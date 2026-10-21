@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     ytrun_lib.cpp
@@ -35,7 +35,5 @@ PEERDIR(
     library/cpp/malloc/api
     library/cpp/sighandler
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

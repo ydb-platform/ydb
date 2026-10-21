@@ -9,9 +9,18 @@ You can set up your actor system either [automatically](#autoconfig) or [manuall
 
 Automatic configuration adapts to the current system workload. It is recommended in most cases.
 
-You might opt for manual configuration when a certain pool in your actor system is overwhelmed and undermines the overall database performance. You can track the workload on your pools on the [Embedded UI monitoring page](../../reference/embedded-ui/ydb-monitoring.md#node_list_page).
+You might opt for manual configuration when a certain pool in your actor system is overwhelmed and undermines the overall database performance. You can track the workload on your pools on the [{{ ydb-ui-name }} monitoring page](../../reference/ydb-ui/ydb-monitoring.md#node_list_page).
 
 ## Automatic Configuring {#autoconfig}
+
+Regardless of the `node_type` parameter value, if one or more pools are starving (experiencing a shortage of compute resources), core redistribution follows the priority order below (highest to lowest):
+
+* `IC`
+* `System`
+* `User`
+* `Batch`
+
+For example, if `IC` and `User` are starving while `System` has idle cores, `IC` receives them.
 
 Example of the `actor_system_config` section for automatic configuration of the actor system:
 

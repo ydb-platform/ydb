@@ -30,6 +30,36 @@ Y_UNIT_TEST_SUITE(THostMaskTest)
         UNIT_ASSERT_VALUES_EQUAL(2u, mask.Count());
     }
 
+    Y_UNIT_TEST(ShouldUpdate)
+    {
+        THostMask mask;
+
+        // Update with true sets the bit.
+        mask.Update(2, true);
+        UNIT_ASSERT(mask.Get(2));
+        UNIT_ASSERT_VALUES_EQUAL(1u, mask.Count());
+
+        // Update with true again is idempotent.
+        mask.Update(2, true);
+        UNIT_ASSERT(mask.Get(2));
+        UNIT_ASSERT_VALUES_EQUAL(1u, mask.Count());
+
+        // Update with false resets the bit.
+        mask.Update(2, false);
+        UNIT_ASSERT(!mask.Get(2));
+        UNIT_ASSERT(mask.Empty());
+
+        // Update with false on an already unset bit is a no-op.
+        mask.Update(5, false);
+        UNIT_ASSERT(!mask.Get(5));
+        UNIT_ASSERT(mask.Empty());
+
+        // Update the highest valid host index.
+        mask.Update(31, true);
+        UNIT_ASSERT(mask.Get(31));
+        UNIT_ASSERT_VALUES_EQUAL(1u, mask.Count());
+    }
+
     Y_UNIT_TEST(ShouldMakeAll)
     {
         UNIT_ASSERT(THostMask::MakeAll(0).Empty());
@@ -42,6 +72,23 @@ Y_UNIT_TEST_SUITE(THostMaskTest)
         auto mask = THostMask::MakeOne(7);
         UNIT_ASSERT_VALUES_EQUAL(1u, mask.Count());
         UNIT_ASSERT(mask.Get(7));
+    }
+
+    Y_UNIT_TEST(ShouldMakeFromRoute)
+    {
+        // A route with distinct source and destination sets both bits.
+        auto mask = THostMask::MakeFromRoute(
+            THostRoute{.SourceHostIndex = 1, .DestinationHostIndex = 4});
+        UNIT_ASSERT_VALUES_EQUAL(2u, mask.Count());
+        UNIT_ASSERT(mask.Get(1));
+        UNIT_ASSERT(mask.Get(4));
+        UNIT_ASSERT(!mask.Get(0));
+
+        // A route where source equals destination collapses to a single bit.
+        auto sameHost = THostMask::MakeFromRoute(
+            THostRoute{.SourceHostIndex = 2, .DestinationHostIndex = 2});
+        UNIT_ASSERT_VALUES_EQUAL(1u, sameHost.Count());
+        UNIT_ASSERT(sameHost.Get(2));
     }
 
     Y_UNIT_TEST(ShouldDoLogicalOps)

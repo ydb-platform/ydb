@@ -14,14 +14,15 @@ RECURSE(
     config
     dstool
     encryption
+    federation_test
     hive
+    kafka
     kqp
     large_serializable
     limits
     minidumps
     mvp
     nbs
-    postgresql
     query_cache
     rename
     restarts
@@ -29,6 +30,7 @@ RECURSE(
     scheme_shard
     scheme_tests
     script_execution
+    sdk/cpp/path_aliasing
     sdk/cpp/sdk_credprovider
     secrets
     security
@@ -36,12 +38,14 @@ RECURSE(
     serverless
     split_merge
     sqs
+    sqs_topic
     statistics
     suite_tests
     tpc
     tpcc
     tenants
     ttl
+    udf_store
     wardens
     ydb_cli
 )

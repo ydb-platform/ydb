@@ -3,22 +3,14 @@
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/events/events.h>
 
-#include <ydb/library/services/services.pb.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::STREAMS, QueryId << ": " << stream)
-
-#define LOG_I(stream) \
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::STREAMS, QueryId << ": " << stream)
-
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STREAMS, QueryId << ": " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STREAMS
 
 namespace NFq {
 namespace {
@@ -27,7 +19,7 @@ using namespace NActors;
 
 struct TEvPrivate {
     // Event ids.
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
 
         EvSingleReadRuleDeleterResult = EvBegin,
@@ -40,7 +32,7 @@ struct TEvPrivate {
 
     // Events.
 
-    struct TEvSingleReadRuleDeleterResult : TEventLocal<TEvSingleReadRuleDeleterResult, EvSingleReadRuleDeleterResult> {
+    struct TEvSingleReadRuleDeleterResult: TEventLocal<TEvSingleReadRuleDeleterResult, EvSingleReadRuleDeleterResult> {
         TEvSingleReadRuleDeleterResult() = default;
 
         explicit TEvSingleReadRuleDeleterResult(const NYql::TIssues& issues)
@@ -51,7 +43,7 @@ struct TEvPrivate {
         NYql::TIssues Issues;
     };
 
-    struct TEvRemoveReadRuleStatus : TEventLocal<TEvRemoveReadRuleStatus, EvRemoveReadRuleStatus> {
+    struct TEvRemoveReadRuleStatus: TEventLocal<TEvRemoveReadRuleStatus, EvRemoveReadRuleStatus> {
         TEvRemoveReadRuleStatus(NYdb::TStatus status)
             : Status(std::move(status))
         {
@@ -62,18 +54,10 @@ struct TEvPrivate {
 };
 
 // Actor for deletion of read rule for one topic.
-class TSingleReadRuleDeleter : public TActorBootstrapped<TSingleReadRuleDeleter> {
+class TSingleReadRuleDeleter: public TActorBootstrapped<TSingleReadRuleDeleter> {
 public:
-    TSingleReadRuleDeleter(
-        NActors::TActorId owner,
-        TString queryId,
-        NYdb::TDriver ydbDriver,
-        const NYql::IPqGateway::TPtr& pqGateway,
-        Fq::Private::TopicConsumer topic,
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProvider,
-        ui64 index,
-        size_t maxRetries
-    )
+    TSingleReadRuleDeleter(NActors::TActorId owner, TString queryId, NYdb::TDriver ydbDriver, const NYql::IPqGateway::TPtr& pqGateway,
+        Fq::Private::TopicConsumer topic, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProvider, ui64 index, size_t maxRetries)
         : Owner(owner)
         , QueryId(std::move(queryId))
         , Topic(std::move(topic))
@@ -103,17 +87,18 @@ public:
     }
 
     void StartRequest() {
-        LOG_D("Make request for read rule deletion for topic `" << Topic.topic_path() << "` [" << Index << "]");
+        YDB_LOG_DEBUG("Make request for read rule deletion",
+            {"queryId", QueryId},
+            {"topicPath", Topic.topic_path()},
+            {"index", Index});
 
         NYdb::NTopic::TAlterTopicSettings alterTopicSettings;
         alterTopicSettings.AppendDropConsumers(Topic.consumer_name());
 
-        TopicClient.AlterTopic(GetTopicPath(), alterTopicSettings)
-            .Subscribe(
-            [actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](const NYdb::TAsyncStatus& status) {
-                actorSystem->Send(selfId, new TEvPrivate::TEvRemoveReadRuleStatus(status.GetValue()));
-            }
-        );
+        TopicClient.AlterTopic(GetTopicPath(), alterTopicSettings).Subscribe([actorSystem = TActivationContext::ActorSystem(),
+                                                                                 selfId = SelfId()](const NYdb::TAsyncStatus& status) {
+            actorSystem->Send(selfId, new TEvPrivate::TEvRemoveReadRuleStatus(status.GetValue()));
+        });
     }
 
     void Handle(TEvPrivate::TEvRemoveReadRuleStatus::TPtr& ev) {
@@ -124,23 +109,26 @@ public:
         } else {
             if (!RetryState) {
                 // Choose default retry policy arguments from topic.h except maxRetries
-                RetryState =
-                    NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(
-                        TDuration::MilliSeconds(10), // minDelay
-                        TDuration::MilliSeconds(200), // minLongRetryDelay
-                        TDuration::Seconds(30), // maxDelay
-                        MaxRetries,
-                        TDuration::Max(), // maxTime
-                        2.0 // scaleFactor
-                    )->CreateRetryState();
+                RetryState = NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(TDuration::MilliSeconds(10),   // minDelay
+                    TDuration::MilliSeconds(200),   // minLongRetryDelay
+                    TDuration::Seconds(30),   // maxDelay
+                    MaxRetries, TDuration::Max(),   // maxTime
+                    2.0   // scaleFactor
+                    )
+                                 ->CreateRetryState();
             }
             TMaybe<TDuration> nextRetryDelay = RetryState->GetNextRetryDelay(status.GetStatus());
             if (status.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
-                nextRetryDelay = Nothing(); // No topic => OK. Leave just transient issues.
+                nextRetryDelay = Nothing();   // No topic => OK. Leave just transient issues.
             }
 
-            LOG_D("Failed to remove read rule from `" << Topic.topic_path() << "`: " << status.GetIssues().ToString() << ". Status: " << status.GetStatus() << ". Retry after: " << nextRetryDelay);
-            if (!nextRetryDelay) { // Not retryable
+            YDB_LOG_DEBUG("Failed to remove read rule",
+                {"queryId", QueryId},
+                {"topicPath", Topic.topic_path()},
+                {"statusIssues", status.GetIssues()},
+                {"status", status.GetStatus()},
+                {"after", nextRetryDelay});
+            if (!nextRetryDelay) {   // Not retryable
                 Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleDeleterResult>(NYdb::NAdapters::ToYqlIssues(status.GetIssues())), 0, Index);
                 PassAway();
             } else {
@@ -182,17 +170,11 @@ private:
 };
 
 // Actor for deletion of read rules for all topics in the query.
-class TReadRuleDeleter : public TActorBootstrapped<TReadRuleDeleter> {
+class TReadRuleDeleter: public TActorBootstrapped<TReadRuleDeleter> {
 public:
-    TReadRuleDeleter(
-        NActors::TActorId owner,
-        TString queryId,
-        NYdb::TDriver ydbDriver,
-        const NYql::IPqGateway::TPtr& pqGateway,
+    TReadRuleDeleter(NActors::TActorId owner, TString queryId, NYdb::TDriver ydbDriver, const NYql::IPqGateway::TPtr& pqGateway,
         const ::google::protobuf::RepeatedPtrField<Fq::Private::TopicConsumer>& topicConsumers,
-        TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials,
-        size_t maxRetries
-    )
+        TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials, size_t maxRetries)
         : Owner(owner)
         , QueryId(std::move(queryId))
         , YdbDriver(std::move(ydbDriver))
@@ -211,8 +193,12 @@ public:
         Children.reserve(Topics.size());
         Results.reserve(Topics.size());
         for (size_t i = 0; i < Topics.size(); ++i) {
-            LOG_D("Create read rule deleter actor for `" << Topics[i].topic_path() << "` [" << i << "]");
-            Children.push_back(Register(new TSingleReadRuleDeleter(SelfId(), QueryId, YdbDriver, PqGateway, Topics[i], Credentials[i], i, MaxRetries)));
+            YDB_LOG_DEBUG("Create read rule deleter actor",
+                {"queryId", QueryId},
+                {"topicPath", Topics[i].topic_path()},
+                {"index", i});
+            Children.push_back(
+                Register(new TSingleReadRuleDeleter(SelfId(), QueryId, YdbDriver, PqGateway, Topics[i], Credentials[i], i, MaxRetries)));
         }
     }
 
@@ -273,27 +259,14 @@ private:
     TVector<NActors::TActorId> Children;
 };
 
-} // namespace
+}   // namespace
 
-NActors::IActor* MakeReadRuleDeleterActor(
-    NActors::TActorId owner,
-    TString queryId,
-    NYdb::TDriver ydbDriver,
-    const NYql::IPqGateway::TPtr& pqGateway,
-    const ::google::protobuf::RepeatedPtrField<Fq::Private::TopicConsumer>& topicConsumers,
-    TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials, // For each topic
-    size_t maxRetries
-)
+NActors::IActor* MakeReadRuleDeleterActor(NActors::TActorId owner, TString queryId, NYdb::TDriver ydbDriver,
+    const NYql::IPqGateway::TPtr& pqGateway, const ::google::protobuf::RepeatedPtrField<Fq::Private::TopicConsumer>& topicConsumers,
+    TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials,   // For each topic
+    size_t maxRetries)
 {
-    return new TReadRuleDeleter(
-        owner,
-        std::move(queryId),
-        std::move(ydbDriver),
-        pqGateway,
-        topicConsumers,
-        std::move(credentials),
-        maxRetries
-    );
+    return new TReadRuleDeleter(owner, std::move(queryId), std::move(ydbDriver), pqGateway, topicConsumers, std::move(credentials), maxRetries);
 }
 
-} // namespace NFq
+}   // namespace NFq

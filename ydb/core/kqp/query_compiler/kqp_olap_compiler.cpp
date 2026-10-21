@@ -35,12 +35,13 @@ class TKqpOlapCompileContext {
 public:
     TKqpOlapCompileContext(const TCoArgument& row, const TKikimrTableMetadata& tableMeta,
         NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames,
-        TExprContext &exprCtx)
+        TExprContext &exprCtx, TTypeAnnotationContext& typesCtx)
         : Row(row)
         , MaxColumnId(0)
         , ReadProto(readProto)
         , ResultColNames(resultColNames)
         , ExprContext(exprCtx)
+        , TypesCtx(typesCtx)
         , YqlKernelsFuncRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone())
         , YqlKernelRequestBuilder(nullptr)
     {
@@ -134,7 +135,7 @@ public:
         if (!resultItemType) {
             const auto& leftCleanType = RemoveOptionality(*leftItemType);
             const auto& rightCleanType = RemoveOptionality(*rightItemType);
-            resultItemType = CommonType<true>(pos, &leftCleanType, &rightCleanType, ExprContext);
+            resultItemType = CommonType<true>(pos, &leftCleanType, &rightCleanType, ExprContext, TypesCtx);
         }
         Y_ENSURE(resultItemType, "KqpOlapCompiler: Result type is nullptr.");
 
@@ -287,6 +288,7 @@ private:
     const std::vector<std::string>& ResultColNames;
     std::unordered_map<std::string, ui32> KqpAggColNameToId;
     TExprContext& ExprContext;
+    TTypeAnnotationContext& TypesCtx;
     TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> YqlKernelsFuncRegistry;
     std::unique_ptr<TKernelRequestBuilder> YqlKernelRequestBuilder;
     THashMap<std::string, ui32> KqpColumnNameToProjectionId;
@@ -626,6 +628,70 @@ const TTypedColumn CompileExists(const TExprBase& arg, TKqpOlapCompileContext& c
     return {ConvertSafeCastToColumn(notCommand->GetColumn().GetId(), "Uint8", ctx), ctx.ConvertToBlockType(type)};
 }
 
+bool IsUtf8Block(const TTypeAnnotationNode& type) {
+    bool isScalar;
+    const auto& itemType = RemoveOptionality(*GetBlockItemType(type, isScalar));
+    return itemType.Cast<TDataExprType>()->GetSlot() == EDataSlot::Utf8;
+}
+
+TTypedColumn CompileYqlKernelToString(const TTypedColumn& argument, TKqpOlapCompileContext& ctx) {
+    const auto resultItemType = ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::String);
+    const auto resultType = ctx.GetReturnType(*argument.Type, resultItemType);
+    auto *const command = ctx.CreateAssignCmd();
+    auto *const function = command->MutableFunction();
+    function->AddArguments()->SetId(argument.Id);
+    function->SetKernelIdx(ctx.GetKernelRequestBuilder().AddUnaryOp(TKernelRequestBuilder::EUnaryOp::ToString, argument.Type, resultType));
+    function->SetFunctionType(TProgram::YQL_KERNEL);
+    function->SetKernelName(ToString(TKernelRequestBuilder::EUnaryOp::ToString));
+    return {command->GetColumn().GetId(), resultType};
+}
+
+TTypedColumn CompileYqlKernelUdf(const TKqpOlapUdf& udf, TKqpOlapCompileContext& ctx) {
+    std::vector<ui64> ids;
+    TTypeAnnotationNode::TListType argTypes;
+    ids.reserve(udf.Args().Size());
+    argTypes.reserve(udf.Args().Size());
+    const auto kernelName = udf.KernelName().StringValue();
+    const auto addArgument = [&](const TTypedColumn& column) {
+        // For now there are no known kernels that support utf8 and do not support string
+        const auto stringColumn = IsUtf8Block(*column.Type) ? CompileYqlKernelToString(column, ctx) : column;
+        bool isScalar;
+        // Supported UDFs require an optional first argument and a non-optional second argument.
+        // Other signatures require type introspection.
+        if (ids.empty() && !GetBlockItemType(*stringColumn.Type, isScalar)->IsOptionalOrNull()) {
+            const auto optionalType = ctx.GetOptionalType(*stringColumn.Type);
+            auto* const command = ctx.CreateAssignCmd();
+            auto* const function = command->MutableFunction();
+            function->AddArguments()->SetId(stringColumn.Id);
+            function->SetKernelIdx(ctx.GetKernelRequestBuilder().AddUnaryOp(TKernelRequestBuilder::EUnaryOp::Just, stringColumn.Type, optionalType));
+            function->SetFunctionType(TProgram::YQL_KERNEL);
+            function->SetKernelName(ToString(TKernelRequestBuilder::EUnaryOp::Just));
+            ids.emplace_back(command->GetColumn().GetId());
+            argTypes.emplace_back(optionalType);
+            return;
+        }
+        ids.emplace_back(stringColumn.Id);
+        argTypes.emplace_back(stringColumn.Type);
+    };
+    for (const auto& arg : udf.Args()) {
+        if (const auto& column = arg.Maybe<TKqpOlapApplyColumnArg>()) {
+            addArgument(GetOrCreateColumnIdAndType(column.Cast().ColumnName(), ctx));
+        } else {
+            addArgument(GetOrCreateColumnIdAndType(arg, ctx));
+        }
+    }
+
+    auto *const command = ctx.CreateAssignCmd();
+    auto *const function = command->MutableFunction();
+    const auto resultType = ctx.ConvertToBlockType(udf.OutputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+    const auto idx = ctx.GetKernelRequestBuilder().Udf(kernelName, /*isPolymorphic=*/false, argTypes, resultType);
+    function->SetKernelIdx(idx);
+    function->SetFunctionType(TProgram::YQL_KERNEL);
+    function->SetKernelName(kernelName);
+    std::for_each(ids.cbegin(), ids.cend(), [function] (ui64 id) { function->AddArguments()->SetId(id); });
+    return {command->GetColumn().GetId(), resultType};
+}
+
 TTypedColumn CompileYqlKernelScalarApply(const TKqpOlapApply& apply, TKqpOlapCompileContext& ctx) {
     std::vector<ui64> ids;
     TTypeAnnotationNode::TListType argTypes;
@@ -854,6 +920,8 @@ TTypedColumn GetOrCreateColumnIdAndType(const TExprBase& node, TKqpOlapCompileCo
         return ConvertJsonValueToColumn(maybeJsonValue.Cast(), ctx);
     } else if (const auto& maybeJsonValue = node.Maybe<TKqpOlapJsonExists>()) {
         return CompileJsonExists(maybeJsonValue.Cast(), ctx);
+    } else if (const auto& maybeUdf = node.Maybe<TKqpOlapUdf>()) {
+        return CompileYqlKernelUdf(maybeUdf.Cast(), ctx);
     } else if (const auto& maybeApply = node.Maybe<TKqpOlapApply>()) {
         return CompileYqlKernelScalarApply(maybeApply.Cast(), ctx);
     }
@@ -880,6 +948,10 @@ ui64 CompileComparison(const TKqpOlapFilterBinaryOp& comparison, TKqpOlapCompile
 }
 
 ui64 CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx) {
+    if (const auto maybeUdf = condition.Maybe<TKqpOlapUdf>()) {
+        return CompileYqlKernelUdf(maybeUdf.Cast(), ctx).Id;
+    }
+
     if (const auto maybeApply = condition.Maybe<TKqpOlapApply>()) {
         return CompileYqlKernelScalarApply(maybeApply.Cast(), ctx).Id;
     }
@@ -1159,11 +1231,11 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
 
 void CompileOlapProgram(const TCoLambda& lambda, const TKikimrTableMetadata& tableMeta,
     NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames,
-    TExprContext &exprCtx)
+    TExprContext &exprCtx, TTypeAnnotationContext& typesCtx)
 {
     YQL_ENSURE(lambda.Args().Size() == 1);
 
-    TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto, resultColNames, exprCtx);
+    TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto, resultColNames, exprCtx, typesCtx);
 
     CompileOlapProgramImpl(lambda.Body(), ctx);
     CompileFinalProjection(ctx);

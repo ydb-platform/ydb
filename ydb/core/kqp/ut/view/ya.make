@@ -12,7 +12,7 @@ SRCS(
 PEERDIR(
     ydb/core/kqp/ut/common
     yql/essentials/sql
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translation
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4

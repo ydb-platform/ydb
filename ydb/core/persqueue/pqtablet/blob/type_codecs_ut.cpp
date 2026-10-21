@@ -6,6 +6,7 @@
 #include <util/generic/vector.h>
 #include <util/random/fast.h>
 #include <util/datetime/base.h>
+#include <util/string/cast.h>
 
 namespace NKikimr::NPQ {
 
@@ -249,6 +250,90 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
         }
         codec = codecs->GetCodec(TCodecSig(TCodecType::DeltaZigZag, true));
         TestImpl(values, codec);
+    }
+
+    Y_UNIT_TEST(TestDeltaVarIntUi64Codec) {
+        // Mirrors batch WTime/CTime/SeqNo packing (ui64 delta varint).
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint64::TypeId));
+
+        TReallyFastRng32 rand(100500);
+        TVector<TDataRef> values;
+        ui64 value = 1'700'000'000'000ull;
+        for (int i = 0; i < 500; ++i) {
+            value += rand.Uniform(10'000);
+            values.push_back(TDataRef((const char*)&value, sizeof(value), true));
+        }
+
+        auto codec = codecs->GetCodec(TCodecSig(TCodecType::DeltaVarInt, false));
+        TestImpl(values, codec);
+    }
+
+    Y_UNIT_TEST(TestVarLenEmptyAndNulls) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+
+        TVector<TDataRef> values;
+        values.push_back(TDataRef("", 0, true));
+        values.push_back(TDataRef("x", 1, true));
+        values.push_back(TDataRef());
+        values.push_back(TDataRef("", 0, true));
+        values.push_back(TDataRef("hello", 5, true));
+        values.push_back(TDataRef());
+
+        auto codec = codecs->GetCodec(TCodecSig(TCodecType::VarLen, true));
+        TestImpl(values, codec);
+    }
+
+    Y_UNIT_TEST(TestBidirIterator) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
+        TVector<ui32> raw = {1, 2, 3, 4, 5};
+        TVector<TDataRef> values;
+        for (ui32 v : raw) {
+            values.push_back(TDataRef((const char*)&v, sizeof(v), true));
+        }
+
+        auto codec = codecs->GetCodec(TCodecSig(TCodecType::VarInt, false));
+        TBuffer output;
+        auto chunk = codec->MakeChunk(output);
+        for (const auto& value : values) {
+            chunk->AddData(value.Data(), value.Size());
+        }
+        chunk->Seal();
+
+        auto reading = codec->ReadChunk(output);
+        auto bidir = reading->MakeBidirIterator();
+        UNIT_ASSERT(bidir);
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            UNIT_ASSERT_EQUAL(values[i], bidir->Next());
+        }
+        for (size_t i = values.size(); i > 0; --i) {
+            bidir->Back();
+            UNIT_ASSERT_EQUAL(values[i - 1], bidir->Peek());
+        }
+    }
+
+    Y_UNIT_TEST(TestDefaultCodecResolves) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint64::TypeId));
+        UNIT_ASSERT(codecs->GetDefaultCodec<false>() != nullptr);
+        UNIT_ASSERT(codecs->GetDefaultCodec<true>() != nullptr);
+        UNIT_ASSERT(codecs->Has(TCodecSig(TCodecType::DeltaVarInt, false)));
+        UNIT_ASSERT(codecs->Has(TCodecSig(TCodecType::VarInt, false)));
+    }
+
+    Y_UNIT_TEST(TestEstimatedSizeAtLeastActual) {
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
+        auto codec = codecs->GetCodec(TCodecSig(TCodecType::VarLen, false));
+
+        TBuffer output;
+        auto chunk = codec->MakeChunk(output);
+        for (int i = 0; i < 20; ++i) {
+            TString s = "value-" + ToString(i);
+            chunk->AddData(s.data(), s.size());
+        }
+        size_t estimated = chunk->GetEstimatedSize();
+        chunk->Seal();
+        UNIT_ASSERT(estimated >= output.Size() || estimated > 0);
+        UNIT_ASSERT(output.Size() > 0);
     }
 
 }

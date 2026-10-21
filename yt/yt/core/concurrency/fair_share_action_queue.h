@@ -31,7 +31,8 @@ IFairShareActionQueuePtr CreateFairShareActionQueue(
     const std::vector<std::string>& queueNames,
     const THashMap<std::string, std::vector<std::string>>& bucketToQueues = {},
     NThreading::TThreadOptions threadOptions = {},
-    NProfiling::IRegistryPtr registry = {});
+    NProfiling::IRegistryPtr registry = {},
+    const NProfiling::TTagSet& extraTags = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -51,7 +52,8 @@ IEnumIndexedFairShareActionQueuePtr<EQueue> CreateEnumIndexedFairShareActionQueu
     std::string threadName,
     const THashMap<EBucket, std::vector<EQueue>>& bucketToQueues = {},
     NThreading::TThreadOptions threadOptions = {},
-    NProfiling::IRegistryPtr registry = {});
+    NProfiling::IRegistryPtr registry = {},
+    const NProfiling::TTagSet& extraTags = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

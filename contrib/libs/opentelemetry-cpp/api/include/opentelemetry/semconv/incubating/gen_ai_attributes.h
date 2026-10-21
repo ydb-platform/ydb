@@ -21,23 +21,44 @@ namespace gen_ai
 
 /**
   Free-form description of the GenAI agent provided by the application.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiAgentDescription = "gen_ai.agent.description";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiAgentDescription =
+    "gen_ai.agent.description";
 
 /**
   The unique identifier of the GenAI agent.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiAgentId = "gen_ai.agent.id";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiAgentId = "gen_ai.agent.id";
 
 /**
   Human-readable name of the GenAI agent provided by the application.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiAgentName = "gen_ai.agent.name";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiAgentName = "gen_ai.agent.name";
 
 /**
   The version of the GenAI agent.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiAgentVersion = "gen_ai.agent.version";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiAgentVersion = "gen_ai.agent.version";
 
 /**
   Deprecated, use Event API to report completions contents.
@@ -50,76 +71,121 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiCompletion = "gen_ai
 /**
   The unique identifier for a conversation (session, thread), used to store and correlate messages
   within this conversation.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiConversationId = "gen_ai.conversation.id";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiConversationId =
+    "gen_ai.conversation.id";
 
 /**
   The data source identifier.
-  <p>
-  Data sources are used by AI agents and RAG applications to store grounding data. A data source may
-  be an external database, object store, document collection, website, or any other storage system
-  used by the GenAI agent or application. The @code gen_ai.data_source.id @endcode SHOULD match the
-  identifier used by the GenAI system rather than a name specific to the external storage, such as a
-  database or object store. Semantic conventions referencing @code gen_ai.data_source.id @endcode
-  MAY also leverage additional attributes, such as @code db.* @endcode, to further identify and
-  describe the data source.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> Data sources are used by AI agents
+  and RAG applications to store grounding data. A data source may be an external database, object
+  store, document collection, website, or any other storage system used by the GenAI agent or
+  application. The @code gen_ai.data_source.id @endcode SHOULD match the identifier used by the
+  GenAI system rather than a name specific to the external storage, such as a database or object
+  store. Semantic conventions referencing @code gen_ai.data_source.id @endcode MAY also leverage
+  additional attributes, such as @code db.* @endcode, to further identify and describe the data
+  source.
  */
-static constexpr const char *kGenAiDataSourceId = "gen_ai.data_source.id";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiDataSourceId = "gen_ai.data_source.id";
 
 /**
   The number of dimensions the resulting output embeddings should have.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiEmbeddingsDimensionCount = "gen_ai.embeddings.dimension.count";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiEmbeddingsDimensionCount =
+    "gen_ai.embeddings.dimension.count";
 
 /**
   A free-form explanation for the assigned score provided by the evaluator.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiEvaluationExplanation = "gen_ai.evaluation.explanation";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiEvaluationExplanation =
+    "gen_ai.evaluation.explanation";
 
 /**
   The name of the evaluation metric used for the GenAI response.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiEvaluationName = "gen_ai.evaluation.name";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiEvaluationName =
+    "gen_ai.evaluation.name";
 
 /**
   Human readable label for evaluation.
-  <p>
-  This attribute provides a human-readable interpretation of the evaluation score produced by an
-  evaluator. For example, a score value of 1 could mean "relevant" in one evaluation system and "not
-  relevant" in another, depending on the scoring range and evaluator. The label SHOULD have low
-  cardinality. Possible values depend on the evaluation metric and evaluator used; implementations
-  SHOULD document the possible values.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> This attribute provides a
+  human-readable interpretation of the evaluation score produced by an evaluator. For example, a
+  score value of 1 could mean "relevant" in one evaluation system and "not relevant" in another,
+  depending on the scoring range and evaluator. The label SHOULD have low cardinality. Possible
+  values depend on the evaluation metric and evaluator used; implementations SHOULD document the
+  possible values.
  */
-static constexpr const char *kGenAiEvaluationScoreLabel = "gen_ai.evaluation.score.label";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiEvaluationScoreLabel =
+    "gen_ai.evaluation.score.label";
 
 /**
   The evaluation score returned by the evaluator.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiEvaluationScoreValue = "gen_ai.evaluation.score.value";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiEvaluationScoreValue =
+    "gen_ai.evaluation.score.value";
 
 /**
   The chat history provided to the model as an input.
-  <p>
-  Instrumentations MUST follow <a href="/docs/gen-ai/gen-ai-input-messages.json">Input messages JSON
-  schema</a>. When the attribute is recorded on events, it MUST be recorded in structured form. When
-  recorded on spans, it MAY be recorded as a JSON string if structured format is not supported and
-  SHOULD be recorded in structured form otherwise. <p> Messages MUST be provided in the order they
-  were sent to the model. Instrumentations MAY provide a way for users to filter or truncate input
-  messages. <blockquote>
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> Instrumentations MUST follow <a
+  href="https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/gen-ai-input-messages.json">Input
+  messages JSON schema</a>. When the attribute is recorded on events, it MUST be recorded in
+  structured form. When recorded on spans, it MAY be recorded as a JSON string if structured format
+  is not supported and SHOULD be recorded in structured form otherwise. <p> Messages MUST be
+  provided in the order they were sent to the model. Instrumentations MAY provide a way for users to
+  filter or truncate input messages. <blockquote>
   [!Warning]
   This attribute is likely to contain sensitive information including user/PII data.</blockquote>
   <p>
-  See <a href="/docs/gen-ai/gen-ai-spans.md#recording-content-on-attributes">Recording content on
-  attributes</a> section for more details.
+  See <a
+  href="https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/gen-ai-spans.md#recording-content-on-attributes">Recording
+  content on attributes</a> section for more details.
  */
-static constexpr const char *kGenAiInputMessages = "gen_ai.input.messages";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiInputMessages = "gen_ai.input.messages";
 
 /**
   Deprecated, use @code gen_ai.output.type @endcode.
 
   @deprecated
-  {"note": "Replaced by @code gen_ai.output.type @endcode.", "reason": "renamed", "renamed_to":
-  "gen_ai.output.type"}
+  {"note": "Replaced by @code gen_ai.output.type @endcode, which has moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiOpenaiRequestResponseFormat =
     "gen_ai.openai.request.response_format";
@@ -128,8 +194,9 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiOpenaiRequestRespons
   Deprecated, use @code gen_ai.request.seed @endcode.
 
   @deprecated
-  {"note": "Replaced by @code gen_ai.request.seed @endcode.", "reason": "renamed", "renamed_to":
-  "gen_ai.request.seed"}
+  {"note": "Replaced by @code gen_ai.request.seed @endcode, which has moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiOpenaiRequestSeed =
     "gen_ai.openai.request.seed";
@@ -138,8 +205,9 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiOpenaiRequestSeed =
   Deprecated, use @code openai.request.service_tier @endcode.
 
   @deprecated
-  {"note": "Replaced by @code openai.request.service_tier @endcode.", "reason": "renamed",
-  "renamed_to": "openai.request.service_tier"}
+  {"note": "Replaced by @code openai.request.service_tier @endcode, which has moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiOpenaiRequestServiceTier =
     "gen_ai.openai.request.service_tier";
@@ -148,8 +216,9 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiOpenaiRequestService
   Deprecated, use @code openai.response.service_tier @endcode.
 
   @deprecated
-  {"note": "Replaced by @code openai.response.service_tier @endcode.", "reason": "renamed",
-  "renamed_to": "openai.response.service_tier"}
+  {"note": "Replaced by @code openai.response.service_tier @endcode, which has moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiOpenaiResponseServiceTier =
     "gen_ai.openai.response.service_tier";
@@ -158,28 +227,39 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiOpenaiResponseServic
   Deprecated, use @code openai.response.system_fingerprint @endcode.
 
   @deprecated
-  {"note": "Replaced by @code openai.response.system_fingerprint @endcode.", "reason": "renamed",
-  "renamed_to": "openai.response.system_fingerprint"}
+  {"note": "Replaced by @code openai.response.system_fingerprint @endcode, which has moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiOpenaiResponseSystemFingerprint =
     "gen_ai.openai.response.system_fingerprint";
 
 /**
   The name of the operation being performed.
-  <p>
-  If one of the predefined values applies, but specific system uses a different name it's
-  RECOMMENDED to document it in the semantic conventions for specific GenAI system and use
-  system-specific name in the instrumentation. If a different name is not documented,
-  instrumentation libraries SHOULD use applicable predefined value.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> If one of the predefined values
+  applies, but specific system uses a different name it's RECOMMENDED to document it in the semantic
+  conventions for specific GenAI system and use system-specific name in the instrumentation. If a
+  different name is not documented, instrumentation libraries SHOULD use applicable predefined
+  value.
  */
-static constexpr const char *kGenAiOperationName = "gen_ai.operation.name";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiOperationName = "gen_ai.operation.name";
 
 /**
   Messages returned by the model where each message represents a specific model response (choice,
-  candidate). <p> Instrumentations MUST follow <a
-  href="/docs/gen-ai/gen-ai-output-messages.json">Output messages JSON schema</a> <p> Each message
-  represents a single output choice/candidate generated by the model. Each message corresponds to
-  exactly one generation (choice/candidate) and vice versa - one choice cannot be split across
+  candidate).
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> Instrumentations MUST follow <a
+  href="https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/gen-ai-output-messages.json">Output
+  messages JSON schema</a> <p> Each message represents a single output choice/candidate generated by
+  the model. Each message corresponds to exactly one generation
+  (choice/candidate) and vice versa - one choice cannot be split across
   multiple messages or one message cannot contain parts from multiple choices.
   <p>
   When the attribute is recorded on events, it MUST be recorded in structured
@@ -192,21 +272,27 @@ static constexpr const char *kGenAiOperationName = "gen_ai.operation.name";
   [!Warning]
   This attribute is likely to contain sensitive information including user/PII data.</blockquote>
   <p>
-  See <a href="/docs/gen-ai/gen-ai-spans.md#recording-content-on-attributes">Recording content on
-  attributes</a> section for more details.
+  See <a
+  href="https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/gen-ai-spans.md#recording-content-on-attributes">Recording
+  content on attributes</a> section for more details.
  */
-static constexpr const char *kGenAiOutputMessages = "gen_ai.output.messages";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiOutputMessages =
+    "gen_ai.output.messages";
 
 /**
   Represents the content type requested by the client.
-  <p>
-  This attribute SHOULD be used when the client requests output of a specific type. The model may
-  return zero or more outputs of this type. This attribute specifies the output modality and not the
-  actual output format. For example, if an image is requested, the actual output could be a URL
-  pointing to an image file. Additional output format details may be recorded in the future in the
-  @code gen_ai.output.{type}.* @endcode attributes.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> This attribute SHOULD be used when
+  the client requests output of a specific type. The model may return zero or more outputs of this
+  type. This attribute specifies the output modality and not the actual output format. For example,
+  if an image is requested, the actual output could be a URL pointing to an image file. Additional
+  output format details may be recorded in the future in the @code gen_ai.output.{type}.* @endcode
+  attributes.
  */
-static constexpr const char *kGenAiOutputType = "gen_ai.output.type";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiOutputType = "gen_ai.output.type";
 
 /**
   Deprecated, use Event API to report prompt contents.
@@ -218,15 +304,22 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiPrompt = "gen_ai.pro
 
 /**
   The name of the prompt that uniquely identifies it.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiPromptName = "gen_ai.prompt.name";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiPromptName = "gen_ai.prompt.name";
 
 /**
   The Generative AI provider as identified by the client or server instrumentation.
-  <p>
-  The attribute SHOULD be set based on the instrumentation's best
-  knowledge and may differ from the actual model provider.
-  <p>
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> The attribute SHOULD be set based
+  on the instrumentation's best knowledge and may differ from the actual model provider. <p>
   Multiple providers, including Azure OpenAI, Gemini, and AI hosting platforms
   are accessible using the OpenAI REST API and corresponding client libraries,
   but may proxy or host models from different providers.
@@ -241,97 +334,189 @@ static constexpr const char *kGenAiPromptName = "gen_ai.prompt.name";
   expected to include
   @code openai.* @endcode attributes.
  */
-static constexpr const char *kGenAiProviderName = "gen_ai.provider.name";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiProviderName = "gen_ai.provider.name";
 
 /**
   The target number of candidate completions to return.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiRequestChoiceCount = "gen_ai.request.choice.count";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiRequestChoiceCount =
+    "gen_ai.request.choice.count";
 
 /**
   The encoding formats requested in an embeddings operation, if specified.
-  <p>
-  In some GenAI systems the encoding formats are called embedding types. Also, some GenAI systems
-  only accept a single format per request.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> In some GenAI systems the encoding
+  formats are called embedding types. Also, some GenAI systems only accept a single format per
+  request.
  */
-static constexpr const char *kGenAiRequestEncodingFormats = "gen_ai.request.encoding_formats";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiRequestEncodingFormats =
+    "gen_ai.request.encoding_formats";
 
 /**
   The frequency penalty setting for the GenAI request.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiRequestFrequencyPenalty = "gen_ai.request.frequency_penalty";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiRequestFrequencyPenalty =
+    "gen_ai.request.frequency_penalty";
 
 /**
   The maximum number of tokens the model generates for a request.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiRequestMaxTokens = "gen_ai.request.max_tokens";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiRequestMaxTokens =
+    "gen_ai.request.max_tokens";
 
 /**
   The name of the GenAI model a request is being made to.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiRequestModel = "gen_ai.request.model";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiRequestModel = "gen_ai.request.model";
 
 /**
   The presence penalty setting for the GenAI request.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiRequestPresencePenalty = "gen_ai.request.presence_penalty";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiRequestPresencePenalty =
+    "gen_ai.request.presence_penalty";
 
 /**
   Requests with same seed value more likely to return same result.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiRequestSeed = "gen_ai.request.seed";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiRequestSeed = "gen_ai.request.seed";
 
 /**
   List of sequences that the model will use to stop generating further tokens.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiRequestStopSequences = "gen_ai.request.stop_sequences";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiRequestStopSequences =
+    "gen_ai.request.stop_sequences";
 
 /**
   Indicates whether the GenAI request was made in streaming mode.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiRequestStream = "gen_ai.request.stream";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiRequestStream = "gen_ai.request.stream";
 
 /**
   The temperature setting for the GenAI request.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiRequestTemperature = "gen_ai.request.temperature";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiRequestTemperature =
+    "gen_ai.request.temperature";
 
 /**
   The top_k sampling setting for the GenAI request.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiRequestTopK = "gen_ai.request.top_k";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiRequestTopK = "gen_ai.request.top_k";
 
 /**
   The top_p sampling setting for the GenAI request.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiRequestTopP = "gen_ai.request.top_p";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiRequestTopP = "gen_ai.request.top_p";
 
 /**
   Array of reasons the model stopped generating tokens, corresponding to each generation received.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiResponseFinishReasons = "gen_ai.response.finish_reasons";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiResponseFinishReasons =
+    "gen_ai.response.finish_reasons";
 
 /**
   The unique identifier for the completion.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiResponseId = "gen_ai.response.id";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiResponseId = "gen_ai.response.id";
 
 /**
   The name of the model that generated the response.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiResponseModel = "gen_ai.response.model";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiResponseModel = "gen_ai.response.model";
 
 /**
   Time to first chunk in a streaming response, measured from request issuance, in seconds. The value
   is measured from when the client issues the generation request to when the first chunk is received
   in the response stream.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiResponseTimeToFirstChunk = "gen_ai.response.time_to_first_chunk";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiResponseTimeToFirstChunk =
+    "gen_ai.response.time_to_first_chunk";
 
 /**
   The documents retrieved.
-  <p>
-  Instrumentations MUST follow <a href="/docs/gen-ai/gen-ai-retrieval-documents.json">Retrieval
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> Instrumentations MUST follow <a
+  href="https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/gen-ai-retrieval-documents.json">Retrieval
   documents JSON schema</a>. When the attribute is recorded on events, it MUST be recorded in
   structured form. When recorded on spans, it MAY be recorded as a JSON string if structured format
   is not supported and SHOULD be recorded in structured form otherwise. <p> Each document object
@@ -339,36 +524,45 @@ static constexpr const char *kGenAiResponseTimeToFirstChunk = "gen_ai.response.t
   @code id @endcode (string): A unique identifier for the document, @code score @endcode (double):
   The relevance score of the document
  */
-static constexpr const char *kGenAiRetrievalDocuments = "gen_ai.retrieval.documents";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiRetrievalDocuments =
+    "gen_ai.retrieval.documents";
 
 /**
   The query text used for retrieval.
-  <blockquote>
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <blockquote>
   [!Warning]
   This attribute may contain sensitive information.</blockquote>
  */
-static constexpr const char *kGenAiRetrievalQueryText = "gen_ai.retrieval.query.text";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiRetrievalQueryText =
+    "gen_ai.retrieval.query.text";
 
 /**
   Deprecated, use @code gen_ai.provider.name @endcode instead.
 
   @deprecated
-  {"note": "Replaced by @code gen_ai.provider.name @endcode.", "reason": "renamed", "renamed_to":
-  "gen_ai.provider.name"}
+  {"note": "Replaced by @code gen_ai.provider.name @endcode, which has moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiSystem = "gen_ai.system";
 
 /**
   The system message or instructions provided to the GenAI model separately from the chat history.
-  <p>
-  This attribute SHOULD be used when the corresponding provider or API
-  allows to provide system instructions or messages separately from the
-  chat history.
-  <p>
-  Instructions that are part of the chat history SHOULD be recorded in
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> This attribute SHOULD be used when
+  the corresponding provider or API allows to provide system instructions or messages separately
+  from the chat history. <p> Instructions that are part of the chat history SHOULD be recorded in
   @code gen_ai.input.messages @endcode attribute instead.
   <p>
-  Instrumentations MUST follow <a href="/docs/gen-ai/gen-ai-system-instructions.json">System
+  Instrumentations MUST follow <a
+  href="https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/gen-ai-system-instructions.json">System
   instructions JSON schema</a>. <p> When recorded on spans, it MAY be recorded as a JSON string if
   structured format is not supported and SHOULD be recorded in structured form otherwise. <p>
   Instrumentations MAY provide a way for users to filter or truncate
@@ -377,19 +571,30 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiSystem = "gen_ai.sys
   [!Warning]
   This attribute may contain sensitive information.</blockquote>
   <p>
-  See <a href="/docs/gen-ai/gen-ai-spans.md#recording-content-on-attributes">Recording content on
-  attributes</a> section for more details.
+  See <a
+  href="https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/gen-ai-spans.md#recording-content-on-attributes">Recording
+  content on attributes</a> section for more details.
  */
-static constexpr const char *kGenAiSystemInstructions = "gen_ai.system_instructions";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiSystemInstructions =
+    "gen_ai.system_instructions";
 
 /**
   The type of token being counted.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiTokenType = "gen_ai.token.type";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiTokenType = "gen_ai.token.type";
 
 /**
   Parameters passed to the tool call.
-  <blockquote>
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <blockquote>
   [!WARNING]
   This attribute may contain sensitive information.</blockquote>
   <p>
@@ -398,16 +603,26 @@ static constexpr const char *kGenAiTokenType = "gen_ai.token.type";
   deserialize it to an object. When recorded on spans, it MAY be recorded as a JSON string if
   structured format is not supported and SHOULD be recorded in structured form otherwise.
  */
-static constexpr const char *kGenAiToolCallArguments = "gen_ai.tool.call.arguments";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiToolCallArguments =
+    "gen_ai.tool.call.arguments";
 
 /**
   The tool call identifier.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiToolCallId = "gen_ai.tool.call.id";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiToolCallId = "gen_ai.tool.call.id";
 
 /**
   The result returned by the tool call (if any and if execution was successful).
-  <blockquote>
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <blockquote>
   [!WARNING]
   This attribute may contain sensitive information.</blockquote>
   <p>
@@ -416,111 +631,157 @@ static constexpr const char *kGenAiToolCallId = "gen_ai.tool.call.id";
   deserialize it to an object. When recorded on spans, it MAY be recorded as a JSON string if
   structured format is not supported and SHOULD be recorded in structured form otherwise.
  */
-static constexpr const char *kGenAiToolCallResult = "gen_ai.tool.call.result";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiToolCallResult =
+    "gen_ai.tool.call.result";
 
 /**
   The list of tool definitions available to the GenAI agent or model.
-  <p>
-  Instrumentations MUST follow <a href="/docs/gen-ai/gen-ai-tool-definitions.json">Tool Definitions
-  JSON Schema</a>. <p> When the attribute is recorded on events, it MUST be recorded in structured
-  form. When recorded on spans, it MAY be recorded as a JSON string if structured
-  format is not supported and SHOULD be recorded in structured form otherwise.
-  <p>
-  Since this attribute could be large, it's NOT RECOMMENDED to populate
-  non-required properties by default. Instrumentations MAY provide a way
-  to enable populating optional properties.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> Instrumentations MUST follow <a
+  href="https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/gen-ai-tool-definitions.json">Tool
+  Definitions JSON Schema</a>. <p> When the attribute is recorded on events, it MUST be recorded in
+  structured form. When recorded on spans, it MAY be recorded as a JSON string if structured format
+  is not supported and SHOULD be recorded in structured form otherwise. <p> Since this attribute
+  could be large, it's NOT RECOMMENDED to populate non-required properties by default.
+  Instrumentations MAY provide a way to enable populating optional properties.
  */
-static constexpr const char *kGenAiToolDefinitions = "gen_ai.tool.definitions";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiToolDefinitions =
+    "gen_ai.tool.definitions";
 
 /**
   The tool description.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiToolDescription = "gen_ai.tool.description";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiToolDescription =
+    "gen_ai.tool.description";
 
 /**
   Name of the tool utilized by the agent.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiToolName = "gen_ai.tool.name";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiToolName = "gen_ai.tool.name";
 
 /**
   Type of the tool utilized by the agent
-  <p>
-  Extension: A tool executed on the agent-side to directly call external APIs, bridging the gap
-  between the agent and real-world systems. Agent-side operations involve actions that are performed
-  by the agent on the server or within the agent's controlled environment. Function: A tool executed
-  on the client-side, where the agent generates parameters for a predefined function, and the client
-  executes the logic. Client-side operations are actions taken on the user's end or within the
-  client application. Datastore: A tool used by the agent to access and query structured or
-  unstructured external data for retrieval-augmented tasks or knowledge updates.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> Extension: A tool executed on the
+  agent-side to directly call external APIs, bridging the gap between the agent and real-world
+  systems. Agent-side operations involve actions that are performed by the agent on the server or
+  within the agent's controlled environment. Function: A tool executed on the client-side, where the
+  agent generates parameters for a predefined function, and the client executes the logic.
+  Client-side operations are actions taken on the user's end or within the client application.
+  Datastore: A tool used by the agent to access and query structured or unstructured external data
+  for retrieval-augmented tasks or knowledge updates.
  */
-static constexpr const char *kGenAiToolType = "gen_ai.tool.type";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiToolType = "gen_ai.tool.type";
 
 /**
   The number of input tokens written to a provider-managed cache.
-  <p>
-  The value SHOULD be included in @code gen_ai.usage.input_tokens @endcode.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> The value SHOULD be included in
+  @code gen_ai.usage.input_tokens @endcode.
  */
-static constexpr const char *kGenAiUsageCacheCreationInputTokens =
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiUsageCacheCreationInputTokens =
     "gen_ai.usage.cache_creation.input_tokens";
 
 /**
   The number of input tokens served from a provider-managed cache.
-  <p>
-  The value SHOULD be included in @code gen_ai.usage.input_tokens @endcode.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> The value SHOULD be included in
+  @code gen_ai.usage.input_tokens @endcode.
  */
-static constexpr const char *kGenAiUsageCacheReadInputTokens =
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiUsageCacheReadInputTokens =
     "gen_ai.usage.cache_read.input_tokens";
 
 /**
   Deprecated, use @code gen_ai.usage.output_tokens @endcode instead.
 
   @deprecated
-  {"note": "Replaced by @code gen_ai.usage.output_tokens @endcode.", "reason": "renamed",
-  "renamed_to": "gen_ai.usage.output_tokens"}
+  {"note": "Replaced by @code gen_ai.usage.output_tokens @endcode, which has moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiUsageCompletionTokens =
     "gen_ai.usage.completion_tokens";
 
 /**
   The number of tokens used in the GenAI input (prompt).
-  <p>
-  This value SHOULD include all types of input tokens, including cached tokens.
-  Instrumentations SHOULD make a best effort to populate this value, using a total
-  provided by the provider when available or, depending on the provider API,
-  by summing different token types parsed from the provider output.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> This value SHOULD include all types
+  of input tokens, including cached tokens. Instrumentations SHOULD make a best effort to populate
+  this value, using a total provided by the provider when available or, depending on the provider
+  API, by summing different token types parsed from the provider output.
  */
-static constexpr const char *kGenAiUsageInputTokens = "gen_ai.usage.input_tokens";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiUsageInputTokens =
+    "gen_ai.usage.input_tokens";
 
 /**
   The number of tokens used in the GenAI response (completion).
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
-static constexpr const char *kGenAiUsageOutputTokens = "gen_ai.usage.output_tokens";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiUsageOutputTokens =
+    "gen_ai.usage.output_tokens";
 
 /**
   Deprecated, use @code gen_ai.usage.input_tokens @endcode instead.
 
   @deprecated
-  {"note": "Replaced by @code gen_ai.usage.input_tokens @endcode.", "reason": "renamed",
-  "renamed_to": "gen_ai.usage.input_tokens"}
+  {"note": "Replaced by @code gen_ai.usage.input_tokens @endcode, which has moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiUsagePromptTokens =
     "gen_ai.usage.prompt_tokens";
 
 /**
   The number of output tokens used for reasoning (e.g. chain-of-thought, extended thinking).
-  <p>
-  The value SHOULD be included in @code gen_ai.usage.output_tokens @endcode.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> The value SHOULD be included in
+  @code gen_ai.usage.output_tokens @endcode.
  */
-static constexpr const char *kGenAiUsageReasoningOutputTokens =
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiUsageReasoningOutputTokens =
     "gen_ai.usage.reasoning.output_tokens";
 
 /**
   Human-readable name of the GenAI workflow provided by the application.
-  <p>
-  This attribute can be populated in different frameworks eg: name of the first chain in LangChain
-  OR name of the crew in CrewAI.
+
+  @deprecated
+  {"note": "Moved to the <a
+  href="https://github.com/open-telemetry/semantic-conventions-genai">OpenTelemetry GenAI semantic
+  conventions repository</a>.\n", "reason": "uncategorized"} <p> This attribute can be populated in
+  different frameworks eg: name of the first chain in LangChain OR name of the crew in CrewAI.
  */
-static constexpr const char *kGenAiWorkflowName = "gen_ai.workflow.name";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiWorkflowName = "gen_ai.workflow.name";
 
 namespace GenAiOpenaiRequestResponseFormatValues
 {

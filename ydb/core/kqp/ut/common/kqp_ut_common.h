@@ -8,6 +8,7 @@
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -15,11 +16,14 @@
 #include <ydb/library/testlib/helpers.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/logger/backend.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/yson/writer.h>
 #include <library/cpp/threading/future/async.h>
 
+#include <memory>
+#include <optional>
 
 template <bool ForceVersionV1>
 TString MakeQuery(const TString& tmpl) {
@@ -40,6 +44,29 @@ const TString KikimrDefaultUtDomainRoot = "Root";
 extern const TString EXPECTED_EIGHTSHARD_VALUE1;
 
 using TTestLogSettings = NTestUtils::TTestLogSettings;
+
+// A copyable handle to shared capture state; backends own the same state.
+class TCapturedLog final {
+public:
+    explicit TCapturedLog(bool appendNewline = false);
+
+    // Copy rvalues as well so the source handle keeps its shared state.
+    TCapturedLog(const TCapturedLog&) = default;
+    TCapturedLog& operator=(const TCapturedLog&) = default;
+
+    // Copies the buffer under the lock; parsing the returned copy does not block log writers.
+    // It includes records already written, not records queued in logger actors.
+    TString Snapshot() const;
+
+    // Every backend shares both the buffer's lifetime and its mutex.
+    THolder<TLogBackend> CreateBackend() const;
+
+private:
+    class TSynchronizedStreamLogBackend;
+    struct TState;
+
+    std::shared_ptr<TState> State_;
+};
 
 struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
 private:
@@ -76,15 +103,19 @@ public:
     ui32 DynamicNodeCount = 0;
     bool WithSampleTables = true;
     bool UseRealThreads = true;
+    bool UseRealInterconnect = false;
     bool EnableForceFollowers = false;
     bool EnableScriptExecutionBackgroundChecks = true;
+    bool NeedsStatsCollectors = false;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
-    IOutputStream* LogStream = nullptr;
+    std::optional<TCapturedLog> LogCapture;
     TVector<TString> StoragePoolTypes;
     TMaybe<NFake::TStorage> Storage = Nothing();
     bool InitFederatedQuerySetupFactory = false;
     NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
-    NKqp::IDescribeSchemaSecretsServiceFactory::TPtr DescribeSchemaSecretsServiceFactory = std::make_shared<NKqp::TDescribeSchemaSecretsServiceFactory>();
+    NSecret::IDescribeSchemaSecretsServiceFactory::TPtr DescribeSchemaSecretsServiceFactory =
+        std::make_shared<NSecret::TDescribeSchemaSecretsServiceFactory>();
+    std::shared_ptr<NKqp::IQueryReplayBackendFactory> QueryReplayBackendFactory;
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
     NKikimrConfig::TImmediateControlsConfig Controls;
@@ -114,14 +145,17 @@ public:
     TKikimrSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
     TKikimrSettings& SetWithSampleTables(bool value) { WithSampleTables = value; return *this; }
     TKikimrSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
-    TKikimrSettings& SetLogStream(IOutputStream* follower) { LogStream = follower; return *this; };
+    TKikimrSettings& SetLogCapture(const TCapturedLog& capture) { LogCapture = capture; return *this; }
     TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
     TKikimrSettings& SetStoragePoolTypes(const TVector<TString>& storagePoolTypes) { StoragePoolTypes = storagePoolTypes; return *this; };
     TKikimrSettings& SetInitFederatedQuerySetupFactory(bool value) { InitFederatedQuerySetupFactory = value; return *this; };
     TKikimrSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; };
-    TKikimrSettings& SetDescribeSchemaSecretsServiceFactory(NKqp::IDescribeSchemaSecretsServiceFactory::TPtr value) { DescribeSchemaSecretsServiceFactory = value; return *this; };
+    TKikimrSettings& SetDescribeSchemaSecretsServiceFactory(NSecret::IDescribeSchemaSecretsServiceFactory::TPtr value) { DescribeSchemaSecretsServiceFactory = value; return *this; };
+    TKikimrSettings& SetQueryReplayBackendFactory(std::shared_ptr<NKqp::IQueryReplayBackendFactory> value) { QueryReplayBackendFactory = std::move(value); return *this; };
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
+    TKikimrSettings& SetUseRealInterconnect(bool value) { UseRealInterconnect = value; return *this; };
     TKikimrSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; };
+    TKikimrSettings& SetNeedsStatsCollectors(bool value) { NeedsStatsCollectors = value; return *this; };
     TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
     TKikimrSettings& SetControls(const NKikimrConfig::TImmediateControlsConfig& value) { Controls = value; return *this; }
     TKikimrSettings& SetColumnShardReaderClassName(const TString& value) { AppConfig.MutableColumnShardConfig()->SetReaderClassName(value); return *this; }
@@ -138,6 +172,10 @@ public:
     TKikimrSettings& SetUseLocalCheckpointsInStreamingQueries(bool value) { UseLocalCheckpointsInStreamingQueries = value; return *this; };
     TKikimrSettings& SetCheckpointPeriod(TDuration value) { CheckpointPeriod = value; return *this; };
     TKikimrSettings& SetLogSettings(TTestLogSettings value) { LogSettings = value; return *this; };
+    TKikimrSettings& SetEnableStrictSerializableIsolation(bool value) {
+        AppConfig.MutableTableServiceConfig()->SetEnableStrictSerializableIsolation(value);
+        return *this;
+    }
     TKikimrSettings& SetVerbose(bool value) { Verbose = value; return *this; };
 };
 
@@ -359,7 +397,7 @@ void AssertTableStats(const Ydb::TableStats::QueryStats& stats, TStringBuf table
 void AssertTableStats(const NYdb::NTable::TDataQueryResult& result, TStringBuf table,
     const TExpectedTableStats& expectedStats);
 
-void AssertTableStats(const NYdb::NTable::TDataQueryResult& result, TStringBuf table,
+void AssertTableStats(const NYdb::NQuery::TExecuteQueryResult& result, TStringBuf table,
     const TExpectedTableStats& expectedStats);
 
 inline void AssertTableReads(const NYdb::NTable::TDataQueryResult& result, TStringBuf table, ui64 expectedReads) {
@@ -488,6 +526,11 @@ void CheckOwner(NYdb::NTable::TSession& session, const TString& path, const TStr
 // Waits until the KQP proxy recognizes the subject's connect permission.
 // Useful after GrantConnect to avoid UNAUTHORIZED/UNAVAILABLE races.
 void WaitForProxy(const TKikimrRunner& kikimr, const TString& subject);
+
+inline NYdb::NQuery::TExecuteQuerySettings NoRetryExecuteQuerySettings() {
+    return NYdb::NQuery::TExecuteQuerySettings().RetrySettings(
+        NYdb::NRetry::TRetryOperationSettings().MaxRetries(0));
+}
 
 } // namespace NKqp
 } // namespace NKikimr

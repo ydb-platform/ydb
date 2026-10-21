@@ -73,8 +73,8 @@
                                                                             "Value"
                                                                         ],
                                                                         "E-Cost": "0",
-                                                                        "E-Rows": "0",
-                                                                        "E-Size": "0",
+                                                                        "E-Rows": "142.8571429",
+                                                                        "E-Size": "100000",
                                                                         "LookupKeyColumns": [
                                                                             "Group"
                                                                         ],
@@ -218,7 +218,11 @@
                         "Node Type": "Sink",
                         "Operators": [
                             {
-                                "Inputs": [],
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 1
+                                    }
+                                ],
                                 "Name": "Replace",
                                 "Path": "/local/base_join_group_by_lookup_script_script/Temp",
                                 "SinkType": "KqpTableSink",

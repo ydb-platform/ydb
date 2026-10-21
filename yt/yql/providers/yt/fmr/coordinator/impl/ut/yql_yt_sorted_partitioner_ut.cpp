@@ -40,6 +40,40 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
         AssertTaskHasRangesForTable(task0, t2.Id, 1, true, true);
     }
 
+    Y_UNIT_TEST(AdjustDataWeightPerPartitionUsesCeilingDivision) {
+        // 10 chunks of weight 1 each (totalWeight=10) with MaxDataWeightPerPart=1
+        // makes the unadjusted estimate 10 parts, which exceeds MaxParts=3 and
+        // triggers the adjustment. Floor division would set maxWeight=10/3=3,
+        // whose total capacity (3 parts * 3 = 9) is less than totalWeight=10,
+        // guaranteeing more than MaxParts tasks get produced (3,3,3,1 -> 4 tasks)
+        // and the partitioner failing below. Ceiling division sets maxWeight=4,
+        // whose capacity (3*4=12) fits totalWeight into exactly MaxParts tasks
+        // (4,4,2 -> 3 tasks).
+        TFmrTableId t1("c", "t1");
+        TFmrTableRef r1{.FmrTableId = t1};
+
+        std::unordered_map<TFmrTableId, std::vector<TString>> partIdsForTables{
+            {t1, {"p1"}},
+        };
+
+        std::vector<TChunkStats> chunks;
+        for (ui64 i = 1; i <= 10; ++i) {
+            chunks.push_back(MakeSortedChunk(1, i, i));
+        }
+        std::unordered_map<TString, std::vector<TChunkStats>> partIdStats{
+            {"p1", chunks},
+        };
+
+        TSortedPartitionSettings settings;
+        settings.FmrPartitionSettings = {.MaxDataWeightPerPart = 1, .MaxParts = 3, .AdjustDataWeightPerPartition = true};
+        TSortingColumns keyColumns{.Columns = {"k"}, .SortOrders = {ESortOrder::Ascending}};
+
+        TSortedPartitioner partitioner(partIdsForTables, partIdStats, keyColumns, settings);
+        auto [tasks, error] = partitioner.PartitionTablesIntoTasks({r1});
+        UNIT_ASSERT_C(!error, error ? error->ErrorMessage : "");
+        UNIT_ASSERT_LE(tasks.size(), 3);
+    }
+
     Y_UNIT_TEST(FailsOnEmptyPartitionsForInputTable) {
         TFmrTableId t1("c", "t1");
         TFmrTableRef r1{.FmrTableId = t1};
@@ -60,7 +94,10 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
             "at least one partition");
     }
 
-    Y_UNIT_TEST(FailsOnEmptyChunksForInputTable) {
+    Y_UNIT_TEST(HandlesEmptyChunksForInputTable) {
+        // An input table can legitimately have zero chunks (e.g. a MapReduce map task whose rows
+        // were all routed to a direct/map-bypass output — see NULL join keys in a FULL JOIN).
+        // Partitioning it must succeed and simply produce no tasks reading from it, not fail.
         TFmrTableId t1("c", "t1");
         TFmrTableRef r1{.FmrTableId = t1};
 
@@ -76,10 +113,9 @@ Y_UNIT_TEST_SUITE(SortedPartitionerTests) {
         TSortingColumns keyColumns{.Columns = {"k"}, .SortOrders = {ESortOrder::Ascending}};
 
         TSortedPartitioner partitioner(partIdsForTables, partIdStats, keyColumns, settings);
-        UNIT_ASSERT_EXCEPTION_CONTAINS(
-            partitioner.PartitionTablesIntoTasks({r1}),
-            yexception,
-            "at least one chunk");
+        auto result = partitioner.PartitionTablesIntoTasks({r1});
+        UNIT_ASSERT_C(!result.Error, "expected no error, got: " << (result.Error ? result.Error->ErrorMessage : ""));
+        UNIT_ASSERT_VALUES_EQUAL(result.TaskInputs.size(), 0u);
     }
 
     Y_UNIT_TEST(MergeMatchesSourceMultipleChunks) {

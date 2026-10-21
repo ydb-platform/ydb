@@ -1102,9 +1102,5 @@
               }
           }
         ]
-    },
-  "TableServiceConfig":
-    {
-      "SqlVersion":1
     }
 }

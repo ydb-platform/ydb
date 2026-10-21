@@ -14,12 +14,12 @@ public:
     void Stop();
 
 protected:
-    const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_;
+    const TIntrusivePtr<TEventCount> CallbackEventCount_;
 
     std::atomic<bool> GracefulStop_ = false;
 
     TSchedulerThread(
-        TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+        TIntrusivePtr<TEventCount> callbackEventCount,
         std::string threadGroupName,
         std::string threadName,
         NThreading::TThreadOptions options = {});
@@ -44,11 +44,6 @@ protected:
     TClosure BeginExecuteImpl(bool dequeued, TEnqueuedAction* action);
 
 private:
-    TCpuInstant LastMaintenanceInstant_ = 0;
-
-    void MaybeRunMaintenance(TCpuInstant now);
-    void RunMaintenance();
-
     void StartEpilogue() override;
     void StopPrologue() override;
     void StopEpilogue() override;
@@ -58,4 +53,4 @@ DEFINE_REFCOUNTED_TYPE(TSchedulerThread)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} //namespace NYT::NConcurrency
+} // namespace NYT::NConcurrency

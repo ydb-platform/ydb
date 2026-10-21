@@ -34,7 +34,7 @@ Func = TypeVar("Func", bound=Callable)
 pretty_file_name_cache: dict[str, str] = {}
 
 
-def pretty_file_name(f):
+def pretty_file_name(f: str) -> str:
     try:
         return pretty_file_name_cache[f]
     except KeyError:
@@ -49,7 +49,7 @@ def pretty_file_name(f):
 
 
 IN_COVERAGE_TESTS = os.getenv("HYPOTHESIS_INTERNAL_COVERAGE") == "true"
-description_stack = []
+description_stack: list[str] = []
 
 
 if IN_COVERAGE_TESTS:

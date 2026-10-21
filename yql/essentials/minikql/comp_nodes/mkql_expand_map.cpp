@@ -15,20 +15,20 @@ class TExpandMapWrapper: public TStatelessWideFlowCodegeneratorNode<TExpandMapWr
 public:
     TExpandMapWrapper(IComputationNode* flow, IComputationExternalNode* item, TComputationNodePtrVector&& newItems)
         : TBaseComputation(flow)
-        , Flow(flow)
-        , Item(item)
-        , NewItems(std::move(newItems))
+        , Flow_(flow)
+        , Item_(item)
+        , NewItems_(std::move(newItems))
     {
     }
 
     EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
-        if (auto item = Flow->GetValue(ctx); item.IsSpecial()) {
+        if (auto item = Flow_->GetValue(ctx); item.IsSpecial()) {
             return item.IsYield() ? EFetchResult::Yield : EFetchResult::Finish;
         } else {
-            Item->SetValue(ctx, std::move(item));
+            Item_->SetValue(ctx, std::move(item));
         }
 
-        for (const auto item : NewItems) {
+        for (const auto item : NewItems_) {
             if (const auto out = *output++) {
                 *out = item->GetValue(ctx);
             }
@@ -36,13 +36,13 @@ public:
         return EFetchResult::One;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
+        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
         MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
 
-        const auto item = GetNodeValue(Flow, ctx, block);
+        const auto item = GetNodeValue(Flow_, ctx, block);
 
         const auto resultType = Type::getInt32Ty(context);
         const auto outres = SelectInst::Create(IsYield(item, block, context), ConstantInt::get(resultType, 0), ConstantInt::get(resultType, -1), "outres", block);
@@ -65,8 +65,8 @@ public:
         block = pass;
 
         TGettersList getters;
-        getters.reserve(NewItems.size());
-        std::transform(NewItems.cbegin(), NewItems.cend(), std::back_inserter(getters), [&](IComputationNode* node) {
+        getters.reserve(NewItems_.size());
+        std::transform(NewItems_.cbegin(), NewItems_.cend(), std::back_inserter(getters), [&](IComputationNode* node) {
             return [node](const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(node, ctx, block); };
         });
         return {result, std::move(getters)};
@@ -74,15 +74,15 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(Flow)) {
-            Own(flow, Item);
-            std::for_each(NewItems.cbegin(), NewItems.cend(), std::bind(&TExpandMapWrapper::DependsOn, flow, std::placeholders::_1));
+        if (const auto flow = FlowDependsOn(Flow_)) {
+            Own(flow, Item_);
+            std::for_each(NewItems_.cbegin(), NewItems_.cend(), std::bind(&TExpandMapWrapper::DependsOn, flow, std::placeholders::_1));
         }
     }
 
-    IComputationNode* const Flow;
-    IComputationExternalNode* const Item;
-    const TComputationNodePtrVector NewItems;
+    IComputationNode* const Flow_;
+    IComputationExternalNode* const Item_;
+    const TComputationNodePtrVector NewItems_;
 };
 
 } // namespace

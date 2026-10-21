@@ -33,9 +33,12 @@ private:
             }
         }
         if (result.size()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "async_schema")("reason", JoinSeq(",", result));
+            YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "async_schema"},
+                {"reason", JoinSeq(",", result)});
         } else {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "sync_schema");
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "sync_schema"});
         }
         return result;
     }
@@ -65,6 +68,8 @@ private:
                 return "Scheme:MoveTable";
             case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable:
                 return "Scheme:CopyTable";
+            case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable:
+                return "Scheme:TruncateTable";
             case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
                 return "Scheme:TXBODY_NOT_SET";
         }
@@ -81,7 +86,8 @@ private:
         if (SchemaTxBody.HasGranuleShardingInfo()) {
             NSharding::TGranuleShardingLogicContainer infoContainer;
             if (!infoContainer.DeserializeFromProto(SchemaTxBody.GetGranuleShardingInfo().GetContainer())) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "cannot parse incoming tx message");
+                YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"problem", "cannot parse incoming tx message"});
                 return false;
             }
             TxAddSharding =
@@ -93,6 +99,16 @@ private:
 
 public:
     using TBase::TBase;
+
+    void OnPlanStep(TColumnShard& owner, const ui64 planStep, NTabletFlatExecutor::TTransactionContext& txc) override {
+        if (SchemaTxBody.TxBody_case() != NKikimrTxColumnShard::TSchemaTxBody::kCopyTable) {
+            return;
+        }
+        NIceDb::TNiceDb db(txc.DB);
+        const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetSrcPathId());
+        const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetDstPathId());
+        owner.TablesManager.CopyTablePlanStep(db, NOlap::TSnapshot(planStep, GetTxId()), srcSchemeShardLocalPathId, dstSchemeShardLocalPathId);
+    }
 
     virtual bool ProgressOnExecute(
         TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {

@@ -56,6 +56,7 @@ message TComputeDatabaseConfig {
     TLoadControlConfig LoadControlConfig = 4;
     TWorkloadManagerConfig WorkloadManagerConfig = 5;
     TAccessConfig AccessConfig = 8;
+    string FolderId = 9;
 }
 
 message TDatabaseMapping {
@@ -88,6 +89,8 @@ message TYdbComputeControlPlane {
     string DatabasePrefix = 5;
     string DatabasesCacheReloadPeriod = 6;
     TWorkloadManagerConfig DefaultWorkloadManagerConfig = 7;
+    // Reject new scopes without a compute_databases record; existing databases can still be recreated.
+    bool DisableSlsCreating = 8;
 }
 
 message TYdbCompute {

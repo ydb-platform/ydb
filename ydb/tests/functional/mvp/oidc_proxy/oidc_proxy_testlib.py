@@ -1,3 +1,4 @@
+import base64
 import json
 import re
 from base64 import b64encode
@@ -93,10 +94,12 @@ def assert_nc_auth_not_started(auth_service):
 
 def assert_cookie_is_set(response, expected_status, cookie_marker):
     assert response.status_code == expected_status, response.text
-    assert "Set-Cookie" in response.headers, response.headers
-    set_cookie = response.headers["Set-Cookie"]
-    assert cookie_marker in set_cookie, set_cookie
-    return set_cookie
+    set_cookie_headers = response_set_cookie_headers(response)
+    assert set_cookie_headers, response.headers
+    for set_cookie in set_cookie_headers:
+        if cookie_marker in set_cookie:
+            return set_cookie
+    raise AssertionError(f"cookie marker {cookie_marker!r} is missing in {set_cookie_headers!r}")
 
 
 def assert_cookie_is_cleared(response, expected_status, cookie_marker):
@@ -175,6 +178,37 @@ def get_multipart_stream_with_session(env, path, session_cookie, timeout=10):
     )
 
 
+def response_set_cookie_headers(response):
+    raw_headers = getattr(response.raw, "headers", None)
+    if raw_headers is not None and hasattr(raw_headers, "getlist"):
+        return list(raw_headers.getlist("Set-Cookie"))
+    set_cookie = response.headers.get("Set-Cookie")
+    if not set_cookie:
+        return []
+    return [set_cookie]
+
+
+def response_cookie_by_name(response, cookie_name):
+    for set_cookie in response_set_cookie_headers(response):
+        cookie_pair = set_cookie.split(";", 1)[0]
+        if cookie_pair.startswith(f"{cookie_name}="):
+            return cookie_pair
+    raise AssertionError(f"cookie {cookie_name!r} is missing in {response_set_cookie_headers(response)!r}")
+
+
+def auth_url_from_response(response):
+    if response.status_code == 302:
+        return response.headers["Location"]
+    response_json = response.json()
+    return response_json["authUrl"]
+
+
+def decode_oidc_state(state):
+    padded_state = state + "=" * (-len(state) % 4)
+    signed_state = json.loads(base64.urlsafe_b64decode(padded_state))
+    return json.loads(base64.b64decode(signed_state["container"]))
+
+
 def authenticate_session(oidc_proxy_full_flow_env, start_path):
     start_response = oidc_proxy_full_flow_env.get(
         start_path,
@@ -183,12 +217,11 @@ def authenticate_session(oidc_proxy_full_flow_env, start_path):
     )
 
     assert start_response.status_code == 302
-    assert "Set-Cookie" in start_response.headers
-    redirect_url = start_response.headers["Location"]
-    parsed_redirect = urlparse(redirect_url)
-    assert redirect_url.startswith(oidc_proxy_full_flow_env.auth_service.endpoint + "/oauth/authorize"), redirect_url
-    state = parse_qs(parsed_redirect.query)["state"][0]
-    oidc_cookie = start_response.headers["Set-Cookie"].split(";", 1)[0]
+    auth_flow_cookie = assert_cookie_is_set(start_response, 302, "ydb_oidc_cookie=")
+    assert "Path=/auth/callback;" in auth_flow_cookie, auth_flow_cookie
+    auth_url = auth_url_from_response(start_response)
+    state = parse_qs(urlparse(auth_url).query)["state"][0]
+    oidc_cookie = response_cookie_by_name(start_response, "ydb_oidc_cookie")
 
     callback_response = oidc_proxy_full_flow_env.get(
         f"/auth/callback?code=code_template%23&state={state}",
@@ -201,9 +234,9 @@ def authenticate_session(oidc_proxy_full_flow_env, start_path):
 
     assert callback_response.status_code == 302, callback_response.text
     assert callback_response.headers["Location"] == start_path, callback_response.headers
-    assert "__Host-session_cookie_" in callback_response.headers["Set-Cookie"], callback_response.headers["Set-Cookie"]
+    assert_cookie_is_set(callback_response, 302, "__Host-session_cookie_")
 
-    return callback_response.headers["Set-Cookie"].split(";", 1)[0]
+    return response_cookie_by_name(callback_response, session_cookie_name())
 
 
 def read_stream_body(response):

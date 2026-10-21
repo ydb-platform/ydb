@@ -424,6 +424,28 @@ namespace NKikimr {
             testData.WaitEndTest();
         }
 
+        Y_UNIT_TEST(FiniteDeadlineIsPreserved) {
+            TBlobStorageGroupType type(TErasureType::Erasure4Plus2Block);
+            TVPatchTestGeneralData testData(type, 10);
+            TTestActorRuntimeBase &runtime = testData.Runtime;
+            TActorId edgeActor = testData.EdgeActors[0];
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(100));
+            testData.Deadline = runtime.GetCurrentTime() + TDuration::Seconds(10);
+
+            std::unique_ptr<TEvBlobStorage::TEvVPatchStart> start = testData.CreateVPatchStart(0);
+            TEvBlobStorage::TEvVPatchStart::TPtr ev = CreateEventHandle(edgeActor, edgeActor, std::move(start));
+            testData.CreateTVPatchActor<TVPatchDecorator>(std::move(ev));
+
+            auto vGet = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVGet>({edgeActor});
+            const auto& record = vGet->Get()->Record;
+            UNIT_ASSERT(record.HasMsgQoS());
+            UNIT_ASSERT(record.GetMsgQoS().HasDeadlineSeconds());
+            UNIT_ASSERT_VALUES_EQUAL(record.GetMsgQoS().GetDeadlineSeconds(), testData.Deadline.Seconds());
+
+            testData.ForceEndTest();
+        }
+
         bool PassPullingPart(TVPatchTestGeneralData &testData, NKikimrProto::EReplyStatus vGetStatus,
                 const TBlob &blob, ui32 nodeId = 0) {
             TTestActorRuntimeBase &runtime = testData.Runtime;

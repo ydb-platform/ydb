@@ -58,6 +58,8 @@ public:
 
   void SetDuration(std::chrono::nanoseconds duration) noexcept override;
 
+  void SetSpanLimits(const SpanLimits &limits) noexcept override;
+
   void SetInstrumentationScope(const InstrumentationScope &instrumentation_scope) noexcept override;
 
 private:

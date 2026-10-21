@@ -1,14 +1,14 @@
-#include "yql_pq_provider_impl.h"
 #include "yql_pq_helpers.h"
+#include "yql_pq_provider_impl.h"
+#include "yql_pq_settings.h"
 
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_topic_key_parser.h>
 
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
@@ -28,11 +28,39 @@ void ScanPlanDependencies(const TExprNode::TPtr& input, TExprNode::TListType& ch
     });
 }
 
-class TPqDataSinkProvider : public TDataProviderBase {
+struct TWriteTopicSettings {
+    TCoAtom Mode;
+    TCoNameValueTupleList Other;
+
+    static TWriteTopicSettings Parse(TExprList node, TExprContext& ctx) {
+        TMaybeNode<TCoAtom> mode;
+        TVector<TCoNameValueTuple> other;
+        for (const auto& child : node) {
+            if (const auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+                const auto tuple = maybeTuple.Cast();
+                const auto name = tuple.Name().Value();
+
+                if (name == "mode"sv) {
+                    const auto maybeAtom = tuple.Value().Maybe<TCoAtom>();
+                    YQL_ENSURE(maybeAtom);
+                    mode = maybeAtom.Cast();
+                } else {
+                    other.push_back(tuple);
+                }
+            }
+        }
+
+        YQL_ENSURE(mode);
+
+        return TWriteTopicSettings{ .Mode = mode.Cast(), .Other = Build<TCoNameValueTupleList>(ctx, node.Pos()).Add(std::move(other)).Done() };
+    }
+};
+
+class TPqDataSinkProvider: public TDataProviderBase {
 public:
     TPqDataSinkProvider(TPqState::TPtr state, IPqGateway::TPtr gateway)
-        : State_(state)
-        , Gateway_(gateway)
+        : State_(std::move(state))
+        , Gateway_(std::move(gateway))
         , IODiscoveryTransformer_(CreatePqDataSinkIODiscoveryTransformer(State_))
         , TypeAnnotationTransformer_(CreatePqDataSinkTypeAnnotationTransformer(State_))
         , ExecutionTransformer_(CreatePqDataSinkExecTransformer(State_))
@@ -103,15 +131,17 @@ public:
         const TCoWrite write(node);
         TTopicKeyParser key;
         YQL_ENSURE(key.Parse(*node->Child(2), nullptr, ctx), "Failed to extract topic name.");
-        const auto settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx);
+        const auto settings = TWriteTopicSettings::Parse(TExprList(node->Child(4)), ctx);
 
         const auto cluster = TString(maybePqWrite.Cast().DataSink().Cluster().Value());
         const auto* found = State_->FindTopicMeta(cluster, key.GetTopicPath());
         if (!found) {
-            ctx.AddError(TIssue(ctx.GetPosition(write.Pos()), TStringBuilder() << "Unknown topic `" << cluster << "`.`" << key.GetTopicPath() << "`"));
+            ctx.AddError(
+                TIssue(ctx.GetPosition(write.Pos()), TStringBuilder() << "Unknown topic `" << cluster << "`.`" << key.GetTopicPath() << "`"));
             return nullptr;
         }
 
+        // clang-format off
         auto topicNode = Build<TPqTopic>(ctx, write.Pos())
             .Cluster().Value(cluster).Build()
             .Database().Value(State_->Configuration->GetDatabaseForTopic(cluster)).Build()
@@ -120,7 +150,9 @@ public:
             .Props(BuildTopicPropsList(*found, write.Pos(), ctx))
             .Metadata().Build()
             .Done();
+        // clang-format on
 
+        // clang-format off
         return Build<TPqWriteTopic>(ctx, node->Pos())
             .World(write.World())
             .DataSink(write.DataSink().Ptr())
@@ -128,9 +160,10 @@ public:
             .Input<TCoRemoveSystemMembers>()
                 .Input(node->Child(3))
                 .Build()
-            .Mode(settings.Mode.Cast())
+            .Mode(settings.Mode)
             .Settings(settings.Other)
             .Done().Ptr();
+        // clang-format on
     }
 
     TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override {
@@ -140,17 +173,20 @@ public:
         }
 
         TPositionHandle pos;
+        // clang-format off
         return Build<NNodes::TPqClusterConfig>(ctx, pos)
             .Endpoint<TCoAtom>().Build(config->Endpoint)
             .TvmId<TCoAtom>().Build(ToString(config->TvmId))
             .Done().Ptr();
+        // clang-format on
     }
 
     ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs, bool withLimits) override {
         Y_UNUSED(withLimits);
         if (auto maybeOp = TMaybeNode<TPqWriteTopic>(&node)) {
             auto op = maybeOp.Cast();
-            outputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), op.Topic().Raw(), MakeTopicDisplayName(op.Topic().Cluster().Value(), op.Topic().Path().Value()), false));
+            outputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), op.Topic().Raw(),
+                MakeTopicDisplayName(op.Topic().Cluster().Value(), op.Topic().Path().Value()), false));
             return 1;
         }
         return 0;
@@ -193,10 +229,10 @@ private:
     THolder<IGraphTransformer> PhysicalOptProposalTransformer_;
 };
 
-}
+}   // anonymous namespace
 
 TIntrusivePtr<IDataProvider> CreatePqDataSink(TPqState::TPtr state, IPqGateway::TPtr gateway) {
-    return new TPqDataSinkProvider(state, gateway);
+    return new TPqDataSinkProvider(std::move(state), std::move(gateway));
 }
 
-} // namespace NYql
+}   // namespace NYql

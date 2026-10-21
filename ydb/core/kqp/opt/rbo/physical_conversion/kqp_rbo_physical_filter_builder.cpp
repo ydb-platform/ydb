@@ -5,7 +5,7 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
 TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
-    const auto inputColumns = Filter->GetInput()->GetOutputIUs();
+    const auto inputColumns = NPhysicalConvertionUtils::GetLiveInputIUs(Filter, 0);
 
     // clang-format off
     input = Build<TCoToFlow>(Ctx, Pos)
@@ -13,22 +13,21 @@ TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     .Done().Ptr();
     // clang-format on
 
-    input = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, inputColumns, Ctx);
+    input = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, inputColumns, Ctx, Names);
 
     THashMap<TString, ui32> colNamesToIndices;
     TVector<TExprNode::TPtr> lambdaArgs;
 
     for (ui32 i = 0; i < inputColumns.size(); ++i) {
         lambdaArgs.push_back(Ctx.NewArgument(Pos, "arg_" + ToString(i)));
-        colNamesToIndices.emplace(inputColumns[i].GetFullName(), i);
+        colNamesToIndices.emplace(Names.Get(inputColumns[i]), i);
     }
 
-    auto lambda = TCoLambda(Filter->FilterExpr.Node);
+    auto lambda = TCoLambda(Filter.GetFilterExpression().Node);
     auto lambdaBody = lambda.Body().Ptr();
-    const bool isPg = lambdaBody->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg;
 
     auto isMember = [&](const TExprNode::TPtr& node) -> bool {
-        if (node->IsCallable("Member")) {
+        if (node->IsCallable("Member") && &node->Head() == lambda.Args().Arg(0).Raw()) {
             return true;
         }
         return false;
@@ -37,24 +36,13 @@ TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     TNodeOnNodeOwnedMap replaces;
     auto members = FindNodes(lambdaBody, isMember);
     for (const auto& member : members) {
-        const auto colName = TString(TCoMember(member).Name().StringValue());
+        const auto colName = Names.Get(GetMemberId(*member));
         auto it = colNamesToIndices.find(colName);
         Y_ENSURE(it != colNamesToIndices.end(), colName + " column not found.");
         replaces[member.Get()] = lambdaArgs[it->second];
     }
 
     auto lambdaResult = Ctx.ReplaceNodes(std::move(lambdaBody), replaces);
-    if (isPg) {
-        // Fixes coalesce type mismatch.
-        // clang-format off
-        lambdaResult = Ctx.Builder(Pos)
-            .Callable("FromPg")
-                .Add(0, lambdaResult)
-            .Seal()
-        .Build();
-        // clang-format on
-    }
-
     // clang-format off
     lambdaResult = Build<TCoCoalesce>(Ctx, Pos)
         .Predicate(lambdaResult)
@@ -74,7 +62,7 @@ TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     .Done().Ptr();
     // clang-format on
 
-    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, inputColumns, Ctx);
+    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, inputColumns, NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(Filter), Names), Ctx, Names);
 
     // clang-format off
     input = Build<TCoFromFlow>(Ctx, Pos)

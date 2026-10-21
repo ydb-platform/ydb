@@ -34,7 +34,9 @@ ENDIF(OS_WINDOWS)
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/wilson
+    library/cpp/containers/stack_vector
     library/cpp/monlib/dynamic_counters
+    library/cpp/threading/queue
     ydb/core/debug
     ydb/library/pdisk_io/protos
 )
@@ -42,6 +44,7 @@ PEERDIR(
 SRCS(
     aio.cpp
     aio.h
+    aio_completion.h
     aio_map.cpp
     buffers.cpp
     buffers.h
@@ -53,6 +56,8 @@ SRCS(
     sector_map.h
     uring_operation.h
     uring_operation.cpp
+    uring_router_client.h
+    uring_router_backend.h
     wcache.cpp
     wcache.h
 )

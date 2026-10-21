@@ -19,7 +19,7 @@ namespace NYT::NNet {
 struct TDialerContext final
 {
     //! Host is used for TlsDialer.
-    std::optional<TString> Host;
+    std::optional<std::string> Host;
     //! BypassTls is used by HTTPS client for plain HTTP connections.
     bool BypassTls = false;
 };

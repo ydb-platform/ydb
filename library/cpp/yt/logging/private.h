@@ -1,0 +1,15 @@
+#pragma once
+
+#include "public.h"
+
+namespace NYT::NLogging::NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Ref-counted memory tag for payload buffers; used for memory accounting.
+struct TMessageBufferTag
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NLogging::NDetail

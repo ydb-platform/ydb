@@ -389,7 +389,7 @@ def test_clip_tab_first_visible_with_sgr():
 
 def test_clip_overtyping_override_by_control_codes_ignore():
     """When overtyping=True and control_codes='ignore', overtyping is overridden to False."""
-    # elif entered: overtyping=True + control_codes='ignore' → overtyping=False
+    # elif entered: overtyping=True + control_codes='ignore': overtyping becomes False
     assert clip('hello world', 0, 5, overtyping=True, control_codes='ignore') == 'hello'
     # Verify that overtyping is actually disabled: cursor movement chars are
     # treated as zero-width, so the result is the same as without overtyping.
@@ -398,7 +398,7 @@ def test_clip_overtyping_override_by_control_codes_ignore():
 
 def test_clip_overtyping_without_ignore():
     """When overtyping=True and control_codes='parse', elif is not entered."""
-    # elif skipped: overtyping=True + control_codes='parse' → overtyping stays True
+    # elif skipped: overtyping=True + control_codes='parse': overtyping stays True
     # The painter path is used, cursor movement sequences affect output.
     assert clip('ab\x1b[2Dcd', 0, 4, overtyping=True, control_codes='parse') == 'cd'
 

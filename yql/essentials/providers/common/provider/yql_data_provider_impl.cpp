@@ -72,6 +72,12 @@ TString TPlanFormatterBase::GetOperationDisplayName(const TExprNode& node) {
     return TString(node.Content());
 }
 
+TString TPlanFormatterBase::GetLinkDisplayName(const TExprNode& source, const TExprNode& dest) {
+    Y_UNUSED(source);
+    Y_UNUSED(dest);
+    return TString();
+}
+
 bool TPlanFormatterBase::WriteSchemaHeader(NYson::TYsonWriter& writer) {
     Y_UNUSED(writer);
     return false;
@@ -82,12 +88,12 @@ void TPlanFormatterBase::WriteTypeDetails(NYson::TYsonWriter& writer, const TTyp
     Y_UNUSED(type);
 }
 
-void TTrackableNodeProcessorBase::GetUsedNodes(const TExprNode& node, TVector<TString>& usedNodeIds) {
+void TTrackableNodeProcessorBase::GetUsedNodes(const TExprNode::TPtr& node, TVector<TString>& usedNodeIds) {
     Y_UNUSED(node);
     usedNodeIds.clear();
 }
 
-void TTrackableNodeProcessorBase::GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) {
+void TTrackableNodeProcessorBase::GetCreatedNodes(const TExprNode::TPtr& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) {
     Y_UNUSED(node);
     Y_UNUSED(ctx);
     createdNodes.clear();
@@ -323,7 +329,7 @@ bool TDataProviderBase::ValidateExecution(const TExprNode& node, TExprContext& c
 }
 
 void TDataProviderBase::GetRequiredChildren(const TExprNode& node, TExprNode::TListType& children) {
-    GetDependencies(node, children, false);
+    GetDependencies(node, children, /*compact=*/false);
 }
 
 IGraphTransformer& TDataProviderBase::GetCallableExecutionTransformer() {
@@ -393,6 +399,8 @@ bool TDataProviderBase::IsFullCaptureReady() {
 
 TExprNode::TPtr DefaultCleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto root = node;
+    TOptimizeExprSettings settings(nullptr);
+    settings.VisitChanges = true;
     auto status = OptimizeExpr(root, root, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         Y_UNUSED(ctx);
         if (auto right = TMaybeNode<TCoRight>(node)) {
@@ -418,7 +426,7 @@ TExprNode::TPtr DefaultCleanupWorld(const TExprNode::TPtr& node, TExprContext& c
         }
 
         return node;
-    }, ctx, TOptimizeExprSettings(nullptr));
+    }, ctx, settings);
     YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error);
     return root;
 }

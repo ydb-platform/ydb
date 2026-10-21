@@ -3,10 +3,18 @@ import functools
 import inspect
 import random
 import time
-from typing import Any, Callable, Generator, Optional, Union
+from typing import Any, Callable, Generator, Optional, TypeVar, Union, cast
 
 from . import issues
 from ._errors import check_retriable_error
+from .observability.metrics import observe_retry_metrics
+from .observability.tracing import SpanName, create_span as _create_span
+
+CallableT = TypeVar("CallableT", bound=Callable[..., Any])
+
+
+def _try_span_attrs(backoff_ms: Optional[int]):
+    return {"ydb.retry.backoff_ms": backoff_ms} if backoff_ms is not None else None
 
 
 class BackoffSettings:
@@ -119,7 +127,9 @@ def retry_operation_impl(
             yield result
 
             if result.exc is not None:
-                raise result.exc
+                exc = result.exc
+                result.exc = None
+                raise exc
 
         except issues.Error as e:
             status = e
@@ -129,19 +139,18 @@ def retry_operation_impl(
             if not retriable_info.is_retriable:
                 raise
 
-            skip_yield_error_types = [
+            skip_yield_error_types = (
                 issues.Aborted,
                 issues.BadSession,
                 issues.NotFound,
                 issues.InternalError,
-            ]
+            )
 
-            yield_sleep = True
-            for t in skip_yield_error_types:
-                if isinstance(e, t):
-                    yield_sleep = False
-
-            if yield_sleep:
+            if isinstance(e, skip_yield_error_types):
+                # Skip the inter-attempt sleep but still emit a marker so consumers
+                # advance per-attempt bookkeeping (e.g. ``ydb.Try`` spans get backoff=0).
+                yield YdbRetryOperationSleepOpt(0.0)
+            else:
                 yield YdbRetryOperationSleepOpt(retriable_info.sleep_timeout_seconds)
 
         except Exception as e:
@@ -153,21 +162,32 @@ def retry_operation_impl(
         raise status
 
 
+@observe_retry_metrics
 def retry_operation_sync(
     callee: Callable[..., Any],
     retry_settings: Optional[RetrySettings] = None,
     *args: Any,
     **kwargs: Any,
 ) -> Any:
-    opt_generator = retry_operation_impl(callee, retry_settings, *args, **kwargs)
-    for next_opt in opt_generator:
-        if isinstance(next_opt, YdbRetryOperationSleepOpt):
-            time.sleep(next_opt.timeout)
-        else:
-            return next_opt.result
+    backoff_ms: Optional[int] = None
+
+    @functools.wraps(callee)
+    def traced_callee(*a: Any, **kw: Any) -> Any:
+        with _create_span(SpanName.TRY, _try_span_attrs(backoff_ms)):
+            return callee(*a, **kw)
+
+    with _create_span(SpanName.RUN_WITH_RETRY):
+        for next_opt in retry_operation_impl(traced_callee, retry_settings, *args, **kwargs):
+            if isinstance(next_opt, YdbRetryOperationSleepOpt):
+                backoff_ms = int(next_opt.timeout * 1000)
+                if next_opt.timeout > 0:
+                    time.sleep(next_opt.timeout)
+            else:
+                return next_opt.result
     return None
 
 
+@observe_retry_metrics
 async def retry_operation_async(  # pylint: disable=W1113
     callee: Callable[..., Any],
     retry_settings: Optional[RetrySettings] = None,
@@ -184,17 +204,26 @@ async def retry_operation_async(  # pylint: disable=W1113
     :param args: A tuple with positional arguments to be passed into the coroutine.
     :param kwargs: A dictionary with keyword arguments to be passed into the coroutine.
 
-    Returns awaitable result of coroutine. If retries are not succussful exception is raised.
+    Returns awaitable result of coroutine. If retries are not successful exception is raised.
     """
-    opt_generator = retry_operation_impl(callee, retry_settings, *args, **kwargs)
-    for next_opt in opt_generator:
-        if isinstance(next_opt, YdbRetryOperationSleepOpt):
-            await asyncio.sleep(next_opt.timeout)
-        else:
-            try:
-                return await next_opt.result
-            except BaseException as e:  # pylint: disable=W0703
-                next_opt.set_exception(e)
+    backoff_ms: Optional[int] = None
+
+    @functools.wraps(callee)
+    async def traced_callee(*a: Any, **kw: Any) -> Any:
+        with _create_span(SpanName.TRY, _try_span_attrs(backoff_ms)):
+            return await callee(*a, **kw)
+
+    with _create_span(SpanName.RUN_WITH_RETRY):
+        for next_opt in retry_operation_impl(traced_callee, retry_settings, *args, **kwargs):
+            if isinstance(next_opt, YdbRetryOperationSleepOpt):
+                backoff_ms = int(next_opt.timeout * 1000)
+                if next_opt.timeout > 0:
+                    await asyncio.sleep(next_opt.timeout)
+            else:
+                try:
+                    return await next_opt.result
+                except BaseException as e:  # pylint: disable=W0703
+                    next_opt.set_exception(e)
     return None
 
 
@@ -209,7 +238,7 @@ def ydb_retry(
     slow_backoff_settings: Optional[BackoffSettings] = None,
     idempotent: bool = False,
     retry_cancelled: bool = False,
-) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+) -> Callable[[CallableT], CallableT]:
     """
     Decorator for automatic function retry in case of YDB errors.
 
@@ -227,7 +256,7 @@ def ydb_retry(
     :param retry_cancelled: Whether to retry cancelled operations (default: False)
     """
 
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+    def decorator(func: CallableT) -> CallableT:
         retry_settings = RetrySettings(
             max_retries=max_retries,
             max_session_acquire_timeout=max_session_acquire_timeout,
@@ -247,13 +276,13 @@ def ydb_retry(
             async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                 return await retry_operation_async(func, retry_settings, *args, **kwargs)
 
-            return async_wrapper
+            return cast(CallableT, async_wrapper)
         else:
 
             @functools.wraps(func)
             def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
                 return retry_operation_sync(func, retry_settings, *args, **kwargs)
 
-            return sync_wrapper
+            return cast(CallableT, sync_wrapper)
 
     return decorator

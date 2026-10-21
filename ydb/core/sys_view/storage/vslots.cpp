@@ -40,6 +40,7 @@ public:
             {T::Kind::ColumnId, {E::kInfoFieldNumber, V::kKindFieldNumber}},
             {T::Replicated::ColumnId, {E::kInfoFieldNumber, V::kReplicatedFieldNumber}},
             {T::DiskSpace::ColumnId, {E::kInfoFieldNumber, V::kDiskSpaceFieldNumber}},
+            {T::PhantomOnly::ColumnId, {E::kInfoFieldNumber, V::kPhantomOnlyFieldNumber}},
         };
         return fieldMap;
     }

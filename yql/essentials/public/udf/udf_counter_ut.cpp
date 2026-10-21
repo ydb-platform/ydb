@@ -39,11 +39,11 @@ Y_UNIT_TEST(Copy) {
     c3 = c1; // assign
     c3.Inc();
     UNIT_ASSERT_VALUES_EQUAL(value, 3);
-    TCounter c4(std::move(c1)); // move ctor
+    TCounter c4(std::move(c1)); // NOLINT(performance-move-const-arg): move ctor
     c4.Inc();
     UNIT_ASSERT_VALUES_EQUAL(value, 4);
     TCounter c5;
-    c5 = std::move(c3); // move assign
+    c5 = std::move(c3); // NOLINT(performance-move-const-arg): move assign
     c5.Inc();
     UNIT_ASSERT_VALUES_EQUAL(value, 5);
 }

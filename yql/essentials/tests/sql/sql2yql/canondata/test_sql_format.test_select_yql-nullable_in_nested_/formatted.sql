@@ -1,0 +1,52 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    IF(
+        x.items[0] IN (
+            SELECT
+                1
+        ), x.items, []
+    ) AS item
+FROM
+    AsTable([<|items: [1, 2]|>]) AS x
+;
+
+SELECT
+    id,
+    IF(
+        items[0] IN (
+            SELECT
+                0
+        ), 1, 0
+    ) AS matched,
+    IF(
+        items[0] NOT IN (
+            SELECT
+                0
+        ), 1, 0
+    ) AS unmatched
+FROM
+    AsTable([
+        <|id: 0, items: ListCreate(Int32)|>,
+        <|id: 1, items: [0]|>,
+        <|id: 2, items: [1]|>
+    ])
+ORDER BY
+    id
+;
+
+SELECT
+    IF(
+        2 IN (
+            SELECT
+                value
+            FROM (
+                VALUES
+                    (Nothing(Int32?)),
+                    (Just(1))
+            ) AS source (
+                value
+            )
+        ), 1, 0
+    ) AS nullable_collection
+;

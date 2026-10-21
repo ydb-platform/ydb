@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 $ages = [
     <|suffix: "0-0.5"u, begin: 0.f, end: 0.5f|>,
     <|suffix: "0.5-1"u, begin: 0.5f, end: 1.f|>,

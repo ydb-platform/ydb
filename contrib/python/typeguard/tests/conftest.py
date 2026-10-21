@@ -13,9 +13,7 @@ version_re = re.compile(r"_py(\d)(\d)\.py$")
 pytest_plugins = ["pytester"]
 
 
-def pytest_ignore_collect(
-    collection_path: Path, config: pytest.Config
-) -> typing.Optional[bool]:
+def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
     match = version_re.search(collection_path.name)
     if match:
         version = tuple(int(x) for x in match.groups())

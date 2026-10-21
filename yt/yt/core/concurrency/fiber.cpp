@@ -11,7 +11,8 @@
 #include <yt/yt/library/profiling/producer.h>
 
 #include <library/cpp/yt/threading/execution_stack.h>
-#include <library/cpp/yt/threading/fork_aware_spin_lock.h>
+
+#include <library/cpp/yt/system/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
@@ -130,7 +131,7 @@ private:
     TFiberStack<NDetail::TFiberRegisterTag> RegisterQueue_;
     TFiberStack<NDetail::TFiberUnregisterTag> UnregisterQueue_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TForkAwareSpinLock, Lock_);
     TFiber::TFiberList Fibers_;
 
 // NB(arkady-e1ppa): This shutdown logic
@@ -412,10 +413,9 @@ void TFiber::ReleaseFiber(TFiber* fiber)
 void TFiber::SetRunning()
 {
     if (auto delay = TFiberBase::SetRunning()) {
-        YT_LOG_WARNING(
-            "Fiber execution was delayed due to introspection (FiberId: %x, Delay: %v)",
-            GetFiberId(),
-            *delay);
+        YT_TLOG_WARNING("Fiber execution was delayed due to introspection")
+            .WithFormat("FiberId", "%x", GetFiberId())
+            .With("Delay", *delay);
     }
 }
 

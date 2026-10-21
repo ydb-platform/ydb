@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 $s = (
     SELECT
         1 AS x,
@@ -12,7 +10,10 @@ SELECT
 FROM
     $s
 GROUP BY
-    ROLLUP (x, y)
+    ROLLUP (
+        x,
+        y
+    )
 ORDER BY
     x2,
     y

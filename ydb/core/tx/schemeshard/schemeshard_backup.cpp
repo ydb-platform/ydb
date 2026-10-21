@@ -3,6 +3,10 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_continuous_backup_cleaner.h"
 
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 void TSchemeShard::Handle(TEvBackup::TEvFetchBackupCollectionsRequest::TPtr& ev, const TActorContext& ctx) {
@@ -61,6 +65,28 @@ void TSchemeShard::Handle(TEvPrivate::TEvContinuousBackupCleanerResult::TPtr& ev
     Execute(CreateTxProgress(ev));
 }
 
+void TSchemeShard::Handle(TEvBackup::TEvGetFullBackupRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxGetFullBackup(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvBackup::TEvForgetFullBackupRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxForgetFullBackup(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvBackup::TEvListFullBackupsRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxListFullBackups(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvFullBackupItemDone::TPtr& ev, const TActorContext& ctx) {
+    YDB_LOG_INFO_CTX(ctx, "Handle(TEvFullBackupItemDone)",
+        {"fullBackupId", ev->Get()->FullBackupId},
+        {"dstPathId", ev->Get()->DstPathId},
+        {"success", ev->Get()->Success},
+        {"tabletId", TabletID()},
+    );
+    Execute(CreateTxFullBackupProgress(ev), ctx);
+}
+
 void TSchemeShard::ResumeIncrementalBackups(const TVector<ui64>& incrementalBackupsIds, const TActorContext& ctx) {
     for (const ui64 id : incrementalBackupsIds) {
         Execute(CreateTxProgress(id), ctx);
@@ -108,3 +134,5 @@ void TSchemeShard::PersistIncrementalBackupItem(NIceDb::TNiceDb& db, ui64 backup
 }
 
 } // namespace NKikimr::NSchemeshard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

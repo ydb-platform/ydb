@@ -8,8 +8,7 @@
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -45,7 +44,7 @@ public:
     }
 
     NUdf::TUnboxedValue Build() final {
-        return Ctx_.HolderFactory.CreateArrowBlock(Builder_->Build(true));
+        return Ctx_.HolderFactory.CreateArrowBlock(Builder_->Build(true), Ctx_.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
@@ -184,7 +183,7 @@ public:
         , Type_(type)
         , Reader_(MakeBlockReader(TTypeInfoHelper(), type))
         , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type, ctx.Builder->GetPgBuilder()))
-        , Packer_(false, type)
+        , Packer_(/*stable=*/false, type)
     {
     }
 
@@ -315,5 +314,4 @@ std::unique_ptr<IBlockAggregatorFactory> MakeBlockSomeFactory() {
     return std::make_unique<TBlockSomeFactory>();
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

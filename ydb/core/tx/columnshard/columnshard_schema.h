@@ -90,6 +90,7 @@ struct Schema: NIceDb::Schema {
         LastCompletedBackupTransaction = 22,
         LastCleanupSnapshotStep = 23,
         LastCleanupSnapshotTxId = 24,
+        SubDomainSmallBlobsQuotaExceeded = 25,
     };
 
     enum class EInsertTableIds: ui8 {
@@ -117,7 +118,17 @@ struct Schema: NIceDb::Schema {
         TxDependencies = 16,
         TxStates = 17,
         TxEvents = 18,
-        TableInfoV1 = 19
+        TableInfoV1 = 19,
+        CutHistoryRequests = 20
+    };
+
+    struct CutHistoryRequests: Table<(ui32)ECommonTables::CutHistoryRequests> {
+        struct Sequence: Column<1, NScheme::NTypeIds::Uint64> {};
+
+        struct RequestProto: Column<2, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<Sequence>;
+        using TColumns = TableColumns<Sequence, RequestProto>;
     };
 
     // Tablet tables
@@ -490,10 +501,10 @@ struct Schema: NIceDb::Schema {
 
         struct LockId: Column<2, NScheme::NTypeIds::Uint64> {};
 
-        struct Broken: Column<3, NScheme::NTypeIds::Bool> {};
+        struct Broken_Deprecated: Column<3, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<TxId, LockId>;
-        using TColumns = TableColumns<TxId, LockId, Broken>;
+        using TColumns = TableColumns<TxId, LockId, Broken_Deprecated>;
     };
 
     struct TierBlobsDraft: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsDraft> {
@@ -778,7 +789,8 @@ struct Schema: NIceDb::Schema {
         TableInfo, TableVersionInfo, LongTxWrites, BlobsToKeep, BlobsToDelete, BlobsToDeleteWT, InsertTable, IndexGranules, IndexColumns,
         IndexCounters, SmallBlobs, OneToOneEvictedBlobs, Operations, TierBlobsDraft, TierBlobsToDelete, TierBlobsToDeleteWT, IndexIndexes,
         SharedBlobIds, BorrowedBlobIds, SourceSessions, DestinationSessions, OperationTxIds, IndexPortions, BackgroundSessions, ShardingInfo,
-        Normalizers, NormalizerEvents, InFlightSnapshots, TxDependencies, TxStates, TxEvents, IndexColumnsV1, IndexColumnsV2, TableInfoV1>;
+        Normalizers, NormalizerEvents, InFlightSnapshots, TxDependencies, TxStates, TxEvents, IndexColumnsV1, IndexColumnsV2, TableInfoV1,
+        CutHistoryRequests>;
 
     //
 
@@ -997,6 +1009,14 @@ struct Schema: NIceDb::Schema {
         db.Table<TableInfoV1>()
             .Key(pathId.GetRawValue(), schemeShardLocalPathId.GetRawValue())
             .Update(NIceDb::TUpdate<TableInfoV1::DropStep>(dropStep), NIceDb::TUpdate<TableInfoV1::DropTxId>(dropTxId));
+    }
+
+    static void SaveTableCopyVersionV1(NIceDb::TNiceDb& db, const TInternalPathId pathId, const TSchemeShardLocalPathId schemeShardLocalPathId,
+        const NOlap::TSnapshot& copyVersion) {
+        db.Table<TableInfoV1>()
+            .Key(pathId.GetRawValue(), schemeShardLocalPathId.GetRawValue())
+            .Update(NIceDb::TUpdate<TableInfoV1::CopyStep>(copyVersion.GetPlanStep()),
+                NIceDb::TUpdate<TableInfoV1::CopyTxId>(copyVersion.GetTxId()), NIceDb::TUpdate<TableInfoV1::IsReadOnly>(true));
     }
 
     static void EraseTableVersionInfo(NIceDb::TNiceDb& db, TInternalPathId pathId, const NOlap::TSnapshot& version) {

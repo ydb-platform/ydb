@@ -3,6 +3,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/util/pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COORDINATOR
+
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
@@ -115,9 +117,8 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
         Self->VolatileState.LastAcquired = LastAcquired;
 
         if (Mediators.size()) {
-            LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR,
-                 "tablet# " << Self->TabletID() <<
-                 " CreateTxInit Complete");
+            YDB_LOG_INFO_CTX(ctx, "CreateTxInit Complete",
+                {"tablet", Self->TabletID()});
             Self->Config.Version = Version;
             Self->Config.Mediators = new TMediators(std::move(Mediators));
             Self->Config.Coordinators = Coordinators;
@@ -142,9 +143,8 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
 
         TAppData* appData = AppData(ctx);
         if (Self->IsTabletInStaticDomain(appData)) {
-            LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR,
-                 "tablet# " << Self->TabletID() <<
-                 " CreateTxInit initialize himself");
+            YDB_LOG_INFO_CTX(ctx, "CreateTxInit initialize himself",
+                {"tablet", Self->TabletID()});
             Self->DoConfiguration(*CreateDomainConfigurationFromStatic(appData), ctx);
             return;
         }
@@ -152,9 +152,8 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
         Self->Become(&TThis::StateSync);
         Self->SignalTabletActive(ctx);
 
-        LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR,
-             "tablet# " << Self->TabletID() <<
-             " CreateTxInit wait TEvCoordinatorConfiguration for switching to StateWork from external");
+        YDB_LOG_INFO_CTX(ctx, "CreateTxInit wait TEvCoordinatorConfiguration for switching to StateWork from external",
+            {"tablet", Self->TabletID()});
     }
 };
 

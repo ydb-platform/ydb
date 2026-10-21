@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 
@@ -113,6 +113,14 @@ public:
    */
   virtual const std::unordered_map<std::string, opentelemetry::sdk::common::OwnedAttributeValue> &
   GetAttributes() const noexcept = 0;
+
+  /**
+   * Get the number of attributes dropped because the attribute count limit
+   * was reached. The default implementation reports zero so existing
+   * recordables that do not enforce limits compile without changes.
+   * @return the number of dropped attributes
+   */
+  virtual uint32_t GetDroppedAttributesCount() const noexcept { return 0; }
 
   /**
    * Get resource of this log

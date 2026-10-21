@@ -53,7 +53,11 @@ class EndpointInfo(object):
                 ssl_target_name_override = self.address
 
         endpoint_options = conn_impl.EndpointOptions(
-            ssl_target_name_override=ssl_target_name_override, node_id=self.node_id
+            ssl_target_name_override=ssl_target_name_override,
+            node_id=self.node_id,
+            address=self.address,
+            port=self.port,
+            location=self.location,
         )
 
         if self.ipv6_addrs or self.ipv4_addrs:

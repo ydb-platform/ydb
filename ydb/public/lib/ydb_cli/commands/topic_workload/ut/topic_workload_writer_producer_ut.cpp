@@ -53,9 +53,8 @@ namespace NTests {
                 GeneratedMessages(TTopicWorkloadWriterWorker::GenerateMessages(100'000))
             {}
             std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(
-                // we need error flag = true, cause without it, stats collector will go into the infinite loop
-                // during the call to PrintWindowStatsLoop. And this call is the only way to deque write events to
-                // statisitcs.
+                // errorFlag=true so PrintWindowStatsLoop exits immediately instead of looping;
+                // it is still needed to drain write events into statistics.
                 1, 1, false, false, 5, 60, 0, 99, std::make_shared<std::atomic_bool>(true), false
             );
             std::shared_ptr<MockWriteSession> WriteSession;
@@ -164,6 +163,17 @@ namespace NTests {
             producer.WaitForContinuationToken(TDuration::Zero());
         }
 
+        Y_UNIT_TEST_F(Close_ShouldReleaseWriteSession, TFixture) {
+            auto producer = CreateProducer();
+            std::weak_ptr<MockWriteSession> session = WriteSession;
+            EXPECT_CALL(*WriteSession, Close(TDuration::Zero())).WillOnce(testing::Return(false));
+            WriteSession.reset();
+
+            producer->Close();
+            UNIT_ASSERT(session.expired());
+            producer->Close();
+        }
+
         Y_UNIT_TEST_F(HandleAckEvent_ShouldSaveStatistics, TFixture) {
             auto producer = CreateProducer();
             auto mockNow = TInstant::MilliSeconds(1730111051000);
@@ -172,15 +182,14 @@ namespace NTests {
             auto createTime = TInstant::MilliSeconds(1730111050000);
             producer->Send(createTime, {});
             UNIT_ASSERT_EQUAL(0, StatsCollector->GetTotalWriteMessages());
-            // We need this call, cause only this call initializes StatsCollector.WarmupTime.
-            // If it is not initialized, no events will be accepted.
-            // Both here and below it will not go into the loop, cause we provided errorFlag into the constructor above.
-            StatsCollector->PrintWindowStatsLoop();
+            // Init() sets WarmupTime; until then no events are accepted.
+            StatsCollector->Init();
 
             auto ackEvent = CreateAckEvent(1);
             producer->HandleAckEvent(ackEvent);
 
-            // We need this call, cause only this way collector will deque wrtie events to statisitcs.
+            // PrintWindowStatsLoop drains write events into statistics.
+            // It will not go into the loop, cause we provided errorFlag into the constructor above.
             StatsCollector->PrintWindowStatsLoop();
             UNIT_ASSERT_VALUES_EQUAL(1, StatsCollector->GetTotalWriteMessages());
         }

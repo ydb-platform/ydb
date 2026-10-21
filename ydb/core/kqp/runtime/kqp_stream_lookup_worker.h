@@ -21,6 +21,7 @@ struct TLookupSettings {
 
     ui32 AllowNullKeysPrefixSize;
     bool KeepRowsOrder;
+    ui32 CookieFormatVersion = 0;
     NKqpProto::EStreamLookupStrategy LookupStrategy;
     std::unique_ptr<NKikimrKqp::TReadVectorTopK> VectorTopK;
 
@@ -110,6 +111,8 @@ public:
     virtual bool AllRowsProcessed() = 0;
     virtual bool HasPendingResults() = 0;
     virtual void ResetRowsProcessing(ui64 readId) = 0;
+
+    virtual void ClearResults(NMiniKQL::TAllocState& /*allocState*/) {}
 
 protected:
     const NMiniKQL::TTypeEnvironment& TypeEnv;

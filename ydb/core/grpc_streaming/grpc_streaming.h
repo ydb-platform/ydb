@@ -79,6 +79,9 @@ public:
     virtual grpc_compression_level GetCompressionLevel() const = 0;
     virtual void UseDatabase(const TString& database) = 0;
     virtual TString GetRpcMethodName() const = 0;
+
+    //! Returns a borrowed counter block owned by this context, if available
+    virtual NYdbGrpc::ICounterBlock* GetCounterBlock() const { return nullptr; }
 };
 
 /**
@@ -224,10 +227,11 @@ private:
             return;
         }
 
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] stream accepted Name# %s ok# %s peer# %s",
-            this, Name,
-            status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
-            this->GetPeer().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Stream accepted",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"statusOk", status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false"},
+            {"peer", this->GetPeer()});
 
         if (status == NYdbGrpc::EQueueEventStatus::ERROR) {
             // Don't bother registering if accept failed
@@ -240,8 +244,9 @@ private:
 
         if (!Server->RegisterRequestCtx(this)) {
             // It's unsafe to send replies, so just cancel the request
-            LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] dropping request Name# %s due to shutdown",
-                this, Name);
+            YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Dropping request due to shutdown",
+                {"this", static_cast<void*>(this)},
+                {"name", Name});
             this->Context.TryCancel();
             return;
         }
@@ -265,10 +270,11 @@ private:
     }
 
     void OnDone(NYdbGrpc::EQueueEventStatus status) {
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] stream done notification Name# %s ok# %s peer# %s",
-            this, Name,
-            status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
-            this->GetPeer().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Stream done notification",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"statusOk", status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false"},
+            {"peer", this->GetPeer()});
 
         bool success = status == NYdbGrpc::EQueueEventStatus::OK;
 
@@ -286,9 +292,10 @@ private:
     }
 
     void Cancel() {
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade cancel Name# %s peer# %s",
-            this, Name,
-            this->GetPeer().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade cancel",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"peer", this->GetPeer()});
 
         this->Context.TryCancel();
     }
@@ -298,10 +305,11 @@ private:
     }
 
     void Attach(TActorId actor) {
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade attach Name# %s actor# %s peer# %s",
-            this, Name,
-            actor.ToString().c_str(),
-            this->GetPeer().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade attach",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"actor", actor},
+            {"peer", this->GetPeer()});
 
         auto guard = SingleThreaded.Enforce();
 
@@ -323,9 +331,10 @@ private:
     }
 
     bool Read() {
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade read Name# %s peer# %s",
-            this, Name,
-            this->GetPeer().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade read",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"peer", this->GetPeer()});
 
         auto guard = SingleThreaded.Enforce();
 
@@ -333,6 +342,15 @@ private:
         Y_ABORT_UNLESS(flags & FlagAttached, "Read cannot be called before Attach");
 
         if (flags & FlagFinishCalled) {
+            return false;
+        }
+
+        // Do not issue gRPC operations on a completion queue that is (or is
+        // about to be) shut down. Return false (read not accepted) without a
+        // completion event, matching the FlagFinishCalled contract: a rejected
+        // read produces no TEvReadFinished. The gRPC client is not notified
+        // (the CQ is dead anyway).
+        if (Server->IsShuttingDown()) {
             return false;
         }
 
@@ -349,11 +367,12 @@ private:
     }
 
     void OnReadDone(NYdbGrpc::EQueueEventStatus status) {
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] read finished Name# %s ok# %s data# %s peer# %s",
-            this, Name,
-            status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
-            NYdbGrpc::FormatMessage<TIn>(ReadInProgress->Record, status == NYdbGrpc::EQueueEventStatus::OK).c_str(),
-            this->GetPeer().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Read finished",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"statusOk", status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false"},
+            {"readInProgress", NYdbGrpc::FormatMessage<TIn>(ReadInProgress->Record, status == NYdbGrpc::EQueueEventStatus::OK)},
+            {"peer", this->GetPeer()});
 
         // Take current in-progress read first
         auto read = std::move(ReadInProgress);
@@ -375,8 +394,10 @@ private:
             while ((flags & FlagRegistered) && (flags & FlagFinishDone) && ReadQueue.load() == 0) {
                 Y_DEBUG_ABORT_UNLESS(flags & FlagFinishCalled);
                 if (Flags.compare_exchange_weak(flags, flags & ~FlagRegistered, std::memory_order_acq_rel)) {
-                    LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] deregistering request Name# %s peer# %s (read done)",
-                        this, Name, this->GetPeer().c_str());
+                    YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Deregistering request (read done)",
+                        {"this", static_cast<void*>(this)},
+                        {"name", Name},
+                        {"peer", this->GetPeer()});
                     Server->DeregisterRequestCtx(this);
                     break;
                 }
@@ -391,17 +412,19 @@ private:
 
     bool Write(TOut&& message, const grpc::WriteOptions& options = { }, const grpc::Status* status = nullptr) {
         if (status) {
-            LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade write Name# %s data# %s peer# %s grpc status# (%d) message# %s",
-                this, Name,
-                NYdbGrpc::FormatMessage<TOut>(message).c_str(),
-                this->GetPeer().c_str(),
-                static_cast<int>(status->error_code()),
-                status->error_message().c_str());
+            YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade write grpc",
+                {"this", static_cast<void*>(this)},
+                {"name", Name},
+                {"message", NYdbGrpc::FormatMessage<TOut>(message)},
+                {"peer", this->GetPeer()},
+                {"errorCode", static_cast<int>(status->error_code())},
+                {"errorMessage", status->error_message()});
         } else {
-            LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade write Name# %s data# %s peer# %s",
-                this, Name,
-                NYdbGrpc::FormatMessage<TOut>(message).c_str(),
-                this->GetPeer().c_str());
+            YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade write",
+                {"this", static_cast<void*>(this)},
+                {"name", Name},
+                {"message", NYdbGrpc::FormatMessage<TOut>(message)},
+                {"peer", this->GetPeer()});
         }
 
         Y_ABORT_UNLESS(!options.is_corked(),
@@ -418,6 +441,14 @@ private:
             Y_ABORT_UNLESS(flags & FlagAttached, "Write cannot be called before Attach");
 
             if (flags & FlagFinishCalled) {
+                return false;
+            }
+
+            // Do not issue gRPC operations on a completion queue that is (or is
+            // about to be) shut down. Return false (write not accepted) without
+            // a completion event. The gRPC client is
+            // not notified (the CQ is dead anyway).
+            if (Server->IsShuttingDown()) {
                 return false;
             }
 
@@ -453,10 +484,11 @@ private:
     }
 
     void OnWriteDone(NYdbGrpc::EQueueEventStatus status) {
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] write finished Name# %s ok# %s peer# %s",
-            this, Name,
-            status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
-            this->GetPeer().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Write finished",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"statusOk", status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false"},
+            {"peer", this->GetPeer()});
 
         auto event = MakeHolder<typename IContext::TEvWriteFinished>();
         event->Success = status == NYdbGrpc::EQueueEventStatus::OK;
@@ -495,23 +527,59 @@ private:
             }
         }
 
+        // Do not issue gRPC operations on a completion queue that is (or is
+        // about to be) shut down. OnFinishDone() is pure bookkeeping (no CQ
+        // operation) and must still run so the limiter token is released, the
+        // request is deregistered and counters are updated.
         if (next && nextStatus) {
-            Stream.WriteAndFinish(next->Message, next->Options, *nextStatus, OnWriteDoneTag.Prepare());
+            if (!Server->IsShuttingDown()) {
+                Stream.WriteAndFinish(next->Message, next->Options, *nextStatus, OnWriteDoneTag.Prepare());
+            } else {
+                // The write chain is being torn down. Drop the pending write and
+                // clear the active flag so OnFinishDone's invariant
+                // (!(flags & FlagWriteActive)) holds.
+                with_lock (WriteLock) {
+                    Flags &= ~FlagWriteActive;
+                }
+                OnFinishDone(status);
+            }
         } else if (next) {
-            Stream.Write(next->Message, next->Options, OnWriteDoneTag.Prepare());
+            if (!Server->IsShuttingDown()) {
+                Stream.Write(next->Message, next->Options, OnWriteDoneTag.Prepare());
+            } else {
+                // The write chain is being torn down. Drop the pending write and
+                // clear the active flag so OnFinishDone's invariant
+                // (!(flags & FlagWriteActive)) holds. If Finish was already
+                // requested, complete the shutdown bookkeeping now; otherwise
+                // leave the stream open so a later Finish() (e.g. from
+                // ~TFacade) can complete it.
+                bool finishCalled;
+                with_lock (WriteLock) {
+                    finishCalled = Flags.load(std::memory_order_acquire) & FlagFinishCalled;
+                    Flags &= ~FlagWriteActive;
+                }
+                if (finishCalled) {
+                    OnFinishDone(status);
+                }
+            }
         } else if (nextStatus) {
-            Stream.Finish(*nextStatus, OnFinishDoneTag.Prepare());
+            if (!Server->IsShuttingDown()) {
+                Stream.Finish(*nextStatus, OnFinishDoneTag.Prepare());
+            } else {
+                OnFinishDone(status);
+            }
         } else if (wasWriteAndFinish) {
             OnFinishDone(status);
         }
     }
 
     bool Finish(const grpc::Status& status) {
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade finish Name# %s peer# %s grpc status# (%d) message# %s",
-            this, Name,
-            this->GetPeer().c_str(),
-            static_cast<int>(status.error_code()),
-            status.error_message().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade finish grpc",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"peer", this->GetPeer()},
+            {"errorCode", static_cast<int>(status.error_code())},
+            {"errorMessage", status.error_message()});
 
         return FinishInternal(status);
     }
@@ -534,20 +602,33 @@ private:
             finish = !(flags & FlagWriteActive);
         } while (!Flags.compare_exchange_weak(flags, flags | FlagFinishCalled, std::memory_order_acq_rel));
 
+        // when the server is shutting down its completion queues are (or are about to be) dead.
+        // Issuing Stream.Finish() on a dead CQ fails with "grpc_cq_begin_op(cq_, notify_tag) failed"
+        // and crashes the process. This happens when an actor holding the IStreamCtx
+        // (TFacade) is force-destroyed after the gRPC server has been stopped
+        // (e.g. ActorSystem::Stop() destroys the request proxy and its deferred
+        // streaming requests). Skip the gRPC finish in that case; the stream is
+        // being torn down anyway. OnFinishDone() is still invoked so the limiter
+        // token is released, the request is deregistered and counters are updated.
         if (finish) {
-            Stream.Finish(status, OnFinishDoneTag.Prepare());
+            if (!Server->IsShuttingDown()) {
+                Stream.Finish(status, OnFinishDoneTag.Prepare());
+            } else {
+                OnFinishDone(NYdbGrpc::EQueueEventStatus::ERROR);
+            }
         }
 
         return true;
     }
 
     void OnFinishDone(NYdbGrpc::EQueueEventStatus status) {
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] stream finished Name# %s ok# %s peer# %s grpc status# (%d) message# %s",
-            this, Name,
-            status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
-            this->GetPeer().c_str(),
-            static_cast<int>(Status->error_code()),
-            Status->error_message().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Stream finished grpc",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"statusOk", status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false"},
+            {"peer", this->GetPeer()},
+            {"errorCode", static_cast<int>(Status->error_code())},
+            {"errorMessage", Status->error_message()});
 
         auto flags = (Flags |= FlagFinishDone);
         Y_ABORT_UNLESS(flags & FlagFinishCalled);
@@ -579,8 +660,10 @@ private:
 
         while ((flags & FlagRegistered) && ReadQueue.load() == 0) {
             if (Flags.compare_exchange_weak(flags, flags & ~FlagRegistered, std::memory_order_acq_rel)) {
-                LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] deregistering request Name# %s peer# %s (finish done)",
-                    this, Name, this->GetPeer().c_str());
+                YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Deregistering request (finish done)",
+                    {"this", static_cast<void*>(this)},
+                    {"name", Name},
+                    {"peer", this->GetPeer()});
                 Server->DeregisterRequestCtx(this);
                 break;
             }
@@ -670,6 +753,10 @@ private:
 
         TString GetRpcMethodName() const override {
             return Self->GetRpcMethodName();
+        }
+
+        NYdbGrpc::ICounterBlock* GetCounterBlock() const override {
+            return Self->Counters.Get();
         }
 
     private:

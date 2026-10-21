@@ -1,12 +1,16 @@
 LIBRARY()
 
 SRCS(
+    actor_monotonic_time_provider.cpp
+    actor_monotonic_time_provider.h
     activeactors.h
     address_classifier.cpp
     backoff.cpp
     cache.cpp
     cache.h
     circular_queue.h
+    circular_sparse_queue.h
+    circular_sparse_queue.cpp
     concurrent_rw_hash.cpp
     concurrent_rw_hash.h
     console.cpp

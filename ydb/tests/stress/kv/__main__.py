@@ -13,6 +13,8 @@ if __name__ == '__main__':
     parser.add_argument('--store_type', default="row", choices=["row", "column"], help='STORE mode for CREATE TABLE')
     parser.add_argument('--kv_prefix', default='topic', help='Topic name')
     parser.add_argument('--log_file', default=None, help='Append log into specified file')
+    parser.add_argument('--phase', choices=['prepare', 'run', 'clean'], default=None,
+                        help='Phase to run: prepare (init), run, clean. If omitted, all phases run in sequence.')
 
     args = parser.parse_args()
 
@@ -26,5 +28,15 @@ if __name__ == '__main__':
         )
 
     workload = YdbKvWorkload(args.endpoint, args.database, duration=args.duration, store_type=args.store_type, tables_prefix=args.kv_prefix)
-    workload.start()
-    workload.join()
+    if args.phase == 'prepare':
+        workload.prepare()
+    elif args.phase == 'run':
+        workload.start()
+        workload.join()
+    elif args.phase == 'clean':
+        workload.clean()
+    else:
+        workload.prepare()
+        workload.start()
+        workload.join()
+        workload.clean()

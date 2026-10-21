@@ -1,22 +1,7 @@
 #include "pq_schema_actor.h"
 
-#include <ydb/core/ydb_convert/topic_description.h>
-#include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
-#include <ydb/core/base/feature_flags.h>
-#include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/persqueue/public/constants.h>
-#include <ydb/core/util/proto_duration.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
-
-#include <ydb/public/api/protos/ydb_topic.pb.h>
-
-#include <yql/essentials/public/decimal/yql_decimal.h>
-
-#include <util/string/vector.h>
-
-#include <library/cpp/digest/md5/md5.h>
 
 #include <expected>
 
@@ -147,111 +132,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         return TMsgPqCodes("", Ydb::PersQueue::ErrorCode::OK);
     }
 
-    TString ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
-        if (alter.has_set_important()) {
-            consumer.set_important(alter.set_important());
-        }
-        if (alter.has_set_read_from()) {
-            consumer.mutable_read_from()->CopyFrom(alter.set_read_from());
-        }
-        if (alter.has_set_supported_codecs()) {
-            consumer.mutable_supported_codecs()->CopyFrom(alter.set_supported_codecs());
-        }
-        for (const auto& [attrName, attrValue] : alter.alter_attributes()) {
-            (*consumer.mutable_attributes())[attrName] = attrValue;
-        }
-        if (alter.has_set_availability_period()) {
-            consumer.mutable_availability_period()->CopyFrom(alter.set_availability_period());
-        }
-        if (alter.has_reset_availability_period()) {
-            consumer.clear_availability_period();
-        }
-
-        if (alter.has_alter_streaming_consumer_type()) {
-            if (!consumer.has_streaming_consumer_type()) {
-                return "Cannot alter consumer type";
-            }
-        } else if (alter.has_alter_shared_consumer_type()) {
-            if (!consumer.has_shared_consumer_type()) {
-                return "Cannot alter consumer type";
-            }
-
-            auto* type = consumer.mutable_shared_consumer_type();
-            auto& alterType = alter.alter_shared_consumer_type();
-
-            if (alterType.has_set_default_processing_timeout()) {
-                type->mutable_default_processing_timeout()->CopyFrom(alterType.set_default_processing_timeout());
-            }
-
-            if (alterType.has_set_receive_message_delay()) {
-                type->mutable_receive_message_delay()->CopyFrom(alterType.set_receive_message_delay());
-            }
-
-            if (alterType.has_set_receive_message_wait_time()) {
-                type->mutable_receive_message_wait_time()->CopyFrom(alterType.set_receive_message_wait_time());
-            }
-
-            if (alterType.has_alter_dead_letter_policy()) {
-                auto& alterPolicy = alterType.alter_dead_letter_policy();
-                auto* policy = type->mutable_dead_letter_policy();
-                if (alterPolicy.has_set_enabled()) {
-                    policy->set_enabled(alterPolicy.set_enabled());
-                }
-
-                if (alterPolicy.has_alter_condition()) {
-                    policy->mutable_condition()->set_max_processing_attempts(alterPolicy.alter_condition().set_max_processing_attempts());
-                }
-
-                if (alterPolicy.has_alter_move_action()) {
-                    if (!policy->has_move_action()) {
-                        return "Cannot alter move action";
-                    }
-                    if (alterPolicy.alter_move_action().has_set_dead_letter_queue()) {
-                        if (alterPolicy.alter_move_action().set_dead_letter_queue().empty()) {
-                            return "Dead letter queue cannot be empty";
-                        }
-                        policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.alter_move_action().set_dead_letter_queue());
-                    }
-                } else if (alterPolicy.has_set_move_action()) {
-                    if (alterPolicy.set_move_action().dead_letter_queue().empty()) {
-                        return "Dead letter queue cannot be empty";
-                    }
-                    policy->clear_action();
-                    policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.set_move_action().dead_letter_queue());
-                } else if (alterPolicy.has_set_delete_action()) {
-                    policy->clear_action();
-                    policy->mutable_delete_action();
-                }
-            }
-        }
-
-        return {};
-    }
-
-    // TODO remove this function. use AddConsumer instead
-    TMsgPqCodes AddReadRuleToConfig(
-        NKikimrPQ::TPQTabletConfig* config,
-        const Ydb::Topic::Consumer& rr,
-        const TClientServiceTypes& supportedClientServiceTypes,
-        const bool checkServiceType,
-        const NKikimrPQ::TPQConfig& /*pqConfig*/,
-        bool /*enableTopicDiskSubDomainQuota*/,
-        const TAppData* /*appData*/,
-        TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings
-    ) {
-        auto result = NPQ::NSchema::AddConsumer(
-            config,
-            rr,
-            supportedClientServiceTypes,
-            checkServiceType,
-            consumersAdvancedMonitoringSettings
-        );
-        if (!result) {
-            return TMsgPqCodes(result.GetErrorMessage(), Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
-        }
-        return TMsgPqCodes("", Ydb::PersQueue::ErrorCode::OK);
-    }
-
     TString RemoveReadRuleFromConfig(
         NKikimrPQ::TPQTabletConfig* config,
         const NKikimrPQ::TPQTabletConfig& originalConfig,
@@ -259,6 +139,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         const NKikimrPQ::TPQConfig& /*pqConfig*/
     ) {
         config->ClearConsumers();
+        NPQ::ClearReadQuotaExceptWithoutConsumer(*config);
 
         bool removed = false;
 
@@ -270,6 +151,11 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             auto* dst = config->AddConsumers();
             dst->CopyFrom(consumer);
+            auto* srcReadQuota = NPQ::GetReadQuota(originalConfig, consumer.GetName());
+            if (srcReadQuota) {
+                auto* dstReadQuota = NPQ::GetOrAddReadQuota(*config, consumer.GetName());
+                dstReadQuota->CopyFrom(*srcReadQuota);
+            }
         }
 
         if (!removed) {
@@ -302,225 +188,5 @@ namespace NKikimr::NGRpcProxy::V1 {
         NYql::TIssue res(NYql::TPosition(), errorReason);
         res.SetCode(errorCode, NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR);
         return res;
-    }
-
-    Ydb::StatusIds::StatusCode ProcessAttributes(
-        const ::google::protobuf::Map<TProtoStringType, TProtoStringType>& attributes,
-        const bool topicsAreFirstClassCitizen,
-        NKikimrSchemeOp::TPersQueueGroupDescription* pqDescr,
-        TConsumersAdvancedMonitoringSettings& consumersAdvancedMonitoringSettings,
-        TString& error,
-        const bool alter) {
-
-        auto [status, error_] = NPQ::NSchema::ProcessTopicAttributes(
-            attributes,
-            pqDescr,
-            alter ? NPQ::NSchema::EOperation::Alter : NPQ::NSchema::EOperation::Create,
-            topicsAreFirstClassCitizen,
-            consumersAdvancedMonitoringSettings);
-
-        if (status != Ydb::StatusIds::SUCCESS) {
-            error = error_;
-        }
-        return status;
-    }
-
-    std::optional<TYdbPqCodes> ValidatePartitionStrategy(const ::NKikimrPQ::TPQTabletConfig& config, TString& error) {
-        auto [status, error_] = NPQ::NSchema::ValidatePartitionStrategy(config);
-
-        if (status != Ydb::StatusIds::SUCCESS) {
-            error = error_;
-            return TYdbPqCodes(status, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
-        }
-
-        return std::nullopt;
-    }
-
-    static bool FillMeteringMode(Ydb::Topic::MeteringMode mode, NKikimrPQ::TPQTabletConfig& config,
-            bool meteringEnabled, bool isAlter, Ydb::StatusIds::StatusCode& code, TString& error)
-    {
-        Y_UNUSED(meteringEnabled);
-
-        auto res = NPQ::NSchema::FillMeteringMode(config, mode, isAlter ? NPQ::NSchema::EOperation::Alter : NPQ::NSchema::EOperation::Create);
-        if (!res) {
-            error = res.GetErrorMessage();
-            code = res.GetStatus();
-            return false;
-        }
-        return true;
-    }
-
-    // TODO: remove
-    TYdbPqCodes FillProposeRequestImpl(
-            const TString& name, const Ydb::Topic::CreateTopicRequest& request,
-            NKikimrSchemeOp::TModifyScheme& modifyScheme, TAppData* appData,
-            TString& error, const TString& path, const TString& database, const TString& localDc
-    ) {
-        const auto& pqConfig = appData->PQConfig;
-
-        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
-        auto pqDescr = modifyScheme.MutableCreatePersQueueGroup();
-
-        pqDescr->SetName(name);
-        ui32 minParts = 1;
-
-        auto pqTabletConfig = pqDescr->MutablePQTabletConfig();
-        auto partConfig = pqTabletConfig->MutablePartitionConfig();
-
-        if (request.retention_storage_mb())
-            partConfig->SetStorageLimitBytes(request.retention_storage_mb() * 1024 * 1024);
-
-        if (request.has_partitioning_settings()) {
-            const auto& settings = request.partitioning_settings();
-            if (settings.min_active_partitions() < 0) {
-                error = TStringBuilder() << "Partitions count must be positive, provided " << settings.min_active_partitions();
-                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
-            }
-            minParts = std::max<ui32>(1, settings.min_active_partitions());
-            if (request.partitioning_settings().has_auto_partitioning_settings() &&
-                request.partitioning_settings().auto_partitioning_settings().strategy() != ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED) {
-
-                auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
-                auto autoscaleSettings = settings.auto_partitioning_settings();
-                pqTabletConfigPartStrategy->SetMinPartitionCount(minParts);
-                pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault<int64_t>(settings.max_active_partitions(),0L,minParts));
-                pqTabletConfigPartStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoscaleSettings.partition_write_speed().up_utilization_percent(), 0, 90));
-                pqTabletConfigPartStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoscaleSettings.partition_write_speed().down_utilization_percent(), 0, 30));
-                pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault<int64_t>(autoscaleSettings.partition_write_speed().stabilization_window().seconds(), 0L, 300L));
-                switch (autoscaleSettings.strategy()) {
-                    case ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP:
-                        pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
-                        break;
-                    case ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN:
-                        pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
-                        break;
-                    case ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_PAUSED:
-                        pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_PAUSED);
-                        break;
-                    default:
-                        pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED);
-                        break;
-                }
-                if (auto code = ValidatePartitionStrategy(*pqTabletConfig, error); code) {
-                    return *code;
-                }
-            }
-        }
-        pqDescr->SetTotalGroupCount(minParts);
-        pqTabletConfig->SetRequireAuthWrite(true);
-        pqTabletConfig->SetRequireAuthRead(true);
-        pqDescr->SetPartitionPerTablet(1);
-
-        partConfig->SetMaxCountInPartition(Max<i32>());
-
-        partConfig->SetSourceIdLifetimeSeconds(NKikimrPQ::TPartitionConfig().GetSourceIdLifetimeSeconds());
-        partConfig->SetSourceIdMaxCounts(NKikimrPQ::TPartitionConfig().GetSourceIdMaxCounts());
-
-        TConsumersAdvancedMonitoringSettings consumersAdvancedMonitoringSettings;
-        auto res = ProcessAttributes(request.attributes(), pqConfig.GetTopicsAreFirstClassCitizen(), pqDescr, consumersAdvancedMonitoringSettings, error, false);
-        if (res != Ydb::StatusIds::SUCCESS) {
-            return TYdbPqCodes(res, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
-        }
-
-        bool local = true; // TODO: check here cluster;
-
-        auto topicPath = NKikimr::JoinPath({modifyScheme.GetWorkingDir(), name});
-        if (!pqConfig.GetTopicsAreFirstClassCitizen()) {
-            auto converter = NPersQueue::TTopicNameConverter::ForFederation(
-                    pqConfig.GetRoot(), pqConfig.GetTestDatabaseRoot(), name, path, database, local, localDc,
-                    pqTabletConfig->GetFederationAccount()
-            );
-
-            if (!converter->IsValid()) {
-                error = TStringBuilder() << "Bad topic: " << converter->GetReason();
-                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
-            }
-            pqTabletConfig->SetLocalDC(local);
-            pqTabletConfig->SetDC(converter->GetCluster());
-            pqTabletConfig->SetProducer(converter->GetLegacyProducer());
-            pqTabletConfig->SetTopic(converter->GetLegacyLogtype());
-        }
-
-//        config->SetTopicName(name);
-//        config->SetTopicPath(topicPath);
-
-        //Sets legacy 'logtype'.
-
-
-        const auto& channelProfiles = pqConfig.GetChannelProfiles();
-        if (channelProfiles.size() > 2) {
-            partConfig->MutableExplicitChannelProfiles()->CopyFrom(channelProfiles);
-        }
-        if (request.has_retention_period()) {
-            if (auto retentionPeriodSeconds = CheckRetentionPeriod(request.retention_period().seconds())) {
-                partConfig->SetLifetimeSeconds(retentionPeriodSeconds.value());
-            } else {
-                error = TStringBuilder() << retentionPeriodSeconds.error() << ", provided " <<
-                        request.retention_period().DebugString();
-                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
-            }
-        } else {
-            partConfig->SetLifetimeSeconds(TDuration::Days(1).Seconds());
-        }
-        if (local) {
-            auto partSpeed = request.partition_write_speed_bytes_per_second();
-            if (partSpeed == 0) {
-                partSpeed = DEFAULT_PARTITION_SPEED;
-            }
-            partConfig->SetWriteSpeedInBytesPerSecond(partSpeed);
-
-            const auto& burstSpeed = request.partition_write_burst_bytes();
-            if (burstSpeed == 0) {
-                partConfig->SetBurstSize(partSpeed);
-            } else {
-                partConfig->SetBurstSize(burstSpeed);
-            }
-        }
-        pqTabletConfig->SetFormatVersion(0);
-        pqTabletConfig->SetContentBasedDeduplication(request.content_based_deduplication());
-
-        auto ct = pqTabletConfig->MutableCodecs();
-        for(const auto& codec : request.supported_codecs().codecs()) {
-            if ((!Ydb::Topic::Codec_IsValid(codec) && codec < Ydb::Topic::CODEC_CUSTOM) || codec == 0) {
-                error = TStringBuilder() << "Unknown codec with value " << codec;
-                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
-            }
-            ct->AddIds(codec - 1);
-            ct->AddCodecs(Ydb::Topic::Codec_IsValid(codec) ? LegacySubstr(to_lower(Ydb::Topic::Codec_Name((Ydb::Topic::Codec)codec)), 6) : "CUSTOM");
-        }
-
-        if (request.consumers_size() > MAX_READ_RULES_COUNT) {
-            error = TStringBuilder() << "consumers count cannot be more than "
-                                     << MAX_READ_RULES_COUNT << ", provided " << request.consumers_size();
-            return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
-        }
-
-        if (Ydb::StatusIds::StatusCode code; !FillMeteringMode(request.metering_mode(), *pqTabletConfig, pqConfig.GetBillingMeteringConfig().GetEnabled(), false, code, error)) {
-            return TYdbPqCodes(code, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
-        }
-
-        const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(pqConfig);
-
-
-        for (const auto& consumer : request.consumers()) {
-            auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, consumer, supportedClientServiceTypes, true, pqConfig,
-                                                      appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota(),
-                                                      appData,
-                                                      &consumersAdvancedMonitoringSettings);
-            if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
-                error = messageAndCode.Message;
-                return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, messageAndCode.PQCode);
-            }
-        }
-        if (auto errorCode = consumersAdvancedMonitoringSettings.CheckForUnknownConsumers(error); errorCode != Ydb::StatusIds::SUCCESS) {
-            return TYdbPqCodes(errorCode, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
-        }
-
-        if (request.has_metrics_level()) {
-            pqTabletConfig->SetMetricsLevel(request.metrics_level());
-        }
-
-        return TYdbPqCodes(CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, EOperation::Create),
-                           Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
     }
 }

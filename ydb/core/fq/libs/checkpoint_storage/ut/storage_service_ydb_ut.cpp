@@ -1,25 +1,22 @@
-#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
-
-#include <ydb/core/fq/libs/actors/logging/log.h>
-#include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
-
-#include <ydb/library/security/ydb_credentials_provider_factory.h>
-
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
-
-#include <ydb/library/actors/core/executor_pool_basic.h>
-#include <ydb/library/actors/core/scheduler_basic.h>
-#include <library/cpp/retry/retry.h>
-#include <library/cpp/testing/unittest/registar.h>
-
+#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
 
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/scheduler_basic.h>
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
+#include <library/cpp/retry/retry.h>
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/system/env.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
 namespace NFq {
 
@@ -44,7 +41,7 @@ using TRuntimePtr = std::unique_ptr<TTestActorRuntime>;
 ////////////////////////////////////////////////////////////////////////////////
 
 template <bool UseYdbSdk>
-class TStorageServiceTest : public NUnitTest::TTestBase{
+class TStorageServiceTest: public NUnitTest::TTestBase {
     using TSelf = TStorageServiceTest<UseYdbSdk>;
 
 public:
@@ -72,7 +69,8 @@ public:
         storageConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
         storageConfig.SetDatabase(GetEnv("YDB_DATABASE"));
         storageConfig.SetToken("");
-        storageConfig.SetTablePrefix(CreateGuidAsString());
+        TablePrefix = CreateGuidAsString();
+        storageConfig.SetTablePrefix(TablePrefix);
 
         auto& gcConfig = *config.MutableCheckpointGarbageConfig();
         gcConfig.SetEnabled(enableGc);
@@ -80,11 +78,10 @@ public:
         auto driverConfig = NYdb::TDriverConfig();
         NYdb::TDriver driver(driverConfig);
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-        auto storageService = NewCheckpointStorageService(config, "id", credFactory, std::move(driver), MakeIntrusive<::NMonitoring::TDynamicCounters>());
+        auto storageService =
+            NewCheckpointStorageService(config, "id", credFactory, std::move(driver), MakeIntrusive<::NMonitoring::TDynamicCounters>());
 
-        Runtime->AddLocalService(
-            NYql::NDq::MakeCheckpointStorageID(),
-            TActorSetupCmd(storageService.release(), TMailboxType::Simple, 0));
+        Runtime->AddLocalService(NYql::NDq::MakeCheckpointStorageID(), TActorSetupCmd(storageService.release(), TMailboxType::Simple, 0));
 
         SetupTabletServices(*Runtime);
         Runtime->DispatchEvents({}, TDuration::Zero());
@@ -97,6 +94,7 @@ public:
         authConfig.SetUseBuiltinDomain(true);
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
         ServerSettings->AppConfig->MutableFeatureFlags()->SetEnableStreamingQueries(true);
+        ServerSettings->AppConfig->MutableTableServiceConfig()->MutableQueryLimits()->SetResultRowsLimit(5);
 
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableStreamingQueries(true);
@@ -121,8 +119,9 @@ public:
             try {
                 auto request = std::make_unique<TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest>("aaa");
                 GetRuntime()->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
-                const auto event = GetRuntime()->template GrabEdgeEvent<TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse>(sender, TDuration::Seconds(1));
-                 if (event && event->Get()->Issues.Empty()) {
+                const auto event =
+                    GetRuntime()->template GrabEdgeEvent<TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse>(sender, TDuration::Seconds(1));
+                if (event && event->Get()->Issues.Empty()) {
                     break;
                 }
             } catch (TEmptyEventQueueException&) {
@@ -131,10 +130,11 @@ public:
 
         while (true) {
             try {
-                auto request = std::make_unique<TEvCheckpointStorage::TEvRegisterCoordinatorRequest>(TCoordinatorId{"test", 777});
+                auto request = std::make_unique<TEvCheckpointStorage::TEvRegisterCoordinatorRequest>(TCoordinatorId{ "test", 777 });
                 GetRuntime()->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
-                const auto event = GetRuntime()->template GrabEdgeEvent<TEvCheckpointStorage::TEvRegisterCoordinatorResponse>(sender, TDuration::Seconds(1));
-                 if (event && event->Get()->Issues.Empty()) {
+                const auto event =
+                    GetRuntime()->template GrabEdgeEvent<TEvCheckpointStorage::TEvRegisterCoordinatorResponse>(sender, TDuration::Seconds(1));
+                if (event && event->Get()->Issues.Empty()) {
                     break;
                 }
             } catch (TEmptyEventQueueException&) {
@@ -150,15 +150,12 @@ public:
         }
     }
 
-    void RegisterCoordinator(
-        const TCoordinatorId& coordinatorId,
-        bool expectFailure = false)
+    void RegisterCoordinator(const TCoordinatorId& coordinatorId, bool expectFailure = false)
     {
         TActorId sender = GetRuntime()->AllocateEdgeActor();
         auto request = std::make_unique<TEvCheckpointStorage::TEvRegisterCoordinatorRequest>(coordinatorId);
-                
-        GetRuntime()->Send(new IEventHandle(
-            NYql::NDq::MakeCheckpointStorageID(), sender, request.release(), IEventHandle::FlagTrackDelivery));
+
+        GetRuntime()->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release(), IEventHandle::FlagTrackDelivery));
 
         TAutoPtr<IEventHandle> handle;
 
@@ -178,9 +175,7 @@ public:
     }
 
     template <class TResponse>
-    void CheckCheckpointResponse(
-        const TCheckpointId& checkpointId,
-        bool expectFailure = false)
+    void CheckCheckpointResponse(const TCheckpointId& checkpointId, bool expectFailure = false)
     {
         TAutoPtr<IEventHandle> handle;
         auto* event = GetRuntime()->template GrabEdgeEvent<TResponse>(handle);
@@ -194,90 +189,62 @@ public:
         }
     }
 
-    void CreateCheckpoint(
-        const TString& graphId,
-        ui64 generation,
-        const TCheckpointId& checkpointId,
-        bool expectFailure = false)
+    void CreateCheckpoint(const TString& graphId, ui64 generation, const TCheckpointId& checkpointId, bool expectFailure = false)
     {
         TActorId sender = GetRuntime()->AllocateEdgeActor();
 
         TCoordinatorId coordinatorId(graphId, generation);
-        auto request = std::make_unique<TEvCheckpointStorage::TEvCreateCheckpointRequest>(coordinatorId, checkpointId, 0, NProto::TCheckpointGraphDescription());
-        GetRuntime()->Send(new IEventHandle(
-            NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
+        auto request = std::make_unique<TEvCheckpointStorage::TEvCreateCheckpointRequest>(
+            coordinatorId, checkpointId, 0, NProto::TCheckpointGraphDescription());
+        GetRuntime()->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
 
-        CheckCheckpointResponse<TEvCheckpointStorage::TEvCreateCheckpointResponse>(
-            checkpointId,
-            expectFailure);
+        CheckCheckpointResponse<TEvCheckpointStorage::TEvCreateCheckpointResponse>(checkpointId, expectFailure);
     }
 
-    void AbortCheckpoint(
-        const TString& graphId,
-        ui64 generation,
-        const TCheckpointId& checkpointId,
-        bool expectFailure = false)
+    void AbortCheckpoint(const TString& graphId, ui64 generation, const TCheckpointId& checkpointId, bool expectFailure = false)
     {
         TActorId sender = GetRuntime()->AllocateEdgeActor();
 
         TCoordinatorId coordinatorId(graphId, generation);
         auto request = std::make_unique<TEvCheckpointStorage::TEvAbortCheckpointRequest>(coordinatorId, checkpointId, "test reason");
-        GetRuntime()->Send(new IEventHandle(
-            NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
+        GetRuntime()->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
 
-        CheckCheckpointResponse<TEvCheckpointStorage::TEvAbortCheckpointResponse>(
-            checkpointId,
-            expectFailure);
+        CheckCheckpointResponse<TEvCheckpointStorage::TEvAbortCheckpointResponse>(checkpointId, expectFailure);
     }
 
     template <class TRequest, class TResponse>
-    void CheckpointOperation(
-        const TString& graphId,
-        ui64 generation,
-        const TCheckpointId& checkpointId,
-        bool expectFailure = false)
+    void CheckpointOperation(const TString& graphId, ui64 generation, const TCheckpointId& checkpointId, bool expectFailure = false)
     {
         TActorId sender = GetRuntime()->AllocateEdgeActor();
 
         TCoordinatorId coordinatorId(graphId, generation);
         std::unique_ptr<TRequest> request;
 
-        if constexpr (std::is_same_v<TRequest, TEvCheckpointStorage::TEvCompleteCheckpointRequest>)
+        if constexpr (std::is_same_v<TRequest, TEvCheckpointStorage::TEvCompleteCheckpointRequest>) {
             request = std::make_unique<TRequest>(coordinatorId, checkpointId, 100, NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT);
-        else
+        } else {
             request = std::make_unique<TRequest>(coordinatorId, checkpointId, 100);
-        GetRuntime()->Send(new IEventHandle(
-            NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
+        }
+        GetRuntime()->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
 
-        CheckCheckpointResponse<TResponse>(
-            checkpointId,
-            expectFailure);
+        CheckCheckpointResponse<TResponse>(checkpointId, expectFailure);
     }
 
-    void PendingCommitCheckpoint(
-        const TString& graphId,
-        ui64 generation,
-        const TCheckpointId& checkpointId,
-        bool expectFailure = false) {
-        CheckpointOperation<TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest, TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusResponse>(
-            graphId, generation, checkpointId, expectFailure);
+    void PendingCommitCheckpoint(const TString& graphId, ui64 generation, const TCheckpointId& checkpointId, bool expectFailure = false) {
+        CheckpointOperation<TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest,
+            TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusResponse>(graphId, generation, checkpointId, expectFailure);
     }
-    void CompleteCheckpoint(
-        const TString& graphId,
-        ui64 generation,
-        const TCheckpointId& checkpointId,
-        bool expectFailure = false) {
+
+    void CompleteCheckpoint(const TString& graphId, ui64 generation, const TCheckpointId& checkpointId, bool expectFailure = false) {
         CheckpointOperation<TEvCheckpointStorage::TEvCompleteCheckpointRequest, TEvCheckpointStorage::TEvCompleteCheckpointResponse>(
             graphId, generation, checkpointId, expectFailure);
     }
 
-    TCheckpoints GetCheckpoints(
-        const TString& graphId)
+    TCheckpoints GetCheckpoints(const TString& graphId)
     {
         TActorId sender = GetRuntime()->AllocateEdgeActor();
         auto request = std::make_unique<TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest>(graphId);
-        GetRuntime()->Send(new IEventHandle(
-            NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
+        GetRuntime()->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
 
         TAutoPtr<IEventHandle> handle;
         auto* event = GetRuntime()->template GrabEdgeEvent<TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse>(handle);
@@ -286,10 +253,7 @@ public:
         return event->Checkpoints;
     }
 
-    void SaveState(
-        ui64 taskId,
-        const TCheckpointId& checkpointId,
-        const TString& blob)
+    void SaveState(ui64 taskId, const TCheckpointId& checkpointId, const TString& blob)
     {
         TActorId sender = GetRuntime()->AllocateEdgeActor();
         TCoordinatorId coordinatorId(GraphId, Generation);
@@ -308,19 +272,15 @@ public:
         UNIT_ASSERT_C(event->Record.GetStatus() == NYql::NDqProto::TEvSaveTaskStateResult::OK, event->Record.DebugString());
     }
 
-    TString GetState(
-        ui64 taskId,
-        const TString& graphId,
-        const TCheckpointId& checkpointId)
+    TString GetState(ui64 taskId, const TString& graphId, const TCheckpointId& checkpointId)
     {
         TActorId sender = GetRuntime()->AllocateEdgeActor();
 
         auto checkpoint = NYql::NDqProto::TCheckpoint();
         checkpoint.SetGeneration(checkpointId.CoordinatorGeneration);
         checkpoint.SetId(checkpointId.SeqNo);
-        auto request = std::make_unique<NYql::NDq::TEvDqCompute::TEvGetTaskState>(graphId, std::vector{taskId}, checkpoint, Generation);
-        GetRuntime()->Send(new IEventHandle(
-            NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
+        auto request = std::make_unique<NYql::NDq::TEvDqCompute::TEvGetTaskState>(graphId, std::vector{ taskId }, checkpoint, Generation);
+        GetRuntime()->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
 
         TAutoPtr<IEventHandle> handle;
         auto* event = GetRuntime()->template GrabEdgeEvent<NYql::NDq::TEvDqCompute::TEvGetTaskStateResult>(handle);
@@ -331,10 +291,7 @@ public:
         return event->States[0].MiniKqlProgram->Data.Blob;
     }
 
-    void CreateCompletedCheckpoint(
-        const TString& graphId,
-        ui64 generation,
-        const TCheckpointId& checkpointId)
+    void CreateCompletedCheckpoint(const TString& graphId, ui64 generation, const TCheckpointId& checkpointId)
     {
         CreateCheckpoint(graphId, generation, checkpointId, false);
         PendingCommitCheckpoint(graphId, generation, checkpointId, false);
@@ -368,6 +325,8 @@ public:
     UNIT_TEST(ShouldSaveState);
     UNIT_TEST(ShouldGetState);
     UNIT_TEST(ShouldUseGc);
+    UNIT_TEST(ShouldTablesHaveAutoPartitioning);
+    UNIT_TEST(ShouldDeleteGraphViaEvent);
     UNIT_TEST_SUITE_END();
 
     void ShouldRegister() {
@@ -444,7 +403,7 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 3UL);
 
         THashSet<TCheckpointId, TCheckpointIdHash> checkpoinIds;
-        for (const auto& checkpoint: checkpoints) {
+        for (const auto& checkpoint : checkpoints) {
             UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Pending);
             checkpoinIds.insert(checkpoint.CheckpointId);
         }
@@ -455,6 +414,7 @@ public:
     }
 
     void ShouldPendingAndCompleteCheckpoint() {
+        Init(true);
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
         PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, false);
@@ -464,36 +424,27 @@ public:
         CompleteCheckpoint(GraphId, Generation, CheckpointId2, false);
 
         auto checkpoints = GetCheckpoints(GraphId);
-        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 2UL);
-
-        for (const auto& checkpoint: checkpoints) {
-            if (checkpoint.CheckpointId == CheckpointId1) {
-                UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::PendingCommit);
-            } else if (checkpoint.CheckpointId == CheckpointId2) {
-                UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Completed);
-            } else {
-                UNIT_ASSERT(false);
-            }
-        }
+        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 1UL);
+        UNIT_ASSERT(checkpoints[0].Status == ECheckpointStatus::Completed);
     }
 
     void ShouldAbortCheckpoint() {
+        Init(true);
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
         PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, false);
+        AbortCheckpoint(GraphId, Generation, CheckpointId1, false);
 
         CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
         PendingCommitCheckpoint(GraphId, Generation, CheckpointId2, false);
         CompleteCheckpoint(GraphId, Generation, CheckpointId2, false);
-
-        AbortCheckpoint(GraphId, Generation, CheckpointId1, false);
         AbortCheckpoint(GraphId, Generation, CheckpointId2, false);
 
         auto checkpoints = GetCheckpoints(GraphId);
-        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 2UL);
+        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 1UL);
 
-        for (const auto& checkpoint: checkpoints) {
-            UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Aborted);
+        for (const auto& checkpoint : checkpoints) {
+            UNIT_ASSERT_C(checkpoint.Status == ECheckpointStatus::Aborted, "checkpoint.Status " << checkpoint.Status);
         }
     }
 
@@ -564,12 +515,28 @@ public:
         NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
 
         RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        auto state = MakeState("some random state");
-        SaveState(1317, CheckpointId1, state);
+        size_t count = 20;
+        ui64 taskId1 = 1316;
+        ui64 taskId2 = 1317;
 
-        auto actual = GetState(1317, GraphId, CheckpointId1);
-        UNIT_ASSERT_VALUES_EQUAL(state, actual);
+        for (size_t seqNo = 0; seqNo < count; ++seqNo) {
+            auto checkpointId = TCheckpointId(Generation, seqNo);
+            CreateCheckpoint(GraphId, Generation, checkpointId, false);
+            auto state1 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId1);
+            SaveState(taskId1, checkpointId, state1);
+            auto state2 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId2);
+            SaveState(taskId2, checkpointId, state2);
+        }
+
+        ui64 seqNo = 10;
+        auto checkpointId = TCheckpointId(Generation, seqNo);
+        auto actual1 = GetState(taskId1, GraphId, checkpointId);
+        auto expected1 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId1);
+        UNIT_ASSERT_VALUES_EQUAL(expected1, actual1);
+
+        auto actual2 = GetState(taskId2, GraphId, checkpointId);
+        auto expected2 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId2);
+        UNIT_ASSERT_VALUES_EQUAL(expected2, actual2);
     }
 
     void ShouldUseGc() {
@@ -588,10 +555,92 @@ public:
         }, TRetryOptions(100, TDuration::MilliSeconds(100)), true);
     }
 
+    // Verifies that all checkpoint storage tables have auto-partitioning enabled
+    // and MinPartitionsCount=1, for both local (TTableCreator) and SDK creation paths.
+    void ShouldTablesHaveAutoPartitioning() {
+        TString endpoint;
+        TString database;
+        TString tablePathPrefix;
+
+        if constexpr (UseYdbSdk) {
+            // SDK mode: tables are at YDB_DATABASE/TablePrefix/tableName
+            endpoint = GetEnv("YDB_ENDPOINT");
+            database = GetEnv("YDB_DATABASE");
+            tablePathPrefix = database + "/" + TablePrefix;
+        } else {
+            // Local mode: the storage proxy uses CHECKPOINTS_TABLE_PREFIX =
+            // ".metadata/streaming/checkpoints" relative to the tenant root.
+            endpoint = TStringBuilder() << "localhost:" << GrpcPort;
+            database = Server->GetRuntime()->GetAppData().TenantName;
+            tablePathPrefix = database + "/.metadata/streaming/checkpoints";
+        }
+
+        auto driverConfig = NYdb::TDriverConfig().SetEndpoint(endpoint);
+        NYdb::TDriver driver(driverConfig);
+        NYdb::NTable::TTableClient tableClient(driver);
+
+        // Obtain a session to call DescribeTable (session-level method)
+        auto sessionResult = tableClient.CreateSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), "Failed to create YDB session: " << sessionResult.GetIssues().ToOneLineString());
+        auto session = sessionResult.GetSession();
+
+        // Check each of the three tables created by TCheckpointStorage::Init()
+        auto checkTable = [&](const TString& tableName) {
+            TString fullPath = tablePathPrefix + "/" + tableName;
+            auto describeResult = session.DescribeTable(fullPath).GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(),
+                "Failed to describe table '" << tableName << "' at path '" << fullPath << "': " << describeResult.GetIssues().ToOneLineString());
+
+            const auto& tableDesc = describeResult.GetTableDescription();
+            const auto& partSettings = tableDesc.GetPartitioningSettings();
+
+            // Verify auto-partitioning by size is enabled
+            auto partBySize = partSettings.GetPartitioningBySize();
+            UNIT_ASSERT_C(partBySize.has_value(), "Partitioning-by-size setting is absent for table '" << tableName << "'");
+            UNIT_ASSERT_C(*partBySize, "Partitioning-by-size is not enabled for table '" << tableName << "'");
+
+            // Verify MinPartitionsCount == 1
+            UNIT_ASSERT_VALUES_EQUAL_C(partSettings.GetMinPartitionsCount(), 1u, "MinPartitionsCount != 1 for table '" << tableName << "'");
+        };
+
+        checkTable("coordinators_sync");
+        checkTable("checkpoints_metadata");
+        checkTable("checkpoints_graphs_description");
+        checkTable("states");
+
+        driver.Stop(true);
+    }
+
+    void ShouldDeleteGraphViaEvent() {
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+        CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
+
+        // Verify checkpoints exist before deletion
+        auto checkpointsBefore = GetCheckpoints(GraphId);
+        UNIT_ASSERT_C(!checkpointsBefore.empty(), "Expected checkpoints to exist before deletion");
+
+        // Send TEvDeleteGraphRequest event to StorageProxy
+        auto sender = GetRuntime()->AllocateEdgeActor();
+        auto request = std::make_unique<TEvCheckpointStorage::TEvDeleteGraphRequest>(GraphId);
+        GetRuntime()->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
+
+        // Wait for the response
+        TAutoPtr<IEventHandle> handle;
+        auto* event = GetRuntime()->template GrabEdgeEvent<TEvCheckpointStorage::TEvDeleteGraphResponse>(handle, TestTimeout);
+        UNIT_ASSERT_C(event, "TEvDeleteGraphResponse not received");
+        UNIT_ASSERT_C(event->Issues.Empty(), event->Issues.ToOneLineString());
+
+        // Verify all checkpoints are gone
+        auto checkpointsAfter = GetCheckpoints(GraphId);
+        UNIT_ASSERT_C(checkpointsAfter.empty(), "Expected all checkpoints to be deleted after TEvDeleteGraphRequest");
+    }
+
 private:
     TPortManager PortManager;
     ui16 MsgBusPort = 0;
     ui16 GrpcPort = 0;
+    TString TablePrefix;   // Stores the table prefix used during SDK initialization
     THolder<Tests::TServerSettings> ServerSettings;
     THolder<Tests::TServer> Server;
     THolder<Tests::TClient> Client;
@@ -602,14 +651,14 @@ private:
     TRuntimePtr Runtime;
 };
 
-} // namespace
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TStorageServiceSdkTest = TStorageServiceTest<true>; 
+using TStorageServiceSdkTest = TStorageServiceTest<true>;
 using TStorageServiceLocalTest = TStorageServiceTest<false>;
 
 UNIT_TEST_SUITE_REGISTRATION(TStorageServiceSdkTest);
 UNIT_TEST_SUITE_REGISTRATION(TStorageServiceLocalTest);
 
-} // namespace NFq
+}   // namespace NFq

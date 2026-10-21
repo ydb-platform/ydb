@@ -35,8 +35,8 @@ class LogLevels(enum.IntEnum):
     TRACE = 8
 
 
-def _tablet_type(id_, magic, is_unique=False, service_name=None):
-    return id_, magic, is_unique, service_name
+def _tablet_type(id_, magic, is_unique=False, service_name=None, is_optional=False):
+    return id_, magic, is_unique, service_name, is_optional
 
 
 @enum.unique
@@ -58,15 +58,17 @@ class TabletTypes(enum.Enum):
     NODE_BROKER = _tablet_type(22, 0x2001, is_unique=True, service_name='NODE_BROKER')
     TENANT_SLOT_BROKER = _tablet_type(27, 0x2002, is_unique=True, service_name='TENANT_SLOT_BROKER')
     CONSOLE = _tablet_type(28, 0x2003, is_unique=True, service_name='CONSOLE')
+    DBS_CONTROLLER = _tablet_type(46, 0x2004, is_unique=True, service_name='DBS_CONTROLLER', is_optional=True)
 
     USER_TYPE_START = _tablet_type(0xFF, 0)
     TYPE_INVALID = _tablet_type(0xFFFFFFFF, 0)
 
-    def __init__(self, id_, magic, is_unique=False, service_name=None):
+    def __init__(self, id_, magic, is_unique=False, service_name=None, is_optional=False):
         self.__id = id_
         self.__magic_preset = magic
         self.__is_unique = is_unique
         self.__service_name = service_name
+        self.__is_optional = is_optional
 
     def __int__(self):
         return self.__id
@@ -85,6 +87,10 @@ class TabletTypes(enum.Enum):
         if self.__service_name is None:
             return self.name
         return self.__service_name
+
+    @property
+    def is_optional(self):
+        return self.__is_optional
 
     def tablet_id_for(self, index, domain_id=1):
         if self.__is_unique:
@@ -120,15 +126,17 @@ class TabletTypesFixed(enum.Enum):
     NODE_BROKER = _tablet_type(22, 0x2001, is_unique=True, service_name='NODE_BROKER')
     TENANT_SLOT_BROKER = _tablet_type(27, 0x2002, is_unique=True, service_name='TENANT_SLOT_BROKER')
     CONSOLE = _tablet_type(28, 0x2003, is_unique=True, service_name='CONSOLE')
+    DBS_CONTROLLER = _tablet_type(46, 0x2004, is_unique=True, service_name='DBS_CONTROLLER', is_optional=True)
 
     USER_TYPE_START = _tablet_type(0xFF, 0)
     TYPE_INVALID = _tablet_type(0xFFFFFFFF, 0)
 
-    def __init__(self, id_, magic, is_unique=False, service_name=None):
+    def __init__(self, id_, magic, is_unique=False, service_name=None, is_optional=False):
         self.__id = id_
         self.__magic_preset = magic
         self.__is_unique = is_unique
         self.__service_name = service_name
+        self.__is_optional = is_optional
 
     def __int__(self):
         return self.__id
@@ -147,6 +155,10 @@ class TabletTypesFixed(enum.Enum):
         if self.__service_name is None:
             return self.name
         return self.__service_name
+
+    @property
+    def is_optional(self):
+        return self.__is_optional
 
     def tablet_id_for(self, index, state_storage_id=1, domain_id=0):
         if self.__is_unique:
@@ -202,6 +214,7 @@ class FailDomainType(enum.IntEnum):
     Room = 20
     Rack = 30
     Body = 40
+    Disk_Scope = 50
     Disk = 256
 
     def __str__(self):
@@ -226,7 +239,8 @@ class FailDomainType(enum.IntEnum):
 
     @staticmethod
     def is_body_fail_domain(actual_faildomain):
-        return str(actual_faildomain) in {str(FailDomainType.Body), str(FailDomainType.Disk)}
+        return str(actual_faildomain) in {str(FailDomainType.Body), str(FailDomainType.Disk),
+                                          str(FailDomainType.Disk_Scope)}
 
 
 DistinctionLevels = {
@@ -234,6 +248,7 @@ DistinctionLevels = {
     FailDomainType.Room: (10, 20, 10, 30),
     FailDomainType.Rack: (10, 20, 10, 40),
     FailDomainType.Body: (10, 20, 10, 50),
+    FailDomainType.Disk_Scope: (10, 20, 10, 60),
     FailDomainType.Disk: (10, 20, 10, 256),
 }
 

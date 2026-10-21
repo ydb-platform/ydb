@@ -41,8 +41,19 @@
 
 ### Список функций
 
-* `DateTime::Split(Date/TzDate/Datetime/TzDatetime/Timestamp/TzTimestamp{Flags:AutoMap}) -> Resource<TM>`;
-* `DateTime::Split(Date32/TzDate32/Datetime64/TzDatetime64/Timestamp64/TzTimestamp64{Flags:AutoMap}) -> Resource<TM64>`.
+*
+
+  ```text
+  DateTime::Split(Date/TzDate/Datetime/TzDatetime/Timestamp/TzTimestamp{Flags:AutoMap})
+  -> Resource<TM>;
+  ```
+
+*
+
+  ```text
+  DateTime::Split(Date32/TzDate32/Datetime64/TzDatetime64/Timestamp64/TzTimestamp64{Flags:AutoMap})
+  -> Resource<TM64>.
+  ```
 
 Функции, принимающие на вход `Resource<TM>` или `Resource<TM64>`, могут быть вызваны непосредственно от простого типа даты/времени. В этом случае будет сделано неявное преобразование через вызов соответствующей функции `Split`.
 
@@ -162,11 +173,43 @@ SELECT
 ### Список функций
 
 * `DateTime::ToSeconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint32`;
-* `DateTime::ToSeconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`;
-* `DateTime::ToMilliseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`;
-* `DateTime::ToMilliseconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`;
-* `DateTime::ToMicroseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`;
-* `DateTime::ToMicroseconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`.
+*
+
+  ```text
+  DateTime::ToSeconds(
+  Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap})
+  -> Int64;
+  ```
+
+*
+
+  ```text
+  DateTime::ToMilliseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap})
+  -> Uint64;
+  ```
+
+*
+
+  ```text
+  DateTime::ToMilliseconds(
+  Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap})
+  -> Int64;
+  ```
+
+*
+
+  ```text
+  DateTime::ToMicroseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap})
+  -> Uint64;
+  ```
+
+*
+
+  ```text
+  DateTime::ToMicroseconds(
+  Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap})
+  -> Int64.
+  ```
 
 ### Примеры
 
@@ -332,7 +375,12 @@ SELECT
 
 ### Список функций
 
-* `DateTime::Format(String, alwaysWriteFractionalSeconds:Bool?) -> (Resource<TM64>{Flags:AutoMap}) -> String`
+*
+
+  ```text
+  DateTime::Format(String, alwaysWriteFractionalSeconds:Bool?)
+  -> (Resource<TM64>{Flags:AutoMap}) -> String
+  ```
 
 Поддерживается множество спецификаторов для строки форматирования:
 

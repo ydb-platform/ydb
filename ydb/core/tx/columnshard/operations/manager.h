@@ -55,6 +55,10 @@ public:
         return Broken;
     }
 
+    void SetBroken() {
+        Broken = true;
+    }
+
     ui64 GetInternalGenerationCounter() const {
         return IsBroken() ? TSysTables::TLocksTable::TLock::ESetErrors::ErrorBroken : 0;
     }
@@ -77,6 +81,8 @@ private:
     bool Aborting = false;
     bool Aborted = false;
     ui64 TxId = 0;
+
+    void SetTxId(const ui64 txId);
 
 public:
     ui64 GetLockId() const {
@@ -111,7 +117,7 @@ public:
     }
 
     void SetBroken() {
-        SharingInfo->Broken = true;
+        SharingInfo->SetBroken();
     }
 
     bool IsBroken() const {
@@ -158,7 +164,7 @@ public:
         return Aborted;
     }
 
-    void SetTxId(const ui64 txId);
+    bool TryProposeTransaction(const ui64 txId);
     bool IsTxIdAssigned() const;
     ui64 GetTxId() const;
 
@@ -211,7 +217,10 @@ public:
     TWriteOperation::TPtr GetOperationByInsertWriteIdVerified(const TInsertWriteId insertWriteId) const {
         auto it = InsertWriteIdToOpWriteId.find(insertWriteId);
         AFL_VERIFY(it != InsertWriteIdToOpWriteId.end())("write_id", insertWriteId);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "ask_by_insert_id")("write_id", insertWriteId)("operation_id", it->second);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+            {"event", "ask_by_insert_id"},
+            {"writeId", insertWriteId},
+            {"operationId", it->second});
         return GetOperationVerified(it->second);
     }
 
@@ -220,13 +229,19 @@ public:
         AFL_VERIFY(op->GetInsertWriteIds() == insertions)("operation_data", JoinSeq(", ", op->GetInsertWriteIds()))(
             "expected", JoinSeq(", ", insertions));
         for (auto&& i : insertions) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "add_write_id_to_operation_id")("write_id", i)(
-                "operation_id", operationId);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                {"event", "add_write_id_to_operation_id"},
+                {"writeId", i},
+                {"operationId", operationId});
             InsertWriteIdToOpWriteId.emplace(i, operationId);
         }
     }
 
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
+
+    std::vector<ui64> GetLockIdsOfNotProposedTransactions() const;
+    bool HasWriteOperations(const TInternalPathId pathId) const;
+
     void AddEventForTx(TColumnShard& owner, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
     void AddEventForLock(TColumnShard& owner, const ui64 lockId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
     void SetOperationFinished(const TOperationWriteId writeId);
@@ -249,13 +264,12 @@ public:
         TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot);
     void CommitTransactionOnComplete(TColumnShard& owner, const ui64 txId, const ui64 lockId, const NOlap::TSnapshot& snapshot);
     void LinkTransactionOnExecute(TLockFeatures& lock, NTabletFlatExecutor::TTransactionContext& txc);
-    void PersistLock(TLockFeatures& lock, NTabletFlatExecutor::TTransactionContext& txc);
     void LinkTransactionOnComplete(const ui64 lockId, const ui64 txId);
     void AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc);
     void AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId, const ui64 lockId);
 
-    void BreakConflictingTxs(const TLockFeatures& lock, NTabletFlatExecutor::TTransactionContext& txc);
-    void BreakConflictingTxs(const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc);
+    void BreakConflictingTxs(const TLockFeatures& lock);
+    void BreakConflictingTxs(const ui64 lockId);
 
     std::optional<ui64> GetLockForTx(const ui64 txId) const;
 

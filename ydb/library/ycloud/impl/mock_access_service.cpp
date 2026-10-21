@@ -1,9 +1,11 @@
+#include "mock_access_service.h"
+
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
-#include <library/cpp/json/json_value.h>
-#include "access_service.h"
-#include <ydb/library/grpc/actor_client/grpc_service_client.h>
-#include <ydb/library/grpc/actor_client/grpc_service_cache.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/ycloud/api/access_service.h>
+
+#include <memory>
 
 namespace NCloud {
 
@@ -31,10 +33,17 @@ public:
         Send(ev->Sender, result.release());
     }
 
+    void Handle(TEvAccessService::TEvBulkAuthorizeRequest::TPtr& ev) {
+        auto result = std::make_unique<TEvAccessService::TEvBulkAuthorizeResponse>();
+        result->Status = NYdbGrpc::TGrpcStatus("Unimplemented", 1, true);
+        Send(ev->Sender, result.release());
+    }
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvAccessService::TEvAuthenticateRequest, Handle)
             hFunc(TEvAccessService::TEvAuthorizeRequest, Handle)
+            hFunc(TEvAccessService::TEvBulkAuthorizeRequest, Handle)
             cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway)
         }
     }

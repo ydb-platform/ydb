@@ -6,12 +6,16 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_mock.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/system/mutex.h>
 #include <util/system/tempfile.h>
 #include <util/thread/factory.h>
 #include <util/thread/lfqueue.h>
@@ -174,7 +178,7 @@ NProto::TError GetRandomError()
 
     std::uniform_int_distribution<ui64> dist(0, 2);
     auto code = dist(eng);
-    return MakeError(code == 0 ? S_OK : (code == 1 ? E_CANCELLED : E_FAIL));
+    return MakeError(code == 0 ? S_OK : (code == 1 ? E_CANCELLED : E_IO));
 }
 
 }   // namespace
@@ -212,6 +216,8 @@ Y_UNIT_TEST_SUITE(TServerStressTest)
 
         auto server = CreateServer(
             CreateLoggingService("console"),
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             queueFactory,
             CreateDefaultDeviceHandlerFactory(),
@@ -232,7 +238,7 @@ Y_UNIT_TEST_SUITE(TServerStressTest)
             sockets.emplace_back(TTempFile(socketPath + ToString(i + 1)));
             auto future = server->StartEndpoint(
                 sockets.back().Name(),
-                std::make_shared<TTestPartitionDirectService>(),
+                std::make_shared<TTraceServiceMock>(),
                 std::move(storage),
                 TStorageOptions{
                     .DiskId = "disk" + ToString(i + 1),

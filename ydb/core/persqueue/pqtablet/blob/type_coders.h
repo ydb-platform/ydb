@@ -8,6 +8,7 @@
 
 #include <util/generic/typetraits.h>
 #include <util/generic/buffer.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NScheme {
@@ -61,7 +62,7 @@ template <>
 class TCoderMask<false> {
 public:
     inline size_t MaxSize() const { return 0; }
-    inline void AddNull() { Y_ABORT("Null values are not supported."); }
+    inline void AddNull() { AFL_ENSURE(false)("reason", "Null values are not supported."); }
     inline void AddNonNull() { }
     inline void Seal(TBuffer&) { }
 };

@@ -29,8 +29,7 @@ public:
     }
 
 private:
-    DefaultPolicy() {
-    }
+    DefaultPolicy() = default;
 
 public:
     DefaultPolicy(DefaultPolicy&) = delete;

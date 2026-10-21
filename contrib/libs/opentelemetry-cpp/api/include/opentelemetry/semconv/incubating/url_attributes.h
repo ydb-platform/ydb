@@ -33,9 +33,9 @@ static constexpr const char *kUrlDomain = "url.domain";
 /**
   The file extension extracted from the @code url.full @endcode, excluding the leading dot.
   <p>
-  The file extension is only set if it exists, as not every url has a file extension. When the file
-  name has multiple extensions @code example.tar.gz @endcode, only the last one should be captured
-  @code gz @endcode, not @code tar.gz @endcode.
+  The file extension is only set if it exists, as not every URL has a file extension. When the
+  filename has multiple extensions @code example.tar.gz @endcode, only the last one should be
+  captured @code gz @endcode, not @code tar.gz @endcode.
  */
 static constexpr const char *kUrlExtension = "url.extension";
 
@@ -61,10 +61,12 @@ static constexpr const char *kUrlFragment = "url.fragment";
   value @code REDACTED @endcode:
   <ul>
     <li><a
-  href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/RESTAuthentication.html#RESTAuthenticationQueryStringAuth">@code
-  AWSAccessKeyId @endcode</a></li> <li><a
-  href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/RESTAuthentication.html#RESTAuthenticationQueryStringAuth">@code
-  Signature @endcode</a></li> <li><a
+  href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html">@code
+  X-Amz-Signature @endcode</a></li> <li><a
+  href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html">@code
+  X-Amz-Credential @endcode</a></li> <li><a
+  href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html">@code
+  X-Amz-Security-Token @endcode</a></li> <li><a
   href="https://learn.microsoft.com/azure/storage/common/storage-sas-overview#sas-token">@code sig
   @endcode</a></li> <li><a
   href="https://cloud.google.com/storage/docs/access-control/signed-urls">@code X-Goog-Signature
@@ -121,10 +123,12 @@ static constexpr const char *kUrlPort = "url.port";
 
   Query string values for the following keys SHOULD be redacted by default and replaced by the value
   @code REDACTED @endcode: <ul> <li><a
-  href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/RESTAuthentication.html#RESTAuthenticationQueryStringAuth">@code
-  AWSAccessKeyId @endcode</a></li> <li><a
-  href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/RESTAuthentication.html#RESTAuthenticationQueryStringAuth">@code
-  Signature @endcode</a></li> <li><a
+  href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html">@code
+  X-Amz-Signature @endcode</a></li> <li><a
+  href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html">@code
+  X-Amz-Credential @endcode</a></li> <li><a
+  href="https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html">@code
+  X-Amz-Security-Token @endcode</a></li> <li><a
   href="https://learn.microsoft.com/azure/storage/common/storage-sas-overview#sas-token">@code sig
   @endcode</a></li> <li><a
   href="https://cloud.google.com/storage/docs/access-control/signed-urls">@code X-Goog-Signature
@@ -148,7 +152,7 @@ static constexpr const char *kUrlPort = "url.port";
 static constexpr const char *kUrlQuery = "url.query";
 
 /**
-  The highest registered url domain, stripped of the subdomain.
+  The highest registered URL domain, stripped of the subdomain.
   <p>
   This value can be determined precisely with the <a href="https://publicsuffix.org/">public suffix
   list</a>. For example, the registered domain for @code foo.example.com @endcode is @code
@@ -164,11 +168,11 @@ static constexpr const char *kUrlRegisteredDomain = "url.registered_domain";
 static constexpr const char *kUrlScheme = "url.scheme";
 
 /**
-  The subdomain portion of a fully qualified domain name includes all of the names except the host
-  name under the registered_domain. In a partially qualified domain, or if the qualification level
-  of the full name cannot be determined, subdomain contains all of the names below the registered
-  domain. <p> The subdomain portion of @code www.east.mydomain.co.uk @endcode is @code east
-  @endcode. If the domain has multiple levels of subdomain, such as @code sub2.sub1.example.com
+  The subdomain portion of a fully qualified domain name includes all of the names except the
+  hostname under the registered_domain. In a partially qualified domain, or if the qualification
+  level of the full name cannot be determined, subdomain contains all of the names below the
+  registered domain. <p> The subdomain portion of @code www.east.mydomain.co.uk @endcode is @code
+  east @endcode. If the domain has multiple levels of subdomain, such as @code sub2.sub1.example.com
   @endcode, the subdomain field should contain @code sub2.sub1 @endcode, with no trailing period.
  */
 static constexpr const char *kUrlSubdomain = "url.subdomain";

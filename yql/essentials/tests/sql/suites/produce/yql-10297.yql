@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 DEFINE SUBQUERY $t() AS
   select * from as_table([<|key:"0"|>, <|key:"1"|>]);
 END DEFINE;

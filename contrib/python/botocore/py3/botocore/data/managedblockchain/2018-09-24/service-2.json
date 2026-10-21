@@ -5,12 +5,14 @@
     "endpointPrefix":"managedblockchain",
     "jsonVersion":"1.1",
     "protocol":"rest-json",
+    "protocols":["rest-json"],
     "serviceAbbreviation":"ManagedBlockchain",
     "serviceFullName":"Amazon Managed Blockchain",
     "serviceId":"ManagedBlockchain",
     "signatureVersion":"v4",
     "signingName":"managedblockchain",
-    "uid":"managedblockchain-2018-09-24"
+    "uid":"managedblockchain-2018-09-24",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "CreateAccessor":{
@@ -652,7 +654,7 @@
         },
         "NetworkType":{
           "shape":"AccessorNetworkType",
-          "documentation":"<p>The blockchain network that the <code>Accessor</code> token is created for.</p> <note> <p>We recommend using the appropriate <code>networkType</code> value for the blockchain network that you are creating the <code>Accessor</code> token for. You cannnot use the value <code>ETHEREUM_MAINNET_AND_GOERLI</code> to specify a <code>networkType</code> for your Accessor token.</p> <p>The default value of <code>ETHEREUM_MAINNET_AND_GOERLI</code> is only applied:</p> <ul> <li> <p>when the <code>CreateAccessor</code> action does not set a <code>networkType</code>.</p> </li> <li> <p>to all existing <code>Accessor</code> tokens that were created before the <code>networkType</code> property was introduced. </p> </li> </ul> </note>"
+          "documentation":"<p>The blockchain network that the <code>Accessor</code> token is created for.</p> <note> <ul> <li> <p>Use the actual <code>networkType</code> value for the blockchain network that you are creating the <code>Accessor</code> token for.</p> </li> <li> <p>With the shut down of the <i>Ethereum Goerli</i> and <i>Polygon Mumbai Testnet</i> networks the following <code>networkType</code> values are no longer available for selection and use.</p> <ul> <li> <p> <code>ETHEREUM_MAINNET_AND_GOERLI</code> </p> </li> <li> <p> <code>ETHEREUM_GOERLI</code> </p> </li> <li> <p> <code>POLYGON_MUMBAI</code> </p> </li> </ul> <p>However, your existing <code>Accessor</code> tokens with these <code>networkType</code> values will remain unchanged.</p> </li> </ul> </note>"
         }
       }
     },
@@ -790,7 +792,7 @@
         },
         "NetworkId":{
           "shape":"ResourceIdString",
-          "documentation":"<p>The unique identifier of the network for the node.</p> <p>Ethereum public networks have the following <code>NetworkId</code>s:</p> <ul> <li> <p> <code>n-ethereum-mainnet</code> </p> </li> <li> <p> <code>n-ethereum-goerli</code> </p> </li> </ul>",
+          "documentation":"<p>The unique identifier of the network for the node.</p> <p>Ethereum public networks have the following <code>NetworkId</code>s:</p> <ul> <li> <p> <code>n-ethereum-mainnet</code> </p> </li> </ul>",
           "location":"uri",
           "locationName":"networkId"
         },
@@ -878,8 +880,7 @@
     },
     "DeleteAccessorOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteMemberInput":{
       "type":"structure",
@@ -904,8 +905,7 @@
     },
     "DeleteMemberOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteNodeInput":{
       "type":"structure",
@@ -916,7 +916,7 @@
       "members":{
         "NetworkId":{
           "shape":"ResourceIdString",
-          "documentation":"<p>The unique identifier of the network that the node is on.</p> <p>Ethereum public networks have the following <code>NetworkId</code>s:</p> <ul> <li> <p> <code>n-ethereum-mainnet</code> </p> </li> <li> <p> <code>n-ethereum-goerli</code> </p> </li> </ul>",
+          "documentation":"<p>The unique identifier of the network that the node is on.</p> <p>Ethereum public networks have the following <code>NetworkId</code>s:</p> <ul> <li> <p> <code>n-ethereum-mainnet</code> </p> </li> </ul>",
           "location":"uri",
           "locationName":"networkId"
         },
@@ -936,8 +936,7 @@
     },
     "DeleteNodeOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DescriptionString":{
       "type":"string",
@@ -1124,8 +1123,7 @@
     "InstanceTypeString":{"type":"string"},
     "InternalServiceErrorException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The request processing has failed because of an unknown error, exception or failure.</p>",
       "error":{"httpStatusCode":500},
       "exception":true
@@ -1818,7 +1816,7 @@
       "members":{
         "ChainId":{
           "shape":"String",
-          "documentation":"<p>The Ethereum <code>CHAIN_ID</code> associated with the Ethereum network. Chain IDs are as follows:</p> <ul> <li> <p>mainnet = <code>1</code> </p> </li> <li> <p>goerli = <code>5</code> </p> </li> </ul>"
+          "documentation":"<p>The Ethereum <code>CHAIN_ID</code> associated with the Ethereum network. Chain IDs are as follows:</p> <ul> <li> <p>mainnet = <code>1</code> </p> </li> </ul>"
         }
       },
       "documentation":"<p>Attributes of Ethereum for a network. </p>"
@@ -2314,8 +2312,7 @@
     },
     "RejectInvitationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "RemoveAction":{
       "type":"structure",
@@ -2417,8 +2414,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{
       "type":"string",
@@ -2440,8 +2436,7 @@
     },
     "ThrottlingException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The request or operation couldn't be performed because a service is throttling requests. The most common source of throttling errors is creating resources that exceed your service limit for this resource type. Request a limit increase or delete unused resources if possible.</p>",
       "error":{"httpStatusCode":429},
       "exception":true
@@ -2486,8 +2481,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateMemberInput":{
       "type":"structure",
@@ -2516,8 +2510,7 @@
     },
     "UpdateMemberOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateNodeInput":{
       "type":"structure",
@@ -2550,8 +2543,7 @@
     },
     "UpdateNodeOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UsernameString":{
       "type":"string",
@@ -2596,8 +2588,7 @@
     },
     "VoteOnProposalOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "VoteSummary":{
       "type":"structure",

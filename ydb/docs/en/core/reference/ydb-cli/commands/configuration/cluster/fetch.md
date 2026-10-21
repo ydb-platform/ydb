@@ -1,6 +1,6 @@
 # admin cluster config fetch
 
-With the `admin cluster config fetch` command, you can retrieve the current [dynamic](../../../../../maintenance/manual/dynamic-config.md) configuration of the YDB cluster.
+With the `admin cluster config fetch` command, you can retrieve the current [dynamic](../../../../../devops/configuration-management/configuration-v1/dynamic-config.md) configuration of the YDB cluster.
 
 General command syntax:
 

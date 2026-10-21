@@ -48,7 +48,7 @@ public:
         description.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(false);
         auto newInfo = DataShard.AlterUserTable(ctx, txc, description);
         TDataShardLocksDb locksDb(DataShard, txc);
-        DataShard.AddUserTable(tableId, newInfo, &locksDb);
+        DataShard.ReplaceUserTable(tableId, newInfo, locksDb);
 
         const TSnapshotKey key(tableId.OwnerId, tableId.LocalPathId, step, txId);
 

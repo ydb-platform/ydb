@@ -1,4 +1,10 @@
-/* syntax version 1 */
+$input = AsList(
+    <|value: "abæcdöef"|>,
+    <|value: "яндекс.ру"|>,
+    <|value: "yandex.ru"|>,
+    <|value: "xn--d1acpjx3f.xn--p1ag"|>,
+);
+
 SELECT
     value,
     Url::PunycodeToHostName(value) AS hostname_utf,
@@ -6,4 +12,4 @@ SELECT
     Url::ForcePunycodeToHostName(value) AS hostname_utf_forced,
     Url::ForceHostNameToPunycode(Url::ForcePunycodeToHostName(value)) as punycode_hostname_forced,
     Url::CanBePunycodeHostName(value) as can_be_punycode
-FROM Input;
+FROM AS_TABLE($input);

@@ -1,11 +1,10 @@
 #include "fair_share_invoker_pool.h"
-#include "profiling_helpers.h"
+#include "helpers.h"
 
 #include <yt/yt/core/actions/current_invoker.h>
 #include <yt/yt/core/actions/invoker_detail.h>
 
 #include <yt/yt/core/misc/finally.h>
-#include <yt/yt/core/misc/ring_queue.h>
 
 #include <yt/yt/core/profiling/public.h>
 #include <yt/yt/core/profiling/timing.h>
@@ -14,12 +13,14 @@
 
 #include <yt/yt/library/ytprof/api/api.h>
 
+#include <library/cpp/yt/containers/ring_queue.h>
+
 #include <library/cpp/yt/misc/port.h>
 
 #include <library/cpp/yt/memory/weak_ptr.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <util/system/compiler.h>
 
@@ -87,7 +88,7 @@ public:
 private:
     using TBuckets = std::vector<TRingQueue<TClosure>>;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
 
     TBuckets Buckets_;
     std::vector<TCpuDuration> ExcessTimes_;
@@ -493,7 +494,7 @@ private:
         }
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, InvokerQueueStatesLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, InvokerQueueStatesLock_);
     std::vector<TInvokerQueueState> InvokerQueueStates_;
 
     IFairShareCallbackQueuePtr Queue_;

@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_config.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_settings.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/interruptable.h>
 #include <ydb/public/lib/ydb_cli/common/lazy_driver.h>
 #include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
@@ -14,9 +15,11 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_sql.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <library/cpp/resource/resource.h>
 
+#include <util/datetime/base.h>
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/generic/scope.h>
@@ -39,6 +42,38 @@ struct TVersionInfo {
     TString ServerVersion;
     TString ServerAvailableCheckFail;
 };
+
+class TInitialAuthorization : private TInterruptableCommand {
+public:
+    static bool Wait(TClientCommand::TConfig& config);
+};
+
+bool TInitialAuthorization::Wait(TClientCommand::TConfig& config) {
+    if (!config.Oidc.IsDeviceFlow()) {
+        return true;
+    }
+
+    const auto factory = config.GetSingletonCredentialsProviderFactory();
+    if (factory == nullptr) {
+        return true;
+    }
+
+    SetInterruptHandlers();
+    Y_DEFER {
+        ResetInterrupted();
+    };
+
+    const auto provider = factory->CreateProvider();
+    auto credentials = provider->GetAuthInfoAsync();
+    while (!credentials.Wait(TDuration::MilliSeconds(50))) {
+        if (IsInterrupted()) {
+            Cerr << "OIDC sign-in interrupted." << Endl;
+            return false;
+        }
+    }
+    credentials.GetValueSync();
+    return true;
+}
 
 TVersionInfo ResolveVersionInfo(const TDriver& driver) {
     TVersionInfo result;
@@ -85,15 +120,18 @@ std::vector<ISessionRunner::TPtr> SetupSessions(
     TInteractiveConfigurationManager::TPtr configManager,
     TLazyDriver::TPtr completerLazyDriver,
     TLazyDriver::TPtr sqlLazyDriver,
+    TLazyDriver::TPtr sqlTxLazyDriver,
     TLazyDriver::TPtr aiLazyDriver)
 {
     std::vector<ISessionRunner::TPtr> sessions;
 
     sessions.push_back(CreateSqlSessionRunner({
         .SqlLazyDriver = std::move(sqlLazyDriver),
+        .SqlTxLazyDriver = std::move(sqlTxLazyDriver),
         .CompleterLazyDriver = std::move(completerLazyDriver),
         .Database = config.Database,
         .EnableAiInteractive = config.EnableAiInteractive,
+        .EnableInteractiveTransactions = config.EnableInteractiveTransactions,
     }));
 
     if (config.EnableAiInteractive) {
@@ -130,6 +168,12 @@ TInteractiveCLI::TInteractiveCLI(const TString& profileName)
 {}
 
 int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
+    // Complete the first sign-in before the probe starts its session/RPC timeouts,
+    // and before SIGINT is ignored for the line editor below.
+    if (!TInitialAuthorization::Wait(config)) {
+        return EXIT_FAILURE;
+    }
+
     // Ctrl+C handling stays where it should: inside replxx. While a line is being read the
     // terminal is in raw mode with ISIG disabled, so the tty driver does not turn Ctrl+C
     // into SIGINT — it arrives as a \x03 byte that replxx interprets as a cancel event
@@ -156,28 +200,32 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     // Probe driver: only used for the connectivity check and welcome message.
     {
-        TDriver probeDriver(config.CreateDriverConfigWithBuildInfo("interactive"));
-        Y_DEFER { probeDriver.Stop(true); };
+        TScopedDriver probeDriver(TDriver(config.CreateDriverConfigWithBuildInfo("interactive")));
         if (auto code = PrintWelcomeMessage(config, probeDriver, configManager)) {
             return code;
         }
     }
 
+    // The completer driver only serves on-demand autocompletion lookups, so it
+    // is released after a short idle period instead of running discovery forever.
     auto completerLazyDriver = std::make_shared<TLazyDriver>(
-        [&config] { return TDriver(config.CreateDriverConfig()); });
+        [&config] { return TDriver(config.CreateDriverConfig()); }, TDuration::Seconds(30));
     auto sqlLazyDriver = std::make_shared<TLazyDriver>(
         [&config] { return TDriver(config.CreateDriverConfigWithBuildInfo("interactive-sql")); });
+    auto sqlTxLazyDriver = std::make_shared<TLazyDriver>(
+        [&config] { return TDriver(config.CreateDriverConfigWithBuildInfo("interactive-sql-transaction")); });
     auto aiLazyDriver = std::make_shared<TLazyDriver>(
         [&config] { return TDriver(config.CreateDriverConfigWithBuildInfo("interactive-ai")); });
 
     Y_DEFER {
         aiLazyDriver->Stop(true);
+        sqlTxLazyDriver->Stop(true);
         sqlLazyDriver->Stop(true);
         completerLazyDriver->Stop(true);
     };
 
     ui64 activeSession = static_cast<ui64>(configManager->GetInteractiveMode());
-    const auto& sessions = SetupSessions(config, configManager, completerLazyDriver, sqlLazyDriver, aiLazyDriver);
+    const auto& sessions = SetupSessions(config, configManager, completerLazyDriver, sqlLazyDriver, sqlTxLazyDriver, aiLazyDriver);
     Y_VALIDATE(activeSession < sessions.size(), "Invalid active session: " << activeSession);
 
     ILineReader::TPtr lineReader;
@@ -280,7 +328,7 @@ int TInteractiveCLI::PrintWelcomeMessage(const TClientCommand::TConfig& config, 
         }
 
         if (activeProfileName) {
-            Cout << "Using model: " << TLogger::EntityName(activeProfileName) << Endl;            
+            Cout << "Using model: " << TLogger::EntityName(activeProfileName) << Endl;
         } else if (!configManager->ActivateAiProfile("", /* printWelcomeMessage */ false)) {
             configManager->SetInteractiveMode(TInteractiveConfigurationManager::EMode::YQL);
             Cout << Endl << "Switching to " << configManager->ModeToString(configManager->GetInteractiveMode()) << " interactive mode, use " << TLogger::EntityNameQuoted("/switch") << " to change mode." << Endl;

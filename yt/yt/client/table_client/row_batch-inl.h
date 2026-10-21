@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "row_batch.h"
 #endif
-#undef ROW_BATCH_INL_H_
 
 namespace NYT::NTableClient {
 

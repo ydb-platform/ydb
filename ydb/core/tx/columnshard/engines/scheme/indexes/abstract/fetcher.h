@@ -210,14 +210,14 @@ private:
     using TBase = NReader::NCommon::IKernelFetchLogic;
     THashMap<NRequest::TOriginalDataAddress, TIndexDataAddress> DataAddresses;
     THashMap<TIndexDataAddress, std::vector<NRequest::TOriginalDataAddress>> IndexAddresses;
-    TString StorageId;
     std::shared_ptr<IIndexMeta> IndexMeta;
     std::vector<TIndexChunkFetching> Fetching;
+    std::vector<TString> FetchingStorageIds;
     std::vector<TIndexDataAddress> IndexAddressesVector;
 
     virtual void DoStart(TReadActionsCollection& nextRead, NReader::NCommon::TFetchingResultContext& context) override;
     virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override;
-    virtual void DoOnDataCollected(NReader::NCommon::TFetchingResultContext& context) override;
+    virtual TConclusionStatus DoOnDataCollected(NReader::NCommon::TFetchingResultContext& context) override;
 
 public:
     TIndexFetcherLogic(const THashSet<NRequest::TOriginalDataAddress>& dataAddress, const std::shared_ptr<IIndexMeta>& indexMeta,

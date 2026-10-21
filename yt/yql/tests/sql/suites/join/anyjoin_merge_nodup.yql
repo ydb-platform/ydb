@@ -1,4 +1,3 @@
-/* syntax version 1 */
 PRAGMA DisableSimpleColumns;
 use plato;
 pragma yt.JoinMergeTablesLimit="10";

@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "async_rw_lock.h"
 #endif
-#undef ASYNC_RW_LOCK_INL_H_
 
 #include <util/system/guard.h>
 

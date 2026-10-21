@@ -4,11 +4,62 @@
 #include <ydb/library/actors/interconnect/slowpoke_actor.h>
 #include <ydb/library/actors/core/interconnect.h>
 
+#include <algorithm>
+
 namespace NKikimr {
 namespace NMsgBusProxy {
 
 class TInterconnectDebugActor : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TInterconnectDebugActor>> {
+    enum {
+        EvLoadFinished = EventSpaceBegin(TEvents::ES_PRIVATE),
+    };
+
+    struct TLoadResult {
+        ui64 ThroughputBytes = 0;
+        ui64 ThroughputSamples = 0;
+        ui64 RttSamples = 0;
+        ui64 DurationUs = 0;
+        ui64 MaxRttGapUs = 0;
+
+        TLoadResult() = default;
+
+        explicit TLoadResult(const NInterconnect::TLoadActorStats& stats)
+            : ThroughputBytes(stats.ThroughputBytes)
+            , ThroughputSamples(stats.ThroughputSamples)
+            , RttSamples(stats.TotalRttSamples)
+            , DurationUs(stats.ThroughputWindow.MicroSeconds())
+            , MaxRttGapUs(stats.MaxRttGap.MicroSeconds())
+        {}
+
+        void Add(const TLoadResult& other) {
+            ThroughputBytes += other.ThroughputBytes;
+            ThroughputSamples += other.ThroughputSamples;
+            RttSamples += other.RttSamples;
+            DurationUs = std::max(DurationUs, other.DurationUs);
+            MaxRttGapUs = std::max(MaxRttGapUs, other.MaxRttGapUs);
+        }
+
+        void Fill(NKikimrClient::TResponse::TInterconnectLoadResult* result) const {
+            result->SetThroughputBytes(ThroughputBytes);
+            result->SetThroughputSamples(ThroughputSamples);
+            result->SetRttSamples(RttSamples);
+            result->SetDurationUs(DurationUs);
+            result->SetMaxRttGapUs(MaxRttGapUs);
+        }
+    };
+
+    struct TEvLoadFinished : TEventLocal<TEvLoadFinished, EvLoadFinished> {
+        TLoadResult Result;
+
+        explicit TEvLoadFinished(const NInterconnect::TLoadActorStats& stats)
+            : Result(stats)
+        {}
+    };
+
     std::function<void(const TActorContext&)> Callback;
+    bool WaitForCompletion = false;
+    ui32 PendingLoadActors = 0;
+    TLoadResult LoadResult;
 
     using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TInterconnectDebugActor>>;
 
@@ -68,16 +119,31 @@ public:
             params.Duration = TDuration::MicroSeconds(record.GetDuration());
             params.UseProtobufWithPayload = record.GetUseProtobufWithPayload();
             params.RdmaMode = record.GetRdmaMode();
-            Callback = [=](const TActorContext& ctx) {
+            WaitForCompletion = record.GetWaitForCompletion();
+            PendingLoadActors = record.GetNumLoadActors();
+            const bool hasServicePool = record.HasServicePool();
+            const TString servicePool = record.GetServicePool();
+            const ui32 numLoadActors = PendingLoadActors;
+            const bool waitForCompletion = WaitForCompletion;
+            Callback = [params = std::move(params), hasServicePool, servicePool, numLoadActors,
+                        waitForCompletion](const TActorContext& ctx) {
                 ui32 poolId = 0;
-                if (record.HasServicePool()) {
+                if (hasServicePool) {
                     auto *appData = AppData(ctx);
-                    if (const auto it = appData->ServicePools.find(record.GetServicePool()); it != appData->ServicePools.end()) {
+                    if (const auto it = appData->ServicePools.find(servicePool); it != appData->ServicePools.end()) {
                         poolId = it->second;
                     }
                 }
-                for (ui32 i = 0; i < record.GetNumLoadActors(); ++i) {
-                    ctx.Register(NInterconnect::CreateLoadActor(params), TMailboxType::HTSwap, poolId);
+                NInterconnect::TFinishCallback finishCallback;
+                if (waitForCompletion) {
+                    const TActorId replyTo = ctx.SelfID;
+                    finishCallback = [replyTo](const TActorContext& ctx, TString&&,
+                                               const NInterconnect::TLoadActorStats& stats) {
+                        ctx.Send(replyTo, new TEvLoadFinished(stats));
+                    };
+                }
+                for (ui32 i = 0; i < numLoadActors; ++i) {
+                    ctx.Register(NInterconnect::CreateLoadActor(params, finishCallback), TMailboxType::HTSwap, poolId);
                 }
             };
         }
@@ -86,12 +152,39 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         Callback(ctx);
 
+        if (WaitForCompletion && PendingLoadActors) {
+            TBase::Become(&TInterconnectDebugActor::StateWait);
+            return;
+        }
+
+        ReplyAndDie(ctx);
+    }
+
+    void Handle(TEvLoadFinished::TPtr& ev, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(PendingLoadActors);
+
+        LoadResult.Add(ev->Get()->Result);
+
+        if (!--PendingLoadActors) {
+            ReplyAndDie(ctx);
+        }
+    }
+
+    void ReplyAndDie(const TActorContext& ctx) {
         auto response = MakeHolder<TBusResponse>();
         response->Record.SetStatus(MSTATUS_OK);
+        if (WaitForCompletion) {
+            LoadResult.Fill(response->Record.MutableInterconnectLoadResult());
+        }
         SendReplyMove(response.Release());
 
         Die(ctx);
     }
+
+    STRICT_STFUNC(StateWait,
+        HFunc(TEvLoadFinished, Handle);
+        CFunc(TEvents::TSystem::PoisonPill, TBase::Cancel);
+    )
 };
 
 IActor *CreateMessageBusInterconnectDebug(NMsgBusProxy::TBusMessageContext& msg) {

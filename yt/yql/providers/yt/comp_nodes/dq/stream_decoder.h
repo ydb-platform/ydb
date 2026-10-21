@@ -81,5 +81,5 @@ class ARROW_EXPORT StreamDecoder2 {
   class StreamDecoder2Impl;
   std::unique_ptr<StreamDecoder2Impl> impl_;
 };
-}  // namespace ipc::NDqs
-}  // namespace arrow
+} // namespace ipc::NDqs
+} // namespace arrow

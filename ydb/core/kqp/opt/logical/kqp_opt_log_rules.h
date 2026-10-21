@@ -31,7 +31,7 @@ struct TKqpOptimizeContext;
 NYql::NNodes::TKqlKeyRange BuildKeyRangeExpr(const NYql::NCommon::TKeyRange& keyRange,
     const NYql::TKikimrTableDescription& tableDesc, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
-NYql::NNodes::TExprBase KqpPushExtractedPredicateToReadTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpPushExtractedPredicateToReadTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, NYql::TTypeAnnotationContext& typesCtx, const NYql::TParentsMap& parentsMap);
 
 NYql::NNodes::TExprBase KqpTopSortSelectIndex(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
@@ -73,6 +73,9 @@ NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpRewriteFlatMapOverJsonRead(
 
 NYql::NNodes::TExprBase KqpRewriteTopSortOverFlatMap(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx);
 
+NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> KqpRewriteHybridRankTopSort(const NYql::NNodes::TExprBase& node,
+    NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx);
+
 NYql::NNodes::TExprBase KqpRewriteTakeOverIndexRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext&,
     const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap);
 
@@ -95,9 +98,6 @@ NYql::NNodes::TExprBase KqpApplyExtractMembersToReadOlapTable(NYql::NNodes::TExp
 
 NYql::NNodes::TExprBase KqpTopSortOverExtend(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const NYql::TParentsMap& parents);
-
-NYql::NNodes::TExprBase KqpUpsertRowsInputRewrite(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx);
 
 } // namespace NOpt
 

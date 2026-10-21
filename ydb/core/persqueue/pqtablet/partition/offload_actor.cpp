@@ -18,6 +18,8 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 using namespace NKikimr::NReplication::NService;
 using namespace NKikimr::NReplication;
 
@@ -36,12 +38,9 @@ private:
     TActorId Worker;
     TActorId SchemeShardPipe;
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder()
-                << "[OffloadActor]"
-                << "[" << TabletActorId << "]"
-                << "[" << Partition << "]"
-                << SelfId() << " ";
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"partition", Partition});
     }
 
 public:
@@ -89,7 +88,10 @@ public:
     }
 
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_D(
+            "Handle TEvGone",
+            {"toString", ev->Get()->ToString()}
+        );
         if (ev->Get()->Status == TEvWorker::TEvGone::DONE) {
             NotifySchemeShard();
         }
@@ -113,14 +115,20 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_D(
+            "Handle TEvClientDestroyed",
+            {"toString", ev->Get()->ToString()}
+        );
         if (SchemeShardPipe == ev->Get()->ClientId) {
             OnPipeDestroyed();
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_D(
+            "Handle TEvClientConnected",
+            {"toString", ev->Get()->ToString()}
+        );
 
         if (SchemeShardPipe == ev->Get()->ClientId && ev->Get()->Status != NKikimrProto::OK) {
             NTabletPipe::CloseClient(SelfId(), SchemeShardPipe);
@@ -147,7 +155,12 @@ public:
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         default:
-            LOG_W("Unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
+            LOG_W(
+                "Unhandled event",
+                {"type", ev->GetTypeRewrite()},
+                            {"event",
+                ev->ToString()}
+            );
         }
     }
 };

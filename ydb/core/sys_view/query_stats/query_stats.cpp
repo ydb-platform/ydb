@@ -17,6 +17,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace {
     using NKikimrSysView::ESysViewType;
 }
@@ -130,8 +132,8 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, TBase::HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TQueryStatsScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TQueryStatsScan: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -399,6 +401,14 @@ private:
             }});
             insert({TSchema::RequestUnits::ColumnId, [] (const TEntry& entry) {
                 return TCell::Make<ui64>(entry.GetStats().GetRequestUnits());
+            }});
+            insert({TSchema::TraceId::ColumnId, [] (const TEntry& entry) {
+                const auto& stats = entry.GetStats();
+                if (!stats.HasTraceId()) {
+                    return TCell();
+                }
+                const auto& traceId = stats.GetTraceId();
+                return TCell(traceId.data(), traceId.size());
             }});
         }
     };

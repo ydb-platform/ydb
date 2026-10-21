@@ -1,4 +1,3 @@
-/* syntax version 1 */
 SELECT
     1 AS `a``b`,
     2 AS ````,

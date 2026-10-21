@@ -51,7 +51,7 @@ public:
             ValueId_ = nameTable->GetIdOrRegisterName(config->Value);
         } catch (const std::exception& ex) {
             auto error = TError("Failed to add columns to name table for YAMR format")
-                << ex;
+                .With(ex);
             SetError(error);
         }
     }
@@ -202,7 +202,7 @@ ISchemalessFormatWriterPtr CreateSchemalessWriterForYamr(
             controlAttributesConfig,
             keyColumnCount);
     } catch (const std::exception& exc) {
-        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for YAMR format") << exc;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for YAMR format").With(exc);
     }
 }
 

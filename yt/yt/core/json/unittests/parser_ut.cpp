@@ -4,6 +4,8 @@
 
 #include <yt/yt/core/json/json_parser.h>
 
+#include <util/stream/mem.h>
+
 namespace NYT::NJson {
 namespace {
 
@@ -15,9 +17,9 @@ using ::testing::NiceMock;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline TString SurroundWithQuotes(const TString& s)
+inline std::string SurroundWithQuotes(const std::string& s)
 {
-    TString quote = "\"";
+    std::string quote = "\"";
     return quote + s + quote;
 }
 
@@ -36,9 +38,9 @@ TEST(TJsonParserTest, List)
         EXPECT_CALL(Mock, OnDoubleScalar(::testing::DoubleEq(3.5)));
     EXPECT_CALL(Mock, OnEndList());
 
-    TString input = "[1,\"aaa\",3.5]";
+    std::string input = "[1,\"aaa\",3.5]";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -54,9 +56,9 @@ TEST(TJsonParserTest, Map)
         EXPECT_CALL(Mock, OnStringScalar("bar"));
     EXPECT_CALL(Mock, OnEndMap());
 
-    TString input = "{\"hello\":\"world\",\"foo\":\"bar\"}";
+    std::string input = "{\"hello\":\"world\",\"foo\":\"bar\"}";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -67,9 +69,9 @@ TEST(TJsonParserTest, Integer1)
 
     EXPECT_CALL(Mock, OnInt64Scalar(1ll << 62));
 
-    TString input = "4611686018427387904";
+    std::string input = "4611686018427387904";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -80,9 +82,9 @@ TEST(TJsonParserTest, Integer2)
 
     EXPECT_CALL(Mock, OnInt64Scalar(std::numeric_limits<i64>::max()));
 
-    TString input = "9223372036854775807";
+    std::string input = "9223372036854775807";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -93,9 +95,9 @@ TEST(TJsonParserTest, UnsignedInteger)
 
     EXPECT_CALL(Mock, OnUint64Scalar((1ull << 63) + (1ull << 62)));
 
-    TString input = "13835058055282163712";
+    std::string input = "13835058055282163712";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -106,9 +108,9 @@ TEST(TJsonParserTest, UnsignedInteger2)
 
     EXPECT_CALL(Mock, OnUint64Scalar((1ull << 63)));
 
-    TString input = "9223372036854775808";
+    std::string input = "9223372036854775808";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -119,9 +121,9 @@ TEST(TJsonParserTest, Infinity)
 
     EXPECT_CALL(Mock, OnDoubleScalar(std::numeric_limits<double>::infinity()));
 
-    TString input = "inf";
+    std::string input = "inf";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -132,9 +134,9 @@ TEST(TJsonParserTest, MinusInfinity)
 
     EXPECT_CALL(Mock, OnDoubleScalar(-std::numeric_limits<double>::infinity()));
 
-    TString input = "-inf";
+    std::string input = "-inf";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -143,9 +145,9 @@ TEST(TJsonParserTest, IncorrectInfinity)
     StrictMock<TMockYsonConsumer> Mock;
     //InSequence dummy; // order in map is not specified
 
-    TString input = "[0, -in, 1.0]";
+    std::string input = "[0, -in, 1.0]";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     EXPECT_ANY_THROW(
         ParseJson(&stream, &Mock));
 }
@@ -157,9 +159,9 @@ TEST(TJsonParserTest, UnsignedInteger3)
 
     EXPECT_CALL(Mock, OnUint64Scalar(std::numeric_limits<ui64>::max()));
 
-    TString input = "18446744073709551615";
+    std::string input = "18446744073709551615";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -170,9 +172,9 @@ TEST(TJsonParserTest, Entity)
 
     EXPECT_CALL(Mock, OnEntity());
 
-    TString input = "null";
+    std::string input = "null";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -183,9 +185,9 @@ TEST(TJsonParserTest, EmptyString)
 
     EXPECT_CALL(Mock, OnStringScalar(""));
 
-    TString input = SurroundWithQuotes("");
+    std::string input = SurroundWithQuotes("");
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -194,8 +196,8 @@ TEST(TJsonParserTest, OutOfRangeUnicodeSymbols)
 {
     StrictMock<TMockYsonConsumer> Mock;
 
-    TString input = SurroundWithQuotes("\\u0100");
-    TStringInput stream(input);
+    std::string input = SurroundWithQuotes("\\u0100");
+    TMemoryInput stream(input);
 
     EXPECT_ANY_THROW(
         ParseJson(&stream, &Mock));
@@ -206,32 +208,32 @@ TEST(TJsonParserTest, EscapedUnicodeSymbols)
     StrictMock<TMockYsonConsumer> Mock;
     InSequence dummy;
 
-    TString s = TString("\x80\n\xFF", 3);
-    EXPECT_CALL(Mock, OnStringScalar(s));
+    std::string s = std::string("\x80\n\xFF", 3);
+    EXPECT_CALL(Mock, OnStringScalar(TStringBuf(s)));
 
-    TString input = SurroundWithQuotes("\\u0080\\u000A\\u00FF");
+    std::string input = SurroundWithQuotes("\\u0080\\u000A\\u00FF");
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
 TEST(TJsonParserTest, Boolean)
 {
     StrictMock<TMockYsonConsumer> Mock;
-    TString input = "true";
+    std::string input = "true";
 
     EXPECT_CALL(Mock, OnBooleanScalar(true));
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
 TEST(TJsonParserTest, InvalidJson)
 {
     StrictMock<TMockYsonConsumer> Mock;
-    TString input = "{\"hello\" = \"world\"}"; // YSon style instead of json
+    std::string input = "{\"hello\" = \"world\"}"; // YSon style instead of json
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     EXPECT_ANY_THROW(
         ParseJson(&stream, &Mock));
 }
@@ -254,13 +256,13 @@ TEST(TJsonParserTest, Embedded)
         EXPECT_CALL(Mock, OnEndList());
     EXPECT_CALL(Mock, OnEndMap());
 
-    TString input =
+    std::string input =
         "{"
             "\"a\":{\"foo\":\"bar\"}"
             ","
             "\"b\":[1]"
         "}";
-    TStringInput stream(input);
+    TMemoryInput stream(input);
 
     ParseJson(&stream, &Mock);
 }
@@ -286,9 +288,9 @@ TEST(TJsonParserPlainTest, Simple)
         EXPECT_CALL(Mock, OnEndMap());
     EXPECT_CALL(Mock, OnEndList());
 
-    TString input = "[1,\"aaa\",3.5,{\"a\": null}]";
+    std::string input = "[1,\"aaa\",3.5,{\"a\": null}]";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
 
     auto config = New<TJsonFormatConfig>();
     config->Plain = true;
@@ -314,13 +316,13 @@ TEST(TJsonParserPlainTest, Incorrect)
         EXPECT_CALL(Mock, OnEndList());
     EXPECT_CALL(Mock, OnEndMap());
 
-    TString input =
+    std::string input =
         "{"
             "\"$attributes\":{\"foo\":\"bar\"}"
             ","
             "\"$value\":[1]"
         "}";
-    TStringInput stream(input);
+    TMemoryInput stream(input);
 
     auto config = New<TJsonFormatConfig>();
     config->Plain = true;
@@ -344,12 +346,12 @@ TEST(TJsonParserPlainTest, ListFragment)
         EXPECT_CALL(Mock, OnStringScalar("bar"));
     EXPECT_CALL(Mock, OnEndMap());
 
-    TString input = "{\"hello\":\"world\"}\n{\"foo\":\"bar\"}\n";
+    std::string input = "{\"hello\":\"world\"}\n{\"foo\":\"bar\"}\n";
 
     auto config = New<TJsonFormatConfig>();
     config->Plain = true;
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock, config, EYsonType::ListFragment);
 }
 
@@ -371,14 +373,14 @@ TEST(TJsonParserTest, ListWithAttributes)
         EXPECT_CALL(Mock, OnInt64Scalar(1));
     EXPECT_CALL(Mock, OnEndList());
 
-    TString input =
+    std::string input =
         "{"
             "\"$attributes\":{\"foo\":\"bar\"}"
             ","
             "\"$value\":[1]"
         "}";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -397,14 +399,14 @@ TEST(TJsonParserTest, MapWithAttributes)
         EXPECT_CALL(Mock, OnStringScalar("bad"));
     EXPECT_CALL(Mock, OnEndMap());
 
-    TString input =
+    std::string input =
         "{"
             "\"$attributes\":{\"foo\":\"bar\"}"
             ","
             "\"$value\":{\"spam\":\"bad\"}"
         "}";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -420,14 +422,14 @@ TEST(TJsonParserTest, Int64WithAttributes)
 
     EXPECT_CALL(Mock, OnInt64Scalar(42));
 
-    TString input =
+    std::string input =
         "{"
             "\"$attributes\":{\"foo\":\"bar\"}"
             ","
             "\"$value\":42"
         "}";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -443,14 +445,14 @@ TEST(TJsonParserTest, EntityWithAttributes)
 
     EXPECT_CALL(Mock, OnEntity());
 
-    TString input =
+    std::string input =
         "{"
             "\"$attributes\":{\"foo\":\"bar\"}"
             ","
             "\"$value\":null"
         "}";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -466,14 +468,14 @@ TEST(TJsonParserTest, StringWithAttributes)
 
     EXPECT_CALL(Mock, OnStringScalar("some_string"));
 
-    TString input =
+    std::string input =
         "{"
             "\"$attributes\":{\"foo\":\"bar\"}"
             ","
             "\"$value\":\"some_string\""
         "}";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -493,7 +495,7 @@ TEST(TJsonParserTest, DoubleAttributes)
 
     EXPECT_CALL(Mock, OnStringScalar("some_string"));
 
-    TString input =
+    std::string input =
         "{"
             "\"$attributes\":{\"foo\":"
                 "{"
@@ -505,7 +507,7 @@ TEST(TJsonParserTest, DoubleAttributes)
             "\"$value\":\"some_string\""
         "}";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -547,7 +549,7 @@ TEST(TJsonParserTest, AnnotateWithTypes)
         EXPECT_CALL(Mock, OnDoubleScalar(::testing::DoubleEq(89)));
     EXPECT_CALL(Mock, OnEndList());
 
-    TString input =
+    std::string input =
         "["
             "{\"$value\":\"42\",\"$type\":\"int64\"},"
             "{\"$value\":\"123\",\"$type\":\"uint64\"},"
@@ -567,13 +569,13 @@ TEST(TJsonParserTest, AnnotateWithTypes)
             "{\"$value\":89,\"$type\":\"double\"}"
         "]";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
 TEST(TJsonParserTest, SomeHackyTest)
 {
-    TString input = "{\"$value\": \"yamr\", \"$attributes\": {\"lenval\": \"false\", \"has_subkey\": \"false\"}}";
+    std::string input = "{\"$value\": \"yamr\", \"$attributes\": {\"lenval\": \"false\", \"has_subkey\": \"false\"}}";
 
     StrictMock<TMockYsonConsumer> Mock;
     InSequence dummy;
@@ -587,7 +589,7 @@ TEST(TJsonParserTest, SomeHackyTest)
 
     EXPECT_CALL(Mock, OnStringScalar("yamr"));
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -596,8 +598,8 @@ TEST(TJsonParserTest, EmptyListFragment)
     StrictMock<TMockYsonConsumer> Mock;
     InSequence dummy;
 
-    TString empty;
-    TStringInput stream(empty);
+    std::string empty;
+    TMemoryInput stream(empty);
     ParseJson(&stream, &Mock, nullptr, EYsonType::ListFragment);
 }
 
@@ -617,9 +619,9 @@ TEST(TJsonParserTest, ListFragment)
         EXPECT_CALL(Mock, OnStringScalar("bar"));
     EXPECT_CALL(Mock, OnEndMap());
 
-    TString input = "{\"hello\":\"world\"}\n{\"foo\":\"bar\"}\n";
+    std::string input = "{\"hello\":\"world\"}\n{\"foo\":\"bar\"}\n";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock, nullptr, EYsonType::ListFragment);
 }
 
@@ -636,9 +638,9 @@ TEST(TJsonParserTest, SpecialKeys)
         EXPECT_CALL(Mock, OnStringScalar("20"));
     EXPECT_CALL(Mock, OnEndMap());
 
-    TString input = "{\"$$$value\":\"10\",\"$$attributes\":\"20\"}\n";
+    std::string input = "{\"$$$value\":\"10\",\"$$attributes\":\"20\"}\n";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock, nullptr, EYsonType::ListFragment);
 }
 
@@ -646,9 +648,9 @@ TEST(TJsonParserTest, AttributesWithoutValue)
 {
     StrictMock<TMockYsonConsumer> Mock;
 
-    TString input = "{\"$attributes\":\"20\"}";
+    std::string input = "{\"$attributes\":\"20\"}";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     EXPECT_ANY_THROW(
         ParseJson(&stream, &Mock));
 }
@@ -657,9 +659,9 @@ TEST(TJsonParserTest, Trash)
 {
     StrictMock<TMockYsonConsumer> Mock;
 
-    TString input = "fdslfsdhfkajsdhf";
+    std::string input = "fdslfsdhfkajsdhf";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     EXPECT_ANY_THROW(
         ParseJson(&stream, &Mock));
 }
@@ -672,9 +674,9 @@ TEST(TJsonParserTest, TrailingTrash)
     EXPECT_CALL(Mock, OnStringScalar("b"));
     EXPECT_CALL(Mock, OnEndMap());
 
-    TString input = "{\"a\":\"b\"} fdslfsdhfkajsdhf";
+    std::string input = "{\"a\":\"b\"} fdslfsdhfkajsdhf";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     EXPECT_ANY_THROW(
         ParseJson(&stream, &Mock));
 }
@@ -687,9 +689,9 @@ TEST(TJsonParserTest, MultipleValues)
     EXPECT_CALL(Mock, OnStringScalar("b"));
     EXPECT_CALL(Mock, OnEndMap());
 
-    TString input = "{\"a\":\"b\"}{\"a\":\"b\"}";
+    std::string input = "{\"a\":\"b\"}{\"a\":\"b\"}";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     EXPECT_ANY_THROW(
         ParseJson(&stream, &Mock));
 }
@@ -700,9 +702,9 @@ TEST(TJsonParserTest, ReservedKeyName)
 
     EXPECT_CALL(Mock, OnBeginMap());
 
-    TString input = "{\"$other\":\"20\"}";
+    std::string input = "{\"$other\":\"20\"}";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     EXPECT_ANY_THROW(
         ParseJson(&stream, &Mock));
 }
@@ -714,9 +716,9 @@ TEST(TJsonParserTest, MemoryLimit1)
     auto config = New<TJsonFormatConfig>();
     config->MemoryLimit = 10;
 
-    TString input = "{\"my_string\":\"" + TString(100000, 'X') + "\"}";
+    std::string input = "{\"my_string\":\"" + std::string(100000, 'X') + "\"}";
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     EXPECT_ANY_THROW(
         ParseJson(&stream, &Mock, config));
 }
@@ -727,16 +729,16 @@ TEST(TJsonParserTest, MemoryLimit2)
 
     EXPECT_CALL(Mock, OnBeginMap());
         EXPECT_CALL(Mock, OnKeyedItem("my_string"));
-        TString expectedString(100000, 'X');
-        EXPECT_CALL(Mock, OnStringScalar(expectedString));
+        std::string expectedString(100000, 'X');
+        EXPECT_CALL(Mock, OnStringScalar(TStringBuf(expectedString)));
     EXPECT_CALL(Mock, OnEndMap());
 
-    TString input = "{\"my_string\":\"" + TString(100000, 'X') + "\"}";
+    std::string input = "{\"my_string\":\"" + std::string(100000, 'X') + "\"}";
 
     auto config = New<TJsonFormatConfig>();
     config->MemoryLimit = 500000;
 
-    TStringInput stream(input);
+    TMemoryInput stream(input);
     ParseJson(&stream, &Mock);
 }
 
@@ -792,9 +794,9 @@ TEST(TJsonParserTest, MemoryLimit4)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString MakeDeepMapJson(int depth)
+std::string MakeDeepMapJson(int depth)
 {
-    TString result;
+    std::string result;
     for (int i = 0; i < depth; ++i) {
         result += "{\"k\":";
     }
@@ -805,9 +807,9 @@ TString MakeDeepMapJson(int depth)
     return result;
 }
 
-TString MakeDeepListJson(int depth)
+std::string MakeDeepListJson(int depth)
 {
-    TString result;
+    std::string result;
     for (int i = 0; i < depth; ++i) {
         result += "[";
     }

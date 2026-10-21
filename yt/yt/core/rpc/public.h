@@ -26,7 +26,13 @@ class TCredentialsExt;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct IBackend;
+constexpr auto DefaultProtocolName = "yt-tcp"_sb;
+DECLARE_REFCOUNTED_STRUCT(TMultiProtocolClientConfig)
+DECLARE_REFCOUNTED_STRUCT(TMultiProtocolServerConfig)
+
 struct TStreamingParameters;
+struct TDirectPlacementTransferParameters;
 struct TStreamingPayload;
 struct TStreamingFeedback;
 
@@ -64,6 +70,7 @@ DECLARE_REFCOUNTED_STRUCT(IServer)
 DECLARE_REFCOUNTED_STRUCT(IService)
 DECLARE_REFCOUNTED_STRUCT(IServiceWithReflection)
 DECLARE_REFCOUNTED_STRUCT(IServiceContext)
+DECLARE_REFCOUNTED_STRUCT(IDirectPlacementTransfer)
 DECLARE_REFCOUNTED_STRUCT(IChannel)
 DECLARE_REFCOUNTED_STRUCT(IThrottlingChannel)
 DECLARE_REFCOUNTED_STRUCT(IChannelFactory)
@@ -82,6 +89,8 @@ DECLARE_REFCOUNTED_CLASS(TCongestionController)
 
 DECLARE_REFCOUNTED_CLASS(TAttachmentsInputStream)
 DECLARE_REFCOUNTED_CLASS(TAttachmentsOutputStream)
+
+struct TAttachmentsOutputStreamStatistics;
 
 DECLARE_REFCOUNTED_STRUCT(IPeerPriorityProvider)
 DECLARE_REFCOUNTED_STRUCT(IMapPeerPriorityProvider)
@@ -176,9 +185,9 @@ using TFeatureIdFormatter = const std::function<std::optional<TStringBuf>(int fe
 extern const std::string RequestIdAnnotation;
 extern const std::string EndpointAnnotation;
 extern const std::string EndpointAddressAnnotation;
-extern const std::string RequestInfoAnnotation;
+extern const std::string RequestAnnotationsTraceTag;
 extern const std::string RequestUser;
-extern const std::string ResponseInfoAnnotation;
+extern const std::string ResponseAnnotationsTraceTag;
 
 extern const std::string FeatureIdAttributeKey;
 extern const std::string FeatureNameAttributeKey;

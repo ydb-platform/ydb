@@ -5,6 +5,7 @@ PEERDIR(
     contrib/restricted/nlohmann_json
     library/cpp/resource
     library/cpp/http/misc
+    library/cpp/xml/document
     ydb/core/base
     ydb/core/http_proxy
     ydb/core/testlib/default
@@ -28,6 +29,7 @@ PEERDIR(
 
 SRCS(
     datastreams_fixture.cpp
+    sqs_xml_ut_helpers.cpp
 )
 
 YQL_LAST_ABI_VERSION()

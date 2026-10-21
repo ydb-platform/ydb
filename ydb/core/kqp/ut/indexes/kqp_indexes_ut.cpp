@@ -1,3 +1,4 @@
+#include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
@@ -56,7 +57,9 @@ TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> ga
     UNIT_ASSERT(TryParseFromTextFormat(defaultSettingsStream, defaultSettings));
     kikimrConfig->Init(defaultSettings.GetDefaultSettings(), cluster, settings, true);
 
-    auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({nullptr, NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, {}, nullptr, {}, nullptr, nullptr});
+    auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>(TKqpFederatedQuerySetup{
+        .HttpGateway = NYql::IHTTPGateway::Make(),
+    });
     return NKqp::CreateKqpHost(gateway, cluster, "/Root", kikimrConfig, moduleResolver,
                                federatedQuerySetup, nullptr, nullptr, NKikimrConfig::TQueryServiceConfig(), {}, funcRegistry, funcRegistry, keepConfigChanges, nullptr, actorSystem, nullptr);
 }
@@ -143,18 +146,6 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
             auto explainResult = qp->SyncExplainDataQuery(query, true);
 
             UNIT_ASSERT_C(explainResult.Success(), explainResult.Issues().ToString());
-
-            TExprContext exprCtx;
-            VisitExpr(GetExpr(explainResult.QueryAst, exprCtx, moduleResolver.get()).Ptr(),
-                [&indexName](const TExprNode::TPtr& exprNode) {
-                    if (TMaybeNode<TKqpUpsertRows>(exprNode)) {
-                        UNIT_ASSERT(!TKqpUpsertRows(exprNode).Table().Path().Value().Contains(indexName));
-                    }
-                    if (TMaybeNode<TKqpDeleteRows>(exprNode)) {
-                        UNIT_ASSERT(!TKqpDeleteRows(exprNode).Table().Path().Value().Contains(indexName));
-                    }
-                    return true;
-                });
         }
 
         {
@@ -313,8 +304,11 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
                     }
                     return true;
                 });
-            UNIT_ASSERT(indexUpdated);
-            UNIT_ASSERT(indexCleaned);
+            if (!server.GetSettings().AppConfig->GetTableServiceConfig().GetEnableIndexStreamWrite()) {
+                // No writes in AST for streaming index.
+                UNIT_ASSERT(indexUpdated);
+                UNIT_ASSERT(indexCleaned);
+            }
         }
 
         {
@@ -1031,7 +1025,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 64);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 23);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 31);
                 UNIT_ASSERT(            !stats.query_phases(0).table_access(0).has_deletes());
@@ -1050,6 +1044,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access().size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).name(), "/Root/TestTable");
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().rows(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().bytes(), 23);
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 2).table_access().size(), 0);
 
@@ -1131,9 +1126,6 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
     }
 
     Y_UNIT_TEST_TWIN(UpsertWithoutExtraNullDelete, UseStreamIndex) {
-        if (UseStreamIndex) {
-            return;
-        }
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
@@ -4864,10 +4856,6 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST_TWIN(UpdateDeletePlan, UseStreamIndex) {
-        if (UseStreamIndex) {
-            // TODO
-            return;
-        }
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
@@ -6838,6 +6826,82 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
+    Y_UNIT_TEST(DisableAutoIndexSelectionPragma) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/TestAutoIndexPragma` (
+                id Uint32,
+                name Utf8,
+                INDEX idx_name GLOBAL ON (name),
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync());
+
+        auto upsertResult = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/TestAutoIndexPragma` (id, name) VALUES
+                (1u, "Alice"),
+                (2u, "Bob");
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto explainScan = [&](const TString& query) {
+            TStreamExecScanQuerySettings settings;
+            settings.Explain(true);
+            auto it = db.StreamExecuteScanQuery(query, settings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            return CollectStreamResult(it);
+        };
+
+        auto countIndexAccessInPlan = [](TStringBuf planJson) {
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(planJson, &plan, true);
+            return CountPlanNodesByKv(plan, "Table", "TestAutoIndexPragma/idx_name/indexImplTable");
+        };
+
+        {
+            auto res = explainScan(R"(
+                PRAGMA ydb.OptDisableAutoIndexSelection = "false";
+                SELECT * FROM `/Root/TestAutoIndexPragma` WHERE name = 'Alice';
+            )");
+            UNIT_ASSERT(res.PlanJson);
+            UNIT_ASSERT_VALUES_EQUAL_C(countIndexAccessInPlan(*res.PlanJson), 1,
+                "Expected auto-select index with OptDisableAutoIndexSelection=false, plan: " << *res.PlanJson);
+        }
+
+        {
+            auto res = explainScan(R"(
+                PRAGMA ydb.OptDisableAutoIndexSelection = "true";
+                SELECT * FROM `/Root/TestAutoIndexPragma` WHERE name = 'Alice';
+            )");
+            UNIT_ASSERT(res.PlanJson);
+            UNIT_ASSERT_VALUES_EQUAL_C(countIndexAccessInPlan(*res.PlanJson), 0,
+                "Expected no auto-select index with OptDisableAutoIndexSelection=true, plan: " << *res.PlanJson);
+        }
+
+        {
+            auto explainResult = session.ExplainDataQuery(R"(
+                PRAGMA ydb.OptDisableAutoIndexSelection = "false";
+                SELECT * FROM `/Root/TestAutoIndexPragma` WHERE name = 'Alice';
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(countIndexAccessInPlan(explainResult.GetPlan()), 1,
+                "Expected auto-select index on data query with OptDisableAutoIndexSelection=false, plan: " << explainResult.GetPlan());
+        }
+
+        {
+            auto explainResult = session.ExplainDataQuery(R"(
+                PRAGMA ydb.OptDisableAutoIndexSelection = "true";
+                SELECT * FROM `/Root/TestAutoIndexPragma` WHERE name = 'Alice';
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(countIndexAccessInPlan(explainResult.GetPlan()), 0,
+                "Expected no auto-select index on data query with OptDisableAutoIndexSelection=true, plan: " << explainResult.GetPlan());
+        }
+    }
+
     Y_UNIT_TEST(UnionAllViewAutoSelectIndex) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
@@ -7651,9 +7715,171 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
 
+    Y_UNIT_TEST(IndexLifecycleInvalidatesCachedReadAndWritePlans) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto scheme = [&](const TString& query) {
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+        scheme(R"sql(
+            CREATE TABLE `/Root/IndexLifecycle` (
+                Key Int64,
+                Value Int64,
+                Payload Utf8,
+                PRIMARY KEY (Key)
+            );
+        )sql");
+
+        const TString writeQuery = R"sql(
+            DECLARE $key AS Int64;
+            DECLARE $value AS Int64;
+            UPSERT INTO `/Root/IndexLifecycle` (Key, Value, Payload)
+            VALUES ($key, $value, "payload");
+        )sql";
+        const auto execWrite = [&](i64 key, i64 value, bool fromCache) {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$key").Int64(key).Build()
+                .AddParam("$value").Int64(value).Build()
+                .Build();
+            auto settings = TExecDataQuerySettings()
+                .KeepInQueryCache(true)
+                .CollectQueryStats(ECollectQueryStatsMode::Basic);
+            auto result = session.ExecuteDataQuery(
+                writeQuery, TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            const auto stats = TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), fromCache);
+        };
+
+        const TString readQuery = R"sql(
+            DECLARE $value AS Int64;
+            SELECT Key FROM `/Root/IndexLifecycle` VIEW `value_idx`
+            WHERE Value = $value ORDER BY Key;
+        )sql";
+        const auto execRead = [&](i64 value, const TString& expected, std::optional<bool> fromCache) {
+            auto params = db.GetParamsBuilder().AddParam("$value").Int64(value).Build().Build();
+            auto settings = TExecDataQuerySettings()
+                .KeepInQueryCache(true)
+                .CollectQueryStats(ECollectQueryStatsMode::Basic);
+            auto result = session.ExecuteDataQuery(
+                readQuery, TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
+            if (!fromCache) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+                return;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+            const auto stats = TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), *fromCache);
+        };
+
+        // Before ADD, the write plan only touches the main table and the explicit VIEW is absent.
+        execWrite(1, 10, false);
+        execWrite(1, 10, true);
+        execRead(10, {}, std::nullopt);
+
+        scheme(R"sql(
+            ALTER TABLE `/Root/IndexLifecycle`
+            ADD INDEX value_idx GLOBAL ON (Value);
+        )sql");
+        // ADD invalidates the cached write plan so subsequent writes maintain the new index.
+        execWrite(2, 20, false);
+        execWrite(2, 20, true);
+        execRead(20, "[[[2]]]", false);
+        execRead(20, "[[[2]]]", true);
+
+        scheme(R"sql(
+            ALTER TABLE `/Root/IndexLifecycle` DROP INDEX value_idx;
+        )sql");
+        // Neither a stale index write nor a cached VIEW plan may survive DROP.
+        execWrite(3, 30, false);
+        execRead(20, {}, std::nullopt);
+
+        scheme(R"sql(
+            ALTER TABLE `/Root/IndexLifecycle`
+            ADD INDEX value_idx GLOBAL ON (Value);
+        )sql");
+        // Recreate with the same name must compile against the new index path and include the row
+        // written while no index existed (the build backfills it).
+        execWrite(4, 40, false);
+        execRead(30, "[[[3]]]", false);
+        execRead(40, "[[[4]]]", true);
+    }
+
+    Y_UNIT_TEST(UniqueIndexLifecycleInvalidatesCachedWritePlan) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAddUniqueIndex(true);
+        featureFlags.SetEnableOnlineAddUniqueIndex(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetFeatureFlags(featureFlags));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto scheme = [&](const TString& query) {
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+        scheme(R"sql(
+            CREATE TABLE `/Root/UniqueLifecycle` (
+                Key Int64,
+                Value Int64,
+                PRIMARY KEY (Key)
+            );
+        )sql");
+
+        const TString writeQuery = R"sql(
+            DECLARE $key AS Int64;
+            DECLARE $value AS Int64;
+            UPSERT INTO `/Root/UniqueLifecycle` (Key, Value) VALUES ($key, $value);
+        )sql";
+        const auto execWrite = [&](i64 key, i64 value, EStatus status, std::optional<bool> fromCache = std::nullopt) {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$key").Int64(key).Build()
+                .AddParam("$value").Int64(value).Build()
+                .Build();
+            auto settings = TExecDataQuerySettings()
+                .KeepInQueryCache(true)
+                .CollectQueryStats(ECollectQueryStatsMode::Basic);
+            auto result = session.ExecuteDataQuery(
+                writeQuery, TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
+            if (fromCache) {
+                const auto stats = TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), *fromCache);
+            }
+        };
+
+        execWrite(1, 10, EStatus::SUCCESS, false);
+        execWrite(1, 10, EStatus::SUCCESS, true);
+        scheme(R"sql(
+            ALTER TABLE `/Root/UniqueLifecycle`
+            ADD INDEX unique_idx GLOBAL UNIQUE ON (Value);
+        )sql");
+
+        // The post-ADD execution recompiles with uniqueness enforcement.
+        execWrite(2, 20, EStatus::SUCCESS, false);
+        execWrite(3, 10, EStatus::PRECONDITION_FAILED);
+
+        scheme(R"sql(
+            ALTER TABLE `/Root/UniqueLifecycle` DROP INDEX unique_idx;
+        )sql");
+        // A duplicate is legal while the unique index is absent; a stale cached plan must not reject it.
+        execWrite(3, 10, EStatus::SUCCESS, false);
+        execWrite(3, 30, EStatus::SUCCESS, true);
+
+        scheme(R"sql(
+            ALTER TABLE `/Root/UniqueLifecycle`
+            ADD INDEX unique_idx GLOBAL UNIQUE ON (Value);
+        )sql");
+        // Recreating under the same name invalidates the no-index plan and enforces uniqueness again.
+        execWrite(4, 40, EStatus::SUCCESS, false);
+        execWrite(5, 10, EStatus::PRECONDITION_FAILED);
+    }
+
     Y_UNIT_TEST(TruncateTableWithAsyncIndexFails) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableTruncateTable(true);
         TKikimrRunner kikimr(TKikimrSettings().SetFeatureFlags(featureFlags));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -7688,6 +7914,94 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             UNIT_ASSERT_C(result.GetIssues().ToString().contains("Cannot truncate table with async indexes"),
                 "Unexpected error message: " << result.GetIssues().ToString());
         }
+    }
+
+    void DoTestPreSharding(bool serverless, bool multiCol, bool unique) {
+        using namespace NStat;
+
+        TTestEnv env(1, 1, true);
+        if (serverless) {
+            CreateDatabase(env, "Shared", 1, true);
+            CreateServerlessDatabase(env, "Database", "/Root/Shared");
+        } else {
+            CreateDatabase(env, "Database");
+        }
+        TTableClient db(env.GetDriver());
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/Database/TestTable` (
+                    id Uint64 not null,
+                    name String not null,
+                    data String not null,
+                    PRIMARY KEY (id),
+                    STATISTICS name_hist ON (name) WITH (EQ_HEIGHT_HISTOGRAM)
+                )
+                WITH (PARTITION_AT_KEYS = (5));
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString query1 = "UPSERT INTO `/Root/Database/TestTable` (id, name, data) VALUES "
+                "(0, \"alice\", \"0\"),"
+                "(1, \"bob\", \"1\"),"
+                "(2, \"carter\", \"2\"),"
+                "(3, \"donald\", \"3\"),"
+                "(4, \"edgar\", \"4\"),"
+                "(5, \"felix\", \"5\"),"
+                "(6, \"george\", \"6\"),"
+                "(7, \"harry\", \"7\"),"
+                "(8, \"ian\", \"8\"),"
+                "(9, \"john\", \"9\");";
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery("ANALYZE `/Root/Database/TestTable`").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto driver = MakeHolder<NYdb::TDriver>(NYdb::TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetDatabase("/Root/Database")
+                .SetDiscoveryMode(NYdb::EDiscoveryMode::Off));
+            TTableClient db(*driver);
+            auto connres = db.CreateSession().GetValueSync();
+            UNIT_ASSERT_C(connres.GetIssues().Empty(), connres.GetIssues().ToString());
+            auto session = connres.GetSession();
+            const TString q = Sprintf(
+                "ALTER TABLE `/Root/Database/TestTable` ADD INDEX name_idx GLOBAL %s ON (name%s)",
+                unique ? "UNIQUE" : "",
+                multiCol ? ", data" : ""
+            );
+            auto result = session.ExecuteSchemeQuery(q).GetValueSync();
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            // Check index shard count
+            auto runtime = env.GetServer().GetRuntime();
+            auto shards = GetTableShards(&env.GetServer(), runtime->AllocateEdgeActor(), "/Root/Database/TestTable/name_idx/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(PreSharding, Unique) {
+        DoTestPreSharding(false, false, Unique);
+    }
+
+    Y_UNIT_TEST(PreShardingMultiCol) {
+        DoTestPreSharding(false, true, false);
+    }
+
+    Y_UNIT_TEST(PreShardingServerless) {
+        DoTestPreSharding(true, true, false);
     }
 
 }

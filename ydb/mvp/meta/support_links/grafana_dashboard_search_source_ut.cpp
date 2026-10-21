@@ -21,6 +21,8 @@
 
 namespace {
 
+using EEntityType = NMVP::NSupportLinks::EEntityType;
+
 class TTestActorRuntime : public TMvpTestRuntime {
 public:
     TTestActorRuntime()
@@ -85,25 +87,30 @@ NHttp::TUrlParametersBuilder MakeUrlParameters(TStringBuf query) {
 class TResolveRunnerActor : public NActors::TActorBootstrapped<TResolveRunnerActor> {
 public:
     TResolveRunnerActor(
-        std::shared_ptr<NMVP::ILinkSource> source,
+        std::shared_ptr<NMVP::NSupportLinks::ILinkSource> source,
         THashMap<TString, TString> clusterInfo,
         NHttp::TUrlParametersBuilder urlParameters,
+        EEntityType entityType,
         NActors::TActorId replyTo,
         NActors::TActorId httpProxyId)
         : Source(std::move(source))
         , ClusterInfo(std::move(clusterInfo))
         , UrlParameters(std::move(urlParameters))
+        , EntityType(entityType)
         , ReplyTo(replyTo)
         , HttpProxyId(httpProxyId)
     {}
 
     void Bootstrap() {
+        const TCgiParameters additionalRequestParams = NMVP::NSupportLinks::BuildAdditionalRequestParameters(UrlParameters);
+        const auto identity = NMVP::NSupportLinks::BuildEntityIdentity(EntityType, UrlParameters);
         auto result = Source->Resolve(
-            NMVP::ILinkSource::TLinkResolveInput{
+            NMVP::NSupportLinks::ILinkSource::TLinkResolveInput{
                 .ClusterInfo = ClusterInfo,
-                .UrlParameters = UrlParameters,
+                .AdditionalRequestParams = additionalRequestParams,
+                .Identity = identity,
             },
-            NMVP::ILinkSource::TResolveContext{
+            NMVP::NSupportLinks::ILinkSource::TResolveContext{
                 .Place = 0,
                 .Owner = SelfId(),
                 .HttpProxyId = HttpProxyId,
@@ -131,9 +138,10 @@ public:
     }
 
 private:
-    std::shared_ptr<NMVP::ILinkSource> Source;
+    std::shared_ptr<NMVP::NSupportLinks::ILinkSource> Source;
     THashMap<TString, TString> ClusterInfo;
     NHttp::TUrlParametersBuilder UrlParameters;
+    EEntityType EntityType;
     NActors::TActorId ReplyTo;
     NActors::TActorId HttpProxyId;
 };
@@ -310,9 +318,10 @@ public:
 
 NMVP::NSupportLinks::TEvPrivate::TEvSourceResponse* ResolveSource(
     TTestActorRuntime& runtime,
-    std::shared_ptr<NMVP::ILinkSource> source,
+    std::shared_ptr<NMVP::NSupportLinks::ILinkSource> source,
     THashMap<TString, TString> clusterInfo,
     NHttp::TUrlParametersBuilder urlParameters,
+    EEntityType entityType,
     NActors::TActorId httpProxyId,
     TAutoPtr<NActors::IEventHandle>& handle)
 {
@@ -321,6 +330,7 @@ NMVP::NSupportLinks::TEvPrivate::TEvSourceResponse* ResolveSource(
         std::move(source),
         std::move(clusterInfo),
         std::move(urlParameters),
+        entityType,
         replyTo,
         httpProxyId));
     return runtime.GrabEdgeEvent<NMVP::NSupportLinks::TEvPrivate::TEvSourceResponse>(handle);
@@ -343,7 +353,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         TMetaDatabaseTokenNameGuard tokenNameGuard("meta-token");
         auto settings = MakeMetaSettings("");
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            NMVP::MakeGrafanaDashboardSearchSource(MakeConfig("/api/search"), settings),
+            NMVP::NSupportLinks::MakeGrafanaDashboardSearchSource(MakeConfig("/api/search"), settings),
             yexception,
             "grafana.endpoint is required for source=grafana/dashboard/search");
     }
@@ -352,7 +362,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         TMetaDatabaseTokenNameGuard tokenNameGuard("meta-token");
         auto settings = MakeMetaSettings("");
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            NMVP::MakeGrafanaDashboardSearchSource(MakeConfig("https://grafana.example.net/api/search"), settings),
+            NMVP::NSupportLinks::MakeGrafanaDashboardSearchSource(MakeConfig("https://grafana.example.net/api/search"), settings),
             yexception,
             "grafana.endpoint is required for source=grafana/dashboard/search");
     }
@@ -360,7 +370,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
     Y_UNIT_TEST(ValidationRejectsMissingMetaDatabaseTokenName) {
         TMetaDatabaseTokenNameGuard tokenNameGuard("");
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            NMVP::MakeGrafanaDashboardSearchSource(MakeConfig("/api/search"), MakeMetaSettings()),
+            NMVP::NSupportLinks::MakeGrafanaDashboardSearchSource(MakeConfig("/api/search"), MakeMetaSettings()),
             yexception,
             "meta.meta_database_token_name is required for source=grafana/dashboard/search");
     }
@@ -369,13 +379,13 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         TMetaDatabaseTokenNameGuard tokenNameGuard("meta-token");
         TTestActorRuntime runtime;
 
-        auto source = NMVP::MakeGrafanaDashboardSearchSource(
+        auto source = NMVP::NSupportLinks::MakeGrafanaDashboardSearchSource(
             MakeConfig("/api/search", TVector<TString>{"ydb-common", "ydb-storage"}, TVector<TString>{"team-folder", "ops-folder"}),
             MakeMetaSettings());
         auto httpProxyId = runtime.Register(new TSearchApiRequestCheckActor());
 
         TAutoPtr<NActors::IEventHandle> handle;
-        auto* response = ResolveSource(runtime, source, {}, MakeUrlParameters(""), httpProxyId, handle);
+        auto* response = ResolveSource(runtime, source, {}, MakeUrlParameters(""), EEntityType::Cluster, httpProxyId, handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Errors.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Links.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Links[0].Title, "YDB Cluster Overview");
@@ -393,7 +403,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
             {"title":"Skip me"}
         ])json";
         auto httpProxyId = runtime.Register(new TGrafanaSearchReplyActor(body));
-        auto source = NMVP::MakeGrafanaDashboardSearchSource(
+        auto source = NMVP::NSupportLinks::MakeGrafanaDashboardSearchSource(
             MakeConfig("/api/search", TVector<TString>{"ydb-common"}),
             MakeMetaSettings());
 
@@ -407,6 +417,7 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
             source,
             clusterInfo,
             MakeUrlParameters("cluster=ydb-global&database=%2Froot%2Ftest"),
+            EEntityType::Database,
             httpProxyId,
             handle);
 
@@ -427,10 +438,10 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
         TTestActorRuntime runtime;
 
         auto httpProxyId = runtime.Register(new TForbiddenReplyActor());
-        auto source = NMVP::MakeGrafanaDashboardSearchSource(MakeConfig(), MakeMetaSettings());
+        auto source = NMVP::NSupportLinks::MakeGrafanaDashboardSearchSource(MakeConfig(), MakeMetaSettings());
 
         TAutoPtr<NActors::IEventHandle> handle;
-        auto* response = ResolveSource(runtime, source, {}, MakeUrlParameters(""), httpProxyId, handle);
+        auto* response = ResolveSource(runtime, source, {}, MakeUrlParameters(""), EEntityType::Cluster, httpProxyId, handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Links.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Errors.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Errors[0].Source, "grafana/dashboard/search");

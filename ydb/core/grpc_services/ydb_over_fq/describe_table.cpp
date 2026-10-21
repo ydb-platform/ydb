@@ -2,17 +2,16 @@
 #include "rpc_base.h"
 #include "service.h"
 
-#include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/grpc_services/local_grpc/local_grpc.h>
+#include <ydb/core/grpc_services/rpc_deferrable.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_INTERNAL_SERVICE
 
 namespace NKikimr::NGRpcService::NYdbOverFq {
 
-class DescribeTableRPC
-    : public TRpcBase<
-        DescribeTableRPC,Ydb::Table::DescribeTableRequest, Ydb::Table::DescribeTableResponse> {
+class DescribeTableRPC: public TRpcBase<DescribeTableRPC, Ydb::Table::DescribeTableRequest, Ydb::Table::DescribeTableResponse> {
 public:
-    using TBase = TRpcBase<
-        DescribeTableRPC,Ydb::Table::DescribeTableRequest, Ydb::Table::DescribeTableResponse>;
+    using TBase = TRpcBase<DescribeTableRPC, Ydb::Table::DescribeTableRequest, Ydb::Table::DescribeTableResponse>;
     static constexpr std::string_view RpcName = "DescribeTable";
 
     using TBase::TBase;
@@ -24,7 +23,7 @@ public:
     }
 
     static TStringBuf ExtractName(const TString& tablePath) {
-        return TStringBuf{tablePath}.RNextTok('/');
+        return TStringBuf{ tablePath }.RNextTok('/');
     }
 
     // ListBindings
@@ -41,7 +40,8 @@ public:
         auto& filter = *req.mutable_filter();
         filter.set_name(BindingName_);
 
-        SRC_LOG_T("listing bindings");
+        YDB_LOG_TRACE_CTX(ctx, "Listing bindings",
+            {"logContext", TLogCtx{.Owner_ = *this}});
 
         Become(&DescribeTableRPC::ListBindingsState);
         MakeLocalCall(std::move(req), ctx);
@@ -57,9 +57,9 @@ public:
 
         if (result.next_page_token().empty()) {
             TString errorMsg = TStringBuilder{} << "couldn't find binding with matching name for " << BindingName_;
-            SRC_LOG_I("failed: " << errorMsg);
-            Reply(
-                Ydb::StatusIds_StatusCode_NOT_FOUND, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+            YDB_LOG_INFO_CTX(ctx, errorMsg,
+                {"logContext", TLogCtx{.Owner_ = *this}});
+            Reply(Ydb::StatusIds_StatusCode_NOT_FOUND, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             return;
         }
 
@@ -74,7 +74,9 @@ public:
         FederatedQuery::DescribeBindingRequest req;
         req.set_binding_id(bindingId);
 
-        SRC_LOG_T("describing binding: " << bindingId);
+        YDB_LOG_TRACE_CTX(ctx, "Describing binding",
+            {"logContext", TLogCtx{.Owner_ = *this}},
+            {"bindingId", bindingId});
 
         Become(&DescribeTableRPC::DescribeBindingState);
         MakeLocalCall(std::move(req), ctx);
@@ -85,21 +87,21 @@ public:
 
         const google::protobuf::RepeatedPtrField<Ydb::Column>* columns = nullptr;
         switch (settings.binding_case()) {
-        case FederatedQuery::BindingSetting::kDataStreams: {
-            columns = &settings.data_streams().schema().column();
-            break;
-        }
-        case FederatedQuery::BindingSetting::kObjectStorage: {
-            columns = &settings.object_storage().subset()[0].schema().column();
-            break;
-        }
-        default:
-            TString errorMsg = TStringBuilder{} << "binding " << result.binding().meta().id() << " got unexpected type: " <<
-                static_cast<int>(settings.binding_case());
-            SRC_LOG_I("failed: " << errorMsg);
-            Reply(
-                Ydb::StatusIds_StatusCode_INTERNAL_ERROR, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-            return;
+            case FederatedQuery::BindingSetting::kDataStreams: {
+                columns = &settings.data_streams().schema().column();
+                break;
+            }
+            case FederatedQuery::BindingSetting::kObjectStorage: {
+                columns = &settings.object_storage().subset()[0].schema().column();
+                break;
+            }
+            default:
+                TString errorMsg = TStringBuilder{} << "binding " << result.binding().meta().id()
+                                                    << " got unexpected type: " << static_cast<int>(settings.binding_case());
+                YDB_LOG_INFO_CTX(ctx, errorMsg,
+                {"logContext", TLogCtx{.Owner_ = *this}});
+                Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+                return;
         }
 
         Ydb::Table::DescribeTableResult response;
@@ -130,4 +132,4 @@ std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> Ge
     };
 }
 
-} // namespace NKikimr::NGRpcService::NYdbOverFq
+}   // namespace NKikimr::NGRpcService::NYdbOverFq

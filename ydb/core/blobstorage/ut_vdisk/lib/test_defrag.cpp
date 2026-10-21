@@ -2,6 +2,8 @@
 #include "helpers.h"
 #include <util/stream/null.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
+
 using namespace NKikimr;
 
 #define STR Cnull
@@ -21,7 +23,7 @@ virtual void Scenario(const TActorContext &ctx) {
 
     TAutoPtr<IActor> defragCmd(CreateDefrag(SyncRunner->NotifyID(), Conf, true, check));
     SyncRunner->Run(ctx, defragCmd);
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Defrag completed");
+    YDB_LOG_NOTICE_CTX(ctx, "Defrag completed");
 }
 SYNC_TEST_END(TDefragEmptyDB, TSyncTestBase)
 
@@ -50,7 +52,7 @@ virtual void Scenario(const TActorContext &ctx) {
     TGeneratedDataSet dataSetSmall(CreateBlobGenerator(smallMaxDataSize, maxBlobs, smallMinBlobSize, smallMaxBlobSize,
             2, 100000, ginfo, vdisks));
     SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &dataSetSmall, hndl));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
+    YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
     // prepare gc command -- it deletes all data from one tablet
     TGCSettings settings;
@@ -65,7 +67,7 @@ virtual void Scenario(const TActorContext &ctx) {
 
     // set gc settings
     SyncRunner->Run(ctx, gcCommand);
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  GC Message sent");
+    YDB_LOG_NOTICE_CTX(ctx, "GC Message sent");
 
     // syncronize (need to sync barriers)
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
@@ -87,22 +89,22 @@ virtual void Scenario(const TActorContext &ctx) {
 
     // wait for compaction
     SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), instance, true));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+    YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
 
     // now defrag only one disk
     TAutoPtr<IActor> defragCmd(CreateDefrag(SyncRunner->NotifyID(), instance, true, check));
     SyncRunner->Run(ctx, defragCmd);
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Defrag completed");
+    YDB_LOG_NOTICE_CTX(ctx, "Defrag completed");
 
     // repeat
     defragCmd.Reset(CreateDefrag(SyncRunner->NotifyID(), instance, true, check));
     SyncRunner->Run(ctx, defragCmd);
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Defrag completed");
+    YDB_LOG_NOTICE_CTX(ctx, "Defrag completed");
 
     // repeat
     defragCmd.Reset(CreateDefrag(SyncRunner->NotifyID(), instance, true, check));
     SyncRunner->Run(ctx, defragCmd);
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Defrag completed");
+    YDB_LOG_NOTICE_CTX(ctx, "Defrag completed");
 
     // check actually freed chunks
     UNIT_ASSERT_VALUES_EQUAL(freedChunks.size(), 6);

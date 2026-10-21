@@ -31,12 +31,12 @@ private:
     std::shared_ptr<TFetchingScript> AskAccumulatorsScript;
 
     virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(
-        const std::shared_ptr<NCommon::IDataSource>& source, const bool /*isFinalSyncPoint*/) override;
+        const NCommon::IDataSource& source, const bool /*isFinalSyncPoint*/) override;
 
 public:
     const ui64 ReadSequentiallyBufferSize = TGlobalLimits::DefaultReadSequentiallyBufferSize;
 
-    ui64 GetMemoryForSources(const THashMap<ui32, std::shared_ptr<IDataSource>>& sources);
+    ui64 GetMemoryForSources(const THashMap<ui32, std::shared_ptr<const IDataSource>>& sources);
 
     ui64 GetRequestedMemoryBytes() const {
         return MergeStageMemory->GetFullMemory() + FilterStageMemory->GetFullMemory() + FetchingStageMemory->GetFullMemory();

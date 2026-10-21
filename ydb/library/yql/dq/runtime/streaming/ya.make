@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     dq_compute_actor_watermarks.cpp
+    dq_watermark_generator_tracker.cpp
 )
 
 PEERDIR(

@@ -1,14 +1,15 @@
 #include "bzip2.h"
 #include "output_queue_impl.h"
 
-#include <contrib/libs/libbz2/bzlib.h>
-
-#include <util/generic/size_literals.h>
-
-#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include <ydb/core/util/exceptions.h>
 
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+
+#include <contrib/libs/libbz2/bzlib.h>
+#include <util/generic/size_literals.h>
 #include <yql/essentials/utils/yql_panic.h>
+
+#undef NO_SANITIZE_THREAD
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 
@@ -18,10 +19,11 @@ using namespace NKikimr;
 
 namespace {
 
-class TReadBuffer : public NDB::ReadBuffer {
+class TReadBuffer: public NDB::ReadBuffer {
 public:
     TReadBuffer(NDB::ReadBuffer& source);
     ~TReadBuffer();
+
 private:
     bool nextImpl() final;
 
@@ -35,7 +37,8 @@ private:
 };
 
 TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
-    : NDB::ReadBuffer(nullptr, 0ULL), Source_(source)
+    : NDB::ReadBuffer(nullptr, 0ULL)
+    , Source_(source)
 {
     InBuffer.resize(8_KB);
     OutBuffer.resize(64_KB);
@@ -48,7 +51,7 @@ TReadBuffer::~TReadBuffer() {
 }
 
 void TReadBuffer::InitDecoder() {
-    YQL_ENSURE(BZ2_bzDecompressInit(&BzStream_, 0, 0) == BZ_OK, "Can not init bzip engine.");
+    YQL_ENSURE(BZ2_bzDecompressInit(&BzStream_, 0, 0) == BZ_OK, "Cannot init bzip engine.");
 }
 
 void TReadBuffer::FreeDecoder() {
@@ -88,16 +91,17 @@ bool TReadBuffer::nextImpl() {
     }
 }
 
-class TCompressor : public TOutputQueue<> {
+class TCompressor: public TOutputQueue<> {
 public:
     TCompressor(int blockSize100k) {
         Zero(BzStream_);
-        YQL_ENSURE(BZ2_bzCompressInit(&BzStream_, blockSize100k, 0, 30) == BZ_OK, "Can not init deflate engine.");
+        YQL_ENSURE(BZ2_bzCompressInit(&BzStream_, blockSize100k, 0, 30) == BZ_OK, "Cannot init deflate engine.");
     }
 
     ~TCompressor() {
         BZ2_bzCompressEnd(&BzStream_);
-   }
+    }
+
 private:
     void Push(TString&& item) override {
         InputQueue.Push(std::move(item));
@@ -125,11 +129,13 @@ private:
         while (!InputQueue.Empty() || !TOutputQueue::IsSealed()) {
             const auto& pop = InputQueue.Pop();
             const bool done = InputQueue.IsSealed() && InputQueue.Empty();
-            if (pop.empty() && !done)
+            if (pop.empty() && !done) {
                 break;
+            }
 
-            if (const auto bound = BZ_MAX_UNUSED + pop.size(); bound > OutputBufferSize)
+            if (const auto bound = BZ_MAX_UNUSED + pop.size(); bound > OutputBufferSize) {
                 OutputBuffer = std::make_unique<char[]>(OutputBufferSize = bound);
+            }
 
             BzStream_.next_in = const_cast<char*>(pop.data());
             BzStream_.avail_in = pop.size();
@@ -140,11 +146,13 @@ private:
             const auto code = BZ2_bzCompress(&BzStream_, done ? BZ_FINISH : BZ_RUN);
             YQL_ENSURE((done ? BZ_STREAM_END : BZ_RUN_OK) == code, "Bzip error code: " << code);
 
-            if (const auto size = OutputBufferSize - BzStream_.avail_out)
+            if (const auto size = OutputBufferSize - BzStream_.avail_out) {
                 TOutputQueue::Push(TString(OutputBuffer.get(), size));
+            }
 
-            if (done)
+            if (done) {
                 return TOutputQueue::Seal();
+            }
         };
     }
 
@@ -156,7 +164,7 @@ private:
     TOutputQueue<0> InputQueue;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& source) {
     return std::make_unique<TReadBuffer>(source);
@@ -166,4 +174,4 @@ IOutputQueue::TPtr MakeCompressor(std::optional<int> blockSize100k) {
     return std::make_unique<TCompressor>(blockSize100k.value_or(9));
 }
 
-} // namespace NYql::NBzip2
+}   // namespace NYql::NBzip2

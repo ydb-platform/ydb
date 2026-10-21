@@ -1,20 +1,20 @@
 #include <ydb/core/fq/libs/ydb/query_actor.h>
-#include <ydb/core/fq/libs/actors/logging/log.h>
 
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/query_actor/query_actor.h>
-
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <yql/essentials/public/issue/yql_issue.h>
-#include <library/cpp/threading/future/core/future.h>
 
-#define LOG_T(stream) LOG_TRACE_S(*NActors::TlsActivationContext, LogComponent, LogPrefix() << stream)
+#include <library/cpp/threading/future/core/future.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT LogComponent
 
 namespace NFq {
 
 namespace {
 
-class TQuerySession final : public NKikimr::TQueryBase {
+class TQuerySession final: public NKikimr::TQueryBase {
     using TBase = NKikimr::TQueryBase;
 
     struct TDataQuery {
@@ -30,17 +30,16 @@ public:
     }
 
 private:
-
     TString LogPrefix() const {
         return "TQuerySession: ";
     }
 
-    TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId &self, const NActors::TActorId& parentId) override {
+    TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId& self, const NActors::TActorId& parentId) override {
         Y_UNUSED(parentId);
         Become(&TQuerySession::StateWork);
         return new NActors::IEventHandle(self, self, new NActors::TEvents::TEvBootstrap());
     }
-    
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             cFunc(NActors::TEvents::TEvBootstrap::EventType, DoBootstrap);
@@ -51,7 +50,7 @@ private:
                 TBase::StateFunc(ev);
         }
     }
-    
+
     void DoBootstrap() {
         TBase::Bootstrap();
         Become(&TQuerySession::StateWork);
@@ -61,7 +60,7 @@ private:
         Y_ABORT_UNLESS(!IsExecuting);
         Y_ABORT_UNLESS(!DataQuery);
 
-        DataQuery = TDataQuery{ev->Get()->Sql, ev->Get()->Params, ev->Get()->TxControl, ev->Get()->Promise};
+        DataQuery = TDataQuery{ ev->Get()->Sql, ev->Get()->Params, ev->Get()->TxControl, ev->Get()->Promise };
         ProcessQueries();
     }
 
@@ -80,18 +79,20 @@ private:
         auto promise = DataQuery->Promise;
         DataQuery = std::nullopt;
         auto status = NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues());
-        
+
         IsExecuting = false;
-        promise.SetValue(NYdb::NTable::TDataQueryResult(std::move(status), std::move(ResultSets), std::nullopt, std::nullopt, false, std::nullopt));
+        promise.SetValue(
+            NYdb::NTable::TDataQueryResult(std::move(status), std::move(ResultSets), std::nullopt, std::nullopt, false, std::nullopt));
         if (IsFinishing) {
             Finish();
         }
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) final {
-        if (DataQuery) {          
+        if (DataQuery) {
             NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), NYdb::NAdapters::ToSdkIssues(issues));
-            DataQuery->Promise.SetValue(NYdb::NTable::TDataQueryResult(std::move(status), std::move(ResultSets), std::nullopt, std::nullopt, false, std::nullopt));
+            DataQuery->Promise.SetValue(
+                NYdb::NTable::TDataQueryResult(std::move(status), std::move(ResultSets), std::nullopt, std::nullopt, false, std::nullopt));
         }
         DataQuery = std::nullopt;
     }
@@ -115,7 +116,10 @@ private:
         if (DataQuery->TxControl.SnapshotRead) {
             tx.SnapshotRead(true);
         }
-        LOG_T("Run query " << DataQuery->Sql << " commit " << tx.Commit_);
+        YDB_LOG_TRACE("Run query",
+            {"logPrefix", LogPrefix()},
+            {"sql", DataQuery->Sql},
+            {"commit", tx.Commit_});
         RunDataQuery(DataQuery->Sql, DataQuery->Params.get(), tx);
     }
 
@@ -134,10 +138,10 @@ private:
     bool IsFinishing = false;
 };
 
-} // namespace
+}   // namespace
 
 std::unique_ptr<NActors::IActor> MakeQuerySession() {
     return std::unique_ptr<NActors::IActor>(new TQuerySession());
 }
 
-} // namespace NFq
+}   // namespace NFq

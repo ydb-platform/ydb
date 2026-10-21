@@ -104,6 +104,9 @@ class new_allocator<void>
 
 
 //! This class is a reduced STL-compatible allocator that allocates memory using operator new
+//! or compatible calls. This allocator is stateless and can be used with any type. It supports
+//! overaligned types, even if the compiler does not support overaligned operator new.
+//! It is a drop-in replacement for std::allocator
 template<class T>
 class new_allocator
 {

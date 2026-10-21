@@ -2,8 +2,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NYql::NUdf;
 
@@ -90,7 +89,7 @@ template <bool IsSet>
 class TToMutDictWrapper: public TMutableComputationNode<TToMutDictWrapper<IsSet>> {
     using TSelf = TToMutDictWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TToMutDictWrapper(TComputationMutables& mutables, TType* keyType, NUdf::TStringRef tag, IComputationNode* source, TComputationNodePtrVector&& dependentNodes)
@@ -112,7 +111,8 @@ public:
             }
         } else {
             auto& map = *static_cast<TMutDictMap*>(res.GetResource());
-            NUdf::TUnboxedValue key, value;
+            NUdf::TUnboxedValue key;
+            NUdf::TUnboxedValue value;
             for (auto it = input.GetDictIterator(); it.NextPair(key, value);) {
                 map.emplace(key, value);
             }
@@ -136,7 +136,7 @@ template <bool IsSet>
 class TMutDictCreateWrapper: public TMutableComputationNode<TMutDictCreateWrapper<IsSet>> {
     using TSelf = TMutDictCreateWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TMutDictCreateWrapper(TComputationMutables& mutables, TType* keyType, NUdf::TStringRef tag, TComputationNodePtrVector&& dependentNodes)
@@ -163,7 +163,7 @@ template <bool IsSet>
 class TFromMutDictWrapper: public TMutableComputationNode<TFromMutDictWrapper<IsSet>> {
     using TSelf = TFromMutDictWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     using TStorage = TMutDictStorage<IsSet>;
@@ -304,7 +304,7 @@ template <bool IsSet>
 class TMutDictInsertWrapper: public TMutableComputationNode<TMutDictInsertWrapper<IsSet>> {
     using TSelf = TMutDictInsertWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TMutDictInsertWrapper(TComputationMutables& mutables, TType* keyType, NUdf::TStringRef tag,
@@ -353,7 +353,7 @@ template <bool IsSet>
 class TMutDictUpsertWrapper: public TMutableComputationNode<TMutDictUpsertWrapper<IsSet>> {
     using TSelf = TMutDictUpsertWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TMutDictUpsertWrapper(TComputationMutables& mutables, TType* keyType, NUdf::TStringRef tag,
@@ -398,7 +398,7 @@ template <bool IsSet>
 class TMutDictUpdateWrapper: public TMutableComputationNode<TMutDictUpdateWrapper<IsSet>> {
     using TSelf = TMutDictUpdateWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TMutDictUpdateWrapper(TComputationMutables& mutables, TType* keyType, NUdf::TStringRef tag,
@@ -444,7 +444,7 @@ template <bool IsSet>
 class TMutDictRemoveWrapper: public TMutableComputationNode<TMutDictRemoveWrapper<IsSet>> {
     using TSelf = TMutDictRemoveWrapper;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TMutDictRemoveWrapper(TComputationMutables& mutables, TType* keyType, NUdf::TStringRef tag,
@@ -480,7 +480,7 @@ template <bool IsSet>
 class TMutDictPopWrapper: public TMutableComputationNode<TMutDictPopWrapper<IsSet>> {
     using TSelf = TMutDictPopWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TMutDictPopWrapper(TComputationMutables& mutables, TType* keyType, NUdf::TStringRef tag,
@@ -533,7 +533,7 @@ template <bool IsSet>
 class TMutDictContainsWrapper: public TMutableComputationNode<TMutDictContainsWrapper<IsSet>> {
     using TSelf = TMutDictContainsWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TMutDictContainsWrapper(TComputationMutables& mutables, TType* keyType, NUdf::TStringRef tag,
@@ -572,7 +572,7 @@ template <bool IsSet>
 class TMutDictLookupWrapper: public TMutableComputationNode<TMutDictLookupWrapper<IsSet>> {
     using TSelf = TMutDictLookupWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TMutDictLookupWrapper(TComputationMutables& mutables, TType* keyType, NUdf::TStringRef tag,
@@ -623,7 +623,7 @@ template <bool IsSet>
 class TMutDictHasItemsWrapper: public TMutableComputationNode<TMutDictHasItemsWrapper<IsSet>> {
     using TSelf = TMutDictHasItemsWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TMutDictHasItemsWrapper(TComputationMutables& mutables, TType* keyType, NUdf::TStringRef tag,
@@ -658,7 +658,7 @@ template <bool IsSet>
 class TMutDictLengthWrapper: public TMutableComputationNode<TMutDictLengthWrapper<IsSet>> {
     using TSelf = TMutDictLengthWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TMutDictLengthWrapper(TComputationMutables& mutables, TType* keyType, NUdf::TStringRef tag,
@@ -693,7 +693,7 @@ template <bool IsSet>
 class TMutDictItemsWrapper: public TMutableComputationNode<TMutDictItemsWrapper<IsSet>> {
     using TSelf = TMutDictItemsWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TMutDictItemsWrapper(TComputationMutables& mutables, TType* keyType, NUdf::TStringRef tag,
@@ -745,7 +745,7 @@ template <bool IsSet>
 class TMutDictKeysWrapper: public TMutableComputationNode<TMutDictKeysWrapper<IsSet>> {
     using TSelf = TMutDictKeysWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TMutDictKeysWrapper(TComputationMutables& mutables, TType* keyType, NUdf::TStringRef tag,
@@ -791,7 +791,7 @@ template <bool IsSet>
 class TMutDictPayloadsWrapper: public TMutableComputationNode<TMutDictPayloadsWrapper<IsSet>> {
     using TSelf = TMutDictPayloadsWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TMutDictPayloadsWrapper(TComputationMutables& mutables, TType* keyType, NUdf::TStringRef tag,
@@ -1062,5 +1062,4 @@ IComputationNode* WrapFromMutDict(TCallable& callable, const TComputationNodeFac
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

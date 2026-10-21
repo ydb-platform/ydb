@@ -33,7 +33,7 @@ TVector<TTest> LoadTestSuite() {
                 std::move(c[0].GetStringSafe()),
                 std::move(c[1].GetStringSafe()));
         }
-        tests.emplace_back(std::move(k), std::move(cases));
+        tests.emplace_back(k, std::move(cases));
     }
     return tests;
 }

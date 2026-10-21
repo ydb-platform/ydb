@@ -92,9 +92,9 @@ void TConstantFoldingStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 
     // Actual map used in the optimizer
     TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>> globalExtractedExprs;
-    TVector<TIntrusivePtr<IOperator>> affectedOps;
+    TVector<IOperator*> affectedOps;
 
-    for (auto it : root) {
+    for (const auto& it : root) {
         if (!it.Current->GetExpressions().empty()) {
             auto expressions = it.Current->GetExpressions();
             bool affected = false;

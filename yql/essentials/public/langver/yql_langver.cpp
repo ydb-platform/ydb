@@ -9,19 +9,9 @@ namespace NYql {
 
 namespace {
 
-constexpr TLangVersion MaxReleasedLangVersion = MakeLangVersion(2026, 1);
+constexpr TLangVersion MaxReleasedLangVersion = MakeLangVersion(2026, 2);
 
 } // namespace
-
-bool IsValidLangVersion(TLangVersion ver) {
-    for (const auto& version : Versions) {
-        if (ver == MakeLangVersion(version.first, version.second)) {
-            return true;
-        }
-    }
-
-    return false;
-}
 
 bool ParseLangVersion(TStringBuf str, TLangVersion& result) {
     result = UnknownLangVersion;

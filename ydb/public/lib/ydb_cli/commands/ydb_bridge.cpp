@@ -50,6 +50,7 @@ namespace {
             case NYdb::NBridge::EPileState::PROMOTED: return "PROMOTED";
             case NYdb::NBridge::EPileState::PRIMARY: return "PRIMARY";
             case NYdb::NBridge::EPileState::SUSPENDED: return "SUSPENDED";
+            case NYdb::NBridge::EPileState::INACTIVE: return "INACTIVE";
         }
         return "UNKNOWN";
     }
@@ -64,6 +65,7 @@ TCommandBridge::TCommandBridge(bool allowEmptyDatabase)
     AddCommand(std::make_unique<TCommandBridgeFailover>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeTakedown>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeRejoin>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandBridgeConvert>(allowEmptyDatabase));
 }
 
 TCommandBridgeUpdate::TCommandBridgeUpdate(bool allowEmptyDatabase)
@@ -134,8 +136,8 @@ void TCommandBridgeUpdate::Parse(TConfig& config) {
 }
 
 int TCommandBridgeUpdate::Run(TConfig& config) {
-    auto driver = std::make_unique<TDriver>(CreateDriver(config));
-    auto client = NYdb::NBridge::TBridgeClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
 
     std::vector<std::string> quorumPiles;
     for (const auto& s : QuorumPiles) {
@@ -174,8 +176,8 @@ void TCommandBridgeList::Parse(TConfig& config) {
 }
 
 int TCommandBridgeList::Run(TConfig& config) {
-    auto driver = std::make_unique<TDriver>(CreateDriver(config));
-    auto client = NYdb::NBridge::TBridgeClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
 
     // TODO(mregrock): support detailed
     auto result = client.GetClusterState().GetValueSync();
@@ -195,6 +197,7 @@ int TCommandBridgeList::Run(TConfig& config) {
                 piles.AppendValue(item);
             }
             json.InsertValue("piles", piles);
+            json.InsertValue("conversion_in_progress", result.IsConversionInProgress());
             NJson::WriteJson(&Cout, &json, true);
             Cout << Endl;
             break;
@@ -212,6 +215,9 @@ int TCommandBridgeList::Run(TConfig& config) {
                 ss << "Pile " << s.PileName << ": " << PileStateToString(s.State) << Endl;
             }
             ss << "Generation: " << result.GetGeneration() << Endl;
+            if (result.IsConversionInProgress()) {
+                ss << "Conversion from non-bridged cluster is in progress, piles can't be added yet" << Endl;
+            }
             Cout << ss.Str();
             break;
         }
@@ -239,8 +245,8 @@ void TCommandBridgeSwitchover::Parse(TConfig& config) {
 }
 
 int TCommandBridgeSwitchover::Run(TConfig& config) {
-    auto driver = std::make_unique<TDriver>(CreateDriver(config));
-    auto client = NYdb::NBridge::TBridgeClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
 
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
     updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PROMOTED});
@@ -254,15 +260,15 @@ int TCommandBridgeSwitchover::Run(TConfig& config) {
 }
 
 TCommandBridgeFailover::TCommandBridgeFailover(bool allowEmptyDatabase)
-    : TYdbCommand("failover", {}, "Perform an emergency failover when a pile becomes unresponsive")
+    : TYdbCommand("failover", {}, "Perform an emergency failover when one or more piles become unresponsive")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
 }
 
 void TCommandBridgeFailover::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption("pile", "Name of the pile that is down.")
-        .Required().RequiredArgument("PILE_NAME").StoreResult(&DownPile);
+    config.Opts->AddLongOption("pile", "Name of a pile that is down. Can be used multiple times.")
+        .Required().RequiredArgument("PILE_NAME").AppendTo(&DownPiles);
     config.Opts->AddLongOption("new-primary", "Name of the pile to become the new primary (optional, only if the target pile was the primary).")
         .Optional().RequiredArgument("PILE_NAME").StoreResult(&NewPrimaryPile);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
@@ -274,11 +280,13 @@ void TCommandBridgeFailover::Parse(TConfig& config) {
 }
 
 int TCommandBridgeFailover::Run(TConfig& config) {
-    auto driver = std::make_unique<TDriver>(CreateDriver(config));
-    auto client = NYdb::NBridge::TBridgeClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
 
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
-    updates.push_back({DownPile, NYdb::NBridge::EPileState::DISCONNECTED});
+    for (const auto& pile : DownPiles) {
+        updates.push_back({pile, NYdb::NBridge::EPileState::DISCONNECTED});
+    }
     if (!NewPrimaryPile.empty()) {
         updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PRIMARY});
     }
@@ -312,8 +320,8 @@ void TCommandBridgeTakedown::Parse(TConfig& config) {
 }
 
 int TCommandBridgeTakedown::Run(TConfig& config) {
-    auto driver = std::make_unique<TDriver>(CreateDriver(config));
-    auto client = NYdb::NBridge::TBridgeClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
 
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
     updates.push_back({DownPile, NYdb::NBridge::EPileState::SUSPENDED});
@@ -348,8 +356,8 @@ void TCommandBridgeRejoin::Parse(TConfig& config) {
 }
 
 int TCommandBridgeRejoin::Run(TConfig& config) {
-    auto driver = std::make_unique<TDriver>(CreateDriver(config));
-    auto client = NYdb::NBridge::TBridgeClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
 
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
     updates.push_back({Pile, NYdb::NBridge::EPileState::NOT_SYNCHRONIZED});
@@ -358,6 +366,35 @@ int TCommandBridgeRejoin::Run(TConfig& config) {
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "Cluster state updated successfully." << Endl;
+
+    return EXIT_SUCCESS;
+}
+
+TCommandBridgeConvert::TCommandBridgeConvert(bool allowEmptyDatabase)
+    : TYdbCommand("convert", {}, "Convert a non-bridged cluster into a bridged one with a single pile. All nodes must "
+        "already run with a single-pile bridge config. Storage groups are converted in the background.")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+}
+
+void TCommandBridgeConvert::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+    config.SetFreeArgsNum(0);
+}
+
+void TCommandBridgeConvert::Parse(TConfig& config) {
+    TYdbCommand::Parse(config);
+}
+
+int TCommandBridgeConvert::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
+
+    auto result = client.ConvertToBridge().GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    Cout << "Cluster converted to bridge mode successfully." << Endl;
 
     return EXIT_SUCCESS;
 }

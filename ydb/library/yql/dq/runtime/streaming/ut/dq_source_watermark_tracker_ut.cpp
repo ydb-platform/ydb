@@ -5,24 +5,20 @@
 namespace NYql::NDq {
 
 namespace {
-    TDqSourceWatermarkTracker<ui32> InitTracker(
-        bool idlePartitionsEnabled = false
-    ) {
-        return TDqSourceWatermarkTracker<ui32>(
-            TDuration::Seconds(5),
-            idlePartitionsEnabled,
-            TDuration::Seconds(1),
-            TDuration::Seconds(10),
-            "Test "
-        );
-    }
-
-    TDqSourceWatermarkTracker<ui32> InitTrackerWithIdleness() {
-        return InitTracker(true);
-    }
+TDqSourceWatermarkTracker<ui32> InitTracker(bool idlePartitionsEnabled = false) {
+    return TDqSourceWatermarkTracker<ui32>(TDuration::Seconds(5), idlePartitionsEnabled, TDuration::Seconds(1), TDuration::Seconds(10), "Test ");
 }
 
+TDqSourceWatermarkTracker<ui32> InitTrackerWithIdleness() {
+    return InitTracker(true);
+}
+}   // namespace
+
 Y_UNIT_TEST_SUITE(TDqSourceWatermarkTrackerTest) {
+    Y_UNIT_TEST(ZeroGranularityIsRejected) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TDqSourceWatermarkTracker<ui32>(TDuration::Zero(), true, TDuration::Zero(), TDuration::Seconds(1),
+                                           "Test "), yexception, "Watermark granularity must be positive");
+    }
 
     auto WatermarkMovementCommon(bool idleness, TInstant systemTime) {
         auto tracker = InitTracker(idleness);
@@ -202,27 +198,36 @@ Y_UNIT_TEST_SUITE(TDqSourceWatermarkTrackerTest) {
     }
 
     Y_UNIT_TEST(IdleNextCheckAt) {
-#if 0 // TODO replace with something working
         auto tracker = InitTrackerWithIdleness();
 
-        {
-            const auto actual = tracker.GetNextIdlenessCheckAt(TInstant::Seconds(10));
-            UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(15), actual);
-        }
-        for (auto i = 10; i < 15; ++i) {
-            const auto actual = tracker.GetNextIdlenessCheckAt(TInstant::Seconds(i));
-            UNIT_ASSERT_VALUES_EQUAL_C(TInstant::Seconds(15), actual, i);
-        }
-        {
-            const auto actual = tracker.GetNextIdlenessCheckAt(TInstant::Seconds(15));
-            UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(20), actual);
-        }
-        {
-            const auto actual = tracker.GetNextIdlenessCheckAt(TInstant::Seconds(20));
-            UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(25), actual);
-        }
-#endif
+        UNIT_ASSERT(tracker.RegisterPartition(0, TInstant::Seconds(10)));
+        UNIT_ASSERT(tracker.RegisterPartition(1, TInstant::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.NotifyNewPartitionTime(0, TInstant::Seconds(7), TInstant::MilliSeconds(20'500)));
+
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(30), tracker.PrepareIdlenessCheck(TInstant::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.PrepareIdlenessCheck(TInstant::Seconds(10)));
+
+        UNIT_ASSERT(!tracker.ProcessIdlenessCheck(TInstant::MilliSeconds(29'999)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.PrepareIdlenessCheck(TInstant::MilliSeconds(29'999)));
+
+        UNIT_ASSERT(tracker.ProcessIdlenessCheck(TInstant::Seconds(30)));
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(5), tracker.HandleIdleness(TInstant::Seconds(30)));
+
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(40), tracker.PrepareIdlenessCheck(TInstant::Seconds(30)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.PrepareIdlenessCheck(TInstant::Seconds(30)));
+    }
+
+    Y_UNIT_TEST(ActivityExtendsOnlyActivePartitionDeadline) {
+        auto tracker = InitTrackerWithIdleness();
+
+        UNIT_ASSERT(tracker.RegisterPartition(0, TInstant::Seconds(10)));
+        UNIT_ASSERT(tracker.RegisterPartition(1, TInstant::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.NotifyNewPartitionTime(0, TInstant::Seconds(7), TInstant::MilliSeconds(20'500)));
+
+        UNIT_ASSERT_VALUES_EQUAL(TInstant::Seconds(5), tracker.HandleIdleness(TInstant::Seconds(30)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.HandleIdleness(TInstant::MilliSeconds(34'999)));
+        UNIT_ASSERT_VALUES_EQUAL(Nothing(), tracker.HandleIdleness(TInstant::Seconds(35)));
     }
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

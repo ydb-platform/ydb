@@ -1,30 +1,33 @@
 #include "utils.h"
 
-#include <ydb/public/lib/fq/scope.h>
 #include <ydb/core/fq/libs/control_plane_storage/request_actor.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
-#include <ydb/core/fq/libs/quota_manager/quota_manager.h>
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
+#include <ydb/core/fq/libs/quota_manager/quota_manager.h>
 #include <ydb/core/fq/libs/rate_limiter/events/control_plane_events.h>
 
+#include <ydb/public/lib/fq/scope.h>
+
+#include <google/protobuf/util/time_util.h>
 #include <util/datetime/base.h>
 #include <util/string/split.h>
 
-#include <google/protobuf/util/time_util.h>
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE
 
 namespace NFq {
 
 namespace {
 
 template <class TRequest, class TResponse, class TDerived>
-class TRateLimiterRequestActor : public TControlPlaneRequestActor<TRequest, TResponse, TDerived> {
+class TRateLimiterRequestActor: public TControlPlaneRequestActor<TRequest, TResponse, TDerived> {
     using TRequestActorBase = TControlPlaneRequestActor<TRequest, TResponse, TDerived>;
 
 protected:
     using TRequestActorBase::ReplyWithError;
 
 public:
-    TRateLimiterRequestActor(typename TRequest::TPtr&& ev, TRequestCounters requestCounters, TDebugInfoPtr debugInfo, TDbPoolPtr dbPool, TYdbConnectionPtr ydbConnection, const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config)
+    TRateLimiterRequestActor(typename TRequest::TPtr&& ev, TRequestCounters requestCounters, TDebugInfoPtr debugInfo, TDbPoolPtr dbPool,
+        TYdbConnectionPtr ydbConnection, const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config)
         : TRequestActorBase(std::move(ev), std::move(requestCounters), std::move(debugInfo), std::move(dbPool), std::move(ydbConnection), config)
         , QueryId(this->Request->Get()->Request.query_id().value())
         , OwnerId(this->Request->Get()->Request.owner_id())
@@ -37,7 +40,10 @@ public:
         const TString& tenant = request.tenant();
 
         if (NYql::TIssues issues = ValidateCreateOrDeleteRateLimiterResource(QueryId, scope, tenant, OwnerId)) {
-            CPS_LOG_W(TDerived::RequestTypeName << "Request: {" << request.DebugString() << "} validation FAILED: " << issues.ToOneLineString());
+            YDB_LOG_WARN("Request: validation",
+                {"requestType", TDerived::RequestTypeName},
+                {"request", request.DebugString()},
+                {"FAILED", issues.ToOneLineString()});
             ReplyWithError(issues);
             return;
         }
@@ -49,18 +55,19 @@ public:
         readQueryBuilder.AddString("scope", scope);
         readQueryBuilder.AddString("tenant", tenant);
         TStringBuilder text;
-        text <<
-        "SELECT `" SCOPE_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "` FROM " PENDING_SMALL_TABLE_NAME
-            " WHERE `" TENANT_COLUMN_NAME "` = $tenant"
-                " AND `" SCOPE_COLUMN_NAME "` = $scope"
-                " AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+        text << "SELECT `" SCOPE_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "` FROM " PENDING_SMALL_TABLE_NAME " WHERE `" TENANT_COLUMN_NAME
+                "` = $tenant"
+                " AND `" SCOPE_COLUMN_NAME
+                "` = $scope"
+                " AND `" QUERY_ID_COLUMN_NAME
+                "` = $query_id;\n"
 
-        "SELECT `" INTERNAL_COLUMN_NAME "`";
+                "SELECT `" INTERNAL_COLUMN_NAME "`";
         if constexpr (TDerived::IsCreateRequest) {
             text << ", `" QUERY_COLUMN_NAME "`";
         }
-        text << " FROM " QUERIES_TABLE_NAME
-            " WHERE `" SCOPE_COLUMN_NAME "` = $scope"
+        text << " FROM " QUERIES_TABLE_NAME " WHERE `" SCOPE_COLUMN_NAME
+                "` = $scope"
                 " AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n";
         readQueryBuilder.AddText(text);
 
@@ -71,7 +78,9 @@ public:
 
     void Handle(TEvControlPlaneStorageInternal::TEvDbRequestResult::TPtr& ev) {
         const auto& status = ev->Get()->Status.GetValueSync();
-        CPS_LOG_D(TDerived::RequestTypeName << "Request. Got response from database: " << status.GetStatus());
+        YDB_LOG_DEBUG("Request. Got response",
+            {"requestType", TDerived::RequestTypeName},
+            {"fromDatabase", status.GetStatus()});
         if (!status.IsSuccess()) {
             ReplyWithError(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
             return;
@@ -79,14 +88,16 @@ public:
 
         const std::vector<NYdb::TResultSet>& resultSets = *ev->Get()->ResultSets;
         if (resultSets.size() != 2) {
-            ReplyWithError(TStringBuilder() << "Result set size is not equal to 2 but equal to " << resultSets.size() << ". Please contact internal support");
+            ReplyWithError(TStringBuilder() << "Result set size is not equal to 2 but equal to " << resultSets.size()
+                                            << ". Please contact internal support");
             return;
         }
 
         {
             TResultSetParser parser(resultSets[0]);
             if (!parser.TryNextRow()) {
-                ReplyWithError(TStringBuilder() << "Query does not exist or permission denied. Please check the id of the query or your access rights");
+                ReplyWithError(
+                    TStringBuilder() << "Query does not exist or permission denied. Please check the id of the query or your access rights");
                 return;
             }
 
@@ -101,15 +112,17 @@ public:
         {
             TResultSetParser parser(resultSets[1]);
             if (!parser.TryNextRow()) {
-                ReplyWithError(TStringBuilder() << "Query does not exist or permission denied. Please check the id of the query or your access rights");
+                ReplyWithError(
+                    TStringBuilder() << "Query does not exist or permission denied. Please check the id of the query or your access rights");
                 return;
             }
 
             FederatedQuery::Internal::QueryInternal internal;
             if (!internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
                 this->RequestCounters.Common->ParseProtobufError->Inc();
-                const TString error{"Error parsing proto message for query internal. Please contact internal support"};
-                CPS_LOG_E(error);
+                const TString error{ "Error parsing proto message for query internal. Please contact internal support" };
+                YDB_LOG_ERROR("",
+                    {"error", error});
                 ReplyWithError(error);
                 return;
             }
@@ -119,8 +132,9 @@ public:
                 FederatedQuery::Query query;
                 if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
                     this->RequestCounters.Common->ParseProtobufError->Inc();
-                    const TString error{"Error parsing proto message for query. Please contact internal support"};
-                    CPS_LOG_E(error);
+                    const TString error{ "Error parsing proto message for query. Please contact internal support" };
+                    YDB_LOG_ERROR("",
+                        {"error", error});
                     ReplyWithError(error);
                     return;
                 }
@@ -159,9 +173,10 @@ protected:
 };
 
 class TRateLimiterCreateRequest;
-using TCreateRequestActorBase = TRateLimiterRequestActor<TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest, TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse, TRateLimiterCreateRequest>;
+using TCreateRequestActorBase = TRateLimiterRequestActor<TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest,
+    TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse, TRateLimiterCreateRequest>;
 
-class TRateLimiterCreateRequest : public TCreateRequestActorBase {
+class TRateLimiterCreateRequest: public TCreateRequestActorBase {
 public:
     using TCreateRequestActorBase::TCreateRequestActorBase;
 
@@ -177,7 +192,7 @@ public:
     using TCreateRequestActorBase::Handle;
 
     void Handle(TEvRateLimiter::TEvCreateResourceResponse::TPtr& ev) {
-        CPS_LOG_D("Got create response from rate limiter service");
+        YDB_LOG_DEBUG("Got create response from rate limiter service");
         if (ev->Get()->Success) {
             Fq::Private::CreateRateLimiterResourceResult proto;
             proto.set_rate_limiter(ev->Get()->RateLimiterPath);
@@ -198,9 +213,10 @@ public:
 const TString TRateLimiterCreateRequest::RequestTypeName = "CreateRateLimiterResource";
 
 class TRateLimiterDeleteRequest;
-using TDeleteRequestActorBase = TRateLimiterRequestActor<TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest, TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse, TRateLimiterDeleteRequest>;
+using TDeleteRequestActorBase = TRateLimiterRequestActor<TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest,
+    TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse, TRateLimiterDeleteRequest>;
 
-class TRateLimiterDeleteRequest : public TDeleteRequestActorBase {
+class TRateLimiterDeleteRequest: public TDeleteRequestActorBase {
 public:
     using TDeleteRequestActorBase::TDeleteRequestActorBase;
 
@@ -216,7 +232,7 @@ public:
     using TDeleteRequestActorBase::Handle;
 
     void Handle(TEvRateLimiter::TEvDeleteResourceResponse::TPtr& ev) {
-        CPS_LOG_D("Got delete response from rate limiter service");
+        YDB_LOG_DEBUG("Got delete response from rate limiter service");
         if (ev->Get()->Success) {
             Fq::Private::DeleteRateLimiterResourceResult proto;
             Reply(proto);
@@ -235,23 +251,26 @@ public:
 
 const TString TRateLimiterDeleteRequest::RequestTypeName = "DeleteRateLimiterResource";
 
-} // namespace
+}   // namespace
 
 template <class TEventPtr, class TRequestActor, TYdbControlPlaneStorageActor::ERequestTypeCommon requestType>
 void TYdbControlPlaneStorageActor::HandleRateLimiterImpl(TEventPtr& ev) {
-    TRequestCounters requestCounters{nullptr, Counters.GetCommonCounters(requestType)};
+    TRequestCounters requestCounters{ nullptr, Counters.GetCommonCounters(requestType) };
 
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
 
-    const NActors::TActorId requestActor = Register(new TRequestActor(std::move(ev), std::move(requestCounters), std::move(debugInfo), DbPool, YdbConnection, Config));
+    const NActors::TActorId requestActor =
+        Register(new TRequestActor(std::move(ev), std::move(requestCounters), std::move(debugInfo), DbPool, YdbConnection, Config));
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest::TPtr& ev) {
-    HandleRateLimiterImpl<TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest::TPtr, TRateLimiterCreateRequest, RTC_CREATE_RATE_LIMITER_RESOURCE>(ev);
+    HandleRateLimiterImpl<TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest::TPtr, TRateLimiterCreateRequest,
+        RTC_CREATE_RATE_LIMITER_RESOURCE>(ev);
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest::TPtr& ev) {
-    HandleRateLimiterImpl<TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest::TPtr, TRateLimiterDeleteRequest, RTC_DELETE_RATE_LIMITER_RESOURCE>(ev);
+    HandleRateLimiterImpl<TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest::TPtr, TRateLimiterDeleteRequest,
+        RTC_DELETE_RATE_LIMITER_RESOURCE>(ev);
 }
 
-} // NFq
+}   // namespace NFq

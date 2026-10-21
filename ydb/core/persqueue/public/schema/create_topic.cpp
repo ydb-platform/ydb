@@ -42,9 +42,15 @@ TResult ApplyChangesInt(
             error = TStringBuilder() << "Partitions count must be positive, provided " << settings.min_active_partitions();
             return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
         }
-        if (settings.min_active_partitions() >= Max<ui32>()) {
-            error = TStringBuilder() << "Partitions count must be less than " << Max<ui32>() << ", provided " << settings.min_active_partitions();
+        if (auto r = ValidateTopicPartitionCount(settings.min_active_partitions(), "Partitions count"); !r) {
+            return r;
+        }
+        if (settings.max_active_partitions() < 0) {
+            error = TStringBuilder() << "Max active partitions must be non-negative, provided " << settings.max_active_partitions();
             return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
+        }
+        if (auto r = ValidateTopicPartitionCount(settings.max_active_partitions(), "Max active partitions"); !r) {
+            return r;
         }
         minParts = std::max<ui32>(1, settings.min_active_partitions());
         if (request.partitioning_settings().has_auto_partitioning_settings() &&
@@ -208,6 +214,43 @@ TResult ApplyChangesInt(
         partConfig->SetBurstSizeInMessages(partConfig->GetWriteSpeedInMessagesPerSecond());
     } else {
         partConfig->SetBurstSizeInMessages(request.partition_write_burst_messages());
+    }
+
+    // Total read speed for a single partition (across all consumers).
+    if (request.partition_total_read_speed_bytes_per_second() < 0) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_total_read_speed_bytes_per_second can't be negative, provided " << request.partition_total_read_speed_bytes_per_second()};
+    }
+    if (request.partition_total_read_speed_messages_per_second() < 0) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_total_read_speed_messages_per_second can't be negative, provided " << request.partition_total_read_speed_messages_per_second()};
+    }
+    if (request.partition_total_read_speed_bytes_per_second()) {
+        partConfig->SetReadSpeedInBytesPerSecond(request.partition_total_read_speed_bytes_per_second());
+        partConfig->SetReadBurstBytes(request.partition_total_read_speed_bytes_per_second());
+    }
+    if (request.partition_total_read_speed_messages_per_second()) {
+        partConfig->SetReadSpeedInMessagesPerSecond(request.partition_total_read_speed_messages_per_second());
+        partConfig->SetReadBurstMessages(request.partition_total_read_speed_messages_per_second());
+    }
+
+    // Read speed for reading a single partition without a consumer is stored in
+    // TPartitionConfig.ReadQuota keyed by CLIENTID_WITHOUT_CONSUMER.
+    if (request.partition_read_without_consumer_speed_bytes_per_second() < 0) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_read_without_consumer_speed_bytes_per_second can't be negative, provided " << request.partition_read_without_consumer_speed_bytes_per_second()};
+    }
+    if (request.partition_read_without_consumer_speed_messages_per_second() < 0) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_read_without_consumer_speed_messages_per_second can't be negative, provided " << request.partition_read_without_consumer_speed_messages_per_second()};
+    }
+    if (request.partition_read_without_consumer_speed_bytes_per_second()
+            || request.partition_read_without_consumer_speed_messages_per_second()) {
+        auto* readQuota = NPQ::GetOrAddReadQuota(*pqTabletConfig, NPQ::CLIENTID_WITHOUT_CONSUMER);
+        if (request.partition_read_without_consumer_speed_bytes_per_second()) {
+            readQuota->SetSpeedInBytesPerSecond(request.partition_read_without_consumer_speed_bytes_per_second());
+            readQuota->SetBurstSize(request.partition_read_without_consumer_speed_bytes_per_second());
+        }
+        if (request.partition_read_without_consumer_speed_messages_per_second()) {
+            readQuota->SetSpeedInMessagesPerSecond(request.partition_read_without_consumer_speed_messages_per_second());
+            readQuota->SetBurstSizeInMessages(request.partition_read_without_consumer_speed_messages_per_second());
+        }
     }
 
     return {};

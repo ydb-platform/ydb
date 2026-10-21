@@ -32,15 +32,6 @@ namespace NKikimr::NArrow::NAccessor {
 class TColumnLoader;
 class IChunkedArray;
 
-class TChunkedArraySerialized {
-private:
-    YDB_READONLY_DEF(std::shared_ptr<IChunkedArray>, Array);
-    YDB_READONLY_DEF(TString, SerializedData);
-
-public:
-    TChunkedArraySerialized(const std::shared_ptr<IChunkedArray>& array, const TString& serializedData);
-};
-
 class IChunkedArray {
 public:
     // PERSISTENT ENUM!!. DONT CHANGE ELEMENT'S IDS
@@ -271,6 +262,9 @@ private:
     virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& /*value*/) const {
         return std::nullopt;
     }
+    virtual std::optional<bool> DoHasNulls() const {
+        return std::nullopt;
+    }
 
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
@@ -283,6 +277,9 @@ private:
     virtual ui32 DoGetValueRawBytes() const = 0;
     virtual std::shared_ptr<IChunkedArray> DoApplyFilter(const TColumnFilter& filter) const;
     virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const = 0;
+    virtual void DoVisitDistinctValues(const TValuesSimpleVisitor& visitor) const {
+        DoVisitValues(visitor);
+    }
 
 protected:
     virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const;
@@ -360,8 +357,20 @@ public:
         return true;
     }
 
+    // nullopt: no check available; false: has more than one value; true: all rows have one value.
+    // Only on true the value is defined: it is non-null and may be an Arrow NULL scalar.
+    // NULL is considered a distinct value.
     std::optional<bool> CheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
-        return DoCheckOneValueAccessor(value);
+        const auto result = DoCheckOneValueAccessor(value);
+        if (result && *result) {
+            AFL_VERIFY(value);
+        }
+        return result;
+    }
+
+    // nullopt: cannot cheaply determine, unknown; false: no null values; true: at least one null
+    std::optional<bool> HasNulls() const {
+        return DoHasNulls();
     }
 
     virtual bool HasSubColumnData(const TString& /*subColumnName*/) const {
@@ -373,6 +382,12 @@ public:
 
     void VisitValues(const TValuesSimpleVisitor& visitor) const {
         DoVisitValues(visitor);
+    }
+
+    // Optimized version of VisitValues for consumers that do not care about order, positions, nulls and duplicate
+    // multiplicity. For implementations that do not have an optimized version it is the same as VisitValues.
+    void VisitDistinctValues(const TValuesSimpleVisitor& visitor) const {
+        DoVisitDistinctValues(visitor);
     }
 
     template <class TResult, class TActor>
@@ -438,20 +453,6 @@ public:
     std::shared_ptr<arrow::Scalar> GetScalar(const ui32 index) const {
         AFL_VERIFY(index < GetRecordsCount());
         return DoGetScalar(index);
-    }
-
-    template <class TSerializer>
-    std::vector<TChunkedArraySerialized> SplitBySizes(
-        const TSerializer& serialize, const TString& fullSerializedData, const std::vector<ui64>& splitSizes) {
-        const std::vector<ui32> recordsCount = NSplitter::TSimilarPacker::SizesToRecordsCount(GetRecordsCount(), fullSerializedData, splitSizes);
-        std::vector<TChunkedArraySerialized> result;
-        ui32 currentStartIndex = 0;
-        for (auto&& i : recordsCount) {
-            std::shared_ptr<IChunkedArray> slice = ISlice(currentStartIndex, i);
-            result.emplace_back(slice, serialize(slice));
-            currentStartIndex += i;
-        }
-        return result;
     }
 
     std::shared_ptr<arrow::Scalar> GetMaxScalar() const {

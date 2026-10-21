@@ -180,6 +180,7 @@ public:
         virtual bool IsPerCluster() const = 0;
         virtual bool IsDeprecated() const = 0;
         virtual bool IgnoreInFullReplay() const = 0;
+        virtual bool HasSerializableValue() const = 0;
         virtual void Serialize(const std::function<void(const TString&, const TString&)>& callback) const = 0;
 
     protected:
@@ -266,6 +267,14 @@ public:
 
         bool IgnoreInFullReplay() const override {
             return IgnoreInFullReplay_;
+        }
+
+        bool HasSerializableValue() const override {
+            YQL_ENSURE(SettingType == EConfSettingType::Static, "Only serialization for static settings is supported now");
+            if constexpr (SettingType == EConfSettingType::Static) {
+                return Setting_.Get().Defined();
+            }
+            return false;
         }
 
         TSettingHandlerImpl& Lower(TType lower) {
@@ -358,9 +367,8 @@ public:
         void Serialize(const std::function<void(const TString&, const TString&)>& callback) const override {
             YQL_ENSURE(SettingType == EConfSettingType::Static, "Only serialization for static settings is supported now");
             if constexpr (SettingType == EConfSettingType::Static) {
-                if (auto value = Setting_.Get()) {
-                    callback(Name_, Serializer_(*value));
-                }
+                YQL_ENSURE(HasSerializableValue(), "Setting is not serializable");
+                callback(Name_, Serializer_(*Setting_.Get()));
             }
         }
 
@@ -422,17 +430,19 @@ public:
         bool IgnoreInFullReplay_ = false;
     };
 
-    explicit TSettingDispatcher(const TStringBuf& providerName = "", const TQContext& qContext = {})
+    explicit TSettingDispatcher(const TStringBuf& providerName = "", const TQContext& qContext = {}, bool strictConfigValidation = false)
         : ProviderName_(providerName)
         , QContext_(qContext)
+        , StrictConfigValidation_(strictConfigValidation)
     {
     }
 
     TSettingDispatcher(const TSettingDispatcher&) = delete;
 
     template <NPrivate::StringContainer TContainer>
-    explicit TSettingDispatcher(const TContainer& validClusters)
+    explicit TSettingDispatcher(const TContainer& validClusters, bool strictConfigValidation = false)
         : ValidClusters(validClusters.begin(), validClusters.end())
+        , StrictConfigValidation_(strictConfigValidation)
     {
     }
 
@@ -493,6 +503,16 @@ public:
         }
     }
 
+    template <NPrivate::ConfigFeatureList TContainer, typename TActivationPolicy>
+    void DispatchWithActivationPolicy(const TString& cluster, const TContainer& clusterValues, const TActivationPolicy& activationPolicy) {
+        using TAttribute = typename TContainer::value_type;
+
+        TString activationLabel = TStringBuilder() << ProviderName_ << "_" << cluster;
+        const auto flags = activationPolicy.template SelectAndSave<TAttribute>(
+            activationLabel, QContext_, clusterValues, !ProviderName_.empty());
+        Dispatch(cluster, flags);
+    }
+
     template <NPrivate::ConfigFeatureList TContainer, NPrivate::AttributeFilter<TContainer> TFilter>
     void Dispatch(const TContainer& globalValues, const TFilter& filter) {
         Dispatch(ALL_CLUSTERS, globalValues, filter);
@@ -503,20 +523,28 @@ public:
         Dispatch(ALL_CLUSTERS, globalValues);
     }
 
+    template <NPrivate::ConfigFeatureList TContainer, typename TActivationPolicy>
+    void DispatchWithActivationPolicy(const TContainer& globalValues, const TActivationPolicy& activationPolicy) {
+        DispatchWithActivationPolicy(ALL_CLUSTERS, globalValues, activationPolicy);
+    }
+
     void FreezeDefaults();
     void Restore();
     static TErrorCallback GetDefaultErrorCallback();
     static TErrorCallback GetErrorCallback(TPositionHandle pos, TExprContext& ctx);
     void Enumerate(std::function<void(std::string_view)> callback);
     void SerializeStaticSettings(const std::function<void(const TString&, const TString&)>& callback) const;
+    ui64 CountSerializableStaticSettings() const;
 
 protected:
     THashSet<TString> ValidClusters; // NOLINT(readability-identifier-naming)
-    THashMap<TString, TSettingHandler::TPtr> Handlers_;
+    // We use TMap instead of THashMap to keep the order of settings serialization.
+    TMap<TString, TSettingHandler::TPtr> Handlers_;
     TSet<TString> Names_;
 
     const TString ProviderName_;
     const TQContext QContext_;
+    bool StrictConfigValidation_ = false;
 };
 
 } // namespace NYql::NCommon

@@ -7,6 +7,8 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_CONVEYOR
+
 namespace NKikimr::NConveyor {
 void ITask::Execute(std::shared_ptr<TTaskSignals> signals, const std::shared_ptr<ITask>& taskPtr) {
     AFL_VERIFY(!ExecutedFlag);
@@ -23,7 +25,9 @@ void ITask::Execute(std::shared_ptr<TTaskSignals> signals, const std::shared_ptr
             signals->Fails->Add(1);
             signals->FailsDuration->Add((TMonotonic::Now() - start).MicroSeconds());
         }
-        AFL_ERROR(NKikimrServices::TX_CONVEYOR)("event", "exception_on_execute")("message", CurrentExceptionMessage());
+        YDB_LOG_ERROR("",
+            {"event", "exception_on_execute"},
+            {"message", CurrentExceptionMessage()});
         OnCannotExecute(CurrentExceptionMessage());
     }
 }

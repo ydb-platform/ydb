@@ -13,6 +13,7 @@ from typing import Any
 
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import require_external_cluster
 from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import MonitoredAgentActor
+from ydb.tests.stability.nemesis.internal.nemesis.runners.target_payload import target_from_payload
 
 
 # ---------------------------------------------------------------------------
@@ -126,29 +127,35 @@ def _local_switch_version() -> None:
     )
 
 
-def _resolve_local_node(cluster):
-    """Find the cluster node object whose host matches the local FQDN / hostname."""
-    import socket
+def _node_from_target(cluster, payload: dict):
+    """Resolve a cluster node from ChaosTarget / payload; no hostname guessing."""
+    target = target_from_payload(payload)
+    node_id = payload.get("node_id")
+    if node_id is None and target is not None:
+        node_id = target.node_id
+    if node_id is None:
+        return None, None
+    return node_id, cluster.nodes.get(node_id)
 
-    fqdn = socket.getfqdn()
-    hostname = socket.gethostname()
-    for node in cluster.nodes.values():
-        if node.host in (fqdn, hostname) or node.host.split(".")[0] == hostname.split(".")[0]:
-            return node
+
+def _slot_from_target(cluster, payload: dict):
+    """Resolve a cluster slot from ChaosTarget / payload; no hostname guessing."""
+    target = target_from_payload(payload)
+    slot_idx = payload.get("slot_idx")
+    if slot_idx is None and target is not None:
+        slot_idx = target.slot_idx
+    if slot_idx is None:
+        return None, None
+    return slot_idx, cluster.slots.get(slot_idx)
+
+
+def _ic_port_from_target(payload: dict) -> int | None:
+    target = target_from_payload(payload)
+    if target is not None and target.ic_port is not None:
+        return int(target.ic_port)
+    if payload.get("node_ic_port") is not None:
+        return int(payload["node_ic_port"])
     return None
-
-
-def _resolve_local_slots(cluster):
-    """Return list of slot objects whose host matches the local FQDN / hostname."""
-    import socket
-
-    fqdn = socket.getfqdn()
-    hostname = socket.gethostname()
-    result = []
-    for slot in cluster.slots.values():
-        if slot.host in (fqdn, hostname) or slot.host.split(".")[0] == hostname.split(".")[0]:
-            result.append(slot)
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -157,22 +164,20 @@ def _resolve_local_slots(cluster):
 
 
 class ClusterKillSlotDaemonNemesis(MonitoredAgentActor):
-    """Kill one random local slot daemon via subprocess."""
+    """Kill one slot daemon; requires ChaosTarget.slot_idx (or payload.slot_idx)."""
 
     def __init__(self) -> None:
         super().__init__(scope="node")
 
     def inject_fault(self, payload=None) -> None:
-        del payload
+        payload = payload if isinstance(payload, dict) else {}
         cluster = require_external_cluster()
-        local_slots = _resolve_local_slots(cluster)
-        if not local_slots:
-            self._logger.warning("No local slots to kill")
+        slot_idx, slot = _slot_from_target(cluster, payload)
+        if slot is None:
+            self._logger.error("KillSlotDaemon: missing/unknown slot_idx in ChaosTarget (got %r)", slot_idx)
             return
-        import random
-        slot = random.choice(local_slots)
         try:
-            self._logger.info("Killing local slot daemon ic_port=%d", slot.ic_port)
+            self._logger.info("Killing slot daemon slot_idx=%s ic_port=%d", slot_idx, slot.ic_port)
             _local_kill_daemon_and_process(int(slot.ic_port))
             self.on_success_inject_fault()
         except Exception as e:
@@ -185,20 +190,20 @@ class ClusterKillSlotDaemonNemesis(MonitoredAgentActor):
 
 
 class ClusterKillNodeDaemonNemesis(MonitoredAgentActor):
-    """Kill the local kikimr node daemon via subprocess."""
+    """Kill a kikimr node daemon; requires ChaosTarget.node_id (or payload.node_id)."""
 
     def __init__(self) -> None:
         super().__init__(scope="node")
 
     def inject_fault(self, payload=None) -> None:
-        del payload
+        payload = payload if isinstance(payload, dict) else {}
         cluster = require_external_cluster()
-        node = _resolve_local_node(cluster)
+        node_id, node = _node_from_target(cluster, payload)
         if node is None:
-            self._logger.warning("No local node found in cluster — cannot kill")
+            self._logger.error("KillNodeDaemon: missing/unknown node_id in ChaosTarget (got %r)", node_id)
             return
         try:
-            self._logger.info("Killing local node daemon ic_port=%d", node.ic_port)
+            self._logger.info("Killing node daemon node_id=%s ic_port=%d", node_id, node.ic_port)
             _local_kill_daemon_and_process(int(node.ic_port))
             self.on_success_inject_fault()
         except Exception as e:
@@ -211,7 +216,7 @@ class ClusterKillNodeDaemonNemesis(MonitoredAgentActor):
 
 
 class ClusterSerialKillNodeNemesis(MonitoredAgentActor):
-    """Kill the local node daemon; ``node_id`` + ``sleep_before`` come from the orchestrator payload."""
+    """Kill the node daemon; ``node_id`` + ``sleep_before`` come from the orchestrator payload."""
 
     def __init__(self) -> None:
         super().__init__(scope="node")
@@ -223,17 +228,12 @@ class ClusterSerialKillNodeNemesis(MonitoredAgentActor):
             self._logger.info("Serial kill node: sleep %.1fs before kill", delay)
             time.sleep(delay)
         cluster = require_external_cluster()
-        # Resolve the target node from payload or fall back to local node
-        node_id = payload.get("node_id")
-        if node_id is not None:
-            node = cluster.nodes.get(node_id)
-        else:
-            node = _resolve_local_node(cluster)
+        node_id, node = _node_from_target(cluster, payload)
         if node is None:
-            self._logger.error("Serial kill node: no daemon (node_id=%s)", node_id)
+            self._logger.error("Serial kill node: missing/unknown node_id (got %r)", node_id)
             return
         try:
-            self._logger.info("Serial kill node daemon ic_port=%d", node.ic_port)
+            self._logger.info("Serial kill node daemon node_id=%s ic_port=%d", node_id, node.ic_port)
             _local_kill_daemon_and_process(int(node.ic_port))
             self.on_success_inject_fault()
         except Exception as e:
@@ -246,7 +246,7 @@ class ClusterSerialKillNodeNemesis(MonitoredAgentActor):
 
 
 class ClusterSerialKillSlotsNemesis(MonitoredAgentActor):
-    """Kill the local slot daemon; ``slot_idx`` + ``sleep_before`` from orchestrator."""
+    """Kill the slot daemon; ``slot_idx`` + ``sleep_before`` from orchestrator."""
 
     def __init__(self) -> None:
         super().__init__(scope="node")
@@ -258,19 +258,12 @@ class ClusterSerialKillSlotsNemesis(MonitoredAgentActor):
             self._logger.info("Serial kill slot: sleep %.1fs before kill", delay)
             time.sleep(delay)
         cluster = require_external_cluster()
-        # Resolve the target slot from payload or fall back to a random local slot
-        slot_idx = payload.get("slot_idx")
-        if slot_idx is not None:
-            slot = cluster.slots.get(slot_idx)
-        else:
-            local_slots = _resolve_local_slots(cluster)
-            import random
-            slot = random.choice(local_slots) if local_slots else None
+        slot_idx, slot = _slot_from_target(cluster, payload)
         if slot is None:
-            self._logger.error("Serial kill slot: no daemon (slot_idx=%s)", slot_idx)
+            self._logger.error("Serial kill slot: missing/unknown slot_idx (got %r)", slot_idx)
             return
         try:
-            self._logger.info("Serial kill slot daemon ic_port=%d", slot.ic_port)
+            self._logger.info("Serial kill slot daemon slot_idx=%s ic_port=%d", slot_idx, slot.ic_port)
             _local_kill_daemon_and_process(int(slot.ic_port))
             self.on_success_inject_fault()
         except Exception as e:
@@ -283,7 +276,7 @@ class ClusterSerialKillSlotsNemesis(MonitoredAgentActor):
 
 
 class ClusterStopStartNodeNemesis(MonitoredAgentActor):
-    """Stop the local node process; next inject starts it again (>=8 nodes)."""
+    """Stop the node process; next inject starts it again (>=8 nodes). Requires node_id."""
 
     def __init__(self) -> None:
         super().__init__(scope="node")
@@ -304,25 +297,25 @@ class ClusterStopStartNodeNemesis(MonitoredAgentActor):
             self.on_success_extract_fault()
 
     def inject_fault(self, payload=None) -> None:
-        del payload
+        payload = payload if isinstance(payload, dict) else {}
         cluster = require_external_cluster()
         if len(cluster.nodes) < 8:
             self._logger.info("Stop/start prohibited (< 8 nodes)")
             return
         if self._try_start_stopped():
             return
-        node = _resolve_local_node(cluster)
+        node_id, node = _node_from_target(cluster, payload)
         if node is None:
-            self._logger.warning("No local node found in cluster — cannot stop")
+            self._logger.error("StopStartNode: missing/unknown node_id in ChaosTarget (got %r)", node_id)
             return
         self._stopped_node = node
-        self._logger.info("Stopping local node ic_port=%d", node.ic_port)
+        self._logger.info("Stopping node_id=%s ic_port=%d", node_id, node.ic_port)
         _local_stop_kikimr(node)
         self.on_success_inject_fault()
 
 
 class ClusterSuspendNodeNemesis(MonitoredAgentActor):
-    """SIGSTOP / SIGCONT on local node or slot (>=8 nodes)."""
+    """SIGSTOP / SIGCONT on a node/slot process (>=8 nodes). Requires ic_port or node/slot id."""
 
     def __init__(self) -> None:
         super().__init__(scope="node")
@@ -343,26 +336,30 @@ class ClusterSuspendNodeNemesis(MonitoredAgentActor):
             self.on_success_extract_fault()
 
     def inject_fault(self, payload=None) -> None:
-        del payload
+        payload = payload if isinstance(payload, dict) else {}
         cluster = require_external_cluster()
         if len(cluster.nodes) < 8:
             self._logger.info("Suspend prohibited (< 8 nodes)")
             return
         if self._try_cont():
             return
-        import random
-        local_node = _resolve_local_node(cluster)
-        local_slots = _resolve_local_slots(cluster)
-        pool = []
-        if local_node is not None:
-            pool.append(local_node)
-        pool.extend(local_slots)
-        if not pool:
-            self._logger.warning("No local processes to suspend")
+
+        ic_port = _ic_port_from_target(payload)
+        if ic_port is None:
+            _, node = _node_from_target(cluster, payload)
+            if node is not None:
+                ic_port = int(node.ic_port)
+        if ic_port is None:
+            _, slot = _slot_from_target(cluster, payload)
+            if slot is not None:
+                ic_port = int(slot.ic_port)
+        if ic_port is None:
+            self._logger.error(
+                "SuspendNode: ChaosTarget must include ic_port, node_id, or slot_idx"
+            )
             return
-        target = random.choice(pool)
-        self._suspended_ic_port = int(target.ic_port)
-        self._logger.info("SIGSTOP local process ic_port=%d", self._suspended_ic_port)
+        self._suspended_ic_port = ic_port
+        self._logger.info("SIGSTOP process ic_port=%d", self._suspended_ic_port)
         _local_send_signal(self._suspended_ic_port, signal.SIGSTOP)
         self.on_success_inject_fault()
 

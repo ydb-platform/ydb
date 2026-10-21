@@ -6,8 +6,8 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
-#include <library/cpp/yt/threading/event_count.h>
-#include <library/cpp/yt/threading/rw_spin_lock.h>
+#include <library/cpp/yt/system/event_count.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
 
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 
@@ -129,10 +129,10 @@ private:
     };
 
     TGrpcCompletionQueuePtr CompletionQueue_;
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, SpinLock_);
     EState State_ = EState::Opened;
     std::atomic<int> LocksCount_ = 0;
-    NThreading::TEvent ReleaseDone_;
+    TEvent ReleaseDone_;
 
     void Release();
 };
@@ -163,7 +163,7 @@ class TGrpcMetadataArray
     : public TGrpcObject<grpc_metadata_array, grpc_metadata_array_init, grpc_metadata_array_destroy>
 {
 public:
-    TStringBuf Find(const char* key) const;
+    std::optional<TStringBuf> Find(const char* key) const;
 
     THashMap<std::string, std::string> ToMap() const;
 };

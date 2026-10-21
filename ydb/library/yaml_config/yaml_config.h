@@ -102,7 +102,8 @@ void ResolveAndParseYamlConfig(
     NKikimrConfig::TAppConfig& appConfig,
     std::optional<TString> databaseYamlConfig = std::nullopt,
     TString* resolvedYamlConfig = nullptr,
-    TString* resolvedJsonConfig = nullptr);
+    TString* resolvedJsonConfig = nullptr,
+    TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector = nullptr);
 
 enum class EValidationResult {
     Ok,
@@ -137,6 +138,11 @@ public:
         const NKikimrConfig::TAppConfig& config,
         std::vector<TString>& msg) const;
 
+    // Custom validators require the complete config unless they declare independent groups.
+    virtual TVector<TVector<TString>> GetValidationDependencies() const {
+        return {{"/"}};
+    }
+
     const TMap<TString, TSimpleSharedPtr<IConfigValidator>>& GetValidators() const {
         return Validators;
     }
@@ -146,5 +152,11 @@ protected:
 
 
 std::unique_ptr<IConfigSwissKnife> CreateDefaultConfigSwissKnife();
+
+// Validate realizable section combinations. A null validator requests only proto conversion.
+void ValidateConfig(
+    NFyaml::TDocument& doc,
+    const IConfigSwissKnife* validator,
+    TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector = nullptr);
 
 } // namespace NKikimr::NYamlConfig

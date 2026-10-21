@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+"""include sanitizer CLI shim.
+
+Puts the package's PARENT directory on ``sys.path`` and imports the
+package by its own top-level name, so this works no matter where the
+package lives in the tree (tools/, ydb/tools/, ...).
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+_HERE = Path(__file__).resolve()
+# .../<pkg>/bin/sanitize_includes -> _PKG_ROOT = .../<pkg>
+_PKG_ROOT = _HERE.parent.parent
+_PKG_PARENT = _PKG_ROOT.parent
+_PKG_NAME = _PKG_ROOT.name
+
+if str(_PKG_PARENT) not in sys.path:
+    sys.path.insert(0, str(_PKG_PARENT))
+
+_cli = __import__(f"{_PKG_NAME}.cli", fromlist=["main"])
+
+
+if __name__ == "__main__":
+    sys.exit(_cli.main(sys.argv[1:]))

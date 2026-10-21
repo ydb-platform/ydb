@@ -1,9 +1,11 @@
 LIBRARY()
 
 SRCS(
+    dbg_counters.cpp
     public.cpp
     trace_helpers.cpp
     vchunk_counters.cpp
+    vchunk_stats.cpp
     vhost_stats_simple.cpp
     vhost_stats_test.cpp
     vhost_stats.cpp
@@ -21,3 +23,5 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(ut)

@@ -1,7 +1,27 @@
 #include "abstract.h"
+
+#include <ydb/core/base/appdata.h>
+
 #include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NMetadata::NModifications {
+
+namespace {
+
+IOperationsManager::TYqlConclusionStatus OldSecretCreationDisabledStatus() {
+    return IOperationsManager::TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, GetOldSecretCreationDisabledMessage());
+}
+
+bool IsOldSecretType(const TString& typeId) {
+    return to_lower(typeId) == "secret";
+}
+
+}   // anonymous namespace
+
+const TString& GetOldSecretCreationDisabledMessage() {
+    static const TString message("Old secrets creation syntax is disabled now. Please use the new one");
+    return message;
+}
 
 TTableSchema::TTableSchema(const THashMap<ui32, TSysTables::TTableColumnInfo>& description) {
     std::map<TString, Ydb::Column> columns;
@@ -35,8 +55,7 @@ NKikimr::NMetadata::NModifications::TTableSchema& TTableSchema::AddColumn(const 
 }
 
 NThreading::TFuture<IOperationsManager::TYqlConclusionStatus> IOperationsManager::DropObject(const NYql::TDropObjectSettings& settings,
-    const ui32 nodeId, const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const
-{
+    const ui32 nodeId, const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const {
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("metadata provider service is disabled"));
     }
@@ -46,8 +65,7 @@ NThreading::TFuture<IOperationsManager::TYqlConclusionStatus> IOperationsManager
 }
 
 NThreading::TFuture<IOperationsManager::TYqlConclusionStatus> IOperationsManager::AlterObject(const NYql::TAlterObjectSettings& settings,
-    const ui32 nodeId, const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const
-{
+    const ui32 nodeId, const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const {
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("metadata provider service is disabled"));
     }
@@ -77,10 +95,12 @@ NThreading::TFuture<IOperationsManager::TYqlConclusionStatus> IOperationsManager
 }
 
 IOperationsManager::TYqlConclusionStatus IOperationsManager::PrepareUpsertObjectSchemeOperation(NKqpProto::TKqpSchemeOperation& schemeOperation,
-    const NYql::TUpsertObjectSettings& settings, const IClassBehaviour::TPtr& manager,
-    const TExternalModificationContext& context) const {
+    const NYql::TUpsertObjectSettings& settings, const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const {
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return TYqlConclusionStatus::Fail("metadata provider service is disabled");
+    }
+    if (AppData()->FeatureFlags.GetDisableOldSecretCreation() && IsOldSecretType(settings.GetTypeId())) {
+        return OldSecretCreationDisabledStatus();
     }
     TInternalModificationContext internalContext(context);
     internalContext.SetActivityType(EActivityType::Upsert);
@@ -88,10 +108,12 @@ IOperationsManager::TYqlConclusionStatus IOperationsManager::PrepareUpsertObject
 }
 
 IOperationsManager::TYqlConclusionStatus IOperationsManager::PrepareCreateObjectSchemeOperation(NKqpProto::TKqpSchemeOperation& schemeOperation,
-    const NYql::TCreateObjectSettings& settings, const IClassBehaviour::TPtr& manager,
-    const TExternalModificationContext& context) const {
+    const NYql::TCreateObjectSettings& settings, const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const {
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return TYqlConclusionStatus::Fail("metadata provider service is disabled");
+    }
+    if (AppData()->FeatureFlags.GetDisableOldSecretCreation() && IsOldSecretType(settings.GetTypeId())) {
+        return OldSecretCreationDisabledStatus();
     }
     TInternalModificationContext internalContext(context);
     internalContext.SetActivityType(EActivityType::Create);
@@ -99,8 +121,7 @@ IOperationsManager::TYqlConclusionStatus IOperationsManager::PrepareCreateObject
 }
 
 IOperationsManager::TYqlConclusionStatus IOperationsManager::PrepareAlterObjectSchemeOperation(NKqpProto::TKqpSchemeOperation& schemeOperation,
-    const NYql::TAlterObjectSettings& settings, const IClassBehaviour::TPtr& manager,
-    const TExternalModificationContext& context) const {
+    const NYql::TAlterObjectSettings& settings, const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const {
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return TYqlConclusionStatus::Fail("metadata provider service is disabled");
     }
@@ -110,14 +131,19 @@ IOperationsManager::TYqlConclusionStatus IOperationsManager::PrepareAlterObjectS
 }
 
 IOperationsManager::TYqlConclusionStatus IOperationsManager::PrepareDropObjectSchemeOperation(NKqpProto::TKqpSchemeOperation& schemeOperation,
-    const NYql::TDropObjectSettings& settings, const IClassBehaviour::TPtr& manager,
-    const TExternalModificationContext& context) const {
+    const NYql::TDropObjectSettings& settings, const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const {
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return TYqlConclusionStatus::Fail("metadata provider service is disabled");
     }
     TInternalModificationContext internalContext(context);
     internalContext.SetActivityType(EActivityType::Drop);
     return DoPrepare(schemeOperation, settings, manager, internalContext);
+}
+
+NThreading::TFuture<IOperationsManager::TYqlConclusionStatus> IOperationsManager::TrackObjectOperation(
+    const TString& objectId, const TOperationTrackContext& context) const {
+    Y_UNUSED(objectId, context);
+    return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("Object operation tracking is not supported"));
 }
 
 TTableSchema IOperationsManager::GetSchema() const {
@@ -131,4 +157,4 @@ void IOperationsManager::SetActualSchema(std::optional<TTableSchema>&& schema) {
     ActualSchema = std::move(schema);
 }
 
-} // namespace NKikimr::NMetadata::NModifications
+}   // namespace NKikimr::NMetadata::NModifications

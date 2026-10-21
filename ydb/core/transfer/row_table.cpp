@@ -1,7 +1,6 @@
 #include "table_kind_state.h"
 #include "uploader.h"
 
-#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
 #include <ydb/core/util/backoff.h>
 
@@ -14,11 +13,11 @@ public:
     TRowTableState(
         const TActorId& selfId,
         const TString& database,
+        const TString& defaultTablePath,
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result
     )
-        : ITableKindState(selfId, database, result)
+        : ITableKindState(selfId, database, defaultTablePath, result)
     {
-        Path = JoinPath(result->ResultSet.front().Path);
     }
 
     NKqp::IDataBatcherPtr CreateDataBatcher() override {
@@ -62,20 +61,17 @@ public:
         }
 
         UploaderActorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(
-            new TTableUploader(SelfId, Database, GetScheme(), std::move(tableData))
+            new TTableUploader(SelfId, Database, DefaultTablePath, GetScheme(), std::move(tableData))
         );
 
         Batchers.clear();
 
         return true;
     }
-
-private:
-    TString Path;
 };
 
-std::unique_ptr<ITableKindState> CreateRowTableState(const TActorId& selfId, const TString& database, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result) {
-    return std::make_unique<TRowTableState>(selfId, database, result);
+std::unique_ptr<ITableKindState> CreateRowTableState(const TActorId& selfId, const TString& database, const TString& defaultTablePath, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result) {
+    return std::make_unique<TRowTableState>(selfId, database, defaultTablePath, result);
 }
 
 namespace {

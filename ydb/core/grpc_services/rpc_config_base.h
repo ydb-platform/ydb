@@ -8,6 +8,8 @@
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/protos/blobstorage_base3.pb.h>
+#include <ydb/core/base/auth.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
@@ -16,6 +18,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -30,7 +33,7 @@ public:
         return Type;
     }
 
-    TDriveDevice(TString path, NKikimrBlobStorage::EPDiskType type) 
+    TDriveDevice(TString path, NKikimrBlobStorage::EPDiskType type)
         : Path(path), Type(type) {}
 
     auto operator<=>(const TDriveDevice &) const = default;
@@ -381,7 +384,7 @@ protected:
         auto *self = Self();
         self->Reply(ev->Get()->Record.GetYdbStatus(), ev->Get()->Record.GetIssues(), self->ActorContext());
     }
-    
+
     void HandleConsole(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
         auto *self = Self();
         self->Reply(Ydb::StatusIds::UNAVAILABLE, "Connection to Console was lost",
@@ -394,6 +397,63 @@ protected:
             self->Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to connect to Console",
                        NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, self->ActorContext());
         }
+    }
+
+    void CheckDatabaseAuthorization(const TString& database) {
+        auto *self = Self();
+        if (NKikimr::IsAdministrator(AppData(), self->Request_->GetInternalToken().Get())) {
+            self->SendRequestToConsole();
+            return;
+        }
+
+        if (!AppData()->FeatureFlags.GetEnableDatabaseAdmin()) {
+            self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a cluster administrator.",
+                NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
+            return;
+        }
+
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = database;
+
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        entry.Path = NKikimr::SplitPath(database);
+
+        self->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
+        self->Become(&TBSConfigRequestGrpc::StateWaitResolveDatabase);
+    }
+
+    STFUNC(StateWaitResolveDatabase) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveDatabase);
+            default:
+                return TBase::StateFuncBase(ev);
+        }
+    }
+
+    void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        auto *self = Self();
+        const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request.Get();
+        if (request.ResultSet.empty() || request.ErrorCount > 0) {
+            self->Reply(Ydb::StatusIds::SCHEME_ERROR, "Error resolving database",
+                NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, self->ActorContext());
+            return;
+        }
+
+        const auto& entry = request.ResultSet.front();
+        if (!entry.Self) {
+            self->Reply(Ydb::StatusIds::SCHEME_ERROR, "Error resolving database",
+                NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, self->ActorContext());
+            return;
+        }
+        const auto& databaseOwner = entry.Self->Info.GetOwner();
+
+        if (!NKikimr::IsDatabaseAdministrator(self->Request_->GetInternalToken().Get(), databaseOwner)) {
+            self->Reply(Ydb::StatusIds::UNAUTHORIZED, "User is not a database administrator.",
+                NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
+            return;
+        }
+        self->SendRequestToConsole();
     }
 
     virtual bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) = 0;

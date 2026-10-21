@@ -1,6 +1,18 @@
-/* Generated from catalan.sbl by Snowball 3.0.1 - https://snowballstem.org/ */
+/* Generated from catalan.sbl by Snowball 3.1.1 - https://snowballstem.org/ */
 
-#include "../runtime/header.h"
+#include "stem_ISO_8859_1_catalan.h"
+
+#include <stddef.h>
+
+#include "../runtime/snowball_runtime.h"
+
+struct SN_local {
+    struct SN_env z;
+    int i_p2;
+    int i_p1;
+};
+
+typedef struct SN_local SN_local;
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,6 +21,7 @@ extern int catalan_ISO_8859_1_stem(struct SN_env * z);
 #ifdef __cplusplus
 }
 #endif
+
 static int r_residual_suffix(struct SN_env * z);
 static int r_verb_suffix(struct SN_env * z);
 static int r_standard_suffix(struct SN_env * z);
@@ -17,18 +30,18 @@ static int r_R2(struct SN_env * z);
 static int r_R1(struct SN_env * z);
 static int r_mark_regions(struct SN_env * z);
 static int r_cleaning(struct SN_env * z);
-#ifdef __cplusplus
-extern "C" {
-#endif
 
+static const symbol s_0[] = { 'a' };
+static const symbol s_1[] = { 'e' };
+static const symbol s_2[] = { 'i' };
+static const symbol s_3[] = { 'o' };
+static const symbol s_4[] = { 'u' };
+static const symbol s_5[] = { '.' };
+static const symbol s_6[] = { 'l', 'o', 'g' };
+static const symbol s_7[] = { 'i', 'c' };
+static const symbol s_8[] = { 'c' };
+static const symbol s_9[] = { 'i', 'c' };
 
-extern struct SN_env * catalan_ISO_8859_1_create_env(void);
-extern void catalan_ISO_8859_1_close_env(struct SN_env * z);
-
-
-#ifdef __cplusplus
-}
-#endif
 static const symbol s_0_1[1] = { 0xB7 };
 static const symbol s_0_2[1] = { 0xE0 };
 static const symbol s_0_3[1] = { 0xE1 };
@@ -1159,20 +1172,9 @@ static const struct among a_4[22] = {
 
 static const unsigned char g_v[] = { 17, 65, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 129, 81, 6, 10 };
 
-static const symbol s_0[] = { 'a' };
-static const symbol s_1[] = { 'e' };
-static const symbol s_2[] = { 'i' };
-static const symbol s_3[] = { 'o' };
-static const symbol s_4[] = { 'u' };
-static const symbol s_5[] = { '.' };
-static const symbol s_6[] = { 'l', 'o', 'g' };
-static const symbol s_7[] = { 'i', 'c' };
-static const symbol s_8[] = { 'c' };
-static const symbol s_9[] = { 'i', 'c' };
-
 static int r_mark_regions(struct SN_env * z) {
-    z->I[1] = z->l;
-    z->I[0] = z->l;
+    ((SN_local *)z)->i_p1 = z->l;
+    ((SN_local *)z)->i_p2 = z->l;
     {
         int v_1 = z->c;
         {
@@ -1185,7 +1187,7 @@ static int r_mark_regions(struct SN_env * z) {
             if (ret < 0) goto lab0;
             z->c += ret;
         }
-        z->I[1] = z->c;
+        ((SN_local *)z)->i_p1 = z->c;
         {
             int ret = out_grouping(z, g_v, 97, 252, 1);
             if (ret < 0) goto lab0;
@@ -1196,7 +1198,7 @@ static int r_mark_regions(struct SN_env * z) {
             if (ret < 0) goto lab0;
             z->c += ret;
         }
-        z->I[0] = z->c;
+        ((SN_local *)z)->i_p2 = z->c;
     lab0:
         z->c = v_1;
     }
@@ -1208,7 +1210,7 @@ static int r_cleaning(struct SN_env * z) {
     while (1) {
         int v_1 = z->c;
         z->bra = z->c;
-        among_var = find_among(z, a_0, 13);
+        among_var = find_among(z, a_0, 13, 0);
         z->ket = z->c;
         switch (among_var) {
             case 1:
@@ -1261,17 +1263,17 @@ static int r_cleaning(struct SN_env * z) {
 }
 
 static int r_R1(struct SN_env * z) {
-    return z->I[1] <= z->c;
+    return ((SN_local *)z)->i_p1 <= z->c;
 }
 
 static int r_R2(struct SN_env * z) {
-    return z->I[0] <= z->c;
+    return ((SN_local *)z)->i_p2 <= z->c;
 }
 
 static int r_attached_pronoun(struct SN_env * z) {
     z->ket = z->c;
     if (z->c - 1 <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((1634850 >> (z->p[z->c - 1] & 0x1f)) & 1)) return 0;
-    if (!find_among_b(z, a_1, 39)) return 0;
+    if (!find_among_b(z, a_1, 39, 0)) return 0;
     z->bra = z->c;
     {
         int ret = r_R1(z);
@@ -1287,7 +1289,7 @@ static int r_attached_pronoun(struct SN_env * z) {
 static int r_standard_suffix(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
-    among_var = find_among_b(z, a_2, 200);
+    among_var = find_among_b(z, a_2, 200, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -1348,7 +1350,7 @@ static int r_standard_suffix(struct SN_env * z) {
 static int r_verb_suffix(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
-    among_var = find_among_b(z, a_3, 283);
+    among_var = find_among_b(z, a_3, 283, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -1379,7 +1381,7 @@ static int r_verb_suffix(struct SN_env * z) {
 static int r_residual_suffix(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
-    among_var = find_among_b(z, a_4, 22);
+    among_var = find_among_b(z, a_4, 22, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -1423,23 +1425,22 @@ extern int catalan_ISO_8859_1_stem(struct SN_env * z) {
     }
     {
         int v_2 = z->l - z->c;
-        {
+        do {
             int v_3 = z->l - z->c;
             {
                 int ret = r_standard_suffix(z);
-                if (ret == 0) goto lab2;
+                if (ret == 0) goto lab1;
                 if (ret < 0) return ret;
             }
-            goto lab1;
-        lab2:
+            break;
+        lab1:
             z->c = z->l - v_3;
             {
                 int ret = r_verb_suffix(z);
                 if (ret == 0) goto lab0;
                 if (ret < 0) return ret;
             }
-        }
-    lab1:
+        } while (0);
     lab0:
         z->c = z->l - v_2;
     }
@@ -1463,7 +1464,16 @@ extern int catalan_ISO_8859_1_stem(struct SN_env * z) {
     return 1;
 }
 
-extern struct SN_env * catalan_ISO_8859_1_create_env(void) { return SN_create_env(0, 2); }
+extern struct SN_env * catalan_ISO_8859_1_create_env(void) {
+    struct SN_env * z = SN_new_env(sizeof(SN_local));
+    if (z) {
+        ((SN_local *)z)->i_p2 = 0;
+        ((SN_local *)z)->i_p1 = 0;
+    }
+    return z;
+}
 
-extern void catalan_ISO_8859_1_close_env(struct SN_env * z) { SN_close_env(z, 0); }
+extern void catalan_ISO_8859_1_close_env(struct SN_env * z) {
+    SN_delete_env(z);
+}
 

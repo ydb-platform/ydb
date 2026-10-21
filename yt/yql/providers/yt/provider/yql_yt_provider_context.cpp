@@ -217,4 +217,4 @@ TOptimizerStatistics TYtProviderContext::ComputeJoinStats(
     return result;
 }
 
-}  // namespace NYql
+} // namespace NYql

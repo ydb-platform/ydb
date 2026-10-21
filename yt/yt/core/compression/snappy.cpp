@@ -67,7 +67,7 @@ void SnappyCompress(TSource* source, TBlob* output)
     // Snappy implementation relies on entire input length to fit into an integer.
     if (source->Available() > std::numeric_limits<int>::max()) {
         THROW_ERROR_EXCEPTION("Snappy compression failed: input size is too big")
-            << TErrorAttribute("size", source->Available());
+            .With("size", source->Available());
     }
 
     output->Resize(snappy::MaxCompressedLength(source->Available()), /*initializeStorage*/ false);

@@ -15,6 +15,8 @@
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 namespace NYT::NYPath {
 
 using namespace NYTree;
@@ -104,12 +106,14 @@ bool IsRootDesignator(char c)
 
 bool StartsWithRootDesignator(TStringBuf str)
 {
-    size_t nonSpaceIndex = str.find_first_not_of(' ');
-    if (nonSpaceIndex != TStringBuf::npos && !IsRootDesignator(str[nonSpaceIndex])) {
-        return false;
+    size_t index = str.find_first_not_of(' ');
+    if (index == TStringBuf::npos) {
+        return true;
     }
 
-    return true;
+    auto stripped = str.substr(index);
+    // "&#<id>" suppresses redirection to the object's native cell.
+    return stripped.starts_with("&#") || IsRootDesignator(stripped[0]);
 }
 
 TStringBuf ParseCluster(TStringBuf str, const IAttributeDictionaryPtr& attributes)
@@ -161,7 +165,7 @@ void ParseColumns(NYson::TTokenizer& tokenizer, IAttributeDictionary* attributes
 
     tokenizer.ParseNext();
     while (tokenizer.GetCurrentType() != EndColumnSelectorToken) {
-        TString begin;
+        std::string begin;
         switch (tokenizer.GetCurrentType()) {
             case NYson::ETokenType::String:
                 begin.assign(tokenizer.CurrentToken().GetStringValue());
@@ -390,8 +394,8 @@ void ParseRowRanges(NYson::TTokenizer& tokenizer, IAttributeDictionary* attribut
 
 void AppendAttributes(TStringBuilderBase* builder, const IAttributeDictionary& attributes, EYsonFormat ysonFormat, bool sortAttributes)
 {
-    TString attrString;
-    TStringOutput output(attrString);
+    std::string attrString;
+    TStdStringOutput output(attrString);
     TYsonWriter writer(&output, ysonFormat, EYsonType::MapFragment);
 
     if (sortAttributes) {
@@ -484,7 +488,7 @@ std::pair<TYPath, IAttributeDictionaryPtr> ParseRichYPathImpl(TStringBuf str)
     return {std::move(path), attributes};
 }
 
-TString ConvertToString(const TYPath& path, const IAttributeDictionary& attributes, EYsonFormat ysonFormat, bool sortAttributes)
+std::string ConvertToString(const TYPath& path, const IAttributeDictionary& attributes, EYsonFormat ysonFormat, bool sortAttributes)
 {
     TStringBuilder builder;
     AppendAttributes(&builder, attributes, ysonFormat, sortAttributes);

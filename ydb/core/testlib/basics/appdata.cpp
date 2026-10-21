@@ -46,7 +46,6 @@ namespace NKikimr {
         app->StreamingConfig.SetEnableOutputStreams(true);
         app->PQConfig.MergeFrom(PQConfig);
         app->PQConfig.SetACLRetryTimeoutSec(1);
-        app->PQConfig.SetBalancerMetadataRetryTimeoutSec(1);
         app->PQConfig.SetClustersUpdateTimeoutSec(1);
         app->PQConfig.SetCheckACL(true);
         if (NetDataSourceUrl) {
@@ -60,6 +59,7 @@ namespace NKikimr {
         app->HiveConfig = HiveConfig;
         app->DataShardConfig = DataShardConfig;
         app->ColumnShardConfig = ColumnShardConfig;
+        app->SmallBlobsQuotaConfig = SmallBlobsQuotaConfig;
         app->SchemeShardConfig = SchemeShardConfig;
         app->MeteringConfig = MeteringConfig;
         app->AwsCompatibilityConfig = AwsCompatibilityConfig;

@@ -2,6 +2,8 @@
 #include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_VDISK_DEFRAG
+
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
@@ -106,8 +108,9 @@ namespace NKikimr {
             const TDefragRecord &rec = Recs[RecToReadIdx++];
 
             if (msg->Status == NKikimrProto::CORRUPTED || (msg->Status == NKikimrProto::OK && !msg->Data.IsReadable())) {
-                LOG_WARN_S(ctx, NKikimrServices::BS_VDISK_DEFRAG,
-                        "Defrag skipping corrupted blob #" << rec.LogoBlobId << " on " << rec.OldDiskPart.ToString());
+                YDB_LOG_WARN_CTX(ctx, "Defrag skipping corrupted blob",
+                    {"logoBlobId", rec.LogoBlobId},
+                    {"oldDiskPart", rec.OldDiskPart});
                 const TBlobStorageGroupType gtype = DCtx->VCtx->Top->GType;
                 Send(DCtx->SkeletonId,
                      new TEvRestoreCorruptedBlob(
@@ -163,13 +166,15 @@ namespace NKikimr {
             }
             Y_VERIFY_S(rope.size() == gtype.PartSize(rec.LogoBlobId), DCtx->VCtx->VDiskLogPrefix);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_DEFRAG, DCtx->VCtx->VDiskLogPrefix << "rewriting BlobId# "
-                << rec.LogoBlobId << " from Location# " << rec.OldDiskPart);
+            YDB_LOG_DEBUG_CTX(ctx, "Rewriting",
+                {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
+                {"blobId", rec.LogoBlobId},
+                {"fromLocation", rec.OldDiskPart});
 
             auto msgSize = rope.size();
             auto writeEvent = std::make_unique<TEvBlobStorage::TEvVPut>(rec.LogoBlobId, std::move(rope),
                 SelfVDiskId, true, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob,
-                DCtx->VCfg->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER);
+                DCtx->VCfg->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER, TWriteSource::DefragRewrite);
             writeEvent->RewriteBlob = true;
             TEventsQuoter::QuoteMessage(DCtx->Throttler, std::make_unique<IEventHandle>(DCtx->SkeletonId, SelfId(), writeEvent.release()),
                 msgSize, DCtx->VCfg->DefragThrottlerBytesRate);
@@ -180,11 +185,15 @@ namespace NKikimr {
             // FIXME: Handle NotOK, in case of RACE just cancel the job
 
             if (auto& record = ev->Get()->Record; record.GetStatus() != NKikimrProto::OK) {
-                LOG_WARN_S(ctx, NKikimrServices::BS_VDISK_DEFRAG, DCtx->VCtx->VDiskLogPrefix << "rewrite failed BlobId# "
-                    << LogoBlobIDFromLogoBlobID(record.GetBlobID()) << " Record# " << SingleLineProto(record));
+                YDB_LOG_WARN_CTX(ctx, "Rewrite failed",
+                    {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
+                    {"blobId", LogoBlobIDFromLogoBlobID(record.GetBlobID())},
+                    {"record", SingleLineProto(record)});
             } else {
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_DEFRAG, DCtx->VCtx->VDiskLogPrefix << "rewritten BlobId# "
-                    << LogoBlobIDFromLogoBlobID(record.GetBlobID()) << " to Location# " << ev->Get()->WrittenLocation);
+                YDB_LOG_DEBUG_CTX(ctx, "Rewritten",
+                    {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
+                    {"blobId", LogoBlobIDFromLogoBlobID(record.GetBlobID())},
+                    {"toLocation", ev->Get()->WrittenLocation});
 
                 ++RewrittenRecsCounter;
             }

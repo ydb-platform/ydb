@@ -2,9 +2,10 @@
   "version":"2.0",
   "metadata":{
     "apiVersion":"2018-05-10",
+    "auth":["aws.auth#sigv4"],
     "endpointPrefix":"ssm-sap",
-    "jsonVersion":"1.1",
     "protocol":"rest-json",
+    "protocols":["rest-json"],
     "serviceAbbreviation":"SsmSap",
     "serviceFullName":"AWS Systems Manager for SAP",
     "serviceId":"Ssm Sap",
@@ -75,6 +76,21 @@
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Gets the component of an application registered with AWS Systems Manager for SAP.</p>"
+    },
+    "GetConfigurationCheckOperation":{
+      "name":"GetConfigurationCheckOperation",
+      "http":{
+        "method":"POST",
+        "requestUri":"/get-configuration-check-operation",
+        "responseCode":200
+      },
+      "input":{"shape":"GetConfigurationCheckOperationInput"},
+      "output":{"shape":"GetConfigurationCheckOperationOutput"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Gets the details of a configuration check operation by specifying the operation ID.</p>"
     },
     "GetDatabase":{
       "name":"GetDatabase",
@@ -155,6 +171,37 @@
       ],
       "documentation":"<p>Lists all the components registered with AWS Systems Manager for SAP.</p>"
     },
+    "ListConfigurationCheckDefinitions":{
+      "name":"ListConfigurationCheckDefinitions",
+      "http":{
+        "method":"POST",
+        "requestUri":"/list-configuration-check-definitions",
+        "responseCode":200
+      },
+      "input":{"shape":"ListConfigurationCheckDefinitionsInput"},
+      "output":{"shape":"ListConfigurationCheckDefinitionsOutput"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Lists all configuration check types supported by AWS Systems Manager for SAP.</p>"
+    },
+    "ListConfigurationCheckOperations":{
+      "name":"ListConfigurationCheckOperations",
+      "http":{
+        "method":"POST",
+        "requestUri":"/list-configuration-check-operations",
+        "responseCode":200
+      },
+      "input":{"shape":"ListConfigurationCheckOperationsInput"},
+      "output":{"shape":"ListConfigurationCheckOperationsOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Lists the configuration check operations performed by AWS Systems Manager for SAP.</p>"
+    },
     "ListDatabases":{
       "name":"ListDatabases",
       "http":{
@@ -171,6 +218,21 @@
       ],
       "documentation":"<p>Lists the SAP HANA databases of an application registered with AWS Systems Manager for SAP.</p>"
     },
+    "ListOperationEvents":{
+      "name":"ListOperationEvents",
+      "http":{
+        "method":"POST",
+        "requestUri":"/list-operation-events",
+        "responseCode":200
+      },
+      "input":{"shape":"ListOperationEventsInput"},
+      "output":{"shape":"ListOperationEventsOutput"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Returns a list of operations events.</p> <p>Available parameters include <code>OperationID</code>, as well as optional parameters <code>MaxResults</code>, <code>NextToken</code>, and <code>Filters</code>.</p>"
+    },
     "ListOperations":{
       "name":"ListOperations",
       "http":{
@@ -185,6 +247,36 @@
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Lists the operations performed by AWS Systems Manager for SAP.</p>"
+    },
+    "ListSubCheckResults":{
+      "name":"ListSubCheckResults",
+      "http":{
+        "method":"POST",
+        "requestUri":"/list-sub-check-results",
+        "responseCode":200
+      },
+      "input":{"shape":"ListSubCheckResultsInput"},
+      "output":{"shape":"ListSubCheckResultsOutput"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Lists the sub-check results of a specified configuration check operation.</p>"
+    },
+    "ListSubCheckRuleResults":{
+      "name":"ListSubCheckRuleResults",
+      "http":{
+        "method":"POST",
+        "requestUri":"/list-sub-check-rule-results",
+        "responseCode":200
+      },
+      "input":{"shape":"ListSubCheckRuleResultsInput"},
+      "output":{"shape":"ListSubCheckRuleResultsOutput"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Lists the rules of a specified sub-check belonging to a configuration check operation.</p>"
     },
     "ListTagsForResource":{
       "name":"ListTagsForResource",
@@ -235,6 +327,23 @@
       ],
       "documentation":"<p>Register an SAP application with AWS Systems Manager for SAP. You must meet the following requirements before registering. </p> <p>The SAP application you want to register with AWS Systems Manager for SAP is running on Amazon EC2.</p> <p>AWS Systems Manager Agent must be setup on an Amazon EC2 instance along with the required IAM permissions.</p> <p>Amazon EC2 instance(s) must have access to the secrets created in AWS Secrets Manager to manage SAP applications and components.</p>"
     },
+    "StartApplication":{
+      "name":"StartApplication",
+      "http":{
+        "method":"POST",
+        "requestUri":"/start-application",
+        "responseCode":200
+      },
+      "input":{"shape":"StartApplicationInput"},
+      "output":{"shape":"StartApplicationOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Request is an operation which starts an application.</p> <p>Parameter <code>ApplicationId</code> is required.</p>"
+    },
     "StartApplicationRefresh":{
       "name":"StartApplicationRefresh",
       "http":{
@@ -252,6 +361,40 @@
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Refreshes a registered application.</p>"
+    },
+    "StartConfigurationChecks":{
+      "name":"StartConfigurationChecks",
+      "http":{
+        "method":"POST",
+        "requestUri":"/start-configuration-checks",
+        "responseCode":200
+      },
+      "input":{"shape":"StartConfigurationChecksInput"},
+      "output":{"shape":"StartConfigurationChecksOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Initiates configuration check operations against a specified application.</p>"
+    },
+    "StopApplication":{
+      "name":"StopApplication",
+      "http":{
+        "method":"POST",
+        "requestUri":"/stop-application",
+        "responseCode":200
+      },
+      "input":{"shape":"StopApplicationInput"},
+      "output":{"shape":"StopApplicationOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"}
+      ],
+      "documentation":"<p>Request is an operation to stop an application.</p> <p>Parameter <code>ApplicationId</code> is required. Parameters <code>StopConnectedEntity</code> and <code>IncludeEc2InstanceShutdown</code> are optional.</p>"
     },
     "TagResource":{
       "name":"TagResource",
@@ -357,9 +500,17 @@
         "StatusMessage":{
           "shape":"String",
           "documentation":"<p>The status message.</p>"
+        },
+        "AssociatedApplicationArns":{
+          "shape":"ApplicationArnList",
+          "documentation":"<p>The Amazon Resource Names of the associated AWS Systems Manager for SAP applications.</p>"
         }
       },
       "documentation":"<p>An SAP application registered with AWS Systems Manager for SAP.</p>"
+    },
+    "ApplicationArnList":{
+      "type":"list",
+      "member":{"shape":"SsmSapArn"}
     },
     "ApplicationCredential":{
       "type":"structure",
@@ -402,7 +553,9 @@
     },
     "ApplicationId":{
       "type":"string",
-      "pattern":"[\\w\\d]{1,50}"
+      "max":60,
+      "min":1,
+      "pattern":"[\\w\\d\\.-]+"
     },
     "ApplicationStatus":{
       "type":"string",
@@ -453,6 +606,10 @@
         "HANA",
         "SAP_ABAP"
       ]
+    },
+    "ApplicationTypeList":{
+      "type":"list",
+      "member":{"shape":"ApplicationType"}
     },
     "Arn":{
       "type":"string",
@@ -606,13 +763,48 @@
       },
       "documentation":"<p>The SAP component of your application.</p>"
     },
+    "ComponentArnList":{
+      "type":"list",
+      "member":{"shape":"SsmSapArn"}
+    },
     "ComponentId":{
       "type":"string",
+      "max":100,
+      "min":1,
       "pattern":"[\\w\\d-]+"
     },
     "ComponentIdList":{
       "type":"list",
       "member":{"shape":"ComponentId"}
+    },
+    "ComponentInfo":{
+      "type":"structure",
+      "required":[
+        "ComponentType",
+        "Sid",
+        "Ec2InstanceId"
+      ],
+      "members":{
+        "ComponentType":{
+          "shape":"ComponentType",
+          "documentation":"<p>This string is the type of the component.</p> <p>Accepted value is <code>WD</code>.</p>"
+        },
+        "Sid":{
+          "shape":"SID",
+          "documentation":"<p>This string is the SAP System ID of the component.</p> <p>Accepted values are alphanumeric.</p>"
+        },
+        "Ec2InstanceId":{
+          "shape":"InstanceId",
+          "documentation":"<p>This is the Amazon EC2 instance on which your SAP component is running.</p> <p>Accepted values are alphanumeric.</p>"
+        }
+      },
+      "documentation":"<p>This is information about the component of your SAP application, such as Web Dispatcher.</p>"
+    },
+    "ComponentInfoList":{
+      "type":"list",
+      "member":{"shape":"ComponentInfo"},
+      "max":5,
+      "min":0
     },
     "ComponentStatus":{
       "type":"string",
@@ -669,6 +861,101 @@
         "ERS"
       ]
     },
+    "ConfigurationCheckDefinition":{
+      "type":"structure",
+      "members":{
+        "Id":{
+          "shape":"ConfigurationCheckType",
+          "documentation":"<p>The unique identifier of the configuration check.</p>"
+        },
+        "Name":{
+          "shape":"String",
+          "documentation":"<p>The name of the configuration check.</p>"
+        },
+        "Description":{
+          "shape":"String",
+          "documentation":"<p>A description of what the configuration check validates.</p>"
+        },
+        "ApplicableApplicationTypes":{
+          "shape":"ApplicationTypeList",
+          "documentation":"<p>The list of SSMSAP application types that this configuration check can be evaluated against.</p>"
+        }
+      },
+      "documentation":"<p>Represents a configuration check definition supported by AWS Systems Manager for SAP.</p>"
+    },
+    "ConfigurationCheckDefinitionList":{
+      "type":"list",
+      "member":{"shape":"ConfigurationCheckDefinition"}
+    },
+    "ConfigurationCheckOperation":{
+      "type":"structure",
+      "members":{
+        "Id":{
+          "shape":"OperationId",
+          "documentation":"<p>The unique identifier of the configuration check operation.</p>"
+        },
+        "ApplicationId":{
+          "shape":"ApplicationId",
+          "documentation":"<p>The ID of the application against which the configuration check was performed.</p>"
+        },
+        "Status":{
+          "shape":"OperationStatus",
+          "documentation":"<p>The current status of the configuration check operation.</p>"
+        },
+        "StatusMessage":{
+          "shape":"String",
+          "documentation":"<p>A message providing additional details about the status of the configuration check operation.</p>"
+        },
+        "ConfigurationCheckId":{
+          "shape":"ConfigurationCheckType",
+          "documentation":"<p>The unique identifier of the configuration check that was performed.</p>"
+        },
+        "ConfigurationCheckName":{
+          "shape":"String",
+          "documentation":"<p>The name of the configuration check that was performed.</p>"
+        },
+        "ConfigurationCheckDescription":{
+          "shape":"String",
+          "documentation":"<p>A description of the configuration check that was performed.</p>"
+        },
+        "StartTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The time at which the configuration check operation started.</p>"
+        },
+        "EndTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The time at which the configuration check operation completed.</p>"
+        },
+        "RuleStatusCounts":{
+          "shape":"RuleStatusCounts",
+          "documentation":"<p>A summary of all the rule results, showing counts for each status type.</p>"
+        }
+      },
+      "documentation":"<p>Represents a configuration check operation that has been executed against an application.</p>"
+    },
+    "ConfigurationCheckOperationList":{
+      "type":"list",
+      "member":{"shape":"ConfigurationCheckOperation"}
+    },
+    "ConfigurationCheckOperationListingMode":{
+      "type":"string",
+      "enum":[
+        "ALL_OPERATIONS",
+        "LATEST_PER_CHECK"
+      ]
+    },
+    "ConfigurationCheckType":{
+      "type":"string",
+      "enum":[
+        "SAP_CHECK_01",
+        "SAP_CHECK_02",
+        "SAP_CHECK_03"
+      ]
+    },
+    "ConfigurationCheckTypeList":{
+      "type":"list",
+      "member":{"shape":"ConfigurationCheckType"}
+    },
     "ConflictException":{
       "type":"structure",
       "members":{
@@ -680,6 +967,10 @@
         "senderFault":true
       },
       "exception":true
+    },
+    "ConnectedEntityType":{
+      "type":"string",
+      "enum":["DBMS"]
     },
     "CredentialType":{
       "type":"string",
@@ -731,6 +1022,10 @@
         "LastUpdated":{
           "shape":"Timestamp",
           "documentation":"<p>The time at which the database was last updated.</p>"
+        },
+        "ConnectedComponentArns":{
+          "shape":"ComponentArnList",
+          "documentation":"<p>The Amazon Resource Names of the connected AWS Systems Manager for SAP components.</p>"
         }
       },
       "documentation":"<p>The SAP HANA database of the application registered with AWS Systems Manager for SAP.</p>"
@@ -762,6 +1057,8 @@
     },
     "DatabaseId":{
       "type":"string",
+      "max":300,
+      "min":1,
       "pattern":".*[\\w\\d]+"
     },
     "DatabaseIdList":{
@@ -864,8 +1161,7 @@
     },
     "DeregisterApplicationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "Filter":{
       "type":"structure",
@@ -971,6 +1267,25 @@
         "Tags":{
           "shape":"TagMap",
           "documentation":"<p>The tags of a component.</p>"
+        }
+      }
+    },
+    "GetConfigurationCheckOperationInput":{
+      "type":"structure",
+      "required":["OperationId"],
+      "members":{
+        "OperationId":{
+          "shape":"OperationId",
+          "documentation":"<p>The ID of the configuration check operation.</p>"
+        }
+      }
+    },
+    "GetConfigurationCheckOperationOutput":{
+      "type":"structure",
+      "members":{
+        "ConfigurationCheckOperation":{
+          "shape":"ConfigurationCheckOperation",
+          "documentation":"<p>Returns the details of a configuration check operation.</p>"
         }
       }
     },
@@ -1148,7 +1463,7 @@
         },
         "MaxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. </p>"
+          "documentation":"<p>The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.</p>"
         },
         "Filters":{
           "shape":"FilterList",
@@ -1199,6 +1514,71 @@
         }
       }
     },
+    "ListConfigurationCheckDefinitionsInput":{
+      "type":"structure",
+      "members":{
+        "MaxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The token for the next page of results.</p>"
+        }
+      }
+    },
+    "ListConfigurationCheckDefinitionsOutput":{
+      "type":"structure",
+      "members":{
+        "ConfigurationChecks":{
+          "shape":"ConfigurationCheckDefinitionList",
+          "documentation":"<p>The configuration check types supported by AWS Systems Manager for SAP.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The token to use to retrieve the next page of results. This value is null when there are no more results to return.</p>"
+        }
+      }
+    },
+    "ListConfigurationCheckOperationsInput":{
+      "type":"structure",
+      "required":["ApplicationId"],
+      "members":{
+        "ApplicationId":{
+          "shape":"ApplicationId",
+          "documentation":"<p>The ID of the application.</p>"
+        },
+        "ListMode":{
+          "shape":"ConfigurationCheckOperationListingMode",
+          "documentation":"<p>The mode for listing configuration check operations. Defaults to \"LATEST_PER_CHECK\".</p> <ul> <li> <p>LATEST_PER_CHECK - Will list the latest configuration check operation per check type.</p> </li> <li> <p>ALL_OPERATIONS - Will list all configuration check operations performed on the application.</p> </li> </ul>"
+        },
+        "MaxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The token for the next page of results.</p>"
+        },
+        "Filters":{
+          "shape":"FilterList",
+          "documentation":"<p>The filters of an operation.</p>"
+        }
+      }
+    },
+    "ListConfigurationCheckOperationsOutput":{
+      "type":"structure",
+      "members":{
+        "ConfigurationCheckOperations":{
+          "shape":"ConfigurationCheckOperationList",
+          "documentation":"<p>The configuration check operations performed by AWS Systems Manager for SAP.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The token to use to retrieve the next page of results. This value is null when there are no more results to return.</p>"
+        }
+      }
+    },
     "ListDatabasesInput":{
       "type":"structure",
       "members":{
@@ -1226,6 +1606,41 @@
         "Databases":{
           "shape":"DatabaseSummaryList",
           "documentation":"<p>The SAP HANA databases of an application.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The token to use to retrieve the next page of results. This value is null when there are no more results to return.</p>"
+        }
+      }
+    },
+    "ListOperationEventsInput":{
+      "type":"structure",
+      "required":["OperationId"],
+      "members":{
+        "OperationId":{
+          "shape":"OperationId",
+          "documentation":"<p>The ID of the operation.</p>"
+        },
+        "MaxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.</p> <p>If you do not specify a value for <code>MaxResults</code>, the request returns 50 items per page by default.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The token to use to retrieve the next page of results. This value is null when there are no more results to return.</p>"
+        },
+        "Filters":{
+          "shape":"FilterList",
+          "documentation":"<p>Optionally specify filters to narrow the returned operation event items.</p> <p>Valid filter names include <code>status</code>, <code>resourceID</code>, and <code>resourceType</code>. The valid operator for all three filters is <code>Equals</code>.</p>"
+        }
+      }
+    },
+    "ListOperationEventsOutput":{
+      "type":"structure",
+      "members":{
+        "OperationEvents":{
+          "shape":"OperationEventList",
+          "documentation":"<p>A returned list of operation events that meet the filter criteria.</p>"
         },
         "NextToken":{
           "shape":"NextToken",
@@ -1268,6 +1683,68 @@
         }
       }
     },
+    "ListSubCheckResultsInput":{
+      "type":"structure",
+      "required":["OperationId"],
+      "members":{
+        "OperationId":{
+          "shape":"OperationId",
+          "documentation":"<p>The ID of the configuration check operation.</p>"
+        },
+        "MaxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The token for the next page of results.</p>"
+        }
+      }
+    },
+    "ListSubCheckResultsOutput":{
+      "type":"structure",
+      "members":{
+        "SubCheckResults":{
+          "shape":"SubCheckResultList",
+          "documentation":"<p>The sub-check results of a configuration check operation.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The token to use to retrieve the next page of results. This value is null when there are no more results to return.</p>"
+        }
+      }
+    },
+    "ListSubCheckRuleResultsInput":{
+      "type":"structure",
+      "required":["SubCheckResultId"],
+      "members":{
+        "SubCheckResultId":{
+          "shape":"SubCheckResultId",
+          "documentation":"<p>The ID of the sub check result.</p>"
+        },
+        "MaxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The token for the next page of results.</p>"
+        }
+      }
+    },
+    "ListSubCheckRuleResultsOutput":{
+      "type":"structure",
+      "members":{
+        "RuleResults":{
+          "shape":"RuleResultList",
+          "documentation":"<p>The rule results of a sub-check belonging to a configuration check operation.</p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>The token to use to retrieve the next page of results. This value is null when there are no more results to return.</p>"
+        }
+      }
+    },
     "ListTagsForResourceRequest":{
       "type":"structure",
       "required":["resourceArn"],
@@ -1297,7 +1774,7 @@
     },
     "NextToken":{
       "type":"string",
-      "pattern":".{16,1024}"
+      "pattern":".{16,2048}"
     },
     "Operation":{
       "type":"structure",
@@ -1348,6 +1825,48 @@
         }
       },
       "documentation":"<p>The operations performed by AWS Systems Manager for SAP.</p>"
+    },
+    "OperationEvent":{
+      "type":"structure",
+      "members":{
+        "Description":{
+          "shape":"String",
+          "documentation":"<p>A description of the operation event. For example, \"Stop the EC2 instance i-abcdefgh987654321\".</p>"
+        },
+        "Resource":{
+          "shape":"Resource",
+          "documentation":"<p>The resource involved in the operations event.</p> <p>Contains <code>ResourceArn</code> ARN and <code>ResourceType</code>.</p>"
+        },
+        "Status":{
+          "shape":"OperationEventStatus",
+          "documentation":"<p>The status of the operation event. The possible statuses are: <code>IN_PROGRESS</code>, <code>COMPLETED</code>, and <code>FAILED</code>.</p>"
+        },
+        "StatusMessage":{
+          "shape":"String",
+          "documentation":"<p>The status message relating to a specific operation event.</p>"
+        },
+        "Timestamp":{
+          "shape":"Timestamp",
+          "documentation":"<p>The timestamp of the specified operation event.</p>"
+        }
+      },
+      "documentation":"<p>An operation event returns details for an operation, including key milestones which can be used to monitor and track operations in progress.</p> <p>Operation events contain:</p> <ul> <li> <p>Description string</p> </li> <li> <p>Resource, including its ARN and type</p> </li> <li> <p>Status</p> </li> <li> <p>StatusMessage string</p> </li> <li> <p>TimeStamp</p> </li> </ul> <p>Operation event examples include StartApplication or StopApplication.</p>"
+    },
+    "OperationEventList":{
+      "type":"list",
+      "member":{"shape":"OperationEvent"}
+    },
+    "OperationEventResourceType":{
+      "type":"string",
+      "pattern":"[\\w]+::[\\w]+::[\\w]+"
+    },
+    "OperationEventStatus":{
+      "type":"string",
+      "enum":[
+        "IN_PROGRESS",
+        "COMPLETED",
+        "FAILED"
+      ]
     },
     "OperationId":{
       "type":"string",
@@ -1459,6 +1978,10 @@
         "DatabaseArn":{
           "shape":"SsmSapArn",
           "documentation":"<p>The Amazon Resource Name of the SAP HANA database.</p>"
+        },
+        "ComponentsInfo":{
+          "shape":"ComponentInfoList",
+          "documentation":"<p>This is an optional parameter for component details to which the SAP ABAP application is attached, such as Web Dispatcher.</p> <p>This is an array of ApplicationComponent objects. You may input 0 to 5 items.</p>"
         }
       }
     },
@@ -1511,6 +2034,20 @@
       },
       "documentation":"<p>Details of the SAP HANA system replication for the instance.</p>"
     },
+    "Resource":{
+      "type":"structure",
+      "members":{
+        "ResourceArn":{
+          "shape":"Arn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the source resource.</p> <p>Example of <code>ResourceArn</code>: \"<code>arn:aws:ec2:us-east-1:111111111111:instance/i-abcdefgh987654321</code>\"</p>"
+        },
+        "ResourceType":{
+          "shape":"OperationEventResourceType",
+          "documentation":"<p>The resource type.</p> <p>Example of <code>ResourceType</code>: \"<code>AWS::SystemsManagerSAP::Component</code>\" or \"<code>AWS::EC2::Instance</code>\".</p>"
+        }
+      },
+      "documentation":"<p>The resource contains a <code>ResourceArn</code> and the <code>ResourceType</code>.</p>"
+    },
     "ResourceId":{
       "type":"string",
       "max":64,
@@ -1533,6 +2070,93 @@
       "max":64,
       "min":1
     },
+    "RuleResult":{
+      "type":"structure",
+      "members":{
+        "Id":{
+          "shape":"RuleResultId",
+          "documentation":"<p>The unique identifier of the rule result.</p>"
+        },
+        "Description":{
+          "shape":"String",
+          "documentation":"<p>A description of what the rule validates.</p>"
+        },
+        "Status":{
+          "shape":"RuleResultStatus",
+          "documentation":"<p>The status of the rule result.</p>"
+        },
+        "Message":{
+          "shape":"String",
+          "documentation":"<p>A message providing details about the rule result.</p>"
+        },
+        "Metadata":{
+          "shape":"RuleResultMetadata",
+          "documentation":"<p>Additional metadata associated with the rule result.</p>"
+        }
+      },
+      "documentation":"<p>Represents the result of a single rule within a configuration check.</p>"
+    },
+    "RuleResultId":{
+      "type":"string",
+      "pattern":"[{]?[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}[}]?"
+    },
+    "RuleResultList":{
+      "type":"list",
+      "member":{"shape":"RuleResult"}
+    },
+    "RuleResultMetadata":{
+      "type":"map",
+      "key":{"shape":"RuleResultMetadataKey"},
+      "value":{"shape":"RuleResultMetadataValue"},
+      "max":50,
+      "min":0
+    },
+    "RuleResultMetadataKey":{
+      "type":"string",
+      "max":100,
+      "min":1
+    },
+    "RuleResultMetadataValue":{
+      "type":"string",
+      "max":1000,
+      "min":1
+    },
+    "RuleResultStatus":{
+      "type":"string",
+      "enum":[
+        "PASSED",
+        "FAILED",
+        "WARNING",
+        "INFO",
+        "UNKNOWN"
+      ]
+    },
+    "RuleStatusCounts":{
+      "type":"structure",
+      "members":{
+        "Failed":{
+          "shape":"Integer",
+          "documentation":"<p>The number of rules that failed.</p>"
+        },
+        "Warning":{
+          "shape":"Integer",
+          "documentation":"<p>The number of rules that returned warnings.</p>"
+        },
+        "Info":{
+          "shape":"Integer",
+          "documentation":"<p>The number of rules that returned informational results.</p>"
+        },
+        "Passed":{
+          "shape":"Integer",
+          "documentation":"<p>The number of rules that passed.</p>"
+        },
+        "Unknown":{
+          "shape":"Integer",
+          "documentation":"<p>The number of rules with unknown status.</p>"
+        }
+      },
+      "documentation":"<p>A summary of rule results, providing counts for each status type.</p>"
+    },
     "SAPInstanceNumber":{
       "type":"string",
       "pattern":"[0-9]{2}"
@@ -1550,6 +2174,25 @@
     "SsmSapArn":{
       "type":"string",
       "pattern":"arn:(.+:){2,4}.+$|^arn:(.+:){1,3}.+\\/.+"
+    },
+    "StartApplicationInput":{
+      "type":"structure",
+      "required":["ApplicationId"],
+      "members":{
+        "ApplicationId":{
+          "shape":"ApplicationId",
+          "documentation":"<p>The ID of the application.</p>"
+        }
+      }
+    },
+    "StartApplicationOutput":{
+      "type":"structure",
+      "members":{
+        "OperationId":{
+          "shape":"OperationId",
+          "documentation":"<p>The ID of the operation.</p>"
+        }
+      }
     },
     "StartApplicationRefreshInput":{
       "type":"structure",
@@ -1570,7 +2213,91 @@
         }
       }
     },
+    "StartConfigurationChecksInput":{
+      "type":"structure",
+      "required":["ApplicationId"],
+      "members":{
+        "ApplicationId":{
+          "shape":"ApplicationId",
+          "documentation":"<p>The ID of the application.</p>"
+        },
+        "ConfigurationCheckIds":{
+          "shape":"ConfigurationCheckTypeList",
+          "documentation":"<p>The list of configuration checks to perform.</p>"
+        }
+      }
+    },
+    "StartConfigurationChecksOutput":{
+      "type":"structure",
+      "members":{
+        "ConfigurationCheckOperations":{
+          "shape":"ConfigurationCheckOperationList",
+          "documentation":"<p>The configuration check operations that were started.</p>"
+        }
+      }
+    },
+    "StopApplicationInput":{
+      "type":"structure",
+      "required":["ApplicationId"],
+      "members":{
+        "ApplicationId":{
+          "shape":"ApplicationId",
+          "documentation":"<p>The ID of the application.</p>"
+        },
+        "StopConnectedEntity":{
+          "shape":"ConnectedEntityType",
+          "documentation":"<p>Specify the <code>ConnectedEntityType</code>. Accepted type is <code>DBMS</code>.</p> <p>If this parameter is included, the connected DBMS (Database Management System) will be stopped.</p>"
+        },
+        "IncludeEc2InstanceShutdown":{
+          "shape":"Boolean",
+          "documentation":"<p>Boolean. If included and if set to <code>True</code>, the StopApplication operation will shut down the associated Amazon EC2 instance in addition to the application.</p>"
+        }
+      }
+    },
+    "StopApplicationOutput":{
+      "type":"structure",
+      "members":{
+        "OperationId":{
+          "shape":"OperationId",
+          "documentation":"<p>The ID of the operation.</p>"
+        }
+      }
+    },
     "String":{"type":"string"},
+    "SubCheckReferencesList":{
+      "type":"list",
+      "member":{"shape":"String"}
+    },
+    "SubCheckResult":{
+      "type":"structure",
+      "members":{
+        "Id":{
+          "shape":"SubCheckResultId",
+          "documentation":"<p>The unique identifier of the sub-check result.</p>"
+        },
+        "Name":{
+          "shape":"String",
+          "documentation":"<p>The name of the sub-check.</p>"
+        },
+        "Description":{
+          "shape":"String",
+          "documentation":"<p>A description of what the sub-check validates.</p>"
+        },
+        "References":{
+          "shape":"SubCheckReferencesList",
+          "documentation":"<p>A list of references or documentation links related to the sub-check.</p>"
+        }
+      },
+      "documentation":"<p>Represents the result of a sub-check within a configuration check operation.</p>"
+    },
+    "SubCheckResultId":{
+      "type":"string",
+      "pattern":"[{]?[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}[}]?"
+    },
+    "SubCheckResultList":{
+      "type":"list",
+      "member":{"shape":"SubCheckResult"}
+    },
     "TagKey":{
       "type":"string",
       "pattern":"(?!aws:)[a-zA-Z+-=._:/]+"
@@ -1605,8 +2332,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{
       "type":"string",
@@ -1649,8 +2375,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateApplicationSettingsInput":{
       "type":"structure",

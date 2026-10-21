@@ -45,7 +45,7 @@ TString TStructuredToken::ToJson() const {
     // set "format output" to false, no need for extra indents
     // "sort keys" value is not used actually
     // turn on UTF8 validation (need for keys checks)
-    NJson::TJsonWriter writer(&output, false, true, true);
+    NJson::TJsonWriter writer(&output, /*formatOutput=*/false, /*sortkeys=*/true, /*validateUtf8=*/true);
     writer.OpenMap();
 
     for (auto& [k, v] : Data_) {
@@ -66,7 +66,7 @@ TStructuredToken ParseStructuredToken(const TString& content) {
 
     NJson::TJsonValue v;
     // will throw on error
-    NJson::ReadJsonTree(content, &v, true);
+    NJson::ReadJsonTree(content, &v, /*throwOnError=*/true);
     TMap<TString, TString> data;
     const auto& m = v.GetMapSafe();
     for (auto& [k, v] : m) {

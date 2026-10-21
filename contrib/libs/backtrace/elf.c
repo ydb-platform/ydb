@@ -566,6 +566,26 @@ elf_nosyms (struct backtrace_state *state ATTRIBUTE_UNUSED,
   error_callback (data, "no symbol table in ELF executable", -1);
 }
 
+/* Variant of backtrace_syminfo_to_full_callback that handles the exta
+   wrapping of moredata.  */
+
+static void
+backtrace_syminfo_to_full_callback_moredata (void *data, uintptr_t pc,
+					     const char *symname,
+					     uintptr_t symval ATTRIBUTE_UNUSED,
+					     uintptr_t symsize ATTRIBUTE_UNUSED)
+{
+  struct backtrace_moredata *md = (struct backtrace_moredata *) data;
+  struct backtrace_call_full *bdata;
+  struct backtrace_moredata callback_md;
+
+  bdata = (struct backtrace_call_full *) md->backtrace_data;
+  memset (&callback_md, 0, sizeof callback_md);
+  callback_md.backtrace_version = BACKTRACE_MOREDATA_VERSION;
+  callback_md.backtrace_data = bdata->full_data;
+  bdata->ret = bdata->full_callback (&callback_md, pc, NULL, 0, symname);
+}
+
 /* A callback function used when we can't find any debug info.  */
 
 static int
@@ -584,8 +604,14 @@ elf_nodebug (struct backtrace_state *state, uintptr_t pc,
       bdata.full_error_callback = error_callback;
       bdata.full_data = data;
       bdata.ret = 0;
-      state->syminfo_fn (state, pc, backtrace_syminfo_to_full_callback,
-			 backtrace_syminfo_to_full_error_callback, &bdata);
+      if (state->moredata)
+	state->syminfo_fn (state, pc,
+			   backtrace_syminfo_to_full_callback_moredata,
+			   backtrace_syminfo_to_full_error_callback,
+			   &bdata);
+      else
+	state->syminfo_fn (state, pc, backtrace_syminfo_to_full_callback,
+			   backtrace_syminfo_to_full_error_callback, &bdata);
       return bdata.ret;
     }
 
@@ -767,6 +793,8 @@ elf_syminfo (struct backtrace_state *state, uintptr_t addr,
 {
   struct elf_syminfo_data *edata;
   struct elf_symbol *sym = NULL;
+  void *mdata;
+  struct backtrace_moredata md;
 
   if (!state->threaded)
     {
@@ -802,10 +830,20 @@ elf_syminfo (struct backtrace_state *state, uintptr_t addr,
 	}
     }
 
-  if (sym == NULL)
-    callback (data, addr, NULL, 0, 0);
+  if (!state->moredata)
+    mdata = data;
   else
-    callback (data, addr, sym->name, sym->address, sym->size);
+    {
+      memset (&md, 0, sizeof md);
+      md.backtrace_version = BACKTRACE_MOREDATA_VERSION;
+      md.backtrace_data = data;
+      mdata = (void *) &md;
+    }
+
+  if (sym == NULL)
+    callback (mdata, addr, NULL, 0, 0);
+  else
+    callback (mdata, addr, sym->name, sym->address, sym->size);
 }
 
 /* Return whether FILENAME is a symlink.  */
@@ -1166,7 +1204,7 @@ elf_fetch_bits (const unsigned char **ppin, const unsigned char *pinend,
   return 1;
 }
 
-/* This is like elf_fetch_bits, but it fetchs the bits backward, and ensures at
+/* This is like elf_fetch_bits, but it fetches the bits backward, and ensures at
    least 16 bits.  This is for zstd.  */
 
 static int
@@ -4302,6 +4340,7 @@ elf_zstd_unpack_seq_decode (int mode,
 	decode->table_bits = 0;
 	if (!conv (&entry, 0, table))
 	  return 0;
+	decode->table = table;
       }
       break;
 
@@ -4364,6 +4403,7 @@ elf_zstd_decompress_frame (const unsigned char **ppin,
   uint32_t repeated_offset3;
   uint16_t *scratch;
   unsigned char hdr;
+  int single_segment;
   int has_checksum;
   uint64_t content_size;
   int last_block;
@@ -4422,11 +4462,17 @@ elf_zstd_decompress_frame (const unsigned char **ppin,
 
   hdr = *pin++;
 
-  /* We expect a single frame.  */
-  if (unlikely ((hdr & (1 << 5)) == 0))
+  single_segment = (hdr & (1 << 5)) != 0;
+  if (!single_segment)
     {
-      elf_uncompress_failed ();
-      return 0;
+      if (unlikely (pin >= pinend))
+	{
+	  elf_uncompress_failed ();
+	  return 0;
+	}
+      /* We have all the data in memory, so we can ignore the window
+	 size.  */
+      pin++;
     }
   /* Reserved bit must be zero.  */
   if (unlikely ((hdr & (1 << 3)) != 0))
@@ -4444,12 +4490,21 @@ elf_zstd_decompress_frame (const unsigned char **ppin,
   switch (hdr >> 6)
     {
     case 0:
-      if (unlikely (pin >= pinend))
+      if (!single_segment)
 	{
-	  elf_uncompress_failed ();
-	  return 0;
+	  /* The content_size is not specified, but we know it from the
+	     section header.  */
+	  content_size = (uint64_t) sout;
 	}
-      content_size = (uint64_t) *pin++;
+      else
+	{
+	  if (unlikely (pin >= pinend))
+	    {
+	      elf_uncompress_failed ();
+	      return 0;
+	    }
+	  content_size = (uint64_t) *pin++;
+	}
       break;
     case 1:
       if (unlikely (pin + 1 >= pinend))
@@ -4620,6 +4675,11 @@ elf_zstd_decompress_frame (const unsigned char **ppin,
 		pin += 2;
 	      }
 
+	    pback = NULL;
+	    bits = 0;
+	    literal_state = 0;
+	    offset_state = 0;
+	    match_state = 0;
 	    if (seq_count > 0)
 	      {
 		int (*pfn)(const struct elf_zstd_fse_entry *,
@@ -4659,27 +4719,27 @@ elf_zstd_decompress_frame (const unsigned char **ppin,
 						 match_fse_table, 9, pfn,
 						 &match_decode))
 		  return 0;
+
+		pback = pblockend - 1;
+		if (!elf_fetch_backward_init (&pback, pin, &val, &bits))
+		  return 0;
+
+		bits -= literal_decode.table_bits;
+		literal_state = ((val >> bits)
+				 & ((1U << literal_decode.table_bits) - 1));
+
+		if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
+		  return 0;
+		bits -= offset_decode.table_bits;
+		offset_state = ((val >> bits)
+				& ((1U << offset_decode.table_bits) - 1));
+
+		if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
+		  return 0;
+		bits -= match_decode.table_bits;
+		match_state = ((val >> bits)
+			       & ((1U << match_decode.table_bits) - 1));
 	      }
-
-	    pback = pblockend - 1;
-	    if (!elf_fetch_backward_init (&pback, pin, &val, &bits))
-	      return 0;
-
-	    bits -= literal_decode.table_bits;
-	    literal_state = ((val >> bits)
-			     & ((1U << literal_decode.table_bits) - 1));
-
-	    if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
-	      return 0;
-	    bits -= offset_decode.table_bits;
-	    offset_state = ((val >> bits)
-			    & ((1U << offset_decode.table_bits) - 1));
-
-	    if (!elf_fetch_bits_backward (&pback, pin, &val, &bits))
-	      return 0;
-	    bits -= match_decode.table_bits;
-	    match_state = ((val >> bits)
-			   & ((1U << match_decode.table_bits) - 1));
 
 	    seq = 0;
 	    while (1)
@@ -4700,6 +4760,40 @@ elf_zstd_decompress_frame (const unsigned char **ppin,
 		uint32_t literal;
 		uint32_t need;
 		uint32_t add;
+
+		if (unlikely (seq >= seq_count))
+		  {
+		    /* Copy remaining literals.  */
+		    if (literal_count > 0 && plit != pout)
+		      {
+			if (unlikely ((size_t)(poutend - pout)
+				      < literal_count))
+			  {
+			    elf_uncompress_failed ();
+			    return 0;
+			  }
+
+			if ((size_t)(plit - pout) < literal_count)
+			  {
+			    uint32_t move;
+
+			    move = plit - pout;
+			    while (literal_count > move)
+			      {
+				memcpy (pout, plit, move);
+				pout += move;
+				plit += move;
+				literal_count -= move;
+			      }
+			  }
+
+			memcpy (pout, plit, literal_count);
+		      }
+
+		    pout += literal_count;
+
+		    break;
+		  }
 
 		pt = &offset_decode.table[offset_state];
 		offset_basebits = pt->basebits;
@@ -4937,40 +5031,6 @@ elf_zstd_decompress_frame (const unsigned char **ppin,
 			    pout += copy;
 			  }
 		      }
-		  }
-
-		if (unlikely (seq >= seq_count))
-		  {
-		    /* Copy remaining literals.  */
-		    if (literal_count > 0 && plit != pout)
-		      {
-			if (unlikely ((size_t)(poutend - pout)
-				      < literal_count))
-			  {
-			    elf_uncompress_failed ();
-			    return 0;
-			  }
-
-			if ((size_t)(plit - pout) < literal_count)
-			  {
-			    uint32_t move;
-
-			    move = plit - pout;
-			    while (literal_count > move)
-			      {
-				memcpy (pout, plit, move);
-				pout += move;
-				plit += move;
-				literal_count -= move;
-			      }
-			  }
-
-			memcpy (pout, plit, literal_count);
-		      }
-
-		    pout += literal_count;
-
-		    break;
 		  }
 	      }
 

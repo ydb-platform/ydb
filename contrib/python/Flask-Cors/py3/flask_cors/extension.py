@@ -1,9 +1,29 @@
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote
 
-from flask import request
+from flask import Blueprint, Flask, Response, request
 
-from .core import ACL_ORIGIN, get_cors_options, get_regexp_pattern, parse_resources, set_cors_headers, try_match_pattern
+from .core import (
+    ACL_ORIGIN,
+    CorsOptionsInput,
+    ResourcePattern,
+    _ComputedCorsOptions,
+    get_cors_options,
+    get_regexp_pattern,
+    merge_options,
+    parse_resources,
+    serialize_options,
+    set_cors_headers,
+    try_match_pattern,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from typing_extensions import Unpack
 
 LOG = logging.getLogger(__name__)
 
@@ -140,50 +160,61 @@ class CORS:
     :type allow_private_network: bool
     """
 
-    def __init__(self, app=None, **kwargs):
+    def __init__(self, app: Flask | Blueprint | None = None, **kwargs: Unpack[CorsOptionsInput]) -> None:
         self._options = kwargs
         if app is not None:
             self.init_app(app, **kwargs)
 
-    def init_app(self, app, **kwargs):
+    def init_app(self, app: Flask | Blueprint, **kwargs: Unpack[CorsOptionsInput]) -> None:
         # The resources and options may be specified in the App Config, the CORS constructor
         # or the kwargs to the call to init_app.
-        options = get_cors_options(app, self._options, kwargs)
+        merged = merge_options(app, self._options, kwargs)
+        options = serialize_options(merged)
 
         # Flatten our resources into a list of the form
-        # (pattern_or_regexp, dictionary_of_options)
-        resources = parse_resources(options.get("resources"))
+        # (pattern_or_regexp, dictionary_of_raw_options). ``resources`` is a raw
+        # spec consumed only here, so it is read from the merged mapping rather
+        # than carried on the resolved options.
+        resources = parse_resources(merged.get("resources", r"/*"))
 
-        # Compute the options for each resource by combining the options from
-        # the app's configuration, the constructor, the kwargs to init_app, and
-        # finally the options specified in the resources dictionary.
-        resources = [(pattern, get_cors_options(app, options, opts)) for (pattern, opts) in resources]
+        # Compute the options for each resource from the raw inputs (defaults,
+        # app config, constructor kwargs, init_app kwargs) plus the per-resource
+        # overrides. Re-merging the raw inputs rather than the already-resolved
+        # ``options`` avoids re-normalizing compiled regexes.
+        resolved_resources: list[tuple[ResourcePattern, _ComputedCorsOptions]] = [
+            (pattern, get_cors_options(app, self._options, kwargs, opts)) for (pattern, opts) in resources
+        ]
 
         # Create a human-readable form of these resources by converting the compiled
         # regular expressions into strings.
-        resources_human = {get_regexp_pattern(pattern): opts for (pattern, opts) in resources}
+        resources_human = {get_regexp_pattern(pattern): opts for (pattern, opts) in resolved_resources}
         LOG.debug("Configuring CORS with resources: %s", resources_human)
 
-        cors_after_request = make_after_request_function(resources)
+        cors_after_request = make_after_request_function(resolved_resources)
         app.after_request(cors_after_request)
 
-        # Wrap exception handlers with cross_origin
-        # These error handlers will still respect the behavior of the route
-        if options.get("intercept_exceptions", True):
+        # Wrap exception handlers with cross_origin so error responses also
+        # receive CORS headers. Blueprints have no ``handle_exception`` /
+        # ``make_response``, so the ``hasattr`` guard skips them; the ``Any``
+        # alias lets us read and reassign those Flask-only methods without
+        # tripping mypy's attr-defined / method-assign checks for ``Blueprint``.
+        if options.intercept_exceptions and hasattr(app, "handle_exception"):
+            app_any: Any = app
 
-            def _after_request_decorator(f):
-                def wrapped_function(*args, **kwargs):
-                    return cors_after_request(app.make_response(f(*args, **kwargs)))
+            def _after_request_decorator(f: Callable[..., Any]) -> Callable[..., Response]:
+                def wrapped_function(*args: Any, **kwargs: Any) -> Response:
+                    return cors_after_request(app_any.make_response(f(*args, **kwargs)))
 
                 return wrapped_function
 
-            if hasattr(app, "handle_exception"):
-                app.handle_exception = _after_request_decorator(app.handle_exception)
-                app.handle_user_exception = _after_request_decorator(app.handle_user_exception)
+            app_any.handle_exception = _after_request_decorator(app_any.handle_exception)
+            app_any.handle_user_exception = _after_request_decorator(app_any.handle_user_exception)
 
 
-def make_after_request_function(resources):
-    def cors_after_request(resp):
+def make_after_request_function(
+    resources: list[tuple[ResourcePattern, _ComputedCorsOptions]],
+) -> Callable[[Response], Response]:
+    def cors_after_request(resp: Response) -> Response:
         # If CORS headers are set in a view decorator, pass
         if resp.headers is not None and resp.headers.get(ACL_ORIGIN):
             LOG.debug("CORS have been already evaluated, skipping")

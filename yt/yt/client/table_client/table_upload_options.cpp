@@ -1,4 +1,6 @@
 #include "table_upload_options.h"
+
+#include <yt/yt/core/phoenix/type_def.h>
 #include "helpers.h"
 
 #include <yt/yt/client/table_client/helpers.h>
@@ -61,13 +63,14 @@ ui64 TEpochSchema::Set(const TTableSchemaPtr& schema)
     return ++Revision_;
 }
 
-void TEpochSchema::Persist(const NPhoenix::TPersistenceContext& context)
+void TEpochSchema::RegisterMetadata(auto&& registrar)
 {
-    using NYT::Persist;
-
-    Persist(context, Revision_);
-    Persist<TNonNullableIntrusivePtrSerializer<>>(context, TableSchema_);
+    PHOENIX_REGISTER_FIELD(1, Revision_);
+    PHOENIX_REGISTER_FIELD(2, TableSchema_,
+        .template Serializer<TNonNullableIntrusivePtrSerializer<>>());
 }
+
+PHOENIX_DEFINE_TYPE(TEpochSchema);
 
 ui64 TEpochSchema::Reset()
 {
@@ -91,28 +94,27 @@ TTableSchemaPtr TTableUploadOptions::GetUploadSchema() const
     }
 }
 
-void TTableUploadOptions::Persist(const NPhoenix::TPersistenceContext& context)
+void TTableUploadOptions::RegisterMetadata(auto&& registrar)
 {
-    using NYT::Persist;
-
-    Persist(context, UpdateMode);
-    Persist(context, LockMode);
-    Persist(context, TableSchema);
-    Persist(context, SchemaId);
-    Persist(context, SchemaModification);
-    // COMPAT(dave11ar): NControllerAgent::ESnapshotVersion::VersionedMapReduceWrite
-    if (context.GetVersion() >= 301602) {
-        Persist(context, VersionedWriteOptions);
-    }
-    Persist(context, SchemaMode);
-    Persist(context, OptimizeFor);
-    Persist(context, ChunkFormat);
-    Persist(context, CompressionCodec);
-    Persist(context, ErasureCodec);
-    Persist(context, EnableStripedErasure);
-    Persist(context, SecurityTags);
-    Persist(context, PartiallySorted);
+    PHOENIX_REGISTER_FIELD(1, UpdateMode);
+    PHOENIX_REGISTER_FIELD(2, LockMode);
+    PHOENIX_REGISTER_FIELD(3, TableSchema);
+    PHOENIX_REGISTER_FIELD(4, SchemaId);
+    PHOENIX_REGISTER_FIELD(5, SchemaModification);
+    // COMPAT(dave11ar): NControllerAgent::ESnapshotVersion::VersionedMapReduceWrite.
+    PHOENIX_REGISTER_FIELD(6, VersionedWriteOptions,
+        .SinceVersion(301602));
+    PHOENIX_REGISTER_FIELD(7, SchemaMode);
+    PHOENIX_REGISTER_FIELD(8, OptimizeFor);
+    PHOENIX_REGISTER_FIELD(9, ChunkFormat);
+    PHOENIX_REGISTER_FIELD(10, CompressionCodec);
+    PHOENIX_REGISTER_FIELD(11, ErasureCodec);
+    PHOENIX_REGISTER_FIELD(12, EnableStripedErasure);
+    PHOENIX_REGISTER_FIELD(13, SecurityTags);
+    PHOENIX_REGISTER_FIELD(14, PartiallySorted);
 }
+
+PHOENIX_DEFINE_TYPE(TTableUploadOptions);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -120,8 +122,8 @@ static void ValidateSortColumnsEqual(const TSortColumns& sortColumns, const TTab
 {
     if (sortColumns != schema.GetSortColumns()) {
         THROW_ERROR_EXCEPTION("YPath attribute \"sorted_by\" must be compatible with table schema for a \"strong\" schema mode")
-            << TErrorAttribute("sort_columns", sortColumns)
-            << TErrorAttribute("table_schema", schema);
+            .With("sort_columns", sortColumns)
+            .With("table_schema", schema);
     }
 }
 
@@ -148,8 +150,8 @@ static void ValidateAppendKeyColumns(const TSortColumns& sortColumns, const TTab
 
     if (!areKeyColumnsCompatible) {
         THROW_ERROR_EXCEPTION("Sort columns mismatch while trying to append sorted data into a non-empty table")
-            << TErrorAttribute("append_sort_columns", sortColumns)
-            << TErrorAttribute("table_sort_columns", tableSortColumns);
+            .With("append_sort_columns", sortColumns)
+            .With("table_sort_columns", tableSortColumns);
     }
 }
 
@@ -189,24 +191,24 @@ TTableUploadOptions GetTableUploadOptions(
     // Some ypath attributes are not compatible with attribute "schema".
     if (path.GetAppend() && path.GetSchema()) {
         THROW_ERROR_EXCEPTION("YPath attributes \"append\" and \"schema\" are not compatible")
-            << TErrorAttribute("path", path);
+            .With("path", path);
     }
 
     if (!path.GetSortedBy().empty() && path.GetSchema()) {
         THROW_ERROR_EXCEPTION("YPath attributes \"sorted_by\" and \"schema\" are not compatible")
-            << TErrorAttribute("path", path);
+            .With("path", path);
     }
 
     // Dynamic tables have their own requirements as well.
     if (dynamic) {
         if (path.GetSchema()) {
             THROW_ERROR_EXCEPTION("YPath attribute \"schema\" cannot be set on a dynamic table")
-                << TErrorAttribute("path", path);
+                .With("path", path);
         }
 
         if (!path.GetSortedBy().empty()) {
             THROW_ERROR_EXCEPTION("YPath attribute \"sorted_by\" cannot be set on a dynamic table")
-                << TErrorAttribute("path", path);
+                .With("path", path);
         }
     }
 
@@ -272,14 +274,14 @@ TTableUploadOptions GetTableUploadOptions(
     } else {
         // Do not use YT_ABORT here, since this code is executed inside scheduler.
         THROW_ERROR_EXCEPTION("Failed to define upload parameters")
-            << TErrorAttribute("path", path)
-            << TErrorAttribute("schema_mode", schemaMode)
-            << TErrorAttribute("schema", *schema);
+            .With("path", path)
+            .With("schema_mode", schemaMode)
+            .With("schema", *schema);
     }
 
     if (path.GetAppend() && path.GetOptimizeFor()) {
         THROW_ERROR_EXCEPTION("YPath attributes \"append\" and \"optimize_for\" are not compatible")
-            << TErrorAttribute("path", path);
+            .With("path", path);
     }
 
     result.OptimizeFor = path.GetOptimizeFor() ? *path.GetOptimizeFor() : optimizeFor;
@@ -287,7 +289,7 @@ TTableUploadOptions GetTableUploadOptions(
 
     if (path.GetAppend() && path.GetCompressionCodec()) {
         THROW_ERROR_EXCEPTION("YPath attributes \"append\" and \"compression_codec\" are not compatible")
-            << TErrorAttribute("path", path);
+            .With("path", path);
     }
 
     if (path.GetCompressionCodec()) {
@@ -298,7 +300,7 @@ TTableUploadOptions GetTableUploadOptions(
 
     if (path.GetAppend() && path.GetErasureCodec()) {
         THROW_ERROR_EXCEPTION("YPath attributes \"append\" and \"erasure_codec\" are not compatible")
-            << TErrorAttribute("path", path);
+            .With("path", path);
     }
 
     result.ErasureCodec = path.GetErasureCodec().value_or(erasureCodec);
@@ -307,11 +309,11 @@ TTableUploadOptions GetTableUploadOptions(
     if (path.GetSchemaModification() == ETableSchemaModification::UnversionedUpdateUnsorted) {
         THROW_ERROR_EXCEPTION("YPath attribute \"schema_modification\" cannot have value %Qlv for output tables",
             path.GetSchemaModification())
-            << TErrorAttribute("path", path);
+            .With("path", path);
     } else if (!dynamic && path.GetSchemaModification() != ETableSchemaModification::None) {
         THROW_ERROR_EXCEPTION("YPath attribute \"schema_modification\" can have value %Qlv only for dynamic tables",
             path.GetSchemaModification())
-            << TErrorAttribute("path", path);
+            .With("path", path);
     }
     result.SchemaModification = path.GetSchemaModification();
 
@@ -319,20 +321,20 @@ TTableUploadOptions GetTableUploadOptions(
     if (!dynamic && versionedWriteOptions.WriteMode != EVersionedIOMode::Default) {
         THROW_ERROR_EXCEPTION("YPath attribute \"versioned_write_options/write_mode\" can have value %Qlv only for dynamic tables",
             versionedWriteOptions.WriteMode)
-            << TErrorAttribute("path", path);
+            .With("path", path);
     }
     if (versionedWriteOptions.WriteMode != EVersionedIOMode::Default && path.GetSchemaModification() != ETableSchemaModification::None) {
         THROW_ERROR_EXCEPTION("YPath attributes \"versioned_write_options/write_mode\" and \"schema_modification\""
-            "can not be set in non-trivial state together: \"versioned_write_options/write_mode\" is %Qlv, \"schema_modification\" is %Qlv",
+            "cannot be set in non-trivial state together: \"versioned_write_options/write_mode\" is %Qlv, \"schema_modification\" is %Qlv",
             versionedWriteOptions.WriteMode,
             path.GetSchemaModification())
-            << TErrorAttribute("path", path);
+            .With("path", path);
     }
     result.VersionedWriteOptions = versionedWriteOptions;
 
     if (!dynamic && path.GetPartiallySorted()) {
         THROW_ERROR_EXCEPTION("YPath attribute \"partially_sorted\" can be set only for dynamic tables")
-            << TErrorAttribute("path", path);
+            .With("path", path);
     }
     result.PartiallySorted = path.GetPartiallySorted();
 
@@ -351,7 +353,7 @@ TTableUploadOptions GetFileUploadOptions(
 
     if (path.GetAppend()) {
         THROW_ERROR_EXCEPTION("Attribute \"append\" is not supported for files")
-            << TErrorAttribute("path", path);
+            .With("path", path);
     }
 
     // NB(coteeq): Fill for sanity. They should not have impact on behaviour, because
@@ -359,7 +361,7 @@ TTableUploadOptions GetFileUploadOptions(
     // TODO(coteeq): Make it YT_VERIFY
     if (path.GetCompressionCodec() || path.GetErasureCodec()) {
         THROW_ERROR_EXCEPTION("\"compression_codec\" and \"erasure_codec\" are disallowed for files")
-            << TErrorAttribute("path", path);
+            .With("path", path);
     }
 
     TTableUploadOptions result;

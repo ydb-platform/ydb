@@ -1,7 +1,7 @@
 #include "action_queue.h"
 
 #include "single_queue_scheduler_thread.h"
-#include "profiling_helpers.h"
+#include "helpers.h"
 #include "invoker_queue.h"
 
 #include <yt/yt/core/actions/invoker_detail.h>
@@ -56,7 +56,7 @@ public:
     }
 
 private:
-    const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_ = New<NThreading::TEventCount>();
+    const TIntrusivePtr<TEventCount> CallbackEventCount_ = New<TEventCount>();
     const TMpscInvokerQueuePtr Queue_;
     const IInvokerPtr Invoker_;
     const TMpscSingleQueueSchedulerThreadPtr Thread_;

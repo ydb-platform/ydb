@@ -2,14 +2,6 @@
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_terminator.h>
 
-extern "C" void* UdfAllocate(ui64 size) {
-    return ::NKikimr::NMiniKQL::MKQLAllocDeprecated(size, ::NKikimr::NMiniKQL::EMemorySubPool::Default);
-}
-
-extern "C" void UdfFree(const void* mem) {
-    return ::NKikimr::NMiniKQL::MKQLFreeDeprecated(mem, ::NKikimr::NMiniKQL::EMemorySubPool::Default);
-}
-
 extern "C" [[noreturn]] void UdfTerminate(const char* message) {
     ::NKikimr::NMiniKQL::MKQLTerminate(message);
 }
@@ -25,7 +17,7 @@ extern "C" void* UdfAllocateWithSize(ui64 size) {
 }
 
 extern "C" void UdfFreeWithSize(const void* mem, ui64 size) {
-    return ::NKikimr::NMiniKQL::TWithDefaultMiniKQLAlloc::FreeWithSize(mem, size);
+    ::NKikimr::NMiniKQL::TWithDefaultMiniKQLAlloc::FreeWithSize(mem, size);
 }
 
 extern "C" void* UdfArrowAllocate(ui64 size) {

@@ -199,6 +199,13 @@ private:
     const bool RetryBySubscription;
     ui64 LastOverloadSeqNo = 0;
     TIntrusivePtr<NACLib::TUserContext> UserCtx;
+    // Sticky: set when the shard ever answered STATUS_OVERLOADED, even if a later retry
+    // succeeded. Reported to FCM so retry-by-subscription cannot launder overload into
+    // success (which would grow the drain rate exactly when it must not).
+    bool WasEverOverloaded = false;
+    // Node that served the last write reply (0 until the first reply arrives).
+    ui32 LastResultNodeId = 0;
+    bool WriteOutcomeReported = false;
 
     void SendWriteRequest();
     static TDuration OverloadTimeout() noexcept;
@@ -206,6 +213,11 @@ private:
         Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), ShardId, true), IEventHandle::FlagTrackDelivery, 0,
             ActorSpan.GetTraceId());
     }
+
+    void ReportTabletLocationToFlowControl(ui64 tabletId, ui32 nodeId);
+    void ReportTabletLocationInvalidatedToFlowControl(ui64 tabletId);
+    // Terminal, exactly-once per shard write. Drives FCM cohort/outcome rate control.
+    void ReportWriteOutcomeToFlowControl();
 
 public:
     TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,

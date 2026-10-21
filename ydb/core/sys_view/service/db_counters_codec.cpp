@@ -1,0 +1,238 @@
+#include "db_counters_codec.h"
+
+#include <ydb/library/actors/core/log.h>
+
+#include <util/generic/hash.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
+namespace NKikimr {
+namespace NSysView {
+
+static void CopyHistogram(NKikimrSysView::TDbCounters::THistogram* histogram,
+    const NKikimrSysView::TDbCounters::THistogram& current)
+{
+    auto bucketCount = current.BucketsSize();
+    histogram->MutableBuckets()->Reserve(bucketCount);
+    histogram->SetBucketsCount(bucketCount);
+    if (current.GetNonDerivative()) {
+        histogram->SetNonDerivative(true);
+    }
+    for (size_t b = 0; b < bucketCount; ++b) {
+        auto value = current.GetBuckets(b);
+        if (!value) {
+            continue;
+        }
+        histogram->AddBuckets(b);
+        histogram->AddBuckets(value);
+    }
+}
+
+void CopyCounters(NKikimrSysView::TDbCounters* diff,
+    const NKikimrSysView::TDbCounters& current)
+{
+    auto simpleSize = current.SimpleSize();
+    auto cumulativeSize = current.CumulativeSize();
+    auto histogramSize = current.HistogramSize();
+
+    diff->MutableSimple()->Reserve(simpleSize);
+    diff->MutableCumulative()->Reserve(cumulativeSize);
+    diff->MutableHistogram()->Reserve(histogramSize);
+
+    for (size_t i = 0; i < simpleSize; ++i) {
+        diff->AddSimple(current.GetSimple(i));
+    }
+
+    diff->SetCumulativeCount(cumulativeSize);
+    for (size_t i = 0; i < cumulativeSize; ++i) {
+        auto value = current.GetCumulative(i);
+        if (!value) {
+            continue;
+        }
+        diff->AddCumulative(i);
+        diff->AddCumulative(value);
+    }
+
+    for (size_t i = 0; i < histogramSize; ++i) {
+        CopyHistogram(diff->AddHistogram(), current.GetHistogram(i));
+    }
+}
+
+void CalculateCountersDiff(NKikimrSysView::TDbCounters* diff,
+    const NKikimrSysView::TDbCounters& current,
+    NKikimrSysView::TDbCounters& prev)
+{
+    auto simpleSize = current.SimpleSize();
+    auto cumulativeSize = current.CumulativeSize();
+    auto histogramSize = current.HistogramSize();
+
+    if (prev.SimpleSize() != simpleSize) {
+        YDB_LOG_CRIT("CalculateCountersDiff: simple counter count mismatch",
+            {"prevSimpleSize", prev.SimpleSize()},
+            {"currentSimpleSize", simpleSize});
+        prev.MutableSimple()->Resize(simpleSize, 0);
+    }
+    if (prev.CumulativeSize() != cumulativeSize) {
+        YDB_LOG_CRIT("CalculateCountersDiff: cumulative counter count mismatch",
+            {"prevCumulativeSize", prev.CumulativeSize()},
+            {"currentCumulativeSize", cumulativeSize});
+        prev.MutableCumulative()->Resize(cumulativeSize, 0);
+    }
+    if (prev.HistogramSize() != histogramSize) {
+        YDB_LOG_CRIT("CalculateCountersDiff: histogram counter count mismatch",
+            {"prevHistogramSize", prev.HistogramSize()},
+            {"currentHistogramSize", histogramSize});
+        if (prev.HistogramSize() < histogramSize) {
+            auto missing = histogramSize - prev.HistogramSize();
+            for (; missing > 0; --missing) {
+                prev.AddHistogram();
+            }
+        }
+    }
+
+    diff->MutableSimple()->Reserve(simpleSize);
+    diff->MutableCumulative()->Reserve(cumulativeSize);
+    diff->MutableHistogram()->Reserve(histogramSize);
+
+    for (size_t i = 0; i < simpleSize; ++i) {
+        diff->AddSimple(current.GetSimple(i));
+    }
+
+    diff->SetCumulativeCount(cumulativeSize);
+    for (size_t i = 0; i < cumulativeSize; ++i) {
+        auto value = current.GetCumulative(i) - prev.GetCumulative(i);
+        if (!value) {
+            continue;
+        }
+        diff->AddCumulative(i);
+        diff->AddCumulative(value);
+    }
+
+    for (size_t i = 0; i < histogramSize; ++i) {
+        const auto& currentH = current.GetHistogram(i);
+        if (currentH.GetNonDerivative()) {
+            CopyHistogram(diff->AddHistogram(), currentH);
+            continue;
+        }
+        auto& prevH = *prev.MutableHistogram(i);
+        auto bucketCount = currentH.BucketsSize();
+        if (prevH.BucketsSize() != bucketCount) {
+            YDB_LOG_CRIT("CalculateCountersDiff: histogram bucket count mismatch",
+                {"histogramIndex", i},
+                {"prevBucketCount", prevH.BucketsSize()},
+                {"currentBucketCount", bucketCount});
+            prevH.MutableBuckets()->Resize(bucketCount, 0);
+        }
+        auto* histogram = diff->AddHistogram();
+        histogram->MutableBuckets()->Reserve(bucketCount);
+        histogram->SetBucketsCount(bucketCount);
+        for (size_t b = 0; b < bucketCount; ++b) {
+            auto value = currentH.GetBuckets(b) - prevH.GetBuckets(b);
+            if (!value) {
+                continue;
+            }
+            histogram->AddBuckets(b);
+            histogram->AddBuckets(value);
+        }
+    }
+}
+
+void ResetSimpleCounters(NKikimrSysView::TDbCounters* dst) {
+    auto simpleSize = dst->SimpleSize();
+    auto* to = dst->MutableSimple();
+    for (size_t i = 0; i < simpleSize; ++i) {
+        (*to)[i] = 0;
+    }
+}
+
+void ResetMaxCounters(NKikimrSysView::TDbCounters* dst) {
+    ResetSimpleCounters(dst);
+    auto cumulativeSize = dst->CumulativeSize();
+    auto* to = dst->MutableCumulative();
+    for (size_t i = 0; i < cumulativeSize; ++i) {
+        (*to)[i] = 0;
+    }
+}
+
+void ResetHistogramBuckets(NKikimrSysView::TDbCounters* dst, const TVector<ui32>& indices) {
+    for (ui32 i : indices) {
+        if (i >= (ui32)dst->HistogramSize()) {
+            continue;
+        }
+        auto* values = dst->MutableHistogram(i)->MutableBuckets();
+        for (auto& v : *values) {
+            v = 0;
+        }
+    }
+}
+
+void MarkHistogramsNonDerivative(NKikimrSysView::TDbCounters* dst, const TVector<ui32>& indices) {
+    for (ui32 i : indices) {
+        if (i < (ui32)dst->HistogramSize()) {
+            dst->MutableHistogram(i)->SetNonDerivative(true);
+        }
+    }
+}
+
+void CalculateCountersDiff(NKikimrSysView::TDbCounters* diff,
+    const NKikimrSysView::TDbCounters& current,
+    NKikimrSysView::TDbCounters* prev)
+{
+    diff->Clear();
+    if (prev) {
+        CalculateCountersDiff(diff, current, *prev);
+    } else {
+        CopyCounters(diff, current);
+    }
+}
+
+void CalculateCountersDiff(NKikimrSysView::TDbTabletCounters* diff,
+    const NKikimrSysView::TDbTabletCounters& current,
+    NKikimrSysView::TDbTabletCounters* prev)
+{
+    diff->Clear();
+    diff->SetType(current.GetType());
+    CalculateCountersDiff(diff->MutableExecutorCounters(), current.GetExecutorCounters(),
+        prev && prev->HasExecutorCounters() ? prev->MutableExecutorCounters() : nullptr);
+    CalculateCountersDiff(diff->MutableAppCounters(), current.GetAppCounters(),
+        prev && prev->HasAppCounters() ? prev->MutableAppCounters() : nullptr);
+    CalculateCountersDiff(diff->MutableMaxExecutorCounters(), current.GetMaxExecutorCounters());
+    CalculateCountersDiff(diff->MutableMaxAppCounters(), current.GetMaxAppCounters());
+}
+
+void MergeCounterDeltas(NKikimrSysView::TDbCounters& current,
+    const NKikimrSysView::TDbCounters& pending)
+{
+    NKikimrSysView::TDbCounters combined;
+    TAggregateCumulative<false>::Apply(&combined, pending);
+    TAggregateCumulative<false>::Apply(&combined, current);
+    combined.MutableSimple()->Swap(current.MutableSimple());
+
+    // The combined counters carry no non-derivative histograms, set them aside: the latest wins
+    THashMap<size_t, NKikimrSysView::TDbCounters::THistogram> nonDerivative;
+    for (size_t i = 0; i < pending.HistogramSize(); ++i) {
+        if (pending.GetHistogram(i).GetNonDerivative()) {
+            nonDerivative[i] = pending.GetHistogram(i);
+        }
+    }
+    for (size_t i = 0; i < current.HistogramSize(); ++i) {
+        if (current.GetHistogram(i).GetNonDerivative()) {
+            nonDerivative[i].Swap(current.MutableHistogram(i));
+        }
+    }
+
+    CalculateCountersDiff(&current, combined);
+    for (auto& [i, histogram] : nonDerivative) {
+        current.MutableHistogram(i)->Swap(&histogram);
+    }
+}
+
+void MergeCounterDeltas(NKikimrSysView::TDbTabletCounters& current,
+    const NKikimrSysView::TDbTabletCounters& pending)
+{
+    MergeCounterDeltas(*current.MutableExecutorCounters(), pending.GetExecutorCounters());
+    MergeCounterDeltas(*current.MutableAppCounters(), pending.GetAppCounters());
+}
+
+} // NSysView
+} // NKikimr

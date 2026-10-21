@@ -47,19 +47,19 @@ TString GetLastErrorAsString()
         return {};
     }
 
-    TPyObjectPtr unused = PyObject_CallMethod(stderrObject.Get(), "_toggle_real_mode", nullptr);
+    TPyObjectPtr unused = PyObject_CallMethod(stderrObject.Get(), "_toggle_real_mode", /*format=*/nullptr);
 
     PyErr_Restore(etypePtr.Get(), evaluePtr.Get(), etracebackPtr.Get());
     // in unusual situations there may be low-level write to stderr
     // (by direct C FILE* write), but that's OK
     PyErr_Print();
 
-    TPyObjectPtr error = PyObject_CallMethod(stderrObject.Get(), "_get_value", nullptr);
+    TPyObjectPtr error = PyObject_CallMethod(stderrObject.Get(), "_get_value", /*format=*/nullptr);
     if (!error) {
         return {};
     }
     unused.ResetSteal(
-        PyObject_CallMethod(stderrObject.Get(), "_toggle_real_mode", nullptr));
+        PyObject_CallMethod(stderrObject.Get(), "_toggle_real_mode", /*format=*/nullptr));
 
     TString errorValue;
     if (!TryPyCast(error.Get(), errorValue)) {

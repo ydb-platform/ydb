@@ -52,8 +52,8 @@ DECLARE_REFCOUNTED_STRUCT(IFairShareCallbackQueue)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, ConcurrencyLogger, "Concurrency");
-YT_DEFINE_GLOBAL(const NProfiling::TProfiler, ConcurrencyProfiler, "/concurrency");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, ConcurrencyLogger, "Concurrency");
+YT_DEFINE_LEAKY_GLOBAL(const NProfiling::TProfiler, ConcurrencyProfiler, "/concurrency");
 
 ////////////////////////////////////////////////////////////////////////////////
 

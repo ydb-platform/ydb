@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-#include <yt/yt/core/misc/property.h>
+#include <library/cpp/yt/misc/property.h>
 
 #include <variant>
 
@@ -19,7 +19,6 @@ public:
 
 public:
     void Push(TStringBuf key);
-    void PushLiteral(std::string key);
     void Push(int index);
     void IncreaseLastIndex();
     void Pop();

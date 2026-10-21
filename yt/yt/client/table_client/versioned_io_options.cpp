@@ -49,12 +49,12 @@ void FromProto(
     FromProto(&options->WriteMode, protoOptions.write_mode());
 }
 
-std::optional<TString> GetTimestampColumnOriginalNameOrNull(TStringBuf name)
+std::optional<std::string> GetTimestampColumnOriginalNameOrNull(TStringBuf name)
 {
     auto prefixEnd = name.begin() + ssize(TimestampColumnPrefix);
     return ssize(name) >= ssize(TimestampColumnPrefix) && std::equal(name.begin(), prefixEnd, TimestampColumnPrefix.begin())
-        ? TString(prefixEnd, name.end())
-        : std::optional<TString>();
+        ? std::string(prefixEnd, name.end())
+        : std::optional<std::string>();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

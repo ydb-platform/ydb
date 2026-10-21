@@ -96,6 +96,91 @@ Nemesis supports several categories of fault injection:
 - **Datacenter** — stop all nodes in a datacenter (multi-DC clusters)
 - **Bridge pile** — stop all nodes in a bridge pile (bridge-enabled clusters)
 
+## Chaos targets and failure model
+
+Planning is entity-based (`ChaosTarget`), not host-only. Dispatch still goes to an agent host; the target says what to hit on that host (or cluster-wide for tablets).
+
+| `target_kind` | Meaning |
+|---|---|
+| `host` | whole machine (time skew; network isolation if enabled) |
+| `node` / `slot` / `disk` | YDB process / tenant slot / drive |
+| `tablet` | Hive / tablet API (usually `guard_mode=BYPASS`) |
+| `datacenter` / `pile` | topology fanout |
+
+**Flow — boundary scheduler** (`boundary_scheduler.py`, what `deploy.py` starts and what drives scheduled chaos):
+
+```text
+tick: fill the budget up to the boundary
+  → menu of (type, target) that currently fits the budget   (guard.budget_view)
+  → pick uniformly, guard.reserve(footprint)                 (atomic, held until the probe)
+  → repeat while something fits; max_per_tick is only a burst fuse (default 16),
+    tablet (BYPASS) chaos is capped separately by max_bypass_per_tick (default 1)
+  → plan_inject → dispatch (payload includes chaos_target)
+      on failure: release the lease only if nothing dispatched;
+      a partial fanout keeps the budget charged and stays tracked
+  → RecoveryProbe releases the budget on healthcheck facts — never on a timer
+       self    — the per-kind predicate holds (else: stuck past stuck_timeout_sec, budget kept)
+       extract — dispatch the extract after auto_recovery_sec, then the same predicate
+                 must confirm within confirm_timeout_sec (else: stuck, budget kept)
+  → sleep base_interval ± jitter (default 15s — the healthcheck/probe cadence)
+  → stop(): drains still-held toggle faults through their extract (leases move to confirm)
+```
+
+**Flow — legacy per-type schedule** (`schedule_loop.py`, still available via `/api/schedule/*`):
+
+```text
+ClusterInventory.entities(kind)
+  → FailureModelGuard.filter_safe(...)
+  → planner.scheduled_tick(candidates)
+  → dispatch → record_inject (held) + RecoveryProbe.track with the same per-kind predicate
+     (slot injects without a fresh HC baseline are skipped, same as the boundary scheduler)
+```
+
+There is **no** dispatch-time `can_inject` veto. Safety is plan-time (`filter_safe` / `fits`) plus accounting after dispatch (`record_inject` / `reserve`).
+
+**Recovery predicates are per target kind** (`hc_model.py`, over the cluster-wide healthcheck each host's endpoint serves):
+
+- `node` / `disk` — host endpoint answers **and** every pdisk/vdisk with the `"{node_id}-"` id prefix is GREEN (strict: BLUE resync / YELLOW SyncGuidRecovery block release until redundancy is restored).
+- `slot` — alive compute nodes (non-empty `pools`) back to the pre-inject count. Without a fresh HC baseline the inject is skipped (boundary / legacy) or rejected with 503 (manual).
+- `host` (time skew) — endpoint answers and `compute.clock_skew` is GREEN.
+- `datacenter` — every DC endpoint answers and its nodes' storage is GREEN; without resolvable node ids the predicate never recovers (stuck, not silent release).
+
+While healthcheck data is stale or no endpoint answers, the probe is *blind*: releases and stuck detection pause, but scheduled extracts still fire. Blindness is reported to `/api/problems` as `recovery_probe_blind` after the HC grace (`max_hc_age_sec`, 180s) on first boot, or at once when sight is lost; the entry resolves when sight returns. Without a probe wired, FULL-guarded types are not offered at all.
+
+**Two independent budgets**, both from `cluster.yaml` (the erasure mode, `location.rack` / `data_center`). The erasure mode is read as `static_erasure` or `erasure` — `ydb/tools/cfg` accepts both spellings — at the top level or under `config:`, the same two places `hosts` is looked up:
+
+- *Fail domains* — `block-4-2` ≤ 2 domains, `mirror-3-dc` = 1 full realm + 1 domain elsewhere, `none` = 0. A domain is keyed `"<data_center>/<rack>"`: rack labels are only unique inside a DC (`rack: '1'` in every DC is normal), so the realm is part of the key. Only static-node / disk / DC faults spend this budget.
+- *Slots* — killing a dynamic node does not reduce storage redundancy, so it draws from its own budget: ≤ 30% of the cluster's slots down at once (`total_slots × slot_fraction`, ≥1 on small clusters). Charged by `reserve` (boundary scheduler) and by `record_inject` (legacy loop, manual inject). The one place that ignores it is the `filter_safe` pre-check: a slot candidate carries no fail domain, so it is always admitted there — `reserve` is what actually refuses.
+
+**The failure model is mandatory.** An unusable `cluster.yaml` — missing, unparsable, no recognizable erasure mode, a host without `location.rack`, or (for `mirror-3-dc`) without `location.data_center` — raises `FailureModelConfigError` and the orchestrator refuses to start. There is no unguarded mode: chaos that ignores fault tolerance is worse than no chaos.
+
+**Catalog fields** (in `cluster_entries.py`): `target_kind`, `impact_scope`, `guard_mode` (`FULL` — filtered and accounted for; `BYPASS` — costs no budget, for tablet chaos), optional `recovery` (`extract` for faults that stay applied until extracted), `auto_recovery_sec` (toggle faults: when the probe dispatches the extract), `stuck_timeout_sec` / `confirm_timeout_sec` (probe timeouts; defaults by scope: DISK 3600s, DATACENTER 1800s, else 900s), `supports_manual`, `boundary_safe` (a custom planner must opt in before the boundary scheduler may drive it — otherwise it could inject something other than the reserved target).
+
+**Agent contract:** node/slot/disk runners require explicit ids in `chaos_target` (`node_id`, `slot_idx`, `ic_port`) — no hostname guessing.
+
+**UI / API:**
+
+- History shows the target (not only host)
+- Manual Run lists nodes/slots when `supports_manual` and `target_kind` need them; types with `supports_manual: false` (network, time skew, rolling restart, bridge pile) are schedule-only
+- `GET /api/inventory` — hosts/nodes/slots used for planning (built once, on the orchestrator's first request; the UI fetches it once, not on every poll)
+- `GET /api/scheduler`, `POST /api/scheduler/start|stop` — boundary scheduler state and profile (`enabled`, `base_interval`, `jitter`, `max_per_tick`, `max_bypass_per_tick`). Rejected with 400: invalid values, unknown type names, and types whose planner keeps its own target state (`supports_boundary_scheduler`)
+- `GET /api/problems` — nemesis-side problems: faults that never recovered (budget still held), a blind recovery probe (no fresh healthcheck data), and a degraded inventory (harness unavailable → synthesized node ids, no slot chaos). `ydb/tests/stability/tests` fetches this when disabling nemesis and attaches it to the Allure report
+- The UI's Nemesis Scheduler card shows run state, profile, both budgets, the recovery probe and the problem list; the per-type schedule toggles in the accordion belong to the legacy loop
+
+**Metrics (orchestrator):**
+
+Chaos lifecycle and failure-budget leases are emitted on the orchestrator (not on agents). Scraped via monlib `/sensors` on `nemesis_mon_port` (default 8666); each transition is also logged as `nemesis_metric {json}`.
+
+| Event | Meaning |
+|---|---|
+| `fault.started` / `fault.extract_dispatched` / `fault.ended` / `fault.stuck` | What was shaken, where, and when the fault opened/closed |
+| `budget.acquired` / `budget.released` | When an identity entered / left the failure-model budget |
+| `budget.acquire_rejected` | `reserve` refused (budget full) |
+
+Useful sensors: `NemesisFaultActive`, `NemesisFaultActiveTotal`, `NemesisBudgetHeld`, `NemesisBudgetImpairedRacks`, `NemesisBudgetImpairedSlots`, `NemesisBudgetMaxSlots`, counters `NemesisFaultStarted` / `Ended` / `Stuck`, `NemesisBudgetAcquired` / `Released`, `NemesisFaultHoldSecondsSum` + `NemesisFaultHoldCount`. All series carry a `nemesis` label (chaos class name, or `unknown`) so Monium legends like `{{nemesis}}` resolve. Agent-side legacy counters (`InjectCompleted`, …) remain execution health only.
+
+Each transition logs two lines on the orchestrator: a human-readable summary (`budget acquired: …`, `fault started: …`, …) and a machine-readable `nemesis_metric {json}` payload.
+
 ## Extending Nemesis
 
 ### Adding a New Fault Type
@@ -131,6 +216,10 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "runner": MyCustomNemesis(),
         "schedule": 300,  # default interval in seconds
         "ui_group": "MyGroup",  # must exist in NEMESIS_UI_GROUPS
+        "target_kind": TargetKind.NODE,  # what planners select
+        "impact_scope": ImpactScope.NODE,  # failure-model projection
+        "guard_mode": GuardMode.FULL,
+        # "supports_manual": False,  # if planner.manual() is unsupported
         # Optional: specify a custom planner
         # "planner_cls": MyCustomPlanner,
         # "planner_factory": lambda key: MyCustomPlanner(key),
@@ -162,7 +251,8 @@ __all__ = [
 
 ### Custom Planners
 
-By default, Nemesis uses `DefaultRandomHostPlanner` which injects faults on a random host per tick. For more complex behavior, create a custom planner.
+By default, Nemesis uses `DefaultRandomHostPlanner`, which picks one random **candidate**
+(`ChaosTarget` of the type's `target_kind`) per tick. For more complex behavior, create a custom planner.
 
 Then register it in `cluster_entries.py`:
 

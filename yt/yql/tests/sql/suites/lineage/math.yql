@@ -1,0 +1,17 @@
+use plato;
+
+insert into Output
+select
+    a1 + b1 as math_add,
+    a1 - b1 as math_sub,
+    a1 * b1 as math_mul,
+    a1 / b1 as math_div,
+    a1 % b1 as math_mod,
+    -a1 as math_neg,
+    (a1 + b1) * k1 as math_complex,
+    a1 + 1 as math_add_const,
+    a1 * 2 as math_mul_const,
+    ABS(a1 - b1) as math_abs,
+    Math::Sqrt(CAST(a1 AS Double)) as math_sqrt,
+    CAST(a1 + b1 AS Double) as math_cast,
+from Input1;

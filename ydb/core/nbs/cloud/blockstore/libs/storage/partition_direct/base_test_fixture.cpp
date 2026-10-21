@@ -60,13 +60,13 @@ void TBaseFixture::Init()
     DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         TBlockRange64 range,
+         TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
-        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
-        UNIT_ASSERT_VALUES_EQUAL(THostIndex{0}, hostIndex);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(ExpectedHost, hostIndex);
 
         if (RangeData.empty()) {
             RangeData = GenerateRandomString(CopyRangeSize);
@@ -89,14 +89,14 @@ void TBaseFixture::Init()
     DirectBlockGroup->ReadBlocksFromPBufferHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         ui64 lsn,
-         TBlockRange64 range,
+         TPBufferKey pBufferKey,
+         TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
-        Y_UNUSED(lsn);
+        Y_UNUSED(pBufferKey);
         Y_UNUSED(traceId);
-        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(THostIndex{0}, hostIndex);
 
         const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
@@ -117,16 +117,18 @@ void TBaseFixture::Init()
     DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         ui64 lsn,
-         TBlockRange64 range,
+         TPBufferKey pBufferKey,
+         TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
+         const TBlockChecksums& checksums,
          const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
         Y_UNUSED(hostIndex);
-        Y_UNUSED(lsn);
+        Y_UNUSED(pBufferKey);
+        Y_UNUSED(checksums);
 
-        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
         const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
@@ -153,25 +155,27 @@ void TBaseFixture::Init()
     DirectBlockGroup->WriteBlocksToDDiskHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         TBlockRange64 range,
+         TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
+         const TBlockChecksums& checksums,
          const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
+        Y_UNUSED(checksums);
 
-        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(FreshDDisk, hostIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
+        const ui64 sizeBytes = range.Size() * BlockSize;
         TString copiedData;
-        copiedData.resize(CopyRangeSize);
+        copiedData.resize(sizeBytes);
         SgListCopy(
             guardedSglist.Acquire().Get(),
             TBlockDataRef{copiedData.data(), copiedData.size()});
 
         const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
         const ui64 offsetBytes = offsetBlocks * BlockSize;
-        const ui64 sizeBytes = range.Size() * BlockSize;
         TString expectedData =
             TString(RangeData.data() + offsetBytes, sizeBytes);
         UNIT_ASSERT_VALUES_EQUAL(expectedData, copiedData);
@@ -203,13 +207,11 @@ void TBaseFixture::Init()
         return future;
     };
 
-    DirectBlockGroup->EraseFromPBufferHandler = [&]   //
-        (ui32 vChunkIndex,
-         THostIndex hostIndex,
-         const TVector<TPBufferSegment>& segments,
+    DirectBlockGroup->BatchEraseFromPBufferHandler = [&]   //
+        (THostIndex hostIndex,
+         const TEraseSegments& segments,
          const NWilson::TTraceId& traceId)
     {
-        Y_UNUSED(vChunkIndex);
         Y_UNUSED(hostIndex);
         Y_UNUSED(segments);
         Y_UNUSED(traceId);
@@ -229,6 +231,18 @@ void TBaseFixture::Init()
     };
 }
 
+void TBaseFixture::TearDown(NUnitTest::TTestContext& context)
+{
+    Y_UNUSED(context);
+
+    // Keep DirectBlockGroup alive across the join. ~TVChunk runs on the
+    // executor thread and must not drop the last TExecutor reference there:
+    // TExecutor::Stop() would Join() the thread it is running on.
+    if (DirectBlockGroup) {
+        DirectBlockGroup->GetExecutor()->Stop();
+    }
+}
+
 TGuardedSgList TBaseFixture::MakeSgList() const
 {
     return TGuardedSgList(
@@ -240,18 +254,23 @@ bool TBaseFixture::WaitScheduledTasks(size_t count, TDuration timeout)
     return Wait(ScheduledTasks, count, timeout);
 }
 
-void TBaseFixture::RunScheduledTasks()
+NThreading::TFuture<void> TBaseFixture::RunScheduledTasks()
 {
+    TPromise<void> promise = NewPromise<void>();
+    auto result = promise.GetFuture();
     auto guard = TGuard(PromisesGuard);
-    auto f = [scheduledTasks = std::move(ScheduledTasks)]   //
+    auto f = [scheduledTasks = std::move(ScheduledTasks),
+              promise = std::move(promise)]   //
         () mutable
     {
         for (auto& task: scheduledTasks) {
             task.Callback();
         }
+        promise.SetValue();
     };
 
     DirectBlockGroup->GetExecutor()->ExecuteSimple(f);
+    return result;
 }
 
 void TBaseFixture::SetReadResult(TDBGReadBlocksResponse response, bool async)
@@ -292,6 +311,25 @@ void TBaseFixture::SetEraseResult(TDBGEraseResponse response, bool async)
 bool TBaseFixture::WaitEraseRequests(size_t count, TDuration timeout)
 {
     return Wait(ErasePromises, count, timeout);
+}
+
+size_t TBaseFixture::ReplyUpdateRequests()
+{
+    auto requests = std::move(PartitionDirectService->UpdateConfigRequests);
+    for (auto& r: requests) {
+        r.Promise.SetValue(EPersistResult::Success);
+    }
+    return requests.size();
+}
+
+size_t TBaseFixture::ReplyUpdateDirtyMapStateRequests()
+{
+    auto requests =
+        std::move(PartitionDirectService->UpdateDirtyMapStateRequests);
+    for (auto& r: requests) {
+        r.Promise.SetValue(EPersistResult::Success);
+    }
+    return requests.size();
 }
 
 template <typename T>

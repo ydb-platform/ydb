@@ -1,12 +1,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/common/generic_provider.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/src/client/types/core_facility/simple_core_facility.h>
+#include <ydb/public/sdk/cpp/tests/common/iam_mocks/iam_grpc_mock_server.h>
 
 #include <ydb/public/api/client/yc_public/iam/iam_token_service.grpc.pb.h>
 #include <ydb/public/api/client/yc_public/iam/iam_token_service.pb.h>
-
-#include <grpcpp/server.h>
-#include <grpcpp/server_builder.h>
 
 #include <gtest/gtest.h>
 
@@ -18,133 +16,36 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
+
+#include <util/generic/yexception.h>
+#include <util/stream/output.h>
 
 using namespace NYdb;
+using namespace NYdb::NTest;
 using namespace yandex::cloud::iam::v1;
-
-namespace {
-
-class TBlockingIamTokenService final : public IamTokenService::Service {
-public:
-    grpc::Status Create(
-        grpc::ServerContext* context,
-        const CreateIamTokenRequest*,
-        CreateIamTokenResponse* response) override
-    {
-        RpcEntered_.store(true);
-
-        std::unique_lock lock(Mutex_);
-        ReleasedCv_.wait(lock, [this] { return Released_; });
-
-        if (context->IsCancelled()) {
-            return grpc::Status::CANCELLED;
-        }
-        response->set_iam_token("released-token");
-        response->mutable_expires_at()->set_seconds(4102444800);
-        response->mutable_expires_at()->set_nanos(0);
-        return grpc::Status::OK;
-    }
-
-    void Release() {
-        {
-            std::lock_guard lock(Mutex_);
-            Released_ = true;
-        }
-        ReleasedCv_.notify_all();
-    }
-
-    bool WaitUntilRpcEntered(std::chrono::milliseconds timeout) const {
-        const auto deadline = std::chrono::steady_clock::now() + timeout;
-        while (std::chrono::steady_clock::now() < deadline) {
-            if (RpcEntered_.load()) {
-                return true;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(2));
-        }
-        return RpcEntered_.load();
-    }
-
-private:
-    std::atomic<bool> RpcEntered_{false};
-    bool Released_ = false;
-    mutable std::mutex Mutex_;
-    std::condition_variable ReleasedCv_;
-};
-
-class TIamGrpcServer {
-public:
-    explicit TIamGrpcServer(TBlockingIamTokenService* service)
-        : Service_(service)
-    {}
-
-    bool Start() {
-        grpc::ServerBuilder builder;
-        int boundPort = 0;
-        builder.AddListeningPort("127.0.0.1:0", grpc::InsecureServerCredentials(), &boundPort);
-        builder.SetMaxSendMessageSize(4 * 1024 * 1024);
-        builder.RegisterService(Service_);
-        Server_ = builder.BuildAndStart();
-        if (!Server_ || boundPort <= 0) {
-            return false;
-        }
-        Port_ = boundPort;
-        WaitThread_ = std::thread([this] { Server_->Wait(); });
-        return true;
-    }
-
-    std::string Endpoint() const {
-        return "127.0.0.1:" + std::to_string(Port_);
-    }
-
-    void Stop() {
-        if (Server_) {
-            Server_->Shutdown();
-        }
-        if (WaitThread_.joinable()) {
-            WaitThread_.join();
-        }
-        Server_.reset();
-    }
-
-    ~TIamGrpcServer() {
-        Stop();
-    }
-
-private:
-    TBlockingIamTokenService* Service_ = nullptr;
-    std::unique_ptr<grpc::Server> Server_;
-    int Port_ = 0;
-    std::thread WaitThread_;
-};
-
-} // namespace
 
 TEST(GrpcIamCredentialsProvider, TeardownWhileIamCreatePendingCompletes) {
     TBlockingIamTokenService iamService;
+    TBlockingIamReleaseGuard releaseGuard(iamService);
     TIamGrpcServer server(&iamService);
     ASSERT_TRUE(server.Start());
 
-    TIamOAuth params;
-    params.Endpoint = server.Endpoint();
-    params.OAuthToken = "unit-test-oauth-token";
-    params.EnableSsl = false;
-    params.RefreshPeriod = TDuration::Hours(1);
-    // Short client deadline: completion arrives with DEADLINE_EXCEEDED while the server handler is still
-    // blocked waiting for Release() (in-flight work on the server side vs client teardown).
+    TIamOAuth params = MakeOAuthParams(server.Endpoint());
     params.RequestTimeout = TDuration::MilliSeconds(400);
 
-    auto work = [&params] {
-        auto facility = std::make_shared<TSimpleCoreFacility>();
-        TIamOAuthCredentialsProvider<CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService> provider(
-            params,
-            facility);
-        (void)provider;
-    };
-
-    std::future<void> done = std::async(std::launch::async, work);
+    auto facility = std::make_shared<TSimpleCoreFacility>();
+    auto provider = std::make_shared<TIamOAuthCredentialsProvider<
+        CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>>(params, facility);
+    auto authInfo = provider->GetAuthInfoAsync();
+    ASSERT_FALSE(authInfo.IsReady());
 
     ASSERT_TRUE(iamService.WaitUntilRpcEntered(std::chrono::seconds(5)))
         << "server should have accepted the IAM Create call";
+
+    std::future<void> done = std::async(std::launch::async, [provider = std::move(provider)]() mutable {
+        provider.reset();
+    });
 
     ASSERT_EQ(done.wait_for(std::chrono::seconds(20)), std::future_status::ready)
         << "provider destructor must finish while an IAM Create is still blocked on the server "
@@ -157,28 +58,26 @@ TEST(GrpcIamCredentialsProvider, TeardownWhileIamCreatePendingCompletes) {
 
 TEST(GrpcIamCredentialsProvider, TeardownWhileIamCreatePendingCompletesViaFactoryWrapper) {
     TBlockingIamTokenService iamService;
+    TBlockingIamReleaseGuard releaseGuard(iamService);
     TIamGrpcServer server(&iamService);
     ASSERT_TRUE(server.Start());
 
-    TIamOAuth params;
-    params.Endpoint = server.Endpoint();
-    params.OAuthToken = "unit-test-oauth-token";
-    params.EnableSsl = false;
-    params.RefreshPeriod = TDuration::Hours(1);
+    TIamOAuth params = MakeOAuthParams(server.Endpoint());
     params.RequestTimeout = TDuration::MilliSeconds(400);
 
     auto factory = std::make_shared<TIamOAuthCredentialsProviderFactory<
         CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>>(params);
 
-    auto work = [&factory] {
-        auto provider = factory->CreateProvider();
-        (void)provider;
-    };
-
-    std::future<void> done = std::async(std::launch::async, work);
+    auto provider = factory->CreateProvider();
+    auto authInfo = provider->GetAuthInfoAsync();
+    ASSERT_FALSE(authInfo.IsReady());
 
     ASSERT_TRUE(iamService.WaitUntilRpcEntered(std::chrono::seconds(5)))
         << "server should have accepted the IAM Create call";
+
+    std::future<void> done = std::async(std::launch::async, [provider = std::move(provider)]() mutable {
+        provider.reset();
+    });
 
     ASSERT_EQ(done.wait_for(std::chrono::seconds(20)), std::future_status::ready)
         << "factory wrapper teardown must finish while an IAM Create is still blocked on the server";
@@ -188,120 +87,47 @@ TEST(GrpcIamCredentialsProvider, TeardownWhileIamCreatePendingCompletesViaFactor
     server.Stop();
 }
 
-// Regression test for backward compatibility of the deprecated no-arg
-// ICredentialsProviderFactory::CreateProvider() entry point on IAM factories. After commit
-// 0140ad8 ("fix sdk: fixed self thread join in iam cred provider") this entry point was
-// throwing "Not supported" and broke all out-of-tree callers that didn't yet plumb an
-// ICoreFacility. The factory must spin up a private facility transparently.
-TEST(GrpcIamCredentialsProvider, NoArgCreateProviderBackwardCompat) {
-    TBlockingIamTokenService iamService;
-    TIamGrpcServer server(&iamService);
+TEST(GrpcIamCredentialsProviderFactory, NoArgProvidersAreCachedAcrossFactoryInstances) {
+    TIamTokenServiceStub iamStub;
+    iamStub.SetResponseToken("unit-test-iam-token");
+    TIamGrpcServer server(&iamStub);
     ASSERT_TRUE(server.Start());
 
-    iamService.Release();
+    using TOAuthFactory = TIamOAuthCredentialsProviderFactory<
+        CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>;
+    const auto oauthParams = MakeOAuthParams(server.Endpoint());
 
-    TIamOAuth params;
-    params.Endpoint = server.Endpoint();
-    params.OAuthToken = "unit-test-oauth-token";
-    params.EnableSsl = false;
-    params.RefreshPeriod = TDuration::Hours(1);
-    params.RequestTimeout = TDuration::Seconds(5);
+    std::vector<std::future<TCredentialsProviderPtr>> oauthProviders;
+    for (size_t i = 0; i < 8; ++i) {
+        auto factory = std::make_shared<TOAuthFactory>(oauthParams);
+        oauthProviders.emplace_back(std::async(std::launch::async, [factory] {
+            return factory->CreateProvider();
+        }));
+    }
 
-    auto factory = std::make_shared<TIamOAuthCredentialsProviderFactory<
-        CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>>(params);
+    auto firstOAuthProvider = oauthProviders.front().get();
+    for (size_t i = 1; i < oauthProviders.size(); ++i) {
+        EXPECT_EQ(firstOAuthProvider, oauthProviders[i].get());
+    }
+    EXPECT_EQ(firstOAuthProvider->GetAuthInfo(), "unit-test-iam-token");
+    EXPECT_EQ(iamStub.GetRequestCount(), 1);
 
-    auto work = [&factory]() -> std::string {
-        auto provider = factory->CreateProvider();
-        return provider->GetAuthInfo();
-    };
+    using TJwtFactory = TIamJwtCredentialsProviderFactory<
+        CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>;
+    const auto jwtParams = MakeJwtParams(server.Endpoint());
+    auto firstJwtProvider = std::make_shared<TJwtFactory>(jwtParams)->CreateProvider();
+    auto secondJwtProvider = std::make_shared<TJwtFactory>(jwtParams)->CreateProvider();
 
-    std::future<std::string> done = std::async(std::launch::async, work);
-    ASSERT_EQ(done.wait_for(std::chrono::seconds(20)), std::future_status::ready)
-        << "no-arg CreateProvider() path must produce a token and tear down cleanly";
-    EXPECT_EQ(done.get(), "released-token");
+    EXPECT_EQ(firstJwtProvider, secondJwtProvider);
+    EXPECT_EQ(firstJwtProvider->GetAuthInfo(), "unit-test-iam-token");
+    EXPECT_EQ(iamStub.GetRequestCount(), 2);
 
-    server.Stop();
-}
-
-namespace {
-
-// PS256-compatible RSA test keypair (also used in jwt_token_source_ut.cpp).
-constexpr const char* TestRSAPrivateKey =
-    "-----BEGIN PRIVATE KEY-----\n"
-    "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC75/JS3rMcLJxv\n"
-    "FgpOzF5+2gH+Yig3RE2MTl9uwC0BZKAv6foYr7xywQyWIK+W1cBhz8R4LfFmZo2j\n"
-    "M0aCvdRmNBdW0EDSTnHLxCsFhoQWLVq+bI5f5jzkcoiioUtaEpADPqwgVULVtN/n\n"
-    "nPJiZ6/dU30C3jmR6+LUgEntUtWt3eq3xQIn5lG3zC1klBY/HxtfH5Hu8xBvwRQT\n"
-    "Jnh3UpPLj8XwSmriDgdrhR7o6umWyVuGrMKlLHmeivlfzjYtfzO1MOIMG8t2/zxG\n"
-    "R+xb4Vwks73sH1KruH/0/JMXU97npwpe+Um+uXhpldPygGErEia7abyZB2gMpXqr\n"
-    "WYKMo02NAgMBAAECggEAO0BpC5OYw/4XN/optu4/r91bupTGHKNHlsIR2rDzoBhU\n"
-    "YLd1evpTQJY6O07EP5pYZx9mUwUdtU4KRJeDGO/1/WJYp7HUdtxwirHpZP0lQn77\n"
-    "uccuX/QQaHLrPekBgz4ONk+5ZBqukAfQgM7fKYOLk41jgpeDbM2Ggb6QUSsJISEp\n"
-    "zrwpI/nNT/wn+Hvx4DxrzWU6wF+P8kl77UwPYlTA7GsT+T7eKGVH8xsxmK8pt6lg\n"
-    "svlBA5XosWBWUCGLgcBkAY5e4ZWbkdd183o+oMo78id6C+PQPE66PLDtHWfpRRmN\n"
-    "m6XC03x6NVhnfvfozoWnmS4+e4qj4F/emCHvn0GMywKBgQDLXlj7YPFVXxZpUvg/\n"
-    "rheVcCTGbNmQJ+4cZXx87huqwqKgkmtOyeWsRc7zYInYgraDrtCuDBCfP//ZzOh0\n"
-    "LxepYLTPk5eNn/GT+VVrqsy35Ccr60g7Lp/bzb1WxyhcLbo0KX7/6jl0lP+VKtdv\n"
-    "mto+4mbSBXSM1Y5BVVoVgJ3T/wKBgQDsiSvPRzVi5TTj13x67PFymTMx3HCe2WzH\n"
-    "JUyepCmVhTm482zW95pv6raDr5CTO6OYpHtc5sTTRhVYEZoEYFTM9Vw8faBtluWG\n"
-    "BjkRh4cIpoIARMn74YZKj0C/0vdX7SHdyBOU3bgRPHg08Hwu3xReqT1kEPSI/B2V\n"
-    "4pe5fVrucwKBgQCNFgUxUA3dJjyMES18MDDYUZaRug4tfiYouRdmLGIxUxozv6CG\n"
-    "ZnbZzwxFt+GpvPUV4f+P33rgoCvFU+yoPctyjE6j+0aW0DFucPmb2kBwCu5J/856\n"
-    "kFwCx3blbwFHAco+SdN7g2kcwgmV2MTg/lMOcU7XwUUcN0Obe7UlWbckzQKBgQDQ\n"
-    "nXaXHL24GGFaZe4y2JFmujmNy1dEsoye44W9ERpf9h1fwsoGmmCKPp90az5+rIXw\n"
-    "FXl8CUgk8lXW08db/r4r+ma8Lyx0GzcZyplAnaB5/6j+pazjSxfO4KOBy4Y89Tb+\n"
-    "TP0AOcCi6ws13bgY+sUTa/5qKA4UVw+c5zlb7nRpgwKBgGXAXhenFw1666482iiN\n"
-    "cHSgwc4ZHa1oL6aNJR1XWH+aboBSwR+feKHUPeT4jHgzRGo/aCNHD2FE5I8eBv33\n"
-    "of1kWYjAO0YdzeKrW0rTwfvt9gGg+CS397aWu4cy+mTI+MNfBgeDAIVBeJOJXLlX\n"
-    "hL8bFAuNNVrCOp79TNnNIsh7\n"
-    "-----END PRIVATE KEY-----\n";
-
-constexpr const char* TestRSAPublicKey =
-    "-----BEGIN PUBLIC KEY-----\n"
-    "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAu+fyUt6zHCycbxYKTsxe\n"
-    "ftoB/mIoN0RNjE5fbsAtAWSgL+n6GK+8csEMliCvltXAYc/EeC3xZmaNozNGgr3U\n"
-    "ZjQXVtBA0k5xy8QrBYaEFi1avmyOX+Y85HKIoqFLWhKQAz6sIFVC1bTf55zyYmev\n"
-    "3VN9At45kevi1IBJ7VLVrd3qt8UCJ+ZRt8wtZJQWPx8bXx+R7vMQb8EUEyZ4d1KT\n"
-    "y4/F8Epq4g4Ha4Ue6OrplslbhqzCpSx5nor5X842LX8ztTDiDBvLdv88RkfsW+Fc\n"
-    "JLO97B9Sq7h/9PyTF1Pe56cKXvlJvrl4aZXT8oBhKxImu2m8mQdoDKV6q1mCjKNN\n"
-    "jQIDAQAB\n"
-    "-----END PUBLIC KEY-----\n";
-
-} // namespace
-
-// Regression test for the deprecated no-arg CreateProvider() on the JWT factory. Mirrors the
-// OAuth counterpart above. The standalone path spins up a private TSimpleCoreFacility behind
-// TOwningFacilityCredentialsProvider; this verifies the JWT specialization wires it up
-// correctly and tears down without aborting.
-TEST(GrpcIamCredentialsProvider, NoArgCreateProviderBackwardCompatJwt) {
-    TBlockingIamTokenService iamService;
-    TIamGrpcServer server(&iamService);
-    ASSERT_TRUE(server.Start());
-
-    iamService.Release();
-
-    TIamJwtParams params;
-    params.Endpoint = server.Endpoint();
-    params.EnableSsl = false;
-    params.RefreshPeriod = TDuration::Hours(1);
-    params.RequestTimeout = TDuration::Seconds(5);
-    params.JwtParams.AccountId = "unit-test-account";
-    params.JwtParams.KeyId = "unit-test-key";
-    params.JwtParams.PrivKey = TestRSAPrivateKey;
-    params.JwtParams.PubKey = TestRSAPublicKey;
-
-    auto factory = std::make_shared<TIamJwtCredentialsProviderFactory<
-        CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>>(params);
-
-    auto work = [&factory]() -> std::string {
-        auto provider = factory->CreateProvider();
-        return provider->GetAuthInfo();
-    };
-
-    std::future<std::string> done = std::async(std::launch::async, work);
-    ASSERT_EQ(done.wait_for(std::chrono::seconds(20)), std::future_status::ready)
-        << "no-arg CreateProvider() path must produce a token and tear down cleanly";
-    EXPECT_EQ(done.get(), "released-token");
+    auto differentOAuthParams = oauthParams;
+    differentOAuthParams.OAuthToken = "different-oauth-token";
+    auto differentOAuthProvider = std::make_shared<TOAuthFactory>(differentOAuthParams)->CreateProvider();
+    EXPECT_NE(firstOAuthProvider, differentOAuthProvider);
+    EXPECT_EQ(differentOAuthProvider->GetAuthInfo(), "unit-test-iam-token");
+    EXPECT_EQ(iamStub.GetRequestCount(), 3);
 
     server.Stop();
 }
@@ -313,6 +139,7 @@ public:
     std::string GetAuthInfo() const override {
         std::unique_lock lock(Mutex_);
         if (++CallCount_ > 1) {
+            BlockedCv_.notify_all();
             BlockedCv_.wait(lock, [this] { return Released_; });
         }
         return "slow-auth-token";
@@ -331,16 +158,8 @@ public:
     }
 
     bool WaitUntilBlocked(std::chrono::milliseconds timeout) const {
-        const auto deadline = std::chrono::steady_clock::now() + timeout;
-        while (std::chrono::steady_clock::now() < deadline) {
-            std::lock_guard lock(Mutex_);
-            if (CallCount_ > 1 && !Released_) {
-                return true;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(2));
-        }
-        std::lock_guard lock(Mutex_);
-        return CallCount_ > 1 && !Released_;
+        std::unique_lock lock(Mutex_);
+        return BlockedCv_.wait_for(lock, timeout, [this] { return CallCount_ > 1; });
     }
 
 private:
@@ -350,24 +169,51 @@ private:
     bool Released_ = false;
 };
 
+class TDeferredAuthProvider final : public ICredentialsProvider {
+public:
+    TDeferredAuthProvider()
+        : AuthInfo_(NThreading::NewPromise<std::string>())
+    {}
+
+    std::string GetAuthInfo() const override {
+        return AuthInfo_.GetFuture().GetValueSync();
+    }
+
+    NThreading::TFuture<std::string> GetAuthInfoAsync() const override {
+        ++CallCount_;
+        return AuthInfo_.GetFuture();
+    }
+
+    bool IsValid() const override {
+        return true;
+    }
+
+    int CallCount() const {
+        return CallCount_.load();
+    }
+
+    void SetReady() {
+        AuthInfo_.SetValue("auth-token");
+    }
+
+private:
+    mutable std::atomic<int> CallCount_{0};
+    NThreading::TPromise<std::string> AuthInfo_;
+};
+
 } // namespace
 
-// Regression: Stop() must not hang when FillContext is blocked inside AuthTokenProvider_->GetAuthInfo().
 TEST(GrpcIamCredentialsProvider, StopDuringFillContextDoesNotHang) {
-    TBlockingIamTokenService iamService;
-    TIamGrpcServer server(&iamService);
+    TIamTokenServiceStub iamStub;
+    iamStub.SetResponseToken("unit-test-iam-token");
+    TIamGrpcServer server(&iamStub);
     ASSERT_TRUE(server.Start());
-
-    iamService.Release();
 
     auto authProvider = std::make_shared<TSlowBlockingAuthProvider>();
 
-    TIamOAuth params;
-    params.Endpoint = server.Endpoint();
-    params.OAuthToken = "unit-test-oauth-token";
-    params.EnableSsl = false;
+    TIamOAuth params = MakeOAuthParams(server.Endpoint());
     params.RefreshPeriod = TDuration::MilliSeconds(50);
-    params.RequestTimeout = TDuration::Seconds(5);
+    params.RequestTimeout = TDuration::MilliSeconds(400);
 
     std::shared_ptr<TGrpcIamCredentialsProvider<CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>> provider;
     auto facility = std::make_shared<TSimpleCoreFacility>();
@@ -384,21 +230,20 @@ TEST(GrpcIamCredentialsProvider, StopDuringFillContextDoesNotHang) {
         facility,
         authProvider);
 
-    ASSERT_TRUE(authProvider->WaitUntilBlocked(std::chrono::seconds(10)))
+    struct TAuthReleaseGuard {
+        std::shared_ptr<TSlowBlockingAuthProvider> Provider;
+        ~TAuthReleaseGuard() {
+            if (Provider) {
+                Provider->Release();
+            }
+        }
+    } authReleaseGuard{authProvider};
+
+    ASSERT_TRUE(authProvider->WaitUntilBlocked(std::chrono::seconds(30)))
         << "FillContext should block inside slow AuthTokenProvider during refresh";
 
-    // Move-capture provider so provider.reset() is the last owner and triggers Stop().
-    // facility stays here: its destructor joins the worker thread (still blocked in
-    // GetAuthInfo()), so it must be destroyed after authProvider->Release().
-    //
-    // Mirrors production (TOwningFacilityCredentialsProvider): Inner_ dies first (Stop()),
-    // then Facility_ dies (joins worker). No self-join: TImpl holds facility as weak_ptr,
-    // callbacks capture only weak_ptr<TImpl>. If a callback locks TImpl temporarily, TImpl's
-    // destructor is trivial (no joins), and it never strong-refs the facility.
     std::future<void> stopDone = std::async(std::launch::async,
         [provider = std::move(provider)]() mutable {
-            // Last owner: triggers ~TGrpcIamCredentialsProvider -> Stop().
-            // Stop() must return even though the worker thread is still blocked in GetAuthInfo().
             provider.reset();
         });
 
@@ -406,9 +251,246 @@ TEST(GrpcIamCredentialsProvider, StopDuringFillContextDoesNotHang) {
         << "provider destructor (Stop()) must complete while FillContext is blocked in GetAuthInfo()";
     stopDone.get();
 
-    // Now unblock the worker thread so facility can be destroyed cleanly.
-    authProvider->Release();
-    facility.reset();  // joins the worker thread (now unblocked)
+    server.Stop();
+}
+
+TEST(GrpcIamCredentialsProvider, WaitsForNestedAuthWithoutPollingIt) {
+    TIamTokenServiceStub iamStub;
+    iamStub.SetResponseToken("unit-test-iam-token");
+    TIamGrpcServer server(&iamStub);
+    ASSERT_TRUE(server.Start());
+
+    auto authProvider = std::make_shared<TDeferredAuthProvider>();
+
+    TIamOAuth params = MakeOAuthParams(server.Endpoint());
+    auto facility = std::make_shared<TSimpleCoreFacility>();
+
+    TGrpcIamCredentialsProvider<CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService> provider(
+        params,
+        [token = params.OAuthToken](CreateIamTokenRequest& req) {
+            req.set_yandex_passport_oauth_token(TStringType{token});
+        },
+        [](IamTokenService::Stub* stub, grpc::ClientContext* context, const CreateIamTokenRequest* request,
+           CreateIamTokenResponse* response, std::function<void(grpc::Status)> cb) {
+            stub->async()->Create(context, request, response, std::move(cb));
+        },
+        facility,
+        authProvider);
+
+    auto future = provider.GetAuthInfoAsync();
+    for (int i = 0; i < 100 && authProvider->CallCount() == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    ASSERT_EQ(authProvider->CallCount(), 1);
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    EXPECT_EQ(authProvider->CallCount(), 1);
+
+    authProvider->SetReady();
+    ASSERT_TRUE(future.Wait(TDuration::Seconds(10)));
+    EXPECT_EQ(future.GetValue(), "unit-test-iam-token");
+    EXPECT_EQ(iamStub.GetRequestCount(), 1);
+
+    server.Stop();
+}
+
+TEST(GrpcIamCredentialsProvider, RetriesTransientFailure) {
+    TIamTokenServiceStub iamStub;
+    iamStub.SetResponseToken("unit-test-iam-token");
+    iamStub.SetStatus(grpc::Status(grpc::StatusCode::UNAVAILABLE, "retry"));
+    TIamGrpcServer server(&iamStub);
+    ASSERT_TRUE(server.Start());
+
+    auto facility = std::make_shared<TSimpleCoreFacility>();
+    auto provider = std::make_shared<TIamOAuthCredentialsProvider<
+        CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>>(
+            MakeOAuthParams(server.Endpoint()), facility);
+    auto future = provider->GetAuthInfoAsync();
+    for (int i = 0; i < 1000 && iamStub.GetRequestCount() == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    ASSERT_GT(iamStub.GetRequestCount(), 0);
+    ASSERT_FALSE(future.IsReady());
+
+    iamStub.SetStatus(grpc::Status::OK);
+    ASSERT_TRUE(future.Wait(TDuration::Seconds(10)));
+    EXPECT_EQ(future.GetValue(), "unit-test-iam-token");
+    EXPECT_GT(iamStub.GetRequestCount(), 1);
+
+    server.Stop();
+}
+
+namespace {
+
+using TOAuthProvider = TIamOAuthCredentialsProvider<CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>;
+
+template <typename TPredicate>
+bool WaitUntil(TPredicate&& predicate, std::chrono::milliseconds timeout) {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (!predicate()) {
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return true;
+}
+
+int64_t NowSeconds() {
+    return std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+// A provider whose first token is already minted and whose refresh is due in `refreshIn`.
+// The refresh starts RequestTimeout before the token expires, so expires_at = now + refreshIn + RequestTimeout.
+struct TRefreshingProviderFixture {
+    TIamTokenServiceStub IamStub;
+    TIamGrpcServer Server{&IamStub};
+    std::shared_ptr<TSimpleCoreFacility> Facility = std::make_shared<TSimpleCoreFacility>();
+    std::shared_ptr<TOAuthProvider> Provider;
+    TIamOAuth Params;
+
+    void Start(TDuration requestTimeout, TDuration refreshIn) {
+        ASSERT_TRUE(Server.Start());
+        Params = MakeOAuthParams(Server.Endpoint());
+        Params.RequestTimeout = requestTimeout;
+        Params.RefreshPeriod = TDuration::Hours(1);
+        // +1 rounds the truncated wall clock up so the refresh never starts earlier than refreshIn.
+        IamStub.SetResponseToken("token-1", NowSeconds() + 1 + (refreshIn + requestTimeout).Seconds());
+
+        Provider = std::make_shared<TOAuthProvider>(Params, Facility);
+        auto future = Provider->GetAuthInfoAsync();
+        ASSERT_TRUE(future.Wait(TDuration::Seconds(10)));
+        ASSERT_EQ(future.GetValue(), "token-1");
+        ASSERT_EQ(IamStub.GetRequestCount(), 1);
+    }
+
+    // Returns the steady_clock time at which the IAM mock saw the first refresh request.
+    std::chrono::steady_clock::time_point WaitForRefreshRequest() {
+        const int before = IamStub.GetRequestCount();
+        EXPECT_TRUE(WaitUntil([&] { return IamStub.GetRequestCount() > before; }, std::chrono::seconds(30)))
+            << "provider should have started refreshing the token";
+        return std::chrono::steady_clock::now();
+    }
+
+    ~TRefreshingProviderFixture() {
+        Provider.reset();
+        Server.Stop();
+    }
+};
+
+} // namespace
+
+// Outage during refresh shorter than the retry budget (2 * RequestTimeout): the provider keeps
+// retrying with backoff and picks up the new token once IAM is back.
+TEST(GrpcIamCredentialsProvider, RecoversFromOutageWithinRetryBudget) {
+    TRefreshingProviderFixture fx;
+    fx.Start(TDuration::Seconds(1), TDuration::Seconds(1));
+
+    fx.IamStub.SetStatus(grpc::Status(grpc::StatusCode::UNAVAILABLE, "iam is down"));
+    fx.WaitForRefreshRequest();
+
+    // Outage of ~0.5s, well inside the 2s budget.
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    fx.IamStub.SetResponseToken("token-2");
+    fx.IamStub.SetStatus(grpc::Status::OK);
+
+    auto future = fx.Provider->GetAuthInfoAsync();
+    ASSERT_TRUE(future.Wait(TDuration::Seconds(15)));
+    EXPECT_EQ(future.GetValue(), "token-2");
+}
+
+// Outage during refresh longer than the retry budget (2 * RequestTimeout), after which IAM fully
+// recovers. A refreshing provider should eventually mint a token again instead of staying dead.
+TEST(GrpcIamCredentialsProvider, RecoversFromOutageExceedingRetryBudget) {
+    const TDuration requestTimeout = TDuration::Seconds(1);
+    TRefreshingProviderFixture fx;
+    fx.Start(requestTimeout, TDuration::Seconds(1));
+
+    fx.IamStub.SetStatus(grpc::Status(grpc::StatusCode::UNAVAILABLE, "iam is down"));
+    const auto outageStart = fx.WaitForRefreshRequest();
+
+    // Wait until the provider gives up: the auth future becomes ready with an exception.
+    auto failedFuture = fx.Provider->GetAuthInfoAsync();
+    ASSERT_TRUE(failedFuture.Wait(TDuration::Seconds(30)))
+        << "provider neither minted a token nor failed within 30s of IAM outage";
+    const auto failedAt = std::chrono::steady_clock::now();
+    EXPECT_THROW(failedFuture.GetValue(), yexception);
+
+    const auto outage = std::chrono::duration_cast<std::chrono::milliseconds>(failedAt - outageStart);
+    Cerr << "IAM outage of " << outage.count() << "ms exhausted the retry budget (2 * RequestTimeout = "
+         << 2 * requestTimeout.MilliSeconds() << "ms) after " << fx.IamStub.GetRequestCount() - 1
+         << " failed refresh attempts" << Endl;
+    // The terminal failure requires now >= RetryDeadline_ = refreshStart + 2 * RequestTimeout
+    // (RetryDeadline_ is stamped slightly before the mock sees the first request, hence the slack).
+    EXPECT_GE(outage.count(), static_cast<int64_t>(2 * requestTimeout.MilliSeconds()) - 500);
+
+    // IAM is back. The next cycle starts after TERMINAL_FAILURE_RETRY_DELAY (10s).
+    const int requestsBeforeRecovery = fx.IamStub.GetRequestCount();
+    fx.IamStub.SetResponseToken("token-2");
+    fx.IamStub.SetStatus(grpc::Status::OK);
+
+    const bool retriedAfterRecovery = WaitUntil(
+        [&] { return fx.IamStub.GetRequestCount() > requestsBeforeRecovery; },
+        std::chrono::seconds(30));
+    Cerr << "after IAM recovery the provider " << (retriedAfterRecovery ? "retried" : "never retried") << Endl;
+
+    auto future = fx.Provider->GetAuthInfoAsync();
+    ASSERT_TRUE(future.Wait(TDuration::Seconds(30)));
+    EXPECT_TRUE(retriedAfterRecovery) << "provider never contacted IAM again after the outage ended";
+    EXPECT_NO_THROW({
+        EXPECT_EQ(future.GetValue(), "token-2");
+    }) << "GetAuthInfoAsync() keeps throwing although IAM has recovered";
+    EXPECT_TRUE(fx.Provider->IsValid());
+}
+
+// A single non-retryable status (e.g. PERMISSION_DENIED for a temporarily revoked grant) during
+// refresh, after which IAM serves tokens again.
+TEST(GrpcIamCredentialsProvider, RecoversAfterTerminalStatusDuringRefresh) {
+    TRefreshingProviderFixture fx;
+    fx.Start(TDuration::Seconds(1), TDuration::Seconds(1));
+
+    fx.IamStub.SetStatus(grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "grant revoked"));
+    fx.WaitForRefreshRequest();
+
+    auto failedFuture = fx.Provider->GetAuthInfoAsync();
+    ASSERT_TRUE(failedFuture.Wait(TDuration::Seconds(10)));
+    EXPECT_THROW(failedFuture.GetValue(), yexception);
+    Cerr << "PERMISSION_DENIED during refresh failed the provider after "
+         << fx.IamStub.GetRequestCount() - 1 << " refresh attempt(s)" << Endl;
+
+    const int requestsBeforeRecovery = fx.IamStub.GetRequestCount();
+    fx.IamStub.SetResponseToken("token-2");
+    fx.IamStub.SetStatus(grpc::Status::OK);
+
+    const bool retriedAfterRecovery = WaitUntil(
+        [&] { return fx.IamStub.GetRequestCount() > requestsBeforeRecovery; },
+        std::chrono::seconds(30));
+    Cerr << "after grant restore the provider " << (retriedAfterRecovery ? "retried" : "never retried") << Endl;
+
+    auto future = fx.Provider->GetAuthInfoAsync();
+    ASSERT_TRUE(future.Wait(TDuration::Seconds(30)));
+    EXPECT_TRUE(retriedAfterRecovery) << "provider never contacted IAM again after PERMISSION_DENIED";
+    EXPECT_NO_THROW({
+        EXPECT_EQ(future.GetValue(), "token-2");
+    }) << "GetAuthInfoAsync() keeps throwing although IAM has recovered";
+}
+
+TEST(GrpcIamCredentialsProvider, DoesNotRetryTerminalFailure) {
+    TIamTokenServiceStub iamStub;
+    iamStub.SetStatus(grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "terminal"));
+    TIamGrpcServer server(&iamStub);
+    ASSERT_TRUE(server.Start());
+
+    auto facility = std::make_shared<TSimpleCoreFacility>();
+    auto provider = std::make_shared<TIamOAuthCredentialsProvider<
+        CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>>(
+            MakeOAuthParams(server.Endpoint()), facility);
+    auto future = provider->GetAuthInfoAsync();
+    ASSERT_TRUE(future.Wait(TDuration::Seconds(10)));
+    EXPECT_THROW(future.GetValue(), yexception);
+    const int requests = iamStub.GetRequestCount();
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    EXPECT_EQ(iamStub.GetRequestCount(), requests);
 
     server.Stop();
 }

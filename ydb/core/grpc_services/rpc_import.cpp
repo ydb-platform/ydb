@@ -7,6 +7,7 @@
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
+#include <ydb/core/backup/common/feature_flags.h>
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 
@@ -17,6 +18,8 @@
 #include <util/folder/path.h>
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -97,12 +100,25 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         auto& createImport = *ev->Record.MutableRequest();
         createImport.MutableOperationParams()->CopyFrom(request.operation_params());
         if constexpr (IsS3Import) {
-            createImport.MutableImportFromS3Settings()->CopyFrom(request.settings());
+            auto* s3Settings = createImport.MutableImportFromS3Settings();
+            s3Settings->CopyFrom(request.settings());
+            s3Settings->set_destination_path(
+                this->Request->NormalizePath(s3Settings->destination_path()));
+            for (auto& item : *s3Settings->mutable_items()) {
+                item.set_destination_path(
+                    this->Request->NormalizePath(item.destination_path()));
+            }
         }
         if constexpr (IsFsImport) {
             auto* fsSettings = createImport.MutableImportFromFsSettings();
             fsSettings->CopyFrom(request.settings());
             fsSettings->set_base_path(StripTrailingSlashes(fsSettings->base_path()));
+            fsSettings->set_destination_path(
+                this->Request->NormalizePath(fsSettings->destination_path()));
+            for (auto& item : *fsSettings->mutable_items()) {
+                item.set_destination_path(
+                    this->Request->NormalizePath(item.destination_path()));
+            }
         }
 
         return ev.Release();
@@ -111,8 +127,11 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     void Handle(TEvImport::TEvCreateImportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvImport::TEvCreateImportResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvImport::TEvCreateImportResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         this->Reply(TImportConv::ToOperation(record.GetEntry()));
     }
@@ -127,6 +146,8 @@ public:
         }
 
         const auto& settings = request.settings();
+        const bool exportFilteringEnabled = NBackup::IsExportFilteringEnabled(*AppData());
+        const bool encryptedExportEnabled = NBackup::IsEncryptedExportEnabled(*AppData());
         try {
             // Validate regexps
             NBackup::CombineRegexps(settings.exclude_regexps());
@@ -134,26 +155,34 @@ public:
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Invalid regexp: " << ex.what());
         }
 
-        const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
         const bool commonSourcePathSpecified = !TTraits::GetCommonSourcePath(settings).empty();
         if constexpr (IsS3Import) {
-            if (!encryptedExportFeatureFlag) {
+            if (!exportFilteringEnabled) {
                 if (commonSourcePathSpecified) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Source prefix is not supported in current configuration");
                 }
             }
         }
-        if (!encryptedExportFeatureFlag) {
+        if (!exportFilteringEnabled) {
             if (!settings.destination_path().empty()) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Destination path is not supported in current configuration");
             }
-            if (settings.has_encryption_settings()) {
+        }
+        if (settings.has_encryption_settings()) {
+            if (!encryptedExportEnabled) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
             }
+            if (settings.encryption_settings().symmetric_key().key().empty()) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No encryption key specified");
+            }
+            if (!commonSourcePathSpecified) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified");
+            }
         }
+
         if (settings.items().empty() && !commonSourcePathSpecified) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified. Don't know where to import from");
-        } else if (settings.items().empty() && !encryptedExportFeatureFlag) {
+        } else if (settings.items().empty() && !exportFilteringEnabled) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No items to import. Don't know where to import from");
         }
         for (const auto& item : settings.items()) {
@@ -163,7 +192,7 @@ public:
             }
             if constexpr (IsS3Import) {
                 if (!item.source_path().empty()) {
-                    if (!encryptedExportFeatureFlag) {
+                    if (!exportFilteringEnabled) {
                         return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Item source path is not supported in current configuration");
                     }
                     if (!commonSourcePathSpecified) {
@@ -171,16 +200,15 @@ public:
                     }
                 }
             }
+            if constexpr (IsFsImport) {
+                if (!item.source_path_db().empty()) {
+                    if (!exportFilteringEnabled) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Item source path is not supported in current configuration");
+                    }
+                }
+            }
             if (TTraits::IsEmptyItem(item)) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Empty import item was specified");
-            }
-        }
-        if (settings.has_encryption_settings()) {
-            if (settings.encryption_settings().symmetric_key().key().empty()) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No encryption key specified");
-            }
-            if (!commonSourcePathSpecified) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified");
             }
         }
 

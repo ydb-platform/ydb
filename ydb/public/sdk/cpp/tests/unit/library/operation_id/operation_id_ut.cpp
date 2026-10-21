@@ -119,6 +119,18 @@ TEST(OperationIdTest, ConvertKindAndValues) {
     }
 }
 
+TEST(OperationIdTest, AddOptionalValueUpdatesIndex) {
+    NKikimr::NOperationId::TOperationId operationId;
+
+    operationId.AddOptionalValue("key", "value1");
+    operationId.AddOptionalValue("key", "value2");
+
+    const auto& values = operationId.GetValue("key");
+    ASSERT_EQ(values.size(), 2);
+    ASSERT_EQ(*values[0], "value1");
+    ASSERT_EQ(*values[1], "value2");
+}
+
 TEST(OperationIdTest, InvalidOperationId) {
     ASSERT_THROW(NKikimr::NOperationId::TOperationId("ydb://preparedqueryid"), yexception);
 }

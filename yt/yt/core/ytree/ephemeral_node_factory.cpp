@@ -58,33 +58,7 @@ public:
             return;
         }
 
-        const auto& attributes = Attributes();
-
-        auto pairs = attributes.ListPairs();
-        if (stable) {
-            std::sort(pairs.begin(), pairs.end(), [] (const auto& lhs, const auto& rhs) {
-                return lhs.first < rhs.first;
-            });
-        }
-
-        TAttributeFilter::TKeyToFilter keyToFilter;
-        if (attributeFilter) {
-            keyToFilter = attributeFilter.Normalize();
-        }
-
-        for (const auto& [key, value] : pairs) {
-            if (!attributeFilter) {
-                // A fast path for taking the whole attribute.
-                consumer->OnKeyedItem(key);
-                consumer->OnRaw(value);
-            } else if (auto it = keyToFilter.find(key); it != keyToFilter.end()) {
-                const auto& pathFilter = it->second;
-                TAttributeValueConsumer valueConsumer(consumer, key);
-                auto filteringConsumer = TAttributeFilter::CreateFilteringConsumer(&valueConsumer, pathFilter);
-                filteringConsumer->GetConsumer()->OnRaw(value);
-                filteringConsumer->Finish();
-            }
-        }
+        WriteAttributeDictionaryFragment(consumer, Attributes(), attributeFilter, stable);
     }
 
 protected:
@@ -196,9 +170,9 @@ public:
         return KeyToChild_.ysize();
     }
 
-    std::vector<std::pair<std::string, INodePtr>> GetChildren() const override
+    std::vector<std::pair<TKey, TValue>> GetChildren() const override
     {
-        std::vector<std::pair<std::string, INodePtr>> result;
+        std::vector<std::pair<TKey, TValue>> result;
         result.reserve(KeyToChild_.size());
         for (const auto& [key, child] : KeyToChild_) {
             result.emplace_back(key, child);
@@ -206,9 +180,9 @@ public:
         return result;
     }
 
-    std::vector<std::string> GetKeys() const override
+    std::vector<TKey> GetKeys() const override
     {
-        std::vector<std::string> result;
+        std::vector<TKey> result;
         result.reserve(KeyToChild_.size());
         for (const auto& [key, child] : KeyToChild_) {
             result.push_back(key);
@@ -216,19 +190,19 @@ public:
         return result;
     }
 
-    INodePtr FindChild(const std::string& key) const override
+    TValue FindChild(TKeyView key) const override
     {
         auto it = KeyToChild_.find(key);
         return it == KeyToChild_.end() ? nullptr : it->second;
     }
 
-    bool AddChild(const std::string& key, const INodePtr& child) override
+    bool AddChild(TKeyView key, const TValue& child) override
     {
         YT_ASSERT(child);
         ValidateYTreeKey(key);
 
-        if (KeyToChild_.emplace(key, child).second) {
-            YT_VERIFY(ChildToKey_.emplace(child, key).second);
+        if (KeyToChild_.emplace(TKey(key), child).second) {
+            YT_VERIFY(ChildToKey_.emplace(child, TKey(key)).second);
             child->SetParent(this);
             return true;
         } else {
@@ -236,7 +210,7 @@ public:
         }
     }
 
-    bool RemoveChild(const std::string& key) override
+    bool RemoveChild(TKeyView key) override
     {
         auto it = KeyToChild_.find(key);
         if (it == KeyToChild_.end()) {
@@ -288,7 +262,7 @@ public:
         YT_VERIFY(ChildToKey_.emplace(newChild, key).second);
     }
 
-    std::optional<std::string> FindChildKey(const IConstNodePtr& child) const override
+    std::optional<TKey> FindChildKey(const IConstNodePtr& child) const override
     {
         YT_ASSERT(child);
 
@@ -297,8 +271,8 @@ public:
     }
 
 private:
-    THashMap<std::string, INodePtr> KeyToChild_;
-    THashMap<INodePtr, std::string> ChildToKey_;
+    THashMap<TKey, TValue> KeyToChild_;
+    THashMap<TValue, TKey> ChildToKey_;
 
     bool DoInvoke(const IYPathServiceContextPtr& context) override
     {

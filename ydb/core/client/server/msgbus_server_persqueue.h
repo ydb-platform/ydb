@@ -323,7 +323,9 @@ protected:
             HFunc(TPipeEvent, HandlePipeEvent);
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
         default:
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::PERSQUEUE, "Unexpected event type: " << ev->GetTypeRewrite() << ", " << ev->ToString());
+            YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "Unexpected event",
+                {"type", ev->GetTypeRewrite()},
+                {"ev", ev->ToString()});
         }
     }
 
@@ -334,7 +336,9 @@ protected:
             HFunc(TEvTabletPipe::TEvClientConnected, HandlePipeEvent);
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
         default:
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::PERSQUEUE, "Unexpected event type: " << ev->GetTypeRewrite() << ", " << ev->ToString());
+            YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "Unexpected event",
+                {"type", ev->GetTypeRewrite()},
+                {"ev", ev->ToString()});
         }
     }
 

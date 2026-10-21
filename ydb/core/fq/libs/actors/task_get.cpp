@@ -1,57 +1,51 @@
-#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
-#include "proxy_private.h"
 #include "proxy.h"
-
-#include <ydb/library/services/services.pb.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-
-#include <library/cpp/yson/node/node_io.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/log.h>
+#include "proxy_private.h"
 
 #include <ydb/core/fq/libs/common/entity_id.h>
-
+#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/fq/libs/control_plane_config/control_plane_config.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
-#include <ydb/library/security/util.h>
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", Tenant: " << Tenant << ", " << stream)
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", Tenant: " << Tenant << ", " << stream)
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/security/util.h>
+#include <ydb/library/services/services.pb.h>
+
+#include <library/cpp/yson/node/node_io.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::YQL_PRIVATE_PROXY
 
 namespace NFq {
 
 using namespace NActors;
 using namespace NMonitoring;
 
-class TGetTaskRequestActor
-    : public NActors::TActorBootstrapped<TGetTaskRequestActor>
-{
+class TGetTaskRequestActor: public NActors::TActorBootstrapped<TGetTaskRequestActor> {
 public:
-    TGetTaskRequestActor(
-        const NActors::TActorId& sender,
-        const ::NFq::TSigner::TPtr& signer,
-        TIntrusivePtr<ITimeProvider> timeProvider,
-        TAutoPtr<TEvents::TEvGetTaskRequest> ev,
-        TDynamicCounterPtr counters)
+    TGetTaskRequestActor(const NActors::TActorId& sender, const ::NFq::TSigner::TPtr& signer, TIntrusivePtr<ITimeProvider> timeProvider,
+        TAutoPtr<TEvents::TEvGetTaskRequest> ev, TDynamicCounterPtr counters)
         : Sender(sender)
         , TimeProvider(timeProvider)
         , Ev(std::move(ev))
         , Counters(std::move(counters->GetSubgroup("subsystem", "private_api")->GetSubgroup("subcomponent", "GetTask")))
-        , LifetimeDuration(Counters->GetHistogram("LifetimeDurationMs",  ExponentialHistogram(10, 2, 50)))
-        , RequestedMBytes(Counters->GetHistogram("RequestedMB",  ExponentialHistogram(6, 2, 3)))
+        , LifetimeDuration(Counters->GetHistogram("LifetimeDurationMs", ExponentialHistogram(10, 2, 50)))
+        , RequestedMBytes(Counters->GetHistogram("RequestedMB", ExponentialHistogram(6, 2, 3)))
         , StartTime(TInstant::Now())
         , Signer(signer)
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "YQ_PRIVATE_GET_TASK";
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_E("TGetTaskRequestActor::OnUndelivered");
+        YDB_LOG_ERROR("PrivateGetTask - TGetTaskRequestActor::OnUndelivered",
+            {"owner", OwnerId},
+            {"host", Host},
+            {"tenant", Tenant});
         auto response = MakeHolder<TEvents::TEvGetTaskResponse>();
         response->Status = Ydb::StatusIds::GENERIC_ERROR;
         response->Issues.AddIssue("UNDELIVERED");
@@ -67,9 +61,12 @@ public:
     void Fail(const TString& message, Ydb::StatusIds::StatusCode reqStatus = Ydb::StatusIds::INTERNAL_ERROR) {
         Issues.AddIssue(message);
         const auto codeStr = Ydb::StatusIds_StatusCode_Name(reqStatus);
-        LOG_E(TStringBuilder()
-            << "Failed with code: " << codeStr
-            << " Details: " << Issues.ToString());
+        YDB_LOG_ERROR("PrivateGetTask - Failed with",
+            {"owner", OwnerId},
+            {"host", Host},
+            {"tenant", Tenant},
+            {"code", codeStr},
+            {"details", Issues});
         auto response = MakeHolder<TEvents::TEvGetTaskResponse>();
         response->Status = reqStatus;
         response->Issues.AddIssues(Issues);
@@ -83,14 +80,21 @@ public:
         OwnerId = request.owner_id();
         Host = request.host();
         Tenant = request.tenant();
-        LOG_D("Request CP::GetTask with size: " << request.ByteSize() << " bytes");
+        YDB_LOG_DEBUG("PrivateGetTask - Request CP::GetTask with bytes",
+            {"owner", OwnerId},
+            {"host", Host},
+            {"tenant", Tenant},
+            {"size", request.ByteSize()});
         RequestedMBytes->Collect(request.ByteSize() / 1024 / 1024);
         Send(ControlPlaneConfigActorId(), new TEvControlPlaneConfig::TEvGetTenantInfoRequest());
     }
 
 private:
-    void HandleResponse(NFq::TEvControlPlaneStorage::TEvGetTaskResponse::TPtr& ev) { // YQ
-        LOG_D("Got CP::GetTask Response");
+    void HandleResponse(NFq::TEvControlPlaneStorage::TEvGetTaskResponse::TPtr& ev) {   // YQ
+        YDB_LOG_DEBUG("PrivateGetTask - Got CP::GetTask Response",
+            {"owner", OwnerId},
+            {"host", Host},
+            {"tenant", Tenant});
 
         const auto& issues = ev->Get()->Issues;
         if (issues) {
@@ -156,18 +160,9 @@ private:
     TString Tenant;
 };
 
-IActor* CreateGetTaskRequestActor(
-    const NActors::TActorId& sender,
-    const ::NFq::TSigner::TPtr& signer,
-    TIntrusivePtr<ITimeProvider> timeProvider,
-    TAutoPtr<TEvents::TEvGetTaskRequest> ev,
-    TDynamicCounterPtr counters) {
-    return new TGetTaskRequestActor(
-        sender,
-        signer,
-        timeProvider,
-        std::move(ev),
-        counters);
+IActor* CreateGetTaskRequestActor(const NActors::TActorId& sender, const ::NFq::TSigner::TPtr& signer, TIntrusivePtr<ITimeProvider> timeProvider,
+    TAutoPtr<TEvents::TEvGetTaskRequest> ev, TDynamicCounterPtr counters) {
+    return new TGetTaskRequestActor(sender, signer, timeProvider, std::move(ev), counters);
 }
 
-} /* NFq */
+}   // namespace NFq

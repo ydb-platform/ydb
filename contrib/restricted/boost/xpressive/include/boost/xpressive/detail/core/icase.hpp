@@ -23,7 +23,7 @@ namespace boost { namespace xpressive { namespace regex_constants
 /// Use icase() to make a sub-expression case-insensitive. For instance,
 /// "foo" >> icase(set['b'] >> "ar") will match "foo" exactly followed by
 /// "bar" irrespective of case.
-detail::modifier_op<detail::icase_modifier> const icase = {{}, regex_constants::icase_};
+BOOST_INLINE_CONSTEXPR detail::modifier_op<detail::icase_modifier> icase = {{}, regex_constants::icase_};
 
 } // namespace regex_constants
 

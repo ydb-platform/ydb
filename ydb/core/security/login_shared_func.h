@@ -15,8 +15,6 @@ bool IsUsernameFromLdapAuthDomain(const TString& username, const NKikimrProto::T
 TString PrepareLdapUsername(const TString& username, const NKikimrProto::TAuthConfig& config);
 NKikimrScheme::TEvLogin CreatePlainLoginRequest(const TString& username, NLoginProto::EHashType::HashType hashType,
     const TString& hashToValidate, const TString& peerName, const NKikimrProto::TAuthConfig& config);
-NKikimrScheme::TEvLogin CreatePlainLoginRequestOldFormat(const TString& username, const TString& password,
-    const TString& peerName, const NKikimrProto::TAuthConfig& config);
 NKikimrScheme::TEvLogin CreatePlainLdapLoginRequest(const TString& username,
      const TString& peerName, const NKikimrProto::TAuthConfig& config);
 NKikimrScheme::TEvLogin CreateScramLoginRequest(const TString& username, NLoginProto::EHashType::HashType hashType,

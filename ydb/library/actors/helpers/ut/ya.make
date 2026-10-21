@@ -20,6 +20,8 @@ PEERDIR(
 )
 
 SRCS(
+    actor_liveness_checker_ut.cpp
+    collector_counters_ut.cpp
     selfping_actor_ut.cpp
 )
 

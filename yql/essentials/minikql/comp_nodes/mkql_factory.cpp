@@ -10,8 +10,13 @@
 #include "mkql_block_coalesce.h"
 #include "mkql_block_container.h"
 #include "mkql_block_decimal.h"
+#include "mkql_block_dynamic_variant.h"
 #include "mkql_block_exists.h"
 #include "mkql_block_getelem.h"
+#include "mkql_block_guess.h"
+#include "mkql_block_variant.h"
+#include "mkql_block_variant_item.h"
+#include "mkql_block_way.h"
 #include "mkql_block_if.h"
 #include "mkql_block_just.h"
 #include "mkql_block_logical.h"
@@ -27,6 +32,7 @@
 #include "mkql_collect.h"
 #include "mkql_combine.h"
 #include "mkql_contains.h"
+#include "mkql_decimal_add_sub.h"
 #include "mkql_decimal_div.h"
 #include "mkql_decimal_mod.h"
 #include "mkql_decimal_mul.h"
@@ -36,6 +42,7 @@
 #include "mkql_element.h"
 #include "mkql_ensure.h"
 #include "mkql_enumerate.h"
+#include "mkql_erased.h"
 #include "mkql_exists.h"
 #include "mkql_expand_map.h"
 #include "mkql_extend.h"
@@ -64,6 +71,7 @@
 #include "mkql_length.h"
 #include "mkql_linear.h"
 #include "mkql_listfromrange.h"
+#include "mkql_list_join.h"
 #include "mkql_logical.h"
 #include "mkql_lookup.h"
 #include "mkql_map.h"
@@ -128,8 +136,7 @@
 #include <string_view>
 #include <unordered_map>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 IComputationNode* WrapArg(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 0, "Expected 0 args");
@@ -148,9 +155,7 @@ using TCallableComputationNodeBuilderMap = std::unordered_map<std::string_view, 
 namespace {
 
 struct TCallableComputationNodeBuilderFuncMapFiller {
-    TCallableComputationNodeBuilderFuncMapFiller()
-    {
-    }
+    TCallableComputationNodeBuilderFuncMapFiller() = default;
 
     const TCallableComputationNodeBuilderMap Map = {
         {"Append", &WrapAppend},
@@ -246,6 +251,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"GraceSelfJoinWithSpilling", &WrapGraceSelfJoin},
         {"MapJoinCore", &WrapMapJoinCore},
         {"CommonJoinCore", &WrapCommonJoinCore},
+        {"ListJoinCore", &WrapListJoinCore},
         {"CombineCore", &WrapCombineCore},
         {"GroupingCore", &WrapGroupingCore},
         {"HoppingCore", &WrapHoppingCore},
@@ -253,6 +259,8 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"FromBytes", &WrapFromBytes},
         {"NewMTRand", &WrapNewMTRand},
         {"NextMTRand", &WrapNextMTRand},
+        {"AsErased", &WrapAsErased},
+        {"PeekErased", &WrapPeekErased},
         {"Random", &WrapRandom<ERandom::Double>},
         {"RandomNumber", &WrapRandom<ERandom::Number>},
         {"RandomUuid", &WrapRandom<ERandom::Uuid>},
@@ -285,6 +293,8 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"TimezoneId", &WrapTimezoneId},
         {"TimezoneName", &WrapTimezoneName},
         {"AddTimezone", &WrapAddTimezone},
+        {"DecimalIntegralAdd", &WrapDecimalIntegralAdd},
+        {"DecimalIntegralSub", &WrapDecimalIntegralSub},
         {"DecimalDiv", &WrapDecimalDiv},
         {"DecimalMod", &WrapDecimalMod},
         {"DecimalMul", &WrapDecimalMul},
@@ -306,6 +316,11 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"ReplicateScalar", &WrapReplicateScalar},
         {"BlockCoalesce", &WrapBlockCoalesce},
         {"BlockExists", &WrapBlockExists},
+        {"BlockGuess", &WrapBlockGuess},
+        {"BlockVariant", &WrapBlockVariant},
+        {"BlockVariantItem", &WrapBlockVariantItem},
+        {"BlockDynamicVariant", &WrapBlockDynamicVariant},
+        {"BlockWay", &WrapBlockWay},
         {"BlockIf", &WrapBlockIf},
         {"BlockAnd", &WrapBlockAnd},
         {"BlockOr", &WrapBlockOr},
@@ -361,6 +376,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"WideTop", &WrapWideTop},
         {"WideTopSort", &WrapWideTopSort},
         {"WideSort", &WrapWideSort},
+        {"WideSortWithSpilling", &WrapWideSort},
         {"WideFlowArg", &WrapWideFlowArg},
         {"Source", &WrapSource},
         {"RangeCreate", &WrapRangeCreate},
@@ -419,5 +435,4 @@ TComputationNodeFactory GetCompositeWithBuiltinFactory(TVector<TComputationNodeF
     };
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

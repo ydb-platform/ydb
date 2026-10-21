@@ -19,7 +19,7 @@ namespace {
 
 struct TStringComparer
 {
-    bool operator()(const TString& lhs, const TString& rhs) const
+    bool operator()(const std::string& lhs, const std::string& rhs) const
     {
         return lhs < rhs;
     }
@@ -27,7 +27,7 @@ struct TStringComparer
 
 struct TStringHasher
 {
-    size_t operator()(const TString& node, ui64 index) const
+    size_t operator()(const std::string& node, ui64 index) const
     {
         return MultiHash(node, index);
     }
@@ -35,7 +35,7 @@ struct TStringHasher
 
 struct TCustomStringHasher
 {
-    size_t operator()(const TString& node, int index) const
+    size_t operator()(const std::string& node, int index) const
     {
         if (index == 0) {
             if (node == "a") {
@@ -58,14 +58,14 @@ struct TCustomStringHasher
 
 TEST(TConsistentHashingRingTest, CheckCollision)
 {
-    TConsistentHashingRing<TString, TString, TStringComparer, TCustomStringHasher, 1> ring;
+    TConsistentHashingRing<std::string, std::string, TStringComparer, TCustomStringHasher, 1> ring;
     ring.AddFile("a", 1);
     ring.AddServer("b", 1);
     ring.AddServer("c", 1);
     EXPECT_EQ(ring.GetServersForFile("a", 1)[0], "c");
 }
 
-void CheckServers(const TCompactVector<TString, 1>& src, const std::vector<TString>& target)
+void CheckServers(const TCompactVector<std::string, 1>& src, const std::vector<std::string>& target)
 {
     EXPECT_EQ(src.size(), target.size());
     EXPECT_TRUE(std::equal(src.begin(), src.end(), target.begin()));
@@ -73,7 +73,7 @@ void CheckServers(const TCompactVector<TString, 1>& src, const std::vector<TStri
 
 TEST(TConsistentHashingRingTest, AddRemove)
 {
-    TConsistentHashingRing<TString, TString, TStringComparer, TCustomStringHasher, 1> ring;
+    TConsistentHashingRing<std::string, std::string, TStringComparer, TCustomStringHasher, 1> ring;
     ring.AddFile("a", 1);
     ring.AddServer("b", 1);
     CheckServers(ring.GetServersForFile("a", 1), {"b"});
@@ -111,7 +111,7 @@ TEST(TConsistentHashingRingTest, AddRemove)
 
 TEST(TConsistentHashingRingTest, AddRemoveManyReplicas)
 {
-    TConsistentHashingRing<TString, TString, TStringComparer, TCustomStringHasher, 1> ring;
+    TConsistentHashingRing<std::string, std::string, TStringComparer, TCustomStringHasher, 1> ring;
 
     ring.AddFile("a", 1);
     ring.AddServer("b", 2);
@@ -155,7 +155,7 @@ TEST(TConsistentHashingRingTest, AddRemoveManyReplicas)
 
 TEST(TConsistentHashingRingTest, CheckConsistency)
 {
-    TConsistentHashingRing<TString, TString, TStringComparer, TCustomStringHasher, 1> ring;
+    TConsistentHashingRing<std::string, std::string, TStringComparer, TCustomStringHasher, 1> ring;
 
     ring.AddFile("e", 1);
 
@@ -207,7 +207,7 @@ private:
     std::uniform_int_distribution<> Distribution_;
 };
 
-using TCrpItemWithToken = std::pair<TString, int>;
+using TCrpItemWithToken = std::pair<std::string, int>;
 
 enum class EQueryType
 {
@@ -291,7 +291,7 @@ double GetPercentageInconsistentFiles(
     int candidateCount,
     int batchSize = 1)
 {
-    TConsistentHashingRing<TString, TString, TStringComparer, TStringHasher, 3> ring;
+    TConsistentHashingRing<std::string, std::string, TStringComparer, TStringHasher, 3> ring;
 
     TCrpItemsContainer servers;
     TCrpItemsContainer files;
@@ -312,8 +312,8 @@ double GetPercentageInconsistentFiles(
         ring.AddServer(generatedServer.first, generatedServer.second);
     }
 
-    auto countDisplaced = [&] (const std::vector<std::pair<EQueryType, std::pair<TString, int>>>& queries) {
-        std::map<TCrpItemWithToken, TCompactVector<TString, 1>> serversBefore;
+    auto countDisplaced = [&] (const std::vector<std::pair<EQueryType, std::pair<std::string, int>>>& queries) {
+        std::map<TCrpItemWithToken, TCompactVector<std::string, 1>> serversBefore;
         for (const auto& file : files) {
             auto candidates = ring.GetServersForFile(file.first, file.second);
             candidates.resize(std::min(file.second, candidateCount));
@@ -398,7 +398,7 @@ double GetPercentageInconsistentFiles(
 TCrpItemWithToken GenerateItem() {
     auto generator = TUniformGenerator();
 
-    TString buffer;
+    std::string buffer;
     for (int i = 0; i < StringSize; ++i) {
         buffer.push_back(PossibleSymbols[generator(PossibleSymbolsCount)]);
     }

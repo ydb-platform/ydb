@@ -15,6 +15,7 @@ SRCS(
     flat_database.h
     flat_dbase_scheme.cpp
     flat_dbase_apply.cpp
+    flat_direct_part_writer.h
     flat_exec_broker.cpp
     flat_exec_commit.cpp
     flat_exec_commit_mgr.cpp
@@ -72,6 +73,8 @@ SRCS(
     flat_store_hotdog.cpp
     flat_table.cpp
     flat_table.h
+    flat_table_key_blocks.cpp
+    flat_table_key_blocks.h
     flat_table_part.cpp
     flat_table_part.h
     flat_table_misc.cpp
@@ -83,6 +86,9 @@ SRCS(
     probes.cpp
     shared_handle.cpp
     shared_cache_counters.cpp
+    shared_cache_btree_walk.cpp
+    shared_cache_btree_walk.h
+    shared_sausagecache_state.h
     shared_sausagecache.cpp
     shared_sausagecache.h
     tablet_flat_executor.h
@@ -114,7 +120,7 @@ PEERDIR(
     ydb/library/actors/util
     ydb/library/actors/core
     ydb/library/services
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
     library/cpp/containers/intrusive_rb_tree
     library/cpp/containers/stack_vector
     library/cpp/digest/crc32c
@@ -135,8 +141,6 @@ PEERDIR(
     yql/essentials/types/dynumber
     ydb/library/mkql_proto/protos
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

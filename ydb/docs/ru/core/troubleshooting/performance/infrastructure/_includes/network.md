@@ -1,6 +1,6 @@
-Для диагностики сетевых проблем используйте опцию healthcheck во [Встроенном UI](../../../../reference/embedded-ui/index.md):
+Для диагностики сетевых проблем используйте опцию healthcheck во [{{ ydb-ui-name }}](../../../../reference/ydb-ui/index.md):
 
-1. Откройте [Встроенный UI](../../../../reference/embedded-ui/index.md):
+1. Откройте [{{ ydb-ui-name }}](../../../../reference/ydb-ui/index.md):
 
     1. Перейдите во вкладку **Databases** и выберите необходимую базу данных.
 

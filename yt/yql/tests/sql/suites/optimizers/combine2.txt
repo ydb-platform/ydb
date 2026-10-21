@@ -1,0 +1,3 @@
+{"date_from"="2026-01-01";"date_to"="2026-01-20";"id"=1;"value"="b1"};
+{"date_from"="2026-01-20";"date_to"="2026-01-23";"id"=1;"value"="b2"};
+{"date_from"="2026-01-23";"date_to"=#;"id"=1;"value"="b3"};

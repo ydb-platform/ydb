@@ -3,11 +3,13 @@
 
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentials.h>
+#include <aws/core/http/HttpResponse.h>
 #include <aws/core/utils/ratelimiter/RateLimiterInterface.h>
 #include <aws/core/utils/threading/Executor.h>
 #include <aws/sqs/model/GetQueueUrlRequest.h>
 #include <library/cpp/logger/log.h>
 #include <library/cpp/uri/http_url.h>
+#include <util/datetime/base.h>
 #include <util/string/builder.h>
 #include <ydb/public/lib/ydb_cli/commands/sqs_workload/sqs_json/sqs_json_client.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
@@ -36,7 +38,7 @@ namespace NYdb::NConsoleClient {
     TSqsWorkloadScenario::~TSqsWorkloadScenario() {}
 
     void TSqsWorkloadScenario::InitAwsSdk() {
-        AwsOptions.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Debug;
+        AwsOptions.loggingOptions.logLevel = GetAwsSdkLogLevel();
         Aws::InitAPI(AwsOptions);
     }
 
@@ -50,13 +52,21 @@ namespace NYdb::NConsoleClient {
             TotalSec.Seconds(), 0, Percentile, ErrorFlag);
     }
 
-    void TSqsWorkloadScenario::InitSqsClient(const TClientCommand::TConfig& config) {
+    Aws::Utils::Logging::LogLevel TSqsWorkloadScenario::GetAwsSdkLogLevel() const {
+        return AwsSdkLog
+            ? Aws::Utils::Logging::LogLevel::Debug
+            : Aws::Utils::Logging::LogLevel::Off;
+    }
+
+    Aws::Client::ClientConfiguration TSqsWorkloadScenario::CreateSqsClientConfiguration() const {
         Aws::Client::ClientConfiguration sqsClientConfiguration;
 
         sqsClientConfiguration.endpointOverride =
             Aws::String(Endpoint.c_str(), Endpoint.size());
         sqsClientConfiguration.scheme = Aws::Http::Scheme::HTTP;
         sqsClientConfiguration.httpRequestTimeoutMs = RequestTimeoutMs;
+        sqsClientConfiguration.disableExpectHeader = true;
+        sqsClientConfiguration.maxConnections = WorkersCount * 4;
         sqsClientConfiguration.executor =
             Aws::MakeShared<Aws::Utils::Threading::PooledThreadExecutor>(
                 "pooled-thread-executor", WorkersCount);
@@ -64,6 +74,12 @@ namespace NYdb::NConsoleClient {
         if (AwsRegion.Defined()) {
             sqsClientConfiguration.region = Aws::String(AwsRegion->c_str(), AwsRegion->size());
         }
+
+        return sqsClientConfiguration;
+    }
+
+    void TSqsWorkloadScenario::InitSqsClient(const TClientCommand::TConfig& config) {
+        Aws::Client::ClientConfiguration sqsClientConfiguration = CreateSqsClientConfiguration();
 
         Aws::Auth::AWSCredentials credentials;
         if (AwsAccessKeyId.Defined()) {
@@ -104,15 +120,40 @@ namespace NYdb::NConsoleClient {
     }
 
     TString TSqsWorkloadScenario::GetQueueUrl(TString topic, TString consumer, TMaybe<TString> queueName) const {
+        constexpr size_t maxAttempts = 10;
+        constexpr TDuration retryDelay = TDuration::MilliSeconds(500);
+
         Aws::SQS::Model::GetQueueUrlRequest request;
         request.SetQueueName(BuildQueueName(topic, consumer, queueName));
-        auto outcome = SqsClient->GetQueueUrl(request);
-        if (outcome.IsSuccess()) {
-            return outcome.GetResult().GetQueueUrl().c_str();
-        } else {
-            Log->Write(ELogPriority::TLOG_ERR, "got error: " + outcome.GetError().GetMessage());
-            return "";
+
+        for (size_t attempt = 1; attempt <= maxAttempts; ++attempt) {
+            auto outcome = SqsClient->GetQueueUrl(request);
+            if (outcome.IsSuccess()) {
+                return outcome.GetResult().GetQueueUrl().c_str();
+            }
+
+            const auto& error = outcome.GetError();
+            const auto responseCode = error.GetResponseCode();
+            const bool retryable =
+                error.ShouldRetry() ||
+                responseCode == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE ||
+                Aws::Http::IsRetryableHttpResponseCode(responseCode);
+            const bool finalFailure = !retryable || attempt == maxAttempts;
+
+            Log->Write(
+                finalFailure ? ELogPriority::TLOG_ERR : ELogPriority::TLOG_WARNING,
+                TStringBuilder()
+                    << "GetQueueUrl failed (attempt " << attempt << "/" << maxAttempts
+                    << "): " << error.GetMessage()
+                    << " responseCode=" << static_cast<int>(responseCode));
+
+            if (finalFailure) {
+                break;
+            }
+            Sleep(retryDelay);
         }
+
+        return "";
     }
 
     void TSqsWorkloadScenario::DestroySqsClient() {

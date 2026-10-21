@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from typing import TypeAlias
+
     from _typeshed import SupportsGetItem, SupportsRead
-    from typing_extensions import TypeAlias
 
     # Same as builtins._TranslateTable from typeshed
-    _TranslateTable: TypeAlias = SupportsGetItem[int, Union[str, int, None]]
+    _TranslateTable: TypeAlias = SupportsGetItem[int, str | int | None]
 
 qwerty = "-=qwertyuiop[]asdfghjkl;'zxcvbnm,./_+QWERTYUIOP{}ASDFGHJKL:\"ZXCVBNM<>?"
 dvorak = "[]',.pyfgcrl/=aoeuidhtns-;qjkxbmwvz{}\"<>PYFGCRL?+AOEUIDHTNS_:QJKXBMWVZ"

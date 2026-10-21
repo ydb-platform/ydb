@@ -4,9 +4,21 @@ from __future__ import annotations
 
 import threading
 from abc import ABC, abstractmethod
-from typing import ClassVar
+from typing import ClassVar, Sequence
 
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand, dispatch, fanout
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget
+
+
+def normalize_candidates(candidates: Sequence[ChaosTarget | str]) -> list[ChaosTarget]:
+    """Accept ChaosTarget list or legacy hostname list."""
+    out: list[ChaosTarget] = []
+    for c in candidates:
+        if isinstance(c, ChaosTarget):
+            out.append(c)
+        else:
+            out.append(ChaosTarget.for_host(str(c)))
+    return out
 
 
 class NemesisPlannerBase(ABC):
@@ -23,8 +35,8 @@ class NemesisPlannerBase(ABC):
         self._lock = threading.Lock()
 
     @abstractmethod
-    def scheduled_tick(self, hosts: list[str]) -> list[DispatchCommand]:
-        """Next step for scheduled chaos (subclass-specific)."""
+    def scheduled_tick(self, candidates: list[ChaosTarget]) -> list[DispatchCommand]:
+        """Next step for scheduled chaos; ``candidates`` already filter_safe'd."""
 
     def extract_all_on_disable(self) -> list[DispatchCommand]:
         with self._lock:
@@ -40,14 +52,15 @@ class NemesisPlannerBase(ABC):
         """Called under lock: return all tracked hosts and clear tracking."""
 
     def manual(self, host: str, action: str) -> list[DispatchCommand] | None:
+        target = ChaosTarget.for_host(host)
         if action == "inject":
             with self._lock:
                 self._register_inject(host)
-            return [dispatch(self.nemesis_type, host, "inject", self.PAYLOAD_INJECT)]
+            return [dispatch(self.nemesis_type, target, "inject", self.PAYLOAD_INJECT)]
         if action == "extract":
             with self._lock:
                 self._register_extract(host)
-            return [dispatch(self.nemesis_type, host, "extract", self.PAYLOAD_EXTRACT)]
+            return [dispatch(self.nemesis_type, target, "extract", self.PAYLOAD_EXTRACT)]
         return None
 
     @abstractmethod

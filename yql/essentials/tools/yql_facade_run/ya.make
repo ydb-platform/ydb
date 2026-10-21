@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_facade_run.cpp
@@ -37,7 +37,7 @@ PEERDIR(
     yql/essentials/utils/log
     yql/essentials/protos
     yql/essentials/sql/settings
-    yql/essentials/sql/v1/complete/check
+    yql/essentials/sql/v1/ide/completion/check
     yql/essentials/sql/v1/format
     yql/essentials/sql/v1/format/check
     yql/essentials/sql/v1/lexer/check
@@ -45,7 +45,7 @@ PEERDIR(
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translation
     yql/essentials/sql
     yql/essentials/public/langver
     yql/essentials/core/langver
@@ -59,7 +59,5 @@ PEERDIR(
 
     contrib/libs/protobuf
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -5,6 +5,9 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_defrag.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_output_estimate.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_allocation.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
@@ -22,9 +25,19 @@ namespace NKikimr {
         const bool IgnoreBlock;
         const bool IssueKeepFlag;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
+        const TWriteSource WriteSource;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
+        // New chunks for this put must pass the same bound as its Fresh index.
+        // Unset for recovery writers; those retain their existing BLACK bound.
+        std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> FreshRefuseAtColor;
+        // Index capacity already charged to Fresh; transferred back to Skeleton
+        // on success or allocation refusal, and held until replay or rejection.
+        TFreshAdmission FreshAdmission;
+        // Present for VPut requests; internal replication does not acknowledge a client write.
+        std::optional<ui32> AdmittedGroupGeneration;
+        NPDisk::EAllocationPurpose AllocationPurpose = NPDisk::EAllocationPurpose::Recovery;
 
         mutable NLWTrace::TOrbit Orbit;
 
@@ -38,6 +51,7 @@ namespace NKikimr {
                              NKikimrBlobStorage::EPutHandleClass handleClass,
                              std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
                              NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
+                             TWriteSource writeSource = UnknownWriteSource(),
                              bool rewriteBlob = false)
             : SenderId(senderId)
             , Cookie(cookie)
@@ -47,6 +61,7 @@ namespace NKikimr {
             , IgnoreBlock(ignoreBlock)
             , IssueKeepFlag(issueKeepFlag)
             , HandleClass(handleClass)
+            , WriteSource(writeSource)
             , Result(std::move(result))
             , RewriteBlob(rewriteBlob)
         {
@@ -80,9 +95,20 @@ namespace NKikimr {
         const TActorId OrigClient;
         const ui64 OrigCookie;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
+        const TWriteSource WriteSource;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
+        const bool IsStripe;
+        // The colour at which reserving Fresh chunks for this blob's index record is refused, as for any put
+        // of its data kind. Unset for writers Fresh admission does not gate, such as replication.
+        const std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> FreshRefuseAtColor;
+        // The index record's Fresh admission, taken before the data was written; empty exactly when
+        // FreshRefuseAtColor is unset or the gate is off. Skeleton lands it once the record is in Fresh, or
+        // instead of that when HugeKeeper refused the data.
+        TFreshAdmission FreshAdmission;
+        // Present for VPut requests; internal replication does not acknowledge a client write.
+        std::optional<ui32> AdmittedGroupGeneration;
 
         TEvHullLogHugeBlob(ui64 writeId,
                            const TLogoBlobID &logoBlobID,
@@ -95,7 +121,10 @@ namespace NKikimr {
                            NKikimrBlobStorage::EPutHandleClass handleClass,
                            std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
                            NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
-                           bool rewriteBlob = false)
+                           TWriteSource writeSource,
+                           bool rewriteBlob = false,
+                           bool isStripe = false,
+                           std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> freshRefuseAtColor = std::nullopt)
             : WriteId(writeId)
             , LogoBlobID(logoBlobID)
             , Ingress(ingress)
@@ -105,8 +134,11 @@ namespace NKikimr {
             , OrigClient(origClient)
             , OrigCookie(origCookie)
             , HandleClass(handleClass)
+            , WriteSource(writeSource)
             , Result(std::move(result))
             , RewriteBlob(rewriteBlob)
+            , IsStripe(isStripe)
+            , FreshRefuseAtColor(freshRefuseAtColor)
         {
             if (extraBlockChecks) {
                 ExtraBlockChecks.Swap(extraBlockChecks);
@@ -218,6 +250,16 @@ namespace NKikimr {
         NHuge::THeapStat Stat;
     };
 
+    // Compact allocator-only statistics for monitoring. The result never
+    // contains chunk or slot identifiers.
+    struct TEvHugeSpaceStat : TEventLocal<TEvHugeSpaceStat, TEvBlobStorage::EvHugeSpaceStat> {};
+
+    struct TEvHugeSpaceStatResult
+        : TEventLocal<TEvHugeSpaceStatResult, TEvBlobStorage::EvHugeSpaceStatResult>
+    {
+        NHuge::THeapSpaceStat Stat;
+    };
+
     struct TEvHugePreCompact : TEventLocal<TEvHugePreCompact, TEvBlobStorage::EvHugePreCompact> {};
 
     struct TEvHugePreCompactResult : TEventLocal<TEvHugePreCompactResult, TEvBlobStorage::EvHugePreCompactResult> {
@@ -234,10 +276,20 @@ namespace NKikimr {
     };
 
     struct TEvHugeAllocateSlotsResult : TEventLocal<TEvHugeAllocateSlotsResult, TEvBlobStorage::EvHugeAllocateSlotsResult> {
+        NKikimrProto::EReplyStatus Status = NKikimrProto::OK;
         std::vector<TDiskPart> Locations;
+        // Heap ownership at allocation time. Do not re-read the feature flag or the leading-disk
+        // knob to classify these: both are latched on the VDisk at start, and a missed restart can
+        // still disagree with the heap that actually produced the location.
+        std::vector<bool> IsStripe;
 
-        TEvHugeAllocateSlotsResult(std::vector<TDiskPart> locations)
+        TEvHugeAllocateSlotsResult(std::vector<TDiskPart> locations, std::vector<bool> isStripe)
             : Locations(std::move(locations))
+            , IsStripe(std::move(isStripe))
+        {}
+
+        explicit TEvHugeAllocateSlotsResult(NKikimrProto::EReplyStatus status)
+            : Status(status)
         {}
     };
 
@@ -259,6 +311,12 @@ namespace NKikimr {
         TEvHugeForbiddenChunks(THashSet<TChunkIdx> forbiddenChunks) : ForbiddenChunks(std::move(forbiddenChunks)) {}
     };
 
+    // an immutable snapshot of chunks currently owned by the stripe heap; the requester keeps it for the whole scan
+    struct TEvHugeStripeChunks : TEventLocal<TEvHugeStripeChunks, TEvBlobStorage::EvHugeStripeChunks> {
+        THashSet<TChunkIdx> StripeChunks;
+        TEvHugeStripeChunks(THashSet<TChunkIdx> stripeChunks) : StripeChunks(std::move(stripeChunks)) {}
+    };
+
     ////////////////////////////////////////////////////////////////////////////
     // THugeKeeperCtx
     ////////////////////////////////////////////////////////////////////////////
@@ -275,6 +333,7 @@ namespace NKikimr {
         NMonGroup::TLsmHullGroup LsmHullGroup;
         NMonGroup::TDskOutOfSpaceGroup DskOutOfSpaceGroup;
         const bool IsReadOnlyVDisk;
+        THugeBlobCtxPtr HugeBlobCtx;
 
         THugeKeeperCtx(
                 TIntrusivePtr<TVDiskContext> vctx,

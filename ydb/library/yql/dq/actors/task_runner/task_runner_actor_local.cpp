@@ -11,6 +11,8 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_memory_quota.h>
 
+#include <ydb/library/yql/dq/comp_nodes/operator_memory_quota/dq_operator_memory_quota.h>
+
 #include <ydb/library/yql/dq/actors/task_runner/task_runner_actor.h>
 
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
@@ -125,6 +127,7 @@ private:
 
     void PassAway() override {
         if (MemoryQuota) {
+            MemoryQuota->UnbindOperatorQuota(); // the graph dies without a quota, maybe under the execution scope
             MemoryQuota->TryReleaseQuota();
         }
         TaskRunner.Reset();
@@ -163,40 +166,10 @@ private:
         return true;
     }
 
-    bool ReadyToWatermark() {
-        for (const auto sourceId: SourcesWithWatermarks) {
-            const auto input = TaskRunner->GetSource(sourceId);
-            // sources are not polled upon watermark
-            if (!input->Empty()) { // check if buffer is empty
-                return false;
-            }
-        }
-        for (const auto inputChannelId: InputsWithWatermarks) {
-            const auto input = TaskRunner->GetInputChannel(inputChannelId);
-            if (!input->IsPausedByWatermark()) {
-                return false;
-            }
-            if (!input->Empty()) {
-                return false;
-            }
-        }
-        for (const auto transformId: InputTransformsWithWatermarks) {
-            const auto t = TaskRunner->GetInputTransform(transformId);
-            if (t) {
-                auto [_, transform] = *t;
-                if (!transform->Empty()) {
-                    return false;
-                }
-                if (transform->IsPending()) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
     void OnContinueRun(TEvContinueRun::TPtr& ev) {
         auto guard = TaskRunner->BindAllocator(MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : ev->Get()->MemLimit);
+        // memory hungry operators reach the task memory quota through this thread-local binding
+        TDqOperatorMemoryQuotaScope operatorQuotaScope(MemoryQuota ? MemoryQuota->GetOperatorQuota() : nullptr);
         const auto& inputMap = ev->Get()->AskFreeSpace
             ? Inputs
             : ev->Get()->InputChannels;
@@ -206,28 +179,7 @@ private:
         THashMap<ui32, i64> inputChannelFreeSpace;
         THashMap<ui32, i64> sourcesFreeSpace;
 
-        const auto& nextWatermark = ev->Get()->WatermarkRequest;
-        if (LastWatermark < nextWatermark) {
-            LastWatermark = *nextWatermark;
-            if (WatermarkRequests.empty()) {
-                if (HasActiveCheckpoint) {
-                    LOG_T("Watermark delayed by checkpoint");
-                } else {
-                    PauseInputs(*nextWatermark);
-                }
-            }
-            WatermarkRequests.push_back(*nextWatermark);
-        }
-
         if (!ev->Get()->CheckpointOnly) {
-            if (!WatermarkRequests.empty()) {
-                auto watermarkRequest = WatermarkRequests.front();
-                if (TaskRunner->GetWatermark().WatermarkIn < watermarkRequest && ReadyToWatermark()) {
-                    LOG_T("Task runner. Inject watermark " << watermarkRequest);
-                    TaskRunner->SetWatermarkIn(watermarkRequest);
-                }
-            }
-
             res = TaskRunner->Run();
         }
 
@@ -239,33 +191,8 @@ private:
             sourcesFreeSpace[index] = TaskRunner->GetSource(index)->GetFreeSpace();
         }
 
-        TMaybe<TInstant> watermarkInjectedToOutputs;
         THolder<TMiniKqlProgramState> mkqlProgramState;
         if (res == ERunStatus::PendingInput || res == ERunStatus::Finished) {
-            if (!WatermarkRequests.empty() && WatermarkRequests.front() == TaskRunner->GetWatermark().WatermarkIn) {
-                auto watermarkRequest = WatermarkRequests.front();
-                WatermarkRequests.pop_front();
-                LOG_T("Task runner. Watermarks. Injecting requested watermark " << watermarkRequest
-                    << " to " << OutputsWithWatermarks.size() << " outputs ");
-
-                for (const auto& channelId : OutputsWithWatermarks) {
-                    NDqProto::TWatermark watermark;
-                    watermark.SetTimestampUs(watermarkRequest.MicroSeconds());
-                    TaskRunner->GetOutputChannel(channelId)->Push(std::move(watermark));
-                }
-                ResumeByWatermark(watermarkRequest);
-                watermarkInjectedToOutputs = watermarkRequest;
-                if (!WatermarkRequests.empty()) {
-                    if (HasActiveCheckpoint) {
-                        LOG_T("Next watermark delayed by active checkpoint");
-                    } else {
-                        auto nextWatermarkRequest = WatermarkRequests.front();
-                        LOG_T("Task runner. Re-pause on watermark " << nextWatermarkRequest);
-                        PauseInputs(nextWatermarkRequest);
-                    }
-                }
-            }
-
             if (ev->Get()->CheckpointRequest.Defined() && ReadyToCheckpoint()) {
                 mkqlProgramState = MakeHolder<TMiniKqlProgramState>();
                 try {
@@ -287,16 +214,11 @@ private:
                 }
                 StartResumeByCheckpoint();
                 HasActiveCheckpoint = false;
-                if (!WatermarkRequests.empty()) {
-                    auto nextWatermarkRequest = WatermarkRequests.front();
-                    LOG_T("Task runner. Pause by watermark " << nextWatermarkRequest);
-                    PauseInputs(nextWatermarkRequest);
-                }
             }
         }
 
         if (MemoryQuota) {
-            MemoryQuota->TryShrinkMemory(guard.GetMutex());
+            MemoryQuota->TryShrinkMemory();
         }
 
         {
@@ -326,7 +248,6 @@ private:
                 (MemoryQuota && MemoryQuota->GetProfileStats()) ? *MemoryQuota->GetProfileStats() : TDqMemoryQuota::TProfileStats(),
                 MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : 0,
                 std::move(mkqlProgramState),
-                watermarkInjectedToOutputs,
                 ev->Get()->CheckpointRequest.Defined(),
                 TInstant::Now() - start),
             /*flags=*/0,
@@ -349,13 +270,6 @@ private:
             HasActiveCheckpoint = true;
             inputChannel->PauseByCheckpoint();
         }
-        if (ev->Get()->WatermarkAfterPush) {
-            LOG_T("Adding " << *ev->Get()->WatermarkAfterPush);
-            inputChannel->AddWatermark(*ev->Get()->WatermarkAfterPush);
-        } else {
-            LOG_T("No watermark ");
-        }
-
         // run
         Send(
             ParentId,
@@ -479,18 +393,6 @@ private:
         MaybeResumeByCheckpoint();
     }
 
-    void ResumeByWatermark(TInstant watermark) {
-        for (const auto& inputId : InputsWithWatermarks) {
-            TaskRunner->GetInputChannel(inputId)->ResumeByWatermark(watermark);
-        }
-    }
-
-    void PauseInputs(TInstant watermark) {
-        for (const auto& inputId : InputsWithWatermarks) {
-            TaskRunner->GetInputChannel(inputId)->PauseByWatermark(watermark);
-        }
-    }
-
     void OnSinkDataRequest(TEvSinkDataRequest::TPtr& ev) {
         auto guard = TaskRunner->BindAllocator();
         auto sink = TaskRunner->GetSink(ev->Get()->Index);
@@ -526,15 +428,9 @@ private:
         auto& inputs = settings.GetInputs();
         for (auto inputId = 0; inputId < inputs.size(); inputId++) {
             auto& input = inputs[inputId];
-            bool inputWatermarksDisabled = false;
             bool inputCheckpointDisabled = false;
             if (input.HasSource()) {
                 Sources.emplace_back(inputId);
-                if (input.GetSource().GetWatermarksMode() == NDqProto::WATERMARKS_MODE_DISABLED) {
-                    inputWatermarksDisabled = true;
-                } else {
-                    SourcesWithWatermarks.emplace_back(inputId);
-                }
             } else {
                 for (auto& channel : input.GetChannels()) {
                     Inputs.emplace_back(channel.GetId());
@@ -543,17 +439,9 @@ private:
                     } else {
                         inputCheckpointDisabled = true;
                     }
-                    if (channel.GetWatermarksMode() != NDqProto::WATERMARKS_MODE_DISABLED) {
-                        InputsWithWatermarks.emplace_back(channel.GetId());
-                    } else {
-                        inputWatermarksDisabled = true;
-                    }
                 }
             }
             if (input.HasTransform()) {
-                if (!inputWatermarksDisabled) {
-                    InputTransformsWithWatermarks.emplace_back(inputId);
-                }
                 if (!inputCheckpointDisabled) {
                     InputTransformsWithCheckpoints.emplace_back(inputId);
                 }
@@ -570,9 +458,6 @@ private:
             } else {
                 for (auto& channel : output.GetChannels()) {
                     Outputs.emplace_back(channel.GetId());
-                    if (channel.GetWatermarksMode() != NDqProto::WATERMARKS_MODE_DISABLED) {
-                        OutputsWithWatermarks.emplace_back(channel.GetId());
-                    }
                 }
             }
         }
@@ -581,10 +466,11 @@ private:
 
         auto guard = TaskRunner->BindAllocator(MemoryQuota ? TMaybe<ui64>(MemoryQuota->GetMkqlMemoryLimit()) : Nothing());
         if (MemoryQuota) {
+            MemoryQuota->BindScopedAlloc(guard.GetMutex());
             if (settings.GetEnableSpilling()) {
-                MemoryQuota->TrySetIncreaseMemoryLimitCallbackWithRSSControl(guard.GetMutex());
+                MemoryQuota->TrySetIncreaseMemoryLimitCallbackWithRSSControl();
             } else {
-                MemoryQuota->TrySetIncreaseMemoryLimitCallback(guard.GetMutex());
+                MemoryQuota->TrySetIncreaseMemoryLimitCallback();
             }
         }
 
@@ -655,20 +541,14 @@ private:
     const ui64 TaskId;
     TVector<ui32> Inputs;
     TVector<ui32> InputsWithCheckpoints;
-    TVector<ui32> InputsWithWatermarks;
     TVector<ui32> InputTransforms;
     TVector<ui32> InputTransformsWithCheckpoints;
-    TVector<ui32> InputTransformsWithWatermarks;
     TVector<ui32> Sources;
-    TVector<ui32> SourcesWithWatermarks;
     TVector<ui32> Sinks;
     TVector<ui32> Outputs;
-    TVector<ui32> OutputsWithWatermarks;
+    THolder<TDqMemoryQuota> MemoryQuota; // declared before TaskRunner: the graph must die before its quota
     TIntrusivePtr<NDq::IDqTaskRunner> TaskRunner;
-    THolder<TDqMemoryQuota> MemoryQuota;
     ui64 ActorElapsedTicks = 0;
-    TMaybe<TInstant> LastWatermark;
-    std::deque<TInstant> WatermarkRequests;
     bool HasActiveCheckpoint = false;
     ui32 UnsentCheckpoints = 0;
 };

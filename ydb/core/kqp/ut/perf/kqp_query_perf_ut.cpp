@@ -576,7 +576,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             SELECT * FROM AS_TABLE($items);
         )"), params);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseStreamIndex ? 2 : 3);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseStreamIndex ? 1 : 3);
     }
 
     Y_UNIT_TEST_QUAD(IndexInsert, QueryService, UseStreamIndex) {
@@ -677,7 +677,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
         CompareYson(R"([[["Anna"];[3800u]]])", FormatResultSetYson(results[0]));
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
     }
 
     Y_UNIT_TEST_TWIN(MultiDeleteFromTable, QueryService) {

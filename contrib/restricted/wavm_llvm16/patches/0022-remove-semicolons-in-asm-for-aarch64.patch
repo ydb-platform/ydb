@@ -1,0 +1,23 @@
+# https://github.com/WAVM/WAVM/issues/308
+#
+# Fix POSIX-AArch64.S build on aarch64.
+# LLVM uses %% as delimiter on aarch64 (silently defined in the sources).
+# It's more straightforward to just expand all the macros for aarch64 than to patch them.
+--- a/contrib/restricted/wavm_llvm16/Lib/Platform/POSIX/POSIX-AArch64.S
++++ b/contrib/restricted/wavm_llvm16/Lib/Platform/POSIX/POSIX-AArch64.S
+@@ -28,6 +28,15 @@
+
+ .text
+
++#ifdef __APPLE__
++	.globl _wavm_probe_stack
++	.align 16
++_wavm_probe_stack:
++	.cfi_startproc
++		br x30
++	.cfi_endproc
++#else
+ BEGIN_FUNC(wavm_probe_stack)
+ 	br x30
+ END_FUNC(wavm_probe_stack)
++#endif

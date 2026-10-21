@@ -1,0 +1,5 @@
+pragma config.flags('OptimizerFlags', 'KeepWorld');
+use plato;
+
+insert into Output
+select * from Input where key > "1";

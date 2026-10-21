@@ -2,16 +2,17 @@
 
 #include "private.h"
 #include "invoker_queue.h"
-#include "profiling_helpers.h"
+#include "helpers.h"
 #include "scheduler_thread.h"
 #include "thread_pool_detail.h"
 
 #include <yt/yt/core/actions/current_invoker.h>
 
 #include <yt/yt/core/misc/heap.h>
-#include <yt/yt/core/misc/ring_queue.h>
 
-#include <yt/yt/core/profiling/tscp.h>
+#include <library/cpp/yt/containers/ring_queue.h>
+
+#include <library/cpp/yt/system/tscp.h>
 
 #include <library/cpp/yt/memory/weak_ptr.h>
 
@@ -56,9 +57,9 @@ public:
         Queue.clear();
     }
 
-    NThreading::TThreadId GetThreadId() const override
+    TThreadId GetThreadId() const override
     {
-        return NThreading::InvalidThreadId;
+        return InvalidThreadId;
     }
 
     bool CheckAffinity(const IInvokerPtr& invoker) const override
@@ -148,7 +149,7 @@ class TFairShareQueue
 {
 public:
     TFairShareQueue(
-        TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+        TIntrusivePtr<TEventCount> callbackEventCount,
         const TTagSet& tags)
         : CallbackEventCount_(std::move(callbackEventCount))
     {
@@ -315,19 +316,19 @@ public:
         TotalTimeCounter_.Record(timeFromEnqueue);
 
         if (timeFromStart > LogDurationThreshold) {
-            YT_LOG_DEBUG("Callback execution took too long (Wait: %v, Execution: %v, Total: %v)",
-                CpuDurationToDuration(action->StartedAt - action->EnqueuedAt),
-                timeFromStart,
-                timeFromEnqueue);
+            YT_TLOG_DEBUG("Callback execution took too long")
+                .With("Wait", CpuDurationToDuration(action->StartedAt - action->EnqueuedAt))
+                .With("Execution", timeFromStart)
+                .With("Total", timeFromEnqueue);
         }
 
         auto waitTime = CpuDurationToDuration(action->StartedAt - action->EnqueuedAt);
 
         if (waitTime > LogDurationThreshold) {
-            YT_LOG_DEBUG("Callback wait took too long (Wait: %v, Execution: %v, Total: %v)",
-                waitTime,
-                timeFromStart,
-                timeFromEnqueue);
+            YT_TLOG_DEBUG("Callback wait took too long")
+                .With("Wait", waitTime)
+                .With("Execution", timeFromStart)
+                .With("Total", timeFromEnqueue);
         }
 
         action->Finished = true;
@@ -351,16 +352,16 @@ private:
         TBucketPtr Bucket;
     };
 
-    const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_;
+    const TIntrusivePtr<TEventCount> CallbackEventCount_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     bool Stopping_ = false;
     std::vector<THeapItem> Heap_;
 
     std::atomic<int> ThreadCount_ = 0;
     std::array<TThreadState, TThreadPoolBase::MaxThreadCount> ThreadStates_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, TagMappingSpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, TagMappingSpinLock_);
     //! \note Beware of ~TBucket behavior, see comment there for details.
     THashMap<TFairShareThreadPoolTag, TWeakPtr<TBucket>> TagToBucket_;
 
@@ -472,7 +473,7 @@ class TFairShareThread
 public:
     TFairShareThread(
         TFairShareQueuePtr queue,
-        TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+        TIntrusivePtr<TEventCount> callbackEventCount,
         const std::string& threadGroupName,
         const std::string& threadName,
         NThreading::EThreadPriority threadPriority,
@@ -548,7 +549,7 @@ public:
     }
 
 private:
-    const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_ = New<NThreading::TEventCount>();
+    const TIntrusivePtr<TEventCount> CallbackEventCount_ = New<TEventCount>();
     const TFairShareQueuePtr Queue_;
 
 

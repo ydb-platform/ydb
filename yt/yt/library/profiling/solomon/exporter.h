@@ -53,6 +53,8 @@ public:
     void Start();
     void Stop();
 
+    void Reconfigure(const TSolomonExporterDynamicConfigPtr& dynamicConfig);
+
     NYTree::IYPathServicePtr GetSensorService();
 
     const TSolomonRegistryPtr& GetRegistry() const;
@@ -110,8 +112,10 @@ private:
         TRemoteRegistry Registry;
     };
 
+    using TRemoteProcessPtr = TIntrusivePtr<TRemoteProcess>;
+
     TSpinLock RemoteProcessLock_;
-    THashSet<TIntrusivePtr<TRemoteProcess>> RemoteProcessList_;
+    THashSet<TRemoteProcessPtr> RemoteProcessList_;
 
     void DoCollect();
     void TransferSensors();

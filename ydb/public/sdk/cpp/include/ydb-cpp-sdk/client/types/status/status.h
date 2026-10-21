@@ -73,10 +73,34 @@ private:
     TStatus Status_;
 };
 
+class TYdbRangeErrorException : public TYdbException {
+public:
+    TYdbRangeErrorException(TStatus status)
+        : Status_(std::move(status))
+    {
+    }
+
+    friend IOutputStream& operator<<(IOutputStream& out, const TYdbRangeErrorException& e) {
+        return out << e.Status_;
+    }
+
+    const TStatus& GetStatus() const {
+        return Status_;
+    }
+
+    TStatus&& ExtractStatus() {
+        return std::move(Status_);
+    }
+
+private:
+    TStatus Status_;
+};
+
 void ThrowOnError(TStatus status, std::function<void(TStatus)> onSuccess = [](TStatus) {});
 void ThrowOnErrorOrPrintIssues(TStatus status);
 
 bool StatusContainsIssueWithCode(const TStatus& status, NYdb::NIssue::TIssueCode code);
+
 }
 
 } // namespace NYdb

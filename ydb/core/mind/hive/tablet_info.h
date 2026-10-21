@@ -2,6 +2,7 @@
 
 #include "hive.h"
 #include "metrics.h"
+#include "event_history.h"
 
 namespace NKikimr {
 namespace NHive {
@@ -153,19 +154,25 @@ protected:
     TMetrics ResourceValues; // current values of various metrics
     TTabletMetricsAggregates ResourceMetricsAggregates;
     TResourceNormalizedValues ResourceNormalizedValues;
+    // Estimated share of the node's total usage caused by this tablet, including load it causes
+    // indirectly in shared pools. Only ever changed through SetUsageImpact, which keeps the owning
+    // node's HighImpactTablets in sync.
+    double UsageImpact = 0;
 
 public:
     TVector<TActorId> ActorsToNotify; // ...OnCreation persistent
     TVector<TActorId> ActorsToNotifyOnRestart; // volatile
     double Weight;
     mutable TString BootState;
+    // diagnostics only: newest events of this tablet, constructed on the first event, see THive::RecordTabletEvent
+    mutable TEventHistory EventHistory;
     TInstant PostponedStart;
     EBalancerPolicy BalancerPolicy;
+    bool IsBackup = false;
     TNodeId FailedNodeId = 0; // last time we tried to start the tablet, we failed on this node
     TInstant BootTime;
     TNodeFilter NodeFilter;
     bool InWaitQueue = false;
-    double UsageImpact = 0;
     bool UpdateMetricsEnqueued = false;
 
     TTabletInfo(ETabletRole role, THive& hive);
@@ -204,10 +211,8 @@ public:
     TString FamilyString() const;
     void ChangeVolatileState(EVolatileState state);
 
-    bool IsReadyToBoot() const {
-        return NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STOPPED;
-    }
-
+    bool IsReadyToWork() const;
+    bool IsReadyToBoot() const;
     bool IsReadyToStart(TInstant now) const;
     bool IsStarting() const;
     bool IsStartingOnNode(TNodeId nodeId) const;
@@ -216,18 +221,19 @@ public:
     bool IsAlive() const;
     bool CanBeAlive() const; // IsAlive() + <Unknown>
 
-    bool IsAliveOnLocal(const TActorId& local) const;
+    bool IsPresentOnLocal(const TActorId& local) const;
     bool IsStopped() const;
     bool InitiateBoot(TNodeId node = 0);
-    bool BecomeStarting(TNodeId nodeId);
-    bool BecomeRunning(TNodeId nodeId);
-    bool BecomeStopped();
+    // reason describes who/what initiated the transition, see THive::RecordTabletEvent
+    bool BecomeStarting(TNodeId nodeId, EHiveEventReason reason);
+    bool BecomeRunning(TNodeId nodeId, EHiveEventReason reason);
+    bool BecomeStopped(EHiveEventReason reason);
 
     TNodeInfo* GetNode() const;
     TActorId GetLocal() const;
     void SendStopTablet(TSideEffects& sideEffects);
     void SendStopTablet(const TActorId& local, TSideEffects& sideEffects);
-    bool InitiateStop(TSideEffects& sideEffects, bool forMove = false);
+    bool InitiateStop(TSideEffects& sideEffects, EHiveEventReason reason, bool forMove = false);
 
     void BecomeUnknown(TNodeInfo* node);
     bool Kick();
@@ -235,6 +241,20 @@ public:
     static bool HasAllowedMetric(const TVector<i64>& allowedMetricIds, EResourceToBalance resource);
     bool HasAllowedMetric(EResourceToBalance resource) const;
     bool HasMetric(EResourceToBalance resource) const;
+
+    double GetUsageImpact() const {
+        return UsageImpact;
+    }
+
+    void SetUsageImpact(double usageImpact);
+
+    // A tablet whose indirect load is large enough that the balancer should isolate it rather than
+    // shuffle it around like an ordinary tablet.
+    bool IsHighImpact() const;
+
+    // A high-impact tablet that accounts for most of its node's usage. Moving it elsewhere would only
+    // relocate the load, so the balancer leaves it alone and drains the rest of the node instead.
+    bool IsPinnedToNode() const;
 
     void UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics);
     TResourceRawValues GetResourceCurrentValues() const;
@@ -313,6 +333,9 @@ public:
     }
 
     void NotifyOnRestart(const TString& status, TSideEffects& sideEffects);
+
+private:
+    void ChangeNode(TNodeId nodeId);
 };
 
 

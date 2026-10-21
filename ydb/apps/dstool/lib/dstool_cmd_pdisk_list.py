@@ -1,4 +1,4 @@
-import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
 from google.protobuf import text_format
@@ -97,9 +97,9 @@ def do(args):
         row['PDiskId'] = pdisk.PDiskId
         row['FQDN'] = node_to_fqdn[pdisk.NodeId]
         row['Path'] = pdisk.Path
-        row['Status'] = kikimr_bsconfig.EDriveStatus.Name(pdisk.DriveStatus)
-        row['DecommitStatus'] = kikimr_bsconfig.EDecommitStatus.Name(pdisk.DecommitStatus)
-        row['MaintenanceStatus'] = kikimr_bsconfig.TMaintenanceStatus.E.Name(pdisk.MaintenanceStatus)
+        row['Status'] = kikimr_bs3.EDriveStatus.Name(pdisk.DriveStatus)
+        row['DecommitStatus'] = kikimr_bs3.EDecommitStatus.Name(pdisk.DecommitStatus)
+        row['MaintenanceStatus'] = kikimr_bs3.TMaintenanceStatus.E.Name(pdisk.MaintenanceStatus)
         row['Type'] = common.EPDiskType.Name(pdisk.Type)
         row['BoxId'] = pdisk.BoxId
         row['Kind'] = pdisk.Kind

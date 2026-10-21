@@ -9,6 +9,8 @@
 
 #include <yt/yt/client/api/client.h>
 
+#include <yt/yt/client/chunk_client/public.h>
+
 #include <yt/yt_proto/yt/client/api/rpc_proxy/proto/api_service.pb.h>
 
 #include <library/cpp/yt/memory/ref.h>
@@ -21,7 +23,11 @@ void PatchProxyForStallRequests(const TConnectionConfigPtr& config, TApiServiceP
 
 ////////////////////////////////////////////////////////////////////////////////
 
-[[noreturn]] void ThrowUnimplemented(const TString& method);
+[[noreturn]] void ThrowUnimplemented(const std::string& method);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void SetControlMultiplexingBandIfEnabled(NRpc::TClientRequest& req, const TConnectionConfigPtr& config);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -168,6 +174,22 @@ void ToProto(
     const NApi::TTabletReadOptionsBase& options);
 
 void ToProto(
+    NProto::TTimingStatistics* protoStatistics,
+    const NChunkClient::TTimingStatistics& statistics);
+
+void FromProto(
+    NChunkClient::TTimingStatistics* statistics,
+    const NProto::TTimingStatistics& protoStatistics);
+
+void ToProto(
+    NProto::TRemoteTableReaderTimingStatistics* protoStatistics,
+    const NApi::TRemoteTableReaderTimingStatistics& statistics);
+
+void FromProto(
+    NApi::TRemoteTableReaderTimingStatistics* statistics,
+    const NProto::TRemoteTableReaderTimingStatistics& protoStatistics);
+
+void ToProto(
     NProto::TQueryStatistics* protoStatistics,
     const NQueryClient::TQueryStatistics& statistics);
 
@@ -244,6 +266,26 @@ void FromProto(
     const TProtobufString& protoCookie);
 
 void ToProto(
+    TProtobufString* protoCookie,
+    const TFilePartitionCookiePtr& cookie);
+
+void FromProto(
+    TFilePartitionCookiePtr* cookie,
+    const TProtobufString& protoCookie);
+
+void ToProto(
+    NProto::TFilePartition* protoFilePartition,
+    const NApi::TFilePartition& filePartition);
+
+void FromProto(
+    NApi::TFilePartition* filePartition,
+    const NProto::TFilePartition& protoFilePartition);
+
+void FromProto(
+    NApi::TFilePartitions* filePartitions,
+    const NProto::TRspPartitionFile& protoRspPartitionFile);
+
+void ToProto(
     NProto::TRowBatchReadOptions* proto,
     const NQueueClient::TQueueRowBatchReadOptions& result);
 
@@ -261,10 +303,10 @@ void FromProto(
 
 void ToProto(
     NProto::TBackupManifest::TClusterManifest* protoEntry,
-    const std::pair<TString, std::vector<NApi::TTableBackupManifestPtr>>& entry);
+    const std::pair<std::string, std::vector<NApi::TTableBackupManifestPtr>>& entry);
 
 void FromProto(
-    std::pair<TString, std::vector<NApi::TTableBackupManifestPtr>>* entry,
+    std::pair<std::string, std::vector<NApi::TTableBackupManifestPtr>>* entry,
     const NProto::TBackupManifest::TClusterManifest& protoEntry);
 
 void ToProto(
@@ -514,6 +556,9 @@ std::vector<TSharedRef> SerializeRowset(
     TRange<TRow> rows,
     NProto::TRowsetDescriptor* descriptor);
 
+NTableClient::TTableSchemaPtr DeserializeRowsetSchema(
+    const NProto::TRowsetDescriptor& descriptor);
+
 template <class TRow>
 TIntrusivePtr<NApi::IRowset<TRow>> DeserializeRowset(
     const NProto::TRowsetDescriptor& descriptor,
@@ -535,7 +580,7 @@ TIntrusivePtr<NApi::IRowset<NTableClient::TTypeErasedRow>> DeserializeRowset(
 
 //! Invokes std::stable_sort reordering addresses by the index of the first regex they match;
 //! addresses not matching any regex are placed at the very end.
-void SortByRegexes(std::vector<TString>& values, const std::vector<NRe2::TRe2Ptr>& regexes);
+void SortByRegexes(std::vector<std::string>& values, const std::vector<NRe2::TRe2Ptr>& regexes);
 
 ////////////////////////////////////////////////////////////////////////////////
 

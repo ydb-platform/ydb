@@ -16,6 +16,7 @@ Point releases may move or break the contents at any time!
 Internet strategies should conform to :rfc:`3986` or the authoritative
 definitions it links to.  If not, report the bug!
 """
+
 # https://tools.ietf.org/html/rfc3696
 
 import string
@@ -105,8 +106,10 @@ class DomainNameStrategy(st.SearchStrategy[str]):
             label_regex = r"[a-zA-Z][a-zA-Z0-9]?"
         else:
             maximum_center_character_pattern_repetitions = self.max_element_length - 2
-            label_regex = r"[a-zA-Z]([a-zA-Z0-9\-]{0,%d}[a-zA-Z0-9])?" % (
-                maximum_center_character_pattern_repetitions,
+            label_regex = (
+                r"[a-zA-Z]([a-zA-Z0-9\-]{0,"
+                f"{maximum_center_character_pattern_repetitions}"
+                r"}[a-zA-Z0-9])?"
             )
 
         # Construct reusable strategies here to avoid a performance hit by doing

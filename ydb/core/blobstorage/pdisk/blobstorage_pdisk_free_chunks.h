@@ -5,6 +5,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/queue.h>
+#include <util/random/shuffle.h>
 
 namespace NKikimr {
 namespace NPDisk {
@@ -21,6 +22,7 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr MonFreeChunks;
     ui64 OutOfOrderCount;
     const ui64 SortFreeChunksPerItems;
+    bool SortingEnabled = true;
 public:
     TFreeChunks(::NMonitoring::TDynamicCounters::TCounterPtr &monFreeChunks, ui64 sortFreeChunksPerItems)
         : FreeChunkCount(0)
@@ -42,7 +44,11 @@ public:
             return 0;
         }
         if (OutOfOrderCount > SortFreeChunksPerItems) {
-            Sort(FreeChunks.begin(), FreeChunks.end());
+            if (SortingEnabled) {
+                Sort(FreeChunks.begin(), FreeChunks.end());
+            } else {
+                Shuffle(FreeChunks.begin(), FreeChunks.end());
+            }
             OutOfOrderCount = 0;
         }
         TChunkIdx idx = FreeChunks.front();
@@ -75,6 +81,10 @@ public:
         FreeChunks.push_front(idx);
         AtomicIncrement(FreeChunkCount);
         MonFreeChunks->Inc();
+    }
+
+    void SetSortingEnabled(bool enabled) {
+        SortingEnabled = enabled;
     }
 
     // A thread-safe function that returns the current number of free chunks.

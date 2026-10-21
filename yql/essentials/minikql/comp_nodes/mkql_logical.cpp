@@ -4,14 +4,13 @@
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include "mkql_check_args.h"
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool IsLeftOptional, bool IsRightOptional>
 class TAndWrapper: public TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>> {
-    typedef TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+    using TBaseComputation = TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>>;
 
 public:
     TAndWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
@@ -44,7 +43,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
 
@@ -84,7 +83,7 @@ public:
 
 template <bool IsLeftOptional, bool IsRightOptional>
 class TOrWrapper: public TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>> {
-    typedef TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+    using TBaseComputation = TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>>;
 
 public:
     TOrWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
@@ -117,7 +116,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
 
@@ -157,7 +156,7 @@ public:
 
 template <bool IsLeftOptional, bool IsRightOptional>
 class TXorWrapper: public TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>> {
-    typedef TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+    using TBaseComputation = TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>>;
 
 public:
     TXorWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
@@ -182,7 +181,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
 
@@ -248,10 +247,10 @@ public:
 
 template <bool IsOptional>
 class TNotWrapper: public TDecoratorCodegeneratorNode<TNotWrapper<IsOptional>> {
-    typedef TDecoratorCodegeneratorNode<TNotWrapper<IsOptional>> TBaseComputation;
+    using TBaseComputation = TDecoratorCodegeneratorNode<TNotWrapper<IsOptional>>;
 
 public:
-    TNotWrapper(IComputationNode* arg)
+    explicit TNotWrapper(IComputationNode* arg)
         : TBaseComputation(arg)
     {
     }
@@ -266,7 +265,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* arg, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* arg, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto xorr = BinaryOperator::CreateXor(arg, ConstantInt::get(arg->getType(), 1), "xor", block);
         const auto result = IsOptional ? SelectInst::Create(IsExists(arg, block, context), xorr, arg, "sel", block) : static_cast<Value*>(xorr);
@@ -282,7 +281,7 @@ IComputationNode* WrapLogicalFunction(TCallable& callable, const TComputationNod
 
     const auto leftType = callable.GetInput(0).GetStaticType();
     const auto rightType = callable.GetInput(1).GetStaticType();
-    CheckBinaryFunctionArgs(leftType, rightType, true, true);
+    CheckBinaryFunctionArgs(leftType, rightType, /*allowOptionalInput=*/true, /*requiresBooleanArgs=*/true);
 
     const bool isLeftOptional = leftType->IsOptional();
     const bool isRightOptional = rightType->IsOptional();
@@ -334,5 +333,4 @@ IComputationNode* WrapNot(TCallable& callable, const TComputationNodeFactoryCont
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

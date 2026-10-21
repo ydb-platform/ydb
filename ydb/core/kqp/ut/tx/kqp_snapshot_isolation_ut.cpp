@@ -124,8 +124,11 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
                 UNIT_ASSERT(false);
             }
 
-            if (WriteOperation == "insert" && GetFillTables()) {
-                // Key (1, "Paul") exists at snapshot time, must be unique constraint violation
+            if (WriteOperation == "insert" && GetFillTables() && !GetIsOlap()) {
+                // Both engines fail the insert and only name the fault differently. Datashard finds the key
+                // already there at tx1's snapshot: constraint violation. Columnshard finds tx2's write and
+                // "sees" it as a conflict. Snapshot isolation forbids write conflicts, so
+                // either name fits.
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, WriteOperation << ": " << result.GetIssues().ToString());
             } else if (!GetFillTables() && (WriteOperation == "delete" || WriteOperation == "update")) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, WriteOperation << ": " << result.GetIssues().ToString());
@@ -987,6 +990,53 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
         tester.SetUseRealThreads(false);
         tester.SetFillTables(false);
         tester.SetIsUpdate(IsUpdate);
+        tester.Execute();
+    }
+
+    class TBrokenLocksReadAfterUpsert : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+            auto session2 = client.GetSession().GetValueSync().GetSession();
+
+            auto result = session1.ExecuteQuery(Q_(R"(
+                SELECT * FROM `/Root/Test` WHERE Name == "Paul";
+            )"), TTxControl::BeginTx(TTxSettings::SnapshotRW())).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+            UNIT_ASSERT(tx1->IsActive());
+
+            result = session1.ExecuteQuery(Q_(R"(
+                PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+                UPSERT INTO `/Root/Test` (Group, Name, Comment)
+                VALUES (1U, "Paul", "Changed");
+            )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            result = session2.ExecuteQuery(Q_(R"(
+                UPSERT INTO `/Root/Test` (Group, Name, Comment)
+                VALUES (1U, "Paul", "Changed Other");
+            )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            result = session1.ExecuteQuery(Q_(R"(
+                SELECT * FROM `/Root/Test` WHERE Name == "Paul";
+            )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(TBrokenLocksReadAfterUpsertOltp) {
+        TBrokenLocksReadAfterUpsert tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TBrokenLocksReadAfterUpsertOlap) {
+        TBrokenLocksReadAfterUpsert tester;
+        tester.SetIsOlap(true);
         tester.Execute();
     }
 }

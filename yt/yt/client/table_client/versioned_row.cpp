@@ -29,14 +29,14 @@ i64 GetDataWeight(const TVersionedValue& value)
 size_t ReadValue(const char* input, TVersionedValue* value)
 {
     int result = ReadRowValue(input, static_cast<TUnversionedValue*>(value));
-    result += ReadVarUint64(input + result, &value->Timestamp);
+    result += ReadVarUint64(input + result, &value->Timestamp.Underlying());
     return result;
 }
 
 size_t WriteValue(char* output, const TVersionedValue& value)
 {
     int result = WriteRowValue(output, static_cast<TUnversionedValue>(value));
-    result += WriteVarUint64(output + result, value.Timestamp);
+    result += WriteVarUint64(output + result, value.Timestamp.Underlying());
     return result;
 }
 

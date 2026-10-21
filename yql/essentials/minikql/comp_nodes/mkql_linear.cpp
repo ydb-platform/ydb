@@ -2,8 +2,9 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <utility>
+
+namespace NKikimr::NMiniKQL {
 
 using namespace NYql::NUdf;
 
@@ -12,22 +13,22 @@ namespace {
 class TToDynamicLinearWrapper: public TMutableComputationNode<TToDynamicLinearWrapper> {
     using TSelf = TToDynamicLinearWrapper;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     class TValue: public TComputationValue<TValue> {
     public:
         TValue(TMemoryUsageInfo* memInfo, TUnboxedValue&& value, const TSourcePosition& pos,
-               const NUdf::ITypeInfoHelper::TPtr& typeHelper)
+               NUdf::ITypeInfoHelper::TPtr typeHelper)
             : TComputationValue(memInfo)
             , Value_(std::move(value))
             , Consumed_(false)
             , Pos_(pos)
-            , TypeHelper_(typeHelper)
+            , TypeHelper_(std::move(typeHelper))
         {
         }
 
-        ~TValue() {
+        ~TValue() override {
             if (!Consumed_) {
                 TypeHelper_->NotifyNotConsumedLinear(Pos_);
             }
@@ -74,7 +75,7 @@ private:
 class TFromDynamicLinearWrapper: public TMutableComputationNode<TFromDynamicLinearWrapper> {
     using TSelf = TFromDynamicLinearWrapper;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
 
 public:
     TFromDynamicLinearWrapper(TComputationMutables& mutables, IComputationNode* source, const TSourcePosition& pos)
@@ -129,5 +130,4 @@ IComputationNode* WrapFromDynamicLinear(TCallable& callable, const TComputationN
     return new TFromDynamicLinearWrapper(ctx.Mutables, source, NUdf::TSourcePosition(row, column, file));
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

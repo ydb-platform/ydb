@@ -199,4 +199,4 @@ TPartitionResult PartitionInputTablesIntoTasksOrdered(
     return TPartitionResult{.TaskInputs = tasks};
 }
 
-}  // namespace NYql::NFmr
+} // namespace NYql::NFmr

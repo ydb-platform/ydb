@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/persqueue/common/logging.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 
@@ -135,9 +136,13 @@ namespace NKikimr::NPQ {
             }
 
             if (cropped) {
-                LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "Cropped PQ response. Tablet: " << Sender
-                    << "cookie " << CookiePQ << " partition " << Partition << " size " << size
-                    << ". Cropped " << cropped << " blobs of " << Blobs.size());
+                YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Cropped PQ response. cookie partition size Cropped blobs of",
+                    {"tablet", Sender},
+                    {"cookiePQ", CookiePQ},
+                    {"partition", Partition},
+                    {"size", size},
+                    {"cropped", cropped},
+                    {"blobsSize", Blobs.size()});
             }
 
             return MakeHolder<TEvPQ::TEvBlobResponse>(CookiePQ, std::move(Blobs), error);
@@ -181,7 +186,7 @@ namespace NKikimr::NPQ {
     };
 
     /// Intablet (L1) cache logic
-    class TIntabletCache {
+    class TIntabletCache : public TLogPrefix {
     public:
         struct TValueL1 {
             enum ESource : ui32 {
@@ -248,10 +253,17 @@ namespace NKikimr::NPQ {
         };
 
         explicit TIntabletCache(ui64 tabletId)
-            : TabletId(tabletId)
+            : TLogPrefix(NKikimrServices::PERSQUEUE)
+            , TabletId(tabletId)
             , L1Strategy(nullptr)
         {
         }
+
+        TStructuredMessage LogPrefix() const override {
+            return {};
+        }
+
+        ui64 TabletId;
 
         const TMapType& CachedMap() const { return Cache; }
         ui64 GetSize() const { return Cache.size(); }
@@ -306,9 +318,11 @@ namespace NKikimr::NPQ {
 
                 reqData.StoredBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, blob.Count, blob.InternalPartsCount, blob.Suffix, cached);
 
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Caching head blob in L1. Partition "
-                    << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
-                    << " size " << reqBlob.RawValue.size() << " actorID " << ctx.SelfID);
+                LOG_D("Caching head blob in L1. Partition offset count size actorID",
+                    {"blobPartition", blob.Partition},
+                    {"blobOffset", blob.Offset},
+                    {"blobCount", blob.Count},
+                    {"rawValueSize", reqBlob.RawValue.size()});
             }
         }
 
@@ -335,16 +349,20 @@ namespace NKikimr::NPQ {
                                                       std::make_tuple(oldBlob.Partition, oldBlob.Offset, oldBlob.PartNo, oldBlob.Count, oldBlob.InternalPartsCount, oldBlob.Suffix, nullptr),
                                                       std::make_tuple(newBlob.Partition, newBlob.Offset, newBlob.PartNo, newBlob.Count, newBlob.InternalPartsCount, newBlob.Suffix, nullptr));
 
-                    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Renaming head blob in L1. Old partition "
-                                << oldBlob.Partition << " old offset " << oldBlob.Offset << " old count " << oldBlob.Count
-                                << " new partition " << newBlob.Partition << " new offset " << newBlob.Offset << " new count " << newBlob.Count
-                                << " actorID " << ctx.SelfID);
+                    LOG_D("Renaming head blob in L1. Old partition old offset old count new partition new offset new count actorID",
+                        {"partition", oldBlob.Partition},
+                        {"offset", oldBlob.Offset},
+                        {"count", oldBlob.Count},
+                        {"newPartition", newBlob.Partition},
+                        {"newOffset", newBlob.Offset},
+                        {"newCount", newBlob.Count});
                 }
             }
         }
 
         void DeleteBlobs(const TKvRequest& kvReq, TCacheL2Request& reqData, const TActorContext& ctx)
         {
+            Y_UNUSED(ctx);
             for (const auto& range : kvReq.DeletedBlobs) {
                 auto [lowerBound, upperBound] = MapSubrange(Cache,
                                                             MakeBlobId(range.Begin), range.IncludeBegin,
@@ -356,9 +374,10 @@ namespace NKikimr::NPQ {
                     reqData.RemovedBlobs.emplace_back(blob.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, blob.Suffix, nullptr);
                     Counters.Dec(value);
 
-                    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Deleting head blob in L1. Partition "
-                                << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
-                                << " actorID " << ctx.SelfID);
+                    LOG_D("Deleting head blob in L1. Partition offset count actorID",
+                        {"blobPartition", blob.Partition},
+                        {"blobOffset", blob.Offset},
+                        {"blobCount", blob.Count});
                 }
 
                 Cache.erase(lowerBound, upperBound);
@@ -393,9 +412,11 @@ namespace NKikimr::NPQ {
 
                 reqData->StoredBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount, reqBlob.Key.GetSuffix(), cached);
 
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Prefetched blob in L1. Partition "
-                    << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
-                    << " size " << reqBlob.RawValue.size()  << " actorID " << ctx.SelfID);
+                LOG_D("Prefetched blob in L1. Partition offset count size actorID",
+                    {"blobPartition", blob.Partition},
+                    {"blobOffset", blob.Offset},
+                    {"blobCount", blob.Count},
+                    {"rawValueSize", reqBlob.RawValue.size()});
                 haveSome = true;
             }
 
@@ -407,25 +428,34 @@ namespace NKikimr::NPQ {
 
         void RemoveEvictedBlob(const TActorContext& ctx, const TBlobId& blob, TCacheValue::TPtr value)
         {
+            Y_UNUSED(ctx);
             auto it = Cache.find(blob);
             if (it == Cache.end()) {
-                LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Can't evict. No such blob in L1. Partition "
-                    << blob.Partition << " offset " << blob.Offset << " size " << value->GetDataSize()
-                    << " cause it's been evicted from L2. Actual L1 size: " << Cache.size());
+                LOG_E("Can't evict. No such blob in L1. Partition offset size cause it's been evicted from L2. Actual L1",
+                    {"blobPartition", blob.Partition},
+                    {"blobOffset", blob.Offset},
+                    {"dataSize", value->GetDataSize()},
+                    {"size", Cache.size()});
                 return;
             }
 
             auto sp = it->second.GetBlob();
             if (sp.get() != value.get()) {
-                LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE, "Evicting strange blob. Partition " << blob.Partition.InternalPartitionId
-                           << "offset " << blob.Offset << " partNo " << blob.PartNo << " size " << value->GetDataSize()
-                           << " L1 ptr " << ((void*)sp.get()) << " vs L2 ptr " << ((void*)value.get()));
+                LOG_C("Evicting strange blob. Partition offset partNo size L1 ptr vs L2 ptr",
+                    {"partitionInternalPartitionId", blob.Partition.InternalPartitionId},
+                    {"blobOffset", blob.Offset},
+                    {"partNo", blob.PartNo},
+                    {"dataSize", value->GetDataSize()},
+                    {"sharedPtr", ((void*)sp.get())},
+                    {"valuePtr", ((void*)value.get())});
             }
             RemoveBlob(it);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Erasing blob in L1. Partition "
-                << blob.Partition << " offset " << blob.Offset << " size " << value->GetDataSize()
-                << " cause it's been evicted from L2. Actual L1 size: " << Cache.size());
+            LOG_D("Erasing blob in L1. Partition offset size cause it's been evicted from L2. Actual L1",
+                {"blobPartition", blob.Partition},
+                {"blobOffset", blob.Offset},
+                {"dataSize", value->GetDataSize()},
+                {"size", Cache.size()});
         }
 
         void Touch(const TActorContext& ctx)
@@ -446,31 +476,39 @@ namespace NKikimr::NPQ {
     private:
         void PrepareTouch(const TActorContext& ctx, THolder<TCacheL2Request>& reqData, const TDeque<TBlobId>& used)
         {
+            Y_UNUSED(ctx);
             for (auto& blob : used) {
                 reqData->ExpectedBlobs.emplace_back(blob.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, blob.Suffix, nullptr);
 
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Touching blob. Partition "
-                    << blob.Partition << " offset " << blob.Offset << " count " << blob.Count);
+                LOG_D("Touching blob. Partition offset count",
+                    {"blobPartition", blob.Partition},
+                    {"blobOffset", blob.Offset},
+                    {"blobCount", blob.Count});
             }
         }
 
         TCacheValue::TPtr GetValue(const TActorContext& ctx, const TBlobId& blobId)
         {
+            Y_UNUSED(ctx);
             const auto it = Cache.find(blobId);
             if (it == Cache.end()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "No blob in L1. Partition "
-                    << blobId.Partition << " offset " << blobId.Offset <<
-                    " partno " << blobId.PartNo << " count " << blobId.Count << " parts_count " << blobId.InternalPartsCount <<
-                    " actorID " << ctx.SelfID);
+                LOG_D("No blob in L1. Partition offset partno count parts_count actorID",
+                    {"partition", blobId.Partition},
+                    {"offset", blobId.Offset},
+                    {"partNo", blobId.PartNo},
+                    {"count", blobId.Count},
+                    {"internalPartsCount", blobId.InternalPartsCount});
                 return nullptr;
             }
 
             TCacheValue::TPtr data = it->second.GetBlob();
             if (!data) {
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Evicted blob in L1. Partition "
-                    << blobId.Partition << " offset " << blobId.Offset <<
-                    " partno " << blobId.PartNo << " count " << blobId.Count << " parts_count " << blobId.InternalPartsCount <<
-                    " actorID " << ctx.SelfID);
+                LOG_D("Evicted blob in L1. Partition offset partno count parts_count actorID",
+                    {"partition", blobId.Partition},
+                    {"offset", blobId.Offset},
+                    {"partNo", blobId.PartNo},
+                    {"count", blobId.Count},
+                    {"internalPartsCount", blobId.InternalPartsCount});
                 RemoveBlob(it);
                 return nullptr;
             }
@@ -480,11 +518,16 @@ namespace NKikimr::NPQ {
                 ("it->second.DataSize", it->second.DataSize);
 
             const TBlobId& blob = it->first;
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Got data from cache. Partition "
-                << blob.Partition << " offset " << blob.Offset <<
-                " partno " << blob.PartNo << " count " << blob.Count << " parts_count " << blob.InternalPartsCount
-                << " source " << (ui32)it->second.Source << " size " << data->GetDataSize()
-                << " accessed " << data->GetAccessCount() << " times before, last time " << data->GetAccessTime());
+            LOG_D("Got data from cache. Partition offset partno count parts_count source size accessed times before, last time",
+                {"blobPartition", blob.Partition},
+                {"blobOffset", blob.Offset},
+                {"partNo", blob.PartNo},
+                {"blobCount", blob.Count},
+                {"internalPartsCount", blob.InternalPartsCount},
+                {"source", (ui32)it->second.Source},
+                {"dataSize", data->GetDataSize()},
+                {"accessCount", data->GetAccessCount()},
+                {"accessTime", data->GetAccessTime()});
 
             return data;
         }
@@ -524,7 +567,6 @@ namespace NKikimr::NPQ {
         }
 
     private:
-        ui64 TabletId;
         TMapType Cache;
         TCounters Counters;
         THolder<TCacheEvictionStrategy> L1Strategy;
@@ -537,14 +579,17 @@ namespace NKikimr::NPQ {
 
         bool CheckExists(const TActorContext& ctx, const TBlobId& blob, TValueL1& out, bool remove = false)
         {
+            Y_UNUSED(ctx);
             auto it = Cache.find(blob);
             if (it != Cache.end()) {
                 out = it->second;
                 AFL_ENSURE(out.GetBlob())("d", "Duplicate blob in L1 with no data");
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Duplicate blob in L1. "
-                    << "Partition " << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
-                    << " size " << out.DataSize << " actorID " << ctx.SelfID
-                    << " is actual " << (bool)out.GetBlob());
+                LOG_D("Duplicate blob in L1. Partition offset count size actorID is actual",
+                    {"blobPartition", blob.Partition},
+                    {"blobOffset", blob.Offset},
+                    {"blobCount", blob.Count},
+                    {"dataSize", out.DataSize},
+                    {"hasBlob", (bool)out.GetBlob()});
                 if (remove)
                     RemoveBlob(it);
                 return true;

@@ -48,6 +48,7 @@ class SequenceTextWrapper(textwrap.TextWrapper):
                  control_codes: Literal['parse', 'strict', 'ignore'] = 'parse',
                  tabsize: int = 8,
                  ambiguous_width: int = 1,
+                 term_program: bool | str = False,
                  **kwargs: Any) -> None:
         """
         Initialize the wrapper.
@@ -56,12 +57,20 @@ class SequenceTextWrapper(textwrap.TextWrapper):
         :param control_codes: How to handle control sequences (see :func:`~.width`).
         :param tabsize: Tab stop width for tab expansion.
         :param ambiguous_width: Width to use for East Asian Ambiguous (A) characters.
+        :param term_program: Terminal software identifier for table correction.
+            ``False`` (default) disables override lookup.  ``True`` reads the
+            ``TERM_PROGRAM`` or ``TERM`` environment variable for auto-detection.
+            Accepts a canonical terminal name matching :func:`list_term_programs`,
+            such as from XTVERSION_, ENQ_, or ``TERM_PROGRAM``.
+
+            .. versionadded:: 0.8.0
         :param kwargs: Additional arguments passed to :class:`textwrap.TextWrapper`.
         """
         super().__init__(width=width, **kwargs)
         self.control_codes = control_codes
         self.tabsize = tabsize
         self.ambiguous_width = ambiguous_width
+        self.term_program = term_program
 
     @staticmethod
     def _next_hyperlink_id() -> str:
@@ -71,7 +80,8 @@ class SequenceTextWrapper(textwrap.TextWrapper):
     def _width(self, text: str) -> int:
         """Measure text width accounting for sequences."""
         return wcwidth_width(text, control_codes=self.control_codes, tabsize=self.tabsize,
-                             ambiguous_width=self.ambiguous_width)
+                             ambiguous_width=self.ambiguous_width,
+                             term_program=self.term_program)
 
     def _strip_sequences(self, text: str) -> str:
         """Strip all terminal sequences from text."""
@@ -520,6 +530,7 @@ def wrap(text: str, width: int = 70, *,
          expand_tabs: bool = True,
          replace_whitespace: bool = True,
          ambiguous_width: int = 1,
+         term_program: bool | str = False,
          initial_indent: str = '',
          subsequent_indent: str = '',
          fix_sentence_endings: bool = False,
@@ -549,6 +560,13 @@ def wrap(text: str, width: int = 70, *,
         may differ from stdlib for non-space whitespace characters.
     :param ambiguous_width: Width to use for East Asian Ambiguous (A)
         characters. Default is ``1`` (narrow). Set to ``2`` for CJK contexts.
+    :param term_program: Terminal software identifier for table correction.
+        ``False`` (default) disables override lookup.  ``True`` reads the
+        ``TERM_PROGRAM`` or ``TERM`` environment variable for auto-detection.
+        Accepts a canonical terminal name matching :func:`list_term_programs`,
+        such as from XTVERSION_, ENQ_, or ``TERM_PROGRAM``.
+
+        .. versionadded:: 0.8.0
     :param initial_indent: String prepended to first line.
     :param subsequent_indent: String prepended to subsequent lines.
     :param fix_sentence_endings: If True, ensure sentences are always
@@ -620,6 +638,7 @@ def wrap(text: str, width: int = 70, *,
         expand_tabs=expand_tabs,
         replace_whitespace=replace_whitespace,
         ambiguous_width=ambiguous_width,
+        term_program=term_program,
         initial_indent=initial_indent,
         subsequent_indent=subsequent_indent,
         fix_sentence_endings=fix_sentence_endings,

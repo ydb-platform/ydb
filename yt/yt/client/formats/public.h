@@ -78,7 +78,6 @@ DECLARE_REFCOUNTED_STRUCT(TProtobufTableConfig)
 DECLARE_REFCOUNTED_STRUCT(TProtobufFormatConfig)
 DECLARE_REFCOUNTED_STRUCT(TWebJsonFormatConfig)
 DECLARE_REFCOUNTED_STRUCT(TSkiffFormatConfig)
-DECLARE_REFCOUNTED_STRUCT(TYamlFormatConfig)
 DECLARE_REFCOUNTED_STRUCT(TArrowFormatConfig)
 DECLARE_REFCOUNTED_STRUCT(TBlobFormatConfig)
 
@@ -96,7 +95,7 @@ class TFormat;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, FormatsLogger, "Formats");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, FormatsLogger, "Formats");
 
 ////////////////////////////////////////////////////////////////////////////////
 

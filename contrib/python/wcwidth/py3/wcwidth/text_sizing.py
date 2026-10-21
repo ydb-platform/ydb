@@ -193,7 +193,9 @@ class TextSizing(typing.NamedTuple):
         if self.params.width > 0:
             return self.params.scale * self.params.width
         w = wcswidth(self.text, ambiguous_width=ambiguous_width)
-        return self.params.scale * max(0, w)
+        if w < 0:
+            w = 0
+        return self.params.scale * w
 
     def make_sequence(self) -> str:
         """Build and return complete OSC 66 Terminal Sequence."""

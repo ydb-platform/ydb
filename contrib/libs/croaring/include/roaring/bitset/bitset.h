@@ -1,3 +1,16 @@
+/*
+ * bitset.h
+ *
+ * This bitset is a general-purpose dynamic bitmap storing bits in a contiguous
+ * array of 64-bit words. The array field points to the word buffer, arraysize
+ * records how many words are currently in use, and capacity records how many
+ * words are allocated.
+ *
+ * Unlike the fixed 16-bit-domain container bitset, this structure can grow to
+ * cover an arbitrary number of bit positions. It is useful when callers need a
+ * resizable bitmap with efficient bitwise operations, scans, and shifts over a
+ * larger or runtime-defined domain.
+ */
 #ifndef CROARING_CBITSET_BITSET_H
 #define CROARING_CBITSET_BITSET_H
 

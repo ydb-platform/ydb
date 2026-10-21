@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
+
+package NYdb.NBS.NNbs1CompatApi.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// WaitReady request/response of NBS1 (cloud/blockstore/libs/storage/protos/
+// volume.proto). Only the fields the NBS2 volume tablet uses are copied; the
+// field numbers are the NBS1 ones.
+
+message TWaitReadyRequest
+{
+    // Label of volume to wait readiness of.
+    string DiskId = 2;
+}
+
+message TWaitReadyResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}

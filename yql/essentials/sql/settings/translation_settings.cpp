@@ -2,10 +2,13 @@
 
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/utils/utf8.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/deprecated/split/split_iterator.h>
 
+#include <util/string/cast.h>
 #include <util/string/split.h>
+#include <util/string/join.h>
 #include <util/system/env.h>
 
 namespace {
@@ -29,6 +32,11 @@ public:
         return true;
     }
 };
+
+[[noreturn]] TString ThrowBad(TStringBuf flag, const TVector<TString>& args) {
+    YQL_ENSURE(false, "Bad " << flag << " args [" << JoinSeq(", ", args) << "]");
+}
+
 } // namespace
 
 namespace NSQLTranslation {
@@ -94,6 +102,10 @@ bool TParsedSettings::ApplyTo(TTranslationSettings& settings, NYql::TIssues& iss
         settings.PgParser = true;
     }
 
+    if (Syntax) {
+        settings.Syntax = Syntax;
+    }
+
     return true;
 }
 
@@ -145,6 +157,8 @@ bool ParseTranslationSettingsFromComments(const TString& query, TParsedSettings&
             // Is always turned on, ignore
         } else if (value == "syntax_pg") {
             parsed.HasPgParser = true;
+        } else if (value.StartsWith("syntax_")) {
+            parsed.Syntax = value.substr(7);
         } else {
             issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, lineNumber), NYql::TIssuesIds::DEFAULT_ERROR,
                                            TStringBuilder() << "Unknown SQL translation setting: " << value));
@@ -161,6 +175,72 @@ bool ParseTranslationSettings(const TString& query, TTranslationSettings& settin
         return false;
     }
     return parsed.ApplyTo(settings, issues);
+}
+
+void ParseTranslationSettings(const TExtendedSqlFlags& flags, TTranslationSettings& settings) {
+    using TFlagValueParser = std::function<void(const TVector<TString>& args, TTranslationSettings& s)>;
+
+    static const THashMap<TString, TFlagValueParser> Parsers = {
+        {
+            "GroupByLimit",
+            [](const TVector<TString>& args, TTranslationSettings& settings) {
+                if (args.empty() || !TryFromString(args[0], settings.GroupByLimit)) {
+                    ThrowBad("GroupByLimit", args);
+                }
+            },
+        },
+        {
+            "GroupByCubeLimit",
+            [](const TVector<TString>& args, TTranslationSettings& settings) {
+                if (args.empty() || !TryFromString(args[0], settings.GroupByCubeLimit)) {
+                    ThrowBad("GroupByCubeLimit", args);
+                }
+            },
+        },
+        {
+            "YqlSelect",
+            [](const TVector<TString>& args, TTranslationSettings& s) {
+                if (!args.empty() && args[0] == "disable") {
+                    s.YqlSelect = EYqlSelect::Disable;
+                } else if (!args.empty() && args[0] == "auto") {
+                    s.YqlSelect = EYqlSelect::Auto;
+                } else if (!args.empty() && args[0] == "force") {
+                    s.YqlSelect = EYqlSelect::Force;
+                } else {
+                    ThrowBad("YqlSelect", args);
+                }
+            },
+        },
+        {
+            "MaxParseTreeDepth",
+            [](const TVector<TString>& args, TTranslationSettings& s) {
+                if (args.empty()) {
+                    ThrowBad("MaxParseTreeDepth", args);
+                }
+
+                size_t value = 0;
+                if (!TryFromString(args[0], value)) {
+                    ThrowBad("MaxParseTreeDepth", args);
+                }
+
+                s.MaxParseTreeDepth = value;
+            },
+        },
+    };
+
+    for (const auto& [flag, args] : flags) {
+        if (args.empty()) {
+            settings.Flags.insert(TString(flag));
+        } else if (const auto* parser = Parsers.FindPtr(flag)) {
+            (*parser)(args, settings);
+        } else {
+            if (settings.StrictConfigValidation) {
+                throw yexception() << "Unknown SQL flag: " << flag;
+            }
+            // Ignore unknown valuable flags, like we are
+            // able to ignore TTranslationSettings::Flags.
+        }
+    }
 }
 
 } // namespace NSQLTranslation

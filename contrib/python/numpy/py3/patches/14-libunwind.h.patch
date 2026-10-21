@@ -1,5 +1,5 @@
---- contrib/python/numpy/py3/numpy/core/src/multiarray/temp_elide.c	(index)
-+++ contrib/python/numpy/py3/numpy/core/src/multiarray/temp_elide.c	(working tree)
+--- contrib/python/numpy/py3/numpy/_core/src/multiarray/temp_elide.c	(index)
++++ contrib/python/numpy/py3/numpy/_core/src/multiarray/temp_elide.c	(working tree)
 @@ -86,7 +86,7 @@
  #if defined HAVE_EXECINFO_H
  #include <execinfo.h>

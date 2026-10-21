@@ -190,7 +190,12 @@ namespace NYdb::NConsoleClient {
                 continue;
             }
 
-            WriteSession_->Write(std::move(*ContinuationToken_), std::move(message.Data), CurrentSeqNo_++);
+            NTopic::TWriteMessage writeMessage(std::move(message.Data));
+            writeMessage.SeqNo(CurrentSeqNo_++);
+            if (WriterParams_.DeferredPublication().Defined()) {
+                writeMessage.DeferredPublication(*WriterParams_.DeferredPublication());
+            }
+            WriteSession_->Write(std::move(*ContinuationToken_), std::move(writeMessage));
             ContinuationToken_ = Nothing();
         }
 

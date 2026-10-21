@@ -25,4 +25,8 @@ PEERDIR(
 
 END()
 
+IF (OS_LINUX)
+    RECURSE(benchmark/compile)
+ENDIF()
+
 RECURSE_FOR_TESTS(ut)

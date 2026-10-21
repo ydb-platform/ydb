@@ -1,5 +1,7 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 FORK_TEST_FILES()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
@@ -7,10 +9,6 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.in
 PEERDIR(
     ydb/tests/tools/datastreams_helpers
     ydb/tests/tools/fq_runner
-)
-
-DEPENDS(
-    ydb/tests/tools/pq_read
 )
 
 TEST_SRCS(

@@ -50,7 +50,7 @@ static int mb_ass_item(MiniBufferObj *self, Py_ssize_t idx, PyObject *other)
     }
     else {
         PyErr_Format(PyExc_TypeError,
-                     "must assign a "STR_OR_BYTES
+                     "must assign a bytes"
                      " of length 1, not %.200s", Py_TYPE(other)->tp_name);
         return -1;
     }
@@ -85,29 +85,6 @@ static int mb_ass_slice(MiniBufferObj *self,
     return 0;
 }
 
-#if PY_MAJOR_VERSION < 3
-static Py_ssize_t mb_getdata(MiniBufferObj *self, Py_ssize_t idx, void **pp)
-{
-    *pp = self->mb_data;
-    return self->mb_size;
-}
-
-static Py_ssize_t mb_getsegcount(MiniBufferObj *self, Py_ssize_t *lenp)
-{
-    if (lenp)
-        *lenp = self->mb_size;
-    return 1;
-}
-
-static PyObject *mb_str(MiniBufferObj *self)
-{
-    /* Python 2: we want str(buffer) to behave like buffer[:], because
-       that's what bytes(buffer) does on Python 3 and there is no way
-       we can prevent this. */
-    return PyString_FromStringAndSize(self->mb_data, self->mb_size);
-}
-#endif
-
 static int mb_getbuf(MiniBufferObj *self, Py_buffer *view, int flags)
 {
     return PyBuffer_FillInfo(view, (PyObject *)self,
@@ -126,12 +103,6 @@ static PySequenceMethods mb_as_sequence = {
 };
 
 static PyBufferProcs mb_as_buffer = {
-#if PY_MAJOR_VERSION < 3
-    (readbufferproc)mb_getdata,
-    (writebufferproc)mb_getdata,
-    (segcountproc)mb_getsegcount,
-    (charbufferproc)mb_getdata,
-#endif
     (getbufferproc)mb_getbuf,
     (releasebufferproc)0,
 };
@@ -234,15 +205,7 @@ mb_richcompare(PyObject *self, PyObject *other, int op)
     return res;
 }
 
-#if PY_MAJOR_VERSION >= 3
 /* pfffffffffffff pages of copy-paste from listobject.c */
-
-/* pfffffffffffff#2: the PySlice_GetIndicesEx() *macro* should not
-   be called, because C extension modules compiled with it differ
-   on ABI between 3.6.0, 3.6.1 and 3.6.2. */
-#if PY_VERSION_HEX < 0x03070000 && defined(PySlice_GetIndicesEx) && !defined(PYPY_VERSION)
-#undef PySlice_GetIndicesEx
-#endif
 
 static PyObject *mb_subscript(MiniBufferObj *self, PyObject *item)
 {
@@ -280,6 +243,11 @@ static PyObject *mb_subscript(MiniBufferObj *self, PyObject *item)
 static int
 mb_ass_subscript(MiniBufferObj* self, PyObject* item, PyObject* value)
 {
+    if (value == NULL) {
+        PyErr_SetString(PyExc_TypeError,
+                        "'del x[n]' not supported for buffer objects");
+        return -1;
+    }
     if (PyIndex_Check(item)) {
         Py_ssize_t i = PyNumber_AsSsize_t(item, PyExc_IndexError);
         if (i == -1 && PyErr_Occurred())
@@ -317,13 +285,6 @@ static PyMappingMethods mb_as_mapping = {
     (binaryfunc)mb_subscript, /*mp_subscript*/
     (objobjargproc)mb_ass_subscript, /*mp_ass_subscript*/
 };
-#endif
-
-#if PY_MAJOR_VERSION >= 3
-# define MINIBUF_TPFLAGS 0
-#else
-# define MINIBUF_TPFLAGS (Py_TPFLAGS_HAVE_GETCHARBUFFER | Py_TPFLAGS_HAVE_NEWBUFFER)
-#endif
 
 PyDoc_STRVAR(ffi_buffer_doc,
 "ffi.buffer(cdata[, byte_size]):\n"
@@ -354,23 +315,14 @@ static PyTypeObject MiniBuffer_Type = {
     0,                                          /* tp_repr */
     0,                                          /* tp_as_number */
     &mb_as_sequence,                            /* tp_as_sequence */
-#if PY_MAJOR_VERSION < 3
-    0,                                          /* tp_as_mapping */
-#else
     &mb_as_mapping,                             /* tp_as_mapping */
-#endif
     0,                                          /* tp_hash */
     0,                                          /* tp_call */
-#if PY_MAJOR_VERSION < 3
-    (reprfunc)mb_str,                           /* tp_str */
-#else
     0,                                          /* tp_str */
-#endif
     PyObject_GenericGetAttr,                    /* tp_getattro */
     0,                                          /* tp_setattro */
     &mb_as_buffer,                              /* tp_as_buffer */
-    (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC |
-        MINIBUF_TPFLAGS),                       /* tp_flags */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,    /* tp_flags */
     ffi_buffer_doc,                             /* tp_doc */
     (traverseproc)mb_traverse,                  /* tp_traverse */
     (inquiry)mb_clear,                          /* tp_clear */

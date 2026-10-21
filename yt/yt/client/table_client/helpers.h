@@ -52,7 +52,7 @@ TVersionedOwningRow YsonToVersionedRow(
     const std::vector<TTimestamp>& deleteTimestamps = {},
     const std::vector<TTimestamp>& extraWriteTimestamps = {});
 TUnversionedOwningRow YsonToKey(TStringBuf yson);
-TString KeyToYson(TUnversionedRow row);
+std::string KeyToYson(TUnversionedRow row);
 
 ////////////////////////////////////////////////////////////////////////////////
 

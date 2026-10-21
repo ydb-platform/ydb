@@ -6,14 +6,13 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool Interruptable, bool UseCtx>
 class TCondenseFlowWrapper: public TStatefulFlowCodegeneratorNode<TCondenseFlowWrapper<Interruptable, UseCtx>> {
-    typedef TStatefulFlowCodegeneratorNode<TCondenseFlowWrapper<Interruptable, UseCtx>> TBaseComputation;
+    using TBaseComputation = TStatefulFlowCodegeneratorNode<TCondenseFlowWrapper<Interruptable, UseCtx>>;
 
 public:
     TCondenseFlowWrapper(
@@ -27,12 +26,12 @@ public:
         IComputationNode* updateState)
         : TBaseComputation(mutables, flow, kind, EValueRepresentation::Embedded)
         ,
-        Flow(flow)
-        , Item(item)
-        , State(state)
-        , Switch(outSwitch)
-        , InitState(initState)
-        , UpdateState(updateState)
+        Flow_(flow)
+        , Item_(item)
+        , State_(state)
+        , Switch_(outSwitch)
+        , InitState_(initState)
+        , UpdateState_(updateState)
     {
     }
 
@@ -43,18 +42,18 @@ public:
 
         if (state.IsInvalid()) {
             state = NUdf::TUnboxedValuePod();
-            State->SetValue(ctx, InitState->GetValue(ctx));
+            State_->SetValue(ctx, InitState_->GetValue(ctx));
         } else if (state.HasValue()) {
             if constexpr (UseCtx) {
                 CleanupCurrentContext();
             }
             state = NUdf::TUnboxedValuePod();
-            State->SetValue(ctx, InitState->GetValue(ctx));
-            State->SetValue(ctx, UpdateState->GetValue(ctx));
+            State_->SetValue(ctx, InitState_->GetValue(ctx));
+            State_->SetValue(ctx, UpdateState_->GetValue(ctx));
         }
 
         while (true) {
-            auto item = Flow->GetValue(ctx);
+            auto item = Flow_->GetValue(ctx);
             if (item.IsYield()) {
                 return item.Release();
             }
@@ -63,34 +62,34 @@ public:
                 break;
             }
 
-            Item->SetValue(ctx, std::move(item));
+            Item_->SetValue(ctx, std::move(item));
 
-            if (Switch) {
-                const auto& reset = Switch->GetValue(ctx);
+            if (Switch_) {
+                const auto& reset = Switch_->GetValue(ctx);
                 if (Interruptable && !reset) {
                     break;
                 }
 
                 if (reset.template Get<bool>()) {
                     state = NUdf::TUnboxedValuePod::Zero();
-                    return State->GetValue(ctx).Release();
+                    return State_->GetValue(ctx).Release();
                 }
             }
 
-            State->SetValue(ctx, UpdateState->GetValue(ctx));
+            State_->SetValue(ctx, UpdateState_->GetValue(ctx));
         }
 
         state = NUdf::TUnboxedValue::MakeFinish();
-        return State->GetValue(ctx).Release();
+        return State_->GetValue(ctx).Release();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
+        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
         MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
-        const auto codegenState = dynamic_cast<ICodegeneratorExternalNode*>(State);
+        const auto codegenState = dynamic_cast<ICodegeneratorExternalNode*>(State_);
         MKQL_ENSURE(codegenState, "State must be codegenerator node.");
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -102,7 +101,7 @@ public:
 
         const auto valueType = Type::getInt128Ty(context);
         const auto state = new LoadInst(valueType, statePtr, "state", block);
-        const auto result = PHINode::Create(valueType, Switch ? 4U : 3U, "result", exit);
+        const auto result = PHINode::Create(valueType, Switch_ ? 4U : 3U, "result", exit);
         result->addIncoming(state, block);
 
         const auto select = SwitchInst::Create(state, work, 3U, block);
@@ -112,7 +111,7 @@ public:
 
         block = init;
         new StoreInst(GetEmpty(context), statePtr, block);
-        codegenState->CreateSetValue(ctx, block, GetNodeValue(InitState, ctx, block));
+        codegenState->CreateSetValue(ctx, block, GetNodeValue(InitState_, ctx, block));
         BranchInst::Create(work, block);
 
         block = next;
@@ -122,12 +121,12 @@ public:
         }
 
         new StoreInst(GetEmpty(context), statePtr, block);
-        codegenState->CreateSetValue(ctx, block, GetNodeValue(InitState, ctx, block));
-        codegenState->CreateSetValue(ctx, block, GetNodeValue(UpdateState, ctx, block));
+        codegenState->CreateSetValue(ctx, block, GetNodeValue(InitState_, ctx, block));
+        codegenState->CreateSetValue(ctx, block, GetNodeValue(UpdateState_, ctx, block));
         BranchInst::Create(work, block);
 
         block = work;
-        const auto item = GetNodeValue(Flow, ctx, block);
+        const auto item = GetNodeValue(Flow_, ctx, block);
         result->addIncoming(item, block);
 
         const auto action = SwitchInst::Create(item, good, 2U, block);
@@ -138,11 +137,11 @@ public:
 
         codegenItem->CreateSetValue(ctx, block, item);
 
-        if (Switch) {
+        if (Switch_) {
             const auto swap = BasicBlock::Create(context, "swap", ctx.Func);
             const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
 
-            const auto reset = GetNodeValue(Switch, ctx, block);
+            const auto reset = GetNodeValue(Switch_, ctx, block);
             if constexpr (Interruptable) {
                 const auto next = BasicBlock::Create(context, "next", ctx.Func);
                 BranchInst::Create(stop, next, IsEmpty(reset, block, context), block);
@@ -155,13 +154,13 @@ public:
             block = swap;
 
             new StoreInst(GetFalse(context), statePtr, block);
-            result->addIncoming(GetNodeValue(State, ctx, block), block);
+            result->addIncoming(GetNodeValue(State_, ctx, block), block);
             BranchInst::Create(exit, block);
 
             block = skip;
         }
 
-        codegenState->CreateSetValue(ctx, block, GetNodeValue(UpdateState, ctx, block));
+        codegenState->CreateSetValue(ctx, block, GetNodeValue(UpdateState_, ctx, block));
         BranchInst::Create(work, block);
 
         block = stop;
@@ -176,26 +175,26 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(Flow)) {
-            this->Own(flow, Item);
-            this->Own(flow, State);
-            this->DependsOn(flow, InitState);
-            this->DependsOn(flow, Switch);
-            this->DependsOn(flow, UpdateState);
+        if (const auto flow = this->FlowDependsOn(Flow_)) {
+            this->Own(flow, Item_);
+            this->Own(flow, State_);
+            this->DependsOn(flow, InitState_);
+            this->DependsOn(flow, Switch_);
+            this->DependsOn(flow, UpdateState_);
         }
     }
 
-    IComputationNode* const Flow;
-    IComputationExternalNode* const Item;
-    IComputationExternalNode* const State;
-    IComputationNode* const Switch;
-    IComputationNode* const InitState;
-    IComputationNode* const UpdateState;
+    IComputationNode* const Flow_;
+    IComputationExternalNode* const Item_;
+    IComputationExternalNode* const State_;
+    IComputationNode* const Switch_;
+    IComputationNode* const InitState_;
+    IComputationNode* const UpdateState_;
 };
 
 template <bool Interruptable, bool UseCtx>
 class TCondenseWrapper: public TCustomValueCodegeneratorNode<TCondenseWrapper<Interruptable, UseCtx>> {
-    typedef TCustomValueCodegeneratorNode<TCondenseWrapper<Interruptable, UseCtx>> TBaseComputation;
+    using TBaseComputation = TCustomValueCodegeneratorNode<TCondenseWrapper<Interruptable, UseCtx>>;
 
 public:
     class TValue: public TComputationValue<TValue> {
@@ -208,9 +207,9 @@ public:
             const TSqueezeState& state,
             TComputationContext& ctx)
             : TBase(memInfo)
-            , Stream(std::move(stream))
-            , Ctx(ctx)
-            , State(state)
+            , Stream_(std::move(stream))
+            , Ctx_(ctx)
+            , State_(state)
         {
         }
 
@@ -221,32 +220,32 @@ public:
 
         NUdf::TUnboxedValue GetTraverseItem(ui32 index) const final {
             Y_UNUSED(index);
-            return Stream;
+            return Stream_;
         }
 
         NUdf::TUnboxedValue Save() const final {
-            return State.Save(Ctx);
+            return State_.Save(Ctx_);
         }
 
         void Load(const NUdf::TStringRef& state) final {
-            State.Load(Ctx, state);
+            State_.Load(Ctx_, state);
         }
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            switch (State.Stage) {
+            switch (State_.Stage) {
                 case ESqueezeState::Finished:
                     return NUdf::EFetchStatus::Finish;
                 case ESqueezeState::Idle:
-                    State.Stage = ESqueezeState::Work;
-                    State.State->SetValue(Ctx, State.InitState->GetValue(Ctx));
+                    State_.Stage = ESqueezeState::Work;
+                    State_.State->SetValue(Ctx_, State_.InitState->GetValue(Ctx_));
                     break;
                 case ESqueezeState::NeedInit:
                     if constexpr (UseCtx) {
                         CleanupCurrentContext();
                     }
-                    State.Stage = ESqueezeState::Work;
-                    State.State->SetValue(Ctx, State.InitState->GetValue(Ctx));
-                    State.State->SetValue(Ctx, State.UpdateState->GetValue(Ctx));
+                    State_.Stage = ESqueezeState::Work;
+                    State_.State->SetValue(Ctx_, State_.InitState->GetValue(Ctx_));
+                    State_.State->SetValue(Ctx_, State_.UpdateState->GetValue(Ctx_));
                     break;
                 default:
                     break;
@@ -254,7 +253,7 @@ public:
 
             while (true) {
                 NYql::NUdf::TUnboxedValue fetchResult;
-                const auto status = Stream.Fetch(fetchResult);
+                const auto status = Stream_.Fetch(fetchResult);
                 if (status == NUdf::EFetchStatus::Yield) {
                     return status;
                 }
@@ -263,32 +262,32 @@ public:
                     break;
                 }
 
-                State.Item->SetValue(Ctx, std::move(fetchResult));
+                State_.Item->SetValue(Ctx_, std::move(fetchResult));
 
-                if (State.Switch) {
-                    const auto& reset = State.Switch->GetValue(Ctx);
+                if (State_.Switch) {
+                    const auto& reset = State_.Switch->GetValue(Ctx_);
                     if (Interruptable && !reset) {
                         break;
                     }
 
                     if (reset.template Get<bool>()) {
-                        State.Stage = ESqueezeState::NeedInit;
-                        result = State.State->GetValue(Ctx);
+                        State_.Stage = ESqueezeState::NeedInit;
+                        result = State_.State->GetValue(Ctx_);
                         return NUdf::EFetchStatus::Ok;
                     }
                 }
 
-                State.State->SetValue(Ctx, State.UpdateState->GetValue(Ctx));
+                State_.State->SetValue(Ctx_, State_.UpdateState->GetValue(Ctx_));
             }
 
-            State.Stage = ESqueezeState::Finished;
-            result = State.State->GetValue(Ctx);
+            State_.Stage = ESqueezeState::Finished;
+            result = State_.State->GetValue(Ctx_);
             return NUdf::EFetchStatus::Ok;
         }
 
-        const NUdf::TUnboxedValue Stream;
-        TComputationContext& Ctx;
-        TSqueezeState State;
+        const NUdf::TUnboxedValue Stream_;
+        TComputationContext& Ctx_;
+        TSqueezeState State_;
     };
 
     TCondenseWrapper(
@@ -305,45 +304,45 @@ public:
         IComputationNode* outLoad = nullptr,
         TType* stateType = nullptr)
         : TBaseComputation(mutables)
-        , Stream(stream)
-        , State(item, state, outSwitch, initState, updateState, inSave, outSave, inLoad, outLoad, stateType)
+        , Stream_(stream)
+        , State_(item, state, outSwitch, initState, updateState, inSave, outSave, inLoad, outLoad, stateType)
     {
         this->Stateless_ = false;
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
-        if (ctx.ExecuteLLVM && Fetch) {
-            return ctx.HolderFactory.Create<TSqueezeCodegenValue>(State, Fetch, ctx, Stream->GetValue(ctx));
+        if (ctx.ExecuteLLVM && Fetch_) {
+            return ctx.HolderFactory.Create<TSqueezeCodegenValue>(State_, Fetch_, ctx, Stream_->GetValue(ctx));
         }
 #endif
-        return ctx.HolderFactory.Create<TValue>(Stream->GetValue(ctx), State, ctx);
+        return ctx.HolderFactory.Create<TValue>(Stream_->GetValue(ctx), State_, ctx);
     }
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Stream);
-        this->Own(State.Item);
-        this->Own(State.State);
-        this->DependsOn(State.Switch);
-        this->DependsOn(State.InitState);
-        this->DependsOn(State.UpdateState);
+        this->DependsOn(Stream_);
+        this->Own(State_.Item);
+        this->Own(State_.State);
+        this->DependsOn(State_.Switch);
+        this->DependsOn(State_.InitState);
+        this->DependsOn(State_.UpdateState);
 
-        this->Own(State.InSave);
-        this->DependsOn(State.OutSave);
-        this->Own(State.InLoad);
-        this->DependsOn(State.OutLoad);
+        this->Own(State_.InSave);
+        this->DependsOn(State_.OutSave);
+        this->Own(State_.InLoad);
+        this->DependsOn(State_.OutLoad);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
     void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        FetchFunc = GenerateFetch(codegen);
-        codegen.ExportSymbol(FetchFunc);
+        FetchFunc_ = GenerateFetch(codegen);
+        codegen.ExportSymbol(FetchFunc_);
     }
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (FetchFunc) {
-            Fetch = reinterpret_cast<TFetchPtr>(codegen.GetPointerToFunction(FetchFunc));
+        if (FetchFunc_) {
+            Fetch_ = reinterpret_cast<TFetchPtr>(codegen.GetPointerToFunction(FetchFunc_));
         }
     }
 
@@ -351,8 +350,8 @@ private:
         auto& module = codegen.GetModule();
         auto& context = codegen.GetContext();
 
-        const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(State.Item);
-        const auto codegenStateArg = dynamic_cast<ICodegeneratorExternalNode*>(State.State);
+        const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(State_.Item);
+        const auto codegenStateArg = dynamic_cast<ICodegeneratorExternalNode*>(State_.State);
 
         MKQL_ENSURE(codegenItemArg, "Item arg must be codegenerator node.");
         MKQL_ENSURE(codegenStateArg, "State arg must be codegenerator node.");
@@ -367,7 +366,7 @@ private:
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto stateType = Type::getInt8Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(stateType)}, false);
+        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(stateType)}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -404,7 +403,7 @@ private:
         block = init;
 
         new StoreInst(ConstantInt::get(state->getType(), static_cast<ui8>(ESqueezeState::Work)), statePtr, block);
-        codegenStateArg->CreateSetValue(ctx, block, GetNodeValue(State.InitState, ctx, block));
+        codegenStateArg->CreateSetValue(ctx, block, GetNodeValue(State_.InitState, ctx, block));
         BranchInst::Create(work, block);
 
         block = next;
@@ -414,8 +413,8 @@ private:
         }
 
         new StoreInst(ConstantInt::get(state->getType(), static_cast<ui8>(ESqueezeState::Work)), statePtr, block);
-        codegenStateArg->CreateSetValue(ctx, block, GetNodeValue(State.InitState, ctx, block));
-        codegenStateArg->CreateSetValue(ctx, block, GetNodeValue(State.UpdateState, ctx, block));
+        codegenStateArg->CreateSetValue(ctx, block, GetNodeValue(State_.InitState, ctx, block));
+        codegenStateArg->CreateSetValue(ctx, block, GetNodeValue(State_.UpdateState, ctx, block));
 
         BranchInst::Create(work, block);
 
@@ -448,11 +447,11 @@ private:
         BranchInst::Create(stop, good, icmp, block);
         block = good;
 
-        if (State.Switch) {
+        if (State_.Switch) {
             const auto swap = BasicBlock::Create(context, "swap", ctx.Func);
             const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
 
-            const auto reset = GetNodeValue(State.Switch, ctx, block);
+            const auto reset = GetNodeValue(State_.Switch, ctx, block);
             if constexpr (Interruptable) {
                 const auto pass = BasicBlock::Create(context, "pass", ctx.Func);
                 const auto done = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, reset, ConstantInt::get(reset->getType(), 0), "done", block);
@@ -470,13 +469,13 @@ private:
             SafeUnRefUnboxedOne(valuePtr, ctx, block);
             const auto state = codegenStateArg->CreateGetValue(ctx, block);
             new StoreInst(state, valuePtr, block);
-            ValueAddRef(State.State->GetRepresentation(), valuePtr, ctx, block);
+            ValueAddRef(State_.State->GetRepresentation(), valuePtr, ctx, block);
             ReturnInst::Create(context, ConstantInt::get(status->getType(), static_cast<ui32>(NUdf::EFetchStatus::Ok)), block);
 
             block = skip;
         }
 
-        codegenStateArg->CreateSetValue(ctx, block, GetNodeValue(State.UpdateState, ctx, block));
+        codegenStateArg->CreateSetValue(ctx, block, GetNodeValue(State_.UpdateState, ctx, block));
         BranchInst::Create(loop, block);
 
         block = stop;
@@ -484,7 +483,7 @@ private:
         SafeUnRefUnboxedOne(valuePtr, ctx, block);
         const auto result = codegenStateArg->CreateGetValue(ctx, block);
         new StoreInst(result, valuePtr, block);
-        ValueAddRef(State.State->GetRepresentation(), valuePtr, ctx, block);
+        ValueAddRef(State_.State->GetRepresentation(), valuePtr, ctx, block);
         ReturnInst::Create(context, ConstantInt::get(status->getType(), static_cast<ui32>(NUdf::EFetchStatus::Ok)), block);
 
         return ctx.Func;
@@ -492,12 +491,12 @@ private:
 
     using TFetchPtr = TSqueezeCodegenValue::TFetchPtr;
 
-    Function* FetchFunc = nullptr;
+    Function* FetchFunc_ = nullptr;
 
-    TFetchPtr Fetch = nullptr;
+    TFetchPtr Fetch_ = nullptr;
 #endif
-    IComputationNode* const Stream;
-    TSqueezeState State;
+    IComputationNode* const Stream_;
+    TSqueezeState State_;
 };
 
 } // namespace
@@ -570,8 +569,7 @@ IComputationNode* WrapSqueeze(TCallable& callable, const TComputationNodeFactory
     }
     const auto stateType = hasSaveLoad ? callable.GetInput(6).GetStaticType() : nullptr;
 
-    return new TCondenseWrapper<false, false>(ctx.Mutables, stream, item, state, nullptr, initState, updateState, inSave, outSave, inLoad, outLoad, stateType);
+    return new TCondenseWrapper<false, false>(ctx.Mutables, stream, item, state, /*outSwitch=*/nullptr, initState, updateState, inSave, outSave, inLoad, outLoad, stateType);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -43,8 +43,8 @@ namespace {
 
 void WriteVersionToLog()
 {
-    YT_LOG_DEBUG("Wrapper version: %v",
-        TProcessState::Get()->ClientVersion);
+    YT_TLOG_DEBUG("Wrapper version")
+        .With("Version", TProcessState::Get()->ClientVersion);
 }
 
 static TNode SecureVaultContents; // safe
@@ -101,8 +101,7 @@ private:
         const TString& logMessage)
     {
         std::function<void()> threadFun = [=] {
-            YT_LOG_INFO("%v",
-                logMessage);
+            YT_TLOG_INFO(logMessage);
             NDetail::TAbortableRegistry::Get()->AbortAllAndBlockForever();
         };
         TThread thread(TThread::TParams(Invoke, &threadFun).SetName("aborter"));
@@ -189,7 +188,7 @@ void CommonInitialize(TGuard<TMutex>& g)
 
             auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateStderrLogger(ToCoreLogLevel(logLevel));
             for (const auto& rule : coreLoggingConfig->Rules) {
-                rule->ExcludeCategories = TConfig::Get()->LogExcludeCategories;
+                rule->ExcludeCategories = THashSet<std::string>(TConfig::Get()->LogExcludeCategories.begin(), TConfig::Get()->LogExcludeCategories.end());
             }
 
             if (auto structuredLogPath = TConfig::Get()->StructuredLog) {
@@ -205,7 +204,7 @@ void CommonInitialize(TGuard<TMutex>& g)
     } else {
         auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateLogFile(logPath, ToCoreLogLevel(logLevel));
         for (const auto& rule : coreLoggingConfig->Rules) {
-            rule->ExcludeCategories = TConfig::Get()->LogExcludeCategories;
+            rule->ExcludeCategories = THashSet<std::string>(TConfig::Get()->LogExcludeCategories.begin(), TConfig::Get()->LogExcludeCategories.end());
         }
 
         if (auto structuredLogPath = TConfig::Get()->StructuredLog) {

@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20260107.1)
+VERSION(20260817.0)
 
-ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20260107.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20260817.0.tar.gz)
 
 PEERDIR(
     library/cpp/sanitizer/include
@@ -33,7 +33,9 @@ NO_UTIL()
 
 SRCS(
     absl/base/casts.cc
+    absl/base/internal/cpu_detect.cc
     absl/base/internal/cycleclock.cc
+    absl/base/internal/hardening.cc
     absl/base/internal/low_level_alloc.cc
     absl/base/internal/poison.cc
     absl/base/internal/raw_logging.cc
@@ -43,15 +45,14 @@ SRCS(
     absl/base/internal/strerror.cc
     absl/base/internal/sysinfo.cc
     absl/base/internal/thread_identity.cc
-    absl/base/internal/throw_delegate.cc
     absl/base/internal/tracing.cc
     absl/base/internal/unscaledcycleclock.cc
     absl/base/log_severity.cc
+    absl/base/throw_delegate.cc
     absl/container/internal/hashtablez_sampler.cc
     absl/container/internal/hashtablez_sampler_force_weak_definition.cc
     absl/container/internal/raw_hash_set.cc
     absl/crc/crc32c.cc
-    absl/crc/internal/cpu_detect.cc
     absl/crc/internal/crc.cc
     absl/crc/internal/crc_cord_state.cc
     absl/crc/internal/crc_memcpy_fallback.cc
@@ -59,7 +60,6 @@ SRCS(
     absl/crc/internal/crc_non_temporal_memcpy.cc
     absl/crc/internal/crc_x86_arm_combined.cc
     absl/debugging/internal/address_is_readable.cc
-    absl/debugging/internal/borrowed_fixup_buffer.cc
     absl/debugging/internal/decode_rust_punycode.cc
     absl/debugging/internal/demangle.cc
     absl/debugging/internal/demangle_rust.cc
@@ -120,6 +120,7 @@ SRCS(
     absl/random/seed_sequences.cc
     absl/status/internal/status_internal.cc
     absl/status/status.cc
+    absl/status/status_builder.cc
     absl/status/status_payload_printer.cc
     absl/status/statusor.cc
     absl/strings/ascii.cc
@@ -174,6 +175,7 @@ SRCS(
     absl/synchronization/notification.cc
     absl/time/civil_time.cc
     absl/time/clock.cc
+    absl/time/clock_interface.cc
     absl/time/duration.cc
     absl/time/format.cc
     absl/time/internal/cctz/src/civil_time_detail.cc
@@ -187,6 +189,7 @@ SRCS(
     absl/time/internal/cctz/src/time_zone_posix.cc
     absl/time/internal/cctz/src/zone_info_source.cc
     absl/time/time.cc
+    absl/types/source_location.cc
 )
 
 IF (OS_WINDOWS)
@@ -195,7 +198,7 @@ IF (OS_WINDOWS)
     )
 ENDIF()
 
-IF (OS_FREERTOS)
+IF (OS_FREERTOS OR OS_ZEPHYR)
     SRCS(
         stubs/failure_signal_handler.cc
     )

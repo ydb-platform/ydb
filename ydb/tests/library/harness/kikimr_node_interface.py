@@ -41,7 +41,15 @@ class NodeInterface(object):
 
     @property
     def monitor(self):
-        return KikimrMonitor(self.host, self.mon_port, use_https=getattr(self, 'mon_uses_https', False), token=getattr(self, '_monitor_token', None))
+        return KikimrMonitor(
+            self.host,
+            self.mon_port,
+            use_https=getattr(self, 'mon_uses_https', False),
+            token=getattr(self, '_monitor_token', None),
+            client_cert_file=getattr(self, '_monitor_client_cert_file', None),
+            client_key_file=getattr(self, '_monitor_client_key_file', None),
+            ca_file=getattr(self, '_monitor_ca_file', None),
+        )
 
     @abc.abstractproperty
     def cwd(self):

@@ -5,9 +5,13 @@
 
 #include "dq_async_stats.h"
 
+#include <memory>
+
 namespace NYql::NDq {
 
 using TDqInputStats = TDqAsyncStats;
+
+class TDqInputReadySet;
 
 class IDqInput : public TSimpleRefCount<IDqInput> {
 public:
@@ -44,21 +48,17 @@ public:
     virtual void PauseByCheckpoint() = 0;
     virtual void ResumeByCheckpoint() = 0;
     virtual bool IsPausedByCheckpoint() const = 0;
-    // Watermarks
-    // Called after receiving watermark (watermark position remembered,
-    // but does not pause channel); watermark may be pushed behind new data
-    // by reading or checkpoint
-    virtual void AddWatermark(TInstant watermark) = 0;
-    // Called after watermark is ready for TaskRunner (got watermarks on all channels;
-    // implies channel must already contain greater-or-equal watermark);
-    // Same as with PauseByCheckpoint, any data added adter Pause is not received until Resume;
-    // If called after PauseByCheckpoint(), checkpoint takes priority
-    virtual void PauseByWatermark(TInstant watermark) = 0;
-    // Called after watermark processed by TaskRunner;
-    // If called before PauseByCheckpoint, all watermarks greater than this
-    // moved after checkpoint (with no data between checkpoint and watermark)
-    virtual void ResumeByWatermark(TInstant watermark) = 0;
-    virtual bool IsPausedByWatermark() const = 0;
+
+    // Opt in to be polled by a union only when marked, see TDqInputReadySet. An input which returns true marks
+    // `slot` right away, and then whenever Pop() or IsFinished() may have changed: data, a watermark or a
+    // checkpoint arrived, the input finished, or it is resumed after a checkpoint. It marks itself before it wakes
+    // the consumer up, and also when its Pop() returns false without the input having been found empty.
+    // Binding again replaces the previous binding. A union is either all bound or all polled: if one of its inputs
+    // returns false, it polls them all as before. The task runner asks for it only where the inputs support it.
+    virtual bool BindReadySet(const std::shared_ptr<TDqInputReadySet>& set, ui32 slot) {
+        Y_UNUSED(set, slot);
+        return false;
+    }
 };
 
 } // namespace NYql::NDq

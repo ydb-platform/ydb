@@ -3,12 +3,15 @@
 #include "public.h"
 
 #include <yt/yt/core/misc/error.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/dns/public.h>
 
 #include <yt/yt/core/actions/future.h>
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
+
+#include <library/cpp/yt/system/local_host.h>
 
 #include <util/generic/hash.h>
 
@@ -19,6 +22,7 @@
 #endif
 
 #include <array>
+#include <optional>
 
 namespace NYT::NNet {
 
@@ -85,8 +89,8 @@ private:
 
     static socklen_t GetGenericLength(const sockaddr& sockAddr);
 
-    friend void ToProto(TString* protoAddress, const TNetworkAddress& address);
-    friend void FromProto(TNetworkAddress* address, const TString& protoAddress);
+    friend void ToProto(TProtobufString* protoAddress, const TNetworkAddress& address);
+    friend void FromProto(TNetworkAddress* address, const TProtobufString& protoAddress);
 };
 
 extern const TNetworkAddress NullNetworkAddress;
@@ -191,8 +195,10 @@ public:
     /*!
      *  Calls |getaddrinfo| and returns the first entry belonging to |AF_INET| or |AF_INET6| family.
      *  Caches successful resolutions.
+     *
+     *  When #options is set, it overrides the IPv4/IPv6 flags from the global config for this resolution.
      */
-    TFuture<TNetworkAddress> Resolve(const std::string& address);
+    TFuture<TNetworkAddress> Resolve(TStringBuf address, std::optional<NDns::TDnsResolveOptions> options = {});
 
     //! Returns the currently installed global DNS resolver.
     NDns::IDnsResolverPtr GetDnsResolver();
@@ -265,7 +271,7 @@ private:
 
 // Expected format: sas1-5535-9d7.sas-test.yp.gencfg-c.yandex.net, or noqpmfiudzbb4hvs.man.yp-c.yandex.net.
 // YP pod id must not contain a '.' in its name.
-std::optional<TStringBuf> InferYPClusterFromHostNameRaw(TStringBuf hostName);
+using ::NYT::InferYPClusterFromHostNameRaw;
 std::optional<std::string> InferYPClusterFromHostName(TStringBuf hostName);
 
 ////////////////////////////////////////////////////////////////////////////////

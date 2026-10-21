@@ -34,7 +34,7 @@ struct TTestedSets {
     void MoveFromHashToCmpSet() {
         const auto size = HashSet.size();
         while (!HashSet.empty()) {
-            CmpSet.insert(std::move(*HashSet.begin()));
+            CmpSet.insert(*HashSet.begin());
             HashSet.erase(HashSet.begin());
         }
         UNIT_ASSERT_EQUAL(size, CmpSet.size());

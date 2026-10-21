@@ -129,7 +129,366 @@ exprEditor.setOptions({
     readOnly: true,
     highlightActiveLine: false,
     highlightGutterLine: false
-})
+});
+
+function positionToCharIndex(text, position) {
+    var lines = text.split("\n");
+    var index = 0;
+    for (var row = 0; row < position.row; ++row) {
+        index += lines[row].length + 1;
+    }
+    return index + position.column;
+}
+
+function charIndexToPosition(text, index) {
+    var lines = text.split("\n");
+    var offset = 0;
+    for (var row = 0; row < lines.length; ++row) {
+        var next = offset + lines[row].length;
+        if (index <= next) {
+            return {row: row, column: index - offset};
+        }
+        offset = next + 1;
+    }
+    return {row: lines.length - 1, column: lines[lines.length - 1].length};
+}
+
+function utf8ByteLength(codePoint) {
+    if (codePoint <= 0x7f) return 1;
+    if (codePoint <= 0x7ff) return 2;
+    if (codePoint <= 0xffff) return 3;
+    return 4;
+}
+
+function codePointAt(text, index) {
+    var first = text.charCodeAt(index);
+    if (first >= 0xd800 && first <= 0xdbff && index + 1 < text.length) {
+        var second = text.charCodeAt(index + 1);
+        if (second >= 0xdc00 && second <= 0xdfff) {
+            return (first - 0xd800) * 0x400 + second - 0xdc00 + 0x10000;
+        }
+    }
+    return first;
+}
+
+function charIndexToUtf8ByteOffset(text, charIndex) {
+    var bytes = 0;
+    for (var i = 0; i < charIndex;) {
+        var point = codePointAt(text, i);
+        bytes += utf8ByteLength(point);
+        i += point > 0xffff ? 2 : 1;
+    }
+    return bytes;
+}
+
+function utf8ByteOffsetToCharIndex(text, byteOffset) {
+    var bytes = 0;
+    for (var i = 0; i < text.length;) {
+        var point = codePointAt(text, i);
+        var next = bytes + utf8ByteLength(point);
+        if (next > byteOffset) {
+            return i;
+        }
+        bytes = next;
+        i += point > 0xffff ? 2 : 1;
+    }
+    return text.length;
+}
+
+function installSqlCompletion(editor) {
+    var Range = ace.require("ace/range").Range;
+    var $popup = $("<div class='sql-completion-popup'><ul></ul></div>").hide();
+    $("body").append($popup);
+
+    var state = {
+        candidates: [],
+        completion: null,
+        selected: 0,
+        requestId: 0,
+        xhr: null,
+        timer: null,
+        shortcutAt: 0,
+        pollSignature: null,
+        inserting: false
+    };
+
+    function getEventKeyCode(e) {
+        return e.which || e.keyCode || e.charCode || 0;
+    }
+
+    function isSpaceKeyEvent(e) {
+        var keyCode = getEventKeyCode(e);
+        return keyCode === 32 || e.key === " " || e.key === "Spacebar" || e.key === "Space" || e.code === "Space";
+    }
+
+    function isCompletionShortcut(e) {
+        return (e.ctrlKey || e.metaKey) && !e.altKey && isSpaceKeyEvent(e);
+    }
+
+    function isVisible() {
+        return $popup.is(":visible");
+    }
+
+    function hideCompletion() {
+        $popup.hide();
+        state.candidates = [];
+        state.completion = null;
+    }
+
+    function moveSelection(delta) {
+        if (!state.candidates.length) return;
+        state.selected = (state.selected + delta + state.candidates.length) % state.candidates.length;
+        renderCompletion();
+    }
+
+    function renderCompletion() {
+        var $list = $popup.find("ul");
+        $list.empty();
+        $.each(state.candidates, function(index, candidate) {
+            var $item = $("<li></li>")
+                .toggleClass("active", index === state.selected)
+                .attr("data-index", index);
+            $("<span class='sql-completion-value'></span>").text(candidate.content).appendTo($item);
+            $("<span class='sql-completion-kind'></span>").text(candidate.kind).appendTo($item);
+            $list.append($item);
+        });
+
+        var pos = editor.getCursorPosition();
+        var coords = editor.renderer.textToScreenCoordinates(pos.row, pos.column);
+        $popup.css({
+            left: coords.pageX + "px",
+            top: (coords.pageY + (editor.renderer.lineHeight || 16)) + "px"
+        }).show();
+
+        var active = $list.children().get(state.selected);
+        if (active) {
+            var top = active.offsetTop;
+            var bottom = top + active.offsetHeight;
+            if (top < $popup.scrollTop()) {
+                $popup.scrollTop(top);
+            } else if (bottom > $popup.scrollTop() + $popup.height()) {
+                $popup.scrollTop(bottom - $popup.height());
+            }
+        }
+    }
+
+    function isSqlIdentifierChar(ch) {
+        return /[A-Za-z0-9_$]/.test(ch);
+    }
+
+    function expandCompletionRange(text, startIndex, endIndex) {
+        while (startIndex > 0 && isSqlIdentifierChar(text.charAt(startIndex - 1))) {
+            --startIndex;
+        }
+        while (endIndex < text.length && isSqlIdentifierChar(text.charAt(endIndex))) {
+            ++endIndex;
+        }
+        return {
+            startIndex: startIndex,
+            endIndex: endIndex
+        };
+    }
+
+    function applyCandidate(candidate) {
+        if (!state.completion || !candidate) return;
+
+        clearTimeout(state.timer);
+        ++state.requestId;
+        if (state.xhr) {
+            state.xhr.abort();
+            state.xhr = null;
+        }
+
+        var text = editor.getValue();
+        var token = state.completion.completedToken;
+        var range = expandCompletionRange(
+            text,
+            utf8ByteOffsetToCharIndex(text, token.sourcePosition),
+            utf8ByteOffsetToCharIndex(text, token.sourcePosition + token.length)
+        );
+        var startIndex = range.startIndex;
+        var endIndex = range.endIndex;
+        var content = candidate.content;
+        var cursorShift = candidate.cursorShift || 0;
+
+        if (content.substr(content.length - 2) === "()" && text.charAt(endIndex) === "(") {
+            content = content.substr(0, content.length - 2);
+            cursorShift = 0;
+        }
+
+        var start = charIndexToPosition(text, startIndex);
+        var end = charIndexToPosition(text, endIndex);
+        var cursorIndex = startIndex + content.length - cursorShift;
+
+        state.inserting = true;
+        editor.getSession().replace(new Range(start.row, start.column, end.row, end.column), content);
+        editor.moveCursorToPosition(charIndexToPosition(editor.getValue(), cursorIndex));
+        editor.clearSelection();
+        state.pollSignature = getPollSignature();
+        state.inserting = false;
+
+        hideCompletion();
+        editor.focus();
+    }
+
+    function shouldCompleteAtCursor() {
+        var text = editor.getValue();
+        var cursorCharIndex = positionToCharIndex(text, editor.getCursorPosition());
+        return cursorCharIndex > 0 && /[A-Za-z0-9_.$]/.test(text.charAt(cursorCharIndex - 1));
+    }
+
+    function getPollSignature() {
+        return editor.getValue();
+    }
+
+    function requestCompletion() {
+        var text = editor.getValue();
+        var cursorCharIndex = positionToCharIndex(text, editor.getCursorPosition());
+        var requestId = ++state.requestId;
+
+        if (state.xhr) {
+            state.xhr.abort();
+        }
+
+        state.xhr = $.ajax({
+            url: "/api/sql/completion",
+            timeout: 10000,
+            dataType: "json",
+            type: "POST",
+            contentType: "application/json",
+            jsonp: false,
+            data: JSON.stringify({
+                program: text,
+                cursorPosition: charIndexToUtf8ByteOffset(text, cursorCharIndex),
+                tableAttr: tableAttrEditor.getValue(),
+                parameters: paramsEditor.getValue(),
+                outputTable: outputTable
+            })
+        })
+        .done(function(response) {
+            if (requestId !== state.requestId) {
+                return;
+            }
+
+            state.completion = response;
+            state.candidates = response.candidates || [];
+            state.selected = 0;
+
+            if (state.candidates.length) {
+                renderCompletion();
+            } else {
+                hideCompletion();
+            }
+        })
+        .fail(function(_, status) {
+            if (status !== "abort") {
+                hideCompletion();
+            }
+        });
+    }
+
+    editor.commands.addCommand({
+        name: "sqlContextCompletion",
+        bindKey: {win: "Ctrl-Space", mac: "Ctrl-Space"},
+        exec: requestCompletion
+    });
+
+    function getInsertedText(change) {
+        var data = change.data || change;
+        if (typeof data.text === "string") {
+            return data.text;
+        }
+        if (data.lines && data.lines.length) {
+            return data.lines.join("\n");
+        }
+        return "";
+    }
+
+    function isInsertChange(change) {
+        var data = change.data || change;
+        return typeof data.action === "string" && data.action.indexOf("insert") === 0;
+    }
+
+    function observeEditorChange() {
+        if (state.inserting) return;
+
+        var signature = getPollSignature();
+        if (signature === state.pollSignature) {
+            return;
+        }
+
+        state.pollSignature = signature;
+        if (shouldCompleteAtCursor()) {
+            clearTimeout(state.timer);
+            state.timer = setTimeout(requestCompletion, 250);
+        }
+    }
+
+    editor.on("change", function(change) {
+        if (state.inserting) return;
+
+        var inserted = getInsertedText(change);
+        clearTimeout(state.timer);
+        state.pollSignature = getPollSignature();
+
+        if (isInsertChange(change) && /[A-Za-z0-9_.$]$/.test(inserted)) {
+            state.timer = setTimeout(requestCompletion, 250);
+        } else {
+            hideCompletion();
+        }
+    });
+
+    editor.on("changeSelection", function() {
+        if (!state.inserting) {
+            hideCompletion();
+        }
+    });
+
+    function handleKeyboardEvent(e) {
+        if (isCompletionShortcut(e)) {
+            var now = Date.now ? Date.now() : new Date().getTime();
+            if (now - state.shortcutAt > 500) {
+                state.shortcutAt = now;
+                requestCompletion();
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+
+        if (!isVisible()) return;
+
+        var keyCode = getEventKeyCode(e);
+        if (keyCode === 38 || e.key === "ArrowUp") {
+            moveSelection(-1);
+        } else if (keyCode === 40 || e.key === "ArrowDown") {
+            moveSelection(1);
+        } else if (keyCode === 13 || keyCode === 9 || e.key === "Enter" || e.key === "Tab") {
+            applyCandidate(state.candidates[state.selected]);
+        } else if (keyCode === 27 || e.key === "Escape" || e.key === "Esc") {
+            hideCompletion();
+        } else {
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    editor.container.addEventListener("keydown", handleKeyboardEvent, true);
+    editor.container.addEventListener("keypress", handleKeyboardEvent, true);
+    state.pollSignature = getPollSignature();
+    setInterval(observeEditorChange, 300);
+
+    $popup.on("mousedown", "li", function(e) {
+        e.preventDefault();
+        applyCandidate(state.candidates[Number($(this).attr("data-index"))]);
+    });
+
+    $(window).on("resize scroll", hideCompletion);
+}
+
+installSqlCompletion(sqlEditor);
 
 function showOutput(output) {
     var headers = "<tr>" + $.map(output.headers, function(header) {

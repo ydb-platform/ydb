@@ -6,6 +6,8 @@
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap {
 
 TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeEv)
@@ -45,7 +47,9 @@ const NKikimr::NOlap::TBlobsAction& TCompactedWriteController::GetBlobsAction() 
 }
 
 void TCompactedWriteController::DoAbort(const TString& reason) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "TCompactedWriteController::DoAbort")("reason", reason);
+    YDB_LOG_WARN("",
+        {"event", "TCompactedWriteController::DoAbort"},
+        {"reason", reason});
 }
 
 }   // namespace NKikimr::NOlap

@@ -1,8 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include <stdint.h>
-#include <map>
+#include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -11,7 +10,6 @@
 #include "opentelemetry/exporters/otlp/otlp_metric_utils.h"
 #include "opentelemetry/exporters/otlp/otlp_populate_attribute_utils.h"
 #include "opentelemetry/exporters/otlp/otlp_preferred_temporality.h"
-#include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/nostd/variant.h"
 #include "opentelemetry/sdk/instrumentationscope/instrumentation_scope.h"
 #include "opentelemetry/sdk/metrics/data/circular_buffer.h"
@@ -94,7 +92,8 @@ void OtlpMetricUtils::ConvertSumMetric(const metric_sdk::MetricData &metric_data
     proto::metrics::v1::NumberDataPoint *proto_sum_point_data = sum->add_data_points();
     proto_sum_point_data->set_start_time_unix_nano(start_ts);
     proto_sum_point_data->set_time_unix_nano(ts);
-    auto sum_data = nostd::get<sdk::metrics::SumPointData>(point_data_with_attributes.point_data);
+    const auto &sum_data =
+        nostd::get<sdk::metrics::SumPointData>(point_data_with_attributes.point_data);
 
     if ((nostd::holds_alternative<int64_t>(sum_data.value_)))
     {
@@ -108,7 +107,7 @@ void OtlpMetricUtils::ConvertSumMetric(const metric_sdk::MetricData &metric_data
     for (auto &kv_attr : point_data_with_attributes.attributes)
     {
       OtlpPopulateAttributeUtils::PopulateAttribute(proto_sum_point_data->add_attributes(),
-                                                    kv_attr.first, kv_attr.second, false);
+                                                    kv_attr.first, kv_attr.second);
     }
   }
 }
@@ -127,7 +126,7 @@ void OtlpMetricUtils::ConvertHistogramMetric(
         histogram->add_data_points();
     proto_histogram_point_data->set_start_time_unix_nano(start_ts);
     proto_histogram_point_data->set_time_unix_nano(ts);
-    auto histogram_data =
+    const auto &histogram_data =
         nostd::get<sdk::metrics::HistogramPointData>(point_data_with_attributes.point_data);
     // sum
     if ((nostd::holds_alternative<int64_t>(histogram_data.sum_)))
@@ -180,7 +179,7 @@ void OtlpMetricUtils::ConvertHistogramMetric(
     for (auto &kv_attr : point_data_with_attributes.attributes)
     {
       OtlpPopulateAttributeUtils::PopulateAttribute(proto_histogram_point_data->add_attributes(),
-                                                    kv_attr.first, kv_attr.second, false);
+                                                    kv_attr.first, kv_attr.second);
     }
   }
 }
@@ -199,7 +198,7 @@ void OtlpMetricUtils::ConvertExponentialHistogramMetric(
         histogram->add_data_points();
     proto_histogram_point_data->set_start_time_unix_nano(start_ts);
     proto_histogram_point_data->set_time_unix_nano(ts);
-    auto histogram_data = nostd::get<sdk::metrics::Base2ExponentialHistogramPointData>(
+    const auto &histogram_data = nostd::get<sdk::metrics::Base2ExponentialHistogramPointData>(
         point_data_with_attributes.point_data);
     if (histogram_data.positive_buckets_ == nullptr && histogram_data.negative_buckets_ == nullptr)
     {
@@ -244,7 +243,7 @@ void OtlpMetricUtils::ConvertExponentialHistogramMetric(
     for (auto &kv_attr : point_data_with_attributes.attributes)
     {
       OtlpPopulateAttributeUtils::PopulateAttribute(proto_histogram_point_data->add_attributes(),
-                                                    kv_attr.first, kv_attr.second, false);
+                                                    kv_attr.first, kv_attr.second);
     }
   }
 }
@@ -259,7 +258,7 @@ void OtlpMetricUtils::ConvertGaugeMetric(const opentelemetry::sdk::metrics::Metr
     proto::metrics::v1::NumberDataPoint *proto_gauge_point_data = gauge->add_data_points();
     proto_gauge_point_data->set_start_time_unix_nano(start_ts);
     proto_gauge_point_data->set_time_unix_nano(ts);
-    auto gauge_data =
+    const auto &gauge_data =
         nostd::get<sdk::metrics::LastValuePointData>(point_data_with_attributes.point_data);
 
     if ((nostd::holds_alternative<int64_t>(gauge_data.value_)))
@@ -274,7 +273,7 @@ void OtlpMetricUtils::ConvertGaugeMetric(const opentelemetry::sdk::metrics::Metr
     for (auto &kv_attr : point_data_with_attributes.attributes)
     {
       OtlpPopulateAttributeUtils::PopulateAttribute(proto_gauge_point_data->add_attributes(),
-                                                    kv_attr.first, kv_attr.second, false);
+                                                    kv_attr.first, kv_attr.second);
     }
   }
 }

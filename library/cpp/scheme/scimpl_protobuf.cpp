@@ -3,6 +3,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 
+#include <memory>
+
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
 #include <google/protobuf/reflection.h>
@@ -154,7 +156,7 @@ namespace NSc {
     }
 
     void TValue::ValueToField(const TValue& value, Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
-        const TString& name = field->name();
+        const TStringBuf name = field->name();
         if (value.IsNull()) {
             if (field->is_required() && !field->has_default_value()) {
                 ythrow TSchemeException() << "has no value for required field " << name;
@@ -203,7 +205,7 @@ namespace NSc {
     }
 
     void TValue::ToField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
-        const TString& name = field->name();
+        const TStringBuf name = field->name();
         const TValue& value = Get(name);
         ValueToField(value, msg, field, opts);
     }
@@ -233,7 +235,7 @@ namespace NSc {
     }
 
     void TValue::ToRepeatedField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
-        const TString& name = field->name();
+        const TStringBuf name = field->name();
 
         const TValue& fieldValue = Get(name);
         if (fieldValue.IsNull()) {
@@ -291,7 +293,7 @@ namespace NSc {
     }
 
     void TValue::ToMapField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
-        const TString& name = field->name();
+        const TStringBuf name = field->name();
 
         const TValue& fieldValue = Get(name);
         if (fieldValue.IsNull()) {
@@ -316,12 +318,12 @@ namespace NSc {
 
         auto mutableField = reflection->GetMutableRepeatedFieldRef<Message>(&msg, field);
         for (const auto& value : fieldValue.GetDict()) {
-            THolder<Message> entry(mutableField.NewMessage());
+            std::unique_ptr<Message> entry(mutableField.NewMessage());
             auto entryDesc = entry->GetDescriptor();
             auto keyField = entryDesc->FindFieldByNumber(1);
             auto valueField = entryDesc->FindFieldByNumber(2);
             auto entryReflection = entry->GetReflection();
-            entryReflection->SetString(entry.Get(), keyField, TString(value.first));
+            entryReflection->SetString(entry.get(), keyField, TString(value.first));
             ValueToField(value.second, *entry, valueField, opts);
             mutableField.Add(*entry);
         }

@@ -1,4 +1,3 @@
-/* postgres can not */
 USE plato;
 
 $input = (FROM Input SELECT key ORDER BY key LIMIT 3);

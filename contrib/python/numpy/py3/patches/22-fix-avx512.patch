@@ -1,0 +1,31 @@
+integer log2 вместо inline-шаблона std::log2 —
+comdat-копия из AVX-512 TU (vcvtusi2sd) прилетала в AVX2-путь -> SIGILL на Zen3
+
+--- contrib/python/numpy/py3/numpy/_core/src/npysort/x86-simd-sort/src/xss-common-argsort.h	(index)
++++ contrib/python/numpy/py3/numpy/_core/src/npysort/x86-simd-sort/src/xss-common-argsort.h	(working tree)
+@@ -645 +645 @@ X86_SIMD_SORT_INLINE void xss_argsort(T *arr,
+-                                       2 * (arrsize_t)log2(arrsize),
++                                       2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)),
+@@ -654 +654 @@ X86_SIMD_SORT_INLINE void xss_argsort(T *arr,
+-                                       2 * (arrsize_t)log2(arrsize),
++                                       2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)),
+@@ -659 +659 @@ X86_SIMD_SORT_INLINE void xss_argsort(T *arr,
+-                arr, arg, 0, arrsize - 1, 2 * (arrsize_t)log2(arrsize), 0);
++                arr, arg, 0, arrsize - 1, 2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)), 0);
+@@ -724 +724 @@ X86_SIMD_SORT_INLINE void xss_argselect(T *arr,
+-                arr, arg, k, 0, arrsize - 1, 2 * (arrsize_t)log2(arrsize));
++                arr, arg, k, 0, arrsize - 1, 2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)));
+--- contrib/python/numpy/py3/numpy/_core/src/npysort/x86-simd-sort/src/xss-common-qsort.h	(index)
++++ contrib/python/numpy/py3/numpy/_core/src/npysort/x86-simd-sort/src/xss-common-qsort.h	(working tree)
+@@ -687 +687 @@ X86_SIMD_SORT_INLINE void xss_qsort(T *arr, arrsize_t arrsize, bool hasnan)
+-                                         2 * (arrsize_t)log2(arrsize),
++                                         2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)),
+@@ -695 +695 @@ X86_SIMD_SORT_INLINE void xss_qsort(T *arr, arrsize_t arrsize, bool hasnan)
+-                                         2 * (arrsize_t)log2(arrsize),
++                                         2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)),
+@@ -700 +700 @@ X86_SIMD_SORT_INLINE void xss_qsort(T *arr, arrsize_t arrsize, bool hasnan)
+-                arr, 0, arrsize - 1, 2 * (arrsize_t)log2(arrsize), 0);
++                arr, 0, arrsize - 1, 2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)), 0);
+@@ -745 +745 @@ xss_qselect(T *arr, arrsize_t k, arrsize_t arrsize, bool hasnan)
+-                                       2 * (arrsize_t)log2(arrsize));
++                                       2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)));

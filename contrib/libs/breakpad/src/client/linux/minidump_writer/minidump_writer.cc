@@ -1,5 +1,4 @@
-// Copyright (c) 2010, Google Inc.
-// All rights reserved.
+// Copyright 2010 Google LLC
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -11,7 +10,7 @@
 // copyright notice, this list of conditions and the following disclaimer
 // in the documentation and/or other materials provided with the
 // distribution.
-//     * Neither the name of Google Inc. nor the names of its
+//     * Neither the name of Google LLC nor the names of its
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
@@ -144,7 +143,7 @@ class MinidumpWriter {
       : fd_(minidump_fd),
         path_(minidump_path),
         ucontext_(context ? &context->context : NULL),
-#if !defined(__ARM_EABI__) && !defined(__mips__)
+#if GOOGLE_BREAKPAD_CRASH_CONTEXT_HAS_FLOAT_STATE
         float_state_(context ? &context->float_state : NULL),
 #endif
         dumper_(dumper),
@@ -523,7 +522,7 @@ class MinidumpWriter {
         if (!cpu.Allocate())
           return false;
         my_memset(cpu.get(), 0, sizeof(RawContextCPU));
-#if !defined(__ARM_EABI__) && !defined(__mips__)
+#if GOOGLE_BREAKPAD_CRASH_CONTEXT_HAS_FLOAT_STATE
         UContextReader::FillCPUContext(cpu.get(), ucontext_, float_state_);
 #else
         UContextReader::FillCPUContext(cpu.get(), ucontext_);
@@ -1257,9 +1256,7 @@ class MinidumpWriter {
           sys_close(fd);
 
           cpus_present.IntersectWith(cpus_possible);
-          int cpu_count = cpus_present.GetCount();
-          if (cpu_count > 255)
-            cpu_count = 255;
+          int cpu_count = std::min(255, cpus_present.GetCount());
           sys_info->number_of_processors = static_cast<uint8_t>(cpu_count);
         }
       }
@@ -1373,6 +1370,59 @@ class MinidumpWriter {
         }
       }
       sys_close(fd);
+    }
+
+    return true;
+  }
+#elif defined(__riscv)
+  bool WriteCPUInformation(MDRawSystemInfo* sys_info) {
+    // processor_architecture should always be set, do this first
+# if __riscv_xlen == 32
+    sys_info->processor_architecture = MD_CPU_ARCHITECTURE_RISCV;
+# elif __riscv_xlen == 64
+    sys_info->processor_architecture = MD_CPU_ARCHITECTURE_RISCV64;
+# else
+#  error "Unexpected __riscv_xlen"
+# endif
+
+    // /proc/cpuinfo is not readable under various sandboxed environments
+    // (e.g. Android services with the android:isolatedProcess attribute)
+    // prepare for this by setting default values now, which will be
+    // returned when this happens.
+    //
+    // Note: Bogus values are used to distinguish between failures (to
+    //       read /sys and /proc files) and really badly configured kernels.
+    sys_info->number_of_processors = 0;
+    sys_info->processor_level = 0U;
+    sys_info->processor_revision = 42;
+    sys_info->cpu.other_cpu_info.processor_features[0] = 0;
+    sys_info->cpu.other_cpu_info.processor_features[1] = 0;
+
+    // Counting the number of CPUs involves parsing two sysfs files,
+    // because the content of /proc/cpuinfo will only mirror the number
+    // of 'online' cores, and thus will vary with time.
+    // See http://www.kernel.org/doc/Documentation/cputopology.txt
+    {
+      CpuSet cpus_present;
+      CpuSet cpus_possible;
+
+      int fd = sys_open("/sys/devices/system/cpu/present",
+                        O_RDONLY | O_CLOEXEC, 0);
+      if (fd >= 0) {
+        cpus_present.ParseSysFile(fd);
+        sys_close(fd);
+
+        fd = sys_open("/sys/devices/system/cpu/possible",
+                      O_RDONLY | O_CLOEXEC, 0);
+        if (fd >= 0) {
+          cpus_possible.ParseSysFile(fd);
+          sys_close(fd);
+
+          cpus_present.IntersectWith(cpus_possible);
+          int cpu_count = std::min(255, cpus_present.GetCount());
+          sys_info->number_of_processors = static_cast<uint8_t>(cpu_count);
+        }
+      }
     }
 
     return true;
@@ -1505,7 +1555,7 @@ class MinidumpWriter {
   const char* path_;  // Path to the file where the minidum should be written.
 
   const ucontext_t* const ucontext_;  // also from the signal handler
-#if !defined(__ARM_EABI__) && !defined(__mips__)
+#if GOOGLE_BREAKPAD_CRASH_CONTEXT_HAS_FLOAT_STATE
   const google_breakpad::fpstate_t* const float_state_;  // ditto
 #endif
   LinuxDumper* dumper_;

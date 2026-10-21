@@ -2,23 +2,19 @@
 
 #include <ydb/core/base/backtrace.h>
 #include <ydb/core/testlib/basics/appdata.h>
+
 #include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 
+#include <util/system/env.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
-
-#include <util/system/env.h>
 
 namespace NYql::NDq {
 
 NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
-    TString topic,
-    TMaybe<TDuration> watermarksPeriod,
-    TDuration lateArrivalDelay,
-    bool idlePartitionsEnabled,
-    bool streamingMode)
+    TString topic, TMaybe<TDuration> watermarksPeriod, TDuration lateArrivalDelay, bool idlePartitionsEnabled, bool streamingMode)
 {
     NYql::NPq::NProto::TDqPqTopicSource settings;
     settings.SetTopicPath(topic);
@@ -38,6 +34,7 @@ NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
     settings.MutableWatermarks()->SetIdlePartitionsEnabled(idlePartitionsEnabled);
     settings.MutableWatermarks()->SetLateArrivalDelayUs(lateArrivalDelay.MicroSeconds());
     settings.SetStopAtCurrentEndOffsets(!streamingMode);
+    settings.SetAllowConsumerRewindForDisposition(streamingMode);
 
     if (streamingMode) {
         auto* disposition = settings.mutable_disposition()->mutable_from_time()->mutable_timestamp();
@@ -46,7 +43,6 @@ NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(
     } else {
         settings.mutable_disposition()->mutable_oldest();
     }
-
 
     return settings;
 }
@@ -62,45 +58,37 @@ NYql::NPq::NProto::TDqPqTopicSink BuildPqTopicSinkSettings(TString topic) {
     return settings;
 }
 
-TPqIoTestFixture::TPqIoTestFixture() {
+TPqIoTestFixture::TPqIoTestFixture(ui32 nodeCount)
+    : CaSetup(std::make_unique<TFakeCASetup>(nodeCount))
+{
     NTestUtils::SetupSignalHandlers();
 }
 
 TPqIoTestFixture::~TPqIoTestFixture() {
-    CaSetup = nullptr;
+    // Teardown order matters (YDBBUGS-600, https://github.com/ydb-platform/ydb/issues/46513).
+    // Async IO actors subscribe to SDK futures (DescribeTopic, WaitEvent, ...) with callbacks that
+    // call TActorSystem::Send from SDK threads. Resetting the topic client in PassAway does not cancel
+    // requests that are already in flight, so:
+    // 1. pass away the actors while the actor system is still alive;
+    // 2. stop the driver and wait until all in-flight requests and their callbacks are drained
+    //    (a late Send to an already dead actor id is harmless);
+    // 3. only then destroy the test runtime and its actor system.
+    // Destroying the runtime first races TMailboxTable::Cleanup with callbacks pushing events into mailboxes.
+    CaSetup->Terminate();
     Driver.Stop(true);
+    CaSetup = nullptr;
 }
 
-void TPqIoTestFixture::InitAsyncOutput(
-    NPq::NProto::TDqPqTopicSink&& settings,
-    i64 freeSpace)
+void TPqIoTestFixture::InitAsyncOutput(NPq::NProto::TDqPqTopicSink&& settings, i64 freeSpace)
 {
     const THashMap<TString, TString> secureParams;
 
-    TPqGatewayServices pqServices(
-            Driver,
-            nullptr,
-            nullptr,
-            std::make_shared<TPqGatewayConfig>(),
-            nullptr
-        );
+    TPqGatewayServices pqServices(Driver, nullptr, CredentialsFactory, std::make_shared<TPqGatewayConfig>(), nullptr);
 
     CaSetup->Execute([&](TFakeActor& actor) {
-        auto [dqAsyncOutput, dqAsyncOutputAsActor] = CreateDqPqWriteActor(
-            std::move(settings),
-            0,
-            NYql::NDq::TCollectStatsLevel::None,
-            "query_1",
-            0,
-            secureParams,
-            Driver,
-            nullptr,
-            &actor.GetAsyncOutputCallbacks(),
-            MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            CreatePqNativeGateway(std::move(pqServices)),
-            true,
-            freeSpace,
-            true);
+        auto [dqAsyncOutput, dqAsyncOutputAsActor] = CreateDqPqWriteActor(std::move(settings), 0, NYql::NDq::TCollectStatsLevel::None, "query_1",
+            0, secureParams, Driver, CredentialsFactory, &actor.GetAsyncOutputCallbacks(), MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            CreatePqNativeGateway(std::move(pqServices)), true, freeSpace, true);
 
         actor.InitAsyncOutput(dqAsyncOutput, dqAsyncOutputAsActor);
     });
@@ -120,38 +108,28 @@ TString GetDefaultPqDatabase() {
 
 extern const TString DefaultPqConsumer = "test_client";
 
-void PQWrite(
-    const std::vector<TString>& messages,
-    const TString& topic,
-    const TString& endpoint)
+void PQWrite(const std::vector<TString>& messages, const TString& topic, const TString& endpoint)
 {
     auto config = NYdb::TDriverConfig()
-        .SetEndpoint(endpoint)
-        .SetDatabase(GetDefaultPqDatabase())
-        .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
+                      .SetEndpoint(endpoint)
+                      .SetDatabase(GetDefaultPqDatabase())
+                      .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(config);
     {
         NYdb::NTopic::TTopicClient client(driver);
 
-        auto settings = NYdb::NTopic::TWriteSessionSettings()
-            .Path(topic)
-            .MessageGroupId("src_id")
-            .Codec(NYdb::NTopic::ECodec::RAW);
+        auto settings = NYdb::NTopic::TWriteSessionSettings().Path(topic).MessageGroupId("src_id").Codec(NYdb::NTopic::ECodec::RAW);
         auto session = client.CreateSimpleBlockingWriteSession(settings);
         for (const auto& message : messages) {
             UNIT_ASSERT_C(session->Write(message), "Failed to write message with body \"" << message << "\" to topic " << topic);
             Cerr << "Message '" << message << "' was written into topic '" << topic << "'" << Endl;
         }
-        session->Close(); // Wait until all data would be written into PQ.
+        session->Close();   // Wait until all data would be written into PQ.
     }
     driver.Stop(true);
 }
 
-std::vector<TString> PQReadUntil(
-    const TString& topic,
-    ui64 size,
-    const TString& endpoint,
-    TDuration timeout)
+std::vector<TString> PQReadUntil(const TString& topic, ui64 size, const TString& endpoint, TDuration timeout)
 {
     NYdb::TDriverConfig cfg;
     cfg.SetEndpoint(endpoint);
@@ -162,9 +140,7 @@ std::vector<TString> PQReadUntil(
     {
         NYdb::NTopic::TTopicClient client(driver);
         NYdb::NTopic::TReadSessionSettings sessionSettings;
-        sessionSettings
-            .AppendTopics(std::string{topic})
-            .ConsumerName(DefaultPqConsumer);
+        sessionSettings.AppendTopics(std::string{ topic }).ConsumerName(DefaultPqConsumer);
 
         auto promise = NThreading::NewPromise();
 
@@ -173,7 +149,7 @@ std::vector<TString> PQReadUntil(
                 result.emplace_back(message.GetData());
             }
             if (result.size() >= size) {
-                promise.SetValue();
+                promise.TrySetValue();
             }
         }, false, false);
 
@@ -193,12 +169,10 @@ void PQCreateStream(const TString& streamName)
     cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(cfg);
     {
-        NYdb::NDataStreams::V1::TDataStreamsClient client(
-            driver,
-            NYdb::TCommonClientSettings().Database(GetDefaultPqDatabase()));
+        NYdb::NDataStreams::V1::TDataStreamsClient client(driver, NYdb::TCommonClientSettings().Database(GetDefaultPqDatabase()));
 
-        auto result = client.CreateStream(streamName,
-            NYdb::NDataStreams::V1::TCreateStreamSettings().ShardCount(1).RetentionPeriodHours(1)).ExtractValueSync();
+        auto result = client.CreateStream(streamName, NYdb::NDataStreams::V1::TCreateStreamSettings().ShardCount(1).RetentionPeriodHours(1))
+                          .ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
     }
@@ -209,11 +183,10 @@ void PQCreateStream(const TString& streamName)
 void AddReadRule(NYdb::TDriver& driver, const TString& streamName) {
     NYdb::NTopic::TTopicClient client(driver);
 
-    auto alterTopicSettings =
-        NYdb::NTopic::TAlterTopicSettings()
-            .BeginAddConsumer(DefaultPqConsumer)
-            .SetSupportedCodecs({NYdb::NTopic::ECodec::RAW})
-            .EndAddConsumer();
+    auto alterTopicSettings = NYdb::NTopic::TAlterTopicSettings()
+                                  .BeginAddConsumer(DefaultPqConsumer)
+                                  .SetSupportedCodecs({ NYdb::NTopic::ECodec::RAW })
+                                  .EndAddConsumer();
     auto result = client.AlterTopic(streamName, alterTopicSettings).ExtractValueSync();
 
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -228,8 +201,8 @@ void ChangePartitionCount(const TString& streamName, ui32 partitionCount) {
     NYdb::TDriver driver(cfg);
     NYdb::NTopic::TTopicClient client(driver);
 
-    auto result = client.AlterTopic(streamName, NYdb::NTopic::TAlterTopicSettings()
-        .AlterPartitioningSettings(partitionCount, partitionCount)).ExtractValueSync();
+    auto result = client.AlterTopic(streamName, NYdb::NTopic::TAlterTopicSettings().AlterPartitioningSettings(partitionCount, partitionCount))
+                      .ExtractValueSync();
 
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -238,7 +211,7 @@ void ChangePartitionCount(const TString& streamName, ui32 partitionCount) {
 std::vector<TMessage> UVPairParser(const NUdf::TUnboxedValue& item) {
     UNIT_ASSERT_VALUES_EQUAL(item.GetListLength(), 2);
     auto stringElement = item.GetElement(1);
-    return { {item.GetElement(0).Get<ui64>(), TString(stringElement.AsStringRef())} };
+    return { { item.GetElement(0).Get<ui64>(), TString(stringElement.AsStringRef()) } };
 }
 
 std::vector<TString> UVParser(const NUdf::TUnboxedValue& item) {
@@ -257,4 +230,4 @@ void TPqIoTestFixture::AsyncOutputWrite(std::vector<TString> data, TMaybe<NDqPro
         return batch;
     }, checkpoint);
 }
-}
+}   // namespace NYql::NDq

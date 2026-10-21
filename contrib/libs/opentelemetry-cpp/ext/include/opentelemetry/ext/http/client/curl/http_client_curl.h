@@ -357,6 +357,8 @@ public:
   void WaitBackgroundThreadExit();
 
 private:
+  friend class HttpClientTestPeer;
+
   void wakeupBackgroundThread();
   bool doAddSessions();
   bool doAbortSessions();

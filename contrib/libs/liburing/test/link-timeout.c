@@ -18,7 +18,7 @@
 
 static int test_fail_lone_link_timeouts(struct io_uring *ring)
 {
-	struct __kernel_timespec ts;
+	struct __kernel_timespec ts = { };
 	struct io_uring_cqe *cqe;
 	struct io_uring_sqe *sqe;
 	int ret;

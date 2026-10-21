@@ -22,7 +22,6 @@ PEERDIR(
     library/cpp/protobuf/interop
     ydb/core/base
     ydb/core/external_sources
-    ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/common
     ydb/core/fq/libs/config
     ydb/core/fq/libs/config/protos
@@ -35,7 +34,7 @@ PEERDIR(
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/ydb
     ydb/core/kqp/opt
-    ydb/core/kqp/proxy_service/script_executions_utils
+    ydb/core/kqp/script_executions/common
     ydb/core/mon
     ydb/core/util
     ydb/library/db_pool

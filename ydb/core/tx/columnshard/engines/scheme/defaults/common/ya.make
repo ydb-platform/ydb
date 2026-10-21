@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     scalar.cpp
@@ -10,6 +10,7 @@ PEERDIR(
     ydb/library/conclusion
     ydb/core/scheme_types
     ydb/library/actors/core
+    ydb/library/formats/arrow
 )
 
 END()

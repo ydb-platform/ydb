@@ -16,8 +16,11 @@ private:
         if (!DeadlockControlInstant) {
             DeadlockControlInstant = now;
         } else if (now - *DeadlockControlInstant > TDuration::Seconds(2)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "tx_timeout")("lock", LockId)("tx_id", GetTxId())(
-                "d", now - *DeadlockControlInstant);
+            YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "tx_timeout"},
+                {"lock", LockId},
+                {"txId", GetTxId()},
+                {"d", now - *DeadlockControlInstant});
             DeadlockControlInstant = now;
             OnTimeout(owner);
             return true;
@@ -30,14 +33,14 @@ private:
 public:
     using TBase::TBase;
 
-    static std::unique_ptr<TEvTxProcessing::TEvReadSetAck> MakeBrokenFlagAck(ui64 step, ui64 txId, ui64 tabletSource, ui64 tabletDest) {
-        return std::make_unique<TEvTxProcessing::TEvReadSetAck>(step, txId, tabletSource, tabletDest, tabletSource, 0);
+    static std::unique_ptr<TEvTxProcessing::TEvReadSetAck> MakeBrokenFlagAck(
+        TColumnShard& owner, ui64 step, ui64 txId, ui64 tabletProducer, ui64 seqNo) {
+        return std::make_unique<TEvTxProcessing::TEvReadSetAck>(step, txId, tabletProducer, owner.TabletID(), owner.TabletID(), 0, seqNo);
     }
 
-    static bool SendBrokenFlagAck(TColumnShard& owner, std::unique_ptr<TEvTxProcessing::TEvReadSetAck> event) {
-        const ui64 tabletDest = event->Record.GetTabletDest();
+    static bool SendBrokenFlagAck(TColumnShard& owner, ui64 tabletProducer, std::unique_ptr<TEvTxProcessing::TEvReadSetAck> event) {
         const ui64 txId = event->Record.GetTxId();
-        return SendPersistent(owner, std::move(event), tabletDest, txId);
+        return SendPersistent(owner, std::move(event), tabletProducer, txId);
     }
 
     static bool SendPersistent(TColumnShard& owner, std::unique_ptr<IEventBase> event, ui64 tabletDest, ui64 cookie) {
@@ -45,14 +48,13 @@ public:
             IEventHandle::FlagTrackDelivery, cookie);
     }
 
-    static bool SendBrokenFlagAck(TColumnShard& owner, ui64 step, ui64 txId, ui64 tabletDest) {
-        const ui64 tabletSource = owner.TabletID();
-        return SendBrokenFlagAck(owner, MakeBrokenFlagAck(step, txId, tabletSource, tabletDest));
+    static bool SendBrokenFlagAck(TColumnShard& owner, ui64 step, ui64 txId, ui64 tabletProducer, ui64 seqNo) {
+        return SendBrokenFlagAck(owner, tabletProducer, MakeBrokenFlagAck(owner, step, txId, tabletProducer, seqNo));
     }
 
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveResultAckTx(TColumnShard& owner, const ui64 recvTabletId) const = 0;
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveBrokenFlagTx(
-        TColumnShard& owner, const ui64 sendTabletId, const bool broken) const = 0;
+        TColumnShard& owner, const ui64 sendTabletId, const ui64 seqNo, const bool broken) const = 0;
 
     NKikimrTxColumnShard::TCommitWriteTxBody SerializeToProto() {
         NKikimrTxColumnShard::TCommitWriteTxBody result;

@@ -2,12 +2,11 @@
 
 #include "output_queue.h"
 
+#include <util/generic/size_literals.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <util/generic/size_literals.h>
-
-#include <numeric>
 #include <deque>
+#include <numeric>
 
 namespace NYql {
 
@@ -15,7 +14,7 @@ namespace NYql {
 constexpr size_t S3PartUploadMinSize = 5_MB;
 
 template <size_t MinItemSize = S3PartUploadMinSize, size_t MaxItemSize = 0ULL>
-class TOutputQueue : public IOutputQueue {
+class TOutputQueue: public IOutputQueue {
 public:
     TOutputQueue() = default;
 
@@ -81,7 +80,7 @@ public:
                 }
 
                 // In case then last item is smaller than MinItemSize and item before it + Last item bigger than MaxItemSize
-                // we can not guarantee that all requirements are met if 2 * MinItemSize > MaxItemSize
+                // we cannot guarantee that all requirements are met if 2 * MinItemSize > MaxItemSize
                 if (endSize > MinItemSize) {
                     const auto appendSize = endSize - std::min(endSize - MinItemSize, MinItemSize - lastItem.size());
                     lastItem = Queue.back().substr(appendSize) + lastItem;
@@ -108,7 +107,9 @@ public:
     }
 
     size_t Volume() const override {
-        return std::accumulate(Queue.cbegin(), Queue.cend(), 0ULL, [](size_t sum, const TString& item) { return sum += item.size(); });
+        return std::accumulate(Queue.cbegin(), Queue.cend(), 0ULL, [](size_t sum, const TString& item) {
+            return sum += item.size();
+        });
     }
 
 private:
@@ -116,4 +117,4 @@ private:
     bool Sealed = false;
 };
 
-} // namespace NYql
+}   // namespace NYql

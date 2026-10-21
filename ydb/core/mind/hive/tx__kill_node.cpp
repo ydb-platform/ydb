@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -8,18 +10,26 @@ class TTxKillNode : public TTransactionBase<THive> {
 protected:
     TNodeId NodeId;
     TActorId Local;
+    EHiveEventReason Reason;
+    TString ReasonDetails;
     TSideEffects SideEffects;
 public:
-    TTxKillNode(TNodeId nodeId, const TActorId& local, THive *hive)
+    TTxKillNode(TNodeId nodeId, const TActorId& local, EHiveEventReason reason, TString reasonDetails, THive *hive)
         : TBase(hive)
         , NodeId(nodeId)
         , Local(local)
+        , Reason(reason)
+        , ReasonDetails(std::move(reasonDetails))
     {}
 
     TTxType GetTxType() const override { return NHive::TXTYPE_KILL_NODE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxKillNode(" << NodeId << ")::Execute");
+        YDB_LOG_DEBUG("THive::TTxKillNode::Execute killing node",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", NodeId},
+            {"reason", EHiveEventReasonName(Reason)},
+            {"reasonDetails", ReasonDetails});
         SideEffects.Reset(Self->SelfId());
         TInstant now = TActivationContext::Now();
         TNodeInfo* node = Self->FindNode(NodeId);
@@ -42,12 +52,22 @@ public:
                 node->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
                 db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Statistics>(node->Statistics);
             }
+            if (!node->IsDisconnected()) {
+                TStringBuilder details;
+                details << ReasonDetails << (ReasonDetails.empty() ? "" : " ") << "tablets=" << node->GetTabletsTotal();
+                if (node->IsAlive() && node->StartTime) {
+                    details << " uptime=" << (now - node->StartTime);
+                }
+                Self->RecordNodeEvent(*node, EHiveEventType::Killed, Reason, std::move(details));
+            }
             node->BecomeDisconnected();
             if (node->LocationAcquired) {
                 Self->RemoveRegisteredDataCentersNode(node->Location.GetDataCenterId(), node->Id);
             }
             for (const TActorId& pipeServer : node->PipeServers) {
-                BLOG_TRACE("THive::TTxKillNode - killing pipe server " << pipeServer);
+                YDB_LOG_TRACE("THive::TTxKillNode::Execute killing pipe server",
+                    {"logPrefix", GetLogPrefix()},
+                    {"pipeServer", pipeServer});
                 SideEffects.Send(pipeServer, new TEvents::TEvPoisonPill());
             }
             node->PipeServers.clear();
@@ -62,20 +82,25 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxKillNode(" << NodeId << ")::Complete");
-        SideEffects.Complete(ctx);
+        YDB_LOG_DEBUG("THive::TTxKillNode::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", NodeId});
+        SideEffects.Complete(ctx, Self->Requests);
         if (Local) {
             TNodeInfo* node = Self->FindNode(Local.NodeId());
             if (node == nullptr || node->IsDisconnected()) {
-                BLOG_D("THive::TTxKillNode(" << NodeId << ")::Complete - send Reconnect to " << Local);
+                YDB_LOG_DEBUG("THive::TTxKillNode::Complete sending reconnect",
+                    {"logPrefix", GetLogPrefix()},
+                    {"nodeId", NodeId},
+                    {"local", Local});
                 Self->SendReconnect(Local); // defibrillation
             }
         }
     }
 };
 
-ITransaction* THive::CreateKillNode(TNodeId nodeId, const TActorId& local) {
-    return new TTxKillNode(nodeId, local, this);
+ITransaction* THive::CreateKillNode(TNodeId nodeId, const TActorId& local, EHiveEventReason reason, TString reasonDetails) {
+    return new TTxKillNode(nodeId, local, reason, std::move(reasonDetails), this);
 }
 
 } // NHive

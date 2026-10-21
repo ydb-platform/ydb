@@ -22,7 +22,7 @@ def qualify(quals, replace_with):
     return replace_with
 
 
-class BaseTypeByIdentity(object):
+class BaseTypeByIdentity:
     is_array_type = False
     is_raw_function = False
 
@@ -34,7 +34,7 @@ class BaseTypeByIdentity(object):
         if replace_with:
             if replace_with.startswith('*') and '&[' in result:
                 replace_with = '(%s)' % replace_with
-            elif not replace_with[0] in '[(':
+            elif replace_with[0] not in '[(':
                 replace_with = ' ' + replace_with
         replace_with = qualify(quals, replace_with)
         result = result.replace('&', replace_with)
@@ -371,8 +371,7 @@ class StructOrUnion(StructOrUnionOrEnum):
             if (name == '' and isinstance(type, StructOrUnion)
                     and expand_anonymous_struct_union):
                 # nested anonymous struct/union
-                for result in type.enumfields():
-                    yield result
+                yield from type.enumfields()
             else:
                 yield (name, type, bitsize, quals)
 

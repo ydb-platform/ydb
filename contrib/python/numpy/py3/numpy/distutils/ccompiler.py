@@ -380,9 +380,9 @@ def CCompiler_customize_cmd(self, cmd, ignore=()):
     Parameters
     ----------
     cmd : class instance
-        An instance inheriting from `distutils.cmd.Command`.
+        An instance inheriting from ``distutils.cmd.Command``.
     ignore : sequence of str, optional
-        List of `CCompiler` commands (without ``'set_'``) that should not be
+        List of ``distutils.ccompiler.CCompiler`` commands (without ``'set_'``) that should not be
         altered. Strings that are checked for are:
         ``('include_dirs', 'define', 'undef', 'libraries', 'library_dirs',
         'rpath', 'link_objects')``.
@@ -480,7 +480,7 @@ def CCompiler_customize(self, dist, need_cxx=0):
     """
     Do any platform-specific customization of a compiler instance.
 
-    This method calls `distutils.sysconfig.customize_compiler` for
+    This method calls ``distutils.sysconfig.customize_compiler`` for
     platform-specific customization, as well as optionally remove a flag
     to suppress spurious warnings in case C++ code is being compiled.
 
@@ -581,7 +581,7 @@ def simple_version_match(pat=r'[-.\d]+', ignore='', start=''):
     -------
     matcher : callable
         A function that is appropriate to use as the ``.version_match``
-        attribute of a `CCompiler` class. `matcher` takes a single parameter,
+        attribute of a ``distutils.ccompiler.CCompiler`` class. `matcher` takes a single parameter,
         a version string.
 
     """
@@ -623,7 +623,7 @@ def CCompiler_get_version(self, force=False, ok_status=[0]):
     Returns
     -------
     version : str or None
-        Version string, in the format of `distutils.version.LooseVersion`.
+        Version string, in the format of ``distutils.version.LooseVersion``.
 
     """
     if not force and hasattr(self, 'version'):
@@ -686,7 +686,7 @@ def CCompiler_cxx_compiler(self):
     Returns
     -------
     cxx : class instance
-        The C++ compiler, as a `CCompiler` instance.
+        The C++ compiler, as a ``distutils.ccompiler.CCompiler`` instance.
 
     """
     if self.compiler_type in ('msvc', 'intelw', 'intelemw'):
@@ -781,14 +781,14 @@ def new_compiler (plat=None,
             __import__(module_name)
         except ImportError as e:
             msg = str(e)
-            raise DistutilsModuleError("can't compile C/C++ code: unable to load module '%s'" % \
-                  module_name)
+            raise DistutilsModuleError("can't compile C/C++ code: unable to load "
+                                       "module '%s'" % module_name)
     try:
         module = sys.modules[module_name]
         klass = vars(module)[class_name]
     except KeyError:
-        raise DistutilsModuleError(("can't compile C/C++ code: unable to find class '%s' " +
-               "in module '%s'") % (class_name, module_name))
+        raise DistutilsModuleError(("can't compile C/C++ code: unable to find "
+               "class '%s' in module '%s'") % (class_name, module_name))
     compiler = klass(None, dry_run, force)
     compiler.verbose = verbose
     log.debug('new_compiler returns %s' % (klass))

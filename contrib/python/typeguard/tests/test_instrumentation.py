@@ -239,6 +239,16 @@ def test_builtin_generic_collections(dummymodule):
     )
 
 
+def test_empty_tuple(dummymodule):
+    assert dummymodule.empty_tuple(()) == ()
+
+
+def test_empty_tuple_fail(dummymodule):
+    pytest.raises(TypeCheckError, dummymodule.empty_tuple, (1,)).match(
+        r'argument "x" \(tuple\) is not an empty tuple'
+    )
+
+
 def test_paramspec(dummymodule):
     def foo(a: int, b: str, *, c: bytes) -> None:
         pass

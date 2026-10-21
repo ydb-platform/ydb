@@ -1,6 +1,5 @@
 #pragma once
 #include <ydb/core/formats/arrow/common/adapter.h>
-#include <ydb/core/formats/arrow/reader/position.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
@@ -52,8 +51,11 @@ private:
             }
         }
         if (columns.empty()) {
-            AFL_WARN(NKikimrServices::ARROW_HELPER)("event", "cannot_read_all_columns")("reason", "fields_not_found")(
-                "field_names", JoinSeq(",", ColumnNames))("batch_fields", JoinSeq(",", batch->schema()->field_names()));
+            YDB_LOG_WARN_COMP(NKikimrServices::ARROW_HELPER, "",
+                {"event", "cannot_read_all_columns"},
+                {"reason", "fields_not_found"},
+                {"fieldNames", JoinSeq(",", ColumnNames)},
+                {"batchFields", JoinSeq(",", batch->schema()->field_names())});
         }
         return columns;
     }
@@ -159,6 +161,13 @@ public:
         AFL_VERIFY(ExecuteToArrayImpl(batch, acceptor));
         return result;
     }
+};
+
+class THashConstructor {
+public:
+    static bool BuildHashUI64(std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName);
+    static bool BuildHashUI64(std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName);
+
 };
 
 }   // namespace NKikimr::NArrow::NHash

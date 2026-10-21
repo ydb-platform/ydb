@@ -1,9 +1,120 @@
-from typing import Optional
+from __future__ import annotations
+
+import builtins
+from typing import Any, TypeVar, overload
+from typing import cast as type_cast
 
 from sqlalchemy import and_, true
+from sqlalchemy import cast as sa_cast
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.base import Immutable
+from sqlalchemy.sql.compiler import SQLCompiler
+from sqlalchemy.sql.elements import ColumnClause, ColumnElement, Label
 from sqlalchemy.sql.selectable import FromClause, Join
+from sqlalchemy.sql.sqltypes import NullType
+from sqlalchemy.sql.type_api import TypeEngine
 from sqlalchemy.sql.visitors import InternalTraversal
+
+from clickhouse_connect.cc_sqlalchemy.sql.preparer import ChIdentifierPreparer
+
+_T = TypeVar("_T")
+
+
+class _JSONSubcolumn(ColumnElement[object]):
+    """A storage-backed ClickHouse JSON subcolumn path."""
+
+    __visit_name__: str = "json_subcolumn"
+
+    _traverse_internals: list[tuple[str, InternalTraversal]] = [
+        ("parent", InternalTraversal.dp_clauseelement),
+        ("segment", InternalTraversal.dp_string),
+        ("type", InternalTraversal.dp_type),
+    ]
+
+    parent: ColumnClause[Any] | _JSONSubcolumn
+    segment: str
+    type: TypeEngine[object]
+
+    def __init__(self, parent: ColumnElement[Any], segment: str) -> None:
+        super().__init__()
+        if not isinstance(parent, (ColumnClause, _JSONSubcolumn)):
+            raise TypeError("JSON subcolumn parent must be a SQLAlchemy column or JSON subcolumn")
+        if not isinstance(segment, str):
+            raise TypeError(f"JSON subcolumn path segment must be a string, got {type(segment).__name__}")
+        if not segment:
+            raise ValueError("JSON subcolumn path segment must not be empty")
+        self.parent = parent
+        self.segment = segment
+        self.type = type_cast(TypeEngine[object], NullType())
+        self._propagate_attrs = parent._propagate_attrs
+
+    @property
+    def _from_objects(self) -> list[FromClause]:
+        return self.parent._from_objects
+
+    def __getitem__(self, segment: str) -> ColumnElement[object]:
+        return self.subcolumn(segment)
+
+    @overload
+    def subcolumn(self, segment: str, type_: None = None) -> ColumnElement[object]: ...
+
+    @overload
+    def subcolumn(self, segment: str, type_: TypeEngine[_T] | builtins.type[TypeEngine[_T]]) -> ColumnElement[_T]: ...
+
+    def subcolumn(
+        self,
+        segment: str,
+        type_: TypeEngine[Any] | builtins.type[TypeEngine[Any]] | None = None,
+    ) -> ColumnElement[Any]:
+        expression = _JSONSubcolumn(self, segment)
+        if type_ is not None:
+            return sa_cast(expression, type_)
+        return expression
+
+
+@overload
+def json_subcolumn(
+    parent: ColumnElement[Any],
+    segment: str,
+    type_: None = None,
+) -> ColumnElement[object]: ...
+
+
+@overload
+def json_subcolumn(
+    parent: ColumnElement[Any],
+    segment: str,
+    type_: TypeEngine[_T] | type[TypeEngine[_T]],
+) -> ColumnElement[_T]: ...
+
+
+def json_subcolumn(
+    parent: ColumnElement[Any],
+    segment: str,
+    type_: TypeEngine[Any] | type[TypeEngine[Any]] | None = None,
+) -> ColumnElement[Any]:
+    expression = _JSONSubcolumn(parent, segment)
+    if type_ is not None:
+        return sa_cast(expression, type_)
+    return expression
+
+
+@compiles(_JSONSubcolumn)
+def _compile_json_subcolumn(element: _JSONSubcolumn, compiler: SQLCompiler, **kw: Any) -> str:
+    """Allow SQLAlchemy's default compiler to inspect statements containing JSON paths."""
+    parent = compiler.process(element.parent, **kw)
+    segment = compiler.preparer.quote_identifier(element.segment)
+    return f"{parent}.{segment}"
+
+
+# The literal must match clickhouse_connect.driver_name. Importing the
+# dialect_name constant from cc_sqlalchemy would create an import cycle.
+@compiles(_JSONSubcolumn, "clickhousedb")
+def _compile_clickhouse_json_subcolumn(element: _JSONSubcolumn, compiler: SQLCompiler, **kw: Any) -> str:
+    parent = compiler.process(element.parent, **kw)
+    preparer = type_cast(ChIdentifierPreparer, compiler.preparer)
+    segment = preparer._quote_raw_identifier(element.segment)
+    return f"{parent}.{segment}"
 
 
 def _normalize_array_columns(array_column, alias):
@@ -17,7 +128,7 @@ def _normalize_array_columns(array_column, alias):
         elif isinstance(alias, (list, tuple)):
             aliases = list(alias)
             if len(aliases) != len(columns):
-                raise ValueError(f"Length of alias list ({len(aliases)}) must match " f"length of array_column list ({len(columns)})")
+                raise ValueError(f"Length of alias list ({len(aliases)}) must match length of array_column list ({len(columns)})")
         else:
             raise ValueError("alias must be a list when array_column is a list")
     else:
@@ -29,7 +140,6 @@ def _normalize_array_columns(array_column, alias):
     return list(zip(columns, aliases))
 
 
-# pylint: disable=protected-access,too-many-ancestors,abstract-method,unused-argument
 class ArrayJoin(Immutable, FromClause):
     """Represents ClickHouse ARRAY JOIN clause.
 
@@ -91,6 +201,7 @@ class ArrayJoin(Immutable, FromClause):
         This ensures that when queries are cloned (e.g., for subqueries, unions, or CTEs),
         the left FromClause and array column references are properly deep-cloned.
         """
+
         def _default_clone(elem, **kwargs):
             return elem
 
@@ -98,10 +209,31 @@ class ArrayJoin(Immutable, FromClause):
             clone = _default_clone
 
         self.left = clone(self.left, **kw)
-        self.array_columns = [
-            (clone(col, **kw), alias)
-            for col, alias in self.array_columns
-        ]
+        self.array_columns = [(clone(col, **kw), alias) for col, alias in self.array_columns]
+
+
+@compiles(ArrayJoin)
+def _compile_array_join(element, compiler, **kw):
+    """Render an ArrayJoin FromClause. Registered via @compiles so any compiler
+    (including the default StrSQLCompiler used for statement introspection) can
+    render it. A SQLAlchemy Label becomes the ARRAY JOIN alias so downstream
+    `column("name")` references bind; an explicit alias= argument overrides.
+    """
+    kw.pop("asfrom", None)
+    kw.pop("from_linter", None)
+    left = compiler.process(element.left, asfrom=True, **kw)
+    join_type = "LEFT ARRAY JOIN" if element.is_left else "ARRAY JOIN"
+    parts = []
+    for col, explicit_alias in element.array_columns:
+        if explicit_alias is None and isinstance(col, Label):
+            body_text = compiler.process(col.element, **kw)
+            col_text = f"{body_text} AS {compiler.preparer.quote(col.name)}"
+        else:
+            col_text = compiler.process(col, **kw)
+            if explicit_alias is not None:
+                col_text += f" AS {compiler.preparer.quote(explicit_alias)}"
+        parts.append(col_text)
+    return f"{left} {join_type} {', '.join(parts)}"
 
 
 def array_join(left, array_column, alias=None, is_left=False):
@@ -195,7 +327,6 @@ def _build_using_onclause(left, right, using):
     return and_(*conditions) if len(conditions) > 1 else conditions[0]
 
 
-# pylint: disable=too-many-ancestors,abstract-method
 class ClickHouseJoin(Join):
     """A SQLAlchemy Join subclass that supports ClickHouse-specific join features.
 
@@ -231,8 +362,18 @@ class ClickHouseJoin(Join):
         ("using_columns", InternalTraversal.dp_string_list),
     ]
 
-    def __init__(self, left, right, onclause=None, isouter=False, full=False,
-                 strictness=None, distribution=None, _is_cross=False, using=None):
+    def __init__(
+        self,
+        left,
+        right,
+        onclause=None,
+        isouter=False,
+        full=False,
+        strictness=None,
+        distribution=None,
+        _is_cross=False,
+        using=None,
+    ):
         if strictness is not None:
             strictness = strictness.upper()
         if distribution is not None:
@@ -257,8 +398,8 @@ def ch_join(
     full=False,
     cross=False,
     using=None,
-    strictness: Optional[str] = None,
-    distribution: Optional[str] = None,
+    strictness: str | None = None,
+    distribution: str | None = None,
 ):
     """Create a ClickHouse JOIN with optional strictness, distribution, and USING support.
 
@@ -286,5 +427,77 @@ def ch_join(
         if using is not None:
             raise ValueError("cross=True conflicts with using")
         onclause = true()
-    return ClickHouseJoin(left, right, onclause, isouter, full,
-                          strictness, distribution, _is_cross=cross, using=using)
+    return ClickHouseJoin(
+        left,
+        right,
+        onclause,
+        isouter,
+        full,
+        strictness,
+        distribution,
+        _is_cross=cross,
+        using=using,
+    )
+
+
+class PreWhereClause:
+    """State container for ClickHouse PREWHERE, stored on a Select and rendered by the dialect compiler."""
+
+    def __init__(self, whereclause):
+        self.whereclause = whereclause
+
+
+class LimitByClause:
+    """State container for ClickHouse LIMIT BY (top-N per group). Renders as `LIMIT [offset,] limit BY by_clauses`."""
+
+    def __init__(self, by_clauses, limit, offset=None):
+        self.by_clauses = tuple(by_clauses)
+        self.limit = limit
+        self.offset = offset
+
+
+class Lambda(ColumnElement):
+    """ClickHouse lambda expression for higher-order functions (arrayMap, arrayFilter, arraySort).
+
+    Lambda(params, body) where params is a parameter name string or a list/tuple
+    of parameter names, and body is any SQLAlchemy ColumnElement. Use
+    `sqlalchemy.column(name)` to reference lambda params inside body. Renders as
+    `param -> body` for one param, `(p1, p2) -> body` for multiple.
+
+    Intentionally does NOT introspect Python lambdas (too brittle across
+    closures and default args). Pass an explicit ColumnElement body instead.
+
+    Example:
+        func.arrayMap(Lambda('x', column('x') * 2), table.c.numbers)
+    """
+
+    __visit_name__ = "lambda_expr"
+
+    def __init__(self, params, body):
+        super().__init__()
+        if isinstance(params, str):
+            param_list = (params,)
+        elif isinstance(params, (list, tuple)):
+            if not params:
+                raise ValueError("Lambda requires at least one parameter name")
+            param_list = tuple(params)
+        else:
+            raise TypeError("Lambda params must be a string or a list/tuple of strings")
+        for p in param_list:
+            if not isinstance(p, str):
+                raise TypeError("Lambda parameter names must be strings")
+            if not p.isidentifier():
+                raise ValueError(f"Lambda parameter name '{p}' is not a valid identifier")
+        # Not `self.params`: ColumnElement.params is a bind-parameter method on the base class.
+        self.param_names = param_list
+        self.body = body
+
+
+@compiles(Lambda)
+def _compile_lambda(element, compiler, **kw):
+    """Render a Lambda as ClickHouse lambda syntax via @compiles so any compiler can render it."""
+    body_text = compiler.process(element.body, **kw)
+    if len(element.param_names) == 1:
+        return f"{element.param_names[0]} -> {body_text}"
+    params_text = ", ".join(element.param_names)
+    return f"({params_text}) -> {body_text}"

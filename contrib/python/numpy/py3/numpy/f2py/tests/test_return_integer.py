@@ -1,9 +1,11 @@
 import pytest
 
 from numpy import array
+
 from . import util
 
 
+@pytest.mark.slow
 class TestReturnInteger(util.F2PyTest):
     def check_function(self, t, tname):
         assert t(123) == 123
@@ -42,12 +44,12 @@ class TestFReturnInteger(TestReturnInteger):
     ]
 
     @pytest.mark.parametrize("name",
-                             "t0,t1,t2,t4,t8,s0,s1,s2,s4,s8".split(","))
+                             ["t0", "t1", "t2", "t4", "t8", "s0", "s1", "s2", "s4", "s8"])
     def test_all_f77(self, name):
         self.check_function(getattr(self.module, name), name)
 
     @pytest.mark.parametrize("name",
-                             "t0,t1,t2,t4,t8,s0,s1,s2,s4,s8".split(","))
+                             ["t0", "t1", "t2", "t4", "t8", "s0", "s1", "s2", "s4", "s8"])
     def test_all_f90(self, name):
         self.check_function(getattr(self.module.f90_return_integer, name),
                             name)

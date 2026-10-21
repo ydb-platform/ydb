@@ -24,7 +24,7 @@ NKikimrDataEvents::TEvWriteResult TShardWriter::StartCommitImpl(const ui64 txId)
 
 void TShardWriter::StartCommitFail(const ui64 txId) {
     auto event = StartCommitImpl(txId);
-    AFL_VERIFY(event.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+    AFL_VERIFY(event.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
 }
 
 TPlanStep TShardWriter::StartCommit(const ui64 txId) {
@@ -35,6 +35,23 @@ TPlanStep TShardWriter::StartCommit(const ui64 txId) {
     AFL_VERIFY(event.GetMinStep() <= event.GetMaxStep());
     AFL_VERIFY(event.GetMaxStep() < Max<ui64>());
     return TPlanStep{ event.GetMinStep() };
+}
+
+NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::StartCommitWithLock(const ui64 txId, const NKikimrDataEvents::TLock& lock) {
+    auto evCommit = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+    auto& locks = *evCommit->Record.MutableLocks();
+    locks.SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+    locks.AddSendingShards(TabletId);
+    locks.AddReceivingShards(TabletId);
+    locks.SetArbiterColumnShard(TabletId);
+    *locks.AddLocks() = lock;
+    ForwardToTablet(Runtime, TabletId, Sender, evCommit.release());
+
+    TAutoPtr<NActors::IEventHandle> handle;
+    auto event = Runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
+    AFL_VERIFY(event);
+    AFL_VERIFY(event->Record.GetTxId() == txId);
+    return event->Record.GetStatus();
 }
 
 NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Abort() {
@@ -51,8 +68,7 @@ NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Abort() {
     return event->Record.GetStatus();
 }
 
-NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Write(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId) {
+void TShardWriter::SendWrite(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId) {
     TString blobData = NArrow::SerializeBatchNoCompression(batch);
     //    AFL_VERIFY(blobData.size() < NColumnShard::TLimits::GetMaxBlobSize());
 
@@ -64,7 +80,9 @@ NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Write(
         payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
 
     ForwardToTablet(Runtime, TabletId, Sender, evWrite.release());
+}
 
+NKikimrDataEvents::TEvWriteResult TShardWriter::WaitWriteResult() {
     TAutoPtr<NActors::IEventHandle> handle;
     auto event = Runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
     AFL_VERIFY(event);
@@ -72,7 +90,7 @@ NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Write(
     AFL_VERIFY(event->Record.GetOrigin() == TabletId);
     AFL_VERIFY(event->Record.GetTxId() == LockId);
 
-    return event->Record.GetStatus();
+    return event->Record;
 }
 
 }   // namespace NKikimr::NTxUT

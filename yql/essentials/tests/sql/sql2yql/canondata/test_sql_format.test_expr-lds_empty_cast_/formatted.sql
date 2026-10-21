@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 SELECT
     Yql::Append(AsList(ListCreate(Int32)), []),
     Yql::Append(AsList(DictCreate(Int32, String)), {}),

@@ -20,11 +20,13 @@ public:
     TDqDataSerializer(const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
                       const NKikimr::NMiniKQL::THolderFactory& holderFactory,
                       NDqProto::EDataTransportVersion transportVersion,
-                      NKikimr::NMiniKQL::EValuePackerVersion packerVersion)
+                      NKikimr::NMiniKQL::EValuePackerVersion packerVersion,
+                      NYql::EDatumValidationMode datumValidationMode)
         : TypeEnv(typeEnv)
         , HolderFactory(holderFactory)
         , TransportVersion(transportVersion)
         , ValuePackerVersion(packerVersion)
+        , DatumValidationMode(datumValidationMode)
     {
     }
 
@@ -39,14 +41,14 @@ public:
             TransportVersion == NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0 ||
             TransportVersion == NDqProto::DATA_TRANSPORT_OOB_PICKLE_1_0)
         {
-            NKikimr::NMiniKQL::TValuePackerTransport<false> packer(itemType, ValuePackerVersion);
+            NKikimr::NMiniKQL::TValuePackerTransport<false> packer(itemType, ValuePackerVersion, DatumValidationMode);
             return SerializeBatch(packer, first, last);
         }
 
         if (TransportVersion == NDqProto::DATA_TRANSPORT_UV_FAST_PICKLE_1_0 ||
             TransportVersion == NDqProto::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0)
         {
-            NKikimr::NMiniKQL::TValuePackerTransport<true> packer(itemType, ValuePackerVersion);
+            NKikimr::NMiniKQL::TValuePackerTransport<true> packer(itemType, ValuePackerVersion, DatumValidationMode);
             return SerializeBatch(packer, first, last);
         }
         YQL_ENSURE(false, "Unsupported TransportVersion");
@@ -78,6 +80,7 @@ public:
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
     const NDqProto::EDataTransportVersion TransportVersion;
     const NKikimr::NMiniKQL::EValuePackerVersion ValuePackerVersion;
+    const NYql::EDatumValidationMode DatumValidationMode;
 
 private:
     template <class TForwardIterator, class TPacker>

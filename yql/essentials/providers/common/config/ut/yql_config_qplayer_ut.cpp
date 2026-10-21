@@ -130,7 +130,7 @@ Y_UNIT_TEST(CaptureAndReplayProduceSameFlags) {
 
         auto readContext = MakeReadContext(storage);
         auto replayedFlags = SelectAndSaveActivatedFlags<TTestAttr>(
-            "label", readContext, testCase.Source, MakeActivationFilter(), false);
+            "label", readContext, testCase.Source, MakeActivationFilter(), /*hasProviderName=*/false);
         auto replayedActual = ToExpected(replayedFlags);
 
         UNIT_ASSERT_VALUES_EQUAL(capturedExpected.size(), replayedActual.size());
@@ -167,7 +167,7 @@ Y_UNIT_TEST(OldFormatFlagsReturnedAsIs) {
 
     auto readContext = MakeReadContext(storage);
     auto replayedFlags = SelectAndSaveActivatedFlags<TTestAttr>(
-        "label", readContext, source, MakeActivationFilter(), false);
+        "label", readContext, source, MakeActivationFilter(), /*hasProviderName=*/false);
 
     UNIT_ASSERT_VALUES_EQUAL(2U, replayedFlags.size());
     THashMap<TString, TString> replayedByName;
@@ -191,7 +191,7 @@ Y_UNIT_TEST(FilterCalledOncePerItem) {
     };
 
     TQContext emptyContext;
-    SelectAndSaveActivatedFlags<TTestAttr>("label", emptyContext, source, countingFilter, false);
+    SelectAndSaveActivatedFlags<TTestAttr>("label", emptyContext, source, countingFilter, /*hasProviderName=*/false);
     UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(source.size()), filterCallCount);
 }
 

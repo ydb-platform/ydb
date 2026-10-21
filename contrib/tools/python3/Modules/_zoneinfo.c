@@ -1760,6 +1760,9 @@ parse_abbr(const char **p, PyObject **abbr)
             ptr++;
         }
         str_end = ptr;
+        if (str_end == str_start) {
+            return -1;
+        }
         ptr++;
     }
     else {
@@ -2306,7 +2309,7 @@ get_local_timestamp(PyObject *dt, int64_t *local_ts)
         }
         hour = PyLong_AsLong(num);
         Py_DECREF(num);
-        if (hour == -1) {
+        if (hour == -1 && PyErr_Occurred()) {
             return -1;
         }
 
@@ -2316,7 +2319,7 @@ get_local_timestamp(PyObject *dt, int64_t *local_ts)
         }
         minute = PyLong_AsLong(num);
         Py_DECREF(num);
-        if (minute == -1) {
+        if (minute == -1 && PyErr_Occurred()) {
             return -1;
         }
 
@@ -2326,7 +2329,7 @@ get_local_timestamp(PyObject *dt, int64_t *local_ts)
         }
         second = PyLong_AsLong(num);
         Py_DECREF(num);
-        if (second == -1) {
+        if (second == -1 && PyErr_Occurred()) {
             return -1;
         }
     }

@@ -955,7 +955,7 @@ YARD_UNIT_TEST(TestRestartAtChunkEnd) {
 
 YARD_UNIT_TEST(TestEnormousDisk) {
     TTestContext tc(true);
-    ui32 chunkSize = 512 << 20;
+    ui32 chunkSize = 128 << 20;
     ui64 diskSize = 100ull << 40;
 
     TString dataPath;

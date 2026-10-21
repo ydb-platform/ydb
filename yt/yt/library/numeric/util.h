@@ -14,7 +14,7 @@ namespace NYT {
 // See: |std::bit_cast| from header <bit> from C++2a.
 // Remove this implementation and use the standard one when it becomes available.
 template <class TTo, class TFrom>
-TTo BitCast(const TFrom &src) noexcept;
+constexpr TTo BitCast(const TFrom &src) noexcept;
 
 ////////////////////////////////////////////////////////////////////////////////
 

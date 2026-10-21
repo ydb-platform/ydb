@@ -46,7 +46,7 @@ struct TDispatcherConfig
     TEnumIndexedArray<EMultiplexingBand, TMultiplexingBandConfigPtr> MultiplexingBands;
 
     //! Used to store TLS/SSL certificate files.
-    std::optional<TString> BusCertsDirectoryPath;
+    std::optional<std::string> BusCertsDirectoryPath;
 
     bool EnableLocalBypass;
 
@@ -75,7 +75,7 @@ struct TDispatcherDynamicConfig
     std::optional<TEnumIndexedArray<EMultiplexingBand, TMultiplexingBandConfigPtr>> MultiplexingBands;
 
     //! Used to store TLS/SSL certificate files.
-    std::optional<TString> BusCertsDirectoryPath;
+    std::optional<std::string> BusCertsDirectoryPath;
 
     std::optional<bool> EnableLocalBypass;
 
@@ -111,9 +111,9 @@ struct TBusConfig
     // Ssl options.
     EEncryptionMode EncryptionMode;
     EVerificationMode VerificationMode;
-    std::optional<TString> CipherList;
+    std::optional<std::string> CipherList;
     bool LoadCertsFromBusCertsDirectory;
-    std::optional<TString> PeerAlternativeHostName;
+    std::optional<std::string> PeerAlternativeHostName;
 
     REGISTER_YSON_STRUCT(TBusConfig);
 

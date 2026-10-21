@@ -6,6 +6,8 @@
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <library/cpp/yt/logging/logger.h>
+#include <library/cpp/yt/logging/tagged_payload.h>
+#include <library/cpp/yt/logging/structured_payload.h>
 
 namespace NYT::NLogging {
 
@@ -13,7 +15,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
+static YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -47,8 +49,7 @@ public:
         return TLogEvent{
             .Category = Logger().GetCategory(),
             .Level = ELogLevel::Info,
-            .MessageKind = ELogMessageKind::Unstructured,
-            .MessageRef = TSharedRef::FromString(Format("Logging started (Version: %v, BuildHost: %v, BuildTime: %v)",
+            .Payload = MakeTaggedPayloadFromMessage(Format("Logging started (Version: %v, BuildHost: %v, BuildTime: %v)",
                 GetVersion(),
                 GetBuildHost(),
                 GetBuildTime())),
@@ -65,8 +66,7 @@ public:
         return TLogEvent{
             .Category = Logger().GetCategory(),
             .Level = ELogLevel::Info,
-            .MessageKind = ELogMessageKind::Unstructured,
-            .MessageRef = TSharedRef::FromString(Format("Skipped log records in last second (Count: %v, SkippedBy: %v)",
+            .Payload = MakeTaggedPayloadFromMessage(Format("Skipped log records in last second (Count: %v, SkippedBy: %v)",
                 count,
                 skippedBy)),
             .Instant = GetCpuInstant(),
@@ -89,14 +89,12 @@ public:
         return TLogEvent{
             .Category = Logger().GetCategory(),
             .Level = ELogLevel::Info,
-            .MessageKind = ELogMessageKind::Structured,
-            .MessageRef = BuildYsonStringFluently<NYson::EYsonType::MapFragment>()
+            .Payload = MakeStructuredPayloadFromYson(BuildYsonStringFluently<NYson::EYsonType::MapFragment>()
                 .Item("message").Value("Logging started")
                 .Item("version").Value(GetVersion())
                 .Item("build_host").Value(GetBuildHost())
                 .Item("build_time").Value(GetBuildTime())
-                .Finish()
-                .ToSharedRef(),
+                .Finish()),
             .Instant = GetCpuInstant(),
         };
     }
@@ -110,13 +108,11 @@ public:
         return TLogEvent{
             .Category = Logger().GetCategory(),
             .Level = ELogLevel::Info,
-            .MessageKind = ELogMessageKind::Structured,
-            .MessageRef = BuildYsonStringFluently<NYson::EYsonType::MapFragment>()
+            .Payload = MakeStructuredPayloadFromYson(BuildYsonStringFluently<NYson::EYsonType::MapFragment>()
                 .Item("message").Value("Events skipped")
                 .Item("skipped_by").Value(skippedBy)
                 .Item("events_skipped").Value(count)
-                .Finish()
-                .ToSharedRef(),
+                .Finish()),
             .Instant = GetCpuInstant(),
         };
     }

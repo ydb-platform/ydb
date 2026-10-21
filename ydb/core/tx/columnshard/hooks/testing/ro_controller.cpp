@@ -11,6 +11,8 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NYDBTest::NColumnShard {
 
 bool TReadOnlyController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {
@@ -24,6 +26,7 @@ bool TReadOnlyController::DoOnWriteIndexComplete(
     const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
     if (change.TypeString() == NOlap::TCleanupPortionsColumnEngineChanges::StaticTypeName()) {
         CleaningFinishedCounter.Inc();
+        PortionsErasedCounter.Add(static_cast<const NOlap::TCleanupPortionsColumnEngineChanges&>(change).GetPortionsToDrop().size());
     }
     if (change.TypeString() == NOlap::TCleanupTablesColumnEngineChanges::StaticTypeName()) {
         CleaningFinishedCounter.Inc();
@@ -39,7 +42,9 @@ bool TReadOnlyController::DoOnWriteIndexComplete(
 }
 
 bool TReadOnlyController::DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) {
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", change.TypeString())("tablet_id", tabletId);
+    YDB_LOG_NOTICE("",
+        {"event", change.TypeString()},
+        {"tabletId", tabletId});
     if (change.TypeString() == NOlap::TCleanupPortionsColumnEngineChanges::StaticTypeName()) {
         CleaningStartedCounter.Inc();
     }

@@ -27,15 +27,13 @@ namespace NActors {
         i16 MaxThreadCount = 0;
         i16 DefaultThreadCount = 0;
         i16 Priority = 0;
+        ui8 HarmonizerNeedyCpuWindowSeconds = 1;
         i16 SharedExecutorsCount = 0;
         i16 SoftProcessingDurationTs = 0;
         EASProfile ActorSystemProfile = EASProfile::Default;
         bool HasSharedThread = false;
-        bool UseRingQueue = true;
         bool AllThreadsAreShared = false;
-        ui16 MinLocalQueueSize = 0;
-        ui16 MaxLocalQueueSize = 0;
-
+        bool EnableWaker = false;
         // tiny-ydb configs
         std::vector<i16> AdjacentPools;
         i16 ForcedForeignSlotCount = 0;
@@ -56,7 +54,6 @@ namespace NActors {
         TString PoolName;
         ui32 Threads = 1;
         TCpuMask Affinity; // Executor thread affinity
-        bool UseRingQueue = false;
     };
 
     struct TSelfPingInfo {

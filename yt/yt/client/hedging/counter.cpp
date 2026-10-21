@@ -74,4 +74,11 @@ TLagPenaltyProviderCounters::TLagPenaltyProviderCounters(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+THedgingExecutorCounters::THedgingExecutorCounters(
+    const NProfiling::TTagSet& tagSet)
+    : HedgingRequestRatio(HedgingClientProfiler.WithTags(tagSet).Gauge("/hedging_request_ratio"))
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NClient::NHedging::NRpc

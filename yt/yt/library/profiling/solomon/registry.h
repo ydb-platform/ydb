@@ -18,7 +18,7 @@
 
 #include <yt/yt/core/ytree/fluent.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NProfiling {
 
@@ -122,6 +122,12 @@ public:
 
     static TSolomonRegistryPtr Get();
 
+    void Configure(const TSolomonRegistryConfigPtr& config);
+
+    //! Returns whether hot sensors use the rseq fast path: rseq is enabled in config and the
+    //! runtime safety probe passed.
+    bool IsRseqEnabled() const;
+
     void Disable();
 
     void SetDynamicTags(std::vector<TTag> dynamicTags);
@@ -163,10 +169,11 @@ private:
     std::function<int(TStringBuf)> GridFactor_;
     TWeakProfiler SelfProfiler_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, DynamicTagsLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, DynamicTagsLock_);
     std::vector<TTag> DynamicTags_;
 
     std::atomic<bool> Disabled_ = false;
+    std::atomic<bool> RseqEnabled_ = false;
     TMpscStack<std::function<void()>> RegistrationQueue_;
 
     template <class TFn>

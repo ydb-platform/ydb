@@ -141,7 +141,7 @@ IGraphTransformer::TStatus InferPgCommonType(
         {
             size_t j = 0;
             for (const auto& [col, gen_col] : *childColumnOrder) {
-                auto itemIdx = structType->FindItemI(gen_col, nullptr);
+                auto itemIdx = structType->FindItemI(gen_col, /*isVirtual=*/nullptr);
                 YQL_ENSURE(itemIdx);
 
                 const auto* type = structType->GetItems()[*itemIdx]->GetItemType();
@@ -182,16 +182,6 @@ IGraphTransformer::TStatus InferPgCommonType(
         return IGraphTransformer::TStatus::Error;
     }
 
-    return IGraphTransformer::TStatus::Ok;
-}
-
-IGraphTransformer::TStatus PgSelfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-    Y_UNUSED(output);
-    if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
     return IGraphTransformer::TStatus::Ok;
 }
 
@@ -264,6 +254,34 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
             }
 
             refinedType = NPg::LookupType(TString(setting->Tail().Content())).TypeId;
+        } else if (content == "collation") {
+            if (!EnsureTupleSize(*setting, 2, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureAtom(setting->Tail(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            TString collationName(setting->Tail().Content());
+            try {
+                NPg::LookupCollation(collationName);
+            } catch (const yexception& e) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Failed to resolve collation \"" << collationName << "\" for function " << name << ": " << e.what()));
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else if (content == "collation_oid") {
+            // Resolved collation oid, computed once from the "collation" setting above
+            // when PgResolvedCall was built (see below) - trusted as-is, same as the
+            // resolved proc oid in input->Child(1) is trusted without re-resolving the name.
+            if (!EnsureTupleSize(*setting, 2, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureAtom(setting->Tail(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Unexpected setting " << content << " in function " << name));
@@ -383,6 +401,32 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
                     children.push_back(std::move(node));
                 }
 
+                // If the call had an explicit COLLATE, resolve it to a stable oid (see
+                // NPg::LookupCollation) and replace the "collation" (name) setting with the
+                // resolved "collation_oid" one - the name has done its job (validation) and
+                // the oid is now the single source of truth, same as how the function name
+                // atom stays but the unresolved settings entry itself doesn't need to persist.
+                auto& settingsNode = children[argStart - 1];
+                for (const auto& setting : settingsNode->Children()) {
+                    if (setting->Head().Content() != "collation") {
+                        continue;
+                    }
+
+                    auto collationOid = NPg::LookupCollation(TString(setting->Tail().Content())).Oid;
+                    TExprNode::TListType newSettings;
+                    for (const auto& other : settingsNode->Children()) {
+                        if (other->Head().Content() != "collation") {
+                            newSettings.push_back(other);
+                        }
+                    }
+                    newSettings.push_back(ctx.Expr.NewList(input->Pos(), {
+                        ctx.Expr.NewAtom(input->Pos(), "collation_oid"),
+                        ctx.Expr.NewAtom(input->Pos(), ToString(collationOid)),
+                    }));
+                    settingsNode = ctx.Expr.NewList(input->Pos(), std::move(newSettings));
+                    break;
+                }
+
                 if (proc.Lang == NPg::LangSQL) {
                     if (!proc.ExprNode) {
                         throw yexception() << "Function " << proc.Name << " has no implementation";
@@ -393,7 +437,7 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
                     YQL_ENSURE(proc.ExprNode->Head().ChildrenSize() == static_cast<ui32>(fargTypes.size()));
                     TNodeOnNodeOwnedMap deepClones;
                     YQL_ENSURE(NPg::GetSqlLanguageParser());
-                    auto lambda = ctx.Expr.DeepCopy(*proc.ExprNode, NPg::GetSqlLanguageParser()->GetContext(), deepClones, true, false);
+                    auto lambda = ctx.Expr.DeepCopy(*proc.ExprNode, NPg::GetSqlLanguageParser()->GetContext(), deepClones, /*internStrings=*/true, /*copyTypes=*/false);
                     TNodeOnNodeOwnedMap replaces;
                     for (ui32 i = 0; i < fargTypes.size(); ++i) {
                         replaces[lambda->Head().Child(i)] = children[i + argStart];
@@ -1683,6 +1727,7 @@ IGraphTransformer::TStatus PgTypeModWrapper(const TExprNode::TPtr& input, TExprN
 
     TExprNode::TListType args;
     for (const auto& mod : mods) {
+        // clang-format off
         args.push_back(ctx.Expr.Builder(input->Pos())
             .Callable("PgConst")
                 .Atom(0, mod)
@@ -1691,9 +1736,11 @@ IGraphTransformer::TStatus PgTypeModWrapper(const TExprNode::TPtr& input, TExprN
                 .Seal()
             .Seal()
             .Build());
+        // clang-format on
     }
 
     auto arr = ctx.Expr.NewCallable(input->Pos(), "PgArray", std::move(args));
+    // clang-format off
     output = ctx.Expr.Builder(input->Pos())
         .Callable("PgCall")
             .Atom(0, NPg::LookupProc(funcId, { 0 }).Name)
@@ -1702,6 +1749,7 @@ IGraphTransformer::TStatus PgTypeModWrapper(const TExprNode::TPtr& input, TExprN
             .Add(2, arr)
         .Seal()
         .Build();
+    // clang-format on
 
     return IGraphTransformer::TStatus::Repeat;
 }
@@ -1768,6 +1816,7 @@ TExprNodePtr BuildUniTypePgIn(TExprNodeList&& args, TContext& ctx) {
     std::swap(args[0], args.back());
     args.pop_back();
 
+    // clang-format off
     return ctx.Expr.Builder(lhs->Pos())
         .Callable("SqlIn")
             .List(0)
@@ -1781,6 +1830,7 @@ TExprNodePtr BuildUniTypePgIn(TExprNodeList&& args, TContext& ctx) {
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -1810,22 +1860,26 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
             if (convertionRequired) {
                 hasConvertions = true;
 
+                // clang-format off
                 auto convertedChild = ctx.Expr.Builder(child->Pos())
                     .Callable("ToPg")
                         .Add(0, child)
                     .Seal()
                     .Build();
+                // clang-format on
                 convertedChildren.push_back(std::move(convertedChild));
             } else {
-                convertedChildren.emplace_back(std::move(child));
+                convertedChildren.emplace_back(child);
             }
         }
         if (hasConvertions) {
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("PgIn")
                     .Add(std::move(convertedChildren))
                 .Seal()
                 .Build();
+            // clang-format on
 
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -1875,11 +1929,13 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
             auto& conversion = elemsOfType.second;
             orClausesOfIn.push_back(BuildUniTypePgIn(std::move(conversion.Items), ctx));
         }
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("Or")
                 .Add(std::move(orClausesOfIn))
             .Seal()
             .Build();
+        // clang-format on
     } else {
         TExprNodeList items;
 
@@ -1893,11 +1949,13 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
         }
         output = BuildUniTypePgIn(std::move((castRequired) ? items : input->ChildrenList()), ctx);
     }
+    // clang-format off
     output = ctx.Expr.Builder(input->Pos())
         .Callable("ToPg")
             .Add(0, output)
         .Seal()
         .Build();
+    // clang-format on
     return IGraphTransformer::TStatus::Repeat;
 }
 
@@ -1951,6 +2009,7 @@ IGraphTransformer::TStatus PgBetweenWrapper(const TExprNode::TPtr& input, TExprN
     switch (elemType) {
         case 0:
         case NPg::UnknownOid:
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("Nothing")
                     .Callable(0, "PgType")
@@ -1958,6 +2017,7 @@ IGraphTransformer::TStatus PgBetweenWrapper(const TExprNode::TPtr& input, TExprN
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
             break;
         default:
             if (!elemTypeAnn->IsComparable()) {
@@ -2056,57 +2116,6 @@ IGraphTransformer::TStatus PgToRecordWrapper(const TExprNode::TPtr& input, TExpr
     }
 
     input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("record").TypeId));
-    return IGraphTransformer::TStatus::Ok;
-}
-
-IGraphTransformer::TStatus PgIterateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-    Y_UNUSED(output);
-    if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
-        input->SetTypeAnn(input->Head().GetTypeAnn());
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    if (!EnsureListType(input->Head(), ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    auto& lambda = input->ChildRef(1);
-    bool isUniversal;
-    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, 1);
-    if (status.Level != IGraphTransformer::TStatus::Ok) {
-        return status;
-    }
-
-    if (isUniversal) {
-        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    if (!UpdateLambdaAllArgumentsTypes(lambda, { input->Head().GetTypeAnn() }, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (!lambda->GetTypeAnn()) {
-        return IGraphTransformer::TStatus::Repeat;
-    }
-
-    if (lambda->GetTypeAnn()->HasUniversal() || input->Head().GetTypeAnn()->HasUniversal()) {
-        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    if (!IsSameAnnotation(*lambda->GetTypeAnn(), *input->Head().GetTypeAnn())) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), TStringBuilder() <<
-            "Mismatch of transform lambda return type and input type: " <<
-            *lambda->GetTypeAnn() << " != " << *input->Head().GetTypeAnn()));
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    input->SetTypeAnn(input->Head().GetTypeAnn());
     return IGraphTransformer::TStatus::Ok;
 }
 

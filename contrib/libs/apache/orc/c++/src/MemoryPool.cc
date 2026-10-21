@@ -24,6 +24,7 @@
 #include <string.h>
 #include <cstdlib>
 #include <iostream>
+#include <type_traits>
 
 namespace orc {
 
@@ -52,10 +53,12 @@ namespace orc {
   }
 
   template <class T>
-  DataBuffer<T>::DataBuffer(MemoryPool& pool, uint64_t newSize)
-      : memoryPool_(pool), buf_(nullptr), currentSize_(0), currentCapacity_(0) {
-    reserve(newSize);
-    currentSize_ = newSize;
+  DataBuffer<T>::DataBuffer(MemoryPool& pool, uint64_t newSize, bool ownBuf)
+      : memoryPool_(pool), buf_(nullptr), currentSize_(0), currentCapacity_(0), ownBuffer_(ownBuf) {
+    if (ownBuffer_) {
+      reserve(newSize);
+      currentSize_ = newSize;
+    }
   }
 
   template <class T>
@@ -63,24 +66,34 @@ namespace orc {
       : memoryPool_(buffer.memoryPool_),
         buf_(buffer.buf_),
         currentSize_(buffer.currentSize_),
-        currentCapacity_(buffer.currentCapacity_) {
+        currentCapacity_(buffer.currentCapacity_),
+        ownBuffer_(buffer.ownBuffer_) {
     buffer.buf_ = nullptr;
     buffer.currentSize_ = 0;
     buffer.currentCapacity_ = 0;
+    buffer.ownBuffer_ = true;
   }
 
   template <class T>
   DataBuffer<T>::~DataBuffer() {
+    if (!ownBuffer_) {
+      return;
+    }
     for (uint64_t i = currentSize_; i > 0; --i) {
       (buf_ + i - 1)->~T();
     }
     if (buf_) {
+      static_assert(std::is_trivially_copyable<T>::value,
+                    "Only trivially copyable type is supported for DataBuffer reserve");
       memoryPool_.free(reinterpret_cast<char*>(buf_));
     }
   }
 
   template <class T>
   void DataBuffer<T>::resize(uint64_t newSize) {
+    if (!ownBuffer_) {
+      return;
+    }
     reserve(newSize);
     if (currentSize_ > newSize) {
       for (uint64_t i = currentSize_; i > newSize; --i) {
@@ -96,6 +109,9 @@ namespace orc {
 
   template <class T>
   void DataBuffer<T>::reserve(uint64_t newCapacity) {
+    if (!ownBuffer_) {
+      return;
+    }
     if (newCapacity > currentCapacity_ || !buf_) {
       if (buf_) {
         T* buf_old = buf_;
@@ -114,6 +130,18 @@ namespace orc {
     memset(buf_, 0, sizeof(T) * currentCapacity_);
   }
 
+  template <class T>
+  void DataBuffer<T>::setData(T* buffer, size_t bufSize) {
+    if (ownBuffer_ && buf_) {
+      static_assert(std::is_trivially_copyable<T>::value,
+                    "Only trivially copyable type is supported for DataBuffer reserve");
+      memoryPool_.free(reinterpret_cast<char*>(buf_));
+    }
+    ownBuffer_ = false;
+    buf_ = buffer;
+    currentSize_ = currentCapacity_ = static_cast<uint64_t>(bufSize / sizeof(T));
+  }
+
   // Specializations for Int128
   template <>
   void DataBuffer<Int128>::zeroOut() {
@@ -126,13 +154,16 @@ namespace orc {
 
   template <>
   DataBuffer<char>::~DataBuffer() {
-    if (buf_) {
+    if (ownBuffer_ && buf_) {
       memoryPool_.free(reinterpret_cast<char*>(buf_));
     }
   }
 
   template <>
   void DataBuffer<char>::resize(uint64_t newSize) {
+    if (!ownBuffer_) {
+      return;
+    }
     reserve(newSize);
     if (newSize > currentSize_) {
       memset(buf_ + currentSize_, 0, newSize - currentSize_);
@@ -144,13 +175,16 @@ namespace orc {
 
   template <>
   DataBuffer<char*>::~DataBuffer() {
-    if (buf_) {
+    if (ownBuffer_ && buf_) {
       memoryPool_.free(reinterpret_cast<char*>(buf_));
     }
   }
 
   template <>
   void DataBuffer<char*>::resize(uint64_t newSize) {
+    if (!ownBuffer_) {
+      return;
+    }
     reserve(newSize);
     if (newSize > currentSize_) {
       memset(buf_ + currentSize_, 0, (newSize - currentSize_) * sizeof(char*));
@@ -162,13 +196,16 @@ namespace orc {
 
   template <>
   DataBuffer<double>::~DataBuffer() {
-    if (buf_) {
+    if (ownBuffer_ && buf_) {
       memoryPool_.free(reinterpret_cast<char*>(buf_));
     }
   }
 
   template <>
   void DataBuffer<double>::resize(uint64_t newSize) {
+    if (!ownBuffer_) {
+      return;
+    }
     reserve(newSize);
     if (newSize > currentSize_) {
       memset(buf_ + currentSize_, 0, (newSize - currentSize_) * sizeof(double));
@@ -180,13 +217,16 @@ namespace orc {
 
   template <>
   DataBuffer<float>::~DataBuffer() {
-    if (buf_) {
+    if (ownBuffer_ && buf_) {
       memoryPool_.free(reinterpret_cast<char*>(buf_));
     }
   }
 
   template <>
   void DataBuffer<float>::resize(uint64_t newSize) {
+    if (!ownBuffer_) {
+      return;
+    }
     reserve(newSize);
     if (newSize > currentSize_) {
       memset(buf_ + currentSize_, 0, (newSize - currentSize_) * sizeof(float));
@@ -198,13 +238,16 @@ namespace orc {
 
   template <>
   DataBuffer<int64_t>::~DataBuffer() {
-    if (buf_) {
+    if (ownBuffer_ && buf_) {
       memoryPool_.free(reinterpret_cast<char*>(buf_));
     }
   }
 
   template <>
   void DataBuffer<int64_t>::resize(uint64_t newSize) {
+    if (!ownBuffer_) {
+      return;
+    }
     reserve(newSize);
     if (newSize > currentSize_) {
       memset(buf_ + currentSize_, 0, (newSize - currentSize_) * sizeof(int64_t));
@@ -216,13 +259,16 @@ namespace orc {
 
   template <>
   DataBuffer<int32_t>::~DataBuffer() {
-    if (buf_) {
+    if (ownBuffer_ && buf_) {
       memoryPool_.free(reinterpret_cast<char*>(buf_));
     }
   }
 
   template <>
   void DataBuffer<int32_t>::resize(uint64_t newSize) {
+    if (!ownBuffer_) {
+      return;
+    }
     reserve(newSize);
     if (newSize > currentSize_) {
       memset(buf_ + currentSize_, 0, (newSize - currentSize_) * sizeof(int32_t));
@@ -234,13 +280,16 @@ namespace orc {
 
   template <>
   DataBuffer<int16_t>::~DataBuffer() {
-    if (buf_) {
+    if (ownBuffer_ && buf_) {
       memoryPool_.free(reinterpret_cast<char*>(buf_));
     }
   }
 
   template <>
   void DataBuffer<int16_t>::resize(uint64_t newSize) {
+    if (!ownBuffer_) {
+      return;
+    }
     reserve(newSize);
     if (newSize > currentSize_) {
       memset(buf_ + currentSize_, 0, (newSize - currentSize_) * sizeof(int16_t));
@@ -252,13 +301,16 @@ namespace orc {
 
   template <>
   DataBuffer<int8_t>::~DataBuffer() {
-    if (buf_) {
+    if (ownBuffer_ && buf_) {
       memoryPool_.free(reinterpret_cast<char*>(buf_));
     }
   }
 
   template <>
   void DataBuffer<int8_t>::resize(uint64_t newSize) {
+    if (!ownBuffer_) {
+      return;
+    }
     reserve(newSize);
     if (newSize > currentSize_) {
       memset(buf_ + currentSize_, 0, (newSize - currentSize_) * sizeof(int8_t));
@@ -270,13 +322,16 @@ namespace orc {
 
   template <>
   DataBuffer<uint64_t>::~DataBuffer() {
-    if (buf_) {
+    if (ownBuffer_ && buf_) {
       memoryPool_.free(reinterpret_cast<char*>(buf_));
     }
   }
 
   template <>
   void DataBuffer<uint64_t>::resize(uint64_t newSize) {
+    if (!ownBuffer_) {
+      return;
+    }
     reserve(newSize);
     if (newSize > currentSize_) {
       memset(buf_ + currentSize_, 0, (newSize - currentSize_) * sizeof(uint64_t));
@@ -288,13 +343,16 @@ namespace orc {
 
   template <>
   DataBuffer<unsigned char>::~DataBuffer() {
-    if (buf_) {
+    if (ownBuffer_ && buf_) {
       memoryPool_.free(reinterpret_cast<char*>(buf_));
     }
   }
 
   template <>
   void DataBuffer<unsigned char>::resize(uint64_t newSize) {
+    if (!ownBuffer_) {
+      return;
+    }
     reserve(newSize);
     if (newSize > currentSize_) {
       memset(buf_ + currentSize_, 0, newSize - currentSize_);

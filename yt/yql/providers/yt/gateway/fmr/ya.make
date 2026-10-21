@@ -1,11 +1,14 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_fmr.cpp
 )
 
 PEERDIR(
+    library/cpp/yson
+    yql/essentials/core
     yql/essentials/providers/common/codec
+    yql/essentials/providers/common/mkql_simple_file
     yql/essentials/providers/common/provider
     yql/essentials/providers/result/expr_nodes
     yql/essentials/utils/log
@@ -27,8 +30,6 @@ PEERDIR(
     yt/yql/providers/yt/lib/schema
     yt/yql/providers/yt/provider
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(yql_yt_fmr.h)
 

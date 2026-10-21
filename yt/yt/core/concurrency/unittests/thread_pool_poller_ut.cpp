@@ -27,7 +27,7 @@ class TPollableMock
 {
 public:
     explicit TPollableMock(std::string loggingTag = {})
-        : LoggingTag_(std::move(loggingTag))
+        : LoggingTags_(NLogging::TLoggingTagList().With("Pollable", loggingTag))
     { }
 
     void SetCookie(IPollable::TCookiePtr cookie) override
@@ -40,9 +40,9 @@ public:
         return static_cast<void*>(Cookie_.Get());
     }
 
-    const std::string& GetLoggingTag() const override
+    const NLogging::TLoggingTagList& GetLoggingTags() const override
     {
-        return LoggingTag_;
+        return LoggingTags_;
     }
 
     void OnEvent(EPollControl control) override
@@ -69,7 +69,7 @@ public:
     }
 
 private:
-    const std::string LoggingTag_;
+    const NLogging::TLoggingTagList LoggingTags_;
 
     const TPromise<void> RetryPromise_ = NewPromise<void>();
     const TPromise<void> ShutdownPromise_ = NewPromise<void>();
@@ -209,7 +209,9 @@ TEST_F(TThreadPoolPollerTest, ForgotToUnarm)
     EXPECT_EQ(::pipe(pipes), 0);
 
     {
-        IPollablePtr pollable = MakeSimplePollable([] (IPollable&, EPollControl) {}, "simple");
+        IPollablePtr pollable = MakeSimplePollable(
+            [] (IPollable&, EPollControl) {},
+            NLogging::TLoggingTagList().With("Pollable", "Simple"));
         EXPECT_TRUE(Poller->TryRegister(pollable));
         Poller->Arm(pipes[0], pollable, EPollControl::Read);
         WaitForFast(Poller->Unregister(pollable))
@@ -234,7 +236,7 @@ TEST_F(TThreadPoolPollerTest, SelfRearmStress)
     for (int i = 0; i < 1000; ++i) {
         IPollablePtr pollable = MakeSimplePollable([&] (IPollable& self, EPollControl) {
             Poller->Arm(pipes[0], MakeStrong(&self), EPollControl::Read);
-        }, "simple");
+        }, NLogging::TLoggingTagList().With("Pollable", "Simple"));
         EXPECT_TRUE(Poller->TryRegister(pollable));
         Poller->Arm(pipes[0], pollable, EPollControl::Read);
 

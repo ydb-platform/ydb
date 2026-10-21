@@ -88,6 +88,9 @@ ELSE()
         WriteTzTimestamp64Native
         GetWrittenBytes
         FillZero
+        FillOptionalZero
+        FillNull
+        FillOptionalNull
     )
 ENDIF()
 ELSE()
@@ -95,8 +98,6 @@ ELSE()
         -DMKQL_DISABLE_CODEGEN
     )
 ENDIF()
-
-YQL_LAST_ABI_VERSION()
 
 PROVIDES(YT_CODEC_CODEGEN)
 

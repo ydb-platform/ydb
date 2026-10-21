@@ -4,6 +4,7 @@ RECURSE(
     example
     fq
     functional
+    hash_test
     library
     library/sqs
     olap
@@ -14,4 +15,5 @@ RECURSE(
     stress
     supp
     tools
+    workload_manager
 )

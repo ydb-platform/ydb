@@ -16,6 +16,7 @@ class TSpaceWatcher: public TActorBootstrapped<TSpaceWatcher> {
     std::optional<NKikimr::TLocalPathId> SubDomainPathId;
     std::optional<NKikimr::TLocalPathId> WatchingSubDomainPathId;
     bool SubDomainOutOfSpace = false;
+    bool SubDomainSmallBlobsQuotaExceeded = false;
 
 public:
     friend class TColumnShard;
@@ -49,7 +50,9 @@ public:
             HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(NActors::TEvents::TEvPoison, Handle);
             default:
-                LOG_S_WARN("TSpaceWatcher.StateWork at " << " unhandled event type: " << ev->GetTypeName() << " event: " << ev->ToString());
+                YDB_LOG_WARN_COMP(TX_COLUMNSHARD, "TSpaceWatcher.StateWork at unhandled event",
+                    {"type", ev->GetTypeName()},
+                    {"event", ev->ToString()});
                 break;
         }
     }

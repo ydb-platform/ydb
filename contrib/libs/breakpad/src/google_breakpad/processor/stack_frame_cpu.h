@@ -1,7 +1,6 @@
 // -*- mode: c++ -*-
 
-// Copyright (c) 2010 Google Inc.
-// All rights reserved.
+// Copyright 2010 Google LLC
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -13,7 +12,7 @@
 // copyright notice, this list of conditions and the following disclaimer
 // in the documentation and/or other materials provided with the
 // distribution.
-//     * Neither the name of Google Inc. nor the names of its
+//     * Neither the name of Google LLC nor the names of its
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
@@ -392,6 +391,118 @@ struct StackFrameMIPS : public StackFrame {
   // stack. In other frames, which registers are present depends on what
   // debugging information were available. Refer to 'context_validity' below.
   MDRawContextMIPS context;   
+
+  // For each register in context whose value has been recovered,
+  // the corresponding CONTEXT_VALID_ bit in 'context_validity' is set.
+  //
+  // context_validity's type should actually be ContextValidity, but
+  // type int is used instead because the bitwise inclusive or operator
+  // yields an int when applied to enum values, and C++ doesn't
+  // silently convert from ints to enums.
+  int context_validity;
+};
+
+struct StackFrameRISCV : public StackFrame {
+
+  enum ContextValidity {
+    CONTEXT_VALID_NONE = 0,
+    CONTEXT_VALID_PC  = 1 << 0,
+    CONTEXT_VALID_RA  = 1 << 1,
+    CONTEXT_VALID_SP  = 1 << 2,
+    CONTEXT_VALID_GP  = 1 << 3,
+    CONTEXT_VALID_TP  = 1 << 4,
+    CONTEXT_VALID_T0  = 1 << 5,
+    CONTEXT_VALID_T1  = 1 << 6,
+    CONTEXT_VALID_T2  = 1 << 7,
+    CONTEXT_VALID_S0  = 1 << 8,
+    CONTEXT_VALID_S1  = 1 << 9,
+    CONTEXT_VALID_A0  = 1 << 10,
+    CONTEXT_VALID_A1  = 1 << 11,
+    CONTEXT_VALID_A2  = 1 << 12,
+    CONTEXT_VALID_A3  = 1 << 13,
+    CONTEXT_VALID_A4  = 1 << 14,
+    CONTEXT_VALID_A5  = 1 << 15,
+    CONTEXT_VALID_A6  = 1 << 16,
+    CONTEXT_VALID_A7  = 1 << 17,
+    CONTEXT_VALID_S2  = 1 << 18,
+    CONTEXT_VALID_S3  = 1 << 19,
+    CONTEXT_VALID_S4  = 1 << 20,
+    CONTEXT_VALID_S5  = 1 << 21,
+    CONTEXT_VALID_S6  = 1 << 22,
+    CONTEXT_VALID_S7  = 1 << 23,
+    CONTEXT_VALID_S8  = 1 << 24,
+    CONTEXT_VALID_S9  = 1 << 25,
+    CONTEXT_VALID_S10 = 1 << 26,
+    CONTEXT_VALID_S11 = 1 << 27,
+    CONTEXT_VALID_T3  = 1 << 28,
+    CONTEXT_VALID_T4  = 1 << 29,
+    CONTEXT_VALID_T5  = 1 << 30,
+    CONTEXT_VALID_T6  = 1 << 31,
+    CONTEXT_VALID_ALL = ~CONTEXT_VALID_NONE
+  };
+
+  StackFrameRISCV() : context(), context_validity(CONTEXT_VALID_NONE) {}
+
+  // Register state. This is only fully valid for the topmost frame in a
+  // stack. In other frames, which registers are present depends on what
+  // debugging information were available. Refer to 'context_validity' below.
+  MDRawContextRISCV context;
+
+  // For each register in context whose value has been recovered,
+  // the corresponding CONTEXT_VALID_ bit in 'context_validity' is set.
+  //
+  // context_validity's type should actually be ContextValidity, but
+  // type int is used instead because the bitwise inclusive or operator
+  // yields an int when applied to enum values, and C++ doesn't
+  // silently convert from ints to enums.
+  int context_validity;
+};
+
+struct StackFrameRISCV64 : public StackFrame {
+
+  enum ContextValidity {
+    CONTEXT_VALID_NONE = 0,
+    CONTEXT_VALID_PC  = 1 << 0,
+    CONTEXT_VALID_RA  = 1 << 1,
+    CONTEXT_VALID_SP  = 1 << 2,
+    CONTEXT_VALID_GP  = 1 << 3,
+    CONTEXT_VALID_TP  = 1 << 4,
+    CONTEXT_VALID_T0  = 1 << 5,
+    CONTEXT_VALID_T1  = 1 << 6,
+    CONTEXT_VALID_T2  = 1 << 7,
+    CONTEXT_VALID_S0  = 1 << 8,
+    CONTEXT_VALID_S1  = 1 << 9,
+    CONTEXT_VALID_A0  = 1 << 10,
+    CONTEXT_VALID_A1  = 1 << 11,
+    CONTEXT_VALID_A2  = 1 << 12,
+    CONTEXT_VALID_A3  = 1 << 13,
+    CONTEXT_VALID_A4  = 1 << 14,
+    CONTEXT_VALID_A5  = 1 << 15,
+    CONTEXT_VALID_A6  = 1 << 16,
+    CONTEXT_VALID_A7  = 1 << 17,
+    CONTEXT_VALID_S2  = 1 << 18,
+    CONTEXT_VALID_S3  = 1 << 19,
+    CONTEXT_VALID_S4  = 1 << 20,
+    CONTEXT_VALID_S5  = 1 << 21,
+    CONTEXT_VALID_S6  = 1 << 22,
+    CONTEXT_VALID_S7  = 1 << 23,
+    CONTEXT_VALID_S8  = 1 << 24,
+    CONTEXT_VALID_S9  = 1 << 25,
+    CONTEXT_VALID_S10 = 1 << 26,
+    CONTEXT_VALID_S11 = 1 << 27,
+    CONTEXT_VALID_T3  = 1 << 28,
+    CONTEXT_VALID_T4  = 1 << 29,
+    CONTEXT_VALID_T5  = 1 << 30,
+    CONTEXT_VALID_T6  = 1 << 31,
+    CONTEXT_VALID_ALL = ~CONTEXT_VALID_NONE
+  };
+
+  StackFrameRISCV64() : context(), context_validity(CONTEXT_VALID_NONE) {}
+
+  // Register state. This is only fully valid for the topmost frame in a
+  // stack. In other frames, which registers are present depends on what
+  // debugging information were available. Refer to 'context_validity' below.
+  MDRawContextRISCV64 context;
 
   // For each register in context whose value has been recovered,
   // the corresponding CONTEXT_VALID_ bit in 'context_validity' is set.

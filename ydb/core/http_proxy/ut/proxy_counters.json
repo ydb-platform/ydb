@@ -114,7 +114,7 @@
         "counters": "utils",
         "component": "ydb"
       },
-      "value": 13,
+      "value": 15,
       "kind": "RATE"
     },
     {
@@ -140,6 +140,26 @@
     {
       "labels": {
         "name": "api.grpc.request.dropped_count",
+        "method": "ListEndpoints",
+        "counters": "ydb",
+        "api_service": "discovery"
+      },
+      "value": 0,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.grpc.request.relative_database_count",
+        "method": "ListEndpoints",
+        "counters": "ydb",
+        "api_service": "discovery"
+      },
+      "value": 0,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.grpc.request.relative_resource_count",
         "method": "ListEndpoints",
         "counters": "ydb",
         "api_service": "discovery"

@@ -2,6 +2,8 @@
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_SYNCER
+
 namespace NKikimr {
 
     TEvLocalSyncData::TEvLocalSyncData(const TVDiskID &vdisk, const TSyncState &syncState, const TString &data)
@@ -124,22 +126,45 @@ namespace NKikimr {
             Squeeze(logoBlobs);
             Extracted.LogoBlobs =
                 std::make_shared<TFreshAppendixLogoBlobs>(std::move(logoBlobs), vctx->FreshIndex, true);
+            LogoBlobsSize = Extracted.LogoBlobs->SizeApproximation();
         }
         if (blocks) {
             Squeeze(blocks);
             // blocks are already sorted
             Extracted.Blocks =
                 std::make_shared<TFreshAppendixBlocks>(std::move(blocks), vctx->FreshIndex, true);
+            BlocksSize = Extracted.Blocks->SizeApproximation();
         }
         if (barriers) {
             Squeeze(barriers);
             Extracted.Barriers =
                 std::make_shared<TFreshAppendixBarriers>(std::move(barriers), vctx->FreshIndex, true);
+            BarriersSize = Extracted.Barriers->SizeApproximation();
         }
         Y_ABORT_UNLESS(Extracted.IsReady());
     }
 
+    void TEvLocalSyncData::CalculateSizesFromData() {
+        LogoBlobsSize = 0;
+        BlocksSize = 0;
+        BarriersSize = 0;
 
+        auto blobHandler = [&] (const NSyncLog::TLogoBlobRec*) {
+            LogoBlobsSize += sizeof(TKeyLogoBlob) + sizeof(TMemRecLogoBlob);
+        };
+        auto blockHandler = [&] (const NSyncLog::TBlockRec*) {
+            BlocksSize += sizeof(TKeyBlock) + sizeof(TMemRecBlock);
+        };
+        auto barrierHandler = [&] (const NSyncLog::TBarrierRec*) {
+            BarriersSize += sizeof(TKeyBarrier) + sizeof(TMemRecBarrier);
+        };
+        auto blockHandlerV2 = [&] (const NSyncLog::TBlockRecV2*) {
+            BlocksSize += sizeof(TKeyBlock) + sizeof(TMemRecBlock);
+        };
+
+        NSyncLog::TFragmentReader fragment(Data);
+        fragment.ForEach(blobHandler, blockHandler, barrierHandler, blockHandlerV2);
+    }
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // TLocalSyncDataExtractorActor -- actor extracts data from TEvLocalSyncData
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -156,10 +181,11 @@ namespace NKikimr {
             auto startTime = TAppData::TimeProvider->Now();
             Ev->UnpackData(VCtx);
             auto finishTime = TAppData::TimeProvider->Now();
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_SYNCER, VCtx->VDiskLogPrefix
-                    << "TLocalSyncDataExtractorActor: VDiskId# " << Ev->VDiskID.ToString()
-                    << " dataSize# " << Ev->Data.size()
-                    << " duration# %s" << (finishTime - startTime));
+            YDB_LOG_DEBUG_CTX(ctx, "TLocalSyncDataExtractorActor: %s",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"VDiskId", Ev->VDiskID},
+                {"dataSize", Ev->Data.size()},
+                {"duration", (finishTime - startTime)});
 
             ctx.Send(new IEventHandle(TargetId, ParentId, Ev.release()));
             PassAway();
@@ -198,6 +224,7 @@ namespace NKikimr {
         TActorId ParentId;
         std::unique_ptr<TEvLocalSyncData> Ev;
         std::vector<TString> Chunks;
+        TSyncState OldSyncState;
 
         ui32 ChunksInFlight = 0;
         bool CompressChunks;
@@ -234,10 +261,11 @@ namespace NKikimr {
             }
             addChunk();
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER, VCtx->VDiskLogPrefix
-                    << "TLocalSyncDataCutterActor: VDiskId# " << Ev->VDiskID.ToString()
-                    << " dataSize# " << Ev->Data.size()
-                    << " duration# " << TDuration::Seconds(timer.Passed()));
+            YDB_LOG_DEBUG("TLocalSyncDataCutterActor",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"VDiskId", Ev->VDiskID},
+                {"dataSize", Ev->Data.size()},
+                {"duration", TDuration::Seconds(timer.Passed())});
 
             Become(&TThis::StateFunc);
             SendChunks();
@@ -263,7 +291,18 @@ namespace NKikimr {
 
         void SendChunks() {
             while (ChunksInFlight < MaxChunksInFlight && !Chunks.empty()) {
-                Send(SkeletonId, new TEvLocalSyncData(Ev->VDiskID, Ev->SyncState, std::move(Chunks.back())));
+                // The last chunk carries the new SyncState, which advances the peer's
+                // SyncedLsn cursor during recovery. It must only be sent (and thus logged)
+                // after all previous chunks have been confirmed durable; otherwise a crash
+                // that persists only the last chunk could advance the cursor past data that
+                // was never written, leading to a permanent local gap. All preceding chunks
+                // carry OldSyncState, which does not advance the cursor.
+                const bool isLastChunk = (Chunks.size() == 1);
+                if (isLastChunk && ChunksInFlight > 0) {
+                    break;
+                }
+                const TSyncState& syncState = isLastChunk ? Ev->SyncState : OldSyncState;
+                Send(SkeletonId, new TEvLocalSyncData(Ev->VDiskID, syncState, std::move(Chunks.back())));
                 Chunks.pop_back();
                 ++ChunksInFlight;
             }
@@ -279,14 +318,16 @@ namespace NKikimr {
                 const TIntrusivePtr<TVDiskContext>& vctx,
                 const TActorId& skeletonId,
                 const TActorId& parentId,
-                std::unique_ptr<TEvLocalSyncData> ev)
+                std::unique_ptr<TEvLocalSyncData> ev,
+                const TSyncState& oldSyncState)
             : VCtx(vctx)
             , SkeletonId(skeletonId)
             , ParentId(parentId)
             , Ev(std::move(ev))
-            , CompressChunks(vconfig->MaxSyncLogChunksInFlight)
+            , OldSyncState(oldSyncState)
+            , CompressChunks(vconfig->EnableSyncLogChunkCompression)
             , MaxChunksInFlight(vconfig->MaxSyncLogChunksInFlight)
-            , MaxChunksSize(vconfig->MaxSyncLogChunkSize)
+            , MaxChunksSize(vconfig->MaxSyncDataCutterChunkSize)
         {}
 
     STRICT_STFUNC(StateFunc, {
@@ -296,8 +337,9 @@ namespace NKikimr {
     };
 
     IActor* CreateLocalSyncDataCutter(const TIntrusivePtr<TVDiskConfig>& vconfig, const TIntrusivePtr<TVDiskContext>& vctx,
-        const TActorId& skeletonId, const TActorId& parentId, std::unique_ptr<TEvLocalSyncData> ev) {
-        return new TLocalSyncDataCutterActor(vconfig, vctx, skeletonId, parentId, std::move(ev));
+        const TActorId& skeletonId, const TActorId& parentId, std::unique_ptr<TEvLocalSyncData> ev,
+        const TSyncState& oldSyncState) {
+        return new TLocalSyncDataCutterActor(vconfig, vctx, skeletonId, parentId, std::move(ev), oldSyncState);
     }
 
 

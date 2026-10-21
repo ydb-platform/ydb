@@ -31,9 +31,7 @@
 #include <util/stream/file.h>
 #include <util/system/hp_timer.h>
 
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_DB_BACKUP
 
 namespace NKikimr::NTabletFlatExecutor::NBackup {
 
@@ -194,6 +192,59 @@ std::optional<TGenStep> ParseBackupGenStep(const TString& name) {
     return std::make_pair(gen, step);
 }
 
+TVector<TFsPath> ListDirectories(const TFsPath& parent) {
+    TVector<TFsPath> children;
+    parent.List(children);
+    children.erase(std::remove_if(children.begin(), children.end(), [](const TFsPath& path) {
+        return path.IsSymlink() || !path.IsDirectory();
+    }), children.end());
+    return children;
+}
+
+std::optional<TString> GetCompletedBackupTimestamp(const TFsPath& path) {
+    const auto name = path.Basename();
+    const auto parts = StringSplitter(name).Split('_').ToList<TStringBuf>();
+    if (parts.size() != 4 || !ParseBackupGenStep(name)) {
+        return std::nullopt;
+    }
+
+    const auto timestamp = parts[1];
+    if (timestamp.size() != 15 || timestamp.back() != 'Z'
+        || !std::all_of(timestamp.begin(), timestamp.end() - 1,
+            [](char c) { return c >= '0' && c <= '9'; })) {
+        return std::nullopt;
+    }
+
+    const auto snapshot = path.Child("snapshot");
+    if (snapshot.IsSymlink() || !snapshot.IsDirectory()) {
+        return std::nullopt;
+    }
+    return TString(timestamp);
+}
+
+struct TCompletedBackup {
+    TString Timestamp;
+    TFsPath Path;
+};
+
+TVector<TCompletedBackup> FindCompletedBackups(const TFsPath& root) {
+    TVector<TCompletedBackup> backups;
+    for (const auto& type : ListDirectories(root)) {
+        for (const auto& tablet : ListDirectories(type)) {
+            ui64 tabletId;
+            if (!TryFromString(tablet.Basename(), tabletId)) {
+                continue;
+            }
+            for (const auto& path : ListDirectories(tablet)) {
+                if (auto timestamp = GetCompletedBackupTimestamp(path)) {
+                    backups.push_back({std::move(*timestamp), path});
+                }
+            }
+        }
+    }
+    return backups;
+}
+
 ui64 NewBackupChangelogMinBytes() {
     return AppData()->SystemTabletBackupConfig.GetNewBackupChangelogMinBytes();
 }
@@ -210,8 +261,13 @@ class TSnapshotWriter : public TActorBootstrapped<TSnapshotWriter>, public IActo
 public:
     using TBase = TActorBootstrapped<TSnapshotWriter>;
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "[" << TabletId << ":" << Generation << ":" << Step << "] ";
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TSnapshotWriter"},
+            {"selfId", SelfId()},
+            {"tabletId", TabletId},
+            {"generation", Generation},
+            {"step", Step});
     }
 
     struct TTableFile {
@@ -241,7 +297,8 @@ public:
     }
 
     void Bootstrap() {
-        LOG_N("Starting snapshot" << " Path# " << SnapshotPath);
+        YDB_LOG_NOTICE("Starting snapshot",
+            {"path", SnapshotPath});
 
         DeleteOldBackups();
 
@@ -264,13 +321,14 @@ public:
             SchemaSha256.Update(stringOut.Data(), stringOut.Size());
             WrittenBytes += stringOut.Size();
             Send(Owner, new TEvSnapshotStats(stringOut.Size()));
-            LOG_D("Schema written" << " Bytes# " << stringOut.Size());
+            YDB_LOG_DEBUG("Schema written",
+                {"bytes", stringOut.Size()});
         } catch (const std::exception& e) {
             return ReplyAndDie(false, TStringBuilder() << "Failed to create snapshot schema file " << schemaPath << ": " << e.what());
         }
 
         if (Tables.empty()) {
-            LOG_D("No tables to scan, finalizing");
+            YDB_LOG_DEBUG("No tables to scan, finalizing");
             return Finalize();
         }
 
@@ -293,10 +351,10 @@ public:
     void DeleteOldBackups() {
         try {
             const auto backupGenStep = TGenStep{Generation, Step};
-    
+
             TVector<TFsPath> children;
             BackupPath.Parent().List(children);
-    
+
             TVector<std::pair<TGenStep, TFsPath>> backups;
             for (const auto& child : children) {
                 auto genStep = ParseBackupGenStep(child.Basename());
@@ -305,19 +363,20 @@ public:
                 if (!genStep) {
                     continue;
                 }
-    
+
                 // valid backup directory
                 if (child.Child("snapshot").Exists()) {
                     backups.emplace_back(*genStep, child);
                     continue;
                 }
-    
+
                 // newer backup
                 if (genStep >= backupGenStep) {
                     continue;
                 }
-    
-                LOG_N("Deleting incomplete backup" << " Path# " << child);
+
+                YDB_LOG_NOTICE("Deleting incomplete backup",
+                    {"path", child});
                 child.ForceDelete();
             }
 
@@ -326,11 +385,40 @@ public:
             });
 
             for (size_t i = MaxBackupsLimit(); i < backups.size(); ++i) {
-                LOG_N("Deleting old backup" << " Path# " << backups[i].second);
+                YDB_LOG_NOTICE("Deleting old backup",
+                    {"path", backups[i].second});
                 backups[i].second.ForceDelete();
             }
         } catch (const std::exception& e) {
-            LOG_E("Failed to delete old backups" << " Path# " << BackupPath << " Error# " << e.what());
+            YDB_LOG_ERROR("Failed to delete old backups",
+                {"path", BackupPath},
+                {"error", e.what()});
+        }
+    }
+
+    void DeleteOldBackupsGlobally() {
+        const ui64 maxTotalBackups = AppData()->SystemTabletBackupConfig.GetMaxGlobalBackupsLimit();
+        const auto root = BackupPath.Parent().Parent().Parent();
+        try {
+            auto backups = FindCompletedBackups(root);
+            if (backups.size() <= maxTotalBackups) {
+                return;
+            }
+
+            // Generations are only comparable within one tablet. Across tablets use time.
+            std::sort(backups.begin(), backups.end(), [](const auto& a, const auto& b) {
+                return a.Timestamp != b.Timestamp ? a.Timestamp < b.Timestamp : a.Path.GetPath() < b.Path.GetPath();
+            });
+            const size_t excess = backups.size() - maxTotalBackups;
+            for (size_t i = 0; i < excess; ++i) {
+                YDB_LOG_NOTICE("Deleting old backup above the global limit",
+                    {"path", backups[i].Path});
+                backups[i].Path.ForceDelete();
+            }
+        } catch (const std::exception& e) {
+            YDB_LOG_ERROR("Failed to delete backups above the global limit",
+                {"path", root},
+                {"error", e.what()});
         }
     }
 
@@ -338,7 +426,8 @@ public:
         if (success) {
             Send(Owner, new TEvSnapshotCompleted(WrittenBytes));
         } else {
-            LOG_E("Snapshot failed" << " Error# " << error);
+            YDB_LOG_ERROR("Snapshot failed",
+                {"error", error});
             Send(Owner, new TEvSnapshotCompleted(error));
         }
 
@@ -346,6 +435,7 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWriteSnapshot, Handle);
         }
@@ -353,7 +443,9 @@ public:
 
     void Handle(TEvWriteSnapshot::TPtr& ev) {
         const auto* msg = ev->Get();
-        LOG_D("Writing snapshot" << " TableId# " << msg->TableId << " Bytes# " << msg->SnapshotData.Size());
+        YDB_LOG_DEBUG("Writing snapshot",
+            {"tableId", msg->TableId},
+            {"bytes", msg->SnapshotData.Size()});
 
         auto it = Tables.find(msg->TableId);
         if (it == Tables.end()) {
@@ -393,7 +485,9 @@ public:
 
     void ScanDone(ui32 tableId) {
         DoneTables.insert(tableId);
-        LOG_D("Table scan done" << " Done# " << DoneTables.size() << " Total# " << Tables.size());
+        YDB_LOG_DEBUG("Table scan done",
+            {"done", DoneTables.size()},
+            {"total", Tables.size()});
         if (DoneTables.size() == Tables.size()) {
             return Finalize();
         }
@@ -478,7 +572,10 @@ public:
 
         DeleteOldBackups();
 
-        LOG_N("Snapshot finalized" << " Bytes# " << WrittenBytes);
+        DeleteOldBackupsGlobally();
+
+        YDB_LOG_NOTICE("Snapshot finalized",
+            {"bytes", WrittenBytes});
         return ReplyAndDie();
     }
 
@@ -564,7 +661,7 @@ public:
             } catch (const std::exception& e) {
                 TString value;
                 DbgPrintValue(value, cell, column.PType);
-        
+
                 throw yexception() << "Failed to write column to JSON: " << e.what()
                     << " Column# " << column.Name
                     << " Type# " << NScheme::TypeName(column.PType.GetTypeId(), "")
@@ -678,9 +775,22 @@ public:
         }
     }
 
-    bool NoOps(ui32 tid, TOps ops) const {
+    bool IsUpdateExcluded(ui32 tid, TOps ops) const {
+        if (!Exclusion) {
+            return false;
+        }
+
+        if (Exclusion->HasTable(tid)) {
+            return true;
+        }
+
+        if (ops.empty()) {
+            return false;
+        }
+
+        // ignore data changes that contain only excluded columns
         for (const auto& op : ops) {
-            if (!Exclusion || !Exclusion->HasColumn(tid, op.Tag)) {
+            if (!Exclusion->HasColumn(tid, op.Tag)) {
                 return false;
             }
         }
@@ -689,12 +799,8 @@ public:
 
     void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion)
     {
-        if (Exclusion && Exclusion->HasTable(tid)) {
+        if (IsUpdateExcluded(tid, ops)) {
             return;
-        }
-
-        if (NoOps(tid, ops) && !TCellOp::HaveNoOps(rop)) {
-            return; // ignore data changes that contain only excluded columns
         }
 
         BeginCommit();
@@ -750,7 +856,7 @@ public:
         Writer.CloseMap();
     }
 
-    void DoUpdateTx(ui32, ERowOp, TKeys, TOps, ui64)
+    void DoUpdateTx(ui32, ERowOp, TKeys, TOps, ui64, ui32)
     {
         Y_TABLET_ERROR("UpdateTx is unsupported");
     }
@@ -831,12 +937,18 @@ public:
         , InFlightBytesLimit(inFlightBytesLimit)
     {}
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "[" << TabletId << ":" << Generation << ":" << Step << "] ";
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TChangelogWriter"},
+            {"selfId", SelfId()},
+            {"tabletId", TabletId},
+            {"generation", Generation},
+            {"step", Step});
     }
 
     void Bootstrap() {
-        LOG_N("Starting changelog" << " Path# " << ChangelogPath);
+        YDB_LOG_NOTICE("Starting changelog",
+            {"path", ChangelogPath});
 
         // writing initial changelog and checksum files
         BufferCreatedAt = TActivationContext::Monotonic();
@@ -846,6 +958,7 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWriteChangelog, Handle);
             hFunc(TEvPrivate::TEvIoComplete, Handle);
@@ -860,7 +973,8 @@ public:
         NJson::TJsonWriter writer(&out, BackupJsonConfig());
 
         const auto* msg = ev->Get();
-        LOG_D("Writing changelog" << " Step# " << msg->Step);
+        YDB_LOG_DEBUG("Writing changelog",
+            {"step", msg->Step});
 
         TString dataUpdate;
         TString schemeUpdate;
@@ -988,10 +1102,10 @@ public:
             return ReplyAndDie(msg->Error);
         }
 
-        LOG_D("Changelog IO completed"
-            << " Bytes# " << IoInFlightBytes
-            << " Latency# " << msg->Latency
-            << " Lag# " << msg->Lag);
+        YDB_LOG_DEBUG("Changelog IO completed",
+            {"bytes", IoInFlightBytes},
+            {"latency", msg->Latency},
+            {"lag", msg->Lag});
 
         Send(Owner, new TEvChangelogStats(IoInFlightBytes, msg->Latency, msg->Lag));
 
@@ -1000,7 +1114,9 @@ public:
         IoInProgress = false;
 
         if (NeedNewBackup()) {
-            LOG_N("Requesting new backup" << " ChangelogBytes# " << WrittenBytes << " SnapshotBytes# " << *SnapshotWrittenBytes);
+            YDB_LOG_NOTICE("Requesting new backup",
+                {"changelogBytes", WrittenBytes},
+                {"snapshotBytes", *SnapshotWrittenBytes});
             Send(Owner, new TEvStartNewBackup());
         }
 
@@ -1034,7 +1150,8 @@ public:
     }
 
     void StartIO(EOpenMode openMode = EOpenModeFlag::OpenExisting | EOpenModeFlag::ForAppend) {
-        LOG_D("Starting Changelog IO" << " Bytes# " << Buffer.Size());
+        YDB_LOG_DEBUG("Starting Changelog IO",
+            {"bytes", Buffer.Size()});
 
         IoInFlightBytes = Buffer.Size();
         IoInProgress = true;
@@ -1069,7 +1186,8 @@ public:
     }
 
     void ReplyAndDie(const TString& error) {
-        LOG_E("Changelog failed" << " Error# " << error);
+        YDB_LOG_ERROR("Changelog failed",
+            {"error", error});
         Send(Owner, new TEvChangelogFailed(error));
         PassAway();
     }
@@ -1157,4 +1275,3 @@ IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTablet
 }
 
 } // NKikimr::NTabletFlatExecutor::NBackup
-

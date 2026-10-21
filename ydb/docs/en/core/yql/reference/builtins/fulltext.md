@@ -24,12 +24,11 @@ Supports named arguments:
 
 * `Mode` (String): query mode:
   * `Keywords` (default) — the query is split into individual terms; how they are combined is determined by `DefaultOperator`
-  * `Query` — extended syntax with logical operators: required terms via `+`, excluded terms via `-`, exact phrases in double quotes
   * `Wildcard` — wildcard search: `%` matches any substring, `_` matches a single character (similar to `LIKE`); requires an n-gram index
 * `DefaultOperator` (String): term combination operator in `Keywords` mode:
   * `And` (default) — all query terms must be present in the text
-  * `Or` — matching at least one term is sufficient; use `MinimumShouldMatch` to set a minimum threshold
-* `MinimumShouldMatch` (String): minimum number of matched terms when `DefaultOperator = "Or"` — specified as an absolute number (for example, `"3"`) or a percentage of query terms (for example, `"50%"`)
+  * `Or` — terms split into **required** (prefixed with `+`, must appear in every result) and **optional** (no prefix, count toward `MinimumShouldMatch`). Without any `+` prefix, all terms are optional and at least one must match
+* `MinimumShouldMatch` (String): minimum number of **optional** terms that must match when `DefaultOperator = "Or"` — specified as an absolute number (for example, `"3"`) or a percentage of the optional terms (for example, `"50%"`). Required (`+`) terms are not counted
 
 `Mode` and `DefaultOperator` values are case-insensitive.
 
@@ -43,6 +42,8 @@ FROM articles VIEW ft_idx
 WHERE FulltextMatch(body, "mach% learn%", "Wildcard" AS Mode)
 LIMIT 20;
 ```
+
+A pattern must contain a searchable fragment at least as long as `filter_ngram_min_length`; `%` or a shorter fragment cannot be used for an index search.
 
 ### MinimumShouldMatch example {#minimum-should-match-example}
 
@@ -62,6 +63,25 @@ WHERE FulltextMatch(
 
 In this example, `Mode` is set to `Keywords` (treating the query as a set of terms), `DefaultOperator` is set to `Or` (allowing matching any subset of terms), and `MinimumShouldMatch` is set to `"50%"` (requiring at least 4 out of 8 terms to match). This helps filter out documents that contain only one or two words from a long query.
 
+### Required term (`+`) example {#required-term-example}
+
+Prefix a term with `+` in `Keywords` mode with `DefaultOperator = "Or"` to require it in every result. This follows [Lucene's required term syntax](https://lucene.apache.org/core/2_9_4/queryparsersyntax.html#+).
+
+```yql
+SELECT id
+FROM articles VIEW ft_idx
+WHERE FulltextMatch(
+  body,
+  "+machine learning neural networks",
+  "Or" AS DefaultOperator,
+  "1" AS MinimumShouldMatch
+);
+```
+
+This returns documents that contain "machine" (required) and at least 1 of "learning", "neural", "networks" (optional). `MinimumShouldMatch` counts only the optional terms. If all terms are prefixed with `+`, the query is a strict AND.
+
+`MinimumShouldMatch` counts distinct optional terms after analysis. Percentages are rounded down, with a minimum of one match. Negative integers are allowed: `"-1"` means all but one optional term. Requires `DefaultOperator="Or"`.
+
 ## FulltextScore {#fulltext-score}
 
 `FulltextScore(text, query)` returns a relevance score based on the [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) algorithm and can be used for ranking results.
@@ -80,10 +100,10 @@ Only the first two arguments can be positional. Additional parameters must be pa
 
 Supports named arguments:
 
-* `DefaultOperator` (String): term combination operator — `And` (default, all terms must be present) or `Or` (at least one term must match)
-* `MinimumShouldMatch` (String): when `DefaultOperator = "Or"`, minimum number of matched terms — specified as an absolute number (for example, `"2"`) or a percentage (for example, `"50%"`)
-* `K1` (Double): term frequency saturation parameter in [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) — controls how strongly repeated occurrences of a term affect the score; typical range: 1.2–2.0
-* `B` (Double): document length normalization parameter in [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) — `0.0` disables normalization, `1.0` fully normalizes by document length; typical value: 0.75
+* `DefaultOperator` (String): term combination operator — `And` (default, all terms must be present) or `Or` (terms split into **required** with `+` prefix and **optional** without; at least `MinimumShouldMatch` optional terms must match, and every required term must be present)
+* `MinimumShouldMatch` (String): when `DefaultOperator = "Or"`, minimum number of **optional** terms that must match — specified as an absolute number (for example, `"2"`) or a percentage of the optional terms (for example, `"50%"`). Required (`+`) terms are not counted
+* `K1` (Double or Float): term frequency saturation parameter in [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) — controls how strongly repeated occurrences of a term affect the score; default: `1.2`
+* `B` (Double or Float): document length normalization parameter in [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) — `0.0` disables normalization, `1.0` fully normalizes by document length; default: `0.75`
 
 Example:
 

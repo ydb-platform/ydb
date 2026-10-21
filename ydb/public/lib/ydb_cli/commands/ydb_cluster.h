@@ -14,6 +14,7 @@ public:
 
 class TCommandClusterBootstrap : public TYdbCommand {
     TString SelfAssemblyUUID;
+    bool AllowUnknownFields = false;
 
 public:
     TCommandClusterBootstrap();

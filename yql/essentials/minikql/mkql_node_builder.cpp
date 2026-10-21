@@ -33,15 +33,15 @@ TNode* BuildCallableTypePayload(const TVector<TStringBuf>& argNames,
             MKQL_ENSURE(usedNames.insert(name).second, "Duplication of argument name: " << name);
         }
 
-        itemBuilder.Add("Name", TRuntimeNode(BuildDataLiteral(name, NUdf::EDataSlot::String, env), true));
-        itemBuilder.Add("Flags", TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(flags), NUdf::EDataSlot::Uint64, env), true));
-        argsListBuilder.Add(TRuntimeNode(itemBuilder.Build(), true));
+        itemBuilder.Add("Name", TRuntimeNode(BuildDataLiteral(name, NUdf::EDataSlot::String, env), /*isImmediate=*/true));
+        itemBuilder.Add("Flags", TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(flags), NUdf::EDataSlot::Uint64, env), /*isImmediate=*/true));
+        argsListBuilder.Add(TRuntimeNode(itemBuilder.Build(), /*isImmediate=*/true));
     }
 
-    TRuntimeNode argsList = TRuntimeNode(argsListBuilder.Build(), true);
+    TRuntimeNode argsList = TRuntimeNode(argsListBuilder.Build(), /*isImmediate=*/true);
     TStructLiteralBuilder payloadBuilder(env);
     payloadBuilder.Add("Args", argsList);
-    payloadBuilder.Add("Payload", TRuntimeNode(BuildDataLiteral(payload, NUdf::EDataSlot::String, env), true));
+    payloadBuilder.Add("Payload", TRuntimeNode(BuildDataLiteral(payload, NUdf::EDataSlot::String, env), /*isImmediate=*/true));
     return payloadBuilder.Build();
 }
 } // namespace

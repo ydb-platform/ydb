@@ -2,17 +2,20 @@
 #include "yql_dns_gateway.h"
 #include "yql_http_gateway.h"
 
+#include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
 #include <util/generic/yexception.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
-#include <util/datetime/base.h>
+#include <util/system/hp_timer.h>
 #include <yql/essentials/utils/log/log.h>
 
-#include <thread>
+#include <deque>
+#include <functional>
 #include <mutex>
-#include <stack>
 #include <queue>
+#include <stack>
+#include <thread>
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 #include <ydb/library/actors/prof/tag.h>
@@ -20,9 +23,7 @@
 
 namespace {
 
-int curlTrace(CURL *handle, curl_infotype type,
-    char *data, size_t size,
-    void *userp) {
+int curlTrace(CURL* handle, curl_infotype type, char* data, size_t size, void* userp) {
     Y_UNUSED(handle);
     Y_UNUSED(userp);
     Y_UNUSED(size);
@@ -31,16 +32,16 @@ int curlTrace(CURL *handle, curl_infotype type,
     TStringBuf buf(data, size);
     TStringBuilder sb;
     switch (type) {
-    case CURLINFO_TEXT:
-        sb << "== Info: " << buf;
-        break;
-    case CURLINFO_HEADER_OUT:
-        sb << "=> Send header (" << size << " bytes):" << Endl << buf;
-        break;
-    case CURLINFO_HEADER_IN:
-        sb << "<= Recv header (" << size << " bytes):" << buf;
-        break;
-    /*case CURLINFO_DATA_OUT:
+        case CURLINFO_TEXT:
+            sb << "== Info: " << buf;
+            break;
+        case CURLINFO_HEADER_OUT:
+            sb << "=> Send header (" << size << " bytes):" << Endl << buf;
+            break;
+        case CURLINFO_HEADER_IN:
+            sb << "<= Recv header (" << size << " bytes):" << buf;
+            break;
+        /*case CURLINFO_DATA_OUT:
         sb << "=> Send data (" << size << " bytes)" << Endl;
         break;
     case CURLINFO_SSL_DATA_OUT:
@@ -52,15 +53,15 @@ int curlTrace(CURL *handle, curl_infotype type,
     case CURLINFO_SSL_DATA_IN:
         sb << "<= Recv SSL data (" << size << " bytes)" << Endl;
         break;*/
-    default:
-        return 0;
+        default:
+            return 0;
     }
 
     Cerr << sb;
 
     return 0;
 }
-}
+}   // namespace
 
 namespace NYql {
 namespace {
@@ -90,19 +91,10 @@ public:
         DELETE
     };
 
-    TEasyCurl(
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& counter,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadedBytes,
-        TString url,
-        IHTTPGateway::THeaders headers,
-        EMethod method,
-        size_t offset = 0ULL,
-        size_t sizeLimit = 0,
-        size_t bodySize = 0,
-        const TCurlInitConfig& config = TCurlInitConfig(),
-        TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr,
-        TString data = {})
+    TEasyCurl(const ::NMonitoring::TDynamicCounters::TCounterPtr& counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadedBytes, TString url, IHTTPGateway::THeaders headers, EMethod method,
+        size_t offset = 0ULL, size_t sizeLimit = 0, size_t bodySize = 0, const TCurlInitConfig& config = TCurlInitConfig(),
+        TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr, TString data = {})
         : Headers(std::move(headers))
         , InitHeadersSize(Headers.Fields.size())
         , Method(method)
@@ -116,7 +108,8 @@ public:
         , ErrorBuffer(static_cast<size_t>(CURL_ERROR_SIZE), '\0')
         , DnsCache(dnsCache)
         , Url(url)
-        , Data(std::move(data)) {
+        , Data(std::move(data))
+    {
         InitHandles();
         Counter->Inc();
     }
@@ -197,7 +190,7 @@ public:
             }
 
             TString contentType;
-            for (const auto& field: Headers.Fields) {
+            for (const auto& field : Headers.Fields) {
                 if (field.StartsWith("Content-Type:")) {
                     contentType = field.substr(strlen("Content-Type:"));
                 }
@@ -213,14 +206,8 @@ public:
         }
 
         if (!Headers.Fields.empty()) {
-            CurlHeaders = std::accumulate(
-                Headers.Fields.cbegin(),
-                Headers.Fields.cend(),
-                CurlHeaders,
-                std::bind(
-                    &curl_slist_append,
-                    std::placeholders::_1,
-                    std::bind(&TString::c_str, std::placeholders::_2)));
+            CurlHeaders = std::accumulate(Headers.Fields.cbegin(), Headers.Fields.cend(), CurlHeaders,
+                std::bind(&curl_slist_append, std::placeholders::_1, std::bind(&TString::c_str, std::placeholders::_2)));
             curl_easy_setopt(Handle, CURLOPT_HTTPHEADER, CurlHeaders);
         }
 
@@ -268,38 +255,59 @@ public:
 
     virtual size_t Write(void* contents, size_t size, size_t nmemb) = 0;
     virtual size_t WriteHeader(void* contents, size_t size, size_t nmemb) = 0;
-    virtual size_t Read(char *buffer, size_t size, size_t nmemb) = 0;
+    virtual size_t Read(char* buffer, size_t size, size_t nmemb) = 0;
 
-    size_t GetSizeLimit() const { return SizeLimit; }
-    TString GetDetailedErrorText() const { return ErrorBuffer.data(); }
+    size_t GetSizeLimit() const {
+        return SizeLimit;
+    }
+
+    virtual size_t GetReservedSize() const {
+        return 0;
+    }
+
+    virtual bool IsStream() const {
+        return false;
+    }
+
+    TString GetDetailedErrorText() const {
+        return ErrorBuffer.data();
+    }
+
+    void SetContext(IHttpRequestContext::TPtr context) {
+        Context = std::move(context);
+    }
+
+    NDq::TWorkScope GetWorkScope() const {
+        return Context ? Context->GetWorkScope() : NDq::TWorkScope{ {}, TString{ IHTTPGateway::DefaultPoolId } };
+    }
+
 protected:
     void SkipTo(size_t offset) const {
         if (offset || Offset || SizeLimit) {
             TStringBuilder byteRange;
             byteRange << Offset + offset << '-';
-            if (SizeLimit)
+            if (SizeLimit) {
                 byteRange << Offset + SizeLimit - 1;
+            }
             curl_easy_setopt(Handle, CURLOPT_RANGE, byteRange.c_str());
         }
     }
+
 private:
-    static size_t
-    WriteMemoryCallback(void* contents, size_t size, size_t nmemb, void* userp) {
+    static size_t WriteMemoryCallback(void* contents, size_t size, size_t nmemb, void* userp) {
         const auto self = static_cast<TEasyCurl*>(userp);
         const auto res = self->Write(contents, size, nmemb);
         self->DownloadedBytes->Add(res);
         return res;
     };
 
-    static size_t
-    WriteHeaderCallback(void* contents, size_t size, size_t nmemb, void* userp) {
+    static size_t WriteHeaderCallback(void* contents, size_t size, size_t nmemb, void* userp) {
         const auto self = static_cast<TEasyCurl*>(userp);
         const auto res = self->WriteHeader(contents, size, nmemb);
         return res;
     };
 
-    static size_t
-    ReadMemoryCallback(char *buffer, size_t size, size_t nmemb, void *userp) {
+    static size_t ReadMemoryCallback(char* buffer, size_t size, size_t nmemb, void* userp) {
         const auto self = static_cast<TEasyCurl*>(userp);
         const auto res = self->Read(buffer, size, nmemb);
         self->UploadedBytes->Add(res);
@@ -320,93 +328,57 @@ private:
     const TCurlInitConfig Config;
     std::vector<char> ErrorBuffer;
     TDNSGateway<>::TDNSConstCurlListPtr DnsCache;
+    IHttpRequestContext::TPtr Context;
+
 public:
     TString Url;
     const TString Data;
 };
 
-class TEasyCurlBuffer : public TEasyCurl {
+class TEasyCurlBuffer: public TEasyCurl {
 public:
     using TPtr = std::shared_ptr<TEasyCurlBuffer>;
     using TWeakPtr = std::weak_ptr<TEasyCurlBuffer>;
 
-    TEasyCurlBuffer(
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& counter,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes,
-        TString url,
-        EMethod method,
-        TString data,
-        IHTTPGateway::THeaders headers,
-        size_t offset,
-        size_t sizeLimit,
-        IHTTPGateway::TOnResult callback,
-        IHTTPGateway::TRetryPolicy::IRetryState::TPtr retryState,
-        const TCurlInitConfig& config = TCurlInitConfig(),
-        TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
-        : TEasyCurl(
-              counter,
-              downloadedBytes,
-              uploadededBytes,
-              url,
-              std::move(headers),
-              method,
-              offset,
-              sizeLimit,
-              data.size(),
-              config,
-              std::move(dnsCache),
-              std::move(data))
+    TEasyCurlBuffer(const ::NMonitoring::TDynamicCounters::TCounterPtr& counter,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes,
+        TString url, EMethod method, TString data, IHTTPGateway::THeaders headers, size_t offset, size_t sizeLimit,
+        IHTTPGateway::TOnResult callback, IHTTPGateway::TRetryPolicy::IRetryState::TPtr retryState,
+        const TCurlInitConfig& config = TCurlInitConfig(), TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
+        : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, std::move(headers), method, offset, sizeLimit, data.size(), config,
+              std::move(dnsCache), std::move(data))
         , Input(Data)
         , Output(Buffer)
         , HeaderOutput(Header)
-        , RetryState(std::move(retryState)) {
+        , RetryState(std::move(retryState))
+    {
         Output.Reserve(sizeLimit);
         Callbacks.emplace(std::move(callback));
     }
 
-    static TPtr Make(
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& counter,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes,
-        TString url,
-        EMethod method,
-        TString data,
-        IHTTPGateway::THeaders headers,
-        size_t offset,
-        size_t sizeLimit,
-        IHTTPGateway::TOnResult callback,
-        IHTTPGateway::TRetryPolicy::IRetryState::TPtr retryState,
-        const TCurlInitConfig& config = TCurlInitConfig(),
-        TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr) {
-        return std::make_shared<TEasyCurlBuffer>(
-            counter,
-            downloadedBytes,
-            uploadededBytes,
-            std::move(url),
-            method,
-            std::move(data),
-            std::move(headers),
-            offset,
-            sizeLimit,
-            std::move(callback),
-            std::move(retryState),
-            config,
-            std::move(dnsCache));
+    static TPtr Make(const ::NMonitoring::TDynamicCounters::TCounterPtr& counter,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes,
+        TString url, EMethod method, TString data, IHTTPGateway::THeaders headers, size_t offset, size_t sizeLimit,
+        IHTTPGateway::TOnResult callback, IHTTPGateway::TRetryPolicy::IRetryState::TPtr retryState,
+        const TCurlInitConfig& config = TCurlInitConfig(), TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr) {
+        return std::make_shared<TEasyCurlBuffer>(counter, downloadedBytes, uploadededBytes, std::move(url), method, std::move(data),
+            std::move(headers), offset, sizeLimit, std::move(callback), std::move(retryState), config, std::move(dnsCache));
     }
 
     // return true if callback successfully added to this work
     bool AddCallback(IHTTPGateway::TOnResult callback) {
         const std::unique_lock lock(SyncCallbacks);
-        if (Callbacks.empty())
+        if (Callbacks.empty()) {
             return false;
+        }
         Callbacks.emplace(std::move(callback));
         return true;
     }
 
     TMaybe<TDuration> GetNextRetryDelay(CURLcode curlResponseCode, long httpResponseCode) const {
-        if (RetryState)
+        if (RetryState) {
             return RetryState->GetNextRetryDelay(curlResponseCode, httpResponseCode);
+        }
 
         return {};
     }
@@ -420,9 +392,14 @@ public:
         FreeHandles();
         InitHandles();
     }
+
+    size_t GetReservedSize() const override {
+        return GetSizeLimit();
+    }
+
 private:
-    void Fail(CURLcode result, const TIssue& error) final  {
-        TIssues issues{error};
+    void Fail(CURLcode result, const TIssue& error) final {
+        TIssues issues{ error };
         const std::unique_lock lock(SyncCallbacks);
         while (!Callbacks.empty()) {
             Callbacks.top()(IHTTPGateway::TResult(result, issues));
@@ -431,15 +408,17 @@ private:
     }
 
     void Done(CURLcode result, long httpResponseCode) final {
-        if (CURLE_OK != result)
-            return Fail(result, TIssue( TStringBuilder{} << curl_easy_strerror(result) << ". Detailed: " << GetDetailedErrorText()));
+        if (CURLE_OK != result) {
+            return Fail(result, TIssue(TStringBuilder{} << curl_easy_strerror(result) << ". Detailed: " << GetDetailedErrorText()));
+        }
 
         const std::unique_lock lock(SyncCallbacks);
         while (!Callbacks.empty()) {
-            if (1U == Callbacks.size())
+            if (1U == Callbacks.size()) {
                 Callbacks.top()(IHTTPGateway::TContent(std::move(Buffer), httpResponseCode, std::move(Header)));
-            else
+            } else {
                 Callbacks.top()(IHTTPGateway::TContent(Buffer, httpResponseCode, Header));
+            }
             Callbacks.pop();
         }
     }
@@ -456,7 +435,7 @@ private:
         return realsize;
     }
 
-    size_t Read(char *buffer, size_t size, size_t nmemb) final {
+    size_t Read(char* buffer, size_t size, size_t nmemb) final {
         return Input.Read(buffer, size * nmemb);
     }
 
@@ -469,27 +448,19 @@ private:
     const IHTTPGateway::TRetryPolicy::IRetryState::TPtr RetryState;
 };
 
-class TEasyCurlStream : public TEasyCurl {
+class TEasyCurlStream: public TEasyCurl {
 public:
     using TPtr = std::shared_ptr<TEasyCurlStream>;
     using TWeakPtr = std::weak_ptr<TEasyCurlStream>;
 
-    TEasyCurlStream(
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& counter,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes,
-        TString url, IHTTPGateway::THeaders headers,
-        size_t offset,
-        size_t sizeLimit,
-        IHTTPGateway::TOnDownloadStart onStart,
-        IHTTPGateway::TOnNewDataPart onNewData,
-        IHTTPGateway::TOnDownloadFinish onFinish,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter,
-        std::weak_ptr<CURLM> handle,
-        size_t threshold,
-        const TCurlInitConfig& config = TCurlInitConfig(),
-        TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
-        : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, std::move(headers), EMethod::GET, offset, sizeLimit, 0ULL, config, std::move(dnsCache))
+    TEasyCurlStream(const ::NMonitoring::TDynamicCounters::TCounterPtr& counter,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes,
+        TString url, IHTTPGateway::THeaders headers, size_t offset, size_t sizeLimit, IHTTPGateway::TOnDownloadStart onStart,
+        IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDownloadFinish onFinish,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter, std::weak_ptr<CURLM> handle, size_t threshold,
+        const TCurlInitConfig& config = TCurlInitConfig(), TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
+        : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, std::move(headers), EMethod::GET, offset, sizeLimit, 0ULL, config,
+              std::move(dnsCache))
         , OnStart(std::move(onStart))
         , OnNewData(std::move(onNewData))
         , OnFinish(std::move(onFinish))
@@ -497,29 +468,22 @@ public:
         , InflightCounter(inflightCounter)
         , Handle(std::move(handle))
         , Threshold(threshold)
-    {}
-
-    static TPtr Make(
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& counter,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes,
-        TString url,
-        IHTTPGateway::THeaders headers,
-        size_t offset,
-        size_t sizeLimit,
-        IHTTPGateway::TOnDownloadStart onStart,
-        IHTTPGateway::TOnNewDataPart onNewData,
-        IHTTPGateway::TOnDownloadFinish onFinish,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter,
-        std::weak_ptr<CURLM> handle = {},
-        size_t threshold = 0,
-        const TCurlInitConfig& config = TCurlInitConfig(),
-        TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
     {
-        return std::make_shared<TEasyCurlStream>(counter, downloadedBytes, uploadededBytes, std::move(url), std::move(headers), offset, sizeLimit, std::move(onStart), std::move(onNewData), std::move(onFinish), inflightCounter, handle, threshold, config, std::move(dnsCache));
     }
 
-    enum class EAction : i8 {
+    static TPtr Make(const ::NMonitoring::TDynamicCounters::TCounterPtr& counter,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes,
+        TString url, IHTTPGateway::THeaders headers, size_t offset, size_t sizeLimit, IHTTPGateway::TOnDownloadStart onStart,
+        IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDownloadFinish onFinish,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter, std::weak_ptr<CURLM> handle = {}, size_t threshold = 0,
+        const TCurlInitConfig& config = TCurlInitConfig(), TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
+    {
+        return std::make_shared<TEasyCurlStream>(counter, downloadedBytes, uploadededBytes, std::move(url), std::move(headers), offset,
+            sizeLimit, std::move(onStart), std::move(onNewData), std::move(onFinish), inflightCounter, handle, threshold, config,
+            std::move(dnsCache));
+    }
+
+    enum class EAction: i8 {
         Drop = -2,
         Stop = -1,
         None = 0,
@@ -528,13 +492,12 @@ public:
     };
 
     EAction GetAction(size_t buffersSize) {
+        if (Cancelled) {
+            return EAction::Drop;
+        }
         if (!Started) {
             Started = true;
             return EAction::Init;
-        }
-
-        if (Cancelled) {
-            return EAction::Drop;
         }
         if (buffersSize && Paused != Counter->load() >= buffersSize) {
             Paused = !Paused;
@@ -546,12 +509,18 @@ public:
 
     void Cancel(TIssue issue) {
         Cancelled = true;
-        OnFinish(CURLE_OK, TIssues{issue});
+        OnFinish(CURLE_OK, TIssues{ issue });
     }
+
+    bool IsStream() const override {
+        return true;
+    }
+
 private:
-    void Fail(CURLcode result, const TIssue& error) final  {
-        if (!Cancelled)
-            OnFinish(result, TIssues{error});
+    void Fail(CURLcode result, const TIssue& error) final {
+        if (!Cancelled) {
+            OnFinish(result, TIssues{ error });
+        }
     }
 
     void MaybeStart(CURLcode result, long httpResponseCode = 0) {
@@ -569,21 +538,28 @@ private:
         if (CURLE_OK != result) {
             return Fail(result, TIssue(TStringBuilder{} << "error: " << curl_easy_strerror(result) << " detailed: " << GetDetailedErrorText()));
         }
-        if (!Cancelled)
+        if (!Cancelled) {
             OnFinish(result, TIssues());
+        }
     }
 
     size_t Write(void* contents, size_t size, size_t nmemb) final {
         MaybeStart(CURLE_OK);
         const auto realsize = size * nmemb;
         if (!Cancelled) {
-            OnNewData(IHTTPGateway::TCountedContent(TString(static_cast<char*>(contents), realsize), Counter, InflightCounter, Handle, Threshold));
+            OnNewData(
+                IHTTPGateway::TCountedContent(TString(static_cast<char*>(contents), realsize), Counter, InflightCounter, Handle, Threshold));
         }
         return realsize;
     }
 
-    size_t WriteHeader(void*, size_t, size_t) final { return 0ULL; }
-    size_t Read(char*, size_t, size_t) final { return 0ULL; }
+    size_t WriteHeader(void*, size_t, size_t) final {
+        return 0ULL;
+    }
+
+    size_t Read(char*, size_t, size_t) final {
+        return 0ULL;
+    }
 
     const IHTTPGateway::TOnDownloadStart OnStart;
     const IHTTPGateway::TOnNewDataPart OnNewData;
@@ -603,7 +579,11 @@ using TKeyType = std::tuple<TString, size_t, IHTTPGateway::THeaders, TString, IH
 
 class TKeyHash {
 public:
-    TKeyHash() : Hash(), HashPtr() {}
+    TKeyHash()
+        : Hash()
+        , HashPtr()
+    {
+    }
 
     size_t operator()(const TKeyType& key) const {
         const auto& headers = std::get<2U>(key);
@@ -611,24 +591,26 @@ public:
         initHash = CombineHashes(HashPtr(std::get<4U>(key)), initHash);
         initHash = CombineHashes(Hash(headers.Options.UserPwd), initHash);
         initHash = CombineHashes(Hash(headers.Options.AwsSigV4), initHash);
-        return std::accumulate(headers.Fields.cbegin(), headers.Fields.cend(), initHash,
-            [this](size_t hash, const TString& item) { return CombineHashes(hash, Hash(item)); });
+        return std::accumulate(headers.Fields.cbegin(), headers.Fields.cend(), initHash, [this](size_t hash, const TString& item) {
+            return CombineHashes(hash, Hash(item));
+        });
     }
+
 private:
     const std::hash<TString> Hash;
     const std::hash<IHTTPGateway::TRetryPolicy::TPtr> HashPtr;
 };
 
-class THTTPMultiGateway : public IHTTPGateway {
-friend class IHTTPGateway;
+class THTTPMultiGateway: public IHTTPGateway {
+    friend class IHTTPGateway;
+
 public:
     using TPtr = std::shared_ptr<THTTPMultiGateway>;
     using TWeakPtr = std::weak_ptr<THTTPMultiGateway>;
 
-    explicit THTTPMultiGateway(
-        const THttpGatewayConfig* httpGatewaysCfg,
-        ::NMonitoring::TDynamicCounterPtr counters)
-        : DnsGateway(httpGatewaysCfg ? httpGatewaysCfg->GetDnsResolverConfig(): TDnsResolverConfig{}, counters->GetSubgroup("subsystem", "dns_gateway"))
+    explicit THTTPMultiGateway(const THttpGatewayConfig* httpGatewaysCfg, ::NMonitoring::TDynamicCounterPtr counters)
+        : DnsGateway(httpGatewaysCfg ? httpGatewaysCfg->GetDnsResolverConfig() : TDnsResolverConfig{},
+              counters->GetSubgroup("subsystem", "dns_gateway"))
         , Counters(std::move(counters))
         , Rps(Counters->GetCounter("Requests", true))
         , InFlight(Counters->GetCounter("InFlight"))
@@ -639,7 +621,6 @@ public:
         , OutputMemory(Counters->GetCounter("OutputMemory"))
         , PerformCycles(Counters->GetCounter("PerformCycles", true))
         , AwaitQueue(Counters->GetCounter("AwaitQueue"))
-        , AwaitQueueTopSizeLimit(Counters->GetCounter("AwaitQueueTopSizeLimit"))
         , DownloadedBytes(Counters->GetCounter("DownloadedBytes", true))
         , UploadedBytes(Counters->GetCounter("UploadedBytes", true))
         , GroupForGET(Counters->GetSubgroup("method", "GET"))
@@ -686,7 +667,13 @@ public:
             }
         }
 
+        PoolCaps.emplace(DefaultPoolKey(), MaxHandlers);
+
         InitCurl();
+    }
+
+    static NDq::TWorkScope DefaultPoolKey() {
+        return NDq::TWorkScope{ {}, TString{ DefaultPoolId } };
     }
 
     ~THTTPMultiGateway() {
@@ -704,18 +691,24 @@ private:
     size_t BuffersSizePerStream = CURL_MAX_WRITE_SIZE << 3U;
     TCurlInitConfig InitConfig;
 
+    struct TPoolCounters {
+        ::NMonitoring::TDynamicCounters::TCounterPtr PerPoolCapFloor;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PerPoolAllocated;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PerPoolAwait;
+    };
+
     void InitCurl() {
         // FIXME: NOT SAFE (see man libcurl(3))
         const CURLcode globalInitResult = curl_global_init(CURL_GLOBAL_ALL);
         if (globalInitResult != CURLE_OK) {
-           throw yexception() << "curl_global_init error " << int(globalInitResult) << ": " << curl_easy_strerror(globalInitResult) << Endl;
+            throw yexception() << "curl_global_init error " << int(globalInitResult) << ": " << curl_easy_strerror(globalInitResult) << Endl;
         }
         Handle = std::shared_ptr<CURLM>(curl_multi_init(), [](auto handle) {
             const CURLMcode multiCleanupResult = curl_multi_cleanup(handle);
             if (multiCleanupResult != CURLM_OK) {
                 Cerr << "curl_multi_cleanup error " << int(multiCleanupResult) << ": " << curl_multi_strerror(multiCleanupResult) << Endl;
             }
-            curl_global_cleanup(); // FIXME: NOT SAFE (see man libcurl(3))
+            curl_global_cleanup();   // FIXME: NOT SAFE (see man libcurl(3))
         });
         if (!Handle) {
             throw yexception() << "curl_multi_init error";
@@ -747,7 +740,7 @@ private:
             if (running < int(handlers)) {
                 for (int messages = int(handlers) - running; messages;) {
                     if (const auto msg = curl_multi_info_read(Handle.get(), &messages)) {
-                        if(msg->msg == CURLMSG_DONE) {
+                        if (msg->msg == CURLMSG_DONE) {
                             Done(msg->easy_handle, msg->data.result);
                         }
                     }
@@ -777,35 +770,86 @@ private:
                     case TEasyCurlStream::EAction::Stop:
                         curl_easy_pause(streamHandle, CURLPAUSE_RECV);
                         break;
-                    case TEasyCurlStream::EAction::Drop:
+                    case TEasyCurlStream::EAction::Drop: {
                         curl_multi_remove_handle(Handle.get(), streamHandle);
-                        Allocated.erase(streamHandle);
+                        NDq::TWorkScope poolKey;
+                        if (const auto ait = Allocated.find(streamHandle); ait != Allocated.end()) {
+                            poolKey = ait->second->GetWorkScope();
+                            Allocated.erase(ait);
+                        }
+                        ReleasePoolSlot(poolKey);
                         break;
+                    }
                     case TEasyCurlStream::EAction::None:
                         break;
                 }
                 ++it;
-            } else
+            } else {
                 it = Streams.erase(it);
+            }
         }
 
         while (!Delayed.empty() && Delayed.top().first <= TInstant::Now()) {
-            Await.emplace(std::move(Delayed.top().second));
+            const auto poolKey = Delayed.top().second->GetWorkScope();
+            AwaitPerPool[poolKey].emplace_back(std::move(Delayed.top().second));
             Delayed.pop();
+            SyncPoolAwaitCounter(poolKey);
         }
 
-        const ui64 topSizeLimit = Await.empty() ? 0 : Await.front()->GetSizeLimit();
-        AwaitQueueTopSizeLimit->Set(topSizeLimit);
-        while (!Await.empty() && Allocated.size() < MaxHandlers && AllocatedSize + Await.front()->GetSizeLimit() <= MaxSimulatenousDownloadsSize) {
-            AllocatedSize += Await.front()->GetSizeLimit();
-            const auto handle = Await.front()->GetHandle();
-            Allocated.emplace(handle, std::move(Await.front()));
-            Await.pop();
-            curl_multi_add_handle(Handle.get(), handle);
+        DispatchAwaiting(true);
+        DispatchAwaiting(false);
+
+        size_t totalAwait = 0;
+        for (const auto& [_, q] : AwaitPerPool) {
+            totalAwait += q.size();
         }
-        AwaitQueue->Set(Await.size());
+        AwaitQueue->Set(totalAwait);
         AllocatedMemory->Set(AllocatedSize);
         return Allocated.size();
+    }
+
+    void DispatchAwaiting(bool respectCap) {
+        for (bool progress = true; progress;) {
+            progress = false;
+            for (auto& [poolKey, q] : AwaitPerPool) {
+                if (q.empty()) {
+                    continue;
+                }
+                if (Allocated.size() >= MaxHandlers) {
+                    break;
+                }
+                if (respectCap) {
+                    const auto cap = GetPoolCap(poolKey);
+                    if (AllocatedPerPool[poolKey] >= cap) {
+                        continue;
+                    }
+                }
+                auto it = q.begin();
+                for (; it != q.end(); ++it) {
+                    if (AllocatedSize + (*it)->GetReservedSize() <= MaxSimulatenousDownloadsSize) {
+                        break;
+                    }
+                }
+                if (it == q.end()) {
+                    continue;
+                }
+                AllocatedSize += (*it)->GetReservedSize();
+                auto easy = std::move(*it);
+                q.erase(it);
+                const auto handle = easy->GetHandle();
+                ++AllocatedPerPool[poolKey];
+                if (easy->IsStream()) {
+                    Streams.emplace_back(TEasyCurlStream::TWeakPtr(std::static_pointer_cast<TEasyCurlStream>(easy)));
+                    Allocated.emplace(handle, std::move(easy));
+                } else {
+                    Allocated.emplace(handle, std::move(easy));
+                    curl_multi_add_handle(Handle.get(), handle);
+                }
+                SyncPoolAllocatedCounter(poolKey);
+                SyncPoolAwaitCounter(poolKey);
+                progress = true;
+            }
+        }
     }
 
     void Done(CURL* handle, CURLcode result) {
@@ -828,23 +872,24 @@ private:
 
                 TIntrusivePtr<::NMonitoring::TDynamicCounters> group;
                 switch (easy->GetMethod()) {
-                case TEasyCurl::EMethod::GET:
-                    group = GroupForGET->GetSubgroup(codeLabel, codeValue);
-                    break;
-                case TEasyCurl::EMethod::POST:
-                    group = GroupForPOST->GetSubgroup(codeLabel, codeValue);
-                    break;
-                case TEasyCurl::EMethod::PUT:
-                    group = GroupForPUT->GetSubgroup(codeLabel, codeValue);
-                    break;
-                default:
-                    break;
+                    case TEasyCurl::EMethod::GET:
+                        group = GroupForGET->GetSubgroup(codeLabel, codeValue);
+                        break;
+                    case TEasyCurl::EMethod::POST:
+                        group = GroupForPOST->GetSubgroup(codeLabel, codeValue);
+                        break;
+                    case TEasyCurl::EMethod::PUT:
+                        group = GroupForPUT->GetSubgroup(codeLabel, codeValue);
+                        break;
+                    default:
+                        break;
                 }
 
                 if (group) {
                     group->GetCounter("count", true)->Inc();
                 }
 
+                const auto poolKey = easy->GetWorkScope();
                 if (auto buffer = std::dynamic_pointer_cast<TEasyCurlBuffer>(easy)) {
                     AllocatedSize -= buffer->GetSizeLimit();
                     if (const auto& nextRetryDelay = buffer->GetNextRetryDelay(result, httpResponseCode)) {
@@ -854,6 +899,7 @@ private:
                     }
                 }
                 Allocated.erase(it);
+                ReleasePoolSlot(poolKey);
             }
         }
         if (easy) {
@@ -863,6 +909,7 @@ private:
 
     void Fail(CURLMcode result) {
         std::stack<TEasyCurl::TPtr> works;
+        std::stack<TEasyCurl::TPtr> queued;
         {
             const std::unique_lock lock(SyncRef());
 
@@ -870,8 +917,27 @@ private:
                 works.emplace(std::move(item.second));
             }
 
+            for (auto& [_, q] : AwaitPerPool) {
+                while (!q.empty()) {
+                    queued.emplace(std::move(q.front()));
+                    q.pop_front();
+                }
+            }
+            AwaitPerPool.clear();
+
+            while (!Delayed.empty()) {
+                queued.emplace(std::move(Delayed.top().second));
+                Delayed.pop();
+            }
+
             AllocatedSize = 0ULL;
             Allocated.clear();
+            AllocatedPerPool.clear();
+            for (auto& [_, counters] : PoolCounters) {
+                counters.PerPoolAllocated->Set(0);
+                counters.PerPoolAwait->Set(0);
+            }
+            AwaitQueue->Set(0);
         }
 
         const TIssue error(curl_multi_strerror(result));
@@ -880,68 +946,89 @@ private:
             works.top()->Fail(CURLE_OK, error);
             works.pop();
         }
+        while (!queued.empty()) {
+            queued.top()->Fail(CURLE_OK, error);
+            queued.pop();
+        }
     }
 
-    void Upload(TString url, THeaders headers, TString body, TOnResult callback, bool put, TRetryPolicy::TPtr retryPolicy) final {
+    void Upload(TString url, THeaders headers, TString body, TOnResult callback, bool put, TRetryPolicy::TPtr retryPolicy,
+        IHttpRequestContext::TPtr context) final {
         Rps->Inc();
 
-        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), put ? TEasyCurl::EMethod::PUT : TEasyCurl::EMethod::POST, std::move(body), std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
+        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url),
+            put ? TEasyCurl::EMethod::PUT : TEasyCurl::EMethod::POST, std::move(body), std::move(headers), 0U, 0U, std::move(callback),
+            retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
+        easy->SetContext(std::move(context));
+        const auto poolKey = easy->GetWorkScope();
         const std::unique_lock lock(SyncRef());
-        Await.emplace(std::move(easy));
+        AwaitPerPool[poolKey].emplace_back(std::move(easy));
+        SyncPoolAwaitCounter(poolKey);
         Wakeup(0U);
     }
 
-    void Delete(TString url, THeaders headers, TOnResult callback, TRetryPolicy::TPtr retryPolicy) final {
+    void Delete(TString url, THeaders headers, TOnResult callback, TRetryPolicy::TPtr retryPolicy, IHttpRequestContext::TPtr context) final {
         Rps->Inc();
 
-        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::DELETE, "", std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
+        auto easy =
+            TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::DELETE, "", std::move(headers),
+                0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
+        easy->SetContext(std::move(context));
+        const auto poolKey = easy->GetWorkScope();
         const std::unique_lock lock(SyncRef());
-        Await.emplace(std::move(easy));
+        AwaitPerPool[poolKey].emplace_back(std::move(easy));
+        SyncPoolAwaitCounter(poolKey);
         Wakeup(0U);
     }
 
-    void Download(
-        TString url,
-        THeaders headers,
-        size_t offset,
-        size_t sizeLimit,
-        TOnResult callback,
-        TString data,
-        TRetryPolicy::TPtr retryPolicy) final
-    {
+    void Download(TString url, THeaders headers, size_t offset, size_t sizeLimit, TOnResult callback, TString data,
+        TRetryPolicy::TPtr retryPolicy, IHttpRequestContext::TPtr context) final {
         Rps->Inc();
         if (sizeLimit > MaxSimulatenousDownloadsSize) {
-            TIssue error(TStringBuilder() << "Too big file for downloading: size " << sizeLimit << ", but limit is " << MaxSimulatenousDownloadsSize);
-            callback(TResult(CURLE_OK, TIssues{error}));
+            TIssue error(
+                TStringBuilder() << "Too big file for downloading: size " << sizeLimit << ", but limit is " << MaxSimulatenousDownloadsSize);
+            callback(TResult(CURLE_OK, TIssues{ error }));
             return;
         }
-        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::GET, std::move(data), std::move(headers), offset, sizeLimit, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
+        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::GET, std::move(data),
+            std::move(headers), offset, sizeLimit, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig,
+            DnsGateway.GetDNSCurlList());
+        easy->SetContext(std::move(context));
+        const auto poolKey = easy->GetWorkScope();
         const std::unique_lock lock(SyncRef());
-        Await.emplace(std::move(easy));
+        AwaitPerPool[poolKey].emplace_back(std::move(easy));
+        SyncPoolAwaitCounter(poolKey);
         Wakeup(sizeLimit);
     }
 
-    TCancelHook Download(
-        TString url,
-        THeaders headers,
-        size_t offset,
-        size_t sizeLimit,
-        TOnDownloadStart onStart,
-        TOnNewDataPart onNewData,
-        TOnDownloadFinish onFinish,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) final
-    {
-        auto stream = TEasyCurlStream::Make(InFlightStreams, DownloadedBytes, UploadedBytes, std::move(url), std::move(headers), offset, sizeLimit, std::move(onStart), std::move(onNewData), std::move(onFinish), inflightCounter, Handle, BuffersSizePerStream, InitConfig, DnsGateway.GetDNSCurlList());
-        const std::unique_lock lock(SyncRef());
-        const auto handle = stream->GetHandle();
+    TCancelHook Download(TString url, THeaders headers, size_t offset, size_t sizeLimit, TOnDownloadStart onStart, TOnNewDataPart onNewData,
+        TOnDownloadFinish onFinish, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter,
+        IHttpRequestContext::TPtr context) final {
+        auto stream = TEasyCurlStream::Make(InFlightStreams, DownloadedBytes, UploadedBytes, std::move(url), std::move(headers), offset,
+            sizeLimit, std::move(onStart), std::move(onNewData), std::move(onFinish), inflightCounter, Handle, BuffersSizePerStream, InitConfig,
+            DnsGateway.GetDNSCurlList());
+        stream->SetContext(std::move(context));
+        const auto poolKey = stream->GetWorkScope();
         TEasyCurlStream::TWeakPtr weak = stream;
-        Streams.emplace_back(stream);
-        Allocated.emplace(handle, std::move(stream));
-        Wakeup(0ULL);
-        return [weak, sync=Sync](TIssue issue) {
+        {
+            const std::unique_lock lock(SyncRef());
+            const auto cap = GetPoolCap(poolKey);
+            if (AllocatedPerPool[poolKey] < cap && Allocated.size() < MaxHandlers) {
+                ++AllocatedPerPool[poolKey];
+                Streams.emplace_back(weak);
+                Allocated.emplace(stream->GetHandle(), std::move(stream));
+                SyncPoolAllocatedCounter(poolKey);
+            } else {
+                AwaitPerPool[poolKey].emplace_back(std::move(stream));
+                SyncPoolAwaitCounter(poolKey);
+            }
+            Wakeup(0ULL);
+        }
+        return [weak, sync = Sync](TIssue issue) {
             const std::unique_lock lock(*sync);
-            if (const auto& stream = weak.lock())
+            if (const auto& stream = weak.lock()) {
                 stream->Cancel(issue);
+            }
         };
     }
 
@@ -949,18 +1036,85 @@ private:
         return BuffersSizePerStream;
     }
 
-    void OnRetry(TEasyCurlBuffer::TPtr easy) {
+    void UpdatePoolCaps(THashMap<NDq::TWorkScope, size_t> caps) final {
+        TStringBuilder log;
+        log << "HTTPGateway UpdatePoolCaps:";
+        for (const auto& [poolKey, cap] : caps) {
+            log << " [" << poolKey.Namespace << "/" << poolKey.Name << "]=" << cap;
+        }
+        YQL_LOG(DEBUG) << log;
         const std::unique_lock lock(SyncRef());
+        PoolCaps = std::move(caps);
+        PoolCaps.emplace(DefaultPoolKey(), MaxHandlers);
+        for (const auto& [poolKey, cap] : PoolCaps) {
+            if (!poolKey.Name.empty()) {
+                GetPoolCounters(poolKey).PerPoolCapFloor->Set(cap);
+            }
+        }
+    }
+
+    void OnRetry(TEasyCurlBuffer::TPtr easy) {
+        const auto poolKey = easy->GetWorkScope();
         const size_t sizeLimit = easy->GetSizeLimit();
-        Await.emplace(std::move(easy));
+        const std::unique_lock lock(SyncRef());
+        AwaitPerPool[poolKey].emplace_back(std::move(easy));
+        SyncPoolAwaitCounter(poolKey);
         Wakeup(sizeLimit);
     }
 
     void Wakeup(size_t sizeLimit) {
-        AwaitQueue->Set(Await.size());
+        size_t totalAwait = 0;
+        for (const auto& [_, q] : AwaitPerPool) {
+            totalAwait += q.size();
+        }
+        AwaitQueue->Set(totalAwait);
         if (Allocated.size() < MaxHandlers && AllocatedSize + sizeLimit + OutputSize.load() <= MaxSimulatenousDownloadsSize) {
             curl_multi_wakeup(Handle.get());
         }
+    }
+
+    size_t GetPoolCap(const NDq::TWorkScope& poolKey) const {
+        return PoolCaps.Value(poolKey, PoolCaps.Value(DefaultPoolKey(), MaxHandlers));
+    }
+
+    TPoolCounters& GetPoolCounters(const NDq::TWorkScope& poolKey) {
+        auto [it, inserted] = PoolCounters.try_emplace(poolKey);
+        if (inserted) {
+            auto sub = Counters->GetSubgroup("db", poolKey.Namespace)->GetSubgroup("pool", poolKey.Name);
+            it->second.PerPoolCapFloor = sub->GetCounter("PerPoolCapFloor");
+            it->second.PerPoolAllocated = sub->GetCounter("PerPoolAllocated");
+            it->second.PerPoolAwait = sub->GetCounter("PerPoolAwait");
+        }
+        return it->second;
+    }
+
+    void SyncPoolAllocatedCounter(const NDq::TWorkScope& poolKey) {
+        if (poolKey.Name.empty()) {
+            return;
+        }
+        GetPoolCounters(poolKey).PerPoolAllocated->Set(AllocatedPerPool[poolKey]);
+    }
+
+    void SyncPoolAwaitCounter(const NDq::TWorkScope& poolKey) {
+        if (poolKey.Name.empty()) {
+            return;
+        }
+        size_t depth = 0;
+        if (auto it = AwaitPerPool.find(poolKey); it != AwaitPerPool.end()) {
+            depth = it->second.size();
+        }
+        GetPoolCounters(poolKey).PerPoolAwait->Set(depth);
+    }
+
+    void ReleasePoolSlot(const NDq::TWorkScope& poolKey) {
+        if (poolKey.Name.empty()) {
+            return;
+        }
+        if (auto& n = AllocatedPerPool[poolKey]; n > 0) {
+            --n;
+        }
+        SyncPoolAllocatedCounter(poolKey);
+        Wakeup(0ULL);
     }
 
     CURLM* GetHandle() const {
@@ -974,12 +1128,17 @@ private:
 
     std::shared_ptr<CURLM> Handle;
 
-    std::queue<TEasyCurlBuffer::TPtr> Await;
+    THashMap<NDq::TWorkScope, std::deque<TEasyCurl::TPtr>> AwaitPerPool;
     std::vector<TEasyCurlStream::TWeakPtr> Streams;
 
+    THashMap<NDq::TWorkScope, size_t> PoolCaps;
+    THashMap<NDq::TWorkScope, size_t> AllocatedPerPool;
+
+    THashMap<NDq::TWorkScope, TPoolCounters> PoolCounters;
 
     std::unordered_map<CURL*, TEasyCurl::TPtr> Allocated;
-    std::priority_queue<std::pair<TInstant, TEasyCurlBuffer::TPtr>> Delayed;
+    std::priority_queue<std::pair<TInstant, TEasyCurlBuffer::TPtr>, std::vector<std::pair<TInstant, TEasyCurlBuffer::TPtr>>, std::greater<>>
+        Delayed;
 
     std::shared_ptr<std::mutex> Sync = std::make_shared<std::mutex>();
     std::thread Thread;
@@ -1003,7 +1162,6 @@ private:
     const ::NMonitoring::TDynamicCounters::TCounterPtr OutputMemory;
     const ::NMonitoring::TDynamicCounters::TCounterPtr PerformCycles;
     const ::NMonitoring::TDynamicCounters::TCounterPtr AwaitQueue;
-    const ::NMonitoring::TDynamicCounters::TCounterPtr AwaitQueueTopSizeLimit;
     const ::NMonitoring::TDynamicCounters::TCounterPtr DownloadedBytes;
     const ::NMonitoring::TDynamicCounters::TCounterPtr UploadedBytes;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> GroupForGET;
@@ -1015,7 +1173,7 @@ std::atomic_size_t THTTPMultiGateway::OutputSize = 0ULL;
 std::mutex THTTPMultiGateway::CreateSync;
 THTTPMultiGateway::TWeakPtr THTTPMultiGateway::Singleton;
 
-}
+}   // namespace
 
 IHTTPGateway::TContentBase::TContentBase(TString&& data)
     : TString(std::move(data))
@@ -1051,18 +1209,23 @@ IHTTPGateway::TContent::TContent(TString&& data, long httpResponseCode, TString&
     : TContentBase(std::move(data))
     , Headers(std::move(headers))
     , HttpResponseCode(httpResponseCode)
-{}
+{
+}
 
 IHTTPGateway::TContent::TContent(const TString& data, long httpResponseCode, const TString& headers)
     : TContentBase(data)
     , Headers(headers)
     , HttpResponseCode(httpResponseCode)
-{}
+{
+}
 
 IHTTPGateway::TCountedContent::TCountedContent(TString&& data, const std::shared_ptr<std::atomic_size_t>& counter,
     const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter, std::weak_ptr<CURLM> handle, size_t threshold)
-    : TContentBase(std::move(data)), Counter(counter), InflightCounter(inflightCounter)
-    , Handle(handle), Threshold(threshold)
+    : TContentBase(std::move(data))
+    , Counter(counter)
+    , InflightCounter(inflightCounter)
+    , Handle(handle)
+    , Threshold(threshold)
 {
     Counter->fetch_add(size());
     if (InflightCounter) {
@@ -1091,16 +1254,16 @@ TString IHTTPGateway::TCountedContent::Extract() {
     return TContentBase::Extract();
 }
 
-IHTTPGateway::TPtr
-IHTTPGateway::Make(const THttpGatewayConfig* httpGatewaysCfg, ::NMonitoring::TDynamicCounterPtr counters) {
+IHTTPGateway::TPtr IHTTPGateway::Make(const THttpGatewayConfig* httpGatewaysCfg, ::NMonitoring::TDynamicCounterPtr counters) {
     const std::unique_lock lock(THTTPMultiGateway::CreateSync);
-    if (const auto g = THTTPMultiGateway::Singleton.lock())
+    if (const auto g = THTTPMultiGateway::Singleton.lock()) {
         return g;
+    }
 
     const auto gateway = std::make_shared<THTTPMultiGateway>(httpGatewaysCfg, std::move(counters));
     THTTPMultiGateway::Singleton = gateway;
 
-    gateway->Thread = std::thread([self = gateway.get()] () {
+    gateway->Thread = std::thread([self = gateway.get()]() {
         return self->Perform();
     });
 
@@ -1108,13 +1271,8 @@ IHTTPGateway::Make(const THttpGatewayConfig* httpGatewaysCfg, ::NMonitoring::TDy
 }
 
 IHTTPGateway::THeaders IHTTPGateway::MakeYcHeaders(
-    const TString& requestId,
-    const TString& token,
-    const TString& contentType,
-    const TString& userPwd,
-    const TString& awsSigV4) {
-
-    IHTTPGateway::THeaders result{.Options{userPwd, awsSigV4}};
+    const TString& requestId, const TString& token, const TString& contentType, const TString& userPwd, const TString& awsSigV4) {
+    IHTTPGateway::THeaders result{ .Options{ userPwd, awsSigV4 } };
 
     if (requestId.empty()) {
         throw yexception() << "RequestId is mandatory";
@@ -1132,4 +1290,4 @@ IHTTPGateway::THeaders IHTTPGateway::MakeYcHeaders(
     return result;
 }
 
-}
+}   // namespace NYql

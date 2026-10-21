@@ -1,11 +1,12 @@
 #pragma once
 #include "util.h"
 
-#include <ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_impl.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/internal_events.h>
 #include <ydb/core/fq/libs/control_plane_storage/schema.h>
+#include <ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_impl.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 #include <ydb/core/fq/libs/shared_resources/db_exec.h>
+
 #include <ydb/public/api/protos/draft/fq.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
@@ -18,10 +19,7 @@ Y_HAS_MEMBER(User);
 Y_HAS_MEMBER(Token);
 
 template <class TRequest, class TResponse, class TDerived>
-class TControlPlaneRequestActor : public NActors::TActorBootstrapped<TDerived>,
-                                  public TDbRequester,
-                                  public TControlPlaneStorageUtils
-{
+class TControlPlaneRequestActor: public NActors::TActorBootstrapped<TDerived>, public TDbRequester, public TControlPlaneStorageUtils {
 public:
     using TResponseEvent = TResponse;
     using TRequestEvent = TRequest;
@@ -32,7 +30,8 @@ public:
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_STORAGE_REQUEST";
 
 protected:
-    TControlPlaneRequestActor(typename TRequestEvent::TPtr&& ev, TRequestCounters requestCounters, TDebugInfoPtr debugInfo, TDbPoolPtr dbPool, TYdbConnectionPtr ydbConnection, const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config)
+    TControlPlaneRequestActor(typename TRequestEvent::TPtr&& ev, TRequestCounters requestCounters, TDebugInfoPtr debugInfo, TDbPoolPtr dbPool,
+        TYdbConnectionPtr ydbConnection, const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config)
         : TDbRequester(std::move(dbPool), std::move(ydbConnection))
         , TControlPlaneStorageUtils(config)
         , Request(std::move(ev))
@@ -54,7 +53,8 @@ public:
     }
 
     void Bootstrap() {
-        CPS_LOG_T(RequestLogString());
+        YDB_LOG_TRACE_COMP(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "Dump request",
+            {"request", RequestLogString()});
 
         AsDerived()->Start();
     }
@@ -89,7 +89,7 @@ protected:
         AsDerived()->LwProbe(success);
 
         for (const auto& issue : event->Issues) {
-            NYql::WalkThroughIssues(issue, true, [issuesCounters=RequestCounters.Common->Issues](const NYql::TIssue& err, ui16 level) {
+            NYql::WalkThroughIssues(issue, true, [issuesCounters = RequestCounters.Common->Issues](const NYql::TIssue& err, ui16 level) {
                 Y_UNUSED(level);
                 issuesCounters->GetCounter(ToString(err.GetCode()), true)->Inc();
             });
@@ -100,15 +100,15 @@ protected:
         this->PassAway();
     }
 
-    bool SendResponse(const TString& name,
-        const NYdb::TAsyncStatus& statusWithDbAnswer,
+    bool SendResponse(const TString& name, const NYdb::TAsyncStatus& statusWithDbAnswer,
         const std::function<typename TPrepareResponseResultType<TResponseEvent, typename TResponseEvent::TProto>::Type()>& prepare)
     {
-        Y_ABORT_UNLESS(statusWithDbAnswer.HasValue() || statusWithDbAnswer.HasException()); // ready
+        Y_ABORT_UNLESS(statusWithDbAnswer.HasValue() || statusWithDbAnswer.HasException());   // ready
         NYql::TIssues internalIssues;
         NYql::TIssues issues;
         typename TResponseEvent::TProto result;
-        typename TPrepareResponseResultType<TResponseEvent, typename TResponseEvent::TProto>::TResponseAuditDetails auditDetails; // void* for nonauditable events
+        typename TPrepareResponseResultType<TResponseEvent, typename TResponseEvent::TProto>::TResponseAuditDetails
+            auditDetails;   // void* for nonauditable events
 
         try {
             TStatus status = statusWithDbAnswer.GetValue();
@@ -143,10 +143,15 @@ protected:
 
         std::unique_ptr<TResponseEvent> event;
         if (issues) {
-            CPS_LOG_W(name << ": {" << TrimForLogs(Request->Get()->Request.DebugString()) << "} ERROR: " << internalIssues.ToOneLineString());
+            YDB_LOG_WARN_COMP(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "",
+                {"name", name},
+                {"request", TrimForLogs(Request->Get()->Request.DebugString())},
+                {"ERROR", internalIssues.ToOneLineString()});
             event = std::make_unique<TResponseEvent>(issues);
         } else {
-            CPS_LOG_W(name << ": {" << TrimForLogs(Request->Get()->Request.DebugString()) << "} SUCCESS");
+            YDB_LOG_WARN_COMP(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "SUCCESS",
+                {"name", name},
+                {"request", TrimForLogs(Request->Get()->Request.DebugString())});
             if constexpr (TResponseEvent::Auditable) {
                 event = std::make_unique<TResponseEvent>(result, auditDetails);
             } else {
@@ -166,11 +171,11 @@ protected:
     }
 
     void Subscribe(NYdb::TAsyncStatus& status, std::shared_ptr<std::vector<NYdb::TResultSet>> resultSets = nullptr) {
-        status.Subscribe(
-            [actorSystem = NActors::TActivationContext::ActorSystem(), selfId = this->SelfId(), resultSets] (const NYdb::TAsyncStatus& status) mutable {
-                actorSystem->Send(new IEventHandle(selfId, selfId, new TEvControlPlaneStorageInternal::TEvDbRequestResult(status, std::move(resultSets))));
-            }
-        );
+        status.Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = this->SelfId(), resultSets](
+                             const NYdb::TAsyncStatus& status) mutable {
+            actorSystem->Send(
+                new IEventHandle(selfId, selfId, new TEvControlPlaneStorageInternal::TEvDbRequestResult(status, std::move(resultSets))));
+        });
     }
 
 protected:
@@ -180,4 +185,4 @@ protected:
     TDebugInfoPtr DebugInfo;
 };
 
-} // namespace NFq
+}   // namespace NFq

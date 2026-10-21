@@ -1,6 +1,8 @@
---- contrib/python/botocore/py3/botocore/data/s3/2006-03-01/service-2.json	(5718cbe7c8ad633beee9e1eac79e295dea4b8966)
-+++ contrib/python/botocore/py3/botocore/data/s3/2006-03-01/service-2.json	(0f7e89156b6ce9f3947ef47273baefe09dd0c1ad)
-@@ -1233,6 +1246,21 @@
+diff --git a/botocore/data/s3/2006-03-01/service-2.json b/botocore/data/s3/2006-03-01/service-2.json
+index 5d641e7..f4eb3f3 100644
+--- a/botocore/data/s3/2006-03-01/service-2.json
++++ b/botocore/data/s3/2006-03-01/service-2.json
+@@ -1292,6 +1292,21 @@
          "requestChecksumRequired":false
        }
      },
@@ -22,7 +24,7 @@
      "PutObjectAcl":{
        "name":"PutObjectAcl",
        "http":{
-@@ -9501,6 +9627,76 @@
+@@ -10614,6 +10629,76 @@
        },
        "payload":"Body"
      },
@@ -99,9 +101,19 @@
      "PutObjectRetentionOutput":{
        "type":"structure",
        "members":{
---- contrib/python/botocore/py3/botocore/handlers.py	(5718cbe7c8ad633beee9e1eac79e295dea4b8966)
-+++ contrib/python/botocore/py3/botocore/handlers.py	(0f7e89156b6ce9f3947ef47273baefe09dd0c1ad)
-@@ -1173,6 +1194,11 @@ BUILTIN_HANDLERS = [
+diff --git a/botocore/handlers.py b/botocore/handlers.py
+index 21b79f4..7ee5f64 100644
+--- a/botocore/handlers.py
++++ b/botocore/handlers.py
+@@ -71,6 +71,7 @@ from botocore.utils import (
+     SAFE_CHARS,
+     SERVICE_NAME_ALIASES,  # noqa: F401
+     ArnParser,
++    conditionally_calculate_md5,
+     get_token_from_environment,
+     hyphenize_service_id,  # noqa: F401
+     is_global_accesspoint,  # noqa: F401
+@@ -1479,6 +1480,11 @@ BUILTIN_HANDLERS = [
          convert_body_to_file_like_object,
          REGISTER_LAST,
      ),
@@ -113,15 +125,15 @@
      ('creating-client-class', add_generate_presigned_url),
      ('creating-client-class.s3', add_generate_presigned_post),
      ('creating-client-class.iot-data', check_openssl_supports_tls_version_1_2),
-@@ -1213,6 +1239,7 @@ BUILTIN_HANDLERS = [
+@@ -1532,6 +1538,7 @@ BUILTIN_HANDLERS = [
+     ('before-call.s3', add_expect_header),
      ('before-call.glacier', add_glacier_version),
      ('before-call.apigateway', add_accept_header),
-     ('before-call.s3.PutObject', conditionally_calculate_checksum),
 +    ('before-call.s3.PatchObject', conditionally_calculate_md5),
-     ('before-call.s3.UploadPart', conditionally_calculate_md5),
      ('before-call.s3.DeleteObjects', escape_xml_payload),
-     ('before-call.s3.DeleteObjects', conditionally_calculate_checksum),
-@@ -1242,6 +1269,7 @@ BUILTIN_HANDLERS = [
+     ('before-call.s3.PutBucketLifecycleConfiguration', escape_xml_payload),
+     ('before-call.glacier.UploadArchive', add_glacier_checksums),
+@@ -1554,6 +1561,7 @@ BUILTIN_HANDLERS = [
      ('before-parameter-build.s3.HeadObject', sse_md5),
      ('before-parameter-build.s3.GetObject', sse_md5),
      ('before-parameter-build.s3.PutObject', sse_md5),

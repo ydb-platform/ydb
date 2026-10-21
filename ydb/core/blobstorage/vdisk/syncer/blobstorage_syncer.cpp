@@ -166,6 +166,12 @@ namespace NKikimr {
         // other
         using TVDiskInfoPtr = const TSyncNeighbors::TValue *;
 
+        enum class EStartupDataSyncTokenState {
+            None,
+            Requested,
+            Acquired,
+        };
+
         TIntrusivePtr<TSyncerContext> SyncerCtx;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TIntrusivePtr<TSyncerData> SyncerData;
@@ -175,12 +181,15 @@ namespace NKikimr {
         TActorId GuidRecoveryId;
         TActorId RecoverLostDataId;
         TVector<TActorId> PropagatorIds;
-        bool StartupDataSyncTokenRequested = false;
+        EStartupDataSyncTokenState StartupDataSyncTokenState = EStartupDataSyncTokenState::None;
         EPhase Phase = TPhaseVal::PhaseNone;
         TActiveActors ActiveActors;
         std::unique_ptr<NSyncer::TOutcome> GuidRecovOutcome;
         TDelayedQueue DelayedQueue;
         TSublog<> Sublog;
+        const ui64 StartupDataSyncBlockedUntilCutLsn = 0;
+        bool StartupDataSyncCutSatisfied = false;
+        bool StartupDataSyncCutRequested = false;
 
         friend class TActorBootstrapped<TSyncer>;
 
@@ -202,28 +211,69 @@ namespace NKikimr {
         }
 
         void QueryStartupDataSyncToken(const TActorContext& ctx) {
-            Y_ABORT_UNLESS(!StartupDataSyncTokenRequested);
+            Y_ABORT_UNLESS(StartupDataSyncTokenState == EStartupDataSyncTokenState::None);
             ctx.Send(MakeBlobStorageStartupDataSyncBrokerID(),
                 new TEvAcquireVDiskOperationToken(GetVDiskServiceId(), SyncerCtx->Config->BaseInfo.PDiskId),
                 IEventHandle::FlagTrackDelivery);
-            StartupDataSyncTokenRequested = true;
+            StartupDataSyncTokenState = EStartupDataSyncTokenState::Requested;
         }
 
         void ReleaseStartupDataSyncToken(const TActorContext& ctx) {
-            if (StartupDataSyncTokenRequested) {
+            if (StartupDataSyncTokenState != EStartupDataSyncTokenState::None) {
                 ctx.Send(MakeBlobStorageStartupDataSyncBrokerID(),
                     new TEvReleaseVDiskOperationToken(GetVDiskServiceId(), SyncerCtx->Config->BaseInfo.PDiskId));
-                StartupDataSyncTokenRequested = false;
+                StartupDataSyncTokenState = EStartupDataSyncTokenState::None;
             }
         }
 
         void StartScheduler(const TActorContext& ctx) {
             Y_ABORT_UNLESS(!SchedulerId);
-            LOG_DEBUG(ctx, BS_SYNCER,
-                VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                    "%s: Creating syncer scheduler on node %d", __PRETTY_FUNCTION__, SelfId().NodeId()));
+            YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "%s: Creating syncer scheduler on node %d", __PRETTY_FUNCTION__, SelfId().NodeId()));
             SchedulerId = ctx.Register(CreateSyncerSchedulerActor(SyncerCtx, GInfo, SyncerData, CommitterId, SelfId()));
             ActiveActors.Insert(SchedulerId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+        }
+
+        bool IsStartupDataSyncBlockedByCut() const {
+            return StartupDataSyncBlockedUntilCutLsn && !StartupDataSyncCutSatisfied;
+        }
+
+        void AskForRecoveryLogCut(const TActorContext& ctx) {
+            if (!IsStartupDataSyncBlockedByCut() || StartupDataSyncCutRequested) {
+                return;
+            }
+
+            ctx.Send(SyncerCtx->PDiskCtx->PDiskId, new NPDisk::TEvAskForCutLog(
+                SyncerCtx->PDiskCtx->Dsk->Owner,
+                SyncerCtx->PDiskCtx->Dsk->OwnerRound));
+            StartupDataSyncCutRequested = true;
+
+            YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
+                    "Startup data sync is waiting for recovery log cut"
+                    " blockedUntilCutLsn# %" PRIu64 " Marker# BSS46",
+                    StartupDataSyncBlockedUntilCutLsn));
+        }
+
+        void TryStartStartupDataSync(const TActorContext& ctx) {
+            if (SchedulerId || SyncerCtx->Config->BaseInfo.ReadOnly) {
+                return;
+            }
+
+            if (StartupDataSyncTokenState == EStartupDataSyncTokenState::Acquired) {
+                StartScheduler(ctx);
+                return;
+            }
+
+            if (StartupDataSyncTokenState == EStartupDataSyncTokenState::Requested) {
+                return;
+            }
+
+            if (IsStartupDataSyncBlockedByCut()) {
+                AskForRecoveryLogCut(ctx);
+                return;
+            }
+
+            Become(&TThis::AwaitStartupDataSyncTokenStateFunc);
+            QueryStartupDataSyncToken(ctx);
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -269,14 +319,14 @@ namespace NKikimr {
                 case EDecision::FirstRun:
                 case EDecision::Good:
                     StandardMode(ctx);
-                    LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "GUID: PDiskId# %s Good", SyncerCtx->PDiskCtx->PDiskIdString.data()));
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "GUID: PDiskId# %s Good", SyncerCtx->PDiskCtx->PDiskIdString.data()));
                     break;
                 case EDecision::LostData:
-                    LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "GUID: PDiskId# %s LostData", SyncerCtx->PDiskCtx->PDiskIdString.data()));
-                    RecoverLostData(ctx);
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "GUID: PDiskId# %s LostData", SyncerCtx->PDiskCtx->PDiskIdString.data()));
+                    StartRecoverLostData(ctx);
                     break;
                 case EDecision::Inconsistency:
-                    LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "GUID: PDiskId# %s Inconsistency", SyncerCtx->PDiskCtx->PDiskIdString.data()));
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "GUID: PDiskId# %s Inconsistency", SyncerCtx->PDiskCtx->PDiskIdString.data()));
                     InconsistentState(ctx);
                     break;
                 default:
@@ -288,6 +338,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             HFunc(TEvSyncerCommitDone, Handle)
             HFunc(TEvVDiskGuidRecovered, Handle)
+            HFunc(TEvRecoveryLogCutDone, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
@@ -310,6 +361,7 @@ namespace NKikimr {
         STRICT_STFUNC(InconsistentancyStateFunc,
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             HFunc(TEvSyncerCommitDone, Handle)
+            HFunc(TEvRecoveryLogCutDone, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
@@ -322,11 +374,9 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // Recover Lost Data
         ////////////////////////////////////////////////////////////////////////
-        void RecoverLostData(const TActorContext &ctx) {
+        void StartRecoverLostData(const TActorContext &ctx) {
             if (SyncerCtx->Config->BaseInfo.ReadOnly) {
-                LOG_WARN(ctx, BS_SYNCER,
-                    VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                        "Unable to recover lost data in read-only mode. Transitioning to inconsistent state."));
+                YDB_LOG_WARN_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "Unable to recover lost data in read-only mode. Transitioning to inconsistent state."));
                 InconsistentState(ctx);
                 return;
             }
@@ -334,14 +384,35 @@ namespace NKikimr {
             Become(&TThis::RecoverLostDataStateFunc);
             Phase = TPhaseVal::PhaseRecoverLostData;
 
+            if (IsStartupDataSyncBlockedByCut()) {
+                AskForRecoveryLogCut(ctx);
+                return;
+            }
+
             if (SyncerCtx->Config->EnableVDiskCooldownTimeout) {
                 Schedule(SyncerCtx->Config->BaseInfo.YardInitDelay, new TEvents::TEvWakeup);
             } else {
-                RecoverLostDataResumeAfterDelay(ctx);
+                TryStartRecoverLostData(ctx);
             }
         }
 
-        void RecoverLostDataResumeAfterDelay(const TActorContext& ctx) {
+        void TryStartRecoverLostData(const TActorContext& ctx) {
+            if (RecoverLostDataId || StartupDataSyncTokenState == EStartupDataSyncTokenState::Requested) {
+                return;
+            }
+
+            if (StartupDataSyncTokenState == EStartupDataSyncTokenState::None) {
+                Become(&TThis::AwaitStartupDataSyncTokenStateFunc);
+                QueryStartupDataSyncToken(ctx);
+                return;
+            }
+
+            Y_ABORT_UNLESS(StartupDataSyncTokenState == EStartupDataSyncTokenState::Acquired);
+            StartRecoverLostDataActor(ctx);
+        }
+
+        void StartRecoverLostDataActor(const TActorContext& ctx) {
+            Y_ABORT_UNLESS(!RecoverLostDataId);
             const TVDiskEternalGuid guid = GuidRecovOutcome->Guid;
             RecoverLostDataId = ctx.Register(CreateSyncerRecoverLostDataActor(SyncerCtx, GInfo, CommitterId, ctx.SelfID, guid));
             ActiveActors.Insert(RecoverLostDataId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
@@ -358,6 +429,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             HFunc(TEvSyncerCommitDone, Handle)
             HFunc(TEvSyncerLostDataRecovered, Handle)
+            HFunc(TEvRecoveryLogCutDone, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
@@ -365,7 +437,7 @@ namespace NKikimr {
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSublogLine, Handle)
             HFunc(TEvVGenerationChange, RecoverLostDataModeHandle)
-            CFunc(TEvents::TSystem::Wakeup, RecoverLostDataResumeAfterDelay);
+            CFunc(TEvents::TSystem::Wakeup, TryStartRecoverLostData);
         )
 
         ////////////////////////////////////////////////////////////////////////
@@ -383,30 +455,44 @@ namespace NKikimr {
             SyncerData->Neighbors->DbBirthLsn = LocalSyncerState.DbBirthLsn;
             Phase = TPhaseVal::PhaseStandardMode;
             if (!SyncerCtx->Config->BaseInfo.ReadOnly) {
-                Become(&TThis::AwaitStartupDataSyncTokenStateFunc);
-                QueryStartupDataSyncToken(ctx);
+                Become(&TThis::StandardModeStateFunc);
+                TryStartStartupDataSync(ctx);
             } else {
                 Become(&TThis::StandardModeStateFunc);
-                LOG_WARN(ctx, BS_SYNCER,
-                    VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                        "%s: Skipping scheduler start due to read-only", __PRETTY_FUNCTION__));
+                YDB_LOG_WARN_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "%s: Skipping scheduler start due to read-only", __PRETTY_FUNCTION__));
+            }
+        }
+
+        void StartStartupDataSyncAfterBroker(const TActorContext& ctx) {
+            switch (Phase) {
+                case TPhaseVal::PhaseRecoverLostData:
+                    Become(&TThis::RecoverLostDataStateFunc);
+                    StartRecoverLostDataActor(ctx);
+                    break;
+
+                case TPhaseVal::PhaseStandardMode:
+                    Become(&TThis::StandardModeStateFunc);
+                    StartScheduler(ctx);
+                    break;
+
+                default:
+                    Y_ABORT("Unexpected phase while acquiring startup data sync token");
             }
         }
 
         void Handle(TEvVDiskOperationToken::TPtr&, const TActorContext& ctx) {
-            Y_ABORT_UNLESS(StartupDataSyncTokenRequested);
-            Become(&TThis::StandardModeStateFunc);
-            StartScheduler(ctx);
+            Y_ABORT_UNLESS(StartupDataSyncTokenState == EStartupDataSyncTokenState::Requested);
+            StartupDataSyncTokenState = EStartupDataSyncTokenState::Acquired;
+            StartStartupDataSyncAfterBroker(ctx);
         }
 
         void HandleStartupDataSyncBrokerUndelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
             if (ev->Get()->SourceType == TEvAcquireVDiskOperationToken::EventType) {
                 // No startup data sync broker service. Continue without it.
-                LOG_WARN(ctx, BS_SYNCER,
-                    VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "Startup data sync broker is not available, continuing without it"));
-                StartupDataSyncTokenRequested = false;
-                Become(&TThis::StandardModeStateFunc);
-                StartScheduler(ctx);
+                YDB_LOG_WARN_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "Startup data sync broker is not available, continuing without it"));
+                Y_ABORT_UNLESS(StartupDataSyncTokenState == EStartupDataSyncTokenState::Requested);
+                StartupDataSyncTokenState = EStartupDataSyncTokenState::None;
+                StartStartupDataSyncAfterBroker(ctx);
             }
         }
 
@@ -414,24 +500,60 @@ namespace NKikimr {
             ReleaseStartupDataSyncToken(ctx);
         }
 
+        void Handle(TEvRecoveryLogCutDone::TPtr &ev, const TActorContext &ctx) {
+            if (!IsStartupDataSyncBlockedByCut()) {
+                return;
+            }
+
+            const ui64 firstLsnToKeep = ev->Get()->FirstLsnToKeep;
+            if (firstLsnToKeep < StartupDataSyncBlockedUntilCutLsn) {
+                StartupDataSyncCutRequested = false;
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
+                        "Startup data sync recovery log cut dependency is not satisfied yet"
+                        " firstLsnToKeep# %" PRIu64 " blockedUntilCutLsn# %" PRIu64 " Marker# BSS48",
+                        firstLsnToKeep, StartupDataSyncBlockedUntilCutLsn));
+                AskForRecoveryLogCut(ctx);
+                return;
+            }
+
+            YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
+                    "Startup data sync recovery log cut dependency satisfied"
+                    " firstLsnToKeep# %" PRIu64 " blockedUntilCutLsn# %" PRIu64 " Marker# BSS47",
+                    firstLsnToKeep, StartupDataSyncBlockedUntilCutLsn));
+
+            StartupDataSyncCutSatisfied = true;
+            StartupDataSyncCutRequested = false;
+
+            if (Phase == TPhaseVal::PhaseRecoverLostData && !RecoverLostDataId) {
+                StartRecoverLostData(ctx);
+                return;
+            }
+
+            if (Phase == TPhaseVal::PhaseStandardMode) {
+                TryStartStartupDataSync(ctx);
+            }
+        }
+
         STRICT_STFUNC(AwaitStartupDataSyncTokenStateFunc,
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             HFunc(TEvSyncerCommitDone, Handle)
             HFunc(TEvVDiskOperationToken, Handle)
             HFunc(TEvents::TEvUndelivered, HandleStartupDataSyncBrokerUndelivered)
+            HFunc(TEvRecoveryLogCutDone, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSublogLine, Handle)
-            HFunc(TEvVGenerationChange, ReadyModeHandle)
+            HFunc(TEvVGenerationChange, AwaitStartupDataSyncTokenModeHandle)
         )
 
         STRICT_STFUNC(StandardModeStateFunc,
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             HFunc(TEvSyncerCommitDone, Handle)
             HFunc(TEvStartupDataSyncDone, Handle)
+            HFunc(TEvRecoveryLogCutDone, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
@@ -471,10 +593,7 @@ namespace NKikimr {
                     auto msg = TEvSyncerCommit::Remote(vdisk, state, guid, cookie);
                     ctx.Send(CommitterId, msg.release());
                 } else {
-                    LOG_WARN(ctx, BS_SYNCER,
-                        VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                            "%s: Skipping commit of incoming EvVSyncGuid: saved guid %s",
-                            __PRETTY_FUNCTION__, prevGuidInMemory != guid ? "differs" : "matches"));
+                    YDB_LOG_WARN_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "%s: Skipping commit of incoming EvVSyncGuid: saved guid %s", __PRETTY_FUNCTION__, prevGuidInMemory != guid ? "differs" : "matches"));
                 }
             } else {
                 // handle READ request
@@ -653,7 +772,24 @@ namespace NKikimr {
             GInfo = msg->NewInfo;
 
             // reconfigure guid recovery actor
-            ctx.Send(RecoverLostDataId, msg->Clone());
+            if (RecoverLostDataId) {
+                ctx.Send(RecoverLostDataId, msg->Clone());
+            }
+        }
+
+        void AwaitStartupDataSyncTokenModeHandle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
+            switch (Phase) {
+                case TPhaseVal::PhaseRecoverLostData:
+                    RecoverLostDataModeHandle(ev, ctx);
+                    break;
+
+                case TPhaseVal::PhaseStandardMode:
+                    ReadyModeHandle(ev, ctx);
+                    break;
+
+                default:
+                    Y_ABORT("Unexpected phase while waiting for startup data sync token");
+            }
         }
 
     public:
@@ -669,6 +805,7 @@ namespace NKikimr {
             , GInfo(info)
             , SyncerData(syncerData)
             , LocalSyncerState(SyncerData->LocalSyncerState)
+            , StartupDataSyncBlockedUntilCutLsn(SyncerCtx->StartupDataSyncBlockedUntilCutLsn)
         {
             Y_VERIFY_S(SyncerCtx->VCtx->Top->EqualityCheck(info->GetTopology()),
                 SyncerCtx->VCtx->VDiskLogPrefix);

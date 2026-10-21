@@ -1,6 +1,19 @@
-/* Generated from arabic.sbl by Snowball 3.0.1 - https://snowballstem.org/ */
+/* Generated from arabic.sbl by Snowball 3.1.1 - https://snowballstem.org/ */
 
-#include "../runtime/header.h"
+#include "stem_UTF_8_arabic.h"
+
+#include <stddef.h>
+
+#include "../runtime/snowball_runtime.h"
+
+struct SN_local {
+    struct SN_env z;
+    unsigned char b_is_defined;
+    unsigned char b_is_verb;
+    unsigned char b_is_noun;
+};
+
+typedef struct SN_local SN_local;
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,6 +22,7 @@ extern int arabic_UTF_8_stem(struct SN_env * z);
 #ifdef __cplusplus
 }
 #endif
+
 static int r_Checks1(struct SN_env * z);
 static int r_Normalize_pre(struct SN_env * z);
 static int r_Normalize_post(struct SN_env * z);
@@ -30,18 +44,81 @@ static int r_Prefix_Step3b_Noun(struct SN_env * z);
 static int r_Prefix_Step3a_Noun(struct SN_env * z);
 static int r_Prefix_Step2(struct SN_env * z);
 static int r_Prefix_Step1(struct SN_env * z);
-#ifdef __cplusplus
-extern "C" {
-#endif
 
+static const symbol s_0[] = { '0' };
+static const symbol s_1[] = { '1' };
+static const symbol s_2[] = { '2' };
+static const symbol s_3[] = { '3' };
+static const symbol s_4[] = { '4' };
+static const symbol s_5[] = { '5' };
+static const symbol s_6[] = { '6' };
+static const symbol s_7[] = { '7' };
+static const symbol s_8[] = { '8' };
+static const symbol s_9[] = { '9' };
+static const symbol s_10[] = { 0xD8, 0xA1 };
+static const symbol s_11[] = { 0xD8, 0xA3 };
+static const symbol s_12[] = { 0xD8, 0xA5 };
+static const symbol s_13[] = { 0xD8, 0xA6 };
+static const symbol s_14[] = { 0xD8, 0xA2 };
+static const symbol s_15[] = { 0xD8, 0xA4 };
+static const symbol s_16[] = { 0xD8, 0xA7 };
+static const symbol s_17[] = { 0xD8, 0xA8 };
+static const symbol s_18[] = { 0xD8, 0xA9 };
+static const symbol s_19[] = { 0xD8, 0xAA };
+static const symbol s_20[] = { 0xD8, 0xAB };
+static const symbol s_21[] = { 0xD8, 0xAC };
+static const symbol s_22[] = { 0xD8, 0xAD };
+static const symbol s_23[] = { 0xD8, 0xAE };
+static const symbol s_24[] = { 0xD8, 0xAF };
+static const symbol s_25[] = { 0xD8, 0xB0 };
+static const symbol s_26[] = { 0xD8, 0xB1 };
+static const symbol s_27[] = { 0xD8, 0xB2 };
+static const symbol s_28[] = { 0xD8, 0xB3 };
+static const symbol s_29[] = { 0xD8, 0xB4 };
+static const symbol s_30[] = { 0xD8, 0xB5 };
+static const symbol s_31[] = { 0xD8, 0xB6 };
+static const symbol s_32[] = { 0xD8, 0xB7 };
+static const symbol s_33[] = { 0xD8, 0xB8 };
+static const symbol s_34[] = { 0xD8, 0xB9 };
+static const symbol s_35[] = { 0xD8, 0xBA };
+static const symbol s_36[] = { 0xD9, 0x81 };
+static const symbol s_37[] = { 0xD9, 0x82 };
+static const symbol s_38[] = { 0xD9, 0x83 };
+static const symbol s_39[] = { 0xD9, 0x84 };
+static const symbol s_40[] = { 0xD9, 0x85 };
+static const symbol s_41[] = { 0xD9, 0x86 };
+static const symbol s_42[] = { 0xD9, 0x87 };
+static const symbol s_43[] = { 0xD9, 0x88 };
+static const symbol s_44[] = { 0xD9, 0x89 };
+static const symbol s_45[] = { 0xD9, 0x8A };
+static const symbol s_46[] = { 0xD9, 0x84, 0xD8, 0xA7 };
+static const symbol s_47[] = { 0xD9, 0x84, 0xD8, 0xA3 };
+static const symbol s_48[] = { 0xD9, 0x84, 0xD8, 0xA5 };
+static const symbol s_49[] = { 0xD9, 0x84, 0xD8, 0xA2 };
+static const symbol s_50[] = { 0xD8, 0xA1 };
+static const symbol s_51[] = { 0xD8, 0xA7 };
+static const symbol s_52[] = { 0xD9, 0x88 };
+static const symbol s_53[] = { 0xD9, 0x8A };
+static const symbol s_54[] = { 0xD8, 0xA3 };
+static const symbol s_55[] = { 0xD8, 0xA2 };
+static const symbol s_56[] = { 0xD8, 0xA7 };
+static const symbol s_57[] = { 0xD8, 0xA5 };
+static const symbol s_58[] = { 0xD8, 0xA7 };
+static const symbol s_59[] = { 0xD8, 0xA8 };
+static const symbol s_60[] = { 0xD9, 0x83 };
+static const symbol s_61[] = { 0xD9, 0x8A };
+static const symbol s_62[] = { 0xD8, 0xAA };
+static const symbol s_63[] = { 0xD9, 0x86 };
+static const symbol s_64[] = { 0xD8, 0xA3 };
+static const symbol s_65[] = { 0xD8, 0xA7, 0xD8, 0xB3, 0xD8, 0xAA };
+static const symbol s_66[] = { 0xD9, 0x86 };
+static const symbol s_67[] = { 0xD8, 0xA7, 0xD8, 0xAA };
+static const symbol s_68[] = { 0xD8, 0xAA };
+static const symbol s_69[] = { 0xD8, 0xA9 };
+static const symbol s_70[] = { 0xD9, 0x8A };
+static const symbol s_71[] = { 0xD9, 0x89 };
+static const symbol s_72[] = { 0xD9, 0x8A };
 
-extern struct SN_env * arabic_UTF_8_create_env(void);
-extern void arabic_UTF_8_close_env(struct SN_env * z);
-
-
-#ifdef __cplusplus
-}
-#endif
 static const symbol s_0_0[2] = { 0xD9, 0x80 };
 static const symbol s_0_1[2] = { 0xD9, 0x8B };
 static const symbol s_0_2[2] = { 0xD9, 0x8C };
@@ -455,178 +532,80 @@ static const struct among a_10[10] = {
 { 4, s_10_9, 0, 2, 0}
 };
 
-static const symbol s_11_0[2] = { 0xD9, 0x86 };
-static const struct among a_11[1] = {
-{ 2, s_11_0, 0, 1, 0}
+static const symbol s_11_0[2] = { 0xD9, 0x88 };
+static const symbol s_11_1[2] = { 0xD9, 0x8A };
+static const symbol s_11_2[2] = { 0xD8, 0xA7 };
+static const struct among a_11[3] = {
+{ 2, s_11_0, 0, 1, 0},
+{ 2, s_11_1, 0, 1, 0},
+{ 2, s_11_2, 0, 1, 0}
 };
 
-static const symbol s_12_0[2] = { 0xD9, 0x88 };
-static const symbol s_12_1[2] = { 0xD9, 0x8A };
-static const symbol s_12_2[2] = { 0xD8, 0xA7 };
-static const struct among a_12[3] = {
+static const symbol s_12_0[2] = { 0xD9, 0x83 };
+static const symbol s_12_1[4] = { 0xD9, 0x83, 0xD9, 0x85 };
+static const symbol s_12_2[4] = { 0xD9, 0x87, 0xD9, 0x85 };
+static const symbol s_12_3[4] = { 0xD9, 0x83, 0xD9, 0x86 };
+static const symbol s_12_4[4] = { 0xD9, 0x87, 0xD9, 0x86 };
+static const symbol s_12_5[2] = { 0xD9, 0x87 };
+static const symbol s_12_6[6] = { 0xD9, 0x83, 0xD9, 0x85, 0xD9, 0x88 };
+static const symbol s_12_7[4] = { 0xD9, 0x86, 0xD9, 0x8A };
+static const symbol s_12_8[6] = { 0xD9, 0x83, 0xD9, 0x85, 0xD8, 0xA7 };
+static const symbol s_12_9[6] = { 0xD9, 0x87, 0xD9, 0x85, 0xD8, 0xA7 };
+static const symbol s_12_10[4] = { 0xD9, 0x86, 0xD8, 0xA7 };
+static const symbol s_12_11[4] = { 0xD9, 0x87, 0xD8, 0xA7 };
+static const struct among a_12[12] = {
 { 2, s_12_0, 0, 1, 0},
-{ 2, s_12_1, 0, 1, 0},
-{ 2, s_12_2, 0, 1, 0}
+{ 4, s_12_1, 0, 2, 0},
+{ 4, s_12_2, 0, 2, 0},
+{ 4, s_12_3, 0, 2, 0},
+{ 4, s_12_4, 0, 2, 0},
+{ 2, s_12_5, 0, 1, 0},
+{ 6, s_12_6, 0, 3, 0},
+{ 4, s_12_7, 0, 2, 0},
+{ 6, s_12_8, 0, 3, 0},
+{ 6, s_12_9, 0, 3, 0},
+{ 4, s_12_10, 0, 2, 0},
+{ 4, s_12_11, 0, 2, 0}
 };
 
-static const symbol s_13_0[4] = { 0xD8, 0xA7, 0xD8, 0xAA };
-static const struct among a_13[1] = {
-{ 4, s_13_0, 0, 1, 0}
+static const symbol s_13_0[2] = { 0xD9, 0x86 };
+static const symbol s_13_1[4] = { 0xD9, 0x88, 0xD9, 0x86 };
+static const symbol s_13_2[4] = { 0xD9, 0x8A, 0xD9, 0x86 };
+static const symbol s_13_3[4] = { 0xD8, 0xA7, 0xD9, 0x86 };
+static const symbol s_13_4[4] = { 0xD8, 0xAA, 0xD9, 0x86 };
+static const symbol s_13_5[2] = { 0xD9, 0x8A };
+static const symbol s_13_6[2] = { 0xD8, 0xA7 };
+static const symbol s_13_7[6] = { 0xD8, 0xAA, 0xD9, 0x85, 0xD8, 0xA7 };
+static const symbol s_13_8[4] = { 0xD9, 0x86, 0xD8, 0xA7 };
+static const symbol s_13_9[4] = { 0xD8, 0xAA, 0xD8, 0xA7 };
+static const symbol s_13_10[2] = { 0xD8, 0xAA };
+static const struct among a_13[11] = {
+{ 2, s_13_0, 0, 1, 0},
+{ 4, s_13_1, -1, 3, 0},
+{ 4, s_13_2, -2, 3, 0},
+{ 4, s_13_3, -3, 3, 0},
+{ 4, s_13_4, -4, 2, 0},
+{ 2, s_13_5, 0, 1, 0},
+{ 2, s_13_6, 0, 1, 0},
+{ 6, s_13_7, -1, 4, 0},
+{ 4, s_13_8, -2, 2, 0},
+{ 4, s_13_9, -3, 2, 0},
+{ 2, s_13_10, 0, 1, 0}
 };
 
-static const symbol s_14_0[2] = { 0xD8, 0xAA };
-static const struct among a_14[1] = {
-{ 2, s_14_0, 0, 1, 0}
+static const symbol s_14_0[4] = { 0xD8, 0xAA, 0xD9, 0x85 };
+static const symbol s_14_1[4] = { 0xD9, 0x88, 0xD8, 0xA7 };
+static const struct among a_14[2] = {
+{ 4, s_14_0, 0, 1, 0},
+{ 4, s_14_1, 0, 1, 0}
 };
 
-static const symbol s_15_0[2] = { 0xD8, 0xA9 };
-static const struct among a_15[1] = {
-{ 2, s_15_0, 0, 1, 0}
+static const symbol s_15_0[2] = { 0xD9, 0x88 };
+static const symbol s_15_1[6] = { 0xD8, 0xAA, 0xD9, 0x85, 0xD9, 0x88 };
+static const struct among a_15[2] = {
+{ 2, s_15_0, 0, 1, 0},
+{ 6, s_15_1, -1, 2, 0}
 };
-
-static const symbol s_16_0[2] = { 0xD9, 0x8A };
-static const struct among a_16[1] = {
-{ 2, s_16_0, 0, 1, 0}
-};
-
-static const symbol s_17_0[2] = { 0xD9, 0x83 };
-static const symbol s_17_1[4] = { 0xD9, 0x83, 0xD9, 0x85 };
-static const symbol s_17_2[4] = { 0xD9, 0x87, 0xD9, 0x85 };
-static const symbol s_17_3[4] = { 0xD9, 0x83, 0xD9, 0x86 };
-static const symbol s_17_4[4] = { 0xD9, 0x87, 0xD9, 0x86 };
-static const symbol s_17_5[2] = { 0xD9, 0x87 };
-static const symbol s_17_6[6] = { 0xD9, 0x83, 0xD9, 0x85, 0xD9, 0x88 };
-static const symbol s_17_7[4] = { 0xD9, 0x86, 0xD9, 0x8A };
-static const symbol s_17_8[6] = { 0xD9, 0x83, 0xD9, 0x85, 0xD8, 0xA7 };
-static const symbol s_17_9[6] = { 0xD9, 0x87, 0xD9, 0x85, 0xD8, 0xA7 };
-static const symbol s_17_10[4] = { 0xD9, 0x86, 0xD8, 0xA7 };
-static const symbol s_17_11[4] = { 0xD9, 0x87, 0xD8, 0xA7 };
-static const struct among a_17[12] = {
-{ 2, s_17_0, 0, 1, 0},
-{ 4, s_17_1, 0, 2, 0},
-{ 4, s_17_2, 0, 2, 0},
-{ 4, s_17_3, 0, 2, 0},
-{ 4, s_17_4, 0, 2, 0},
-{ 2, s_17_5, 0, 1, 0},
-{ 6, s_17_6, 0, 3, 0},
-{ 4, s_17_7, 0, 2, 0},
-{ 6, s_17_8, 0, 3, 0},
-{ 6, s_17_9, 0, 3, 0},
-{ 4, s_17_10, 0, 2, 0},
-{ 4, s_17_11, 0, 2, 0}
-};
-
-static const symbol s_18_0[2] = { 0xD9, 0x86 };
-static const symbol s_18_1[4] = { 0xD9, 0x88, 0xD9, 0x86 };
-static const symbol s_18_2[4] = { 0xD9, 0x8A, 0xD9, 0x86 };
-static const symbol s_18_3[4] = { 0xD8, 0xA7, 0xD9, 0x86 };
-static const symbol s_18_4[4] = { 0xD8, 0xAA, 0xD9, 0x86 };
-static const symbol s_18_5[2] = { 0xD9, 0x8A };
-static const symbol s_18_6[2] = { 0xD8, 0xA7 };
-static const symbol s_18_7[6] = { 0xD8, 0xAA, 0xD9, 0x85, 0xD8, 0xA7 };
-static const symbol s_18_8[4] = { 0xD9, 0x86, 0xD8, 0xA7 };
-static const symbol s_18_9[4] = { 0xD8, 0xAA, 0xD8, 0xA7 };
-static const symbol s_18_10[2] = { 0xD8, 0xAA };
-static const struct among a_18[11] = {
-{ 2, s_18_0, 0, 1, 0},
-{ 4, s_18_1, -1, 3, 0},
-{ 4, s_18_2, -2, 3, 0},
-{ 4, s_18_3, -3, 3, 0},
-{ 4, s_18_4, -4, 2, 0},
-{ 2, s_18_5, 0, 1, 0},
-{ 2, s_18_6, 0, 1, 0},
-{ 6, s_18_7, -1, 4, 0},
-{ 4, s_18_8, -2, 2, 0},
-{ 4, s_18_9, -3, 2, 0},
-{ 2, s_18_10, 0, 1, 0}
-};
-
-static const symbol s_19_0[4] = { 0xD8, 0xAA, 0xD9, 0x85 };
-static const symbol s_19_1[4] = { 0xD9, 0x88, 0xD8, 0xA7 };
-static const struct among a_19[2] = {
-{ 4, s_19_0, 0, 1, 0},
-{ 4, s_19_1, 0, 1, 0}
-};
-
-static const symbol s_20_0[2] = { 0xD9, 0x88 };
-static const symbol s_20_1[6] = { 0xD8, 0xAA, 0xD9, 0x85, 0xD9, 0x88 };
-static const struct among a_20[2] = {
-{ 2, s_20_0, 0, 1, 0},
-{ 6, s_20_1, -1, 2, 0}
-};
-
-static const symbol s_21_0[2] = { 0xD9, 0x89 };
-static const struct among a_21[1] = {
-{ 2, s_21_0, 0, 1, 0}
-};
-
-static const symbol s_0[] = { '0' };
-static const symbol s_1[] = { '1' };
-static const symbol s_2[] = { '2' };
-static const symbol s_3[] = { '3' };
-static const symbol s_4[] = { '4' };
-static const symbol s_5[] = { '5' };
-static const symbol s_6[] = { '6' };
-static const symbol s_7[] = { '7' };
-static const symbol s_8[] = { '8' };
-static const symbol s_9[] = { '9' };
-static const symbol s_10[] = { 0xD8, 0xA1 };
-static const symbol s_11[] = { 0xD8, 0xA3 };
-static const symbol s_12[] = { 0xD8, 0xA5 };
-static const symbol s_13[] = { 0xD8, 0xA6 };
-static const symbol s_14[] = { 0xD8, 0xA2 };
-static const symbol s_15[] = { 0xD8, 0xA4 };
-static const symbol s_16[] = { 0xD8, 0xA7 };
-static const symbol s_17[] = { 0xD8, 0xA8 };
-static const symbol s_18[] = { 0xD8, 0xA9 };
-static const symbol s_19[] = { 0xD8, 0xAA };
-static const symbol s_20[] = { 0xD8, 0xAB };
-static const symbol s_21[] = { 0xD8, 0xAC };
-static const symbol s_22[] = { 0xD8, 0xAD };
-static const symbol s_23[] = { 0xD8, 0xAE };
-static const symbol s_24[] = { 0xD8, 0xAF };
-static const symbol s_25[] = { 0xD8, 0xB0 };
-static const symbol s_26[] = { 0xD8, 0xB1 };
-static const symbol s_27[] = { 0xD8, 0xB2 };
-static const symbol s_28[] = { 0xD8, 0xB3 };
-static const symbol s_29[] = { 0xD8, 0xB4 };
-static const symbol s_30[] = { 0xD8, 0xB5 };
-static const symbol s_31[] = { 0xD8, 0xB6 };
-static const symbol s_32[] = { 0xD8, 0xB7 };
-static const symbol s_33[] = { 0xD8, 0xB8 };
-static const symbol s_34[] = { 0xD8, 0xB9 };
-static const symbol s_35[] = { 0xD8, 0xBA };
-static const symbol s_36[] = { 0xD9, 0x81 };
-static const symbol s_37[] = { 0xD9, 0x82 };
-static const symbol s_38[] = { 0xD9, 0x83 };
-static const symbol s_39[] = { 0xD9, 0x84 };
-static const symbol s_40[] = { 0xD9, 0x85 };
-static const symbol s_41[] = { 0xD9, 0x86 };
-static const symbol s_42[] = { 0xD9, 0x87 };
-static const symbol s_43[] = { 0xD9, 0x88 };
-static const symbol s_44[] = { 0xD9, 0x89 };
-static const symbol s_45[] = { 0xD9, 0x8A };
-static const symbol s_46[] = { 0xD9, 0x84, 0xD8, 0xA7 };
-static const symbol s_47[] = { 0xD9, 0x84, 0xD8, 0xA3 };
-static const symbol s_48[] = { 0xD9, 0x84, 0xD8, 0xA5 };
-static const symbol s_49[] = { 0xD9, 0x84, 0xD8, 0xA2 };
-static const symbol s_50[] = { 0xD8, 0xA1 };
-static const symbol s_51[] = { 0xD8, 0xA7 };
-static const symbol s_52[] = { 0xD9, 0x88 };
-static const symbol s_53[] = { 0xD9, 0x8A };
-static const symbol s_54[] = { 0xD8, 0xA3 };
-static const symbol s_55[] = { 0xD8, 0xA2 };
-static const symbol s_56[] = { 0xD8, 0xA7 };
-static const symbol s_57[] = { 0xD8, 0xA5 };
-static const symbol s_58[] = { 0xD8, 0xA7 };
-static const symbol s_59[] = { 0xD8, 0xA8 };
-static const symbol s_60[] = { 0xD9, 0x83 };
-static const symbol s_61[] = { 0xD9, 0x8A };
-static const symbol s_62[] = { 0xD8, 0xAA };
-static const symbol s_63[] = { 0xD9, 0x86 };
-static const symbol s_64[] = { 0xD8, 0xA3 };
-static const symbol s_65[] = { 0xD8, 0xA7, 0xD8, 0xB3, 0xD8, 0xAA };
-static const symbol s_66[] = { 0xD9, 0x8A };
 
 static int r_Normalize_pre(struct SN_env * z) {
     int among_var;
@@ -634,11 +613,11 @@ static int r_Normalize_pre(struct SN_env * z) {
         int v_1 = z->c;
         while (1) {
             int v_2 = z->c;
-            {
+            do {
                 int v_3 = z->c;
                 z->bra = z->c;
-                among_var = find_among(z, a_0, 144);
-                if (!among_var) goto lab3;
+                among_var = find_among(z, a_0, 144, 0);
+                if (!among_var) goto lab2;
                 z->ket = z->c;
                 switch (among_var) {
                     case 1:
@@ -948,16 +927,15 @@ static int r_Normalize_pre(struct SN_env * z) {
                         }
                         break;
                 }
-                goto lab2;
-            lab3:
+                break;
+            lab2:
                 z->c = v_3;
                 {
                     int ret = skip_utf8(z->p, z->c, z->l, 1);
                     if (ret < 0) goto lab1;
                     z->c = ret;
                 }
-            }
-        lab2:
+            } while (0);
             continue;
         lab1:
             z->c = v_2;
@@ -975,7 +953,7 @@ static int r_Normalize_post(struct SN_env * z) {
         z->lb = z->c; z->c = z->l;
         z->ket = z->c;
         if (z->c - 1 <= z->lb || z->p[z->c - 1] >> 5 != 5 || !((124 >> (z->p[z->c - 1] & 0x1f)) & 1)) goto lab0;
-        if (!find_among_b(z, a_1, 5)) goto lab0;
+        if (!find_among_b(z, a_1, 5, 0)) goto lab0;
         z->bra = z->c;
         {
             int ret = slice_from_s(z, 2, s_50);
@@ -989,12 +967,12 @@ static int r_Normalize_post(struct SN_env * z) {
         int v_2 = z->c;
         while (1) {
             int v_3 = z->c;
-            {
+            do {
                 int v_4 = z->c;
                 z->bra = z->c;
-                if (z->c + 1 >= z->l || z->p[z->c + 1] >> 5 != 5 || !((124 >> (z->p[z->c + 1] & 0x1f)) & 1)) goto lab4;
-                among_var = find_among(z, a_2, 5);
-                if (!among_var) goto lab4;
+                if (z->c + 1 >= z->l || z->p[z->c + 1] >> 5 != 5 || !((124 >> (z->p[z->c + 1] & 0x1f)) & 1)) goto lab3;
+                among_var = find_among(z, a_2, 5, 0);
+                if (!among_var) goto lab3;
                 z->ket = z->c;
                 switch (among_var) {
                     case 1:
@@ -1016,16 +994,15 @@ static int r_Normalize_post(struct SN_env * z) {
                         }
                         break;
                 }
-                goto lab3;
-            lab4:
+                break;
+            lab3:
                 z->c = v_4;
                 {
                     int ret = skip_utf8(z->p, z->c, z->l, 1);
                     if (ret < 0) goto lab2;
                     z->c = ret;
                 }
-            }
-        lab3:
+            } while (0);
             continue;
         lab2:
             z->c = v_3;
@@ -1040,21 +1017,21 @@ static int r_Checks1(struct SN_env * z) {
     int among_var;
     z->bra = z->c;
     if (z->c + 3 >= z->l || (z->p[z->c + 3] != 132 && z->p[z->c + 3] != 167)) return 0;
-    among_var = find_among(z, a_3, 4);
+    among_var = find_among(z, a_3, 4, 0);
     if (!among_var) return 0;
     z->ket = z->c;
     switch (among_var) {
         case 1:
             if (len_utf8(z->p) <= 4) return 0;
-            z->I[2] = 1;
-            z->I[1] = 0;
-            z->I[0] = 1;
+            ((SN_local *)z)->b_is_noun = 1;
+            ((SN_local *)z)->b_is_verb = 0;
+            ((SN_local *)z)->b_is_defined = 1;
             break;
         case 2:
             if (len_utf8(z->p) <= 3) return 0;
-            z->I[2] = 1;
-            z->I[1] = 0;
-            z->I[0] = 1;
+            ((SN_local *)z)->b_is_noun = 1;
+            ((SN_local *)z)->b_is_verb = 0;
+            ((SN_local *)z)->b_is_defined = 1;
             break;
     }
     return 1;
@@ -1064,7 +1041,7 @@ static int r_Prefix_Step1(struct SN_env * z) {
     int among_var;
     z->bra = z->c;
     if (z->c + 3 >= z->l || z->p[z->c + 3] >> 5 != 5 || !((188 >> (z->p[z->c + 3] & 0x1f)) & 1)) return 0;
-    among_var = find_among(z, a_4, 5);
+    among_var = find_among(z, a_4, 5, 0);
     if (!among_var) return 0;
     z->ket = z->c;
     switch (among_var) {
@@ -1103,16 +1080,12 @@ static int r_Prefix_Step1(struct SN_env * z) {
 static int r_Prefix_Step2(struct SN_env * z) {
     z->bra = z->c;
     if (z->c + 1 >= z->l || (z->p[z->c + 1] != 129 && z->p[z->c + 1] != 136)) return 0;
-    if (!find_among(z, a_5, 2)) return 0;
+    if (!find_among(z, a_5, 2, 0)) return 0;
     z->ket = z->c;
     if (len_utf8(z->p) <= 3) return 0;
-    {
-        int v_1 = z->c;
-        if (!(eq_s(z, 2, s_58))) goto lab0;
-        return 0;
-    lab0:
-        z->c = v_1;
-    }
+    if (!(eq_s(z, 2, s_58))) goto lab0;
+    return 0;
+lab0:
     {
         int ret = slice_del(z);
         if (ret < 0) return ret;
@@ -1124,7 +1097,7 @@ static int r_Prefix_Step3a_Noun(struct SN_env * z) {
     int among_var;
     z->bra = z->c;
     if (z->c + 3 >= z->l || (z->p[z->c + 3] != 132 && z->p[z->c + 3] != 167)) return 0;
-    among_var = find_among(z, a_6, 4);
+    among_var = find_among(z, a_6, 4, 0);
     if (!among_var) return 0;
     z->ket = z->c;
     switch (among_var) {
@@ -1150,7 +1123,7 @@ static int r_Prefix_Step3b_Noun(struct SN_env * z) {
     int among_var;
     z->bra = z->c;
     if (z->c + 1 >= z->l || (z->p[z->c + 1] != 168 && z->p[z->c + 1] != 131)) return 0;
-    among_var = find_among(z, a_7, 4);
+    among_var = find_among(z, a_7, 4, 0);
     if (!among_var) return 0;
     z->ket = z->c;
     switch (among_var) {
@@ -1182,7 +1155,7 @@ static int r_Prefix_Step3b_Noun(struct SN_env * z) {
 static int r_Prefix_Step3_Verb(struct SN_env * z) {
     int among_var;
     z->bra = z->c;
-    among_var = find_among(z, a_8, 4);
+    among_var = find_among(z, a_8, 4, 0);
     if (!among_var) return 0;
     z->ket = z->c;
     switch (among_var) {
@@ -1221,11 +1194,11 @@ static int r_Prefix_Step3_Verb(struct SN_env * z) {
 static int r_Prefix_Step4_Verb(struct SN_env * z) {
     z->bra = z->c;
     if (z->c + 5 >= z->l || z->p[z->c + 5] != 170) return 0;
-    if (!find_among(z, a_9, 3)) return 0;
+    if (!find_among(z, a_9, 3, 0)) return 0;
     z->ket = z->c;
     if (len_utf8(z->p) <= 4) return 0;
-    z->I[1] = 1;
-    z->I[2] = 0;
+    ((SN_local *)z)->b_is_verb = 1;
+    ((SN_local *)z)->b_is_noun = 0;
     {
         int ret = slice_from_s(z, 6, s_65);
         if (ret < 0) return ret;
@@ -1236,7 +1209,7 @@ static int r_Prefix_Step4_Verb(struct SN_env * z) {
 static int r_Suffix_Noun_Step1a(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
-    among_var = find_among_b(z, a_10, 10);
+    among_var = find_among_b(z, a_10, 10, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -1267,8 +1240,7 @@ static int r_Suffix_Noun_Step1a(struct SN_env * z) {
 
 static int r_Suffix_Noun_Step1b(struct SN_env * z) {
     z->ket = z->c;
-    if (z->c - 1 <= z->lb || z->p[z->c - 1] != 134) return 0;
-    if (!find_among_b(z, a_11, 1)) return 0;
+    if (!(eq_s_b(z, 2, s_66))) return 0;
     z->bra = z->c;
     if (len_utf8(z->p) <= 5) return 0;
     {
@@ -1280,7 +1252,7 @@ static int r_Suffix_Noun_Step1b(struct SN_env * z) {
 
 static int r_Suffix_Noun_Step2a(struct SN_env * z) {
     z->ket = z->c;
-    if (!find_among_b(z, a_12, 3)) return 0;
+    if (!find_among_b(z, a_11, 3, 0)) return 0;
     z->bra = z->c;
     if (len_utf8(z->p) <= 4) return 0;
     {
@@ -1292,8 +1264,7 @@ static int r_Suffix_Noun_Step2a(struct SN_env * z) {
 
 static int r_Suffix_Noun_Step2b(struct SN_env * z) {
     z->ket = z->c;
-    if (z->c - 3 <= z->lb || z->p[z->c - 1] != 170) return 0;
-    if (!find_among_b(z, a_13, 1)) return 0;
+    if (!(eq_s_b(z, 4, s_67))) return 0;
     z->bra = z->c;
     if (len_utf8(z->p) < 5) return 0;
     {
@@ -1305,8 +1276,7 @@ static int r_Suffix_Noun_Step2b(struct SN_env * z) {
 
 static int r_Suffix_Noun_Step2c1(struct SN_env * z) {
     z->ket = z->c;
-    if (z->c - 1 <= z->lb || z->p[z->c - 1] != 170) return 0;
-    if (!find_among_b(z, a_14, 1)) return 0;
+    if (!(eq_s_b(z, 2, s_68))) return 0;
     z->bra = z->c;
     if (len_utf8(z->p) < 4) return 0;
     {
@@ -1318,8 +1288,7 @@ static int r_Suffix_Noun_Step2c1(struct SN_env * z) {
 
 static int r_Suffix_Noun_Step2c2(struct SN_env * z) {
     z->ket = z->c;
-    if (z->c - 1 <= z->lb || z->p[z->c - 1] != 169) return 0;
-    if (!find_among_b(z, a_15, 1)) return 0;
+    if (!(eq_s_b(z, 2, s_69))) return 0;
     z->bra = z->c;
     if (len_utf8(z->p) < 4) return 0;
     {
@@ -1331,8 +1300,7 @@ static int r_Suffix_Noun_Step2c2(struct SN_env * z) {
 
 static int r_Suffix_Noun_Step3(struct SN_env * z) {
     z->ket = z->c;
-    if (z->c - 1 <= z->lb || z->p[z->c - 1] != 138) return 0;
-    if (!find_among_b(z, a_16, 1)) return 0;
+    if (!(eq_s_b(z, 2, s_70))) return 0;
     z->bra = z->c;
     if (len_utf8(z->p) < 3) return 0;
     {
@@ -1345,7 +1313,7 @@ static int r_Suffix_Noun_Step3(struct SN_env * z) {
 static int r_Suffix_Verb_Step1(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
-    among_var = find_among_b(z, a_17, 12);
+    among_var = find_among_b(z, a_12, 12, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -1377,7 +1345,7 @@ static int r_Suffix_Verb_Step1(struct SN_env * z) {
 static int r_Suffix_Verb_Step2a(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
-    among_var = find_among_b(z, a_18, 11);
+    among_var = find_among_b(z, a_13, 11, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -1416,7 +1384,7 @@ static int r_Suffix_Verb_Step2a(struct SN_env * z) {
 static int r_Suffix_Verb_Step2b(struct SN_env * z) {
     z->ket = z->c;
     if (z->c - 3 <= z->lb || (z->p[z->c - 1] != 133 && z->p[z->c - 1] != 167)) return 0;
-    if (!find_among_b(z, a_19, 2)) return 0;
+    if (!find_among_b(z, a_14, 2, 0)) return 0;
     z->bra = z->c;
     if (len_utf8(z->p) < 5) return 0;
     {
@@ -1430,7 +1398,7 @@ static int r_Suffix_Verb_Step2c(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c - 1 <= z->lb || z->p[z->c - 1] != 136) return 0;
-    among_var = find_among_b(z, a_20, 2);
+    among_var = find_among_b(z, a_15, 2, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -1454,20 +1422,19 @@ static int r_Suffix_Verb_Step2c(struct SN_env * z) {
 
 static int r_Suffix_All_alef_maqsura(struct SN_env * z) {
     z->ket = z->c;
-    if (z->c - 1 <= z->lb || z->p[z->c - 1] != 137) return 0;
-    if (!find_among_b(z, a_21, 1)) return 0;
+    if (!(eq_s_b(z, 2, s_71))) return 0;
     z->bra = z->c;
     {
-        int ret = slice_from_s(z, 2, s_66);
+        int ret = slice_from_s(z, 2, s_72);
         if (ret < 0) return ret;
     }
     return 1;
 }
 
 extern int arabic_UTF_8_stem(struct SN_env * z) {
-    z->I[2] = 1;
-    z->I[1] = 1;
-    z->I[0] = 0;
+    ((SN_local *)z)->b_is_noun = 1;
+    ((SN_local *)z)->b_is_verb = 1;
+    ((SN_local *)z)->b_is_defined = 0;
     {
         int v_1 = z->c;
         {
@@ -1483,10 +1450,10 @@ extern int arabic_UTF_8_stem(struct SN_env * z) {
     z->lb = z->c; z->c = z->l;
     {
         int v_2 = z->l - z->c;
-        {
+        do {
             int v_3 = z->l - z->c;
-            if (!(z->I[1])) goto lab2;
-            {
+            if (!((SN_local *)z)->b_is_verb) goto lab1;
+            do {
                 int v_4 = z->l - z->c;
                 {
                     int v_5 = 1;
@@ -1494,189 +1461,179 @@ extern int arabic_UTF_8_stem(struct SN_env * z) {
                         int v_6 = z->l - z->c;
                         {
                             int ret = r_Suffix_Verb_Step1(z);
-                            if (ret == 0) goto lab5;
+                            if (ret == 0) goto lab3;
                             if (ret < 0) return ret;
                         }
                         v_5--;
                         continue;
-                    lab5:
+                    lab3:
                         z->c = z->l - v_6;
                         break;
                     }
-                    if (v_5 > 0) goto lab4;
+                    if (v_5 > 0) goto lab2;
                 }
-                {
+                do {
                     int v_7 = z->l - z->c;
                     {
                         int ret = r_Suffix_Verb_Step2a(z);
-                        if (ret == 0) goto lab7;
+                        if (ret == 0) goto lab4;
                         if (ret < 0) return ret;
                     }
-                    goto lab6;
-                lab7:
+                    break;
+                lab4:
                     z->c = z->l - v_7;
                     {
                         int ret = r_Suffix_Verb_Step2c(z);
-                        if (ret == 0) goto lab8;
+                        if (ret == 0) goto lab5;
                         if (ret < 0) return ret;
                     }
-                    goto lab6;
-                lab8:
+                    break;
+                lab5:
                     z->c = z->l - v_7;
                     {
                         int ret = skip_b_utf8(z->p, z->c, z->lb, 1);
-                        if (ret < 0) goto lab4;
+                        if (ret < 0) goto lab2;
                         z->c = ret;
                     }
-                }
-            lab6:
-                goto lab3;
-            lab4:
+                } while (0);
+                break;
+            lab2:
                 z->c = z->l - v_4;
                 {
                     int ret = r_Suffix_Verb_Step2b(z);
-                    if (ret == 0) goto lab9;
+                    if (ret == 0) goto lab6;
                     if (ret < 0) return ret;
                 }
-                goto lab3;
-            lab9:
+                break;
+            lab6:
                 z->c = z->l - v_4;
                 {
                     int ret = r_Suffix_Verb_Step2a(z);
-                    if (ret == 0) goto lab2;
+                    if (ret == 0) goto lab1;
                     if (ret < 0) return ret;
                 }
-            }
-        lab3:
-            goto lab1;
-        lab2:
+            } while (0);
+            break;
+        lab1:
             z->c = z->l - v_3;
-            if (!(z->I[2])) goto lab10;
+            if (!((SN_local *)z)->b_is_noun) goto lab7;
             {
                 int v_8 = z->l - z->c;
-                {
+                do {
                     int v_9 = z->l - z->c;
                     {
                         int ret = r_Suffix_Noun_Step2c2(z);
-                        if (ret == 0) goto lab13;
+                        if (ret == 0) goto lab9;
                         if (ret < 0) return ret;
                     }
-                    goto lab12;
-                lab13:
+                    break;
+                lab9:
                     z->c = z->l - v_9;
-                    if (!(z->I[0])) goto lab15;
-                    goto lab14;
-                lab15:
+                    if (((SN_local *)z)->b_is_defined) goto lab10;
                     {
                         int ret = r_Suffix_Noun_Step1a(z);
-                        if (ret == 0) goto lab14;
+                        if (ret == 0) goto lab10;
                         if (ret < 0) return ret;
                     }
-                    {
+                    do {
                         int v_10 = z->l - z->c;
                         {
                             int ret = r_Suffix_Noun_Step2a(z);
-                            if (ret == 0) goto lab17;
+                            if (ret == 0) goto lab11;
                             if (ret < 0) return ret;
                         }
-                        goto lab16;
-                    lab17:
+                        break;
+                    lab11:
                         z->c = z->l - v_10;
                         {
                             int ret = r_Suffix_Noun_Step2b(z);
-                            if (ret == 0) goto lab18;
+                            if (ret == 0) goto lab12;
                             if (ret < 0) return ret;
                         }
-                        goto lab16;
-                    lab18:
+                        break;
+                    lab12:
                         z->c = z->l - v_10;
                         {
                             int ret = r_Suffix_Noun_Step2c1(z);
-                            if (ret == 0) goto lab19;
+                            if (ret == 0) goto lab13;
                             if (ret < 0) return ret;
                         }
-                        goto lab16;
-                    lab19:
+                        break;
+                    lab13:
                         z->c = z->l - v_10;
                         {
                             int ret = skip_b_utf8(z->p, z->c, z->lb, 1);
-                            if (ret < 0) goto lab14;
+                            if (ret < 0) goto lab10;
                             z->c = ret;
                         }
-                    }
-                lab16:
-                    goto lab12;
-                lab14:
+                    } while (0);
+                    break;
+                lab10:
                     z->c = z->l - v_9;
                     {
                         int ret = r_Suffix_Noun_Step1b(z);
-                        if (ret == 0) goto lab20;
+                        if (ret == 0) goto lab14;
                         if (ret < 0) return ret;
                     }
-                    {
+                    do {
                         int v_11 = z->l - z->c;
                         {
                             int ret = r_Suffix_Noun_Step2a(z);
-                            if (ret == 0) goto lab22;
+                            if (ret == 0) goto lab15;
                             if (ret < 0) return ret;
                         }
-                        goto lab21;
-                    lab22:
+                        break;
+                    lab15:
                         z->c = z->l - v_11;
                         {
                             int ret = r_Suffix_Noun_Step2b(z);
-                            if (ret == 0) goto lab23;
+                            if (ret == 0) goto lab16;
                             if (ret < 0) return ret;
                         }
-                        goto lab21;
-                    lab23:
+                        break;
+                    lab16:
                         z->c = z->l - v_11;
                         {
                             int ret = r_Suffix_Noun_Step2c1(z);
-                            if (ret == 0) goto lab20;
+                            if (ret == 0) goto lab14;
                             if (ret < 0) return ret;
                         }
-                    }
-                lab21:
-                    goto lab12;
-                lab20:
+                    } while (0);
+                    break;
+                lab14:
                     z->c = z->l - v_9;
-                    if (!(z->I[0])) goto lab25;
-                    goto lab24;
-                lab25:
+                    if (((SN_local *)z)->b_is_defined) goto lab17;
                     {
                         int ret = r_Suffix_Noun_Step2a(z);
-                        if (ret == 0) goto lab24;
+                        if (ret == 0) goto lab17;
                         if (ret < 0) return ret;
                     }
-                    goto lab12;
-                lab24:
+                    break;
+                lab17:
                     z->c = z->l - v_9;
                     {
                         int ret = r_Suffix_Noun_Step2b(z);
-                        if (ret == 0) { z->c = z->l - v_8; goto lab11; }
+                        if (ret == 0) { z->c = z->l - v_8; goto lab8; }
                         if (ret < 0) return ret;
                     }
-                }
-            lab12:
-            lab11:
+                } while (0);
+            lab8:
                 ;
             }
             {
                 int ret = r_Suffix_Noun_Step3(z);
-                if (ret == 0) goto lab10;
+                if (ret == 0) goto lab7;
                 if (ret < 0) return ret;
             }
-            goto lab1;
-        lab10:
+            break;
+        lab7:
             z->c = z->l - v_3;
             {
                 int ret = r_Suffix_All_alef_maqsura(z);
                 if (ret == 0) goto lab0;
                 if (ret < 0) return ret;
             }
-        }
-    lab1:
+        } while (0);
     lab0:
         z->c = z->l - v_2;
     }
@@ -1687,60 +1644,59 @@ extern int arabic_UTF_8_stem(struct SN_env * z) {
             int v_13 = z->c;
             {
                 int ret = r_Prefix_Step1(z);
-                if (ret == 0) { z->c = v_13; goto lab27; }
+                if (ret == 0) { z->c = v_13; goto lab19; }
                 if (ret < 0) return ret;
             }
-        lab27:
+        lab19:
             ;
         }
         {
             int v_14 = z->c;
             {
                 int ret = r_Prefix_Step2(z);
-                if (ret == 0) { z->c = v_14; goto lab28; }
+                if (ret == 0) { z->c = v_14; goto lab20; }
                 if (ret < 0) return ret;
             }
-        lab28:
+        lab20:
             ;
         }
-        {
+        do {
             int v_15 = z->c;
             {
                 int ret = r_Prefix_Step3a_Noun(z);
-                if (ret == 0) goto lab30;
+                if (ret == 0) goto lab21;
                 if (ret < 0) return ret;
             }
-            goto lab29;
-        lab30:
+            break;
+        lab21:
             z->c = v_15;
-            if (!(z->I[2])) goto lab31;
+            if (!((SN_local *)z)->b_is_noun) goto lab22;
             {
                 int ret = r_Prefix_Step3b_Noun(z);
-                if (ret == 0) goto lab31;
+                if (ret == 0) goto lab22;
                 if (ret < 0) return ret;
             }
-            goto lab29;
-        lab31:
+            break;
+        lab22:
             z->c = v_15;
-            if (!(z->I[1])) goto lab26;
+            if (!((SN_local *)z)->b_is_verb) goto lab18;
             {
                 int v_16 = z->c;
                 {
                     int ret = r_Prefix_Step3_Verb(z);
-                    if (ret == 0) { z->c = v_16; goto lab32; }
+                    if (ret == 0) { z->c = v_16; goto lab23; }
                     if (ret < 0) return ret;
                 }
-            lab32:
+            lab23:
                 ;
             }
             {
                 int ret = r_Prefix_Step4_Verb(z);
-                if (ret == 0) goto lab26;
+                if (ret == 0) goto lab18;
                 if (ret < 0) return ret;
             }
-        }
-    lab29:
-    lab26:
+        } while (0);
+    lab18:
         z->c = v_12;
     }
     {
@@ -1750,7 +1706,17 @@ extern int arabic_UTF_8_stem(struct SN_env * z) {
     return 1;
 }
 
-extern struct SN_env * arabic_UTF_8_create_env(void) { return SN_create_env(0, 3); }
+extern struct SN_env * arabic_UTF_8_create_env(void) {
+    struct SN_env * z = SN_new_env(sizeof(SN_local));
+    if (z) {
+        ((SN_local *)z)->b_is_defined = 0;
+        ((SN_local *)z)->b_is_verb = 0;
+        ((SN_local *)z)->b_is_noun = 0;
+    }
+    return z;
+}
 
-extern void arabic_UTF_8_close_env(struct SN_env * z) { SN_close_env(z, 0); }
+extern void arabic_UTF_8_close_env(struct SN_env * z) {
+    SN_delete_env(z);
+}
 

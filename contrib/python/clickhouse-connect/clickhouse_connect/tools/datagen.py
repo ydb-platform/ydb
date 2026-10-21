@@ -1,20 +1,19 @@
 import struct
 import uuid
+from collections.abc import Callable, Sequence
+from datetime import date, datetime, timedelta, timezone, tzinfo
 from decimal import Decimal as PyDecimal
 from ipaddress import IPv4Address, IPv6Address
-from random import random, choice
-from typing import Sequence, Union, NamedTuple, Callable, Type, Dict
-from datetime import date, datetime, timedelta, tzinfo
-
-import pytz
+from random import choice, random
+from typing import NamedTuple
 
 from clickhouse_connect.datatypes.base import ClickHouseType
-from clickhouse_connect.datatypes.container import Array, Tuple, Map, Nested
+from clickhouse_connect.datatypes.container import Array, Map, Nested, Tuple
 from clickhouse_connect.datatypes.network import IPv4, IPv6
-from clickhouse_connect.datatypes.numeric import BigInt, Float32, Float64, Enum, Bool, Boolean, Decimal
+from clickhouse_connect.datatypes.numeric import BigInt, Bool, Boolean, Decimal, Enum, Float32, Float64
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.datatypes.special import UUID
-from clickhouse_connect.datatypes.string import String, FixedString
+from clickhouse_connect.datatypes.string import FixedString, String
 from clickhouse_connect.datatypes.temporal import Date, Date32, DateTime, DateTime64
 from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.common import array_sizes
@@ -29,14 +28,15 @@ class RandomValueDef(NamedTuple):
     """
     Parameter object to control the generation of random data values for testing
     """
-    server_tz: tzinfo = pytz.UTC
+
+    server_tz: tzinfo = timezone.utc
     null_pct: float = 0.15
     str_len: int = 200
     arr_len: int = 12
     ascii_only: bool = False
 
 
-def random_col_data(ch_type: Union[str, ClickHouseType], cnt: int, col_def: RandomValueDef = RandomValueDef()):
+def random_col_data(ch_type: str | ClickHouseType, cnt: int, col_def: RandomValueDef = RandomValueDef()):  # noqa: B008
     """
     Generate a column of random data for insert tests
     :param ch_type: ClickHouseType or ClickHouse type name
@@ -53,7 +53,6 @@ def random_col_data(ch_type: Union[str, ClickHouseType], cnt: int, col_def: Rand
     return tuple(gen() for _ in range(cnt))
 
 
-# pylint: disable=too-many-return-statements,too-many-branches,protected-access
 def random_value_gen(ch_type: ClickHouseType, col_def: RandomValueDef):
     """
     Returns a generator function of random values of the requested ClickHouseType
@@ -63,7 +62,7 @@ def random_value_gen(ch_type: ClickHouseType, col_def: RandomValueDef):
     """
     if ch_type.__class__ in gen_map:
         return gen_map[ch_type.__class__]
-    if isinstance(ch_type, BigInt) or ch_type.python_type == int:
+    if isinstance(ch_type, BigInt) or ch_type.python_type is int:
         if isinstance(ch_type, BigInt):
             sz = 2 ** (ch_type.byte_size * 8)
             signed = ch_type._signed
@@ -92,19 +91,19 @@ def random_value_gen(ch_type: ClickHouseType, col_def: RandomValueDef):
             return lambda: random_ascii_str(col_def.str_len)
         return lambda: random_utf8_str(col_def.str_len)
     if isinstance(ch_type, FixedString):
-        return lambda: bytes((int(random() * 256) for _ in range(ch_type.byte_size)))
+        return lambda: bytes(int(random() * 256) for _ in range(ch_type.byte_size))
     if isinstance(ch_type, DateTime):
-        if col_def.server_tz == pytz.UTC:
+        if tzutil.is_utc_timezone(col_def.server_tz):
             return random_datetime
-        timezone = col_def.server_tz
-        return lambda: random_datetime_tz(timezone)
+        tz = col_def.server_tz
+        return lambda: random_datetime_tz(tz)
     if isinstance(ch_type, DateTime64):
         prec = ch_type.prec
-        if col_def.server_tz == pytz.UTC:
+        if tzutil.is_utc_timezone(col_def.server_tz):
             return lambda: random_datetime64(prec)
-        timezone = col_def.server_tz
-        return lambda: random_datetime64_tz(prec, timezone)
-    raise ValueError(f'Invalid ClickHouse type {ch_type.name} for random column data')
+        tz = col_def.server_tz
+        return lambda: random_datetime64_tz(prec, tz)
+    raise ValueError(f"Invalid ClickHouse type {ch_type.name} for random column data")
 
 
 def random_float():
@@ -113,15 +112,15 @@ def random_float():
 
 def random_float32():
     f64 = (random() * random() * 65536) / (random() * (random() * 256 - 128))
-    return struct.unpack('f', struct.pack('f', f64))[0]
+    return struct.unpack("f", struct.pack("f", f64))[0]
 
 
 def random_decimal(prec: int, scale: int):
-    digits = ''.join(str(int(random() * 12000000000)) for _ in range(prec // 10 + 1)).rjust(prec, '0')[:prec]
-    sign = '' if ord(digits[0]) & 0x01 else '-'
+    digits = "".join(str(int(random() * 12000000000)) for _ in range(prec // 10 + 1)).rjust(prec, "0")[:prec]
+    sign = "" if ord(digits[0]) & 0x01 else "-"
     if scale == 0:
-        return PyDecimal(f'{sign}{digits}')
-    return PyDecimal(f'{sign}{digits[:-scale]}.{digits[-scale:]}')
+        return PyDecimal(f"{sign}{digits}")
+    return PyDecimal(f"{sign}{digits[:-scale]}.{digits[-scale:]}")
 
 
 def random_tuple(element_types: Sequence[ClickHouseType], col_def):
@@ -135,24 +134,24 @@ def random_map(key_type, value_type, sz: int, col_def):
 
 
 def random_datetime():
-    return dt_from_ts(int(random() * 2 ** 32)).replace(microsecond=0)
+    return dt_from_ts(int(random() * 2**32)).replace(microsecond=0)
 
 
 def random_datetime_tz(timezone: tzinfo):
-    return dt_from_ts_tz(int(random() * 2 ** 32), timezone).replace(microsecond=0)
+    return dt_from_ts_tz(int(random() * 2**32), timezone).replace(microsecond=0)
 
 
 def random_ascii_str(max_len: int = 200, min_len: int = 0):
-    return ''.join((chr(int(random() * 95) + 32) for _ in range(int(random() * (max_len - min_len)) + min_len)))
+    return "".join(chr(int(random() * 95) + 32) for _ in range(int(random() * (max_len - min_len)) + min_len))
 
 
 def random_utf8_str(max_len: int = 200):
     random_chars = [chr(int(random() * 65000) + 32) for _ in range(int(random() * max_len))]
-    return ''.join((c for c in random_chars if c.isprintable()))
+    return "".join(c for c in random_chars if c.isprintable())
 
 
 def fixed_len_ascii_str(str_len: int = 200):
-    return ''.join((chr(int(random() * 95) + 32) for _ in range(str_len)))
+    return "".join(chr(int(random() * 95) + 32) for _ in range(str_len))
 
 
 #   Only accepts precisions in multiples of 3 because others are extremely unlikely to be actually used
@@ -179,11 +178,15 @@ def random_datetime64_tz(prec: int, timezone: tzinfo):
 def random_ipv6():
     if random() > 0.2:
         # multiple randoms because of random float multiply limitations
-        ip_int = (int(random() * 4294967296) << 96) | (int(random() * 4294967296)) | (
-                    int(random() * 4294967296) << 32) | ( int(random() * 4294967296) << 64)
+        ip_int = (
+            (int(random() * 4294967296) << 96)
+            | (int(random() * 4294967296))
+            | (int(random() * 4294967296) << 32)
+            | (int(random() * 4294967296) << 64)
+        )
         return IPv6Address(ip_int)
     # Return mapped IPv4 as IPv6
-    ipv4_int = int(random() * 2 ** 32)
+    ipv4_int = int(random() * 2**32)
     return IPv6Address(f"::ffff:{IPv4Address(ipv4_int)}")
 
 
@@ -198,7 +201,7 @@ def random_nested(keys: Sequence[str], types: Sequence[ClickHouseType], col_def:
     return row
 
 
-gen_map: Dict[Type[ClickHouseType], Callable] = {
+gen_map: dict[type[ClickHouseType], Callable] = {
     Float64: random_float,
     Float32: random_float32,
     Date: lambda: epoch_date + timedelta(days=int(random() * 65536)),
@@ -206,6 +209,6 @@ gen_map: Dict[Type[ClickHouseType], Callable] = {
     UUID: uuid.uuid4,
     IPv4: lambda: IPv4Address(int(random() * 4294967296)),
     IPv6: random_ipv6,
-    Boolean: lambda: random() > .5,
-    Bool: lambda: random() > .5
+    Boolean: lambda: random() > 0.5,
+    Bool: lambda: random() > 0.5,
 }

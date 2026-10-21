@@ -1,7 +1,6 @@
 #include "mkql_builtins_impl.h" // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -26,5 +25,4 @@ void RegisterBitOr(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryUnsignedFunctionOpt<TBitOr, TBinaryArgsOpt>(registry, "BitOr");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

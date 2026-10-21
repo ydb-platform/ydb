@@ -24,6 +24,7 @@ enum EReplyStatus {
     RESTART = 19;
     NOT_YET = 20;
     NO_GROUP = 21;
+    NOT_FOUND = 22;
     UNKNOWN = 255;
 };
 

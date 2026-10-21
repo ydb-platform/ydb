@@ -1,4 +1,10 @@
 ====================BSL-1.0====================
+ * Distributed under the Boost Software License, Version 1.0.
+ * (See accompanying file LICENSE_1_0.txt or copy at
+ * http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
 ### License
 
 Distributed under the [Boost Software License, Version 1.0](http://www.boost.org/LICENSE_1_0.txt).
@@ -111,6 +117,12 @@ Distributed under the [Boost Software License, Version 1.0](http://www.boost.org
 
 
 ====================BSL-1.0====================
+// (C) Copyright Ion Gaztanaga 2024-2024. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
 // (C) Copyright Ion Gaztanaga 2025-2025. Distributed under the Boost
 // Software License, Version 1.0. (See accompanying file
 // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -212,6 +224,12 @@ DEALINGS IN THE SOFTWARE.
 ====================CC0-1.0====================
   Doug Lea and released to the public domain, as explained at
   http://creativecommons.org/publicdomain/zero/1.0/ Send questions,
+
+
+====================COPYRIGHT====================
+ * Copyright 2025-2026 Joaquin M Lopez Munoz.
+ * Distributed under the Boost Software License, Version 1.0.
+ * (See accompanying file LICENSE_1_0.txt or copy at
 
 
 ====================COPYRIGHT====================
@@ -334,6 +352,12 @@ DEALINGS IN THE SOFTWARE.
 
 
 ====================COPYRIGHT====================
+// (C) Copyright Ion Gaztanaga 2024-2024. Distributed under the Boost
+// Software License, Version 1.0. (See accompanying file
+// LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
 // (C) Copyright Ion Gaztanaga 2025-2025. Distributed under the Boost
 // Software License, Version 1.0. (See accompanying file
 // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -352,14 +376,10 @@ DEALINGS IN THE SOFTWARE.
 
 
 ====================COPYRIGHT====================
+// (C) Copyright Joaquin M Lopez Munoz 2025-2026.
 // (C) Copyright Ion Gaztanaga 2026. Distributed under the Boost
 // Software License, Version 1.0. (See accompanying file
 // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
-
-
-====================COPYRIGHT====================
-// (C) Copyright Joaquin M Lopez Munoz 2025-2026.
-// (C) Copyright Ion Gaztanaga 2025-2026.
 
 
 ====================COPYRIGHT====================

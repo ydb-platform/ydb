@@ -264,7 +264,7 @@ class Path(pathlib.PurePath):
         full_match = _wrap_method(pathlib.Path.full_match)
 
     def as_uri(self) -> str:
-        return pathlib.Path.as_uri(self)
+        return self._wrapped_cls(self).as_uri()
 
 
 if Path.relative_to.__doc__:  # pragma: no branch

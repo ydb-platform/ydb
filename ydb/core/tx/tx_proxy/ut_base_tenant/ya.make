@@ -12,6 +12,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
+    library/cpp/retry
     library/cpp/svnversion
     library/cpp/testing/unittest
     ydb/core/testlib/default

@@ -1,0 +1,10 @@
+$tupleVariantType = Variant<Int32?, Int32?, Int32?>;
+
+$data = [
+    <|payload: Just(10), index: Just(0u)|>,
+    <|payload: Nothing(Int32?), index: Just(1u)|>,
+    <|payload: Just(30), index: Just(99u)|>,
+    <|payload: Just(40), index: Nothing(Uint32?)|>,
+];
+
+SELECT DynamicVariant(payload, index, $tupleVariantType) AS variant FROM as_table($data);

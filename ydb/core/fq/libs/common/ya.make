@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(util.h)
 
@@ -12,17 +12,16 @@ SRCS(
     rows_proto_splitter.cpp
     rows_proto_splitter.h
     util.cpp
+    util.h
 )
 
 PEERDIR(
     ydb/core/fq/libs/control_plane_storage/events
     ydb/core/fq/libs/events
+    ydb/public/api/protos
     yql/essentials/providers/common/structured_token
     yql/essentials/public/issue
-    ydb/public/api/protos
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

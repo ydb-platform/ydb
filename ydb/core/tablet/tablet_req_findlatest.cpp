@@ -1,15 +1,9 @@
 #include "tablet_impl.h"
+#include <ydb/core/base/blobstorage_data_kind.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
-#error log macro definition clash
-#endif
-
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, stream)
-#define BLOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, stream)
-#define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_MAIN
 
 namespace NKikimr {
 
@@ -19,6 +13,7 @@ class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLat
     const ui32 BlockedGeneration;
     const bool Leader;
     TIntrusivePtr<TTabletStorageInfo> Info;
+    const NKikimrBlobStorage::TDataKind::E DataKind;
     const TTabletChannelInfo *ChannelInfo;
     ui64 CurrentHistoryIndex;
 
@@ -35,6 +30,10 @@ class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLat
         const ui32 group = ChannelInfo->History[CurrentHistoryIndex].GroupID;
         const ui32 minGeneration = ChannelInfo->History[CurrentHistoryIndex].FromGeneration;
         auto request = MakeHolder<TEvBlobStorage::TEvDiscover>(Info->TabletID, minGeneration, ReadBody, true, TInstant::Max(), BlockedGeneration, Leader);
+        // With ReadBody set this discover reads the entry back with MustRestoreFirst, which makes
+        // BlobStorage rewrite the parts it is missing; the tablet cannot boot if that write is
+        // rejected, so it is admitted as whatever the tablet itself writes.
+        request->DataKind = DataKind;
         SendToBSProxy(SelfId(), group, request.Release());
     }
 
@@ -61,7 +60,8 @@ class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLat
         case NKikimrProto::TIMEOUT:
         case NKikimrProto::NO_GROUP:
         case NKikimrProto::BLOCKED:
-            BLOG_ERROR("Handle::TEvDiscoverResult, result status " << NKikimrProto::EReplyStatus_Name(msg->Status));
+            YDB_LOG_ERROR("TTabletReqFindLatestLogEntry::HandleDiscoverResult: discover failed",
+                {"status", NKikimrProto::EReplyStatus_Name(msg->Status)});
             return ReplyAndDie(msg->Status, msg->ErrorReason);
         default:
             Y_ABORT_UNLESS(false, "default case status %s", NKikimrProto::EReplyStatus_Name(msg->Status).c_str());
@@ -80,6 +80,7 @@ public:
         , BlockedGeneration(blockedGeneration)
         , Leader(leader)
         , Info(info)
+        , DataKind(DataKindByTabletType(info->TabletType))
         , ChannelInfo(Info->ChannelInfo(0))
         , CurrentHistoryIndex(ChannelInfo->History.size())
     {

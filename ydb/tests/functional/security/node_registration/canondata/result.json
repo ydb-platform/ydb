@@ -1,0 +1,500 @@
+{
+    "test_node_authentication.test_get_node_config[body-certificate-and-token-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-certificate-and-token-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-certificate-and-token-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-certificate-and-token-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-certificate-only-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-certificate-only-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-certificate-only-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-certificate-only-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-denied-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-denied-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-denied-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-denied-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-denied-token-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-denied-token-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-denied-token-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-denied-token-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-denied-token-over-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-denied-token-over-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-denied-token-over-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-denied-token-over-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-invalid-token-over-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-invalid-token-over-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-invalid-token-over-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-invalid-token-over-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-no-credentials-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-no-credentials-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-no-credentials-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-no-credentials-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-token-only-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-token-only-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-token-only-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-token-only-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-token-over-denied-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-token-over-denied-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-token-over-denied-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-token-over-denied-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-token-over-unrecognized-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-token-over-unrecognized-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[body-token-over-unrecognized-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_body-token-over-unrecognized-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-certificate-and-token-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-certificate-and-token-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-certificate-and-token-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-certificate-and-token-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-certificate-only-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-certificate-only-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-certificate-only-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-certificate-only-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-denied-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-denied-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-denied-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-denied-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-denied-token-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-denied-token-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-denied-token-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-denied-token-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-denied-token-over-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-denied-token-over-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-denied-token-over-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-denied-token-over-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-invalid-token-over-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-invalid-token-over-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-invalid-token-over-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-invalid-token-over-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-no-credentials-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-no-credentials-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-no-credentials-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-no-credentials-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-token-only-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-token-only-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-token-only-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-token-only-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-token-over-denied-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-token-over-denied-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-token-over-denied-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-token-over-denied-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-token-over-unrecognized-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-token-over-unrecognized-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_get_node_config[metadata-token-over-unrecognized-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_get_node_config_metadata-token-over-unrecognized-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-certificate-and-token-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-certificate-and-token-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-certificate-and-token-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-certificate-and-token-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-certificate-only-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-certificate-only-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-certificate-only-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-certificate-only-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-denied-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-denied-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-denied-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-denied-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-denied-token-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-denied-token-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-denied-token-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-denied-token-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-denied-token-over-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-denied-token-over-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-denied-token-over-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-denied-token-over-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-invalid-token-over-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-invalid-token-over-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-invalid-token-over-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-invalid-token-over-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-no-credentials-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-no-credentials-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-no-credentials-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-no-credentials-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-token-only-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-token-only-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-token-only-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-token-only-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-token-over-denied-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-token-over-denied-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-token-over-denied-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-token-over-denied-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-token-over-unrecognized-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-token-over-unrecognized-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[discovery-token-over-unrecognized-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_discovery-token-over-unrecognized-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-certificate-and-token-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-certificate-and-token-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-certificate-and-token-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-certificate-and-token-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-certificate-only-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-certificate-only-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-certificate-only-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-certificate-only-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-denied-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-denied-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-denied-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-denied-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-denied-token-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-denied-token-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-denied-token-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-denied-token-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-denied-token-over-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-denied-token-over-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-denied-token-over-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-denied-token-over-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-invalid-token-over-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-invalid-token-over-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-invalid-token-over-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-invalid-token-over-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-no-credentials-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-no-credentials-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-no-credentials-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-no-credentials-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-token-only-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-token-only-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-token-only-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-token-only-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-token-over-denied-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-token-over-denied-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-token-over-denied-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-token-over-denied-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-token-over-unrecognized-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-token-over-unrecognized-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-body-token-over-unrecognized-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-body-token-over-unrecognized-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-certificate-and-token-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-certificate-and-token-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-certificate-and-token-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-certificate-and-token-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-certificate-only-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-certificate-only-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-certificate-only-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-certificate-only-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-denied-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-denied-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-denied-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-denied-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-denied-token-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-denied-token-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-denied-token-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-denied-token-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-denied-token-over-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-denied-token-over-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-denied-token-over-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-denied-token-over-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-invalid-token-over-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-invalid-token-over-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-invalid-token-over-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-invalid-token-over-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-no-credentials-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-no-credentials-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-no-credentials-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-no-credentials-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-token-only-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-token-only-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-token-only-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-token-only-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-token-over-denied-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-token-over-denied-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-token-over-denied-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-token-over-denied-certificate-grpcs_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-token-over-unrecognized-certificate-grpc]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-token-over-unrecognized-certificate-grpc_/result.log"
+    },
+    "test_node_authentication.test_node_registration[legacy-token-in-metadata-token-over-unrecognized-certificate-grpcs]": {
+        "uri": "file://test_node_authentication.test_node_registration_legacy-token-in-metadata-token-over-unrecognized-certificate-grpcs_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[auth-token-file-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_auth-token-file-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[auth-token-file-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_auth-token-file-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[auth-token-file-without-static-config-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_auth-token-file-without-static-config-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[auth-token-file-without-static-config-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_auth-token-file-without-static-config-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[bootstrap-custom-token-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_bootstrap-custom-token-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[bootstrap-custom-token-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_bootstrap-custom-token-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[bootstrap-empty-token-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_bootstrap-empty-token-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[bootstrap-empty-token-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_bootstrap-empty-token-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[config-directory-empty-auth-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_config-directory-empty-auth-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[config-directory-empty-auth-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_config-directory-empty-auth-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[config-directory-token-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_config-directory-token-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[config-directory-token-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_config-directory-token-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[config-directory-without-auth-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_config-directory-without-auth-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[config-directory-without-auth-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_config-directory-without-auth-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[config-without-cli-option-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_config-without-cli-option-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[config-without-cli-option-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_config-without-cli-option-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[custom-token-without-static-config-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_custom-token-without-static-config-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[custom-token-without-static-config-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_custom-token-without-static-config-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[empty-auth-file-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_empty-auth-file-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[empty-auth-file-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_empty-auth-file-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[empty-auth-file-without-static-config-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_empty-auth-file-without-static-config-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[empty-auth-file-without-static-config-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_empty-auth-file-without-static-config-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[empty-auth-section-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_empty-auth-section-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[empty-auth-section-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_empty-auth-section-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[empty-auth-token-file-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_empty-auth-token-file-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[empty-auth-token-file-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_empty-auth-token-file-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[empty-auth-token-file-without-static-config-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_empty-auth-token-file-without-static-config-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[empty-auth-token-file-without-static-config-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_empty-auth-token-file-without-static-config-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[empty-config-directory-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_empty-config-directory-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[empty-config-directory-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_empty-config-directory-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[empty-static-config-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_empty-static-config-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[empty-static-config-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_empty-static-config-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[empty-token-without-static-config-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_empty-token-without-static-config-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[empty-token-without-static-config-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_empty-token-without-static-config-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[explicit-custom-token-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_explicit-custom-token-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[explicit-custom-token-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_explicit-custom-token-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[explicit-empty-token-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_explicit-empty-token-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[explicit-empty-token-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_explicit-empty-token-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[explicit-root-token-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_explicit-root-token-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[explicit-root-token-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_explicit-root-token-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[missing-config-directory-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_missing-config-directory-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[missing-config-directory-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_missing-config-directory-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[missing-protobuf-file-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_missing-protobuf-file-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[missing-protobuf-file-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_missing-protobuf-file-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[missing-yaml-file-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_missing-yaml-file-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[missing-yaml-file-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_missing-yaml-file-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[multiple-protobuf-files-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_multiple-protobuf-files-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[multiple-protobuf-files-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_multiple-protobuf-files-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[only-log-config-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_only-log-config-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[only-log-config-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_only-log-config-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[protobuf-without-auth-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_protobuf-without-auth-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[protobuf-without-auth-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_protobuf-without-auth-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[root-token-without-static-config-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_root-token-without-static-config-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[root-token-without-static-config-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_root-token-without-static-config-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[without-config-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_without-config-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[without-config-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_without-config-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[yaml-custom-token-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_yaml-custom-token-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[yaml-custom-token-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_yaml-custom-token-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[yaml-empty-auth-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_yaml-empty-auth-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[yaml-empty-auth-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_yaml-empty-auth-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[yaml-empty-token-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_yaml-empty-token-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[yaml-empty-token-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_yaml-empty-token-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[yaml-without-auth-grpc-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_yaml-without-auth-grpc-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_credentials[yaml-without-auth-grpcs-startup-auth]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_credentials_yaml-without-auth-grpcs-startup-auth_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_without_config[empty-config-directory-certificate-auth-only]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_without_config_empty-config-directory-certificate-auth-only_/result.log"
+    },
+    "test_startup_credentials.test_startup_registration_without_config[no-config-certificate-auth-only]": {
+        "uri": "file://test_startup_credentials.test_startup_registration_without_config_no-config-certificate-auth-only_/result.log"
+    }
+}

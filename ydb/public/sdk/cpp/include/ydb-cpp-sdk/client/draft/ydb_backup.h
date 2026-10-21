@@ -47,6 +47,23 @@ private:
     TMetadata Metadata_;
 };
 
+class TFullBackupResponse : public TOperation {
+public:
+    struct TMetadata {
+        EBackupProgress Progress = EBackupProgress::Unspecified;
+        int32_t ProgressPercent = 0; // [0; 100]
+    };
+
+public:
+    using TOperation::TOperation;
+    TFullBackupResponse(TStatus&& status, Ydb::Operations::Operation&& operation);
+
+    const TMetadata& Metadata() const;
+
+private:
+    TMetadata Metadata_;
+};
+
 class TBackupCollectionRestoreResponse : public TOperation {
 public:
     struct TMetadata {

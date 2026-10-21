@@ -1,19 +1,12 @@
-import sys
-from typing import Any
+from typing import Any, assert_type
 
 import numpy as np
 import numpy.typing as npt
-from numpy.lib.shape_base import _ArrayPrepare, _ArrayWrap
-
-if sys.version_info >= (3, 11):
-    from typing import assert_type
-else:
-    from typing_extensions import assert_type
 
 i8: np.int64
 f8: np.float64
 
-AR_b: npt.NDArray[np.bool_]
+AR_b: npt.NDArray[np.bool]
 AR_i8: npt.NDArray[np.int64]
 AR_f8: npt.NDArray[np.float64]
 
@@ -33,9 +26,6 @@ assert_type(np.column_stack([AR_LIKE_f8]), npt.NDArray[Any])
 assert_type(np.dstack([AR_i8]), npt.NDArray[np.int64])
 assert_type(np.dstack([AR_LIKE_f8]), npt.NDArray[Any])
 
-assert_type(np.row_stack([AR_i8]), npt.NDArray[np.int64])
-assert_type(np.row_stack([AR_LIKE_f8]), npt.NDArray[Any])
-
 assert_type(np.array_split(AR_i8, [3, 5, 6, 10]), list[npt.NDArray[np.int64]])
 assert_type(np.array_split(AR_LIKE_f8, [3, 5, 6, 10]), list[npt.NDArray[Any]])
 
@@ -51,15 +41,12 @@ assert_type(np.vsplit(AR_LIKE_f8, [3, 5, 6, 10]), list[npt.NDArray[Any]])
 assert_type(np.dsplit(AR_i8, [3, 5, 6, 10]), list[npt.NDArray[np.int64]])
 assert_type(np.dsplit(AR_LIKE_f8, [3, 5, 6, 10]), list[npt.NDArray[Any]])
 
-assert_type(np.lib.shape_base.get_array_prepare(AR_i8), _ArrayPrepare)
-assert_type(np.lib.shape_base.get_array_prepare(AR_i8, 1), None | _ArrayPrepare)
-
-assert_type(np.get_array_wrap(AR_i8), _ArrayWrap)
-assert_type(np.get_array_wrap(AR_i8, 1), None | _ArrayWrap)
-
-assert_type(np.kron(AR_b, AR_b), npt.NDArray[np.bool_])
-assert_type(np.kron(AR_b, AR_i8), npt.NDArray[np.signedinteger[Any]])
-assert_type(np.kron(AR_f8, AR_f8), npt.NDArray[np.floating[Any]])
+assert_type(np.kron(AR_b, AR_b), npt.NDArray[np.bool])
+assert_type(np.kron(AR_b, AR_i8), npt.NDArray[np.signedinteger])
+assert_type(np.kron(AR_f8, AR_f8), npt.NDArray[np.floating])
 
 assert_type(np.tile(AR_i8, 5), npt.NDArray[np.int64])
 assert_type(np.tile(AR_LIKE_f8, [2, 2]), npt.NDArray[Any])
+
+assert_type(np.unstack(AR_i8, axis=0), tuple[npt.NDArray[np.int64], ...])
+assert_type(np.unstack(AR_LIKE_f8, axis=0), tuple[npt.NDArray[Any], ...])

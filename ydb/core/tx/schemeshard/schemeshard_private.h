@@ -1,13 +1,14 @@
 #pragma once
 #include "schemeshard_identificators.h"
 
+#include <ydb/core/base/storage_pools.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
-#include <ydb/library/login/login.h>
 
 #include <util/datetime/base.h>
 
@@ -48,12 +49,17 @@ namespace TEvPrivate {
         EvRunShred,
         EvRunTenantShred,
         EvAddNewShardToShred,
-        EvVerifyPassword,
-        EvLoginFinalize,
         EvContinuousBackupCleanerResult,
         EvTestNotifySubdomainCleanup,
         EvFlushConditionalEraseBatch,
         EvRunForcedCompaction,
+        EvProgressTablePartitionsFormatSweep,
+        EvFullBackupItemDone,
+        EvProgressForcedCompaction,
+        EvMoveShardToStoragePool,
+        EvPeriodicTableStatsParsed,
+        EvRevisitSplitMerge,
+        EvExportCompletionUploadResult,
         EvEnd
     };
 
@@ -187,6 +193,20 @@ namespace TEvPrivate {
         {}
     };
 
+    struct TEvExportCompletionUploadResult: public TEventLocal<TEvExportCompletionUploadResult, EvExportCompletionUploadResult> {
+        const ui64 ExportId;
+        const ui32 ItemIdx; // Max<ui32>() denotes the operation marker.
+        const bool Success;
+        const TString Error;
+
+        TEvExportCompletionUploadResult(ui64 exportId, ui32 itemIdx, bool success, const TString& error)
+            : ExportId(exportId)
+            , ItemIdx(itemIdx)
+            , Success(success)
+            , Error(error)
+        {}
+    };
+
     struct TEvServerlessStorageBilling: public TEventLocal<TEvServerlessStorageBilling, EvServerlessStorageBilling> {
         TEvServerlessStorageBilling()
         {}
@@ -267,6 +287,12 @@ namespace TEvPrivate {
         TEvPersistTableStats() = default;
     };
 
+    // Self-event: a split/merge slot may have freed -- re-evaluate deferred candidates fairly
+    // (round-robin across tables). At most one is in flight (coalesced via SplitMergeRevisitScheduled).
+    struct TEvRevisitSplitMerge: public TEventLocal<TEvRevisitSplitMerge, EvRevisitSplitMerge> {
+        TEvRevisitSplitMerge() = default;
+    };
+
     struct TEvPersistTopicStats: public TEventLocal<TEvPersistTopicStats, EvPersistTopicStats> {
         TEvPersistTopicStats() = default;
     };
@@ -322,51 +348,6 @@ namespace TEvPrivate {
         {}
     };
 
-    struct TEvVerifyPassword : public NActors::TEventLocal<TEvVerifyPassword, EvVerifyPassword> {
-    public:
-        TEvVerifyPassword(
-            const NLogin::TLoginProvider::TLoginUserRequest& request,
-            const NLogin::TLoginProvider::TPasswordCheckResult& checkResult,
-            const NActors::TActorId source,
-            const TString& passwordHash
-        )
-            : Request(request)
-            , CheckResult(checkResult)
-            , Source(source)
-            , PasswordHash(passwordHash)
-        {}
-
-    public:
-        const NLogin::TLoginProvider::TLoginUserRequest Request;
-        NLogin::TLoginProvider::TPasswordCheckResult CheckResult;
-        const NActors::TActorId Source; // actorId of the initial schemeshard client which requested user login
-        const TString PasswordHash;
-    };
-
-    struct TEvLoginFinalize : public NActors::TEventLocal<TEvLoginFinalize, EvLoginFinalize> {
-    public:
-        TEvLoginFinalize(
-            const NLogin::TLoginProvider::TLoginUserRequest& request,
-            const NLogin::TLoginProvider::TPasswordCheckResult& checkResult,
-            const NActors::TActorId source,
-            const TString& passwordHash,
-            const bool needUpdateCache
-        )
-            : Request(request)
-            , CheckResult(checkResult)
-            , Source(source)
-            , PasswordHash(passwordHash)
-            , NeedUpdateCache(needUpdateCache)
-        {}
-
-    public:
-        const NLogin::TLoginProvider::TLoginUserRequest Request;
-        const NLogin::TLoginProvider::TPasswordCheckResult CheckResult;
-        const NActors::TActorId Source; // actorId of the initial schemeshard client which requested user login
-        const TString PasswordHash;
-        const bool NeedUpdateCache;
-    };
-
     struct TEvContinuousBackupCleanerResult : public NActors::TEventLocal<TEvContinuousBackupCleanerResult, EvContinuousBackupCleanerResult> {
     public:
         TEvContinuousBackupCleanerResult(ui64 backupId, TPathId item, bool success, const TString& error = "")
@@ -380,6 +361,58 @@ namespace TEvPrivate {
         const TPathId Item;
         const bool Success = false;
         const TString Error;
+    };
+
+    struct TEvProgressTablePartitionsFormatSweep
+        : public TEventLocal<TEvProgressTablePartitionsFormatSweep, EvProgressTablePartitionsFormatSweep>
+    {};
+
+    // Sent self->self post-commit when a CopyTable sub-op of a tracked full backup finishes.
+    struct TEvFullBackupItemDone : public NActors::TEventLocal<TEvFullBackupItemDone, EvFullBackupItemDone> {
+        TEvFullBackupItemDone(ui64 fullBackupId, TPathId dstPathId, bool success)
+            : FullBackupId(fullBackupId)
+            , DstPathId(dstPathId)
+            , Success(success)
+        {}
+
+        const ui64 FullBackupId;
+        const TPathId DstPathId;
+        const bool Success;
+    };
+
+    struct TEvProgressForcedCompaction : TEventLocal<TEvProgressForcedCompaction, EvProgressForcedCompaction> {
+        TEvProgressForcedCompaction()
+        {}
+    };
+
+    // Sent by the DevUI move-shard actor once Hive acks, to persist the shard's new channel
+    // bindings in a dedicated tx. That tx also answers the HTTP request (from Complete()), so
+    // success is reported only after the binding is durable. HttpSender: the request's sender;
+    // HiveReply: the already-serialized Hive response to hand back.
+    struct TEvMoveShardToStoragePool : public TEventLocal<TEvMoveShardToStoragePool, EvMoveShardToStoragePool> {
+        TShardIdx ShardIdx;
+        TChannelsBindings NewBindings;
+        TActorId HttpSender;
+        TString HiveReply;
+
+        TEvMoveShardToStoragePool(const TShardIdx& shardIdx, TChannelsBindings newBindings, const TActorId& httpSender, TString hiveReply)
+            : ShardIdx(shardIdx)
+            , NewBindings(std::move(newBindings))
+            , HttpSender(httpSender)
+            , HiveReply(std::move(hiveReply))
+        {}
+    };
+
+    // Sent by TStatsParserActor back to the schemeshard after it parsed a raw
+    // TEvDataShard::TEvPeriodicTableStats. Carries the same handle (not just the record) so the
+    // original datashard Sender survives for VerifySplitAndRequestStats, and the schemeshard's
+    // Get() is a cache hit rather than a second parse.
+    struct TEvPeriodicTableStatsParsed : public TEventLocal<TEvPeriodicTableStatsParsed, EvPeriodicTableStatsParsed> {
+        TEvDataShard::TEvPeriodicTableStats::TPtr Ev;
+
+        explicit TEvPeriodicTableStatsParsed(TEvDataShard::TEvPeriodicTableStats::TPtr&& ev)
+            : Ev(std::move(ev))
+        {}
     };
 
 }; // TEvPrivate

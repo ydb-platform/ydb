@@ -45,14 +45,14 @@ private:
     int RecordCount;
     int FieldCount;
 
-    TString CurrentToken;
+    std::string CurrentToken;
 
     const char* Consume(const char* begin, const char* end);
 
     void StartRecordIfNeeded();
     void FinishRecord();
 
-    void ValidatePrefix(const TString& prefix) const;
+    void ValidatePrefix(const std::string& prefix) const;
 
     using EState = EDsvParserState;
     EState State;
@@ -119,7 +119,7 @@ const char* TDsvParser::Consume(const char* begin, const char* end)
         return begin + 1;
     }
     if (ExpectingEscapedChar) {
-        CurrentToken.append(EscapeBackward[static_cast<ui8>(*begin)]);
+        CurrentToken.push_back(EscapeBackward[static_cast<ui8>(*begin)]);
         ExpectingEscapedChar = false;
         return begin + 1;
     }
@@ -135,8 +135,8 @@ const char* TDsvParser::Consume(const char* begin, const char* end)
 
     if (*next == '\0') {
         THROW_ERROR_EXCEPTION("Unescaped \\0 symbol in DSV")
-            << TErrorAttribute("record_index", RecordCount)
-            << TErrorAttribute("field_index", FieldCount);
+            .With("record_index", RecordCount)
+            .With("field_index", FieldCount);
     }
 
     // Here, we have finished reading prefix, key or value
@@ -191,15 +191,15 @@ void TDsvParser::FinishRecord()
     FieldCount = 1;
 }
 
-void TDsvParser::ValidatePrefix(const TString& prefix) const
+void TDsvParser::ValidatePrefix(const std::string& prefix) const
 {
     if (prefix != *Config->LinePrefix) {
         // TODO(babenko): provide position
         THROW_ERROR_EXCEPTION("Malformed line prefix in DSV: expected %Qv, found %Qv",
             *Config->LinePrefix,
             prefix)
-            << TErrorAttribute("record_index", RecordCount)
-            << TErrorAttribute("field_index", FieldCount);
+            .With("record_index", RecordCount)
+            .With("field_index", FieldCount);
     }
 }
 

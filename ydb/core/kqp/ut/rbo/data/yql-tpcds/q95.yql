@@ -31,7 +31,7 @@ FROM
 ,
     `/Root/test/ds/web_site`
 WHERE
-    d_date BETWEEN CAST('1999-5-01' AS Date) AND (
+    CAST(d_date AS Date) BETWEEN CAST('1999-5-01' AS Date) AND (
         CAST('1999-5-01' AS Date) + DateTime::IntervalFromDays(60)
     )
     AND ws1.ws_ship_date_sk == d_date_sk

@@ -50,3 +50,8 @@ class TestConfig:
     consumers: int
     consumer_threads: int
     byte_rate: str
+    codec: str = "raw"
+    batch_flush_message_count: int = 1
+    batch_flush_interval: str = "1s"
+    batch_flush_size: str | None = None
+    batch_inner_codec: str | None = None

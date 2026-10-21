@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 SELECT
     NULL IS DISTINCT FROM NULL,
     NULL IS NOT DISTINCT FROM NULL,

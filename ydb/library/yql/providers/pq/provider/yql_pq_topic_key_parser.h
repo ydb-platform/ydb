@@ -1,7 +1,6 @@
 #pragma once
-#include <yql/essentials/ast/yql_expr.h>
-
 #include <util/generic/string.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 namespace NYql {
 
@@ -50,14 +49,6 @@ public:
         return DateFormat;
     }
 
-    TExprNode::TPtr GetWatermarkAdjustLateEvents() const {
-        return WatermarkAdjustLateEvents;
-    }
-
-    TExprNode::TPtr GetWatermarkDropLateEvents() const {
-        return WatermarkDropLateEvents;
-    }
-
     TExprNode::TPtr GetWatermarkGranularity() const {
         return WatermarkGranularity;
     }
@@ -101,8 +92,6 @@ private:
     TExprNode::TPtr DateFormat;
     TExprNode::TPtr UserSchema;
     TExprNode::TPtr ColumnOrder;
-    TExprNode::TPtr WatermarkAdjustLateEvents;
-    TExprNode::TPtr WatermarkDropLateEvents;
     TExprNode::TPtr WatermarkGranularity;
     TExprNode::TPtr WatermarkIdleTimeout;
     TExprNode::TPtr Watermark;
@@ -111,4 +100,4 @@ private:
     TExprNode::TPtr StreamingTopicRead;
 };
 
-} // namespace NYql
+}   // namespace NYql

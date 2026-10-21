@@ -17,10 +17,12 @@ PEERDIR(
     ydb/core/mind
     ydb/core/persqueue/public/list_topics
     ydb/core/persqueue/public/partition_key_range
+    ydb/core/persqueue/public/schema
     ydb/core/persqueue/public/write_meta
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/public/sdk/cpp/src/client/resources
     ydb/public/sdk/cpp/src/client/datastreams
     ydb/services/datastreams/codes

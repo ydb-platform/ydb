@@ -27,36 +27,48 @@ struct TWideUnboxedEqual {
     const TKeyTypes& Types;
 };
 
-struct TWideUnboxedHasher {
-    TWideUnboxedHasher(const TKeyTypes& types, const ui64 seed = 0ULL)
+template<bool FibonacciOptimization>
+struct TWideUnboxedHasherFib {
+    TWideUnboxedHasherFib(const TKeyTypes& types, const ui64 seed = 0ULL)
         : Seed(seed)
         , Types(types)
     {}
 
     NUdf::THashType operator()(const NUdf::TUnboxedValuePod* values) const {
+        NUdf::THashType hash;
+
         if (Types.size() == 1U) {
             if (const auto v = *values) {
-                return CombineHashes(Seed, NUdf::GetValueHash(Types.front().first, v));
+                hash = CombineHashes(Seed, NUdf::GetValueHash(Types.front().first, v));
             } else {
-                return HashOfNull;
+                hash = HashOfNull;
+            }
+        } else {
+            hash = Seed;
+
+            for (const auto& type : Types) {
+                if (const auto v = *values++) {
+                    hash = CombineHashes(hash, NUdf::GetValueHash(type.first, v));
+                } else {
+                    hash = CombineHashes(hash, HashOfNull);
+                }
             }
         }
 
-        NUdf::THashType hash = Seed;
-        for (const auto& type : Types) {
-            if (const auto v = *values++) {
-                hash = CombineHashes(hash, NUdf::GetValueHash(type.first, v));
-            } else {
-                hash = CombineHashes(hash, HashOfNull);
-            }
+        // https://web.archive.org/web/20180620004325/https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
+        if constexpr (FibonacciOptimization) {
+            return hash * 11400714819323198485ull;
+        } else {
+            return hash;
         }
-        return hash;
     }
 
 private:
     const ui64 Seed;
     const TKeyTypes& Types;
 };
+
+using TWideUnboxedHasher = TWideUnboxedHasherFib<false>;
 
 bool UnwrapBlockTypes(const TArrayRef<TType* const>& typeComponents, std::vector<TType*>& result);
 

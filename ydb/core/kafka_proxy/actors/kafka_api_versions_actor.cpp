@@ -22,16 +22,27 @@ void AddApiKey(TApiVersionsResponseData::ApiKeysMeta::Type& apiKeys,
     back.MaxVersion = versions.MaxVersion;
 }
 
-NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message) {
-    return new TKafkaApiVersionsActor(context, correlationId, message);
+NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message,
+                                            TKafkaVersion requestApiVersion) {
+    return new TKafkaApiVersionsActor(context, correlationId, message, requestApiVersion);
 }
 
-TApiVersionsResponseData::TPtr GetApiVersions() {
+TApiVersionsResponseData::TPtr GetApiVersions(TKafkaVersion requestVersion) {
     TApiVersionsResponseData::TPtr response = std::make_shared<TApiVersionsResponseData>();
+
+    if (!IsApiVersionsRequestVersionSupported(requestVersion)) {
+        // KIP-511: do not close the connection. Answer with v0-compatible payload listing
+        // only the supported versions of ApiVersions itself so the client can retry.
+        response->ErrorCode = EKafkaErrors::UNSUPPORTED_VERSION;
+        AddApiKey<TApiVersionsRequestData>(response->ApiKeys, API_VERSIONS, {.MaxVersion=AdvertisedApiVersionsMax});
+        return response;
+    }
+
     response->ErrorCode = EKafkaErrors::NONE_ERROR;
 
-    AddApiKey<TProduceRequestData>(response->ApiKeys, PRODUCE, {.MinVersion=3, .MaxVersion=9});
-    AddApiKey<TApiVersionsRequestData>(response->ApiKeys, API_VERSIONS, {.MaxVersion=2});
+    // Advertise Produce min=0 (KAFKA-18659): some librdkafka versions treat min>0 as "Produce unsupported".
+    AddApiKey<TProduceRequestData>(response->ApiKeys, PRODUCE, {.MaxVersion=9});
+    AddApiKey<TApiVersionsRequestData>(response->ApiKeys, API_VERSIONS, {.MaxVersion=AdvertisedApiVersionsMax});
     AddApiKey<TMetadataRequestData>(response->ApiKeys, METADATA, {.MaxVersion=9});
     AddApiKey<TInitProducerIdRequestData>(response->ApiKeys, INIT_PRODUCER_ID, {.MaxVersion=4});
     AddApiKey<TAddPartitionsToTxnRequestData>(response->ApiKeys, ADD_PARTITIONS_TO_TXN, {.MaxVersion=3});
@@ -61,7 +72,7 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
 
 void TKafkaApiVersionsActor::Bootstrap(const NActors::TActorContext& ctx) {
     Y_UNUSED(Message);
-    auto apiVersions = GetApiVersions();
+    auto apiVersions = GetApiVersions(RequestApiVersion);
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, apiVersions, static_cast<EKafkaErrors>(apiVersions->ErrorCode)));
     Die(ctx);
 }

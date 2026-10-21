@@ -53,6 +53,26 @@ To insert a value in the first line, use `raw string` and the escape method usin
 
 We recommend using `raw string` and the escape method using `\"`, as it is more visual.
 
+### How do I update a JSON value in a table? {#update-json}
+
+Partial updates of a JSON field are not supported, so it is necessary to construct a new value from parts of the old and new data. This is done using the [`Yson` UDF](../../yql/reference/udf/list/yson.md) combined with [dictionary functions](../../yql/reference/builtins/dict.md).
+
+The example below adds a new field `new_field` to the JSON object stored in the `column` column:
+
+```yql
+UPDATE table
+SET column = Yson::SerializeJson(
+    Yson::From(
+        SetUnion(
+            Yson::ConvertTo(Yson::ParseJson(column), Dict<String, Yson>),
+            {'new_field': Yson('"value"')},
+            ($K, $v1, $v2) -> { RETURN COALESCE($v2, $v1); }
+        )
+    )
+)
+WHERE id = 1;
+```
+
 ### How do I update only those values whose keys are not in the table? {#update-non-existent}
 
 You can use the `LEFT JOIN` operator to identify the keys a table is missing and update their values:
@@ -107,18 +127,13 @@ There is no explicit limit on the number of entries in the constant table, but m
 
 ### What's the best way to implement a query like (key1, key2) IN ((v1, v2), (v3, v4), ...)? {#key-pairs-in}
 
-It's better to write it using a JOIN with a constant table:
+You can use the `WHERE ... IN` syntax to query by a set of keys (including composite keys):
 
 ```yql
-$keys = AsList(
-    AsStruct(1 AS Key1, "One" AS Key2),
-    AsStruct(2 AS Key1, "Three" AS Key2),
-    AsStruct(4 AS Key1, "One" AS Key2)
-);
+DECLARE $key_pairs AS List<Tuple<Uint64, Uint64>>;
 
-SELECT t.* FROM AS_TABLE($keys) AS k
-INNER JOIN table1 AS t
-ON t.Key1 = k.Key1 AND t.Key2 = k.Key2;
+SELECT * FROM some_table
+WHERE (Key1, Key2) IN $key_pairs;
 ```
 
 ## Transactions {#transactions}

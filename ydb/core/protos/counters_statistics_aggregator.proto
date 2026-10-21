@@ -24,6 +24,10 @@ enum ETxTypes {
     TXTYPE_ANALYZE_SHARD_RESPONSE = 14 [(TxTypeOpts) = {Name: "TxAnalyzeShardResponse"}];
     TXTYPE_ANALYZE_SHARD_DELIVERY_PROBLEM = 15 [(TxTypeOpts) = {Name: "TTxAnalyzeShardDeliveryProblem"}];
     TXTYPE_ANALYZE_DEADLINE = 16 [(TxTypeOpts) = {Name: "TTxAnalyzeDeadline"}];
+    TXTYPE_ANALYZE_OP_LIST = 17  [(TxTypeOpts) = {Name: "TTxAnalyzeOpList"}];
+    TXTYPE_ANALYZE_OP_GET = 18   [(TxTypeOpts) = {Name: "TTxAnalyzeOpGet"}];
+    TXTYPE_ANALYZE_OP_CANCEL = 19 [(TxTypeOpts) = {Name: "TTxAnalyzeOpCancel"}];
+    TXTYPE_ANALYZE_OP_FORGET = 20 [(TxTypeOpts) = {Name: "TTxAnalyzeOpForget"}];
 }
 
 enum ESimpleCounters {

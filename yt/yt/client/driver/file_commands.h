@@ -18,7 +18,7 @@ class TReadFileCommand
 private:
     NYPath::TRichYPath Path;
     NYTree::INodePtr FileReader;
-    TString Etag;
+    std::string Etag;
 
     void DoExecute(ICommandContextPtr context) override;
     bool HasResponseParameters() const override;
@@ -51,7 +51,7 @@ class TGetFileFromCacheCommand
     static void Register(TRegistrar registrar);
 
 private:
-    TString MD5;
+    std::string MD5;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -67,7 +67,39 @@ class TPutFileToCacheCommand
 
 private:
     NYPath::TYPath Path;
-    TString MD5;
+    std::string MD5;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TPartitionFileCommand
+    : public TTypedCommand<NApi::TPartitionFileOptions>
+{
+    REGISTER_YSON_STRUCT_LITE(TPartitionFileCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYPath::TYPath Path;
+    std::vector<NApi::TFileReadRange> Ranges;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TReadFilePartitionCommand
+    : public TTypedCommand<NApi::TReadFilePartitionOptions>
+{
+    REGISTER_YSON_STRUCT_LITE(TReadFilePartitionCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    std::string Cookie;
+    NYTree::INodePtr FileReader;
 
     void DoExecute(ICommandContextPtr context) override;
 };

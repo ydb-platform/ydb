@@ -20,7 +20,7 @@ namespace session
 {
 
 /**
-  A unique id to identify a session.
+  A unique ID to identify a session.
  */
 static constexpr const char *kSessionId = "session.id";
 

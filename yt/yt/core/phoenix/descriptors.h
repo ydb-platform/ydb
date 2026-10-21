@@ -16,9 +16,8 @@ namespace NDetail {
 
 // Forward declaration of friends.
 class TTypeRegistry;
-class TTypeSchemaBuilderRegistar;
+class TTypeSchemaBuilderRegistrar;
 class TFieldSchemaRegistrar;
-class TTypeSchemaBuilderRegistar;
 
 } // namespace NDetail
 
@@ -27,16 +26,16 @@ class TTypeSchemaBuilderRegistar;
 class TFieldDescriptor
 {
 public:
-    const TString& GetName() const;
+    const std::string& GetName() const;
     TFieldTag GetTag() const;
 
     const TFieldSchemaPtr& GetSchema() const;
 
 private:
-    friend class NDetail::TTypeSchemaBuilderRegistar;
+    friend class NDetail::TTypeSchemaBuilderRegistrar;
     friend class NDetail::TFieldSchemaRegistrar;
 
-    TString Name_;
+    std::string Name_;
     TFieldTag Tag_;
     int MinVersion_ = std::numeric_limits<int>::min();
     int MaxVersion_ = std::numeric_limits<int>::max();
@@ -48,7 +47,7 @@ private:
 class TTypeDescriptor
 {
 public:
-    const TString& GetName() const;
+    const std::string& GetName() const;
     TTypeTag GetTag() const;
     const std::vector<std::unique_ptr<TFieldDescriptor>>& Fields() const;
     const std::vector<TTypeTag>& BaseTypeTags() const;
@@ -64,9 +63,9 @@ public:
 
 private:
     friend class NDetail::TTypeRegistry;
-    friend class NDetail::TTypeSchemaBuilderRegistar;
+    friend class NDetail::TTypeSchemaBuilderRegistrar;
 
-    TString Name_;
+    std::string Name_;
     std::vector<const std::type_info*> TypeInfos_;
     TTypeTag Tag_;
     std::vector<std::unique_ptr<TFieldDescriptor>> Fields_;
@@ -88,11 +87,11 @@ public:
     const TUniverseSchemaPtr& GetSchema() const;
     const NYson::TYsonString& GetSchemaYson() const;
 
-    const TTypeDescriptor* FindTypeDescriptorByTag(TTypeTag tag) const ;
+    const TTypeDescriptor* FindTypeDescriptorByTag(TTypeTag tag) const;
     const TTypeDescriptor& GetTypeDescriptorByTag(TTypeTag tag) const;
     const TTypeDescriptor& GetTypeDescriptorByTagOrThrow(TTypeTag tag) const;
 
-    const TTypeDescriptor* FindTypeDescriptorByTypeIndex(std::type_index typeIndex) const ;
+    const TTypeDescriptor* FindTypeDescriptorByTypeIndex(std::type_index typeIndex) const;
     const TTypeDescriptor& GetTypeDescriptorByTypeIndex(std::type_index typeIndex) const;
     const TTypeDescriptor& GetTypeDescriptorByTypeIndexOrThrow(std::type_index typeIndex) const;
 

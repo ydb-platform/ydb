@@ -133,6 +133,7 @@ namespace NActors {
             return x;
         }
 
+        // Note that ChannelBits bits in Flags are reserved for channel
         enum EFlags: ui32 {
             FlagTrackDelivery = 1 << 0,
             FlagForwardOnNondelivery = 1 << 1,
@@ -142,6 +143,10 @@ namespace NActors {
             FlagExtendedFormat = 1 << 5,
             FlagDebugTrackReceive = 1 << 6,
             FlagFailFastWhenDisconnected = 1 << 7,
+            FlagDisablePayloadChecksums = 1 << 8, // When set, IC will not calculate or check XDC/RDMA checksums
+            // System messages are handled by the actor runtime and must never
+            // reach actor awaiters or the user state function.
+            FlagSystemMessage = 1 << 9,
         };
         using TEventFlags = ui32;
 
@@ -311,6 +316,11 @@ namespace NActors {
 
         TIntrusivePtr<TEventSerializedData> GetChainBuffer();
         TIntrusivePtr<TEventSerializedData> ReleaseChainBuffer();
+
+        // Serializes the event now and drops the IEventBase. Pass allowExternalDataChannel when the
+        // session that will transmit it can route sections over an external data channel: the retained
+        // serialization info decides whether that is still possible once the event is only a rope.
+        void Preserialize(bool allowExternalDataChannel);
 
         ui32 GetSize() const {
             if (Buffer) {

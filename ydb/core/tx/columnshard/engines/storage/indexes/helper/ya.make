@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     case_helper.cpp
@@ -12,3 +12,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

@@ -1,0 +1,12 @@
+USE plato;
+
+-- Outer join + nullable keys + multi-out, flat payload on. Results must match the default plan.
+pragma yt.JoinCommonUseMapMultiOut="true";
+pragma yt.JoinCommonUseFlatPayload="true";
+
+$a = SELECT key, value, CAST(subkey AS Int32) AS sk FROM Input1;
+$b = SELECT key, value, CAST(subkey AS Int32) AS sk FROM Input2;
+
+SELECT a.key AS ak, b.key AS bk, a.value AS av, b.value AS bv
+FROM $a AS a LEFT JOIN $b AS b ON a.sk == b.sk
+ORDER BY ak, bk, av, bv;

@@ -5,9 +5,9 @@
 #include "unversioned_reader.h"
 #include "unversioned_writer.h"
 
-#include <yt/yt/core/misc/ring_queue.h>
+#include <library/cpp/yt/containers/ring_queue.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 namespace NYT::NTableClient {
 
@@ -33,7 +33,7 @@ DECLARE_REFCOUNTED_CLASS(TSchemafulPipeWriter);
 
 struct TSchemafulPipeData final
 {
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock);
 
     const IMemoryChunkProviderPtr ChunkProvider;
     const std::optional<int> MaxFlushBatchCount;
@@ -74,7 +74,7 @@ struct TSchemafulPipeData final
     void HandleCancel(const TError& error)
     {
         Fail(TError(NYT::EErrorCode::Canceled, "Pipe reader canceled")
-            << error);
+            .With(error));
     }
 
     void Fail(const TError& error)

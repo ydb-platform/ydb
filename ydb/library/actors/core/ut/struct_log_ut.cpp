@@ -1,3 +1,4 @@
+#include "actorid.h"
 #include <ydb/library/actors/struct_log/create_message.h>
 #include <ydb/library/actors/struct_log/json_writer.h>
 #include <ydb/library/actors/struct_log/key_name.h>
@@ -5,8 +6,6 @@
 #include <ydb/library/actors/struct_log/native_types_mapping.h>
 #include <ydb/library/actors/struct_log/native_types_support.h>
 #include <ydb/library/actors/struct_log/structured_message.h>
-
-#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -245,6 +244,50 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TString ToString() const {
             return "some value";
         }
+
+        TString ToString() {
+            return "wrong value from non-const ToString()";
+        }
+
+        static TString ToString(int) {
+            return "wrong value from static ToString(int)";
+        }
+
+        TString ToString(bool) {
+            return "wrong value from ToString(bool)";
+        }
+    };
+
+    struct TTestTypeToStringRef {
+        const TString& ToString() const {
+            static TString result("some value");
+            return result;
+        }
+    };
+
+    struct TTestTypeToStringBuf {
+        TStringBuf ToString() const {
+            return "some value";
+        }
+    };
+
+    struct TTestTypeToStdString {
+        std::string ToString() const {
+            return "some value";
+        }
+    };
+
+    struct TTestTypeToStdStringRef {
+        const std::string& ToString() const {
+            static std::string result("some value");
+            return result;
+        }
+    };
+
+    struct TTestTypeToStdStringView {
+        std::string_view ToString() const {
+            return "some value";
+        }
     };
 
     struct TTestTypeToStructuredMessage {
@@ -265,6 +308,11 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
     Y_UNIT_TEST(CreateMessageToMethods) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToString{}}), "value=some value");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStringRef{}}), "value=some value");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStringBuf{}}), "value=some value");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStdString{}}), "value=some value");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStdStringRef{}}), "value=some value");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStdStringView{}}), "value=some value");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStructuredMessage{}}), "value.value1=1, value.value2=2");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToBoth{}}), "value.value1=1, value.value2=2");
     }
@@ -376,21 +424,61 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
     Y_UNIT_TEST(LogStackGuard) {
         TEST_MESSAGE(TLogStack::GetTop(), "");
+        UNIT_ASSERT_EQUAL(TLogStack::GetComponent(), 0);
+        UNIT_ASSERT_EQUAL(TLogStack::GetComponent(1), 1);
         {
-            TLogStack::TLogGuard guard1;
+            TLogStack::TLogGuard guard1(1);
             YDB_LOG_UPDATE_CONTEXT({"v1", 1});
             TEST_MESSAGE(TLogStack::GetTop(), "v1=1");
+            UNIT_ASSERT_EQUAL(TLogStack::GetComponent(), 1);
+            UNIT_ASSERT_EQUAL(TLogStack::GetComponent(1), 1);
+
+            {
+                TLogStack::TLogGuard guard2(2);
+                TEST_MESSAGE(TLogStack::GetTop(), "v1=1");
+                YDB_LOG_UPDATE_CONTEXT({"v2", 2});
+                TEST_MESSAGE(TLogStack::GetTop(), "v1=1, v2=2");
+                UNIT_ASSERT_EQUAL(TLogStack::GetComponent(), 2);
+                UNIT_ASSERT_EQUAL(TLogStack::GetComponent(1), 2);
+            }
 
             {
                 TLogStack::TLogGuard guard2;
                 TEST_MESSAGE(TLogStack::GetTop(), "v1=1");
                 YDB_LOG_UPDATE_CONTEXT({"v2", 2});
                 TEST_MESSAGE(TLogStack::GetTop(), "v1=1, v2=2");
+                UNIT_ASSERT_EQUAL(TLogStack::GetComponent(), 1);
+                UNIT_ASSERT_EQUAL(TLogStack::GetComponent(1), 1);
             }
 
             TEST_MESSAGE(TLogStack::GetTop(), "v1=1");
+            UNIT_ASSERT_EQUAL(TLogStack::GetComponent(), 1);
+            UNIT_ASSERT_EQUAL(TLogStack::GetComponent(1), 1);
         }
         TEST_MESSAGE(TLogStack::GetTop(), "");
+        UNIT_ASSERT_EQUAL(TLogStack::GetComponent(), 0);
+        UNIT_ASSERT_EQUAL(TLogStack::GetComponent(1), 1);
+    }
+
+    Y_UNIT_TEST(LogStackCreateContext) {
+        TEST_MESSAGE(TLogStack::GetTop(), "");
+        UNIT_ASSERT_EQUAL(TLogStack::GetComponent(), 0);
+        UNIT_ASSERT_EQUAL(TLogStack::GetComponent(1), 1);
+        {
+            YDB_LOG_CREATE_CONTEXT_COMP(1, {"v1", 1});
+            TEST_MESSAGE(TLogStack::GetTop(), "v1=1");
+            UNIT_ASSERT_EQUAL(TLogStack::GetComponent(), 1);
+            UNIT_ASSERT_EQUAL(TLogStack::GetComponent(1), 1);
+        }
+        {
+            YDB_LOG_CREATE_CONTEXT({"v1", 1});
+            TEST_MESSAGE(TLogStack::GetTop(), "v1=1");
+            UNIT_ASSERT_EQUAL(TLogStack::GetComponent(), 0);
+            UNIT_ASSERT_EQUAL(TLogStack::GetComponent(1), 1);
+        }
+        TEST_MESSAGE(TLogStack::GetTop(), "");
+        UNIT_ASSERT_EQUAL(TLogStack::GetComponent(), 0);
+        UNIT_ASSERT_EQUAL(TLogStack::GetComponent(1), 1);
     }
 
     TString GetMessageJsonString(const TStructuredMessage& message) {

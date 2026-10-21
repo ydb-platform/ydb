@@ -1,12 +1,13 @@
 #include "s3.h"
 #include "blocks.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
+
 namespace NKikimr::NBlobDepot {
 
     using TS3Manager = TBlobDepot::TS3Manager;
 
     class TS3Manager::TTxPrepareWriteS3 : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-        const ui32 NodeId;
         const ui64 AgentInstanceId;
         std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle> Request;
         std::unique_ptr<IEventHandle> Response;
@@ -16,8 +17,7 @@ namespace NKikimr::NBlobDepot {
         TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_PREPARE_WRITE_S3; }
 
         TTxPrepareWriteS3(TBlobDepot *self, TAgent& agent, std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle> request)
-            : TTransactionBase(self)
-            , NodeId(agent.Connection->NodeId)
+            : TTransactionBase(self, std::move(request->TraceId))
             , AgentInstanceId(*agent.AgentInstanceId)
             , Request(std::move(request))
         {}
@@ -25,11 +25,17 @@ namespace NKikimr::NBlobDepot {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             AllocatedLocatorCount = 0;
 
-            TAgent& agent = Self->GetAgent(NodeId);
-            if (!agent.Connection || agent.AgentInstanceId != AgentInstanceId) {
-                // agent has been disconnected while transaction was in queue -- do nothing
+            // The response is addressed back through the pipe server this request arrived on (MakeResponseFor uses
+            // Request->Recipient as the sender), and the agent drops any response that does not come from its
+            // current pipe server. Matching NodeId and AgentInstanceId is not enough: a transient disconnect and
+            // reconnect of the same agent instance keeps both, and we would then allocate locators that the agent
+            // never hears about and therefore never commits or discards -- leaking a tablet-wide write slot.
+            TAgent *agentPtr = Self->FindAgent(Request->Recipient);
+            if (!agentPtr || agentPtr->AgentInstanceId != AgentInstanceId) {
+                // the connection this request arrived on is gone -- do nothing
                 return true;
             }
+            TAgent& agent = *agentPtr;
 
             if (!Self->Data->LoadMissingKeys(Request->Get()->Record, txc)) {
                 // we haven't loaded all of the required keys
@@ -65,6 +71,13 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
+            if (AllocatedLocatorCount) {
+                // This has to stay in lockstep with agent.S3WritesInFlight, which is what OnAgentDisconnect counts
+                // when it releases the slots of a departing agent -- and it may well run between Execute and
+                // Complete of this very transaction. TTxCommitBlobSeq releases them from Execute for the same reason.
+                Self->S3Manager->OnS3WriteInFlightAdded(AllocatedLocatorCount);
+            }
+
             return true;
         }
 
@@ -97,9 +110,6 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            if (AllocatedLocatorCount) {
-                Self->S3Manager->OnS3WriteInFlightAdded(AllocatedLocatorCount);
-            }
             if (Response) {
                 TActivationContext::Send(Response.release());
             }
@@ -119,16 +129,23 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TS3Manager::HandlePrepareWriteS3(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev) {
+        ApplyMaxWritesInFlight();
+
         const TMonotonic now = TActivationContext::Monotonic();
         const bool timeThrottled = now < PutThrottleUntil;
         const bool concurrencyThrottled = S3WritesInFlight >= CurrentMaxWritesInFlight;
 
         if (timeThrottled || concurrencyThrottled) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS23, "TEvPrepareWriteS3 queued", (Id, Self->GetLogId()),
-                (TimeThrottled, timeThrottled), (ConcurrencyThrottled, concurrencyThrottled),
-                (S3WritesInFlight, S3WritesInFlight), (CurrentMaxWritesInFlight, CurrentMaxWritesInFlight),
-                (QueueSize, PendingPrepareWrites.size()));
+            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "TEvPrepareWriteS3 queued",
+                {"marker", "BDTS23"},
+                {"id", Self->GetLogId()},
+                {"timeThrottled", timeThrottled},
+                {"concurrencyThrottled", concurrencyThrottled},
+                {"S3WritesInFlight", S3WritesInFlight},
+                {"currentMaxWritesInFlight", CurrentMaxWritesInFlight},
+                {"queueSize", PendingPrepareWrites.size()});
             PendingPrepareWrites.push_back(std::move(ev));
+            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_PENDING_QUEUE_SIZE] = PendingPrepareWrites.size();
             if (timeThrottled && !PutWakeupScheduled) {
                 TActivationContext::Schedule(PutThrottleUntil, new IEventHandle(TEvPrivate::EvPutThrottleWakeup,
                     0, Self->SelfId(), {}, nullptr, 0));
@@ -139,8 +156,11 @@ namespace NKikimr::NBlobDepot {
 
         auto& agent = Self->GetAgent(ev->Recipient);
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS07, "TEvPrepareWriteS3", (Id, Self->GetLogId()),
-            (AgentId, agent.Connection->NodeId), (Msg, ev->Get()->Record));
+        YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "TEvPrepareWriteS3",
+            {"marker", "BDTS07"},
+            {"id", Self->GetLogId()},
+            {"agentId", agent.Connection->NodeId},
+            {"msg", ev->Get()->Record});
 
         Self->Execute(std::make_unique<TTxPrepareWriteS3>(Self, agent,
             std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle>(ev.Release())));
@@ -148,17 +168,26 @@ namespace NKikimr::NBlobDepot {
 
     void TS3Manager::NotifyPutSlowDown() {
         Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_PUTS_SLOW_DOWN] += 1;
+        Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_PUT_THROTTLE_ACTIVATIONS] += 1;
 
         CurrentMaxWritesInFlight = 1;
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] = CurrentMaxWritesInFlight;
         ConsecutiveSuccessfulWriteBatches = 0;
         const TDuration delay = PutBackoff.Next();
         PutThrottleUntil = TActivationContext::Monotonic() + delay;
 
-        STLOG(PRI_WARN, BLOB_DEPOT, BDTS22, "S3 put throttled", (Id, Self->GetLogId()),
-            (Delay, delay), (CurrentMaxWritesInFlight, CurrentMaxWritesInFlight),
-            (S3WritesInFlight, S3WritesInFlight), (QueueSize, PendingPrepareWrites.size()));
-        BDEV(BDEV42, "S3_put_throttled", (BDT, Self->TabletID()), (DelayMs, delay.MilliSeconds()),
-            (QueueSize, PendingPrepareWrites.size()));
+        YDB_LOG_WARN_COMP(BLOB_DEPOT, "S3 put throttled",
+            {"marker", "BDTS22"},
+            {"id", Self->GetLogId()},
+            {"delay", delay},
+            {"currentMaxWritesInFlight", CurrentMaxWritesInFlight},
+            {"S3WritesInFlight", S3WritesInFlight},
+            {"queueSize", PendingPrepareWrites.size()});
+        YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "S3_put_throttled",
+            {"marker", "BDEV42"},
+            {"BDT", Self->TabletID()},
+            {"delayMs", delay.MilliSeconds()},
+            {"queueSize", PendingPrepareWrites.size()});
 
         if (!PutWakeupScheduled) {
             TActivationContext::Schedule(PutThrottleUntil, new IEventHandle(TEvPrivate::EvPutThrottleWakeup,
@@ -183,38 +212,99 @@ namespace NKikimr::NBlobDepot {
             return;
         }
 
+        ApplyMaxWritesInFlight();
+
         while (!PendingPrepareWrites.empty() && S3WritesInFlight < CurrentMaxWritesInFlight) {
             auto ev = std::move(PendingPrepareWrites.front());
             PendingPrepareWrites.pop_front();
 
-            auto& agent = Self->GetAgent(ev->Recipient);
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS07, "TEvPrepareWriteS3", (Id, Self->GetLogId()),
-                (AgentId, agent.Connection->NodeId), (Msg, ev->Get()->Record));
+            // the pipe server this request came through may have vanished (or have been superseded by a newer
+            // connection of the same agent) while the request was sitting in the queue -- there is no one to answer
+            // to anymore, so just drop it
+            TAgent *agent = Self->FindAgent(ev->Recipient);
+            if (!agent) {
+                YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "dropping queued TEvPrepareWriteS3 of a disconnected agent",
+                    {"marker", "BDTS37"},
+                    {"id", Self->GetLogId()},
+                    {"pipeServerId", ev->Recipient},
+                    {"sender", ev->Sender});
+                continue;
+            }
 
-            Self->Execute(std::make_unique<TTxPrepareWriteS3>(Self, agent,
+            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "TEvPrepareWriteS3",
+                {"marker", "BDTS07"},
+                {"id", Self->GetLogId()},
+                {"agentId", agent->Connection->NodeId},
+                {"msg", ev->Get()->Record});
+
+            Self->Execute(std::make_unique<TTxPrepareWriteS3>(Self, *agent,
                 std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle>(ev.Release())));
         }
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_PENDING_QUEUE_SIZE] = PendingPrepareWrites.size();
+    }
+
+    void TS3Manager::DropPendingPrepareWrites(const TActorId& pipeServerId) {
+        if (PendingPrepareWrites.empty()) {
+            return;
+        }
+
+        std::deque<TEvBlobDepot::TEvPrepareWriteS3::TPtr> remain;
+        size_t numDropped = 0;
+        for (auto& ev : PendingPrepareWrites) {
+            if (ev->Recipient == pipeServerId) {
+                ++numDropped;
+            } else {
+                remain.push_back(std::move(ev));
+            }
+        }
+        // every kept item has already been moved into `remain`, so the swap has to happen unconditionally
+        PendingPrepareWrites.swap(remain);
+        if (!numDropped) {
+            return;
+        }
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_PENDING_QUEUE_SIZE] = PendingPrepareWrites.size();
+
+        YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "dropped queued TEvPrepareWriteS3 on pipe server disconnect",
+            {"marker", "BDTS38"},
+            {"id", Self->GetLogId()},
+            {"pipeServerId", pipeServerId},
+            {"numDropped", numDropped},
+            {"queueSize", PendingPrepareWrites.size()});
     }
 
     void TS3Manager::OnS3WriteInFlightAdded(ui32 count) {
         S3WritesInFlight += count;
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_WRITES_IN_FLIGHT] = S3WritesInFlight;
     }
 
     void TS3Manager::OnS3WriteInFlightRemoved(bool success) {
         Y_ABORT_UNLESS(S3WritesInFlight);
         --S3WritesInFlight;
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_WRITES_IN_FLIGHT] = S3WritesInFlight;
 
-        if (success && CurrentMaxWritesInFlight < MaxWritesInFlight) {
+        const ui32 maxWritesInFlight = MaxWritesInFlight();
+        if (success && CurrentMaxWritesInFlight < maxWritesInFlight) {
             if (++ConsecutiveSuccessfulWriteBatches >= SuccessesPerWriteConcurrencyStepUp) {
                 ConsecutiveSuccessfulWriteBatches = 0;
                 ++CurrentMaxWritesInFlight;
-                if (CurrentMaxWritesInFlight >= MaxWritesInFlight) {
-                    CurrentMaxWritesInFlight = MaxWritesInFlight;
+                if (CurrentMaxWritesInFlight >= maxWritesInFlight) {
+                    CurrentMaxWritesInFlight = maxWritesInFlight;
                     PutBackoff.Reset();
                 }
+
+                Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] = CurrentMaxWritesInFlight;
             }
         }
 
+        RunPendingPrepareWritesIfPossible();
+    }
+
+    void TS3Manager::OnS3WritesInFlightAbandoned(ui32 count) {
+        Y_ABORT_UNLESS(S3WritesInFlight >= count);
+        S3WritesInFlight -= count;
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_WRITES_IN_FLIGHT] = S3WritesInFlight;
+
+        // these writes never completed, so the concurrency step-up logic must not treat them as successful batches
         RunPendingPrepareWritesIfPossible();
     }
 

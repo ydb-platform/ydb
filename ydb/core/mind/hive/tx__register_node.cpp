@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -18,11 +20,16 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_REGISTER_NODE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxRegisterNode(" << Local.NodeId() << ")::Execute");
+        YDB_LOG_DEBUG("THive::TTxRegisterNode::Execute registering node",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", Local.NodeId()});
         NIceDb::TNiceDb db(txc.DB);
         TNodeId nodeId = Local.NodeId();
         TNodeInfo& node = Self->GetNode(nodeId);
-        if (node.Local != Local) {
+        const bool localChanged = node.Local != Local;
+        const TActorId previousLocal = node.Local;
+        const auto previousState = node.GetVolatileState();
+        if (localChanged) {
             Self->RemoveNodeFromSegments(&node);
 
             TInstant now = TActivationContext::Now();
@@ -50,17 +57,23 @@ public:
                 NIceDb::TUpdate<Schema::Node::Statistics>(node.Statistics),
                 NIceDb::TUpdate<Schema::Node::Name>(name)
             );
- 
+
             node.BecomeDisconnected();
             if (node.LastSeenServicedDomains != servicedDomains) {
                 // new tenant - new rules
-                node.SetDown(false);
-                node.SetFreeze(false);
+                if (!node.LastSeenServicedDomains.empty()) {
+                    Self->RecordNodeEvent(node, EHiveEventType::TenantChanged, EHiveEventReason::ServicedDomainsChanged,
+                        TStringBuilder() << "from=" << node.LastSeenServicedDomains << " to=" << servicedDomains);
+                }
+                node.SetDown(false, EHiveEventReason::TenantChanged);
+                node.SetFreeze(false, EHiveEventReason::TenantChanged);
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::Freeze>(false, false);
             }
             if (node.BecomeUpOnRestart) {
-                BLOG_TRACE("THive::TTxRegisterNode(" << Local.NodeId() << ")::Execute - node became up on restart");
-                node.SetDown(false);
+                YDB_LOG_TRACE("THive::TTxRegisterNode::Execute node became up on restart",
+                    {"logPrefix", GetLogPrefix()},
+                    {"nodeId", Local.NodeId()});
+                node.SetDown(false, EHiveEventReason::BecomeUpOnRestart);
                 node.BecomeUpOnRestart = false;
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(false, false);
             }
@@ -68,19 +81,36 @@ public:
             node.ServicedDomains.swap(servicedDomains);
             node.LastSeenServicedDomains = node.ServicedDomains;
             node.Name = name;
+            TBridgePileId bridgePileId;
             if (Record.HasBridgePileId()) {
-                node.BridgePileId = TBridgePileId::FromProto(&Record, &decltype(Record)::GetBridgePileId);
-                Self->GetPile(node.BridgePileId).Nodes.insert(nodeId);
-                db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::BridgePileId>(node.BridgePileId.GetLocalDb());
+                bridgePileId = TBridgePileId::FromProto(&Record, &decltype(Record)::GetBridgePileId);
+            } else if (const auto implicitPileId = NBridge::GetImplicitPileId(Self->BridgeInfo.get())) {
+                // node is not bridge-capable yet (it is being restarted while converting the cluster into bridged
+                // one), but the cluster has single pile, so the node implicitly belongs to it
+                bridgePileId = implicitPileId;
             } else {
                 Y_ENSURE(!Self->BridgeInfo, "Running in bridge mode, but node " << nodeId << " has no pile");
             }
+            if (bridgePileId) {
+                node.BridgePileId = bridgePileId;
+                Self->GetPile(node.BridgePileId).Nodes.insert(nodeId);
+                db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::BridgePileId>(node.BridgePileId.GetLocalDb());
+            }
 
             Self->UpdateNodeSegments(&node);
+
+            // Restore metrics accounting cleared by BecomeDisconnected().
+            // The new Local cannot restore it: the tablet is managed by an external owner.
+            if (Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
+                for (TLeaderTabletInfo* tablet : node.LockedTablets) {
+                    if (!tablet->IsDeleting()) {
+                        tablet->BecomeUnknown(&node);
+                    }
+                }
+            }
         }
         if (Record.HasSystemLocation() && Record.GetSystemLocation().HasDataCenter()) {
-            node.Location = TNodeLocation(Record.GetSystemLocation());
-            node.LocationAcquired = true;
+            node.SetLocation(TNodeLocation(Record.GetSystemLocation()), EHiveEventReason::RegisterNode);
         }
         node.TabletAvailability.clear();
         for (const NKikimrLocal::TTabletAvailability& tabletAvailability : Record.GetTabletAvailability()) {
@@ -91,12 +121,25 @@ public:
                 itAvail->second.UpdateRestriction(itRestr->second);
             }
         }
-        node.BecomeConnecting();
+        if (node.BecomeConnecting() || localChanged) {
+            TStringBuilder details;
+            details << "previousState=" << TNodeInfo::EVolatileStateName(previousState);
+            if (localChanged && previousLocal) {
+                details << " previousLocal=" << previousLocal;
+            }
+            details << " domains=" << node.ServicedDomains
+                << " location=" << GetLocationString(node.Location)
+                << " tabletTypesAvailable=" << node.TabletAvailability.size();
+            Self->RecordNodeEvent(node, EHiveEventType::Registered,
+                localChanged ? EHiveEventReason::NewLocalActor : EHiveEventReason::SameLocalActor, std::move(details));
+        }
         return true;
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxRegisterNode(" << Local.NodeId() << ")::Complete");
+        YDB_LOG_DEBUG("THive::TTxRegisterNode::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", Local.NodeId()});
         TNodeInfo* node = Self->FindNode(Local.NodeId());
         if (node != nullptr && node->Local) { // we send ping on every RegisterNode because we want to re-sync tablets upon every reconnection
             Self->NodePingsInProgress.erase(node->Id);

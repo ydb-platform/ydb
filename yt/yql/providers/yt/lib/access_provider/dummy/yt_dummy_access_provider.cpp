@@ -8,10 +8,11 @@ class TYtDummyAccessProvider : public IYtAccessProvider {
 public:
     void RequestAccess(
         TStringBuf /*ytCluster*/,
-        EIdentityType /*type*/,
         TStringBuf /*path*/,
         TStringBuf /*requester*/,
-        const TYqlOperationOptions& /*operationOptions*/) override
+        EIdentityType /*identityType*/,
+        TStringBuf /*identity*/,
+        TMaybe<TDuration> /*period*/) override
     {
         YQL_ENSURE(false, "YT access provider implementation is not present");
     }

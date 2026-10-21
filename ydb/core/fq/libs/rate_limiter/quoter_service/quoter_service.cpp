@@ -1,26 +1,23 @@
 #include "quoter_service.h"
 
-#include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/library/services/services.pb.h>
+#include <ydb/core/quoter/public/quoter.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+
 #include <library/cpp/retry/retry_policy.h>
 
 #include <algorithm>
 #include <deque>
 #include <unordered_map>
 
-#define LOG_T(stream) LOG_TRACE_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER, stream)
-#define LOG_D(stream) LOG_DEBUG_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER, stream)
-#define LOG_I(stream) LOG_INFO_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER, stream)
-#define LOG_W(stream) LOG_WARN_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER, stream)
-#define LOG_E(stream) LOG_ERROR_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::YQ_RATE_LIMITER
 
 namespace NFq {
 namespace {
@@ -30,7 +27,7 @@ constexpr ui64 MaxInflight = 2;
 
 struct TEvPrivate {
     // Event ids
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
 
         EvQuotaReceived = EvBegin,
@@ -42,7 +39,7 @@ struct TEvPrivate {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
 
     // Events
-    struct TEvQuotaReceived : public NActors::TEventLocal<TEvQuotaReceived, EvQuotaReceived> {
+    struct TEvQuotaReceived: public NActors::TEventLocal<TEvQuotaReceived, EvQuotaReceived> {
         TEvQuotaReceived(const NYdb::TStatus& status, const TString& rateLimiter, const TString& resource, ui64 amount)
             : RateLimiter(rateLimiter)
             , Resource(resource)
@@ -57,7 +54,7 @@ struct TEvPrivate {
         NYdb::TStatus Status;
     };
 
-    struct TEvRetryQuotaRequest : public NActors::TEventLocal<TEvRetryQuotaRequest, EvRetryQuotaRequest> {
+    struct TEvRetryQuotaRequest: public NActors::TEventLocal<TEvRetryQuotaRequest, EvRetryQuotaRequest> {
         TEvRetryQuotaRequest(const TString& rateLimiter, const TString& resource, ui64 amount, ui64 cookie)
             : RateLimiter(rateLimiter)
             , Resource(resource)
@@ -75,7 +72,8 @@ struct TEvPrivate {
 
 struct TCounters {
     explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
-        : Counters(counters) {
+        : Counters(counters)
+    {
         InFlySubscribe = Counters->GetCounter("InFlySubscribe");
         ResourceCount = Counters->GetCounter("ResourceCount");
         SenderCount = Counters->GetCounter("SenderCount");
@@ -87,7 +85,7 @@ struct TCounters {
     ::NMonitoring::TDynamicCounters::TCounterPtr SenderCount;
 };
 
-class TYqQuoterService : public NActors::TActorBootstrapped<TYqQuoterService> {
+class TYqQuoterService: public NActors::TActorBootstrapped<TYqQuoterService> {
     using TResourceKey = std::pair<TString, TString>;
 
     struct TResourceProcessor {
@@ -99,11 +97,8 @@ class TYqQuoterService : public NActors::TActorBootstrapped<TYqQuoterService> {
     };
 
 public:
-    TYqQuoterService(
-        const NFq::NConfig::TRateLimiterConfig& config,
-        const NFq::TYqSharedResources::TPtr& yqSharedResources,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const ::NMonitoring::TDynamicCounterPtr& counters)
+    TYqQuoterService(const NFq::NConfig::TRateLimiterConfig& config, const NFq::TYqSharedResources::TPtr& yqSharedResources,
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, const ::NMonitoring::TDynamicCounterPtr& counters)
         : Config(config)
         , YqSharedResources(yqSharedResources)
         , CredProviderFactory(credentialsProviderFactory)
@@ -121,8 +116,9 @@ public:
 
     void Bootstrap() {
         Become(&TYqQuoterService::StateFunc);
-        LOG_I("Bootstraping with config: " << Config);
-        Config.MutableDatabase()->SetDatabase(NKikimr::CanonizePath(Config.GetDatabase().GetDatabase())); // Crutch for rate limiter grpc
+        YDB_LOG_INFO("Bootstraping with",
+            {"config", Config});
+        Config.MutableDatabase()->SetDatabase(NKikimr::CanonizePath(Config.GetDatabase().GetDatabase()));   // Crutch for rate limiter grpc
         YdbConnection = NewYdbConnection(Config.GetDatabase(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
 
         Schedule(CLEANUP_PERIOD, new NActors::TEvents::TEvWakeup());
@@ -147,7 +143,11 @@ public:
         }
 
         const ui64 amount = ev->Get()->Reqs[0].Amount;
-        LOG_T("Quota request {\"" << quoter << "\", \"" << resource << "\"}. Amount: " << amount << ". Sender: " << ev->Sender);
+        YDB_LOG_TRACE("Quota request",
+            {"quoter", quoter},
+            {"resource", resource},
+            {"amount", amount},
+            {"sender", ev->Sender});
 
         TResourceProcessor& proc = Resources[key];
         proc.RequiredAmount += amount;
@@ -158,26 +158,39 @@ public:
     }
 
     void AcquireResource(const TResourceKey& key, ui64 amount, ui64 cookie) {
-        LOG_T("Send acquire resource request to {\"" << key.first << "\", \"" << key.second << "\"}. Amount: " << amount << ". Cookie: " << cookie);
-        auto asyncStatus = YdbConnection->RateLimiterClient.AcquireResource(key.first, key.second, NYdb::NRateLimiter::TAcquireResourceSettings().Amount(amount));
+        YDB_LOG_TRACE("Send acquire resource request to",
+            {"key", key.first},
+            {"value", key.second},
+            {"amount", amount},
+            {"cookie", cookie});
+        auto asyncStatus = YdbConnection->RateLimiterClient.AcquireResource(
+            key.first, key.second, NYdb::NRateLimiter::TAcquireResourceSettings().Amount(amount));
         Counters.InFlySubscribe->Inc();
-        asyncStatus.Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId(), cookie, key, amount](const NYdb::TAsyncStatus& status) {
-            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, new TEvPrivate::TEvQuotaReceived(status.GetValueSync(), key.first, key.second, amount), 0, cookie));
+        asyncStatus.Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId(), cookie, key, amount](
+                                  const NYdb::TAsyncStatus& status) {
+            actorSystem->Send(new NActors::IEventHandle(
+                selfId, selfId, new TEvPrivate::TEvQuotaReceived(status.GetValueSync(), key.first, key.second, amount), 0, cookie));
         });
     }
 
     void ProcessRequests(TResourceProcessor& proc, const TResourceKey& key) {
-        LOG_T("Process requests for {\"" << key.first << "\", \"" << key.second << "\"}. Requests: " << proc.Requests.size()
-            << ". RateLimiterInflight: " << proc.RateLimiterRequests.size() << ". AvailableAmount: " << proc.AvailableAmount
-            << ". RequiredAmount: " << proc.RequiredAmount << ". RequestedAmount: " << proc.RequestedAmount);
+        YDB_LOG_TRACE("Process requests for",
+            {"key", key.first},
+            {"value", key.second},
+            {"requests", proc.Requests.size()},
+            {"rateLimiterInflight", proc.RateLimiterRequests.size()},
+            {"availableAmount", proc.AvailableAmount},
+            {"requiredAmount", proc.RequiredAmount},
+            {"requestedAmount", proc.RequestedAmount});
         while (!proc.Requests.empty() && proc.AvailableAmount >= proc.Requests.front()->Get()->Reqs[0].Amount) {
             Send(proc.Requests.front()->Sender, new NKikimr::TEvQuota::TEvClearance(NKikimr::TEvQuota::TEvClearance::EResult::Success));
             proc.AvailableAmount -= proc.Requests.front()->Get()->Reqs[0].Amount;
             proc.RequiredAmount -= proc.Requests.front()->Get()->Reqs[0].Amount;
             proc.Requests.pop_front();
         }
-        Y_ABORT_UNLESS(!proc.Requests.empty() || proc.RequiredAmount == 0); // Requests.empty() => RequiredAmount == 0
-        if (proc.RateLimiterRequests.size() < MaxInflight && !proc.Requests.empty() && proc.RequestedAmount + proc.AvailableAmount < proc.RequiredAmount) {
+        Y_ABORT_UNLESS(!proc.Requests.empty() || proc.RequiredAmount == 0);   // Requests.empty() => RequiredAmount == 0
+        if (proc.RateLimiterRequests.size() < MaxInflight && !proc.Requests.empty() &&
+            proc.RequestedAmount + proc.AvailableAmount < proc.RequiredAmount) {
             const ui64 rateLimiterRequestCookie = RateLimiterNextRequestCookie++;
             const ui64 amountToRequest = proc.RequiredAmount - proc.AvailableAmount - proc.RequestedAmount;
             AcquireResource(key, amountToRequest, rateLimiterRequestCookie);
@@ -192,7 +205,7 @@ public:
             proc.RequiredAmount -= proc.Requests.front()->Get()->Reqs[0].Amount;
             proc.Requests.pop_front();
         }
-        Y_ABORT_UNLESS(!proc.Requests.empty() || proc.RequiredAmount == 0); // Requests.empty() => RequiredAmount == 0
+        Y_ABORT_UNLESS(!proc.Requests.empty() || proc.RequiredAmount == 0);   // Requests.empty() => RequiredAmount == 0
     }
 
     static ERetryErrorClass RetryClass(const NYdb::TStatus& status) {
@@ -200,38 +213,36 @@ public:
             return ERetryErrorClass::ShortRetry;
         }
         const NYdb::EStatus st = status.GetStatus();
-        if (st == NYdb::EStatus::INTERNAL_ERROR
-            || st == NYdb::EStatus::UNAVAILABLE
-            || st == NYdb::EStatus::TIMEOUT
-            || st == NYdb::EStatus::BAD_SESSION
-            || st == NYdb::EStatus::SESSION_EXPIRED
-            || st == NYdb::EStatus::UNDETERMINED
-            || st == NYdb::EStatus::TRANSPORT_UNAVAILABLE
-            || st == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED
-            || st == NYdb::EStatus::CLIENT_INTERNAL_ERROR
-            || st == NYdb::EStatus::CLIENT_OUT_OF_RANGE
-            || st == NYdb::EStatus::CLIENT_DISCOVERY_FAILED)
+        if (st == NYdb::EStatus::INTERNAL_ERROR || st == NYdb::EStatus::UNAVAILABLE || st == NYdb::EStatus::TIMEOUT ||
+            st == NYdb::EStatus::BAD_SESSION || st == NYdb::EStatus::SESSION_EXPIRED || st == NYdb::EStatus::UNDETERMINED ||
+            st == NYdb::EStatus::TRANSPORT_UNAVAILABLE || st == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED ||
+            st == NYdb::EStatus::CLIENT_INTERNAL_ERROR || st == NYdb::EStatus::CLIENT_OUT_OF_RANGE ||
+            st == NYdb::EStatus::CLIENT_DISCOVERY_FAILED)
         {
             return ERetryErrorClass::ShortRetry;
         }
 
-        if (st == NYdb::EStatus::OVERLOADED
-            || st == NYdb::EStatus::SESSION_BUSY
-            || st == NYdb::EStatus::CLIENT_RESOURCE_EXHAUSTED
-            || st == NYdb::EStatus::CLIENT_LIMITS_REACHED)
+        if (st == NYdb::EStatus::OVERLOADED || st == NYdb::EStatus::SESSION_BUSY || st == NYdb::EStatus::CLIENT_RESOURCE_EXHAUSTED ||
+            st == NYdb::EStatus::CLIENT_LIMITS_REACHED)
         {
             return ERetryErrorClass::LongRetry;
         }
         return ERetryErrorClass::NoRetry;
     }
 
-    bool ScheduleRetry(TResourceProcessor& proc, const TResourceKey& key, TEvPrivate::TEvQuotaReceived::TPtr& ev) { // true if error is retriable
+    bool ScheduleRetry(
+        TResourceProcessor& proc, const TResourceKey& key, TEvPrivate::TEvQuotaReceived::TPtr& ev) {   // true if error is retriable
         auto& retryState = proc.RateLimiterRequests[ev->Cookie];
         if (!retryState) {
             retryState = RetryPolicy->CreateRetryState();
         }
         if (const TMaybe<TDuration> delay = retryState->GetNextRetryDelay(ev->Get()->Status)) {
-            LOG_D("Scheduled retry in " << *delay << " for resource {\"" << key.first << "\", \"" << key.second << "\"}. Status: " << ev->Get()->Status.GetStatus() << " " << ev->Get()->Status.GetIssues().ToOneLineString());
+            YDB_LOG_DEBUG("Scheduled retry in for resource",
+                {"delay", *delay},
+                {"key", key.first},
+                {"value", key.second},
+                {"status", ev->Get()->Status.GetStatus()},
+                {"issues", ev->Get()->Status.GetIssues().ToOneLineString()});
             Schedule(*delay, new TEvPrivate::TEvRetryQuotaRequest(key.first, key.second, ev->Get()->Amount, ev->Cookie));
             return true;
         } else {
@@ -244,7 +255,13 @@ public:
         Counters.InFlySubscribe->Dec();
         const TResourceKey key(ev->Get()->RateLimiter, ev->Get()->Resource);
         TResourceProcessor& proc = Resources[key];
-        LOG_T("Received quota for resource {\"" << key.first << "\", \"" << key.second << "\"}. Amount: " << ev->Get()->Amount << ". Cookie: " << ev->Cookie << ". Status: " << ev->Get()->Status.GetStatus() << " " << ev->Get()->Status.GetIssues().ToOneLineString());
+        YDB_LOG_TRACE("Received quota for resource",
+            {"key", key.first},
+            {"value", key.second},
+            {"amount", ev->Get()->Amount},
+            {"cookie", ev->Cookie},
+            {"status", ev->Get()->Status.GetStatus()},
+            {"issues", ev->Get()->Status.GetIssues().ToOneLineString()});
         if (ev->Get()->Status.IsSuccess()) {
             proc.RateLimiterRequests.erase(ev->Cookie);
             proc.RequestedAmount -= ev->Get()->Amount;
@@ -259,7 +276,11 @@ public:
     void Handle(TEvPrivate::TEvRetryQuotaRequest::TPtr& ev) {
         const TResourceKey key(ev->Get()->RateLimiter, ev->Get()->Resource);
         const ui64 cookie = ev->Get()->Cookie;
-        LOG_T("Retry acquire quota for resource {\"" << key.first << "\", \"" << key.second << "\"}. Amount: " << ev->Get()->Amount << ". Cookie: " << cookie);
+        YDB_LOG_TRACE("Retry acquire quota for resource",
+            {"key", key.first},
+            {"value", key.second},
+            {"amount", ev->Get()->Amount},
+            {"cookie", cookie});
         AcquireResource(key, ev->Get()->Amount, cookie);
     }
 
@@ -269,12 +290,9 @@ public:
             if (const auto procIt = Resources.find(resIt->second); procIt != Resources.end()) {
                 auto& proc = procIt->second;
                 proc.Requests.erase(
-                    std::remove_if(
-                        proc.Requests.begin(),
-                        proc.Requests.end(),
-                        [&](const NKikimr::TEvQuota::TEvRequest::TPtr& req) { return req->Sender == ev->Sender; }
-                    ),
-                    proc.Requests.end());
+                    std::remove_if(proc.Requests.begin(), proc.Requests.end(), [&](const NKikimr::TEvQuota::TEvRequest::TPtr& req) {
+                        return req->Sender == ev->Sender;
+                    }), proc.Requests.end());
             }
             SenderToResource.erase(resIt);
         }
@@ -320,7 +338,9 @@ public:
             }
         }
         if (deletedRes || deletedSenders) {
-            LOG_I("CleanupEmpty. Deleted " << deletedRes << " resources and " << deletedSenders << " senders");
+            YDB_LOG_INFO("CleanupEmpty. Deleted resources and senders",
+                {"deletedRes", deletedRes},
+                {"deletedSenders", deletedSenders});
         }
         Counters.ResourceCount->Set(Resources.size());
         Counters.SenderCount->Set(SenderToResource.size());
@@ -338,15 +358,13 @@ private:
     TCounters Counters;
 };
 
-} // namespace
+}   // namespace
 
-NActors::IActor* CreateQuoterService(
-    const NFq::NConfig::TRateLimiterConfig& rateLimiterConfig,
-    const NFq::TYqSharedResources::TPtr& yqSharedResources,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+NActors::IActor* CreateQuoterService(const NFq::NConfig::TRateLimiterConfig& rateLimiterConfig,
+    const NFq::TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters)
 {
     return new TYqQuoterService(rateLimiterConfig, yqSharedResources, credentialsProviderFactory, counters);
 }
 
-} // namespace NFq
+}   // namespace NFq

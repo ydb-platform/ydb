@@ -5,12 +5,14 @@
     "endpointPrefix":"codeconnections",
     "jsonVersion":"1.0",
     "protocol":"json",
+    "protocols":["json"],
     "serviceFullName":"AWS CodeConnections",
     "serviceId":"CodeConnections",
     "signatureVersion":"v4",
     "signingName":"codeconnections",
     "targetPrefix":"com.amazonaws.codeconnections.CodeConnections_20231201",
-    "uid":"codeconnections-2023-12-01"
+    "uid":"codeconnections-2023-12-01",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "CreateConnection":{
@@ -518,7 +520,7 @@
         },
         "ConnectionArn":{
           "shape":"ConnectionArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the connection. The ARN is used as the connection reference when the connection is shared between Amazon Web Services.</p> <note> <p>The ARN is never reused if the connection is deleted.</p> </note>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the connection. The ARN is used as the connection reference when the connection is shared between Amazon Web Services services.</p> <note> <p>The ARN is never reused if the connection is deleted.</p> </note>"
         },
         "ProviderType":{
           "shape":"ProviderType",
@@ -724,6 +726,10 @@
         "TriggerResourceUpdateOn":{
           "shape":"TriggerResourceUpdateOn",
           "documentation":"<p>When to trigger Git sync to begin the stack update.</p>"
+        },
+        "PullRequestComment":{
+          "shape":"PullRequestComment",
+          "documentation":"<p>A toggle that specifies whether to enable or disable pull request comments for the sync configuration to be created.</p>"
         }
       }
     },
@@ -750,8 +756,7 @@
     },
     "DeleteConnectionOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteHostInput":{
       "type":"structure",
@@ -765,8 +770,7 @@
     },
     "DeleteHostOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteRepositoryLinkInput":{
       "type":"structure",
@@ -780,8 +784,7 @@
     },
     "DeleteRepositoryLinkOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteSyncConfigurationInput":{
       "type":"structure",
@@ -802,8 +805,7 @@
     },
     "DeleteSyncConfigurationOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeploymentFilePath":{"type":"string"},
     "Directory":{"type":"string"},
@@ -1311,10 +1313,18 @@
         "GitHub",
         "GitHubEnterpriseServer",
         "GitLab",
-        "GitLabSelfManaged"
+        "GitLabSelfManaged",
+        "AzureDevOps"
       ]
     },
     "PublishDeploymentStatus":{
+      "type":"string",
+      "enum":[
+        "ENABLED",
+        "DISABLED"
+      ]
+    },
+    "PullRequestComment":{
       "type":"string",
       "enum":[
         "ENABLED",
@@ -1823,6 +1833,10 @@
         "TriggerResourceUpdateOn":{
           "shape":"TriggerResourceUpdateOn",
           "documentation":"<p>When to trigger Git sync to begin the stack update.</p>"
+        },
+        "PullRequestComment":{
+          "shape":"PullRequestComment",
+          "documentation":"<p>A toggle that specifies whether to enable or disable pull request comments for the sync configuration to be created.</p>"
         }
       },
       "documentation":"<p>Information, such as repository, branch, provider, and resource names for a specific sync configuration.</p>"
@@ -1898,8 +1912,7 @@
     },
     "TagResourceOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{
       "type":"string",
@@ -1966,8 +1979,7 @@
     },
     "UntagResourceOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateHostInput":{
       "type":"structure",
@@ -1989,8 +2001,7 @@
     },
     "UpdateHostOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateOutOfSyncException":{
       "type":"structure",
@@ -2114,6 +2125,10 @@
         "TriggerResourceUpdateOn":{
           "shape":"TriggerResourceUpdateOn",
           "documentation":"<p>When to trigger Git sync to begin the stack update.</p>"
+        },
+        "PullRequestComment":{
+          "shape":"PullRequestComment",
+          "documentation":"<p>TA toggle that specifies whether to enable or disable pull request comments for the sync configuration to be updated.</p>"
         }
       }
     },

@@ -1,17 +1,18 @@
 {% extends '//builtin/bag.ym' %}
 
-{% block current_version %}c8dfee3e4c489c5ae0d30c484c92db102a69ec51{% endblock %}
+{% block current_version %}7dd049e3367acff457a20cc4fb4c8b366cb2892d{% endblock %}
 
 {% block current_url %}
 https://github.com/google/tcmalloc/archive/{{self.version().strip()}}.tar.gz
 {% endblock %}
 
-{% block current_date %}2025-01-30{% endblock %}
+{% block current_date %}2025-02-22{% endblock %}
 
 {% block keep_sources %}
 common.inc
 default/ya.make
 dynamic/ya.make
+internal_utils/ya.make
 malloc_extension/ya.make
 no_percpu_cache/ya.make
 no_percpu_cache/aligned_alloc.c
@@ -44,6 +45,7 @@ IF (NOT DLL_FOR)
     RECURSE(
         default
         dynamic
+        internal_utils
         malloc_extension
         no_percpu_cache
         numa_256k
@@ -65,6 +67,9 @@ done
 
 {% block move_to_output %}
 {{super()}}
+# Upstream tests are not built in Arcadia, so do not import them or their
+# fixtures.
+rm -rf tcmalloc/testing tcmalloc/testdata tcmalloc/internal/testdata
 cp -R tcmalloc common.inc ${OUTPUT}
 cp no_percpu_cache/aligned_alloc.c ${OUTPUT}/no_percpu_cache/
 {% endblock %}

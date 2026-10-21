@@ -12,8 +12,8 @@ TBordersFlowController::TBordersFlowController(const std::shared_ptr<TMergeConte
     , ReadMetadata(readMetadata)
 {
     for (const auto& portion : portions) {
-        Borders[NCommon::TReplaceKeyAdapter::BuildStart(*portion, *ReadMetadata)].Start.push_back(portion->GetPortionId());
-        Borders[NCommon::TReplaceKeyAdapter::BuildFinish(*portion, *ReadMetadata)].Finish.push_back(portion->GetPortionId());
+        Borders[NCommon::TReplaceKeyAdapter::BuildStart(*portion, ReadMetadata->GetRequestSorting())].Start.push_back(portion->GetPortionId());
+        Borders[NCommon::TReplaceKeyAdapter::BuildFinish(*portion, ReadMetadata->GetRequestSorting())].Finish.push_back(portion->GetPortionId());
     }
     BuildExclusivePortions();
     Counters->OnLeftBorders(Borders.size());
@@ -65,7 +65,7 @@ bool TBordersFlowController::ExtractExclusiveInterval(const ui64 portionId) {
 }
 
 TBordersIterator TBordersFlowController::Next(const std::shared_ptr<const TPortionInfo>& portion) {
-    auto border = NCommon::TReplaceKeyAdapter::BuildFinish(*portion, *ReadMetadata);
+    auto border = NCommon::TReplaceKeyAdapter::BuildFinish(*portion, ReadMetadata->GetRequestSorting());
     TBordersIteratorBuilder builder;
     ui32 oldWaitingBordersSize = WaitingBorders.size();
     for (auto it = Borders.begin(); it != Borders.end() && it->first <= border; it = Borders.erase(it)) {
@@ -85,7 +85,7 @@ TString TBordersFlowController::DebugString() const {
     sb << "ReadyBorders=" << ReadyBorders.size() << ";";
     sb << "BordersQueue=" << BordersQueue.size() << ";";
     sb << "Reverse=" << IsReversed() << ";";
-    sb << "InFlight=" << IsInflight << ";";
+    sb << "MergeInflight=" << IsInflight << ";";
     sb << "}";
     return sb;
 }
@@ -142,11 +142,24 @@ void TBordersFlowController::DrainQueue() {
     const std::shared_ptr<TMergeBorders> task = std::make_shared<TMergeBorders>(ev.Get()->Recipient, MergeContext, ev, readyBorders);
     NConveyorComposite::TDeduplicationServiceOperator::SendTaskToExecute(task);
     IsInflight = true;
+    Counters->OnMergeInflight(1);
 }
 
 void TBordersFlowController::OnReadyMergeBorders() {
     IsInflight = false;
+    Counters->OnMergeInflight(-1);
     DrainQueue();
+}
+
+void TBordersFlowController::ClearInflightOnAbort() {
+    if (IsInflight) {
+        IsInflight = false;
+        Counters->OnMergeInflight(-1);
+    }
+    if (!BordersQueue.empty()) {
+        Counters->OnMergeQueue(-1 * static_cast<i64>(BordersQueue.size()));
+        BordersQueue.clear();
+    }
 }
 
 void TBordersFlowController::Enqueue(const TEvBordersConstructionResult::TPtr& event) {

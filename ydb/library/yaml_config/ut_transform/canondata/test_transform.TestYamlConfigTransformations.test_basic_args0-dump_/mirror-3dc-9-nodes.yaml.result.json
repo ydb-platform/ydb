@@ -1697,9 +1697,5 @@
         [
           "legacy"
         ]
-    },
-  "TableServiceConfig":
-    {
-      "SqlVersion":1
     }
 }

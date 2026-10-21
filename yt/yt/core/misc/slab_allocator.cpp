@@ -157,9 +157,9 @@ public:
 
         size_t totalSize = segmentCount * (sizeof(TFreeListItem) + ObjectSize_ * ObjectCount_);
 
-        YT_LOG_TRACE("Destroying arena (ObjectSize: %v, TotalSize: %v)",
-            ObjectSize_,
-            totalSize);
+        YT_TLOG_TRACE("Destroying arena")
+            .With("ObjectSize", ObjectSize_)
+            .With("TotalSize", totalSize);
 
         if (MemoryTracker_) {
             MemoryTracker_->Release(totalSize);
@@ -177,6 +177,17 @@ public:
 
         auto maxRefCount = static_cast<ssize_t>(segmentCount * ObjectCount_) + 4;
         return segmentCount > 1 && refCount * 2 < maxRefCount || segmentCount == 1 && refCount == 2;
+    }
+
+    i64 GetAliveByteSize() const
+    {
+        return GetAliveItemCount() * ObjectSize_;
+    }
+
+    i64 GetAliveItemCount() const
+    {
+        auto refCount = GetRefCounter(this)->GetRefCount();
+        return refCount;
     }
 
     IMemoryUsageTrackerPtr GetMemoryTracker() const
@@ -237,12 +248,12 @@ private:
         auto refCount = GetRefCounter(this)->GetRefCount();
         constexpr auto& Logger = LockFreeLogger;
 
-        YT_LOG_TRACE("Allocating segment (ObjectSize: %v, RefCount: %v, SegmentCount: %v, TotalObjectCapacity: %v, TotalSize: %v)",
-            ObjectSize_,
-            refCount,
-            segmentCount,
-            segmentCount * ObjectCount_,
-            segmentCount * totalSize);
+        YT_TLOG_TRACE("Allocating segment")
+            .With("ObjectSize", ObjectSize_)
+            .With("RefCount", refCount)
+            .With("SegmentCount", segmentCount)
+            .With("TotalObjectCapacity", segmentCount * ObjectCount_)
+            .With("TotalSize", segmentCount * totalSize);
 
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
         TRefCountedTrackerFacade::AllocateSpace(GetRefCountedTypeCookie<TSmallArena>(), totalSize);
@@ -314,6 +325,16 @@ public:
         FreedItems.Increment();
         AliveItems.Update(RefCount_.load() - 1);
         Unref();
+    }
+
+    i64 GetAliveByteSize() const
+    {
+        return AcquiredMemory_.load();
+    }
+
+    i64 GetAliveItemCount() const
+    {
+        return RefCount_.load();
     }
 
     size_t Unref()
@@ -515,6 +536,34 @@ bool TSlabAllocator::ReallocateArenasIfNeeded()
         }
     }
     return hasReallocatedArenas;
+}
+
+i64 TSlabAllocator::GetAliveByteSize() const
+{
+    i64 byteSize = 0;
+
+    for (size_t rank = 1; rank < SmallRankCount; ++rank) {
+        auto arena = SmallArenas_[rank].Acquire();
+        byteSize += arena->GetAliveByteSize();
+    }
+
+    byteSize += LargeArena_->GetAliveByteSize();
+
+    return byteSize;
+}
+
+i64 TSlabAllocator::GetAliveItemCount() const
+{
+    i64 itemCount = 0;
+
+    for (size_t rank = 1; rank < SmallRankCount; ++rank) {
+        auto arena = SmallArenas_[rank].Acquire();
+        itemCount += arena->GetAliveItemCount();
+    }
+
+    itemCount += LargeArena_->GetAliveItemCount();
+
+    return itemCount;
 }
 
 void TSlabAllocator::Free(void* ptr)

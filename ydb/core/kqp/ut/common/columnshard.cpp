@@ -281,7 +281,7 @@ namespace NKqp {
         case NScheme::NTypeIds::Timestamp:
             return arrow::field(name, arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), nullable);
         case NScheme::NTypeIds::Interval:
-            return arrow::field(name, arrow::duration(arrow::TimeUnit::TimeUnit::MICRO), nullable);
+            return arrow::field(name, arrow::int64(), nullable);
         case NScheme::NTypeIds::Date32:
             return arrow::field(name, arrow::int32(), nullable);
         case NScheme::NTypeIds::Datetime64:
@@ -290,7 +290,10 @@ namespace NKqp {
             return arrow::field(name, arrow::int64(), nullable);
         case NScheme::NTypeIds::JsonDocument:
             return arrow::field(name, arrow::binary(), nullable);
+        case NScheme::NTypeIds::DyNumber:
+            return arrow::field(name, arrow::binary(), nullable);
         case NScheme::NTypeIds::Decimal:
+        case NScheme::NTypeIds::Uuid:
             return arrow::field(name, std::make_shared<arrow::FixedSizeBinaryType>(NScheme::FSB_SIZE), nullable);
         case NScheme::NTypeIds::Pg:
             switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {

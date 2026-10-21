@@ -6,6 +6,13 @@
 #include <ydb/library/testlib/common/test_utils.h>
 
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/lexer.h>
+
+#include <util/string/cast.h>
+#include <util/string/subst.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -14,6 +21,47 @@ using namespace NYdb;
 using namespace NYdb::NDump;
 
 namespace {
+
+struct TChangefeedTopicSettings {
+    TDuration RetentionPeriod;
+    ui64 MinActivePartitions = 0;
+    ui64 MaxActivePartitions = 0;
+    NTopic::EAutoPartitioningStrategy AutoPartitioningStrategy = NTopic::EAutoPartitioningStrategy::Unspecified;
+    TDuration AutoPartitioningStabilizationWindow;
+    ui32 AutoPartitioningUpUtilizationPercent = 0;
+    ui32 AutoPartitioningDownUtilizationPercent = 0;
+    std::optional<size_t> InitialPartitionCount;
+
+    bool operator==(const TChangefeedTopicSettings& other) const {
+        return RetentionPeriod == other.RetentionPeriod
+            && MinActivePartitions == other.MinActivePartitions
+            && MaxActivePartitions == other.MaxActivePartitions
+            && AutoPartitioningStrategy == other.AutoPartitioningStrategy
+            && AutoPartitioningStabilizationWindow == other.AutoPartitioningStabilizationWindow
+            && AutoPartitioningUpUtilizationPercent == other.AutoPartitioningUpUtilizationPercent
+            && AutoPartitioningDownUtilizationPercent == other.AutoPartitioningDownUtilizationPercent
+            && InitialPartitionCount == other.InitialPartitionCount;
+    }
+
+    TString DebugString() const {
+        return TStringBuilder()
+            << "{ retention_us: " << RetentionPeriod.MicroSeconds()
+            << ", min_active_partitions: " << MinActivePartitions
+            << ", max_active_partitions: " << MaxActivePartitions
+            << ", auto_partitioning_strategy: " << static_cast<ui32>(AutoPartitioningStrategy)
+            << ", auto_partitioning_stabilization_window_us: " << AutoPartitioningStabilizationWindow.MicroSeconds()
+            << ", auto_partitioning_up_utilization_percent: " << AutoPartitioningUpUtilizationPercent
+            << ", auto_partitioning_down_utilization_percent: " << AutoPartitioningDownUtilizationPercent
+            << ", initial_partition_count: "
+            << (InitialPartitionCount ? ToString(*InitialPartitionCount) : TString("not compared"))
+            << " }";
+    }
+};
+
+struct TChangefeedRoundTripSpec {
+    TString Name;
+    bool CompareInitialPartitionCount = true;
+};
 
 class TShowCreateChecker {
 public:
@@ -28,7 +76,7 @@ public:
         CreateTier("tier2");
     }
 
-    void WaitForCdcStreamReady(const std::string& streamPath) {
+    void WaitForCdcStreamReady(const TString& streamPath) {
         for (int i = 0; i < 60; ++i) {
             auto pathDesc = DescribePath(Runtime, TString(streamPath));
             if (pathDesc.HasCdcStreamDescription()
@@ -43,6 +91,14 @@ public:
 
     std::string ShowCreateTable(NQuery::TSession& session, const std::string& tableName) {
         return ShowCreate(session, "TABLE", tableName);
+    }
+
+    std::string ShowCreateExternalDataSource(NQuery::TSession& session, const std::string& dataSourceName) {
+        return ShowCreate(session, "EXTERNAL DATA SOURCE", dataSourceName);
+    }
+
+    std::string ShowCreateExternalTable(NQuery::TSession& session, const std::string& tableName) {
+        return ShowCreate(session, "EXTERNAL TABLE", tableName);
     }
 
     void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false, bool initialScan = false) {
@@ -82,6 +138,63 @@ public:
         CompareDescriptions(describeResultOrig, describeResultNew, showCreateTableQuery);
     }
 
+    void CheckChangefeedRoundTrip(const std::string& query, const std::string& tableName,
+            const std::string& changefeedName, const std::string& alterTopicQuery = {},
+            bool compareInitialPartitionCount = true)
+    {
+        CheckChangefeedsRoundTrip(query, tableName,
+            {{TString(changefeedName), compareInitialPartitionCount}}, alterTopicQuery);
+    }
+
+    void CheckChangefeedsRoundTrip(const std::string& query, const std::string& tableName,
+            const TVector<TChangefeedRoundTripSpec>& changefeeds,
+            const std::string& alterTopicQuery = {})
+    {
+        ExecuteQuery(Session, query);
+
+        for (const auto& changefeed : changefeeds) {
+            WaitForCdcStreamReady(TStringBuilder() << "/Root/" << tableName << "/" << changefeed.Name);
+        }
+
+        if (!alterTopicQuery.empty()) {
+            ExecuteQuery(Session, alterTopicQuery);
+        }
+
+        const auto originalTableDescription = DescribeTable(tableName);
+        TVector<TChangefeedTopicSettings> originalTopicSettings;
+        originalTopicSettings.reserve(changefeeds.size());
+        for (const auto& changefeed : changefeeds) {
+            const TString topicPath = TStringBuilder() << "/Root/" << tableName << "/" << changefeed.Name;
+            originalTopicSettings.push_back(
+                DescribeTopicSettings(topicPath, changefeed.CompareInitialPartitionCount));
+        }
+        const auto showCreateTableQuery = ShowCreateTable(Session, tableName);
+
+        DropTable(Session, tableName);
+        ExecuteDdlStatements(TString(showCreateTableQuery));
+        for (const auto& changefeed : changefeeds) {
+            WaitForCdcStreamReady(TStringBuilder() << "/Root/" << tableName << "/" << changefeed.Name);
+        }
+
+        const auto recreatedTableDescription = DescribeTable(tableName);
+
+        CompareDescriptions(originalTableDescription, recreatedTableDescription, showCreateTableQuery);
+        for (size_t i = 0; i < changefeeds.size(); ++i) {
+            const auto& changefeed = changefeeds[i];
+            const TString topicPath = TStringBuilder() << "/Root/" << tableName << "/" << changefeed.Name;
+            const auto recreatedTopicSettings =
+                DescribeTopicSettings(topicPath, changefeed.CompareInitialPartitionCount);
+            UNIT_ASSERT_C(originalTopicSettings[i] == recreatedTopicSettings,
+                "Changefeed topic settings differ after SHOW CREATE TABLE round-trip"
+                << "\nChangefeed: " << changefeed.Name
+                << "\nOriginal: " << originalTopicSettings[i].DebugString()
+                << "\nRecreated: " << recreatedTopicSettings.DebugString()
+                << "\nDDL:\n" << showCreateTableQuery);
+        }
+
+        DropTable(Session, tableName);
+    }
+
     // Checks that the view created from the description provided by the `SHOW CREATE VIEW` statement
     // can be used to create a view with a description equal to the original.
     void CheckShowCreateView(const std::string& query, const std::string& viewName, const std::string& formatQuery = "") {
@@ -106,6 +219,21 @@ public:
     }
 
 private:
+
+    void ExecuteDdlStatements(const TString& query) {
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+
+        TVector<TString> statements;
+        NYql::TIssues issues;
+        UNIT_ASSERT_C(NSQLTranslationV1::SplitQueryToStatements(
+            query, NSQLTranslationV1::MakeLexer(lexers, false), statements, issues), issues.ToString());
+        UNIT_ASSERT(!statements.empty());
+
+        for (const auto& statement : statements) {
+            ExecuteQuery(Session, statement);
+        }
+    }
 
     void CreateTier(const std::string& tierName) {
         ExecuteQuery(Session, std::format(R"(
@@ -152,6 +280,29 @@ private:
         return tableDesc;
     }
 
+    TChangefeedTopicSettings DescribeTopicSettings(const TString& topicPath, bool includeInitialPartitionCount) {
+        NTopic::TTopicClient topicClient(Env.GetDriver(), NTopic::TTopicClientSettings().Database("/Root"));
+        auto result = topicClient.DescribeTopic(topicPath).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto& description = result.GetTopicDescription();
+        const auto& partitioningSettings = description.GetPartitioningSettings();
+
+        TChangefeedTopicSettings settings;
+        settings.RetentionPeriod = description.GetRetentionPeriod();
+        settings.MinActivePartitions = partitioningSettings.GetMinActivePartitions();
+        settings.MaxActivePartitions = partitioningSettings.GetMaxActivePartitions();
+        const auto& autoPartitioningSettings = partitioningSettings.GetAutoPartitioningSettings();
+        settings.AutoPartitioningStrategy = autoPartitioningSettings.GetStrategy();
+        settings.AutoPartitioningStabilizationWindow = autoPartitioningSettings.GetStabilizationWindow();
+        settings.AutoPartitioningUpUtilizationPercent = autoPartitioningSettings.GetUpUtilizationPercent();
+        settings.AutoPartitioningDownUtilizationPercent = autoPartitioningSettings.GetDownUtilizationPercent();
+        if (includeInitialPartitionCount) {
+            settings.InitialPartitionCount = description.GetPartitions().size();
+        }
+        return settings;
+    }
+
     NKikimrSchemeOp::TViewDescription DescribeView(const std::string& viewName) {
         auto pathDescription = DescribePath(Runtime, TString(viewName));
         UNIT_ASSERT_C(pathDescription.HasViewDescription(), pathDescription.DebugString());
@@ -191,8 +342,12 @@ private:
             if (column.Name == "Path") {
                 UNIT_ASSERT_VALUES_EQUAL(value, path);
             } else if (column.Name == "PathType") {
-                auto actualType = to_upper(TString(value));
-                UNIT_ASSERT_VALUES_EQUAL(actualType, type);
+                TString actualType = to_upper(TString(value));
+                TString expectedType = TString(type);
+                // The "EXTERNAL DATA SOURCE" SQL keyword maps to a single
+                // CamelCase enum name "ExternalDataSource" in the column.
+                SubstGlobal(expectedType, " ", "");
+                UNIT_ASSERT_VALUES_EQUAL(actualType, expectedType);
             } else if (column.Name == "CreateQuery") {
                 createQuery = value;
             } else {
@@ -217,7 +372,18 @@ private:
     }
 
     template <typename TProtobufDescription>
-    void CompareDescriptions(const TProtobufDescription& describeResultOrig, const TProtobufDescription& describeResultNew, const std::string& showCreateTableQuery) {
+    void CompareDescriptions(TProtobufDescription describeResultOrig, TProtobufDescription describeResultNew, const std::string& showCreateTableQuery) {
+        if constexpr (std::is_same_v<TProtobufDescription, Ydb::Table::DescribeTableResult>) {
+            auto sortIndexes = [](TProtobufDescription& desc) {
+                if (desc.indexes_size() > 1) {
+                    std::sort(desc.mutable_indexes()->begin(), desc.mutable_indexes()->end(),
+                        [](const auto& a, const auto& b) { return a.name() < b.name(); });
+                }
+            };
+            sortIndexes(describeResultOrig);
+            sortIndexes(describeResultNew);
+        }
+
         TString first;
         ::google::protobuf::TextFormat::PrintToString(describeResultOrig, &first);
         TString second;
@@ -253,6 +419,7 @@ private:
         FillPartitioningSettings(scheme, tableDesc);
         FillKeyBloomFilter(scheme, tableDesc);
         FillReadReplicasSettings(scheme, tableDesc);
+        FillMetricsSettings(scheme, tableDesc);
 
         TString error;
         Ydb::StatusIds::StatusCode status;
@@ -714,6 +881,128 @@ Y_UNIT_TEST(TableDefaultLiteral) {
     );
 }
 
+Y_UNIT_TEST(TableWithMultiColumnStatistics) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+    TShowCreateChecker checker(env);
+
+    // Exact-output check for a row table.
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b) WITH (COUNT_MIN_SKETCH)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64,
+                `a` Uint64,
+                `b` Utf8,
+                STATISTICS `s` ON (`a`, `b`) WITH (COUNT_MIN_SKETCH),
+                PRIMARY KEY (`Key`)
+            );
+        )"
+    );
+
+    // Round-trip check (create -> SHOW CREATE -> recreate -> compare) for a column table.
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b) WITH (COUNT_MIN_SKETCH)
+            )
+            WITH (STORE = COLUMN);
+        )", "test_show_create"
+    );
+}
+
+Y_UNIT_TEST(TableWithEqHeightHistogram) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b) WITH (EQ_HEIGHT_HISTOGRAM)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64,
+                `a` Uint64,
+                `b` Utf8,
+                STATISTICS `s` ON (`a`, `b`) WITH (EQ_HEIGHT_HISTOGRAM),
+                PRIMARY KEY (`Key`)
+            );
+        )"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b) WITH (EQ_HEIGHT_HISTOGRAM)
+            )
+            WITH (STORE = COLUMN);
+        )", "test_show_create"
+    );
+}
+
+Y_UNIT_TEST(TableWithMultiColumnStatisticsWithoutWith) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64,
+                `a` Uint64,
+                `b` Utf8,
+                STATISTICS `s` ON (`a`, `b`),
+                PRIMARY KEY (`Key`)
+            );
+        )"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                a Uint64,
+                b Utf8,
+                PRIMARY KEY (Key),
+                STATISTICS s ON (a, b)
+            )
+            WITH (STORE = COLUMN);
+        )", "test_show_create"
+    );
+}
+
 Y_UNIT_TEST(TablePartitionAtKeys) {
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
 
@@ -988,6 +1277,210 @@ Y_UNIT_TEST(TableReadReplicas) {
     );
 }
 
+Y_UNIT_TEST(TableMetricsLevel) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableDetailedMetrics = true});
+
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                METRICS_LEVEL = "TABLE"
+            );
+        )", "test_show_create"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                METRICS_LEVEL = "PARTITION"
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                PRIMARY KEY (`Key`)
+            )
+            WITH (METRICS_LEVEL = 'PARTITION');
+        )"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                METRICS_LEVEL = "DATABASE"
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                PRIMARY KEY (`Key`)
+            )
+            WITH (METRICS_LEVEL = 'DATABASE');
+        )"
+    );
+}
+
+Y_UNIT_TEST(TableMetricsLevelAfterAlter) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableDetailedMetrics = true});
+    TShowCreateChecker checker(env);
+
+    // RESET leaves no METRICS_LEVEL, and with nothing else set, no WITH at all.
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                METRICS_LEVEL = "TABLE"
+            );
+            ALTER TABLE test_show_create RESET (METRICS_LEVEL);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                PRIMARY KEY (`Key`)
+            );
+        )"
+    );
+
+    const std::string createWithOtherSettings = R"(
+        CREATE TABLE test_show_create (
+            Key Uint64 NOT NULL,
+            Value String NOT NULL,
+            Ts Timestamp,
+            PRIMARY KEY (Key)
+        )
+        WITH (
+            AUTO_PARTITIONING_BY_SIZE = ENABLED,
+            AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000,
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+            READ_REPLICAS_SETTINGS = "PER_AZ:1",
+            METRICS_LEVEL = "PARTITION",
+            KEY_BLOOM_FILTER = ENABLED,
+            TTL = Interval("P1D") ON Ts
+        );
+    )";
+
+    checker.CheckShowCreateTable(createWithOtherSettings, "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                `Ts` Timestamp,
+                PRIMARY KEY (`Key`)
+            )
+            WITH (
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+                READ_REPLICAS_SETTINGS = 'PER_AZ:1',
+                METRICS_LEVEL = 'PARTITION',
+                KEY_BLOOM_FILTER = ENABLED,
+                TTL = INTERVAL('P1D') DELETE ON Ts
+            );
+        )"
+    );
+
+    // RESET drops only METRICS_LEVEL, the other settings stay.
+    checker.CheckShowCreateTable(createWithOtherSettings + R"(
+            ALTER TABLE test_show_create RESET (METRICS_LEVEL);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                `Ts` Timestamp,
+                PRIMARY KEY (`Key`)
+            )
+            WITH (
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+                READ_REPLICAS_SETTINGS = 'PER_AZ:1',
+                KEY_BLOOM_FILTER = ENABLED,
+                TTL = INTERVAL('P1D') DELETE ON Ts
+            );
+        )"
+    );
+
+    // SET together with another setting in one ALTER.
+    checker.CheckShowCreateTable(createWithOtherSettings + R"(
+            ALTER TABLE test_show_create SET (METRICS_LEVEL = "TABLE", AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                `Ts` Timestamp,
+                PRIMARY KEY (`Key`)
+            )
+            WITH (
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3,
+                READ_REPLICAS_SETTINGS = 'PER_AZ:1',
+                METRICS_LEVEL = 'TABLE',
+                KEY_BLOOM_FILTER = ENABLED,
+                TTL = INTERVAL('P1D') DELETE ON Ts
+            );
+        )"
+    );
+}
+
+Y_UNIT_TEST(TableMetricsLevelIndexedCreate) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableDetailedMetrics = true});
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                INDEX idx GLOBAL ON (Value),
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                METRICS_LEVEL = "PARTITION"
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                INDEX `idx` GLOBAL SYNC ON (`Value`),
+                PRIMARY KEY (`Key`)
+            )
+            WITH (METRICS_LEVEL = 'PARTITION');
+        )"
+    );
+}
+
 Y_UNIT_TEST(TableKeyBloomFilter) {
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
 
@@ -1031,6 +1524,23 @@ Y_UNIT_TEST(TableKeyBloomFilter) {
             WITH (KEY_BLOOM_FILTER = DISABLED);
         )"
     );
+}
+
+Y_UNIT_TEST(TableTtlObjectKeyPrefix) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    env.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableTieringObjectKeyTree(true);
+    TShowCreateChecker checker(env);
+    checker.CheckShowCreateTable(R"(
+        CREATE TABLE test_show_create (
+            ts Timestamp NOT NULL,
+            PRIMARY KEY(ts)
+        ) WITH (
+            STORE = COLUMN,
+            TTL = Interval("P1D") TO EXTERNAL DATA SOURCE `/Root/tier1`.`archive//2026:09`,
+                  Interval("P2D") TO EXTERNAL DATA SOURCE `/Root/tier1`.`cold`,
+                  Interval("P3D") DELETE ON ts
+        );
+    )", "test_show_create");
 }
 
 Y_UNIT_TEST(TableTtlSettings) {
@@ -1190,7 +1700,12 @@ Y_UNIT_TEST(TableTemporary) {
 }
 
 Y_UNIT_TEST(Table) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableFulltextIndex = true});
+    TTestEnv env(1, 4, {
+        .StoragePools = 3,
+        .ShowCreateTable = true,
+        .EnableFulltextIndex = true,
+        .EnableSuperLemmer = true,
+    });
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -1222,6 +1737,17 @@ Y_UNIT_TEST(Table) {
     checker.CheckShowCreateTable(
         R"(
             CREATE TABLE test_show_create (
+                Key Uint64,
+                Text String,
+                PRIMARY KEY (Key),
+                INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text) WITH (tokenizer=standard, language="russian,english", use_filter_superlemmer=true)
+            );
+        )", "test_show_create"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
                 Key1 Int64 NOT NULL,
                 Key2 Utf8 NOT NULL,
                 Key3 PgInt2 NOT NULL,
@@ -1243,6 +1769,19 @@ Y_UNIT_TEST(Table) {
                 Data String,
                 PRIMARY KEY (Key),
                 INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_min=3)
+            );
+            ALTER TABLE test_show_create ADD INDEX Index2 GLOBAL SYNC ON (Data);
+        )", "test_show_create"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                Text String,
+                Data String,
+                PRIMARY KEY (Key),
+                INDEX fulltext_idx GLOBAL USING fulltext_relevance ON (Text) WITH (tokenizer=alphanumeric, use_filter_snowball=true, language="russian")
             );
             ALTER TABLE test_show_create ADD INDEX Index2 GLOBAL SYNC ON (Data);
         )", "test_show_create"
@@ -1338,7 +1877,6 @@ Y_UNIT_TEST(Table) {
                 INDEX Index2 GLOBAL USING vector_kmeans_tree ON (Value5) COVER (Value1, Value3) WITH (distance=manhattan, vector_type=float, vector_dimension=2, clusters=2, levels=1),
                 PRIMARY KEY (Key1, Key2, Key3),
             ) WITH (
-                TTL = Interval("PT1H") DELETE ON Value4,
                 KEY_BLOOM_FILTER = ENABLED,
                 PARTITION_AT_KEYS = ((10), (100, "123"), (1000, "cde")),
                 AUTO_PARTITIONING_BY_LOAD = ENABLED
@@ -1362,8 +1900,7 @@ Y_UNIT_TEST(Table) {
             WITH (
                 AUTO_PARTITIONING_BY_LOAD = ENABLED,
                 PARTITION_AT_KEYS = ((10), (100, '123'), (1000, 'cde')),
-                KEY_BLOOM_FILTER = ENABLED,
-                TTL = INTERVAL('PT1H') DELETE ON Value4
+                KEY_BLOOM_FILTER = ENABLED
             );
         )"
     );
@@ -1643,6 +2180,217 @@ Y_UNIT_TEST(TableChangefeeds) {
             ;
         )", false, true
     );
+}
+
+Y_UNIT_TEST(TableChangefeedSettingsRoundTrip) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    TShowCreateChecker checker(env);
+
+    checker.CheckChangefeedRoundTrip(R"(
+        CREATE TABLE show_create_settings (
+            Key Uint64,
+            Value String,
+            PRIMARY KEY (Key)
+        );
+        ALTER TABLE show_create_settings
+            ADD CHANGEFEED `feed` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON',
+                VIRTUAL_TIMESTAMPS = TRUE,
+                BARRIERS_INTERVAL = INTERVAL('PT1S'),
+                RETENTION_PERIOD = INTERVAL('PT12H'),
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 2,
+                TOPIC_MAX_ACTIVE_PARTITIONS = 4
+            );
+    )", "show_create_settings", "feed");
+
+    checker.CheckChangefeedRoundTrip(R"(
+        CREATE TABLE show_create_settings_altered (
+            Key Uint64,
+            Value String,
+            PRIMARY KEY (Key)
+        );
+        ALTER TABLE show_create_settings_altered
+            ADD CHANGEFEED `feed` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON',
+                BARRIERS_INTERVAL = INTERVAL('PT1S'),
+                RETENTION_PERIOD = INTERVAL('PT12H'),
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 2,
+                TOPIC_MAX_ACTIVE_PARTITIONS = 4
+            );
+    )", "show_create_settings_altered", "feed", R"(
+        ALTER TOPIC `/Root/show_create_settings_altered/feed` SET (
+            retention_period = INTERVAL('PT6H'),
+            min_active_partitions = 3,
+            max_active_partitions = 8,
+            auto_partitioning_strategy = 'scale_up_and_down',
+            auto_partitioning_stabilization_window = INTERVAL('PT15M'),
+            auto_partitioning_up_utilization_percent = 70,
+            auto_partitioning_down_utilization_percent = 25
+        );
+    )", false);
+
+    checker.CheckChangefeedRoundTrip(R"(
+        CREATE TABLE show_create_settings_fixed (
+            Key Uint64,
+            Value String,
+            PRIMARY KEY (Key)
+        );
+        ALTER TABLE show_create_settings_fixed
+            ADD CHANGEFEED `feed` WITH (
+                MODE = 'KEYS_ONLY',
+                FORMAT = 'JSON',
+                RETENTION_PERIOD = INTERVAL('PT3H'),
+                TOPIC_AUTO_PARTITIONING = 'DISABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 3
+            );
+    )", "show_create_settings_fixed", "feed");
+
+    checker.CheckChangefeedRoundTrip(R"(
+        CREATE TABLE show_create_settings_paused (
+            Key Uint64,
+            Value String,
+            PRIMARY KEY (Key)
+        );
+        ALTER TABLE show_create_settings_paused
+            ADD CHANGEFEED `feed` WITH (
+                MODE = 'KEYS_ONLY',
+                FORMAT = 'JSON',
+                RETENTION_PERIOD = INTERVAL('PT2H'),
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 2,
+                TOPIC_MAX_ACTIVE_PARTITIONS = 4
+            );
+    )", "show_create_settings_paused", "feed", R"(
+        ALTER TOPIC `/Root/show_create_settings_paused/feed`
+            SET (auto_partitioning_strategy = 'paused');
+    )");
+}
+
+Y_UNIT_TEST(TableChangefeedStringKeyPartitionSettingsRoundTrip) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    TShowCreateChecker checker(env);
+
+    checker.CheckChangefeedRoundTrip(R"(
+        CREATE TABLE show_create_string_key_settings (
+            Key Utf8,
+            Value String,
+            PRIMARY KEY (Key)
+        );
+        ALTER TABLE show_create_string_key_settings
+            ADD CHANGEFEED `feed` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON',
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MAX_ACTIVE_PARTITIONS = 4
+            );
+    )", "show_create_string_key_settings", "feed", R"(
+        ALTER TOPIC `/Root/show_create_string_key_settings/feed` SET (
+            min_active_partitions = 3,
+            max_active_partitions = 4
+        );
+    )", false);
+}
+
+Y_UNIT_TEST(TableMultipleAutoPartitionedChangefeedsRoundTrip) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    TShowCreateChecker checker(env);
+
+    checker.CheckChangefeedsRoundTrip(R"(
+        CREATE TABLE show_create_multiple_auto_changefeeds (
+            Key Uint64,
+            Value String,
+            PRIMARY KEY (Key)
+        );
+        ALTER TABLE show_create_multiple_auto_changefeeds
+            ADD CHANGEFEED `feed_scale_up` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON',
+                RETENTION_PERIOD = INTERVAL('PT2H'),
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 2,
+                TOPIC_MAX_ACTIVE_PARTITIONS = 4
+            );
+        ALTER TABLE show_create_multiple_auto_changefeeds
+            ADD CHANGEFEED `feed_paused` WITH (
+                MODE = 'KEYS_ONLY',
+                FORMAT = 'JSON',
+                RETENTION_PERIOD = INTERVAL('PT3H'),
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 3,
+                TOPIC_MAX_ACTIVE_PARTITIONS = 6
+            );
+    )", "show_create_multiple_auto_changefeeds", {
+        {.Name = "feed_scale_up"},
+        {.Name = "feed_paused"},
+    }, R"(
+        ALTER TOPIC `/Root/show_create_multiple_auto_changefeeds/feed_scale_up` SET (
+            max_active_partitions = 5,
+            auto_partitioning_stabilization_window = INTERVAL('PT10M'),
+            auto_partitioning_up_utilization_percent = 75,
+            auto_partitioning_down_utilization_percent = 20
+        );
+        ALTER TOPIC `/Root/show_create_multiple_auto_changefeeds/feed_paused` SET (
+            max_active_partitions = 9,
+            auto_partitioning_strategy = 'paused',
+            auto_partitioning_stabilization_window = INTERVAL('PT20M'),
+            auto_partitioning_up_utilization_percent = 80,
+            auto_partitioning_down_utilization_percent = 30
+        );
+    )");
+}
+
+Y_UNIT_TEST(TableChangefeedSettingsWithAdditionalDdlRoundTrip) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    TShowCreateChecker checker(env);
+
+    checker.CheckChangefeedRoundTrip(R"(
+        CREATE TABLE show_create_settings_with_ddl (
+            Key Uint64,
+            Seq BigSerial,
+            IndexedValue Uint64,
+            Value String,
+            ObsoleteValue String,
+            INDEX ValueIndex GLOBAL ASYNC ON (IndexedValue) COVER (Value),
+            PRIMARY KEY (Key)
+        ) WITH (
+            AUTO_PARTITIONING_BY_SIZE = ENABLED,
+            AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000,
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+        );
+        ALTER TABLE show_create_settings_with_ddl
+            ADD COLUMN AddedValue Utf8;
+        ALTER TABLE show_create_settings_with_ddl
+            DROP COLUMN ObsoleteValue;
+        ALTER TABLE show_create_settings_with_ddl
+            SET (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3);
+        ALTER TABLE show_create_settings_with_ddl ALTER INDEX ValueIndex SET (
+            AUTO_PARTITIONING_BY_LOAD = ENABLED,
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+            AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 10
+        );
+        ALTER SEQUENCE IF EXISTS `/Root/show_create_settings_with_ddl/_serial_column_Seq`
+            START WITH 50
+            INCREMENT BY 11;
+        ALTER SEQUENCE IF EXISTS `/Root/show_create_settings_with_ddl/_serial_column_Seq`
+            RESTART WITH 72;
+        ALTER TABLE show_create_settings_with_ddl
+            ADD CHANGEFEED `feed` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON',
+                BARRIERS_INTERVAL = INTERVAL('PT1S'),
+                RETENTION_PERIOD = INTERVAL('PT12H'),
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 2,
+                TOPIC_MAX_ACTIVE_PARTITIONS = 4
+            );
+    )", "show_create_settings_with_ddl", "feed", R"(
+        ALTER TOPIC `/Root/show_create_settings_with_ddl/feed`
+            SET (auto_partitioning_strategy = 'paused');
+    )");
 }
 
 Y_UNIT_TEST(TableChangefeedAfterInitialScan) {
@@ -1945,7 +2693,7 @@ Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
     );
 }
 
-Y_UNIT_TEST(TableColumnAlterColumn) {
+void CheckAlterColumnShowCreate(double dictionaryUniqueFraction, bool enableNativeColumns) {
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true, .EnableCsDictionaryEncoding = true});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
@@ -1955,8 +2703,10 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
 
     TShowCreateChecker checker(env);
 
-    checker.CheckShowCreateTable(
-        R"(
+    const TString fractionStr = ToString(dictionaryUniqueFraction);
+    const TString nativeColumnsStr = enableNativeColumns ? "true" : "false";
+
+    const TString query = Sprintf(R"(
             CREATE TABLE `/Root/test_show_create` (
                 Col1 Uint64 NOT NULL,
                 Col2 JsonDocument,
@@ -1967,15 +2717,16 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
             )
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`, `DICTIONARY_UNIQUE_FRACTION`=`%s`, `ENABLE_NATIVE_COLUMNS`=`%s`, `DENSE_ENCODING_VERSION`=`1`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `DEFAULT_VALUE`=`5`);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col2 SET COMPRESSION (algorithm=zstd, level=4);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col3 SET ENCODING (DICT);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col4 SET ENCODING ();
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col4 SET COMPRESSION ();
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col5 SET ENCODING (OFF);
-        )", "test_show_create",
-        R"(
+        )", fractionStr.c_str(), nativeColumnsStr.c_str());
+
+    const TString expected = Sprintf(R"(
             CREATE TABLE `test_show_create` (
                 `Col1` Uint64 NOT NULL,
                 `Col2` JsonDocument COMPRESSION (algorithm = zstd, level = 4),
@@ -1990,11 +2741,20 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
             );
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DICTIONARY_UNIQUE_FRACTION` = `%s`, `ENABLE_NATIVE_COLUMNS` = `%s`, `DENSE_ENCODING_VERSION` = `1`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DEFAULT_VALUE` = `5`);
-        )"
-    );
+        )", fractionStr.c_str(), nativeColumnsStr.c_str());
+
+    checker.CheckShowCreateTable(query.c_str(), "test_show_create", expected);
+}
+
+Y_UNIT_TEST(TableColumnAlterColumn) {
+    CheckAlterColumnShowCreate(0.5, true);
+}
+
+Y_UNIT_TEST(TableColumnAlterColumnExplicitlyUnsetValues) {
+    CheckAlterColumnShowCreate(0, false);
 }
 
 Y_UNIT_TEST(TableColumnUpsertOptions) {
@@ -2016,7 +2776,9 @@ Y_UNIT_TEST(TableColumnUpsertOptions) {
             )
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES`=`1048576`, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `DEDUPLICATION_ENABLED`=`false`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`,
                 `COMPACTION_PLANNER.FEATURES`=`{"levels" : [{"class_name" : "Zero", "portions_live_duration" : "5s", "expected_blobs_size" : 1000000000000, "portions_count_available" : 2},
                                 {"class_name" : "Zero"}]}`);
@@ -2035,13 +2797,86 @@ Y_UNIT_TEST(TableColumnUpsertOptions) {
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
             );
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME` = 'SIMPLE', `COMPACTION_PLANNER.CLASS_NAME` = 'lc-buckets', `COMPACTION_PLANNER.FEATURES` = `{"levels":[{"portions_count_available":2,"portions_live_duration":"5.000000s","class_name":"Zero","expected_blobs_size":1000000000000},{"class_name":"Zero"}]}`, `METADATA_MEMORY_MANAGER.CLASS_NAME` = 'local_db', `METADATA_MEMORY_MANAGER.FEATURES` = `{"memory_cache_size":0,"fetch_on_start":false}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED` = `true`, `INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES` = `1048576`, `SCAN_READER_POLICY_NAME` = 'SIMPLE', `DEDUPLICATION_ENABLED` = `false`, `COMPACTION_PLANNER.CLASS_NAME` = 'lc-buckets', `COMPACTION_PLANNER.FEATURES` = `{"levels":[{"portions_count_available":2,"portions_live_duration":"5.000000s","class_name":"Zero","expected_blobs_size":1000000000000},{"class_name":"Zero"}]}`, `METADATA_MEMORY_MANAGER.CLASS_NAME` = 'local_db', `METADATA_MEMORY_MANAGER.FEATURES` = `{"memory_cache_size":0,"fetch_on_start":false}`);
+        )"
+    );
+}
+
+Y_UNIT_TEST(TableColumnCacheBlobsAfterWrite) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true});
+
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE `/Root/test_show_create` (
+                Col1 Uint64 NOT NULL,
+                Col2 Utf8,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `CACHE_BLOBS_AFTER_WRITE`=`true`);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Col1` Uint64 NOT NULL,
+                `Col2` Utf8,
+                PRIMARY KEY (`Col1`)
+            )
+            PARTITION BY HASH (`Col1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+            );
+
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `CACHE_BLOBS_AFTER_WRITE` = `true`);
+        )"
+    );
+}
+
+Y_UNIT_TEST(TableColumnCacheBlobsAfterWriteDefault) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true});
+
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE `/Root/test_show_create` (
+                Col1 Uint64 NOT NULL,
+                Col2 Utf8,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Col1` Uint64 NOT NULL,
+                `Col2` Utf8,
+                PRIMARY KEY (`Col1`)
+            )
+            PARTITION BY HASH (`Col1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+            );
         )"
     );
 }
 
 Y_UNIT_TEST(TableColumnUpsertIndex) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableLocalIndexAsSchemeObject = false});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -2095,7 +2930,7 @@ Y_UNIT_TEST(TableColumnUpsertIndex) {
 }
 
 Y_UNIT_TEST(TableColumnAlterObject) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true, .EnableLocalIndexAsSchemeObject = false});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -2436,9 +3271,9 @@ Y_UNIT_TEST(TableSystemTableWithEmptyKeyColumnIds) {
     // When trying to SHOW CREATE TABLE on a system table that has empty key column IDs,
     // the formatter crashes at line 347 with: Y_ENSURE(!tableDesc.GetKeyColumnIds().empty())
     //
-    // The issue specifically mentions `.sys/tables` as causing the crash.
-    // This test verifies that SHOW CREATE TABLE on system tables either succeeds
-    // or returns a proper error status, but does not crash the server.
+    // The issue was triggered by system tables with empty key column IDs (e.g. some
+    // `.sys/*` views). This test verifies that SHOW CREATE TABLE on representative
+    // system tables either succeeds or returns a proper error status, but does not crash.
 
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
 
@@ -2449,10 +3284,9 @@ Y_UNIT_TEST(TableSystemTableWithEmptyKeyColumnIds) {
     NQuery::TQueryClient queryClient(env.GetDriver());
     auto session = queryClient.GetSession().GetValueSync().GetSession();
 
-    // The issue specifically mentions .sys/tables as the problematic table
-    // We test this and a few other system tables to ensure robustness
+    // We test a few representative system tables to ensure SHOW CREATE TABLE is robust
     TVector<TString> systemTablesToTest = {
-        "/Root/.sys/tables",  // The specific table mentioned in issue #30332
+        "/Root/.sys/query_sessions",
         "/Root/.sys/partition_stats",
         "/Root/.sys/nodes"
     };
@@ -2608,7 +3442,461 @@ Y_UNIT_TEST(TableDataShardLocalBloomFilterIndex) {
     );
 }
 
+Y_UNIT_TEST(TableColumnLocalBloomFilterIndex) {
+    TTestEnv env(1, 4, {
+        .StoragePools = 3,
+        .ShowCreateTable = true,
+        .EnableLocalBloomFilterIndex = true,
+        .EnableLocalIndexAsSchemeObject = true,
+    });
+
+    TShowCreateChecker checker(env);
+
+    // Single-column bloom filter
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64 NOT NULL,
+                Value String,
+                INDEX idx_bloom LOCAL USING bloom_filter ON (Key1),
+                PRIMARY KEY (Key1, Key2)
+            )
+            PARTITION BY HASH(Key1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Key2` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_bloom` LOCAL USING bloom_filter ON (`Key1`),
+                PRIMARY KEY (`Key1`, `Key2`)
+            )
+            PARTITION BY HASH (`Key1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )"
+    );
+
+    // Bloom filter on second column
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64 NOT NULL,
+                Value String,
+                INDEX idx_bloom LOCAL USING bloom_filter ON (Key2),
+                PRIMARY KEY (Key1, Key2)
+            )
+            PARTITION BY HASH(Key1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Key2` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_bloom` LOCAL USING bloom_filter ON (`Key2`),
+                PRIMARY KEY (`Key1`, `Key2`)
+            )
+            PARTITION BY HASH (`Key1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )"
+    );
+
+    // Multiple single-column bloom filter indexes
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64 NOT NULL,
+                Value String,
+                INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1),
+                INDEX idx_bloom2 LOCAL USING bloom_filter ON (Key2),
+                PRIMARY KEY (Key1, Key2)
+            )
+            PARTITION BY HASH(Key1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Key2` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_bloom1` LOCAL USING bloom_filter ON (`Key1`),
+                INDEX `idx_bloom2` LOCAL USING bloom_filter ON (`Key2`),
+                PRIMARY KEY (`Key1`, `Key2`)
+            )
+            PARTITION BY HASH (`Key1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )"
+    );
+
+    // Bloom filter with custom false_positive_probability
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Value String,
+                INDEX idx_bloom LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=0.05),
+                PRIMARY KEY (Key1)
+            )
+            PARTITION BY HASH(Key1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_bloom` LOCAL USING bloom_filter ON (`Key1`) WITH (false_positive_probability=0.05),
+                PRIMARY KEY (`Key1`)
+            )
+            PARTITION BY HASH (`Key1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )"
+    );
 }
+
+Y_UNIT_TEST(ExternalDataSource) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+    TShowCreateChecker checker(env);
+
+    auto session = NQuery::TQueryClient(env.GetDriver()).GetSession().GetValueSync().GetSession();
+
+    // The checker's constructor creates `tier1` as an S3-style external data
+    // source with AWS authentication. The output must include every property
+    // that was set on it (source type, location, and each AWS_* setting).
+    auto tier1Query = checker.ShowCreateExternalDataSource(session, "tier1");
+    UNIT_ASSERT_C(tier1Query.find("CREATE EXTERNAL DATA SOURCE") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("SOURCE_TYPE = 'ObjectStorage'") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("LOCATION = 'http://fake.fake/olap-tier1'") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("AUTH_METHOD = 'AWS'") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("AWS_ACCESS_KEY_ID_SECRET_NAME = 'accessKey'") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("AWS_SECRET_ACCESS_KEY_SECRET_NAME = 'secretKey'") != std::string::npos, tier1Query);
+    UNIT_ASSERT_C(tier1Query.find("AWS_REGION = 'ru-central1'") != std::string::npos, tier1Query);
+
+    // Round-trip the AWS-authenticated source: drop tier1, recreate it from
+    // the SHOW CREATE output, and confirm every auth property is preserved.
+    // (Full-string equality is not stable — WITH-clause property order in the
+    // formatted output is not deterministic.)
+    ExecuteQuery(session, "DROP EXTERNAL DATA SOURCE `tier1`;");
+    ExecuteQuery(session, tier1Query);
+    auto tier1Recreated = checker.ShowCreateExternalDataSource(session, "tier1");
+    for (const auto& expected : {
+             "SOURCE_TYPE = 'ObjectStorage'",
+             "LOCATION = 'http://fake.fake/olap-tier1'",
+             "AUTH_METHOD = 'AWS'",
+             "AWS_ACCESS_KEY_ID_SECRET_NAME = 'accessKey'",
+             "AWS_SECRET_ACCESS_KEY_SECRET_NAME = 'secretKey'",
+             "AWS_REGION = 'ru-central1'",
+         }) {
+        UNIT_ASSERT_C(tier1Recreated.find(expected) != std::string::npos,
+            "recreated tier1 is missing '" << expected << "': " << tier1Recreated);
+    }
+
+    // Also exercise the AUTH_METHOD = NONE branch.
+    ExecuteQuery(session, R"(
+        CREATE EXTERNAL DATA SOURCE `eds_none` WITH (
+            SOURCE_TYPE = "ObjectStorage",
+            LOCATION = "http://fake.fake/no-auth",
+            AUTH_METHOD = "NONE"
+        );
+    )");
+    auto noAuthQuery = checker.ShowCreateExternalDataSource(session, "eds_none");
+    UNIT_ASSERT_C(noAuthQuery.find("SOURCE_TYPE = 'ObjectStorage'") != std::string::npos, noAuthQuery);
+    UNIT_ASSERT_C(noAuthQuery.find("LOCATION = 'http://fake.fake/no-auth'") != std::string::npos, noAuthQuery);
+    UNIT_ASSERT_C(noAuthQuery.find("AUTH_METHOD = 'NONE'") != std::string::npos, noAuthQuery);
+
+    ExecuteQuery(session, "DROP EXTERNAL DATA SOURCE `eds_none`;");
+    ExecuteQuery(session, noAuthQuery);
+    auto noAuthRecreated = checker.ShowCreateExternalDataSource(session, "eds_none");
+    for (const auto& expected : {
+             "SOURCE_TYPE = 'ObjectStorage'",
+             "LOCATION = 'http://fake.fake/no-auth'",
+             "AUTH_METHOD = 'NONE'",
+         }) {
+        UNIT_ASSERT_C(noAuthRecreated.find(expected) != std::string::npos,
+            "recreated eds_none is missing '" << expected << "': " << noAuthRecreated);
+    }
+}
+
+Y_UNIT_TEST(ExternalTable) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+    TShowCreateChecker checker(env);
+
+    auto session = NQuery::TQueryClient(env.GetDriver()).GetSession().GetValueSync().GetSession();
+
+    // `tier1` is created by the checker's constructor as an ObjectStorage
+    // external data source.
+    ExecuteQuery(session, R"(
+        CREATE EXTERNAL TABLE `ext_table` (
+            Key Uint64 NOT NULL,
+            Value Utf8,
+            Year Int32 NOT NULL
+        ) WITH (
+            DATA_SOURCE = "tier1",
+            LOCATION = "/folder1/",
+            FORMAT = "csv_with_names",
+            COMPRESSION = "gzip",
+            PARTITIONED_BY = "['Year']"
+        );
+    )");
+
+    auto query = checker.ShowCreateExternalTable(session, "ext_table");
+    UNIT_ASSERT_C(query.find("CREATE EXTERNAL TABLE") != std::string::npos, query);
+    // The data source is referenced by its absolute path, the same way
+    // SHOW CREATE TABLE reports external data sources used for tiering.
+    for (const auto& expected : {
+             "`Key` Uint64 NOT NULL",
+             "`Value` Utf8",
+             "`Year` Int32 NOT NULL",
+             "DATA_SOURCE = '/Root/tier1'",
+             "LOCATION = '/folder1/'",
+             "FORMAT = 'csv_with_names'",
+             "COMPRESSION = 'gzip'",
+             "PARTITIONED_BY = '[\"Year\"]'",
+         }) {
+        UNIT_ASSERT_C(query.find(expected) != std::string::npos,
+            "ext_table is missing '" << expected << "': " << query);
+    }
+
+    // Round-trip: drop the external table, recreate it from the SHOW CREATE
+    // output and confirm every column and setting survived. (Full-string
+    // equality is not stable — WITH-clause property order in the formatted
+    // output is not deterministic.)
+    ExecuteQuery(session, "DROP EXTERNAL TABLE `ext_table`;");
+    ExecuteQuery(session, query);
+    auto recreated = checker.ShowCreateExternalTable(session, "ext_table");
+    for (const auto& expected : {
+             "`Key` Uint64 NOT NULL",
+             "`Value` Utf8",
+             "`Year` Int32 NOT NULL",
+             "DATA_SOURCE = '/Root/tier1'",
+             "LOCATION = '/folder1/'",
+             "FORMAT = 'csv_with_names'",
+             "COMPRESSION = 'gzip'",
+             "PARTITIONED_BY = '[\"Year\"]'",
+         }) {
+        UNIT_ASSERT_C(recreated.find(expected) != std::string::npos,
+            "recreated ext_table is missing '" << expected << "': " << recreated);
+    }
+
+    // A minimal external table: no optional settings beyond the mandatory ones.
+    ExecuteQuery(session, R"(
+        CREATE EXTERNAL TABLE `ext_table_minimal` (
+            Key Utf8 NOT NULL
+        ) WITH (
+            DATA_SOURCE = "tier1",
+            LOCATION = "obj",
+            FORMAT = "json_each_row"
+        );
+    )");
+    auto minimalQuery = checker.ShowCreateExternalTable(session, "ext_table_minimal");
+    UNIT_ASSERT_C(minimalQuery.find("`Key` Utf8 NOT NULL") != std::string::npos, minimalQuery);
+    UNIT_ASSERT_C(minimalQuery.find("DATA_SOURCE = '/Root/tier1'") != std::string::npos, minimalQuery);
+    UNIT_ASSERT_C(minimalQuery.find("LOCATION = 'obj'") != std::string::npos, minimalQuery);
+
+    ExecuteQuery(session, "DROP EXTERNAL TABLE `ext_table_minimal`;");
+    ExecuteQuery(session, minimalQuery);
+    auto minimalRecreated = checker.ShowCreateExternalTable(session, "ext_table_minimal");
+    UNIT_ASSERT_C(minimalRecreated.find("`Key` Utf8 NOT NULL") != std::string::npos, minimalRecreated);
+    UNIT_ASSERT_C(minimalRecreated.find("FORMAT = 'json_each_row'") != std::string::npos, minimalRecreated);
+
+    // Several partition columns: the list keeps its declared order and stays a
+    // JSON list. `ext_table` above covers the one-column case, where the array
+    // must not collapse into a scalar.
+    ExecuteQuery(session, R"(
+        CREATE EXTERNAL TABLE `ext_table_multi_partition` (
+            Key Uint64 NOT NULL,
+            Year Int32 NOT NULL,
+            Month Int32 NOT NULL
+        ) WITH (
+            DATA_SOURCE = "tier1",
+            LOCATION = "/folder2/",
+            FORMAT = "csv_with_names",
+            PARTITIONED_BY = "['Year', 'Month']"
+        );
+    )");
+    auto multiQuery = checker.ShowCreateExternalTable(session, "ext_table_multi_partition");
+    UNIT_ASSERT_C(multiQuery.find("PARTITIONED_BY = '[\"Year\", \"Month\"]'") != std::string::npos, multiQuery);
+
+    ExecuteQuery(session, "DROP EXTERNAL TABLE `ext_table_multi_partition`;");
+    ExecuteQuery(session, multiQuery);
+    auto multiRecreated = checker.ShowCreateExternalTable(session, "ext_table_multi_partition");
+    for (const auto& expected : {
+             "`Key` Uint64 NOT NULL",
+             "`Year` Int32 NOT NULL",
+             "`Month` Int32 NOT NULL",
+             "LOCATION = '/folder2/'",
+             "PARTITIONED_BY = '[\"Year\", \"Month\"]'",
+         }) {
+        UNIT_ASSERT_C(multiRecreated.find(expected) != std::string::npos,
+            "recreated ext_table_multi_partition is missing '" << expected << "': " << multiRecreated);
+    }
+
+    // A path type mismatch must be reported instead of silently formatting the
+    // wrong kind of object: `tier1` is an external data source, not an
+    // external table.
+    auto mismatch = session.ExecuteQuery(
+        "SHOW CREATE EXTERNAL TABLE `tier1`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_UNEQUAL_C(mismatch.GetStatus(), EStatus::SUCCESS, "expected SHOW CREATE EXTERNAL TABLE to fail on an external data source");
+    UNIT_ASSERT_STRING_CONTAINS(mismatch.GetIssues().ToString(), "Path type mismatch");
+
+    // And the other way round: an external table is not a table.
+    auto reverseMismatch = session.ExecuteQuery(
+        "SHOW CREATE TABLE `ext_table`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_UNEQUAL_C(reverseMismatch.GetStatus(), EStatus::SUCCESS, "expected SHOW CREATE TABLE to fail on an external table");
+    UNIT_ASSERT_STRING_CONTAINS(reverseMismatch.GetIssues().ToString(), "Path type mismatch");
+}
+
+Y_UNIT_TEST(TableColumnLocalBloomNgramFilterIndex) {
+    TTestEnv env(1, 4, {
+        .StoragePools = 3,
+        .ShowCreateTable = true,
+        .EnableLocalBloomNgramFilterIndex = true,
+        .EnableLocalIndexAsSchemeObject = true,
+    });
+
+    TShowCreateChecker checker(env);
+
+    // Single-column bloom ngram filter
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64 NOT NULL,
+                Value String,
+                INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (Value) WITH (ngram_size=3),
+                PRIMARY KEY (Key1, Key2)
+            )
+            PARTITION BY HASH(Key1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Key2` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_ngram` LOCAL USING bloom_ngram_filter ON (`Value`) WITH (ngram_size=3),
+                PRIMARY KEY (`Key1`, `Key2`)
+            )
+            PARTITION BY HASH (`Key1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )"
+    );
+
+    // Bloom ngram filter with custom false_positive_probability
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Value String,
+                INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (Value) WITH (ngram_size=3, false_positive_probability=0.05),
+                PRIMARY KEY (Key1)
+            )
+            PARTITION BY HASH(Key1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_ngram` LOCAL USING bloom_ngram_filter ON (`Value`) WITH (ngram_size=3, false_positive_probability=0.05),
+                PRIMARY KEY (`Key1`)
+            )
+            PARTITION BY HASH (`Key1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )"
+    );
+
+    // Bloom ngram filter with case_sensitive parameter
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Value String,
+                INDEX idx_ngram_false LOCAL USING bloom_ngram_filter ON (Value) WITH (ngram_size=3, case_sensitive=false),
+                INDEX idx_ngram_true LOCAL USING bloom_ngram_filter ON (Value) WITH (ngram_size=3, case_sensitive=true),
+                PRIMARY KEY (Key1)
+            )
+            PARTITION BY HASH(Key1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_ngram_false` LOCAL USING bloom_ngram_filter ON (`Value`) WITH (ngram_size=3, case_sensitive=FALSE),
+                INDEX `idx_ngram_true` LOCAL USING bloom_ngram_filter ON (`Value`) WITH (ngram_size=3),
+                PRIMARY KEY (`Key1`)
+            )
+            PARTITION BY HASH (`Key1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )"
+    );
+
+    // Multiple bloom ngram filter indexes
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64 NOT NULL,
+                Value1 String,
+                Value2 String,
+                INDEX idx_ngram1 LOCAL USING bloom_ngram_filter ON (Value1) WITH (ngram_size=3),
+                INDEX idx_ngram2 LOCAL USING bloom_ngram_filter ON (Value2) WITH (ngram_size=4),
+                PRIMARY KEY (Key1, Key2)
+            )
+            PARTITION BY HASH(Key1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Key2` Uint64 NOT NULL,
+                `Value1` String,
+                `Value2` String,
+                INDEX `idx_ngram1` LOCAL USING bloom_ngram_filter ON (`Value1`) WITH (ngram_size=3),
+                INDEX `idx_ngram2` LOCAL USING bloom_ngram_filter ON (`Value2`) WITH (ngram_size=4),
+                PRIMARY KEY (`Key1`, `Key2`)
+            )
+            PARTITION BY HASH (`Key1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+        )"
+    );
+}
+
+} // ShowCreateSystemView
 
 } // NSysView
 } // NKikimr

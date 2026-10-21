@@ -2,14 +2,13 @@
 
 import unittest
 import warnings
-from typing import List, Tuple
 
 import idna
 
 
 class IDNATests(unittest.TestCase):
     def setUp(self):
-        self.tld_strings: List[Tuple[str, bytes]] = [
+        self.tld_strings: list[tuple[str, bytes]] = [
             ("\u6d4b\u8bd5", b"xn--0zwm56d"),
             ("\u092a\u0930\u0940\u0915\u094d\u0937\u093e", b"xn--11b5bs3a9aj6g"),
             ("\ud55c\uad6d", b"xn--3e0b707e"),
@@ -94,6 +93,30 @@ class IDNATests(unittest.TestCase):
             self.assertRaises(idna.IDNAError, idna.encode, payload)
             self.assertRaises(idna.IDNAError, idna.decode, payload)
             self.assertLess(time.perf_counter() - start, 1.0)
+
+    def test_oversized_label_rejected_promptly(self):
+        # The whole-domain cap in encode()/decode() does not cover direct
+        # callers of alabel/ulabel/check_label, nor the idna2008
+        # incremental codec which calls alabel/ulabel per label. Without a
+        # per-label cap, a single oversized CONTEXTO-heavy label still
+        # drives validation into quadratic time.
+        import codecs
+        import time
+
+        import idna.codec  # register the idna2008 codec
+
+        payload = "・" * 8000 + "漢"
+        start = time.perf_counter()
+        self.assertRaises(idna.IDNAError, idna.check_label, payload)
+        self.assertRaises(idna.IDNAError, idna.alabel, payload)
+        self.assertRaises(idna.IDNAError, idna.ulabel, payload)
+        self.assertRaises(
+            idna.IDNAError,
+            codecs.getincrementalencoder("idna2008")().encode,
+            payload,
+            True,
+        )
+        self.assertLess(time.perf_counter() - start, 1.0)
 
     def test_check_bidi(self):
         la = "\u0061"
@@ -325,6 +348,61 @@ class IDNATests(unittest.TestCase):
         for value in (42, None, 1.5, ["a", "b"], {"a": 1}):
             self.assertRaises(idna.IDNAError, idna.encode, value)
             self.assertRaises(idna.IDNAError, idna.decode, value)
+
+    def test_decode_display(self):
+        # A label whose Punycode decode succeeds but contains disallowed
+        # codepoints — under display decoding, the original A-label is kept.
+        self.assertRaises(idna.IDNAError, idna.decode, "a.b.c.xn--pokxncvks")
+        self.assertEqual(
+            idna.decode("a.b.c.xn--pokxncvks", display=True),
+            "a.b.c.xn--pokxncvks",
+        )
+
+        # Mixed valid/invalid labels: the valid label still decodes, the
+        # invalid xn-- label is preserved verbatim.
+        self.assertEqual(
+            idna.decode("xn--zckzah.xn--pokxncvks", display=True),
+            "テスト.xn--pokxncvks",
+        )
+
+        # A label whose Punycode itself is malformed.
+        self.assertEqual(
+            idna.decode("xn--.example", display=True),
+            "xn--.example",
+        )
+
+        # Uppercase A-label prefix: the kept label is lowercased to match
+        # what a successful ulabel() call would have returned.
+        self.assertEqual(
+            idna.decode("XN--POKXNCVKS.example", display=True),
+            "xn--pokxncvks.example",
+        )
+
+        # display must not swallow errors for non-xn-- labels.
+        self.assertRaises(
+            idna.IDNAError,
+            idna.decode,
+            "-bad.example",
+            display=True,
+        )
+
+        # display should be a no-op for fully valid input.
+        self.assertEqual(
+            idna.decode("xn--zckzah.xn--zckzah", display=True),
+            "テスト.テスト",
+        )
+
+        # Trailing dot preserved under display recovery.
+        self.assertEqual(
+            idna.decode("xn--pokxncvks.", display=True),
+            "xn--pokxncvks.",
+        )
+
+        # Bytes input is supported, matching decode()'s normal contract.
+        self.assertEqual(
+            idna.decode(b"a.b.c.xn--pokxncvks", display=True),
+            "a.b.c.xn--pokxncvks",
+        )
 
 
 if __name__ == "__main__":

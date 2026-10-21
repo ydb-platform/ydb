@@ -9,17 +9,20 @@
 #include <util/generic/vector.h>
 
 #include <functional>
+#include <memory>
 
 
 namespace NKikimr::NMiniKQL {
 
-struct TComputationNodeFactoryContext;
+class TTypeEnvironment;
 
 } // namespace NKikimr::NMiniKQL
 
 namespace NYql::NUdf {
 
 class IFunctionTypeInfoBuilder;
+class ISecureParamsProvider;
+class IValueBuilder;
 
 } // namespace NYql::NUdf
 
@@ -34,22 +37,50 @@ enum class ERowSelectionMode {
 class IYtflowLookupProvider
 {
 public:
-    using TLookupResultCallback = std::function<TVector<TVector<NUdf::TUnboxedValue>>()>;
+    class ILookupResult {
+    public:
+        virtual ~ILookupResult() = default;
+    };
+
+    using ILookupResultPtr = std::shared_ptr<const ILookupResult>;
 
     virtual ~IYtflowLookupProvider() = default;
 
-    // Perform lookup according to params passed into concrete instance creation.
-    virtual NThreading::TFuture<TLookupResultCallback> Lookup(
+    // Perform lookup using parameters captured during factory creation.
+    virtual NThreading::TFuture<ILookupResultPtr> Lookup(
         const TVector<NUdf::TUnboxedValue>& keys) = 0;
+
+    // Decode a ready transport result synchronously in the computation graph.
+    virtual TVector<TVector<NUdf::TUnboxedValue>> Decode(
+        const ILookupResultPtr& result) = 0;
 
     // Get full table name (with cluster) for detailed error messages.
     virtual TString GetTableName() const = 0;
 };
 
-class IYtflowLookupProviderRegistry
+// Created during computation-node construction and reused to create a provider
+// whose mutable state belongs to one computation context.
+class IYtflowLookupProviderFactory
 {
 public:
     struct TCreationContext
+    {
+        // ValueBuilder belongs to the target computation context and must
+        // outlive the provider. FunctionTypeInfoBuilder is used only by Create().
+        NYql::NUdf::IValueBuilder& ValueBuilder;
+        NYql::NUdf::IFunctionTypeInfoBuilder& FunctionTypeInfoBuilder;
+    };
+
+    virtual ~IYtflowLookupProviderFactory() = default;
+
+    virtual THolder<IYtflowLookupProvider> Create(
+        const TCreationContext& ctx) const = 0;
+};
+
+class IYtflowLookupProviderRegistry
+{
+public:
+    struct TFactoryCreationContext
     {
         NKikimr::NMiniKQL::TRuntimeNode LookupSourceArgs;
         ERowSelectionMode LookupSourceRowSelectionMode;
@@ -60,20 +91,20 @@ public:
         TVector<TString> LookupSourceKeys;
         const NKikimr::NMiniKQL::TStructType* LookupSourceRowType;
 
-        const NKikimr::NMiniKQL::TComputationNodeFactoryContext& ComputationNodeFactoryContext;
-        NYql::NUdf::IFunctionTypeInfoBuilder& FunctionTypeInfoBuilder;
+        const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnvironment;
+        const NYql::NUdf::ISecureParamsProvider* SecureParamsProvider;
     };
 
-    using TCreationCallback = std::function<
-        THolder<IYtflowLookupProvider>(TCreationContext& ctx)>;
+    using TFactoryCreationCallback = std::function<
+        THolder<IYtflowLookupProviderFactory>(const TFactoryCreationContext& ctx)>;
 
     virtual ~IYtflowLookupProviderRegistry() = default;
 
-    virtual void Register(const TString& providerName, TCreationCallback callback) = 0;
+    virtual void Register(const TString& providerName, TFactoryCreationCallback callback) = 0;
 
-    virtual THolder<IYtflowLookupProvider> Create(
+    virtual THolder<IYtflowLookupProviderFactory> CreateFactory(
         const TString& providerName,
-        TCreationContext& ctx) const = 0;
+        const TFactoryCreationContext& ctx) const = 0;
 };
 
 THolder<IYtflowLookupProviderRegistry> CreateYtflowLookupProviderRegistry();

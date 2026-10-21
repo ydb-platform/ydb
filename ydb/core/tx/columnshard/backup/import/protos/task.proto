@@ -20,6 +20,7 @@ message TColumnDescription {
     optional string Name = 1;
     optional NKikimrProto.TTypeInfo TypeInfo = 2;
     optional uint32 TypeId = 3;
+    optional uint32 ColumnId = 4;
 }
 
 message TSessionControlContainer {

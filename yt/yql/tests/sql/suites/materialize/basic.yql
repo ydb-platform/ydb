@@ -1,0 +1,10 @@
+USE plato;
+
+MATERIALIZE Input INTO $result;
+
+SELECT
+    *
+FROM
+    $result
+ORDER BY
+    key;

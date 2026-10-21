@@ -21,6 +21,7 @@ public:
     ui64 AlterVersion = 0;
     TPtr AlterData;
     bool IsRestore = false;
+    bool IsReadOnly = false;
 
     TPathId GetOlapStorePathIdVerified() const;
 
@@ -60,6 +61,8 @@ public:
     void SetOlapStorePathId(const TPathId& pathId);
 
     static TColumnTableInfo::TPtr BuildTableWithAlter(const TColumnTableInfo& initialTable, const NKikimrSchemeOp::TAlterColumnTable& alterBody);
+
+    TPtr Clone() const;
 
     bool IsStandalone() const {
         return !!StandaloneSharding;

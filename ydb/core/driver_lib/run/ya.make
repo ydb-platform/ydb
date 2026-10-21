@@ -11,13 +11,13 @@ SRCS(
     config_helpers.cpp
     config_parser.cpp
     config_parser.h
-    factories.h
     factories.cpp
+    factories.h
     grpc_servers_manager.h
     kikimr_services_initializers.cpp
     kikimr_services_initializers.h
-    main.h
     main.cpp
+    main.h
     run.cpp
     run.h
     service_initializer.cpp
@@ -26,6 +26,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
+    library/cpp/containers/absl
     library/cpp/getopt/small
     library/cpp/logger
     library/cpp/malloc/api
@@ -74,10 +75,9 @@ PEERDIR(
     ydb/core/keyvalue
     ydb/core/kqp
     ydb/core/kqp/federated_query/actors
-    ydb/core/kqp/finalize_script_service
     ydb/core/kqp/rm_service
+    ydb/core/kqp/script_executions/finalization
     ydb/core/load_test
-    ydb/core/local_pgwire
     ydb/core/log_backend
     ydb/core/memory_controller
     ydb/core/metering
@@ -88,7 +88,9 @@ PEERDIR(
     ydb/core/mon
     ydb/core/mon_alloc
     ydb/core/node_whiteboard
+    ydb/core/path_aliasing
     ydb/core/persqueue
+    ydb/core/persqueue/deferred_publish
     ydb/core/protos
     ydb/core/public_http
     ydb/core/quoter
@@ -101,6 +103,9 @@ PEERDIR(
     ydb/core/security/token_manager
     ydb/core/statistics/aggregator
     ydb/core/statistics/service
+    ydb/core/subsystems/actor_system_monitoring
+    ydb/core/subsystems/inmemory_metrics_monitoring
+    ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/tablet
@@ -110,16 +115,20 @@ PEERDIR(
     ydb/core/transfer
     ydb/core/tx
     ydb/core/tx/columnshard
-    ydb/core/tx/conveyor/service
-    ydb/core/tx/general_cache
-    ydb/core/tx/columnshard/data_accessor/cache_policy
     ydb/core/tx/columnshard/column_fetching
+    ydb/core/tx/columnshard/data_accessor/cache_policy
+    ydb/core/tx/conveyor/service
+    ydb/core/tx/conveyor_composite/service
+    ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/coordinator
     ydb/core/tx/datashard
+    ydb/core/tx/general_cache
     ydb/core/tx/limiter/grouped_memory/usage
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/mediator
+    ydb/core/tx/priorities/service
+    ydb/core/tx/priorities/usage
     ydb/core/tx/replication/controller
     ydb/core/tx/replication/service
     ydb/core/tx/scheme_board
@@ -149,8 +158,9 @@ PEERDIR(
     ydb/library/grpc/server/actors
     ydb/library/pdisk_io
     ydb/library/security
-    ydb/library/yql/providers/pq/cm_client
     ydb/library/slide_limiter/service
+    ydb/library/slide_limiter/usage
+    ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/s3/actors
     ydb/public/lib/base
     ydb/public/lib/deprecated/client
@@ -163,9 +173,8 @@ PEERDIR(
     ydb/services/datastreams
     ydb/services/deprecated/persqueue_v0
     ydb/services/discovery
+    ydb/services/distributed_storage
     ydb/services/dynamic_config
-    ydb/services/ext_index/metadata
-    ydb/services/ext_index/service
     ydb/services/fq
     ydb/services/kesus
     ydb/services/keyvalue
@@ -178,9 +187,13 @@ PEERDIR(
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/replication
+    ydb/services/scheme_secret
     ydb/services/tablet
     ydb/services/test_shard
+    ydb/services/udf_store
+    ydb/services/udf_store/compile_controller
     ydb/services/view
+    ydb/services/workload_manager/service
     ydb/services/ydb
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy
@@ -189,13 +202,19 @@ PEERDIR(
     yt/yql/providers/yt/comp_nodes/llvm16
 )
 
-IF (OS_LINUX)
+DEFAULT(YDB_EMBEDDED_NBS_ENABLED yes)
+
+IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
+    CFLAGS(
+        -DYDB_EMBEDDED_NBS_ENABLED
+    )
     PEERDIR(
         ydb/core/nbs/cloud/blockstore/bootstrap
         ydb/core/nbs/cloud/blockstore/config/protos
+        ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller
+        ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet
         ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy
         ydb/core/nbs/cloud/blockstore/libs/storage/volume
-
         ydb/services/nbs
     )
 ENDIF()

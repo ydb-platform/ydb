@@ -33,7 +33,7 @@ NKikimr::TConclusionStatus TImportTask::DoDeserializeFromProto(const NKikimrColu
     for (const auto& columnProto : proto.GetColumns()) {
         const NKikimrProto::TTypeInfo* typeInfoProto = columnProto.HasTypeInfo() ? &columnProto.GetTypeInfo() : nullptr;
         auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(columnProto.GetTypeId(), typeInfoProto);
-        Columns.emplace_back(columnProto.GetName(), typeInfoMod.TypeInfo);
+        Columns.emplace(columnProto.GetColumnId(), TNameTypeInfo(columnProto.GetName(), typeInfoMod.TypeInfo));
     }
     return TConclusionStatus::Success();
 }
@@ -49,8 +49,9 @@ NKikimrColumnShardImportProto::TImportTask TImportTask::DoSerializeToProto() con
     if (SchemaVersion) {
         result.SetSchemaVersion(*SchemaVersion);
     }
-    for (const auto& column : Columns) {
+    for (const auto& [columnId, column] : Columns) {
         auto* columnProto = result.AddColumns();
+        columnProto->SetColumnId(columnId);
         columnProto->SetName(column.first);
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.second, "");
         columnProto->SetTypeId(columnType.TypeId);
@@ -91,7 +92,7 @@ const NColumnShard::TSchemeShardLocalPathId TImportTask::GetSchemeShardLocalPath
     return SchemeShardLocalPathId;
 }
 
-TImportTask::TImportTask(const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId, const TVector<TNameTypeInfo>& columns,
+TImportTask::TImportTask(const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId, const TColumns& columns,
     const NKikimrSchemeOp::TRestoreTask& restoreTask, const std::optional<ui64> schemaVersion, const std::optional<ui64> txId)
     : SchemeShardLocalPathId(schemeShardLocalPathId)
     , Columns(columns)

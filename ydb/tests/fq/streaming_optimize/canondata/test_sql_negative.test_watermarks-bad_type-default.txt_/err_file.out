@@ -1,0 +1,9 @@
+Failed to execute query, reason:
+Request finished with status: GENERIC_ERROR
+Issues:
+<main>: Error: Type annotation, code: 1030
+    <main>:1:1: Error: At function: RemovePrefixMembers, At function: RemovePrefixMembers, At function: RemoveSystemMembers, At function: PersistableRepr, At function: SqlProject
+        <main>:7:9: Error: At lambda
+            <main>:7:23: Error: At function: -
+                <main>:7:23: Error: Cannot substract type Optional<String> and Interval
+

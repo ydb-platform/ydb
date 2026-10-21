@@ -3,8 +3,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -14,18 +13,18 @@ class TTakeFlowWrapper: public TStatefulFlowCodegeneratorNode<TTakeFlowWrapper> 
 public:
     TTakeFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow, IComputationNode* count)
         : TBaseComputation(mutables, flow, kind, EValueRepresentation::Embedded)
-        , Flow(flow)
-        , Count(count)
+        , Flow_(flow)
+        , Count_(count)
     {
     }
 
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsInvalid()) {
-            state = Count->GetValue(ctx);
+            state = Count_->GetValue(ctx);
         }
 
         if (auto count = state.Get<ui64>()) {
-            const auto item = Flow->GetValue(ctx);
+            const auto item = Flow_->GetValue(ctx);
             if (!(item.IsSpecial())) {
                 state = NUdf::TUnboxedValuePod(--count);
             }
@@ -36,7 +35,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -52,7 +51,7 @@ public:
 
         block = init;
 
-        GetNodeValue(statePtr, Count, ctx, block);
+        GetNodeValue(statePtr, Count_, ctx, block);
         const auto save = new LoadInst(valueType, statePtr, "save", block);
         state->addIncoming(save, block);
         BranchInst::Create(main, block);
@@ -73,7 +72,7 @@ public:
         BranchInst::Create(work, done, plus, block);
 
         block = work;
-        const auto item = GetNodeValue(Flow, ctx, block);
+        const auto item = GetNodeValue(Flow_, ctx, block);
         result->addIncoming(item, block);
         BranchInst::Create(done, good, IsSpecial(item, block, context), block);
 
@@ -91,13 +90,13 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(Flow)) {
-            DependsOn(flow, Count);
+        if (const auto flow = FlowDependsOn(Flow_)) {
+            DependsOn(flow, Count_);
         }
     }
 
-    IComputationNode* const Flow;
-    IComputationNode* const Count;
+    IComputationNode* const Flow_;
+    IComputationNode* const Count_;
 };
 
 class TWideTakeWrapper: public TStatefulWideFlowCodegeneratorNode<TWideTakeWrapper> {
@@ -106,18 +105,18 @@ class TWideTakeWrapper: public TStatefulWideFlowCodegeneratorNode<TWideTakeWrapp
 public:
     TWideTakeWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count)
         : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
-        , Flow(flow)
-        , Count(count)
+        , Flow_(flow)
+        , Count_(count)
     {
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
-            state = Count->GetValue(ctx);
+            state = Count_->GetValue(ctx);
         }
 
         if (auto count = state.Get<ui64>()) {
-            if (const auto result = Flow->FetchValues(ctx, output); EFetchResult::One == result) {
+            if (const auto result = Flow_->FetchValues(ctx, output); EFetchResult::One == result) {
                 state = NUdf::TUnboxedValuePod(--count);
                 return EFetchResult::One;
             } else {
@@ -128,7 +127,7 @@ public:
         return EFetchResult::Finish;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -144,7 +143,7 @@ public:
 
         block = init;
 
-        GetNodeValue(statePtr, Count, ctx, block);
+        GetNodeValue(statePtr, Count_, ctx, block);
         const auto save = new LoadInst(valueType, statePtr, "save", block);
         state->addIncoming(save, block);
         BranchInst::Create(main, block);
@@ -166,7 +165,7 @@ public:
         BranchInst::Create(work, done, plus, block);
 
         block = work;
-        const auto getres = GetNodeValues(Flow, ctx, block);
+        const auto getres = GetNodeValues(Flow_, ctx, block);
         const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, getres.first, ConstantInt::get(getres.first->getType(), 0), "special", block);
         result->addIncoming(getres.first, block);
         BranchInst::Create(done, good, special, block);
@@ -179,22 +178,22 @@ public:
         BranchInst::Create(done, block);
 
         block = done;
-        return {result, std::move(getres.second)};
+        return {result, getres.second};
     }
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(Flow)) {
-            DependsOn(flow, Count);
+        if (const auto flow = FlowDependsOn(Flow_)) {
+            DependsOn(flow, Count_);
         }
     }
 
-    IComputationWideFlowNode* const Flow;
-    IComputationNode* const Count;
+    IComputationWideFlowNode* const Flow_;
+    IComputationNode* const Count_;
 };
 
 class TTakeStreamWrapper: public TMutableComputationNode<TTakeStreamWrapper> {
-    typedef TMutableComputationNode<TTakeStreamWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TTakeStreamWrapper>;
 
 public:
     class TStreamValue: public TComputationValue<TStreamValue> {
@@ -231,49 +230,49 @@ public:
 
     TTakeStreamWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationNode* count)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , List(list)
-        , Count(count)
+        , List_(list)
+        , Count_(count)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(List->GetValue(ctx), Count->GetValue(ctx).Get<ui64>());
+        return ctx.HolderFactory.Create<TStreamValue>(List_->GetValue(ctx), Count_->GetValue(ctx).Get<ui64>());
     }
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(List);
-        DependsOn(Count);
+        DependsOn(List_);
+        DependsOn(Count_);
     }
 
-    IComputationNode* const List;
-    IComputationNode* const Count;
+    IComputationNode* const List_;
+    IComputationNode* const Count_;
 };
 
 class TTakeWrapper: public TMutableCodegeneratorNode<TTakeWrapper> {
-    typedef TMutableCodegeneratorNode<TTakeWrapper> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TTakeWrapper>;
 
 public:
     TTakeWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationNode* count)
         : TBaseComputation(mutables, list->GetRepresentation())
-        , List(list)
-        , Count(count)
+        , List_(list)
+        , Count_(count)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.TakeList(ctx.Builder, List->GetValue(ctx).Release(), Count->GetValue(ctx).Get<ui64>());
+        return ctx.HolderFactory.TakeList(ctx.Builder, List_->GetValue(ctx).Release(), Count_->GetValue(ctx).Get<ui64>());
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto factory = ctx.GetFactory();
         const auto builder = ctx.GetBuilder();
 
-        const auto list = GetNodeValue(List, ctx, block);
-        const auto cnt = GetNodeValue(Count, ctx, block);
+        const auto list = GetNodeValue(List_, ctx, block);
+        const auto cnt = GetNodeValue(Count_, ctx, block);
         const auto count = GetterFor<ui64>(cnt, context, block);
 
         return EmitFunctionCall<&THolderFactory::TakeList>(list->getType(), {factory, builder, list, count}, ctx, block);
@@ -281,12 +280,12 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        DependsOn(List);
-        DependsOn(Count);
+        DependsOn(List_);
+        DependsOn(Count_);
     }
 
-    IComputationNode* const List;
-    IComputationNode* const Count;
+    IComputationNode* const List_;
+    IComputationNode* const Count_;
 };
 
 } // namespace
@@ -312,5 +311,4 @@ IComputationNode* WrapTake(TCallable& callable, const TComputationNodeFactoryCon
     THROW yexception() << "Expected flow, list or stream.";
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

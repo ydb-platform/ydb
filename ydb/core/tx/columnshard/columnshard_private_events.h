@@ -48,7 +48,6 @@ struct TEvPrivate {
         EvForget,
         EvGetExported,
         EvWriteBlobsResult,
-        EvStartReadTask,
         EvWriteDraft,
         EvGarbageCollectionFinished,
         EvTieringModified,
@@ -93,10 +92,28 @@ struct TEvPrivate {
         EvBackupImportRecordBatch,
         EvBackupImportRecordBatchResult,
 
+        EvRetryConfigSubscription,
+        EvUpdateChannelApproximateFreeSpace,
+
+        EvContinueFindEmptyHistoryIntervals,
+        EvFindEmptyHistoryIntervalsPortionsReady,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    struct TEvContinueFindEmptyHistoryIntervals
+        : NActors::TEventLocal<TEvContinueFindEmptyHistoryIntervals, EvContinueFindEmptyHistoryIntervals> {};
+
+    struct TEvFindEmptyHistoryIntervalsPortionsReady
+        : NActors::TEventLocal<TEvFindEmptyHistoryIntervalsPortionsReady, EvFindEmptyHistoryIntervalsPortionsReady> {
+        std::vector<std::pair<TInternalPathId, ui64>> Portions;
+
+        explicit TEvFindEmptyHistoryIntervalsPortionsReady(std::vector<std::pair<TInternalPathId, ui64>>&& portions)
+            : Portions(std::move(portions))
+        {
+        }
+    };
 
     class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, EvMetadataAccessorsInfo> {
     private:
@@ -362,12 +379,24 @@ struct TEvPrivate {
         TEvPingSnapshotsUsage() = default;
     };
 
+    struct TEvUpdateChannelApproximateFreeSpace: public TEventLocal<TEvUpdateChannelApproximateFreeSpace, EvUpdateChannelApproximateFreeSpace> {
+        const ui32 Channel;
+        const float ApproximateFreeSpaceShare;
+
+        TEvUpdateChannelApproximateFreeSpace(ui32 channel, float approximateFreeSpaceShare)
+            : Channel(channel)
+            , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
+        {
+        }
+    };
+
     class TEvWriteBlobsResult: public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {
     public:
         enum EErrorClass {
             Internal,
             Request,
-            ConstraintViolation
+            ConstraintViolation,
+            LocksBroken
         };
 
     private:
@@ -385,6 +414,8 @@ struct TEvPrivate {
                     return NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST;
                 case EErrorClass::ConstraintViolation:
                     return NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION;
+                case EErrorClass::LocksBroken:
+                    return NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN;
             }
         }
 
@@ -512,6 +543,8 @@ struct TEvPrivate {
     struct TEvBackupImportRecordBatchResult: public TEventLocal<TEvBackupImportRecordBatchResult, EvBackupImportRecordBatchResult> {
         explicit TEvBackupImportRecordBatchResult() = default;
     };
+
+    struct TEvRetryConfigSubscription: public TEventLocal<TEvRetryConfigSubscription, EvRetryConfigSubscription> {};
 };
 
 }   // namespace NKikimr::NColumnShard

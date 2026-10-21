@@ -54,6 +54,10 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TVectorIndexSettings::EVectorType, stream, va
         switch (value) {
         case NYdb::NTable::TVectorIndexSettings::EVectorType::Float:
             return "float";
+        case NYdb::NTable::TVectorIndexSettings::EVectorType::Float16:
+            return "float16";
+        case NYdb::NTable::TVectorIndexSettings::EVectorType::BFloat16:
+            return "bfloat16";
         case NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8:
             return "uint8";
         case NYdb::NTable::TVectorIndexSettings::EVectorType::Int8:
@@ -97,6 +101,9 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::ETokenizer, stream, v
         case NYdb::NTable::TFulltextIndexSettings::ETokenizer::Keyword:
             stream << "keyword";
             break;
+        case NYdb::NTable::TFulltextIndexSettings::ETokenizer::Alphanumeric:
+            stream << "alphanumeric";
+            break;
         case NYdb::NTable::TFulltextIndexSettings::ETokenizer::Unspecified:
             stream << "unspecified";
             break;
@@ -134,6 +141,12 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::TAnalyzers, stream, v
     }
     if (value.FilterLengthMax.has_value()) {
         stream << ", filter_length_max: " << *value.FilterLengthMax;
+    }
+    if (value.UseFilterSnowball.has_value()) {
+        stream << ", use_filter_snowball: " << (*value.UseFilterSnowball ? "true" : "false");
+    }
+    if (value.UseFilterSuperLemmer.has_value()) {
+        stream << ", use_filter_superlemmer: " << (*value.UseFilterSuperLemmer ? "true" : "false");
     }
     stream << " }";
 }

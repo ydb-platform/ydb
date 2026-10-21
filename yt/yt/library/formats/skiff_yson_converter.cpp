@@ -13,6 +13,8 @@
 #include <library/cpp/skiff/skiff.h>
 #include <library/cpp/skiff/skiff_schema.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/zerocopy.h>
 #include <util/stream/mem.h>
 
@@ -76,7 +78,7 @@ std::shared_ptr<TSkiffSchema> GetOptionalChild(const std::shared_ptr<TSkiffSchem
 
 struct TSkiffStructField
 {
-    TString Name;
+    std::string Name;
     std::shared_ptr<TSkiffSchema> Type;
 };
 
@@ -117,22 +119,15 @@ struct TOptionalTypesMatch
     int SkiffNesting = 0;
 };
 
-[[noreturn]] void ThrowBadWireType(EWireType expected, EWireType actual)
-{
-    THROW_ERROR_EXCEPTION("Bad Skiff wire type: expected %Qlv, actual %Qlv",
-        expected,
-        actual);
-}
-
 [[noreturn]] void RethrowCannotMatchField(
     const TComplexTypeFieldDescriptor& descriptor,
     const std::shared_ptr<TSkiffSchema>& skiffSchema,
-    const std::exception& ex)
+    const TError& error)
 {
     THROW_ERROR_EXCEPTION("Cannot match field %Qv to Skiff schema",
         descriptor.GetDescription())
-        << SkiffYsonErrorAttributes(descriptor, skiffSchema)
-        << ex;
+        .With(SkiffYsonErrorAttributes(descriptor, skiffSchema))
+        .With(error);
 }
 
 template <typename... TArgs>
@@ -143,7 +138,7 @@ template <typename... TArgs>
 {
     THROW_ERROR_EXCEPTION("Yson to Skiff conversion error while converting %Qv field",
         descriptor.GetDescription())
-        << TError(format, std::forward<TArgs>(args)...);
+        .With(TError(format, std::forward<TArgs>(args)...));
 }
 
 [[noreturn]] void ThrowBadYsonToken(
@@ -151,24 +146,8 @@ template <typename... TArgs>
     const std::vector<EYsonItemType>& expected,
     const EYsonItemType actual)
 {
-    TStringStream expectationString;
-    if (expected.size() > 1) {
-        expectationString << "one of ";
-        bool first = true;
-        for (const auto& itemType : expected) {
-            if (!first) {
-                expectationString << ", ";
-            }
-            first = false;
-            expectationString << Format("%Qlv", itemType);
-        }
-    } else {
-        YT_VERIFY(expected.size() == 1);
-        expectationString << Format("%Qlv", expected[0]);
-    }
-
     ThrowYsonToSkiffConversionError(descriptor, "Bad yson token type, expected %v actual: %Qlv",
-        expectationString.Str(),
+        FormatExpectedTypes(expected),
         actual);
 }
 
@@ -180,7 +159,7 @@ template <typename... TArgs>
 {
     THROW_ERROR_EXCEPTION("Skiff to Yson conversion error while converting %Qv field",
         descriptor.GetDescription())
-        << TError(format, std::forward<TArgs>(args)...);
+        .With(TError(format, std::forward<TArgs>(args)...));
 }
 
 TOptionalTypesMatch MatchOptionalTypes(
@@ -290,9 +269,7 @@ TOptionalTypesMatch MatchOptionalTypes(
 TTypePair MatchListTypes(const TComplexTypeFieldDescriptor& descriptor, const std::shared_ptr<TSkiffSchema>& skiffSchema)
 {
     try {
-        if (skiffSchema->GetWireType() != EWireType::RepeatedVariant8) {
-            ThrowBadWireType(EWireType::RepeatedVariant8, skiffSchema->GetWireType());
-        }
+        ValidateWireTypeIsOneOf(skiffSchema->GetWireType(), {EWireType::RepeatedVariant8});
         if (skiffSchema->GetChildren().size() != 1) {
             THROW_ERROR_EXCEPTION(
                 "%Qlv has too many children: expected %v, actual %v",
@@ -312,11 +289,9 @@ std::vector<std::optional<TTypePair>> MatchStructTypes(
     bool allowUnknownSkiffFields)
 {
     try {
-        if (skiffSchema->GetWireType() != EWireType::Tuple) {
-            ThrowBadWireType(EWireType::Tuple, skiffSchema->GetWireType());
-        }
+        ValidateWireTypeIsOneOf(skiffSchema->GetWireType(), {EWireType::Tuple});
 
-        THashMap<TString, int> skiffNameToIndex;
+        THashMap<std::string, int> skiffNameToIndex;
         std::vector<TSkiffStructField> skiffFields;
         {
             const auto& children = skiffSchema->GetChildren();
@@ -390,9 +365,7 @@ std::vector<std::optional<TTypePair>> MatchStructTypes(
 std::vector<TTypePair> MatchTupleTypes(const TComplexTypeFieldDescriptor& descriptor, const std::shared_ptr<TSkiffSchema>& skiffSchema)
 {
     try {
-        if (skiffSchema->GetWireType() != EWireType::Tuple) {
-            ThrowBadWireType(EWireType::Tuple, skiffSchema->GetWireType());
-        }
+        ValidateWireTypeIsOneOf(skiffSchema->GetWireType(), {EWireType::Tuple});
 
         const auto& elements = descriptor.GetType()->AsTupleTypeRef().GetElements();
         const auto& children = skiffSchema->GetChildren();
@@ -417,9 +390,7 @@ std::vector<TTypePair> MatchTupleTypes(const TComplexTypeFieldDescriptor& descri
 std::vector<TTypePair> MatchVariantTupleTypes(const TComplexTypeFieldDescriptor& descriptor, const std::shared_ptr<TSkiffSchema>& skiffSchema)
 {
     try {
-        if (skiffSchema->GetWireType() != EWireType::Variant8 && skiffSchema->GetWireType() != EWireType::Variant16) {
-            ThrowBadWireType(EWireType::Tuple, skiffSchema->GetWireType());
-        }
+        ValidateWireTypeIsOneOf(skiffSchema->GetWireType(), {EWireType::Variant8, EWireType::Variant16});
 
         const auto& elements = descriptor.GetType()->AsVariantTupleTypeRef().GetElements();
         const auto& children = skiffSchema->GetChildren();
@@ -444,9 +415,7 @@ std::vector<TTypePair> MatchVariantTupleTypes(const TComplexTypeFieldDescriptor&
 std::vector<TTypePair> MatchVariantStructTypes(const TComplexTypeFieldDescriptor& descriptor, const std::shared_ptr<TSkiffSchema>& skiffSchema)
 {
     try {
-        if (skiffSchema->GetWireType() != EWireType::Variant8 && skiffSchema->GetWireType() != EWireType::Variant16) {
-            ThrowBadWireType(EWireType::Variant8, skiffSchema->GetWireType());
-        }
+        ValidateWireTypeIsOneOf(skiffSchema->GetWireType(), {EWireType::Variant8, EWireType::Variant16});
 
         const auto& fields = descriptor.GetType()->AsVariantStructTypeRef().GetFields();
         const auto& children = skiffSchema->GetChildren();
@@ -478,9 +447,7 @@ std::vector<TTypePair> MatchVariantStructTypes(const TComplexTypeFieldDescriptor
 std::pair<TTypePair, TTypePair> MatchDictTypes(const TComplexTypeFieldDescriptor& descriptor, const std::shared_ptr<TSkiffSchema>& skiffSchema)
 {
     try {
-        if (skiffSchema->GetWireType() != EWireType::RepeatedVariant8) {
-            ThrowBadWireType(EWireType::RepeatedVariant8, skiffSchema->GetWireType());
-        }
+        ValidateWireTypeIsOneOf(skiffSchema->GetWireType(), {EWireType::RepeatedVariant8});
 
         if (skiffSchema->GetChildren().size() != 1) {
             THROW_ERROR_EXCEPTION("%Qlv has unexpected child count: expected %v, got %v",
@@ -490,12 +457,7 @@ std::pair<TTypePair, TTypePair> MatchDictTypes(const TComplexTypeFieldDescriptor
         }
 
         auto tupleSchema = skiffSchema->GetChildren()[0];
-        if (tupleSchema->GetWireType() != EWireType::Tuple) {
-            THROW_ERROR_EXCEPTION("%Qlv has unexpected wire type: expected %Qlv, got %Qlv",
-                EWireType::RepeatedVariant8,
-                EWireType::Tuple,
-                tupleSchema->GetWireType());
-        }
+        ValidateWireTypeIsOneOf(tupleSchema->GetWireType(), {EWireType::Tuple});
 
         if (tupleSchema->GetChildren().size() != 2) {
             THROW_ERROR_EXCEPTION("%Qlv has unexpected child count: expected %v, got %v",
@@ -555,7 +517,7 @@ public:
         if constexpr (wireType == EWireType::Yson32) {
             TmpString_.clear();
             {
-                TStringOutput output(TmpString_);
+                TStdStringOutput output(TmpString_);
                 TBufferedBinaryYsonWriter ysonWriter(&output);
                 cursor->TransferComplexValue(&ysonWriter);
                 ysonWriter.Flush();
@@ -617,7 +579,7 @@ public:
 
 private:
     TComplexTypeFieldDescriptor Descriptor_;
-    TString TmpString_;
+    std::string TmpString_;
 };
 
 template <EYsonItemType ExpectedTokenType, typename TFunction>
@@ -708,7 +670,7 @@ TYsonToSkiffConverter CreateSimpleYsonToSkiffConverter(
             case ESimpleLogicalValueType::Int64:
 
             case ESimpleLogicalValueType::Interval:
-                CheckWireType(wireType, {EWireType::Int8, EWireType::Int16, EWireType::Int32, EWireType::Int64});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::Int8, EWireType::Int16, EWireType::Int32, EWireType::Int64});
                 return CreatePrimitiveTypeYsonToSkiffConverter(std::move(descriptor), wireType);
 
             case ESimpleLogicalValueType::Uint8:
@@ -719,35 +681,35 @@ TYsonToSkiffConverter CreateSimpleYsonToSkiffConverter(
             case ESimpleLogicalValueType::Date:
             case ESimpleLogicalValueType::Datetime:
             case ESimpleLogicalValueType::Timestamp:
-                CheckWireType(wireType, {EWireType::Uint8, EWireType::Uint16, EWireType::Uint32, EWireType::Uint64});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::Uint8, EWireType::Uint16, EWireType::Uint32, EWireType::Uint64});
                 return CreatePrimitiveTypeYsonToSkiffConverter(std::move(descriptor), wireType);
 
             case ESimpleLogicalValueType::Float:
             case ESimpleLogicalValueType::Double:
-                CheckWireType(wireType, {EWireType::Double});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::Double});
                 return CreatePrimitiveTypeYsonToSkiffConverter(std::move(descriptor), wireType);
 
             case ESimpleLogicalValueType::Boolean:
-                CheckWireType(wireType, {EWireType::Boolean});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::Boolean});
                 return CreatePrimitiveTypeYsonToSkiffConverter(std::move(descriptor), wireType);
 
             case ESimpleLogicalValueType::Utf8:
             case ESimpleLogicalValueType::Json:
             case ESimpleLogicalValueType::String:
-                CheckWireType(wireType, {EWireType::String32});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::String32});
                 return CreatePrimitiveTypeYsonToSkiffConverter(std::move(descriptor), wireType);
 
             case ESimpleLogicalValueType::Any:
-                CheckWireType(wireType, {EWireType::Yson32});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::Yson32});
                 return CreatePrimitiveTypeYsonToSkiffConverter(std::move(descriptor), wireType);
 
             case ESimpleLogicalValueType::Null:
             case ESimpleLogicalValueType::Void:
-                CheckWireType(wireType, {EWireType::Nothing});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::Nothing});
                 return CreatePrimitiveTypeYsonToSkiffConverter(std::move(descriptor), wireType);
 
             case ESimpleLogicalValueType::Uuid:
-                CheckWireType(wireType, {EWireType::Uint128, EWireType::String32});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::Uint128, EWireType::String32});
                 if (wireType == EWireType::Uint128) {
                     return CreatePrimitiveTypeYsonToSkiffConverter<EYsonItemType::StringValue>(
                         std::move(descriptor),
@@ -760,7 +722,7 @@ TYsonToSkiffConverter CreateSimpleYsonToSkiffConverter(
             case ESimpleLogicalValueType::Datetime64:
             case ESimpleLogicalValueType::Timestamp64:
             case ESimpleLogicalValueType::Interval64:
-                CheckWireType(wireType, {EWireType::Int32, EWireType::Int64, EWireType::String32});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::Int32, EWireType::Int64, EWireType::String32});
                 return CreatePrimitiveTypeYsonToSkiffConverter(std::move(descriptor), wireType);
             case ESimpleLogicalValueType::TzDate32:
             case ESimpleLogicalValueType::TzDatetime64:
@@ -1316,6 +1278,7 @@ TYsonToSkiffConverter CreateYsonToSkiffConverterImpl(
             return CreateVariantYsonToSkiffConverter(std::move(descriptor), skiffSchema, innerContext, config);
         case ELogicalMetatype::Dict:
             return CreateDictYsonToSkiffConverter(std::move(descriptor), skiffSchema, innerContext, config);
+        case ELogicalMetatype::AggregateState:
         case ELogicalMetatype::Tagged:
             // We have detagged our type previously.
             YT_ABORT();
@@ -1464,7 +1427,7 @@ TSkiffToYsonConverter CreateSimpleSkiffToYsonConverter(
             case ESimpleLogicalValueType::Int64:
 
             case ESimpleLogicalValueType::Interval:
-                CheckWireType(wireType, {EWireType::Int8, EWireType::Int16, EWireType::Int32, EWireType::Int64});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::Int8, EWireType::Int16, EWireType::Int32, EWireType::Int64});
                 return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
 
             case ESimpleLogicalValueType::Uint8:
@@ -1475,35 +1438,35 @@ TSkiffToYsonConverter CreateSimpleSkiffToYsonConverter(
             case ESimpleLogicalValueType::Date:
             case ESimpleLogicalValueType::Datetime:
             case ESimpleLogicalValueType::Timestamp:
-                CheckWireType(wireType, {EWireType::Uint8, EWireType::Uint16, EWireType::Uint32, EWireType::Uint64});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::Uint8, EWireType::Uint16, EWireType::Uint32, EWireType::Uint64});
                 return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
 
             case ESimpleLogicalValueType::Boolean:
-                CheckWireType(wireType, {EWireType::Boolean});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::Boolean});
                 return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
 
             case ESimpleLogicalValueType::Float:
             case ESimpleLogicalValueType::Double:
-                CheckWireType(wireType, {EWireType::Double});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::Double});
                 return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
 
             case ESimpleLogicalValueType::String:
             case ESimpleLogicalValueType::Utf8:
             case ESimpleLogicalValueType::Json:
-                CheckWireType(wireType, {EWireType::String32});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::String32});
                 return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
 
             case ESimpleLogicalValueType::Any:
-                CheckWireType(wireType, {EWireType::Yson32});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::Yson32});
                 return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
 
             case ESimpleLogicalValueType::Null:
             case ESimpleLogicalValueType::Void:
-                CheckWireType(wireType, {EWireType::Nothing});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::Nothing});
                 return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
 
             case ESimpleLogicalValueType::Uuid:
-                CheckWireType(wireType, {EWireType::Uint128, EWireType::String32});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::Uint128, EWireType::String32});
                 if (wireType == EWireType::Uint128) {
                     return TPrimitiveTypeSkiffToYsonConverter(TUuidParser());
                 } else {
@@ -1514,7 +1477,7 @@ TSkiffToYsonConverter CreateSimpleSkiffToYsonConverter(
             case ESimpleLogicalValueType::Datetime64:
             case ESimpleLogicalValueType::Timestamp64:
             case ESimpleLogicalValueType::Interval64:
-                CheckWireType(wireType, {EWireType::Int32, EWireType::Int64, EWireType::String32});
+                ValidateWireTypeIsOneOf(wireType, {EWireType::Int32, EWireType::Int64, EWireType::String32});
                 return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
             case ESimpleLogicalValueType::TzDate32:
             case ESimpleLogicalValueType::TzDatetime64:
@@ -1687,8 +1650,7 @@ TSkiffToYsonConverter CreateOptionalSkiffToYsonConverter(
     auto match = MatchOptionalTypes(descriptor, skiffSchema, allowOmitOptional);
     if (match.LogicalNesting != match.SkiffNesting) {
         if (!config.AllowOmitTopLevelOptional || context.NestingLevel > 0) {
-            RethrowCannotMatchField(descriptor, skiffSchema, TErrorException()
-                <<= TError("Optional nesting mismatch"));
+            RethrowCannotMatchField(descriptor, skiffSchema, TError("Optional nesting mismatch"));
         }
     }
 
@@ -1756,7 +1718,7 @@ TSkiffToYsonConverter CreateStructSkiffToYsonConverter(
             RethrowCannotMatchField(
                 descriptor,
                 skiffSchema,
-                TErrorException() <<= TError(
+                TError(
                     "Non optional struct field %Qv is missing in Skiff schema",
                     fieldDescriptor.GetDescription()));
         }
@@ -1952,6 +1914,7 @@ TSkiffToYsonConverter CreateSkiffToYsonConverterImpl(
         case ELogicalMetatype::Dict:
             return CreateDictSkiffToYsonConverter(std::move(descriptor), skiffSchema, innerContext, config);
         case ELogicalMetatype::Tagged:
+        case ELogicalMetatype::AggregateState:
             // We have detagged our type previously.
             break;
     }
@@ -2012,10 +1975,11 @@ void CheckSkiffWireTypeForDecimal(int precision, NSkiff::EWireType wireType)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void CheckWireType(EWireType wireType, const std::initializer_list<EWireType>& allowed)
+void ValidateWireTypeIsOneOf(EWireType wireType, const std::initializer_list<EWireType>& expected)
 {
-    if (std::find(allowed.begin(), allowed.end(), wireType) == allowed.end()) {
-        THROW_ERROR_EXCEPTION("Unexpected wire type %Qlv",
+    if (std::find(expected.begin(), expected.end(), wireType) == expected.end()) {
+        THROW_ERROR_EXCEPTION("Unexpected wire type: expected %v, got %Qlv",
+            FormatExpectedTypes(expected),
             wireType);
     }
 }
@@ -2044,32 +2008,32 @@ void CheckTzType(const std::shared_ptr<TSkiffSchema>& skiffSchema, ESimpleLogica
     try {
         switch (columnType) {
             case ESimpleLogicalValueType::TzDate32:
-                CheckWireType(
+                ValidateWireTypeIsOneOf(
                     innerTimeType,
                     {EWireType::Int32});
                 break;
             case ESimpleLogicalValueType::TzDatetime64:
-                CheckWireType(
+                ValidateWireTypeIsOneOf(
                     innerTimeType,
                     {EWireType::Int64});
                 break;
             case ESimpleLogicalValueType::TzTimestamp64:
-                CheckWireType(
+                ValidateWireTypeIsOneOf(
                     innerTimeType,
                     {EWireType::Int64,});
                 break;
             case ESimpleLogicalValueType::TzDate:
-                CheckWireType(
+                ValidateWireTypeIsOneOf(
                     innerTimeType,
                     {EWireType::Uint16});
                 break;
             case ESimpleLogicalValueType::TzDatetime:
-                CheckWireType(
+                ValidateWireTypeIsOneOf(
                     innerTimeType,
                     {EWireType::Uint32});
                 break;
             case ESimpleLogicalValueType::TzTimestamp:
-                CheckWireType(
+                ValidateWireTypeIsOneOf(
                     innerTimeType,
                     {EWireType::Uint64});
                 break;
@@ -2080,7 +2044,9 @@ void CheckTzType(const std::shared_ptr<TSkiffSchema>& skiffSchema, ESimpleLogica
         auto error = TError(
             "TzType cannot be represented with Skiff schema %Qv",
             GetShortDebugString(skiffSchema));
-        error <<= ex.Error();
+        if (auto addedError = ex.Error(); !addedError.IsOK()) {
+            error.Add(std::move(addedError));
+        }
         THROW_ERROR(error);
     }
 }

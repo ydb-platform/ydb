@@ -54,16 +54,25 @@ public:
         TrimmedFreeChunks.Push(chunkIdx);
     }
 
+    void SetFreeChunksSortingEnabled(bool enabled) {
+        UntrimmedFreeChunks.SetSortingEnabled(enabled);
+        TrimmedFreeChunks.SetSortingEnabled(enabled);
+    }
+
     //
     // Add/remove owner
     //
 
-    void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight) {
-        ChunkTracker.AddOwner(owner, vdiskId, weight);
+    void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight, ui32 groupSizeInUnits = 0) {
+        ChunkTracker.AddOwner(owner, vdiskId, weight, groupSizeInUnits);
     }
 
     void SetOwnerWeight(TOwner owner, ui32 weight) {
         ChunkTracker.SetOwnerWeight(owner, weight);
+    }
+
+    void SetOwnerSettings(TOwner owner, ui32 weight, ui32 groupSizeInUnits) {
+        ChunkTracker.SetOwnerSettings(owner, weight, groupSizeInUnits);
     }
 
     void RemoveOwner(TOwner owner) {
@@ -103,6 +112,10 @@ public:
 
     ui32 GetNumActiveSlots() const {
         return ChunkTracker.GetNumActiveSlots();
+    }
+
+    i64 GetUserChunkPoolSize() const {
+      return ChunkTracker.GetTotalHardLimit();
     }
 
     TChunkIdx PopOwnerFreeChunk(TOwner owner, TString &outErrorReason) {
@@ -146,14 +159,43 @@ public:
         return ChunkTracker.GetSpaceStatusFlags(owner, occupancy);
     }
 
+    TSpaceHeadroom GetSpaceHeadroom(TOwner owner) const {
+        return ChunkTracker.GetSpaceHeadroom(owner);
+    }
+
     NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(TOwner owner, i64 allocationSize, double *occupancy) const {
         return ChunkTracker.EstimateSpaceColor(owner, allocationSize, occupancy);
+    }
+
+    NKikimrBlobStorage::TPDiskSpaceColor::E EstimateAllocationColor(TOwner owner, i64 allocationSize,
+            bool housekeeping, double *occupancy) const {
+        return ChunkTracker.EstimateAllocationColor(owner, allocationSize, housekeeping, occupancy);
     }
 
     double GetPDiskUsage() const {
         i64 totalUsed = ChunkTracker.GetTotalUsed();
         i64 totalHardLimit = ChunkTracker.GetTotalHardLimit();
         return 100.0 * (totalHardLimit ? (double)totalUsed / totalHardLimit : 1.0);
+    }
+
+    NKikimrBlobStorage::TPDiskSpaceColor::E GetSharedPoolColor() const {
+        return ChunkTracker.GetSharedPoolColor();
+    }
+
+    NKikimrBlobStorage::TPDiskSpaceColor::E GetCompactionPressureColor() const {
+        return ChunkTracker.GetCompactionPressureColor();
+    }
+
+    void SetAllocationReserves(ui64 system, ui64 maintenance) {
+        ChunkTracker.SetAllocationReserves(system, maintenance);
+    }
+
+    ui64 GetAllocationHeadroom(TOwner owner, EAllocationPurpose purpose) const {
+        return ChunkTracker.GetAllocationHeadroom(owner, purpose);
+    }
+
+    ui64 GetWorstAllocationHeadroom(EAllocationPurpose purpose) const {
+        return ChunkTracker.GetWorstAllocationHeadroom(purpose);
     }
 
     NKikimrBlobStorage::TPDiskSpaceColor::E GetPDiskCapacityAlert() const {
@@ -206,8 +248,20 @@ public:
         ChunkTracker.SetExpectedOwnerCount(newOwnerCount);
     }
 
+    void SetExpectedOwnerSize(i64 newOwnerSize) {
+        ChunkTracker.SetExpectedOwnerSize(newOwnerSize);
+    }
+
+    void SetExpectedOwnerSettings(size_t newOwnerCount, i64 newOwnerSize) {
+        ChunkTracker.SetExpectedOwnerSettings(newOwnerCount, newOwnerSize);
+    }
+
     void SetColorBorder(NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder) {
         ChunkTracker.SetColorBorder(colorBorder);
+    }
+
+    void SetStaticGroupChunkReservePerMille(ui32 perMille) {
+        ChunkTracker.SetStaticGroupChunkReservePerMille(perMille);
     }
 
     //

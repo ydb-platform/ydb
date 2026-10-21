@@ -8,11 +8,11 @@ namespace NYdb::inline Dev::NPersQueue {
 
 TReadSessionEvent::TDataReceivedEvent::TMessageInformation::TMessageInformation(
     ui64 offset,
-    std::string messageGroupId,
+    std::string_view messageGroupId,
     ui64 seqNo,
     TInstant createTime,
     TInstant writeTime,
-    std::string ip,
+    std::string_view ip,
     TWriteSessionMeta::TPtr meta,
     ui64 uncompressedSize
 )

@@ -1,0 +1,5 @@
+use plato;
+
+$table = SELECT key, TableName() as table FROM Input;
+MATERIALIZE $table INTO $result;
+SELECT * FROM $result ORDER BY key;

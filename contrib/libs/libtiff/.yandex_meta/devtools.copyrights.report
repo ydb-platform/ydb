@@ -392,7 +392,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         LICENSE.md [32:33]
-        tif_lzw.c [1445:1446]
+        tif_lzw.c [1463:1464]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ef9e24bc2ee738c92b1a0aae6c46127d
 BELONGS ya.make

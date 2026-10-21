@@ -56,7 +56,7 @@ private:
         return std::make_shared<TDefaultHeader>(data.GetSize());
     }
 
-    virtual std::optional<ui64> DoCalcCategory(const TString& /*subColumnName*/) const {
+    virtual std::optional<ui64> DoCalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& /*subColumnName*/) const {
         return std::nullopt;
     }
 
@@ -84,7 +84,7 @@ public:
         return std::nullopt;
     }
 
-    std::optional<ui64> CalcCategory(const TString& subColumnName) const;
+    std::optional<ui64> CalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName) const;
 
     TConclusion<std::shared_ptr<IIndexHeader>> BuildHeader(const TChunkOriginalData& data) const {
         return DoBuildHeader(data);
@@ -112,7 +112,7 @@ public:
     {
     }
 
-    NJson::TJsonValue SerializeDataToJson(const TIndexChunk& iChunk, const TIndexInfo& indexInfo) const;
+    NJson::TJsonValue SerializeDataToJson(const TString& iChunk, const TIndexInfo& indexInfo) const;
 
     TConclusionStatus CheckModificationCompatibility(const std::shared_ptr<IIndexMeta>& newMeta) const {
         if (!newMeta) {

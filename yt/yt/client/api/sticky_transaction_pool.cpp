@@ -4,7 +4,7 @@
 
 #include <yt/yt/core/concurrency/lease_manager.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NApi {
 
@@ -68,8 +68,8 @@ public:
         transaction->SubscribeAborted(
             BIND(&TStickyTransactionPool::OnStickyTransactionAborted, MakeWeak(this), transactionId));
 
-        YT_LOG_DEBUG("Sticky transaction registered (TransactionId: %v)",
-            transactionId);
+        YT_TLOG_DEBUG("Sticky transaction registered")
+            .With("TransactionId", transactionId);
 
         return transaction;
     }
@@ -87,8 +87,8 @@ public:
             IdToStickyTransactionEntry_.erase(it);
         }
 
-        YT_LOG_DEBUG("Sticky transaction unregistered (TransactionId: %v)",
-            transactionId);
+        YT_TLOG_DEBUG("Sticky transaction unregistered")
+            .With("TransactionId", transactionId);
     }
 
     ITransactionPtr FindTransactionAndRenewLease(TTransactionId transactionId) override
@@ -106,8 +106,8 @@ public:
             lease = entry.Lease;
         }
         NConcurrency::TLeaseManager::RenewLease(std::move(lease));
-        YT_LOG_DEBUG("Sticky transaction lease renewed (TransactionId: %v)",
-            transactionId);
+        YT_TLOG_DEBUG("Sticky transaction lease renewed")
+            .With("TransactionId", transactionId);
         return transaction;
     }
 
@@ -120,7 +120,7 @@ private:
         NConcurrency::TLease Lease;
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, StickyTransactionLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, StickyTransactionLock_);
     THashMap<TTransactionId, TStickyTransactionEntry> IdToStickyTransactionEntry_;
 
     void OnStickyTransactionLeaseExpired(TTransactionId transactionId, TWeakPtr<ITransaction> weakTransaction)
@@ -142,8 +142,8 @@ private:
             IdToStickyTransactionEntry_.erase(it);
         }
 
-        YT_LOG_DEBUG("Sticky transaction lease expired (TransactionId: %v)",
-            transactionId);
+        YT_TLOG_DEBUG("Sticky transaction lease expired")
+            .With("TransactionId", transactionId);
 
         YT_UNUSED_FUTURE(transaction->Abort());
     }
@@ -171,8 +171,8 @@ private:
             IdToStickyTransactionEntry_.erase(it);
         }
 
-        YT_LOG_DEBUG("Sticky transaction unregistered (TransactionId: %v)",
-            transactionId);
+        YT_TLOG_DEBUG("Sticky transaction unregistered")
+            .With("TransactionId", transactionId);
 
         NConcurrency::TLeaseManager::CloseLease(lease);
     }

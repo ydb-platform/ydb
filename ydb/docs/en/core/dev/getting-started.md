@@ -16,14 +16,13 @@ Choose the {{ ydb-short-name }} API you want to use; there are several options:
 
 ## Install prerequisites
 
-Choose the specific programming language you'll be using. [Install the respective {{ ydb-short-name }} SDK](../reference/ydb-sdk/index.md) or [a PostgreSQL driver](https://wiki.postgresql.org/wiki/List_of_drivers) depending on the route you have chosen above.
+Choose the specific programming language you'll be using. [Install the respective {{ ydb-short-name }} SDK](../reference/ydb-sdk/index.md).
 
 Additionally, you'd want to set up at least one of the available ways to run ad-hoc queries for debugging purposes. Choose at least one according to your preferences:
 
 * [{{ ydb-short-name }} CLI](../reference/ydb-cli/install.md)
-* [Embedded UI](../reference/embedded-ui/index.md)
+* [{{ ydb-ui-name }}](../reference/ydb-ui/index.md)
 * Any SQL IDE that supports [JDBC](https://github.com/ydb-platform/ydb-jdbc-driver)
-* [psql](https://www.postgresql.org/docs/14/app-psql.html) or [pgAdmin](https://www.pgadmin.org/) for the PostgreSQL-compatible route.
 
 ## Start coding
 
@@ -31,7 +30,7 @@ Additionally, you'd want to set up at least one of the available ways to run ad-
 
 - Go through [YQL tutorial](yql-tutorial/index.md) to get familiar with {{ ydb-short-name }}'s SQL dialect.
 - Explore [example applications](example-app/index.md) to see how working with SDK's looks like.
-- Check out [SDK recipies](../recipes/ydb-sdk/index.md) for typical SDK use cases, which you can refer to later.
+- Check out [SDK recipes](../recipes/ydb-sdk/index.md) for typical SDK use cases, which you can refer to later.
 - Learn how to [handle {{ ydb-short-name }} SDK errors](../reference/ydb-sdk/error_handling.md).
 - Leverage your IDE capabilities to navigate the SDK code.
 

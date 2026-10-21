@@ -11,6 +11,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_LOGCUTTER
+
 using namespace NKikimrServices;
 
 namespace NKikimr {
@@ -27,6 +29,12 @@ namespace NKikimr {
             TSyncLogKeeperState KeepState;
             // Sublog with circle buffer
             TSublog<TCircleBufStringStream<4096>> Sublog;
+            // SyncLog actor: TEvSyncLogPut comes from PDisk log callbacks through its mailbox. The committer
+            // reports through the same mailbox, so TEvSyncLogCommitDone for an entry point reaches the keeper
+            // only after every TEvSyncLogPut logged before that entry point. Otherwise the keeper could rely
+            // on an entry point LSN (and the confirmed LSN taken for it) while a record below it is still on
+            // its way, and let the recovery log be cut past a record SyncLog has never stored.
+            const TActorId SyncLogId;
             // committer actor id, or empty if we don't have commit activity at this moment
             TActorId CommitterId = {};
             // FirstLsnToKeep reported to LogCutter last time
@@ -72,6 +80,8 @@ namespace NKikimr {
             // PERFORM ACTIONS
             ////////////////////////////////////////////////////////////////////////
             void PerformActions(const TActorContext &ctx) {
+                KeepState.UpdateAtomics(TActivationContext::Now());
+
                 if (auto v = KeepState.GetChunksToForget(); !v.empty()) {
                     Send(SlCtx->PDiskCtx->PDiskId, new NPDisk::TEvChunkForget(SlCtx->PDiskCtx->Dsk->Owner,
                         SlCtx->PDiskCtx->Dsk->OwnerRound, std::move(v)));
@@ -96,11 +106,9 @@ namespace NKikimr {
                     // create and run committer
                     TSyncLogKeeperCommitData commitData = KeepState.PrepareCommitData(recoveryLogConfirmedLsn);
 
-                    LOG_DEBUG(ctx, BS_SYNCLOG,
-                            VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: start committer; commitData# %s",
-                                commitData.ToString().data()));
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: start committer; commitData# %s", commitData.ToString().data()));
 
-                    CommitterId = ctx.Register(CreateSyncLogCommitter(SlCtx, ctx.SelfID, std::move(commitData)));
+                    CommitterId = ctx.Register(CreateSyncLogCommitter(SlCtx, SyncLogId, std::move(commitData)));
                 }
             }
 
@@ -119,20 +127,14 @@ namespace NKikimr {
             // HELPERS
             ////////////////////////////////////////////////////////////////////////
             void FixateFirstLsnToKeep(const TActorContext &ctx, ui64 firstLsnToKeep) {
-                LOG_DEBUG(ctx, BS_SYNCLOG,
-                        VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                            "KEEPER: FixateFirstLsnToKeep: firstLsnToKeep# %" PRIu64 " decomposed# %s",
-                            firstLsnToKeep, KeepState.CalculateFirstLsnToKeepDecomposed().data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: FixateFirstLsnToKeep: firstLsnToKeep# %" PRIu64 " decomposed# %s", firstLsnToKeep, KeepState.CalculateFirstLsnToKeepDecomposed().data()));
 
                 if (LastReportedFirstLsnToKeep.Empty() || firstLsnToKeep > *LastReportedFirstLsnToKeep) {
                     SlCtx->SyncLogFirstLsnToKeep->Set(firstLsnToKeep);
                     ctx.Send(SlCtx->LogCutterID, new TEvVDiskCutLog(TEvVDiskCutLog::SyncLog, firstLsnToKeep));
                     LastReportedFirstLsnToKeep = firstLsnToKeep;
 
-                    LOG_DEBUG(ctx, BS_SYNCLOG,
-                            VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                "KEEPER: FixateFirstLsnToKeep: CutLog: firstLsnToKeep# %" PRIu64 " decomposed# %s",
-                                firstLsnToKeep, KeepState.CalculateFirstLsnToKeepDecomposed().data()));
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: FixateFirstLsnToKeep: CutLog: firstLsnToKeep# %" PRIu64 " decomposed# %s", firstLsnToKeep, KeepState.CalculateFirstLsnToKeepDecomposed().data()));
                 }
             }
 
@@ -176,15 +178,9 @@ namespace NKikimr {
 
             void Handle(TEvSyncLogCommitDone::TPtr &ev, const TActorContext &ctx) {
                 auto *msg = ev->Get();
-                LOG_DEBUG(ctx, BS_SYNCLOG,
-                          VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                "KEEPER: TEvSyncLogCommitDone: ev# %s",
-                                msg->ToString().data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: TEvSyncLogCommitDone: ev# %s", msg->ToString().data()));
 
-                LOG_DEBUG(ctx, BS_LOGCUTTER,
-                          VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                "KEEPER: TEvSyncLogCommitDone: ev# %s",
-                                msg->ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: TEvSyncLogCommitDone: ev# %s", msg->ToString().data()));
 
                 // log commit to Sublog
                 Sublog.Log() << ToStringLocalTimeUpToSeconds(ctx.Now())
@@ -215,6 +211,21 @@ namespace NKikimr {
                 PerformActions(ctx);
             }
 
+            void Handle(TEvSyncLogDiskOutOfSpace::TPtr &ev, const TActorContext &ctx) {
+                auto *msg = ev->Get();
+                YDB_LOG_NOTICE_CTX_COMP(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: TEvSyncLogDiskOutOfSpace: disposing disk sync log;" " allocatedChunks# %s", FormatList(msg->AllocatedChunks).data()));
+
+                Sublog.Log() << ToStringLocalTimeUpToSeconds(ctx.Now())
+                    << " Disk sync log disposed due to OUT_OF_SPACE\n";
+
+                // committer aborted the commit
+                CommitterId = TActorId();
+                KeepState.DisposeDiskSyncLog(std::move(msg->AllocatedChunks));
+
+                // start the disposal commit (and any other delayed actions)
+                PerformActions(ctx);
+            }
+
             void Handle(TEvSyncLogSnapshot::TPtr &ev, const TActorContext &ctx) {
                 ++SlCtx->IFaceMonGroup.SyncLogGetSnapshot();
                 auto snap = KeepState.GetSyncLogSnapshot();
@@ -229,6 +240,12 @@ namespace NKikimr {
                 TLogEssence e;
                 KeepState.FillInSyncLogEssence(&e);
                 ctx.Send(ev->Sender, new TEvSyncLogLocalStatusResult(e));
+            }
+
+            void Handle(TEvSyncLogSpaceStat::TPtr &ev, const TActorContext &ctx) {
+                auto result = std::make_unique<TEvSyncLogSpaceStatResult>();
+                KeepState.FillInSpaceStat(result.get());
+                ctx.Send(ev->Sender, result.release(), 0, ev->Cookie);
             }
 
             void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
@@ -268,7 +285,13 @@ namespace NKikimr {
             void Handle(const TEvPhantomFlagStorageGetSnapshotResult::TPtr& ev) {
                 // This actor only requests PhantomFlagStorage snapshot on restart
                 // to rebuild ThresholdsStructure
-                KeepState.RecoverPhantomFlagStorage(std::move(ev->Get()->Snapshot));
+                auto* msg = ev->Get();
+                KeepState.RecoverPhantomFlagStorage(std::move(msg->Thresholds), msg->Eof);
+                if (!msg->Eof) {
+                    auto next = std::make_unique<TEvPhantomFlagStorageGetSnapshot>();
+                    next->ProcessedChunks = std::move(msg->ProcessedChunks);
+                    KeepState.ContinuePhantomFlagStorageSnapshot(std::move(next));
+                }
             }
 
             void Handle(const TEvLocalSyncData::TPtr& ev) {
@@ -283,11 +306,11 @@ namespace NKikimr {
 
             void Handle(TEvPhantomFlagStorageCommitData::TPtr ev) {
                 KeepState.UpdatePhantomFlagStorageData(std::move(ev->Get()->Data));
+                KeepState.RetireExtractedChunks(ev->Get()->RetiredChunks);
             }
 
             void UpdateCounters() {
                 KeepState.UpdateMetrics();
-                KeepState.FlushPhantomFlagStorageWriteBufferIfNeeded();
                 Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup);
             }
 
@@ -297,8 +320,10 @@ namespace NKikimr {
                 HFunc(TEvSyncLogTrim, Handle)
                 HFunc(TEvSyncLogFreeChunk, Handle)
                 HFunc(TEvSyncLogCommitDone, Handle)
+                HFunc(TEvSyncLogDiskOutOfSpace, Handle)
                 HFunc(TEvSyncLogSnapshot, Handle)
                 HFunc(TEvSyncLogLocalStatus, Handle)
+                HFunc(TEvSyncLogSpaceStat, Handle)
                 HFunc(TEvBlobStorage::TEvVBaldSyncLog, Handle)
                 HFunc(NPDisk::TEvCutLog, Handle)
                 HFunc(TEvents::TEvPoisonPill, Handle)
@@ -319,18 +344,21 @@ namespace NKikimr {
 
             TSyncLogKeeperActor(
                     TIntrusivePtr<TSyncLogCtx> slCtx,
-                    std::unique_ptr<TSyncLogRepaired> repaired)
+                    std::unique_ptr<TSyncLogRepaired> repaired,
+                    const TActorId &syncLogId)
                 : TActorBootstrapped<TSyncLogKeeperActor>()
                 , SlCtx(std::move(slCtx))
                 , KeepState(SlCtx, std::move(repaired), SlCtx->SyncLogMaxMemAmount, SlCtx->SyncLogMaxDiskAmount,
                     SlCtx->SyncLogMaxEntryPointSize)
+                , SyncLogId(syncLogId)
             {}
         };
 
         IActor* CreateSyncLogKeeperActor(
                 TIntrusivePtr<TSyncLogCtx> slCtx,
-                std::unique_ptr<TSyncLogRepaired> repaired) {
-            return new TSyncLogKeeperActor(std::move(slCtx), std::move(repaired));
+                std::unique_ptr<TSyncLogRepaired> repaired,
+                const TActorId &syncLogId) {
+            return new TSyncLogKeeperActor(std::move(slCtx), std::move(repaired), syncLogId);
         }
 
     } // NSyncLog

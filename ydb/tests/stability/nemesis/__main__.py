@@ -9,10 +9,15 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster  # noqa: E402
+from ydb.tests.library.wardens.fetched_counters import fetch_liveness_counters  # noqa: E402
 from ydb.tests.stability.nemesis.internal.config import Settings, get_orchestrator_settings  # noqa: E402
 from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services  # noqa: E402
 from ydb.tests.tools.nemesis.library import monitor  # noqa: E402
-from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_execution import run_orchestrator_liveness_cli_batch  # noqa: E402
+from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_catalog import ORCHESTRATOR_LIVENESS_CHECKS  # noqa: E402
+from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_execution import (  # noqa: E402
+    liveness_check_result_dict,
+    unreachable_slots_check,
+)
 
 
 _DESCRIPTION = """\
@@ -185,7 +190,7 @@ def run_liveness_checks(settings: Settings):
             "checks": [],
             "error_message": "No hosts found in config"
         }
-        print(json.dumps(result))
+        print(json.dumps(result), flush=True)
         return
 
     # Create cluster object
@@ -201,9 +206,36 @@ def run_liveness_checks(settings: Settings):
         kikimr_path=None,
         yaml_config=cluster_yaml)
 
+    counters, unreachable_slots = fetch_liveness_counters(cluster)
+
     checks: list = []
+    slot_error = unreachable_slots_check(unreachable_slots)
+    if slot_error is not None:
+        checks.append(slot_error)
+        print(
+            "liveness done %s status=%s violations=%d" % (
+                slot_error["name"],
+                slot_error["status"],
+                len(slot_error["violations"]),
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
     try:
-        checks = run_orchestrator_liveness_cli_batch(cluster)
+        for spec in ORCHESTRATOR_LIVENESS_CHECKS:
+            # Flushed before the check: a timeout kill keeps this line in the pipe.
+            print("liveness start %s" % spec.name, file=sys.stderr, flush=True)
+            row = liveness_check_result_dict(spec, cluster, counters)
+            checks.append(row)
+            print(
+                "liveness done %s status=%s violations=%d" % (
+                    spec.name,
+                    row.get("status"),
+                    len(row.get("violations") or []),
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
         result = {
             "status": "completed",
             "checks": checks,
@@ -215,8 +247,8 @@ def run_liveness_checks(settings: Settings):
             "error_message": str(e),
         }
 
-    # Output JSON to stdout
-    print(json.dumps(result))
+    # Output JSON to stdout. flush: the parent may SIGKILL this process on timeout.
+    print(json.dumps(result), flush=True)
 
 
 def main():
@@ -261,12 +293,11 @@ def main():
         return
 
     elif args.command == "stop":
-        # Stop mode: stop all services on cluster
         print("Stopping nemesis services on cluster...")
         hosts = get_hosts_from_yaml(settings.yaml_config_location)
         print(f"Hosts: {hosts}")
 
-        stop_agent_services(hosts)
+        stop_agent_services(hosts, app_port=settings.app_port)
 
         print("\n" + "=" * 60)
         print("All services stopped successfully!")
@@ -284,7 +315,9 @@ def main():
         # Second Flask app + thread: no conflict as long as nemesis_mon_port != app_port.
         monitor.setup_page(settings.app_host, settings.nemesis_mon_port)
         # threaded=True is important for concurrent request handling
-        from ydb.tests.stability.nemesis.app import app
+        from ydb.tests.stability.nemesis.app import app, require_failure_model_or_die
+        # No usable cluster.yaml → no failure model → no chaos: exit instead of serving unguarded.
+        require_failure_model_or_die(app)
         app.run(
             host=settings.app_host,
             port=settings.app_port,

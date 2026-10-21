@@ -2,6 +2,7 @@
 #include "blobstorage_synclogdata.h"
 #include "blobstorage_synclogmsgwriter.h"
 #include "blobstorage_synclogkeeper.h"
+#include "blobstorage_synclogkeeper_committer.h"
 #include "blobstorage_synclogrecovery.h"
 #include "blobstorage_syncloghttp.h"
 #include "blobstorage_synclogreader.h"
@@ -12,6 +13,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCLOG
 
 using namespace NKikimrServices;
 using namespace NKikimr::NSyncLog;
@@ -117,7 +120,7 @@ namespace NKikimr {
                                                                 SlCtx->VCtx->Top,
                                                                 SlCtx->VCtx->VDiskLogPrefix,
                                                                 ctx.ActorSystem());
-                KeeperId = ctx.Register(CreateSyncLogKeeperActor(SlCtx, std::move(Repaired)));
+                KeeperId = ctx.Register(CreateSyncLogKeeperActor(SlCtx, std::move(Repaired), ctx.SelfID));
                 ActiveActors.Insert(KeeperId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 TThis::Become(&TThis::StateFunc);
             }
@@ -134,12 +137,7 @@ namespace NKikimr {
                 // check that the disk is from this group
                 if (!SelfVDiskId.SameGroupAndGeneration(sourceVDisk) ||
                     !SelfVDiskId.SameDisk(targetVDisk)) {
-                    LOG_WARN(ctx, BS_SYNCLOG,
-                              VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                    "Handle(TEvSyncLogRead): check vdisk id failed; "
-                                    "SelfVDiskId# %s sourceVDisk# %s targetVDisk# %s",
-                                    SelfVDiskId.ToString().data(), sourceVDisk.ToString().data(),
-                                    targetVDisk.ToString().data()));
+                    YDB_LOG_WARN_CTX(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "Handle(TEvSyncLogRead): check vdisk id failed; " "SelfVDiskId# %s sourceVDisk# %s targetVDisk# %s", SelfVDiskId.ToString().data(), sourceVDisk.ToString().data(), targetVDisk.ToString().data()));
 
                     auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(NKikimrProto::RACE, SelfVDiskId,
                         TSyncState(), true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
@@ -154,11 +152,7 @@ namespace NKikimr {
                 if (NeighborsPtr->IsLocked(sourceVDisk)) {
                     // we already have a lock set by this vdisk, i.e. read request up and running;
                     // reply with error, it's an error from their side
-                    LOG_ERROR(ctx, BS_SYNCLOG,
-                              VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                    "Handle(TEvSyncLogRead): locked; "
-                                    "sourceVDisk# %s targetVDisk# %s",
-                                    sourceVDisk.ToString().data(), targetVDisk.ToString().data()));
+                    YDB_LOG_ERROR_CTX(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "Handle(TEvSyncLogRead): locked; " "sourceVDisk# %s targetVDisk# %s", sourceVDisk.ToString().data(), targetVDisk.ToString().data()));
 
                     auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(NKikimrProto::BLOCKED, SelfVDiskId,
                         TSyncState(), true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
@@ -170,13 +164,7 @@ namespace NKikimr {
                 // check IncarnationGuid and reply with correct (IncarnationGuid, DbBirthLsn)
                 // if it has been changed
                 if (VDiskIncarnationGuid != oldSyncState.Guid) {
-                    LOG_WARN(ctx, BS_SYNCLOG,
-                             VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                    "Handle(TEvSyncLogRead): FULL_RECOVER(unequal guid); "
-                                   "sourceVDisk# %s targetVDisk# %s oldSyncState# %s"
-                                   " DbBirthLsn# %" PRIu64,
-                                   sourceVDisk.ToString().data(), targetVDisk.ToString().data(),
-                                   oldSyncState.ToString().data(), GetDbBirthLsn()));
+                    YDB_LOG_WARN_CTX(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "Handle(TEvSyncLogRead): FULL_RECOVER(unequal guid); " "sourceVDisk# %s targetVDisk# %s oldSyncState# %s" " DbBirthLsn# %" PRIu64, sourceVDisk.ToString().data(), targetVDisk.ToString().data(), oldSyncState.ToString().data(), GetDbBirthLsn()));
 
                     auto status = NKikimrProto::RESTART;
                     TSyncState syncState(VDiskIncarnationGuid, GetDbBirthLsn());
@@ -204,10 +192,7 @@ namespace NKikimr {
 
             void Handle(TEvSyncLogPut::TPtr &ev, const TActorContext &ctx) {
                 ++SlCtx->IFaceMonGroup.SyncPutMsgs();
-                LOG_DEBUG(ctx, BS_SYNCLOG,
-                          VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                "Handle(TEvSyncLogPut): recs# %s",
-                                ev->Get()->GetRecs().ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "Handle(TEvSyncLogPut): recs# %s", ev->Get()->GetRecs().ToString().data()));
                 ctx.Send(ev->Forward(KeeperId));
             }
 
@@ -247,6 +232,16 @@ namespace NKikimr {
             }
 
             void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
+                ctx.Send(ev->Forward(KeeperId));
+            }
+
+            // Committer reports pass this mailbox after the TEvSyncLogPut sent before them (see SyncLogId in
+            // the keeper).
+            void Handle(TEvSyncLogCommitDone::TPtr &ev, const TActorContext &ctx) {
+                ctx.Send(ev->Forward(KeeperId));
+            }
+
+            void Handle(TEvSyncLogDiskOutOfSpace::TPtr &ev, const TActorContext &ctx) {
                 ctx.Send(ev->Forward(KeeperId));
             }
 
@@ -304,9 +299,15 @@ namespace NKikimr {
                 Send(ev->Forward(KeeperId));
             }
 
+            void Handle(TEvSyncLogSpaceStat::TPtr& ev, const TActorContext& ctx) {
+                ctx.Send(ev->Forward(KeeperId));
+            }
+
             STRICT_STFUNC(StateFunc,
                 HFunc(TEvSyncLogPut, Handle)
                 HFunc(TEvSyncLogPutSst, Handle)
+                HFunc(TEvSyncLogCommitDone, Handle)
+                HFunc(TEvSyncLogDiskOutOfSpace, Handle)
                 HFunc(TEvBlobStorage::TEvVSync, Handle)
                 HFunc(TEvSyncLogReadFinished, Handle)
                 HFunc(TEvSyncLogDbBirthLsn, Handle)
@@ -318,6 +319,7 @@ namespace NKikimr {
                 HFunc(TEvents::TEvCompleted, HandleActorCompletion)
                 HFunc(TEvents::TEvPoisonPill, HandlePoison)
                 HFunc(TEvListChunks, Handle)
+                HFunc(TEvSyncLogSpaceStat, Handle)
                 hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
                 hFunc(TEvLocalSyncData, Handle);
             )

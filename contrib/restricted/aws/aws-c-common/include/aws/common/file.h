@@ -267,6 +267,172 @@ int aws_file_path_read_from_offset_direct_io_with_chunk_size(
     struct aws_byte_buf *output_buf,
     size_t *out_actual_read);
 
+/*
+ * Write to a file using DIRECT I/O at the given offset.
+ * Using direct IO to bypass the OS cache. Helpful when the disk I/O outperform the kernel cache.
+ * If O_DIRECT is not supported, returns AWS_ERROR_UNSUPPORTED_OPERATION.
+ *
+ * The file must already exist; the caller is responsible for creating it.
+ *
+ * For aligned writes (offset and length both aligned to page size), O_DIRECT is used for the
+ * entire write.
+ *
+ * Notes:
+ * - ONLY supports linux for now and raises AWS_ERROR_UNSUPPORTED_OPERATION on all other platforms.
+ * - The offset, data.len, and data.ptr all need to be aligned with the page size (a multiple of page size).
+ *      Otherwise, AWS_ERROR_INVALID_ARGUMENT will be raised.
+ * - check the NOTES for O_DIRECT in https://man7.org/linux/man-pages/man2/openat.2.html
+ *
+ * @param file_path         The file path to write to.
+ * @param offset            The offset in the file to start writing at.
+ * @param data              The buffer to write from (data.len bytes will be written).
+ *
+ * Returns AWS_OP_SUCCESS, or AWS_OP_ERR (after an error has been raised).
+ */
+AWS_COMMON_API
+int aws_file_path_write_to_offset_direct_io(
+    const struct aws_string *file_path,
+    uint64_t offset,
+    struct aws_byte_cursor data);
+
+/*
+ * Value representing "no descriptor", for use with the DIRECT I/O descriptor functions below.
+ */
+enum { AWS_FILE_INVALID_FD = -1 };
+
+/*
+ * Open a file for writing, producing a descriptor for aws_file_write_to_offset().
+ *
+ * A caller issuing many writes to the same file can hold one descriptor across all of them
+ * instead of paying an open/close pair per write.
+ *
+ * This is the buffered counterpart to aws_file_open_direct_io_for_write(): the descriptor goes
+ * through the OS page cache and carries no alignment requirements. Unlike that function, it is
+ * supported on every platform.
+ *
+ * The file must already exist; the caller is responsible for creating it.
+ *
+ * Notes:
+ * - Release the descriptor with aws_file_close_fd().
+ * - Opened in binary mode, so the bytes written are the bytes given.
+ *
+ * @param file_path         The file path to open.
+ * @param out_fd            Set to the open descriptor on success; left untouched on failure.
+ *
+ * Returns AWS_OP_SUCCESS, or AWS_OP_ERR (after an error has been raised).
+ */
+AWS_COMMON_API int aws_file_open_for_write(const struct aws_string *file_path, int *out_fd);
+
+/*
+ * Close a file descriptor
+ */
+AWS_COMMON_API
+void aws_file_close_fd(int fd);
+
+/*
+ * Write to an already-open descriptor at the given offset.
+ *
+ * The write carries its own offset and does not consult the descriptor's file position, so several
+ * threads may write concurrently through one descriptor as long as their ranges do not overlap.
+ * (Implemented with pwrite() on POSIX, and WriteFile() with an OVERLAPPED offset on Windows. The
+ * Windows call moves the descriptor's file position as a side effect; the offset written to is
+ * unaffected by it.)
+ *
+ * Unlike aws_file_write_to_offset_direct_io(), the offset, data.len, and data.ptr carry no
+ * alignment requirements.
+ *
+ * @param fd                A descriptor from aws_file_open_for_write().
+ * @param offset            The offset in the file to start writing at.
+ * @param data              The buffer to write from (data.len bytes will be written).
+ *
+ * Returns AWS_OP_SUCCESS, or AWS_OP_ERR (after an error has been raised).
+ */
+AWS_COMMON_API
+int aws_file_write_to_offset(int fd, uint64_t offset, struct aws_byte_cursor data);
+
+/*
+ * Open a file for writing with DIRECT I/O, producing a descriptor for
+ * aws_file_write_to_offset_direct_io().
+ *
+ * A caller issuing many writes to the same file can hold one descriptor across all of them
+ * instead of paying an open/close pair per write.
+ *
+ * The file must already exist; the caller is responsible for creating it.
+ *
+ * Notes:
+ * - ONLY supports linux for now and raises AWS_ERROR_UNSUPPORTED_OPERATION on all other platforms.
+ * - Release the descriptor with aws_file_close_fd().
+ *
+ * @param file_path         The file path to open.
+ * @param out_fd            Set to the open descriptor on success; left untouched on failure.
+ *
+ * Returns AWS_OP_SUCCESS, or AWS_OP_ERR (after an error has been raised).
+ */
+AWS_COMMON_API
+int aws_file_open_direct_io_for_write(const struct aws_string *file_path, int *out_fd);
+
+/*
+ * Write to an already-open DIRECT I/O descriptor at the given offset.
+ * Using direct IO to bypass the OS cache. Helpful when the disk I/O outperform the kernel cache.
+ * If O_DIRECT is not supported, returns AWS_ERROR_UNSUPPORTED_OPERATION.
+ *
+ * The write carries its own offset and does not consult or advance the descriptor's file
+ * position, so several threads may write concurrently through one descriptor as long as their
+ * ranges do not overlap.
+ *
+ * Notes:
+ * - ONLY supports linux for now and raises AWS_ERROR_UNSUPPORTED_OPERATION on all other platforms.
+ * - The offset, data.len, and data.ptr all need to be aligned with the page size (a multiple of page size).
+ *      Otherwise, AWS_ERROR_INVALID_ARGUMENT will be raised.
+ * - check the NOTES for O_DIRECT in https://man7.org/linux/man-pages/man2/openat.2.html
+ *
+ * @param fd                A descriptor from aws_file_open_direct_io_for_write().
+ * @param offset            The offset in the file to start writing at.
+ * @param data              The buffer to write from (data.len bytes will be written).
+ *
+ * Returns AWS_OP_SUCCESS, or AWS_OP_ERR (after an error has been raised).
+ */
+AWS_COMMON_API
+int aws_file_write_to_offset_direct_io(int fd, uint64_t offset, struct aws_byte_cursor data);
+
+/**
+ * Returns true if direct I/O (O_DIRECT) is supported on the current platform.
+ *
+ * Currently only Linux supports direct I/O. On unsupported platforms, the direct I/O read,
+ * write, and open functions declared above all raise AWS_ERROR_UNSUPPORTED_OPERATION.
+ *
+ * Use this to check at init time whether direct I/O is viable, rather than calling the
+ * read/write functions and handling the error reactively.
+ */
+AWS_COMMON_API
+bool aws_file_direct_io_is_supported(void);
+
+/*
+ * Gets the last modification time of an open file as nanoseconds since unix epoch.
+ *
+ * Unix flavors use fstat with nanosecond-precision fields (st_mtim on Linux/FreeBSD,
+ * st_mtimespec on Apple). Windows uses GetFileTime on the HANDLE queried from the
+ * libc FILE pointer (100-nanosecond FILETIME precision).
+ *
+ * Platform timestamp-visibility guarantees differ:
+ * - POSIX: st_mtime/st_mtim is updated by write(2) itself (see inode(7):
+ *   https://man7.org/linux/man-pages/man7/inode.7.html). Callers using buffered stdio
+ *   writes must fflush() or fclose() first so write(2) actually happens; once it has,
+ *   a subsequent stat()/fstat() sees the new timestamp immediately, no fsync needed
+ *   (fsync(2) confirms fdatasync() skips flushing st_mtime for this reason:
+ *   https://man7.org/linux/man-pages/man2/fsync.2.html).
+ * - Windows: the last write time is only guaranteed correct once all write handles are
+ *   closed; FlushFileBuffers() does not help. See "File Times":
+ *   https://learn.microsoft.com/en-us/windows/win32/sysinfo/file-times
+ *
+ * As a result, if a file was written to and you need to observe that write in its
+ * updated timestamp, close the write handle first, then open a new handle and call
+ * this function on that new handle. Calling this function on the (now-closed) write
+ * handle is not valid on any platform, since a closed FILE* cannot be used at all.
+ */
+AWS_COMMON_API
+int aws_file_get_last_modified_epoch(FILE *file, uint64_t *last_modified_ns);
+
 AWS_EXTERN_C_END AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_FILE_H */

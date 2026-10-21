@@ -33,21 +33,36 @@ import ydb.apps.dstool.lib.dstool_cmd_group_virtual_reconfigure as group_virtual
 import ydb.apps.dstool.lib.dstool_cmd_group_resize as group_resize
 import ydb.apps.dstool.lib.dstool_cmd_pool_create_virtual as pool_create_virtual
 import ydb.apps.dstool.lib.dstool_cmd_pool_list as pool_list
+import ydb.apps.dstool.lib.dstool_cmd_pool_set as pool_set
 
 import ydb.apps.dstool.lib.dstool_cmd_box_list as box_list
 
 import ydb.apps.dstool.lib.dstool_cmd_node_list as node_list
 
 import ydb.apps.dstool.lib.dstool_cmd_cluster_balance as cluster_balance
+import ydb.apps.dstool.lib.dstool_cmd_cluster_reanimate as cluster_reanimate
 import ydb.apps.dstool.lib.dstool_cmd_cluster_list as cluster_list
 import ydb.apps.dstool.lib.dstool_cmd_cluster_get as cluster_get
 import ydb.apps.dstool.lib.dstool_cmd_cluster_set as cluster_set
 import ydb.apps.dstool.lib.dstool_cmd_cluster_workload_run as cluster_workload_run
 
-import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_create as nbs_partition_create
-import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_delete as nbs_partition_delete
-import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_get_load_actor_adapter_actor_id as nbs_partition_get_load_actor_adapter_actor_id
-import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_io as nbs_partition_io
+# NBS partition commands depend on ydb/core/nbs, which only builds on Linux
+# (vhost-user uses epoll/eventfd/timerfd). On other platforms these modules
+# are absent from the bundle; importing them must not break the rest of dstool.
+try:
+    import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_create as nbs_partition_create
+    import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_delete as nbs_partition_delete
+    import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_get_load_actor_adapter_actor_id as nbs_partition_get_load_actor_adapter_actor_id
+    import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_io as nbs_partition_io
+    import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_resize as nbs_partition_resize
+    _nbs_partition_modules = [
+        nbs_partition_create, nbs_partition_delete, nbs_partition_resize,
+        nbs_partition_get_load_actor_adapter_actor_id, nbs_partition_io,
+    ]
+except ImportError:
+    _nbs_partition_modules = []
+
+import ydb.apps.dstool.lib.dstool_cmd_cluster_workload_nbs_dbg_like as cluster_workload_nbs_dbg_like
 
 import sys
 import ydb.apps.dstool.lib.common as common
@@ -55,15 +70,16 @@ import ydb.apps.dstool.lib.common as common
 MODULE_PREFIX = 'dstool_cmd_'
 
 modules = [
-    cluster_balance, cluster_get, cluster_set, cluster_list, cluster_workload_run,
+    cluster_workload_nbs_dbg_like,
+    cluster_balance, cluster_reanimate, cluster_get, cluster_set, cluster_list, cluster_workload_run,
     node_list,
     box_list,
-    pool_list, pool_create_virtual,
+    pool_list, pool_set, pool_create_virtual,
     group_check, group_decommit, group_show_blob_info, group_show_storage_efficiency, group_show_usage_by_tablets,
     group_state, group_take_snapshot, group_add, group_resize, group_list, group_virtual_create, group_virtual_cancel, group_virtual_reconfigure,
     pdisk_add_by_serial, pdisk_remove_by_serial, pdisk_set, pdisk_list, pdisk_stop, pdisk_restart, pdisk_readonly, pdisk_move, pdisk_populate,
     vdisk_evict, vdisk_list, vdisk_set_read_only, vdisk_remove_donor, vdisk_wipe, vdisk_compact, device_list,
-    nbs_partition_create, nbs_partition_delete, nbs_partition_get_load_actor_adapter_actor_id, nbs_partition_io,
+    *_nbs_partition_modules,
 ]
 
 default_structure = [
@@ -72,12 +88,18 @@ default_structure = [
     ('vdisk', ['evict', 'list', 'set-read-only', 'remove-donor', 'wipe', 'compact']),
     ('group', ['add', 'check', 'decommit', ('show', ['blob-info', 'storage-efficiency', 'usage-by-tablets']),
                'state', 'take-snapshot', 'resize', 'list', ('virtual', ['create', 'cancel', 'reconfigure'])]),
-    ('pool', ['list', ('create', ['virtual'])]),
+    ('pool', ['list', 'set', ('create', ['virtual'])]),
     ('box', ['list']),
     ('node', ['list']),
-    ('cluster', ['balance', 'get', 'set', ('workload', ['run']), 'list']),
-    ('nbs', [('partition', ['create', 'delete', 'get-load-actor-adapter-actor-id', 'io'])]),
+    ('cluster', ['balance', 'reanimate', 'get', 'set', ('workload', ['run', 'nbs-dbg-like']), 'list']),
 ]
+
+# Only expose the `nbs partition ...` subcommand tree when the modules are
+# available; otherwise argparse would render them as UNIMPLEMETED stubs.
+if _nbs_partition_modules:
+    default_structure.append(
+        ('nbs', [('partition', ['create', 'delete', 'resize', 'get-load-actor-adapter-actor-id', 'io'])]),
+    )
 
 
 def make_command_map_by_structure(subparsers, modules=modules, structure=default_structure):
@@ -115,7 +137,8 @@ def make_command_map_by_structure(subparsers, modules=modules, structure=default
                             help = module.help
                         else:
                             help = module.description
-                        module.add_options(subparsers.add_parser(el, help=help, description=module.description))
+                        module.add_options(subparsers.add_parser(
+                            el, help=help, description=module.description, hidden=getattr(module, 'hidden', False)))
                         command_map[key] = module.do
                     else:
                         subparsers.add_parser(el, help='UNIMPLEMETED')
@@ -124,7 +147,8 @@ def make_command_map_by_structure(subparsers, modules=modules, structure=default
 
     for cmd_name in sorted(set(module_map) - already_added):
         module = module_map[cmd_name]
-        module.add_options(subparsers.add_parser(cmd_name, help=module.description))
+        module.add_options(subparsers.add_parser(
+            cmd_name, help=module.description, hidden=getattr(module, 'hidden', False)))
         command_map[cmd_name] = module.do
 
     return command_map
@@ -177,6 +201,9 @@ def run_command(command_map, args):
         output.add_line('Group Selection Error: {}'.format(ex))
         output.print(args)
         sys.exit(1)
+    except common.InvalidParameterError:
+        # InvalidParameterError is rendered with command usage by main().
+        raise
     except Exception as ex:
         output.add_line('Unexpected Error: {}'.format(ex))
         output.print(args)

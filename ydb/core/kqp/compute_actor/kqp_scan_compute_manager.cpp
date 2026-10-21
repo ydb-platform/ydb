@@ -2,10 +2,16 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
+
 namespace NKikimr::NKqp::NScanPrivate {
 
 TShardState::TPtr TInFlightShards::Put(TShardState&& state) {
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "put_inflight")("tablet_id", state.TabletId)("state", state.State)("gen", state.Generation);
+    YDB_LOG_DEBUG("Added shard to in-flight scans",
+        {"event", "put_inflight"},
+        {"tabletId", state.TabletId},
+        {"state", state.State},
+        {"gen", state.Generation});
     TScanShardsStatistics::OnScansDiff(Shards.size(), GetScansCount());
     MutableStatistics(state.TabletId).MutableStatistics(0).SetStartInstant(Now());
 
@@ -37,7 +43,10 @@ std::vector<std::unique_ptr<TComputeTaskData>> TShardScannerInfo::OnReceiveData(
     } else {
         result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(TabletId, data, std::move(data.Rows))));
     }
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "receive_data")("actor_id", ActorId)("count_chunks", result.size());
+    YDB_LOG_DEBUG("Received scan data chunks from shard scanner",
+        {"event", "receive_data"},
+        {"actorId", ActorId},
+        {"countChunks", result.size()});
     DataChunksInFlightCount = result.size();
     return result;
 }

@@ -12,7 +12,7 @@
 
 #include <yt/yt/core/ytree/attributes.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/testing/common/network.h>
 
@@ -128,8 +128,8 @@ private:
 
     std::atomic<bool> TerminationFlag_ = false;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
-    THashMap<std::pair<TString, TGuid>, TTestBusPtr> RequestToBus_;
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
+    THashMap<std::pair<std::string, TGuid>, TTestBusPtr> RequestToBus_;
 
     void HandleRequestResult(
         const std::string& address,

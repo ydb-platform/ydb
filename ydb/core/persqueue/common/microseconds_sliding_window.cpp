@@ -27,10 +27,6 @@ ui32 TMicrosecondsSlidingWindow::GetValue() {
 }
 
 void TMicrosecondsSlidingWindow::LocateFirstNotZeroElement() {
-    if (WindowValue == 0) {
-        return;
-    }
-
     if (FirstNotZeroElem < 0) {
         FirstNotZeroElem = FirstElem;
         while (Buckets[FirstNotZeroElem] == 0) {

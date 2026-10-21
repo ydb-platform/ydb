@@ -1,5 +1,6 @@
 #include "controller.h"
 
+#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/gc.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
@@ -9,6 +10,8 @@
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NYDBTest::NColumnShard {
 
@@ -88,18 +91,22 @@ void TController::DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumn
 
 void TController::DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard& shard) {
     TGuard<TMutex> g(Mutex);
-    AFL_VERIFY(ShardActuals.erase(shard.TabletID()));
+    // A shard may stop before init completes (e.g. it dies on TEvWatchNotifyUnavailable
+    // while still in StateInit), in which case it was never added to ShardActuals.
+    ShardActuals.erase(shard.TabletID());
 }
 
 bool TController::IsTrivialLinks() const {
     TGuard<TMutex> g(Mutex);
     for (auto&& i : ShardActuals) {
         if (!i.second->GetStoragesManager()->GetSharedBlobsManager()->IsTrivialLinks()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("reason", "non_trivial");
+            YDB_LOG_WARN("",
+                {"reason", "non_trivial"});
             return false;
         }
         if (i.second->GetStoragesManager()->HasBlobsToDelete()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("reason", "has_delete");
+            YDB_LOG_WARN("",
+                {"reason", "has_delete"});
             return false;
         }
     }
@@ -132,6 +139,49 @@ void TController::OnAfterLocalTxCommitted(
     if (RestartOnLocalDbTxCommitted == txInfo) {
         ctx.Send(shard.SelfId(), new TEvents::TEvPoisonPill{});
     }
+}
+
+ui32 TController::GetBackgroundSessionsCount() const {
+    TGuard<TMutex> g(Mutex);
+    ui32 count = 0;
+    for (auto&& i : ShardActuals) {
+        if (auto mgr = i.second->GetBackgroundSessionsManager()) {
+            count += mgr->GetSessionsInfoForReport().size();
+        }
+    }
+    return count;
+}
+
+ui32 TController::GetTxOperatorsCount() const {
+    TGuard<TMutex> g(Mutex);
+    ui32 count = 0;
+    for (auto&& i : ShardActuals) {
+        count += i.second->GetProgressTxController().GetTxs().size();
+    }
+    return count;
+}
+
+namespace {
+const ::NKikimr::NColumnShard::TColumnShard* GetShardVerified(
+    const THashMap<ui64, const ::NKikimr::NColumnShard::TColumnShard*>& shardActuals, const ui64 tabletId) {
+    if (tabletId) {
+        auto it = shardActuals.find(tabletId);
+        AFL_VERIFY(it != shardActuals.end());
+        return it->second;
+    }
+    AFL_VERIFY(shardActuals.size() == 1);
+    return shardActuals.begin()->second;
+}
+}   // namespace
+
+ui64 TController::GetNodePortionsCountLimitVerified(const ui64 tabletId) const {
+    TGuard<TMutex> g(Mutex);
+    const auto* shard = GetShardVerified(ShardActuals, tabletId);
+    AFL_VERIFY(shard->HasIndex());
+    const auto& engine = shard->GetIndexAs<NOlap::TColumnEngineForLogs>();
+    const auto& tables = engine.GetTables();
+    AFL_VERIFY(!tables.empty());
+    return tables.begin()->second->GetOptimizerPlanner().GetNodePortionsCountLimit();
 }
 
 }   // namespace NKikimr::NYDBTest::NColumnShard

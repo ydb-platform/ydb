@@ -47,7 +47,8 @@ bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TCons
     return true;
 }
 
-TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
+TBlobWithAdditionalAccessorData TConstructor::DoSerializeToBlobAndMeta(
+    const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
     auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", externalInfo.GetColumnType()) }));
     std::shared_ptr<arrow::RecordBatch> rb;
     if (columnData->GetType() == IChunkedArray::EType::Array) {
@@ -58,7 +59,7 @@ TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& 
         auto table = arrow::Table::Make(schema, { chunked }, columnData->GetRecordsCount());
         rb = NArrow::ToBatch(table);
     }
-    return externalInfo.GetDefaultSerializer()->SerializePayload(rb);
+    return { externalInfo.GetDefaultSerializer()->SerializePayload(rb), std::make_shared<TEmptyAdditionalData>() };
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(

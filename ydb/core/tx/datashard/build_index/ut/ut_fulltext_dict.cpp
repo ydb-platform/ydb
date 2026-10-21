@@ -21,6 +21,8 @@ static std::atomic<ui64> sId = 1;
 static const TString kDatabaseName = "/Root";
 static const TString kIndexTable = "/Root/table-index";
 static const TString kDictTable = "/Root/table-dict";
+static const TString kCompactTable = "/Root/table-compact";
+static const TString kStatsTable = "/Root/table-stats";
 
 Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextDictScan) {
 
@@ -38,17 +40,14 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextDictScan) {
         request.SetSeqNoGeneration(id);
         request.SetSeqNoRound(1);
 
+        request.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance);
+        request.SetMaxSegmentDocuments(3);
+
         request.SetTabletId(datashards[0]);
         tableId.PathId.ToProto(request.MutablePathId());
 
-        FulltextIndexSettings settings;
-        auto column = settings.add_columns();
-        column->set_column("text");
-        column->mutable_analyzers()->set_tokenizer(FulltextIndexSettings::WHITESPACE);
-        *request.MutableSettings() = settings;
-
         request.SetDatabaseName(kDatabaseName);
-        request.SetOutputName(kDictTable);
+        request.SetDictTableName(kDictTable);
 
         return datashards[0];
     }
@@ -131,6 +130,67 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextDictScan) {
         CreateShardedTable(server, sender, "/Root", "table-dict", options);
     }
 
+    // Posting table for a prefixed relevance index: key is [prefix..., __ydb_token, <doc_id>],
+    // value is __ydb_freq. The empty __ydb_token row carries the document length in __ydb_freq.
+    void CreatePrefixedIndexTable(Tests::TServer::TPtr server, TActorId sender) {
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true);
+        options.Shards(1);
+        options.AllowSystemColumnNames(true);
+        options.Columns({
+            {"UserId", "Uint64", true, true},
+            {TokenColumn, "String", true, true},
+            {"key", "Uint32", true, true},
+            {FreqColumn, TokenCountTypeName, false, false},
+        });
+        CreateShardedTable(server, sender, "/Root", "table-index", options);
+    }
+
+    // Compact posting table for a prefixed index: key is [prefix..., __ydb_token, __ydb_generation,
+    // __ydb_max_id], value is [__ydb_added, __ydb_segment].
+    void CreatePrefixedCompactTable(Tests::TServer::TPtr server, TActorId sender, const char* name, const char* keyType = "Uint64") {
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true);
+        options.Shards(1);
+        options.AllowSystemColumnNames(true);
+        options.Columns({
+            {"UserId", "Uint64", true, true},
+            {TokenColumn, "String", true, true},
+            {GenColumn, "Uint64", true, true},
+            {MaxIdColumn, keyType, true, true},
+            {AddedColumn, "Bool", false, true},
+            {SegmentColumn, "String", false, true},
+        });
+        CreateShardedTable(server, sender, "/Root", name, options);
+    }
+
+    // Per-prefix statistics table: key is [prefix...], value is [__ydb_doc_count, __ydb_sum_doc_length].
+    void CreateStatsTable(Tests::TServer::TPtr server, TActorId sender) {
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true);
+        options.Shards(1);
+        options.AllowSystemColumnNames(true);
+        options.Columns({
+            {"UserId", "Uint64", true, true},
+            {DocCountColumn, DocCountTypeName, false, false},
+            {SumDocLengthColumn, DocCountTypeName, false, false},
+        });
+        CreateShardedTable(server, sender, "/Root", "table-stats", options);
+    }
+
+    void FillPrefixedIndexTable(Tests::TServer::TPtr server, TActorId sender) {
+        ExecSQL(server, sender, Sprintf(R"(
+            UPSERT INTO `/Root/table-index` (UserId, %s, key, %s) VALUES
+                (100, "", 1, 1),
+                (100, "", 2, 2),
+                (100, "cats", 1, 1),
+                (100, "dogs", 2, 1),
+                (100, "run", 2, 1),
+                (200, "", 3, 1),
+                (200, "cats", 3, 1)
+        )", TokenColumn, FreqColumn));
+    }
+
     void Setup(Tests::TServer::TPtr server, TActorId sender) {
         server->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         server->GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
@@ -167,24 +227,42 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextDictScan) {
         }, "Error: Unknown snapshot", true);
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
-            request.clear_settings();
-        }, "{ <main>: Error: Missing fulltext index settings }");
-        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
-            request.MutableSettings()->clear_columns();
-        }, "{ <main>: Error: columns should be set }");
-        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
-            request.MutableSettings()->mutable_columns()->at(0).mutable_analyzers()->clear_tokenizer();
-        }, "{ <main>: Error: tokenizer should be set }");
+            request.ClearDictTableName();
+        }, "{ <main>: Error: Empty output dictionary table name }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
-            request.ClearOutputName();
-        }, "{ <main>: Error: Empty output table name }");
+            request.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextPlain);
+        }, "{ <main>: Error: Unsupported index type }");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
+            request.SetPostingTableName("abc");
+        }, "{ <main>: Error: Output posting table name is set for a non-compact index }");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
+            request.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextCompact);
+            request.SetPostingTableName("abc");
+        }, "{ <main>: Error: Output dict table name is set for a plain index }");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
+            request.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextCompact);
+            request.ClearDictTableName();
+        }, "{ <main>: Error: Empty output posting table name }");
 
         // test multiple issues:
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
-            request.clear_settings();
-            request.ClearOutputName();
-        }, "[ { <main>: Error: Empty output table name } { <main>: Error: Missing fulltext index settings } ]");
+            request.SetPostingTableName("abc");
+            request.ClearDictTableName();
+        }, "[ { <main>: Error: Output posting table name is set for a non-compact index } { <main>: Error: Empty output dictionary table name } ]");
+
+        // A prefixed relevance index requires a statistics table.
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
+            request.AddPrefixColumns("UserId");
+        }, "{ <main>: Error: Empty output statistics table name }");
+
+        // A non-prefixed relevance index must not set a statistics table.
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
+            request.SetStatsTableName("abc");
+        }, "{ <main>: Error: Output statistics table name is set for a non-prefixed-relevance index }");
     }
 
     Y_UNIT_TEST_QUAD(Build, SkipFirst, SkipLast) {
@@ -230,6 +308,279 @@ __ydb_token = red, __ydb_freq = 2
 
         UNIT_ASSERT_VALUES_EQUAL(index, expected);
     }
+
+    Y_UNIT_TEST_QUAD(BuildPrefixedStats, SkipFirst, SkipLast) {
+        // Per-prefix document statistics aggregation: the empty __ydb_token posting rows carry each
+        // document's length, and the dict scan aggregates them into [prefix -> DocCount, SumDocLength]
+        // rows in the stats table. SkipFirst/SkipLast mirror the cross-shard boundary handling of the
+        // token-level dict scan.
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto sender = server->GetRuntime()->AllocateEdgeActor();
+
+        server->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        server->GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        CreatePrefixedIndexTable(server, sender);
+        FillPrefixedIndexTable(server, sender);
+        CreateDictTable(server, sender);
+        CreateStatsTable(server, sender);
+
+        auto reply = DoBuild(server, sender, [](auto& request){
+            request.AddPrefixColumns("UserId");
+            request.SetStatsTableName(kStatsTable);
+            request.SetSkipFirstPrefix(SkipFirst);
+            request.SetSkipLastPrefix(SkipLast);
+        });
+        auto& record = reply->Get()->Record;
+
+        TString expected;
+        if (SkipFirst) {
+            UNIT_ASSERT_EQUAL(record.GetFirstPrefixDocCount(), 2);
+            UNIT_ASSERT_EQUAL(record.GetFirstPrefixSumDocLength(), 3);
+        } else {
+            expected += "UserId = 100, __ydb_doc_count = 2, __ydb_sum_doc_length = 3\n";
+        }
+
+        if (SkipLast) {
+            UNIT_ASSERT_EQUAL(record.GetLastPrefixDocCount(), 1);
+            UNIT_ASSERT_EQUAL(record.GetLastPrefixSumDocLength(), 1);
+        } else {
+            expected += "UserId = 200, __ydb_doc_count = 1, __ydb_sum_doc_length = 1\n";
+        }
+
+        auto stats = ReadShardedTable(server, kStatsTable);
+        Cerr << "Stats:" << Endl;
+        Cerr << stats << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(stats, expected);
+    }
+
+    Y_UNIT_TEST(BuildPrefixedStatsCompact) {
+        // Same as BuildPrefixedStats but for the compact (delta-segment) relevance format. Per-prefix
+        // stats are aggregated by decoding the empty-token delta segment, which stores (doc_id, length)
+        // pairs for every document in the prefix.
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto sender = server->GetRuntime()->AllocateEdgeActor();
+
+        server->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        server->GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        CreatePrefixedCompactTable(server, sender, "table-index");
+        CreatePrefixedCompactTable(server, sender, "table-compact");
+        CreateStatsTable(server, sender);
+
+        // Empty-token segments: prefix 100 has docs (1, len=1) and (2, len=2) encoded as \x41\x02\x41\x03;
+        // prefix 200 has doc (3, len=1) encoded as \x43\x02.
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table-index` (UserId, __ydb_token, __ydb_generation, __ydb_max_id, __ydb_added, __ydb_segment) VALUES
+                (100, "", 1, 2, true, "\x41\x02\x41\x03"),
+                (100, "cats", 1, 1, true, "\x01"),
+                (100, "dogs", 1, 2, true, "\x02"),
+                (100, "run", 1, 2, true, "\x02"),
+                (200, "", 1, 3, true, "\x43\x02"),
+                (200, "cats", 1, 3, true, "\x03")
+        )");
+
+        auto reply = DoBuild(server, sender, [](auto& request){
+            request.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance);
+            request.ClearDictTableName();
+            request.AddPrefixColumns("UserId");
+            request.SetPostingTableName(kCompactTable);
+            request.SetStatsTableName(kStatsTable);
+        });
+
+        TString expected = R"(UserId = 100, __ydb_doc_count = 2, __ydb_sum_doc_length = 3
+UserId = 200, __ydb_doc_count = 1, __ydb_sum_doc_length = 1
+)";
+
+        auto stats = ReadShardedTable(server, kStatsTable);
+        Cerr << "Stats:" << Endl;
+        Cerr << stats << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(stats, expected);
+    }
+
+    void DoTestCompact(bool WithRelevance, const char* keyType) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto sender = server->GetRuntime()->AllocateEdgeActor();
+
+        server->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        server->GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+        CreateFulltextCompactTable(server, sender, "table-index", keyType);
+        CreateFulltextCompactTable(server, sender, "table-compact", keyType);
+        if (WithRelevance) {
+            CreateDictTable(server, sender);
+        }
+
+        if (WithRelevance) {
+            if (keyType[0] == 'U') {
+                ExecSQL(server, sender,
+                    R"(UPSERT INTO `/Root/table-index` (__ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment) VALUES
+                        ("and", 5, 10082, true, "\x41\x02\x04"),
+                        ("and", 11, 12382, true, "\x06\x01\x04"),
+                        ("apple", 6, 28194, true, "\x01\x41\x04\x01\x01\x01\x01"),
+                        ("blue", 2, 68421, true, "\x02"),
+                        ("car", 4, 581, true, "\x04"),
+                        ("green", 1, 285, true, "\x41\x10"),
+                        ("red", 2, 780, true, "\x01\x02"),
+                        ("yellow", 3, 1000, true, "\x03")
+                    )");
+            } else {
+                ExecSQL(server, sender,
+                    R"(UPSERT INTO `/Root/table-index` (__ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment) VALUES
+                        ("and", 5, 10082, true, "\x42\x02\x04"),
+                        ("and", 11, 12382, true, "\x0C\x01\x04"),
+                        ("apple", 6, 28194, true, "\x02\x41\x04\x01\x01\x01\x01"),
+                        ("blue", 2, 68421, true, "\x04"),
+                        ("car", 4, 581, true, "\x08"),
+                        ("green", 1, 285, true, "\x42\x10"),
+                        ("red", 2, 780, true, "\x02\x02"),
+                        ("yellow", 3, 1000, true, "\x06")
+                    )");
+            }
+        } else {
+            if (keyType[0] == 'U') {
+                ExecSQL(server, sender,
+                    R"(UPSERT INTO `/Root/table-index` (__ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment) VALUES
+                        ("and", 5, 10082, true, "\x01\x04"),
+                        ("and", 11, 12382, true, "\x06\x01\x04"),
+                        ("apple", 6, 28194, true, "\x01\x01\x01\x01\x01\x01"),
+                        ("blue", 2, 68421, true, "\x02"),
+                        ("car", 4, 581, true, "\x04"),
+                        ("green", 1, 285, true, "\x01"),
+                        ("red", 2, 780, true, "\x01\x02"),
+                        ("yellow", 3, 1000, true, "\x03")
+                    )");
+            } else {
+                ExecSQL(server, sender,
+                    R"(UPSERT INTO `/Root/table-index` (__ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment) VALUES
+                        ("and", 5, 10082, true, "\x02\x04"),
+                        ("and", 11, 12382, true, "\x0C\x01\x04"),
+                        ("apple", 6, 28194, true, "\x02\x01\x01\x01\x01\x01"),
+                        ("blue", 2, 68421, true, "\x04"),
+                        ("car", 4, 581, true, "\x08"),
+                        ("green", 1, 285, true, "\x02"),
+                        ("red", 2, 780, true, "\x02\x02"),
+                        ("yellow", 3, 1000, true, "\x06")
+                    )");
+            }
+        }
+
+        auto reply = DoBuild(server, sender, [&](auto& request){
+            request.SetIndexType(WithRelevance
+                ? NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance
+                : NKikimrTxDataShard::EFulltextIndexType::FulltextCompact);
+            request.SetPostingTableName(kCompactTable);
+            if (!WithRelevance) {
+                request.ClearDictTableName();
+            }
+        });
+
+        TString expected;
+        if (WithRelevance) {
+            if (keyType[0] == 'U') {
+                expected = TStringBuilder() << "__ydb_token = and, __ydb_generation = 18446744073709551615, __ydb_max_id = 6, __ydb_added = 1, __ydb_segment = \x41\x02\x04\x01\n\
+__ydb_token = and, __ydb_generation = 18446744073709551615, __ydb_max_id = 11, __ydb_added = 1, __ydb_segment = \x07\x04\n\
+__ydb_token = apple, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x01\x41\x04\x01\n\
+__ydb_token = apple, __ydb_generation = 18446744073709551615, __ydb_max_id = 6, __ydb_added = 1, __ydb_segment = \x04\x01\x01\n\
+__ydb_token = blue, __ydb_generation = 18446744073709551615, __ydb_max_id = 2, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = car, __ydb_generation = 18446744073709551615, __ydb_max_id = 4, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = green, __ydb_generation = 18446744073709551615, __ydb_max_id = 1, __ydb_added = 1, __ydb_segment = \x41\x10\n\
+__ydb_token = red, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x01\x02\n\
+__ydb_token = yellow, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x03\n\
+";
+            } else {
+                expected = TStringBuilder() << "__ydb_token = and, __ydb_generation = 18446744073709551615, __ydb_max_id = 6, __ydb_added = 1, __ydb_segment = \x42\x02\x04\x01\n\
+__ydb_token = and, __ydb_generation = 18446744073709551615, __ydb_max_id = 11, __ydb_added = 1, __ydb_segment = \x0E\x04\n\
+__ydb_token = apple, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x02\x41\x04\x01\n\
+__ydb_token = apple, __ydb_generation = 18446744073709551615, __ydb_max_id = 6, __ydb_added = 1, __ydb_segment = \x08\x01\x01\n\
+__ydb_token = blue, __ydb_generation = 18446744073709551615, __ydb_max_id = 2, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = car, __ydb_generation = 18446744073709551615, __ydb_max_id = 4, __ydb_added = 1, __ydb_segment = \x08\n\
+__ydb_token = green, __ydb_generation = 18446744073709551615, __ydb_max_id = 1, __ydb_added = 1, __ydb_segment = \x42\x10\n\
+__ydb_token = red, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x02\x02\n\
+__ydb_token = yellow, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x06\n\
+";
+            }
+        } else {
+            if (keyType[0] == 'U') {
+                expected = TStringBuilder() << "__ydb_token = and, __ydb_generation = 18446744073709551615, __ydb_max_id = 6, __ydb_added = 1, __ydb_segment = \x01\x04\x01\n\
+__ydb_token = and, __ydb_generation = 18446744073709551615, __ydb_max_id = 11, __ydb_added = 1, __ydb_segment = \x07\x04\n\
+__ydb_token = apple, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x01\x01\x01\n\
+__ydb_token = apple, __ydb_generation = 18446744073709551615, __ydb_max_id = 6, __ydb_added = 1, __ydb_segment = \x04\x01\x01\n\
+__ydb_token = blue, __ydb_generation = 18446744073709551615, __ydb_max_id = 2, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = car, __ydb_generation = 18446744073709551615, __ydb_max_id = 4, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = green, __ydb_generation = 18446744073709551615, __ydb_max_id = 1, __ydb_added = 1, __ydb_segment = \x01\n\
+__ydb_token = red, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x01\x02\n\
+__ydb_token = yellow, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x03\n\
+";
+            } else {
+                expected = TStringBuilder() << "__ydb_token = and, __ydb_generation = 18446744073709551615, __ydb_max_id = 6, __ydb_added = 1, __ydb_segment = \x02\x04\x01\n\
+__ydb_token = and, __ydb_generation = 18446744073709551615, __ydb_max_id = 11, __ydb_added = 1, __ydb_segment = \x0E\x04\n\
+__ydb_token = apple, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x02\x01\x01\n\
+__ydb_token = apple, __ydb_generation = 18446744073709551615, __ydb_max_id = 6, __ydb_added = 1, __ydb_segment = \x08\x01\x01\n\
+__ydb_token = blue, __ydb_generation = 18446744073709551615, __ydb_max_id = 2, __ydb_added = 1, __ydb_segment = \x04\n\
+__ydb_token = car, __ydb_generation = 18446744073709551615, __ydb_max_id = 4, __ydb_added = 1, __ydb_segment = \x08\n\
+__ydb_token = green, __ydb_generation = 18446744073709551615, __ydb_max_id = 1, __ydb_added = 1, __ydb_segment = \x02\n\
+__ydb_token = red, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x02\x02\n\
+__ydb_token = yellow, __ydb_generation = 18446744073709551615, __ydb_max_id = 3, __ydb_added = 1, __ydb_segment = \x06\n\
+";
+            }
+        }
+        auto index = ReadShardedTable(server, kCompactTable);
+        Cerr << "Index:" << Endl;
+        Cerr << index << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(index, expected);
+
+        if (WithRelevance) {
+            expected = R"(__ydb_token = and, __ydb_freq = 5
+__ydb_token = apple, __ydb_freq = 6
+__ydb_token = blue, __ydb_freq = 1
+__ydb_token = car, __ydb_freq = 1
+__ydb_token = green, __ydb_freq = 1
+__ydb_token = red, __ydb_freq = 2
+__ydb_token = yellow, __ydb_freq = 1
+)";
+            index = ReadShardedTable(server, kDictTable);
+            Cerr << "Index:" << Endl;
+            Cerr << index << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(index, expected);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CompactUint64, WithRelevance) {
+        DoTestCompact(WithRelevance, "Uint64");
+    }
+
+    Y_UNIT_TEST_TWIN(CompactUint32, WithRelevance) {
+        DoTestCompact(WithRelevance, "Uint32");
+    }
+
+    Y_UNIT_TEST_TWIN(CompactInt64, WithRelevance) {
+        DoTestCompact(WithRelevance, "Int64");
+    }
+
+    Y_UNIT_TEST_TWIN(CompactInt32, WithRelevance) {
+        DoTestCompact(WithRelevance, "Int32");
+    }
+
 }
 
 }

@@ -41,7 +41,7 @@ struct ILogWriterFactory
      */
     virtual ILogWriterPtr CreateWriter(
         std::unique_ptr<ILogFormatter> formatter,
-        TString name,
+        std::string name,
         const NYTree::IMapNodePtr& configNode,
         ILogWriterHost* host) noexcept = 0;
 };

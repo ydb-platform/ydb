@@ -74,7 +74,7 @@ static void *fetch_global_var_addr(GlobSupportObject *gs)
     }
     if (data == NULL) {
         PyErr_Format(FFIError, "global variable '%s' is at address NULL",
-                     PyText_AS_UTF8(gs->gs_name));
+                     PyUnicode_AsUTF8(gs->gs_name));
         return NULL;
     }
     return data;

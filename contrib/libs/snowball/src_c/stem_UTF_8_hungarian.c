@@ -1,6 +1,17 @@
-/* Generated from hungarian.sbl by Snowball 3.0.1 - https://snowballstem.org/ */
+/* Generated from hungarian.sbl by Snowball 3.1.1 - https://snowballstem.org/ */
 
-#include "../runtime/header.h"
+#include "stem_UTF_8_hungarian.h"
+
+#include <stddef.h>
+
+#include "../runtime/snowball_runtime.h"
+
+struct SN_local {
+    struct SN_env z;
+    int i_p1;
+};
+
+typedef struct SN_local SN_local;
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,6 +20,7 @@ extern int hungarian_UTF_8_stem(struct SN_env * z);
 #ifdef __cplusplus
 }
 #endif
+
 static int r_double(struct SN_env * z);
 static int r_undouble(struct SN_env * z);
 static int r_factive(struct SN_env * z);
@@ -23,18 +35,22 @@ static int r_case(struct SN_env * z);
 static int r_v_ending(struct SN_env * z);
 static int r_R1(struct SN_env * z);
 static int r_mark_regions(struct SN_env * z);
-#ifdef __cplusplus
-extern "C" {
-#endif
 
+static const symbol s_0[] = { 'a' };
+static const symbol s_1[] = { 'e' };
+static const symbol s_2[] = { 'e' };
+static const symbol s_3[] = { 'a' };
+static const symbol s_4[] = { 'a' };
+static const symbol s_5[] = { 'e' };
+static const symbol s_6[] = { 'a' };
+static const symbol s_7[] = { 'e' };
+static const symbol s_8[] = { 'e' };
+static const symbol s_9[] = { 'a' };
+static const symbol s_10[] = { 'a' };
+static const symbol s_11[] = { 'e' };
+static const symbol s_12[] = { 'a' };
+static const symbol s_13[] = { 'e' };
 
-extern struct SN_env * hungarian_UTF_8_create_env(void);
-extern void hungarian_UTF_8_close_env(struct SN_env * z);
-
-
-#ifdef __cplusplus
-}
-#endif
 static const symbol s_0_0[2] = { 0xC3, 0xA1 };
 static const symbol s_0_1[2] = { 0xC3, 0xA9 };
 static const struct among a_0[2] = {
@@ -418,60 +434,44 @@ static const struct among a_10[42] = {
 
 static const unsigned char g_v[] = { 17, 65, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 17, 36, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1 };
 
-static const symbol s_0[] = { 'a' };
-static const symbol s_1[] = { 'e' };
-static const symbol s_2[] = { 'e' };
-static const symbol s_3[] = { 'a' };
-static const symbol s_4[] = { 'a' };
-static const symbol s_5[] = { 'e' };
-static const symbol s_6[] = { 'a' };
-static const symbol s_7[] = { 'e' };
-static const symbol s_8[] = { 'e' };
-static const symbol s_9[] = { 'a' };
-static const symbol s_10[] = { 'a' };
-static const symbol s_11[] = { 'e' };
-static const symbol s_12[] = { 'a' };
-static const symbol s_13[] = { 'e' };
-
 static int r_mark_regions(struct SN_env * z) {
-    z->I[0] = z->l;
-    {
+    ((SN_local *)z)->i_p1 = z->l;
+    do {
         int v_1 = z->c;
-        if (in_grouping_U(z, g_v, 97, 369, 0)) goto lab1;
+        if (in_grouping_U(z, g_v, 97, 369, 0)) goto lab0;
         {
             int v_2 = z->c;
             {
                 int ret = in_grouping_U(z, g_v, 97, 369, 1);
-                if (ret < 0) goto lab2;
+                if (ret < 0) goto lab1;
                 z->c += ret;
             }
-            z->I[0] = z->c;
-        lab2:
+            ((SN_local *)z)->i_p1 = z->c;
+        lab1:
             z->c = v_2;
         }
-        goto lab0;
-    lab1:
+        break;
+    lab0:
         z->c = v_1;
         {
             int ret = out_grouping_U(z, g_v, 97, 369, 1);
             if (ret < 0) return 0;
             z->c += ret;
         }
-        z->I[0] = z->c;
-    }
-lab0:
+        ((SN_local *)z)->i_p1 = z->c;
+    } while (0);
     return 1;
 }
 
 static int r_R1(struct SN_env * z) {
-    return z->I[0] <= z->c;
+    return ((SN_local *)z)->i_p1 <= z->c;
 }
 
 static int r_v_ending(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c - 1 <= z->lb || (z->p[z->c - 1] != 161 && z->p[z->c - 1] != 169)) return 0;
-    among_var = find_among_b(z, a_0, 2);
+    among_var = find_among_b(z, a_0, 2, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     {
@@ -499,7 +499,7 @@ static int r_double(struct SN_env * z) {
     {
         int v_1 = z->l - z->c;
         if (z->c - 1 <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((106790108 >> (z->p[z->c - 1] & 0x1f)) & 1)) return 0;
-        if (!find_among_b(z, a_1, 23)) return 0;
+        if (!find_among_b(z, a_1, 23, 0)) return 0;
         z->c = z->l - v_1;
     }
     return 1;
@@ -528,7 +528,7 @@ static int r_undouble(struct SN_env * z) {
 static int r_instrum(struct SN_env * z) {
     z->ket = z->c;
     if (z->c - 1 <= z->lb || z->p[z->c - 1] != 108) return 0;
-    if (!find_among_b(z, a_2, 2)) return 0;
+    if (!find_among_b(z, a_2, 2, 0)) return 0;
     z->bra = z->c;
     {
         int ret = r_R1(z);
@@ -542,16 +542,12 @@ static int r_instrum(struct SN_env * z) {
         int ret = slice_del(z);
         if (ret < 0) return ret;
     }
-    {
-        int ret = r_undouble(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
+    return r_undouble(z);
 }
 
 static int r_case(struct SN_env * z) {
     z->ket = z->c;
-    if (!find_among_b(z, a_3, 44)) return 0;
+    if (!find_among_b(z, a_3, 44, 0)) return 0;
     z->bra = z->c;
     {
         int ret = r_R1(z);
@@ -561,18 +557,14 @@ static int r_case(struct SN_env * z) {
         int ret = slice_del(z);
         if (ret < 0) return ret;
     }
-    {
-        int ret = r_v_ending(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
+    return r_v_ending(z);
 }
 
 static int r_case_special(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c - 2 <= z->lb || (z->p[z->c - 1] != 110 && z->p[z->c - 1] != 116)) return 0;
-    among_var = find_among_b(z, a_4, 3);
+    among_var = find_among_b(z, a_4, 3, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     {
@@ -600,7 +592,7 @@ static int r_case_other(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c - 3 <= z->lb || z->p[z->c - 1] != 108) return 0;
-    among_var = find_among_b(z, a_5, 6);
+    among_var = find_among_b(z, a_5, 6, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     {
@@ -633,7 +625,7 @@ static int r_case_other(struct SN_env * z) {
 static int r_factive(struct SN_env * z) {
     z->ket = z->c;
     if (z->c - 1 <= z->lb || (z->p[z->c - 1] != 161 && z->p[z->c - 1] != 169)) return 0;
-    if (!find_among_b(z, a_6, 2)) return 0;
+    if (!find_among_b(z, a_6, 2, 0)) return 0;
     z->bra = z->c;
     {
         int ret = r_R1(z);
@@ -647,18 +639,14 @@ static int r_factive(struct SN_env * z) {
         int ret = slice_del(z);
         if (ret < 0) return ret;
     }
-    {
-        int ret = r_undouble(z);
-        if (ret <= 0) return ret;
-    }
-    return 1;
+    return r_undouble(z);
 }
 
 static int r_plural(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c <= z->lb || z->p[z->c - 1] != 107) return 0;
-    among_var = find_among_b(z, a_7, 7);
+    among_var = find_among_b(z, a_7, 7, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     {
@@ -692,7 +680,7 @@ static int r_owned(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c - 1 <= z->lb || (z->p[z->c - 1] != 105 && z->p[z->c - 1] != 169)) return 0;
-    among_var = find_among_b(z, a_8, 12);
+    among_var = find_among_b(z, a_8, 12, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     {
@@ -725,7 +713,7 @@ static int r_owned(struct SN_env * z) {
 static int r_sing_owner(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
-    among_var = find_among_b(z, a_9, 31);
+    among_var = find_among_b(z, a_9, 31, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     {
@@ -759,7 +747,7 @@ static int r_plur_owner(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((10768 >> (z->p[z->c - 1] & 0x1f)) & 1)) return 0;
-    among_var = find_among_b(z, a_10, 42);
+    among_var = find_among_b(z, a_10, 42, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     {
@@ -875,7 +863,15 @@ extern int hungarian_UTF_8_stem(struct SN_env * z) {
     return 1;
 }
 
-extern struct SN_env * hungarian_UTF_8_create_env(void) { return SN_create_env(0, 1); }
+extern struct SN_env * hungarian_UTF_8_create_env(void) {
+    struct SN_env * z = SN_new_env(sizeof(SN_local));
+    if (z) {
+        ((SN_local *)z)->i_p1 = 0;
+    }
+    return z;
+}
 
-extern void hungarian_UTF_8_close_env(struct SN_env * z) { SN_close_env(z, 0); }
+extern void hungarian_UTF_8_close_env(struct SN_env * z) {
+    SN_delete_env(z);
+}
 

@@ -1,6 +1,7 @@
 UNITTEST_FOR(yql/essentials/minikql/runtime_settings)
 
 SRCS(
+    runtime_settings_hash_ut.cpp
     runtime_settings_serialization_ut.cpp
 )
 

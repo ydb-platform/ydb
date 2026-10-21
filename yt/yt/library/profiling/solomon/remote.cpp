@@ -82,7 +82,7 @@ void TRemoteRegistry::Transfer(const NProto::TSensorDump& dump)
             for (const auto& tagId : projection.tag_ids()) {
                 if (tagId <= 0 || tagId > dump.tags().size()) {
                     THROW_ERROR_EXCEPTION("Incorrect tag")
-                        << TErrorAttribute("tag_id", tagId);
+                        .With("tag_id", tagId);
                 }
             }
         }

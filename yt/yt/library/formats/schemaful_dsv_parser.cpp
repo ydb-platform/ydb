@@ -40,7 +40,7 @@ private:
 
     int TableIndex_ = 0;
 
-    TString CurrentToken_;
+    std::string CurrentToken_;
 
     const char* Consume(const char* begin, const char* end);
     void SwitchTable(int newTableIndex);
@@ -74,7 +74,7 @@ const char* TSchemafulDsvParser::Consume(const char* begin, const char* end)
         return begin + 1;
     }
     if (ExpectingEscapedChar_) {
-        CurrentToken_.append(EscapeBackward[static_cast<ui8>(*begin)]);
+        CurrentToken_.push_back(EscapeBackward[static_cast<ui8>(*begin)]);
         ExpectingEscapedChar_ = false;
         return begin + 1;
     }
@@ -140,7 +140,7 @@ const char* TSchemafulDsvParser::Consume(const char* begin, const char* end)
 
 void TSchemafulDsvParser::SwitchTable(int newTableIndex)
 {
-    static const TString key = FormatEnum(NTableClient::EControlAttribute(
+    static const std::string key = FormatEnum(NTableClient::EControlAttribute(
         NTableClient::EControlAttribute::TableIndex));
     if (newTableIndex != TableIndex_) {
         TableIndex_ = newTableIndex;

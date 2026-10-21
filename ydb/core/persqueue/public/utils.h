@@ -42,6 +42,12 @@ size_t ConsumerCount(const NKikimrPQ::TPQTabletConfig& config);
 
 const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const ui32 partitionId);
 
+// Read quota entry (per consumer or, for CLIENTID_WITHOUT_CONSUMER, for reading a partition without a consumer)
+// stored in TPartitionConfig.ReadQuota keyed by ClientId.
+const NKikimrPQ::TPartitionConfig::TReadQuota* GetReadQuota(const NKikimrPQ::TPQTabletConfig& config, const TString& clientId);
+NKikimrPQ::TPartitionConfig::TReadQuota* GetOrAddReadQuota(NKikimrPQ::TPQTabletConfig& config, const TString& clientId);
+void ClearReadQuotaExceptWithoutConsumer(NKikimrPQ::TPQTabletConfig& config);
+
 // The graph of split-merge operations.
 class TPartitionGraph {
 public:
@@ -87,6 +93,7 @@ public:
 
     TString DebugString() const;
 
+    std::vector<ui32> GetRootPartitions() const;
 private:
     std::unordered_map<ui32, Node> Partitions;
 };

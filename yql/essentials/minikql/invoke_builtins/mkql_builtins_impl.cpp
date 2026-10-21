@@ -1,8 +1,7 @@
 #include "mkql_builtins_impl.h"                       // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_builder.h> // UnpackOptionalData
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 namespace {
 
 std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBufferAndResize(size_t size, arrow::MemoryPool* pool) {
@@ -323,12 +322,12 @@ TPlainKernel::TPlainKernel(const TKernelFamily& family, const std::vector<NUdf::
                            NUdf::TDataTypeId returnType, std::unique_ptr<arrow::compute::ScalarKernel>&& arrowKernel,
                            TKernel::ENullMode nullMode)
     : TKernel(family, argTypes, returnType, nullMode)
-    , ArrowKernel(std::move(arrowKernel))
+    , ArrowKernel_(std::move(arrowKernel))
 {
 }
 
 const arrow::compute::ScalarKernel& TPlainKernel::GetArrowKernel() const {
-    return *ArrowKernel;
+    return *ArrowKernel_;
 }
 
 std::shared_ptr<arrow::compute::ScalarKernel> TPlainKernel::MakeArrowKernel(const TVector<TType*>&, TType*) const {
@@ -337,60 +336,6 @@ std::shared_ptr<arrow::compute::ScalarKernel> TPlainKernel::MakeArrowKernel(cons
 
 bool TPlainKernel::IsPolymorphic() const {
     return false;
-}
-
-TDecimalKernel::TDecimalKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes,
-                               NUdf::TDataTypeId returnType, TStatelessArrayKernelExec exec,
-                               TKernel::ENullMode nullMode)
-    : TKernel(family, argTypes, returnType, nullMode)
-    , Exec(exec)
-{
-}
-
-const arrow::compute::ScalarKernel& TDecimalKernel::GetArrowKernel() const {
-    ythrow yexception() << "Unsupported kernel";
-}
-
-std::shared_ptr<arrow::compute::ScalarKernel> TDecimalKernel::MakeArrowKernel(const TVector<TType*>& argTypes, TType* resultType) const {
-    MKQL_ENSURE(argTypes.size() == 2, "Require 2 arguments");
-    MKQL_ENSURE(argTypes[0]->GetKind() == TType::EKind::Block, "Require block");
-    MKQL_ENSURE(argTypes[1]->GetKind() == TType::EKind::Block, "Require block");
-    MKQL_ENSURE(resultType->GetKind() == TType::EKind::Block, "Require block");
-
-    bool isOptional = false;
-    auto dataType1 = UnpackOptionalData(static_cast<TBlockType*>(argTypes[0])->GetItemType(), isOptional);
-    auto dataType2 = UnpackOptionalData(static_cast<TBlockType*>(argTypes[1])->GetItemType(), isOptional);
-    auto dataResultType = UnpackOptionalData(static_cast<TBlockType*>(resultType)->GetItemType(), isOptional);
-
-    MKQL_ENSURE(*dataType1->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
-    MKQL_ENSURE(*dataType2->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
-
-    auto decimalType1 = static_cast<TDataDecimalType*>(dataType1);
-    auto decimalType2 = static_cast<TDataDecimalType*>(dataType2);
-
-    MKQL_ENSURE(decimalType1->GetParams() == decimalType2->GetParams(), "Require same precision/scale");
-
-    ui8 precision = decimalType1->GetParams().first;
-    MKQL_ENSURE(precision >= 1 && precision <= 35, TStringBuilder() << "Wrong precision: " << (int)precision);
-
-    auto k = std::make_shared<arrow::compute::ScalarKernel>(
-        std::vector<arrow::compute::InputType>{
-            GetPrimitiveInputArrowType(NUdf::EDataSlot::Decimal),
-            GetPrimitiveInputArrowType(NUdf::EDataSlot::Decimal)},
-        GetPrimitiveOutputArrowType(*dataResultType->GetDataSlot()),
-        Exec);
-    k->null_handling = arrow::compute::NullHandling::INTERSECTION;
-    k->init = [precision](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
-        auto state = std::make_unique<TDecimalKernel::TKernelState>();
-        state->Precision = precision;
-        return arrow::Result(std::move(state));
-    };
-
-    return k;
-}
-
-bool TDecimalKernel::IsPolymorphic() const {
-    return true;
 }
 
 void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot res,
@@ -449,5 +394,66 @@ void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::E
     owner.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(owner, argTypes, returnType, std::move(k), nullMode));
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+TDecimalKernel::TDecimalKernel(const TKernelFamily& family,
+                               const std::vector<NUdf::TDataTypeId>& argTypes, NUdf::TDataTypeId returnType,
+                               TKernel::ENullMode nullMode, TExecFactory execFactory)
+    : TKernel(family, argTypes, returnType, nullMode)
+    , ExecFactory_(execFactory)
+{
+}
+
+const arrow::compute::ScalarKernel& TDecimalKernel::GetArrowKernel() const {
+    ythrow yexception() << "Unsupported kernel";
+}
+
+std::shared_ptr<arrow::compute::ScalarKernel> TDecimalKernel::MakeArrowKernel(
+    const TVector<TType*>& argTypes, TType* resultType) const {
+    MKQL_ENSURE(argTypes.size() == 2, "Require 2 arguments");
+    bool isOptional = false;
+    auto leftType = GetDataType(argTypes[0], isOptional);
+    auto rightType = GetDataType(argTypes[1], isOptional);
+    auto dataResultType = GetDataType(resultType, isOptional);
+    MKQL_ENSURE(*leftType->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
+    MKQL_ENSURE(*rightType->GetDataSlot() == NUdf::EDataSlot::Decimal, "Require decimal");
+
+    auto decimalLeftType = static_cast<TDataDecimalType*>(leftType);
+    auto decimalRightType = static_cast<TDataDecimalType*>(rightType);
+    const auto [leftPrecision, leftScale] = decimalLeftType->GetParams();
+    const auto [rightPrecision, rightScale] = decimalRightType->GetParams();
+    return MakeArrowKernel(
+        decimalLeftType, dataResultType,
+        ExecFactory_(leftPrecision, leftScale, rightPrecision, rightScale));
+}
+
+bool TDecimalKernel::IsPolymorphic() const {
+    return true;
+}
+
+TDataType* TDecimalKernel::GetDataType(TType* blockType, bool& isOptional) {
+    MKQL_ENSURE(blockType->GetKind() == TType::EKind::Block, "Require block");
+    return UnpackOptionalData(
+        static_cast<TBlockType*>(blockType)->GetItemType(), isOptional);
+}
+
+std::shared_ptr<arrow::compute::ScalarKernel> TDecimalKernel::MakeArrowKernel(
+    TDataDecimalType* leftType, TDataType* resultType,
+    TStatelessArrayKernelExec exec) {
+    const ui8 precision = leftType->GetParams().first;
+    MKQL_ENSURE(precision >= 1 && precision <= 35,
+                TStringBuilder() << "Wrong precision: " << static_cast<int>(precision));
+    auto kernel = std::make_shared<arrow::compute::ScalarKernel>(
+        std::vector<arrow::compute::InputType>{
+            GetPrimitiveInputArrowType(NUdf::EDataSlot::Decimal),
+            GetPrimitiveInputArrowType(NUdf::EDataSlot::Decimal)},
+        GetPrimitiveOutputArrowType(*resultType->GetDataSlot()), exec);
+    kernel->null_handling = arrow::compute::NullHandling::INTERSECTION;
+    kernel->init = [precision](arrow::compute::KernelContext*,
+                               const arrow::compute::KernelInitArgs&) {
+        auto state = std::make_unique<TDecimalKernelState>();
+        state->Precision = precision;
+        return arrow::Result(std::move(state));
+    };
+    return kernel;
+}
+
+} // namespace NKikimr::NMiniKQL

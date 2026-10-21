@@ -206,6 +206,7 @@ namespace NKikimr {
                 return ReplyAndDie(TSyncStatusVal::ProtocolError);
             }
 
+            const TSyncState oldSyncState = GetCurrent().SyncState;
             SetSyncState(newSyncState);
             EndOfStream = record.GetFinished();
 
@@ -217,7 +218,8 @@ namespace NKikimr {
 
                 if (Ctx->SyncerCtx->Config->EnableLocalSyncLogDataCutting) {
                     std::unique_ptr<IActor> actor(CreateLocalSyncDataCutter(Ctx->SyncerCtx->Config,
-                            Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId, parentId, std::move(msg)));
+                            Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId, parentId, std::move(msg),
+                            oldSyncState));
                     return TSjOutcome::Actor(std::move(actor), true);
                 } else {
 
@@ -375,7 +377,8 @@ namespace NKikimr {
 
                 if (Ctx->SyncerCtx->Config->EnableLocalSyncLogDataCutting) {
                     std::unique_ptr<IActor> actor(CreateLocalSyncDataCutter(Ctx->SyncerCtx->Config,
-                            Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId, parentId, std::move(msg)));
+                            Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId, parentId, std::move(msg),
+                            OldSyncState));
                     return TSjOutcome::Actor(std::move(actor), true);
                 } else {
                     auto msg = std::make_unique<TEvLocalSyncData>(vdisk, OldSyncState, data);

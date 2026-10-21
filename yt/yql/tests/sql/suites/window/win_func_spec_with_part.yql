@@ -1,4 +1,3 @@
-/* postgres can not */
 $input=(select cast(key as int32) / 100 as key_hundred, cast(key as int32) as key, cast(subkey as int32) as subkey, value from plato.Input);
 
 select

@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/library/actors/core/log.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <util/string/builder.h>
 #include <util/string/vector.h>
@@ -23,10 +24,28 @@ TString IncorrectIndexColumnsErrorMessage(const auto& indexColumns) {
 
 inline const TString DisabledForRowTablesErrorMessage = "Local min_max index is supported only for column tables";
 
-inline TString UnknownIndexColumnNameErrorMessage(TStringBuf columnName) {
-    return TStringBuilder() << "Tried to apply min_max index to unknown column '" << columnName << "'";
+inline TString UnknownIndexColumnNameErrorMessage(TStringBuf columnName, const auto& alteredTableColumns) {
+    return TStringBuilder() << "Tried to apply min_max index to unknown column '" << columnName << "'. Table has these "
+                            << alteredTableColumns.size() << " columns: ["
+                            << JoinStrings(alteredTableColumns.begin(), alteredTableColumns.end(), ", ") << "]";
 }
 
 inline const TString FeatureFlagDisabledErrorMessage = "Local min_max index is disabled with EnableLocalMinMaxIndex feature flag";
+
+inline const TString SchemeObjectFeatureFlagDisabledErrorMessage =
+    "Local min_max index is not treated as scheme object because feature flag EnableLocalIndexAsSchemeObject is disabled";
+
+inline const TString ProtoDescrptionLacksColumnIdErrorMessage = "Local min_max index description lacks required ColumnId field";
+
+void SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(auto& index, std::string_view typeName) {
+    if (typeName == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::String) ||
+        typeName == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::Utf8)) {
+        index.SetInheritPortionStorage(true);
+        index.SetStorageId("__DEFAULT");
+    } else {
+        index.SetInheritPortionStorage(false);
+        index.SetStorageId("__LOCAL_METADATA");
+    }
+}
 
 }   // namespace NKikimr::NOlap::NIndexes::NMinMax

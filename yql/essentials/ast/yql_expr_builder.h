@@ -22,7 +22,6 @@ class TExprNodeBuilder {
 public:
     using ExtArgsFuncType = std::function<TExprNodePtr(const TStringBuf&)>;
 
-public:
     TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx);
     TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx, ExtArgsFuncType extArgsFunc);
     TExprNodePtr Build();
@@ -94,11 +93,10 @@ public:
     }
 
 private:
-    TExprNodeBuilder(TPositionHandle pos, TExprNodeBuilder* parent, const TExprNodePtr& container);
+    TExprNodeBuilder(TPositionHandle pos, TExprNodeBuilder* parent, TExprNodePtr container);
     TExprNodeBuilder(TPositionHandle pos, TExprNodeReplaceBuilder* parentReplacer);
     TExprNodePtr FindArgument(const TStringBuf& name);
 
-private:
     TExprContext& Ctx_;
     TExprNodeBuilder* Parent_;
     TExprNodeReplaceBuilder* ParentReplacer_;

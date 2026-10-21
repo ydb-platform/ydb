@@ -32,16 +32,19 @@
 KEEP     COPYRIGHT_SERVICE_LABEL 09d7b0b4359c1980fce1cec0f0064d2c
 BELONGS ya.make
     License text:
-            Copyright (c) 2017-2025 Intel Corporation
             Copyright (c) 2026 UXL Foundation Contributors
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        include/oneapi/tbb.cppm [2:2]
+        include/oneapi/tbb.h [2:3]
         include/oneapi/tbb/blocked_nd_range.h [2:3]
         include/oneapi/tbb/blocked_range.h [2:3]
+        include/oneapi/tbb/cache_aligned_allocator.h [2:3]
         include/oneapi/tbb/collaborative_call_once.h [2:3]
+        include/oneapi/tbb/concurrent_lru_cache.h [2:3]
         include/oneapi/tbb/concurrent_map.h [2:3]
         include/oneapi/tbb/concurrent_queue.h [2:3]
         include/oneapi/tbb/concurrent_set.h [2:3]
@@ -57,12 +60,19 @@ BELONGS ya.make
         include/oneapi/tbb/detail/_utils.h [2:3]
         include/oneapi/tbb/enumerable_thread_specific.h [2:3]
         include/oneapi/tbb/info.h [2:3]
+        include/oneapi/tbb/memory_pool.h [2:3]
+        include/oneapi/tbb/numa_allocation.h [2:2]
+        include/oneapi/tbb/parallel_reduce.h [2:3]
         include/oneapi/tbb/partitioner.h [2:3]
+        include/tbb/numa_allocation.h [2:2]
+        src/tbb/allocator.cpp [2:3]
         src/tbb/arena.h [2:3]
         src/tbb/co_context.h [2:3]
+        src/tbb/concurrent_monitor.h [2:3]
         src/tbb/dynamic_link.cpp [2:3]
         src/tbb/global_control.cpp [2:3]
         src/tbb/misc.h [2:3]
+        src/tbb/numa_allocation.cpp [2:2]
         src/tbb/tcm_adaptor.cpp [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 0acd00469276a99d863e3828c9954aff
@@ -273,13 +283,14 @@ KEEP     COPYRIGHT_SERVICE_LABEL 766614077ece9f54dcc96e471051491a
 BELONGS ya.make
     License text:
             Copyright (c) 2005-2022 Intel Corporation
+            Copyright (c) 2026 UXL Foundation Contributors
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/oneapi/tbb/cache_aligned_allocator.h [2:2]
-        include/oneapi/tbb/concurrent_lru_cache.h [2:2]
+        include/oneapi/tbb/cache_aligned_allocator.h [2:3]
+        include/oneapi/tbb/concurrent_lru_cache.h [2:3]
         include/oneapi/tbb/concurrent_priority_queue.h [2:2]
         include/oneapi/tbb/detail/_aggregator.h [2:2]
         include/oneapi/tbb/detail/_concurrent_queue_base.h [2:2]
@@ -364,10 +375,10 @@ BELONGS ya.make
         include/oneapi/tbb/detail/_template_helpers.h [2:2]
         include/oneapi/tbb/enumerable_thread_specific.h [2:3]
         include/oneapi/tbb/flow_graph_abstractions.h [2:2]
-        include/oneapi/tbb/memory_pool.h [2:2]
+        include/oneapi/tbb/memory_pool.h [2:3]
         include/oneapi/tbb/parallel_for.h [2:2]
-        include/oneapi/tbb/parallel_reduce.h [2:2]
-        src/tbb/allocator.cpp [2:2]
+        include/oneapi/tbb/parallel_reduce.h [2:3]
+        src/tbb/allocator.cpp [2:3]
         src/tbb/global_control.cpp [2:3]
         src/tbb/governor.h [2:2]
         src/tbb/main.cpp [2:2]
@@ -405,12 +416,13 @@ KEEP     COPYRIGHT_SERVICE_LABEL c7ac9dd1e2a2c5ad41a3ae820f2cfa30
 BELONGS ya.make
     License text:
             Copyright (c) 2005-2025 Intel Corporation
+            Copyright (c) 2026 UXL Foundation Contributors
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/oneapi/tbb.h [2:2]
+        include/oneapi/tbb.h [2:3]
         include/oneapi/tbb/blocked_range.h [2:3]
         include/oneapi/tbb/concurrent_hash_map.h [2:3]
         include/oneapi/tbb/concurrent_queue.h [2:3]
@@ -438,7 +450,7 @@ BELONGS ya.make
         src/tbb/arena_slot.h [2:3]
         src/tbb/assert_impl.h [2:3]
         src/tbb/co_context.h [2:3]
-        src/tbb/concurrent_monitor.h [2:2]
+        src/tbb/concurrent_monitor.h [2:3]
         src/tbb/def/lin64-tbb.def [2:3]
         src/tbb/dynamic_link.cpp [2:3]
         src/tbb/dynamic_link.h [2:2]

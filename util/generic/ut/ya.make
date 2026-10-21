@@ -34,6 +34,7 @@ SRCS(
     generic/overloaded_ut.cpp
     generic/ptr_ut.cpp
     generic/queue_ut.cpp
+    generic/ranges_ut.cpp
     generic/scope_ut.cpp
     generic/serialized_enum_ut.cpp
     generic/set_ut.cpp
@@ -62,7 +63,7 @@ INCLUDE(${ARCADIA_ROOT}/util/tests/ya_util_tests.inc)
 
 PEERDIR(
     library/cpp/case_insensitive_string
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
 )
 
 GENERATE_ENUM_SERIALIZATION(generic/enum_cast_ut.h)

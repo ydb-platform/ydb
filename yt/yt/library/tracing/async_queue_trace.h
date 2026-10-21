@@ -4,7 +4,7 @@
 
 #include <yt/yt/core/tracing/trace_context.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <util/generic/noncopyable.h>
 
@@ -37,7 +37,7 @@ public:
     void Join(i64 queueIndex);
 
     //! StartSpan creates span that traces background work in the queue.
-    std::pair<TTraceContextPtr, bool> StartSpan(i64 startIndex, const TString& spanName);
+    std::pair<TTraceContextPtr, bool> StartSpan(i64 startIndex, const std::string& spanName);
 
     //! Notify that trace is finished.
     void FinishSpan(const TTraceContextPtr& traceContext);
@@ -45,12 +45,12 @@ public:
     //! Notify that all future calls to StartSpan will have startIndex > endIndex.
     void Commit(i64 endIndex);
 
-    TAsyncQueueTraceGuard CreateTraceGuard(const TString& spanName, i64 startIndex, std::optional<i64> endIndex);
+    TAsyncQueueTraceGuard CreateTraceGuard(const std::string& spanName, i64 startIndex, std::optional<i64> endIndex);
 
 private:
     const bool Lazy_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     std::deque<std::pair<i64, TTraceContextPtr>> Blocked_;
     THashMap<TTraceContextPtr, i64> Background_;
 };

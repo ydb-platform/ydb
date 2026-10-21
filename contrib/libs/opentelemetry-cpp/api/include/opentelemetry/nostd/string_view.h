@@ -37,7 +37,7 @@ using Traits = std::char_traits<char>;
 class string_view
 {
 public:
-  typedef std::size_t size_type;
+  using size_type = std::size_t;
 
   static constexpr size_type npos = static_cast<size_type>(-1);
 
@@ -71,7 +71,7 @@ public:
   {
     if (pos > length_)
     {
-#  if __EXCEPTIONS
+#  if OPENTELEMETRY_HAVE_EXCEPTIONS
       throw std::out_of_range{"opentelemetry::nostd::string_view"};
 #  else
       std::terminate();

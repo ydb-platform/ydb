@@ -11,8 +11,8 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 
 struct TMsgPqCodes {
@@ -23,35 +23,10 @@ struct TMsgPqCodes {
     : Message(message), PQCode(pqCode) {}
 };
 
-struct TYdbPqCodes {
-    Ydb::StatusIds::StatusCode YdbCode;
-    Ydb::PersQueue::ErrorCode::ErrorCode PQCode;
-
-    TYdbPqCodes(Ydb::StatusIds::StatusCode YdbCode, Ydb::PersQueue::ErrorCode::ErrorCode PQCode)
-    : YdbCode(YdbCode),
-        PQCode(PQCode) {}
-};
-
-namespace Ydb::Topic {
-    class CreateTopicRequest;
-    class AlterTopicRequest;
-}
-
 namespace NKikimr::NGRpcProxy::V1 {
 
     using namespace NKikimr::NPQ;
     using namespace NKikimr::NPQ::NSchema;
-
-    TYdbPqCodes FillProposeRequestImpl(
-        const TString& name,
-        const Ydb::Topic::CreateTopicRequest& request,
-        NKikimrSchemeOp::TModifyScheme& modifyScheme,
-        TAppData* appData,
-        TString& error,
-        const TString& path,
-        const TString& database = TString(),
-        const TString& localDc = TString()
-    );
 
     TClientServiceTypes GetSupportedClientServiceTypes(const NKikimrPQ::TPQConfig& pqConfig);
 
@@ -123,10 +98,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return RespondWithCode(Ydb::StatusIds::UNAUTHORIZED);
             }
 
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "SendDescribeProposeRequest "
-                << " database: " << Database
-                << " path: " << GetTopicPath()
-                << " showPrivate: " << showPrivate);
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "SendDescribeProposeRequest",
+                {"database", Database},
+                {"path", GetTopicPath()},
+                {"showPrivate", showPrivate});
 
             navigateRequest->DatabaseName = Database;
             navigateRequest->ResultSet.emplace_back(NSchemeCache::TSchemeCacheNavigate::TEntry{
@@ -257,7 +232,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             default:
-                ALOG_WARN(NKikimrServices::PERSQUEUE, "unhandled eventType=" << ev->GetTypeRewrite() << " event=" << ev->GetTypeName());
+                YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "Unhandled",
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"event", ev->GetTypeName()});
                 AFL_VERIFY_DEBUG(false)("eventType", ev->GetTypeRewrite())("event", ev->GetTypeName());
             }
         }
@@ -314,9 +291,10 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         bool OnUnhandledException(const std::exception& exc) override {
             auto ctx = *NActors::TlsActivationContext;
-            LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE,
-                TStringBuilder() << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
-                    << TBackTrace::FromCurrentException().PrintToString());
+            YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Unhandled exception",
+                {"typeName", TypeName(exc)},
+                {"exception", exc.what()},
+                {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 
             ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR, "Internal error");
 
@@ -375,7 +353,11 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
             if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
                 if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
-                    Y_ABORT_UNLESS(response.ListNodeEntry->Children.size() == 1);
+                    AFL_ENSURE(response.ListNodeEntry)
+                        ("path", GetTopicPath())("database", TActorBase::Database);
+                    AFL_ENSURE(response.ListNodeEntry->Children.size() == 1)
+                        ("path", GetTopicPath())("database", TActorBase::Database)
+                        ("children", response.ListNodeEntry->Children.size());
                     PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
 
                     if (response.Self) {
@@ -576,10 +558,6 @@ namespace NKikimr::NGRpcProxy::V1 {
             return path;
         }
 
-        const TMaybe<TString>& GetCdcStreamName() const {
-            return CdcStreamName;
-        }
-
         void SendDescribeProposeRequest(bool showPrivate = false) {
             return TBase::SendDescribeProposeRequest(this->ActorContext(), showPrivate);
         }
@@ -592,10 +570,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             auto& item = ev->Get()->Request->ResultSet[0];
             PQGroupInfo = item.PQGroupInfo;
-            for (const auto& partition : PQGroupInfo->Description.GetPartitions()) {
-                TopicPartitionsIds.insert(partition.GetPartitionId());
-            }
-            Self = item.Self;
 
             return true;
         }
@@ -614,10 +588,9 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         void RespondWithCode(Ydb::StatusIds::StatusCode status, bool notFound = false) override {
-            if (!RespondOverride(status, notFound)) {
-                Response->Status = status;
-                this->ActorContext().Send(Requester, Response.Release());
-            }
+            Response->Status = status;
+            Y_UNUSED(notFound);
+            this->ActorContext().Send(Requester, Response.Release());
             this->Die(this->ActorContext());
             TBase::IsDead = true;
         }
@@ -627,21 +600,11 @@ namespace NKikimr::NGRpcProxy::V1 {
             return Request;
         }
 
-        virtual bool RespondOverride(Ydb::StatusIds::StatusCode status, bool notFound) {
-            Y_UNUSED(status);
-            Y_UNUSED(notFound);
-            return false;
-        }
-
         bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
             if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
                 if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
                     Y_ABORT_UNLESS(response.ListNodeEntry->Children.size() == 1);
                     PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
-
-                    if (response.Self) {
-                        CdcStreamName = response.Self->Info.GetName();
-                    }
                     SendDescribeProposeRequest(true);
                     return true;
                 }
@@ -657,10 +620,7 @@ namespace NKikimr::NGRpcProxy::V1 {
     protected:
         THolder<TEvResponse> Response;
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
-        TSet<i64> TopicPartitionsIds;
-        TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo> Self;
         TMaybe<TString> PrivateTopicName;
-        TMaybe<TString> CdcStreamName;
     };
 
 }

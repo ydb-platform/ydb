@@ -301,4 +301,21 @@ private:
     TRowVersion MvccVersion = TRowVersion::Min();
 };
 
+// Attaches a directly-built part (direct part import) as a bottom layer of the
+// restored table and persists the final restore progress in the same commit.
+class TDataShard::TTxS3DirectWriteFinish
+    : public NTabletFlatExecutor::TTransactionBase<TDataShard>
+{
+public:
+    TTxS3DirectWriteFinish(TDataShard* ds, TEvDataShard::TEvS3DirectWriteFinish::TPtr& ev);
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_S3_DIRECT_WRITE_FINISH; }
+
+private:
+    TEvDataShard::TEvS3DirectWriteFinish::TPtr Ev;
+    bool Success = false;
+    TString Error;
+};
+
 }

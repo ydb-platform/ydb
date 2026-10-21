@@ -97,6 +97,9 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&Scenario.RequestTimeoutMs);
         config.Opts->AddLongOption("aws-region", "AWS region.")
             .StoreResult(&Scenario.AwsRegion);
+        config.Opts->AddLongOption("aws-sdk-log", "Enable AWS SDK debug logs.")
+            .DefaultValue(false)
+            .StoreTrue(&Scenario.AwsSdkLog);
     }
 
     void TCommandWorkloadSqsRunRead::Parse(TConfig& config) {

@@ -32,6 +32,9 @@ public:
 
     bool ReallocateArenasIfNeeded();
 
+    i64 GetAliveByteSize() const;
+    i64 GetAliveItemCount() const;
+
     static constexpr size_t SegmentSize = 64_KB;
     static constexpr size_t AcquireMemoryGranularity = 500_KB;
 

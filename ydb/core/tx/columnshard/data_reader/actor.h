@@ -4,6 +4,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NDataReader {
 
@@ -14,7 +15,9 @@ private:
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) = 0;
     virtual TConclusionStatus DoOnFinished() = 0;
-    virtual void DoOnError(const TString& errorMessage) = 0;
+    // Why the read stopped. ABORTED means the transaction's lock is broken and the read was cut short on
+    // purpose; anything else is a failure of the read itself.
+    virtual void DoOnError(const Ydb::StatusIds::StatusCode status, const TString& errorMessage) = 0;
     virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const = 0;
 
 public:
@@ -31,8 +34,8 @@ public:
         return DoOnFinished();
     }
 
-    void OnError(const TString& errorMessage) {
-        DoOnError(errorMessage);
+    void OnError(const Ydb::StatusIds::StatusCode status, const TString& errorMessage) {
+        DoOnError(status, errorMessage);
     }
 
     std::unique_ptr<TEvColumnShard::TEvInternalScan> BuildRequestInitiator() const {
@@ -76,6 +79,7 @@ private:
     std::optional<TMonotonic> LastAck;
     bool AbortedFlag = false;
     bool CheckActivity();
+    void AbortScanIfKnown();
 
 protected:
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev);
@@ -92,8 +96,12 @@ public:
     }
 
     STATEFN(StateFunc) {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", RestoreTask->GetTabletId())("tablet_actor_id",
-            RestoreTask->GetTabletActorId())("this", (ui64)this)("activity", RestoreTask->IsActive())("task_id", RestoreTask->GetTaskId());
+        YDB_LOG_CREATE_CONTEXT(
+            {"tabletId", RestoreTask->GetTabletId()},
+            {"tabletActorId", RestoreTask->GetTabletActorId()},
+            {"this", (ui64)this},
+            {"activity", RestoreTask->IsActive()},
+            {"taskId", RestoreTask->GetTaskId()});
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NKqp::TEvKqpCompute::TEvScanInitActor, HandleExecute);

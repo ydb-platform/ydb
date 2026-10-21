@@ -1,5 +1,7 @@
 #include "mkql_match_recognize_measure_arg.h"
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL::NMatchRecognize {
 
 TRowForMeasureValue::TRowForMeasureValue(
@@ -11,19 +13,19 @@ TRowForMeasureValue::TRowForMeasureValue(
     const TUnboxedValueVector& varNames,
     ui64 matchNumber)
     : TComputationValue<TRowForMeasureValue>(memInfo)
-    , InputRow(inputRow)
-    , RowIndex(rowIndex)
-    , ColumnOrder(columnOrder)
-    , MatchedVars(matchedVars)
-    , VarNames(varNames)
-    , MatchNumber(matchNumber)
+    , InputRow_(std::move(inputRow))
+    , RowIndex_(rowIndex)
+    , ColumnOrder_(columnOrder)
+    , MatchedVars_(matchedVars)
+    , VarNames_(varNames)
+    , MatchNumber_(matchNumber)
 {
 }
 
 NUdf::TUnboxedValue TRowForMeasureValue::GetElement(ui32 index) const {
-    switch (ColumnOrder[index].first) {
+    switch (ColumnOrder_[index].first) {
         case NYql::NMatchRecognize::EMeasureInputDataSpecialColumns::Classifier: {
-            auto varIterator = MatchedVars.GetListIterator();
+            auto varIterator = MatchedVars_.GetListIterator();
             MKQL_ENSURE(varIterator, "Internal logic error");
             NUdf::TUnboxedValue var;
             size_t varIndex = 0;
@@ -34,35 +36,35 @@ NUdf::TUnboxedValue TRowForMeasureValue::GetElement(ui32 index) const {
                 while (rangeIterator.Next(range)) {
                     const auto from = range.GetElement(0).Get<ui64>();
                     const auto to = range.GetElement(1).Get<ui64>();
-                    if (RowIndex >= from and RowIndex <= to) {
-                        return VarNames[varIndex];
+                    if (RowIndex_ >= from and RowIndex_ <= to) {
+                        return VarNames_[varIndex];
                     }
                 }
                 ++varIndex;
             }
-            MKQL_ENSURE(MatchedVars.GetListLength() == varIndex, "Internal logic error");
+            MKQL_ENSURE(MatchedVars_.GetListLength() == varIndex, "Internal logic error");
             return MakeString("");
         }
         case NYql::NMatchRecognize::EMeasureInputDataSpecialColumns::MatchNumber:
-            return NUdf::TUnboxedValuePod(MatchNumber);
+            return NUdf::TUnboxedValuePod(MatchNumber_);
         case NYql::NMatchRecognize::EMeasureInputDataSpecialColumns::Last: // Last corresponds to columns from the input table row
-            return InputRow.GetElement(ColumnOrder[index].second);
+            return InputRow_.GetElement(ColumnOrder_[index].second);
     }
 }
 
 TMeasureInputDataValue::TMeasureInputDataValue(
     TMemoryUsageInfo* memInfo,
-    const NUdf::TUnboxedValue& inputData,
+    NUdf::TUnboxedValue inputData,
     const TMeasureInputColumnOrder& columnOrder,
-    const NUdf::TUnboxedValue& matchedVars,
+    NUdf::TUnboxedValue matchedVars,
     const TUnboxedValueVector& varNames,
     ui64 matchNumber)
     : TComputationValue<TMeasureInputDataValue>(memInfo)
-    , InputData(inputData)
-    , ColumnOrder(columnOrder)
-    , MatchedVars(matchedVars)
-    , VarNames(varNames)
-    , MatchNumber(matchNumber)
+    , InputData_(std::move(inputData))
+    , ColumnOrder_(columnOrder)
+    , MatchedVars_(std::move(matchedVars))
+    , VarNames_(varNames)
+    , MatchNumber_(matchNumber)
 {
 }
 
@@ -92,38 +94,38 @@ NUdf::IBoxedValuePtr TMeasureInputDataValue::ToIndexDictImpl(const NUdf::IValueB
 }
 
 ui64 TMeasureInputDataValue::GetDictLength() const {
-    return InputData.GetDictLength();
+    return InputData_.GetDictLength();
 }
 
 NUdf::TUnboxedValue TMeasureInputDataValue::GetDictIterator() const {
-    return InputData.GetDictIterator();
+    return InputData_.GetDictIterator();
 }
 
 NUdf::TUnboxedValue TMeasureInputDataValue::GetKeysIterator() const {
-    return InputData.GetKeysIterator();
+    return InputData_.GetKeysIterator();
 }
 
 NUdf::TUnboxedValue TMeasureInputDataValue::GetPayloadsIterator() const {
-    return InputData.GetPayloadsIterator();
+    return InputData_.GetPayloadsIterator();
 }
 
 bool TMeasureInputDataValue::Contains(const NUdf::TUnboxedValuePod& key) const {
-    return InputData.Contains(key);
+    return InputData_.Contains(key);
 }
 
 NUdf::TUnboxedValue TMeasureInputDataValue::Lookup(const NUdf::TUnboxedValuePod& key) const {
     return NUdf::TUnboxedValuePod{new TRowForMeasureValue(
         GetMemInfo(),
-        InputData.Lookup(key),
+        InputData_.Lookup(key),
         key.Get<ui64>(),
-        ColumnOrder,
-        MatchedVars,
-        VarNames,
-        MatchNumber)};
+        ColumnOrder_,
+        MatchedVars_,
+        VarNames_,
+        MatchNumber_)};
 }
 
 bool TMeasureInputDataValue::HasDictItems() const {
-    return InputData.HasDictItems();
+    return InputData_.HasDictItems();
 }
 
 } // namespace NKikimr::NMiniKQL::NMatchRecognize

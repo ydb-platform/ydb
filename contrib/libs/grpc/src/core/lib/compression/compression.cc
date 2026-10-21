@@ -73,8 +73,9 @@ grpc_compression_algorithm grpc_compression_algorithm_for_level(
 
 void grpc_compression_options_init(grpc_compression_options* opts) {
   memset(opts, 0, sizeof(*opts));
-  // all enabled by default
+  // all enabled by default, except zstd - it should be enabled explicitly.
   opts->enabled_algorithms_bitset = (1u << GRPC_COMPRESS_ALGORITHMS_COUNT) - 1;
+  grpc_core::ClearBit(&opts->enabled_algorithms_bitset, GRPC_COMPRESS_ZSTD);
 }
 
 void grpc_compression_options_enable_algorithm(

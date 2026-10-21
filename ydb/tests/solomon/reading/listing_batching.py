@@ -31,7 +31,10 @@ class TestListingBatching(SolomonReadingTestBase):
 
         for i in range(total_size - first_label_size):
             if int(test_labels[i]) != 0:
-                return False, f"Invalid test_label = \"0\" values, should contain {total_size - first_label_size} zeros, have: {i}"
+                return (
+                    False,
+                    f"Invalid test_label = \"0\" values, should contain {total_size - first_label_size} zeros, have: {i}",
+                )
         for i in range(total_size - first_label_size, total_size):
             if int(test_labels[i]) != i - total_size + first_label_size:
                 return False, f"Missing test_label = {i - total_size + first_label_size}"
@@ -42,7 +45,7 @@ class TestListingBatching(SolomonReadingTestBase):
     def test_listing_batching_solomon(self):
         data_source_query = f"""
             CREATE EXTERNAL DATA SOURCE local_solomon WITH (
-                SOURCE_TYPE     = "Solomon",
+                SOURCE_TYPE     = "Monium.Metrics",
                 LOCATION        = "{self.solomon_http_endpoint}",
                 GRPC_LOCATION   = "{self.solomon_grpc_endpoint}",
                 AUTH_METHOD     = "NONE",
@@ -68,7 +71,7 @@ class TestListingBatching(SolomonReadingTestBase):
     def test_listing_batching_monitoring(self):
         data_source_query = f"""
             CREATE EXTERNAL DATA SOURCE local_monitoring WITH (
-                SOURCE_TYPE     = "Solomon",
+                SOURCE_TYPE     = "Monium.Metrics",
                 LOCATION        = "{self.solomon_http_endpoint}",
                 GRPC_LOCATION   = "{self.solomon_grpc_endpoint}",
                 PROJECT         = "listing_batching",

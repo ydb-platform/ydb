@@ -2,6 +2,8 @@
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/library/yaml_config/tools/util/defaults.h>
 
+#include <ydb/core/protos/blobstorage_config.pb.h>
+
 #include <util/generic/string.h>
 #include <util/stream/input.h>
 

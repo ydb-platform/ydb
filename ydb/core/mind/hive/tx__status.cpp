@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -19,14 +21,22 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TNodeId nodeId = Local.NodeId();
-        BLOG_D("THive::TTxStatus(" << nodeId << ")::Execute");
+        YDB_LOG_DEBUG("THive::TTxStatus::Execute processing node status",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", nodeId});
         TEvLocal::TEvStatus::EStatus status = (TEvLocal::TEvStatus::EStatus)Record.GetStatus();
         TNodeInfo& node = Self->GetNode(nodeId);
+        // Local resends StatusOk on resource limit changes, BecomeConnected() returns true for an already connected node too
+        const bool wasConnected = node.GetVolatileState() == TNodeInfo::EVolatileState::Connected;
         if (status == TEvLocal::TEvStatus::StatusOk && node.BecomeConnected()) {
             node.Local = Local;
             node.UpdateResourceMaximum(Record.GetResourceMaximum());
             if (Record.HasStartTime()) {
                 node.StartTime = TInstant::MicroSeconds(Record.GetStartTime());
+            }
+            if (!wasConnected) {
+                Self->RecordNodeEvent(node, EHiveEventType::Connected, EHiveEventReason::StatusOk,
+                    TStringBuilder() << "resourceMaximum={" << Record.GetResourceMaximum().ShortDebugString() << "}");
             }
             if (!node.Tablets[TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING].empty()) {
                 Self->WarmUp = false;
@@ -48,22 +58,32 @@ public:
             }
             Self->ProcessWaitQueue(); // new node connected
             if (node.Drain && Self->BalancerNodes.count(nodeId) == 0) {
-                BLOG_D("THive::TTxStatus(" << nodeId << ") - continuing node drain");
+                YDB_LOG_DEBUG("THive::TTxStatus::Execute continuing node drain",
+                    {"logPrefix", GetLogPrefix()},
+                    {"nodeId", nodeId});
                 Y_DEBUG_ABORT_UNLESS(node.DrainActor == nullptr);
+                // the drain was persisted before a Hive or node restart and continues here
+                Self->RecordNodeEvent(node, EHiveEventType::DrainStarted, EHiveEventReason::DrainResumed,
+                    TStringBuilder() << "seqNo=" << node.DrainSeqNo << " tabletsRunning=" << node.GetTabletsRunning());
                 node.DrainActor = Self->StartHiveDrain(nodeId, {.Persist = true, .DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN});
             }
             Self->ObjectDistributions.AddNode(node);
         } else {
-            BLOG_W("THive::TTxStatus(status=" << static_cast<int>(status)
-                   << " node=" << TNodeInfo::EVolatileStateName(node.GetVolatileState()) << ") - killing node " << node.Id);
-            Self->KillNode(node.Id, Local);
+            YDB_LOG_WARN("THive::TTxStatus::Execute killing node due to bad status",
+                {"logPrefix", GetLogPrefix()},
+                {"status", static_cast<int>(status)},
+                {"nodeState", TNodeInfo::EVolatileStateName(node.GetVolatileState())},
+                {"nodeId", node.Id});
+            Self->KillNode(node.Id, Local, EHiveEventReason::BadStatus, TStringBuilder() << "status=" << static_cast<int>(status));
         }
         return true;
     }
 
     void Complete(const TActorContext&) override {
         TNodeId nodeId = Local.NodeId();
-        BLOG_D("THive::TTxStatus(" << nodeId << ")::Complete");
+        YDB_LOG_DEBUG("THive::TTxStatus::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", nodeId});
     }
 };
 

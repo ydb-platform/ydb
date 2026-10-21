@@ -32,6 +32,8 @@ namespace NKikimr {
 #undef DEFINE_TRACING_LEVELS
 
         enum : ui8 {
+            // Detalisation level that doesn't reach storage nodes
+            DynamicNodesOnly = 4,
             // The most verbose detalisation level used in production
             ProductionVerbose = 13,
             // The most verbose detalisation level
@@ -104,6 +106,13 @@ namespace NKikimr {
         };
     };
 
+    struct TWilsonBlobDepot {
+        enum {
+            AgentQuery = TComponentTracingLevels::TDistributedStorage::TopLevel,
+            AgentInternals = TComponentTracingLevels::TDistributedStorage::Basic,
+        };
+    };
+
     struct TWilsonTablet {
         enum {
             TabletTopLevel = TComponentTracingLevels::TTablet::TopLevel,
@@ -117,6 +126,13 @@ namespace NKikimr {
             RequestProxy = TComponentTracingLevels::TGrpcProxy::TopLevel,
             RequestActor = TComponentTracingLevels::TGrpcProxy::TopLevel,
             RequestCheckActor = TComponentTracingLevels::TGrpcProxy::Basic,
+        };
+    };
+
+    struct TWilsonQuoter {
+        enum {
+            QuoterService = TComponentTracingLevels::TGrpcProxy::TopLevel,
+            QuoterProxy = TComponentTracingLevels::TGrpcProxy::TopLevel,
         };
     };
 

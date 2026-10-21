@@ -1,20 +1,22 @@
-#include "yql_pq_provider_impl.h"
-#include "yql_pq_topic_key_parser.h"
+#include "yql_pq_datasource_constraints.h"
 #include "yql_pq_helpers.h"
+#include "yql_pq_provider_impl.h"
+#include "yql_pq_settings.h"
+#include "yql_pq_topic_key_parser.h"
 
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
-#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/provider/yql_provider.h>
-#include <yql/essentials/providers/common/transform/yql_lazy_init.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/transform/yql_lazy_init.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
@@ -23,17 +25,19 @@ using namespace NNodes;
 
 namespace {
 
-class TPqDataSourceProvider : public TDataProviderBase {
+class TPqDataSourceProvider: public TDataProviderBase {
 public:
     TPqDataSourceProvider(TPqState::TPtr state, IPqGateway::TPtr gateway)
         : State_(state)
         , Gateway_(gateway)
         , ConfigurationTransformer_([this]() {
-        return MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{ PqProviderName });
-    })
+            return MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{ PqProviderName });
+        })
         , LoadMetaDataTransformer_(CreatePqLoadTopicMetadataTransformer(State_))
         , TypeAnnotationTransformer_(CreatePqDataSourceTypeAnnotationTransformer(State_))
-        , IODiscoveryTransformer_(CreatePqIODiscoveryTransformer(State_)) {
+        , IODiscoveryTransformer_(CreatePqIODiscoveryTransformer(State_))
+        , ConstraintsTransformer_(CreatePqDataSourceConstraintTransformer(State_))
+    {
     }
 
     TStringBuf GetName() const override {
@@ -46,8 +50,7 @@ public:
                 auto clusterName = node.Child(1)->Content();
                 const auto& clusterSettings = State_->Configuration->ClustersConfigurationSettings;
                 if (clusterName != NCommon::ALL_CLUSTERS && !clusterSettings.FindPtr(clusterName)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() <<
-                        "Unknown cluster name: " << clusterName));
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() << "Unknown cluster name: " << clusterName));
                     return false;
                 }
                 cluster = clusterName;
@@ -82,6 +85,11 @@ public:
         return *TypeAnnotationTransformer_;
     }
 
+    IGraphTransformer& GetConstraintTransformer(bool instantOnly, bool subGraph) override {
+        Y_UNUSED(instantOnly, subGraph);
+        return *ConstraintsTransformer_;
+    }
+
     bool EnableDqSource() const {
         return !State_->IsRtmrMode();
     }
@@ -102,21 +110,28 @@ public:
         const TString cluster(read.DataSource().Cluster().Value());
         const auto* topicMeta = State_->FindTopicMeta(cluster, topicKeyParser.GetTopicPath());
         if (!topicMeta) {
-            ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Unknown topic `" << cluster << "`.`" << topicKeyParser.GetTopicPath() << "`"));
+            ctx.AddError(TIssue(
+                ctx.GetPosition(read.Pos()), TStringBuilder() << "Unknown topic `" << cluster << "`.`" << topicKeyParser.GetTopicPath() << "`"));
             return nullptr;
         }
 
         TVector<TCoNameValueTuple> sourceMetadata;
-        for (auto sysColumn : GetAllowedPqMetaSysColumns(
-                 State_->AddTransparentPrefixToTransparentSystemColumns,
-                 State_->EnableUserAttributesInTopicQuery))
-        {
-            sourceMetadata.push_back(Build<TCoNameValueTuple>(ctx, read.Pos())
-                .Name().Build("system")
-                .Value<TCoAtom>().Build(sysColumn)
-                .Done());
+        if (!State_->ForbidYqlSysColumnsAndSystemMetadata) {
+            for (auto sysColumn :
+                GetAllowedPqMetaSysColumns(State_->AddTransparentPrefixToTransparentSystemColumns, State_->EnableUserAttributesInTopicQuery))
+            {
+                sourceMetadata.push_back(
+                    Build<TCoNameValueTuple>(ctx, read.Pos()).Name().Build("system") .Value<TCoAtom>().Build(sysColumn) .Done());
+            }
         }
 
+        // Also register __ydb_-prefixed system columns
+        for (auto ydbColumn : GetAllowedYdbSysColumns(State_->EnableUserAttributesInTopicQuery)) {
+            sourceMetadata.push_back(
+                Build<TCoNameValueTuple>(ctx, read.Pos()).Name().Build("system") .Value<TCoAtom>().Build(ydbColumn) .Done());
+        }
+
+        // clang-format off
         auto topicNode = Build<TPqTopic>(ctx, read.Pos())
             .Cluster().Value(cluster).Build()
             .Database().Value(State_->Configuration->GetDatabaseForTopic(cluster)).Build()
@@ -125,6 +140,7 @@ public:
             .Props(BuildTopicPropsList(*topicMeta, read.Pos(), ctx))
             .Metadata().Add(sourceMetadata).Build()
             .Done();
+        // clang-format on
 
         TExprNode::TPtr columns = topicKeyParser.GetColumnOrder();
 
@@ -136,8 +152,8 @@ public:
         // csv: physical field order only as explicit atom list in userschema (third argument / tail), same as S3 ColumnOrder.
         if (format == "csv"sv) {
             if (!columns || !columns->IsList() || columns->ChildrenSize() == 0) {
-                ctx.AddError(TIssue(ctx.GetPosition(read.Pos()),
-                    "csv format requires SCHEMA with explicitly listed column names to determine column order"));
+                ctx.AddError(TIssue(
+                    ctx.GetPosition(read.Pos()), "csv format requires SCHEMA with explicitly listed column names to determine column order"));
                 return nullptr;
             }
         }
@@ -165,10 +181,7 @@ public:
         }
 
         if (!hasDateTimeFormat && !hasDateTimeFormatName) {
-            settings.Add<TExprList>()
-                .Add<TCoAtom>().Build("data.datetime.formatname")
-                .Add<TCoAtom>().Build("POSIX")
-                .Build();
+            settings.Add<TExprList>().Add<TCoAtom>().Build("data.datetime.formatname") .Add<TCoAtom>().Build("POSIX") .Build();
         }
 
         bool hasTimestampFormat = false;
@@ -192,22 +205,11 @@ public:
         }
 
         if (!hasTimestampFormat && !hasTimestampFormatName) {
-            settings.Add<TExprList>()
-                .Add<TCoAtom>().Build("data.timestamp.formatname")
-                .Add<TCoAtom>().Build("POSIX")
-                .Build();
+            settings.Add<TExprList>().Add<TCoAtom>().Build("data.timestamp.formatname") .Add<TCoAtom>().Build("POSIX") .Build();
         }
 
         if (auto dateFormat = topicKeyParser.GetDateFormat()) {
             settings.Add(std::move(dateFormat));
-        }
-
-        if (auto watermarkAdjustLateEvents = topicKeyParser.GetWatermarkAdjustLateEvents()) {
-            settings.Add(std::move(watermarkAdjustLateEvents));
-        }
-
-        if (auto watermarkDropLateEvents = topicKeyParser.GetWatermarkDropLateEvents()) {
-            settings.Add(std::move(watermarkDropLateEvents));
         }
 
         if (auto watermarkGranularity = topicKeyParser.GetWatermarkGranularity()) {
@@ -250,6 +252,7 @@ public:
             watermarkArg = Build<TCoVoid>(ctx, read.Pos()).Done().Ptr();
         }
 
+        // clang-format off
         auto builder = Build<TPqReadTopic>(ctx, read.Pos())
             .World(read.World())
             .DataSource(read.DataSource())
@@ -261,10 +264,9 @@ public:
             .Settings(settings.Done())
             .Watermark(std::move(watermarkArg))
             .UserSchemaColumns(std::move(userSchemaColumnsList));
+        // clang-format on
 
-        return Build<TCoRight>(ctx, read.Pos())
-            .Input(builder.Done())
-            .Done().Ptr();
+        return Build<TCoRight>(ctx, read.Pos()).Input(builder.Done()).Done().Ptr();
     }
 
     const THashMap<TString, TString>* GetClusterTokens() override {
@@ -318,6 +320,9 @@ public:
         TString sharedReading = properties.Value("shared_reading", "false");
         sharedReading.to_lower();
         cluster.SetSharedReading(sharedReading == "true"sv);
+        if (auto readingGroup = properties.FindPtr("shared_reading_group")) {
+            cluster.SetReadGroup(*readingGroup);
+        }
 
         State_->Configuration->AddCluster(cluster, State_->DatabaseIds, State_->Types->Credentials, State_->DbResolver, properties);
         Gateway_->AddCluster(cluster);
@@ -342,12 +347,13 @@ private:
     THolder<IGraphTransformer> LoadMetaDataTransformer_;
     THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     THolder<IGraphTransformer> IODiscoveryTransformer_;
+    const TAutoPtr<IGraphTransformer> ConstraintsTransformer_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway) {
     return new TPqDataSourceProvider(state, gateway);
 }
 
-} // namespace NYql
+}   // namespace NYql

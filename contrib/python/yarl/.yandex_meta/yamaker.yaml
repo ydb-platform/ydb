@@ -1,3 +1,6 @@
 mark_as_cython_c:
   - yarl/_helpers_c.pyx
   - yarl/_quoting_c.pyx
+exclude:
+  - tests/test_quoting_benchmarks.py
+  - tests/test_url_benchmarks.py

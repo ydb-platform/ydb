@@ -25,7 +25,7 @@ NApi::ITransactionPtr CreateTransaction(
     std::optional<TDuration> pingPeriod,
     std::optional<TStickyTransactionParameters> stickyParameters,
     i64 sequenceNumberSourceId,
-    TStringBuf capitalizedCreationReason);
+    TStringBuf creationReason);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -5,8 +5,7 @@
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -272,40 +271,43 @@ struct TCustomEquals: public TAggrEquals {
 #endif
 };
 
+template <i8 ScaleFactor>
 struct TDecimalEquals {
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
-        return NUdf::TUnboxedValuePod(NYql::NDecimal::IsEqual(left.GetInt128(), right.GetInt128()));
+    static NUdf::TUnboxedValuePod Execute(
+        const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+        return NUdf::TUnboxedValuePod(
+            NYql::NDecimal::IsEqual(left.GetInt128(), right.GetInt128(), ScaleFactor));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    static Value* Generate(
+        Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) {
         auto& context = ctx.Codegen.GetContext();
-        const auto l = GetterForInt128(left, block);
-        const auto r = GetterForInt128(right, block);
-        const auto good = NDecimal::GenIsComparable(l, context, block);
-        const auto eq = GenEqualsIntegral(l, r, block);
-        const auto res = BinaryOperator::CreateAnd(good, eq, "res", block);
-        return MakeBoolean(res, context, block);
+        const auto leftValue = GetterForInt128(left, block);
+        const auto rightValue = GetterForInt128(right, block);
+        const auto result = NDecimal::GenIsEqual(
+            leftValue, rightValue, ScaleFactor, /*aggregate=*/false, block);
+        return MakeBoolean(result, context, block);
     }
 #endif
 };
 
+template <i8 ScaleFactor>
 struct TDecimalAggrEquals: public TAggrEquals {
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
-        const auto l = left.GetInt128();
-        const auto r = right.GetInt128();
-        return NUdf::TUnboxedValuePod(l == r);
+    static NUdf::TUnboxedValuePod Execute(
+        const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+        return NUdf::TUnboxedValuePod(
+            NYql::NDecimal::IsEqual<true>(left.GetInt128(), right.GetInt128(), ScaleFactor));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    static Value* Generate(
+        Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) {
         auto& context = ctx.Codegen.GetContext();
-        const auto l = GetterForInt128(left, block);
-        const auto r = GetterForInt128(right, block);
-        const auto eq = GenEqualsIntegral(l, r, block);
-        return MakeBoolean(eq, context, block);
+        const auto result = NDecimal::GenIsEqual(
+            GetterForInt128(left, block), GetterForInt128(right, block),
+            ScaleFactor, /*aggregate=*/true, block);
+        return MakeBoolean(result, context, block);
     }
 #endif
 };
@@ -320,7 +322,6 @@ void RegisterEquals(IBuiltinFunctionRegistry& registry) {
     RegisterCompareBigDatetime<TDiffDateEquals, TCompareArgsOpt>(registry, name);
 
     RegisterCompareStrings<TCustomEquals, TCompareArgsOpt>(registry, name);
-    RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, TDecimalEquals, TCompareArgsOpt>(registry, name);
 
     const auto aggrName = "AggrEquals";
     RegisterAggrComparePrimitive<TEquals, TCompareArgsOpt>(registry, aggrName);
@@ -330,7 +331,7 @@ void RegisterEquals(IBuiltinFunctionRegistry& registry) {
     RegisterAggrCompareBigTzDatetime<TAggrTzDateEquals, TCompareArgsOpt>(registry, aggrName);
 
     RegisterAggrCompareStrings<TCustomEquals, TCompareArgsOpt>(registry, aggrName);
-    RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrEquals, TCompareArgsOpt>(registry, aggrName);
+    NDecimal::RegisterCompare<TDecimalEquals, TDecimalAggrEquals>(registry, name, aggrName);
 }
 
 void RegisterEquals(TKernelFamilyMap& kernelFamilyMap) {
@@ -344,5 +345,4 @@ void RegisterEquals(TKernelFamilyMap& kernelFamilyMap) {
     kernelFamilyMap["Equals"] = std::move(family);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

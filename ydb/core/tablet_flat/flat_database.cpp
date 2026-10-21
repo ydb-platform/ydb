@@ -342,7 +342,7 @@ void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUp
     RequireForUpdate(table)->Update(rop, key, ModifiedOps, Annex->Current(), rowVersion);
 }
 
-void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, ui64 txId)
+void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, ui64 txId, ui32 savepointSeqNum)
 {
     for (size_t index = 0; index < key.size(); ++index) {
         if (auto error = NScheme::HasUnexpectedValueSize(key[index])) {
@@ -370,8 +370,8 @@ void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const T
         //        avoid creating large objects when they are in deltas
     }
 
-    Redo->EvUpdateTx(table, rop, key, ModifiedOps, txId);
-    RequireForUpdate(table)->UpdateTx(rop, key, ModifiedOps, Annex->Current(), txId);
+    Redo->EvUpdateTx(table, rop, key, ModifiedOps, txId, savepointSeqNum);
+    RequireForUpdate(table)->UpdateTx(rop, key, ModifiedOps, Annex->Current(), txId, savepointSeqNum);
 }
 
 void TDatabase::LockRowTx(ui32 table, ELockMode mode, TRawVals key, ui64 txId)
@@ -778,7 +778,8 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
         NRedo::TWriter prefix{ };
 
         {
-            const ui32 head = ui32(ECompatibility::Head);
+            // Chunks with events unknown to older versions require a newer evolution to read
+            const ui32 head = Max(ui32(ECompatibility::Head), Redo->RequiredEvolution());
             const ui32 edge = ui32(ECompatibility::Edge);
 
             prefix.EvBegin(head, edge, Change->Serial, Change->Stamp);

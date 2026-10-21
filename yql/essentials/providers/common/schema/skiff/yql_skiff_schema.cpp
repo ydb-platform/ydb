@@ -39,10 +39,10 @@ struct TSkiffTypeLoader {
     }
 
     TMaybe<TType> LoadVoidType(ui32 /*level*/) {
-        return NYT::TNode()("wire_type", (NativeYTTypesFlags & NTCF_VOID) ? "nothing" : "yson32");
+        return NYT::TNode()("wire_type", "nothing");
     }
     TMaybe<TType> LoadNullType(ui32 /*level*/) {
-        return NYT::TNode()("wire_type", (NativeYTTypesFlags & NTCF_NULL) ? "nothing" : "yson32");
+        return NYT::TNode()("wire_type", "nothing");
     }
     TMaybe<TType> LoadUnitType(ui32 /*level*/) {
         ythrow yexception() << "Unsupported type: Unit";
@@ -214,8 +214,17 @@ struct TSkiffTypeLoader {
         ythrow yexception() << "Unsupported type: Stream";
     }
     TMaybe<TType> LoadOptionalType(TType itemType, ui32 level) {
-        if (!(NativeYTTypesFlags & NTCF_COMPLEX) && level > 1) {
-            return NYT::TNode()("wire_type", "yson32");
+        if (!(NativeYTTypesFlags & NTCF_COMPLEX)) {
+            if (level > 1) {
+                return NYT::TNode()("wire_type", "yson32");
+            }
+
+            // Intended data loss in order to
+            // keep backward compatibility with existing tables
+            const auto* wireType = itemType.IsMap() ? itemType.AsMap().FindPtr("wire_type") : nullptr;
+            if (wireType && wireType->IsString() && wireType->AsString() == "nothing") {
+                return itemType;
+            }
         }
         return NYT::TNode()("wire_type", "variant8")("children", NYT::TNode()
                                                                      .Add(NYT::TNode()("wire_type", "nothing"))

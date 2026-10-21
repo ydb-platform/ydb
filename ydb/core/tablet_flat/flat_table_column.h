@@ -16,15 +16,40 @@ namespace NTable {
         TColumn() = default;
 
         TColumn(const TString& name, TTag tag, NScheme::TTypeInfo type,
-            const TString& typeMod, bool notNull = false, bool isSensitive = false)
+            const TString& typeMod, bool notNull = false, bool isSensitive = false, bool setNotNullInProgress = false)
             : Id(tag)
             , PType(type)
             , PTypeMod(typeMod)
             , Name(name)
             , NotNull(notNull)
+            , SetNotNullInProgress(setNotNullInProgress)
             , IsSensitive(isSensitive)
         {
 
+        }
+
+        // Null may point into Storage, so a copy must re-point it into its own Storage
+        TColumn(const TColumn& other)
+        {
+            *this = other;
+        }
+
+        TColumn& operator=(const TColumn& other)
+        {
+            if (this != &other) {
+                Id = other.Id;
+                PType = other.PType;
+                PTypeMod = other.PTypeMod;
+                Name = other.Name;
+                Family = other.Family;
+                KeyOrder = other.KeyOrder;
+                Storage = other.Storage;
+                Null = Storage.empty() ? other.Null : TCell(Storage.data(), Storage.size());
+                NotNull = other.NotNull;
+                SetNotNullInProgress = other.SetNotNullInProgress;
+                IsSensitive = other.IsSensitive;
+            }
+            return *this;
         }
 
         void SetDefault(const TCell &null)
@@ -55,6 +80,7 @@ namespace NTable {
         TCell Null;
         TString Storage;
         bool NotNull = false;
+        bool SetNotNullInProgress = false;
         bool IsSensitive = false;
     };
 }

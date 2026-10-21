@@ -1,13 +1,24 @@
 from .. import _utilities
+from ... import issues
 
 
 class AsyncResponseContextIterator(_utilities.AsyncResponseIterator):
-    def __init__(self, it, wrapper, on_error=None):
+    """Async ExecuteQuery result stream."""
+
+    def __init__(self, it, wrapper, on_error=None, on_finish=None):
         super().__init__(it, wrapper)
         self._on_error = on_error
+        self._on_finish = on_finish
 
     async def __aenter__(self) -> "AsyncResponseContextIterator":
         return self
+
+    def cancel(self):
+        error = issues.Cancelled("Query stream was cancelled by client")
+        if self._on_error:
+            self._on_error(error)
+        self._call_on_finish(error)
+        return super().cancel()
 
     async def _next(self):
         try:
@@ -15,6 +26,7 @@ class AsyncResponseContextIterator(_utilities.AsyncResponseIterator):
         except StopAsyncIteration:
             # Normal stream termination is not an error and must not invalidate
             # the session.
+            self._call_on_finish()
             raise
         except BaseException as e:
             # BaseException (not Exception) because asyncio.CancelledError
@@ -25,7 +37,17 @@ class AsyncResponseContextIterator(_utilities.AsyncResponseIterator):
             # reply with SessionBusy.
             if self._on_error:
                 self._on_error(e)
+            self._call_on_finish(e)
             raise
+
+    def _call_on_finish(self, exception=None):
+        if self._on_finish is not None:
+            self._on_finish(exception)
+            self._on_finish = None
+        self._on_error = None
+
+    def __del__(self):
+        self._call_on_finish()
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         #  To close stream on YDB it is necessary to scroll through it to the end.
@@ -39,3 +61,4 @@ class AsyncResponseContextIterator(_utilities.AsyncResponseIterator):
                 pass
         except BaseException:
             pass
+        self._call_on_finish()

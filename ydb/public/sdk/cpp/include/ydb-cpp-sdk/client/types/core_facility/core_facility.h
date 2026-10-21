@@ -19,7 +19,7 @@ public:
     // Add task to execute periodicaly
     // Task should return false to stop execution
     virtual void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) = 0;
-    // Post task on SDK response executor.
+    // Post task on SDK response executor, never inline.
     virtual void PostToResponseQueue(TPostTaskCb&& f) = 0;
 };
 

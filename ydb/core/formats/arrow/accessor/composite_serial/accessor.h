@@ -24,6 +24,9 @@ protected:
     virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
         return GetLocalChunkedArray(std::nullopt, 0).GetArray()->VisitValues(visitor);
     }
+    virtual void DoVisitDistinctValues(const TValuesSimpleVisitor& visitor) const override {
+        return GetLocalChunkedArray(std::nullopt, 0).GetArray()->VisitDistinctValues(visitor);
+    }
     virtual ui32 DoGetNullsCount() const override {
         AFL_VERIFY(false);
         return 0;
@@ -73,12 +76,13 @@ public:
         AFL_VERIFY(Loader);
     }
 
-    TDeserializeChunkedArray(
-        const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, const TStringBuf data, const bool forLazyInitialization = false)
+    TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, const TStringBuf data,
+        const bool forLazyInitialization = false, std::shared_ptr<IAdditionalAccessorData> additionalAccessorData = nullptr)
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
         , Loader(loader)
         , DataBuffer(data)
         , ForLazyInitialization(forLazyInitialization)
+        , AdditionalAccessorData(std::move(additionalAccessorData))
     {
         AFL_VERIFY(Loader);
     }

@@ -99,7 +99,7 @@ public:
         }
         logEntry["imports"] = std::move(importsJson);
         logEntry["functions"] = std::move(fnsJson);
-        sb << NJson::WriteJson(logEntry, false) << "\n";
+        sb << NJson::WriteJson(logEntry, /*formatOutput=*/false) << "\n";
         Out_ << TString(sb);
         return result;
     }
@@ -126,7 +126,7 @@ public:
             LogImport(importsJson, e);
         }
         logEntry["imports"] = std::move(importsJson);
-        sb << NJson::WriteJson(logEntry, false) << "\n";
+        sb << NJson::WriteJson(logEntry, /*formatOutput=*/false) << "\n";
         Out_ << TString(sb);
         return result;
     }

@@ -15,8 +15,15 @@ struct TEvThroughputAddRequest : public TEventLocal<TEvThroughputAddRequest, TEv
     {}
 };
 
+struct TEvSetProxyDormant : public TEventLocal<TEvSetProxyDormant, TEvBlobStorage::EvSetProxyDormant> {
+    bool IsDormant;
+
+    explicit TEvSetProxyDormant(bool isDormant)
+        : IsDormant(isDormant)
+    {}
+};
+
 IActor* CreateBlobStorageGroupProxyMon(TIntrusivePtr<TBlobStorageGroupProxyMon> mon, ui32 groupId,
-        TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId);
+        TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId, bool isDormant = false);
 
 } // NKikimr
-

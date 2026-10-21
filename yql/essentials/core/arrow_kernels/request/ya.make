@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     request.cpp
@@ -12,8 +12,6 @@ PEERDIR(
     yql/essentials/sql
     yql/essentials/public/langver
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(request.h)
 

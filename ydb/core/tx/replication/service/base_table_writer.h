@@ -12,13 +12,26 @@ namespace NKikimrTxDataShard {
     class TEvApplyReplicationChanges_TChange;
 }
 
+namespace NKikimrReplication {
+    class TSchemaChange;
+    class TLocalTableWriterSettings;
+}
+
 namespace NKikimr::NReplication::NService {
 
 class IChangeRecordParser {
 public:
+    enum class ESchemaChangeResult {
+        NotSchemaChange,
+        SchemaChange,
+        Error,
+    };
+
     virtual ~IChangeRecordParser() = default;
     virtual void SetSchema(TLightweightSchema::TCPtr schema) = 0;
     virtual NChangeExchange::IChangeRecord::TPtr Parse(const TString& source, ui64 id, TString&& body) = 0;
+    virtual ESchemaChangeResult ParseSchemaChange(const NChangeExchange::IChangeRecord& record,
+        NKikimrReplication::TSchemaChange& schema, TString& error) const = 0;
 };
 
 class IChangeRecordSerializer {
@@ -34,6 +47,7 @@ IActor* CreateLocalTableWriter(
     THolder<IChangeRecordParser>&& parser,
     THolder<IChangeRecordSerializer>&& serializer,
     std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn,
-    EWriteMode mode = EWriteMode::Simple);
+    EWriteMode mode = EWriteMode::Simple,
+    const NKikimrReplication::TLocalTableWriterSettings* settings = nullptr);
 
 }

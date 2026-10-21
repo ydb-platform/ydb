@@ -314,5 +314,21 @@ TEST_F(TSuspendableInvokerTest, VerifySerializedActionsOrder)
     EXPECT_EQ(reorderingCount, 0);
 }
 
+TEST_F(TSuspendableInvokerTest, CurrentInvoker)
+{
+    auto invoker = CreateSuspendableInvoker(Queue1->GetInvoker());
+
+    auto future = BIND([&] {
+        EXPECT_EQ(invoker.Get(), GetCurrentInvoker());
+        // The invoker must remain current across a context switch.
+        Yield();
+        EXPECT_EQ(invoker.Get(), GetCurrentInvoker());
+    })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitUntilSet(future);
+}
+
 } // namespace
 } // namespace NYT::NConcurrency

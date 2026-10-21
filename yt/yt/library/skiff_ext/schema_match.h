@@ -2,11 +2,11 @@
 
 #include "public.h"
 
-#include <yt/yt/core/misc/property.h>
-
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/public.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <library/cpp/skiff/skiff_schema.h>
 
@@ -14,10 +14,10 @@ namespace NYT::NSkiffExt {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-extern const TString SparseColumnsName;
-extern const TString OtherColumnsName;
-extern const TString KeySwitchColumnName;
-extern const TString RemainingRowBytesColumnName;
+extern const std::string SparseColumnsName;
+extern const std::string OtherColumnsName;
+extern const std::string KeySwitchColumnName;
+extern const std::string RemainingRowBytesColumnName;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -26,20 +26,19 @@ DEFINE_ENUM(ERowRangeIndexMode,
     (IncrementalWithError)
 );
 
+DEFINE_ENUM(EOptionalKind,
+    (None)
+    (Variant8)
+);
+
 class TFieldDescription
 {
 public:
-    DEFINE_BYREF_RO_PROPERTY(TString, Name);
+    DEFINE_BYREF_RO_PROPERTY(std::string, Name);
     DEFINE_BYREF_RO_PROPERTY(std::shared_ptr<NSkiff::TSkiffSchema>, Schema);
 
 public:
-    TFieldDescription(TString name, std::shared_ptr<NSkiff::TSkiffSchema> schema);
-
-    bool IsRequired() const;
-    bool IsNullable() const;
-
-    NSkiff::EWireType ValidatedGetDeoptionalizeType(bool simplify) const;
-    std::optional<NSkiff::EWireType> GetDeoptionalizeType(bool simplify) const;
+    TFieldDescription(std::string name, std::shared_ptr<NSkiff::TSkiffSchema> schema);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -88,7 +87,16 @@ std::vector<std::shared_ptr<NSkiff::TSkiffSchema>> ParseSkiffSchemas(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::pair<std::shared_ptr<NSkiff::TSkiffSchema>, bool> DeoptionalizeSchema(std::shared_ptr<NSkiff::TSkiffSchema> skiffSchema);
+struct TStripOptionalResult
+{
+    NSkiff::TSkiffSchemaPtr StrippedSchema;
+    EOptionalKind OptionalKind;
+};
+
+TStripOptionalResult StripOptional(NSkiff::TSkiffSchemaPtr skiffSchema);
+
+bool MatchesOptionalSingular(NSkiff::TSkiffSchemaPtr skiffSchema);
+void ValidateDoesNotMatchOptionalSingular(NSkiff::TSkiffSchemaPtr skiffSchema);
 
 ////////////////////////////////////////////////////////////////////////////////
 

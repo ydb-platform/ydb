@@ -1,5 +1,7 @@
 #include "tx__set_down.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr::NHive {
 
 
@@ -10,6 +12,7 @@ TTxSetDown::TTxSetDown(TNodeId nodeId, bool down, TSelf* hive, TActorId source, 
     , Forward(forward)
     , Source(source)
     , Cookie(cookie)
+    , ReasonDetails(TStringBuilder() << "from=" << source)
 {}
 
 TTxType TTxSetDown::GetTxType() const { return NHive::TXTYPE_MON_SET_DOWN; }
@@ -17,7 +20,7 @@ TTxType TTxSetDown::GetTxType() const { return NHive::TXTYPE_MON_SET_DOWN; }
 bool TTxSetDown::SetDown(NIceDb::TNiceDb& db) {
     TNodeInfo* node = Self->FindNode(NodeId);
     if (node != nullptr) {
-        node->SetDown(Down);
+        node->SetDown(Down, Reason, ReasonDetails);
         db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(Down, false);
         if (Forward) {
             auto tenantHive = Self->GetPipeToTenantHive(node);
@@ -31,7 +34,15 @@ bool TTxSetDown::SetDown(NIceDb::TNiceDb& db) {
         }
         return true;
     }
-    return false;
+    // setting Down = false on a non-existent node is considered a no-op and thus successful
+    if (Down) {
+        return false;
+    } else {
+        if (Forward) {
+            SideEffects.Send(Source, new TEvHive::TEvSetDownReply(), 0, Cookie);
+        }
+        return true;
+    }
 }
 
 bool TTxSetDown::Execute(TTransactionContext& txc, const TActorContext&) {
@@ -46,8 +57,12 @@ bool TTxSetDown::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxSetDown::Complete(const TActorContext& ctx) {
-    BLOG_D("THive::TTxSetDown(" << NodeId << ")::Complete");
-    SideEffects.Complete(ctx);
+    YDB_LOG_DEBUG("THive::TTxSetDown::Complete setting node down state",
+        {"logPrefix", GetLogPrefix()},
+        {"nodeId", NodeId},
+        {"down", Down},
+        {"SideEffects", SideEffects});
+    SideEffects.Complete(ctx, Self->Requests);
 }
 
 ITransaction* THive::CreateSetDown(TEvHive::TEvSetDown::TPtr& ev) {

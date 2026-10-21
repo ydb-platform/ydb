@@ -9,9 +9,9 @@ CREATE TABLE `<table_name>` (
         GLOBAL
         [SYNC]
         USING fulltext_plain | fulltext_relevance
-        ON ( <text_column> )
+        ON ( [<prefix_columns>,] <text_column> )
         [COVER ( <cover_columns> )]
-        [WITH ( <parameter_name> = <parameter_value>[, ...])]
+        WITH ( <parameter_name> = <parameter_value>[, ...])
     [,   ...]
 )
 ```
@@ -20,7 +20,8 @@ CREATE TABLE `<table_name>` (
 
 * `<index_name>` - уникальное имя индекса для доступа к данным
 * `SYNC` - указывает на синхронную запись данных в индекс. Это единственная доступная на данный момент опция, явно указывать не обязательно.
-* `<text_column>` - одна колонка таблицы с текстовым содержимым (на данный момент поддерживается только одна индексируемая колонка)
+* `<prefix_columns>` - необязательные колонки фильтрации для [полнотекстового индекса с фильтрацией](../../../../dev/fulltext-indexes.md#filtered); в запросе требуется равенство для каждой колонки префикса
+* `<text_column>` - одна колонка типа `String` или `Utf8`, указанная последней в `ON`
 * `<cover_columns>` - список дополнительных колонок создаваемой таблицы, которые будут сохранены в индексе для возможности их извлечения без обращения к основной таблице
 * `<parameter_name>` и `<parameter_value>` - список параметров в формате ключ-значение:
 
@@ -45,6 +46,20 @@ CREATE TABLE articles (
     ),
     PRIMARY KEY (id)
 )
+```
+
+### Лемматизация для нескольких языков {#snowball}
+
+Готовый анализатор Snowball выполняет лемматизацию и позволяет искать формы английских и русских слов в одной текстовой колонке. В `language` можно перечислить несколько поддерживаемых языков через запятую, в том числе с пробелами:
+
+```yql
+CREATE TABLE documents (
+    id Uint64,
+    body Utf8,
+    PRIMARY KEY (id),
+    INDEX ft_idx GLOBAL USING fulltext_relevance ON (body)
+    WITH (analyzer="snowball", language="english, russian")
+);
 ```
 
 ### Пример с N-граммами

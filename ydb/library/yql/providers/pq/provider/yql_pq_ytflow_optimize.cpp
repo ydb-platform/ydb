@@ -1,21 +1,22 @@
 #include "yql_pq_ytflow_optimize.h"
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yt/yql/providers/ytflow/expr_nodes/yql_ytflow_expr_nodes.h>
 
 namespace NYql {
 
 using namespace NNodes;
 
-class TPqYtflowOptimization : public TEmptyYtflowOptimization {
+namespace {
+
+class TPqYtflowOptimization: public TEmptyYtflowOptimization {
 public:
-    TPqYtflowOptimization(const TPqState::TPtr& state)
+    explicit TPqYtflowOptimization(const TPqState::TPtr& state)
         : State_(state.Get())
     {
     }
 
-    TExprNode::TPtr ApplyExtractMembers(
-        const TExprNode::TPtr& read, const TExprNode::TPtr& members, TExprContext& ctx
-    ) override {
+    TExprNode::TPtr ApplyExtractMembers(const TExprNode::TPtr& read, const TExprNode::TPtr& members, TExprContext& ctx) override {
         auto maybeReadTopic = TMaybeNode<TPqReadTopic>(read);
         if (!maybeReadTopic) {
             return read;
@@ -31,9 +32,7 @@ public:
         TVector<const TItemExprType*> extractedMemberTypes;
         for (auto* memberType : rowSpecType->Cast<TStructExprType>()->GetItems()) {
             if (membersSet.contains(memberType->GetName())) {
-                columns.push_back(Build<TCoAtom>(ctx, read->Pos())
-                    .Value(memberType->GetName())
-                    .Done());
+                columns.push_back(Build<TCoAtom>(ctx, read->Pos()).Value(memberType->GetName()).Done());
                 extractedMemberTypes.push_back(memberType);
             }
         }
@@ -49,6 +48,7 @@ public:
 
         auto userSchemaColumnsNode = Build<TCoVoid>(ctx, read->Pos()).Done().Ptr();
 
+        // clang-format off
         return Build<TPqReadTopic>(ctx, read->Pos())
             .InitFrom(maybeReadTopic.Cast())
             .Topic<TPqTopic>()
@@ -61,6 +61,7 @@ public:
                 .Build()
             .UserSchemaColumns(std::move(userSchemaColumnsNode))
             .Done().Ptr();
+        // clang-format on
     }
 
     TExprNode::TPtr ApplyUnordered(const TExprNode::TPtr& read, TExprContext& ctx) override {
@@ -69,11 +70,7 @@ public:
             return read;
         }
 
-        return Build<TCoUnordered>(ctx, read->Pos())
-            .Input<TPqReadTopic>()
-                .InitFrom(maybeReadTopic.Cast())
-                .Build()
-            .Done().Ptr();
+        return Build<TPqReadTopic>(ctx, read->Pos()).InitFrom(maybeReadTopic.Cast()).Done().Ptr();
     }
 
     TExprNode::TPtr TrimWriteContent(const TExprNode::TPtr& write, TExprContext& ctx) override {
@@ -85,6 +82,7 @@ public:
         auto listType = maybeWriteTopic.Cast().Input().Ref().GetTypeAnn();
         auto* itemType = listType->Cast<TListExprType>()->GetItemType();
 
+        // clang-format off
         return Build<TPqWriteTopic>(ctx, write->Pos())
             .InitFrom(maybeWriteTopic.Cast())
             .Input<TYtflowReadStub>()
@@ -92,15 +90,18 @@ public:
                 .ItemType(ExpandType(TPositionHandle{}, *itemType, ctx))
                 .Build()
             .Done().Ptr();
+        // clang-format on
     }
 
 private:
     TPqState* State_;
 };
 
+}   // anonymous namespace
+
 THolder<IYtflowOptimization> CreatePqYtflowOptimization(const TPqState::TPtr& state) {
     YQL_ENSURE(state);
     return MakeHolder<TPqYtflowOptimization>(state);
 }
 
-} // namespace NYql
+}   // namespace NYql

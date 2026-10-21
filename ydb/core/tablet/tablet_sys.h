@@ -2,6 +2,7 @@
 #include "defs.h"
 #include "tablet_impl.h"
 #include "tablet_setup.h"
+#include <ydb/core/base/tablet_history_cutter.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -222,6 +223,7 @@ class TTablet : public TActor<TTablet> {
     TIntrusivePtr<TTabletStorageInfo> Info;
     TIntrusivePtr<TTabletSetupInfo> SetupInfo;
     ui32 SuggestedGeneration;
+    ui32 ActualGeneration;
     bool NeedCleanupOnLockedPath;
     ui32 GcCounter;
     THolder<NTabletPipe::IConnectAcceptor> PipeConnectAcceptor;
@@ -241,6 +243,22 @@ class TTablet : public TActor<TTablet> {
     TBackoffTimer GcBackoffTimer;
     bool GcPendingRetry;
     ui32 GcFailCount;
+
+    enum class ECutHistoryStatus {
+        None,
+        SentBarrier,
+        Cut,
+    };
+
+    THistoryCutter HistoryCutter;
+    ECutHistoryStatus CutHistoryStatus = ECutHistoryStatus::None;
+    bool WantCutHistoryAfterGc = false;
+
+    void SeenBlobForCutHistory(const TLogoBlobID& blob);
+    void FeedCutHistoryFromGraph(const TEvTablet::TDependencyGraph* graph);
+    void SendBarriersForCutHistory();
+    void SendCutTabletHistory();
+    void TryCutHistoryAfterGc();
 
     TEvTablet::TEvGcForStepAckRequest::TPtr GcForStepAckRequest;
     TResourceProfilesPtr ResourceProfiles;
@@ -304,7 +322,7 @@ class TTablet : public TActor<TTablet> {
 
     ui64 TabletID() const;
 
-    void ReportTabletStateChange(ETabletState state);
+    void ReportTabletStateChange(ETabletState state, ui32 generation);
     void PromoteToCandidate(ui32 gen);
     void TabletBlockBlobStorage();
     void TabletRebuildGraph();

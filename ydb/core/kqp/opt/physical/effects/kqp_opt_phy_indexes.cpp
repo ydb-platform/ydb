@@ -1,4 +1,5 @@
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include "kqp_opt_phy_effects_impl.h"
 
 namespace NKikimr::NKqp::NOpt {
@@ -113,6 +114,7 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
             TIntrusivePtr<TKikimrTableMetadata> implTable = table.Metadata->ImplTables[i];
             switch (index.Type) {
                 case TIndexDescription::EType::GlobalJson:
+                case TIndexDescription::EType::GlobalFulltextPlain:
                 case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalAsync:
                 case TIndexDescription::EType::GlobalSyncUnique: {
@@ -121,21 +123,20 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
                     result.emplace_back(indexTable, &index);
                     break;
                 }
-                case TIndexDescription::EType::GlobalFulltextPlain:
                 case TIndexDescription::EType::GlobalFulltextRelevance: {
-                    const bool withRelevance = index.Type == TIndexDescription::EType::GlobalFulltextRelevance;
-                    if (withRelevance) {
-                        while (implTable && !implTable->Name.EndsWith(NKikimr::NTableIndex::ImplTable)) {
-                            implTable = implTable->Next;
-                        }
-                        YQL_ENSURE(implTable);
-                    } else {
-                        YQL_ENSURE(!implTable->Next);
+                    while (implTable && !implTable->Name.EndsWith(NKikimr::NTableIndex::ImplTable)) {
+                        implTable = implTable->Next;
                     }
+                    YQL_ENSURE(implTable);
                     auto indexTable = tableBuilder(*implTable, pos, ctx).Ptr();
                     result.emplace_back(indexTable, &index);
                     break;
                 }
+                case TIndexDescription::EType::GlobalFulltextCompact:
+                case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+                case TIndexDescription::EType::GlobalJsonCompact:
+                    // Compact indexes are always updated by the sink (KqpWriteActor)
+                    continue;
                 case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                     if (index.KeyColumns.size() == 1) {
                         YQL_ENSURE(implTable->Next && !implTable->Next->Next);

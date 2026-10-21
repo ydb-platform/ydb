@@ -1,10 +1,10 @@
 #pragma once
 #include "config.h"
 
-#include <ydb/core/tx/conveyor/service/service.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NConveyor {
@@ -35,6 +35,8 @@ class TServiceOperatorImpl {
 private:
     using TSelf = TServiceOperatorImpl<TConveyorPolicy>;
     std::atomic<bool> IsEnabledFlag = false;
+
+public:
     static void Register(const TConfig& serviceConfig) {
         Singleton<TSelf>()->IsEnabledFlag = serviceConfig.IsEnabled();
     }
@@ -42,8 +44,6 @@ private:
         Y_ABORT_UNLESS(TConveyorPolicy::Name.size() == 4);
         return TConveyorPolicy::Name;
     }
-
-public:
     static void AsyncTaskToExecute(const std::shared_ptr<ITask>& task) {
         auto& context = NActors::TActorContext::AsActorContext();
         context.Register(new TAsyncTaskExecutor(task));
@@ -67,10 +67,6 @@ public:
     }
     static NActors::TActorId MakeServiceId(const ui32 nodeId) {
         return NActors::TActorId(nodeId, "SrvcConv" + GetConveyorName());
-    }
-    static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals) {
-        Register(config);
-        return new TDistributor(config, GetConveyorName(), TConveyorPolicy::EnableProcesses, conveyorSignals);
     }
     static TProcessGuard StartProcess(const ui64 externalProcessId, const TCPULimitsConfig& cpuLimits) {
         if (TSelf::IsEnabled() && NActors::TlsActivationContext) {

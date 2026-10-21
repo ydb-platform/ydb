@@ -25,7 +25,7 @@ void WriteTzNative(NCommon::TOutputBuf& buf, typename NUdf::TDataType<T>::TLayou
     buf.WriteMany((const char*)&tzId, sizeof(tzId));
 }
 
-// yt native table format (string with presorted timestamp concatenated with timezone name)
+// yt native table format (string with presorted timestamp concatenated with presorted timezone id)
 // only tzId is validated
 template<typename T>
 bool ReadTzTableNative(NCommon::TInputBuf& buf, typename NUdf::TDataType<T>::TLayout& value, ui16& tzId) {
@@ -33,7 +33,7 @@ bool ReadTzTableNative(NCommon::TInputBuf& buf, typename NUdf::TDataType<T>::TLa
     using TLayout = NUdf::TDataType<T>::TLayout;
 
     TStringBuf str = buf.ReadYtString();
-    if (str.size() < sizeof(value)) {
+    if (str.size() != sizeof(value) + sizeof(tzId)) {
         return false;
     }
 
@@ -46,11 +46,9 @@ bool ReadTzTableNative(NCommon::TInputBuf& buf, typename NUdf::TDataType<T>::TLa
     value = (TLayout)SwapBytes(data);
 
     str.Skip(sizeof(data));
-    if (auto maybeTzId = NKikimr::NMiniKQL::FindTimezoneId(str)) {
-        tzId = *maybeTzId;
-        return true;
-    }
-    return false;
+    std::memcpy(&tzId, str.data(), sizeof(tzId));
+    tzId = SwapBytes(tzId);
+    return NKikimr::NMiniKQL::IsValidTimezoneId(tzId);
 }
 
 template<typename T>
@@ -63,13 +61,12 @@ void WriteTzTableNative(NCommon::TOutputBuf& buf, typename NUdf::TDataType<T>::T
         data = 0x80 ^ data;
     }
 
-    auto tzName = NKikimr::NMiniKQL::GetTimezoneIANAName(tzId);
-
-    ui32 size = sizeof(data) + tzName.size();;
+    ui32 size = sizeof(data) + sizeof(tzId);
     buf.Write(NYson::NDetail::StringMarker);
     buf.WriteVarI32(size);
     buf.WriteMany((const char*)&data, sizeof(data));
-    buf.WriteMany(tzName);
+    tzId = SwapBytes(tzId);
+    buf.WriteMany((const char*)&tzId, sizeof(tzId));
 }
 
 namespace {

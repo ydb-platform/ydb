@@ -218,6 +218,31 @@ class GenericSpecificationBaseTests(unittest.TestCase):
         with _Monkey(interface, implementedBy=_implementedBy):
             self.assertFalse(sb.implementedBy(object()))
 
+    def test_isOrExtends_raises_TypeError_for_unhashable_iface(self):
+        from zope.interface import Interface
+
+        class IFoo(Interface):
+            pass
+
+        class Unhashable:
+            __hash__ = None
+
+        with self.assertRaises(TypeError):
+            IFoo.isOrExtends(Unhashable())
+
+    def test_isOrExtends_propagates_MemoryError_from_hash_iface(self):
+        from zope.interface import Interface
+
+        class IFoo(Interface):
+            pass
+
+        class BadHash:
+            def __hash__(self):
+                raise MemoryError("hash bomb")
+
+        with self.assertRaises(MemoryError):
+            IFoo.isOrExtends(BadHash())
+
 
 class SpecificationBaseTests(
     GenericSpecificationBaseTests,
@@ -255,6 +280,27 @@ class SpecificationBasePyTests(GenericSpecificationBaseTests):
         testing = object()
         sb._implied = {testing: {}}  # not defined by SpecificationBasePy
         self.assertTrue(sb(testing))
+
+    def test_isOrExtends_raises_TypeError_for_unhashable(self):
+        sb = self._makeOne()
+        sb._implied = {}
+
+        class Unhashable:
+            __hash__ = None
+
+        with self.assertRaises(TypeError):
+            sb.isOrExtends(Unhashable())
+
+    def test_isOrExtends_propagates_MemoryError_from_hash(self):
+        sb = self._makeOne()
+        sb._implied = {}
+
+        class BadHash:
+            def __hash__(self):
+                raise MemoryError("hash bomb")
+
+        with self.assertRaises(MemoryError):
+            sb.isOrExtends(BadHash())
 
     def test_implementedBy_hit(self):
         from zope.interface import interface

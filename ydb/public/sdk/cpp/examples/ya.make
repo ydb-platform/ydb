@@ -1,4 +1,5 @@
 RECURSE(
+    auth/oidc
     auth/ssa_delegation
     basic_example
     bulk_upsert_simple
@@ -9,6 +10,7 @@ RECURSE(
     secondary_index
     secondary_index_builtin
     time
+    topic_deferred_publish
     topic_reader
     topic_writer/transaction
     topic_writer/producer/basic_write

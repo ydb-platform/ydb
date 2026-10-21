@@ -307,20 +307,20 @@ class TestSize(Enum):
 
     MaxRequirements = {
         Small: {
-            TestRequirements.Cpu: 4,
+            TestRequirements.Cpu: 6,
             TestRequirements.Ram: 32,
             # TestRequirements.Ram: 4,
             TestRequirements.RamDisk: 32,
         },
         Medium: {
-            TestRequirements.Cpu: 4,
+            TestRequirements.Cpu: 6,
             # TestRequirements.Cpu: 8,
             TestRequirements.Ram: 32,
             # TestRequirements.Ram: 16,
             TestRequirements.RamDisk: 32,
         },
         Large: {
-            TestRequirements.Cpu: 4,
+            TestRequirements.Cpu: 6,
             TestRequirements.Ram: 32,
             TestRequirements.RamDisk: 32,
         },
@@ -461,6 +461,7 @@ class CppLinterName(Enum):
     ClangFormatYT = "clang_format_yt"
     ClangFormat15 = "clang_format_15"
     ClangFormat18Vanilla = "clang_format_18_vanilla"
+    ClangFormat18UserSessions = "clang_format_18_user_sessions"
     RussianStrings = "russian_strings"
 
 
@@ -508,6 +509,7 @@ LINTER_CONFIG_TYPES = {
     CppLinterName.ClangFormat: ((".clang-format",),),
     CppLinterName.ClangFormat15: ((".clang-format",),),
     CppLinterName.ClangFormat18Vanilla: ((".clang-format",),),
+    CppLinterName.ClangFormat18UserSessions: ((".clang-format",),),
     CppLinterName.ClangFormatYT: ((".clang-format",),),
     PythonLinterName.Black: (("pyproject.toml",),),
     PythonLinterName.Ruff: (("pyproject.toml",), ("ruff.toml",)),

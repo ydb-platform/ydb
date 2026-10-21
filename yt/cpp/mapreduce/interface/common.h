@@ -459,6 +459,8 @@ enum EErasureCodecAttr : i8
     EC_REED_SOLOMON_6_3_ATTR    /* "reed_solomon_6_3" */,
     EC_LRC_12_2_2_ATTR          /* "lrc_12_2_2" */,
     EC_ISA_LRC_12_2_2_ATTR      /* "isa_lrc_12_2_2" */,
+    EC_ISA_REED_SOLOMON_6_3_ATTR    /* "isa_reed_solomon_6_3" */,
+    EC_ISA_REED_SOLOMON_3_3_ATTR    /* "isa_reed_solomon_3_3" */,
     /// @endcond
 };
 
@@ -1321,6 +1323,38 @@ struct TMultiTablePartitions
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/// Byte range of a file, offsets are uncompressed bytes.
+struct TFileReadRange
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TFileReadRange;
+    /// @endcond
+
+    FLUENT_FIELD_DEFAULT(i64, Begin, 0);
+
+    /// If missing, the range extends to the end of file.
+    FLUENT_FIELD_OPTION(i64, End);
+};
+
+/// Description of a file partition.
+struct TFilePartition
+{
+    /// Partition cookie that can be passed to @ref NYT::IClientBase::CreateFilePartitionReader
+    TString Cookie;
+
+    /// Partition length in bytes.
+    i64 Length = 0;
+};
+
+/// File partitions from GetFilePartitions command.
+struct TFilePartitions
+{
+    /// Partitions are listed in the order of the requested ranges, one per range.
+    TVector<TFilePartition> Partitions;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 ///
 /// @brief Contains information about tablet
 ///
@@ -1401,8 +1435,6 @@ namespace NDetail {
 // MUST NOT BE USED BY CLIENTS
 // TODO: we should use default GENERATE_ENUM_SERIALIZATION
 TString ToString(EValueType type);
-
-TMutationId GenerateMutationId();
 
 } // namespace NDetail
 /// @endcond

@@ -1,22 +1,27 @@
 #include "kqp_compute.h"
 #include "kqp_stream_lookup_join_helpers.h"
-#include "kqp_fulltext_analyze.h"
 
+#include <ydb/core/kqp/runtime/streaming/kqp_streaming_aggregation.h>
+
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
-#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/public/udf/udf_terminator.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TComputationNodeFactory GetKqpBaseComputeFactory(const TKqpComputeContextBase* computeCtx) {
-    return NYql::NDq::GetDqBaseComputeFactory(computeCtx);
+    return [baseFactory = NYql::NDq::GetDqBaseComputeFactory(computeCtx), computeCtx](TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+        if (callable.GetType()->GetName() == "KqpStreamingAggregation") {
+            return WrapKqpStreamingAggregation(callable, ctx, *computeCtx);
+        }
+        return baseFactory(callable, ctx);
+    };
 }
 
 namespace {
@@ -152,7 +157,7 @@ public:
 
         bool OmitRowLeftJoin(TState& state, ui64 header, bool isNull) {
 
-            auto cookie = NKqp::TStreamLookupJoinRowCookie::Decode(header);
+            auto cookie = NKqp::TStreamLookupJoinRowCookie::Decode(header, Self->CookieFormatVersion);
 
             if (cookie.LastRow) {
                 // if row is the first and last row in the sequence at the same time
@@ -215,7 +220,7 @@ public:
             // Decode metadata from the row header
             // Contains information about the position of this right row in the sequence
             // of potential matches for the current left row
-            auto meta = NKqp::TStreamLookupJoinRowCookie::Decode(rowMeta);
+            auto meta = NKqp::TStreamLookupJoinRowCookie::Decode(rowMeta, Self->CookieFormatVersion);
 
             // Case 1: Right row is NULL (didn't pass filters) AND this isn't the last potential match
             // We need to wait for more potential matches before making a final decision
@@ -283,7 +288,7 @@ public:
             //
             // Even though we're processing a single logical right row, the lookup might return
             // multiple related rows that need to be considered as a group for semi-join semantics
-            auto meta = NKqp::TStreamLookupJoinRowCookie::Decode(rowMeta);
+            auto meta = NKqp::TStreamLookupJoinRowCookie::Decode(rowMeta, Self->CookieFormatVersion);
 
             // Optimization for single-row sequences from lookup:
             // If a row is both the first and last in its sequence, it's a complete unit
@@ -394,7 +399,8 @@ public:
 
 public:
     TKqpIndexLookupJoinWrapper(TComputationMutables& mutables, IComputationNode* inputNode,
-        EJoinKind joinType, TVector<ui32>&& leftColumnsIndices, TVector<ui32>&& rightColumnsIndices)
+        EJoinKind joinType, TVector<ui32>&& leftColumnsIndices, TVector<ui32>&& rightColumnsIndices,
+        ui32 cookieFormatVersion)
         : TMutableComputationNode<TKqpIndexLookupJoinWrapper>(mutables)
         , InputNode(inputNode)
         , JoinType(joinType)
@@ -402,6 +408,7 @@ public:
         , RightColumnsIndices(std::move(rightColumnsIndices))
         , ResultRowCache(mutables)
         , StateIndex(mutables.CurValueIndex++)
+        , CookieFormatVersion(cookieFormatVersion)
     {
     }
 
@@ -421,6 +428,7 @@ private:
     const TVector<ui32> RightColumnsIndices;
     const TContainerCacheOnContext ResultRowCache;
     const ui32 StateIndex;
+    const ui32 CookieFormatVersion;
 };
 
 } // namespace
@@ -440,7 +448,14 @@ IComputationNode* WrapKqpEnsure(TCallable& callable, const TComputationNodeFacto
 }
 
 IComputationNode* WrapKqpIndexLookupJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
+    // The 5th arg (cookie format version) is optional: legacy programs omit it and
+    // default to version 0. See NKqp::StreamLookupJoinCookieVersion* in the helpers.
+    MKQL_ENSURE(callable.GetInputsCount() == 4 || callable.GetInputsCount() == 5, "Expected 4 or 5 args");
+
+    ui32 cookieFormatVersion = 0;
+    if (callable.GetInputsCount() == 5) {
+        cookieFormatVersion = AS_VALUE(TDataLiteral, callable.GetInput(4))->AsValue().Get<ui32>();
+    }
 
     auto inputNode = LocateNode(ctx.NodeLocator, callable, 0);
     ui32 joinKind = AS_VALUE(TDataLiteral, callable.GetInput(1))->AsValue().Get<ui32>();
@@ -463,8 +478,7 @@ IComputationNode* WrapKqpIndexLookupJoin(TCallable& callable, const TComputation
         rightColumnsIndices[rightIndex] = resultIndex;
     }
 
-    return new TKqpIndexLookupJoinWrapper(ctx.Mutables, inputNode, GetJoinKind(joinKind), std::move(leftColumnsIndices), std::move(rightColumnsIndices));
+    return new TKqpIndexLookupJoinWrapper(ctx.Mutables, inputNode, GetJoinKind(joinKind), std::move(leftColumnsIndices), std::move(rightColumnsIndices), cookieFormatVersion);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

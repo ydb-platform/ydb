@@ -1,6 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
-/* syntax version 1 */
 $create = ($item, $_parent) -> {
     RETURN AsList($item);
 };

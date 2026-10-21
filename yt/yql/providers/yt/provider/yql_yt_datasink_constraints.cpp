@@ -35,7 +35,9 @@ public:
         AddHandler({TYtFill::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleFill));
         AddHandler({TYtTouch::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleTouch));
         AddHandler({TYtCreateTable::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDefault));
+        AddHandler({TYtCreateSymlink::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleCreateSymlink));
         AddHandler({TYtDropTable::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDefault));
+        AddHandler({TYtDropSymlink::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDefault));
         AddHandler({TYtCreateView::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDefault));
         AddHandler({TYtDropView::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDefault));
         AddHandler({TCoCommit::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleCommit));
@@ -45,7 +47,8 @@ public:
         AddHandler({TYtStatOut::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDefault));
         AddHandler({TYtDqProcessWrite ::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDqProcessWrite));
         AddHandler({TYtTryFirst ::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleTryFirst));
-        AddHandler({TYtMaterialize ::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleMaterialize));
+        AddHandler({TYtMaterialize::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleMaterialize));
+        AddHandler({TYtPersist::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandlePersist));
         AddHandler({TYtQLFilter::CallableName()}, Hndl(&TYtDataSinkConstraintTransformer::HandleDefault));
     }
 private:
@@ -326,6 +329,24 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleCreateSymlink(TExprBase input, TExprContext& ctx) {
+        Y_UNUSED(ctx);
+        if (SubGraph) {
+            return TStatus::Ok;
+        }
+
+        const auto create = input.Cast<TYtCreateSymlink>();
+        const TYtTableInfo linkInfo(create.Table());
+        if (const auto commitEpoch = linkInfo.CommitEpoch.GetOrElse(0)) {
+            auto& next = State_->TablesData->GetModifTable(
+                create.DataSink().Cluster().StringValue(), linkInfo.Name, commitEpoch);
+            next.ConstraintsReady = false;
+            next.Constraints = create.Target().Ref().GetConstraintSet();
+        }
+
+        return TStatus::Ok;
+    }
+
     TStatus HandlePublish(TExprBase input, TExprContext& ctx) {
         if (SubGraph) {
             return TStatus::Ok;
@@ -454,7 +475,27 @@ private:
     }
 
     TStatus HandleMaterialize(TExprBase input, TExprContext&) {
-        input.Ptr()->CopyConstraints(*input.Ref().Child(TYtMaterialize::idx_Input));
+        auto materialize = input.Cast<TYtMaterialize>();
+        const bool skipSort = NYql::HasSetting(materialize.Settings().Ref(), EYtSettingType::Unordered);
+        for (auto c: materialize.Input().Ref().GetAllConstraints()) {
+            if (!skipSort || c->GetName() != TSortedConstraintNode::Name()) {
+                input.Ptr()->AddConstraint(c);
+            }
+        }
+        return TStatus::Ok;
+    }
+
+    TStatus HandlePersist(TExprBase input, TExprContext&) {
+        auto persist = input.Cast<TYtPersist>();
+        const bool skipSort = NYql::HasSetting(persist.Settings().Ref(), EYtSettingType::Unordered);
+        for (auto c: persist.Output().Item(0).Ref().GetAllConstraints()) {
+            if (!skipSort || c->GetName() != TSortedConstraintNode::Name()) {
+                input.Ptr()->AddConstraint(c);
+            }
+        }
+        if (auto empty = persist.Input().Item(0).Ref().GetConstraint<TEmptyConstraintNode>()) {
+            input.Ptr()->AddConstraint(empty);
+        }
         return TStatus::Ok;
     }
 

@@ -37,6 +37,46 @@ Y_UNIT_TEST(ConsumerNotExists) {
     UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SCHEME_ERROR);
 }
 
+Y_UNIT_TEST(DescribeEmptyTopic) {
+    auto setup = CreateSetup();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+    auto& runtime = setup->GetRuntime();
+    CreateDescriberActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer"
+    });
+
+    auto result = GetDescribeResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_UNEQUAL(result->TopicCreated, TInstant::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(result->ApproximateMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(result->ApproximateDelayedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(result->ApproximateLockedMessageCount, 0);
+}
+
+Y_UNIT_TEST(UnauthorizedDescriber) {
+    auto setup = CreateSetup();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+    NACLib::TDiffACL acl;
+    acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1@staff");
+    ModifyTopicAcl(*setup, "topic1", acl);
+
+    auto& runtime = setup->GetRuntime();
+    CreateDescriberActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .UserToken = MakeIntrusiveConst<NACLib::TUserToken>("bad-user@staff", TVector<TString>{}),
+    });
+
+    auto result = GetDescribeResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SCHEME_ERROR);
+    UNIT_ASSERT(!result->ErrorDescription.empty());
+}
+
 Y_UNIT_TEST(DescribeTest) {
     auto setup = CreateSetup();
 

@@ -1,12 +1,13 @@
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
-#include <ydb/core/formats/arrow/accessor/dictionary/additional_data.h>
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -58,14 +59,14 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             auto slice = std::static_pointer_cast<TDictionaryArray>(dict->ISlice(5, 3));
             AFL_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
             AFL_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([[null,"ab",null]])");
-            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"(["ab"])");
+            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"(["ab",null])");
             AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([null,0,null])");
         }
         {
             auto slice = std::static_pointer_cast<TDictionaryArray>(dict->ISlice(7, 2));
             AFL_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
             AFL_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([[null,null]])");
-            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"([])");
+            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"([null])");
             AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([null,null])");
         }
         {
@@ -104,6 +105,23 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([0,1])");
     }
 
+    Y_UNIT_TEST(SlicePreservesNullDictionaryEntry) {
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "Alpha");
+        builder.AddRecord(2, "Alpha");
+        auto arr = builder.Finish(3);
+        TChunkConstructionData info(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dictionary = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
+        UNIT_ASSERT_VALUES_EQUAL(dictionary->GetDictionary()->null_count(), 1);
+
+        auto slice = std::static_pointer_cast<TDictionaryArray>(dictionary->ISlice(1, 2));
+        UNIT_ASSERT_VALUES_EQUAL(slice->GetDictionary()->null_count(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(slice->GetPositions()->null_count(), 1);
+        UNIT_ASSERT(slice->IsNull(0));
+        UNIT_ASSERT(!slice->IsNull(1));
+    }
+
     Y_UNIT_TEST(Serialization) {
         TTrivialArray::TPlainBuilder builder;
         builder.AddRecord(0, "abc");
@@ -116,7 +134,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         TChunkConstructionData info(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
-        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         TChunkConstructionData infoWithMeta(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer(),
             std::nullopt, blobAndMeta.Meta);
@@ -142,7 +160,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         TChunkConstructionData info(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
-        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         const auto* dictData = dynamic_cast<const TDictionaryAccessorData*>(blobAndMeta.Meta.get());
         AFL_VERIFY(dictData);
         TString dictionaryBlobOnly(blobAndMeta.Blob.data(), dictData->DictionaryBlobSize);
@@ -175,7 +193,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         // Dictionary has 300 distinct values + null slot = 301 variants -> uint16 positions
         AFL_VERIFY(dict->GetPositions()->type()->id() == arrow::Type::UINT16);
 
-        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         const auto* dictData = dynamic_cast<const TDictionaryAccessorData*>(blobAndMeta.Meta.get());
         AFL_VERIFY(dictData);
         AFL_VERIFY(dictData->PositionsBlobSize > 0);
@@ -211,7 +229,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             ("numDistinct", numDistinct)("withNulls", withNulls)("expected", static_cast<int>(expectedPositionsType))("actual", static_cast<int>(dict->GetPositions()->type()->id()));
         AFL_VERIFY(dict->GetDictionary()->length() == numDistinct + (withNulls ? 1 : 0));
 
-        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         TChunkConstructionData infoWithMeta(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer(),
             std::nullopt, blobAndMeta.Meta);
@@ -239,5 +257,204 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
     }
     Y_UNIT_TEST(CornerCase256WithNulls) {
         RunCornerCaseVariants(256, true, arrow::Type::UINT16); // 257 variants -> uint16
+    }
+
+    // Low-cardinality column with nulls: records "abc","abcd","abcd",null,"abc",null,"ab",null,null,null.
+    // Distinct non-null values {ab, abc, abcd} => dictionary ["ab","abc","abcd", null-slot].
+    std::shared_ptr<TDictionaryArray> BuildSimpleDict() {
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "abc");
+        builder.AddRecord(1, "abcd");
+        builder.AddRecord(2, "abcd");
+        builder.AddRecord(4, "abc");
+        builder.AddRecord(6, "ab");
+        auto arr = builder.Finish(10);
+        TChunkConstructionData info(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        return std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
+    }
+
+    // VisitValues is the per-record view: it must reconstruct the full-length array (one entry per
+    // record, nulls in place, order preserved, duplicates present), NOT the deduplicated dictionary.
+    // This is what record-indexed callers (e.g. sub-column JSON path evaluation) rely on.
+    Y_UNIT_TEST(VisitValues) {
+        auto dict = BuildSimpleDict();
+        std::vector<std::shared_ptr<arrow::Array>> visited;
+        dict->VisitValues([&](std::shared_ptr<arrow::Array> arr) {
+            AFL_VERIFY(arr);
+            visited.emplace_back(arr);
+        });
+        AFL_VERIFY(visited.size() == 1)("size", visited.size());
+        AFL_VERIFY((ui32)visited[0]->length() == dict->GetRecordsCount())("len", visited[0]->length());
+        AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["abc","abcd","abcd",null,"abc",null,"ab",null,null,null])")(
+            "actual", PrepareToCompare(visited[0]->ToString()));
+        AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == PrepareToCompare(dict->GetChunkedArray()->chunk(0)->ToString()));
+    }
+
+    // VisitDistinctValues is the value-set view for set-membership indexing: it hands over the
+    // deduplicated dictionary directly (no reconstruction). The visited array holds each distinct value
+    // once (plus the trailing null slot) -- strictly shorter than the record count, and never a duplicate
+    // ("abcd" appears twice per record but once here).
+    Y_UNIT_TEST(VisitDistinctValues) {
+        auto dict = BuildSimpleDict();
+        std::vector<std::shared_ptr<arrow::Array>> visited;
+        dict->VisitDistinctValues([&](std::shared_ptr<arrow::Array> arr) {
+            AFL_VERIFY(arr);
+            visited.emplace_back(arr);
+        });
+        AFL_VERIFY(visited.size() == 1)("size", visited.size());
+        // Deduplicated: length == #distinct (+ null slot), strictly less than the record count.
+        AFL_VERIFY((ui32)visited[0]->length() < dict->GetRecordsCount())("len", visited[0]->length());
+        AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["ab","abc","abcd",null])")(
+            "actual", PrepareToCompare(visited[0]->ToString()));
+    }
+
+    void CheckVisitValuesWithoutNullsPreservesDataSize(const std::shared_ptr<IChunkedArray>& source) {
+        TChunkConstructionData info(
+            source->GetRecordsCount(), nullptr, source->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(source, info).DetachResult());
+
+        std::shared_ptr<arrow::Array> decoded;
+        dict->VisitValues([&](std::shared_ptr<arrow::Array> array) {
+            decoded = std::move(array);
+        });
+
+        AFL_VERIFY(!HasNulls(decoded));
+        AFL_VERIFY(GetArrayDataSize(decoded) == GetArrayDataSize(source->GetChunkedArray()->chunk(0)));
+    }
+
+    Y_UNIT_TEST(VisitValuesWithoutNullsPreservesStringDataSize) {
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "abc");
+        builder.AddRecord(1, "abcd");
+        builder.AddRecord(2, "abc");
+        CheckVisitValuesWithoutNullsPreservesDataSize(builder.Finish(3));
+    }
+
+    Y_UNIT_TEST(VisitValuesWithoutNullsPreservesBooleanDataSize) {
+        TTrivialArray::TPlainBuilder<arrow::BooleanType> builder;
+        builder.AddValue(0, true);
+        builder.AddValue(1, false);
+        builder.AddValue(2, true);
+        CheckVisitValuesWithoutNullsPreservesDataSize(builder.Finish(3));
+    }
+
+    Y_UNIT_TEST(NullDefaultUsesNullPositions) {
+        TChunkConstructionData info(3, nullptr, arrow::utf8(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().ConstructDefault(info).DetachResult());
+
+        UNIT_ASSERT_VALUES_EQUAL(dict->GetPositions()->null_count(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(dict->GetNullsCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(dict->GetDictionary()->length(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dict->GetDictionary()->null_count(), 1);
+        for (ui32 i = 0; i < 3; ++i) {
+            UNIT_ASSERT(dict->IsNull(i));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(PrepareToCompare(dict->GetChunkedArray()->ToString()), R"([[null,null,null]])");
+    }
+
+    Y_UNIT_TEST(LegacyNullDefaultUsesReferencedNull) {
+        auto dictionary = TThreadSimpleArraysCache::GetNull(arrow::utf8(), 1);
+        auto positions = TThreadSimpleArraysCache::GetConst(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(0), 3);
+
+        const auto checkNulls = [](const std::shared_ptr<TDictionaryArray>& array) {
+            UNIT_ASSERT_VALUES_EQUAL(array->GetPositions()->null_count(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(array->GetDictionary()->null_count(), 1);
+            for (ui32 i = 0; i < 3; ++i) {
+                UNIT_ASSERT(array->IsNull(i));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(array->GetNullsCount(), 3);
+        };
+
+        auto legacy = std::make_shared<TDictionaryArray>(dictionary, positions);
+        checkNulls(legacy);
+
+        auto serializer = NSerialization::TSerializerContainer::GetDefaultSerializer();
+        TChunkConstructionData info(3, nullptr, arrow::utf8(), serializer);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(legacy, info);
+        TChunkConstructionData infoWithMeta(3, nullptr, arrow::utf8(), serializer, std::nullopt, blobAndMeta.Meta);
+        auto restored = std::static_pointer_cast<TDictionaryArray>(
+            NDictionary::TConstructor().DeserializeFromString(blobAndMeta.Blob, infoWithMeta).DetachResult());
+        checkNulls(restored);
+    }
+
+    Y_UNIT_TEST(SlicedSingleValueWithNullPositionsIsNotOneValue) {
+        TTrivialArray::TPlainBuilder<> dictionaryBuilder;
+        dictionaryBuilder.AddRecord(0, "Alpha");
+        dictionaryBuilder.AddNull(1);
+        TTrivialArray::TPlainBuilder<arrow::UInt8Type> positionsBuilder;
+        positionsBuilder.AddValue(0, 0);
+        positionsBuilder.AddNull(1);
+        positionsBuilder.AddValue(2, 0);
+
+        auto dictionary = std::make_shared<TDictionaryArray>(dictionaryBuilder.Finish(2)->GetChunkedArray()->chunk(0),
+                                                             positionsBuilder.Finish(3)->GetChunkedArray()->chunk(0));
+        auto sliced = dictionary->ISlice(0, 3);
+        UNIT_ASSERT(sliced->GetType() == IChunkedArray::EType::Dictionary);
+        sliced->VisitDistinctValues([](const std::shared_ptr<arrow::Array>& values) {
+            UNIT_ASSERT_VALUES_EQUAL(values->length(), 2);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(sliced->GetNullsCount(), 1);
+
+        std::shared_ptr<arrow::Scalar> value;
+        const auto oneValue = sliced->CheckOneValueAccessor(value);
+        UNIT_ASSERT(oneValue && !*oneValue);
+    }
+
+    Y_UNIT_TEST(AllNullPositionsAreOneNullValue) {
+        TTrivialArray::TPlainBuilder<> dictionaryBuilder;
+        dictionaryBuilder.AddRecord(0, "Alpha");
+        TTrivialArray::TPlainBuilder<arrow::UInt8Type> positionsBuilder;
+        auto dictionary = std::make_shared<TDictionaryArray>(dictionaryBuilder.Finish(1)->GetChunkedArray()->chunk(0),
+                                                             positionsBuilder.Finish(2)->GetChunkedArray()->chunk(0));
+
+        std::shared_ptr<arrow::Scalar> value;
+        const auto oneValue = dictionary->CheckOneValueAccessor(value);
+        UNIT_ASSERT(oneValue && *oneValue);
+        UNIT_ASSERT(value && !value->is_valid);
+        UNIT_ASSERT(value->type->Equals(arrow::utf8()));
+    }
+
+    Y_UNIT_TEST(HasNoNullsWithValidDictionaryAndPositions) {
+        auto dictionary = TThreadSimpleArraysCache::GetConst(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(1), 1);
+        auto positions = TThreadSimpleArraysCache::GetConst(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(0), 2);
+        UNIT_ASSERT(std::make_shared<TDictionaryArray>(dictionary, positions)->HasNulls() == false);
+    }
+
+    Y_UNIT_TEST(HasNullsFromPositions) {
+        auto dictionary = TThreadSimpleArraysCache::GetConst(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(1), 1);
+        TTrivialArray::TPlainBuilder<arrow::UInt8Type> positionsBuilder;
+        positionsBuilder.AddValue(0, 0);
+        positionsBuilder.AddNull(1);
+        auto positions = positionsBuilder.Finish(2)->GetChunkedArray()->chunk(0);
+        UNIT_ASSERT(std::make_shared<TDictionaryArray>(dictionary, positions)->HasNulls() == true);
+    }
+
+    Y_UNIT_TEST(HasNullsFromLegacySingleNullDictionary) {
+        auto dictionary = TThreadSimpleArraysCache::GetNull(arrow::uint8(), 1);
+        auto positions = TThreadSimpleArraysCache::GetConst(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(0), 2);
+        UNIT_ASSERT(std::make_shared<TDictionaryArray>(dictionary, positions)->HasNulls() == true);
+    }
+
+    Y_UNIT_TEST(NullDictionaryEntryWithoutNullPositionsIsUnknown) {
+        TTrivialArray::TPlainBuilder<arrow::UInt8Type> dictionaryBuilder;
+        dictionaryBuilder.AddValue(0, 1);
+        dictionaryBuilder.AddNull(1);
+        auto dictionary = dictionaryBuilder.Finish(2)->GetChunkedArray()->chunk(0);
+        auto positions = TThreadSimpleArraysCache::GetConst(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(0), 2);
+        UNIT_ASSERT(!std::make_shared<TDictionaryArray>(dictionary, positions)->HasNulls());
+    }
+
+    // We cannot guarantee that null entry is referenced by any position without scanning the positions, so default to unknown.
+    Y_UNIT_TEST(ReferencedNullDictionaryEntryIsUnknown) {
+        TTrivialArray::TPlainBuilder<arrow::UInt8Type> dictionaryBuilder;
+        dictionaryBuilder.AddValue(0, 1);
+        dictionaryBuilder.AddNull(1);
+        auto dictionary = dictionaryBuilder.Finish(2)->GetChunkedArray()->chunk(0);
+        TTrivialArray::TPlainBuilder<arrow::UInt8Type> positionsBuilder;
+        positionsBuilder.AddValue(0, 0);
+        positionsBuilder.AddValue(1, 1);
+        auto positions = positionsBuilder.Finish(2)->GetChunkedArray()->chunk(0);
+        UNIT_ASSERT(!std::make_shared<TDictionaryArray>(dictionary, positions)->HasNulls());
     }
 };

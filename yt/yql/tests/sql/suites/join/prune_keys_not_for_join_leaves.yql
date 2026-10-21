@@ -1,0 +1,9 @@
+use plato;
+
+pragma config.flags('OptimizerFlags', 'EmitPruneKeys');
+
+select * from Input3
+where Input3.value in (select value from Input1)
+and Input3.value in (select Input2.value
+                     from Input2 cross join Input1
+                     where Input1.value = Input2.value);

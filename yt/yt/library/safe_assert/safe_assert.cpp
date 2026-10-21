@@ -15,9 +15,9 @@ using namespace NCoreDump;
 ////////////////////////////////////////////////////////////////////////////////
 
 TAssertionFailedException::TAssertionFailedException(
-    const TString& expression,
-    const TString& stackTrace,
-    const std::optional<TString>& corePath)
+    const std::string& expression,
+    const std::string& stackTrace,
+    const std::optional<std::string>& corePath)
     : Expression_(expression)
     , StackTrace_(stackTrace)
     , CorePath_(corePath)
@@ -29,7 +29,7 @@ struct TSafeAssertionsFrame
 {
     ICoreDumperPtr CoreDumper;
     TAsyncSemaphorePtr CoreSemaphore;
-    std::vector<TString> CoreNotes;
+    std::vector<std::string> CoreNotes;
 };
 
 //! This vector keeps all information about safe frames we have in our stack. The resulting
@@ -52,7 +52,7 @@ public:
     TSafeAssertionGuard(
         ICoreDumperPtr coreDumper,
         TAsyncSemaphorePtr coreSemaphore,
-        std::vector<TString> coreNotes)
+        std::vector<std::string> coreNotes)
     {
         Active_ = static_cast<bool>(coreDumper) &&
             static_cast<bool>(coreSemaphore);
@@ -82,7 +82,7 @@ private:
 std::any CreateSafeAssertionGuard(
     ICoreDumperPtr coreDumper,
     TAsyncSemaphorePtr coreSemaphore,
-    std::vector<TString> coreNotes)
+    std::vector<std::string> coreNotes)
 {
     return std::make_shared<TSafeAssertionGuard>(std::move(coreDumper), std::move(coreSemaphore), std::move(coreNotes));
 }
@@ -99,9 +99,9 @@ TAsyncSemaphorePtr GetSafeAssertionsCoreSemaphore()
     return SafeAssertionsContext().back().CoreSemaphore;
 }
 
-std::vector<TString> GetSafeAssertionsCoreNotes()
+std::vector<std::string> GetSafeAssertionsCoreNotes()
 {
-    std::vector<TString> coreNotes;
+    std::vector<std::string> coreNotes;
     for (const auto& frame : SafeAssertionsContext()) {
         coreNotes.insert(coreNotes.end(), frame.CoreNotes.begin(), frame.CoreNotes.end());
     }
@@ -123,10 +123,10 @@ void MaybeThrowSafeAssertionException(TStringBuf message)
     }
 
     auto semaphore = GetSafeAssertionsCoreSemaphore();
-    std::optional<TString> corePath;
+    std::optional<std::string> corePath;
     if (auto semaphoreGuard = TAsyncSemaphoreGuard::TryAcquire(semaphore)) {
         try {
-            std::vector<TString> coreNotes{"Reason: SafeAssertion"};
+            std::vector<std::string> coreNotes{"Reason: SafeAssertion"};
             auto contextCoreNotes = GetSafeAssertionsCoreNotes();
             coreNotes.insert(coreNotes.end(), contextCoreNotes.begin(), contextCoreNotes.end());
             auto coreDump = GetSafeAssertionsCoreDumper()->WriteCoreDump(coreNotes, "safe_assertion");
@@ -141,7 +141,7 @@ void MaybeThrowSafeAssertionException(TStringBuf message)
     DumpBacktrace([&] (TStringBuf str) {
         stackTrace.AppendString(str);
     });
-    TString expression(message);
+    std::string expression(message);
     throw TAssertionFailedException(std::move(expression), stackTrace.Flush(), std::move(corePath));
 }
 

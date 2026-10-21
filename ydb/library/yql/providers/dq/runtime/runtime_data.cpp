@@ -21,6 +21,7 @@ void TWorkerRuntimeData::AddRusageDelta(const TRusage& delta) {
         }
         Rusages[Index].Stime += delta.Stime;
         Rusages[Index].Utime += delta.Utime;
+        Rusages[Index].MaxRss = Max(Rusages[Index].MaxRss, delta.MaxRss);
         Rusages[Index].MajorPageFaults += delta.MajorPageFaults;
     }
     LastUpdate = TInstant::Seconds(now.Seconds());

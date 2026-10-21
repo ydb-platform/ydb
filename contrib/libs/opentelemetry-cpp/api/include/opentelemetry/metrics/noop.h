@@ -14,6 +14,24 @@ OPENTELEMETRY_BEGIN_NAMESPACE
 namespace metrics
 {
 
+#ifdef OPENTELEMETRY_HAVE_METRICS_BOUND_INSTRUMENTS_PREVIEW
+template <class T>
+class NoopBoundCounter : public BoundCounter<T>
+{
+public:
+  NoopBoundCounter() noexcept = default;
+  void Add(T /* value */) noexcept override {}
+};
+
+template <class T>
+class NoopBoundHistogram : public BoundHistogram<T>
+{
+public:
+  NoopBoundHistogram() noexcept = default;
+  void Record(T /* value */) noexcept override {}
+};
+#endif
+
 template <class T>
 class NoopCounter : public Counter<T>
 {
@@ -29,6 +47,13 @@ public:
            const common::KeyValueIterable & /* attributes */,
            const context::Context & /* context */) noexcept override
   {}
+#ifdef OPENTELEMETRY_HAVE_METRICS_BOUND_INSTRUMENTS_PREVIEW
+  nostd::unique_ptr<BoundCounter<T>> Bind(
+      const common::KeyValueIterable & /* attributes */) noexcept override
+  {
+    return nostd::unique_ptr<BoundCounter<T>>{new NoopBoundCounter<T>()};
+  }
+#endif
 };
 
 template <class T>
@@ -50,6 +75,14 @@ public:
   {}
 
   void Record(T /*value*/) noexcept override {}
+#endif
+
+#ifdef OPENTELEMETRY_HAVE_METRICS_BOUND_INSTRUMENTS_PREVIEW
+  nostd::unique_ptr<BoundHistogram<T>> Bind(
+      const common::KeyValueIterable & /* attributes */) noexcept override
+  {
+    return nostd::unique_ptr<BoundHistogram<T>>{new NoopBoundHistogram<T>()};
+  }
 #endif
 };
 

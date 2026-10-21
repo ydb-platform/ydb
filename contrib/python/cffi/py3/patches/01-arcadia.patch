@@ -92,16 +92,8 @@
              if (*w > 0xFFFF) {
 --- contrib/python/cffi/py3/cffi/recompiler.py	(index)
 +++ contrib/python/cffi/py3/cffi/recompiler.py	(working tree)
-@@ -287,10 +287,8 @@ class Recompiler:
-             self.write_c_source_to_f(f, preamble)
- 
-     def _rel_readlines(self, filename):
--        g = open(os.path.join(os.path.dirname(__file__), filename), 'r')
--        lines = g.readlines()
--        g.close()
--        return lines
+@@ -287,2 +287,2 @@ class Recompiler:
+-        with open(os.path.join(os.path.dirname(__file__), filename), 'r') as g:
+-            return g.readlines()
 +        import pkgutil
 +        return pkgutil.get_data('cffi', filename).decode('utf-8').splitlines(True)
- 
-     def write_c_source_to_f(self, f, preamble):
-         self._f = f

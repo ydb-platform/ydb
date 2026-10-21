@@ -39,13 +39,15 @@ public:
     : Border_(border)
     , Sum_(0)
     , RecsCount_(0)
-    , InternalPartsCount_(0) {}
+    , InternalPartsCount_(0)
+    , OffsetDelta_(0) {}
 
     void Clear() {
         Keys_.clear();
         Sum_ = 0;
         RecsCount_ = 0;
         InternalPartsCount_ = 0;
+        OffsetDelta_ = 0;
     }
 
     ui32 KeysCount() const {
@@ -54,6 +56,10 @@ public:
 
     ui32 RecsCount() const {
         return RecsCount_;
+    }
+
+    ui64 OffsetDelta() const {
+        return OffsetDelta_;
     }
 
     ui16 InternalPartsCount() const {
@@ -69,6 +75,9 @@ public:
         TKey tmp(Keys_.front().first);
         tmp.SetCount(RecsCount_);
         tmp.SetInternalPartsCount(InternalPartsCount_);
+        if (OffsetDelta_ > 0) {
+            tmp.SetOffsetDelta(OffsetDelta_);
+        }
         std::pair<TKey, ui32> res(tmp, Sum_);
         Clear();
         return res;
@@ -79,6 +88,9 @@ public:
         Sum_ -= Keys_.front().second;
         RecsCount_ -= Keys_.front().first.GetCount();
         InternalPartsCount_ -= Keys_.front().first.GetInternalPartsCount();
+        if (Keys_.front().first.HasOffsetDelta()) {
+            OffsetDelta_ -= *Keys_.front().first.GetOffsetDelta();
+        }
         auto res = Keys_.front();
         Keys_.pop_front();
         return res;
@@ -89,6 +101,9 @@ public:
         Sum_ -= Keys_.back().second;
         RecsCount_ -= Keys_.back().first.GetCount();
         InternalPartsCount_ -= Keys_.back().first.GetInternalPartsCount();
+        if (Keys_.back().first.HasOffsetDelta()) {
+            OffsetDelta_ -= *Keys_.back().first.GetOffsetDelta();
+        }
         auto res = Keys_.back();
         Keys_.pop_back();
         return res;
@@ -108,11 +123,18 @@ public:
         return Keys_[pos].second;
     }
 
+    void SetNewOffsetDelta(const TKey& key) {
+        if (key.HasOffsetDelta()) {
+            OffsetDelta_ += *key.GetOffsetDelta();
+        }
+    }
+
     void PushKeyToFront(const TKey& key, ui32 size) {
         Sum_ += size;
         RecsCount_ += key.GetCount();
         InternalPartsCount_ += key.GetInternalPartsCount();
         Keys_.push_front(std::make_pair(key, size));
+        SetNewOffsetDelta(key);
     }
 
     void AddKey(const TKey& key, ui32 size) {
@@ -120,6 +142,7 @@ public:
         RecsCount_ += key.GetCount();
         InternalPartsCount_ += key.GetInternalPartsCount();
         Keys_.push_back(std::make_pair(key, size));
+        SetNewOffsetDelta(key);
     }
 
     ui32 Border() const {
@@ -132,6 +155,7 @@ private:
     ui32 Sum_;
     ui32 RecsCount_;
     ui16 InternalPartsCount_;
+    ui64 OffsetDelta_;
 };
 
 struct TPartition::THasDataReq {

@@ -62,10 +62,14 @@ def create_external_table(session, external_table, external_data_source):
     )
 
 
-def create_secret(session, secret_name, value):
+def create_secret(session, secret_name, value, inherit_permissions):
+    inherit_permissions_sql_value = "TRUE" if inherit_permissions else "FALSE"
     session.execute_scheme(
         f"""
-        CREATE SECRET `{secret_name}` WITH ( value = '{value}' );
+        CREATE SECRET `{secret_name}` WITH (
+            value = '{value}',
+            inherit_permissions = {inherit_permissions_sql_value}
+        );
         """
     )
 
@@ -83,6 +87,26 @@ class TestSchemeDescribe:
     def init_test(self, tmp_path):
         self.tmp_path = tmp_path
         set_ydb_cli_test_canondata_root()
+
+    def test_describe_external_data_source(self, ydb_cluster, ydb_database, ydb_client_session):
+        database_path = ydb_database
+        external_data_source = "external_data_source"
+        session_pool = ydb_client_session(database_path)
+        with session_pool.checkout() as session:
+            create_external_data_source(session, external_data_source)
+
+            output = execute_ydb_cli_command(
+                ydb_cluster.nodes[1],
+                database_path,
+                ["scheme", "describe", external_data_source],
+            )
+            # The pretty output is non-deterministic (it carries a creation timestamp),
+            # so assert on the rendered fields rather than comparing against canondata.
+            assert "<external-data-source> " + external_data_source in output
+            assert "Source type: ObjectStorage" in output
+            assert "Location: localhost:1" in output
+            assert "Auth method: NONE" in output
+            assert "Created:" in output
 
     def test_describe_external_table_references_json(self, ydb_cluster, ydb_database, ydb_client_session):
         database_path = ydb_database
@@ -182,7 +206,7 @@ class TestSecretSchemeDescribe:
 
         # check the initial state
         with session_pool.checkout() as session:
-            create_secret(session, secret_name, self.secret_value_created)
+            create_secret(session, secret_name, self.secret_value_created, inherit_permissions=False)
         self._assert_scheme_describe_secret_default(
             ydb_cluster,
             ydb_database,
@@ -208,7 +232,7 @@ class TestSecretSchemeDescribe:
 
         # check the initial state
         with session_pool.checkout() as session:
-            create_secret(session, secret_name, self.secret_value_created)
+            create_secret(session, secret_name, self.secret_value_created, inherit_permissions=False)
         self._assert_scheme_describe_secret_proto_json_base64(
             ydb_cluster,
             ydb_database,
@@ -228,27 +252,49 @@ class TestSecretSchemeDescribe:
             expected_version=1,
         )
 
+    @pytest.mark.parametrize(
+        "inherit_permissions",
+        [
+            pytest.param(False, id="inherit_permissions_false"),
+            pytest.param(True, id="inherit_permissions_true"),
+        ],
+    )
+    def test_describe_secret_permissions(
+        self,
+        ydb_cluster,
+        ydb_database,
+        ydb_client_session,
+        inherit_permissions,
+    ):
+        secret_name = f"cli_scheme_describe_secret_permissions_{str(inherit_permissions).lower()}"
+        session_pool = ydb_client_session(ydb_database)
+        interrupted_line = "Is permission inheritance interrupted: true"
+
+        with session_pool.checkout() as session:
+            create_secret(session, secret_name, self.secret_value_created, inherit_permissions=inherit_permissions)
+
+        describe_permissions = execute_ydb_cli_command(
+            ydb_cluster.nodes[1],
+            ydb_database,
+            ["scheme", "describe", "--permissions", secret_name],
+        )
+
+        assert "<secret>" in describe_permissions
+        assert "Version: 0" in describe_permissions
+        if not inherit_permissions:
+            assert interrupted_line in describe_permissions
+        else:
+            assert interrupted_line not in describe_permissions
+
 
 class TestViewSchemeDescribe:
     @pytest.fixture(
         scope="module",
-        params=[
-            (True, True),
-            (True, False),
-            (False, True),
-            (False, False),
-        ],
-        ids=lambda param: f"show_create_{"enabled" if param[0] else "disabled"}_view_service_{"enabled" if param[1] else "disabled"}",
+        params=[True, False],
+        ids=lambda param: f"view_service_{"enabled" if param else "disabled"}",
     )
     def ydb_cluster_configuration(self, request):
-        show_create_enabled, view_service_enabled = request.param
-
-        extra_feature_flags = []
-        disabled_feature_flags = []
-        if show_create_enabled:
-            extra_feature_flags = ["enable_show_create"]
-        else:
-            disabled_feature_flags = ["enable_show_create"]
+        view_service_enabled = request.param
 
         extra_grpc_services = []
         disabled_grpc_services = []
@@ -258,8 +304,6 @@ class TestViewSchemeDescribe:
             disabled_grpc_services = ["view"]
 
         return dict(
-            extra_feature_flags=extra_feature_flags,
-            disabled_feature_flags=disabled_feature_flags,
             extra_grpc_services=extra_grpc_services,
             disabled_grpc_services=disabled_grpc_services,
         )
@@ -275,16 +319,6 @@ class TestViewSchemeDescribe:
             view_name = "view"
             create_view(session, view_name)
 
-            should_fail = (
-                "enable_show_create" in ydb_cluster_configuration["disabled_feature_flags"]
-                and "view" in ydb_cluster_configuration["disabled_grpc_services"]
-            )
-
-            if should_fail:
-                with pytest.raises(yatest.common.process.ExecutionError):
-                    execute_ydb_cli_command(ydb_cluster.nodes[1], ydb_database, ["scheme", "describe", view_name])
-                output = ""
-            else:
-                output = execute_ydb_cli_command(ydb_cluster.nodes[1], ydb_database, ["scheme", "describe", view_name])
+            output = execute_ydb_cli_command(ydb_cluster.nodes[1], ydb_database, ["scheme", "describe", view_name])
 
             return canonical_result(output, self.tmp_path)

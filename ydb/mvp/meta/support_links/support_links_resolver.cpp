@@ -1,44 +1,40 @@
 #include "support_links_resolver.h"
 
+#include "entity.h"
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/events.h>
 
 #include <util/generic/yexception.h>
 #include <utility>
 
-namespace NMVP {
+namespace NMVP::NSupportLinks {
 
-namespace {
-
-TVector<std::shared_ptr<ILinkSource>> BuildSources(const TSupportLinksResolver::TParams& params) {
+TSupportLinksResolver::TSupportLinksResolver(TParams params)
+    : ClusterInfo(std::move(params.RequestContext.ClusterInfo))
+    , AdditionalRequestParams(std::move(params.RequestContext.AdditionalRequestParams))
+    , Owner(std::move(params.Owner))
+    , HttpProxyId(std::move(params.HttpProxyId))
+{
     if (!params.Settings) {
         ythrow yexception() << "support links settings are required";
     }
-    const auto& linkConfigs = params.EntityType == TSupportLinksResolver::EEntityType::Database
-        ? params.Settings->SupportLinks.DatabaseLinks
-        : params.Settings->SupportLinks.ClusterLinks;
-    TVector<std::shared_ptr<ILinkSource>> linkSources;
-    linkSources.reserve(linkConfigs.size());
-    for (const auto& linkConfig : linkConfigs) {
-        linkSources.push_back(params.LinkSourceFactory(linkConfig, *params.Settings));
+    for (const auto& identity : params.RequestContext.Identities) {
+        const auto& linkConfigs = GetEntityLinkConfigs(params.Settings->SupportLinks, identity.Type);
+        Sources.reserve(Sources.size() + linkConfigs.size());
+        SourceIdentities.reserve(SourceIdentities.size() + linkConfigs.size());
+        for (const auto& linkConfig : linkConfigs) {
+            Sources.push_back(params.LinkSourceFactory(linkConfig, *params.Settings));
+            SourceIdentities.push_back(identity);
+        }
     }
-    return linkSources;
 }
 
-} // namespace
-
-TSupportLinksResolver::TSupportLinksResolver(TParams params)
-    : Sources(BuildSources(params))
-    , ClusterInfo(std::move(params.ClusterInfo))
-    , UrlParameters(std::move(params.UrlParameters))
-    , Owner(std::move(params.Owner))
-    , HttpProxyId(std::move(params.HttpProxyId))
-{}
-
-ILinkSource::TLinkResolveInput TSupportLinksResolver::MakeResolveInput() const {
+ILinkSource::TLinkResolveInput TSupportLinksResolver::MakeResolveInput(size_t place) const {
     return ILinkSource::TLinkResolveInput{
         .ClusterInfo = ClusterInfo,
-        .UrlParameters = UrlParameters,
+        .AdditionalRequestParams = AdditionalRequestParams,
+        .Identity = SourceIdentities[place],
     };
 }
 
@@ -58,7 +54,7 @@ void TSupportLinksResolver::ResetState() {
 }
 
 TResolveOutput TSupportLinksResolver::ResolveSource(size_t place) const {
-    return Sources[place]->Resolve(MakeResolveInput(), MakeResolveContext(place));
+    return Sources[place]->Resolve(MakeResolveInput(place), MakeResolveContext(place));
 }
 
 void TSupportLinksResolver::SaveSourceOutput(size_t place, TResolveOutput sourceOutput) {
@@ -66,7 +62,7 @@ void TSupportLinksResolver::SaveSourceOutput(size_t place, TResolveOutput source
     SourceOutputs[place] = std::move(sourceOutput);
 }
 
-void TSupportLinksResolver::ApplySourceResponse(size_t place, const NSupportLinks::TEvPrivate::TEvSourceResponse& response) {
+void TSupportLinksResolver::ApplySourceResponse(size_t place, const TEvPrivate::TEvSourceResponse& response) {
     TResolveOutput& slot = SourceOutputs[place];
     slot.Links = response.Links;
     slot.Errors.insert(slot.Errors.end(), response.Errors.begin(), response.Errors.end());
@@ -80,7 +76,7 @@ void TSupportLinksResolver::HandleSourceTimeout(size_t place, NActors::TActorSys
         Owner,
         new NActors::TEvents::TEvPoisonPill()));
     SourceActors[place].Clear();
-    sourceOutput.Errors.emplace_back(NSupportLinks::TSupportError{
+    sourceOutput.Errors.emplace_back(TSupportError{
         .Source = sourceOutput.Name,
         .Message = "Timeout while resolving support links source"
     });
@@ -95,7 +91,7 @@ void TSupportLinksResolver::Start() {
     }
 }
 
-void TSupportLinksResolver::OnSourceResponse(const NSupportLinks::TEvPrivate::TEvSourceResponse::TPtr& event) {
+void TSupportLinksResolver::OnSourceResponse(const TEvPrivate::TEvSourceResponse::TPtr& event) {
     const auto* msg = event->Get();
     if (msg->Place >= SourceOutputs.size()) {
         return;
@@ -126,4 +122,4 @@ const TVector<TResolveOutput>& TSupportLinksResolver::GetSourceOutput() const {
     return SourceOutputs;
 }
 
-} // namespace NMVP
+} // namespace NMVP::NSupportLinks

@@ -37,6 +37,7 @@
 #endif
 
 #if !defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
+#ifndef BOOST_TYPE_INDEX_USE_STD_MODULE
 #include <typeinfo>
 #include <cstring>                                  // std::strcmp, std::strlen, std::strstr
 #include <memory>
@@ -44,13 +45,15 @@
 #include <string>
 #include <type_traits>
 
-#include <boost/throw_exception.hpp>
-
 #ifdef BOOST_TYPE_INDEX_IMPL_HAS_CXXABI
 # include <cxxabi.h>
 # include <cstdlib>
 # include <cstddef>
 #endif
+
+#endif // BOOST_TYPE_INDEX_USE_STD_MODULE
+
+#include <boost/throw_exception.hpp>
 
 #endif
 

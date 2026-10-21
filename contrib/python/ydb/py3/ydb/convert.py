@@ -11,7 +11,7 @@ _SIGN_BIT = 2**63
 _DecimalNanRepr = 10**35 + 1
 _DecimalInfRepr = 10**35
 _DecimalSignedInfRepr = -(10**35)
-_primitive_type_by_id = {}
+_primitive_type_by_id: dict[int, types.PrimitiveType] = {}
 _default_allow_truncated_result = False
 
 
@@ -23,12 +23,31 @@ def _initialize():
 _initialize()
 
 
+class _MissingItemError(AttributeError, KeyError):
+    # Dotted access to a missing row/struct field used to leak KeyError; since
+    # 3.29.5 it raises AttributeError (the correct protocol, e.g. for hasattr
+    # and copy). This combined type is both, so callers that still catch
+    # KeyError — as they had to before 3.29.5 — keep working alongside the new
+    # AttributeError. Prefer catching AttributeError in new code.
+    __slots__ = ()
+
+
 class _DotDict(dict):
+    # A lazy __dict__ is declared on purpose: it is not materialized until a row
+    # is written to (or its __dict__ is introspected), so untouched read-only
+    # rows avoid the per-instance dict overhead while callers can still attach
+    # their own attributes (ORM-style row.extra = ...), which materializes the
+    # dict for that row alone.
+    __slots__ = ("__dict__",)
+
     def __init__(self, *args, **kwargs):
         super(_DotDict, self).__init__(*args, **kwargs)
 
     def __getattr__(self, item):
-        return self[item]
+        try:
+            return self[item]
+        except KeyError:
+            raise _MissingItemError(item) from None
 
 
 def _is_decimal_signed(hi_value):
@@ -83,7 +102,7 @@ def _pb_to_dict(type_pb, value_pb, table_client_settings):
 
 
 class _Struct(_DotDict):
-    pass
+    __slots__ = ()
 
 
 def _pb_to_struct(type_pb, value_pb, table_client_settings):
@@ -351,6 +370,16 @@ def _unwrap_optionality(column):
     return _to_native_map.get(current_type), c_type
 
 
+def _detach_columns(columns):
+    # The columns container references the source protobuf message, which keeps
+    # the whole arena (including already-parsed message.rows) alive for as long
+    # as the result set is held. Copy the schema into a standalone message so the
+    # source arena can be released right after conversion.
+    holder = _apis.ydb_value.ResultSet()
+    holder.columns.extend(columns)
+    return holder.columns
+
+
 class _ResultSet(object):
     __slots__ = ("columns", "rows", "truncated", "snapshot", "index", "format", "arrow_format_meta", "data")
 
@@ -366,21 +395,40 @@ class _ResultSet(object):
         self.arrow_format_meta = arrow_format_meta
         self.data = data
 
+    def _extend(self, other):
+        """Merge another stream part of the same result set into this one.
+
+        The query service streams one logical VALUE result set as several
+        response parts sharing a ``result_set_index``; this concatenates
+        ``other``'s rows onto ``self`` and carries the schema over from the
+        first part that provides it.
+        """
+        self.rows.extend(other.rows)
+        if other.truncated:
+            self.truncated = True
+        if not self.columns and other.columns:
+            self.columns = other.columns
+
     @classmethod
     def from_message(cls, message, table_client_settings=None, snapshot=None, index=None):
         rows = []
-        # prepare column parsers before actuall parsing
+        # prepare column parsers before actually parsing
         column_parsers = []
         if len(message.rows) > 0:
             for column in message.columns:
                 column_parsers.append(_unwrap_optionality(column))
 
+        # Names are the only per-row metadata we need. Storing this shared tuple
+        # (instead of the proto columns) keeps rows detached from the source
+        # protobuf arena, so it can be freed once conversion is done.
+        column_names = tuple(column.name for column in message.columns)
+
         for row_proto in message.rows:
-            row = _Row(message.columns)
-            for column, value, column_info in zip(message.columns, row_proto.items, column_parsers):
+            row = _Row(column_names)
+            for name, value, column_info in zip(column_names, row_proto.items, column_parsers):
                 v_type = value.WhichOneof("value")
                 if v_type == "null_flag_value":
-                    row[column.name] = None
+                    row[name] = None
                     continue
 
                 while v_type == "nested_value":
@@ -388,7 +436,7 @@ class _ResultSet(object):
                     v_type = value.WhichOneof("value")
 
                 column_parser, unwrapped_type = column_info
-                row[column.name] = column_parser(unwrapped_type, value, table_client_settings)
+                row[name] = column_parser(unwrapped_type, value, table_client_settings)
             rows.append(row)
 
         from ydb.query import QueryResultSetFormat, ArrowFormatMeta
@@ -401,12 +449,17 @@ class _ResultSet(object):
 
         data = message.data if message.data else None
 
-        return cls(message.columns, rows, message.truncated, snapshot, index, result_format, arrow_meta, data)
+        return cls(
+            _detach_columns(message.columns), rows, message.truncated, snapshot, index, result_format, arrow_meta, data
+        )
 
     @classmethod
     def lazy_from_message(cls, message, table_client_settings=None, snapshot=None):
         from ydb.query import QueryResultSetFormat, ArrowFormatMeta
 
+        # No _detach_columns here on purpose: _LazyRows defers parsing and keeps
+        # message.rows, so the source arena is pinned regardless — detaching the
+        # schema would only add a copy without freeing anything.
         rows = _LazyRows(message.rows, table_client_settings, message.columns)
         result_format = message.format if message.format else QueryResultSetFormat.VALUE
 
@@ -421,16 +474,65 @@ class _ResultSet(object):
 ResultSet = _ResultSet
 
 
+class _ResultSetsAccumulator:
+    """Reassembles streamed result-set parts in a single pass.
+
+    The query service streams one logical result set as several response parts
+    that share a ``result_set_index``. Parts are fed one at a time via
+    :meth:`add`: VALUE parts sharing an index are concatenated into a single
+    result set, while ARROW parts — each already carrying its own schema and
+    record-batch ``data`` — are kept as separate, independently decodable
+    result sets.
+    """
+
+    __slots__ = ("result_sets", "_by_index")
+
+    def __init__(self):
+        self.result_sets = []
+        self._by_index = {}
+
+    def add(self, result_set):
+        index = result_set.index
+        if index is None or result_set.data is not None:
+            self.result_sets.append(result_set)
+            return
+
+        target = self._by_index.get(index)
+        if target is None:
+            self._by_index[index] = result_set
+            self.result_sets.append(result_set)
+        else:
+            target._extend(result_set)
+
+
+def aggregate_result_sets_by_index(result_sets):
+    """Merge a sync stream of result-set parts into one result set per index."""
+    accumulator = _ResultSetsAccumulator()
+    for result_set in result_sets:
+        accumulator.add(result_set)
+    return accumulator.result_sets
+
+
+async def aggregate_result_sets_by_index_async(result_sets):
+    """Merge an async stream of result-set parts into one result set per index."""
+    accumulator = _ResultSetsAccumulator()
+    async for result_set in result_sets:
+        accumulator.add(result_set)
+    return accumulator.result_sets
+
+
 class _Row(_DotDict):
+    __slots__ = ("_columns",)
+
     def __init__(self, columns):
         super(_Row, self).__init__()
         self._columns = columns
 
     def __getitem__(self, key):
         if isinstance(key, int):
-            return self[self._columns[key].name]
+            return self[self._columns[key]]
         elif isinstance(key, slice):
-            return tuple(map(lambda x: self[x.name], self._columns[key]))
+            return tuple(self[name] for name in self._columns[key])
         else:
             return super(_Row, self).__getitem__(key)
 
@@ -455,10 +557,11 @@ class _LazyRowItem:
 
 
 class _LazyRow(_DotDict):
+    __slots__ = ("_columns",)
+
     def __init__(self, columns, proto_row, table_client_settings, parsers):
         super(_LazyRow, self).__init__()
         self._columns = columns
-        self._table_client_settings = table_client_settings
         for i, (column, row_item) in enumerate(zip(self._columns, proto_row.items)):
             super(_LazyRow, self).__setitem__(
                 column.name,

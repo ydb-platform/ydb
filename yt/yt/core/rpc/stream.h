@@ -5,7 +5,6 @@
 #include <yt/yt/core/concurrency/async_stream.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
 
-#include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/sliding_window.h>
 
 #include <yt/yt/core/actions/signal.h>
@@ -13,10 +12,14 @@
 
 #include <yt/yt/core/compression/public.h>
 
+#include <yt/yt/core/profiling/timing.h>
+
+#include <library/cpp/yt/containers/ring_queue.h>
+
 #include <library/cpp/yt/memory/range.h>
 #include <library/cpp/yt/memory/ref.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NRpc {
 
@@ -64,7 +67,7 @@ private:
         size_t CompressedSize;
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     TSlidingWindow<TWindowPacket> Window_;
     TRingQueue<TQueueEntry> Queue_;
     TError Error_;
@@ -79,7 +82,7 @@ private:
         const TStreamingPayload& payload,
         const std::vector<TSharedRef>& decompressedAttachments);
     void DoAbort(
-        TGuard<NThreading::TSpinLock>& guard,
+        TGuard<TSpinLock>& guard,
         const TError& error,
         bool fireAborted = true);
     void OnTimeout();
@@ -87,6 +90,17 @@ private:
 };
 
 DEFINE_REFCOUNTED_TYPE(TAttachmentsInputStream)
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Cumulative timings of an attachments output stream.
+struct TAttachmentsOutputStreamStatistics
+{
+    //! Time writes were blocked because the window was full.
+    TDuration WriteStallTime;
+    //! Time the window was drained, i.e. everything written was already read by the peer.
+    TDuration WindowDrainedTime;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -109,6 +123,8 @@ public:
     void AbortUnlessClosed(const TError& error, bool fireAborted = true);
     void HandleFeedback(const TStreamingFeedback& feedback);
     std::optional<TStreamingPayload> TryPull();
+
+    TAttachmentsOutputStreamStatistics GetStatistics();
 
     DEFINE_SIGNAL(void(), Aborted);
 
@@ -134,7 +150,7 @@ private:
         NConcurrency::TDelayedExecutorCookie TimeoutCookie;
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     std::atomic<size_t> CompressionSequenceNumber_ = 0;
     TSlidingWindow<TWindowPacket> Window_;
     TError Error_;
@@ -142,6 +158,8 @@ private:
     TRingQueue<TConfirmationEntry> ConfirmationQueue_;
     TPromise<void> ClosePromise_;
     NConcurrency::TDelayedExecutorCookie CloseTimeoutCookie_;
+    NProfiling::TWallTimer WindowDrainedTimer_;
+    NProfiling::TWallTimer WriteStallTimer_{/*start*/ false};
     bool Closed_ = false;
     ssize_t WritePosition_ = 0;
     ssize_t SentPosition_ = 0;
@@ -150,11 +168,11 @@ private:
 
     void OnWindowPacketsReady(
         TMutableRange<TWindowPacket> packets,
-        TGuard<NThreading::TSpinLock>& guard);
-    void MaybeInvokePullCallback(TGuard<NThreading::TSpinLock>& guard);
+        TGuard<TSpinLock>& guard);
+    void MaybeInvokePullCallback(TGuard<TSpinLock>& guard);
     bool CanPullMore(bool first) const;
     void DoAbort(
-        TGuard<NThreading::TSpinLock>& guard,
+        TGuard<TSpinLock>& guard,
         const TError& error,
         bool fireAborted = true);
     void OnTimeout();
@@ -232,7 +250,7 @@ private:
     NConcurrency::IAsyncZeroCopyInputStreamPtr FeedbackStream_;
     bool FeedbackEnabled_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     TRingQueue<TPromise<void>> ConfirmationQueue_;
     TError Error_;
 
@@ -287,10 +305,11 @@ TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Handles an incoming streaming request that uses the #CreateRpcClientInputStream
-//! function.
+//! function. #finalizer is invoked after the response stream is closed and before the reply is sent.
 void HandleInputStreamingRequest(
     const IServiceContextPtr& context,
-    const std::function<TSharedRef()>& blockGenerator);
+    const std::function<TSharedRef()>& blockGenerator,
+    const std::function<void()>& finalizer = {});
 
 void HandleInputStreamingRequest(
     const IServiceContextPtr& context,

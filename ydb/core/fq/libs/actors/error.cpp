@@ -8,4 +8,4 @@ TString MakeInternalError(const TString& text) {
     return TStringBuilder() << "Internal error (" << text << ", host: " << HostName() << ")";
 }
 
-} // namespace NFq
+}   // namespace NFq

@@ -6,12 +6,16 @@
 #include <memory>
 
 #include "opentelemetry/sdk/configuration/console_log_record_exporter_configuration.h"
-#include "opentelemetry/sdk/logs/exporter.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace sdk
 {
+namespace logs
+{
+class LogRecordExporter;
+}  // namespace logs
+
 namespace configuration
 {
 

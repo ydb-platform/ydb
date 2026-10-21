@@ -25,11 +25,12 @@ Y_UNIT_TEST(Test) {
     const ui32 n = 100;
     for (ui32 i = 0; i < n; ++i) {
         auto c = i;
+        // NOLINTNEXTLINE(performance-move-const-arg)
         lists.push_back(TListType(lists.back(), std::move(c)));
     }
 
     for (ui32 i = 0; i < n; ++i) {
-        auto list = lists[i];
+        const auto& list = lists[i];
         auto it = list.GetIterator();
         ui32 expected = 0;
         while (!it.AtEnd()) {
@@ -42,7 +43,7 @@ Y_UNIT_TEST(Test) {
     }
 
     for (ui32 i = 0; i < n; ++i) {
-        auto list = lists[i];
+        const auto& list = lists[i];
         auto it = list.GetReverseIterator();
         ui32 expected = i;
         while (!it.AtEnd()) {
@@ -57,11 +58,12 @@ Y_UNIT_TEST(Test) {
     rlists.push_back(list1);
     for (ui32 i = 0; i < n; ++i) {
         auto c = i;
+        // NOLINTNEXTLINE(performance-move-const-arg)
         rlists.push_back(TListType(std::move(c), rlists.back()));
     }
 
     for (ui32 i = 0; i < n; ++i) {
-        auto list = rlists[i];
+        const auto& list = rlists[i];
         auto it = list.GetIterator();
         ui32 expected = i;
         while (!it.AtEnd()) {
@@ -73,7 +75,7 @@ Y_UNIT_TEST(Test) {
     }
 
     for (ui32 i = 0; i < n; ++i) {
-        auto list = rlists[i];
+        const auto& list = rlists[i];
         auto it = list.GetReverseIterator();
         ui32 expected = 0;
         while (!it.AtEnd()) {
@@ -94,7 +96,7 @@ Y_UNIT_TEST(Test) {
 
     for (ui32 i = 0; i < 2 * n; ++i) {
         ui32 k = (i + 1) / 2;
-        auto list = zlists[i];
+        const auto& list = zlists[i];
         auto it = list.GetIterator();
         ui32 expected = 2 * k + 1;
         if ((i % 2)) {

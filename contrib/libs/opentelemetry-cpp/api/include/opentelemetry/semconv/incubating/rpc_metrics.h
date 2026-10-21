@@ -69,15 +69,19 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricRpcClientDuratio
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricRpcClientDuration(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Histogram(kMetricRpcClientDuration, descrMetricRpcClientDuration,
                                       unitMetricRpcClientDuration);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
 CreateSyncDoubleMetricRpcClientDuration(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleHistogram(kMetricRpcClientDuration, descrMetricRpcClientDuration,
                                       unitMetricRpcClientDuration);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -99,15 +103,19 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricRpcClientRequest
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricRpcClientRequestSize(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Histogram(kMetricRpcClientRequestSize, descrMetricRpcClientRequestSize,
                                       unitMetricRpcClientRequestSize);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
 CreateSyncDoubleMetricRpcClientRequestSize(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleHistogram(kMetricRpcClientRequestSize, descrMetricRpcClientRequestSize,
                                       unitMetricRpcClientRequestSize);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -131,17 +139,21 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricRpcClientRequest
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricRpcClientRequestsPerRpc(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Histogram(kMetricRpcClientRequestsPerRpc,
                                       descrMetricRpcClientRequestsPerRpc,
                                       unitMetricRpcClientRequestsPerRpc);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
 CreateSyncDoubleMetricRpcClientRequestsPerRpc(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleHistogram(kMetricRpcClientRequestsPerRpc,
                                       descrMetricRpcClientRequestsPerRpc,
                                       unitMetricRpcClientRequestsPerRpc);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -163,17 +175,21 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricRpcClientRespons
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricRpcClientResponseSize(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Histogram(kMetricRpcClientResponseSize,
                                       descrMetricRpcClientResponseSize,
                                       unitMetricRpcClientResponseSize);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
 CreateSyncDoubleMetricRpcClientResponseSize(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleHistogram(kMetricRpcClientResponseSize,
                                       descrMetricRpcClientResponseSize,
                                       unitMetricRpcClientResponseSize);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -198,17 +214,21 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricRpcClientRespons
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricRpcClientResponsesPerRpc(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Histogram(kMetricRpcClientResponsesPerRpc,
                                       descrMetricRpcClientResponsesPerRpc,
                                       unitMetricRpcClientResponsesPerRpc);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
 CreateSyncDoubleMetricRpcClientResponsesPerRpc(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleHistogram(kMetricRpcClientResponsesPerRpc,
                                       descrMetricRpcClientResponsesPerRpc,
                                       unitMetricRpcClientResponsesPerRpc);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -260,15 +280,19 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricRpcServerDuratio
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricRpcServerDuration(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Histogram(kMetricRpcServerDuration, descrMetricRpcServerDuration,
                                       unitMetricRpcServerDuration);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
 CreateSyncDoubleMetricRpcServerDuration(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleHistogram(kMetricRpcServerDuration, descrMetricRpcServerDuration,
                                       unitMetricRpcServerDuration);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -290,15 +314,19 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricRpcServerRequest
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricRpcServerRequestSize(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Histogram(kMetricRpcServerRequestSize, descrMetricRpcServerRequestSize,
                                       unitMetricRpcServerRequestSize);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
 CreateSyncDoubleMetricRpcServerRequestSize(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleHistogram(kMetricRpcServerRequestSize, descrMetricRpcServerRequestSize,
                                       unitMetricRpcServerRequestSize);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -322,17 +350,21 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricRpcServerRequest
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricRpcServerRequestsPerRpc(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Histogram(kMetricRpcServerRequestsPerRpc,
                                       descrMetricRpcServerRequestsPerRpc,
                                       unitMetricRpcServerRequestsPerRpc);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
 CreateSyncDoubleMetricRpcServerRequestsPerRpc(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleHistogram(kMetricRpcServerRequestsPerRpc,
                                       descrMetricRpcServerRequestsPerRpc,
                                       unitMetricRpcServerRequestsPerRpc);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -354,17 +386,21 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricRpcServerRespons
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricRpcServerResponseSize(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Histogram(kMetricRpcServerResponseSize,
                                       descrMetricRpcServerResponseSize,
                                       unitMetricRpcServerResponseSize);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
 CreateSyncDoubleMetricRpcServerResponseSize(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleHistogram(kMetricRpcServerResponseSize,
                                       descrMetricRpcServerResponseSize,
                                       unitMetricRpcServerResponseSize);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -389,17 +425,21 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricRpcServerRespons
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricRpcServerResponsesPerRpc(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Histogram(kMetricRpcServerResponsesPerRpc,
                                       descrMetricRpcServerResponsesPerRpc,
                                       unitMetricRpcServerResponsesPerRpc);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
 CreateSyncDoubleMetricRpcServerResponsesPerRpc(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleHistogram(kMetricRpcServerResponsesPerRpc,
                                       descrMetricRpcServerResponsesPerRpc,
                                       unitMetricRpcServerResponsesPerRpc);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 }  // namespace rpc

@@ -8,7 +8,7 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TTestCpo1
-    : public TTagInvokeCpoBase<TTestCpo1>
+    : public NMpl::TTagInvokeCpoBase<TTestCpo1>
 { };
 
 inline constexpr TTestCpo1 TestCpo = {};
@@ -17,9 +17,17 @@ struct TCustomized
 {
     int Value = 42;
 
-    friend int TagInvoke(TTagInvokeTag<TestCpo>, const TCustomized& this_)
+    friend int TagInvoke(NMpl::TTagInvokeTag<TestCpo>, const TCustomized& this_)
     {
         return this_.Value + 1;
+    }
+};
+
+struct TOtherCustomized
+{
+    friend int TagInvoke(NMpl::TTagInvokeTag<TestCpo>, const TOtherCustomized&)
+    {
+        return 0;
     }
 };
 
@@ -75,7 +83,7 @@ TEST(TAnyRefTest, EmptyRef)
 
     TAnyRef<> any{concrete};
 
-    static_assert(!std::invocable<TTagInvokeTag<TestCpo>, decltype(any)>);
+    static_assert(!std::invocable<NMpl::TTagInvokeTag<TestCpo>, decltype(any)>);
     const auto& conc = any.AnyCast<TCustomized>();
     EXPECT_EQ(conc.Value, 11);
 }
@@ -137,21 +145,21 @@ struct TCustomized2
         ++DtorCount;
     }
 
-    friend const TNoCopy& TagInvoke(TTagInvokeTag<TestCpo>, TCustomized2&)
+    friend const TNoCopy& TagInvoke(NMpl::TTagInvokeTag<TestCpo>, TCustomized2&)
     {
         static TNoCopy noCp;
         noCp.Val = 11;
         return noCp;
     }
 
-    friend int TagInvoke(TTagInvokeTag<TestCpo>, TCustomized2&& this_)
+    friend int TagInvoke(NMpl::TTagInvokeTag<TestCpo>, TCustomized2&& this_)
     {
         auto v = std::move(this_);
 
         return 1212;
     }
 
-    friend int TagInvoke(TTagInvokeTag<TestCpo>, TCustomized2&, int)
+    friend int TagInvoke(NMpl::TTagInvokeTag<TestCpo>, TCustomized2&, int)
     {
         return 42;
     }
@@ -248,9 +256,25 @@ TEST(TAnyObjectTest, EmptyAny)
 
     TAnyObject<> any{concrete};
 
-    static_assert(!std::invocable<TTagInvokeTag<TestCpo>, decltype(any)>);
+    static_assert(!std::invocable<NMpl::TTagInvokeTag<TestCpo>, decltype(any)>);
     const auto& conc = any.AnyCast<TCustomized>();
     EXPECT_EQ(conc.Value, 11);
+}
+
+TEST(TAnyObjectTest, Holds)
+{
+    using TAnyObject = TAnyObject<TOverload<TestCpo, int(const TErasedThis&)>>;
+
+    TAnyObject any{TCustomized{.Value = 42}};
+    EXPECT_TRUE(any.Holds<TCustomized>());
+    EXPECT_FALSE(any.Holds<TOtherCustomized>());
+
+    TAnyObject other{TOtherCustomized{}};
+    EXPECT_TRUE(other.Holds<TOtherCustomized>());
+    EXPECT_FALSE(other.Holds<TCustomized>());
+
+    TAnyObject empty;
+    EXPECT_FALSE(empty.Holds<TCustomized>());
 }
 
 TEST(TAnyObjectTest, CvRefCorrectness)

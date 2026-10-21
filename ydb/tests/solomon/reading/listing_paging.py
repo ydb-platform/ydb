@@ -20,7 +20,9 @@ class TestListingPaging(SolomonReadingTestBase):
             rows.extend(result.rows)
 
         if len(rows) != self.listing_paging_metrics_size:
-            return False, "Result size differs from expected: have {}, should be {}".format(len(rows), self.listing_paging_metrics_size)
+            return False, "Result size differs from expected: have {}, should be {}".format(
+                len(rows), self.listing_paging_metrics_size
+            )
 
         test_labels = []
         for row in rows:
@@ -41,8 +43,10 @@ class TestListingPaging(SolomonReadingTestBase):
         for result in result_set:
             rows.extend(result.rows)
 
-        if (len(rows) != self.listing_paging_metrics_size + 1):
-            return False, "Result size differs from expected: have {}, should be {}".format(len(rows), self.listing_paging_metrics_size)
+        if len(rows) != self.listing_paging_metrics_size + 1:
+            return False, "Result size differs from expected: have {}, should be {}".format(
+                len(rows), self.listing_paging_metrics_size
+            )
 
         return True, None
 
@@ -50,7 +54,7 @@ class TestListingPaging(SolomonReadingTestBase):
     def test_listing_paging_solomon(self):
         data_source_query = f"""
             CREATE EXTERNAL DATA SOURCE local_solomon WITH (
-                SOURCE_TYPE     = "Solomon",
+                SOURCE_TYPE     = "Monium.Metrics",
                 LOCATION        = "{self.solomon_http_endpoint}",
                 GRPC_LOCATION   = "{self.solomon_grpc_endpoint}",
                 AUTH_METHOD     = "NONE",
@@ -87,7 +91,7 @@ class TestListingPaging(SolomonReadingTestBase):
     def test_listing_paging_monitoring(self):
         data_source_query = f"""
             CREATE EXTERNAL DATA SOURCE local_monitoring WITH (
-                SOURCE_TYPE     = "Solomon",
+                SOURCE_TYPE     = "Monium.Metrics",
                 LOCATION        = "{self.solomon_http_endpoint}",
                 GRPC_LOCATION   = "{self.solomon_grpc_endpoint}",
                 PROJECT         = "listing_paging",

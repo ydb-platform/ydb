@@ -473,7 +473,7 @@ const std::vector<ECodec>& GetSupportedCodecs()
 {
     static const std::vector<ECodec> supportedCodecs = [] {
         std::vector<ECodec> supportedCodecs;
-        for (auto codecId : TEnumTraits<ECodec>::GetDomainValues()) {
+        for (auto codecId : TEnumTraits<ECodec>::GetUniqueDomainValues()) {
             if (!GetForbiddenCodecs().contains(codecId)) {
                 supportedCodecs.push_back(codecId);
             }

@@ -73,12 +73,18 @@ Y_UNIT_TEST_SUITE(Path) {
     }
 
     Y_UNIT_TEST(CanonizedStringIsSame1) {
+        if (!TStringUseCow) {
+            return; // the result is a copy without copy-on-write
+        }
         const TString in = "/Foo/Bar";
         const TString& result = DoCanonizePathFast(in);
         UNIT_ASSERT_VALUES_EQUAL((void*)in.data(), (void*)result.data());
     }
 
     Y_UNIT_TEST(CanonizedStringIsSame2) {
+        if (!TStringUseCow) {
+            return; // the result is a copy without copy-on-write
+        }
         const TString in = "/Foo";
         const TString& result = DoCanonizePathFast(in);
         UNIT_ASSERT_VALUES_EQUAL((void*)in.data(), (void*)result.data());
@@ -204,6 +210,39 @@ Y_UNIT_TEST_SUITE(Path) {
         const TString pathPart = "this string contains whitespaces";
         UNIT_ASSERT_EQUAL(PathPartBrokenAt(pathPart), std::find(pathPart.begin(), pathPart.end(), ' '));
         UNIT_ASSERT_EQUAL(PathPartBrokenAt(pathPart, " "), pathPart.end());
+    }
+
+    Y_UNIT_TEST(NormalizePath_AlreadyUnderDatabase) {
+        const TString database = "/Root/Db";
+        const TString path = "/Root/Db/account/topic";
+        const TString result = NormalizePath(database, path);
+        UNIT_ASSERT_VALUES_EQUAL(result, path);
+        UNIT_ASSERT_VALUES_EQUAL((void*)path.data(), (void*)result.data());
+    }
+
+    Y_UNIT_TEST(NormalizePath_EqualToDatabase) {
+        const TString database = "/Root/Db";
+        const TString result = NormalizePath(database, database);
+        UNIT_ASSERT_VALUES_EQUAL(result, database);
+        UNIT_ASSERT_VALUES_EQUAL((void*)database.data(), (void*)result.data());
+    }
+
+    Y_UNIT_TEST(NormalizePath_JoinRelative) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            NormalizePath(TString{"/Root/Db"}, TString{"account/topic"}),
+            "/Root/Db/account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(
+            NormalizePath(TString{"/Root/Db"}, TString{"/account/topic"}),
+            "/Root/Db/account/topic");
+        UNIT_ASSERT_VALUES_EQUAL(
+            NormalizePath(TStringBuf("/Root/Db"), TStringBuf("account/topic")),
+            "/Root/Db/account/topic");
+    }
+
+    Y_UNIT_TEST(NormalizePath_CollapsesSlashes) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            NormalizePath(TString{"/Root/Db"}, TString{"account//topic"}),
+            "/Root/Db/account/topic");
     }
 }
 

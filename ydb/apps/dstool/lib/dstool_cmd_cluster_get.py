@@ -1,4 +1,5 @@
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.core.protos.blobstorage_disk_color_pb2 as disk_color
 import ydb.apps.dstool.lib.table as table
 import ydb.apps.dstool.lib.common as common
@@ -31,8 +32,11 @@ def do(args):
         'MaxScrubbedDisksAtOnce',
         'EnableGroupLayoutSanitizer',
         'PDiskSpaceColorBorder',
+        'DatabaseSpaceBlockColor',
+        'DatabaseSpaceUnblockColor',
         'SerialManagementStage',
     ]
+    color_columns = {'PDiskSpaceColorBorder', 'DatabaseSpaceBlockColor', 'DatabaseSpaceUnblockColor'}
 
     table_output = table.TableOutput(columns, default_visible_columns=columns)
 
@@ -41,11 +45,14 @@ def do(args):
     for attr in columns:
         if not hasattr(settings, attr):
             continue
-        value = getattr(settings, attr)[0]
-        if attr == 'PDiskSpaceColorBorder':
+        values = getattr(settings, attr)
+        if not values:
+            continue  # not reported by this version of BSC
+        value = values[0]
+        if attr in color_columns:
             row[attr] = disk_color.TPDiskSpaceColor.E.Name(value)
         elif attr == 'SerialManagementStage':
-            row[attr] = kikimr_bsconfig.TSerialManagementStage.E.Name(value)
+            row[attr] = kikimr_bs3.TSerialManagementStage.E.Name(value)
         else:
             row[attr] = value
 

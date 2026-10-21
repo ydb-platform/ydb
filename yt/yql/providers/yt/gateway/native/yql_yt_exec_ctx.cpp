@@ -11,7 +11,6 @@
 #include <yt/yql/providers/yt/common/yql_names.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -70,7 +69,7 @@ void TExecContextBase::SetCache(const TVector<TString>& outTablePaths, const TVe
         QueryCacheItem.Reset(new TYtQueryCacheItem(settings->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable),
             entry, opHash, outputHash, outTablePaths, outTableSpecs, Session_->UserName_, tmpFolder, mergeSpec, tableAttrs, chunkLimit,
             settings->QueryCacheUseExpirationTimeout.Get().GetOrElse(false),
-            settings->_UseMultisetAttributes.Get().GetOrElse(DEFAULT_USE_MULTISET_ATTRS), LogCtx_));
+            LogCtx_));
     }
 }
 

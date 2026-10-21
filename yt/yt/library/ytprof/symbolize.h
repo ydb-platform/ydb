@@ -2,7 +2,7 @@
 
 #include <optional>
 
-#include <util/generic/string.h>
+#include <string>
 
 #include <yt/yt/library/ytprof/proto/profile.pb.h>
 
@@ -29,10 +29,10 @@ void AddBuildInfo(NProto::Profile* profile, const TBuildInfo& buildInfo);
 std::pair<void*, void*> GetVdsoRange();
 
 // Returns current binary build id as binary string.
-std::optional<TString> GetBuildId();
+std::optional<std::string> GetBuildId();
 
 // Returns version of profiler library.
-TString GetVersion();
+std::string GetVersion();
 
 ////////////////////////////////////////////////////////////////////////////////
 

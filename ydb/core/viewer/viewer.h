@@ -396,8 +396,6 @@ TBSGroupState GetBSGroupOverallState(
         const TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&>& vDisksIndex,
         const TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&>& pDisksIndex);
 
-NKikimrViewer::EFlag GetFlagFromUsage(double usage);
-
 NKikimrWhiteboard::EFlag GetWhiteboardFlag(NKikimrViewer::EFlag flag);
 NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag);
 

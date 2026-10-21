@@ -16,12 +16,6 @@ namespace NYql::NUdf {
     XX(Exception, 1)            \
     XX(Max, 2)
 
-enum class EValidateDatumMode {
-    None,
-    Cheap,
-    Expensive,
-};
-
 enum class EValidateMode: ui8 {
     UDF_VALIDATE_MODE(ENUM_VALUE_GEN)
 };
@@ -36,5 +30,4 @@ EValidateMode ValidateModeByStr(const TString& verifyModeStr);
 TStringBuf ValidatePolicyAsStr(EValidatePolicy verifyPolicy);
 EValidatePolicy ValidatePolicyByStr(const TString& verifyPolicy);
 
-EValidateDatumMode ToDatumValidateMode(EValidateMode validateMode);
 } // namespace NYql::NUdf

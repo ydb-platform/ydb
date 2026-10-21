@@ -1,20 +1,19 @@
 #pragma once
 #include "common/blob.h"
 
-#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/blobstorage_tablet_types.h>
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/settings.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/tx/columnshard/engines/writer/put_status.h>
-#include <ydb/core/tx/ctor_logger.h>
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NColumnShard {
 
-using TLogThis = TCtorLogger<NKikimrServices::TX_COLUMNSHARD>;
+inline constexpr ui32 FirstDataChannel = 2;
 
 struct TLimits {
 private:

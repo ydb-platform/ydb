@@ -1,0 +1,4 @@
+/* custom error: Cannot add type Decimal(6,2) and Double */
+SELECT
+    Decimal('12.34', 6, 2) + Double('1') AS value
+;

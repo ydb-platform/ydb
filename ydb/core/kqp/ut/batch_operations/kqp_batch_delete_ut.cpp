@@ -8,13 +8,11 @@ using namespace NYdb::NQuery;
 
 namespace {
 
-TKikimrSettings GetTestSettings(size_t maxBatchSize = 10000, size_t partitionLimit = 10,
-    bool enableBatchUpdates = true, bool enableIndexStreamWrite = true)
+TKikimrSettings GetTestSettings(size_t maxBatchSize = 10000, size_t partitionLimit = 10, bool enableIndexStreamWrite = true)
 {
     auto app = NKikimrConfig::TAppConfig();
     app.MutableTableServiceConfig()->SetEnableOlapSink(true);
     app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(enableIndexStreamWrite);
-    app.MutableTableServiceConfig()->SetEnableBatchUpdates(enableBatchUpdates);
     app.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetMaxBatchSize(maxBatchSize);
     app.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetPartitionExecutionLimit(partitionLimit);
 
@@ -586,29 +584,8 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(DisableFlags, UseBatchUpdates) {
-        TKikimrRunner kikimr(GetTestSettings(10000, 10, UseBatchUpdates));
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            auto query = Q_(R"(
-                BATCH DELETE FROM KeyValue
-                    WHERE Key >= 3;
-            )");
-
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            if (UseBatchUpdates) {
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH operations are not supported at the current time.", result.GetIssues().ToString());
-            }
-        }
-    }
-
     Y_UNIT_TEST_TWIN(TableWithSyncIndex, EnableIndexStreamWrite) {
-        TKikimrRunner kikimr(GetTestSettings(10000, 10, true, EnableIndexStreamWrite).SetWithSampleTables(false));
+        TKikimrRunner kikimr(GetTestSettings(10000, 10, EnableIndexStreamWrite).SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -661,7 +638,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
     }
 
     Y_UNIT_TEST_TWIN(TableWithUniqueSyncIndex, EnableIndexStreamWrite) {
-        TKikimrRunner kikimr(GetTestSettings(10000, 10, true, EnableIndexStreamWrite).SetWithSampleTables(false));
+        TKikimrRunner kikimr(GetTestSettings(10000, 10, EnableIndexStreamWrite).SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -767,7 +744,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
     }
 
     Y_UNIT_TEST_TWIN(TableWithAsyncIndex, EnableIndexStreamWrite) {
-        TKikimrRunner kikimr(GetTestSettings(10000, 10, true, EnableIndexStreamWrite).SetWithSampleTables(false));
+        TKikimrRunner kikimr(GetTestSettings(10000, 10, EnableIndexStreamWrite).SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();

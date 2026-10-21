@@ -1,5 +1,6 @@
 /*=============================================================================
     Copyright (c) 2001, Daniel C. Nuffer
+    Copyright (c) 2025 Joaquin M Lopez Munoz
     http://spirit.sourceforge.net/
 
   Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -1257,6 +1258,19 @@ class look_ahead :
         look_ahead(int)         // workaround for a bug in the library
             : base_t() {}       // shipped with gcc 3.1
 #endif // BOOST_WORKAROUND(__GLIBCPP__, == 20020514)
+
+        look_ahead& operator++()
+        {
+            this->base_t::operator++();
+            return *this;
+        }
+
+        look_ahead operator++(int)
+        {
+            look_ahead tmp(*this);
+            this->base_t::operator++();
+            return tmp;
+        }
 
     // default generated operators destructor and assignment operator are okay.
 };

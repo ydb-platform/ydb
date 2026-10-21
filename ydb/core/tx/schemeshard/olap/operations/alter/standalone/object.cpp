@@ -37,6 +37,10 @@ NKikimr::TConclusionStatus TStandaloneTable::InitializeFromTableInfo() {
         TableTTL = std::move(ttl);
     }
 
+    TOlapMultiColumnStatisticsDescription statistics;
+    statistics.Parse(GetTableInfoPtrVerified()->Description);
+    TableMultiColumnStatistics = std::move(statistics);
+
     return TConclusionStatus::Success();
 }
 

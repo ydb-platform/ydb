@@ -1,5 +1,7 @@
 PY3_LIBRARY()
 
+STYLE_PYTHON()
+
 PY_SRCS(
     artifacts.py
     comparator.py
@@ -14,17 +16,12 @@ PY_SRCS(
     sql.py
 )
 
-IF (AUTOCHECK)
-    # YQ-3351: enabling python style checks only for opensource
-    NO_LINT()
-ENDIF()
-
 PEERDIR(
     contrib/python/PyYAML
     yql/essentials/providers/common/proto
+    ydb/library/yql/providers/generic/connector/api/service
     ydb/library/yql/providers/generic/connector/tests/utils/types
     ydb/public/api/protos
-    yt/python/yt/yson
 )
 
 END()

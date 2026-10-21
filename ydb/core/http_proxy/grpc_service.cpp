@@ -3,9 +3,10 @@
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/grpc/server/grpc_method_setup.h>
 
@@ -16,25 +17,28 @@
 namespace NKikimr::NHttpProxy {
 
 using namespace NGRpcService;
-class TGRpcRequestActor : public NActors::TActorBootstrapped<TGRpcRequestActor> {
+class TGRpcRequestActor : public NPQ::TBaseActor<TGRpcRequestActor>
+                          , public NPQ::TConstantLogPrefix {
 public:
-    using TBase = NActors::TActorBootstrapped<TGRpcRequestActor>;
+    using TBase = NPQ::TBaseActor<TGRpcRequestActor>;
 
-
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "[GrpcProxy] ListEndpointRequest requestId : " << RequestId;
+    NPQ::TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"requestId", RequestId});
         // << ReqCtx->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER)
         //                << " trace: " << ReqCtx->GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER) << " ";
     }
 
     TGRpcRequestActor(NYdbGrpc::IRequestContextBase *ctx)
-        : ReqCtx(ctx)
+        : TBase(NKikimrServices::GRPC_PROXY)
+        , ReqCtx(ctx)
         , RequestId(CreateGuidAsString())
     {
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_SP_INFO_S(ctx, NKikimrServices::GRPC_PROXY, "got new request from " << ReqCtx->GetPeer());
+        LOG_I("Got new request",
+            {"peer", ReqCtx->GetPeer()});
         SendYdbDriverRequest(ctx);
         Become(&TGRpcRequestActor::StateWork);
     }
@@ -61,7 +65,7 @@ private:
             database = dynamic_cast<const Ydb::Discovery::ListEndpointsRequest*>(ReqCtx->GetRequest())->database();
         }
         request->DatabasePath = database;
-        LOG_SP_DEBUG_S(ctx, NKikimrServices::GRPC_PROXY, "Database discovery request sent");
+        LOG_D("Database discovery request sent");
 
         ctx.Send(MakeTenantDiscoveryID(), std::move(request));
     }
@@ -70,7 +74,8 @@ private:
 
         if (ev->Get()->DatabaseInfo) {
             auto& db = ev->Get()->DatabaseInfo;
-            LOG_SP_DEBUG_S(ctx, NKikimrServices::GRPC_PROXY, "Database discovery result " << db->Path);
+            LOG_D("Database discovery result",
+                {"dbPath", db->Path});
             SendGrpcRequest(ctx, db->Endpoint, db->Path);
         } else {
             return ReplyWithError(ctx, ev->Get()->Status, ev->Get()->Message);
@@ -79,7 +84,7 @@ private:
 
     void Handle(TEvServerlessProxy::TEvListEndpointsResponse::TPtr ev, const TActorContext& ctx) {
         if (ev->Get()->Record) {
-            LOG_SP_INFO_S(ctx, NKikimrServices::GRPC_PROXY, "Replying ok");
+            LOG_I("Replying ok");
 
             Ydb::Discovery::ListEndpointsResponse * resp = CreateResponseMessage();
             resp->CopyFrom(*(ev->Get()->Record.get()));
@@ -88,19 +93,23 @@ private:
             TBase::Die(ctx);
             return;
         } else if (ev->Get()->Status) {
-            LOG_SP_INFO_S(ctx, NKikimrServices::GRPC_PROXY, "Replying " << ev->Get()->Status->GRpcStatusCode << " error " << ev->Get()->Status->Msg);
+            LOG_I("Replying error",
+                {"grpcStatusCode", ev->Get()->Status->GRpcStatusCode},
+                {"statusMsg", ev->Get()->Status->Msg});
             if (ev->Get()->Status->GRpcStatusCode == grpc::StatusCode::NOT_FOUND)
                 return ReplyWithError(ctx, NYdb::EStatus::NOT_FOUND, TString{ev->Get()->Status->Msg});
             return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR, TString{ev->Get()->Status->Msg});
         } else {
-            LOG_SP_INFO_S(ctx, NKikimrServices::GRPC_PROXY, "Replying INTERNAL ERROR");
+            LOG_I("Replying INTERNAL ERROR");
             return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR, "Error happened while discovering database endpoint");
         }
     }
 
 
     void SendGrpcRequest(const TActorContext& ctx, const TString& endpoint, const TString& database) {
-        LOG_SP_DEBUG_S(ctx, NKikimrServices::GRPC_PROXY, "Send grpc request to " << database << " endpoint " << endpoint);
+        LOG_D("Send grpc request to endpoint",
+            {"database", database},
+            {"endpoint", endpoint});
         ctx.Send(MakeDiscoveryProxyID(), new TEvServerlessProxy::TEvListEndpointsRequest(endpoint, database));
     }
 
@@ -122,10 +131,9 @@ private:
     TString RequestId;
 };
 
-TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system, std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system,
                                  TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
     : ActorSystem_(system)
-    , CredentialsProvider_(credentialsProvider)
     , Counters_(counters)
 {
 

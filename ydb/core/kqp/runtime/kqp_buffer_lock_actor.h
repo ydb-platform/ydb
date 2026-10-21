@@ -17,7 +17,10 @@ public:
 
     virtual void SetLockSettings(
         ui64 cookie,
-        TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns) = 0;
+        TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
+        bool skipAbsent,
+        const NKikimrDataEvents::TMvccSnapshot& mvccSnapshot,
+        const NWilson::TTraceId& traceId) = 0;
 
     virtual void AddLockTask(
         ui64 cookie,
@@ -39,12 +42,12 @@ struct TKqpBufferLockSettings {
     IKqpBufferTableLookupCallbacks* Callbacks = nullptr;
     TTableId TableId;
     TString TablePath;
+    TString Database;
 
     ui64 LockTxId;
     ui64 LockNodeId;
     NKikimrDataEvents::ELockMode LockMode;
     ui64 QuerySpanId = 0;
-    std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
 
     IKqpTransactionManagerPtr TxManager;
 
@@ -55,7 +58,6 @@ struct TKqpBufferLockSettings {
     TActorId SessionActorId;
     TIntrusivePtr<TKqpCounters> Counters;
 
-    NWilson::TTraceId ParentTraceId;
 };
 
 std::pair<IKqpBufferTableLock*, NActors::IActor*> CreateKqpBufferTableLock(TKqpBufferLockSettings&& settings);

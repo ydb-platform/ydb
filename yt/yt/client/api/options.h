@@ -53,20 +53,16 @@ struct TClientOptions
      */
     std::optional<std::string> MultiproxyTargetCluster;
 
-    //! Use a separate connection for lightweight control requests.
-    /**
-    *  If this option is set to true, a separate connection is opened for lightweight requests (for example, ping_transaction).
-    *  This is needed so that important lightweight requests do not wait for heavy requests, such as file writes, to complete.
-    *  However, using this option increases the number of open TCP connections.
-    */
-    bool EnableControlMultiplexingBand = false;
+    //! If set, a master transaction whose commit fails is abandoned (dropped locally, no
+    //! abort) instead of aborted, so a retrier can re-issue the commit. RPC proxy only.
+    bool AbandonMasterTransactionsOnFailedCommit = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Fills client options from environment variable (client options is permanent for whole lifecycle of program).
 /*!
- *  UserName is extracted from YT_USER env variable or uses current system username.
+ *  User is extracted from a non-empty YT_USER env variable; otherwise it remains unset.
  *  Token is extracted from YT_TOKEN env variable or from file `~/.yt/token`.
  */
 TClientOptions GetClientOptionsFromEnv();

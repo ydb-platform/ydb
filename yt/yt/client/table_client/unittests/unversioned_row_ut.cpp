@@ -38,7 +38,7 @@ TEST(TUnversionedOwningValueTest, String)
 
 TEST(TUnversionedOwningValueTest, FromSharedRef)
 {
-    auto string = TSharedRef::FromString("Hello world!");
+    auto string = TSharedRef::FromString(std::string("Hello world!"));
     auto owningValue = MakeUnversionedStringOwningValue(string);
     TUnversionedValue value = owningValue;
     ASSERT_EQ(owningValue.Type(), EValueType::String);
@@ -91,8 +91,7 @@ TEST(TUnversionedOwningRowTest, MakeUnversionedOwningRowAllInline)
         bool(true),
         double(3.14),
         TInstant::Seconds(12345),
-        TDuration::Seconds(67)
-    );
+        TDuration::Seconds(67));
 
     TUnversionedOwningRowBuilder builder(13);
     builder.AddValue(MakeUnversionedNullValue(0));
@@ -120,8 +119,7 @@ TEST(TUnversionedOwningRowTest, MakeUnversionedOwningRowWithNonInline)
         TString("hello"),
         ui64(456),
         TStringBuf("world"),
-        bool(true)
-    );
+        bool(true));
 
     TUnversionedOwningRowBuilder builder(5);
     builder.AddValue(MakeUnversionedInt64Value(123, 0));

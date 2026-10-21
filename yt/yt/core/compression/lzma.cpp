@@ -124,8 +124,8 @@ void LzmaCompress(int level, TSource* source, TBlob* output)
     });
 
     auto checkError = [] (SRes result) {
-        YT_LOG_FATAL_IF(result != SZ_OK, "Lzma compression failed (Error: %v)",
-            result);
+        YT_TLOG_FATAL_IF(result != SZ_OK, "Lzma compression failed")
+            .With("Error", result);
     };
 
     {
@@ -161,7 +161,7 @@ void LzmaDecompress(TSource* source, TBlob* output)
         auto result = LzmaDec_Allocate(&handle, propsBuffer, LZMA_PROPS_SIZE, &Alloc);
         if (result != SZ_OK) {
             THROW_ERROR_EXCEPTION("Lzma decompression failed: LzmaDec_Allocate returned an error")
-                << TErrorAttribute("error", result);
+                .With("error", result);
         }
     }
 
@@ -191,7 +191,7 @@ void LzmaDecompress(TSource* source, TBlob* output)
                 &status);
             if (result != SZ_OK) {
                 THROW_ERROR_EXCEPTION("Lzma decompression failed: LzmaDec_DecodeToDic returned an error")
-                    << TErrorAttribute("error", result);
+                    .With("error", result);
             }
         }
 
@@ -210,7 +210,7 @@ void LzmaDecompress(TSource* source, TBlob* output)
 
     if (status != LZMA_STATUS_FINISHED_WITH_MARK) {
         THROW_ERROR_EXCEPTION("Lzma decompression failed: unexpected final status")
-            << TErrorAttribute("status", static_cast<int>(status));
+            .With("status", static_cast<int>(status));
     }
 }
 

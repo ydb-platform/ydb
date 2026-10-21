@@ -1,17 +1,14 @@
-from __future__ import annotations
-
-import os
 import errno
+import os
+import re
 import shutil
 import subprocess
 import sys
+from itertools import chain
 from pathlib import Path
+from string import Template
 
 from ._backend import Backend
-from string import Template
-from itertools import chain
-
-import warnings
 
 
 class MesonTemplate:
@@ -27,7 +24,7 @@ class MesonTemplate:
         include_dirs: list[Path],
         object_files: list[Path],
         linker_args: list[str],
-        c_args: list[str],
+        fortran_args: list[str],
         build_type: str,
         python_exe: str,
     ):
@@ -45,15 +42,22 @@ class MesonTemplate:
             self.include_dirs = []
         self.substitutions = {}
         self.objects = object_files
+        # Convert args to '' wrapped variant for meson
+        self.fortran_args = [
+            f"'{x}'" if not (x.startswith("'") and x.endswith("'")) else x
+            for x in fortran_args
+        ]
         self.pipeline = [
             self.initialize_template,
             self.sources_substitution,
             self.deps_substitution,
             self.include_substitution,
             self.libraries_substitution,
+            self.fortran_args_substitution,
         ]
         self.build_type = build_type
         self.python_exe = python_exe
+        self.indent = " " * 21
 
     def meson_build_template(self) -> str:
         if not self.build_template_path.is_file():
@@ -71,51 +75,57 @@ class MesonTemplate:
         self.substitutions["python"] = self.python_exe
 
     def sources_substitution(self) -> None:
-        indent = " " * 21
-        self.substitutions["source_list"] = f",\n{indent}".join(
-            [f"{indent}'{source}'" for source in self.sources]
+        self.substitutions["source_list"] = ",\n".join(
+            [f"{self.indent}'''{source}'''," for source in self.sources]
         )
 
     def deps_substitution(self) -> None:
-        indent = " " * 21
-        self.substitutions["dep_list"] = f",\n{indent}".join(
-            [f"{indent}dependency('{dep}')" for dep in self.deps]
+        self.substitutions["dep_list"] = f",\n{self.indent}".join(
+            [f"{self.indent}dependency('{dep}')," for dep in self.deps]
         )
 
     def libraries_substitution(self) -> None:
         self.substitutions["lib_dir_declarations"] = "\n".join(
             [
-                f"lib_dir_{i} = declare_dependency(link_args : ['-L{lib_dir}'])"
+                f"lib_dir_{i} = declare_dependency(link_args : ['''-L{lib_dir}'''])"
                 for i, lib_dir in enumerate(self.library_dirs)
             ]
         )
 
         self.substitutions["lib_declarations"] = "\n".join(
             [
-                f"{lib} = declare_dependency(link_args : ['-l{lib}'])"
+                f"{lib.replace('.', '_')} = declare_dependency(link_args : ['-l{lib}'])"
                 for lib in self.libraries
             ]
         )
 
-        indent = " " * 21
-        self.substitutions["lib_list"] = f"\n{indent}".join(
-            [f"{indent}{lib}," for lib in self.libraries]
+        self.substitutions["lib_list"] = f"\n{self.indent}".join(
+            [f"{self.indent}{lib.replace('.', '_')}," for lib in self.libraries]
         )
-        self.substitutions["lib_dir_list"] = f"\n{indent}".join(
-            [f"{indent}lib_dir_{i}," for i in range(len(self.library_dirs))]
+        self.substitutions["lib_dir_list"] = f"\n{self.indent}".join(
+            [f"{self.indent}lib_dir_{i}," for i in range(len(self.library_dirs))]
         )
 
     def include_substitution(self) -> None:
-        indent = " " * 21
-        self.substitutions["inc_list"] = f",\n{indent}".join(
-            [f"{indent}'{inc}'" for inc in self.include_dirs]
+        self.substitutions["inc_list"] = f",\n{self.indent}".join(
+            [f"{self.indent}'''{inc}'''," for inc in self.include_dirs]
         )
+
+    def fortran_args_substitution(self) -> None:
+        if self.fortran_args:
+            self.substitutions["fortran_args"] = (
+                f"{self.indent}fortran_args: [{', '.join(list(self.fortran_args))}],"
+            )
+        else:
+            self.substitutions["fortran_args"] = ""
 
     def generate_meson_build(self):
         for node in self.pipeline:
             node()
         template = Template(self.meson_build_template())
-        return template.substitute(self.substitutions)
+        meson_build = template.substitute(self.substitutions)
+        meson_build = meson_build.replace(",,", ",")
+        return meson_build
 
 
 class MesonBackend(Backend):
@@ -126,12 +136,14 @@ class MesonBackend(Backend):
         self.build_type = (
             "debug" if any("debug" in flag for flag in self.fc_flags) else "release"
         )
+        self.fc_flags = _get_flags(self.fc_flags)
 
     def _move_exec_to_root(self, build_dir: Path):
         walk_dir = Path(build_dir) / self.meson_build_dir
         path_objects = chain(
             walk_dir.glob(f"{self.modulename}*.so"),
             walk_dir.glob(f"{self.modulename}*.pyd"),
+            walk_dir.glob(f"{self.modulename}*.dll"),
         )
         # Same behavior as distutils
         # https://github.com/numpy/numpy/issues/24874#issuecomment-1835632293
@@ -203,3 +215,17 @@ def _prepare_sources(mname, sources, bdir):
         if not Path(source).suffix == ".pyf"
     ]
     return extended_sources
+
+
+def _get_flags(fc_flags):
+    flag_values = []
+    flag_pattern = re.compile(r"--f(77|90)flags=(.*)")
+    for flag in fc_flags:
+        match_result = flag_pattern.match(flag)
+        if match_result:
+            values = match_result.group(2).strip().split()
+            values = [val.strip("'\"") for val in values]
+            flag_values.extend(values)
+    # Hacky way to preserve order of flags
+    unique_flags = list(dict.fromkeys(flag_values))
+    return unique_flags

@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     AsTuple(
         AsDict(AsTuple(1, 2u)) == AsDict(AsTuple(1, 2)),

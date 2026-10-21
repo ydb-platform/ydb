@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 SELECT
     MULTI_AGGREGATE_BY(nums, AGGREGATION_FACTORY('minby'))
 FROM (

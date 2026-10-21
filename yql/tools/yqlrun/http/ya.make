@@ -1,8 +1,9 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     assets_servlet.cpp
     server.cpp
+    sql_complete_servlet.cpp
     servlet.cpp
     sql_tokens_servlet.cpp
     yql_functions_servlet.cpp
@@ -34,9 +35,20 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/minikql/comp_nodes
     yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/sql/v1/ide/completion
+    yql/essentials/sql/v1/ide/completion/name/cluster/static
+    yql/essentials/sql/v1/ide/completion/name/object/simple
+    yql/essentials/sql/v1/ide/completion/name/object/simple/static
+    yql/essentials/sql/v1/ide/completion/name/service/cluster
+    yql/essentials/sql/v1/ide/completion/name/service/impatient
+    yql/essentials/sql/v1/ide/completion/name/service/schema
+    yql/essentials/sql/v1/ide/completion/name/service/static
+    yql/essentials/sql/v1/ide/completion/name/service/union
     yql/essentials/sql/v1/format
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi
+    yql/essentials/sql/v1/lexer/antlr4_pure
+    yql/essentials/sql/v1/lexer/antlr4_pure_ansi
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
     yql/essentials/utils/log
@@ -78,7 +90,5 @@ RESOURCE(
     yql/essentials/data/language/types.json types.json
     yql/essentials/data/language/sql_functions.json sql_functions.json
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

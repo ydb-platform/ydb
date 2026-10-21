@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <string>
 
@@ -16,6 +17,11 @@
 #include "opentelemetry/sdk/instrumentationscope/instrumentation_scope.h"
 #include "opentelemetry/sdk/logs/logger_context.h"
 #include "opentelemetry/version.h"
+
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+#  include "opentelemetry/nostd/variant.h"
+#  include "opentelemetry/trace/span_context.h"
+#endif  // OPENTELEMETRY_ABI_VERSION_NO >= 2
 
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace sdk
@@ -45,6 +51,12 @@ public:
 
   nostd::unique_ptr<opentelemetry::logs::LogRecord> CreateLogRecord() noexcept override;
 
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+  nostd::unique_ptr<opentelemetry::logs::LogRecord> CreateLogRecord(
+      const nostd::variant<opentelemetry::trace::SpanContext, opentelemetry::context::Context>
+          &context_or_span) noexcept override;
+#endif  // OPENTELEMETRY_ABI_VERSION_NO >= 2
+
   using opentelemetry::logs::Logger::EmitLogRecord;
 
   void EmitLogRecord(
@@ -61,7 +73,7 @@ public:
     return GetInstrumentationScope();
   }
 
-private:
+protected:
   bool EnabledImplementation(opentelemetry::logs::Severity severity,
                              const opentelemetry::logs::EventId &event_id) const noexcept override;
 
@@ -69,13 +81,28 @@ private:
                              int64_t event_id) const noexcept override;
 
 #if OPENTELEMETRY_ABI_VERSION_NO >= 2
-  bool EnabledImplementation(const opentelemetry::context::Context &context,
+  bool EnabledImplementation(const nostd::variant<opentelemetry::trace::SpanContext,
+                                                  opentelemetry::context::Context> &context_or_span,
                              opentelemetry::logs::Severity severity) const noexcept override;
 
-  bool EnabledImplementation(const opentelemetry::context::Context &context,
+  bool EnabledImplementation(const nostd::variant<opentelemetry::trace::SpanContext,
+                                                  opentelemetry::context::Context> &context_or_span,
                              opentelemetry::logs::Severity severity,
                              const opentelemetry::logs::EventId &event_id) const noexcept override;
 #endif  // OPENTELEMETRY_ABI_VERSION_NO >= 2
+
+private:
+  // LoggerProvider needs access to UpdateLoggerConfig to propagate configuration updates to
+  // existing loggers.
+  friend class LoggerProvider;
+
+  /**
+   * Update this logger's LoggerConfig. Called only by
+   * LoggerProvider::UpdateLoggerConfigurator when the provider-level
+   * LoggerConfigurator is replaced at runtime.
+   */
+  void UpdateLoggerConfig(LoggerConfig config) noexcept;
+
   // The name of this logger
   std::string logger_name_;
 
@@ -83,7 +110,10 @@ private:
   // logger-context.
   std::unique_ptr<instrumentationscope::InstrumentationScope> instrumentation_scope_;
   std::shared_ptr<LoggerContext> context_;
-  LoggerConfig logger_config_;
+  // LoggerConfig state is stored in atomic variables to avoid locking in the hot path of Enabled()
+  // and EmitLogRecord().
+  std::atomic<bool> logger_enabled_{true};
+  std::atomic<bool> trace_based_{false};
   static opentelemetry::logs::NoopLogger kNoopLogger;
 };
 

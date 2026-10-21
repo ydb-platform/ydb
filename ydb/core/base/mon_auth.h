@@ -1,8 +1,12 @@
 #pragma once
 
+#include "tablet_types.h"
+
 #include <util/generic/strbuf.h>
 
 namespace NKikimr {
+
+struct TAppData;
 
 // Access model for mutating tablet DevUI requests under `/tablets/app/`:
 //   * operations that require administrator-level access
@@ -15,6 +19,20 @@ namespace NKikimr {
 inline constexpr TStringBuf TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH = "app/secure";
 
 // True if `pathInfo` is exactly `/app/secure` or starts with `/app/secure/`.
-bool IsTabletDevUiSecurePath(TStringBuf pathInfo);
+bool IsTabletDevUiSecurePath(const TStringBuf pathInfo);
+
+// True if the tablet type exposes an `/app/secure` subtree and EnableTabletDevUiSecurePath is set.
+// Such a tablet may still serve part of its DevUI on plain `/app/` (e.g. SchemeShard keeps its
+// read-only pages there and moves only admin actions).
+bool HasTabletDevUiSecureSubtree(const TAppData* appData, TTabletTypes::EType type);
+
+bool IsTabletDevUiAppPageAdminOnly(const TAppData* appData, TTabletTypes::EType type);
+
+// Check, caller must reply with HTTPFORBIDDEN when false.
+bool IsTabletDevUiAccessAllowed(
+    const TAppData* appData,
+    TStringBuf pathInfo,
+    const TString& userToken,
+    bool isMonitoringDevUiRequest);
 
 } // namespace NKikimr

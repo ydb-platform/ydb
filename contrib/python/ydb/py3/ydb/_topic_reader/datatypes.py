@@ -197,23 +197,44 @@ class PublicBatch(ICommittable, ISessionAlive):
         msgs_left = True if len(self.messages) > 1 else False
         return self.messages.pop(0), msgs_left
 
-    def _pop_batch(self, message_count: int) -> PublicBatch:
+    def _pop_batch(self, max_messages: Optional[int] = None, max_bytes: Optional[int] = None) -> PublicBatch:
+        """Split off and return a prefix of the batch, capped by max_messages and/or
+        max_bytes. The remainder stays in self (empty if the whole batch was taken).
+        At least one message is always taken (even for a non-positive max_messages or
+        a max_bytes smaller than a single message) so the caller always makes progress."""
+        initial_length = len(self.messages)
+
+        message_count = initial_length
+        if max_messages is not None:
+            message_count = min(message_count, max_messages)
+        if max_bytes is not None:
+            # Only an aggregate byte size is known, so the per-message size (and
+            # hence the cut) is approximate.
+            one_message_size = self._bytes_size // initial_length
+            message_count = min(message_count, max_bytes // max(1, one_message_size))
+        message_count = max(1, message_count)  # always take at least one message
+
+        return self._pop_batch_count(message_count)
+
+    def _pop_batch_count(self, message_count: int) -> PublicBatch:
         initial_length = len(self.messages)
 
         if message_count >= initial_length:
-            raise ValueError("Pop batch with size >= actual size is not supported.")
-
-        one_message_size = self._bytes_size // initial_length
+            # Take the whole batch, keeping its exact byte size (the proportional
+            # split below would drop the integer-division remainder).
+            new_bytes_size = self._bytes_size
+        else:
+            new_bytes_size = (self._bytes_size // initial_length) * message_count
 
         new_batch = PublicBatch(
             messages=self.messages[:message_count],
             _partition_session=self._partition_session,
-            _bytes_size=one_message_size * message_count,
+            _bytes_size=new_bytes_size,
             _codec=self._codec,
         )
 
         self.messages = self.messages[message_count:]
-        self._bytes_size = self._bytes_size - new_batch._bytes_size
+        self._bytes_size = self._bytes_size - new_bytes_size
 
         return new_batch
 

@@ -20,12 +20,12 @@ TEST(TStatisticPathTest, Literal)
     EXPECT_EQ("ABC"_L.Literal(), "ABC");
 
     EXPECT_TRUE(CheckStatisticPathLiteral("$a/b.c").IsOK());
-    EXPECT_FALSE(CheckStatisticPathLiteral(TString(Delimiter)).IsOK());
+    EXPECT_FALSE(CheckStatisticPathLiteral(std::string(1, Delimiter)).IsOK());
     EXPECT_FALSE(CheckStatisticPathLiteral("\0").IsOK());
     EXPECT_FALSE(CheckStatisticPathLiteral("").IsOK());
 
     EXPECT_THROW(TStatisticPathLiteral("\0"), TErrorException);
-    EXPECT_THROW(TStatisticPathLiteral(TString(Delimiter)), TErrorException);
+    EXPECT_THROW(TStatisticPathLiteral(std::string(1, Delimiter)), TErrorException);
     EXPECT_THROW(TStatisticPathLiteral(""), TErrorException);
 
     EXPECT_EQ("A"_L / "BB"_L / "CCC"_L, "/A/BB/CCC"_SP);
@@ -36,7 +36,7 @@ TEST(TStatisticPathTest, Literal)
 TEST(TStatisticPathTest, Append)
 {
     EXPECT_EQ(("A"_L / "BB"_L / "CCC"_L).Path(),
-        TString(Delimiter) + "A" + Delimiter + "BB" + Delimiter + "CCC");
+        std::string(1, Delimiter) + "A" + Delimiter + "BB" + Delimiter + "CCC");
 
     EXPECT_EQ(("A"_L / "B"_L) / "C"_L, "A"_L / ("B"_L / "C"_L));
 
@@ -53,16 +53,16 @@ TEST(TStatisticPathTest, Iterator)
 
     TStatisticPath path = "A"_L / "BB"_L / "CCC"_L;
 
-    std::vector<TString> expected{"A", "BB", "CCC"};
+    std::vector<std::string> expected{"A", "BB", "CCC"};
 
     {
-        std::vector<TString> actual(path.begin(), path.end());
+        std::vector<std::string> actual(path.begin(), path.end());
         EXPECT_EQ(actual, expected);
     }
 
     {
         std::reverse(expected.begin(), expected.end());
-        std::vector<TString> actual(path.rbegin(), path.rend());
+        std::vector<std::string> actual(path.rbegin(), path.rend());
         EXPECT_EQ(actual, expected);
     }
 
@@ -105,7 +105,7 @@ TEST(TStatisticPathTest, Compare)
 TEST(TStatisticPathTest, Adjacent)
 {
     for (TChar c = std::numeric_limits<TChar>::min();; ++c) {
-        auto literal = ParseStatisticPathLiteral(TString("A") + c + "B");
+        auto literal = ParseStatisticPathLiteral(std::string("A") + c + "B");
         if (literal.IsOK()) {
             EXPECT_LT("A"_L / "B"_L, TStatisticPath(literal.Value()));
         }
@@ -119,22 +119,22 @@ TEST(TStatisticPathTest, Adjacent)
 
 TEST(TStatisticPathTest, Parse)
 {
-    EXPECT_EQ(ParseStatisticPath(TString(Delimiter) + "ABC" + Delimiter + "DEF").ValueOrThrow(), "ABC"_L / "DEF"_L);
+    EXPECT_EQ(ParseStatisticPath(std::string(1, Delimiter) + "ABC" + Delimiter + "DEF").ValueOrThrow(), "ABC"_L / "DEF"_L);
     EXPECT_EQ(ParseStatisticPath("").ValueOrThrow(), TStatisticPath());
 
-    EXPECT_FALSE(ParseStatisticPath(TString(Delimiter) + "A\0B"_sb).IsOK());
-    EXPECT_FALSE(ParseStatisticPath(TString(Delimiter) + "AB" + Delimiter).IsOK());
-    EXPECT_FALSE(ParseStatisticPath(TString(Delimiter) + "A" + Delimiter + Delimiter + "B").IsOK());
+    EXPECT_FALSE(ParseStatisticPath(std::string(1, Delimiter) + std::string("A\0B"_sb)).IsOK());
+    EXPECT_FALSE(ParseStatisticPath(std::string(1, Delimiter) + "AB" + Delimiter).IsOK());
+    EXPECT_FALSE(ParseStatisticPath(std::string(1, Delimiter) + "A" + Delimiter + Delimiter + "B").IsOK());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TEST(TStatisticPathTest, Constructor)
 {
-    EXPECT_EQ(TStatisticPath("abc"_L).Path(), TString(Delimiter) + "abc");
+    EXPECT_EQ(TStatisticPath("abc"_L).Path(), std::string(1, Delimiter) + "abc");
 
     TStatisticPath defaultConstructed;
-    EXPECT_EQ(defaultConstructed.Path(), TString());
+    EXPECT_EQ(defaultConstructed.Path(), std::string());
     EXPECT_TRUE(defaultConstructed.Empty());
 }
 
@@ -222,7 +222,7 @@ TEST(TStatisticPathTest, Serialize)
 {
     TStatisticPath path = "A"_L / "B/C"_L;
     EXPECT_EQ(
-        ConvertTo<TString>(ConvertToYsonString(path)),
+        ConvertTo<std::string>(ConvertToYsonString(path)),
         path.Path());
 }
 

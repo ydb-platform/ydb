@@ -14,7 +14,7 @@ check_dependency() {
   fi
 }
 
-DIR=${1:-"$TMPDIR"docs}
+DIR=${1:-"$(python3 -c "import os; print(os.path.realpath('${TMPDIR:-/tmp}'))")docs"}
 
 check_dependency "yfm" "YFM builder" "https://diplodoc.com/docs/en/tools/docs/"
 

@@ -40,7 +40,7 @@ public:
 private:
     NYTree::TYPath Path;
     int TabletIndex;
-    std::vector<TString> Payloads;
+    std::vector<std::string> Payloads;
 
     void DoExecute(ICommandContextPtr context) override;
 };

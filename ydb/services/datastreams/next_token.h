@@ -3,6 +3,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/datetime/base.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NDataStreams::V1 {
 
@@ -33,7 +34,7 @@ TNextToken(const TString& streamArn, ui32 alreadyRead, ui32 maxResults, ui64 cre
 TString Serialize() const {
     TString data;
     bool result = Proto.SerializeToString(&data);
-    Y_ABORT_UNLESS(result);
+    AFL_ENSURE(result);
     TString encoded;
     Base64Encode(data, encoded);
     return encoded;

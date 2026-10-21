@@ -43,19 +43,19 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
             case NScheme::NTypeIds::Pg: {
                 NKikimrProto::TTypeInfo typeInfo;
                 NScheme::ProtoFromTypeInfo(col.PType, col.PTypeMod, typeInfo);
-                delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.IsSensitive, col.Null);
+                delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.IsSensitive, col.Null, col.SetNotNullInProgress);
                 break;
             }
             case NScheme::NTypeIds::Decimal: {
                 NKikimrProto::TTypeInfo typeInfo;
                 NScheme::ProtoFromTypeInfo(col.PType, {}, typeInfo);
-                delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.IsSensitive, col.Null);
+                delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.IsSensitive, col.Null, col.SetNotNullInProgress);
                 break;
             }
             default: {
-                delta.AddColumn(table, col.Name, it.first, col.PType.GetTypeId(), col.NotNull, col.IsSensitive, col.Null);
+                delta.AddColumn(table, col.Name, it.first, col.PType.GetTypeId(), col.NotNull, col.IsSensitive, col.Null, col.SetNotNullInProgress);
                 break;
-            }            
+            }
             }
 
             delta.AddColumnToFamily(table, it.first, col.Family);
@@ -88,6 +88,10 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
         // N.B. must be last for compatibility with older versions :(
         delta.SetByKeyFilterPrefixes(table, itTable.second.ByKeyFilterPrefixes);
         delta.SetColdBorrow(table, itTable.second.ColdBorrow);
+
+        if (itTable.second.SpecialTableType != 0) {
+            delta.SetSpecialTableType(table, itTable.second.SpecialTableType);
+        }
     }
 
     delta.SetRedo(Redo.Annex);
@@ -136,14 +140,14 @@ TAlter& TAlter::DropTable(ui32 id)
     return ApplyLastRecord();
 }
 
-TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, bool isSensitive, TCell null)
+TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, bool isSensitive, TCell null, bool setNotNullInProgress)
 {
     Y_ENSURE(!NScheme::NTypeIds::IsParametrizedType(type));
-    return AddColumnWithTypeInfo(table, name, id, type, {}, notNull, isSensitive, null);
+    return AddColumnWithTypeInfo(table, name, id, type, {}, notNull, isSensitive, null, setNotNullInProgress);
 }
 
 TAlter& TAlter::AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type,
-        const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, TCell null)
+        const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, TCell null, bool setNotNullInProgress)
 {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::AddColumn);
@@ -153,6 +157,7 @@ TAlter& TAlter::AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, 
     delta.SetColumnType(type);
     delta.SetNotNull(notNull);
     delta.SetIsSensitive(isSensitive);
+    delta.SetSetNotNullInProgress(setNotNullInProgress);
 
     if (!null.IsNull())
         delta.SetDefault(null.Data(), null.Size());
@@ -406,6 +411,16 @@ TAlter& TAlter::SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 max
         delta.SetEraseCacheMinRows(minRows);
         delta.SetEraseCacheMaxBytes(maxBytes);
     }
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::SetSpecialTableType(ui32 tableId, ui32 type)
+{
+    TAlterRecord &delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetTable);
+    delta.SetTableId(tableId);
+    delta.SetSpecialTableType(type);
 
     return ApplyLastRecord();
 }

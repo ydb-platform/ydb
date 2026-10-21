@@ -368,6 +368,28 @@ NThreading::TFuture<uint64_t> TFederatedWriteSessionImpl::GetInitSeqNo() {
     return NThreading::MakeFuture<uint64_t>(0u);
 }
 
+NThreading::TFuture<bool> TFederatedWriteSessionImpl::Flush() {
+    std::lock_guard guard(Lock);
+    if (SessionState == State::CLOSED) {
+        return NThreading::MakeFuture(false);
+    }
+
+    TWrappedWriteMessage* message = nullptr;
+    if (!OriginalMessagesToPassDown.empty()) {
+        message = &OriginalMessagesToPassDown.back();
+    } else if (!OriginalMessagesToGetAck.empty()) {
+        message = &OriginalMessagesToGetAck.back();
+    } else {
+        return NThreading::MakeFuture(true);
+    }
+
+    if (!message->FlushPromise.Initialized()) {
+        message->InitFlushPromise(Connections);
+    }
+
+    return message->FlushPromise.GetFuture();
+}
+
 void TFederatedWriteSessionImpl::Write(NTopic::TContinuationToken&& token, std::string_view data, std::optional<uint64_t> seqNo,
                                    std::optional<TInstant> createTimestamp) {
     NTopic::TWriteMessage message{std::move(data)};
@@ -436,6 +458,14 @@ void TFederatedWriteSessionImpl::CloseImpl(NTopic::TSessionClosedEvent const& ev
     }
     SessionState = State::CLOSED;
     NTopic::Cancel(UpdateStateDelayContext);
+
+    for (auto& message : OriginalMessagesToPassDown) {
+        message.CompleteFlush(false);
+    }
+    for (auto& message : OriginalMessagesToGetAck) {
+        message.CompleteFlush(false);
+    }
+
     if (!HasBeenClosed.HasValue()) {
         HasBeenClosed.SetValue();
     }

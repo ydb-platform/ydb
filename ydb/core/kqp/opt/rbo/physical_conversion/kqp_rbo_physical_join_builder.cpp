@@ -1,5 +1,6 @@
 #include "kqp_rbo_physical_join_builder.h"
 #include "kqp_rbo_physical_convertion_utils.h"
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
@@ -7,48 +8,93 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
+namespace {
 
-TString TPhysicalJoinBuilder::GetValidJoinKind(const TString& joinKind) const {
-    const auto joinKindLowered = to_lower(joinKind);
-    if (joinKindLowered == "left") {
-        return "Left";
-    } else if (joinKindLowered == "inner") {
-        return "Inner";
-    } else if (joinKindLowered == "cross") {
-        return "Cross";
+bool BadKeyTypeForHashJoin(const TTypeAnnotationNode* type) {
+    while (type && (type->GetKind() == ETypeAnnotationKind::Tagged || type->GetKind() == ETypeAnnotationKind::Optional)) {
+        if (type->GetKind() == ETypeAnnotationKind::Tagged) {
+            type = type->Cast<TTaggedExprType>()->GetBaseType();
+        } else {
+            type = type->Cast<TOptionalExprType>()->GetItemType();
+        }
     }
-    return joinKind;
+
+    Y_ENSURE(type, "Null type for join key");
+
+    switch (type->GetKind()) {
+        case ETypeAnnotationKind::List:
+        case ETypeAnnotationKind::Dict:
+        case ETypeAnnotationKind::Variant:
+        case ETypeAnnotationKind::Resource:
+            return true;
+        case ETypeAnnotationKind::Struct:
+            for (const auto* item : type->Cast<TStructExprType>()->GetItems()) {
+                if (BadKeyTypeForHashJoin(item->GetItemType())) {
+                    return true;
+                }
+            }
+            return false;
+        case ETypeAnnotationKind::Tuple:
+            for (const auto* element : type->Cast<TTupleExprType>()->GetItems()) {
+                if (BadKeyTypeForHashJoin(element)) {
+                    return true;
+                }
+            }
+            return false;
+        default:
+            return false;
+    }
 }
+
+bool BadTypesForBlockJoin(TOpJoin& join, TExprContext& ctx) {
+    for (const auto & joinIU : join.JoinKeys.Items()) {
+        if (BadKeyTypeForHashJoin(join.GetLeftInput()->GetIUType(joinIU.first, ctx))) {
+            return true;
+        }
+        if (BadKeyTypeForHashJoin(join.GetRightInput()->GetIUType(joinIU.second, ctx))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}
+
 
 TExprNode::TPtr TPhysicalJoinBuilder::BuildCrossJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput) {
     TCoArgument leftArg{Ctx.NewArgument(Pos, "_kqp_left")};
     TCoArgument rightArg{Ctx.NewArgument(Pos, "_kqp_right")};
+    const auto leftIUs = NPhysicalConvertionUtils::GetLiveInputIUs(Join, 0);
+    const auto rightIUs = NPhysicalConvertionUtils::GetLiveInputIUs(Join, 1);
+
+    leftInput = NPhysicalConvertionUtils::ExtractMembers(leftInput, Ctx, leftIUs, Names);
+    rightInput = NPhysicalConvertionUtils::ExtractMembers(rightInput, Ctx, rightIUs, Names);
 
     TVector<TExprNode::TPtr> keys;
-    for (const auto& iu : Join->GetLeftInput()->GetOutputIUs()) {
-        YQL_CLOG(TRACE, CoreDq) << "Converting Cross Join, left key: " << iu.GetFullName();
+    for (const auto& iu : leftIUs) {
+        YQL_CLOG(TRACE, CoreDq) << "Converting Cross Join, left key: " << Names.Get(iu);
 
         // clang-format off
         auto keyPtr = Build<TCoNameValueTuple>(Ctx, Pos)
-            .Name().Build(iu.GetFullName())
+            .Name().Build(Names.Get(iu))
             .Value<TCoMember>()
                 .Struct(leftArg)
-                .Name().Build(iu.GetFullName())
+                .Name().Build(Names.Get(iu))
             .Build()
             .Done().Ptr();
         // clang-format on
         keys.push_back(keyPtr);
     }
 
-    for (const auto& iu : Join->GetRightInput()->GetOutputIUs()) {
-        YQL_CLOG(TRACE, CoreDq) << "Converting Cross Join, right key: " << iu.GetFullName();
+    for (const auto& iu : rightIUs) {
+        YQL_CLOG(TRACE, CoreDq) << "Converting Cross Join, right key: " << Names.Get(iu);
 
         // clang-format off
         auto keyPtr = Build<TCoNameValueTuple>(Ctx, Pos)
-            .Name().Build(iu.GetFullName())
+            .Name().Build(Names.Get(iu))
             .Value<TCoMember>()
                 .Struct(rightArg)
-                .Name().Build(iu.GetFullName())
+                .Name().Build(Names.Get(iu))
             .Build()
             .Done().Ptr();
         // clang-format on
@@ -113,7 +159,7 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildCrossJoin(TExprNode::TPtr leftInput, 
     // clang-format on
 }
 
-TExprNode::TPtr TPhysicalJoinBuilder::PrepareJoinSide(TExprNode::TPtr input, const TVector<TInfoUnit>& colNames, TVector<TString>& joinKeys,
+TExprNode::TPtr TPhysicalJoinBuilder::PrepareJoinSide(TExprNode::TPtr input, const TVector<TInfoUnitId>& colNames, TVector<TString>& joinKeys,
                                                       const TModifyKeysList& remap, const bool filterNulls) {
     // clang-format off
     auto castMap = Ctx.Builder(Pos)
@@ -125,7 +171,7 @@ TExprNode::TPtr TPhysicalJoinBuilder::PrepareJoinSide(TExprNode::TPtr input, con
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                         ui32 i = 0U;
                         for (const auto& colName : colNames) {
-                            const auto colNameStr = colName.GetFullName();
+                            const auto colNameStr = Names.Get(colName);
                             parent.List(i++)
                                 .Atom(0, colNameStr)
                                 .Callable(1, "Member")
@@ -186,16 +232,13 @@ TExprNode::TPtr TPhysicalJoinBuilder::PrepareJoinSide(TExprNode::TPtr input, con
         }
     }
 
-    // Update join keys.
-    THashMap<TString, ui32> joinKeysIndexMap;
-    for (ui32 i = 0; i < joinKeys.size(); ++i) {
-        joinKeysIndexMap[joinKeys[i]] = i;
-    }
-
     for (const auto& remapTuple: remap) {
-        const auto& oldKey = std::get<0>(remapTuple);
-        const auto& newKey = std::get<1>(remapTuple);
-        joinKeys[joinKeysIndexMap[oldKey]] = newKey;
+        const auto oldKey = std::get<0>(remapTuple).StringValue();
+        const auto newKey = std::get<1>(remapTuple).StringValue();
+        const ui32 joinKeyIndex = std::get<2>(remapTuple);
+        Y_ENSURE(joinKeyIndex < joinKeys.size());
+        Y_ENSURE(joinKeys[joinKeyIndex] == oldKey);
+        joinKeys[joinKeyIndex] = newKey;
     }
 
     return castMap;
@@ -204,39 +247,45 @@ TExprNode::TPtr TPhysicalJoinBuilder::PrepareJoinSide(TExprNode::TPtr input, con
 void TPhysicalJoinBuilder::PrepareJoinKeys(TVector<TString>& leftJoinKeys, TVector<TString>& rightJoinKeys, TModifyKeysList& remapLeft,
                                            TModifyKeysList& remapRight, THashMap<TString, TString>& leftColumnRemap,
                                            THashMap<TString, TString>& rightColumnRemap, TVector<TString>& leftJoinKeyRenames,
-                                           TVector<TString>& rightJoinKeyRenames, const TStructExprType* leftInputType, const TStructExprType* rightInputType,
-                                           const bool outer, const EJoinSide joinSide) {
-    for (ui32 i = 0; i < Join->JoinKeys.size(); ++i) {
-        const auto joinKeyPair = Join->JoinKeys[i];
-        const auto leftKey = joinKeyPair.first.GetFullName();
-        leftJoinKeys.emplace_back(leftKey);
-        const auto rightKey = joinKeyPair.second.GetFullName();
-        rightJoinKeys.emplace_back(rightKey);
+                                           TVector<TString>& rightJoinKeyRenames, const bool outer, const EJoinSide joinSide, const TTypeAnnotationContext& typesCtx) {
+    THashSet<TString> seenLeftKeys;
+    THashSet<TString> seenRightKeys;
 
-        const auto leftKeyType = leftInputType->FindItemType(leftKey);
-        const auto rightKeyType = rightInputType->FindItemType(rightKey);
+    for (ui32 i = 0; i < Join.JoinKeys.Items().size(); ++i) {
+        const auto joinKeyPair = Join.JoinKeys.Items()[i];
+        const auto leftKey = Names.Get(joinKeyPair.first);
+        leftJoinKeys.emplace_back(leftKey);
+        const auto rightKey = Names.Get(joinKeyPair.second);
+        rightJoinKeys.emplace_back(rightKey);
+        const bool duplicateLeftKey = !seenLeftKeys.insert(leftKey).second;
+        const bool duplicateRightKey = !seenRightKeys.insert(rightKey).second;
+
+        const auto leftKeyType = Join.GetLeftInput()->GetIUType(joinKeyPair.first, Ctx);
+        const auto rightKeyType = Join.GetRightInput()->GetIUType(joinKeyPair.second, Ctx);
         Y_ENSURE(leftKeyType && rightKeyType, "No types for join keys");
+
+        const bool keepOptional = outer || joinKeyPair.EqualNulls;
 
         const TTypeAnnotationNode* commonType = nullptr;
         if (joinSide == EJoinSide::Left) {
-            commonType = JoinDryKeyType(outer, leftKeyType, rightKeyType, Ctx);
+            commonType = JoinDryKeyType(keepOptional, leftKeyType, rightKeyType, Ctx);
         } else if (joinSide == EJoinSide::Right) {
-            commonType = JoinDryKeyType(outer, rightKeyType, leftKeyType, Ctx);
+            commonType = JoinDryKeyType(keepOptional, rightKeyType, leftKeyType, Ctx);
         } else {
-            commonType = JoinCommonDryKeyType(Pos, outer, leftKeyType, rightKeyType, Ctx);
+            commonType = JoinCommonDryKeyType(Pos, keepOptional, leftKeyType, rightKeyType, Ctx, typesCtx);
         }
 
         if (commonType) {
-            if (!IsSameAnnotation(*leftKeyType, *commonType)) {
-                const TString rename = TString("_rbo_join_key_left_") + ToString(i);
+            if (!IsSameAnnotation(*leftKeyType, *commonType) || duplicateLeftKey) {
+                const TString rename = Names.GetTemporaryName(TString("_rbo_join_key_left_") + ToString(i) + "_");
                 leftColumnRemap[leftKey] = rename;
                 const auto joinKey = Ctx.NewAtom(Pos, leftKey);
                 const auto renameKey = Ctx.NewAtom(Pos, rename);
                 remapLeft.emplace_back(joinKey, renameKey, i, commonType);
                 leftJoinKeyRenames.emplace_back(rename);
             }
-            if (!IsSameAnnotation(*rightKeyType, *commonType)) {
-                const TString rename = TString("_rbo_join_key_right_") + ToString(i);
+            if (!IsSameAnnotation(*rightKeyType, *commonType) || duplicateRightKey) {
+                const TString rename = Names.GetTemporaryName(TString("_rbo_join_key_right_") + ToString(i) + "_");
                 rightColumnRemap[rightKey] = rename;
                 const auto joinKey = Ctx.NewAtom(Pos, rightKey);
                 const auto renameKey = Ctx.NewAtom(Pos, rename);
@@ -333,9 +382,63 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildMapJoin(const TString& joinType, TExp
     // clang-format on
 }
 
+void TPhysicalJoinBuilder::PrepareJoinFilters(TExprNode::TPtr& leftLambda, TExprNode::TPtr& rightLambda, TExprNode::TPtr& commonLambda,
+                                              const TVector<TString>& leftInputColumns, const TVector<TString>& rightInputColumns,
+                                              const TString& joinType) {
+    TVector<TExpression> leftFilters;
+    TVector<TExpression> rightFilters;
+    TVector<TExpression> commonFilters;
+    const auto leftIds = NPhysicalConvertionUtils::GetLiveInputIUs(Join, 0);
+    const auto rightIds = NPhysicalConvertionUtils::GetLiveInputIUs(Join, 1);
+    // Wide-row position of each input ID.
+    TMappedIUs<ui32> leftInputs;
+    TMappedIUs<ui32> rightInputs;
+    for (ui32 i = 0; i < leftIds.size(); ++i) {
+        leftInputs.Add(leftIds[i], i);
+    }
+    for (ui32 i = 0; i < rightIds.size(); ++i) {
+        rightInputs.Add(rightIds[i], i);
+    }
+
+    TUnorderedIUs unwrapInputs;
+    // Block left join adds an optional layer to originally non-optional RHS fields.
+    if (joinType == "Left") {
+        for (const auto id : rightIds) {
+            if (Join.GetRightInput()->GetIUType(id, Ctx)->GetKind() != ETypeAnnotationKind::Optional) {
+                unwrapInputs.Add(id);
+            }
+        }
+    }
+
+    for (const auto& filterExpr : Join.JoinFilters) {
+        if (filterExpr.GetInputIUs().IsSubsetOf(Join.GetLeftInput()->GetOutputIUs())) {
+            leftFilters.push_back(filterExpr);
+        } else if (filterExpr.GetInputIUs().IsSubsetOf(Join.GetRightInput()->GetOutputIUs())) {
+            rightFilters.push_back(filterExpr);
+        } else {
+            commonFilters.push_back(filterExpr);
+        }
+    }
+
+    auto leftFilter = leftFilters.size() ? MakeConjunction(leftFilters).Node : NPhysicalConvertionUtils::BuildVoidLambda(Ctx, Pos);
+    leftLambda = NPhysicalConvertionUtils::ConvertToWideJoinFilter(leftFilter, leftInputs, unwrapInputs, leftInputColumns.size(), Ctx);
+
+    auto rightFilter = rightFilters.size() ? MakeConjunction(rightFilters).Node : NPhysicalConvertionUtils::BuildVoidLambda(Ctx, Pos);
+    rightLambda = NPhysicalConvertionUtils::ConvertToWideJoinFilter(rightFilter, rightInputs, unwrapInputs, rightInputColumns.size(), Ctx);
+
+    // Cast/duplicate-key temporaries occupy wide slots but have no logical IDs.
+    for (const auto& [id, position] : rightInputs.Items()) {
+        leftInputs.Add(id, leftInputColumns.size() + position);
+    }
+    auto commonFilter = commonFilters.size() ? MakeConjunction(commonFilters).Node : NPhysicalConvertionUtils::BuildVoidLambda(Ctx, Pos);
+    commonLambda = NPhysicalConvertionUtils::ConvertToWideJoinFilter(commonFilter, leftInputs, unwrapInputs,
+        leftInputColumns.size() + rightInputColumns.size(), Ctx);
+}
+
 TExprNode::TPtr TPhysicalJoinBuilder::BuildBlockHashJoin(const TString& joinType, TExprNode::TPtr leftInput, TExprNode::TPtr rightInput,
                                                          const TVector<TCoAtom>& leftKeyColumnIdxs, const TVector<TCoAtom>& rightKeyColumnIdsx,
                                                          const TVector<TCoAtom>& leftKeyColumnNames, const TVector<TCoAtom>& rightKeyColumnNames,
+                                                         const TVector<TString>& leftInputColumns, const TVector<TString>& rightInputColumns,
                                                          bool isReverseBlockJoin) {
     TVector<TCoNameValueTuple> joinSettings;
     if (isReverseBlockJoin) {
@@ -344,9 +447,28 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildBlockHashJoin(const TString& joinType
             Build<TCoNameValueTuple>(Ctx, Pos)
                 .Name().Build("BuildSide")
                 .Value<TCoAtom>().Build("Left")
-                .Done());
+            .Done());
         // clang-format on
     }
+
+    for (size_t keyIndex = 0; keyIndex < Join.JoinKeys.Items().size(); ++keyIndex) {
+        if (Join.JoinKeys.Items()[keyIndex].EqualNulls) {
+            // clang-format off
+            joinSettings.push_back(
+                Build<TCoNameValueTuple>(Ctx, Pos)
+                    .Name().Build("EqualNulls")
+                    .Value<TCoUint32>()
+                        .Literal().Build(ToString(keyIndex))
+                        .Build()
+                .Done());
+            // clang-format on
+        }
+    }
+
+    TExprNode::TPtr leftFilter;
+    TExprNode::TPtr rightFilter;
+    TExprNode::TPtr commonFilter;
+    PrepareJoinFilters(leftFilter, rightFilter, commonFilter, leftInputColumns, rightInputColumns, joinType);
 
     // clang-format off
     return Build<TDqBlockHashJoinCore>(Ctx, Pos)
@@ -370,6 +492,9 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildBlockHashJoin(const TString& joinType
         .Settings()
             .Add(joinSettings)
         .Build()
+        .LeftFilter(leftFilter)
+        .RightFilter(rightFilter)
+        .CommonFilter(commonFilter)
     .Done().Ptr();
     // clang-format on
 }
@@ -408,13 +533,12 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildGraceJoin(const TString& joinType, TE
     // clang-format on
 }
 
-TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin) {
-    const TPhysicalOpProps& props = Join->Props;
-    const auto leftIUs = Join->GetLeftInput()->GetOutputIUs();
-    const auto rightIUs = Join->GetRightInput()->GetOutputIUs();
-    const auto joinType = GetValidJoinKind(Join->JoinKind);
+TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) {
+    const TPhysicalOpProps& props = Join.Props;
+    const auto leftIUs = NPhysicalConvertionUtils::GetLiveInputIUs(Join, 0);
+    const auto rightIUs = NPhysicalConvertionUtils::GetLiveInputIUs(Join, 1);
+    const auto joinType = GetValidJoinKind(Join.JoinKind);
     const bool rightSideEmpty = (joinType == "LeftSemi"sv || joinType == "LeftOnly"sv);
-    const bool leftSideEmpty = (joinType == "RightSemi"sv || joinType == "RightOnly"sv);
 
     const bool outer = !(joinType == "Inner"sv || joinType.EndsWith("Semi"));
     EJoinSide joinSide = EJoinSide::Both;
@@ -423,15 +547,27 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
     } else if (joinType.StartsWith("Right"sv)) {
         joinSide = EJoinSide::Right;
     }
+
     Y_ENSURE(props.JoinAlgo.has_value());
-    const auto joinAlgo = *(props.JoinAlgo);
+    auto joinAlgo = *(props.JoinAlgo);
 
-    useBlockHashJoin = useBlockHashJoin &&
-                       (joinAlgo == NKikimr::NKqp::EJoinAlgoType::GraceJoin || joinAlgo == NKikimr::NKqp::EJoinAlgoType::ReverseBlockJoin) &&
-                       (joinType == "Inner"sv || joinType == "Left"sv || joinType == "LeftSemi"sv || joinType == "LeftOnly"sv);
+    Y_ENSURE(!HasEqualNullsKey(Join.JoinKeys) || useBlockHashJoin,
+             "Join keys with IS NOT DISTINCT FROM semantics require the block hash join");
 
-    const auto leftInputType = Join->GetLeftInput()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    const auto rightInputType = Join->GetRightInput()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    if (!Join.JoinFilters.empty() && joinAlgo == NKikimr::NKqp::EJoinAlgoType::MapJoin) {
+        Y_ENSURE(useBlockHashJoin, "Join filters are supported only with BlockHashJoin.");
+    }
+
+    if (joinAlgo == NKikimr::NKqp::EJoinAlgoType::MapJoin && useBlockHashJoin) {
+        joinAlgo = NKikimr::NKqp::EJoinAlgoType::GraceJoin;
+    }
+
+    if (joinAlgo != NKikimr::NKqp::EJoinAlgoType::MapJoin && joinAlgo != NKikimr::NKqp::EJoinAlgoType::GraceJoin &&
+        joinAlgo != NKikimr::NKqp::EJoinAlgoType::ReverseBlockJoin) {
+        YQL_CLOG(DEBUG, CoreDq) << "Join algo " << static_cast<int>(joinAlgo) << " has no physical implementation here taking GraceJoin";
+        joinAlgo = NKikimr::NKqp::EJoinAlgoType::GraceJoin;
+    }
+
     TModifyKeysList remapLeft;
     TModifyKeysList remapRight;
     THashMap<TString, TString> leftColumnRemap;
@@ -444,7 +580,7 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
     TVector<TCoAtom> rightKeyColumnNames;
 
     PrepareJoinKeys(leftJoinKeys, rightJoinKeys, remapLeft, remapRight, leftColumnRemap, rightColumnRemap, leftJoinKeyRenames, rightJoinKeyRenames,
-                    leftInputType, rightInputType, outer, joinSide);
+                    outer, joinSide, typesCtx);
     if (!remapLeft.empty()) {
         leftInput = PrepareJoinSide(leftInput, leftIUs, leftJoinKeys, remapLeft, !useBlockHashJoin && (!outer || joinSide == EJoinSide::Right));
     }
@@ -453,21 +589,27 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
     }
 
     // Prepare inputs.
+    const auto joinOutputs = NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(Join), Names);
+
     TVector<TString> leftInputColumns;
     THashSet<TString> leftOutputColumns;
     for (const auto& leftCol : leftIUs) {
-        const auto column = leftCol.GetFullName();
+        const auto column = Names.Get(leftCol);
         leftInputColumns.push_back(column);
-        leftOutputColumns.insert(column);
+        if (joinOutputs.contains(column)) {
+            leftOutputColumns.insert(column);
+        }
     }
     leftInputColumns.insert(leftInputColumns.end(), leftJoinKeyRenames.begin(), leftJoinKeyRenames.end());
 
     TVector<TString> rightInputColumns;
     THashSet<TString> rightOutputColumns;
     for (const auto& rightCol : rightIUs) {
-        const auto column = rightCol.GetFullName();
+        const auto column = Names.Get(rightCol);
         rightInputColumns.push_back(column);
-        rightOutputColumns.insert(column);
+        if (joinOutputs.contains(column)) {
+            rightOutputColumns.insert(column);
+        }
     }
     rightInputColumns.insert(rightInputColumns.end(), rightJoinKeyRenames.begin(), rightJoinKeyRenames.end());
 
@@ -488,15 +630,15 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
         rightJoinKeyIdxs.push_back(rightIdx);
     }
 
-    // Prepare renames.
+    // LeftSemi/LeftOnly emit no right columns.
     ui32 outputIdx = 0;
+    TVector<TString> joinOutputColumns;
     TVector<TCoAtom> leftRenames;
-    if (!leftSideEmpty) {
-        for (ui32 i = 0; i < leftInputColumns.size(); ++i) {
-            if (leftOutputColumns.contains(leftInputColumns[i])) {
-                leftRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
-                leftRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(outputIdx++).Done());
-            }
+    for (ui32 i = 0; i < leftInputColumns.size(); ++i) {
+        if (leftOutputColumns.contains(leftInputColumns[i])) {
+            leftRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
+            leftRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(outputIdx++).Done());
+            joinOutputColumns.push_back(leftInputColumns[i]);
         }
     }
 
@@ -506,6 +648,7 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
             if (rightOutputColumns.contains(rightInputColumns[i])) {
                 rightRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
                 rightRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(outputIdx++).Done());
+                joinOutputColumns.push_back(rightInputColumns[i]);
             }
         }
     }
@@ -520,9 +663,8 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
     .Done().Ptr();
     // clang-format on
 
-
-    leftInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(leftInput, leftInputColumns, Ctx);
-    rightInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(rightInput, rightInputColumns, Ctx);
+    leftInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(leftInput, leftInputColumns, Ctx, Names);
+    rightInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(rightInput, rightInputColumns, Ctx, Names);
 
     if (useBlockHashJoin) {
         // clang-format off
@@ -549,10 +691,11 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
         }
         case NKikimr::NKqp::EJoinAlgoType::GraceJoin:
         case NKikimr::NKqp::EJoinAlgoType::ReverseBlockJoin: {
-            phyJoin = useBlockHashJoin ? BuildBlockHashJoin(joinType, leftInput, rightInput, leftColumnIdxs, rightColumnIdxs, leftKeyColumnNames,
-                                                            rightKeyColumnNames, joinAlgo == NKikimr::NKqp::EJoinAlgoType::ReverseBlockJoin)
-                                       : BuildGraceJoin(joinType, leftInput, rightInput, leftColumnIdxs, rightColumnIdxs, leftRenames, rightRenames,
-                                                        leftKeyColumnNames, rightKeyColumnNames);
+            phyJoin = useBlockHashJoin
+                          ? BuildBlockHashJoin(joinType, leftInput, rightInput, leftColumnIdxs, rightColumnIdxs, leftKeyColumnNames, rightKeyColumnNames,
+                                               leftInputColumns, rightInputColumns, joinAlgo == NKikimr::NKqp::EJoinAlgoType::ReverseBlockJoin)
+                          : BuildGraceJoin(joinType, leftInput, rightInput, leftColumnIdxs, rightColumnIdxs, leftRenames, rightRenames, leftKeyColumnNames,
+                                           rightKeyColumnNames);
             break;
         }
         default: {
@@ -567,11 +710,6 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
             inputs.insert(inputs.end(), rightInputColumns.begin(), rightInputColumns.end());
         }
 
-        THashSet<TString> outputs;
-        for (const auto& outputColumn : Join->GetOutputIUs()) {
-            outputs.insert(outputColumn.GetFullName());
-        }
-
         // clang-format off
         phyJoin = Build<TCoToFlow>(Ctx, Pos)
             .Input<TCoWideFromBlocks>()
@@ -580,24 +718,30 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
         .Done().Ptr();
 
         return Build<TCoFromFlow>(Ctx, Pos)
-            .Input(NPhysicalConvertionUtils::BuildNarrowMapForWideInput(phyJoin, inputs, outputs, Ctx))
+            .Input(NPhysicalConvertionUtils::BuildNarrowMapForWideInput(phyJoin, inputs, joinOutputs, Ctx, Names))
         .Done().Ptr();
         // clang-format on
     }
 
     // clang-format off
     return Build<TCoFromFlow>(Ctx, Pos)
-        .Input(NPhysicalConvertionUtils::BuildNarrowMapForWideInput(phyJoin, Join->GetOutputIUs(), Ctx))
+        .Input(NPhysicalConvertionUtils::BuildNarrowMapForWideInput(phyJoin, joinOutputColumns, joinOutputs, Ctx, Names))
     .Done().Ptr();
     // clang-format on
 }
 
-TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin) {
-    const auto joinKind = to_lower(Join->JoinKind);
-    if (joinKind == "cross") {
+TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) {
+    const auto joinKind = to_lower(Join.JoinKind);
+    if (joinKind == "cross" && !useBlockHashJoin) {
         return BuildCrossJoin(leftInput, rightInput);
     }
 
-    Y_ENSURE(joinKind == "inner" || joinKind == "left" || joinKind == "leftonly" || joinKind == "leftsemi");
-    return BuildPhysicalJoin(leftInput, rightInput, useBlockHashJoin);
+    Y_ENSURE(joinKind == "inner" || joinKind == "left" || joinKind == "leftonly" || joinKind == "leftsemi" ||
+             joinKind == "full" || joinKind == "cross");
+
+    if(BadTypesForBlockJoin(Join, Ctx)) {
+        useBlockHashJoin = false;
+    }
+
+    return BuildPhysicalJoin(leftInput, rightInput, useBlockHashJoin, typesCtx);
 }

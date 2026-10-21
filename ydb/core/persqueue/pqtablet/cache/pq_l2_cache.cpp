@@ -84,6 +84,7 @@ void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheKeysRequest::TPtr& ev, const 
 void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs,
                                  THashMap<TKey, TCacheValue::TPtr>& outEvicted)
 {
+    Y_UNUSED(ctx);
     ui32 numUnused = 0;
     for (const TCacheBlobL2& blob : blobs) {
         AFL_ENSURE(blob.Value->GetDataSize())("d", "Trying to place empty blob into L2 cache");
@@ -91,7 +92,9 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
         TKey key(tabletId, blob);
         // PQ tablet could send some data twice (if it's restored after die)
         if (Cache.FindWithoutPromote(key) != Cache.End()) {
-            LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Same blob insertion. " << key.ToString() << " size " << blob.Value->GetDataSize());
+            LOG_W("PQ Cache (L2). Same blob insertion. size",
+                {"key", key},
+                {"valueDataSize", blob.Value->GetDataSize()});
             continue;
         }
 
@@ -120,13 +123,17 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
             if (value->GetAccessCount() == 0)
                 ++numUnused;
 
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Evicting blob. " << oldest.Key().ToString() << " size " << value->GetDataSize());
+            LOG_D("PQ Cache (L2). Evicting blob. size",
+                {"key", oldest.Key()},
+                {"dataSize", value->GetDataSize()});
 
             CurrentSize -= value->GetDataSize();
             Cache.Erase(oldest);
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Adding blob. " << key.ToString() << " size " << blob.Value->GetDataSize());
+        LOG_D("PQ Cache (L2). Adding blob. size",
+            {"key", key},
+            {"valueDataSize", blob.Value->GetDataSize()});
 
         Cache.Insert(key, blob.Value);
     }
@@ -142,6 +149,7 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
 
 void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs)
 {
+    Y_UNUSED(ctx);
     ui32 numEvicted = 0;
     ui32 numUnused = 0;
     for (const TCacheBlobL2& blob : blobs) {
@@ -152,10 +160,13 @@ void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, ui64 tabletId, con
             numEvicted++;
             if ((*it)->GetAccessCount() == 0)
                 ++numUnused;
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Removed. " << key.ToString() << " size " << (*it)->GetDataSize());
+            LOG_D("PQ Cache (L2). Removed. size",
+                {"key", key},
+                {"dataSize", (*it)->GetDataSize()});
             Cache.Erase(it);
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Miss in remove. " << key.ToString());
+            LOG_D("PQ Cache (L2). Miss in remove",
+                {"key", key});
         }
     }
 
@@ -171,6 +182,7 @@ void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, ui64 tabletId, con
 void TPersQueueCacheL2::RenameBlobs(const TActorContext& ctx, ui64 tabletId,
                                     const TVector<std::pair<TCacheBlobL2, TCacheBlobL2>>& blobs)
 {
+    Y_UNUSED(ctx);
     RenamedKeys += blobs.size();
 
     for (const auto& [oldBlob, newBlob] : blobs) {
@@ -185,12 +197,15 @@ void TPersQueueCacheL2::RenameBlobs(const TActorContext& ctx, ui64 tabletId,
         Cache.Insert(newKey, *it);
         Cache.Erase(it);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Renamed. old " << oldKey.ToString() << ", new " << newKey.ToString());
+        LOG_D("PQ Cache (L2). Renamed. old new",
+            {"oldKey", oldKey},
+            {"newKey", newKey});
     }
 }
 
 void TPersQueueCacheL2::TouchBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs, bool isHit)
 {
+    Y_UNUSED(ctx);
     TInstant now = TAppData::TimeProvider->Now();
 
     for (const TCacheBlobL2& blob : blobs) {
@@ -198,9 +213,11 @@ void TPersQueueCacheL2::TouchBlobs(const TActorContext& ctx, ui64 tabletId, cons
         auto it = Cache.Find(key);
         if (it != Cache.End()) {
             (*it)->Touch(now);
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Touched. " << key.ToString());
+            LOG_D("PQ Cache (L2). Touched",
+                {"key", key});
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Miss in touch. " << key.ToString());
+            LOG_D("PQ Cache (L2). Miss in touch",
+                {"key", key});
         }
     }
 
@@ -217,10 +234,15 @@ void TPersQueueCacheL2::TouchBlobs(const TActorContext& ctx, ui64 tabletId, cons
 
 void TPersQueueCacheL2::RegretBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs)
 {
+    Y_UNUSED(ctx);
     for (const TCacheBlobL2& blob : blobs) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Missed blob. tabletId '" << tabletId
-            << "' partition " << blob.Partition << " offset " << blob.Offset <<
-            " partno " << blob.PartNo << " count " << blob.Count << " parts_count " << blob.InternalPartsCount);
+        LOG_D("PQ Cache (L2). Missed blob. tabletId partition offset partno count parts_count",
+            {"tabletId", tabletId},
+            {"blobPartition", blob.Partition},
+            {"blobOffset", blob.Offset},
+            {"partNo", blob.PartNo},
+            {"blobCount", blob.Count},
+            {"internalPartsCount", blob.InternalPartsCount});
     }
 
     { // counters

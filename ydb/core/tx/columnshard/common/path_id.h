@@ -1,5 +1,7 @@
 #pragma once
 
+#include "snapshot.h"
+
 #include <util/generic/hash.h>
 #include <util/stream/output.h>
 #include <util/system/types.h>
@@ -205,6 +207,15 @@ public:
         const TInternalPathId internalPathId) const = 0;
     virtual std::optional<TInternalPathId> ResolveInternalPathIdOptional(
         const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId) const = 0;
+
+    virtual std::optional<TSnapshot> GetCopyVersionOptional(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const {
+        Y_UNUSED(schemeShardLocalPathId);
+        return std::nullopt;
+    }
+
+    virtual std::vector<TSnapshot> GetReadOnlyTablesSnapshots() const {
+        return {};
+    }
 
     std::optional<std::set<NColumnShard::TSchemeShardLocalPathId>> ResolveSchemeShardLocalPathIds(const TInternalPathId internalPathId) const {
         return ResolveSchemeShardLocalPathIdsOptional(internalPathId);

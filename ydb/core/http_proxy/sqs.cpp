@@ -2,7 +2,6 @@
 
 #include "auth_factory.h"
 #include "controller_base.h"
-#include "custom_metrics.h"
 #include "exceptions_mapping.h"
 #include "http_req.h"
 #include "sqs_serialization.h"
@@ -12,9 +11,11 @@
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
 #include <ydb/core/ymq/actor/serviceid.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/library/http_proxy/error/error.h>
@@ -43,19 +44,6 @@ namespace NKikimr::NHttpProxy {
         return {};
     }
 
-    template <class TRequest>
-    std::expected<TString, TString> MaybeGetDatabasePathFromSQSTopicQueueUrl(const TRequest& request) {
-        TString queueUrl = MaybeGetQueueUrl(request);
-        if (queueUrl.empty()) {
-            return {};
-        }
-        auto parsedQueueUrl = NKikimr::NSqsTopic::ParseQueueUrl(queueUrl);
-        if (!parsedQueueUrl.has_value()) {
-            return std::unexpected(std::move(parsedQueueUrl).error());
-        }
-        return parsedQueueUrl->Database;
-    }
-
     template<class TProtoService, class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoCall, class TRpcEv>
     class TSqsTopicHttpRequestProcessor : public TBaseHttpRequestProcessor<TProtoService, TProtoRequest, TProtoResponse, TProtoResult, TProtoCall, TRpcEv>{
     using TProcessorBase = TBaseHttpRequestProcessor<TProtoService, TProtoRequest, TProtoResponse, TProtoResult, TProtoCall, TRpcEv>;
@@ -73,14 +61,16 @@ namespace NKikimr::NHttpProxy {
 
     private:
 
-        class TSqsTopicHttpRequestActor : public NActors::TActorBootstrapped<TSqsTopicHttpRequestActor> {
+        class TSqsTopicHttpRequestActor : public NPQ::TBaseActor<TSqsTopicHttpRequestActor>
+                                         , public NPQ::TConstantLogPrefix {
         public:
-            using TBase = NActors::TActorBootstrapped<TSqsTopicHttpRequestActor>;
+            using TBase = NPQ::TBaseActor<TSqsTopicHttpRequestActor>;
 
             TSqsTopicHttpRequestActor(THttpRequestContext&& httpContext,
                               THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature,
                               TProtoCall protoCall, const TString& method)
-                : HttpContext(std::move(httpContext))
+                : TBase(NKikimrServices::HTTP_PROXY)
+                , HttpContext(std::move(httpContext))
                 , Signature(std::move(signature))
                 , ProtoCall(protoCall)
                 , Method(method)
@@ -90,7 +80,7 @@ namespace NKikimr::NHttpProxy {
                 }
             }
 
-            TStringBuilder LogPrefix() const {
+            NPQ::TStructuredMessage BuildLogPrefix() const override {
                 return HttpContext.LogPrefix();
             }
 
@@ -110,15 +100,19 @@ namespace NKikimr::NHttpProxy {
             }
 
             void SendGrpcRequestNoDriver(const TActorContext& ctx) {
-                RequestState = TProcessorBase::TRequestState::StateGrpcRequest;
-                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
-                              "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
-                              "' database: '" << HttpContext.DatabasePath <<
-                              "' iam token size: " << HttpContext.IamToken.size());
+                ReportInputCounters(ctx);
+                LOG_I("Sending grpc request to database: iam token",
+                    {"discoveryEndpoint", HttpContext.DiscoveryEndpoint},
+                    {"databasePath", HttpContext.DatabasePath},
+                    {"size", HttpContext.IamToken.size()});
 
                 TMap<TString, TString> peerMetadata {
                     {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
+                    {NYmq::V1::SOURCE_ADDRESS, HttpContext.SourceAddress},
                 };
+                if (TString requestEndpoint = MakeSqsRequestEndpoint(HttpContext)) {
+                    peerMetadata[TString{NSqsTopic::REQUEST_ENDPOINT_METADATA_KEY}] = std::move(requestEndpoint);
+                }
 
                 RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(
                     std::move(Request),
@@ -151,13 +145,14 @@ namespace NKikimr::NHttpProxy {
                 Y_UNUSED(ev);
             }
 
-            void TryUpdateDbInfo(const TDatabase& db) {
+            void TryUpdateDbInfo(const TDatabase& db, const TActorContext& ctx) {
                 if (db.Path) {
                     HttpContext.DatabasePath = db.Path;
                     HttpContext.DatabaseId = db.Id;
                     HttpContext.CloudId = db.CloudId;
                     HttpContext.FolderId = db.FolderId;
                 }
+                ReportInputCounters(ctx);
             }
 
             void HandleSecurityTokenAuth(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
@@ -194,24 +189,35 @@ namespace NKikimr::NHttpProxy {
                         return;
                     }
                 }
-                TryUpdateDbInfo(ev->Get()->Database);
+                TryUpdateDbInfo(ev->Get()->Database, ctx);
 
                 SendGrpcRequestNoDriver(ctx);
             }
 
             void HandleErrorWithIssue(TEvServerlessProxy::TEvErrorWithIssue::TPtr& ev, const TActorContext& ctx) {
-                TryUpdateDbInfo(ev->Get()->Database);
+                TryUpdateDbInfo(ev->Get()->Database, ctx);
                 ReplyWithYdbError(ctx, ev->Get()->Status, ev->Get()->Response, ev->Get()->IssueCode);
             }
 
             TVector<std::pair<TString, TString>> AddCommonLabels(TVector<std::pair<TString, TString>>&& labels) const {
-                return NSqsTopic::GetMetricsLabels(HttpContext.DatabasePath, TopicPath, ConsumerName, Method, std::move(labels));
+                return NSqsTopic::GetMetricsLabels(
+                    HttpContext.DatabasePath,
+                    TopicPath,
+                    ConsumerName,
+                    Method,
+                    std::move(labels),
+                    HttpContext.DatabaseId,
+                    HttpContext.CloudId,
+                    HttpContext.FolderId);
             }
 
             void ReplyWithYdbError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText, size_t issueCode = ISSUE_CODE_GENERIC) {
                 const auto [errorName, httpCode] = MapToException(status, Method, issueCode);
+                ReplyWithYdbError(ctx, errorName, errorText, httpCode);
+            }
 
-                ctx.Send(MakeMetricsServiceID(),
+            void ReplyWithYdbError(const TActorContext& ctx, const TString& errorName, const TString& errorText, ui32 httpCode) {
+                    ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvCounter{
                              1, true, true,
                              AddCommonLabels({
@@ -223,7 +229,7 @@ namespace NKikimr::NHttpProxy {
                     .HttpCode = static_cast<ui32>(httpCode),
                     .ContentType = HttpContext.ContentType,
                     .Message = errorName,
-                    .Body = NSQS::Serialize(HttpContext.ContentType, {
+                    .Body = NSQS::Serialize(HttpContext, {
                         .StatusCode = errorName,
                         .ErrorText = errorText,
                     })
@@ -254,7 +260,7 @@ namespace NKikimr::NHttpProxy {
                     .HttpCode = httpStatusCode,
                     .ContentType = HttpContext.ContentType,
                     .Message = ymqStatusCode,
-                    .Body = NSQS::Serialize(HttpContext.ContentType, {
+                    .Body = NSQS::Serialize(HttpContext, {
                         .StatusCode = ymqStatusCode,
                         .ErrorText = errorText,
                     })
@@ -270,6 +276,7 @@ namespace NKikimr::NHttpProxy {
             void ReplyToHttpContext(THttpResponseData&& data, size_t messageSize, TStringBuf errorText = "") {
                 const TActorContext& ctx = TlsActivationContext->AsActorContext();
 
+                ReportInputCounters(ctx);
                 ReportLatencyCounters(ctx);
                 ReportResponseSizeCounters(TStringBuilder() << data.HttpCode, messageSize, ctx);
                 LogHttpRequestResponse(ctx, data.HttpCode, errorText);
@@ -317,11 +324,6 @@ namespace NKikimr::NHttpProxy {
             void HandleGrpcResponse(TEvServerlessProxy::TEvGrpcRequestResult::TPtr ev,
                                     const TActorContext& ctx) {
                 if (ev->Get()->Status->IsSuccess()) {
-                    FillOutputCustomMetrics<TProtoResult>(
-                        *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())),
-                        HttpContext,
-                        ctx
-                    );
                     ctx.Send(MakeMetricsServiceID(),
                              new TEvServerlessProxy::TEvCounter{
                                  1, true, true,
@@ -332,7 +334,7 @@ namespace NKikimr::NHttpProxy {
                         .HttpCode = 200,
                         .ContentType = HttpContext.ContentType,
                         .Message = "",
-                        .Body = NSQS::Serialize(HttpContext.ContentType, *ev->Get()->Message)
+                        .Body = NSQS::Serialize(HttpContext, *ev->Get()->Message)
                     }, ev->Get()->Message->ByteSizeLong());
                 } else {
                     auto retryClass =
@@ -361,12 +363,9 @@ namespace NKikimr::NHttpProxy {
                                 NKikimr::NSQS::NErrors::INTERNAL_FAILURE.HttpStatusCode)
                             : NKikimr::NSQS::TErrorClass::GetErrorAndCode(issues.begin()->GetCode());
 
-                        LOG_SP_DEBUG_S(
-                            ctx,
-                            NKikimrServices::HTTP_PROXY,
-                            "Not retrying GRPC response."
-                                << " Code: " << errorCode
-                                << ", Error: " << error);
+                        LOG_D("Not retrying GRPC response",
+                            {"code", errorCode},
+                            {"error", error});
                         return ReplyWithMessageQueueError(
                             ctx,
                             errorCode,
@@ -401,18 +400,21 @@ namespace NKikimr::NHttpProxy {
             void Bootstrap(const TActorContext& ctx) {
                 StartTime = ctx.Now();
                 try {
-                    NSQS::Deserialize<TProtoRequest>(HttpContext.ContentType, Request, HttpContext.Request->Body);
+                    NSQS::Deserialize<TProtoRequest>(HttpContext, Request);
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;
-                    if (e.ErrorClass.ErrorCode == "MissingParameter")
+                    if (e.ErrorClass.ErrorCode == "MissingParameter") {
                         issueCode = NYds::EErrorCodes::MISSING_PARAMETER;
-                    else if (e.ErrorClass.ErrorCode == "InvalidQueryParameter" || e.ErrorClass.ErrorCode == "MalformedQueryString")
+                    } else if (e.ErrorClass.ErrorCode == "InvalidParameterValue") {
+                        return ReplyWithYdbError(ctx, "InvalidParameterValue", e.what(), static_cast<ui32>(e.ErrorClass.HttpStatusCode));
+                    } else if (e.ErrorClass.ErrorCode == "InvalidQueryParameter" || e.ErrorClass.ErrorCode == "MalformedQueryString") {
                         issueCode = NYds::EErrorCodes::INVALID_ARGUMENT;
+                    }
                     return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(issueCode));
                 } catch (const std::exception& e) {
-                    LOG_SP_WARN_S(ctx, NKikimrServices::HTTP_PROXY,
-                                  "got new request with incorrect json from [" << HttpContext.SourceAddress << "] " <<
-                                  "database '" << HttpContext.DatabasePath << "'");
+                    LOG_W("Got new request with incorrect json from database",
+                        {"sourceAddress", HttpContext.SourceAddress},
+                        {"databasePath", HttpContext.DatabasePath});
                     return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
                 }
 
@@ -423,7 +425,6 @@ namespace NKikimr::NHttpProxy {
                     }
                     TopicPath = parsedQueueUrl->TopicPath;
                     ConsumerName = parsedQueueUrl->Consumer;
-                    IsFifo = parsedQueueUrl->Fifo;
 
                     if (!AssignDatabasePath(ctx, parsedQueueUrl->Database)) {
                         return;
@@ -433,21 +434,24 @@ namespace NKikimr::NHttpProxy {
                     }
                 }
 
-                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
-                              "got new request from [" << HttpContext.SourceAddress << "] " <<
-                              "database '" << HttpContext.DatabasePath << "' " <<
-                              "stream '" << MaybeGetQueueUrl<TProtoRequest>(Request) << "'");
+                LOG_I("Got new request from database stream",
+                    {"sourceAddress", HttpContext.SourceAddress},
+                    {"databasePath", HttpContext.DatabasePath},
+                    {"request", MaybeGetQueueUrl<TProtoRequest>(Request)});
 
-                ReportInputCounters(ctx);
-                if (!HttpContext.IamToken.empty() || Signature) {
+                if (!HttpContext.SecurityToken.empty()) {
+                    ctx.Send(
+                        MakeTicketParserID(),
+                        new TEvTicketParser::TEvAuthorizeTicket({
+                                .Ticket = HttpContext.SecurityToken,
+                                .Database = HttpContext.DatabasePath,
+                                .TraceContext = {HttpContext.SourceAddress, HttpContext.RequestId},
+                            }
+                        )
+                    );
+                } else if (!HttpContext.IamToken.empty() || Signature) {
                     AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
                         ctx.SelfID, HttpContext, std::move(Signature)));
-                } else if (!HttpContext.SecurityToken.empty()) {
-                    ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
-                        .Ticket = HttpContext.SecurityToken,
-                        .Database = HttpContext.DatabasePath,
-                        .PeerName = HttpContext.SourceAddress,
-                    }));
                 } else {
                     if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                         return ReplyWithMessageQueueError(
@@ -466,10 +470,8 @@ namespace NKikimr::NHttpProxy {
 
         private:
             TInstant StartTime;
-            typename TProcessorBase::TRequestState RequestState = TProcessorBase::TRequestState::StateIdle;
             TProtoRequest Request;
             TDuration RequestTimeout = TDuration::Seconds(60);
-            ui32 PoolId;
             THttpRequestContext HttpContext;
             THolder<NKikimr::NSQS::TAwsRequestSignV4> Signature;
             NThreading::TFuture<TProtoResponse> RpcFuture;
@@ -477,7 +479,6 @@ namespace NKikimr::NHttpProxy {
             TString Method;
             TString TopicPath;
             TString ConsumerName;
-            bool IsFifo{};
             TRetryCounter RetryCounter;
 
             TActorId AuthActor;
@@ -530,13 +531,13 @@ namespace NKikimr::NHttpProxy {
                 #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
             }
 
-            THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
+            THttpResponseData MakeError(const THttpRequestContext& httpContext, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
                 const auto [errorName, httpCode] = MapToException(Status, "", issueCode);
                 return {
                     .HttpCode = static_cast<ui32>(httpCode),
-                    .ContentType = contentType,
+                    .ContentType = httpContext.ContentType,
                     .Message = errorName,
-                    .Body = NSQS::Serialize(contentType, NSQS::TErrorResponse{
+                    .Body = NSQS::Serialize(httpContext, NSQS::TErrorResponse{
                         .StatusCode = errorName,
                         .ErrorText = TString(message),
                     })
@@ -561,4 +562,3 @@ namespace NKikimr::NHttpProxy {
     }
 
 } // namespace NKikimr::NHttpProxy
-

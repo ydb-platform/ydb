@@ -1,16 +1,23 @@
-#include "yql_pq_provider_impl.h"
 #include "yql_pq_helpers.h"
+#include "yql_pq_provider_impl.h"
+#include "yql_pq_settings.h"
 
-#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/providers/common/transform/yql_optimize.h>
+#include <ydb/library/yql/dq/runtime/streaming/partition_key.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
+
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -19,19 +26,167 @@ namespace {
 using namespace NNodes;
 using namespace NDq;
 
-class TPqPhysicalOptProposalTransformer : public TOptimizeTransformerBase {
+TCoAtomList GetWatermarkMetadataColumns(TPositionHandle pos, const TPqState& state, TExprContext& ctx) {
+    static constexpr auto RequiredMetadataColumns = std::to_array<std::string_view>({
+        "cluster", "partition_id", "write_time",
+    });
+
+    auto result = Build<TCoAtomList>(ctx, pos);
+    for (const auto& key : RequiredMetadataColumns) {
+        const auto descriptor = GetPqMetaFieldDescriptorByKey(TString(key), state.AddTransparentPrefixToTransparentSystemColumns,
+            state.EnableUserAttributesInTopicQuery, state.ForbidYqlSysColumnsAndSystemMetadata);
+        YQL_ENSURE(descriptor, "Unexpected pq metadata key: " << key);
+        result.Add<TCoAtom>().Value(descriptor->SysColumn).Build();
+    }
+    return result.Done();
+}
+
+TMaybeNode<TPqReadTopic> FindPqReadTopic(TExprBase input) {
+    for (;;) {
+        if (const auto parsingWrap = input.Maybe<TPqParsingWrap>()) {
+            input = parsingWrap.Cast().Input();
+            continue;
+        }
+        if (const auto parsingWrap = input.Maybe<TDqPqPhyParsingWrap>()) {
+            input = parsingWrap.Cast().Input();
+            continue;
+        }
+        if (const auto right = input.Maybe<TCoRight>()) {
+            return right.Cast().Input().Maybe<TPqReadTopic>();
+        }
+        return {};
+    }
+}
+
+TDqPqPhyParsingWrap BuildPhysicalParsingWrap(const TPqParsingWrap& parsingWrap, TExprContext& ctx) {
+    TExprBase input = parsingWrap.Input();
+    if (const auto innerParsingWrap = input.Maybe<TPqParsingWrap>()) {
+        input = BuildPhysicalParsingWrap(innerParsingWrap.Cast(), ctx);
+    }
+
+    return Build<TDqPqPhyParsingWrap>(ctx, parsingWrap.Pos())
+        .Input(input)
+        .Lambda(parsingWrap.Lambda())
+        .MetadataColumns(parsingWrap.MetadataColumns())
+        .Done();
+}
+
+TMaybeNode<TExprBase> ParseISO8601(TCoAtom input, TExprContext& ctx) {
+    const auto buf = input.Value();
+
+    const auto out = NKikimr::NMiniKQL::ValueFromString(NKikimr::NUdf::EDataSlot::Interval, buf);
+    if (!out) {
+        ctx.AddError(
+            TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Expected interval in ISO 8601 format, got " << TString(buf).Quote()));
+        return {};
+    }
+
+    const i64 signedInterval = out.Get<i64>();
+    if (signedInterval < 0) {
+        ctx.AddError(TIssue(ctx.GetPosition(input.Pos()),
+            TStringBuilder() << "Expected non-negative interval in ISO 8601 format, got " << TString(buf).Quote()));
+        return {};
+    }
+
+    return Build<TCoAtom>(ctx, input.Pos()).Value(ToString(signedInterval)).Done();
+}
+
+TMaybeNode<TCoNameValueTupleList> BuildDqWatermarkSettings(
+    TCoNameValueTupleList settings, TCoNameValueTupleList topicProps, TCoLambda watermark, const TPqState& state, TExprContext& ctx) {
+    auto result = Build<TCoNameValueTupleList>(ctx, settings.Pos());
+
+    for (const auto nameValue : settings) {
+        auto name = nameValue.Name().Value();
+        auto value = nameValue.Value();
+
+        if (name == "watermarkgranularity") {
+            name = WatermarksGranularityUsSetting;
+            value = ParseISO8601(value.Cast<TCoAtom>(), ctx);
+            if (!value) {
+                return {};
+            }
+        } else if (name == "watermarklatearrivaldelay") {
+            name = WatermarksLateArrivalDelayUsSetting;
+            value = ParseISO8601(value.Cast<TCoAtom>(), ctx);
+            if (!value) {
+                return {};
+            }
+        } else if (name == "watermarkidletimeout") {
+            name = WatermarksIdleTimeoutUsSetting;
+            value = ParseISO8601(value.Cast<TCoAtom>(), ctx);
+            if (!value) {
+                return {};
+            }
+        } else {
+            continue;
+        }
+
+        result.Add<TCoNameValueTuple>().Name<TCoAtom>().Build(name) .Value(value).Build();
+    }
+
+    for (const auto nameValue : topicProps) {
+        auto name = nameValue.Name().Value();
+        auto value = nameValue.Value();
+
+        if (name == FederatedClustersProp) {
+            const auto federatedClusters = value.Cast<TDqPqFederatedClusterList>();
+
+            auto newValue = Build<TCoAtomList>(ctx, value.Cast().Pos());
+            for (const auto& federatedCluster : federatedClusters) {
+                const auto cluster = federatedCluster.Name();
+                const auto partitionsCount = federatedCluster.PartitionsCount();
+
+                TString serializedPartitionKey;
+                TStringOutput out(serializedPartitionKey);
+                out << NDq::TPartitionKey{
+                    .Cluster = TString{ cluster.Value() },
+                    .PartitionId = partitionsCount ? FromString<ui32>(partitionsCount.Cast().Value()) : 0,
+                };
+
+                newValue.Add<TCoAtom>().Value(serializedPartitionKey).Build();
+            }
+            value = newValue.Done();
+        } else {
+            continue;
+        }
+
+        result.Add<TCoNameValueTuple>().Name<TCoAtom>().Build(name) .Value(value).Build();
+    }
+
+    const auto eventTimeAndDelay = SplitWatermarkExpr(watermark, state, ctx);
+    if (!eventTimeAndDelay) {
+        return {};
+    }
+    const auto [_, delay] = *eventTimeAndDelay;
+
+    // clang-format off
+    result.Add<TCoNameValueTuple>()
+        .Name<TCoAtom>().Build(WatermarksLateArrivalDelayUsSetting)
+        .Value<TCoAtom>()
+            .Value(ToString(delay))
+            .Build()
+        .Build();
+    // clang-format on
+
+    return result.Done();
+}
+
+class TPqPhysicalOptProposalTransformer: public TOptimizeTransformerBase {
 public:
     explicit TPqPhysicalOptProposalTransformer(TPqState::TPtr state)
         : TOptimizeTransformerBase(state->Types, NLog::EComponent::ProviderPq, {})
         , State_(std::move(state))
     {
-#define HNDL(name) "PhysicalOptimizer-"#name, Hndl(&TPqPhysicalOptProposalTransformer::name)
+#define HNDL(name) "PhysicalOptimizer-" #name, Hndl(&TPqPhysicalOptProposalTransformer::name)
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
         AddHandler(0, &TPqWriteTopic::Match, HNDL(PqWriteTopic));
         AddHandler(0, &TPqInsert::Match, HNDL(PqInsert));
+        AddHandler(0, &TCoWatermarkGenerator::Match, HNDL(RewriteWatermarkGenerator));
+        AddHandler(0, &TPqParsingWrap::Match, HNDL(RewriteParsingWrap));
+        AddHandler(0, &TDqPqPhyParsingWrap::Match, HNDL(PushParsingWrapToStage));
 #undef HNDL
 
-        SetGlobal(0); // Stage 0 of this optimizer is global => we can remap nodes.
+        SetGlobal(0);   // Stage 0 of this optimizer is global => we can remap nodes.
     }
 
     TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
@@ -45,7 +200,200 @@ public:
         return TExprBase(maybeRead.Cast().World().Ptr());
     }
 
-    NNodes::TCoNameValueTupleList BuildTopicWriteSettings(const TString& cluster, TPositionHandle pos, TExprContext& ctx) const {
+    TMaybeNode<TExprBase> RewriteWatermarkGenerator(TExprBase node, TExprContext& ctx) const {
+        const auto watermarkGenerator = node.Cast<TCoWatermarkGenerator>();
+
+        TExprBase parsingWrap = watermarkGenerator.Input();
+        if (!parsingWrap.Maybe<TPqParsingWrap>() && !parsingWrap.Maybe<TDqPqPhyParsingWrap>()) {
+            const auto metadataColumns = GetWatermarkMetadataColumns(watermarkGenerator.Pos(), *State_, ctx);
+
+            // clang-format off
+            return Build<TCoRemovePrefixMembers>(ctx, watermarkGenerator.Pos())
+                .Input<TCoWatermarkGenerator>()
+                    .InitFrom(watermarkGenerator)
+                    .Input<TPqParsingWrap>()
+                        .Input(watermarkGenerator.Input())
+                        .Lambda(BuildIdentityLambda(watermarkGenerator.Pos(), ctx))
+                        .MetadataColumns(metadataColumns)
+                        .Build()
+                    .Build()
+                .Prefixes<TCoAtomList>()
+                    .Add<TCoAtom>().Build("__ydb_watermark_")
+                    .Build()
+                .Done();
+            // clang-format on
+        }
+
+        const auto maybePqReadTopic = FindPqReadTopic(parsingWrap);
+        if (!maybePqReadTopic) {
+            return node;
+        }
+        const auto pqReadTopic = maybePqReadTopic.Cast();
+
+        const auto eventTimeAndDelay = SplitWatermarkExpr(watermarkGenerator.WatermarkExtractor(), *State_, ctx);
+        if (!eventTimeAndDelay) {
+            return {};
+        }
+        const auto [eventTimeExtractor, _] = *eventTimeAndDelay;
+
+        const auto maybeWatermarkSettings = BuildDqWatermarkSettings(
+            watermarkGenerator.WatermarkSettings(), pqReadTopic.Topic().Props(), watermarkGenerator.WatermarkExtractor(), *State_, ctx);
+        if (!maybeWatermarkSettings) {
+            return {};
+        }
+        const auto watermarkSettings = maybeWatermarkSettings.Cast();
+
+        if (const auto logicalParsingWrap = parsingWrap.Maybe<TPqParsingWrap>()) {
+            parsingWrap = BuildPhysicalParsingWrap(logicalParsingWrap.Cast(), ctx);
+        }
+
+        // clang-format off
+        return Build<TDqPhyWatermarkGenerator>(ctx, watermarkGenerator.Pos())
+            .Input(parsingWrap)
+            .WatermarkExtractor(eventTimeExtractor)
+            .PartitionKeyExtractor<TCoLambda>()
+                .Args({"arg"})
+                .Body<TCoAsStruct>()
+                    .Add<TCoNameValueTuple>()
+                        .Name<TCoAtom>().Build("cluster")
+                        .Value<TCoMember>()
+                            .Struct("arg")
+                            .Name().Build("__ydb_watermark_cluster")
+                            .Build()
+                        .Build()
+                    .Add<TCoNameValueTuple>()
+                        .Name<TCoAtom>().Build("partition_id")
+                        .Value<TCoMember>()
+                            .Struct("arg")
+                            .Name().Build("__ydb_watermark_partition_id")
+                            .Build()
+                        .Build()
+                    .Build()
+                .Build()
+            .WriteTimeExtractor<TCoLambda>()
+                .Args({"arg"})
+                .Body<TCoMember>()
+                    .Struct("arg")
+                    .Name().Build("__ydb_watermark_write_time")
+                    .Build()
+                .Build()
+            .WatermarkSettings(watermarkSettings)
+            .PartitionKeys<TCoVoid>().Build()
+            .Done();
+        // clang-format on
+    }
+
+    TMaybeNode<TExprBase> RewriteParsingWrap(
+        TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
+        const auto parsingWrap = node.Cast<TPqParsingWrap>();
+        const auto input = parsingWrap.Input();
+
+        if (const auto maybeRight = input.Maybe<TCoRight>()) {
+            if (!maybeRight.Cast().Input().Maybe<TPqReadTopic>()) {
+                ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), "Unsupported source category: expected PQ topic"));
+                return {};
+            }
+
+            return BuildPhysicalParsingWrap(parsingWrap, ctx);
+        }
+
+        if (input.Ref().IsCallable({
+                TCoExtractMembers::CallableName(), TCoRemoveSystemMembers::CallableName(), TCoRemovePrefixMembers::CallableName(),
+                TCoFlatMap::CallableName(), TCoOrderedFlatMap::CallableName(),
+            })) {
+            auto arg = Build<TCoArgument>(ctx, input.Pos()).Name("stream").Done();
+
+            auto innerLambda = Build<TCoLambda>(ctx, input.Pos()).Args({ arg }).Body(ctx.ChangeChild(input.Ref(), 0, arg.Ptr())).Done();
+
+            if (!IsSingleConsumer(input, *getParents())) {
+                auto innerParsingWrap = Build<TPqParsingWrap>(ctx, input.Pos())
+                                            .Input(input.Ref().HeadPtr())
+                                            .Lambda(innerLambda)
+                                            .MetadataColumns(parsingWrap.MetadataColumns())
+                                            .Done();
+
+                // clang-format off
+                const auto inputWithoutWatermarkMetadata = Build<TCoRemovePrefixMembers>(ctx, input.Pos())
+                    .Input(innerParsingWrap)
+                    .Prefixes<TCoAtomList>()
+                        .Add<TCoAtom>().Build("__ydb_watermark_")
+                        .Build()
+                    .Done();
+                // clang-format on
+
+                const auto& parents = *getParents();
+                const auto parentsIt = parents.find(input.Raw());
+                YQL_ENSURE(parentsIt != parents.end());
+                for (const auto* parent : parentsIt->second) {
+                    if (parent == parsingWrap.Raw()) {
+                        continue;
+                    }
+
+                    TExprNode::TListType newChildren;
+                    newChildren.reserve(parent->ChildrenSize());
+                    for (const auto& child : parent->Children()) {
+                        newChildren.emplace_back(child.Get() == input.Raw() ? inputWithoutWatermarkMetadata.Ptr() : child);
+                    }
+
+                    optCtx.RemapNode(*parent, ctx.ChangeChildren(*parent, std::move(newChildren)));
+                }
+
+                return Build<TPqParsingWrap>(ctx, parsingWrap.Pos()).InitFrom(parsingWrap).Input(innerParsingWrap).Done();
+            }
+
+            return Build<TPqParsingWrap>(ctx, parsingWrap.Pos())
+                .InitFrom(parsingWrap)
+                .Input(input.Ref().HeadPtr())
+                .Lambda(ctx.FuseLambdas(parsingWrap.Lambda().Ref(), innerLambda.Ref()))
+                .Done();
+        }
+
+        if (input.Maybe<TPqParsingWrap>() || input.Ref().Content().starts_with("Dq")) {
+            return node;
+        }
+
+        ctx.AddError(TIssue(
+            ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported node between PQ source and WATERMARK: " << input.Ref().Content()));
+        return {};
+    }
+
+    TMaybeNode<TExprBase> PushParsingWrapToStage(
+        TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
+        const auto parsingWrap = node.Cast<TDqPqPhyParsingWrap>();
+
+        const auto maybeConnection = parsingWrap.Input().Maybe<TDqCnUnionAll>();
+        if (!maybeConnection) {
+            return node;
+        }
+        const auto connection = maybeConnection.Cast();
+
+        if (!IsSingleConsumerConnection(connection, *getParents())) {
+            return node;
+        }
+
+        // clang-format off
+        const auto lambda = Build<TCoLambda>(ctx, parsingWrap.Pos())
+            .Args({"arg"})
+            .Body<TCoToFlow>()
+                .Input<TDqPqPhyParsingWrap>()
+                    .InitFrom(parsingWrap)
+                    .Input<TCoFromFlow>()
+                        .Input("arg")
+                        .Build()
+                    .Build()
+                .Build()
+            .Done();
+        // clang-format on
+
+        const auto result = DqPushLambdaToStageUnionAll(connection, lambda, {}, ctx, optCtx);
+        if (!result) {
+            return node;
+        }
+        return result.Cast();
+    }
+
+    TCoNameValueTupleList BuildTopicWriteSettings(
+        const TString& cluster, TPositionHandle pos, const std::optional<TCoNameValueTupleList>& settings, TExprContext& ctx) const {
         TVector<TCoNameValueTuple> props;
 
         auto clusterConfiguration = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
@@ -62,14 +410,33 @@ public:
             Add(props, AddBearerToTokenSetting, "1", pos, ctx);
         }
 
-        return Build<TCoNameValueTupleList>(ctx, pos)
-            .Add(props)
-            .Done();
+        if (settings) {
+            for (const auto& setting : *settings) {
+                const auto pos = setting.Ref().Pos();
+                const TStringBuf name = setting.Name();
+                const TStringBuf value = setting.Value().Cast<TCoAtom>();
+                if (name == NDeliveryGuaranteeSetting::Name && value == NDeliveryGuaranteeSetting::ExactlyOnceValue &&
+                    !State_->DeferredPublicationExtIdPrefix) {
+                    TIssue issue(ctx.GetPosition(setting.Pos()), TStringBuilder()
+                                                                     << "`" << NDeliveryGuaranteeSetting::PrettyName << "` = '"
+                                                                     << NDeliveryGuaranteeSetting::ExactlyOnceValue
+                                                                     << "' cannot be used in current query context, falling back to default '"
+                                                                     << NDeliveryGuaranteeSetting::AtLeastOnceValue << "'");
+                    issue.Severity = TSeverityIds::S_WARNING;
+                    ctx.AddWarning(issue);
+                    continue;
+                }
+
+                Add(props, name, value, pos, ctx);
+            }
+        }
+
+        return Build<TCoNameValueTupleList>(ctx, pos).Add(props).Done();
     }
 
     TMaybeNode<TExprBase> PqWriteTopic(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
         auto write = node.Cast<TPqWriteTopic>();
-        if (!TDqCnUnionAll::Match(write.Input().Raw())) { // => this code is not for RTMR mode.
+        if (!TDqCnUnionAll::Match(write.Input().Raw())) {   // => this code is not for RTMR mode.
             return node;
         }
 
@@ -84,24 +451,22 @@ public:
 
         const auto* topicMeta = State_->FindTopicMeta(topicNode);
         if (!topicMeta) {
-            ctx.AddError(TIssue(ctx.GetPosition(write.Pos()), TStringBuilder() << "Unknown topic `" << topicNode.Cluster().StringValue() << "`.`"
-                                << topicNode.Path().StringValue() << "`"));
+            ctx.AddError(TIssue(ctx.GetPosition(write.Pos()),
+                TStringBuilder() << "Unknown topic `" << topicNode.Cluster().StringValue() << "`.`" << topicNode.Path().StringValue() << "`"));
             return nullptr;
         }
 
-        YQL_CLOG(INFO, ProviderPq) << "Optimize PqWriteTopic `" << topicNode.Cluster().StringValue() << "`.`" << topicNode.Path().StringValue() << "`";
+        YQL_CLOG(INFO, ProviderPq) << "Optimize PqWriteTopic `" << topicNode.Cluster().StringValue() << "`.`" << topicNode.Path().StringValue()
+                                   << "`";
 
         auto dqPqTopicSinkSettingsBuilder = Build<TDqPqTopicSink>(ctx, write.Pos());
         dqPqTopicSinkSettingsBuilder.Topic(topicNode);
-        dqPqTopicSinkSettingsBuilder.Settings(BuildTopicWriteSettings(cluster, write.Pos(), ctx));
+        dqPqTopicSinkSettingsBuilder.Settings(BuildTopicWriteSettings(cluster, write.Pos(), std::nullopt, ctx));
         dqPqTopicSinkSettingsBuilder.Token<TCoSecureParam>().Name().Build("cluster:default_" + cluster).Build();
         auto dqPqTopicSinkSettings = dqPqTopicSinkSettingsBuilder.Done();
 
-        auto dqSink = Build<TDqSink>(ctx, write.Pos())
-            .DataSink(write.DataSink())
-            .Settings(dqPqTopicSinkSettings)
-            .Index(dqUnion.Output().Index())
-            .Done();
+        auto dqSink =
+            Build<TDqSink>(ctx, write.Pos()).DataSink(write.DataSink()).Settings(dqPqTopicSinkSettings).Index(dqUnion.Output().Index()).Done();
 
         TDqStage inputStage = dqUnion.Output().Stage().Cast<TDqStage>();
 
@@ -111,10 +476,7 @@ public:
         }
         outputsBuilder.Add(dqSink);
 
-        auto dqStageWithSink = Build<TDqStage>(ctx, inputStage.Pos())
-            .InitFrom(inputStage)
-            .Outputs(outputsBuilder.Done())
-            .Done();
+        auto dqStageWithSink = Build<TDqStage>(ctx, inputStage.Pos()).InitFrom(inputStage).Outputs(outputsBuilder.Done()).Done();
 
         auto dqQueryBuilder = Build<TDqQuery>(ctx, write.Pos());
         dqQueryBuilder.World(write.World());
@@ -130,30 +492,44 @@ public:
         const auto& topicNode = insert.Topic();
         const TString cluster(topicNode.Cluster().Value());
         if (!State_->FindTopicMeta(topicNode)) {
-            ctx.AddError(TIssue(ctx.GetPosition(insert.Pos()), TStringBuilder() << "Unknown topic `" << cluster << "`.`" << topicNode.Path().StringValue() << "`"));
+            ctx.AddError(TIssue(ctx.GetPosition(insert.Pos()),
+                TStringBuilder() << "Unknown topic `" << cluster << "`.`" << topicNode.Path().StringValue() << "`"));
             return nullptr;
         }
 
+        const auto input = insert.Input();
+        const auto isPureDqExpr = IsDqPureExpr(input);
+        if (!isPureDqExpr) {
+            if (!TDqCnUnionAll::Match(input.Raw())) {
+                return node;
+            }
+
+            if (!NDq::IsSingleConsumerConnection(input.Cast<TDqCnUnionAll>(), *getParents())) {
+                return node;
+            }
+        }
+
+        // clang-format off
         auto dqSinkBuilder = Build<TDqSink>(ctx, insert.Pos())
             .DataSink(insert.DataSink())
             .Settings<TDqPqTopicSink>()
                 .Topic(topicNode)
-                .Settings(BuildTopicWriteSettings(cluster, insert.Pos(), ctx))
+                .Settings(BuildTopicWriteSettings(cluster, insert.Pos(), insert.Settings(), ctx))
                 .Token<TCoSecureParam>()
                     .Name()
                         .Value(TStringBuilder() << "cluster:default_" << cluster)
                         .Build()
                     .Build()
                 .Build();
+        // clang-format on
 
-        const auto input = insert.Input();
-        if (IsDqPureExpr(input)) {
-            YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << cluster << "`.`" << topicNode.Path().StringValue() << "`, build pure stage with sink";
+        if (isPureDqExpr) {
+            YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << cluster << "`.`" << topicNode.Path().StringValue()
+                                       << "`, build pure stage with sink";
 
-            const auto dqSink = dqSinkBuilder
-                .Index().Build(0)
-                .Done();
+            const auto dqSink = dqSinkBuilder.Index().Build(0) .Done();
 
+            // clang-format off
             return Build<TDqStage>(ctx, insert.Pos())
                 .Inputs().Build()
                 .Program<TCoLambda>()
@@ -167,56 +543,41 @@ public:
                     .Build()
                 .Settings().Build()
                 .Done();
+            // clang-format on
         }
 
-        if (!TDqCnUnionAll::Match(input.Raw())) {
-            return node;
-        }
+        YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << cluster << "`.`" << topicNode.Path().StringValue()
+                                   << "`, push into existing stage";
 
-        const auto dqUnion = input.Cast<TDqCnUnionAll>();
-        if (!NDq::IsSingleConsumerConnection(dqUnion, *getParents())) {
-            return node;
-        }
-
-        YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << cluster << "`.`" << topicNode.Path().StringValue() << "`, push into existing stage";
-
-        const auto dqUnionOutput = dqUnion.Output();
-        const auto dqSink = dqSinkBuilder
-            .Index(dqUnionOutput.Index())
-            .Done();
+        const auto dqUnionOutput = input.Cast<TDqCnUnionAll>().Output();
+        const auto dqSink = dqSinkBuilder.Index(dqUnionOutput.Index()).Done();
 
         const auto inputStage = dqUnionOutput.Stage().Cast<TDqStage>();
 
         auto outputsBuilder = Build<TDqStageOutputsList>(ctx, topicNode.Pos());
         if (const auto outputs = inputStage.Outputs()) {
             outputsBuilder.InitFrom(outputs.Cast());
-            YQL_ENSURE(inputStage.Program().Body().Maybe<TDqReplicate>(), "Can not push multiple async outputs into stage without TDqReplicate");
+            YQL_ENSURE(inputStage.Program().Body().Maybe<TDqReplicate>(), "Cannot push multiple async outputs into stage without TDqReplicate");
         }
         outputsBuilder.Add(dqSink);
 
-        const auto dqStageWithSink = Build<TDqStage>(ctx, inputStage.Pos())
-            .InitFrom(inputStage)
-            .Outputs(outputsBuilder.Done())
-            .Done();
+        const auto dqStageWithSink = Build<TDqStage>(ctx, inputStage.Pos()).InitFrom(inputStage).Outputs(outputsBuilder.Done()).Done();
 
         optCtx.RemapNode(inputStage.Ref(), dqStageWithSink.Ptr());
 
-        const auto dqResult = Build<TCoNth>(ctx, dqStageWithSink.Pos())
-            .Tuple(dqStageWithSink)
-            .Index(dqUnionOutput.Index())
-            .Done();
+        const auto dqResult = Build<TCoNth>(ctx, dqStageWithSink.Pos()).Tuple(dqStageWithSink).Index(dqUnionOutput.Index()).Done();
 
-        return ctx.NewList(dqStageWithSink.Pos(), {dqResult.Ptr()});
+        return ctx.NewList(dqStageWithSink.Pos(), { dqResult.Ptr() });
     }
 
 private:
     TPqState::TPtr State_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 THolder<IGraphTransformer> CreatePqPhysicalOptProposalTransformer(TPqState::TPtr state) {
     return MakeHolder<TPqPhysicalOptProposalTransformer>(std::move(state));
 }
 
-} // namespace NYql
+}   // namespace NYql

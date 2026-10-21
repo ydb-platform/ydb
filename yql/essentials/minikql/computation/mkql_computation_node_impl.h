@@ -29,7 +29,6 @@ private:
 
     ui32 RefCount() const final;
 
-private:
     ui32 Refs_ = 0;
 };
 
@@ -106,7 +105,6 @@ class TStatefulComputationNode: public TRefCountedComputationNode<IComputationNo
 protected:
     TStatefulComputationNode(TComputationMutables& mutables, EValueRepresentation kind);
 
-protected:
     void InitNode(TComputationContext&) const override;
 
     ui32 GetIndex() const final;
@@ -349,7 +347,6 @@ private:
         return static_cast<const TDerived*>(this)->DoCalculate(this->ValueRef(compCtx), compCtx);
     }
 
-private:
     const EValueRepresentation RepresentationKind_;
 };
 
@@ -1100,8 +1097,7 @@ public:
     {
     }
 
-    ~TComputationValueBaseNotSupportedStub() override {
-    }
+    ~TComputationValueBaseNotSupportedStub() override = default;
 
 private:
     bool HasFastListLength() const override;
@@ -1166,8 +1162,7 @@ public:
     {
     }
 
-    ~TComputationValueBase() override {
-    }
+    ~TComputationValueBase() override = default;
 
     TString DebugString() const {
         return TypeName<TDerived>();
@@ -1333,6 +1328,11 @@ public:
         MKQL_ENSURE(!Empty(ctx), "Value not created");
         auto& val = ctx.MutableValues[Index_];
         return static_cast<TBoxedData<T>*>(val.AsBoxed().Get())->Get();
+    }
+
+    NUdf::TUnboxedValue GetValue(TComputationContext& ctx) const {
+        MKQL_ENSURE(!Empty(ctx), "Value not created");
+        return ctx.MutableValues[Index_];
     }
 
     template <typename... Args>

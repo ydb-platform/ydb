@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "logical_type.h"
 #endif
-#undef LOGICAL_TYPE_INL_H_
 
 namespace NYT::NTableClient {
 
@@ -62,6 +61,11 @@ const TDictLogicalType& TLogicalType::UncheckedAsDictTypeRef() const
 const TTaggedLogicalType& TLogicalType::UncheckedAsTaggedTypeRef() const
 {
     return static_cast<const TTaggedLogicalType&>(*this);
+}
+
+const TAggregateStateLogicalType& TLogicalType::UncheckedAsAggregateStateTypeRef() const
+{
+    return static_cast<const TAggregateStateLogicalType&>(*this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -137,12 +141,29 @@ const TLogicalTypePtr& TDictLogicalType::GetValue() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString& TTaggedLogicalType::GetTag() const
+const std::string& TTaggedLogicalType::GetTag() const
 {
     return Tag_;
 }
 
 const TLogicalTypePtr& TTaggedLogicalType::GetElement() const
+{
+    return Element_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+EAggregateFunction TAggregateStateLogicalType::GetFunction() const
+{
+    return Function_;
+}
+
+const TLogicalTypePtr& TAggregateStateLogicalType::GetArgumentType() const
+{
+    return ArgumentType_;
+}
+
+const TLogicalTypePtr& TAggregateStateLogicalType::GetElement() const
 {
     return Element_;
 }

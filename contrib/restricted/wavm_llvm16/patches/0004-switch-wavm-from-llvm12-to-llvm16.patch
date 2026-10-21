@@ -1,0 +1,621 @@
+commit d494cc68321751876b259c2a446537a2756a7fce
+merge: ca14b3fd3feb0c03c8c06df3039190115439747f 9da061c377e1915618a4084b25a0a4c48e0a12fc
+author: dtorilov
+date: 2023-05-18T18:09:21+03:00
+revision: 11508331
+
+    YT-17640: Switch wavm from llvm12 to llvm16
+    
+    REVIEW: 3821777
+
+--- a/Lib/LLVMJIT/EmitContext.h	(ca14b3fd3feb0c03c8c06df3039190115439747f)
++++ b/Lib/LLVMJIT/EmitContext.h	(d494cc68321751876b259c2a446537a2756a7fce)
+@@ -74,6 +74,7 @@ namespace WAVM { namespace LLVMJIT {
+ 											   U32 alignment = 1)
+ 		{
+ 			auto load = irBuilder.CreateLoad(
++				valueType,
+ 				irBuilder.CreatePointerCast(pointer, valueType->getPointerTo()));
+ 			load->setAlignment(LLVM_ALIGNMENT(alignment));
+ 			return load;
+@@ -92,7 +93,7 @@ namespace WAVM { namespace LLVMJIT {
+ 			// 31 bits.
+ 			return irBuilder.CreateIntToPtr(
+ 				irBuilder.CreateAnd(
+-					irBuilder.CreatePtrToInt(irBuilder.CreateLoad(contextPointerVariable),
++					irBuilder.CreatePtrToInt(irBuilder.CreateLoad(llvmContext.i8PtrType, contextPointerVariable),
+ 											 llvmContext.i64Type),
+ 					emitLiteral(llvmContext, ~((U64(1) << 31) - 1))),
+ 				llvmContext.i8PtrType);
+@@ -111,7 +112,7 @@ namespace WAVM { namespace LLVMJIT {
+ 				llvm::Constant* memoryOffset = memoryOffsets[memoryIndex];
+ 				irBuilder.CreateStore(
+ 					loadFromUntypedPointer(
+-						irBuilder.CreateInBoundsGEP(compartmentAddress, {memoryOffset}),
++						irBuilder.CreateInBoundsGEP(llvmContext.i8Type, compartmentAddress, {memoryOffset}),
+ 						llvmContext.i8PtrType,
+ 						sizeof(U8*)),
+ 					memoryInfo.basePointerVariable);
+@@ -122,7 +123,7 @@ namespace WAVM { namespace LLVMJIT {
+ 									memoryOffset->getType()));
+ 				irBuilder.CreateStore(
+ 					loadFromUntypedPointer(irBuilder.CreateInBoundsGEP(
+-											   compartmentAddress, {memoryNumReservedBytesOffset}),
++												llvmContext.i8Type, compartmentAddress, {memoryNumReservedBytesOffset}),
+ 										   memoryOffset->getType()),
+ 					memoryInfo.endAddressVariable);
+ 			}
+@@ -185,6 +186,8 @@ namespace WAVM { namespace LLVMJIT {
+ 			llvm::Value* resultsArray = nullptr;
+ 			if(callingConvention == IR::CallingConvention::cAPICallback)
+ 			{
++				std::abort(); // NB: This branch is not covered by test suite.
++
+ 				// Pass in pointers to argument and result arrays.
+ 				auto argsArray = irBuilder.CreateAlloca(
+ 					llvmContext.i8Type,
+@@ -194,6 +197,7 @@ namespace WAVM { namespace LLVMJIT {
+ 					storeToUntypedPointer(
+ 						args[argIndex],
+ 						irBuilder.CreateInBoundsGEP(
++							nullptr,  // TODO(dtorilov): Type needed.
+ 							argsArray,
+ 							{emitLiteral(llvmContext,
+ 										 Uptr(argIndex * sizeof(IR::UntaggedValue)))}));
+@@ -215,7 +219,7 @@ namespace WAVM { namespace LLVMJIT {
+ 				auto callArgsAlloca
+ 					= (llvm::Value**)alloca(sizeof(llvm::Value*) * (args.size() + 1));
+ 				callArgs = llvm::ArrayRef<llvm::Value*>(callArgsAlloca, args.size() + 1);
+-				callArgsAlloca[0] = irBuilder.CreateLoad(contextPointerVariable);
++				callArgsAlloca[0] = irBuilder.CreateLoad(llvmContext.i8PtrType, contextPointerVariable);
+ 				for(Uptr argIndex = 0; argIndex < args.size(); ++argIndex)
+ 				{ callArgsAlloca[1 + argIndex] = args[argIndex]; }
+ 			}
+@@ -277,7 +281,8 @@ namespace WAVM { namespace LLVMJIT {
+ 						WAVM_ASSERT(resultOffset < Runtime::maxThunkArgAndReturnBytes);
+ 
+ 						results.push_back(loadFromUntypedPointer(
+-							irBuilder.CreateInBoundsGEP(newContextPointer,
++							irBuilder.CreateInBoundsGEP(llvmContext.i8Type,
++														newContextPointer,
+ 														{emitLiteral(llvmContext, resultOffset)}),
+ 							asLLVMType(llvmContext, resultType),
+ 							resultNumBytes));
+@@ -311,6 +316,8 @@ namespace WAVM { namespace LLVMJIT {
+ 				break;
+ 			}
+ 			case IR::CallingConvention::cAPICallback: {
++				std::abort(); // NB: This branch is not covered by test suite.
++
+ 				// Check whether the call returned an Exception.
+ 				auto exception = returnValue;
+ 				auto function = irBuilder.GetInsertBlock()->getParent();
+@@ -344,6 +351,7 @@ namespace WAVM { namespace LLVMJIT {
+ 				{
+ 					results.push_back(loadFromUntypedPointer(
+ 						irBuilder.CreateInBoundsGEP(
++							nullptr,  // TODO(dtorilov): Type needed.
+ 							resultsArray,
+ 							{emitLiteral(llvmContext, resultIndex * sizeof(IR::UntaggedValue))}),
+ 						asLLVMType(llvmContext, calleeType.results()[resultIndex])));
+@@ -367,7 +375,7 @@ namespace WAVM { namespace LLVMJIT {
+ 		{
+ 			llvm::Value* returnStruct = getZeroedLLVMReturnStruct(llvmContext, resultTypes);
+ 			returnStruct = irBuilder.CreateInsertValue(
+-				returnStruct, irBuilder.CreateLoad(contextPointerVariable), {U32(0)});
++				returnStruct, irBuilder.CreateLoad(llvmContext.i8PtrType, contextPointerVariable), {U32(0)});
+ 
+ 			WAVM_ASSERT(resultTypes.size() == results.size());
+ 			if(areResultsReturnedDirectly(resultTypes))
+@@ -395,7 +403,8 @@ namespace WAVM { namespace LLVMJIT {
+ 					irBuilder.CreateStore(results[resultIndex],
+ 										  irBuilder.CreatePointerCast(
+ 											  irBuilder.CreateInBoundsGEP(
+-												  irBuilder.CreateLoad(contextPointerVariable),
++												  llvmContext.i8Type,
++												  irBuilder.CreateLoad(llvmContext.i8PtrType, contextPointerVariable),
+ 												  {emitLiteral(llvmContext, resultOffset)}),
+ 											  asLLVMType(llvmContext, resultType)->getPointerTo()));
+ 
+--- a/Lib/LLVMJIT/EmitCore.cpp	(ca14b3fd3feb0c03c8c06df3039190115439747f)
++++ b/Lib/LLVMJIT/EmitCore.cpp	(d494cc68321751876b259c2a446537a2756a7fce)
+@@ -373,15 +373,17 @@ void EmitFunctionContext::call_indirect(CallIndirectImm imm)
+ 	// Load base and endIndex from the TableRuntimeData in CompartmentRuntimeData::tables
+ 	// corresponding to imm.tableIndex.
+ 	auto tableRuntimeDataPointer = irBuilder.CreateInBoundsGEP(
+-		getCompartmentAddress(), {moduleContext.tableOffsets[imm.tableIndex]});
++		llvmContext.i8Type, getCompartmentAddress(), {moduleContext.tableOffsets[imm.tableIndex]});
+ 	auto tableBasePointer = loadFromUntypedPointer(
+ 		irBuilder.CreateInBoundsGEP(
++			llvmContext.i8Type,
+ 			tableRuntimeDataPointer,
+ 			{emitLiteralIptr(offsetof(TableRuntimeData, base), moduleContext.iptrType)}),
+ 		moduleContext.iptrType->getPointerTo(),
+ 		moduleContext.iptrAlignment);
+ 	auto tableMaxIndex = loadFromUntypedPointer(
+ 		irBuilder.CreateInBoundsGEP(
++			llvmContext.i8Type,
+ 			tableRuntimeDataPointer,
+ 			{emitLiteralIptr(offsetof(TableRuntimeData, endIndex), moduleContext.iptrType)}),
+ 		moduleContext.iptrType,
+@@ -393,8 +395,8 @@ void EmitFunctionContext::call_indirect(CallIndirectImm imm)
+ 		irBuilder.CreateICmpULT(elementIndex, tableMaxIndex), elementIndex, tableMaxIndex);
+ 
+ 	// Load the funcref referenced by the table.
+-	auto elementPointer = irBuilder.CreateInBoundsGEP(tableBasePointer, {clampedElementIndex});
+-	llvm::LoadInst* biasedValueLoad = irBuilder.CreateLoad(elementPointer);
++	auto elementPointer = irBuilder.CreateInBoundsGEP(llvmContext.i64Type, tableBasePointer, {clampedElementIndex});
++	llvm::LoadInst* biasedValueLoad = irBuilder.CreateLoad(llvmContext.i64Type, elementPointer);
+ 	biasedValueLoad->setAtomic(llvm::AtomicOrdering::Acquire);
+ 	biasedValueLoad->setAlignment(LLVM_ALIGNMENT(sizeof(Uptr)));
+ 	auto runtimeFunction = irBuilder.CreateIntToPtr(
+@@ -402,6 +404,7 @@ void EmitFunctionContext::call_indirect(CallIndirectImm imm)
+ 		llvmContext.i8PtrType);
+ 	auto elementTypeId = loadFromUntypedPointer(
+ 		irBuilder.CreateInBoundsGEP(
++			llvmContext.i8Type,
+ 			runtimeFunction,
+ 			emitLiteralIptr(offsetof(Runtime::Function, encodedType), moduleContext.iptrType)),
+ 		moduleContext.iptrType,
+@@ -419,13 +422,14 @@ void EmitFunctionContext::call_indirect(CallIndirectImm imm)
+ 								moduleContext.iptrValueType}),
+ 					 IR::CallingConvention::intrinsic),
+ 		{elementIndex,
+-		 getTableIdFromOffset(moduleContext.tableOffsets[imm.tableIndex]),
++		 getTableIdFromOffset(moduleContext.tableOffsets[imm.tableIndex], irBuilder),
+ 		 irBuilder.CreatePointerCast(runtimeFunction, llvmContext.externrefType),
+ 		 calleeTypeId});
+ 
+ 	// Call the function loaded from the table.
+ 	auto functionPointer = irBuilder.CreatePointerCast(
+ 		irBuilder.CreateInBoundsGEP(
++			llvmContext.i8Type,
+ 			runtimeFunction,
+ 			emitLiteralIptr(offsetof(Runtime::Function, code), moduleContext.iptrType)),
+ 		asLLVMType(llvmContext, calleeType)->getPointerTo());
+--- a/Lib/LLVMJIT/EmitExceptions.cpp	(ca14b3fd3feb0c03c8c06df3039190115439747f)
++++ b/Lib/LLVMJIT/EmitExceptions.cpp	(d494cc68321751876b259c2a446537a2756a7fce)
+@@ -163,6 +163,7 @@ void EmitFunctionContext::try_(ControlStructureImm imm)
+ 		// Load the exception type ID.
+ 		auto exceptionTypeId = loadFromUntypedPointer(
+ 			irBuilder.CreateInBoundsGEP(
++				llvmContext.i8Type,
+ 				exceptionPointer,
+ 				{emitLiteralIptr(offsetof(Exception, typeId), moduleContext.iptrType)}),
+ 			moduleContext.iptrType);
+@@ -191,6 +192,7 @@ void EmitFunctionContext::try_(ControlStructureImm imm)
+ 		// Load the exception type ID.
+ 		auto exceptionTypeId = loadFromUntypedPointer(
+ 			irBuilder.CreateInBoundsGEP(
++				llvmContext.i8Type,
+ 				exceptionPointer,
+ 				{emitLiteralIptr(offsetof(Exception, typeId), moduleContext.iptrType)}),
+ 			moduleContext.iptrType);
+@@ -263,8 +265,10 @@ void EmitFunctionContext::catch_(ExceptionTypeImm imm)
+ 			= offsetof(Exception, arguments)
+ 			  + (catchType.params.size() - argumentIndex - 1) * sizeof(Exception::arguments[0]);
+ 		auto argument = loadFromUntypedPointer(
+-			irBuilder.CreateInBoundsGEP(catchContext.exceptionPointer,
+-										{emitLiteral(llvmContext, argOffset)}),
++			irBuilder.CreateInBoundsGEP(
++				llvmContext.i8Type,
++				catchContext.exceptionPointer,
++				{emitLiteral(llvmContext, argOffset)}),
+ 			asLLVMType(llvmContext, parameters),
+ 			sizeof(Exception::arguments[0]));
+ 		push(argument);
+@@ -298,6 +302,7 @@ void EmitFunctionContext::catch_all(NoImm)
+ 	auto isUserExceptionType = irBuilder.CreateICmpNE(
+ 		loadFromUntypedPointer(
+ 			irBuilder.CreateInBoundsGEP(
++				llvmContext.i8Type,
+ 				catchContext.exceptionPointer,
+ 				{emitLiteralIptr(offsetof(Exception, isUserException), moduleContext.iptrType)}),
+ 			llvmContext.i8Type),
+@@ -332,6 +337,7 @@ void EmitFunctionContext::throw_(ExceptionTypeImm imm)
+ 			elementValue,
+ 			irBuilder.CreatePointerCast(
+ 				irBuilder.CreateInBoundsGEP(
++					llvmContext.i8Type,
+ 					argBaseAddress,
+ 					{emitLiteral(llvmContext, (numArgs - argIndex - 1) * sizeof(UntaggedValue))}),
+ 				elementValue->getType()->getPointerTo()),
+--- a/Lib/LLVMJIT/EmitFunction.cpp	(ca14b3fd3feb0c03c8c06df3039190115439747f)
++++ b/Lib/LLVMJIT/EmitFunction.cpp	(d494cc68321751876b259c2a446537a2756a7fce)
+@@ -347,6 +347,7 @@ void EmitFunctionContext::emit()
+ 				  : functionDef.nonParameterLocalTypes[localIndex - functionType.params().size()];
+ 		auto localPointer = irBuilder.CreateAlloca(asLLVMType(llvmContext, localType), nullptr, "");
+ 		localPointers.push_back(localPointer);
++		localPointerElementTypes.push_back(asLLVMType(llvmContext, localType));
+ 
+ 		if(localIndex < functionType.params().size())
+ 		{
+--- a/Lib/LLVMJIT/EmitFunctionContext.h	(ca14b3fd3feb0c03c8c06df3039190115439747f)
++++ b/Lib/LLVMJIT/EmitFunctionContext.h	(d494cc68321751876b259c2a446537a2756a7fce)
+@@ -23,6 +23,7 @@ namespace WAVM { namespace LLVMJIT {
+ 		llvm::Function* function;
+ 
+ 		std::vector<llvm::Value*> localPointers;
++		std::vector<llvm::Type*> localPointerElementTypes;
+ 
+ 		llvm::DISubprogram* diFunction;
+ 
+--- a/Lib/LLVMJIT/EmitMem.cpp	(ca14b3fd3feb0c03c8c06df3039190115439747f)
++++ b/Lib/LLVMJIT/EmitMem.cpp	(d494cc68321751876b259c2a446537a2756a7fce)
+@@ -42,6 +42,7 @@ static llvm::Value* getMemoryNumPages(EmitFunctionContext& functionContext, Uptr
+ 	// Load the number of memory pages from the compartment runtime data.
+ 	llvm::LoadInst* memoryNumPagesLoad = functionContext.loadFromUntypedPointer(
+ 		functionContext.irBuilder.CreateInBoundsGEP(
++			llvm::Type::getInt8Ty(functionContext.irBuilder.getContext()),
+ 			functionContext.getCompartmentAddress(),
+ 			{llvm::ConstantExpr::getAdd(
+ 				memoryOffset,
+@@ -159,7 +160,9 @@ static llvm::Value* getOffsetAndBoundedAddress(EmitFunctionContext& functionCont
+ 		// the guard region.
+ 
+ 		llvm::Value* endAddress
+-			= irBuilder.CreateLoad(functionContext.memoryInfos[memoryIndex].endAddressVariable);
++			= irBuilder.CreateLoad(
++                    functionContext.moduleContext.iptrType,
++                    functionContext.memoryInfos[memoryIndex].endAddressVariable);
+ 		address = irBuilder.CreateSelect(
+ 			irBuilder.CreateICmpULT(address, endAddress), address, endAddress);
+ 	}
+@@ -184,8 +187,8 @@ llvm::Value* EmitFunctionContext::coerceAddressToPointer(llvm::Value* boundedAdd
+ 														 Uptr memoryIndex)
+ {
+ 	llvm::Value* memoryBasePointer
+-		= irBuilder.CreateLoad(memoryInfos[memoryIndex].basePointerVariable);
+-	llvm::Value* bytePointer = irBuilder.CreateInBoundsGEP(memoryBasePointer, boundedAddress);
++		= irBuilder.CreateLoad(llvmContext.i8PtrType, memoryInfos[memoryIndex].basePointerVariable);
++	llvm::Value* bytePointer = irBuilder.CreateInBoundsGEP(llvmContext.i8Type, memoryBasePointer, boundedAddress);
+ 
+ 	// Cast the pointer to the appropriate type.
+ 	return irBuilder.CreatePointerCast(bytePointer, memoryType->getPointerTo());
+@@ -206,7 +209,7 @@ void EmitFunctionContext::memory_grow(MemoryImm imm)
+ 					 TypeTuple({moduleContext.iptrValueType, moduleContext.iptrValueType}),
+ 					 IR::CallingConvention::intrinsic),
+ 		{zext(deltaNumPages, moduleContext.iptrType),
+-		 getMemoryIdFromOffset(moduleContext.memoryOffsets[imm.memoryIndex])});
++		 getMemoryIdFromOffset(moduleContext.memoryOffsets[imm.memoryIndex], irBuilder)});
+ 	WAVM_ASSERT(resultTuple.size() == 1);
+ 	const MemoryType& memoryType = moduleContext.irModule.memories.getType(imm.memoryIndex);
+ 	push(coerceIptrToIndex(memoryType.indexType, resultTuple[0]));
+@@ -239,7 +242,7 @@ void EmitFunctionContext::memory_init(DataSegmentAndMemImm imm)
+ 						  zext(sourceOffset, moduleContext.iptrType),
+ 						  zext(numBytes, moduleContext.iptrType),
+ 						  moduleContext.instanceId,
+-						  getMemoryIdFromOffset(moduleContext.memoryOffsets[imm.memoryIndex]),
++						  getMemoryIdFromOffset(moduleContext.memoryOffsets[imm.memoryIndex], irBuilder),
+ 						  emitLiteral(llvmContext, imm.dataSegmentIndex)});
+ }
+ 
+@@ -317,7 +320,7 @@ void EmitFunctionContext::memory_fill(MemoryImm imm)
+ 			imm.offset,                                                                            \
+ 			BoundsCheckOp::clampToGuardRegion);                                                    \
+ 		auto pointer = coerceAddressToPointer(boundedAddress, llvmMemoryType, imm.memoryIndex);    \
+-		auto load = irBuilder.CreateLoad(pointer);                                                 \
++		auto load = irBuilder.CreateLoad(llvmMemoryType, pointer);                                 \
+ 		/* Don't trust the alignment hint provided by the WebAssembly code, since the load can't   \
+ 		 * trap if it's wrong. */                                                                  \
+ 		load->setAlignment(LLVM_ALIGNMENT(1));                                                     \
+@@ -416,7 +419,7 @@ static void emitLoadLane(EmitFunctionContext& functionContext,
+ 		BoundsCheckOp::clampToGuardRegion);
+ 	llvm::Value* pointer = functionContext.coerceAddressToPointer(
+ 		boundedAddress, llvmVectorType->getScalarType(), loadOrStoreImm.memoryIndex);
+-	llvm::LoadInst* load = functionContext.irBuilder.CreateLoad(pointer);
++	llvm::LoadInst* load = functionContext.irBuilder.CreateLoad(llvmVectorType->getScalarType(), pointer);
+ 	// Don't trust the alignment hint provided by the WebAssembly code, since the load can't trap if
+ 	// it's wrong.
+ 	load->setAlignment(LLVM_ALIGNMENT(1));
+@@ -512,8 +515,8 @@ static void emitLoadInterleaved(EmitFunctionContext& functionContext,
+ 		for(U32 vectorIndex = 0; vectorIndex < numVectors; ++vectorIndex)
+ 		{
+ 			auto load
+-				= functionContext.irBuilder.CreateLoad(functionContext.irBuilder.CreateInBoundsGEP(
+-					pointer, {emitLiteral(functionContext.llvmContext, U32(vectorIndex))}));
++				= functionContext.irBuilder.CreateLoad(llvmValueType, functionContext.irBuilder.CreateInBoundsGEP(
++					llvmValueType, pointer, {emitLiteral(functionContext.llvmContext, U32(vectorIndex))}));
+ 			/* Don't trust the alignment hint provided by the WebAssembly code, since the load
+ 			 * can't trap if it's wrong. */
+ 			load->setAlignment(LLVM_ALIGNMENT(1));
+@@ -596,7 +599,7 @@ static void emitStoreInterleaved(EmitFunctionContext& functionContext,
+ 			auto store = functionContext.irBuilder.CreateStore(
+ 				interleavedVector,
+ 				functionContext.irBuilder.CreateInBoundsGEP(
+-					pointer, {emitLiteral(functionContext.llvmContext, U32(vectorIndex))}));
++					llvmValueType, pointer, {emitLiteral(functionContext.llvmContext, U32(vectorIndex))}));
+ 			store->setVolatile(true);
+ 			store->setAlignment(LLVM_ALIGNMENT(1));
+ 		}
+@@ -688,7 +691,7 @@ void EmitFunctionContext::memory_atomic_notify(AtomicLoadOrStoreImm<2> imm)
+ 			IR::CallingConvention::intrinsic),
+ 		{boundedAddress,
+ 		 numWaiters,
+-		 getMemoryIdFromOffset(moduleContext.memoryOffsets[imm.memoryIndex])})[0]);
++		 getMemoryIdFromOffset(moduleContext.memoryOffsets[imm.memoryIndex], irBuilder)})[0]);
+ }
+ void EmitFunctionContext::memory_atomic_wait32(AtomicLoadOrStoreImm<2> imm)
+ {
+@@ -714,7 +717,7 @@ void EmitFunctionContext::memory_atomic_wait32(AtomicLoadOrStoreImm<2> imm)
+ 		{boundedAddress,
+ 		 expectedValue,
+ 		 timeout,
+-		 getMemoryIdFromOffset(moduleContext.memoryOffsets[imm.memoryIndex])})[0]);
++		 getMemoryIdFromOffset(moduleContext.memoryOffsets[imm.memoryIndex], irBuilder)})[0]);
+ }
+ void EmitFunctionContext::memory_atomic_wait64(AtomicLoadOrStoreImm<3> imm)
+ {
+@@ -740,7 +743,7 @@ void EmitFunctionContext::memory_atomic_wait64(AtomicLoadOrStoreImm<3> imm)
+ 		{boundedAddress,
+ 		 expectedValue,
+ 		 timeout,
+-		 getMemoryIdFromOffset(moduleContext.memoryOffsets[imm.memoryIndex])})[0]);
++		 getMemoryIdFromOffset(moduleContext.memoryOffsets[imm.memoryIndex], irBuilder)})[0]);
+ }
+ 
+ void EmitFunctionContext::atomic_fence(AtomicFenceImm imm)
+@@ -767,7 +770,7 @@ void EmitFunctionContext::atomic_fence(AtomicFenceImm imm)
+ 			BoundsCheckOp::clampToGuardRegion);                                                    \
+ 		trapIfMisalignedAtomic(boundedAddress, numBytesLog2);                                      \
+ 		auto pointer = coerceAddressToPointer(boundedAddress, llvmMemoryType, imm.memoryIndex);    \
+-		auto load = irBuilder.CreateLoad(pointer);                                                 \
++		auto load = irBuilder.CreateLoad(llvmMemoryType, pointer);                                                 \
+ 		load->setAlignment(LLVM_ALIGNMENT(U64(1) << imm.alignmentLog2));                           \
+ 		load->setVolatile(true);                                                                   \
+ 		load->setAtomic(llvm::AtomicOrdering::SequentiallyConsistent);                             \
+@@ -831,6 +834,7 @@ EMIT_ATOMIC_STORE_OP(i64, atomic_store32, llvmContext.i32Type, 2, trunc)
+ 			= irBuilder.CreateAtomicCmpXchg(pointer,                                               \
+ 											expectedValue,                                         \
+ 											replacementValue,                                      \
++                                            {},                                                    \
+ 											llvm::AtomicOrdering::SequentiallyConsistent,          \
+ 											llvm::AtomicOrdering::SequentiallyConsistent);         \
+ 		atomicCmpXchg->setVolatile(true);                                                          \
+@@ -865,6 +869,7 @@ EMIT_ATOMIC_CMPXCHG(i64, atomic_rmw_cmpxchg, llvmContext.i64Type, 3, identity, i
+ 		auto atomicRMW = irBuilder.CreateAtomicRMW(llvm::AtomicRMWInst::BinOp::rmwOpId,            \
+ 												   pointer,                                        \
+ 												   value,                                          \
++                                                   {},                                             \
+ 												   llvm::AtomicOrdering::SequentiallyConsistent);  \
+ 		atomicRMW->setVolatile(true);                                                              \
+ 		push(memToValue(atomicRMW, asLLVMType(llvmContext, ValueType::valueTypeId)));              \
+--- a/Lib/LLVMJIT/EmitTable.cpp	(ca14b3fd3feb0c03c8c06df3039190115439747f)
++++ b/Lib/LLVMJIT/EmitTable.cpp	(d494cc68321751876b259c2a446537a2756a7fce)
+@@ -54,7 +54,7 @@ void EmitFunctionContext::table_get(TableImm imm)
+ 					 TypeTuple({moduleContext.iptrValueType, moduleContext.iptrValueType}),
+ 					 IR::CallingConvention::intrinsic),
+ 		{zext(index, moduleContext.iptrType),
+-		 getTableIdFromOffset(moduleContext.tableOffsets[imm.tableIndex])})[0];
++		 getTableIdFromOffset(moduleContext.tableOffsets[imm.tableIndex], irBuilder)})[0];
+ 	push(result);
+ }
+ 
+@@ -70,7 +70,7 @@ void EmitFunctionContext::table_set(TableImm imm)
+ 									  IR::CallingConvention::intrinsic),
+ 						 {zext(index, moduleContext.iptrType),
+ 						  value,
+-						  getTableIdFromOffset(moduleContext.tableOffsets[imm.tableIndex])});
++						  getTableIdFromOffset(moduleContext.tableOffsets[imm.tableIndex], irBuilder)});
+ }
+ 
+ void EmitFunctionContext::table_init(ElemSegmentAndTableImm imm)
+@@ -91,7 +91,7 @@ void EmitFunctionContext::table_init(ElemSegmentAndTableImm imm)
+ 						  zext(sourceOffset, moduleContext.iptrType),
+ 						  zext(numElements, moduleContext.iptrType),
+ 						  moduleContext.instanceId,
+-						  getTableIdFromOffset(moduleContext.tableOffsets[imm.tableIndex]),
++						  getTableIdFromOffset(moduleContext.tableOffsets[imm.tableIndex], irBuilder),
+ 						  emitLiteralIptr(imm.elemSegmentIndex, moduleContext.iptrType)});
+ }
+ 
+@@ -122,8 +122,8 @@ void EmitFunctionContext::table_copy(TableCopyImm imm)
+ 						 {zext(destOffset, moduleContext.iptrType),
+ 						  zext(sourceOffset, moduleContext.iptrType),
+ 						  zext(numElements, moduleContext.iptrType),
+-						  getTableIdFromOffset(moduleContext.tableOffsets[imm.destTableIndex]),
+-						  getTableIdFromOffset(moduleContext.tableOffsets[imm.sourceTableIndex])});
++						  getTableIdFromOffset(moduleContext.tableOffsets[imm.destTableIndex], irBuilder),
++						  getTableIdFromOffset(moduleContext.tableOffsets[imm.sourceTableIndex], irBuilder)});
+ }
+ 
+ void EmitFunctionContext::table_fill(TableImm imm)
+@@ -142,7 +142,7 @@ void EmitFunctionContext::table_fill(TableImm imm)
+ 						 {zext(destOffset, moduleContext.iptrType),
+ 						  value,
+ 						  zext(numElements, moduleContext.iptrType),
+-						  getTableIdFromOffset(moduleContext.tableOffsets[imm.tableIndex])});
++						  getTableIdFromOffset(moduleContext.tableOffsets[imm.tableIndex], irBuilder)});
+ }
+ 
+ void EmitFunctionContext::table_grow(TableImm imm)
+@@ -158,7 +158,7 @@ void EmitFunctionContext::table_grow(TableImm imm)
+ 			IR::CallingConvention::intrinsic),
+ 		{value,
+ 		 zext(deltaNumElements, moduleContext.iptrType),
+-		 getTableIdFromOffset(moduleContext.tableOffsets[imm.tableIndex])});
++		 getTableIdFromOffset(moduleContext.tableOffsets[imm.tableIndex], irBuilder)});
+ 	WAVM_ASSERT(previousNumElements.size() == 1);
+ 	const TableType& tableType = moduleContext.irModule.tables.getType(imm.tableIndex);
+ 	push(coerceIptrToIndex(tableType.indexType, previousNumElements[0]));
+@@ -170,7 +170,7 @@ void EmitFunctionContext::table_size(TableImm imm)
+ 							   FunctionType(TypeTuple(moduleContext.iptrValueType),
+ 											TypeTuple(moduleContext.iptrValueType),
+ 											IR::CallingConvention::intrinsic),
+-							   {getTableIdFromOffset(moduleContext.tableOffsets[imm.tableIndex])});
++							   {getTableIdFromOffset(moduleContext.tableOffsets[imm.tableIndex], irBuilder)});
+ 	WAVM_ASSERT(currentNumElements.size() == 1);
+ 	const TableType& tableType = moduleContext.irModule.tables.getType(imm.tableIndex);
+ 	push(coerceIptrToIndex(tableType.indexType, currentNumElements[0]));
+--- a/Lib/LLVMJIT/EmitVar.cpp	(ca14b3fd3feb0c03c8c06df3039190115439747f)
++++ b/Lib/LLVMJIT/EmitVar.cpp	(d494cc68321751876b259c2a446537a2756a7fce)
+@@ -27,20 +27,22 @@ using namespace WAVM::LLVMJIT;
+ void EmitFunctionContext::local_get(GetOrSetVariableImm<false> imm)
+ {
+ 	WAVM_ASSERT(imm.variableIndex < localPointers.size());
+-	push(irBuilder.CreateLoad(localPointers[imm.variableIndex]));
++	push(irBuilder.CreateLoad(
++		localPointerElementTypes[imm.variableIndex],
++		localPointers[imm.variableIndex]));
+ }
+ void EmitFunctionContext::local_set(GetOrSetVariableImm<false> imm)
+ {
+ 	WAVM_ASSERT(imm.variableIndex < localPointers.size());
+ 	auto value = irBuilder.CreateBitCast(
+-		pop(), localPointers[imm.variableIndex]->getType()->getPointerElementType());
++		pop(), localPointerElementTypes[imm.variableIndex]);
+ 	irBuilder.CreateStore(value, localPointers[imm.variableIndex]);
+ }
+ void EmitFunctionContext::local_tee(GetOrSetVariableImm<false> imm)
+ {
+ 	WAVM_ASSERT(imm.variableIndex < localPointers.size());
+ 	auto value = irBuilder.CreateBitCast(
+-		getValueFromTop(), localPointers[imm.variableIndex]->getType()->getPointerElementType());
++		getValueFromTop(), localPointerElementTypes[imm.variableIndex]);
+ 	irBuilder.CreateStore(value, localPointers[imm.variableIndex]);
+ }
+ 
+@@ -72,7 +74,7 @@ void EmitFunctionContext::global_get(GetOrSetVariableImm<true> imm)
+ 		llvm::Value* globalDataOffset = irBuilder.CreatePtrToInt(
+ 			moduleContext.globals[imm.variableIndex], moduleContext.iptrType);
+ 		llvm::Value* globalPointer = irBuilder.CreateInBoundsGEP(
+-			irBuilder.CreateLoad(contextPointerVariable), {globalDataOffset});
++			llvmContext.i8Type, irBuilder.CreateLoad(llvmContext.i8PtrType, contextPointerVariable), {globalDataOffset});
+ 		value = loadFromUntypedPointer(globalPointer,
+ 									   asLLVMType(llvmContext, globalType.valueType),
+ 									   getTypeByteWidth(globalType.valueType));
+@@ -148,6 +150,6 @@ void EmitFunctionContext::global_set(GetOrSetVariableImm<true> imm)
+ 	llvm::Value* globalDataOffset = irBuilder.CreatePtrToInt(
+ 		moduleContext.globals[imm.variableIndex], moduleContext.iptrType);
+ 	llvm::Value* globalPointer = irBuilder.CreateInBoundsGEP(
+-		irBuilder.CreateLoad(contextPointerVariable), {globalDataOffset});
++		llvmContext.i8Type, irBuilder.CreateLoad(llvmContext.i8PtrType, contextPointerVariable), {globalDataOffset});
+ 	storeToUntypedPointer(value, globalPointer);
+ }
+--- a/Lib/LLVMJIT/EmitWorkarounds.h	(ca14b3fd3feb0c03c8c06df3039190115439747f)
++++ b/Lib/LLVMJIT/EmitWorkarounds.h	(d494cc68321751876b259c2a446537a2756a7fce)
+@@ -11,7 +11,7 @@ inline llvm::Value* getTriviallyNonConstantZero(llvm::IRBuilder<>& irBuilder, ll
+ {
+ 	llvm::Value* zeroAlloca = irBuilder.CreateAlloca(type, nullptr, "nonConstantZero");
+ 	irBuilder.CreateStore(llvm::Constant::getNullValue(type), zeroAlloca);
+-	return irBuilder.CreateLoad(zeroAlloca);
++	return irBuilder.CreateLoad(type, zeroAlloca);
+ }
+ 
+ inline llvm::Value* createFCmpWithWorkaround(llvm::IRBuilder<>& irBuilder,
+--- a/Lib/LLVMJIT/LLVMJITPrivate.h	(ca14b3fd3feb0c03c8c06df3039190115439747f)
++++ b/Lib/LLVMJIT/LLVMJITPrivate.h	(d494cc68321751876b259c2a446537a2756a7fce)
+@@ -272,9 +272,9 @@ namespace WAVM { namespace LLVMJIT {
+ 		}
+ 	}
+ 
+-	inline llvm::Constant* getMemoryIdFromOffset(llvm::Constant* memoryOffset)
++	inline llvm::Value* getMemoryIdFromOffset(llvm::Constant* memoryOffset, llvm::IRBuilder<>& irBuilder)
+ 	{
+-		return llvm::ConstantExpr::getExactUDiv(
++        return irBuilder.CreateExactUDiv(
+ 			llvm::ConstantExpr::getSub(
+ 				memoryOffset,
+ 				emitLiteralIptr(offsetof(Runtime::CompartmentRuntimeData, memories),
+@@ -282,9 +282,9 @@ namespace WAVM { namespace LLVMJIT {
+ 			emitLiteralIptr(sizeof(Runtime::MemoryRuntimeData), memoryOffset->getType()));
+ 	}
+ 
+-	inline llvm::Constant* getTableIdFromOffset(llvm::Constant* tableOffset)
++	inline llvm::Value* getTableIdFromOffset(llvm::Constant* tableOffset, llvm::IRBuilder<>& irBuilder)
+ 	{
+-		return llvm::ConstantExpr::getExactUDiv(
++        return irBuilder.CreateExactUDiv(
+ 			llvm::ConstantExpr::getSub(
+ 				tableOffset,
+ 				emitLiteralIptr(offsetof(Runtime::CompartmentRuntimeData, tables),
+@@ -326,14 +326,14 @@ namespace WAVM { namespace LLVMJIT {
+ 
+ 			// LLVM 9+ has a more general purpose frame-pointer=(all|non-leaf|none) attribute that
+ 			// WAVM should use once we can depend on it.
+-			attrs = attrs.addAttribute(function->getContext(),
++			attrs = attrs.addAttributeAtIndex(function->getContext(),
+ 									   llvm::AttributeList::FunctionIndex,
+ 									   "no-frame-pointer-elim",
+ 									   "true");
+ 
+ 			// Set the probe-stack attribute: this will cause functions that allocate more than a
+ 			// page of stack space to call the wavm_probe_stack function defined in POSIX.S
+-			attrs = attrs.addAttribute(function->getContext(),
++			attrs = attrs.addAttributeAtIndex(function->getContext(),
+ 									   llvm::AttributeList::FunctionIndex,
+ 									   "probe-stack",
+ 									   "wavm_probe_stack");
+--- a/Lib/LLVMJIT/LLVMModule.cpp	(ca14b3fd3feb0c03c8c06df3039190115439747f)
++++ b/Lib/LLVMJIT/LLVMModule.cpp	(d494cc68321751876b259c2a446537a2756a7fce)
+@@ -35,6 +35,7 @@ PUSH_DISABLE_WARNINGS_FOR_LLVM_HEADERS
+ #include <llvm/Object/ObjectFile.h>
+ #include <llvm/Object/SymbolSize.h>
+ #include <llvm/Object/SymbolicFile.h>
++#include <llvm/Support/Alignment.h>
+ #include <llvm/Support/Error.h>
+ #include <llvm/Support/Memory.h>
+ #include <llvm/Support/MemoryBuffer.h>
+@@ -80,7 +81,7 @@ struct LLVMJIT::GlobalModuleState
+ 	{
+ 		gdbRegistrationListener = llvm::JITEventListener::createGDBRegistrationListener();
+ 	}
+-	~GlobalModuleState() { delete gdbRegistrationListener; }
++	~GlobalModuleState() = default; // NB: Should not delete gdbRegistrationListener in llvm16.
+ };
+ 
+ // Allocates memory for the LLVM object loader.
+@@ -139,12 +140,13 @@ struct LLVMJIT::ModuleMemoryManager : llvm::RTDyldMemoryManager
+ 	}
+ 
+ 	virtual bool needsToReserveAllocationSpace() override { return true; }
+-	virtual void reserveAllocationSpace(uintptr_t numCodeBytes,
+-										U32 codeAlignment,
++
++	void reserveAllocationSpace(uintptr_t numCodeBytes,
++										llvm::Align codeAlignment,
+ 										uintptr_t numReadOnlyBytes,
+-										U32 readOnlyAlignment,
++										llvm::Align readOnlyAlignment,
+ 										uintptr_t numReadWriteBytes,
+-										U32 readWriteAlignment) override
++										llvm::Align readWriteAlignment)
+ 	{
+ 		if(USE_WINDOWS_SEH)
+ 		{
+--- a/Lib/LLVMJIT/Thunk.cpp	(ca14b3fd3feb0c03c8c06df3039190115439747f)
++++ b/Lib/LLVMJIT/Thunk.cpp	(d494cc68321751876b259c2a446537a2756a7fce)
+@@ -134,7 +134,7 @@ InvokeThunkPointer LLVMJIT::getInvokeThunk(FunctionType functionType)
+ 		const ValueType paramType = functionType.params()[argIndex];
+ 		llvm::Value* argOffset = emitLiteral(llvmContext, argIndex * sizeof(UntaggedValue));
+ 		llvm::Value* arg = emitContext.loadFromUntypedPointer(
+-			emitContext.irBuilder.CreateInBoundsGEP(argsArray, {argOffset}),
++			emitContext.irBuilder.CreateInBoundsGEP(llvmContext.i8Type, argsArray, {argOffset}),
+ 			asLLVMType(llvmContext, paramType),
+ 			alignof(UntaggedValue));
+ 		arguments.push_back(arg);
+@@ -142,7 +142,7 @@ InvokeThunkPointer LLVMJIT::getInvokeThunk(FunctionType functionType)
+ 
+ 	// Call the function.
+ 	llvm::Value* functionCode = emitContext.irBuilder.CreateInBoundsGEP(
+-		calleeFunction, {emitLiteralIptr(offsetof(Runtime::Function, code), iptrType)});
++		llvmContext.i8Type, calleeFunction, {emitLiteralIptr(offsetof(Runtime::Function, code), iptrType)});
+ 	ValueVector results = emitContext.emitCallOrInvoke(
+ 		emitContext.irBuilder.CreatePointerCast(
+ 			functionCode, asLLVMType(llvmContext, functionType)->getPointerTo()),
+@@ -157,13 +157,13 @@ InvokeThunkPointer LLVMJIT::getInvokeThunk(FunctionType functionType)
+ 		llvm::Value* result = results[resultIndex];
+ 		emitContext.storeToUntypedPointer(
+ 			result,
+-			emitContext.irBuilder.CreateInBoundsGEP(resultsArray, {resultOffset}),
++			emitContext.irBuilder.CreateInBoundsGEP(llvmContext.i8Type, resultsArray, {resultOffset}),
+ 			alignof(UntaggedValue));
+ 	}
+ 
+ 	// Return the new context pointer.
+ 	emitContext.irBuilder.CreateRet(
+-		emitContext.irBuilder.CreateLoad(emitContext.contextPointerVariable));
++		emitContext.irBuilder.CreateLoad(llvmContext.i8PtrType, emitContext.contextPointerVariable));
+ 
+ 	// Compile the LLVM IR to object code.
+ 	std::vector<U8> objectBytes

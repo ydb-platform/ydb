@@ -14,14 +14,6 @@ private:
     NOlap::TTabletsByBlob SharingBlobIds;
     const std::shared_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager> Manager;
 
-    TStringBuilder TxPrefix() const {
-        return TStringBuilder() << "TxWrite[" << ToString(TabletTxNo) << "] ";
-    }
-
-    TString TxSuffix() const {
-        return TStringBuilder() << " at tablet " << Self->TabletID();
-    }
-
 public:
     TTxRemoveSharedBlobs(
         TColumnShard* self, const NOlap::TTabletsByBlob& sharingBlobIds, const NActors::TActorId initiatorActorId, const TString& storageId)
@@ -39,8 +31,10 @@ public:
             RemoveAction->DeclareRemove(it.GetTabletId(), it.GetBlobId());
         }
         for (auto it = categories.GetBorrowed().GetIterator(); it.IsValid(); ++it) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_BLOBS)("problem", "borrowed_to_remove")("blob_id", it.GetBlobId())(
-                "tablet_id", it.GetTabletId());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS, "",
+                {"problem", "borrowed_to_remove"},
+                {"blobId", it.GetBlobId()},
+                {"tabletId", it.GetTabletId()});
         }
         AFL_VERIFY(categories.GetBorrowed().IsEmpty());
         AFL_VERIFY(categories.GetSharing().GetSize() == SharingBlobIds.GetSize())("sharing_category", categories.GetSharing().GetSize())(

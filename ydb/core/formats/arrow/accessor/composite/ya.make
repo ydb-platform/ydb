@@ -1,7 +1,8 @@
-LIBRARY(library-formats-arrow-accessor-composite)
+YQL_LIBRARY(library-formats-arrow-accessor-composite)
 
 PEERDIR(
     contrib/libs/apache/arrow
+    ydb/core/formats/arrow/filter
     ydb/library/formats/arrow/common
 )
 

@@ -1,4 +1,5 @@
 #include "transaction_cache.h"
+#include "client_config.h"
 #include "yt_helpers.h"
 
 #include <yt/cpp/mapreduce/common/helpers.h>
@@ -159,6 +160,7 @@ TMaybe<NYT::TTableColumnarStatistics> TTransactionCache::TEntry::GetExtendedColu
     }
 
     NYT::TTableColumnarStatistics res;
+    res.LegacyChunksDataWeight = p->ColumnarStat.LegacyChunksDataWeight;
     for (auto& column: columns) {
         if (p->ExtendedStatColumns.count(column) == 0) {
             return Nothing();
@@ -173,7 +175,7 @@ TMaybe<NYT::TTableColumnarStatistics> TTransactionCache::TEntry::GetExtendedColu
     return res;
 }
 
-void TTransactionCache::TEntry::UpdateColumnarStat(NYT::TRichYPath ytPath, ui64 size) {
+void TTransactionCache::TEntry::UpdateColumnarStat(NYT::TRichYPath ytPath, ui64 size, bool extended) {
     YQL_ENSURE(ytPath.Columns_.Defined());
     TVector<TString> columns(std::move(ytPath.Columns_->Parts_));
     ytPath.Columns_.Clear();
@@ -181,6 +183,10 @@ void TTransactionCache::TEntry::UpdateColumnarStat(NYT::TRichYPath ytPath, ui64 
 
     auto guard = Guard(Lock_);
     auto& cacheEntry = StatisticsCache[cacheKey];
+    if (extended) {
+        cacheEntry.ExtendedStatColumns.clear();
+        std::copy(columns.begin(), columns.end(), std::inserter(cacheEntry.ExtendedStatColumns, cacheEntry.ExtendedStatColumns.end()));
+    }
     cacheEntry.ColumnarStat.LegacyChunksDataWeight = size;
     for (auto& c: cacheEntry.ColumnarStat.ColumnDataWeight) {
         c.second = 0;
@@ -449,11 +455,12 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         createdEntry = MakeIntrusive<TEntry>();
         createdEntry->Cluster = cluster;
         createdEntry->Server = server;
-        auto createClientOptions = TCreateClientOptions().Token(token);
+        auto createClientOptions = TCreateClientOptions().Token(token).Config(CreateYtClientConfig(*config));
         if (impersonationUser) {
             createClientOptions = createClientOptions.ImpersonationUser(*impersonationUser);
         }
         createdEntry->Client = CreateClient(server, createClientOptions);
+        createdEntry->EffectiveUser = createdEntry->Client->WhoAmI().Login;
         createdEntry->TransactionSpec = specProvider();
         if (externalTx) {
             try {

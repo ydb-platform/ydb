@@ -1,4 +1,3 @@
-/* postgres can not */
 $create = ($item, $_parent) -> { return $item };
 $add = ($state, $item, $_parent) -> { return $item + $state };
 $merge = ($state1, $state2) -> { return $state1 + $state2 };

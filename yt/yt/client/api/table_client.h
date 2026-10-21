@@ -8,6 +8,8 @@
 #include <yt/yt/client/table_client/schema.h>
 #include <yt/yt/client/table_client/constrained_schema.h>
 
+#include <yt/yt/client/tablet_client/index_info.h>
+
 #include <yt/yt/client/chaos_client/replication_card.h>
 
 namespace NYT::NApi {
@@ -107,6 +109,7 @@ struct TReshardTableOptions
     std::optional<bool> EnableSlicing;
     std::optional<double> SlicingAccuracy;
     std::vector<i64> TrimmedRowCounts;
+    std::vector<i64> CumulativeDataWeights;
 };
 
 struct TReshardTableAutomaticOptions
@@ -131,6 +134,10 @@ struct TAlterTableOptions
     std::optional<NTableClient::ETableSchemaModification> SchemaModification;
     std::optional<NChaosClient::TReplicationProgress> ReplicationProgress;
     std::optional<NTransactionClient::TTimestamp> ClipTimestamp;
+
+    //! Validates that no options unsupported by two-phase alter are present.
+    //! Keep this method in sync when adding new options above.
+    void ValidateForTwoPhaseAlter() const;
 };
 
 struct TTrimTableOptions
@@ -189,6 +196,11 @@ struct TTabletInfo
     //! Only makes sense for ordered tablet.
     //! Contains the number of front rows that are trimmed and are not guaranteed to be accessible.
     i64 TrimmedRowCount = 0;
+
+    //! Only provided for ordered tablets.
+    //! Contains the number of front rows (including trimmed ones) that are flushed to chunks.
+    //! Never exceeds @flushed_row_count of the tablet at master.
+    std::optional<i64> FlushedRowCount;
 
     //! Only makes sense for replicated tablets.
     //! Contains the number of rows that are yet to be committed.
@@ -284,6 +296,40 @@ struct TUpdateChaosTableReplicaProgressOptions
     bool Force;
 };
 
+DECLARE_REFCOUNTED_STRUCT(TCreateSecondaryIndex);
+
+struct TCreateSecondaryIndex
+    : public NYTree::TYsonStruct
+{
+    NTabletClient::ESecondaryIndexKind Kind;
+    NChaosClient::TReplicationCardId IndexReplicationCardId;
+    NTabletClient::ETableToIndexCorrespondence Correspondence;
+    std::optional<std::string> Predicate;
+    std::optional<NTabletClient::TUnfoldedColumns> UnfoldedColumns;
+    NTableClient::TTableSchemaPtr EvaluatedColumnsSchema;
+
+    REGISTER_YSON_STRUCT(TCreateSecondaryIndex);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TCreateSecondaryIndex)
+
+DECLARE_REFCOUNTED_STRUCT(TProgressSecondaryIndexCorrespondence);
+
+struct TProgressSecondaryIndexCorrespondence
+    : public NYTree::TYsonStruct
+{
+    NChaosClient::TReplicationCardId IndexReplicationCardId;
+    NTabletClient::ETableToIndexCorrespondence NewCorrespondence;
+
+    REGISTER_YSON_STRUCT(TProgressSecondaryIndexCorrespondence);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TProgressSecondaryIndexCorrespondence)
+
 struct TAlterReplicationCardOptions
     : public TTimeoutOptions
     , public TMutatingOptions
@@ -292,6 +338,9 @@ struct TAlterReplicationCardOptions
     std::optional<bool> EnableReplicatedTableTracker;
     std::optional<NChaosClient::TReplicationCardCollocationId> ReplicationCardCollocationId;
     NTabletClient::TReplicationCollocationOptionsPtr CollocationOptions;
+    TCreateSecondaryIndexPtr CreateSecondaryIndex;
+    NChaosClient::TReplicationCardId DestroySecondaryIndex;
+    TProgressSecondaryIndexCorrespondencePtr ProgressSecondaryIndexCorrespondence;
 };
 
 struct TGetReplicationCardOptions

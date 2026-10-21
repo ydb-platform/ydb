@@ -114,6 +114,20 @@ enum { AWS_CACHE_LINE = 64 };
 #endif
 
 #if defined(__has_feature)
+#    if __has_feature(hwaddress_sanitizer)
+#        define AWS_SUPPRESS_HWASAN __attribute__((no_sanitize("hwaddress")))
+#    endif
+#elif defined(__SANITIZE_HWADDRESS__)
+#    if defined(__GNUC__)
+#        define AWS_SUPPRESS_HWASAN __attribute__((no_sanitize("hwaddress")))
+#    endif
+#endif
+
+#if !defined(AWS_SUPPRESS_HWASAN)
+#    define AWS_SUPPRESS_HWASAN
+#endif
+
+#if defined(__has_feature)
 #    if __has_feature(thread_sanitizer)
 #        define AWS_SUPPRESS_TSAN __attribute__((no_sanitize("thread")))
 #    endif
@@ -147,6 +161,15 @@ enum { AWS_CACHE_LINE = 64 };
 
 #if !defined(AWS_SUPPRESS_UBSAN)
 #    define AWS_SUPPRESS_UBSAN
+#endif
+
+#if defined(__has_feature)
+#    if __has_feature(memory_sanitizer)
+#        define AWS_SUPPRESS_MSAN __attribute__((no_sanitize("memory")))
+#    endif
+#endif
+#if !defined(AWS_SUPPRESS_MSAN)
+#    define AWS_SUPPRESS_MSAN
 #endif
 
 /* If this is C++, restrict isn't supported. If this is not at least C99 on gcc and clang, it isn't supported.

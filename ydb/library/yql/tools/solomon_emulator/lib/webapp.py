@@ -9,9 +9,15 @@ from .multi_shard import MultiShard
 from .shard import Shard
 
 import grpc
-from ydb.library.yql.providers.solomon.solomon_accessor.grpc.data_service_pb2_grpc import \
-    DataServiceServicer, add_DataServiceServicer_to_server
-from ydb.library.yql.providers.solomon.solomon_accessor.grpc.data_service_pb2 import ReadRequest, ReadResponse, MetricType
+from ydb.library.yql.providers.solomon.solomon_accessor.grpc.data_service_pb2_grpc import (
+    DataServiceServicer,
+    add_DataServiceServicer_to_server,
+)
+from ydb.library.yql.providers.solomon.solomon_accessor.grpc.data_service_pb2 import (
+    ReadRequest,
+    ReadResponse,
+    MetricType,
+)
 
 routes = web.RouteTableDef()
 logger = logging.getLogger(__name__)
@@ -24,20 +30,20 @@ def _parse_selectors(selectors):
     result = dict()
 
     match = re.search(r".*{(.*)}.*", selectors)
-    if (not match):
+    if not match:
         return (result, False)
 
     group = match[1]
-    if (len(group) == 0):
+    if len(group) == 0:
         return (result, True)
 
     for selector in group.split(","):
         eq_pos = selector.find("=")
-        if (eq_pos == -1):
+        if eq_pos == -1:
             return (result, False)
 
         key = selector[:eq_pos].strip()
-        value = selector[eq_pos + 1:].strip('=').strip().strip('"')
+        value = selector[eq_pos + 1 :].strip('=').strip().strip('"')
         result[key] = value
 
     return (result, True)
@@ -48,6 +54,10 @@ class SolomonEmulator(object):
         self._config = config
         self._api_calls = 0
         self._data = MultiShard()
+        # Per-shard count of upcoming /api/v2/push requests that must be answered with a
+        # retriable (non-terminal) error before the shard starts accepting writes again.
+        # Used by tests to exercise the write actor's retry path.
+        self._push_failures = {}
 
     def _get_shard(self, project, cluster, service):
         return self._data.get_or_create(project, cluster, service)
@@ -71,6 +81,13 @@ class SolomonEmulator(object):
         project = request.rel_url.query['project']
         cluster = request.rel_url.query['cluster']
         service = request.rel_url.query['service']
+
+        key = (project, cluster, service)
+        remaining = self._push_failures.get(key, 0)
+        if remaining > 0:
+            self._push_failures[key] = remaining - 1
+            logger.debug(f"injecting transient push failure for {key}, {remaining - 1} left")
+            return web.HTTPServiceUnavailable(text="Injected transient failure")
 
         shard = self._get_shard(project, cluster, service)
         content_type = request.headers['content-type']
@@ -202,6 +219,15 @@ class SolomonEmulator(object):
 
         return web.Response(status=200)
 
+    async def fail_push(self, request):
+        project = request.rel_url.query['project']
+        cluster = request.rel_url.query['cluster']
+        service = request.rel_url.query['service']
+        count = int(request.rel_url.query.get('count', 1))
+
+        self._push_failures[(project, cluster, service)] = count
+        return web.Response(status=200)
+
     async def get_api_calls(self, request):
         return web.json_response({"api_calls": self._api_calls})
 
@@ -212,8 +238,10 @@ class SolomonEmulator(object):
 
         if project is None and cluster is None and service is None:
             self._data.clear()
+            self._push_failures = {}
         else:
             self._data.delete(project, cluster, service)
+            self._push_failures.pop((project, cluster, service), None)
         return web.Response(status=200)
 
     async def cleanup_api_calls(self, request):
@@ -284,11 +312,11 @@ class DataService(DataServiceServicer):
 
     @staticmethod
     def _map_metric_type(kind):
-        if (kind == "DGAUGE"):
+        if kind == "DGAUGE":
             return MetricType.DGAUGE
-        elif (kind == "IGAUGE"):
+        elif kind == "IGAUGE":
             return MetricType.IGAUGE
-        elif (kind == "COUNTER"):
+        elif kind == "COUNTER":
             return MetricType.COUNTER
         else:
             return MetricType.RATE
@@ -330,28 +358,29 @@ class DataService(DataServiceServicer):
 
 def create_web_app(emulator):
     webapp = web.Application()
-    webapp.add_routes([
-        web.post("/api/v2/projects/{project}/sensors/names", emulator.sensor_names),
-        web.post("/api/v2/projects/{project}/sensors/labels", emulator.sensor_labels),
-        web.post("/api/v2/projects/{project}/sensors", emulator.sensors),
-        web.get("/api/calls", emulator.get_api_calls),
-        web.get("/metrics/get", emulator.metrics_get),
-        web.get("/ping", emulator.get_ping),
-        web.post("/api/v2/push", emulator.api_v2_push),
-        web.post("/monitoring/v2/data/write", emulator.data_write),
-        web.post("/metrics/post", emulator.metrics_post),
-        web.post("/cleanup", emulator.cleanup),
-        web.post("/cleanup/api/calls", emulator.cleanup_api_calls)
-    ])
+    webapp.add_routes(
+        [
+            web.post("/api/v2/projects/{project}/sensors/names", emulator.sensor_names),
+            web.post("/api/v2/projects/{project}/sensors/labels", emulator.sensor_labels),
+            web.post("/api/v2/projects/{project}/sensors", emulator.sensors),
+            web.get("/api/calls", emulator.get_api_calls),
+            web.get("/metrics/get", emulator.metrics_get),
+            web.get("/ping", emulator.get_ping),
+            web.post("/api/v2/push", emulator.api_v2_push),
+            web.post("/monitoring/v2/data/write", emulator.data_write),
+            web.post("/metrics/post", emulator.metrics_post),
+            web.post("/cleanup", emulator.cleanup),
+            web.post("/cleanup/api/calls", emulator.cleanup_api_calls),
+            web.post("/fail/push", emulator.fail_push),
+        ]
+    )
 
     return webapp
 
 
 def create_grpc_server(emulator, port):
     grpc_server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
-    add_DataServiceServicer_to_server(
-        DataService(emulator), grpc_server
-    )
+    add_DataServiceServicer_to_server(DataService(emulator), grpc_server)
     grpc_server.add_insecure_port(f'[::]:{port}')
 
     return grpc_server
@@ -364,4 +393,5 @@ def run_web_app(config, http_port, grpc_port):
     server = create_grpc_server(emulator, grpc_port)
 
     server.start()
+    logger.info(f"Started Solomon emulator on http port {http_port}, grpc port {grpc_port}")
     web.run_app(app, port=http_port)

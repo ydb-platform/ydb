@@ -207,7 +207,7 @@ class Factory:
 
         test_cases = []
         for param in params:
-            (select_what, data_out, data_source_kinds) = param
+            select_what, data_out, data_source_kinds = param
 
             test_case_name = f'column_selection_{select_what}'
 
@@ -232,7 +232,7 @@ class Factory:
         '''
         In this test the dataset is obviously larger than a single page
         (a single message of ReadSplits protocol), so it will take at least several protocol messages
-        to transfer the table from Connector to the engine (dqrun/kqprun).
+        to transfer the table from Connector to the engine (kqprun).
 
         Therefore, we will check:
         1. Connector's data prefetching logic

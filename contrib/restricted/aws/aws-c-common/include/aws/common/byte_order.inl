@@ -122,6 +122,22 @@ AWS_STATIC_IMPL uint32_t aws_ntoh32(uint32_t x) {
 }
 
 /**
+ * Convert 32 bit integer from little endian to host byte order.
+ */
+AWS_STATIC_IMPL uint32_t aws_letoh32(uint32_t x) {
+#ifdef _WIN32
+    AWS_FATAL_ASSERT(!aws_is_big_endian());
+    return x;
+#elif (defined(__GNUC__) || defined(__clang__))
+    return aws_is_big_endian() ? __builtin_bswap32(x) : x;
+#else
+    return aws_is_big_endian()
+               ? ((x >> 24) & 0x000000FF) | ((x >> 8) & 0x0000FF00) | ((x << 8) & 0x00FF0000) | ((x << 24) & 0xFF000000)
+               : x;
+#endif
+}
+
+/**
  * Convert 32 bit float from network to host byte order.
  */
 AWS_STATIC_IMPL float aws_ntohf32(float x) {
@@ -154,6 +170,20 @@ AWS_STATIC_IMPL uint16_t aws_ntoh16(uint16_t x) {
     return aws_is_big_endian() ? x : _byteswap_ushort(x);
 #else
     return ntohs(x);
+#endif
+}
+
+/**
+ * Convert 16 bit integer from little endian to host byte order.
+ */
+AWS_STATIC_IMPL uint16_t aws_letoh16(uint16_t x) {
+#ifdef _WIN32
+    AWS_FATAL_ASSERT(!aws_is_big_endian());
+    return x;
+#elif (defined(__GNUC__) || defined(__clang__))
+    return aws_is_big_endian() ? __builtin_bswap16(x) : x;
+#else
+    return aws_is_big_endian() ? ((x >> 8) | (x << 8)) : x;
 #endif
 }
 

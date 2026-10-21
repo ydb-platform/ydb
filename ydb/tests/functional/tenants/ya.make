@@ -13,6 +13,7 @@ TEST_SRCS(
     test_system_views.py
     test_auth_system_views.py
     test_publish_into_schemeboard_with_common_ssring.py
+    test_remove_storage_groups.py
     test_user_administration.py
     test_users_groups_with_acl.py
 )
@@ -31,6 +32,8 @@ PEERDIR(
     ydb/tests/library/flavours
     ydb/tests/library/clients
     ydb/tests/oss/ydb_sdk_import
+    ydb/tests/stress/remove_storage_groups/workload
+    ydb/tests/stress/tpcc/workload
     ydb/public/sdk/python
 )
 

@@ -1,5 +1,7 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 FORK_SUBTESTS()
 
 SPLIT_FACTOR(50)
@@ -13,10 +15,6 @@ PEERDIR(
     ydb/tests/tools/fq_runner
 )
 
-DEPENDS(
-    ydb/tests/tools/pq_read
-)
-
 PY_SRCS(
     conftest.py
     test_base.py
@@ -28,7 +26,6 @@ TEST_SRCS(
     test_bad_syntax.py
     test_big_state.py
     test_continue_mode.py
-    test_cpu_quota.py
     test_delete_read_rules_after_abort_by_system.py
     test_disposition.py
     test_eval.py

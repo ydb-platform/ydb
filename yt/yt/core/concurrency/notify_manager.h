@@ -8,7 +8,7 @@
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
-#include <library/cpp/yt/threading/event_count.h>
+#include <library/cpp/yt/system/event_count.h>
 
 namespace NYT::NConcurrency {
 
@@ -18,7 +18,7 @@ class TNotifyManager
 {
 public:
     TNotifyManager(
-        TIntrusivePtr<NThreading::TEventCount> eventCount,
+        TIntrusivePtr<TEventCount> eventCount,
         const NProfiling::TTagSet& counterTagSet,
         TDuration pollingPeriod);
 
@@ -31,27 +31,26 @@ public:
     // Must be called after DoCancelWait.
     void NotifyAfterFetch(TCpuInstant cpuInstant, TCpuInstant newMinEnqueuedAt);
 
-    void Wait(NThreading::TEventCount::TCookie cookie, std::function<bool()> isStopping);
+    void Wait(TEventCount::TCookie cookie, std::function<bool()> isStopping);
 
     void CancelWait();
 
-    NThreading::TEventCount* GetEventCount();
+    TEventCount* GetEventCount();
 
     void SetPollingPeriod(TDuration pollingPeriod);
 
 private:
-    static constexpr TCpuInstant SentinelMinEnqueuedAt = std::numeric_limits<TCpuInstant>::max();
+    static constexpr TCpuInstant UnlockedNotifyInstant = 0;
+    static constexpr TCpuInstant SentinelMinEnqueuedAtInstant = std::numeric_limits<TCpuInstant>::max();
 
-    const TIntrusivePtr<NThreading::TEventCount> EventCount_;
+    const TIntrusivePtr<TEventCount> EventCount_;
     const NProfiling::TCounter WakeupCounter_;
     const NProfiling::TCounter WakeupByTimeoutCounter_;
 
     std::atomic<TDuration> PollingPeriod_;
-    std::atomic<bool> NotifyLock_ = false;
-    // LockedInstant is used for debug and check purpose.
-    std::atomic<TCpuInstant> LockedInstant_ = 0;
+    std::atomic<TCpuInstant> NotifyInstant_ = UnlockedNotifyInstant;
     std::atomic<bool> PollingWaiterLock_ = false;
-    std::atomic<TCpuInstant> MinEnqueuedAt_ = SentinelMinEnqueuedAt;
+    std::atomic<TCpuInstant> MinEnqueuedAtInstant_ = SentinelMinEnqueuedAtInstant;
 
     // Returns true if was locked.
     bool UnlockNotifies();

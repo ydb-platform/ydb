@@ -1,0 +1,2 @@
+/* custom error:Cannot read table "Reserved": column "_yql_extra" has reserved prefix "_yql_" */
+SELECT key FROM plato.Reserved;

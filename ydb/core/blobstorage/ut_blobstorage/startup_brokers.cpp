@@ -2,6 +2,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
+#include <ydb/core/blobstorage/vdisk/common/blobstorage_status.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_operation_broker.h>
 #include <ydb/core/blobstorage/vdisk/syncer/syncer_job_task.h>
 #include <ydb/core/blobstorage/vdisk/syncer/syncer_job_actor.h>
@@ -136,6 +137,14 @@ namespace {
     void WaitForBrokerToken(TEnvironmentSetup& env, const TActorId& ownerActorId, TStringBuf message) {
         auto* res = env.WaitForEdgeActorEvent<TEvVDiskOperationToken>(ownerActorId, false, env.Now() + TDuration::Seconds(30)).Get();
         UNIT_ASSERT_C(res, message);
+    }
+
+    NKikimrBlobStorage::TSyncerStatus::EPhase GetSyncerPhase(TEnvironmentSetup& env, const TActorId& syncerId) {
+        const TActorId edge = env.Runtime->AllocateEdgeActor(syncerId.NodeId(), __FILE__, __LINE__);
+        env.Runtime->Send(new IEventHandle(syncerId, edge, new TEvLocalStatus()), edge.NodeId());
+        auto res = env.WaitForEdgeActorEvent<TEvLocalStatusResult>(edge, true, env.Now() + TDuration::Seconds(30));
+        UNIT_ASSERT_C(res, "expected syncer to reply to local status query");
+        return res->Get()->Record.GetSyncerStatus().GetPhase();
     }
 
     void RestartVDisk(TEnvironmentSetup& env, const TTargetVDisk& target) {
@@ -634,9 +643,151 @@ namespace {
         }
     };
 
+    struct TRecoverLostDataCapture {
+        const ui32 TargetNodeId;
+        const TActorId IgnoredOwnerActorId;
+        TActorId SyncerId;
+        TActorId VDiskActorId;
+        bool TokenGranted = false;
+        bool FullSyncBeforeToken = false;
+        bool FullSyncAfterToken = false;
+
+        TRecoverLostDataCapture(ui32 targetNodeId, TActorId ignoredOwnerActorId)
+            : TargetNodeId(targetNodeId)
+            , IgnoredOwnerActorId(ignoredOwnerActorId)
+        {}
+
+        bool Handle(std::unique_ptr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvAcquireVDiskOperationToken::EventType: {
+                    if (ev->Recipient != MakeBlobStorageStartupDataSyncBrokerID()
+                            || ev->Sender == IgnoredOwnerActorId) {
+                        break;
+                    }
+
+                    auto* msg = ev->Get<TEvAcquireVDiskOperationToken>();
+                    if (msg->VDiskServiceId.NodeId() == TargetNodeId) {
+                        UNIT_ASSERT_C(!SyncerId || SyncerId == ev->Sender,
+                            "more than one Syncer requested startup data sync token on target node");
+                        SyncerId = ev->Sender;
+                        VDiskActorId = msg->VDiskServiceId;
+                    }
+                    break;
+                }
+
+                case TEvVDiskOperationToken::EventType:
+                    if (SyncerId && ev->Recipient == SyncerId) {
+                        TokenGranted = true;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvVSyncFull:
+                    if (ev->Sender.NodeId() == TargetNodeId) {
+                        if (TokenGranted) {
+                            FullSyncAfterToken = true;
+                        } else {
+                            FullSyncBeforeToken = true;
+                        }
+                    }
+                    break;
+            }
+
+            return true;
+        }
+    };
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
+
+    // A dynamically assigned empty VDisk must acquire the startup data sync token before
+    // RecoverLostData starts full sync, not only later when it enters StandardMode.
+    Y_UNIT_TEST(StartupDataSyncBrokerGatesRecoverLostDataForReassignedVDisk) {
+        TEnvironmentSetup env{{
+            .NodeCount = 12,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+
+        const ui32 groupId = env.GetGroups().front();
+        const auto baseConfig = env.FetchBaseConfig();
+        const NKikimrBlobStorage::TBaseConfig::TVSlot* source = nullptr;
+        THashSet<ui32> usedNodes;
+        for (const auto& slot : baseConfig.GetVSlot()) {
+            if (slot.GetGroupId() == groupId) {
+                usedNodes.insert(slot.GetVSlotId().GetNodeId());
+                if (!source) {
+                    source = &slot;
+                }
+            }
+        }
+        UNIT_ASSERT_C(source, "expected a source VDisk in the group");
+
+        const NKikimrBlobStorage::TBaseConfig::TPDisk* targetPDisk = nullptr;
+        for (const auto& pdisk : baseConfig.GetPDisk()) {
+            if (!usedNodes.contains(pdisk.GetNodeId())) {
+                targetPDisk = &pdisk;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(targetPDisk, "expected a spare PDisk on a node unused by the group");
+
+        const ui32 targetNodeId = targetPDisk->GetNodeId();
+        const ui32 targetPDiskId = targetPDisk->GetPDiskId();
+        ConfigureBrokerControls(env, targetNodeId, 0, 0, 1, 0);
+
+        // Occupy the only node-wide startup data sync slot before assigning the new VDisk.
+        // Its RecoverLostData path must remain idle until this holder releases the slot.
+        const TActorId holder1 = env.Runtime->AllocateEdgeActor(targetNodeId, __FILE__, __LINE__);
+        const TActorId holderVDiskServiceId1 = MakeBlobStorageVDiskID(targetNodeId, targetPDiskId, 1337);
+        SendBrokerAcquire(env, holder1, MakeBlobStorageStartupDataSyncBrokerID(), holderVDiskServiceId1);
+        WaitForBrokerToken(env, holder1, "expected test holder1 to acquire startup data sync token");
+
+        {
+            TRecoverLostDataCapture capture(targetNodeId, holder1);
+            TScopedCaptureFilter guard(env, capture);
+
+            NKikimrBlobStorage::TConfigRequest request;
+            auto* cmd = request.AddCommand()->MutableReassignGroupDisk();
+            cmd->SetGroupId(groupId);
+            cmd->SetGroupGeneration(source->GetGroupGeneration());
+            cmd->SetFailRealmIdx(source->GetFailRealmIdx());
+            cmd->SetFailDomainIdx(source->GetFailDomainIdx());
+            cmd->SetVDiskIdx(source->GetVDiskIdx());
+            auto* target = cmd->MutableTargetPDiskId();
+            target->SetNodeId(targetNodeId);
+            target->SetPDiskId(targetPDiskId);
+
+            const auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            WaitUntil(env, [&] { return bool(capture.SyncerId); },
+                "expected reassigned VDisk to request startup data sync token before RecoverLostData");
+
+            UNIT_ASSERT_VALUES_EQUAL_C(GetSyncerPhase(env, capture.SyncerId),
+                NKikimrBlobStorage::TSyncerStatus::PhaseRecoverLostData,
+                "expected syncer to await startup data sync token in RecoverLostData phase");
+
+            env.Sim(TDuration::Seconds(5));
+            UNIT_ASSERT_C(!capture.TokenGranted,
+                "reassigned VDisk unexpectedly received startup data sync token while the slot was occupied");
+            UNIT_ASSERT_C(!capture.FullSyncBeforeToken,
+                "RecoverLostData started full sync before startup data sync token was granted"
+                << " vdiskActorId# " << capture.VDiskActorId);
+
+            SendBrokerRelease(env, holder1, MakeBlobStorageStartupDataSyncBrokerID(), holderVDiskServiceId1);
+            WaitUntil(env, [&] { return capture.TokenGranted && capture.FullSyncAfterToken; },
+                "expected RecoverLostData full sync to start after startup data sync token was granted");
+        }
+
+        const TActorId holder2 = env.Runtime->AllocateEdgeActor(targetNodeId, __FILE__, __LINE__);
+        const TActorId holderVDiskServiceId2 = MakeBlobStorageVDiskID(targetNodeId, targetPDiskId, 6767);
+
+        SendBrokerAcquire(env, holder2, MakeBlobStorageStartupDataSyncBrokerID(), holderVDiskServiceId2);
+        WaitForBrokerToken(env, holder2, "expected test holder2 to acquire startup data sync token");
+
+        SendBrokerRelease(env, holder2, MakeBlobStorageStartupDataSyncBrokerID(), holderVDiskServiceId2);
+    }
 
     // Active startup data sync owner dies; the broker frees its token and grants a new owner.
     Y_UNIT_TEST(StartupDataSyncBrokerAllowsNewOwnerAfterActiveOwnerDies) {

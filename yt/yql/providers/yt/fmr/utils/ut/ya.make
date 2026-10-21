@@ -9,6 +9,7 @@ SRCS(
 
 PEERDIR(
     yt/yql/providers/yt/fmr/test_tools/yson
+    yt/yql/providers/yt/fmr/test_utils
     yt/yql/providers/yt/fmr/utils
     yt/yql/providers/yt/fmr/request_options
     yt/yql/providers/yt/fmr/yt_job_service/file

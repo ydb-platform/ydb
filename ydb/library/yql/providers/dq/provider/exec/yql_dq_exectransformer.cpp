@@ -20,7 +20,6 @@
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/providers/dq/planner/execution_planner.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_control.h>
 
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
@@ -71,6 +70,12 @@ using namespace NThreading;
 namespace {
 
 using TUploadList = IDqGateway::TUploadList;
+
+struct TPreparedUploadFile {
+    TString Path;
+    TString ObjectId;
+    TString ContentMd5;
+};
 
 // TODO: move this to separate file
 class TLocalExecutor: public TCounters
@@ -134,7 +139,6 @@ public:
         auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
             __LOCATION__,
             NKikimr::TAlignedPagePoolCounters(),
-            State->FunctionRegistry->SupportsSizedAllocators(),
             false);
         NDq::TDqTaskRunnerContext executionContext;
         executionContext.FuncRegistry = State->FunctionRegistry;
@@ -494,12 +498,16 @@ private:
         return ctx.WrapByCallableIf(kind != ETypeAnnotationKind::Stream, "ToStream", ctx.WrapByCallableIf(data, "Just", std::move(node)));
     }
 
-    std::tuple<TString, TString> GetPathAndObjectId(const TString& path, const TString& objectId, const TString& md5) const {
+    TPreparedUploadFile PrepareFile(const TString& path, const TString& objectId, const TString& md5) const {
         if (path.StartsWith(NKikimr::NMiniKQL::StaticModulePrefix)
             || !State->Settings->EnableStrip.Get() || !State->Settings->EnableStrip.Get().GetOrElse(false))
         {
             UploadCache_->ModulesMapping.emplace(objectId, path);
-            return std::make_tuple(path, objectId);
+            // Static modules are not uploaded; for unstripped files, MD5 may predate the snapshot.
+            return {
+                .Path = path,
+                .ObjectId = objectId,
+            };
         }
 
         TFileLinkPtr& fileLink = UploadCache_->FileLinks[objectId];
@@ -507,23 +515,28 @@ private:
             fileLink = State->FileStorage->PutFileStripped(path, md5);
         }
 
-        UploadCache_->ModulesMapping.emplace(objectId  + DqStrippedSuffied, path);
+        UploadCache_->ModulesMapping.emplace(objectId  + DqStrippedSuffied(), path);
 
-        return std::make_tuple(fileLink->GetPath(), objectId + DqStrippedSuffied);
+        return {
+            .Path = fileLink->GetPath(),
+            .ObjectId = objectId + DqStrippedSuffied(),
+            .ContentMd5 = fileLink->GetMd5(),
+        };
     }
 
-    std::tuple<TString, TString> GetPathAndObjectId(const TFilePathWithMd5& pathWithMd5) const {
+    TPreparedUploadFile PrepareFile(const TFilePathWithMd5& pathWithMd5) const {
         if (pathWithMd5.Md5.empty()) {
             YQL_CLOG(WARN, ProviderDq) << "Empty md5 for " << pathWithMd5.Path;
         }
-        return GetPathAndObjectId(pathWithMd5.Path,
+        return PrepareFile(pathWithMd5.Path,
             (pathWithMd5.Md5.empty() && !pathWithMd5.Path.StartsWith(NKikimr::NMiniKQL::StaticModulePrefix))
             ? MD5::File(pathWithMd5.Path) /* used for local run only */
             : pathWithMd5.Md5,
             pathWithMd5.Md5);
     }
 
-    bool BuildUploadList(
+    // Returns formatted error message if attachments exceed the limit; empty string otherwise.
+    TString BuildUploadList(
         TUploadList* uploadList,
         bool localRun,
         TString* lambda,
@@ -538,7 +551,7 @@ private:
         return ret;
     }
 
-    bool BuildUploadList(
+    TString BuildUploadList(
         TUploadList* uploadList,
         bool localRun,
         TExploringNodeVisitor& explorer,
@@ -572,17 +585,18 @@ private:
             } else {
                 auto f = IDqGateway::TFileResource();
                 f.SetName("dq_vanilla_job.lite");
-                TString path = State->VanillaJobPath;
-                TString objectId = GetProgramCommitId();
-                std::tie(path, objectId) = GetPathAndObjectId(path, objectId, State->VanillaJobMd5);
-                f.SetObjectId(objectId);
-                f.SetLocalPath(path);
+                const auto preparedFile = PrepareFile(
+                    State->VanillaJobPath,
+                    GetProgramCommitId(),
+                    State->VanillaJobMd5);
+                f.SetObjectId(preparedFile.ObjectId);
+                f.SetLocalPath(preparedFile.Path);
                 f.SetObjectType(IDqGateway::TFileResource::EEXE_FILE);
-                f.SetSize(TFile(path, OpenExisting | RdOnly).GetLength());
+                f.SetSize(TFile(preparedFile.Path, OpenExisting | RdOnly).GetLength());
+                f.SetContentMd5(preparedFile.ContentMd5);
                 uploadList->emplace(f);
             }
         }
-        bool fallbackFlag = false;
         for (TNode* node : explorer.GetNodes()) {
             node->Freeze(typeEnv);
 
@@ -694,19 +708,20 @@ private:
                         TMaybe<TFilePathWithMd5> udfPathWithMd5 = State->TypeCtx->UdfResolver->GetSystemModulePath(moduleName);
                         YQL_ENSURE(udfPathWithMd5.Defined());
 
-                        TString filePath, objectId;
-                        std::tie(filePath, objectId) = GetPathAndObjectId(*udfPathWithMd5);
+                        const auto preparedFile = PrepareFile(*udfPathWithMd5);
 
-                        YQL_CLOG(DEBUG, ProviderDq) << "File|Md5 " << filePath << "|" << objectId;
+                        YQL_CLOG(DEBUG, ProviderDq) << "File|Md5 "
+                            << preparedFile.Path << "|" << preparedFile.ObjectId;
 
-                        if (!filePath.StartsWith(NKikimr::NMiniKQL::StaticModulePrefix)) {
+                        if (!preparedFile.Path.StartsWith(NKikimr::NMiniKQL::StaticModulePrefix)) {
                             auto f = IDqGateway::TFileResource();
-                            f.SetLocalPath(filePath);
+                            f.SetLocalPath(preparedFile.Path);
                             f.SetName(ToString(moduleName));
-                            f.SetObjectId(objectId);
+                            f.SetObjectId(preparedFile.ObjectId);
                             f.SetObjectType(IDqGateway::TFileResource::EUDF_FILE);
-                            f.SetSize(TFile(filePath, OpenExisting | RdOnly).GetLength());
+                            f.SetSize(TFile(preparedFile.Path, OpenExisting | RdOnly).GetLength());
                             f.SetCustomUdfPrefix(customUdfPrefix);
+                            f.SetContentMd5(preparedFile.ContentMd5);
                             uploadList->emplace(f);
                         }
 
@@ -734,11 +749,17 @@ private:
 
         i64 dataLimit = static_cast<i64>(State->Settings->_MaxAttachmentsSize.Get().GetOrElse(TDqSettings::TDefault::MaxAttachmentsSize));
         if (sizeSum > dataLimit) {
-            YQL_CLOG(WARN, ProviderDq) << "Too much data: " << sizeSum << " > " << dataLimit;
-            fallbackFlag = true;
+            const auto filesCount = uploadList->size();
+            YQL_CLOG(WARN, ProviderDq) << "Too much data: " << filesCount << " file(s), " << sizeSum << " > " << dataLimit;
+            // Keep the "Too big attachment" prefix — analytics tools parse it.
+            return TStringBuilder()
+                << "Too big attachment: " << filesCount
+                << " file(s) attached with a total size of "
+                << sizeSum << " bytes, which exceeds the limit of "
+                << dataLimit << " bytes";
         }
 
-        return fallbackFlag;
+        return {};
     }
 
     TStatusCallbackPair GetLambda(
@@ -778,7 +799,7 @@ private:
         }
         // copy-paste }
 
-        TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment typeEnv(alloc);
         NCommon::TMkqlCommonCallableCompiler compiler;
 
@@ -823,10 +844,8 @@ private:
         }
 
         const bool localRun = enableLocalRun && (!State->DqGateway || (!*untrustedUdfFlag && !State->TypeCtx->ForceDq && !hasGraphParams));
-        bool fallbackFlag = BuildUploadList(uploadList, localRun, explorer, typeEnv, files);
-
-        if (fallbackFlag) {
-            YQL_CLOG(TRACE, ProviderDq) << "Fallback: " << NCommon::ExprToPrettyString(ctx, *input);
+        if (auto error = BuildUploadList(uploadList, localRun, explorer, typeEnv, files)) {
+            YQL_CLOG(TRACE, ProviderDq) << "Fallback: " << error << ": " << NCommon::ExprToPrettyString(ctx, *input);
             return Fallback();
         } else {
             *lambda = SerializeRuntimeNode(root, typeEnv);
@@ -976,7 +995,8 @@ private:
                 return true;
             });
             IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(publicIds);
-            bool enableFullResultWrite = settings->EnableFullResultWrite.Get().GetOrElse(false);
+            const bool initialFullResultWrite = settings->EnableFullResultWrite.Get().GetOrElse(false);
+            bool enableFullResultWrite = initialFullResultWrite;
             if (enableFullResultWrite) {
                 const auto type = result.Input().Ref().GetTypeAnn();
                 const auto integration = GetDqIntegrationForFullResTable(State);
@@ -988,6 +1008,11 @@ private:
                     && integration->PrepareFullResultTableParams(result.Ref(), ctx, graphParams, secureParams, TColumnOrder(columns));
                 settings->EnableFullResultWrite = enableFullResultWrite;
             }
+            YQL_CLOG(INFO, ProviderDq) << "FullResultWrite decision: initial=" << initialFullResultWrite
+                << " effective=" << enableFullResultWrite
+                << " discard=" << fillSettings.Discard
+                << " hasDqGateway=" << (bool)State->DqGateway
+                << " hasYtFullResultParam=" << graphParams.contains("yt.full_result_table");
 
             TString lambda;
             bool untrustedUdfFlag;
@@ -1083,10 +1108,13 @@ private:
             }
 
             return WrapFutureCallback<false>(future, [localRun, startTime, type, rowSpec, skiffType, fillSettings, level, settings, enableFullResultWrite, columns, graphParams, state = State, skiffConverter = SkiffConverter](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-                YQL_CLOG(DEBUG, ProviderDq) << state->SessionId <<  " WrapFutureCallback";
-
                 auto duration = TInstant::Now() - startTime;
-                YQL_CLOG(INFO, ProviderDq) << "Execution Result complete, duration: " << duration;
+                YQL_CLOG(INFO, ProviderDq) << state->SessionId << " Execution Result complete, duration: " << duration
+                    << " localRun=" << localRun
+                    << " enableFullResultWrite=" << enableFullResultWrite
+                    << " truncated=" << res.Truncated
+                    << " rowsCount=" << res.RowsCount
+                    << " dataBytes=" << res.Data.size();
                 if (state->Metrics) {
                     state->Metrics->SetCounter("dq", "TotalExecutionTime", duration.MilliSeconds());
                     state->Metrics->SetCounter(
@@ -1106,7 +1134,7 @@ private:
                     if (state->Settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) == EFallbackPolicy::Never || state->TypeCtx->ForceDq) {
                         auto issues = TIssues{TIssue(ctx.GetPosition(input->Pos()), "Gateway Error").SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)};
                         issues.AddIssues(res.Issues());
-                        ctx.AssociativeIssues.emplace(input.Get(), std::move(issues));
+                        ctx.IssueManager.RaiseIssues(issues);
                         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
                     }
 
@@ -1272,6 +1300,18 @@ private:
         }
     }
 
+    static TString FormatTooManyStagesError(size_t count, size_t limit) {
+        return TStringBuilder()
+            << "The query plan is too complex: " << count << " stages exceeds the limit of " << limit
+            << ". Consider simplifying the query (e.g. reduce the number of joins, subqueries or unions).";
+    }
+
+    static TString FormatTooManyTasksError(size_t count, size_t limit) {
+        return TStringBuilder()
+            << "The query plan is too complex: " << count << " tasks exceeds the limit of " << limit
+            << ". Consider simplifying the query (e.g. reduce the number of joins, subqueries or unions).";
+    }
+
     TPublicIds::TPtr GetPublicIds(const TExprNode::TPtr& root) const {
         TPublicIds::TPtr publicIds = std::make_shared<TPublicIds>();
         VisitExpr(root, [&](const TExprNode::TPtr& node) {
@@ -1381,7 +1421,7 @@ private:
         const auto maxTasksPerOperation = State->Settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
 
         auto maxDataSizePerJob = settings->MaxDataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::MaxDataSizePerJob);
-        auto stagesCount = executionPlanner->StagesCount();
+        const auto stagesCount = executionPlanner->StagesCount();
 
         if (!executionPlanner->CanFallback()) {
             settings->FallbackPolicy = State->TypeCtx->DqFallbackPolicy = EFallbackPolicy::Never;
@@ -1389,16 +1429,19 @@ private:
 
         bool canFallback = (settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) != EFallbackPolicy::Never && !State->TypeCtx->ForceDq);
 
-        if (stagesCount > maxTasksPerOperation && canFallback) {
-            return SyncStatus(FallbackWithMessage(
-                pull.Ref(),
-                TStringBuilder()
-                << "Too many stages: "
-                << stagesCount << " > "
-                << maxTasksPerOperation, ctx, true));
+        // Each stage produces at least one task, so stagesCount is a lower bound
+        // for the total task count. Use it as a fast-path check before running
+        // the full execution planner.
+        if (stagesCount > maxTasksPerOperation) {
+            if (canFallback) {
+                return SyncStatus(FallbackWithMessage(
+                    pull.Ref(),
+                    TStringBuilder() << "Too many stages: " << stagesCount << " > " << maxTasksPerOperation,
+                    ctx, true));
+            }
+            ctx.AddError(TIssue(ctx.GetPosition(pull.Ref().Pos()), FormatTooManyStagesError(stagesCount, maxTasksPerOperation)));
+            return SyncError();
         }
-
-        YQL_ENSURE(stagesCount <= maxTasksPerOperation, "Too many stages: " << stagesCount << " > " << maxTasksPerOperation);
 
         try {
             while (!executionPlanner->PlanExecution(canFallback) && tasksPerStage > 1) {
@@ -1414,7 +1457,6 @@ private:
             return SyncStatus(FallbackWithMessage(pull.Ref(), err, ctx, true));
         }
 
-        bool fallbackFlag = false;
         if (executionPlanner->MaxDataSizePerJob() > maxDataSizePerJob && canFallback) {
             return SyncStatus(FallbackWithMessage(
                 pull.Ref(),
@@ -1426,24 +1468,28 @@ private:
 
         bool localRun = false;
         auto& tasks = executionPlanner->GetTasks();
-        if (tasks.size() > maxTasksPerOperation && canFallback) {
-            return SyncStatus(FallbackWithMessage(
-                pull.Ref(),
-                TStringBuilder()
-                << "Too many tasks: "
-                << tasks.size() << " > "
-                << maxTasksPerOperation, ctx, true));
+        if (tasks.size() > maxTasksPerOperation) {
+            if (canFallback) {
+                return SyncStatus(FallbackWithMessage(
+                    pull.Ref(),
+                    TStringBuilder() << "Too many tasks: " << tasks.size() << " > " << maxTasksPerOperation,
+                    ctx, true));
+            }
+            ctx.AddError(TIssue(ctx.GetPosition(pull.Ref().Pos()), FormatTooManyTasksError(tasks.size(), maxTasksPerOperation)));
+            return SyncError();
         }
 
-        YQL_ENSURE(tasks.size() <= maxTasksPerOperation);
-
+        TString tooBigAttachmentError;
         {
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment typeEnv(alloc);
             for (auto& t : tasks) {
                 TUploadList uploadList;
                 TString lambda = t.GetProgram().GetRaw();
-                fallbackFlag |= BuildUploadList(&uploadList, localRun, &lambda, typeEnv, files);
+                if (auto error = BuildUploadList(&uploadList, localRun, &lambda, typeEnv, files)) {
+                    tooBigAttachmentError = error;
+                    break;
+                }
                 t.MutableProgram()->SetRaw(lambda);
                 t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
                 *t.MutableProgram()->MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings);
@@ -1461,8 +1507,8 @@ private:
 
         MarkProgressStarted(publicIds->AllPublicIds, State->ProgressWriter);
 
-        if (fallbackFlag) {
-            return SyncStatus(FallbackWithMessage(pull.Ref(), "Too big attachment", ctx, true));
+        if (tooBigAttachmentError) {
+            return SyncStatus(FallbackWithMessage(pull.Ref(), tooBigAttachmentError, ctx, true));
         }
 
         IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(pull.Ref());
@@ -1509,7 +1555,12 @@ private:
             settings, progressWriter, UploadCache_->ModulesMapping, fillSettings.Discard, executionTimeout);
 
         future.Subscribe([publicIds, progressWriter = State->ProgressWriter](const NThreading::TFuture<IDqGateway::TResult>& completedFuture) {
-            MarkProgressFinished(publicIds->AllPublicIds, completedFuture.GetValueSync().Success(), progressWriter);
+            const auto& res = completedFuture.GetValueSync();
+            MarkProgressFinished(
+                publicIds->AllPublicIds,
+                res.Success(),
+                progressWriter,
+                ExtractDqStagesStats(res.Statistics));
         });
         executionPlanner.Destroy();
 
@@ -1722,13 +1773,21 @@ private:
         }
     }
 
-    static void MarkProgressFinished(const THashMap<ui32, ui32>& allPublicIds, bool success, const TOperationProgressWriter& progressWriter) {
+    static void MarkProgressFinished(
+        const THashMap<ui32, ui32>& allPublicIds,
+        bool success,
+        const TOperationProgressWriter& progressWriter,
+        const std::unordered_map<ui64, IDqGateway::TStageStats>& stats)
+    {
         for(const auto& publicId : allPublicIds) {
             auto state = success ? TOperationProgress::EState::Finished : TOperationProgress::EState::Failed;
             auto p = TOperationProgress(TString(DqProviderName), publicId.first, state);
             if (publicId.second) {
                 p.Counters.ConstructInPlace();
                 (success ? p.Counters->Completed : p.Counters->Failed) = p.Counters->Total = publicId.second;
+                if (const auto maybeStats = stats.find(publicId.first); maybeStats != stats.end()) {
+                    p.Counters->Custom = maybeStats->second.ToMap();
+                }
             }
             progressWriter(p);
         }
@@ -1938,7 +1997,7 @@ private:
             const auto maxTasksPerOperation = State->Settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
 
             auto maxDataSizePerJob = settings->MaxDataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::MaxDataSizePerJob);
-            auto stagesCount = executionPlanner->StagesCount();
+            const auto stagesCount = executionPlanner->StagesCount();
 
             if (!executionPlanner->CanFallback()) {
                 settings->FallbackPolicy = State->TypeCtx->DqFallbackPolicy = EFallbackPolicy::Never;
@@ -1946,16 +2005,18 @@ private:
 
             bool canFallback = (settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) != EFallbackPolicy::Never && !State->TypeCtx->ForceDq);
 
-            if (stagesCount > maxTasksPerOperation && canFallback) {
-                return FallbackWithMessage(
-                    *input,
-                    TStringBuilder()
-                    << "Too many stages: "
-                    << stagesCount << " > "
-                    << maxTasksPerOperation, ctx, false);
+            // Each stage produces at least one task, so stagesCount is a lower
+            // bound for the total task count. Use it as a fast-path check.
+            if (stagesCount > maxTasksPerOperation) {
+                if (canFallback) {
+                    return FallbackWithMessage(
+                        *input,
+                        TStringBuilder() << "Too many stages: " << stagesCount << " > " << maxTasksPerOperation,
+                        ctx, false);
+                }
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), FormatTooManyStagesError(stagesCount, maxTasksPerOperation)));
+                return IGraphTransformer::TStatus::Error;
             }
-
-            YQL_ENSURE(stagesCount <= maxTasksPerOperation);
 
             try {
                 while (!executionPlanner->PlanExecution(canFallback) && tasksPerStage > 1) {
@@ -1968,7 +2029,6 @@ private:
                 return FallbackWithMessage(*input, err, ctx, false);
             }
 
-            bool fallbackFlag = false;
             if (executionPlanner->MaxDataSizePerJob() > maxDataSizePerJob && canFallback) {
                 return FallbackWithMessage(
                     *input,
@@ -1979,24 +2039,28 @@ private:
             }
 
             auto& tasks = executionPlanner->GetTasks();
-            if (tasks.size() > maxTasksPerOperation && canFallback) {
-                return FallbackWithMessage(
-                    *input,
-                    TStringBuilder()
-                    << "Too many tasks: "
-                    << tasks.size() << " > "
-                    << maxTasksPerOperation, ctx, false);
+            if (tasks.size() > maxTasksPerOperation) {
+                if (canFallback) {
+                    return FallbackWithMessage(
+                        *input,
+                        TStringBuilder() << "Too many tasks: " << tasks.size() << " > " << maxTasksPerOperation,
+                        ctx, false);
+                }
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), FormatTooManyTasksError(tasks.size(), maxTasksPerOperation)));
+                return IGraphTransformer::TStatus::Error;
             }
 
-            YQL_ENSURE(tasks.size() <= maxTasksPerOperation);
-
+            TString tooBigAttachmentError;
             {
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 TTypeEnvironment typeEnv(alloc);
                 for (auto& t : tasks) {
                     TUploadList uploadList;
                     TString lambda = t.GetProgram().GetRaw();
-                    fallbackFlag |= BuildUploadList(&uploadList, false, &lambda, typeEnv, files);
+                    if (auto error = BuildUploadList(&uploadList, false, &lambda, typeEnv, files)) {
+                        tooBigAttachmentError = error;
+                        break;
+                    }
                     t.MutableProgram()->SetRaw(lambda);
                     t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
                     *t.MutableProgram()->MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings);
@@ -2012,8 +2076,8 @@ private:
                 }
             }
 
-            if (fallbackFlag) {
-                return FallbackWithMessage(*input, "Too big attachment", ctx, false);
+            if (tooBigAttachmentError) {
+                return FallbackWithMessage(*input, tooBigAttachmentError, ctx, false);
             }
 
             if (State->Metrics) {
@@ -2041,7 +2105,11 @@ private:
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 const IDqGateway::TResult& res = completedFuture.GetValueSync();
 
-                MarkProgressFinished(publicIds->AllPublicIds, res.Success(), state->ProgressWriter);
+                MarkProgressFinished(
+                    publicIds->AllPublicIds,
+                    res.Success(),
+                    state->ProgressWriter,
+                    ExtractDqStagesStats(res.Statistics));
 
                 auto duration = TInstant::Now() - startTime;
                 YQL_CLOG(INFO, ProviderDq) << "Execution precomputes complete, duration: " << duration;

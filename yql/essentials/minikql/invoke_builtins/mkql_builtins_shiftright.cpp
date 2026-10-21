@@ -1,7 +1,6 @@
 #include "mkql_builtins_impl.h" // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -32,5 +31,4 @@ void RegisterShiftRight(IBuiltinFunctionRegistry& registry) {
     RegisterUnsignedShiftFunctionOpt<TShiftRight, TBinaryShiftArgsOpt>(registry, "ShiftRight");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

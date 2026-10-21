@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-#include "opentelemetry/common/key_value_iterable.h"
+#include "opentelemetry/common/key_value_iterable.h"  // IWYU pragma: keep
 #include "opentelemetry/nostd/shared_ptr.h"
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/sdk/common/global_log_handler.h"
@@ -16,11 +16,11 @@
 #include "opentelemetry/sdk/trace/id_generator.h"
 #include "opentelemetry/sdk/trace/processor.h"
 #include "opentelemetry/sdk/trace/sampler.h"
+#include "opentelemetry/sdk/trace/span_limits.h"
 #include "opentelemetry/sdk/trace/tracer.h"
 #include "opentelemetry/sdk/trace/tracer_config.h"
 #include "opentelemetry/sdk/trace/tracer_context.h"
 #include "opentelemetry/sdk/trace/tracer_provider.h"
-#include "opentelemetry/trace/tracer.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -42,14 +42,14 @@ TracerProvider::TracerProvider(
     const resource::Resource &resource,
     std::unique_ptr<Sampler> sampler,
     std::unique_ptr<IdGenerator> id_generator,
-    std::unique_ptr<instrumentationscope::ScopeConfigurator<TracerConfig>>
-        tracer_configurator) noexcept
+    std::unique_ptr<instrumentationscope::ScopeConfigurator<TracerConfig>> tracer_configurator,
+    SpanLimits span_limits) noexcept
 {
   std::vector<std::unique_ptr<SpanProcessor>> processors;
   processors.push_back(std::move(processor));
-  context_ =
-      std::make_shared<TracerContext>(std::move(processors), resource, std::move(sampler),
-                                      std::move(id_generator), std::move(tracer_configurator));
+  context_ = std::make_shared<TracerContext>(std::move(processors), resource, std::move(sampler),
+                                             std::move(id_generator),
+                                             std::move(tracer_configurator), span_limits);
 }
 
 TracerProvider::TracerProvider(
@@ -57,13 +57,14 @@ TracerProvider::TracerProvider(
     const resource::Resource &resource,
     std::unique_ptr<Sampler> sampler,
     std::unique_ptr<IdGenerator> id_generator,
-    std::unique_ptr<instrumentationscope::ScopeConfigurator<TracerConfig>>
-        tracer_configurator) noexcept
+    std::unique_ptr<instrumentationscope::ScopeConfigurator<TracerConfig>> tracer_configurator,
+    SpanLimits span_limits) noexcept
     : context_(std::make_shared<TracerContext>(std::move(processors),
                                                resource,
                                                std::move(sampler),
                                                std::move(id_generator),
-                                               std::move(tracer_configurator)))
+                                               std::move(tracer_configurator),
+                                               span_limits))
 {}
 
 TracerProvider::~TracerProvider()
@@ -129,9 +130,44 @@ void TracerProvider::AddProcessor(std::unique_ptr<SpanProcessor> processor) noex
   context_->AddProcessor(std::move(processor));
 }
 
+void TracerProvider::UpdateTracerConfigurator(
+    std::unique_ptr<instrumentationscope::ScopeConfigurator<TracerConfig>>
+        tracer_configurator) noexcept
+{
+  if (!tracer_configurator)
+  {
+    OTEL_INTERNAL_LOG_ERROR(
+        "[TracerProvider::UpdateTracerConfigurator] tracer_configurator must not be null, "
+        "ignoring.");
+    return;
+  }
+
+  // Lock the provider mutex to ensure that calls to GetTracer are exclusive with respect to the
+  // TracerConfigurator update and corresponding TracerConfig updates. This ensures that a Tracer
+  // will never be returned from GetTracer with a TracerConfig that is out of date with respect to
+  // the provider-level TracerConfigurator.
+  const std::lock_guard<std::mutex> guard(lock_);
+  context_->SetTracerConfigurator(std::move(tracer_configurator));
+
+  // The only way to set the TracerConfig of a tracer is on Tracer construction in
+  // TracerProvider::GetTracer or through Tracer::UpdateTracerConfig (which is private and only
+  // accessed by TracerProvider).
+  for (auto &tracer : tracers_)
+  {
+    TracerConfig new_config =
+        context_->GetTracerConfigurator().ComputeConfig(tracer->GetInstrumentationScope());
+    tracer->UpdateTracerConfig(new_config);
+  }
+}
+
 const resource::Resource &TracerProvider::GetResource() const noexcept
 {
   return context_->GetResource();
+}
+
+const opentelemetry::sdk::trace::SpanLimits &TracerProvider::GetSpanLimits() const noexcept
+{
+  return context_->GetSpanLimits();
 }
 
 bool TracerProvider::Shutdown(std::chrono::microseconds timeout) noexcept

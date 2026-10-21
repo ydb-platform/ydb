@@ -1,0 +1,53 @@
+/* ytfile can not */
+
+PRAGMA yt.UseQLFilter;
+
+/* 43 predicates: depth 3 + 42 alternating AND/OR levels = 45.
+ * Explicit left nesting prevents same-operator balancing.
+ */
+SELECT a
+FROM plato.Input
+WHERE
+    ((((((((((((((((((((((((((((((((((((((((((a = -101 OR
+    b = 101) AND
+    d = 102) OR
+    b = 103) AND
+    d = 104) OR
+    b = 105) AND
+    d = 106) OR
+    b = 107) AND
+    d = 108) OR
+    b = 109) AND
+    d = 110) OR
+    b = 111) AND
+    d = 112) OR
+    b = 113) AND
+    d = 114) OR
+    b = 115) AND
+    d = 116) OR
+    b = 117) AND
+    d = 118) OR
+    b = 119) AND
+    d = 120) OR
+    b = 121) AND
+    d = 122) OR
+    b = 123) AND
+    d = 124) OR
+    b = 125) AND
+    d = 126) OR
+    b = 127) AND
+    d = 128) OR
+    b = 129) AND
+    d = 130) OR
+    b = 131) AND
+    d = 132) OR
+    b = 133) AND
+    d = 134) OR
+    b = 135) AND
+    d = 136) OR
+    b = 137) AND
+    d = 138) OR
+    b = 139) AND
+    d = 140) OR
+    b = 141) AND
+    d = 142);

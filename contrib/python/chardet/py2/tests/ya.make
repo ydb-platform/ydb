@@ -1,5 +1,7 @@
 PY2TEST()
 
+SUBSCRIBER(g:python-contrib )
+
 SRCDIR(contrib/python/chardet/py2)
 
 TEST_SRCS(

@@ -2,7 +2,19 @@
 
 #include "distconf.h"
 
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+
 namespace NKikimr::NStorage {
+
+    // Bump generation of the bridge proxy group after the groups of its piles got their generations bumped; inline pile
+    // is its own pile, so it is not bumped twice. bumpedAsPile tells whether the group was bumped as the pile.
+    inline void BumpBridgeProxyGeneration(NKikimrBlobStorage::TGroupInfo *proxyGroup,
+            const std::function<bool(TGroupId)>& bumpedAsPile) {
+        if (!bumpedAsPile(TGroupId::FromProto(proxyGroup, &NKikimrBlobStorage::TGroupInfo::GetGroupID))) {
+            proxyGroup->SetGroupGeneration(proxyGroup->GetGroupGeneration() + 1);
+        }
+    }
 
     class TDistributedConfigKeeper::TInvokeRequestHandlerActor : public TActor<TInvokeRequestHandlerActor> {
         friend class TDistributedConfigKeeper;
@@ -81,13 +93,17 @@ namespace NKikimr::NStorage {
 
         THashMultiMap<ui32, TVDiskID> NodeToVDisk;
         THashMap<TActorId, TVDiskID> ActorToVDisk;
+        THashMap<ui32, TVector<std::pair<TActorId, TVDiskID>>> VStatusQueriesAwaitingConnection;
         std::optional<NKikimrBlobStorage::TBaseConfig> BaseConfig;
         THashSet<TVDiskID> PendingVDiskIds;
         TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
         std::optional<TBlobStorageGroupInfo::TGroupVDisks> SuccessfulVDisks;
+        std::optional<TResult::TReassignGroupDisk> ReassignGroupDiskResult;
 
         void ReassignGroupDisk(const TQuery::TReassignGroupDisk& cmd);
         void IssueVStatusQueries(const NKikimrBlobStorage::TGroupInfo& group);
+        void SendVStatusQuery(TActorId actorId, TVDiskID vdiskId, TActorId sessionId = {});
+        void SendPendingVStatusQueries(ui32 nodeId, TActorId sessionId);
         void Handle(TEvBlobStorage::TEvVStatusResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void OnVStatusError(TVDiskID vdiskId);
@@ -155,17 +171,27 @@ namespace NKikimr::NStorage {
         void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerDistconfResponse::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev);
-        void BootstrapCluster(const TString& selfAssemblyUUID);
+        void BootstrapCluster(const TQuery::TBootstrapCluster& request);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge mode
 
         void NeedBridgeMode();
+        void CheckPileNotification(TBridgePileId bridgePileId, ui64 generation);
 
         void SwitchBridgeClusterState(const TQuery::TSwitchBridgeClusterState& cmd);
 
         void NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd);
         void NotifyBridgeSuspended(const TQuery::TNotifyBridgeSuspended& cmd);
+
+        void ConvertToBridge(const TQuery::TConvertToBridge& cmd);
+
+        // check that every node runs with BridgeConfig (and with support of changes of the list of piles, when
+        // pileListChange is set), then invoke the callback; every static node listed in requiredNodeIds must report it,
+        // while nodes listed in ignoredNodeIds may not report anything (they are leaving the cluster)
+        void RequireBridgeCapability(bool pileListChange, THashSet<ui32> requiredNodeIds,
+            THashSet<ui32> ignoredNodeIds, std::function<void()> callback);
+        void NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Retro trace collection

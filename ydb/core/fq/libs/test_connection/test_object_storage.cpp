@@ -1,14 +1,15 @@
-#include "events/events.h"
 #include "probes.h"
 #include "test_connection.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include "events/events.h"
 
 #include <ydb/core/fq/libs/actors/clusters_from_connections.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
-#include <ydb/library/security/util.h>
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/security/util.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider_impl.h>
+
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <yql/essentials/utils/url_builder.h>
 
@@ -16,6 +17,8 @@
 #undef THROW
 #endif
 #include <library/cpp/xml/document/xml-document.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_TEST_CONNECTION
 
 namespace {
 
@@ -27,7 +30,7 @@ struct TEvPrivate {
 
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-    struct TEvDiscoveryResponse : NActors::TEventLocal<TEvDiscoveryResponse, EvDiscoveryResponse> {
+    struct TEvDiscoveryResponse: NActors::TEventLocal<TEvDiscoveryResponse, EvDiscoveryResponse> {
         bool IsSuccess = false;
         TString ErrorMessage;
         TString RequestId;
@@ -36,16 +39,18 @@ struct TEvPrivate {
             : IsSuccess(false)
             , ErrorMessage(errorMessage)
             , RequestId(requestId)
-        {}
+        {
+        }
 
         TEvDiscoveryResponse(const TString& requestId)
             : IsSuccess(true)
             , RequestId(requestId)
-        {}
+        {
+        }
     };
 };
 
-}
+}   // namespace
 
 namespace NFq {
 
@@ -53,7 +58,7 @@ LWTRACE_USING(YQ_TEST_CONNECTION_PROVIDER);
 
 using namespace NActors;
 
-class TTestObjectStorageConnectionActor : public NActors::TActorBootstrapped<TTestObjectStorageConnectionActor> {
+class TTestObjectStorageConnectionActor: public NActors::TActorBootstrapped<TTestObjectStorageConnectionActor> {
     TTestConnectionRequestCountersPtr Counters;
     TActorId Sender;
     TString Scope;
@@ -61,23 +66,15 @@ class TTestObjectStorageConnectionActor : public NActors::TActorBootstrapped<TTe
     TString Token;
     ui64 Cookie;
     NYql::IHTTPGateway::TPtr Gateway;
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     NYql::TS3ClusterConfig ClusterConfig;
 
     const TInstant StartTime = TInstant::Now();
 
 public:
-    TTestObjectStorageConnectionActor(
-        const FederatedQuery::ObjectStorageConnection& os,
-        const NFq::NConfig::TCommonConfig& commonConfig,
-        const TActorId& sender,
-        ui64 cookie,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
-         NYql::IHTTPGateway::TPtr gateway,
-        const TString& scope,
-        const TString& user,
-        const TString& token,
-        const NFq::TSigner::TPtr& signer,
+    TTestObjectStorageConnectionActor(const FederatedQuery::ObjectStorageConnection& os, const NFq::NConfig::TCommonConfig& commonConfig,
+        const TActorId& sender, ui64 cookie, const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
+        NYql::IHTTPGateway::TPtr gateway, const TString& scope, const TString& user, const TString& token, const NFq::TSigner::TPtr& signer,
         const TTestConnectionRequestCountersPtr& counters)
         : Counters(counters)
         , Sender(sender)
@@ -87,7 +84,8 @@ public:
         , Cookie(cookie)
         , Gateway(gateway)
         , CredentialsFactory(credentialsFactory)
-        , ClusterConfig(NFq::CreateS3ClusterConfig({}, token, commonConfig.GetObjectStorageEndpoint(), signer ? signer->SignAccountId(os.auth().service_account().id()) : "", os))
+        , ClusterConfig(NFq::CreateS3ClusterConfig(
+              {}, token, commonConfig.GetObjectStorageEndpoint(), signer ? signer->SignAccountId(os.auth().service_account().id()) : "", os))
     {
         Counters->InFly->Inc();
     }
@@ -96,7 +94,11 @@ public:
 
     void Bootstrap() {
         Become(&TTestObjectStorageConnectionActor::StateFunc);
-        TC_LOG_D(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Starting test object storage connection actor. Actor id: " << SelfId());
+        YDB_LOG_DEBUG("Starting test object storage connection actor",
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"selfId", SelfId()});
         try {
             SendDiscover();
         } catch (...) {
@@ -148,33 +150,26 @@ private:
     }
 
     static ERetryErrorClass RetryS3SlowDown(CURLcode curlResponseCode, long httpResponseCode) {
-        return curlResponseCode == CURLE_OK && httpResponseCode == 503 ? ERetryErrorClass::LongRetry : ERetryErrorClass::NoRetry; // S3 Slow Down == 503
+        return curlResponseCode == CURLE_OK && httpResponseCode == 503 ? ERetryErrorClass::LongRetry
+                                                                       : ERetryErrorClass::NoRetry;   // S3 Slow Down == 503
     }
 
     void SendDiscover() {
-        const auto structedToken = NYql::ComposeStructuredTokenJsonForServiceAccount(ClusterConfig.GetServiceAccountId(), ClusterConfig.GetServiceAccountIdSignature(), ClusterConfig.GetToken());
-        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, structedToken);
+        const auto structuredToken = NYql::ComposeStructuredTokenJsonForServiceAccount(
+            ClusterConfig.GetServiceAccountId(), ClusterConfig.GetServiceAccountIdSignature(), ClusterConfig.GetToken());
+        const auto credentialsProviderFactory = CredentialsFactory->Create(structuredToken);
         const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
 
         TString requestId = CreateGuidAsString();
-        NYql::IHTTPGateway::THeaders headers = NYql::IHTTPGateway::MakeYcHeaders(requestId, TString{authToken}, {});
+        NYql::IHTTPGateway::THeaders headers = NYql::IHTTPGateway::MakeYcHeaders(requestId, TString{ authToken }, {});
 
         const auto retryPolicy = NYql::IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(RetryS3SlowDown);
 
         NYql::TUrlBuilder urlBuilder(ClusterConfig.GetUrl());
-        const auto url = urlBuilder.AddUrlParam("list-type", "2")
-                                   .AddUrlParam("max-keys", "1")
-                                   .Build();
+        const auto url = urlBuilder.AddUrlParam("list-type", "2").AddUrlParam("max-keys", "1").Build();
 
-        Gateway->Download(
-                url,
-                headers,
-                0U,
-                0U,
-                std::bind(&DiscoveryCallback, std::placeholders::_1, SelfId(), requestId, TActivationContext::ActorSystem()),
-                /*data=*/"",
-                retryPolicy
-            );
+        Gateway->Download(url, headers, 0U, 0U, std::bind(&DiscoveryCallback, std::placeholders::_1, SelfId(), requestId,
+                                                    TActivationContext::ActorSystem()), /*data=*/"", retryPolicy);
     }
 
     void DestroyActor(bool success = true) {
@@ -186,36 +181,35 @@ private:
     }
 
     void ReplyError(const TString& message) {
-        TC_LOG_D(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Invalid access for object storage connection: " << message);
+        YDB_LOG_DEBUG("Invalid access for object storage",
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"error", message});
         Counters->Error->Inc();
-        Send(Sender, new NFq::TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(NFq::TIssuesIds::BAD_REQUEST, "Object Storage: " + message)}), 0, Cookie);
+        Send(Sender, new NFq::TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{ MakeErrorIssue(NFq::TIssuesIds::BAD_REQUEST,
+                         "Object Storage: " + message) }), 0, Cookie);
         DestroyActor(false /* success */);
     }
 
     void ReplyOk(const TString& requestId) {
-        TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Access is valid for object storage connection, request id: [" << requestId << "]");
+        YDB_LOG_TRACE("Access is valid for object storage connection",
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"requestId", requestId});
         Counters->Ok->Inc();
         Send(Sender, new NFq::TEvTestConnection::TEvTestConnectionResponse(FederatedQuery::TestConnectionResult{}), 0, Cookie);
         DestroyActor();
     }
 };
 
-NActors::IActor* CreateTestObjectStorageConnectionActor(
-        const FederatedQuery::ObjectStorageConnection& os,
-        const NFq::NConfig::TCommonConfig& commonConfig,
-        const TActorId& sender,
-        ui64 cookie,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
-         NYql::IHTTPGateway::TPtr gateway,
-        const TString& scope,
-        const TString& user,
-        const TString& token,
-        const NFq::TSigner::TPtr& signer,
-        const TTestConnectionRequestCountersPtr& counters) {
+NActors::IActor* CreateTestObjectStorageConnectionActor(const FederatedQuery::ObjectStorageConnection& os,
+    const NFq::NConfig::TCommonConfig& commonConfig, const TActorId& sender, ui64 cookie,
+    const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory, NYql::IHTTPGateway::TPtr gateway, const TString& scope,
+    const TString& user, const TString& token, const NFq::TSigner::TPtr& signer, const TTestConnectionRequestCountersPtr& counters) {
     return new TTestObjectStorageConnectionActor(
-                    os, commonConfig, sender,
-                    cookie, credentialsFactory, gateway,
-                    scope, user, token, signer, counters);
+        os, commonConfig, sender, cookie, credentialsFactory, gateway, scope, user, token, signer, counters);
 }
 
-} // namespace NFq
+}   // namespace NFq

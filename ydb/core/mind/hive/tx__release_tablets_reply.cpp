@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -30,8 +32,9 @@ public:
     void Handle(TEvPrivate::TEvRestartComplete::TPtr&) {
         ++TabletsDone;
         if (TabletsDone >= TabletsTotal) {
-            BLOG_D("THive::TTxReleaseTabletsReply::Complete - continue migration");
-            Hive->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Hive->MigrationFilter));
+            YDB_LOG_DEBUG("THive::TTxReleaseTabletsReply::Complete continuing migration",
+                {"logPrefix", GetLogPrefix()});
+            Hive->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Hive->MigrationFilter), true);
             PassAway();
         }
     }
@@ -39,8 +42,9 @@ public:
     void Bootstrap(const TActorContext&) {
         Become(&TThis::StateWork);
         if (TabletsTotal == 0) {
-            BLOG_D("THive::TTxReleaseTabletsReply::Complete - continue migration");
-            Hive->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Hive->MigrationFilter));
+            YDB_LOG_DEBUG("THive::TTxReleaseTabletsReply::Complete continuing migration",
+                {"logPrefix", GetLogPrefix()});
+            Hive->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Hive->MigrationFilter), true);
             PassAway();
         }
     }
@@ -67,7 +71,9 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const NKikimrHive::TEvReleaseTabletsReply& request(Request->Get()->Record);
-        BLOG_D("THive::TTxReleaseTabletsReply::Execute " << request);
+        YDB_LOG_DEBUG("THive::TTxReleaseTabletsReply::Execute processing release tablets reply",
+            {"logPrefix", GetLogPrefix()},
+            {"request", request});
         NIceDb::TNiceDb db(txc.DB);
         for (const TTabletId tabletId : request.GetTabletIDs()) {
             db.Table<Schema::Tablet>().Key(tabletId).Update<Schema::Tablet::NeedToReleaseFromParent>(false);
@@ -77,7 +83,8 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         const NKikimrHive::TEvReleaseTabletsReply& request(Request->Get()->Record);
-        BLOG_D("THive::TTxReleaseTabletsReply::Complete");
+        YDB_LOG_DEBUG("THive::TTxReleaseTabletsReply::Complete",
+            {"logPrefix", GetLogPrefix()});
 
         TActorId waitActorId;
         TReleaseTabletsWaitActor* waitActor = nullptr;
@@ -111,10 +118,11 @@ public:
         Self->MigrationProgress += request.TabletIDsSize();
         // continue migration
         if (waitActor) {
-            BLOG_D("THive::TTxReleaseTabletsReply::Complete - waiting for tablets to rise");
+            YDB_LOG_DEBUG("THive::TTxReleaseTabletsReply::Complete waiting for tablets to start",
+                {"logPrefix", GetLogPrefix()});
             return; // waiting for tablets
         } else {
-            Self->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Self->MigrationFilter));
+            Self->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Self->MigrationFilter), true);
         }
     }
 };

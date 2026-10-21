@@ -18,6 +18,7 @@ private:
     YDB_READONLY_DEF(std::optional<TString>, DefaultValue);
     YDB_READONLY_DEF(std::optional<NArrow::NAccessor::TRequestedConstructorContainer>, AccessorConstructor);
     YDB_READONLY_DEF(std::optional<TString>, ColumnFamilyName);
+    YDB_READONLY_DEF(std::optional<bool>, NotNull);
 
 public:
     bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors);
@@ -50,7 +51,6 @@ public:
     static bool IsAllowedType(ui32 typeId);
     static bool IsAllowedPkType(ui32 typeId);
     static bool IsAllowedDictionaryType(ui32 typeId);
-    static bool IsAllowedPgType(ui32 pgTypeId);
 };
 
 class TOlapColumnAdd: public TOlapColumnBase {

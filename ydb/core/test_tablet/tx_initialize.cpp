@@ -1,6 +1,8 @@
 #include "test_shard_impl.h"
 #include "scheme.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT TEST_SHARD
+
 namespace NKikimr::NTestShard {
 
     class TTestShard::TTxInitialize : public TTransactionBase<TTestShard> {
@@ -34,7 +36,9 @@ namespace NKikimr::NTestShard {
             response->Record.SetTabletId(Self->TabletID());
             ctx.Send(Sender, response.release(), 0, Cookie);
             Self->Settings = Cmd;
-            STLOG(PRI_DEBUG, TEST_SHARD, TS30, "TTxInitialize::Complete", (TabletId, Self->TabletID()));
+            YDB_LOG_DEBUG("TTxInitialize::Complete",
+                {"marker", "TS30"},
+                {"tabletId", Self->TabletID()});
             Self->StartActivities();
         }
     };

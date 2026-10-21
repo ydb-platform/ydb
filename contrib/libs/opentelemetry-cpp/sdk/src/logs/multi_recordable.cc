@@ -1,21 +1,18 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include <stdint.h>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <unordered_map>
 #include <utility>
 
 #include "opentelemetry/common/attribute_value.h"
 #include "opentelemetry/common/timestamp.h"
-#include "opentelemetry/logs/log_record.h"
-#include "opentelemetry/logs/severity.h"
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/sdk/logs/multi_recordable.h"
 #include "opentelemetry/sdk/logs/processor.h"
 #include "opentelemetry/sdk/logs/recordable.h"
-#include "opentelemetry/sdk/resource/resource.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -154,6 +151,10 @@ void MultiRecordable::SetTraceFlags(const opentelemetry::trace::TraceFlags &trac
 void MultiRecordable::SetAttribute(nostd::string_view key,
                                    const opentelemetry::common::AttributeValue &value) noexcept
 {
+  if (key.empty())
+  {
+    return;
+  }
   for (auto &recordable : recordables_)
   {
     if (recordable.second)
@@ -183,6 +184,17 @@ void MultiRecordable::SetInstrumentationScope(
     if (recordable.second)
     {
       recordable.second->SetInstrumentationScope(instrumentation_scope);
+    }
+  }
+}
+
+void MultiRecordable::SetLogRecordLimits(const LogRecordLimits &limits) noexcept
+{
+  for (auto &recordable : recordables_)
+  {
+    if (recordable.second)
+    {
+      recordable.second->SetLogRecordLimits(limits);
     }
   }
 }

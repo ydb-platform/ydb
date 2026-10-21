@@ -1,6 +1,10 @@
 #include "flat_executor_gclogic.h"
 #include "flat_bio_eggs.h"
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet.h>
+#include <unordered_set>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -11,8 +15,10 @@ namespace {
     constexpr ui64 GcMaxErrors = 25;  // ~1.13 min in total
 }
 
-TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies)
-    : TabletStorageInfo(std::move(info))
+TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies, const TFeatureFlags& flags)
+    : HistoryCutter(info)
+    , CutHistoryEnabled(flags.GetEnableCutHistory())
+    , TabletStorageInfo(std::move(info))
     , Cookies(cookies)
     , Generation(Cookies->Gen)
     , Slicer(1, Cookies.Get(), NBlockIO::BlockSize)
@@ -107,6 +113,10 @@ void TExecutorGCLogic::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap, ui32 s
             x->SetChannel(chIt.first);
             x->SetSetToGeneration(chIt.second.CommitedGcBarrier.Generation);
             x->SetSetToStep(chIt.second.CommitedGcBarrier.Step);
+
+            if (chIt.second.CutHistoryStatus == TChannelInfo::ECutHistoryStatus::None && chIt.second.GcWaitFor == 0) {
+                ChannelsToCutHistory.insert(chIt.first);
+            }
         }
     }
 }
@@ -132,13 +142,27 @@ void TExecutorGCLogic::OnConfirmSnapshot(ui32 step, const TActorContext &ctx) {
     }
 }
 
-TDuration TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ptr) {
+TDuration TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ptr, const TActorContext &ctx, TActorId launcher) {
     TEvBlobStorage::TEvCollectGarbageResult* ev = ptr->Get();
-    TChannelInfo& channel = ChannelInfo[ev->Channel];
+    ui32 channelId = ev->Channel;
+    TChannelInfo& channel = ChannelInfo[channelId];
     if (ev->Status == NKikimrProto::EReplyStatus::OK) {
-        channel.OnCollectGarbageSuccess();
+        if (channel.OnCollectGarbageSuccess() && channel.CutHistoryStatus == TChannelInfo::ECutHistoryStatus::SentBarrier) {
+            auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
+            for (const auto* historyEntry : historyToCut) {
+                TAutoPtr<TEvTablet::TEvCutTabletHistory> request(new TEvTablet::TEvCutTabletHistory);
+                auto &record = request->Record;
+                record.SetTabletID(TabletStorageInfo->TabletID);
+                record.SetChannel(channelId);
+                record.SetFromGeneration(historyEntry->FromGeneration);
+                record.SetGroupID(historyEntry->GroupID);
+                ctx.Send(launcher, request.Release());
+            }
+            channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::Cut;
+        }
     } else {
         channel.OnCollectGarbageFailure();
+        channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::None;
     }
     return channel.TryScheduleGcRequestRetries();
 }
@@ -175,17 +199,39 @@ void TExecutorGCLogic::FollowersSyncComplete(bool isBoot) {
     AllowGarbageCollection = true;
 }
 
+void TExecutorGCLogic::Confirm(const TActorContext &ctx) {
+    // CutHistoryEnabled was latched at boot, the live flag is still honored so that turning
+    // EnableCutHistory off works as an immediate kill switch.
+    if (!CutHistoryEnabled || !AppData()->FeatureFlags.GetEnableCutHistory()) {
+        return;
+    }
+    for (auto channelId : ChannelsToCutHistory) {
+        auto& channel = ChannelInfo[channelId];
+        auto hardBarriers = HistoryCutter.GetHardBarriers(channelId);
+
+        for (const auto& [groupId, generation] : hardBarriers) {
+            channel.SendCollectGarbageEntry(ctx, {}, {}, TabletStorageInfo->TabletID, channelId, groupId, Generation, true, TGCTime{generation, Max<ui32>()});
+        }
+        channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::SentBarrier;
+    }
+    ChannelsToCutHistory.clear();
+}
+
 void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {
     for (const TLogoBlobID &blobId : delta.Created) {
         auto &channel = ChannelInfo[blobId.Channel()];
         TGCTime gcTime(blobId.Generation(), blobId.Step());
         Y_ENSURE(channel.KnownGcBarrier < gcTime);
         channel.CommittedDelta[gcTime].Created.push_back(blobId);
+        HistoryCutter.SeenBlob(blobId);
     }
 
     for (const TLogoBlobID &blobId : delta.Deleted) {
         auto &channel = ChannelInfo[blobId.Channel()];
         channel.CommittedDelta[time].Deleted.push_back(blobId);
+        // A DoNotKeep mark still pins its entry: the flag is delivered to the group the
+        // blob's generation resolves to, and cutting the entry makes that unresolvable.
+        HistoryCutter.SeenBlob(blobId);
     }
 }
 
@@ -218,7 +264,7 @@ void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) {
     const TGCTime minTime = std::min(uncommittedTime, std::min(uncommitedSnap, minBarrier));
 
     for (auto it = ChannelInfo.begin(); it != ChannelInfo.end(); ++it) {
-        it->second.SendCollectGarbage(minTime, TabletStorageInfo.Get(), it->first, Generation, ctx);
+        SentinelDroppedMarks += it->second.SendCollectGarbage(minTime, TabletStorageInfo.Get(), it->first, Generation, ctx);
     }
 }
 
@@ -364,8 +410,12 @@ namespace {
 void TExecutorGCLogic::TChannelInfo::SendCollectGarbageEntry(
             const TActorContext &ctx,
             TVector<TLogoBlobID> &&keep, TVector<TLogoBlobID> &&notKeep,
-            ui64 tabletid, ui32 channel, ui32 bsgroup, ui32 generation)
+            ui64 tabletid, ui32 channel, ui32 bsgroup, ui32 generation,
+            bool hard, std::optional<TGCTime> barrier)
 {
+    if (!barrier) {
+        barrier = KnownGcBarrier;
+    }
     ValidateGCVector(tabletid, channel, "Keep", keep);
     ValidateGCVector(tabletid, channel, "DoNotKeep", notKeep);
     THolder<TEvBlobStorage::TEvCollectGarbage> ev =
@@ -373,19 +423,25 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbageEntry(
             tabletid,
             generation, GcCounter,
             channel, true,
-            KnownGcBarrier.Generation, KnownGcBarrier.Step,
+            barrier->Generation, barrier->Step,
             keep.empty() ? nullptr : new TVector<TLogoBlobID>(std::move(keep)),
             notKeep.empty() ? nullptr : new TVector<TLogoBlobID>(std::move(notKeep)),
             TInstant::Max(),
-            true);
+            !hard,
+            TWriteSource::FlatCollectGarbage,
+            hard);
     GcCounter += ev->PerGenerationCounterStepSize();
     SendToBSProxy(ctx, bsgroup, ev.Release());
     ++GcWaitFor;
 }
 
-void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
+ui64 TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
     if (GcWaitFor > 0)
-        return;
+        return 0;
+    // A retry is already scheduled; proceeding would cancel the backoff.
+    if (PendingRetry)
+        return 0;
+    ui64 droppedMarks = 0;
 
     MinUncollectedTime = uncommittedTime;
     PendingRetry = false;
@@ -430,7 +486,7 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
 
         if (lastCommitedGcBarrier >= latestEntry->FromGeneration && firstFlagGen >= latestEntry->FromGeneration) {
             // normal case, commit gc info for last entry only
-            SendCollectGarbageEntry(ctx, std::move(keep), std::move(notKeep), tabletStorageInfo->TabletID, channel, latestEntry->GroupID, generation);
+            SendCollectGarbageEntry(ctx, std::move(keep), std::move(notKeep), tabletStorageInfo->TabletID, channel, latestEntry->GroupID, generation, false);
         } else {
         // bloated case - spread among different groups
             TMap<ui32, std::pair<TVector<TLogoBlobID>, TVector<TLogoBlobID>>> affectedGroups;
@@ -444,6 +500,8 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
                     affectedGroups[xit->GroupID];
             }
 
+            // GroupForGeneration returns Max<ui32>() below the first surviving history entry.
+            // Dropping such a mark is safe: those blobs have already been deleted with the cut entry.
             ui32 activeGen = Max<ui32>();
             ui32 activeGroup = Max<ui32>();
             TVector<TLogoBlobID> *vec = nullptr;
@@ -452,10 +510,14 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
                 if (activeGen != blobId.Generation()) {
                     activeGen = blobId.Generation();
                     activeGroup = channelInfo->GroupForGeneration(blobId.Generation());
-                    vec = &affectedGroups[activeGroup].first;
+                    vec = activeGroup == Max<ui32>() ? nullptr : &affectedGroups[activeGroup].first;
                 }
 
-                vec->push_back(blobId);
+                if (vec) {
+                    vec->push_back(blobId);
+                } else {
+                    ++droppedMarks;
+                }
             }
 
             activeGen = Max<ui32>();
@@ -466,22 +528,34 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
                 if (activeGen != blobId.Generation()) {
                     activeGen = blobId.Generation();
                     activeGroup = channelInfo->GroupForGeneration(blobId.Generation());
-                    vec = &affectedGroups[activeGroup].second;
+                    vec = activeGroup == Max<ui32>() ? nullptr : &affectedGroups[activeGroup].second;
                 }
 
-                vec->push_back(blobId);
+                if (vec) {
+                    vec->push_back(blobId);
+                } else {
+                    ++droppedMarks;
+                }
             }
 
             for (auto &xpair : affectedGroups) {
-                SendCollectGarbageEntry(ctx, std::move(xpair.second.first), std::move(xpair.second.second), tabletStorageInfo->TabletID, channel, xpair.first, generation);
+                SendCollectGarbageEntry(ctx, std::move(xpair.second.first), std::move(xpair.second.second), tabletStorageInfo->TabletID, channel, xpair.first, generation, false);
             }
         }
     }
+    if (droppedMarks) {
+        LOG_WARN_S(ctx, NKikimrServices::TABLET_EXECUTOR,
+            "GC marks dropped by sentinel guard (blob generation below first surviving history entry)"
+            << " tablet " << tabletStorageInfo->TabletID
+            << " channel " << channel
+            << " dropped " << droppedMarks);
+    }
+    return droppedMarks;
 }
 
-void TExecutorGCLogic::TChannelInfo::OnCollectGarbageSuccess() {
+bool TExecutorGCLogic::TChannelInfo::OnCollectGarbageSuccess() {
     if (--GcWaitFor || !CollectSent)
-        return;
+        return false;
 
     auto it = CommittedDelta.upper_bound(CollectSent);
     if (it != CommittedDelta.begin()) {
@@ -492,6 +566,7 @@ void TExecutorGCLogic::TChannelInfo::OnCollectGarbageSuccess() {
     CommitedGcBarrier = KnownGcBarrier;
     TryCounter = 0;
     BackoffTimer.Reset();
+    return true;
 }
 
 void TExecutorGCLogic::TChannelInfo::OnCollectGarbageFailure() {
@@ -513,6 +588,7 @@ TDuration TExecutorGCLogic::TChannelInfo::TryScheduleGcRequestRetries() {
 
 void TExecutorGCLogic::TChannelInfo::RetryGcRequests(const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
     if (PendingRetry) {
+        PendingRetry = false;
         SendCollectGarbage(MinUncollectedTime, tabletStorageInfo, channel, generation, ctx);
     }
 }

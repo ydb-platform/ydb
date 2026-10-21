@@ -8,7 +8,9 @@ RECURSE(
     interconnect
     log_backend
     memory_log
+    metrics
     prof
+    subsystems
     struct_log
     testlib
     util

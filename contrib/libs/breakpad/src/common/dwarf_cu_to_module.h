@@ -1,7 +1,6 @@
 // -*- mode: c++ -*-
 
-// Copyright (c) 2010 Google Inc.
-// All rights reserved.
+// Copyright 2010 Google LLC
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -13,7 +12,7 @@
 // copyright notice, this list of conditions and the following disclaimer
 // in the documentation and/or other materials provided with the
 // distribution.
-//     * Neither the name of Google Inc. nor the names of its
+//     * Neither the name of Google LLC nor the names of its
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
@@ -42,6 +41,7 @@
 #include <stdint.h>
 
 #include <string>
+#include <vector>
 
 #include "common/language.h"
 #include "common/module.h"
@@ -83,6 +83,10 @@ class DwarfCUToModule: public RootDIEHandler {
                                 const uint8_t* contents,
                                 uint64_t length);
 
+    void AddManagedSectionToSectionMap(const string& name,
+                                uint8_t* contents,
+                                uint64_t length);
+
     // Clear the section map for testing.
     void ClearSectionMapForTest();
 
@@ -115,6 +119,7 @@ class DwarfCUToModule: public RootDIEHandler {
 
     // Inter-compilation unit data used internally by the handlers.
     scoped_ptr<FilePrivate> file_private_;
+    std::vector<uint8_t *> uncompressed_sections_;
   };
 
   // An abstract base class for handlers that handle DWARF range lists for

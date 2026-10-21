@@ -9,6 +9,7 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
     ydb/core/tx/columnshard/engines/portions
+    ydb/core/tx/columnshard/engines/protos
     ydb/core/tx/general_cache/usage
     ydb/library/yverify_stream
     ydb/core/tx/columnshard

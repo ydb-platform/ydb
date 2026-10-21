@@ -17,10 +17,63 @@
 #include <yql/essentials/utils/backtrace/backtrace.h>
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <library/cpp/logger/backend.h>
+#include <library/cpp/logger/record.h>
 #include <library/cpp/testing/common/env.h>
+
+#include <util/system/mutex.h>
+
+#include <memory>
 
 namespace NKikimr {
 namespace NKqp {
+
+struct TCapturedLog::TState {
+    explicit TState(bool appendNewline)
+        : AppendNewline(appendNewline)
+    {
+    }
+
+    TMutex Mutex;
+    TString Buffer;
+    const bool AppendNewline;
+};
+
+class TCapturedLog::TSynchronizedStreamLogBackend final : public TLogBackend {
+public:
+    explicit TSynchronizedStreamLogBackend(std::shared_ptr<TState> state)
+        : State_(std::move(state))
+    {
+    }
+
+    void WriteData(const TLogRecord& rec) override {
+        TGuard<TMutex> guard(State_->Mutex);
+        State_->Buffer.append(rec.Data, rec.Len);
+        if (State_->AppendNewline) {
+            State_->Buffer.push_back('\n');
+        }
+    }
+
+    void ReopenLog() override {
+    }
+
+private:
+    const std::shared_ptr<TState> State_;
+};
+
+TCapturedLog::TCapturedLog(bool appendNewline)
+    : State_(std::make_shared<TState>(appendNewline))
+{
+}
+
+TString TCapturedLog::Snapshot() const {
+    TGuard<TMutex> guard(State_->Mutex);
+    return State_->Buffer;
+}
+
+THolder<TLogBackend> TCapturedLog::CreateBackend() const {
+    return MakeHolder<TSynchronizedStreamLogBackend>(State_);
+}
 
 using namespace NYdb::NTable;
 
@@ -139,12 +192,13 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableNotNullColumns(true);
     ServerSettings->SetEnableMoveIndex(true);
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
+    ServerSettings->SetUseRealInterconnect(settings.UseRealInterconnect);
     ServerSettings->SetEnableTablePgTypes(true);
-    ServerSettings->SetEnablePgSyntax(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
     ServerSettings->Controls = settings.Controls;
     ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
     ServerSettings->SetEnableScriptExecutionBackgroundChecks(settings.EnableScriptExecutionBackgroundChecks);
+    ServerSettings->SetNeedStatsCollectors(settings.NeedsStatsCollectors);
 
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
         ServerSettings->SetEnableOlapCompression(true);
@@ -155,16 +209,16 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         ServerSettings->SetEnableMockOnSingleNode(false);
     }
 
-    if (settings.LogStream) {
+    if (settings.LogCapture) {
+        auto makeBackend = [capture = *settings.LogCapture]() {
+            return capture.CreateBackend().Release();
+        };
         if (settings.NodeCount > 1) {
-            auto* logStream = settings.LogStream;
-            ServerSettings->SetLoggerInitializer([logStream](NActors::TTestActorRuntime& runtime) {
-                runtime.SetLogBackendFactory([logStream]() {
-                    return new TStreamLogBackend(logStream);
-                });
+            ServerSettings->SetLoggerInitializer([makeBackend](NActors::TTestActorRuntime& runtime) {
+                runtime.SetLogBackendFactory(makeBackend);
             });
         } else {
-            ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
+            ServerSettings->SetLogBackend(makeBackend());
         }
     }
 
@@ -176,6 +230,10 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     if (settings.DescribeSchemaSecretsServiceFactory) {
         ServerSettings->SetDescribeSchemaSecretsServiceFactory(settings.DescribeSchemaSecretsServiceFactory);
+    }
+
+    if (settings.QueryReplayBackendFactory) {
+        ServerSettings->SetQueryReplayBackendFactory(settings.QueryReplayBackendFactory);
     }
 
     Server.Reset(MakeIntrusive<Tests::TServer>(*ServerSettings));
@@ -646,7 +704,10 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
         // but does require explicit EAccessRights::GenericFull rights.
         // The order is important here, because grants from anonymous user are possible
         // only while AdministrationAllowedSIDs is empty (which means that anyone is an admin).
-        this->Client->TestGrant("/", settings.DomainRoot, settings.AuthToken, NACLib::EAccessRights::GenericFull);
+        RunCall([&] {
+            this->Client->TestGrant("/", settings.DomainRoot, settings.AuthToken, NACLib::EAccessRights::GenericFull);
+            return true;
+        });
         Server->GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back(settings.AuthToken);
     }
 }
@@ -829,6 +890,11 @@ void AssertTableStats(const Ydb::TableStats::QueryStats& stats, TStringBuf table
 }
 
 void AssertTableStats(const TDataQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
+    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+    return AssertTableStats(stats, table, expectedStats);
+}
+
+void AssertTableStats(const NYdb::NQuery::TExecuteQueryResult& result, TStringBuf table, const TExpectedTableStats& expectedStats) {
     auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
     return AssertTableStats(stats, table, expectedStats);
 }

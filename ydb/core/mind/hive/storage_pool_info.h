@@ -74,6 +74,7 @@ struct TStoragePoolInfo {
     ui64 ConsoleVersion = 0;
     THashSet<THistoryEntry, THistoryHash> RemainingHistory;
     bool NeedShrinkFromTenant = false;
+    TEvHive::TEvShrinkStoragePool::TPtr ShrinkRequest;
 
     TStoragePoolInfo(const TString& name, THiveSharedSettings* hive);
     TStoragePoolInfo(const TStoragePoolInfo&) = delete;
@@ -83,10 +84,10 @@ struct TStoragePoolInfo {
     bool AcquireAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel, TStorageGroupId groupId);
     bool ReleaseAllocationUnit(const TLeaderTabletInfo* tablet, ui32 channel, TStorageGroupId groupId);
     TStorageGroupInfo& GetStorageGroup(TStorageGroupId groupId);
-    void UpdateStorageGroup(TStorageGroupId groupId, const TEvControllerSelectGroupsResult::TGroupParameters& groupParameters);
+    void UpdateStorageGroup(TStorageGroupId groupId, const TGroupMetrics::TGroupParameters& groupParameters);
     void DeleteStorageGroup(TStorageGroupId groupId);
     // Guarantees to first call filter on all groups, then call calculateUsage on ones that passed the filter
-    const TEvControllerSelectGroupsResult::TGroupParameters* FindFreeAllocationUnit(std::function<bool(const TStorageGroupInfo&)> filter,
+    const TGroupMetrics::TGroupParameters* FindFreeAllocationUnit(std::function<bool(const TStorageGroupInfo&)> filter,
                                                                                     std::function<double(const TStorageGroupInfo*)> calculateUsage = [](const TStorageGroupInfo* group) {
                                                                                         return group->GetUsage();
                                                                                     });
@@ -98,6 +99,7 @@ struct TStoragePoolInfo {
     void Invalidate();
     THolder<TEvControllerSelectGroups::TGroupParameters> BuildRefreshRequest() const;
     bool AddTabletToWait(TTabletId tabletId);
+    bool SetShrinkRequest(TEvHive::TEvShrinkStoragePool::TPtr ev);
     TVector<TTabletId> PullWaitingTablets();
     template <NKikimrConfig::THiveConfig::EHiveStorageSelectStrategy Strategy>
     size_t SelectGroup(const TVector<double>& groupCandidateUsages);

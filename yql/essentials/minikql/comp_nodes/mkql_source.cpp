@@ -4,18 +4,17 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TSourceOfWrapper: public TMutableComputationNode<TSourceOfWrapper> {
-    typedef TMutableComputationNode<TSourceOfWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TSourceOfWrapper>;
 
 private:
     class TValue: public TComputationValue<TValue> {
     public:
-        TValue(TMemoryUsageInfo* memInfo)
+        explicit TValue(TMemoryUsageInfo* memInfo)
             : TComputationValue<TValue>(memInfo)
         {
         }
@@ -32,7 +31,7 @@ private:
     };
 
 public:
-    TSourceOfWrapper(TComputationMutables& mutables)
+    explicit TSourceOfWrapper(TComputationMutables& mutables)
         : TBaseComputation(mutables)
     {
     }
@@ -59,7 +58,7 @@ public:
         return EFetchResult::One;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*&) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*&) const override {
         return {ConstantInt::get(Type::getInt32Ty(ctx.Codegen.GetContext()), static_cast<i32>(EFetchResult::One)), {}};
     }
 #endif
@@ -88,5 +87,4 @@ IComputationNode* WrapSource(TCallable& callable, const TComputationNodeFactoryC
     return new TSourceWrapper;
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

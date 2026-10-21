@@ -33,6 +33,7 @@ struct TSslData {
     TString Key;
     TString Root;
     bool DoRequestClientCertificate = false;
+    bool ClientCertificateRequired = false;
 };
 
 struct IExternalListener
@@ -401,6 +402,8 @@ private:
 
     TVector<IGRpcServicePtr> Services_;
     TGlobalLimiter Limiter_;
+
+    std::atomic<bool> Stopped_{ false };
 };
 
 } // namespace NYdbGrpc

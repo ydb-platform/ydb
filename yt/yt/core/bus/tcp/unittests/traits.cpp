@@ -26,14 +26,18 @@ NBus::IBusServerPtr TBusTraits::StartServer(IMessageHandlerPtr handler)
 
 NBus::IBusClientPtr TBusTraits::CreateClient()
 {
-    return CreateBusClient(TBusClientConfig::CreateTcp(Address));
+    return CreateClient(Address);
+}
+
+NBus::IBusClientPtr TBusTraits::CreateClient(std::string address)
+{
+    return CreateBusClient(TBusClientConfig::CreateTcp(std::move(address)));
 }
 
 NBus::IBusClientPtr TBusTraits::CreateUnreachableClient()
 {
     auto unreachablePort = NTesting::GetFreePort();
-    return CreateBusClient(TBusClientConfig::CreateTcp(
-        Format("localhost:%v", unreachablePort)));
+    return CreateClient(Format("localhost:%v", unreachablePort));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

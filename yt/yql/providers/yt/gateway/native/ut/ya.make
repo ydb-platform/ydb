@@ -2,6 +2,7 @@ UNITTEST()
 
 SRCS(
     yql_yt_native_folders_ut.cpp
+    yt_helpers_ut.cpp
 )
 
 PEERDIR(

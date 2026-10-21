@@ -43,7 +43,6 @@ DECLARE_REFCOUNTED_STRUCT(TSpecWithPool)
 struct TSpecWithPool
     : public TYsonStruct
 {
-public:
     std::string Pool;
     int NonUpdatable;
     IMapNodePtr MapNode;
@@ -67,7 +66,6 @@ DECLARE_REFCOUNTED_STRUCT(TSpecBase)
 struct TSpecBase
     : public TSpecWithPool
 {
-public:
     int MaxFailedJobCount;
     TMapperSpecPtr Mapper;
 
@@ -92,7 +90,6 @@ DECLARE_REFCOUNTED_STRUCT(TVanillaTaskSpec)
 struct TVanillaTaskSpec
     : public TYsonStruct
 {
-public:
     std::string Command;
     bool Creatable;
     bool Removable;
@@ -117,7 +114,6 @@ DECLARE_REFCOUNTED_STRUCT(TVanillaSpec)
 struct TVanillaSpec
     : public TYsonStruct
 {
-public:
     THashMap<std::string, TVanillaTaskSpecPtr> Tasks;
 
     REGISTER_YSON_STRUCT(TVanillaSpec);
@@ -136,8 +132,8 @@ DEFINE_REFCOUNTED_TYPE(TVanillaSpec)
 
 TEST(TUpdateYsonStructTest, Simple)
 {
-    auto oldSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(TString("{pool=pool;}")));
-    auto newSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(TString("{pool=new_pool;}")));
+    auto oldSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(std::string("{pool=pool;}")));
+    auto newSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(std::string("{pool=new_pool;}")));
 
     std::string updatedPool;
 
@@ -156,8 +152,8 @@ TEST(TUpdateYsonStructTest, Simple)
 
 TEST(TUpdateYsonStructTest, NonUpdatable)
 {
-    auto oldSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(TString("{non_updatable=42;pool=pool}")));
-    auto newSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(TString("{non_updatable=43;pool=pool}")));
+    auto oldSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(std::string("{non_updatable=42;pool=pool}")));
+    auto newSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(std::string("{non_updatable=43;pool=pool}")));
 
     std::string updatedPool;
 
@@ -177,8 +173,8 @@ TEST(TUpdateYsonStructTest, NonUpdatable)
 
 TEST(TUpdateYsonStructTest, Inherited)
 {
-    auto oldSpec = ConvertTo<TSpecBasePtr>(TYsonString(TString("{pool=pool;}")));
-    auto newSpec = ConvertTo<TSpecBasePtr>(TYsonString(TString("{pool=new_pool;}")));
+    auto oldSpec = ConvertTo<TSpecBasePtr>(TYsonString(std::string("{pool=pool;}")));
+    auto newSpec = ConvertTo<TSpecBasePtr>(TYsonString(std::string("{pool=new_pool;}")));
 
     std::string updatedPool;
 
@@ -198,8 +194,8 @@ TEST(TUpdateYsonStructTest, Inherited)
 
 TEST(TUpdateYsonStructTest, Nested)
 {
-    auto oldSpec = ConvertTo<TSpecBasePtr>(TYsonString(TString("{pool=pool;    mapper={command=cat};}")));
-    auto newSpec = ConvertTo<TSpecBasePtr>(TYsonString(TString("{pool=new_pool;mapper={command=sort};}")));
+    auto oldSpec = ConvertTo<TSpecBasePtr>(TYsonString(std::string("{pool=pool;    mapper={command=cat};}")));
+    auto newSpec = ConvertTo<TSpecBasePtr>(TYsonString(std::string("{pool=new_pool;mapper={command=sort};}")));
 
     std::string updatedPool;
     std::string updatedCommand;
@@ -230,9 +226,9 @@ TEST(TUpdateYsonStructTest, Nested)
 
 TEST(TUpdateYsonStructTest, Validate)
 {
-    auto oldSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(TString("{pool=pool;}")));
-    auto longPoolSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(TString("{pool=new_pool;}")));
-    auto shortPoolSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(TString("{pool=p;}")));
+    auto oldSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(std::string("{pool=pool;}")));
+    auto longPoolSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(std::string("{pool=new_pool;}")));
+    auto shortPoolSpec = ConvertTo<TSpecWithPoolPtr>(TYsonString(std::string("{pool=p;}")));
 
     std::string updatedPool;
 

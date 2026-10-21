@@ -24,6 +24,4 @@ struct TStatementName {
     }
 };
 
-TVector<TStatementName> StatementNames(const TRule_sql_query& rule);
-
 } // namespace NSQLTranslationV1

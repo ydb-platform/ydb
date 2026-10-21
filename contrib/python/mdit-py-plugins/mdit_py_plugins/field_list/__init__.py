@@ -164,8 +164,9 @@ def _fieldlist_rule(
             while _line < endLine:
                 # if start_of_content < end_of_content, then non-empty line
                 if (state.bMarks[_line] + state.tShift[_line]) < state.eMarks[_line]:
-                    if state.tShift[_line] <= 0:
-                        # the line has no indent, so it's the end of the field
+                    if state.tShift[_line] <= state.blkIndent:
+                        # the line is not indented relative to the field marker,
+                        # so it's the end of the field body
                         break
                     block_indent = (
                         state.tShift[_line]

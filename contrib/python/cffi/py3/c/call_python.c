@@ -1,16 +1,7 @@
-#if PY_VERSION_HEX >= 0x03080000
-# define HAVE_PYINTERPSTATE_GETDICT
-#endif
-
-
 static PyObject *_current_interp_key(void)
 {
-    PyInterpreterState *interp = PyThreadState_GET()->interp;
-#ifdef HAVE_PYINTERPSTATE_GETDICT
+    PyInterpreterState *interp = PyInterpreterState_Get();
     return PyInterpreterState_GetDict(interp);   /* shared reference */
-#else
-    return interp->modules;
-#endif
 }
 
 static PyObject *_get_interpstate_dict(void)
@@ -26,18 +17,18 @@ static PyObject *_get_interpstate_dict(void)
     int err;
     PyInterpreterState *interp;
 
-    tstate = PyThreadState_GET();
+#if PY_VERSION_HEX >= 0x030D0000
+    tstate = PyThreadState_GetUnchecked();
+#else
+    tstate = _PyThreadState_UncheckedGet();
+#endif
     if (tstate == NULL) {
         /* no thread state! */
         return NULL;
     }
 
-    interp = tstate->interp;
-#ifdef HAVE_PYINTERPSTATE_GETDICT
+    interp = PyThreadState_GetInterpreter(tstate);
     interpdict = PyInterpreterState_GetDict(interp);   /* shared reference */
-#else
-    interpdict = interp->builtins;
-#endif
     if (interpdict == NULL) {
         /* subinterpreter was cleared already, or is being cleared right now,
            to a point that is too much for us to continue */
@@ -47,7 +38,7 @@ static PyObject *_get_interpstate_dict(void)
     /* from there on, we know the (sub-)interpreter is still valid */
 
     if (attr_name == NULL) {
-        attr_name = PyText_InternFromString("__cffi_backend_extern_py");
+        attr_name = PyUnicode_InternFromString("__cffi_backend_extern_py");
         if (attr_name == NULL)
             goto error;
     }
@@ -90,7 +81,7 @@ static PyObject *_ffi_def_extern_decorator(PyObject *outer_args, PyObject *fn)
         name = PyObject_GetAttrString(fn, "__name__");
         if (name == NULL)
             return NULL;
-        s = PyText_AsUTF8(name);
+        s = PyUnicode_AsUTF8(name);
         if (s == NULL) {
             Py_DECREF(name);
             return NULL;

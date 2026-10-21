@@ -12,7 +12,7 @@ public:
     TDqInputStats PopStats;
 
     TDqAsyncInputBuffer(ui64 inputIndex, const TString& type, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, TCollectStatsLevel level)
-        : TBaseImpl(inputType, maxBufferBytes)
+        : TBaseImpl(inputType, maxBufferBytes, nullptr)
     {
         PopStats.Level = level;
         PushStats.Level = level;

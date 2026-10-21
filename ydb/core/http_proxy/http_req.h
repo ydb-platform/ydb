@@ -2,6 +2,7 @@
 
 #include "events.h"
 
+#include <ydb/core/persqueue/common/logging.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/http_proxy/authorization/signature.h>
@@ -52,7 +53,7 @@ struct THttpResponseData {
     TString Body;
 };
 
-struct THttpRequestContext {
+struct THttpRequestContext : public NPQ::TLogPrefix {
     THttpRequestContext(const NKikimrConfig::TServerlessProxyConfig& config,
                         NHttp::THttpIncomingRequestPtr request,
                         NActors::TActorId sender,
@@ -63,6 +64,8 @@ struct THttpRequestContext {
     NActors::TActorId Sender;
     NYdb::TDriver* Driver;
     std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
+
+    TCgiParameters CgiParameters;
 
     TString ServiceAccountId;
     TString RequestId;
@@ -76,14 +79,17 @@ struct THttpRequestContext {
     TString SourceAddress;
     TString MethodName; // used once
     TString ApiVersion; // used once
+    TString RawContentType;
     MimeTypes ContentType{MIME_UNKNOWN};
     TString IamToken;
     TString SecurityToken;
     TString SerializedUserToken;
     TString UserName;
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "http request [" << MethodName << "] requestId [" << RequestId << "]";
+    NPQ::TStructuredMessage LogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"methodName", MethodName},
+            {"requestId", RequestId});
     }
 
     THolder<NKikimr::NSQS::TAwsRequestSignV4> GetSignature();
@@ -115,14 +121,6 @@ public:
         return Method;
     }
 
-    enum TRequestState {
-        StateIdle,
-        StateAuthentication,
-        StateAuthorization,
-        StateListEndpoints,
-        StateGrpcRequest,
-        StateFinished
-    };
 protected:
     TString Method;
     TProtoCall ProtoCall;
@@ -142,7 +140,7 @@ public:
         THolder<NKikimr::NSQS::TAwsRequestSignV4> signature
     ) const = 0;
 
-    virtual THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const = 0;
+    virtual THttpResponseData MakeError(const THttpRequestContext& httpContext, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const = 0;
 
     virtual bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const = 0;
 };
@@ -155,10 +153,6 @@ public:
 const THttpControllerRegistry& GetHttpControllerRegistry();
 
 class THttpRequestProcessors {
-public:
-    using TService = Ydb::DataStreams::V1::DataStreamsService;
-    using TServiceConnection = NYdbGrpc::TServiceConnection<TService>;
-
 public:
     THttpRequestProcessors(const NKikimrConfig::TServerlessProxyConfig& config);
 

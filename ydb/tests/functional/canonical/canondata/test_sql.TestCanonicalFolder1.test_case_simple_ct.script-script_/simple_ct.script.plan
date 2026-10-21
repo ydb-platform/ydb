@@ -13,7 +13,11 @@
                         "Node Type": "Sink",
                         "Operators": [
                             {
-                                "Inputs": [],
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 1
+                                    }
+                                ],
                                 "Name": "Upsert",
                                 "Path": "/local/base_simple_ct_script_script/Questions",
                                 "SinkType": "KqpTableSink",

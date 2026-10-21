@@ -10,7 +10,6 @@ class TGetField: public TBoxedValue {
 public:
     using TTypeAwareMarker = bool;
 
-public:
     static TStringRef Name() {
         return TStringRef::Of("GetField");
     }
@@ -30,7 +29,7 @@ public:
         }
 
         NJson::TJsonParser parser;
-        parser.AddField(field, false);
+        parser.AddField(field, /*mustExist=*/false);
 
         TVector<TString> result;
         parser.Parse(json, &result);

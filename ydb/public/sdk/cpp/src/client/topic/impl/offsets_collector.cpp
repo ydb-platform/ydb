@@ -59,12 +59,12 @@ void TOffsetsCollector::CollectOffsets(const TReadSessionEvent::TDataReceivedEve
     if (event.HasCompressedMessages()) {
         for (auto& message : event.GetCompressedMessages()) {
             uint64_t offset = message.GetOffset();
-            Ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
+            Ranges[topicPath][partitionId].InsertInterval(offset, offset + message.GetLogicalMessageCount());
         }
     } else {
         for (auto& message : event.GetMessages()) {
             uint64_t offset = message.GetOffset();
-            Ranges[topicPath][partitionId].InsertInterval(offset, offset + 1);
+            Ranges[topicPath][partitionId].InsertInterval(offset, offset + message.GetLogicalMessageCount());
         }
     }
 }

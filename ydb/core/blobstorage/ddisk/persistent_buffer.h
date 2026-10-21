@@ -3,18 +3,47 @@
 #include "defs.h"
 
 namespace NKikimr::NDDisk {
+
+    struct TPersistentBufferLocation {
+        ui32 ChunkIdx;
+        ui32 SectorIdx;
+
+        friend constexpr std::strong_ordering operator <=>(const TPersistentBufferLocation& x, const TPersistentBufferLocation& y) = default;
+    };
+
     struct TPersistentBufferSectorInfo {
         ui64 ChunkIdx : 32;
         ui64 SectorIdx : 16;
+        // Used for either format when the data sector's first byte (payload or
+        // record header unique ID) equals the persistent-buffer header marker.
         ui64 HasSignatureCorrection : 1;
         ui64 Reserved : 15;
-        ui64 Checksum : 64;
+        // In the checksum-free format this stores the original first eight data
+        // bytes; ChunkIdx/SectorIdx form the expected sector index. The format is
+        // selected exclusively by TPersistentBufferHeader::CHECKSUMS_DISABLED.
+        ui64 ChecksumOrData : 64;
+    };
+
+    // DirectBlockGroupIndex extends the persistent buffer key from plain TabletId to
+    // (TabletId, DirectBlockGroupIndex): a direct block group number that fits in a single byte
+    // (0-255). It is appended as the LAST field (with a default of 0) so that every existing
+    // 2-/3-argument positional aggregate initialization (e.g. {tabletId, generation}) keeps working
+    // unchanged and defaults to group 0 - preserving today's "one persistent buffer namespace per
+    // tablet" behavior. Callers that want independent per-direct-block-group persistent buffer
+    // namespaces can opt in by supplying the extra value explicitly.
+    struct TPersistentBufferId {
+        ui64 TabletId;
+        ui32 Generation;
+        ui8 DirectBlockGroupIndex = 0;
+
+        friend constexpr std::strong_ordering operator <=>(const TPersistentBufferId& x, const TPersistentBufferId& y) = default;
     };
 
     struct TPersistentBufferRecordId {
         ui64 TabletId;
         ui32 Generation;
         ui64 Lsn;
+        ui8 DirectBlockGroupIndex = 0;
 
         friend constexpr std::strong_ordering operator <=>(const TPersistentBufferRecordId& x, const TPersistentBufferRecordId& y) = default;
     };
@@ -28,6 +57,14 @@ namespace NKikimr::NDDisk {
             ui64 VChunkIndex;
             TInstant Timestamp;
             std::unordered_set<ui64> ReadInflight;
+            // Sender-supplied per-MinSectorSize-block payload checksums, in order, covering
+            // [OffsetInBytes, OffsetInBytes + Size). Empty when the record was written without
+            // checksums (legacy / internal writes) - opt-in, mirrors the wire-level semantics.
+            std::vector<ui64> PayloadChecksums;
+            // The on-disk header determines this independently of the current setting,
+            // allowing records written in both formats to coexist during migration.
+            bool ChecksumsDisabled = false;
+            ui64 HeaderUniqueId = 0;
         };
 
         std::map<ui64, TRecord> Records;
@@ -39,7 +76,14 @@ namespace NKikimr::NDDisk {
     template <>
     struct hash<NKikimr::NDDisk::TPersistentBufferRecordId> {
         inline size_t operator()(const NKikimr::NDDisk::TPersistentBufferRecordId& r) const {
-            return MultiHash(r.TabletId, r.Generation, r.Lsn);
+            return MultiHash(r.TabletId, r.Generation, r.Lsn, r.DirectBlockGroupIndex);
+        }
+    };
+
+    template <>
+    struct hash<NKikimr::NDDisk::TPersistentBufferLocation> {
+        inline size_t operator()(const NKikimr::NDDisk::TPersistentBufferLocation& r) const {
+            return MultiHash(r.ChunkIdx, r.SectorIdx);
         }
     };
  }

@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "record_helpers.h"
 #endif
-#undef RECORD_HELPERS_INL_H_
 
 #include "row_buffer.h"
 

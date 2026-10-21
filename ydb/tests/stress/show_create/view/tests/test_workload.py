@@ -9,11 +9,7 @@ from ydb.tests.library.stress.fixtures import StressFixture
 class TestYdbWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        yield from self.setup_cluster(
-            extra_feature_flags={
-                "enable_show_create": True,
-            }
-        )
+        yield from self.setup_cluster()
 
     @pytest.mark.parametrize(
         "duration, path_prefix",

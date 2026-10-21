@@ -14,6 +14,8 @@
 
 #include <grpcpp/alarm.h>
 
+#include <memory>
+
 namespace NYdb::inline Dev {
 
 using NYdbGrpc::IQueueClientContext;
@@ -27,6 +29,15 @@ template<typename TResponse>
 using TResponseCb = std::function<void(TResponse*, TPlainStatus status)>;
 using TDeferredOperationCb = std::function<void(Ydb::Operations::Operation*, TPlainStatus status)>;
 using TDelayedCb = std::function<void(bool ok)>;
+
+inline TPlainStatus MakeClientStoppedStatus() {
+    return TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped");
+}
+
+class TQueueResponse : public IObjectInQueue {
+public:
+    virtual void Cancel() = 0;
+};
 
 template<typename TCb>
 class TGenericCbHolder {
@@ -87,11 +98,16 @@ private:
             LocalContext_.reset();
         }
 
-        if (ok) {
-            OnAlarm();
-        } else {
-            OnError();
-        }
+        auto guardFactory = this->Context_
+            ? this->Context_->GetCallbackGuardFactory()
+            : NYdbGrpc::TQueueClientCallbackGuardFactory();
+        NYdbGrpc::RunQueueClientCallback(guardFactory, [&] {
+            if (ok) {
+                OnAlarm();
+            } else {
+                OnError();
+            }
+        });
 
         return false;
     }
@@ -112,7 +128,7 @@ private:
 template<typename TResponse>
 class TGRpcErrorResponse
     : public TGenericCbHolder<TResponseCb<TResponse>>
-    , public IObjectInQueue
+    , public TQueueResponse
 {
 public:
     TGRpcErrorResponse(
@@ -135,7 +151,14 @@ public:
             status.Issues.AddIssue(NYdb::NIssue::TIssue(msg));
         }
 
+        this->Context_.reset();
         this->UserResponseCb_(nullptr, status);
+        delete this;
+    }
+
+    void Cancel() override {
+        this->Context_.reset();
+        this->UserResponseCb_(nullptr, MakeClientStoppedStatus());
         delete this;
     }
 
@@ -147,7 +170,7 @@ private:
 template<typename TResponse>
 class TResult
     : public TGenericCbHolder<TResponseCb<TResponse>>
-    , public IObjectInQueue
+    , public TQueueResponse
 {
 public:
     TResult(
@@ -165,7 +188,14 @@ public:
         , Metadata_(std::move(metadata)) {}
 
     void Process(void*) override {
+        this->Context_.reset();
         this->UserResponseCb_(&Response_, TPlainStatus{GRpcStatus_, Endpoint_, std::move(Metadata_)});
+        delete this;
+    }
+
+    void Cancel() override {
+        this->Context_.reset();
+        this->UserResponseCb_(nullptr, MakeClientStoppedStatus());
         delete this;
     }
 

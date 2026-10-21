@@ -40,6 +40,7 @@ public:
         AddHandler(0, &TDqReadWrap::Match, HNDL(BuildStageWithReadWrap));
         AddHandler(0, &TKqlReadTable::Match, HNDL(BuildReadTableStage));
         AddHandler(0, &TKqlReadTableFullTextIndex::Match, HNDL(BuildReadTableFullTextIndexStage));
+        AddHandler(0, &TKqlReadTableVectorIndex::Match, HNDL(BuildReadTableVectorIndexStage));
         AddHandler(0, &TKqlReadTableRanges::Match, HNDL(BuildReadTableRangesStage));
         AddHandler(0, &TKqlStreamLookupTable::Match, HNDL(BuildStreamLookupTableStages));
         AddHandler(0, &TKqlIndexLookupJoin::Match, HNDL(BuildStreamIdxLookupJoinStagesKeepSorted));
@@ -54,6 +55,7 @@ public:
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapFilter));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapProjections));
         AddHandler(0, &TCoTake::Match, HNDL(DisableOlapBlocks));
+        AddHandler(0, &TKqpStreamEnumerate::Match, HNDL(PushStreamEnumerateToStage));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushAggregateCombineToStage));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushOlapAggregate));
         AddHandler(0, &TDqPhyHashCombine::Match, HNDL(PushOlapDistinct));
@@ -113,7 +115,7 @@ public:
         AddHandler(0, &TCoAggregateMergeFinalize::Match, HNDL(ExpandAggregatePhase));
         AddHandler(0, &TCoAggregateMergeManyFinalize::Match, HNDL(ExpandAggregatePhase));
         AddHandler(0, &TCoAggregateFinalize::Match, HNDL(ExpandAggregatePhase));
-        AddHandler(0, &TDqPhyWatermarkGenerator::Match, HNDL(PushWatermarkGeneratorToStage));
+        AddHandler(0, &TDqPhyWatermarkGenerator::Match, HNDL(PushWatermarkGeneratorToStage<false>));
 
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>));
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
@@ -151,6 +153,7 @@ public:
         AddHandler(1, &TKqpWriteConstraint::Match, HNDL(BuildWriteConstraint<true>));
         AddHandler(1, &TKqpWriteConstraint::Match, HNDL(BuildWriteConstraint<true>));
         AddHandler(1, &TKqpReadOlapTableRanges::Match, HNDL(AddColumnForEmptyColumnsOlapRead));
+        AddHandler(1, &TDqPhyWatermarkGenerator::Match, HNDL(PushWatermarkGeneratorToStage<true>));
 
 
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTableSysView));
@@ -200,6 +203,12 @@ protected:
     TMaybeNode<TExprBase> BuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildReadTableFullTextIndexStage(node, ctx, KqpCtx);
         DumpAppliedRule("BuildReadTableFullTextIndexStage", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> BuildReadTableVectorIndexStage(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpBuildReadTableVectorIndexStage(node, ctx, KqpCtx);
+        DumpAppliedRule("BuildReadTableVectorIndexStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -334,6 +343,36 @@ protected:
         TExprBase output = DqPushAggregateCombineToStage(node, ctx, optCtx, *getParents(), false);
         DumpAppliedRule("PushAggregateCombineToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
+    }
+
+    // KqpStreamEnumerate over a connection cannot live in the outer program; push it into the branch's
+    // (single-partition) producing stage so it becomes part of that stage and yields a connection. The
+    // downstream Map/Extend/Aggregate then stage normally. Used by hybrid search to rank each branch's
+    // ordered stream without first materializing it via TDqPrecompute.
+    TMaybeNode<TExprBase> PushStreamEnumerateToStage(TExprBase node, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents)
+    {
+        Y_UNUSED(getParents);
+        auto streamEnumerate = node.Cast<TKqpStreamEnumerate>();
+        auto maybeConn = streamEnumerate.Input().Maybe<TDqConnection>();
+        if (!maybeConn) {
+            return node;  // input not yet lowered to a connection; retry on a later pass
+        }
+
+        auto arg = Build<TCoArgument>(ctx, node.Pos()).Name("stream").Done();
+        auto lambda = Build<TCoLambda>(ctx, node.Pos())
+            .Args({arg})
+            .Body<TKqpStreamEnumerate>()
+                .Input(arg)
+                .Build()
+            .Done();
+
+        auto pushed = DqPushLambdaToStageUnionAll(maybeConn.Cast(), lambda, {}, ctx, optCtx);
+        if (!pushed) {
+            return node;
+        }
+        DumpAppliedRule("PushStreamEnumerateToStage", node.Ptr(), pushed.Cast().Ptr(), ctx);
+        return pushed.Cast();
     }
 
     TMaybeNode<TExprBase> PushdownOlapGroupByKeys(TExprBase node, TExprContext& ctx) {
@@ -510,8 +549,8 @@ protected:
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
         bool enableShuffleElimination = KqpCtx.Config->OptShuffleEliminationForAggregation.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleEliminationForAggregation());
-        const bool useSortForPartitionsByKeys = KqpCtx.Config->OptUseSortForPartitionsByKeys.Get().GetOrElse(false);
-        TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination, useSortForPartitionsByKeys);
+        const bool windowFunctionsV2 = KqpCtx.Config->GetWindowFunctionsV2();
+        TExprBase output = DqBuildPartitionsStage(node, ctx, optCtx, *getParents(), IsGlobal, &TypesCtx, enableShuffleElimination, windowFunctionsV2);
         DumpAppliedRule("BuildPartitionsStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -619,6 +658,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteStreamLookupJoin(TExprBase node, TExprContext& ctx) {
+        // Second step of stream lookup join with DQ external sources (not kqp tables)
         TMaybeNode<TExprBase> output = DqRewriteStreamLookupJoin(node, ctx);
         if (output) {
             DumpAppliedRule("RewriteStreamLookupJoin", node.Ptr(), output.Cast().Ptr(), ctx);
@@ -626,8 +666,9 @@ protected:
         return output;
     }
 
+    template <bool IsGlobal>
     TMaybeNode<TExprBase> PushWatermarkGeneratorToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        TMaybeNode<TExprBase> output = DqPushWatermarkGeneratorToStage(node, ctx, optCtx, *getParents());
+        TMaybeNode<TExprBase> output = DqPushWatermarkGeneratorToStage(node, ctx, optCtx, *getParents(), IsGlobal);
         if (output) {
             DumpAppliedRule("PushWatermarkGeneratorToStage", node.Ptr(), output.Cast().Ptr(), ctx);
         }
@@ -644,9 +685,10 @@ protected:
         bool shuffleEliminationWithMap = KqpCtx.Config->OptShuffleEliminationWithMap.Get().GetOrElse(true);
         bool rightCollectStage = !KqpCtx.Config->GetAllowMultiBroadcasts();
         TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal,
-            pushLeftStage, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->GetUseBlockHashJoin(), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination()), shuffleEliminationWithMap,
+            pushLeftStage, TypesCtx, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->GetUseBlockHashJoin(), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination()), shuffleEliminationWithMap,
             rightCollectStage,
-            KqpCtx.Config->BlockHashJoinSwapLeftJoinSides.Get().GetOrElse(false)
+            KqpCtx.Config->BlockHashJoinSwapLeftJoinSides.Get().GetOrElse(false),
+            KqpCtx.Config->GetUseScalarHashJoinForMap()
         );
         DumpAppliedRule("BuildJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -683,7 +725,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildUpdateStages(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpBuildUpdateStages(node, ctx, KqpCtx);
+        TExprBase output = KqpBuildUpdateStages(node, ctx);
         DumpAppliedRule("BuildUpdateStages", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

@@ -12,6 +12,13 @@ namespace {
     constexpr ui32 kNodeIdForMetadata = 1;
     constexpr ui32 kPDiskIdForMetadata = 1;
     constexpr ui32 kMetaTimeoutSeconds = 10;
+    constexpr ui32 kMetaWaitTimeoutSeconds = kMetaTimeoutSeconds + 1;
+
+    struct TMetadataReadResult {
+        NPDisk::EPDiskMetadataOutcome Outcome = NPDisk::EPDiskMetadataOutcome::ERROR;
+        NKikimrBlobStorage::TPDiskMetadataRecord Metadata;
+        TString Error;
+    };
 
     static NPDisk::TMainKey GetEffectiveMainKey(const NPDisk::TMainKey& mainKey) {
         NPDisk::TMainKey result = mainKey;
@@ -54,7 +61,8 @@ namespace {
 
 } // namespace
 
-NKikimrBlobStorage::TPDiskMetadataRecord ReadPDiskMetadata(const TString& path, const NPDisk::TMainKey& mainKey) {
+std::optional<NKikimrBlobStorage::TPDiskMetadataRecord> ReadPDiskMetadata(
+        const TString& path, const NPDisk::TMainKey& mainKey) {
     TActorSystemCreator creator;
     auto* sys = creator.GetActorSystem();
     auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
@@ -67,32 +75,18 @@ NKikimrBlobStorage::TPDiskMetadataRecord ReadPDiskMetadata(const TString& path, 
 
     const NActors::TActorId pdiskActorId = RegisterPDiskActor(sys, pdiskCfg, effectiveMainKey, counters);
 
-    NKikimrBlobStorage::TPDiskMetadataRecord out;
-
     class TMetadataReader : public NActors::TActorBootstrapped<TMetadataReader> {
         const NActors::TActorId PDiskActorId;
-        NKikimrBlobStorage::TPDiskMetadataRecord& Out;
-        std::promise<bool>& Done;
-        TString& Error;
-
-        static const char* OutcomeToStr(NPDisk::EPDiskMetadataOutcome oc) {
-            switch (oc) {
-                case NPDisk::EPDiskMetadataOutcome::OK: return "OK";
-                case NPDisk::EPDiskMetadataOutcome::NO_METADATA: return "NO_METADATA";
-                case NPDisk::EPDiskMetadataOutcome::ERROR: return "ERROR";
-            }
-            return "UNKNOWN";
-        }
+        TMetadataReadResult Result;
+        std::promise<TMetadataReadResult> Done;
     public:
-        TMetadataReader(NActors::TActorId pdiskActorId,
-                        NKikimrBlobStorage::TPDiskMetadataRecord& out,
-                        std::promise<bool>& done,
-                        TString& error)
+        explicit TMetadataReader(NActors::TActorId pdiskActorId)
             : PDiskActorId(pdiskActorId)
-            , Out(out)
-            , Done(done)
-            , Error(error)
         {}
+
+        std::future<TMetadataReadResult> GetFuture() {
+            return Done.get_future();
+        }
 
         void Bootstrap() {
             Send(PDiskActorId, new NPDisk::TEvReadMetadata());
@@ -101,35 +95,32 @@ NKikimrBlobStorage::TPDiskMetadataRecord ReadPDiskMetadata(const TString& path, 
 
         void Handle(NPDisk::TEvReadMetadataResult::TPtr ev) {
             auto* msg = ev->Get();
-            bool ok = false;
+            auto outcome = msg->Outcome;
             switch (msg->Outcome) {
                 case NPDisk::EPDiskMetadataOutcome::OK: {
                     TRope rope(std::move(msg->Metadata));
                     TRopeStream stream(rope.begin(), rope.size());
-                    ok = Out.ParseFromZeroCopyStream(&stream);
-                    if (!ok) {
-                        Error = "PARSE_FAILED";
+                    if (!Result.Metadata.ParseFromZeroCopyStream(&stream)) {
+                        Result.Error = "PARSE_FAILED";
+                        outcome = NPDisk::EPDiskMetadataOutcome::ERROR;
                     }
                     break;
                 }
-                case NPDisk::EPDiskMetadataOutcome::NO_METADATA: {
-                    Error = OutcomeToStr(msg->Outcome);
-                    ok = false;
+                case NPDisk::EPDiskMetadataOutcome::NO_METADATA:
                     break;
-                }
-                case NPDisk::EPDiskMetadataOutcome::ERROR: {
-                    Error = OutcomeToStr(msg->Outcome);
-                    ok = false;
+                case NPDisk::EPDiskMetadataOutcome::ERROR:
+                    Result.Error = "ERROR";
                     break;
-                }
             }
-            Done.set_value(ok);
+            Result.Outcome = outcome;
+            Done.set_value(std::move(Result));
             PassAway();
         }
 
         void HandleWakeup() {
-            Error = "TIMEOUT";
-            Done.set_value(false);
+            Result.Outcome = NPDisk::EPDiskMetadataOutcome::ERROR;
+            Result.Error = "TIMEOUT";
+            Done.set_value(std::move(Result));
             PassAway();
         }
 
@@ -139,19 +130,23 @@ NKikimrBlobStorage::TPDiskMetadataRecord ReadPDiskMetadata(const TString& path, 
         )
     };
 
-    std::promise<bool> done;
-    auto fut = done.get_future();
-    TString error;
-    sys->Register(new TMetadataReader(pdiskActorId, out, done, error));
+    auto* reader = new TMetadataReader(pdiskActorId);
+    auto fut = reader->GetFuture();
+    sys->Register(reader);
 
-    WaitOrThrow(fut, 10, details.Str(), "read");
-    bool ok = fut.get();
-    if (!ok) {
-        ythrow yexception()
-            << "PDisk metadata read failed: " << (!error.empty() ? error : TString("ERROR")) << "\n"
-            << "Details: " << details.Str();
+    WaitOrThrow(fut, kMetaWaitTimeoutSeconds, details.Str(), "read");
+    TMetadataReadResult result = fut.get();
+    switch (result.Outcome) {
+        case NPDisk::EPDiskMetadataOutcome::OK:
+            return std::move(result.Metadata);
+        case NPDisk::EPDiskMetadataOutcome::NO_METADATA:
+            return std::nullopt;
+        case NPDisk::EPDiskMetadataOutcome::ERROR:
+            ythrow yexception()
+                << "PDisk metadata read failed: " << (!result.Error.empty() ? result.Error : TString("ERROR")) << "\n"
+                << "Details: " << details.Str();
     }
-    return out;
+    Y_UNREACHABLE();
 }
 
 static void UpdateStorageConfigFingerprint(NKikimrBlobStorage::TStorageConfig* config) {
@@ -171,20 +166,18 @@ void WritePDiskMetadata(const TString& path, const NKikimrBlobStorage::TPDiskMet
 
     const NPDisk::TMainKey effectiveMainKey = GetEffectiveMainKey(mainKey);
 
-    NKikimrBlobStorage::TPDiskMetadataRecord previous;
-    bool havePrevious = false;
+    std::optional<NKikimrBlobStorage::TPDiskMetadataRecord> previous;
     try {
         previous = ReadPDiskMetadata(path, effectiveMainKey);
-        havePrevious = true;
     } catch (...) {
-        havePrevious = false;
+        previous.reset();
     }
 
     if (adjustedRecord.HasCommittedStorageConfig()) {
         auto* cfg = adjustedRecord.MutableCommittedStorageConfig();
-        if (!cfg->HasPrevConfig() && havePrevious) {
-            if (previous.HasCommittedStorageConfig()) {
-                cfg->MutablePrevConfig()->CopyFrom(previous.GetCommittedStorageConfig());
+        if (!cfg->HasPrevConfig() && previous) {
+            if (previous->HasCommittedStorageConfig()) {
+                cfg->MutablePrevConfig()->CopyFrom(previous->GetCommittedStorageConfig());
             }
         }
         UpdateStorageConfigFingerprint(cfg);
@@ -202,16 +195,18 @@ void WritePDiskMetadata(const TString& path, const NKikimrBlobStorage::TPDiskMet
 
     class TWriter : public NActors::TActorBootstrapped<TWriter> {
         const NActors::TActorId PDiskActorId;
-        const NKikimrBlobStorage::TPDiskMetadataRecord& Record;
-        std::promise<bool>& Done;
+        NKikimrBlobStorage::TPDiskMetadataRecord Record;
+        std::promise<bool> Done;
     public:
         TWriter(NActors::TActorId pdiskActorId,
-                const NKikimrBlobStorage::TPDiskMetadataRecord& record,
-                std::promise<bool>& done)
+                NKikimrBlobStorage::TPDiskMetadataRecord record)
             : PDiskActorId(pdiskActorId)
-            , Record(record)
-            , Done(done)
+            , Record(std::move(record))
         {}
+
+        std::future<bool> GetFuture() {
+            return Done.get_future();
+        }
 
         void Bootstrap() {
             TString data;
@@ -241,11 +236,11 @@ void WritePDiskMetadata(const TString& path, const NKikimrBlobStorage::TPDiskMet
         )
     };
 
-    std::promise<bool> done;
-    auto fut = done.get_future();
-    sys->Register(new TWriter(pdiskActorId, adjustedRecord, done));
+    auto* writer = new TWriter(pdiskActorId, std::move(adjustedRecord));
+    auto fut = writer->GetFuture();
+    sys->Register(writer);
 
-    WaitOrThrow(fut, 10, details.Str(), "write");
+    WaitOrThrow(fut, kMetaWaitTimeoutSeconds, details.Str(), "write");
     if (!fut.get()) {
         ythrow yexception()
             << "PDisk metadata write failed\n"

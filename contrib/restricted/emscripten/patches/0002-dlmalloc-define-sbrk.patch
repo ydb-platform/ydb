@@ -1,0 +1,13 @@
+diff --git a/system/lib/dlmalloc.c b/system/lib/dlmalloc.c
+--- a/system/lib/dlmalloc.c
++++ b/system/lib/dlmalloc.c
+@@ -1564,7 +1564,8 @@ size_t bulk_free(void**, size_t n_elements) __attribute__((weak, alias("dlbulk_f
+ #endif /* LACKS_FCNTL_H */
+ #endif /* HAVE_MMAP */
+ #ifndef LACKS_UNISTD_H
+-#include <unistd.h>     /* for sbrk, sysconf */
++// #include <unistd.h>     /* for sbrk, sysconf */
++extern void*     sbrk(ptrdiff_t);
+ #else /* LACKS_UNISTD_H */
+ #if !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__NetBSD__)
+ extern void*     sbrk(ptrdiff_t);

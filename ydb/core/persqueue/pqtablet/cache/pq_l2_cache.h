@@ -38,7 +38,8 @@ struct TL2Counters {
 };
 
 /// PersQueue shared (L2) cache
-class TPersQueueCacheL2 : public TActorBootstrapped<TPersQueueCacheL2> {
+class TPersQueueCacheL2 : public TBaseActor<TPersQueueCacheL2>
+                         , public TConstantLogPrefix {
 public:
     struct TKey {
         ui64 TabletId;
@@ -100,13 +101,18 @@ public:
     }
 
     TPersQueueCacheL2(const TCacheL2Parameters& params, TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup)
-        : Cache(1_TB / MAX_BLOB_SIZE) // It's some "much bigger then we need" size here.
+        : TBaseActor(NKikimrServices::PERSQUEUE)
+        , Cache(1_TB / MAX_BLOB_SIZE) // It's some "much bigger then we need" size here.
         , MaxSize(ClampMinSize(params.MaxSizeMB * 1_MB))
         , CurrentSize(0)
         , KeepTime(params.KeepTime)
         , RetentionTime(TDuration::Zero())
         , Counters(countersGroup)
     {}
+
+    TStructuredMessage BuildLogPrefix() const override {
+        return {};
+    }
 
     void Bootstrap(const TActorContext& ctx);
 

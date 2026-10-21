@@ -22,6 +22,7 @@ public:
     TDqsPhysicalOptProposalTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config)
         : TOptimizeTransformerBase(/* TODO: typeCtx*/nullptr, NLog::EComponent::ProviderDq, {})
         , Config(config)
+        , TypeCtx(typeCtx)
     {
         const bool enablePrecompute = Config->_EnablePrecompute.Get().GetOrElse(false);
         const bool enableDqReplicate = Config->IsDqReplicateEnabled(*typeCtx);
@@ -249,7 +250,8 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildExtendStage(TExprBase node, TExprContext& ctx) {
-        return DqBuildExtendStage(node, ctx);
+        const auto enableSortConstraintProcessing = Config->_EnableSortConstraintProcessing.Get().GetOrElse(TDqSettings::TDefault::EnableSortConstraintProcessing);
+        return DqBuildExtendStage(node, ctx, /*enableParallelUnionAllConnections*/ false, /*keepMerge*/ enableSortConstraintProcessing);
     }
 
     TMaybeNode<TExprBase> RewriteRightJoinToLeft(TExprBase node, TExprContext& ctx) {
@@ -275,7 +277,7 @@ protected:
         const TParentsMap* parentsMap = getParents();
         const auto mode = Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off);
         const auto useGraceJoin = Config->UseGraceJoinCoreForMap.Get().GetOrElse(false);
-        return DqBuildJoin(join, ctx, optCtx, *parentsMap, IsGlobal, /* pushLeftStage = */ false /* TODO */, mode, true, useGraceJoin);
+        return DqBuildJoin(join, ctx, optCtx, *parentsMap, IsGlobal, /* pushLeftStage = */ false /* TODO */, *TypeCtx, mode, true, useGraceJoin);
     }
 
     template <bool IsGlobal>
@@ -318,6 +320,7 @@ protected:
 
 private:
     TDqConfiguration::TPtr Config;
+    TTypeAnnotationContext* TypeCtx;
 };
 
 THolder<IGraphTransformer> CreateDqsPhyOptTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config) {

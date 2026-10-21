@@ -141,7 +141,7 @@ protected:
         EInequalityPredicateType inequalitySign
     );
 
-    std::shared_ptr<TTreeNode> ProcessRegexPredicte(
+    std::shared_ptr<TTreeNode> ProcessRegexPredicate(
         bool underNot,
         bool collectConstantMembers
     );
@@ -178,6 +178,7 @@ private:
 
     bool CollectConstantMembers = false;
     TVector<TCoMember> ConstantMembers{};
+
 };
 
 } // namespace NKikimr::NKqp

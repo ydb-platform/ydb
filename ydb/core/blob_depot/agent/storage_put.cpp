@@ -1,5 +1,7 @@
 #include "agent_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+
 namespace NKikimr::NBlobDepot {
 
     template<>
@@ -23,6 +25,10 @@ namespace NKikimr::NBlobDepot {
             ui64 ConnectionInstanceOnStart;
             ui32 S3SlowDownRetries = 0;
 
+            NWilson::TSpan PrepareWriteS3Span;
+            NWilson::TSpan WriteS3Span;
+            NWilson::TSpan CommitBlobSeqSpan;
+
         public:
             using TBlobStorageQuery::TBlobStorageQuery;
 
@@ -32,11 +38,14 @@ namespace NKikimr::NBlobDepot {
                 if (!IsInFlight && !LocatorInFlight) {
                     return;
                 }
+                // Latch this before RemoveBlobSeqFromInFlight(), which clears IsInFlight. An id the tablet has
+                // already reclaimed must not be handed back -- it no longer holds a point for it.
+                const bool returnBlobSeqId = IsInFlight && !Agent.IsBlobSeqIdExpired(BlobSeqId);
                 if (IsInFlight) {
                     RemoveBlobSeqFromInFlight();
                 }
                 NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg;
-                if (IsInFlight) {
+                if (returnBlobSeqId) {
                     BlobSeqId.ToProto(msg.AddItems());
                 }
                 if (LocatorInFlight) {
@@ -99,16 +108,6 @@ namespace NKikimr::NBlobDepot {
             void IssuePuts() {
                 Y_ABORT_UNLESS(!PutsIssued);
 
-                if (Agent.Recommissioning) { // issue put to the original group being recommissioned
-                    auto ev = std::make_unique<TEvBlobStorage::TEvPut>(Request.Id, TRope(Request.Buffer), Request.Deadline,
-                        Request.HandleClass, Request.Tactic);
-                    ev->ExtraBlockChecks = Request.ExtraBlockChecks;
-                    Agent.SendToProxy(Agent.DecommitGroupId.value(), std::move(ev), this, nullptr);
-                    ++PutsInFlight;
-                    PutsIssued = true;
-                    return;
-                }
-
                 auto prepare = [&] {
                     Y_ABORT_UNLESS(CommitBlobSeq.ItemsSize() == 0);
                     auto *commitItem = CommitBlobSeq.AddItems();
@@ -140,8 +139,12 @@ namespace NKikimr::NBlobDepot {
                 auto& kind = it->second;
 
                 std::optional<TBlobSeqId> blobSeqId = kind.Allocate(Agent);
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA21, "allocated BlobSeqId", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (BlobSeqId, blobSeqId), (BlobId, Request.Id));
+                YDB_LOG_DEBUG("Allocated BlobSeqId",
+                    {"marker", "BDA21"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"blobSeqId", blobSeqId},
+                    {"blobId", Request.Id});
                 if (!blobSeqId) {
                     return kind.EnqueueQueryWaitingForId(this);
                 }
@@ -153,8 +156,15 @@ namespace NKikimr::NBlobDepot {
                     IsInFlight = true;
                 }
 
-                BDEV_QUERY(BDEV09, "TEvPut_new", (U.BlobId, Request.Id), (U.BufferSize, Request.Buffer.size()),
-                    (U.HandleClass, Request.HandleClass));
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_new",
+                    {"marker", "BDEV09"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"U.BlobId", Request.Id},
+                    {"U.BufferSize", Request.Buffer.size()},
+                    {"U.HandleClass", Request.HandleClass});
 
                 auto *commitItem = prepare();
                 auto *locator = commitItem->MutableBlobLocator();
@@ -177,11 +187,27 @@ namespace NKikimr::NBlobDepot {
                     const auto& [id, groupId] = kind.MakeBlobId(Agent, BlobSeqId, type, 0, buffer.size());
                     Y_ABORT_UNLESS(!locator->HasGroupId() || locator->GetGroupId() == groupId);
                     locator->SetGroupId(groupId);
-                    auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, std::move(buffer), Request.Deadline, Request.HandleClass, Request.Tactic);
+                    auto ev = std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
+                        .BlobId = id,
+                        .Buffer = std::move(buffer),
+                        .Deadline = Request.Deadline,
+                        .HandleClass = Request.HandleClass,
+                        .Tactic = Request.Tactic,
+                        .WriteSource = Request.WriteSource,
+                        .DataKind = Request.DataKind,
+                    });
                     ev->ExtraBlockChecks = Request.ExtraBlockChecks;
                     ev->ExtraBlockChecks.emplace_back(Request.Id.TabletID(), Request.Id.Generation());
-                    BDEV_QUERY(BDEV10, "TEvPut_sendToProxy", (BlobSeqId, BlobSeqId), (GroupId, groupId), (BlobId, id));
-                    Agent.SendToProxy(groupId, std::move(ev), this, nullptr);
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_sendToProxy",
+                        {"marker", "BDEV10"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"Q", QueryId},
+                        {"blobSeqId", BlobSeqId},
+                        {"groupId", groupId},
+                        {"blobId", id});
+                    Agent.SendToProxy(groupId, std::move(ev), this, nullptr, Span.GetTraceId());
                     Agent.BytesWritten += id.BlobSize();
                     ++PutsInFlight;
                 };
@@ -216,18 +242,27 @@ namespace NKikimr::NBlobDepot {
                     item->ClearUncertainWrite();
                 }
 
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA30, "IssueCommitBlobSeq", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (UncertainWrite, uncertainWrite), (Msg, CommitBlobSeq));
+                YDB_LOG_DEBUG("IssueCommitBlobSeq",
+                    {"marker", "BDA30"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"uncertainWrite", uncertainWrite},
+                    {"msg", CommitBlobSeq});
 
-                Agent.Issue(CommitBlobSeq, this, nullptr);
+                CommitBlobSeqSpan = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                    "BlobDepotAgent.CommitBlobSeq", NWilson::EFlags::AUTO_END);
+
+                Agent.Issue(CommitBlobSeq, this, nullptr, CommitBlobSeqSpan.GetTraceId());
 
                 Y_ABORT_UNLESS(!WaitingForCommitBlobSeq);
                 WaitingForCommitBlobSeq = true;
             }
 
             void RemoveBlobSeqFromInFlight() {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA32, "RemoveBlobSeqFromInFlight", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()));
+                YDB_LOG_DEBUG("RemoveBlobSeqFromInFlight",
+                    {"marker", "BDA32"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()});
 
                 Y_ABORT_UNLESS(IsInFlight);
                 IsInFlight = false;
@@ -240,7 +275,8 @@ namespace NKikimr::NBlobDepot {
                 }
                 auto& kind = it->second;
                 const size_t numErased = kind.WritesInFlight.erase(BlobSeqId);
-                Y_ABORT_UNLESS(numErased || BlobSeqId.Generation < Agent.BlobDepotGeneration);
+                Y_ABORT_UNLESS(numErased || BlobSeqId.Generation < Agent.BlobDepotGeneration ||
+                    Agent.IsBlobSeqIdExpired(BlobSeqId));
             }
 
             void OnUpdateBlock() override {
@@ -276,11 +312,21 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandlePutResult(TRequestContext::TPtr /*context*/, TEvBlobStorage::TEvPutResult& msg) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA22, "TEvPutResult", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (Msg, msg));
+                YDB_LOG_DEBUG("TEvPutResult",
+                    {"marker", "BDA22"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"msg", msg});
 
-                BDEV_QUERY(BDEV11, "TEvPut_resultFromProxy", (BlobId, msg.Id), (Status, msg.Status),
-                    (ErrorReason, msg.ErrorReason));
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_resultFromProxy",
+                    {"marker", "BDEV11"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"blobId", msg.Id},
+                    {"status", msg.Status},
+                    {"errorReason", msg.ErrorReason});
 
                 if (msg.Status == NKikimrProto::OK && msg.WrittenBeyondBarrier) {
                     WrittenBeyondBarrier = true;
@@ -291,13 +337,21 @@ namespace NKikimr::NBlobDepot {
                     EndWithError(msg.Status, std::move(msg.ErrorReason));
                 } else if (PutsInFlight) {
                     // wait for all puts to complete
+                } else if (!Agent.IsConnected) {
+                    // Registration may invalidate this id. Do not queue a commit on the reconnecting pipe before
+                    // RegisterAgentResult has supplied the current generation and expired steps.
+                    EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected during write");
                 } else if (BlobSeqId.Generation != Agent.BlobDepotGeneration) {
                     // FIXME: although this is error now, we can handle this in the future, when BlobDepot picks records
                     // on restarts; it may have scanned written record and already updated it in its local database;
                     // however, if it did not, we can't try to commit this records as it may be already scheduled for
                     // garbage collection by the tablet
                     EndWithError(NKikimrProto::ERROR, "BlobDepot tablet was restarting during write");
-                } else if (!IssueUncertainWrites && !Agent.Recommissioning) { // proceed to second phase
+                } else if (Agent.IsBlobSeqIdExpired(BlobSeqId)) {
+                    // we were disconnected long enough for the tablet to reclaim this id and it may already have
+                    // collected the blob we have just written, so this put cannot be committed
+                    EndWithError(NKikimrProto::ERROR, "BlobSeqId was reclaimed by BlobDepot while agent was disconnected");
+                } else if (!IssueUncertainWrites) { // proceed to second phase
                     IssueCommitBlobSeq(false);
                     RemoveBlobSeqFromInFlight();
                 } else {
@@ -306,8 +360,11 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleCommitBlobSeqResult(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvCommitBlobSeqResult& msg) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA31, "TEvCommitBlobSeqResult", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (Msg, msg));
+                YDB_LOG_DEBUG("TEvCommitBlobSeqResult",
+                    {"marker", "BDA31"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"msg", msg});
 
                 Y_ABORT_UNLESS(WaitingForCommitBlobSeq);
                 WaitingForCommitBlobSeq = false;
@@ -315,8 +372,16 @@ namespace NKikimr::NBlobDepot {
                 Y_ABORT_UNLESS(msg.ItemsSize() == 1);
                 auto& item = msg.GetItems(0);
                 if (const auto status = item.GetStatus(); status != NKikimrProto::OK && status != NKikimrProto::RACE) {
+                    if (CommitBlobSeqSpan) {
+                        CommitBlobSeqSpan.EndError(item.GetErrorReason());
+                    }
+
                     EndWithError(item.GetStatus(), item.GetErrorReason());
                 } else {
+                    if (CommitBlobSeqSpan) {
+                        CommitBlobSeqSpan.EndOk();
+                    }
+
                     // it's okay to treat RACE as OK here since values are immutable in Virtual Group mode
                     CheckIfFinished();
                 }
@@ -330,14 +395,27 @@ namespace NKikimr::NBlobDepot {
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
                 if (BlobSeqId) {
-                    BDEV_QUERY(BDEV12, "TEvPut_end", (Status, status), (ErrorReason, errorReason));
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_end",
+                        {"marker", "BDEV12"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"Q", QueryId},
+                        {"status", status},
+                        {"errorReason", errorReason});
                 }
                 TBlobStorageQuery::EndWithError(status, errorReason);
             }
 
             void EndWithSuccess() {
                 if (BlobSeqId) {
-                    BDEV_QUERY(BDEV13, "TEvPut_end", (Status, NKikimrProto::OK));
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_end",
+                        {"marker", "BDEV13"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"Q", QueryId},
+                        {"status", NKikimrProto::OK});
                 }
 
                 if (IssueUncertainWrites) { // send a notification
@@ -370,7 +448,14 @@ namespace NKikimr::NBlobDepot {
                     p->SetGeneration(generation);
                 }
                 item->SetLen(Request.Id.BlobSize());
-                Agent.Issue(query, this, nullptr);
+
+                PrepareWriteS3Span = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                    "BlobDepotAgent.PrepareWriteS3", NWilson::EFlags::AUTO_END);
+                if (PrepareWriteS3Span && S3SlowDownRetries) {
+                    PrepareWriteS3Span.Attribute("slow_down_retry", S3SlowDownRetries);
+                }
+
+                Agent.Issue(query, this, nullptr, PrepareWriteS3Span.GetTraceId());
             }
 
             void HandlePrepareWriteS3Result(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvPrepareWriteS3Result& msg) {
@@ -378,7 +463,14 @@ namespace NKikimr::NBlobDepot {
                 Y_ABORT_UNLESS(msg.ItemsSize() == 1);
                 const auto& item = msg.GetItems(0);
                 if (item.GetStatus() != NKikimrProto::OK) {
+                    if (PrepareWriteS3Span) {
+                        PrepareWriteS3Span.EndError(item.GetErrorReason());
+                    }
+
                     return EndWithError(item.GetStatus(), item.GetErrorReason());
+                }
+                if (PrepareWriteS3Span) {
+                    PrepareWriteS3Span.EndOk();
                 }
 
                 auto *commitItem = CommitBlobSeq.MutableItems(0);
@@ -390,8 +482,17 @@ namespace NKikimr::NBlobDepot {
                 const TS3Locator temp = TS3Locator::FromProto(*locator);
                 TString key = temp.MakeObjectName(Agent.S3BasePath);
 
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA54, "starting WriteActor", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (Key, key));
+                YDB_LOG_DEBUG("Starting WriteActor",
+                    {"marker", "BDA54"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"key", key});
+
+                WriteS3Span = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                    "BlobDepotAgent.WriteS3", NWilson::EFlags::AUTO_END);
+                if (WriteS3Span) {
+                    WriteS3Span.Attribute("size", static_cast<i64>(Request.Buffer.size()));
+                }
 
                 // Pass a copy so Request.Buffer remains intact for potential SlowDown-driven retries.
                 WriterActorId = IssueWriteS3(std::move(key), TRope(Request.Buffer), Request.Id, temp);
@@ -404,10 +505,26 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnPutS3ObjectResponse(std::optional<TString>&& error, bool slowDown) override {
-                STLOG(error ? PRI_WARN : PRI_DEBUG, BLOB_DEPOT_AGENT, BDA53, "OnPutS3ObjectResponse",
-                    (AgentId, Agent.LogId), (QueryId, GetQueryId()), (Error, error), (SlowDown, slowDown));
+                YDB_LOG_COMP(error ? PRI_WARN : PRI_DEBUG, BLOB_DEPOT_AGENT, "OnPutS3ObjectResponse",
+                    {"marker", "BDA53"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"error", error},
+                    {"slowDown", slowDown});
 
                 WriterActorId = {};
+
+                if (WriteS3Span) {
+                    if (error) {
+                        if (slowDown) {
+                            WriteS3Span.Attribute("slow_down", true);
+                        }
+
+                        WriteS3Span.EndError(*error);
+                    } else {
+                        WriteS3Span.EndOk();
+                    }
+                }
 
                 if (ConnectionInstanceOnStart != Agent.ConnectionInstance) {
                     error = "BlobDepot tablet disconnected";
@@ -433,8 +550,14 @@ namespace NKikimr::NBlobDepot {
                     // Transparent retry: report SlowDown to the tablet via the discard message, then immediately
                     // re-issue TEvPrepareWriteS3. Pipe ordering guarantees the discard (which arms throttling) is
                     // processed before the retry, so the retry will be parked by the tablet until backoff clears.
-                    BDEV_QUERY(BDEV41, "S3_put_slow_down", (Locator, LocatorInFlight),
-                        (Retry, S3SlowDownRetries));
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "S3_put_slow_down",
+                        {"marker", "BDEV41"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"Q", QueryId},
+                        {"locator", LocatorInFlight},
+                        {"retry", S3SlowDownRetries});
                     ++S3SlowDownRetries;
                     SendDiscardSpoiled(/*s3SlowDown=*/true);
                     // Reset the per-attempt S3Locator from CommitBlobSeq so HandlePrepareWriteS3Result repopulates it.

@@ -1,6 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
-
 SELECT
     user,
     ts,

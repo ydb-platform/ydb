@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/formats/arrow/reader/result_builder.h>
 #include <ydb/core/scheme/scheme_type_info.h>
@@ -10,6 +10,8 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <util/string/builder.h>
+
+#include <vector>
 
 namespace NKikimr::NOlap {
 
@@ -28,6 +30,11 @@ protected:
     std::shared_ptr<ISnapshotSchema> Schema;
     NArrow::TContainerWithIndexes<arrow::RecordBatch> IncomingData;
     bool IncomingFinished = false;
+
+private:
+    std::vector<std::shared_ptr<arrow::Table>> ExistsChunks;
+
+    TYdbConclusionStatus MergeExistsDataOrdered(const std::shared_ptr<arrow::Table>& data);
 
 public:
     IMerger(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema)

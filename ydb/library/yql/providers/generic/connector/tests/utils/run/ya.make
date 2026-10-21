@@ -1,13 +1,9 @@
 PY3_LIBRARY()
 
-IF (AUTOCHECK)
-    # YQ-3351: enabling python style checks only for opensource
-    NO_LINT()
-ENDIF()
+STYLE_PYTHON()
 
 
 PY_SRCS(
-    dqrun.py
     kqprun.py
     parent.py
     result.py
@@ -21,7 +17,6 @@ PEERDIR(
     ydb/library/yql/providers/generic/connector/api/service/protos
     ydb/library/yql/providers/generic/connector/tests/utils
     ydb/public/api/protos
-    yt/python/yt/yson
 )
 
 END()

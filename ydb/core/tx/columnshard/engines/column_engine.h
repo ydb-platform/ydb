@@ -44,6 +44,10 @@ namespace NDataLocks {
 class TManager;
 }
 
+namespace NReader {
+class TReadDescription;
+}
+
 struct TSelectInfo {
     struct TStats {
         size_t Portions{};
@@ -144,12 +148,14 @@ public:
     class TSelectedPortionInfo {
     private:
         YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, Portion);
-        YDB_READONLY_DEF(bool, IsVisible);
+        // A conflicting portion is not visible in the read snapshot and belongs to a foreign transaction.
+        // It is selected only so the reader can detect the conflict, never to return its rows.
+        YDB_READONLY_DEF(bool, IsConflicting);
 
     public:
-        TSelectedPortionInfo(const std::shared_ptr<TPortionInfo> portion, const bool isVisible)
+        TSelectedPortionInfo(const std::shared_ptr<TPortionInfo> portion, const bool isConflicting)
             : Portion(portion)
-            , IsVisible(isVisible)
+            , IsConflicting(isConflicting)
         {
         }
     };
@@ -170,14 +176,15 @@ public:
     virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) = 0;
 
     void RegisterTable(const TInternalPathId pathId) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RegisterTable")("path_id", pathId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "RegisterTable"},
+            {"pathId", pathId});
         return DoRegisterTable(pathId);
     }
 
     virtual bool IsOverloadedByMetadata(const ui64 limit) const = 0;
-    virtual std::vector<TSelectedPortionInfo> Select(TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter,
-        const bool withNonconflicting, const bool withConflicting, const std::optional<THashSet<TInsertWriteId>>& ownPortions,
-        const std::shared_ptr<NLWTrace::TOrbit>& orbit, ui64 txId = 0, ui64 scanId = 0) const = 0;
+    virtual std::vector<TSelectedPortionInfo> Select(TInternalPathId pathId, const NReader::TReadDescription& readDescription,
+        const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> GetNextCompactionTask(
@@ -191,7 +198,8 @@ public:
     virtual std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const ISnapshotHolders& snapshotHolders,
         const std::map<TSnapshot, THashSet<TInternalPathId>>& pathsToDrop,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
-    virtual std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(const THashSet<TInternalPathId>& pathsToDrop) noexcept = 0;
+    virtual std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(
+        const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept = 0;
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;

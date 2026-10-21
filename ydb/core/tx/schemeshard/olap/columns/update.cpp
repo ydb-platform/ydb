@@ -8,10 +8,6 @@
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/protos/config.pb.h>
 
-extern "C" {
-#include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
-}
-
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -61,6 +57,10 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
 
     if (columnSchema.HasColumnFamilyName()) {
         ColumnFamilyName = columnSchema.GetColumnFamilyName();
+    }
+
+    if (columnSchema.HasNotNull()) {
+        NotNull = columnSchema.GetNotNull();
     }
 
     if (columnSchema.HasSerializer()) {
@@ -126,16 +126,9 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
         return false;
     }
 
-    if (Type.GetTypeId() == NScheme::NTypeIds::Pg) {
-        if (!IsAllowedPgType(NPg::PgTypeIdFromTypeDesc(Type.GetPgTypeDesc()))) {
-            errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
-            return false;
-        }
-    } else {
-        if (!IsAllowedType(Type.GetTypeId())) {
-            errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
-            return false;
-        }
+    if (Type.GetTypeId() == NScheme::NTypeIds::Pg || !IsAllowedType(Type.GetTypeId())) {
+        errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported for column tables");
+        return false;
     }
 
     auto arrowTypeResult = NArrow::GetArrowType(Type);
@@ -269,6 +262,19 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
             << "Column FAMILY is not supported for column tables");
         return false;
     }
+    if (diffColumn.GetNotNull().has_value()) {
+        if (*diffColumn.GetNotNull()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "SET NOT NULL is not supported for column tables (column '" << Name << "')");
+            return false;
+        }
+        if (IsKeyColumn()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "Cannot drop NOT NULL from primary key column '" << Name << "'");
+            return false;
+        }
+        NotNullFlag = false;
+    }
     if (diffColumn.GetSerializer()) {
         if (*diffColumn.GetSerializer()) {
             Serializer = *diffColumn.GetSerializer();
@@ -293,29 +299,7 @@ bool TOlapColumnBase::IsAllowedType(ui32 typeId) {
         return false;
     }
 
-    switch (typeId) {
-        case NYql::NProto::Interval:
-        case NYql::NProto::DyNumber:
-        case NYql::NProto::Uuid:
-            return false;
-        default:
-            break;
-    }
     return true;
-}
-
-bool TOlapColumnBase::IsAllowedPgType(ui32 pgTypeId) {
-    switch (pgTypeId) {
-        case INT2OID:
-        case INT4OID:
-        case INT8OID:
-        case FLOAT4OID:
-        case FLOAT8OID:
-            return true;
-        default:
-            break;
-    }
-    return false;
 }
 
 bool TOlapColumnBase::IsAllowedPkType(ui32 typeId) {
@@ -338,7 +322,10 @@ bool TOlapColumnBase::IsAllowedPkType(ui32 typeId) {
         case NYql::NProto::Datetime64:
         case NYql::NProto::Timestamp64:
         case NYql::NProto::Interval64:
+        case NYql::NProto::Interval:
         case NYql::NProto::Decimal:
+        case NYql::NProto::DyNumber:
+        case NYql::NProto::Uuid:
             return true;
         default:
             return false;
@@ -363,6 +350,9 @@ bool TOlapColumnBase::IsAllowedDictionaryType(ui32 typeId) {
         case NYql::NProto::Date:
         case NYql::NProto::Datetime:
         case NYql::NProto::Timestamp:
+        case NYql::NProto::Interval:
+        case NYql::NProto::Uuid:
+        case NYql::NProto::DyNumber:
             return true;
         default:
             return false;

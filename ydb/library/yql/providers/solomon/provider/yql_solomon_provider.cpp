@@ -1,25 +1,26 @@
 #include "yql_solomon_provider.h"
 
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_ytflow_integration.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_ytflow_optimize.h>
 
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+
 namespace NYql {
 
-TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool supportRtmrMode, bool useYtflowEngine) {
-    return [gateway, credentialsFactory, supportRtmrMode, useYtflowEngine] (
-        const TString& userName,
-        const TString& sessionId,
-        const TGatewaysConfig* gatewaysConfig,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        TIntrusivePtr<IRandomProvider> randomProvider,
-        TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-        const TOperationProgressWriter& progressWriter,
-        const TYqlOperationOptions& operationOptions,
-        THiddenQueryAborter hiddenAborter,
-        const TQContext& qContext)
+TSolomonState::TSolomonState(bool strictConfigValidation)
+    : Configuration(MakeIntrusive<TSolomonConfiguration>(strictConfigValidation))
+{
+}
+
+TDataProviderInitializer GetSolomonDataProviderInitializer(
+    ISolomonGateway::TPtr gateway, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, bool supportRtmrMode, bool useYtflowEngine) {
+    return [gateway, credentialsFactory, supportRtmrMode, useYtflowEngine](const TString& userName, const TString& sessionId,
+               const TGatewaysConfig* gatewaysConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+               TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
+               const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions, THiddenQueryAborter hiddenAborter,
+               const TQContext& qContext)
     {
         Y_UNUSED(sessionId);
         Y_UNUSED(userName);
@@ -30,7 +31,7 @@ TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr
         Y_UNUSED(hiddenAborter);
         Y_UNUSED(qContext);
 
-        auto solomonState = MakeIntrusive<TSolomonState>();
+        auto solomonState = MakeIntrusive<TSolomonState>(typeCtx->StrictConfigValidation);
 
         solomonState->SupportRtmrMode = supportRtmrMode;
         solomonState->Types = typeCtx.Get();
@@ -47,7 +48,7 @@ TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr
 
         TDataProviderInfo info;
 
-        info.Names.insert({TString{SolomonProviderName}});
+        info.Names.insert({ TString{ SolomonProviderName } });
         info.Source = CreateSolomonDataSource(solomonState);
         info.Sink = CreateSolomonDataSink(solomonState);
 
@@ -55,4 +56,4 @@ TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr
     };
 }
 
-} // namespace NYql
+}   // namespace NYql

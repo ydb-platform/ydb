@@ -122,7 +122,7 @@ void CoalesceByOneElement(size_t elements,
     for (size_t i = 0; i < elements; i++) {
         if (arrow::BitUtil::GetBit(leftBitMask, i + leftOffset)) {
             out[i + outOffset] = left[i + leftOffset];
-            SetBitTo<rightHasBitmask>(outBitMask, i + outOffset, true);
+            SetBitTo<rightHasBitmask>(outBitMask, i + outOffset, /*bit_value=*/true);
         } else {
             if constexpr (rightIsScalar) {
                 out[i + outOffset] = right[0];

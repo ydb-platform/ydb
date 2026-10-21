@@ -1,5 +1,3 @@
-/* postgres can not */
-/* syntax version 1 */
 $l = ($x) -> (ListMap($x, Yson::Serialize));
 $d = ($x) -> (ToDict(ListMap(DictItems($x), ($i) -> (($i.0, Yson::Serialize($i.1))))));
 

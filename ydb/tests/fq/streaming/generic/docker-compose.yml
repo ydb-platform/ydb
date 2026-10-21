@@ -1,0 +1,10 @@
+services:
+  fq-connector-go:
+    build: ./connector
+    container_name: tests-fq-streaming-generic-fq-connector-go
+    ports:
+      - 2130
+    extra_hosts:
+      - "localhost:host-gateway"
+
+version: "2.4"

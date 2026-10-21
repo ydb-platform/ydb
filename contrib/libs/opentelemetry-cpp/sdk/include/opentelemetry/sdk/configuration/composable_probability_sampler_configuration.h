@@ -4,7 +4,6 @@
 #pragma once
 
 #include "opentelemetry/sdk/configuration/composable_sampler_configuration.h"
-#include "opentelemetry/sdk/configuration/sampler_configuration_visitor.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -16,9 +15,13 @@ namespace configuration
 class ComposableProbabilitySamplerConfiguration : public ComposableSamplerConfiguration
 {
 public:
+  static constexpr double kDefaultRatio = 1.0;  // schema: minimum 0, maximum 1
+  static constexpr double kMinRatio     = 0.0;
+  static constexpr double kMaxRatio     = 1.0;
+
   ComposableProbabilitySamplerConfiguration() = default;
-  double ratio{1.0};
-  void Accept(SamplerConfigurationVisitor *visitor) const override;
+  double ratio{kDefaultRatio};
+  void Accept(ComposableSamplerConfigurationVisitor *visitor) const override;
 };
 
 }  // namespace configuration

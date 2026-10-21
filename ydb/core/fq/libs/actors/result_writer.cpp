@@ -1,31 +1,27 @@
-#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include "proxy.h"
 
-#include <ydb/library/services/services.pb.h>
 #include <ydb/core/fq/libs/common/rows_proto_splitter.h>
-
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
-#include <ydb/library/yql/dq/common/rope_over_buffer.h>
-#include <ydb/library/yql/providers/dq/actors/proto_builder.h>
-#include <ydb/library/yql/providers/dq/actors/events.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-
-#include <library/cpp/yson/node/node_io.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/log.h>
-#include <library/cpp/protobuf/interop/cast.h>
-
+#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
-#define LOG_I(stream) LOG_INFO_S (*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
+#include <ydb/library/yql/providers/dq/actors/events.h>
+#include <ydb/library/yql/providers/dq/actors/proto_builder.h>
+
+#include <library/cpp/protobuf/interop/cast.h>
+#include <library/cpp/yson/node/node_io.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RESULT_WRITER
 
 namespace NFq {
 
@@ -33,19 +29,13 @@ using namespace NActors;
 using namespace NYql;
 using namespace NDqs;
 
-class TResultWriter : public NActors::TActorBootstrapped<TResultWriter> {
+class TResultWriter: public NActors::TActorBootstrapped<TResultWriter> {
 public:
-    TResultWriter(
-        const NActors::TActorId& executerId,
-        const TString& resultType,
-        const TResultId& resultId,
-        const TVector<TString>& columns,
-        const TString& traceId,
-        const TInstant& deadline,
-        ui64 resultBytesLimit)
+    TResultWriter(const NActors::TActorId& executerId, const TString& resultType, const TResultId& resultId, const TVector<TString>& columns,
+        const TString& traceId, const TInstant& deadline, ui64 resultBytesLimit)
         : ExecuterId(executerId)
         , ResultBuilder(MakeHolder<TProtoBuilder>(resultType, columns))
-        , ResultId({resultId})
+        , ResultId({ resultId })
         , TraceId(traceId)
         , Deadline(deadline)
         , ResultBytesLimit(resultBytesLimit)
@@ -59,7 +49,8 @@ public:
     static constexpr char ActorName[] = "YQ_RESULT_WRITER";
 
     void Bootstrap() {
-        LOG_I("Bootstrap");
+        YDB_LOG_INFO("Bootstrap",
+            {"traceId", TraceId});
         Become(&TResultWriter::StateFunc);
     }
 
@@ -76,26 +67,32 @@ private:
     )
 
     void PassAway() {
-        auto duration = (TInstant::Now()-StartTime);
-        LOG_I("FinishWrite, Records: " << RowIndex
-                << " HasError: " << HasError
-                << " Size: " << Size
-                << " Rows: " << Rows
-                << " FreeSpace: " << FreeSpace
-                << " Duration: " << duration
-                << " AvgSpeed: " << Size/(duration.Seconds()+1)/1024/1024
-                << " ResultChunks.size(): " << ResultChunks.size());
+        auto duration = (TInstant::Now() - StartTime);
+        YDB_LOG_INFO("FinishWrite",
+            {"traceId", TraceId},
+            {"records", RowIndex},
+            {"hasError", HasError},
+            {"size", Size},
+            {"rows", Rows},
+            {"freeSpace", FreeSpace},
+            {"duration", duration},
+            {"avgSpeed", Size/(duration.Seconds()+1)/1024/1024},
+            {"resultChunks", ResultChunks.size()});
         NActors::IActor::PassAway();
     }
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
-        auto req = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNAVAILABLE, TIssue("Undelivered").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR));
+        auto req = MakeHolder<TEvDqFailure>(
+            NYql::NDqProto::StatusIds::UNAVAILABLE, TIssue("Undelivered").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR));
         Send(ExecuterId, req.Release());
         HasError = true;
     }
 
-    void SendIssuesAndSetErrorFlag(const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode statusCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR) {
-        LOG_E("ControlPlane WriteResult Issues: " << issues.ToString());
+    void SendIssuesAndSetErrorFlag(
+        const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode statusCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR) {
+        YDB_LOG_ERROR("ControlPlane WriteResult",
+            {"traceId", TraceId},
+            {"issues", issues});
         Issues.AddIssues(issues);
         HasError = true;
         auto req = MakeHolder<TEvDqFailure>(statusCode, Issues);
@@ -123,11 +120,13 @@ private:
         queryResult.SetTruncated(Truncated);
         queryResult.SetRowsCount(Rows);
 
-        LOG_D("Send response to executer");
+        YDB_LOG_DEBUG("Send response to executer",
+            {"traceId", TraceId});
         Send(ExecuterId, new TEvQueryResponse(std::move(queryResult)));
     }
 
-    void OnReadyState(TEvReadyState::TPtr&) { }
+    void OnReadyState(TEvReadyState::TPtr&) {
+    }
 
     void HandleResponse(NFq::TEvInternalService::TEvWriteResultResponse::TPtr& ev) {
         auto statusCode = ev->Get()->Result.status_code();
@@ -143,13 +142,15 @@ private:
         auto it = Requests.find(ev->Get()->Result.request_id());
         if (it == Requests.end()) {
             HasError = true;
-            auto req = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::BAD_REQUEST, TIssue("Unknown RequestId").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR));
+            auto req = MakeHolder<TEvDqFailure>(
+                NYql::NDqProto::StatusIds::BAD_REQUEST, TIssue("Unknown RequestId").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR));
             Send(ExecuterId, req.Release());
             return;
         }
         auto& request = it->second;
-        if (request.MessagesNum > 0)
+        if (request.MessagesNum > 0) {
             --request.MessagesNum;
+        }
 
         --InflightCounter;
 
@@ -164,21 +165,23 @@ private:
                 res->Record.SetFinish(HasError);
                 Send(request.Sender, res.Release());
 
-                auto duration = (TInstant::Now()-StartTime);
+                auto duration = (TInstant::Now() - StartTime);
 
-                LOG_T("ChannelData, Records: " << RowIndex
-                    << " HasError: " << HasError
-                    << " Size: " << Size
-                    << " Rows: " << Rows
-                    << " FreeSpace: " << FreeSpace
-                    << " Duration: " << duration
-                    << " AvgSpeed: " << Size/(duration.Seconds()+1)/1024/1024);
+                YDB_LOG_TRACE("ChannelData",
+                    {"traceId", TraceId},
+                    {"records", RowIndex},
+                    {"hasError", HasError},
+                    {"size", Size},
+                    {"rows", Rows},
+                    {"freeSpace", FreeSpace},
+                    {"duration", duration},
+                    {"avgSpeed", Size/(duration.Seconds()+1)/1024/1024});
             }
 
             Requests.erase(it);
             MaybeFinish();
         }
-        SendResult(); // Send remaining rows
+        SendResult();   // Send remaining rows
     }
 
     void StopChannel(NDq::TEvDqCompute::TEvChannelData::TPtr& ev) {
@@ -220,15 +223,17 @@ private:
             Send(request.Sender, res.Release());
             Requests.erase(chunk.request_id());
 
-            auto duration = (TInstant::Now()-StartTime);
+            auto duration = (TInstant::Now() - StartTime);
 
-            LOG_T("ChannelData Shift, Records: " << RowIndex
-                << " HasError: " << HasError
-                << " Size: " << Size
-                << " Rows: " << Rows
-                << " FreeSpace: " << FreeSpace
-                << " Duration: " << duration
-                << " AvgSpeed: " << Size/(duration.Seconds()+1)/1024/1024);
+            YDB_LOG_TRACE("ChannelData Shift",
+                {"traceId", TraceId},
+                {"records", RowIndex},
+                {"hasError", HasError},
+                {"size", Size},
+                {"rows", Rows},
+                {"freeSpace", FreeSpace},
+                {"duration", duration},
+                {"avgSpeed", Size/(duration.Seconds()+1)/1024/1024});
             ResultChunks.pop_front();
         }
 
@@ -288,7 +293,8 @@ private:
 
         if (OccupiedSpace > ResultBytesLimit) {
             TIssues issues;
-            issues.AddIssue(TStringBuilder() << "Can not write results with size > " << ResultBytesLimit << " byte(s), please write results to Object Storage by INSERT INTO binding.'' statement");
+            issues.AddIssue(TStringBuilder() << "Can not write results with size > " << ResultBytesLimit
+                                             << " byte(s), please write results to Object Storage by INSERT INTO binding.'' statement");
             SendIssuesAndSetErrorFlag(issues, NYql::NDqProto::StatusIds::LIMIT_EXCEEDED);
             return;
         }
@@ -308,9 +314,8 @@ private:
         Size += data.Size();
         Rows += data.RowCount();
 
-        if (!Truncated &&
-            (!AllResultsBytesLimit || Size + data.Size() < *AllResultsBytesLimit)
-            && (!RowsLimitPerWrite || Rows + data.RowCount() < *RowsLimitPerWrite)) {
+        if (!Truncated && (!AllResultsBytesLimit || Size + data.Size() < *AllResultsBytesLimit) &&
+            (!RowsLimitPerWrite || Rows + data.RowCount() < *RowsLimitPerWrite)) {
             Head.push_back(std::move(data));
         } else {
             Truncated = true;
@@ -328,8 +333,11 @@ private:
         try {
             ProcessData(ev);
         } catch (...) {
-            LOG_E(CurrentExceptionMessage());
-            auto req = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssue("Internal error on data write").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR));
+            YDB_LOG_ERROR("Exception",
+                {"traceId", TraceId},
+                {"currentExceptionMessage", CurrentExceptionMessage()});
+            auto req = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                TIssue("Internal error on data write").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR));
             Send(ExecuterId, req.Release());
             HasError = true;
         }
@@ -342,6 +350,7 @@ private:
         i64 Size;
         size_t MessagesNum;
     };
+
     THashMap<ui64, TRequest> Requests;
 
     TVector<NDq::TDqSerializedBatch> Head;
@@ -360,7 +369,7 @@ private:
 
     ui64 RowIndex = 0;
     ui64 Cookie = 0;
-    i64 FreeSpace = 64_MB; // TODO: make global free space
+    i64 FreeSpace = 64_MB;   // TODO: make global free space
     const size_t ProtoMessageLimit = 10_MB;
     const size_t MaxRowsCountPerChunk = 100'000;
     bool HasError = false;
@@ -374,16 +383,10 @@ private:
     TActorId InternalServiceId;
 };
 
-NActors::IActor* CreateResultWriter(
-    const NActors::TActorId& executerId,
-    const TString& resultType,
-    const TResultId& resultId,
-    const TVector<TString>& columns,
-    const TString& traceId,
-    const TInstant& deadline,
-    ui64 resultBytesLimit)
+NActors::IActor* CreateResultWriter(const NActors::TActorId& executerId, const TString& resultType, const TResultId& resultId,
+    const TVector<TString>& columns, const TString& traceId, const TInstant& deadline, ui64 resultBytesLimit)
 {
     return new TResultWriter(executerId, resultType, resultId, columns, traceId, deadline, resultBytesLimit);
 }
 
-} // namespace NFq
+}   // namespace NFq

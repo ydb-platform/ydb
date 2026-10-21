@@ -19,7 +19,7 @@ namespace {
 class TModelOpenAi final : public TModelBase {
     using TBlase = TModelBase;
 
-    static constexpr ui64 MAX_COMPLETION_TOKENS = 1024;
+    static constexpr ui64 MAX_COMPLETION_TOKENS = 8192;
 
 public:
     explicit TModelOpenAi(const TOpenAiModelSettings& settings)

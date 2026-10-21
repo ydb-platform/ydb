@@ -111,17 +111,19 @@ void array_container_offset(const array_container_t *c, container_t **loc,
     if (loc && lo_cap) {
         lo = array_container_create_given_capacity(lo_cap);
         for (int i = 0; i < lo_cap; ++i) {
-            array_container_add(lo, c->array[i] + offset);
+            lo->array[i] = c->array[i] + offset;
         }
+        lo->cardinality = lo_cap;
         *loc = (container_t *)lo;
     }
 
     hi_cap = c->cardinality - lo_cap;
     if (hic && hi_cap) {
         hi = array_container_create_given_capacity(hi_cap);
-        for (int i = lo_cap; i < c->cardinality; ++i) {
-            array_container_add(hi, c->array[i] + offset);
+        for (int i = 0; i < hi_cap; ++i) {
+            hi->array[i] = c->array[lo_cap + i] + offset;
         }
+        hi->cardinality = hi_cap;
         *hic = (container_t *)hi;
     }
 }
@@ -508,7 +510,14 @@ int32_t array_container_number_of_runs(const array_container_t *ac) {
  *
  */
 int32_t array_container_write(const array_container_t *container, char *buf) {
+#if CROARING_IS_BIG_ENDIAN
+    for (int32_t i = 0; i < container->cardinality; ++i) {
+        uint16_t v_le = croaring_htole16(container->array[i]);
+        memcpy(buf + i * sizeof(uint16_t), &v_le, sizeof(uint16_t));
+    }
+#else
     memcpy(buf, container->array, container->cardinality * sizeof(uint16_t));
+#endif
     return array_container_size_in_bytes(container);
 }
 
@@ -541,7 +550,15 @@ int32_t array_container_read(int32_t cardinality, array_container_t *container,
         array_container_grow(container, cardinality, false);
     }
     container->cardinality = cardinality;
+#if CROARING_IS_BIG_ENDIAN
+    for (int32_t i = 0; i < cardinality; ++i) {
+        uint16_t v_le;
+        memcpy(&v_le, buf + i * sizeof(uint16_t), sizeof(uint16_t));
+        container->array[i] = croaring_letoh16(v_le);
+    }
+#else
     memcpy(container->array, buf, container->cardinality * sizeof(uint16_t));
+#endif
 
     return array_container_size_in_bytes(container);
 }

@@ -39,7 +39,7 @@ void SetReuseAddrFlag(SOCKET socket)
         THROW_ERROR_EXCEPTION(
             NRpc::EErrorCode::TransportError,
             "Failed to configure socket address reuse")
-            << TError::FromSystem(lastError);
+            .With(TError::FromSystem(lastError));
     }
 }
 
@@ -52,7 +52,7 @@ void SetReusePortFlag(SOCKET socket)
         THROW_ERROR_EXCEPTION(
             NRpc::EErrorCode::TransportError,
             "Failed to configure socket port reuse")
-            << TError::FromSystem(lastError);
+            .With(TError::FromSystem(lastError));
     }
 #endif
 }
@@ -72,7 +72,7 @@ SOCKET CreateTcpServerSocket()
         THROW_ERROR_EXCEPTION(
             NRpc::EErrorCode::TransportError,
             "Failed to create a server socket")
-            << TError::FromSystem(lastError);
+            .With(TError::FromSystem(lastError));
     }
 
 #ifdef _win_
@@ -89,7 +89,7 @@ SOCKET CreateTcpServerSocket()
             THROW_ERROR_EXCEPTION(
                 NRpc::EErrorCode::TransportError,
                 "Failed to enable nonblocking mode")
-                << TError::FromSystem(lastError);
+                .With(TError::FromSystem(lastError));
         }
     }
 
@@ -102,7 +102,7 @@ SOCKET CreateTcpServerSocket()
             THROW_ERROR_EXCEPTION(
                 NRpc::EErrorCode::TransportError,
                 "Failed to enable close-on-exec mode")
-                << TError::FromSystem(lastError);
+                .With(TError::FromSystem(lastError));
         }
     }
 #endif
@@ -115,7 +115,7 @@ SOCKET CreateTcpServerSocket()
             THROW_ERROR_EXCEPTION(
                 NRpc::EErrorCode::TransportError,
                 "Failed to configure IPv6 protocol")
-                << TError::FromSystem(lastError);
+                .With(TError::FromSystem(lastError));
         }
     }
 
@@ -148,7 +148,7 @@ SOCKET CreateUnixServerSocket()
         THROW_ERROR_EXCEPTION(
             NRpc::EErrorCode::TransportError,
             "Failed to create a local server socket")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 
 #ifdef _win_
@@ -175,7 +175,7 @@ SOCKET CreateTcpClientSocket(int family)
         THROW_ERROR_EXCEPTION(
             NRpc::EErrorCode::TransportError,
             "Failed to create client socket")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 
     if (family == AF_INET6) {
@@ -186,7 +186,7 @@ SOCKET CreateTcpClientSocket(int family)
             THROW_ERROR_EXCEPTION(
                 NRpc::EErrorCode::TransportError,
                 "Failed to configure IPv6 protocol")
-                << TError::FromSystem(lastError);
+                .With(TError::FromSystem(lastError));
         }
     }
 
@@ -200,7 +200,7 @@ SOCKET CreateTcpClientSocket(int family)
             THROW_ERROR_EXCEPTION(
                 NRpc::EErrorCode::TransportError,
                 "Failed to enable nonblocking mode")
-                << TError::FromSystem(lastError);
+                .With(TError::FromSystem(lastError));
         }
     }
 
@@ -211,7 +211,7 @@ SOCKET CreateTcpClientSocket(int family)
             auto lastError = LastSystemError();
             SafeClose(clientSocket, false);
             THROW_ERROR_EXCEPTION("Failed to enable close-on-exec mode")
-                << TError::FromSystem(lastError);
+                .With(TError::FromSystem(lastError));
         }
     }
 #elif defined _win_
@@ -237,7 +237,7 @@ SOCKET CreateUnixClientSocket()
         THROW_ERROR_EXCEPTION(
             NRpc::EErrorCode::TransportError,
             "Failed to create client socket")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 
 #if defined _unix_ && !defined _linux_
@@ -250,7 +250,7 @@ SOCKET CreateUnixClientSocket()
             THROW_ERROR_EXCEPTION(
                 NRpc::EErrorCode::TransportError,
                 "Failed to enable nonblocking mode")
-                << TError::FromSystem(lastError);
+                .With(TError::FromSystem(lastError));
         }
     }
 
@@ -261,7 +261,7 @@ SOCKET CreateUnixClientSocket()
             auto lastError = LastSystemError();
             SafeClose(clientSocket, false);
             THROW_ERROR_EXCEPTION("Failed to enable close-on-exec mode")
-                << TError::FromSystem(lastError);
+                .With(TError::FromSystem(lastError));
         }
     }
 #elif defined _win_
@@ -286,7 +286,7 @@ SOCKET CreateUdpSocket(int family)
         THROW_ERROR_EXCEPTION(
             NRpc::EErrorCode::TransportError,
             "Failed to create a server socket")
-            << TError::FromSystem(lastError);
+            .With(TError::FromSystem(lastError));
     }
 
 #ifdef _win_
@@ -306,7 +306,7 @@ int ConnectSocket(SOCKET clientSocket, const TNetworkAddress& address)
                 NRpc::EErrorCode::TransportError,
                 "Error connecting to %v",
                 address)
-                << TError::FromSystem(error);
+                .With(TError::FromSystem(error));
         }
     }
 
@@ -334,7 +334,7 @@ void BindSocket(SOCKET serverSocket, const TNetworkAddress& address)
             NRpc::EErrorCode::TransportError,
             "Failed to bind a server socket to %v",
             address)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 }
 
@@ -363,7 +363,7 @@ int AcceptSocket(SOCKET serverSocket, TNetworkAddress* clientAddress)
             THROW_ERROR_EXCEPTION(
                 NRpc::EErrorCode::TransportError,
                 "Error accepting connection")
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
 
         return clientSocket;
@@ -379,7 +379,7 @@ int AcceptSocket(SOCKET serverSocket, TNetworkAddress* clientAddress)
             THROW_ERROR_EXCEPTION(
                 NRpc::EErrorCode::TransportError,
                 "Failed to enable nonblocking mode")
-                << TError::FromSystem(lastError);
+                .With(TError::FromSystem(lastError));
         }
     }
 
@@ -392,7 +392,7 @@ int AcceptSocket(SOCKET serverSocket, TNetworkAddress* clientAddress)
             THROW_ERROR_EXCEPTION(
                 NRpc::EErrorCode::TransportError,
                 "Failed to enable close-on-exec mode")
-                << TError::FromSystem(lastError);
+                .With(TError::FromSystem(lastError));
         }
     }
 #elif defined _win_
@@ -408,7 +408,7 @@ void ListenSocket(SOCKET serverSocket, int backlog)
         THROW_ERROR_EXCEPTION(
             NRpc::EErrorCode::TransportError,
             "Failed to listen to server socket")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 }
 
@@ -434,7 +434,7 @@ TNetworkAddress GetSocketName(SOCKET socket)
         THROW_ERROR_EXCEPTION(
             NRpc::EErrorCode::TransportError,
             "Failed to get socket name")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 
     return address;
@@ -449,7 +449,7 @@ TNetworkAddress GetSocketPeerName(SOCKET socket)
         THROW_ERROR_EXCEPTION(
             NRpc::EErrorCode::TransportError,
             "Failed to get socket peer name")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 
     return address;

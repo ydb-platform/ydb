@@ -5,6 +5,7 @@ import pytest
 import yaml
 from hamcrest import assert_that
 
+from ydb.core.protos import blobstorage_base3_pb2 as bsbase
 from ydb.core.protos import blobstorage_config_pb2 as bsconfig
 import ydb.public.api.protos.ydb_config_pb2 as config_pb
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
@@ -53,7 +54,7 @@ def cluster():
 def set_pdisk_faulty(cluster, node, pdisk_path):
     for attempt in range(10):
         resp = cluster.client.update_drive_status(
-            node.host, node.ic_port, pdisk_path, bsconfig.EDriveStatus.FAULTY
+            node.host, node.ic_port, pdisk_path, bsbase.EDriveStatus.FAULTY
         ).BlobStorageConfigResponse
 
         if resp.Success:

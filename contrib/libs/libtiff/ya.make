@@ -10,9 +10,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(4.7.1)
+VERSION(4.7.2)
 
-ORIGINAL_SOURCE(https://gitlab.com/api/v4/projects/libtiff%2Flibtiff/repository/archive.tar.gz?sha=v4.7.1)
+ORIGINAL_SOURCE(https://gitlab.com/api/v4/projects/libtiff%2Flibtiff/repository/archive.tar.gz?sha=v4.7.2)
 
 PEERDIR(
     contrib/libs/libjpeg-turbo

@@ -240,14 +240,14 @@ void THealExecNodeCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("address", &TThis::Address_);
 
-    registrar.ParameterWithUniversalAccessor<std::vector<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::vector<std::string>>(
         "locations",
         [] (TThis* command) -> auto& {
             return command->Options.Locations;
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::vector<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::vector<std::string>>(
         "alert_types_to_reset",
         [] (TThis* command) -> auto& {
             return command->Options.AlertTypesToReset;

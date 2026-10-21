@@ -78,7 +78,7 @@ ETokenType TTokenizer::Advance()
                 break;
 
             default:
-                LiteralValue_.append(*current);
+                LiteralValue_.push_back(*current);
                 ++current;
                 break;
         }
@@ -110,7 +110,7 @@ const char* TTokenizer::AdvanceEscaped(const char* current)
     }
 
     if (IsSpecialCharacter(*current)) {
-        LiteralValue_.append(*current);
+        LiteralValue_.push_back(*current);
         ++current;
     } else {
         if (*current == 'x') {
@@ -120,7 +120,7 @@ const char* TTokenizer::AdvanceEscaped(const char* current)
             TStringBuf context(current - 1, current + 3);
             int hi = ParseHexDigit(current[1], context);
             int lo = ParseHexDigit(current[2], context);
-            LiteralValue_.append((hi << 4) + lo);
+            LiteralValue_.push_back(static_cast<char>((hi << 4) + lo));
             current = context.end();
         } else {
             ThrowMalformedEscapeSequence(TStringBuf(current - 1, current + 1));
@@ -179,7 +179,7 @@ void TTokenizer::ExpectListIndex(TSourceLocation location) const
     const auto& token = GetLiteralValue();
     if (!IsSpecialListKey(token) && !TryFromString(token, index)) {
         THROW_ERROR_EXCEPTION("Expected special list key or integer for repeated field index, %Qv found", token)
-            << TErrorAttribute("ypath", GetPrefixPlusToken());
+            .With("ypath", GetPrefixPlusToken());
     }
 }
 
@@ -251,7 +251,7 @@ TStringBuf TTokenizer::GetPath() const
     return Path_;
 }
 
-const TString& TTokenizer::GetLiteralValue() const
+const std::string& TTokenizer::GetLiteralValue() const
 {
     return LiteralValue_;
 }

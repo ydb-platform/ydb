@@ -3,6 +3,8 @@
 #include <yt/yt/client/table_client/unversioned_row.h>
 #include <yt/yt/client/table_client/versioned_row.h>
 
+#include <yt/yt/client/transaction_client/ts_literal.h>
+
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
@@ -11,6 +13,8 @@
 
 namespace NYT::NTableClient {
 namespace {
+
+using NTransactionClient::operator""_ts;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -161,7 +165,7 @@ TEST(TFormatTest, UnversionedValue)
 TEST(TFormatTest, VersionedValue)
 {
     auto value = MakeInt64Value<TVersionedValue>(123, 7, EValueFlags::Aggregate | EValueFlags::Hunk);
-    value.Timestamp = 0x1234567890abcdef;
+    value.Timestamp = 0x1234567890abcdef_ts;
 
     EXPECT_EQ(Format("%v", value), "%&7#123@1234567890abcdef");
 }
@@ -189,11 +193,11 @@ TEST(TFormatTest, VersionedRow)
     auto key3 = MakeUnversionedInt64Value(8, 2, EValueFlags::Aggregate);
 
     auto value1 = MakeInt64Value<TVersionedValue>(123, 3, EValueFlags::Aggregate);
-    value1.Timestamp = 0xaaa;
+    value1.Timestamp = 0xaaa_ts;
     auto value2 = MakeInt64Value<TVersionedValue>(234, 4, EValueFlags::Hunk);
-    value2.Timestamp = 0xbbb;
+    value2.Timestamp = 0xbbb_ts;
     auto value3 = MakeInt64Value<TVersionedValue>(345, 5, EValueFlags::Aggregate | EValueFlags::Hunk);
-    value3.Timestamp = 0xccc;
+    value3.Timestamp = 0xccc_ts;
 
     TVersionedRowBuilder builder(New<TRowBuffer>());
     builder.AddKey(key1);
@@ -204,7 +208,7 @@ TEST(TFormatTest, VersionedRow)
     builder.AddValue(value2);
     builder.AddValue(value3);
 
-    builder.AddDeleteTimestamp(0xeee);
+    builder.AddDeleteTimestamp(0xeee_ts);
 
     auto row = builder.FinishRow();
 

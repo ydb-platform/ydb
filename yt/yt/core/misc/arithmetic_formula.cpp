@@ -96,8 +96,8 @@ void ThrowError(const std::string& formula, int position, const std::string& mes
     builder.AppendChar(' ', position);
     builder.AppendFormat("^\n%v", message);
     THROW_ERROR_EXCEPTION(std::move(builder.Flush()), NYT::TError::DisableFormat)
-        << TErrorAttribute("context", context)
-        << TErrorAttribute("context_pos", contextPosition);
+        .With("context", context)
+        .With("context_pos", contextPosition);
 }
 
 // NB: 'Set' type cannot appear in parsed/tokenized formula, it is needed only for CheckTypeConsistency.
@@ -242,8 +242,8 @@ i64 TGenericFormulaImpl::Eval(const THashMap<std::string, i64>& values, EEvaluat
                 return 0;
             } else {
                 THROW_ERROR_EXCEPTION("Undefined variable %Qv", var)
-                    << TErrorAttribute("formula", Formula_)
-                    << TErrorAttribute("values", values);
+                    .With("formula", Formula_)
+                    .With("values", values);
             }
         }
         return iter->second;
@@ -324,13 +324,13 @@ i64 TGenericFormulaImpl::Eval(const THashMap<std::string, i64>& values, EEvaluat
                     i64 top = std::get<i64>(stack.back());
                     if (top == 0) {
                         THROW_ERROR_EXCEPTION("Division by zero in formula %Qv", Formula_)
-                            << TErrorAttribute("values", values);
+                            .With("values", values);
                     }
                     stack.pop_back();
                     YT_VERIFY(std::holds_alternative<i64>(stack.back()));
                     if (std::get<i64>(stack.back()) == std::numeric_limits<i64>::min() && top == -1) {
                         THROW_ERROR_EXCEPTION("Division of INT64_MIN by -1 in formula %Qv", Formula_)
-                            << TErrorAttribute("values", values);
+                            .With("values", values);
                     }
                     if (token.Type == EFormulaTokenType::Divides) {
                         stack.back() = std::get<i64>(stack.back()) / top;

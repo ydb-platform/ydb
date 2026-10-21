@@ -4,8 +4,7 @@
 
 #include <cmath>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 template <typename T, std::enable_if_t<std::is_unsigned<T>::value>* = nullptr>
@@ -42,7 +41,7 @@ struct TAbs: public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutput
 
         if (std::is_floating_point<TInput>()) {
             auto& module = ctx.Codegen.GetModule();
-            const auto fnType = FunctionType::get(arg->getType(), {arg->getType()}, false);
+            const auto fnType = FunctionType::get(arg->getType(), {arg->getType()}, /*isVarArg=*/false);
             const auto& name = GetFuncNameForType<TInput>("llvm.fabs");
             const auto func = module.getOrInsertFunction(name, fnType).getCallee();
             const auto res = CallInst::Create(fnType, func, {arg}, "fabs", block);
@@ -92,5 +91,4 @@ void RegisterAbs(TKernelFamilyMap& kernelFamilyMap) {
     kernelFamilyMap["Abs"] = std::move(family);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

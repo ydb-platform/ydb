@@ -1,9 +1,11 @@
 #include "accessor.h"
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 #include "direct_builder.h"
 #include "signals.h"
 
 #include <util/generic/overloaded.h>
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
@@ -73,9 +75,15 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
     ui32 columnIdx = 0;
     TMonotonic pred = TMonotonic::Now();
     for (auto&& i : ColumnsData.GetRecords()->GetColumns()) {
-        TChunkConstructionData cData(GetRecordsCount(), nullptr, arrow::binary(), externalInfo.GetDefaultSerializer());
-        blobRanges.emplace_back(ColumnsData.GetStats().GetAccessorConstructor(columnIdx).SerializeToString(i, cData));
+        TChunkConstructionData cData(
+            GetRecordsCount(), nullptr, ColumnsData.GetStats().GetField(columnIdx)->type(), externalInfo.GetDefaultSerializer());
         auto* cInfo = proto.AddKeyColumns();
+        auto blobAndMeta =
+            ColumnsData.GetStats().GetAccessorConstructor(columnIdx, Settings.GetEncodingParams()).SerializeToBlobAndMeta(i, cData);
+        if (auto additional = blobAndMeta.Meta->SerializeToProto()) {
+            *cInfo->MutableAdditionalAccessorData() = std::move(*additional);
+        }
+        blobRanges.emplace_back(std::move(blobAndMeta.Blob));
         cInfo->SetSize(blobRanges.back().size());
         TMonotonic next = TMonotonic::Now();
         NSubColumns::TSignals::GetColumnSignals().OnBlobSize(ColumnsData.GetStats().GetColumnSize(columnIdx), blobRanges.back().size(), next - pred);
@@ -87,7 +95,7 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
         TMonotonic pred = TMonotonic::Now();
         for (auto&& i : OthersData.GetRecords()->GetColumns()) {
             TChunkConstructionData cData(i->GetRecordsCount(), nullptr, i->GetDataType(), externalInfo.GetDefaultSerializer());
-            blobRanges.emplace_back(NPlain::TConstructor().SerializeToString(i, cData));
+            blobRanges.emplace_back(NPlain::TConstructor().SerializeToBlobAndMeta(i, cData).Blob);
             TMonotonic next = TMonotonic::Now();
             NSubColumns::TSignals::GetOtherSignals().OnBlobSize(i->GetRawSizeVerified(), blobRanges.back().size(), next - pred);
             pred = next;
@@ -124,10 +132,28 @@ TConclusion<NBinaryJson::TBinaryJson> ToBinaryJson(const TJsonRestorer& restorer
         [](NBinaryJson::TBinaryJson&& val) -> TConclusion<NBinaryJson::TBinaryJson> {
             return std::move(val);
         }},
-        NBinaryJson::SerializeToBinaryJson(restorer.GetResult().GetStringRobust()));
+        NBinaryJson::SerializeToBinaryJson(WriteJsonRoundTripSafe(restorer.GetResult())));
 }
 
+namespace {
+
+std::vector<NSubColumns::TSplittedJsonPath> BuildResolvedPathsByIndex(const NSubColumns::TDictStats& stats) {
+    std::vector<NSubColumns::TSplittedJsonPath> result;
+    result.reserve(stats.GetColumnsCount());
+    for (ui32 index = 0; index < stats.GetColumnsCount(); ++index) {
+        const auto path = stats.GetColumnName(index);
+        auto parsedResult = NSubColumns::ParseJsonPath(NSubColumns::ToJsonPath(path.empty() ? "\"\"" : path));
+        AFL_VERIFY(parsedResult.IsSuccess())("error", parsedResult.GetErrorMessage())("path", path);
+        result.emplace_back(std::move(parsedResult.DetachResult().Items));
+    }
+    return result;
+}
+
+} // namespace
+
 std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnConstructionContext& context) const {
+    const auto columnsPaths = BuildResolvedPathsByIndex(ColumnsData.GetStats());
+    const auto othersPaths = BuildResolvedPathsByIndex(OthersData.GetStats());
     auto it = BuildUnorderedIterator();
     auto builder = NArrow::MakeBuilder(GetDataType());
     const ui32 start = context.GetStartIndex().value_or(0);
@@ -154,15 +180,15 @@ std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnCon
             }
         };
 
-        const auto addValueToJson = [&](const TString& path, const NJson::TJsonValue& jsonValue) {
+        const auto addValueToJson = [&](const NSubColumns::TSplittedJsonPath& path, const NJson::TJsonValue& jsonValue) {
             value.SetValueByPath(path, jsonValue);
         };
 
         auto onRecordKV = [&](const ui32 index, const NJson::TJsonValue& jsonValue, const bool isColumn) {
             if (isColumn) {
-                addValueToJson(ColumnsData.GetStats().GetColumnNameString(index), jsonValue);
+                addValueToJson(columnsPaths[index], jsonValue);
             } else {
-                addValueToJson(OthersData.GetStats().GetColumnNameString(index), jsonValue);
+                addValueToJson(othersPaths[index], jsonValue);
             }
         };
         it.ReadRecord(recordIndex, onStartRecord, onRecordKV, onFinishRecord);
@@ -192,15 +218,13 @@ const NJson::TJsonValue& TJsonRestorer::GetResult() const {
     return Result;
 }
 
-void TJsonRestorer::SetValueByPath(const TString& path, const NJson::TJsonValue& jsonValue) {
-    // Path may be empty (for backward compatibility), so make it $."" in this case
-    auto splitResult = NSubColumns::SplitJsonPath(NSubColumns::ToJsonPath(path.empty() ? "\"\"" : path), NSubColumns::TJsonPathSplitSettings{.FillTypes = true});
-    AFL_VERIFY(splitResult.IsSuccess())("error", splitResult.GetErrorMessage())("path", path);
-    const auto [pathItems, pathTypes, _] = splitResult.DetachResult();
+void TJsonRestorer::SetValueByPath(const NSubColumns::TSplittedJsonPath& path, const NJson::TJsonValue& jsonValue) {
+    const auto& pathItems = path.PathItems;
+    const auto& pathTypes = path.PathTypes;
     AFL_VERIFY(pathItems.size() > 0);
     AFL_VERIFY(pathItems.size() == pathTypes.size());
     NJson::TJsonValue* current = &Result;
-    for (decltype(pathItems)::size_type i = 0; i < pathItems.size() - 1; ++i) {
+    for (decltype(path.PathItems)::size_type i = 0; i < pathItems.size() - 1; ++i) {
         AFL_VERIFY(pathTypes[i] == NYql::NJsonPath::EJsonPathItemType::MemberAccess);
         NJson::TJsonValue* currentNext = nullptr;
         if (current->GetValuePointer(pathItems[i], &currentNext)) {

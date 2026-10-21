@@ -24,10 +24,10 @@ else:
         def write(self, s):
             if isinstance(s, unicode):
                 s = s.encode('ascii')
-            super(NativeIO, self).write(s)
+            super().write(s)
 
 
-class Verifier(object):
+class Verifier:
 
     def __init__(self, ffi, preamble, tmpdir=None, modulename=None,
                  ext_package=None, tag='', force_generic_engine=False,
@@ -182,7 +182,7 @@ class Verifier(object):
             # Determine if this matches the current file
             if os.path.exists(self.sourcefilename):
                 with open(self.sourcefilename, "r") as fp:
-                    needs_written = not (fp.read() == source_data)
+                    needs_written = fp.read() != source_data
             else:
                 needs_written = True
 

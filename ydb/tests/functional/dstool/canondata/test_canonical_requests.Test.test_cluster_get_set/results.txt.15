@@ -1,0 +1,4 @@
+dstool -e <endpoint> --mon-port <mon_port> --dry-run cluster set --disable-self-heal
+Exit Status: 1
+===== stderr =====
+error, Option --dry-run is not allowed for this command

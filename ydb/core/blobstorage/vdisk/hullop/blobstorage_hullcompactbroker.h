@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_compaction_priority.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/control/lib/immediate_control_board_wrapper.h>
@@ -13,14 +14,14 @@ namespace NKikimr {
         TPDiskId PDiskId;
         TGroupId GroupId;
         TVDiskIdShort VDiskId;
-        double Ratio;
+        TCompactionPriority Priority;
 
-        TEvCompactionTokenRequest(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, double ratio)
-            : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Ratio(ratio) {}
+        TEvCompactionTokenRequest(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, TCompactionPriority priority)
+            : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Priority(priority) {}
 
         TString ToString() const {
             TStringStream str;
-            str << "{EvCompactionTokenRequest PDiskId# " << PDiskId << " GroupId# " << GroupId << " VDiskId# " << VDiskId.ToString() << " Ratio# " << Ratio << "}";
+            str << "{EvCompactionTokenRequest PDiskId# " << PDiskId << " GroupId# " << GroupId << " VDiskId# " << VDiskId.ToString() << " Priority# " << Priority.ToString() << "}";
             return str.Str();
         }
     };
@@ -47,9 +48,9 @@ namespace NKikimr {
         TCompactionTokenId Token;
         bool Force;
         TEvReleaseCompactionToken(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, TCompactionTokenId token) 
-            : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Token(token) {}
+            : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Token(token), Force(false) {}
         TEvReleaseCompactionToken(TPDiskId pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, bool force) 
-            : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Force(force) {}
+            : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Token(0), Force(force) {}
 
         TString ToString() const {
             TStringStream str;

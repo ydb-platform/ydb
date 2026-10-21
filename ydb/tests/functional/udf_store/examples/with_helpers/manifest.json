@@ -1,0 +1,19 @@
+{
+  "module_type": "module",
+  "module_kind": "wasm",
+  "module_name": "WithHelpers",
+  "module_extension": "wasm",
+  "required_libraries": [
+    "sdk",
+    "helpers"
+  ],
+  "functions": [
+    {
+      "name": "scale",
+      "argument_types": [
+        "Optional<Int64>"
+      ],
+      "result_type": "Optional<Int64>"
+    }
+  ]
+}

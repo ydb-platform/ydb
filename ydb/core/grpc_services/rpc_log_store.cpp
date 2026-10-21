@@ -1,6 +1,7 @@
 #include "service_logstore.h"
 #include "rpc_common/rpc_common.h"
 #include "rpc_scheme_base.h"
+#include "table_settings.h"
 
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/scheme/scheme_type_id.h>
@@ -11,6 +12,8 @@
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/public/api/grpc/draft/ydb_logstore_v1.pb.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
 
 namespace NKikimr::NGRpcService {
 
@@ -186,7 +189,7 @@ private:
         const auto req = GetProtoRequest();
         std::pair<TString, TString> destinationPathPair;
         try {
-            destinationPathPair = SplitPath(req->path());
+            destinationPathPair = SplitPath(Request_->NormalizePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, "Invalid path: " + req->path(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
@@ -210,7 +213,8 @@ private:
             auto* toSchemaPreset = create->AddSchemaPresets();
             toSchemaPreset->SetName(schemaPreset.name());
             if (!ConvertSchemaFromPublicToInternal(schemaPreset.schema(), *toSchemaPreset->MutableSchema(), status, error)) {
-                LOG_DEBUG(ctx, NKikimrServices::GRPC_SERVER, "LogStore schema error: %s", error.c_str());
+                YDB_LOG_DEBUG_CTX(ctx, "LogStore schema error",
+                    {"error", error});
                 return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             }
         }
@@ -267,7 +271,8 @@ private:
                     Ydb::StatusIds::StatusCode status;
                     TString error;
                     if (!ConvertSchemaFromInternalToPublic(schemaPreset.GetSchema(), *toSchemaPreset->mutable_schema(), status, error)) {
-                        LOG_DEBUG(ctx, NKikimrServices::GRPC_SERVER, "LogStore schema error: %s", error.c_str());
+                        YDB_LOG_DEBUG_CTX(ctx, "LogStore schema error",
+                            {"error", error});
                         return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                     }
                 }
@@ -300,7 +305,7 @@ private:
         SetAuthToken(navigateRequest, *Request_);
         SetDatabase(navigateRequest.get(), *Request_);
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
-        record->SetPath(req->path());
+        record->SetPath(Request_->NormalizePath(req->path()));
 
         ctx.Send(MakeTxProxyID(), navigateRequest.release());
     }
@@ -327,7 +332,7 @@ private:
         const auto req = this->GetProtoRequest();
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(req->path());
+            pathPair = SplitPath(this->Request_->NormalizePath(req->path()));
         } catch (const std::exception& ex) {
             this->Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return ReplyWithResult(StatusIds::BAD_REQUEST, ctx);
@@ -402,7 +407,7 @@ private:
         const auto req = GetProtoRequest();
         std::pair<TString, TString> destinationPathPair;
         try {
-            destinationPathPair = SplitPath(req->path());
+            destinationPathPair = SplitPath(Request_->NormalizePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, "Invalid path: " + req->path(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
@@ -426,13 +431,16 @@ private:
         }
         if (req->has_schema()) {
             if (!ConvertSchemaFromPublicToInternal(req->schema(), *create->MutableSchema(), status, error)) {
-                LOG_DEBUG(ctx, NKikimrServices::GRPC_SERVER, "LogTable schema error: %s", error.c_str());
+                YDB_LOG_DEBUG_CTX(ctx, "LogTable schema error",
+                    {"error", error});
                 return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             }
         }
 
         if (req->has_ttl_settings()) {
-            if (!FillTtlSettings(*create->MutableTtlSettings()->MutableEnabled(), req->ttl_settings(), status, error)) {
+            auto ttlSettings = req->ttl_settings();
+            NormalizeTtlStoragePaths(ttlSettings, *Request_);
+            if (!FillTtlSettings(*create->MutableTtlSettings()->MutableEnabled(), ttlSettings, status, error)) {
                 return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             }
         }
@@ -499,7 +507,8 @@ private:
                 Ydb::StatusIds::StatusCode status;
                 TString error;
                 if (!ConvertSchemaFromInternalToPublic(tableDescription.GetSchema(), *describeLogTableResult.mutable_schema(), status, error)) {
-                    LOG_DEBUG(ctx, NKikimrServices::GRPC_SERVER, "LogTable schema error: %s", error.c_str());
+                    YDB_LOG_DEBUG_CTX(ctx, "LogTable schema error",
+                        {"error", error});
                     return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                 }
                 if (tableDescription.HasSchemaPresetName()) {
@@ -541,7 +550,7 @@ private:
         SetAuthToken(navigateRequest, *Request_);
         SetDatabase(navigateRequest.get(), *Request_);
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
-        record->SetPath(req->path());
+        record->SetPath(Request_->NormalizePath(req->path()));
 
         ctx.Send(MakeTxProxyID(), navigateRequest.release());
     }
@@ -571,7 +580,7 @@ private:
         const auto req = GetProtoRequest();
         std::pair<TString, TString> destinationPathPair;
         try {
-            destinationPathPair = SplitPath(req->path());
+            destinationPathPair = SplitPath(Request_->NormalizePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, "Invalid path: " + req->path(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
@@ -591,7 +600,9 @@ private:
         Ydb::StatusIds::StatusCode status;
         TString error;
         if (req->has_set_ttl_settings()) {
-            if (!FillTtlSettings(*alter->MutableAlterTtlSettings()->MutableEnabled(), req->set_ttl_settings(), status, error)) {
+            auto ttlSettings = req->set_ttl_settings();
+            NormalizeTtlStoragePaths(ttlSettings, *Request_);
+            if (!FillTtlSettings(*alter->MutableAlterTtlSettings()->MutableEnabled(), ttlSettings, status, error)) {
                 return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             }
         } else if (req->has_drop_ttl_settings()) {

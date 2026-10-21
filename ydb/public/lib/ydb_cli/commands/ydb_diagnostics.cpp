@@ -115,7 +115,8 @@ TString ReplaceCountersIdx(TString& name, ui32 index) {
 }
 
 void TCommandClusterDiagnosticsCollect::ProcessState(TConfig& config, TFileOutput& out, ui32 index) {
-    NMonitoring::TMonitoringClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NMonitoring::TMonitoringClient client(driver);
     NMonitoring::TClusterStateSettings settings;
     settings.DurationSeconds(PeriodSeconds ? PeriodSeconds : DurationSeconds);
     settings.NoSanitize(NoSanitize);

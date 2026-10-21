@@ -325,6 +325,7 @@ private:
     TStringBuilder LogPrefix() const;
 
     void UpdateTokenIfNeededImpl();
+    void UpdateTokenImpl(const NThreading::TFuture<std::string>& future);
 
     void WriteInternal(TContinuationToken&& continuationToken, std::string_view data, std::optional<ECodec> codec, ui32 originalSize,
                std::optional<ui64> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt);
@@ -344,9 +345,11 @@ private:
     void DoConnect(const TDuration& delay, const std::string& endpoint);
     void InitImpl();
     void ReadFromProcessor(); // Assumes that we're under lock.
-    void WriteToProcessorImpl(TClientMessage&& req); // Assumes that we're under lock.
+    void WriteToProcessorImpl(TClientMessage&& req, size_t requestMemoryUsage = 0); // Assumes that we're under lock.
     void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
     void OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration);
+    void OnWriteRequestDone(size_t requestMemoryUsage);
+    bool TryIssueContinuationTokenImpl();
     TProcessSrvMessageResult ProcessServerMessageImpl();
     TMemoryUsageChange OnMemoryUsageChangedImpl(i64 diff);
     TBuffer CompressBufferImpl(std::vector<std::string_view>& data, ECodec codec, i32 level);
@@ -387,7 +390,7 @@ private:
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> ConnectionFactory;
     TDbDriverStatePtr DbDriverState;
     std::string PrevToken;
-    bool UpdateTokenInProgress = false;
+    std::atomic_bool UpdateTokenInProgress = false;
     TInstant LastTokenUpdate = TInstant::Zero();
     std::shared_ptr<TWriteSessionEventsQueue> EventsQueue;
     NYdbGrpc::IQueueClientContextPtr ClientContext; // Common client context.
@@ -406,6 +409,8 @@ private:
     IExecutor::TPtr CompressionExecutor;
     size_t MemoryUsage = 0; //!< Estimated amount of memory used
     bool FirstTokenSent = false;
+    // Queuing a protobuf can exceed the limit while a token is still outstanding.
+    bool ContinuationTokenIssued = false;
 
     TMessageBatch CurrentBatch;
 

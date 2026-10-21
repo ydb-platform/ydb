@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/testlib/pg
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
+    ydb/public/api/protos
     yql/essentials/public/udf/service/exception_policy
 )
 
@@ -19,12 +20,15 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_base.cpp
+    ut_operation_registry.cpp
     ut_counters.cpp
     ut_info_types.cpp
+    ut_move_tablet_to_storage_pool.cpp
     ut_table_decimal_types.cpp
     ut_table_info.cpp
     ut_table_pg_types.cpp
     ut_commit_redo_limit.cpp
+    ut_db_ref_map.cpp
 )
 
 END()

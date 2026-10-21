@@ -156,7 +156,9 @@ void CheckPartitionCorrectness(const std::vector<TCase>& cases) {
             TReducePartitionSettings settings;
             settings.FmrPartitionSettings = fmrPartitionSettings;
             settings.MaxKeySizePerPart = c.MaxKeySizePerPart;
-            partitioner = MakeIntrusive<TReducePartitioner>(partIdsForTables, partIdStats, keyColumns, settings);
+            // These cases use a single-column key with no SortBy tiebreaker, so the merge/order key
+            // and the reduce-group key coincide.
+            partitioner = MakeIntrusive<TReducePartitioner>(partIdsForTables, partIdStats, keyColumns, keyColumns, settings);
         }
 
         auto [tasks, error] = partitioner->PartitionTablesIntoTasks(inputTables);

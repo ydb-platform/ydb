@@ -47,7 +47,7 @@ void TChangeSender::CreateMissingSenders(const TVector<ui64>& partitionIds) {
     }
 
     for (const auto& [partitionId, sender] : Senders) {
-        ReEnqueueRecords(sender);
+        ReEnqueueRecords(partitionId, sender);
         ProcessBroadcasting(&TChangeSender::RemoveBroadcastPartition, partitionId, sender.Broadcasting);
         if (sender.ActorId) {
             ActorOps->Send(sender.ActorId, new TEvents::TEvPoisonPill());
@@ -94,6 +94,7 @@ void TChangeSender::KillSenders() {
     }
 
     ReadySenders = 0;
+    UninitSenders = 0;
 }
 
 void TChangeSender::EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) {
@@ -145,14 +146,14 @@ void TChangeSender::ProcessRecords(TVector<IChangeRecord::TPtr>&& records) {
             continue;
         }
 
-        if (it->BodySize != record->GetBody().size()) {
+        if (it->BodySize != record->GetBodySize()) {
             MemUsage -= it->BodySize;
-            MemUsage += record->GetBody().size();
+            MemUsage += record->GetBodySize();
         }
 
         if (record->IsBroadcast()) {
             // assume that broadcast records are too small to affect memory consumption
-            MemUsage -= record->GetBody().size();
+            MemUsage -= record->GetBodySize();
         }
 
         PendingSent.emplace(record->GetOrder(), std::move(record));
@@ -290,18 +291,36 @@ void TChangeSender::SendPreparedRecords(ui64 partitionId) {
     sender.Ready = false;
     ReadySenders--;
 
-    sender.Pending.reserve(sender.Prepared.size());
-    for (const auto& record : sender.Prepared) {
+    // Hold back records after a schema-change broadcast so post-schema data cannot share
+    // a write batch with a delayed-ACK schema change. Heartbeats stay non-blocking:
+    // they ACK immediately and must not introduce an extra OnReady round-trip.
+    TVector<IChangeRecord::TPtr> toSend;
+    TVector<IChangeRecord::TPtr> rest;
+    bool seenSchemaChangeBarrier = false;
+    for (auto& record : sender.Prepared) {
+        if (seenSchemaChangeBarrier) {
+            rest.push_back(std::move(record));
+            continue;
+        }
+        if (record->GetKind() == IChangeRecord::EKind::CdcSchemaChange) {
+            seenSchemaChangeBarrier = true;
+        }
+        toSend.push_back(std::move(record));
+    }
+    sender.Prepared = std::move(rest);
+
+    sender.Pending.reserve(toSend.size());
+    for (const auto& record : toSend) {
         if (!record->IsBroadcast()) {
-            sender.Pending.emplace_back(record->GetOrder(), record->GetBody().size());
-            MemUsage -= record->GetBody().size();
+            sender.Pending.emplace_back(record->GetOrder(), record->GetBodySize());
+            MemUsage -= record->GetBodySize();
         } else {
             sender.Broadcasting.push_back(record->GetOrder());
         }
     }
 
     Y_ABORT_UNLESS(sender.ActorId);
-    ActorOps->Send(sender.ActorId, new TEvChangeExchange::TEvRecords(std::exchange(sender.Prepared, {})));
+    ActorOps->Send(sender.ActorId, new TEvChangeExchange::TEvRecords(std::move(toSend)));
 }
 
 void TChangeSender::OnGone(ui64 partitionId) {
@@ -310,7 +329,7 @@ void TChangeSender::OnGone(ui64 partitionId) {
         return;
     }
 
-    ReEnqueueRecords(it->second);
+    ReEnqueueRecords(partitionId, it->second);
     if (it->second.Ready) {
         --ReadySenders;
     }
@@ -325,16 +344,25 @@ void TChangeSender::OnGone(ui64 partitionId) {
     PathResolver->Resolve();
 }
 
-void TChangeSender::ReEnqueueRecords(const TSender& sender) {
+void TChangeSender::ReEnqueueRecords(ui64 partitionId, const TSender& sender) {
     for (const auto& record : sender.Pending) {
         Enqueued.insert(ReEnqueue(record));
     }
 
+    TVector<ui64> preparedBroadcasts;
     for (const auto& record : sender.Prepared) {
         if (!record->IsBroadcast()) {
-            Enqueued.insert(ReEnqueue(record->GetOrder(), record->GetBody().size()));
-            MemUsage -= record->GetBody().size();
+            Enqueued.insert(ReEnqueue(record->GetOrder(), record->GetBodySize()));
+            MemUsage -= record->GetBodySize();
+        } else {
+            // Broadcasts held back after a barrier split are not in sender.Broadcasting yet,
+            // but the partition was already removed from PendingPartitions when prepared.
+            // Drop them from the broadcast set so completion cannot stall if the sender is gone.
+            preparedBroadcasts.push_back(record->GetOrder());
         }
+    }
+    if (preparedBroadcasts) {
+        ProcessBroadcasting(&TChangeSender::RemoveBroadcastPartition, partitionId, preparedBroadcasts);
     }
 }
 
@@ -355,7 +383,7 @@ TChangeSender::TBroadcast& TChangeSender::EnsureBroadcast(IChangeRecord::TPtr re
     }
 
     auto res = Broadcasting.emplace(record->GetOrder(), TBroadcast{
-        .Record = {record->GetOrder(), record->GetBody().size()},
+        .Record = {record->GetOrder(), record->GetBodySize()},
         .Partitions = partitionIds,
         .PendingPartitions = partitionIds,
     });

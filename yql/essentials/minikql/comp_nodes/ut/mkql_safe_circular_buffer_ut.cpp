@@ -2,6 +2,7 @@
 
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -30,32 +31,32 @@ Y_UNIT_TEST(TestUnboxedNoFailOnEmpty) {
 Y_UNIT_TEST(TestUnboxedNormalUsage) {
     TBufUnboxed buffer(5, TUnboxedValuePod());
     buffer.PushBack(TUnboxedValue::Embedded("It"));
-    UNIT_ASSERT_EQUAL(buffer.Get(0).AsStringRef(), "It");
+    AssertUnboxedValueElementEqual(buffer.Get(0), TStringBuf("It"));
     buffer.PushBack(TUnboxedValue::Embedded("is"));
-    UNIT_ASSERT_EQUAL(buffer.Get(0).AsStringRef(), "It");
+    AssertUnboxedValueElementEqual(buffer.Get(0), TStringBuf("It"));
     buffer.PushBack(TUnboxedValue::Embedded("funny"));
     UNIT_ASSERT_EQUAL(buffer.Size(), 3);
-    UNIT_ASSERT_EQUAL(buffer.Get(0).AsStringRef(), "It");
-    UNIT_ASSERT_EQUAL(buffer.Get(2).AsStringRef(), "funny");
-    UNIT_ASSERT(!buffer.Get(3));
+    AssertUnboxedValueElementEqual(buffer.Get(0), TStringBuf("It"));
+    AssertUnboxedValueElementEqual(buffer.Get(2), TStringBuf("funny"));
+    AssertUnboxedValueElementEqual(buffer.Get(3), TMaybe<TStringBuf>{});
     buffer.PopFront();
-    UNIT_ASSERT_EQUAL(buffer.Get(0).AsStringRef(), "is");
-    UNIT_ASSERT_EQUAL(buffer.Get(1).AsStringRef(), "funny");
+    AssertUnboxedValueElementEqual(buffer.Get(0), TStringBuf("is"));
+    AssertUnboxedValueElementEqual(buffer.Get(1), TStringBuf("funny"));
     buffer.PushBack(TUnboxedValue::Embedded("bunny"));
-    UNIT_ASSERT_EQUAL(buffer.Get(1).AsStringRef(), "funny");
-    UNIT_ASSERT_EQUAL(buffer.Get(2).AsStringRef(), "bunny");
-    UNIT_ASSERT(!buffer.Get(3));
+    AssertUnboxedValueElementEqual(buffer.Get(1), TStringBuf("funny"));
+    AssertUnboxedValueElementEqual(buffer.Get(2), TStringBuf("bunny"));
+    AssertUnboxedValueElementEqual(buffer.Get(3), TMaybe<TStringBuf>{});
     buffer.PopFront();
-    UNIT_ASSERT_EQUAL(buffer.Get(0).AsStringRef(), "funny");
-    UNIT_ASSERT_EQUAL(buffer.Get(1).AsStringRef(), "bunny");
+    AssertUnboxedValueElementEqual(buffer.Get(0), TStringBuf("funny"));
+    AssertUnboxedValueElementEqual(buffer.Get(1), TStringBuf("bunny"));
     UNIT_ASSERT_EQUAL(buffer.Size(), 2);
     buffer.PopFront();
-    UNIT_ASSERT_EQUAL(buffer.Get(0).AsStringRef(), "bunny");
+    AssertUnboxedValueElementEqual(buffer.Get(0), TStringBuf("bunny"));
     UNIT_ASSERT_EQUAL(buffer.Size(), 1);
     for (auto i = 0; i < 3; ++i) {
         buffer.PopFront();
         UNIT_ASSERT_EQUAL(buffer.Size(), 0);
-        UNIT_ASSERT(!buffer.Get(0));
+        AssertUnboxedValueElementEqual(buffer.Get(0), TMaybe<TStringBuf>{});
     }
 }
 
@@ -74,7 +75,7 @@ Y_UNIT_TEST(TestOverflowWithInitSize) {
     buffer.PopFront();
     buffer.PushBack(TUnboxedValue::Embedded("2"));
     UNIT_ASSERT_EQUAL(buffer.Size(), 3);
-    UNIT_ASSERT_EQUAL(buffer.Get(1).AsStringRef(), "1");
+    AssertUnboxedValueElementEqual(buffer.Get(1), TStringBuf("1"));
     UNIT_ASSERT_EXCEPTION(buffer.PushBack(TUnboxedValue::Embedded("3")), yexception);
 }
 
@@ -90,12 +91,12 @@ Y_UNIT_TEST(TestUnbounded) {
         buffer.PushBack(TUnboxedValue::Embedded(ToString(i)));
     }
 
-    UNIT_ASSERT(!buffer.Get(0));
-    UNIT_ASSERT(!buffer.Get(1));
-    UNIT_ASSERT(!buffer.Get(2));
+    AssertUnboxedValueElementEqual(buffer.Get(0), TMaybe<TStringBuf>{});
+    AssertUnboxedValueElementEqual(buffer.Get(1), TMaybe<TStringBuf>{});
+    AssertUnboxedValueElementEqual(buffer.Get(2), TMaybe<TStringBuf>{});
 
     for (size_t i = 0; i < 100; ++i) {
-        UNIT_ASSERT_EQUAL(TStringBuf(buffer.Get(i + 3).AsStringRef()), ToString(i));
+        AssertUnboxedValueElementEqual(buffer.Get(i + 3), TStringBuf(ToString(i)));
     }
 
     for (size_t i = 0; i < 100; ++i) {
@@ -103,9 +104,9 @@ Y_UNIT_TEST(TestUnbounded) {
     }
 
     UNIT_ASSERT_EQUAL(buffer.Size(), 3);
-    UNIT_ASSERT_EQUAL(TStringBuf(buffer.Get(0).AsStringRef()), ToString(97));
-    UNIT_ASSERT_EQUAL(TStringBuf(buffer.Get(1).AsStringRef()), ToString(98));
-    UNIT_ASSERT_EQUAL(TStringBuf(buffer.Get(2).AsStringRef()), ToString(99));
+    AssertUnboxedValueElementEqual(buffer.Get(0), TStringBuf(ToString(97)));
+    AssertUnboxedValueElementEqual(buffer.Get(1), TStringBuf(ToString(98)));
+    AssertUnboxedValueElementEqual(buffer.Get(2), TStringBuf(ToString(99)));
 
     buffer.PopFront();
     buffer.PopFront();

@@ -99,9 +99,26 @@ SELECT
     DateTime::GetDayOfWeekName($tm) as WeekDay; -- "Wednesday"
 ```
 
+## Init/Init64 {#init}
+
+Доступна начиная с версии [2026.03](../../changelog/2026.03.md#datetime-module).
+
+Создаёт внутреннее представление даты и времени. Неуказанные или NULL-компоненты получают значения по умолчанию: год 1970, месяц 1, день 1, а для остальных компонентов — 0. Для незаданного часового пояса используется GMT. `Timezone` допустим только как именованный аргумент. Возвращает NULL для некорректных компонентов или даты.
+
+#### Список функций
+
+```yql
+DateTime::Init([ Year:Uint16?, Month:Uint8?, Day:Uint8?, Hour:Uint8?, Minute:Uint8?, Second:Uint8?, Microsecond:Uint32?, Timezone:String? ]) -> Resource<TM>?
+DateTime::Init64([ Year:Int32?, Month:Uint8?, Day:Uint8?, Hour:Uint8?, Minute:Uint8?, Second:Uint8?, Microsecond:Uint32?, Timezone:String? ]) -> Resource<TM64>?
+```
+
+```yql
+SELECT DateTime::MakeTimestamp(DateTime::Init(2024 as Year, 2 as Month, 29 as Day)); -- 2024-02-29T00:00:00Z
+```
+
 ## Update {#update}
 
-Обновление одной или нескольких компонент во внутреннем представлении. Возвращает либо обновлённую копию, либо NULL, если после обновления получается некорректная дата или возникают другие противоречия.
+Обновление одной или нескольких компонент во внутреннем представлении. `Timezone` допустим только как именованный аргумент. Возвращает либо обновлённую копию, либо NULL, если после обновления получается некорректная дата или возникают другие противоречия.
 
 #### Список функций
 
@@ -335,7 +352,7 @@ SELECT
 * `%H` - час 2 цифры;
 * `%M` - минуты 2 цифры;
 * `%S` - секунды 2 цифры или `XX.XXXXXX` в случае непустых микросекунд (и только если флаг `AlwaysWriteFractionalSeconds` не выставлен в `True`);
-* `%z` - +hhmm или -hhmm по умолчанию; +hh:mm или -hh:mm, если флаг `WriteOffsetWithColon` выставлен в `True`;
+* `%z` - +hhmm или -hhmm по умолчанию; +hh:mm или -hh:mm, если флаг `WriteOffsetWithColon` (добавлен в версии [2025.05](../../changelog/2025.05.md#datetime-module)) выставлен в `True`;
 * `%Z` - IANA имя таймзоны;
 * `%b` - короткое трехбуквенное английское название месяца (Jan);
 * `%B` - полное английское название месяца (January).

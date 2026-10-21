@@ -12,9 +12,7 @@
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
 
-#define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "[CdcStreamScan][" << TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "[CdcStreamScan][" << TabletID() << "] " << stream)
-#define LOG_W(stream) LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "[CdcStreamScan][" << TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr::NDataShard {
 
@@ -113,6 +111,15 @@ void TCdcStreamScanManager::Complete(const TPathId& streamPathId) {
 void TCdcStreamScanManager::Complete(ui64 txId) {
     Y_ENSURE(TxIdToPathId.contains(txId));
     Complete(TxIdToPathId.at(txId));
+}
+
+void TCdcStreamScanManager::Fail(ui64 txId) {
+    Y_ENSURE(TxIdToPathId.contains(txId));
+    auto& info = Scans.at(TxIdToPathId.at(txId));
+    TxIdToPathId.erase(txId);
+    info.TxId = 0;
+    info.ScanId = 0;
+    info.ActorId = {};
 }
 
 bool TCdcStreamScanManager::IsCompleted(const TPathId& streamPathId) const {
@@ -232,13 +239,15 @@ public:
         const auto& readVersion = ev.ReadVersion;
         const auto& valueTags = ev.ValueTags;
 
-        LOG_D("Progress"
-            << ": streamPathId# " << streamPathId
-            << ", rows# " << ev.Rows.size());
+        YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Processing CDC stream scan progress batch",
+            {"tabletId", TabletID()},
+            {"streamPathId", streamPathId},
+            {"rowCount", ev.Rows.size()});
 
         if (!Self->GetUserTables().contains(tablePathId.LocalPathId)) {
-            LOG_W("Cannot progress on unknown table"
-                << ": tablePathId# " << tablePathId);
+            YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] CDC stream scan skipped: unknown table",
+                {"tabletId", TabletID()},
+                {"tablePathId", tablePathId});
             return true;
         }
 
@@ -246,8 +255,9 @@ public:
 
         auto it = table->CdcStreams.find(streamPathId);
         if (it == table->CdcStreams.end()) {
-            LOG_W("Cannot progress on unknown cdc stream"
-                << ": streamPathId# " << streamPathId);
+            YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] CDC stream scan skipped: unknown stream",
+                {"tabletId", TabletID()},
+                {"streamPathId", streamPathId});
             return true;
         }
 
@@ -258,19 +268,22 @@ public:
         }
 
         if (!ev.ReservationCookie) {
-            LOG_I("Cannot reserve change queue capacity");
+            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] CDC stream scan rescheduled: failed to reserve change queue capacity",
+                {"tabletId", TabletID()});
             Reschedule = true;
             return true;
         }
 
         if (Self->GetFreeChangeQueueCapacity(ev.ReservationCookie) < ev.Rows.size()) {
-            LOG_I("Not enough change queue capacity");
+            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] CDC stream scan rescheduled: insufficient change queue capacity",
+                {"tabletId", TabletID()});
             Reschedule = true;
             return true;
         }
 
         if (Self->CheckChangesQueueOverflow(ev.ReservationCookie)) {
-            LOG_I("Change queue overflow");
+            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] CDC stream scan rescheduled: change queue overflow",
+                {"tabletId", TabletID()});
             Reschedule = true;
             return true;
         }
@@ -345,7 +358,7 @@ public:
                 .Step = record.GetStep(),
                 .TxId = record.GetTxId(),
                 .PathId = record.GetPathId(),
-                .BodySize = record.GetBody().size(),
+                .BodySize = record.GetBodySize(),
                 .TableId = record.GetTableId(),
                 .SchemaVersion = record.GetSchemaVersion(),
             });
@@ -372,14 +385,17 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Response) {
-            LOG_I("Enqueue " << ChangeRecords.size() << " change record(s)"
-                << ": streamPathId# " << Request->Get()->StreamPathId);
+            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] Enqueuing CDC stream scan change records",
+                {"tabletId", TabletID()},
+                {"changeRecordsCount", ChangeRecords.size()},
+                {"streamPathId", Request->Get()->StreamPathId});
 
             Self->EnqueueChangeRecords(std::move(ChangeRecords), Request->Get()->ReservationCookie);
             ctx.Send(Request->Sender, Response.Release());
         } else if (Reschedule) {
-            LOG_I("Re-schedule progress tx"
-                << ": streamPathId# " << Request->Get()->StreamPathId);
+            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] CDC stream scan progress rescheduled",
+                {"tabletId", TabletID()},
+                {"streamPathId", Request->Get()->StreamPathId});
 
             // re-schedule tx
             ctx.TActivationContext::Schedule(TDuration::Seconds(1), Request->Forward(ctx.SelfID));
@@ -515,7 +531,6 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EStatus status) override {
-        // TODO: https://github.com/ydb-platform/ydb/issues/18806
         if (status != EStatus::Done) {
             Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::ABORTED);
         } else {
@@ -579,8 +594,9 @@ public:
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
 
-        LOG_D("Run"
-            << ": ev# " << record.ShortDebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Handling CDC stream scan request",
+            {"tabletId", TabletID()},
+            {"requestRecord", record.ShortDebugString()});
 
         const auto tablePathId = TPathId::FromProto(record.GetTablePathId());
         if (!Self->GetUserTables().contains(tablePathId.LocalPathId)) {
@@ -700,8 +716,9 @@ public:
         );
         Self->CdcStreamScanManager.Enqueue(streamPathId, localTxId, scanId);
 
-        LOG_I("Run scan"
-            << ": streamPathId# " << streamPathId);
+        YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] Starting CDC stream scan",
+            {"tabletId", TabletID()},
+            {"streamPathId", streamPathId});
 
         Response = MakeResponse(ctx, NKikimrTxDataShard::TEvCdcStreamScanResponse::ACCEPTED);
         return true;
@@ -721,7 +738,9 @@ void TDataShard::Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const T
 
 void TDataShard::Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx) {
     if (!CdcStreamScanManager.Has(ev->Get()->TxId)) {
-        LOG_W("Unknown cdc stream scan actor registered");
+        YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] Ignoring CDC stream scan registration for unknown transaction",
+            {"tabletId", TabletID()},
+            {"txId", ev->Get()->TxId});
         return;
     }
 
@@ -733,3 +752,7 @@ void TDataShard::Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TA
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -346,6 +346,36 @@ function initReadSetsTab() {
                 sortList: [[0,0]],
                 widgets : ['zebra', 'filter'],
             });
+            $('#ds-op-send-rs').off('click').on('click', function() {
+                const body = $('#ds-send-rs-body');
+                const data = {
+                    TabletID: '',
+                    action: 'send-read-set'
+                };
+                for (const key of ['step', 'txId', 'srcTabletId', 'seqNo']) {
+                    data[key] = body.find('input[name='+key+']').val();
+                    if (!/^\d+$/.exec(data[key])) {
+                        $('#ds-send-rs-error').html('Invalid '+key);
+                        return;
+                    }
+                }
+                data['commit'] = body.find('select[name=commit]').val();
+                const m = /[&\?]TabletID=(\d+)/.exec(window.location.search);
+                if (!m) {
+                    $('#ds-send-rs-error').html('Invalid destination datashard ID');
+                    return;
+                }
+                data['TabletID'] = m[1];
+                $('#ds-send-rs-error').html('Sending...');
+                const url = makeTabletDevUiUrl($.param(data));
+                $.ajax({ type: 'POST', url: url, data: {}, dataType: 'text' })
+                    .done(function(data) {
+                        $('#ds-send-rs-error').html(data);
+                    })
+                    .fail(function(xhr, textStatus) {
+                        $('#ds-send-rs-error').html(xhr.responseText || xhr.statusText);
+                    });
+            });
             scheduleLoadReadSets(0);
         }
     });

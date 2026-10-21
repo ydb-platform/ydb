@@ -52,7 +52,7 @@ TString StripSourceLocationPrefix(TStringBuf message) {
         msg << " at line " << e.mark.line + 1 << ", column " << e.mark.column + 1;
     }
     msg << ": " << e.msg;
-    throw TInitializationException("YDB-CFG01") << msg;
+    throw TInitializationException("YDBE-10001") << msg;
 }
 
 [[noreturn]] void ThrowUnknownYamlFieldsError(TStringBuf source, const NYamlConfig::TBasicUnknownFieldsCollector& collector) {
@@ -79,11 +79,12 @@ TString StripSourceLocationPrefix(TStringBuf message) {
             }
         }
     }
-    throw TInitializationException("YDB-CFG02") << msg;
+    throw TInitializationException("YDBE-10002") << msg;
 }
 
-[[noreturn]] void ThrowJsonToProtoError(TStringBuf source, const NYamlConfig::TBasicUnknownFieldsCollector& collector, const yexception& e) {
-    if (!collector.GetUnknownKeys().empty()) {
+[[noreturn]] void ThrowJsonToProtoError(TStringBuf source, const NYamlConfig::TBasicUnknownFieldsCollector& collector,
+    const yexception& e, bool allowUnknownFields) {
+    if (!allowUnknownFields && !collector.GetUnknownKeys().empty()) {
         ThrowUnknownYamlFieldsError(source, collector);
     }
 
@@ -93,13 +94,13 @@ TString StripSourceLocationPrefix(TStringBuf message) {
         msg << " at path " << currentPath.Quote();
     }
     msg << ": " << StripSourceLocationPrefix(e.AsStrBuf());
-    throw TInitializationException("YDB-CFG03") << msg;
+    throw TInitializationException("YDBE-10003") << msg;
 }
 
 [[noreturn]] void ThrowInvalidConfigurationError(TStringBuf source, const yexception& e) {
     TStringBuilder msg;
     msg << "Invalid configuration in " << EffectiveYamlSource(source) << ": " << StripSourceLocationPrefix(e.AsStrBuf());
-    throw TInitializationException("YDB-CFG04") << msg;
+    throw TInitializationException("YDBE-10004") << msg;
 }
 
 } // anonymous namespace
@@ -112,11 +113,12 @@ NJson::TJsonValue LoadYamlAsJsonOrThrow(const TString& config, TStringBuf source
     } catch (const yexception& e) {
         TStringBuilder msg;
         msg << "Failed to parse " << EffectiveYamlSource(source) << ": " << StripSourceLocationPrefix(e.AsStrBuf());
-        throw TInitializationException("YDB-CFG05") << msg;
+        throw TInitializationException("YDBE-10005") << msg;
     }
 }
 
-void ParseJsonConfigOrThrow(const NJson::TJsonValue& json, TStringBuf source, NKikimrConfig::TAppConfig& config) {
+void ParseJsonConfigOrThrow(const NJson::TJsonValue& json, TStringBuf source, NKikimrConfig::TAppConfig& config,
+    bool allowUnknownFields) {
     const bool hasMetadataConfig = json.Has("metadata") && json.Has("config") && json["config"].IsMap();
     TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> collector =
         new NYamlConfig::TBasicUnknownFieldsCollector(hasMetadataConfig ? "config" : "");
@@ -126,13 +128,13 @@ void ParseJsonConfigOrThrow(const NJson::TJsonValue& json, TStringBuf source, NK
         NKikimr::NYaml::Parse(json, NKikimr::NYaml::GetJsonToProtoConfig(true, collector), config, true, &phase);
     } catch (const yexception& e) {
         if (phase == NYaml::EParsePhase::JsonToProto) {
-            ThrowJsonToProtoError(source, *collector, e);
+            ThrowJsonToProtoError(source, *collector, e, allowUnknownFields);
         } else {
             ThrowInvalidConfigurationError(source, e);
         }
     }
 
-    if (!collector->GetUnknownKeys().empty()) {
+    if (!allowUnknownFields && !collector->GetUnknownKeys().empty()) {
         ThrowUnknownYamlFieldsError(source, *collector);
     }
 }

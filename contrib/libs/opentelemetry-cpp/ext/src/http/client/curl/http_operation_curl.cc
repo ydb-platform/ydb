@@ -12,21 +12,32 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <functional>
 #include <future>
-#include <map>
 #include <memory>
 #include <random>
-#include <ratio>
 #include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
+#ifdef _MSC_VER
+#  define strncasecmp _strnicmp
+#else
+#  include <strings.h>
+#endif
+
+#ifdef OTEL_CURL_DEBUG
+#  include <cctype>
+#endif
+
 #include "opentelemetry/ext/http/client/curl/http_client_curl.h"
 #include "opentelemetry/ext/http/client/curl/http_operation_curl.h"
+#include "opentelemetry/ext/http/client/curl/http_time_util.h"
 #include "opentelemetry/ext/http/client/http_client.h"
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/sdk/common/global_log_handler.h"
@@ -36,6 +47,47 @@
 #ifndef CURL_VERSION_BITS
 #  define CURL_VERSION_BITS(x, y, z) ((x) << 16 | (y) << 8 | (z))
 #endif
+
+namespace
+{
+
+bool FindRetryAfterValue(const std::vector<uint8_t> &raw_headers,
+                         opentelemetry::nostd::string_view &value)
+{
+  if (raw_headers.empty())
+  {
+    return false;
+  }
+
+  static const char kRetryAfterHeader[] = "retry-after:";
+  static const size_t kRetryAfterLen    = sizeof(kRetryAfterHeader) - 1;
+
+  const char *data = reinterpret_cast<const char *>(raw_headers.data());
+  const char *end  = data + raw_headers.size();
+  const char *line = data;
+
+  while (line < end)
+  {
+    const char *line_end = line;
+    while (line_end < end && *line_end != '\n')
+    {
+      ++line_end;
+    }
+
+    size_t line_len = static_cast<size_t>(line_end - line);
+    if (line_len > kRetryAfterLen && strncasecmp(line, kRetryAfterHeader, kRetryAfterLen) == 0)
+    {
+      value = opentelemetry::nostd::string_view(line + kRetryAfterLen, line_len - kRetryAfterLen);
+      return true;
+    }
+
+    line = (line_end < end) ? line_end + 1 : end;
+  }
+
+  return false;
+}
+
+}  // namespace
 
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace ext
@@ -278,9 +330,30 @@ size_t HttpOperation::ReadMemoryCallback(char *buffer, size_t size, size_t nitem
     nwrite = self->request_body_.size() - self->request_nwrite_;
   }
 
-  memcpy(buffer, &self->request_body_[self->request_nwrite_], nwrite);
+  std::memcpy(buffer, &self->request_body_[self->request_nwrite_], nwrite);
   self->request_nwrite_ += nwrite;
   return nwrite;
+}
+
+int HttpOperation::SeekCallback(void *userp, curl_off_t offset, int origin)
+{
+  HttpOperation *self = reinterpret_cast<HttpOperation *>(userp);
+  if (nullptr == self)
+  {
+    return CURL_SEEKFUNC_CANTSEEK;
+  }
+
+  // The body is a fully buffered span owned by the caller, so an absolute seek inside it is just a
+  // move of the read cursor. Anything else is refused rather than approximated, because reporting
+  // success without repositioning would resume the upload from the wrong offset and send a
+  // truncated or misaligned body.
+  if (origin != SEEK_SET || offset < 0 || static_cast<size_t>(offset) > self->request_body_.size())
+  {
+    return CURL_SEEKFUNC_CANTSEEK;
+  }
+
+  self->request_nwrite_ = static_cast<size_t>(offset);
+  return CURL_SEEKFUNC_OK;
 }
 
 #if LIBCURL_VERSION_NUM >= 0x075000
@@ -324,12 +397,9 @@ int HttpOperation::OnProgressCallback(void *clientp,
     return -1;
   }
 
-  // CURL_PROGRESSFUNC_CONTINUE is added in 7.68.0
-#  if defined(CURL_PROGRESSFUNC_CONTINUE)
-  return CURL_PROGRESSFUNC_CONTINUE;
-#  else
+  // Not CURL_PROGRESSFUNC_CONTINUE, which asks libcurl to also run its built-in progress
+  // meter, and that meter writes to stderr.
   return 0;
-#  endif
 }
 #else
 int HttpOperation::OnProgressCallback(void *clientp,
@@ -495,11 +565,9 @@ void HttpOperation::Cleanup()
   if (async_data_)
   {
     // Just reset and move easy_handle to owner if in async mode
-    if (async_data_->session != nullptr)
+    Session *session = async_data_->session.exchange(nullptr, std::memory_order_acq_rel);
+    if (session != nullptr)
     {
-      auto session         = async_data_->session;
-      async_data_->session = nullptr;
-
       if (curl_resource_.easy_handle != nullptr)
       {
         curl_easy_setopt(curl_resource_.easy_handle, CURLOPT_PRIVATE, NULL);
@@ -562,9 +630,15 @@ bool HttpOperation::IsRetryable()
 
 std::chrono::system_clock::time_point HttpOperation::NextRetryTime()
 {
-  static std::random_device rd;
-  static std::mt19937 gen(rd());
-  static std::uniform_real_distribution<float> dis(0.8f, 1.2f);
+  if (retry_after_time_point_ != std::chrono::system_clock::time_point{})
+  {
+    return retry_after_time_point_;
+  }
+
+  // One engine per thread. Every HttpClient drives its own background thread, and drawing from
+  // the engine advances its state, so a shared one is written by all of them at once.
+  static thread_local std::mt19937 gen{std::random_device{}()};
+  std::uniform_real_distribution<float> dis(0.8f, 1.2f);
 
   // The initial retry attempt will occur after initialBackoff * random(0.8, 1.2)
   auto backoff = retry_policy_.initial_backoff;
@@ -669,7 +743,7 @@ const char *HttpOperation::GetCurlErrorMessage(CURLcode code)
   return message;
 }
 
-CURLcode HttpOperation::SetCurlPtrOption(CURLoption option, void *value)
+CURLcode HttpOperation::SetCurlPtrOption(CURLoption option, const void *value)
 {
   /*
     curl_easy_setopt() is a macro with variadic arguments, type unsafe.
@@ -858,7 +932,9 @@ CURLcode HttpOperation::Setup()
       const char *data = ssl_options_.ssl_ca_cert_string.c_str();
       size_t data_len  = ssl_options_.ssl_ca_cert_string.length();
 
-      struct curl_blob stblob;
+      struct curl_blob stblob
+      {};
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
       stblob.data  = const_cast<char *>(data);
       stblob.len   = data_len;
       stblob.flags = CURL_BLOB_COPY;
@@ -899,7 +975,9 @@ CURLcode HttpOperation::Setup()
       const char *data = ssl_options_.ssl_client_key_string.c_str();
       size_t data_len  = ssl_options_.ssl_client_key_string.length();
 
-      struct curl_blob stblob;
+      struct curl_blob stblob
+      {};
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
       stblob.data  = const_cast<char *>(data);
       stblob.len   = data_len;
       stblob.flags = CURL_BLOB_COPY;
@@ -946,7 +1024,9 @@ CURLcode HttpOperation::Setup()
       const char *data = ssl_options_.ssl_client_cert_string.c_str();
       size_t data_len  = ssl_options_.ssl_client_cert_string.length();
 
-      struct curl_blob stblob;
+      struct curl_blob stblob
+      {};
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
       stblob.data  = const_cast<char *>(data);
       stblob.len   = data_len;
       stblob.flags = CURL_BLOB_COPY;
@@ -1254,7 +1334,7 @@ CURLcode HttpOperation::Setup()
       return rc;
     }
 
-    rc = SetCurlStrOption(CURLOPT_POSTFIELDS, NULL);
+    rc = SetCurlStrOption(CURLOPT_POSTFIELDS, nullptr);
     if (rc != CURLE_OK)
     {
       return rc;
@@ -1274,6 +1354,19 @@ CURLcode HttpOperation::Setup()
     }
 
     rc = SetCurlPtrOption(CURLOPT_READDATA, this);
+    if (rc != CURLE_OK)
+    {
+      return rc;
+    }
+
+    rc = SetCurlPtrOption(CURLOPT_SEEKFUNCTION,
+                          reinterpret_cast<void *>(&HttpOperation::SeekCallback));
+    if (rc != CURLE_OK)
+    {
+      return rc;
+    }
+
+    rc = SetCurlPtrOption(CURLOPT_SEEKDATA, this);
     if (rc != CURLE_OK)
     {
       return rc;
@@ -1378,7 +1471,7 @@ CURLcode HttpOperation::SendAsync(Session *session, std::function<void(HttpOpera
 
   async_data_.reset(new AsyncData());
   async_data_->is_promise_running.store(false, std::memory_order_release);
-  async_data_->session = nullptr;
+  async_data_->session.store(nullptr, std::memory_order_release);
 
   ReleaseResponse();
 
@@ -1392,12 +1485,17 @@ CURLcode HttpOperation::SendAsync(Session *session, std::function<void(HttpOpera
   }
   curl_easy_setopt(curl_resource_.easy_handle, CURLOPT_PRIVATE, session);
 
+  // Only a session can be cancelled, so only this path needs the progress callback live. Setting
+  // it here, on the thread that owns the handle and before the handle is scheduled, leaves
+  // Abort() with nothing to do but raise the flag.
+  curl_easy_setopt(curl_resource_.easy_handle, CURLOPT_NOPROGRESS, 0L);
+
   DispatchEvent(opentelemetry::ext::http::client::SessionState::Connecting);
   is_finished_.store(false, std::memory_order_release);
   is_aborted_.store(false, std::memory_order_release);
   is_cleaned_.store(false, std::memory_order_release);
 
-  async_data_->session = session;
+  async_data_->session.store(session, std::memory_order_release);
   if (false == async_data_->is_promise_running.exchange(true, std::memory_order_acq_rel))
   {
     async_data_->result_promise = std::promise<CURLcode>();
@@ -1449,15 +1547,16 @@ void HttpOperation::ReleaseResponse()
 
 void HttpOperation::Abort()
 {
+  // The easy handle belongs to the thread inside curl_multi_perform, so nothing here reads or
+  // writes it. Raising the flag is enough: the progress callback polls it, and the scheduled
+  // abort removes the handle on that thread.
   is_aborted_.store(true, std::memory_order_release);
-  if (curl_resource_.easy_handle != nullptr)
+  if (async_data_)
   {
-    // Enable progress callback to abort from polling thread
-    curl_easy_setopt(curl_resource_.easy_handle, CURLOPT_NOPROGRESS, 0L);
-    if (async_data_ && nullptr != async_data_->session)
+    Session *session = async_data_->session.load(std::memory_order_acquire);
+    if (nullptr != session)
     {
-      async_data_->session->GetHttpClient().ScheduleAbortSession(
-          async_data_->session->GetSessionId());
+      session->GetHttpClient().ScheduleAbortSession(session->GetSessionId());
     }
   }
 }
@@ -1465,8 +1564,9 @@ void HttpOperation::Abort()
 void HttpOperation::PerformCurlMessage(CURLcode code)
 {
   ++retry_attempts_;
-  last_attempt_time_ = std::chrono::system_clock::now();
-  last_curl_result_  = code;
+  last_attempt_time_      = std::chrono::system_clock::now();
+  last_curl_result_       = code;
+  retry_after_time_point_ = std::chrono::system_clock::time_point{};
 
   if (code != CURLE_OK)
   {
@@ -1513,16 +1613,57 @@ void HttpOperation::PerformCurlMessage(CURLcode code)
     DispatchEvent(opentelemetry::ext::http::client::SessionState::Response);
   }
 
-  if (IsRetryable())
+  // A server-driven Retry-After may request a retry far beyond the retry
+  // policy's max_backoff (e.g. a malicious or misbehaving server returning
+  // "Retry-After: 2 years"). Such a session would linger in the pending retry
+  // list and block the FIFO drain in doRetrySessions(), so it must be closed
+  // rather than honored. Cap the requested delay at max_backoff; if the
+  // server-driven retry time still exceeds the maximum expected retry window,
+  // the session is closed below and not retried.
+  const bool is_retryable            = IsRetryable();
+  bool retry_after_exceeds_max_delay = false;
+
+  if (is_retryable)
   {
-    // Clear any response data received in previous attempt
-    ReleaseResponse();
-    // Rewind request data so that read callback can re-transfer the payload
-    request_nwrite_ = 0;
-    // Reset session state
-    DispatchEvent(opentelemetry::ext::http::client::SessionState::Connecting);
+    nostd::string_view retry_after;
+    if (FindRetryAfterValue(response_headers_, retry_after))
+    {
+      std::chrono::seconds delay;
+      std::chrono::system_clock::time_point date;
+      const bool parsed_delay = HttpTimeUtil::ParseDelaySeconds(retry_after, delay);
+      const bool parsed_date  = !parsed_delay && HttpTimeUtil::ParseHttpDate(retry_after, date);
+
+      if (parsed_delay || parsed_date)
+      {
+        // Reuse the attempt timestamp instead of calling now() again, so the
+        // retry-after delay is measured from the attempt that produced this
+        // response and we avoid an extra system_clock syscall on the hot path.
+        retry_after_time_point_ = parsed_delay
+                                      ? (last_attempt_time_ + delay)
+                                      : ((date > last_attempt_time_) ? date : last_attempt_time_);
+
+        const auto max_retry_time =
+            last_attempt_time_ +
+            std::chrono::duration_cast<std::chrono::milliseconds>(retry_policy_.max_backoff);
+        if (retry_after_time_point_ > max_retry_time)
+        {
+          retry_after_exceeds_max_delay = true;
+        }
+      }
+    }
+
+    if (!retry_after_exceeds_max_delay)
+    {
+      // Clear any response data received in previous attempt
+      ReleaseResponse();
+      // Rewind request data so that read callback can re-transfer the payload
+      request_nwrite_ = 0;
+      // Reset session state
+      DispatchEvent(opentelemetry::ext::http::client::SessionState::Connecting);
+    }
   }
-  else
+
+  if (!is_retryable || retry_after_exceeds_max_delay)
   {
     // Cleanup and unbind easy handle from multi handle, and finish callback
     Cleanup();

@@ -10,6 +10,8 @@
 
 namespace NYT::NQueryClient {
 
+////////////////////////////////////////////////////////////////////////////////
+
 using NTransactionClient::TTimestamp;
 
 using NTableClient::TRowRange;
@@ -30,6 +32,7 @@ class TGroupClause;
 class TProjectClause;
 class TWhenThenExpression;
 class TJoinClause;
+class THierarchicalJoinClause;
 class TQuery;
 class TQueryOptions;
 class TFeatureFlags;
@@ -52,6 +55,9 @@ using TConstArrayJoinClausePtr = TIntrusivePtr<const TArrayJoinClause>;
 
 DECLARE_REFCOUNTED_STRUCT(TJoinClause)
 using TConstJoinClausePtr = TIntrusivePtr<const TJoinClause>;
+
+DECLARE_REFCOUNTED_STRUCT(THierarchicalJoinClause)
+using TConstHierarchicalJoinClausePtr = TIntrusivePtr<const THierarchicalJoinClause>;
 
 DECLARE_REFCOUNTED_STRUCT(TGroupClause)
 using TConstGroupClausePtr = TIntrusivePtr<const TGroupClause>;
@@ -172,8 +178,7 @@ using NTableClient::ESimpleLogicalValueType;
 
 namespace NAst {
 
-DECLARE_REFCOUNTED_STRUCT(TTableHint);
-DECLARE_REFCOUNTED_STRUCT(TQueryAstHead);
+using NQueryClient::TTableHint;
 
 } // namespace NAst
 

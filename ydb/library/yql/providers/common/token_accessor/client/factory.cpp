@@ -1,15 +1,12 @@
-#include "factory.h"
 #include "bearer_credentials_provider.h"
+#include "factory.h"
 #include "token_accessor_client_factory.h"
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/protos/replication.pb.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
+
+#include <util/string/cast.h>
 #include <yql/essentials/providers/common/structured_token/yql_structured_token.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
-#include <util/string/cast.h>
 
 namespace NYql {
 
@@ -17,16 +14,10 @@ namespace {
 
 using TTokenAccessorConnectionPool = std::vector<std::shared_ptr<NYdbGrpc::TServiceConnection<TokenAccessorService>>>;
 
-class TSecuredServiceAccountCredentialsFactoryImpl : public ISecuredServiceAccountCredentialsFactory {
+class TSecuredServiceAccountCredentialsFactoryImpl: public ISecuredServiceAccountCredentialsFactory {
 public:
-    TSecuredServiceAccountCredentialsFactoryImpl(
-        const TString& tokenAccessorEndpoint,
-        bool useSsl,
-        const TString& sslCaCert,
-        ui32 connectionPoolSize,
-        const TDuration& refreshPeriod,
-        const TDuration& requestTimeout
-    )
+    TSecuredServiceAccountCredentialsFactoryImpl(const TString& tokenAccessorEndpoint, bool useSsl, const TString& sslCaCert,
+        ui32 connectionPoolSize, const TDuration& refreshPeriod, const TDuration& requestTimeout)
         : RefreshPeriod(refreshPeriod)
         , RequestTimeout(requestTimeout)
         , Client(std::make_shared<NYdbGrpc::TGRpcClientLow>())
@@ -40,7 +31,8 @@ public:
         }
     }
 
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString& serviceAccountId, const TString& serviceAccountIdSignature) override {
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(
+        const TString& serviceAccountId, const TString& serviceAccountIdSignature) override {
         Y_ENSURE(serviceAccountId);
         Y_ENSURE(serviceAccountIdSignature);
 
@@ -51,7 +43,8 @@ public:
             connection = Connections[NextConnectionIndex++ % Connections.size()];
         }
 
-        return CreateTokenAccessorCredentialsProviderFactory(Client, std::move(connection), serviceAccountId, serviceAccountIdSignature, RefreshPeriod, RequestTimeout);
+        return CreateTokenAccessorCredentialsProviderFactory(
+            Client, std::move(connection), serviceAccountId, serviceAccountIdSignature, RefreshPeriod, RequestTimeout);
     }
 
 private:
@@ -63,83 +56,99 @@ private:
     mutable std::atomic<ui32> NextConnectionIndex = 0;
 };
 
-std::shared_ptr<NYdb::ICredentialsProviderFactory> WrapWithBearerIfNeeded(std::shared_ptr<NYdb::ICredentialsProviderFactory> delegatee, bool addBearerToToken) {
+std::shared_ptr<NYdb::ICredentialsProviderFactory> WrapWithBearerIfNeeded(
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> delegatee, bool addBearerToToken) {
     if (!addBearerToToken) {
         return delegatee;
     }
     return WrapCredentialsProviderFactoryWithBearer(delegatee);
 }
-}
+
+class TDefaultStructuredTokenCredentialsFactory: public IStructuredTokenCredentialsFactory {
+public:
+    TDefaultStructuredTokenCredentialsFactory(
+        ISecuredServiceAccountCredentialsFactory::TPtr saFactory, TIamAuthCredentialsFactory iamAuthFactory)
+        : SaFactory_(std::move(saFactory))
+        , IamAuthFactory_(std::move(iamAuthFactory))
+    {
+    }
+
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString& structuredTokenJson, bool addBearerToToken) override {
+        if (!NYql::IsStructuredTokenJson(structuredTokenJson)) {
+            return WrapWithBearerIfNeeded(NYdb::CreateOAuthCredentialsProviderFactory(structuredTokenJson), addBearerToToken);
+        }
+
+        NYql::TStructuredTokenParser parser = NYql::CreateStructuredTokenParser(structuredTokenJson);
+        if (parser.HasIAMToken()) {
+            return WrapWithBearerIfNeeded(NYdb::CreateOAuthCredentialsProviderFactory(parser.GetIAMToken()), addBearerToToken);
+        }
+
+        if (parser.HasIamAuth()) {
+            if (IamAuthFactory_) {
+                return IamAuthFactory_(parser);
+            }
+            ythrow yexception() << "AUTH_METHOD=IAM is not supported in this context";
+        }
+
+        if (parser.HasTransientToken()) {
+            return NYdb::CreateOAuthCredentialsProviderFactory(parser.GetTransientToken());
+        }
+
+        if (parser.HasServiceAccountIdAuth()) {
+            TString id;
+            TString signature;
+            parser.GetServiceAccountIdAuth(id, signature);
+            if (!SaFactory_) {
+                ythrow yexception() << "You must provide credentials factory instance to transform service account credentials into IAM-token.";
+            }
+            return WrapWithBearerIfNeeded(SaFactory_->Create(id, signature), addBearerToToken);
+        }
+
+        if (parser.HasBasicAuth()) {
+            TString login;
+            TString password;
+            parser.GetBasicAuth(login, password);
+            return NYdb::CreateLoginCredentialsProviderFactory({ .User = login, .Password = password });
+        }
+
+        if (parser.IsNoAuth()) {
+            return NYdb::CreateInsecureCredentialsProviderFactory();
+        }
+
+        ythrow yexception() << "Unrecognized token of length " << structuredTokenJson.size();
+    }
+
+private:
+    const ISecuredServiceAccountCredentialsFactory::TPtr SaFactory_;
+    const TIamAuthCredentialsFactory IamAuthFactory_;
+};
+
+}   // namespace
 
 ISecuredServiceAccountCredentialsFactory::TPtr CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(
-    const TString& tokenAccessorEndpoint,
-    bool useSsl,
-    const TString& sslCaCert,
-    ui32 connectionPoolSize,
-    const TDuration& refreshPeriod,
+    const TString& tokenAccessorEndpoint, bool useSsl, const TString& sslCaCert, ui32 connectionPoolSize, const TDuration& refreshPeriod,
     const TDuration& requestTimeout) {
-    return std::make_shared<TSecuredServiceAccountCredentialsFactoryImpl>(tokenAccessorEndpoint, useSsl, sslCaCert, connectionPoolSize, refreshPeriod, requestTimeout);
+    return std::make_shared<TSecuredServiceAccountCredentialsFactoryImpl>(
+        tokenAccessorEndpoint, useSsl, sslCaCert, connectionPoolSize, refreshPeriod, requestTimeout);
 }
 
-std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFactoryForStructuredToken(ISecuredServiceAccountCredentialsFactory::TPtr factory, const TString& structuredTokenJson, bool addBearerToToken) {
-    if (!NYql::IsStructuredTokenJson(structuredTokenJson)) {
-        return WrapWithBearerIfNeeded(NYdb::CreateOAuthCredentialsProviderFactory(structuredTokenJson), addBearerToToken);
-    }
-
-    NYql::TStructuredTokenParser parser = NYql::CreateStructuredTokenParser(structuredTokenJson);
-    if (parser.HasIAMToken()) {
-        return WrapWithBearerIfNeeded(NYdb::CreateOAuthCredentialsProviderFactory(parser.GetIAMToken()), addBearerToToken); // OK for any static token (OAuth, IAM).
-    }
-
-    if (parser.HasIamAuth()) {
-        NYdb::TIamServiceParams iamParams;
-        if (!NKikimr::AppData()->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
-            throw yexception() << "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it";
-        }
-        const auto& serviceControl = NKikimr::AppData()->ReplicationConfig.GetIamServiceControl();
-
-        TString serviceAccountId;
-        TString resourceId;
-        parser.GetIamAuth(serviceAccountId, resourceId);
-        iamParams.SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory();
-        iamParams.Endpoint = serviceControl.GetEndpoint();
-        iamParams.ServiceId = serviceControl.GetServiceId();
-        iamParams.MicroserviceId = serviceControl.GetMicroserviceId();
-        iamParams.ResourceType = serviceControl.GetResourceType();
-        iamParams.ResourceId = resourceId;
-        iamParams.TargetServiceAccountId = serviceAccountId;
-
-        return CreateIamServiceCredentialsProviderFactory(iamParams);
-    }
-    if (parser.HasTransientToken()) {
-        return NYdb::CreateOAuthCredentialsProviderFactory(parser.GetTransientToken()); // Expected serialized NACLib::TUserToken with authorized user SID and list of group SIDs.
-    }
-
-    if (parser.HasServiceAccountIdAuth()) {
-        TString id;
-        TString signature;
-        parser.GetServiceAccountIdAuth(id, signature);
-
-        if (!factory) {
-            ythrow yexception() << "You must provide credentials factory instance to transform service account credentials into IAM-token.";
-        }
-        return WrapWithBearerIfNeeded(factory->Create(id, signature), addBearerToToken);
-    }
-
-    if (parser.HasBasicAuth()) {
-        TString login;
-        TString password;
-        parser.GetBasicAuth(login, password);
-        return NYdb::CreateLoginCredentialsProviderFactory({
-            .User = login,
-            .Password = password});
-    }
-
-    if (parser.IsNoAuth()) {
-        return NYdb::CreateInsecureCredentialsProviderFactory();
-    }
-
-    ythrow yexception() << "Unrecognized token of length " << structuredTokenJson.size();
+IStructuredTokenCredentialsFactory::TPtr CreateStructuredTokenCredentialsFactory(
+    ISecuredServiceAccountCredentialsFactory::TPtr saFactory, TIamAuthCredentialsFactory iamAuthFactory)
+{
+    return std::make_shared<TDefaultStructuredTokenCredentialsFactory>(std::move(saFactory), std::move(iamAuthFactory));
 }
 
+IStructuredTokenCredentialsFactory::TPtr CreateStructuredTokenCredentialsOverTokenAccessorFactory(const TString& tokenAccessorEndpoint,
+    bool useSsl, const TString& sslCaCert, ui32 connectionPoolSize, const TDuration& refreshPeriod, const TDuration& requestTimeout) {
+    auto factory = CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(
+        tokenAccessorEndpoint, useSsl, sslCaCert, connectionPoolSize, refreshPeriod, requestTimeout);
+    return CreateStructuredTokenCredentialsFactory(factory);
 }
+
+std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFactoryForStructuredToken(
+    ISecuredServiceAccountCredentialsFactory::TPtr factory, const TString& structuredTokenJson, bool addBearerToToken)
+{
+    return CreateStructuredTokenCredentialsFactory(std::move(factory))->Create(structuredTokenJson, addBearerToToken);
+}
+
+}   // namespace NYql

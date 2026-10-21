@@ -24,6 +24,8 @@ SRCS(
     actorid.h
     actorsystem.cpp
     actorsystem.h
+    allocation_cache_families.h
+    allocation_cache.h
     ask.cpp
     ask.h
     buffer.cpp
@@ -64,7 +66,6 @@ SRCS(
     invoke.h
     io_dispatcher.cpp
     io_dispatcher.h
-    lease.h
     log.cpp
     log.h
     log_settings.cpp
@@ -121,6 +122,7 @@ PEERDIR(
     library/cpp/logger
     library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters
+    library/cpp/string_utils/base64
     library/cpp/svnversion
     library/cpp/time_provider
     library/cpp/threading/future

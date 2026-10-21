@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -21,7 +23,9 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_RESUME_TABLET; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxResumeTablet::Execute Tablet: " << TabletId);
+        YDB_LOG_DEBUG("THive::TTxResumeTablet::Execute resuming tablet",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId});
         SideEffects.Reset(Self->SelfId());
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
@@ -67,6 +71,8 @@ public:
                 if (NewState != State) {
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::State>(NewState);
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::StoppedByTenant>(false);
+                    Self->RecordTabletEvent(*tablet, EHiveEventType::Resumed, EHiveEventReason::OwnerRequest,
+                        TStringBuilder() << "from=" << ETabletStateName(State) << " to=" << ETabletStateName(NewState));
                     tablet->State = NewState;
                     tablet->StoppedByTenant = false;
                 }
@@ -85,8 +91,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxResumeTablet::Complete TabletId: " << TabletId);
-        SideEffects.Complete(ctx);
+        YDB_LOG_DEBUG("THive::TTxResumeTablet::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId});
+        SideEffects.Complete(ctx, Self->Requests);
         if (ByTenant) {
             Self->ProcessPendingResumeTablet();
         }

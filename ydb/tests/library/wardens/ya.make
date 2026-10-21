@@ -6,8 +6,10 @@ PY_SRCS(
     datashard.py
     disk.py
     factories.py
+    fetched_counters.py
     hive.py
     logs.py
+    pq.py
     schemeshard.py
 )
 

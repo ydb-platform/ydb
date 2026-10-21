@@ -26,6 +26,7 @@ namespace NKikimr {
         const TIntrusivePtr<TLevelIndex<TKeyBlock, TMemRecBlock>> LevelIndexBlock;
         const TIntrusivePtr<TLevelIndex<TKeyBarrier, TMemRecBarrier>> LevelIndexBarrier;
         const TIntrusivePtr<TVDiskConfig> Config;
+        const ui64 StartupDataSyncBlockedUntilCutLsn;
         NMonGroup::TSyncerGroup MonGroup;
 
         TSyncerContext(TIntrusivePtr<TVDiskContext> vctx,
@@ -39,7 +40,8 @@ namespace NKikimr {
                 TIntrusivePtr<TLevelIndex<TKeyLogoBlob, TMemRecLogoBlob>> levelIndexLogoBlob,
                 TIntrusivePtr<TLevelIndex<TKeyBlock, TMemRecBlock>> levelIndexBlock,
                 TIntrusivePtr<TLevelIndex<TKeyBarrier, TMemRecBarrier>> levelIndexBarrier,
-                TIntrusivePtr<TVDiskConfig> config)
+                TIntrusivePtr<TVDiskConfig> config,
+                ui64 startupDataSyncBlockedUntilCutLsn = 0)
             : VCtx(std::move(vctx))
             , LsnMngr(std::move(lsnMngr))
             , PDiskCtx(std::move(pdiskCtx))
@@ -52,6 +54,7 @@ namespace NKikimr {
             , LevelIndexBlock(levelIndexBlock)
             , LevelIndexBarrier(levelIndexBarrier)
             , Config(std::move(config))
+            , StartupDataSyncBlockedUntilCutLsn(startupDataSyncBlockedUntilCutLsn)
             , MonGroup(VCtx->VDiskCounters, "subsystem", "syncer")
         {
             Y_ABORT_UNLESS(VCtx && LsnMngr && PDiskCtx);

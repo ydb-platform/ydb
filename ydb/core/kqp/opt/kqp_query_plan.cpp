@@ -1,10 +1,12 @@
 #include "kqp_query_plan.h"
 
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/library/json_index/json_index.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
+#include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -145,8 +147,10 @@ TString GetExprStr(const TExprBase& scalar, bool quoteStr = true) {
     }
 
     if (literal) {
-        CollapseText(*literal, 32);
-
+        if (literal->size() > 100) {
+            Utf8TruncateInplace(*literal, 96);
+            *literal += " ...";
+        }
         if (quoteStr) {
             return TStringBuilder() << '"' << *literal << '"';
         } else {
@@ -254,10 +258,22 @@ public:
 
             planNode.TypeName = typeName;
 
+            auto visitResultStage = [&](const TDqStageBase& resultStage) {
+                // Write with RETURNING produces the result straight from the sink stage.
+                // Keep the ResultSet node clean and attach the sink stage below it so the plan
+                // looks like a regular write with the ResultSet on top.
+                if (resultStage.Outputs()) {
+                    auto& sinkPlanNode = AddPlanNode(planNode);
+                    Visit(resultStage, sinkPlanNode);
+                } else {
+                    Visit(resultStage, planNode);
+                }
+            };
+
             if (res.Maybe<TDqCnResult>()) {
-                Visit(res.Cast<TDqCnResult>().Output().Stage(), planNode);
+                visitResultStage(res.Cast<TDqCnResult>().Output().Stage());
             } else if (res.Maybe<TDqCnValue>()) {
-                Visit(res.Cast<TDqCnValue>().Output().Stage(), planNode);
+                visitResultStage(res.Cast<TDqCnValue>().Output().Stage());
             } else {
                 Y_ENSURE(false, res.Ref().Content());
             }
@@ -265,11 +281,12 @@ public:
 
         for (const auto& stage: Tx.Stages()) {
             TDqStageBase stageBase = stage.Cast<TDqStageBase>();
-            if (stageBase.Program().Body().Maybe<TKqpEffects>()) {
-                auto& planNode = AddPlanNode(phaseNode);
-                planNode.TypeName = "Effect";
-                Visit(TExprBase(stage), planNode);
-            } else if (stageBase.Outputs()) { // Sink
+            if (stageBase.Outputs()) { // Sink
+                if (VisitedStages.contains(stage.Raw())) {
+                    // Already rendered as a result output stage (e.g. write with RETURNING).
+                    continue;
+                }
+
                 auto& planNode = AddPlanNode(phaseNode);
                 Visit(TExprBase(stage), planNode);
             }
@@ -627,6 +644,63 @@ private:
             }
 
             SerializerCtx.Tables[tablePath].Reads.push_back(std::move(readInfo));
+        } else if (auto maybeVectorSearch = connection.Maybe<TKqpCnVectorSearch>()) {
+            auto vectorSearch = maybeVectorSearch.Cast();
+
+            planNode.TypeName = "VectorSearch";
+            const TString indexName(vectorSearch.Index().Value());
+            planNode.NodeInfo["Index"] = indexName;
+
+            // The actor always reads the kmeans-tree level and posting index tables; whether it also
+            // reads the main table depends on the index being covering for the requested columns. When
+            // it is covering, every output column is served from the posting table and the main table
+            // is not touched — reflect that so covered-index plans show no main-table access.
+            // The posting table holds the main table's key columns plus the index data columns; the
+            // index key columns (the embedding, and the prefix of a prefixed index) are not in it, so
+            // ask its metadata rather than deriving the set from the index description.
+            TString tablePath(vectorSearch.Table().Path().Value());
+            auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
+
+            TKikimrTableMetadataPtr postingMeta;
+            {
+                const TString postingPath = TStringBuilder()
+                    << tablePath << "/" << indexName << "/" << NTableIndex::NKMeans::PostingTable;
+                const auto& tables = SerializerCtx.TablesData->GetTables();
+                if (auto* desc = tables.FindPtr(std::make_pair(SerializerCtx.Cluster, postingPath))) {
+                    postingMeta = desc->Metadata;
+                }
+            }
+
+            // Without the posting metadata, fall back to reporting the main table read.
+            bool covered = bool(postingMeta);
+            auto& columns = planNode.NodeInfo["Columns"];
+            TVector<TString> readColumns;
+            readColumns.reserve(vectorSearch.Columns().Size());
+            for (const auto& column : vectorSearch.Columns()) {
+                columns.AppendValue(column.Value());
+                readColumns.push_back(TString(column.Value()));
+                if (postingMeta && !postingMeta->Columns.contains(readColumns.back())) {
+                    covered = false;
+                }
+            }
+
+            if (!covered) {
+                planNode.NodeInfo["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
+                planNode.NodeInfo["Path"] = tablePath;
+
+                TTableRead readInfo;
+                readInfo.Type = EPlanTableReadType::Lookup;
+                readInfo.Columns = readColumns;
+                SerializerCtx.Tables[tablePath].Reads.push_back(std::move(readInfo));
+            }
+
+            // TopK (LIMIT) is either a literal or a query parameter resolved at runtime.
+            TExprBase topK = vectorSearch.TopK();
+            if (auto literal = topK.Maybe<TCoUint64>()) {
+                planNode.NodeInfo["TopK"] = TString(literal.Cast().Literal().Value());
+            } else if (auto param = topK.Maybe<TCoParameter>()) {
+                planNode.NodeInfo["TopK"] = TString(param.Cast().Name().Value());
+            }
         } else {
             planNode.TypeName = connection.Ref().Content();
         }
@@ -802,7 +876,9 @@ private:
                 auto literal = TString(query.Cast<TCoDataCtor>().Literal());
                 YQL_ENSURE(indexDesc);
                 YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
-                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance);
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompact
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompactRelevance);
 
                 auto& desc = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDesc->SpecializedIndexDescription);
                 for(const auto& column: readColumns) {
@@ -843,7 +919,8 @@ private:
 
         std::vector<TString> tokens;
         if (settings.Tokens) {
-            YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalJson);
+            YQL_ENSURE(
+                indexDesc->Type == TIndexDescription::EType::GlobalJson || indexDesc->Type == TIndexDescription::EType::GlobalJsonCompact);
 
             for (const auto& token : TExprBase(settings.Tokens).Cast<TExprList>()) {
                 auto pair = token.Cast<TExprList>();
@@ -1030,33 +1107,34 @@ private:
         AddOperator(stagePlanNode, "Source", op);
     }
 
-    void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
+    template<typename TSinkLike>
+    void VisitTableSink(const TSinkLike& sinkLike, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode, TString planNodeSuffix = "Sink") {
         // Federated providers
         TOperator op;
-        TCoDataSink dataSink = sink.DataSink().Cast<TCoDataSink>();
+        TCoDataSink dataSink = sinkLike.DataSink().template Cast<TCoDataSink>();
         const TString dataSinkCategory = dataSink.Category().StringValue();
-        IDqIntegration* dqIntegration = nullptr;
-
-        {
-            auto providerIt = SerializerCtx.TypeCtx.DataSinkMap.find(dataSinkCategory);
-            if (providerIt != SerializerCtx.TypeCtx.DataSinkMap.end()) {
-                dqIntegration = providerIt->second->GetDqIntegration();
-            }
-        }
 
         // Common settings that can be overwritten by provider
         op.Properties["SinkType"] = dataSinkCategory;
         if (dataSinkCategory == NYql::KqpTableSinkName) {
-            auto settings = sink.Settings().Cast<TKqpTableSinkSettings>();
+            auto settings = sinkLike.Settings().template Cast<TKqpTableSinkSettings>();
 
             NKikimrKqp::TKqpTableSinkSettings tableSinkSettings;
             {
                 AFL_ENSURE(stagePlanNode.StageProto);
                 bool found = false;
                 for (const auto& protoSink : stagePlanNode.StageProto->GetSinks()) {
-                    if (FromString<ui32>(TStringBuf(sink.Index())) == protoSink.GetOutputIndex()
+                    if (FromString<ui32>(TStringBuf(sinkLike.Index())) == protoSink.GetOutputIndex()
                             && protoSink.HasInternalSink()
                             && protoSink.GetInternalSink().GetSettings().UnpackTo(&tableSinkSettings)) {
+                                found = true;
+                                break;
+                    }
+                }
+                for (const auto& protoTransform : stagePlanNode.StageProto->GetOutputTransforms()) {
+                    if (FromString<ui32>(TStringBuf(sinkLike.Index())) == protoTransform.GetOutputIndex()
+                            && protoTransform.HasInternalSink()
+                            && protoTransform.GetInternalSink().GetSettings().UnpackTo(&tableSinkSettings)) {
                                 found = true;
                                 break;
                     }
@@ -1206,11 +1284,41 @@ private:
             op.Properties["Name"] = "Write to external data source";
         }
 
-        if (dqIntegration) {
-            dqIntegration->FillSinkPlanProperties(sink, op.Properties);
+        auto inputContext = CurrentArgContext.AddArg(sinkLike.Ptr().Get());
+        LambdaInputs[inputContext] = &stagePlanNode;
+        op.Inputs.push_back(inputContext);
+
+        AddOperator(planNode, planNodeSuffix, op);
+    }
+
+    void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
+        IDqIntegration* dqIntegration = nullptr;
+        auto dataSink = sink.DataSink().Cast<TCoDataSink>();
+        auto providerIt = SerializerCtx.TypeCtx.DataSinkMap.find(dataSink.Category().StringValue());
+        if (providerIt != SerializerCtx.TypeCtx.DataSinkMap.end()) {
+            dqIntegration = providerIt->second->GetDqIntegration();
         }
 
-        AddOperator(planNode, "Sink", op);
+        VisitTableSink(sink, stage, planNode, stagePlanNode);
+
+        if (dqIntegration) {
+            dqIntegration->FillSinkPlanProperties(sink, planNode.Operators.back().Properties);
+        }
+    }
+
+    void Visit(const TDqTransform& transform, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
+        IDqIntegration* dqIntegration = nullptr;
+        auto dataSink = transform.DataSink().Cast<TCoDataSink>();
+        auto providerIt = SerializerCtx.TypeCtx.DataSinkMap.find(dataSink.Category().StringValue());
+        if (providerIt != SerializerCtx.TypeCtx.DataSinkMap.end()) {
+            dqIntegration = providerIt->second->GetDqIntegration();
+        }
+
+        VisitTableSink(transform, stage, planNode, stagePlanNode, TString(transform.Type().Value()));
+
+        if (dqIntegration) {
+            dqIntegration->FillSinkPlanProperties(transform, planNode.Operators.back().Properties);
+        }
     }
 
     void Visit(const TExprBase& expr, TQueryPlanNode& planNode) {
@@ -1284,6 +1392,8 @@ private:
                 for (auto output : outputs.Cast()) {
                     if (auto sink = output.Maybe<TDqSink>()) {
                         Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode, stagePlanNode);
+                    } else if (auto transform = output.Maybe<TDqTransform>()) {
+                        Visit(transform.Cast(), expr.Cast<TDqStageBase>(), planNode, stagePlanNode);
                     }
                 }
             }
@@ -1310,6 +1420,15 @@ private:
             operatorId = Visit(maybeReadRanges.Cast(), planNode);
         } else if (auto maybeLookup = TMaybeNode<TKqlLookupTableBase>(node)) {
             operatorId = Visit(maybeLookup.Cast(), planNode);
+        } else if (node->IsCallable({"Map", "FlatMap", "OrderedMap", "OrderedFlatMap"}) && node->ChildrenSize() >= 2
+            && FindNode(node->ChildPtr(1), [](const TExprNode::TPtr& n) {
+                   auto udf = TMaybeNode<TCoUdf>(n);
+                   return udf && udf.Cast().MethodName().Value().StartsWith("HybridSearch.");
+               })) {
+            // The Reciprocal Rank Fusion step uniquely identifies a hybrid-search (HybridRank) query.
+            TOperator op;
+            op.Properties["Name"] = "HybridSearch";
+            operatorId = AddOperator(planNode, "HybridSearch", std::move(op));
         } else if (auto maybeFilter = TMaybeNode<TCoFilterBase>(node)) {
             operatorId = Visit(maybeFilter.Cast(), planNode);
         } else if (auto maybeMapJoin = TMaybeNode<TCoMapJoinCore>(node)) {
@@ -1361,6 +1480,8 @@ private:
             operatorId = AddOperator(planNode, "Aggregate", std::move(op));
         } else if (auto maybeCombiner = TMaybeNode<TCoWideCombiner>(node)) {
             operatorId = Visit(maybeCombiner.Cast(), planNode);
+        } else if (auto maybeSort = TMaybeNode<TCoWideSort>(node)) {
+            operatorId = Visit(maybeSort.Cast(), planNode);
         } else if (auto maybeSort = TMaybeNode<TCoSort>(node)) {
             operatorId = Visit(maybeSort.Cast(), planNode);
         } else if (auto maybeTop = TMaybeNode<TCoTop>(node)) {
@@ -1383,16 +1504,14 @@ private:
             operatorId = Visit(maybeIter.Cast(), planNode);
         } else if (auto maybePartitionByKey = TMaybeNode<TCoPartitionByKey>(node)) {
             operatorId = Visit(maybePartitionByKey.Cast(), planNode);
-        } else if (auto maybeUpsert = TMaybeNode<TKqpUpsertRows>(node)) {
-            operatorId = Visit(maybeUpsert.Cast(), planNode);
-        } else if (auto maybeDelete = TMaybeNode<TKqpDeleteRows>(node)) {
-            operatorId = Visit(maybeDelete.Cast(), planNode);
         } else if (auto maybeArg = TMaybeNode<TCoArgument>(node)) {
             return {CurrentArgContext.AddArg(node.Get())};
         } else if (auto maybeCrossJoin = TMaybeNode<TDqPhyCrossJoin>(node)) {
             operatorId = Visit(maybeCrossJoin.Cast(), planNode);
         } else if (auto maybeBlockHashJoin = TMaybeNode<TDqBlockHashJoinCore>(node)) {
             operatorId = Visit(maybeBlockHashJoin.Cast(), planNode);
+        } else if (auto maybeScalarHashJoin = TMaybeNode<TDqScalarHashJoinCore>(node)) {
+            operatorId = Visit(maybeScalarHashJoin.Cast(), planNode);
         } else if (auto lookupJoin = TMaybeNode<TKqpIndexLookupJoin>(node)) {
             operatorId = Visit(lookupJoin.Cast(), planNode);
         } else if (auto maybeCombineByKey = TMaybeNode<TCoCombineByKey>(node)) {
@@ -1400,12 +1519,7 @@ private:
         }
 
         TVector<std::variant<ui32, TArgContext>> inputIds;
-        if (auto maybeEffects = TMaybeNode<TKqpEffects>(node)) {
-            for (const auto& effect : maybeEffects.Cast().Args()) {
-                auto ids = Visit(effect, planNode);
-                inputIds.insert(inputIds.end(), ids.begin(), ids.end());
-            }
-        } else {
+        {
             if (TMaybeNode<TCoFlatMapBase>(node)) {
                 auto flatMap = TExprBase(node).Cast<TCoFlatMapBase>();
                 auto flatMapInputs = Visit(flatMap, planNode);
@@ -1467,7 +1581,7 @@ private:
 
                     TOperator op;
                     op.Properties["Name"] = "Filter";
-                    op.Properties["Predicate"] = OlapFilterStr(kqpOlapFilter);
+                    op.Properties["Predicate"] = NOpt::FormatOlapFilter(kqpOlapFilter);
                     op.Properties["Pushdown"] = "True";
                     op.Properties["Blocks"] = "True";
 
@@ -1513,81 +1627,6 @@ private:
         }
 
         return inputIds;
-    }
-
-    TString OlapFilterExpr(const TExprNode::TPtr& node) {
-        TVector<TString> s;
-        if (TMaybeNode<TKqpOlapNot>(node)) {
-            s.emplace_back("NOT");
-        } else if (auto maybeList = TMaybeNode<TCoAtomList>(node)) {
-            auto listPtr = maybeList.Cast().Ptr();
-            size_t listSize = listPtr->Children().size();
-            if (listSize == 3 || listSize == 4 /*OpType optional field*/) {
-                THashMap<TString, TString> strComp = {
-                    {"eq", " == "},
-                    {"neq", " != "},
-                    {"lt", " < "},
-                    {"lte", " <= "},
-                    {"gt", " > "},
-                    {"gte", " >= "}
-                };
-                THashMap<TString, TString> strRegexp = {
-                    {"string_contains", "%s LIKE \"%%%s%%\""},
-                    {"starts_with", "%s LIKE \"%s%%\""},
-                    {"ends_with", "%s LIKE \"%%%s\""}
-                };
-                TString compSign = TString(listPtr->Child(0)->Content());
-                if (strComp.contains(compSign)) {
-                    TString attr = TString(listPtr->Child(1)->Content());
-                    TString value;
-                    if (listPtr->Child(2)->ChildrenSize() >= 1) {
-                        value = TString(listPtr->Child(2)->Child(0)->Content());
-                        if (TString(listPtr->Child(2)->Content()) == "String") {
-                            value = TStringBuilder() << '"' << value << '"';
-                        }
-                    } else if (listPtr->Child(2)->ChildrenSize() == 0 && listPtr->Child(2)->Content()) {
-                        value = TString(listPtr->Child(2)->Content());
-                    }
-
-                    return TStringBuilder() << attr << strComp[compSign] << value;
-                } else if (strRegexp.contains(compSign)) {
-                    TString attr = TString(listPtr->Child(1)->Content());
-                    TString value;
-                    if (listPtr->Child(2)->ChildrenSize() >= 1) {
-                        value = TString(listPtr->Child(2)->Child(0)->Content());
-                    } else if (listPtr->Child(2)->ChildrenSize() == 0 && listPtr->Child(2)->Content()) {
-                        value = TString(listPtr->Child(2)->Content());
-                    }
-
-                    return Sprintf(strRegexp[compSign].c_str(), attr.c_str(), value.c_str());
-                }
-            }
-        } else if (auto olapApply = TMaybeNode<TKqpOlapApply>(node)) {
-            return NPlanUtils::ExtractPredicate(olapApply.Cast().Lambda()).Body;
-        }
-
-        for (const auto& child: node->Children()) {
-            auto childStr = OlapFilterExpr(child);
-            if (!childStr.empty()) {
-                s.push_back(std::move(childStr));
-            }
-        }
-
-        TString delim = " ";
-        if (TMaybeNode<TKqpOlapAnd>(node)) {
-            delim = " AND ";
-        } else if (TMaybeNode<TKqpOlapOr>(node)) {
-            delim = " OR ";
-        }
-        return JoinStrings(s, delim);
-    }
-
-    TString OlapFilterStr(const TKqpOlapFilter& filter) {
-        auto result = OlapFilterExpr(filter.Condition().Ptr());
-        if (auto maybeInnerFilter = TMaybeNode<TKqpOlapFilter>(filter.Input().Ptr())) {
-            return TStringBuilder() << '(' << OlapFilterStr(maybeInnerFilter.Cast()) << ") AND (" << result << ')';
-        }
-        return result;
     }
 
     TVector<std::variant<ui32, TArgContext>> Visit(const TCoMap& map, TQueryPlanNode& planNode) {
@@ -1708,6 +1747,39 @@ private:
         op.Properties["SortBy"] = NPlanUtils::PrettyExprStr(sort.KeySelectorLambda());
 
         return AddOperator(planNode, "Sort", std::move(op));
+    }
+
+    std::variant<ui32, TArgContext> Visit(const TCoWideSort& sort, TQueryPlanNode& planNode) {
+        const auto& input = sort.Input().Ref();
+        YQL_ENSURE(input.IsCallable("ExpandMap") && input.ChildrenSize() == 2);
+
+        const auto& expandLambda = input.Tail();
+        YQL_ENSURE(expandLambda.IsLambda());
+
+        TStringBuilder sortBy;
+        for (const auto& key : sort.Keys()) {
+            const auto index = FromString<ui32>(key.Index().Value());
+            YQL_ENSURE(index + 1 < expandLambda.ChildrenSize());
+
+            const TExprBase item(expandLambda.ChildPtr(index + 1));
+            const auto ascending = FromString<bool>(key.Direction().Cast<TCoBool>().Literal().Value());
+
+            if (sortBy.size()) {
+                sortBy << ", ";
+            }
+            if (const auto member = item.Maybe<TCoMember>()) {
+                sortBy << member.Cast().Name().Value();
+            } else {
+                sortBy << NPlanUtils::PrettyExprStr(item);
+            }
+            sortBy << (ascending ? " asc" : " desc");
+        }
+
+        TOperator op;
+        op.Properties["Name"] = "WideSort";
+        op.Properties["SortBy"] = TString(sortBy);
+
+        return AddOperator(planNode, "WideSort", std::move(op));
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoTop& top, TQueryPlanNode& planNode) {
@@ -1878,43 +1950,6 @@ private:
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
-    std::variant<ui32, TArgContext> Visit(const TKqpUpsertRows& upsert, TQueryPlanNode& planNode) {
-        const auto tablePath = upsert.Table().Path().StringValue();
-
-        TOperator op;
-        op.Properties["Name"] = "Upsert";
-        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
-        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
-        op.Properties["Path"] = tablePath;
-
-        TTableWrite writeInfo;
-        writeInfo.Type = EPlanTableWriteType::MultiUpsert;
-        for (const auto& column : upsert.Columns()) {
-            writeInfo.Columns.push_back(TString(column.Value()));
-        }
-
-        SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);
-        planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
-        return AddOperator(planNode, "Upsert", std::move(op));
-    }
-
-    std::variant<ui32, TArgContext> Visit(const TKqpDeleteRows& del, TQueryPlanNode& planNode) {
-        const auto tablePath = del.Table().Path().StringValue();
-
-        TOperator op;
-        op.Properties["Name"] = "Delete";
-        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
-        op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
-        op.Properties["Path"] = tablePath;
-
-        TTableWrite writeInfo;
-        writeInfo.Type = EPlanTableWriteType::MultiErase;
-
-        SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);
-        planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
-        return AddOperator(planNode, "Delete", std::move(op));
-    }
-
     TString MakeJoinConditionString(const TCoAtomList& leftKeys, const TCoAtomList& rightKeys) {
         TString result = "";
 
@@ -1965,6 +2000,18 @@ private:
 
     std::variant<ui32, TArgContext> Visit(const TDqBlockHashJoinCore& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (BlockHash)";
+
+        TOperator op;
+        op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumnNames(), join.RightKeysColumnNames());
+
+        AddOptimizerEstimates(op, join);
+
+        return AddOperator(planNode, name, std::move(op));
+    }
+
+    std::variant<ui32, TArgContext> Visit(const TDqScalarHashJoinCore& join, TQueryPlanNode& planNode) {
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (ScalarHash)";
 
         TOperator op;
         op.Properties["Name"] = name;
@@ -2085,11 +2132,19 @@ private:
         }
     }
 
+    static bool IsIdentityLambda(const TCoLambda& lambda) {
+        return lambda.Args().Size() == 1 && lambda.Body().Raw() == lambda.Args().Arg(0).Raw();
+    }
+
     std::variant<ui32, TArgContext> Visit(const TCoFilterBase& filter, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Filter";
-        auto pred = NPlanUtils::ExtractPredicate(filter.Lambda());
-        op.Properties["Predicate"] = pred.Body;
+        try {
+            auto pred = NPlanUtils::ExtractPredicate(filter.Lambda());
+            op.Properties["Predicate"] = pred.Body;
+        } catch (...) {
+            op.Properties["Predicate"] = "";
+        }
 
         AddOptimizerEstimates(op, filter);
 
@@ -2161,8 +2216,13 @@ private:
         AddReadTableSettings(op, read, readInfo);
 
         if (auto maybeRead = read.Maybe<TKqpReadOlapTableRangesBase>()) {
+            const auto olapRead = maybeRead.Cast();
             op.Properties["SsaProgram"] = GetSsaProgramInJsonByTable(read.Table().Path().StringValue(), planNode.StageProto);
-            AddOptimizerEstimates(op, maybeRead.Cast().Process());
+            if (IsIdentityLambda(olapRead.Process())) {
+                AddOptimizerEstimates(op, olapRead);
+            } else {
+                AddOptimizerEstimates(op, olapRead.Process());
+            }
         } else {
             AddOptimizerEstimates(op, read);
         }
@@ -2473,10 +2533,14 @@ void SetNonZero(NJson::TJsonValue& node, const TStringBuf& name, T value) {
     }
 }
 
-void BuildPlanIndex(NJson::TJsonValue& plan, THashMap<int, NJson::TJsonValue>& planIndex, THashMap<TString, NJson::TJsonValue>& precomputes) {
+void BuildPlanIndex(
+    const NJson::TJsonValue& plan,
+    THashMap<int, const NJson::TJsonValue*>& planIndex,
+    THashMap<TString, const NJson::TJsonValue*>& precomputes
+) {
     if (plan.GetMapSafe().contains("PlanNodeId")){
         auto id = plan.GetMapSafe().at("PlanNodeId").GetIntegerSafe();
-        planIndex[id] = plan;
+        planIndex[id] = &plan;
     }
 
     if (plan.GetMapSafe().contains("Subplan Name")) {
@@ -2484,14 +2548,14 @@ void BuildPlanIndex(NJson::TJsonValue& plan, THashMap<int, NJson::TJsonValue>& p
 
         auto pos = precomputeName.find("precompute");
         if (pos != TString::npos) {
-            precomputes[precomputeName.substr(pos)] = plan;
+            precomputes[precomputeName.substr(pos)] = &plan;
         } else if (precomputeName.size()>=4 && precomputeName.find("CTE ") != TString::npos) {
-            precomputes[precomputeName.substr(4)] = plan;
+            precomputes[precomputeName.substr(4)] = &plan;
         }
     }
 
     if (plan.GetMapSafe().contains("Plans")) {
-        for (auto p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+        for (const auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
             BuildPlanIndex(p, planIndex, precomputes);
         }
     }
@@ -2527,11 +2591,29 @@ TVector<NJson::TJsonValue> RemoveRedundantNodes(NJson::TJsonValue& plan, const T
     return {plan};
 }
 
+void CopySimplifiedConnectionFields(const NJson::TJsonValue& from, NJson::TJsonValue& to) {
+    static const TVector<TString> fields = {
+        "Blocks",
+        "HashFunc",
+        "KeyColumns",
+        "Parallel",
+        "SortBy",
+        "SortColumns",
+    };
+
+    const auto& fromMap = from.GetMapSafe();
+    for (const auto& field : fields) {
+        if (auto it = fromMap.find(field); it != fromMap.end()) {
+            to[field] = it->second;
+        }
+    }
+}
+
 class TQueryPlanReconstructor {
 public:
     TQueryPlanReconstructor(
-        const THashMap<int, NJson::TJsonValue>& planIndex,
-        const THashMap<TString, NJson::TJsonValue>& precomputes
+        const THashMap<int, const NJson::TJsonValue*>& planIndex,
+        const THashMap<TString, const NJson::TJsonValue*>& precomputes
     )
         : PlanIndex(planIndex)
         , Precomputes(precomputes)
@@ -2542,26 +2624,46 @@ public:
     NJson::TJsonValue Reconstruct(
         const NJson::TJsonValue& plan
     ) {
-        auto reconstructed = ReconstructImpl(plan, 0, 0, false);
-        return reconstructed;
+        return ReconstructImpl(plan, 0, 0, false, nullptr, Nothing());
     }
 
 private:
+    static void ApplyCpuTime(NJson::TJsonValue& op, const TMaybe<double>& cpuTimeMs) {
+        if (cpuTimeMs) {
+            op["A-SelfCpu"] = *cpuTimeMs;
+        }
+    }
+
     NJson::TJsonValue ReconstructImpl(
         const NJson::TJsonValue& plan,
         int operatorIndex,
         int parentTaskCount,
-        bool fromBroadcast
+        bool fromBroadcast,
+        const NJson::TJsonValue* inheritedTableStats,
+        TMaybe<double> inheritedCpuTimeMs
     ) {
         int currentNodeId = NodeIDCounter++;
 
         int taskCount = parentTaskCount;
+        const NJson::TJsonValue* ownTableStats = nullptr;
+        TMaybe<double> ownCpuTimeMs;
         if (plan.GetMapSafe().contains("Stats")) {
             const auto& stats = plan.GetMapSafe().at("Stats").GetMapSafe();
             if (stats.contains("Tasks")) {
                 taskCount = stats.at("Tasks").GetIntegerSafe();
             }
+            if (stats.contains("Table")) {
+                ownTableStats = &stats.at("Table");
+            }
+            if (operatorIndex == 0 && stats.contains("CpuTimeUs")) {
+                const auto& cpuTime = stats.at("CpuTimeUs");
+                const double cpuTimeUs = cpuTime.IsMap()
+                    ? cpuTime.GetMapSafe().at("Max").GetDoubleSafe()
+                    : cpuTime.GetDoubleSafe();
+                ownCpuTimeMs = cpuTimeUs / 1000.0;
+            }
         }
+        const auto effectiveCpuTimeMs = ownCpuTimeMs ? ownCpuTimeMs : inheritedCpuTimeMs;
 
         NJson::TJsonValue result;
         result["PlanNodeId"] = currentNodeId;
@@ -2582,6 +2684,7 @@ private:
 
             op["Name"] = "Lookup";
             op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
+            ApplyCpuTime(op, effectiveCpuTimeMs);
 
             newOps.AppendValue(std::move(op));
             result["Operators"] = std::move(newOps);
@@ -2614,7 +2717,7 @@ private:
             lookupPlan["Operators"] = std::move(lookupOps);
 
 	        if (plan.GetMapSafe().contains("Plans")) {
-                newPlans.AppendValue(ReconstructImpl(plan.GetMapSafe().at("Plans").GetArraySafe()[0], 0, taskCount, false));
+                newPlans.AppendValue(ReconstructImpl(plan.GetMapSafe().at("Plans").GetArraySafe()[0], 0, taskCount, false, inheritedTableStats, Nothing()));
             }
 
             newPlans.AppendValue(std::move(lookupPlan));
@@ -2628,21 +2731,16 @@ private:
             NJson::TJsonValue planInputs;
 
             result["Node Type"] = plan.GetMapSafe().at("Node Type").GetStringSafe();
-
-            if (plan.GetMapSafe().at("Node Type") == "HashShuffle") {
-                    TStringBuilder stringBuilder;
-                    stringBuilder << "HashShuffle (" <<
-                        "KeyColumns: " << plan.GetMapSafe().at("KeyColumns") << ", " <<
-                        "HashFunc: "   << plan.GetMapSafe().at("HashFunc")
-                    << ")";
-
-                result["Node Type"] = stringBuilder;
+            if (result.GetMapSafe().contains("PlanNodeType")
+                && result.GetMapSafe().at("PlanNodeType") == "Connection")
+            {
+                CopySimplifiedConnectionFields(plan, result);
             }
 
             if (plan.GetMapSafe().contains("CTE Name")) {
                 auto precompute = plan.GetMapSafe().at("CTE Name").GetStringSafe();
                 if (Precomputes.contains(precompute)) {
-                    planInputs.AppendValue(ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false));
+                    planInputs.AppendValue(ReconstructImpl(*Precomputes.at(precompute), 0, taskCount, false, nullptr, Nothing()));
                 }
             }
 
@@ -2669,6 +2767,7 @@ private:
                 if (plan.GetMapSafe().contains("E-Size")) {
                     op["E-Size"] = plan.GetMapSafe().at("E-Size");
                 }
+                ApplyCpuTime(op, effectiveCpuTimeMs);
 
                 newOps.AppendValue(std::move(op));
 
@@ -2676,14 +2775,32 @@ private:
                 return result;
             }
 
-            for (auto p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+            const auto effectiveTableStats = ownTableStats ? ownTableStats : inheritedTableStats;
+            const auto isRegularPlan = [](const NJson::TJsonValue& child) {
+                const auto& childMap = child.GetMapSafe();
+                const bool isCte = !childMap.contains("Operators") && childMap.contains("CTE Name");
+                return !isCte && childMap.at("Node Type").GetStringSafe().find("Precompute") == TString::npos;
+            };
+            TMaybe<double> childCpuTimeMs;
+            if (effectiveCpuTimeMs) {
+                size_t regularPlansCount = 0;
+                for (const auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
+                    if (isRegularPlan(p)) {
+                        ++regularPlansCount;
+                    }
+                }
+                if (regularPlansCount == 1) {
+                    childCpuTimeMs = effectiveCpuTimeMs;
+                }
+            }
+            for (const auto& p : plan.GetMapSafe().at("Plans").GetArraySafe()) {
                 if (!p.GetMapSafe().contains("Operators") && p.GetMapSafe().contains("CTE Name")) {
                     auto precompute = p.GetMapSafe().at("CTE Name").GetStringSafe();
                     if (Precomputes.contains(precompute)) {
-                        planInputs.AppendValue(ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false));
+                        planInputs.AppendValue(ReconstructImpl(*Precomputes.at(precompute), 0, taskCount, false, nullptr, Nothing()));
                     }
-                } else if (p.GetMapSafe().at("Node Type").GetStringSafe().find("Precompute") == TString::npos) {
-                    planInputs.AppendValue(ReconstructImpl(p, 0, taskCount, fromBroadcast));
+                } else if (isRegularPlan(p)) {
+                    planInputs.AppendValue(ReconstructImpl(p, 0, taskCount, fromBroadcast, effectiveTableStats, childCpuTimeMs));
                 }
             }
             result["Plans"] = planInputs;
@@ -2697,7 +2814,7 @@ private:
                 return result;
             }
 
-            return ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false);
+            return ReconstructImpl(*Precomputes.at(precompute), 0, taskCount, false, nullptr, Nothing());
         }
 
         auto ops = plan.GetMapSafe().at("Operators").GetArraySafe();
@@ -2719,8 +2836,8 @@ private:
                 }
                 processedExternalOperators.insert(inputPlanKey);
 
-                auto inputPlan = PlanIndex.at(inputPlanKey);
-                planInputs.push_back( ReconstructImpl(inputPlan, 0, taskCount, inputPlan.GetMapSafe().at("Node Type").GetStringSafe() == "Broadcast") );
+                const auto& inputPlan = *PlanIndex.at(inputPlanKey);
+                planInputs.push_back( ReconstructImpl(inputPlan, 0, taskCount, inputPlan.GetMapSafe().at("Node Type").GetStringSafe() == "Broadcast", ownTableStats, Nothing()) );
             } else if (opInput.GetMapSafe().contains("InternalOperatorId")) {
                 auto inputPlanId = opInput.GetMapSafe().at("InternalOperatorId").GetIntegerSafe();
 
@@ -2729,7 +2846,7 @@ private:
                 }
                 processedInternalOperators.insert(inputPlanId);
 
-                planInputs.push_back( ReconstructImpl(plan, inputPlanId, taskCount, false) );
+                planInputs.push_back( ReconstructImpl(plan, inputPlanId, taskCount, false, inheritedTableStats, Nothing()) );
             }
         }
 
@@ -2762,17 +2879,44 @@ private:
             }
 
             if (Precomputes.contains(maybePrecompute) && planInputs.empty()) {
-                planInputs.push_back(ReconstructImpl(Precomputes.at(maybePrecompute), 0, taskCount, false));
+                planInputs.push_back(ReconstructImpl(*Precomputes.at(maybePrecompute), 0, taskCount, false, nullptr, Nothing()));
             }
         }
 
         result["Node Type"] = opName;
 
+        auto operatorSize = false;
+        auto operatorRows = false;
+        const auto applyTableStats = [&](const NJson::TJsonValue& tableStats) {
+            TString tablePath;
+            if (op.GetMapSafe().contains("Path")) {
+                tablePath = op.GetMapSafe().at("Path").GetStringSafe();
+            } else if (op.GetMapSafe().contains("Table")) {
+                tablePath = op.GetMapSafe().at("Table").GetStringSafe();
+            }
+            if (tablePath) {
+                for (auto& opStat : tableStats.GetArraySafe()) {
+                    if (opStat.IsMap()) {
+                        auto& opMap = opStat.GetMapSafe();
+                        if (opMap.contains("Path") && opMap.at("Path").GetStringSafe() == tablePath) {
+                            if (opMap.contains("ReadRows")) {
+                                op["A-Rows"] = opMap.at("ReadRows").GetMapSafe().at("Sum").GetDouble();
+                                operatorRows = true;
+                            }
+                            if (opMap.contains("ReadBytes")) {
+                                op["A-Size"] = opMap.at("ReadBytes").GetMapSafe().at("Sum").GetDouble();
+                                operatorSize = true;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        };
+
         if (plan.GetMapSafe().contains("Stats")) {
             const auto& stats = plan.GetMapSafe().at("Stats").GetMapSafe();
 
-            auto operatorSize = false;
-            auto operatorRows = false;
             TString opType;
             TString opId = "0";
 
@@ -2821,31 +2965,8 @@ private:
                 }
             }
 
-            if (opName == "TableFullScan" && stats.contains("Table")) {
-                TString tablePath;
-                if (op.GetMapSafe().contains("Path")) {
-                    tablePath = op.GetMapSafe().at("Path").GetStringSafe();
-                } else if (op.GetMapSafe().contains("Table")) {
-                    tablePath = op.GetMapSafe().at("Table").GetStringSafe();
-                }
-                if (tablePath) {
-                    for (auto& opStat : stats.at("Table").GetArraySafe()) {
-                        if (opStat.IsMap()) {
-                            auto& opMap = opStat.GetMapSafe();
-                            if (opMap.contains("Path") && opMap.at("Path").GetStringSafe() == tablePath) {
-                                if (opMap.contains("ReadRows")) {
-                                    op["A-Rows"] = opMap.at("ReadRows").GetMapSafe().at("Sum").GetDouble();
-                                    operatorRows = true;
-                                }
-                                if (opMap.contains("ReadBytes")) {
-                                    op["A-Size"] = opMap.at("ReadBytes").GetMapSafe().at("Sum").GetDouble();
-                                    operatorRows = true;
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
+            if (opName == "TableFullScan" && ownTableStats) {
+                applyTableStats(*ownTableStats);
             }
 
             if (opType && stats.contains("Operator")) {
@@ -2870,7 +2991,6 @@ private:
             }
 
             if (operatorIndex == 0 && !op.GetMapSafe().contains("A-Rows")) {
-
                 // top level rows/size have to match stage output
                 if (!operatorRows && stats.contains("OutputRows")) {
                     auto outputRows = stats.at("OutputRows");
@@ -2888,21 +3008,15 @@ private:
                     }
                     op["A-Size"] = aSize;
                 }
-
-                // cpu usage available for stage only, so assign it to top level operator
-                if (stats.contains("CpuTimeUs")) {
-                    double opCpuTime;
-
-                    auto& cpuTime = stats.at("CpuTimeUs");
-                    if (cpuTime.IsMap()) {
-                        opCpuTime = cpuTime.GetMapSafe().at("Max").GetDoubleSafe();
-                    } else {
-                        opCpuTime = cpuTime.GetDoubleSafe();
-                    }
-
-                    op["A-SelfCpu"] = opCpuTime / 1000.0;
-                }
             }
+        }
+
+        if (operatorIndex == 0) {
+            ApplyCpuTime(op, effectiveCpuTimeMs);
+        }
+
+        if (opName == "TableFullScan" && !ownTableStats && inheritedTableStats) {
+            applyTableStats(*inheritedTableStats);
         }
 
         // erase some redundant info from the table scan
@@ -2940,8 +3054,8 @@ private:
     }
 
 private:
-    const THashMap<int, NJson::TJsonValue>& PlanIndex;
-    const THashMap<TString, NJson::TJsonValue>& Precomputes;
+    const THashMap<int, const NJson::TJsonValue*>& PlanIndex;
+    const THashMap<TString, const NJson::TJsonValue*>& Precomputes;
     ui32 NodeIDCounter;
     i32 Budget; // Prevent bugs with inf recursion
 };
@@ -2983,15 +3097,17 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
         "CombineByKey"
     };
 
-    THashMap<int, NJson::TJsonValue> planIndex;
-    THashMap<TString, NJson::TJsonValue> precomputes;
+    NJson::TJsonValue reconstructedPlan;
+    {
+        THashMap<int, const NJson::TJsonValue*> planIndex;
+        THashMap<TString, const NJson::TJsonValue*> precomputes;
 
+        BuildPlanIndex(plan, planIndex, precomputes);
 
-    BuildPlanIndex(plan, planIndex, precomputes);
-
-    plan =
-        TQueryPlanReconstructor(planIndex, precomputes)
-            .Reconstruct(plan);
+        TQueryPlanReconstructor reconstructor(planIndex, precomputes);
+        reconstructedPlan = reconstructor.Reconstruct(plan);
+    }
+    plan = std::move(reconstructedPlan);
 
     RemoveRedundantNodes(plan, redundantNodes);
     ComputeCpuTimes(plan);
@@ -3383,6 +3499,15 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 stats["PhysicalStageId"] = (*stat)->GetStageId();
                 stats["Tasks"] = (*stat)->GetTotalTasksCount();
                 stats["FinishedTasks"] = (*stat)->GetFinishedTasksCount();
+                if (!(*stat)->GetNodes().empty()) {
+                    auto& nodesStats = stats.InsertValue("Nodes", NJson::JSON_ARRAY);
+                    for (const auto& node : (*stat)->GetNodes()) {
+                        auto& nodeInfo = nodesStats.AppendValue(NJson::JSON_MAP);
+                        nodeInfo["NodeId"] = node.GetNodeId();
+                        nodeInfo["Tasks"] = node.GetTasks();
+                        nodeInfo["Finished"] = node.GetFinished();
+                    }
+                }
                 if (auto updateTimeUs = (*stat)->GetUpdateTimeMs(); updateTimeUs) {
                     stats["UpdateTimeMs"] = updateTimeUs;
                 }
@@ -3517,10 +3642,14 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 if (!(*stat)->GetInput().empty()) {
                     auto& inputStats = stats.InsertValue("Input", NJson::JSON_ARRAY);
                     for (auto input : (*stat)->GetInput()) {
-                        auto& inputInfo = inputStats.AppendValue(NJson::JSON_MAP);
                         auto stageGuid = stageIdToGuid.at(input.first);
-                        AFL_ENSURE(guidToPlaneId.contains(stageGuid));
-                        auto planNodeId = guidToPlaneId.at(stageGuid);
+                        auto planNodeIdIt = guidToPlaneId.find(stageGuid);
+                        if (planNodeIdIt == guidToPlaneId.end()) {
+                            AFL_ENSURE(newRboEnabled)("stage_guid", stageGuid);
+                            continue;
+                        }
+                        auto& inputInfo = inputStats.AppendValue(NJson::JSON_MAP);
+                        auto planNodeId = planNodeIdIt->second;
                         inputInfo["Name"] = ToString(planNodeId);
                         if (input.second.HasPush()) {
                             FillAsyncAggrStat(inputInfo.InsertValue("Push", NJson::JSON_MAP), input.second.GetPush());
@@ -3536,15 +3665,21 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 if (!(*stat)->GetOutput().empty()) {
                     auto& outputStats = stats.InsertValue("Output", NJson::JSON_ARRAY);
                     for (auto output : (*stat)->GetOutput()) {
-                        auto& outputInfo = outputStats.AppendValue(NJson::JSON_MAP);
+                        TString outputName;
                         if (output.first == 0) {
-                            outputInfo["Name"] = "RESULT";
+                            outputName = "RESULT";
                         } else {
                             auto stageGuid = stageIdToGuid.at(output.first);
-                            AFL_ENSURE(guidToPlaneId.contains(stageGuid));
-                            auto planNodeId = guidToPlaneId.at(stageGuid);
-                            outputInfo["Name"] = ToString(planNodeId);
+                            auto planNodeIdIt = guidToPlaneId.find(stageGuid);
+                            if (planNodeIdIt == guidToPlaneId.end()) {
+                                AFL_ENSURE(newRboEnabled)("stage_guid", stageGuid);
+                                continue;
+                            }
+                            auto planNodeId = planNodeIdIt->second;
+                            outputName = ToString(planNodeId);
                         }
+                        auto& outputInfo = outputStats.AppendValue(NJson::JSON_MAP);
+                        outputInfo["Name"] = outputName;
                         if (output.second.HasPush()) {
                             FillAsyncAggrStat(outputInfo.InsertValue("Push", NJson::JSON_MAP), output.second.GetPush());
                         }
@@ -3649,6 +3784,21 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     ModifyPlan(root, collectPlanNodeId);
     ModifyPlan(root, addStatsToPlanNode);
 
+    // Executer TxId of this execution phase, so that the plan can be matched with LWTrace
+    // records. It is not reported for literal-only phases, which never reach shards.
+    NKqpProto::TKqpExecutionExtraStats executionExtraStats;
+    if (stats.HasExtra() && stats.GetExtra().UnpackTo(&executionExtraStats) && executionExtraStats.GetTxId()) {
+        const ui64 txId = executionExtraStats.GetTxId();
+        root["TxId"] = txId;
+        // SerializeTxPlans() keeps only the subplans of the tx plan root, so the value has to be
+        // duplicated into them to survive the final serialization.
+        if (root.GetMapSafe().contains("Plans") && root.GetMapSafe().at("Plans").IsArray()) {
+            for (auto& plan : root.GetMapSafe().at("Plans").GetArraySafe()) {
+                plan["TxId"] = txId;
+            }
+        }
+    }
+
     if (stats.GetNodes().size()) {
         if (root.GetMapSafe().contains("Plans") && root.GetMapSafe().at("Plans").IsArray()) {
             for (auto& plan : root.GetMapSafe().at("Plans").GetArraySafe()) {
@@ -3724,6 +3874,11 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                         auto& inputBytes = history.InsertValue("InputInflightBytes", NJson::JSON_ARRAY);
                         for (auto& u : node.GetGlobalMemoryUsageMB()) {
                             inputBytes.AppendValue(u.GetInputInflightBytes());
+                        }
+
+                        auto& queryAllocated = history.InsertValue("MemQueryAllocated", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            queryAllocated.AppendValue(u.GetMemQueryAllocated());
                         }
                     }
                 }

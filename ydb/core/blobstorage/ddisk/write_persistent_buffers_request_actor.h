@@ -5,6 +5,7 @@
 #include "ddisk.h"
 
 #include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr::NDDisk {
@@ -14,6 +15,7 @@ namespace NKikimr::NDDisk {
             ui64 Cookie;
             ui64 TabletId;
             ui32 TabletGeneration;
+            ui32 DirectBlockGroupIndex;
             ui32 RequestGeneration;
             ui64 Lsn;
             ui32 Timeout;
@@ -58,9 +60,13 @@ namespace NKikimr::NDDisk {
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev);
 
     public:
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_PERSISTENT_BUFFER_RA;
+        }
+
         TWritePersistentBuffersRequestActor(TActorId parentId);
 
         STFUNC(StateFunc);
     };
-} // NKikimr::NDDisk
 
+} // NKikimr::NDDisk

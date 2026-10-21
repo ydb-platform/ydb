@@ -80,6 +80,7 @@ public:
 
     virtual void OnTaskCompleted(const TStatistics& /* stats */) {}
 
+    // Must be idempotent: GetOperation can call this multiple times and must get the same result.
     virtual std::vector<TString> GetOperationResult() { return {}; }
 
     virtual TGetNewPartIdsForTaskResult GetNewPartIdsForTask(

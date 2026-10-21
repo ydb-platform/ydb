@@ -41,7 +41,7 @@ int main(int, char**) {
 
         TUnboxedValue list(holderFactory.VectorAsArray(listItems));
 
-        TValuePacker packer(true, listType);
+        TValuePacker packer(/*stable=*/true, listType);
 
         TSimpleTimer timer;
         TStringBuf packed = packer.Pack(list);

@@ -1,6 +1,7 @@
 #include "columns_storage.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/container/filterable/filterable.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 
 #include <yql/essentials/types/binary_json/read.h>
 
@@ -14,7 +15,8 @@ TColumnsData TColumnsData::Slice(const ui32 offset, const ui32 count) const {
         for (auto&& i : records.GetColumns()) {
             AFL_VERIFY(Stats.GetColumnName(idx) == records.GetSchema()->field(idx)->name());
             if (i->GetRecordsCount() > i->GetNullsCount()) {
-                builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType());
+                builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType(),
+                    Stats.GetValueType(idx));
             } else {
                 indexesToRemove.emplace_back(idx);
             }
@@ -31,8 +33,7 @@ TColumnsData TColumnsData::ApplyFilter(const TColumnFilter& filter) const {
     if (!Stats.GetColumnsCount()) {
         return *this;
     }
-    auto records = Records;
-    filter.Apply(records);
+    auto records = NArrow::ApplyFilter(filter, Records);
     if (records->GetRecordsCount()) {
         TDictStats::TBuilder builder;
         ui32 idx = 0;
@@ -40,7 +41,8 @@ TColumnsData TColumnsData::ApplyFilter(const TColumnFilter& filter) const {
         for (auto&& i : records->GetColumns()) {
             AFL_VERIFY(Stats.GetColumnName(idx) == records->GetSchema()->field(idx)->name());
             if (i->GetRecordsCount() > i->GetNullsCount()) {
-                builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType());
+                builder.Add(Stats.GetColumnName(idx), i->GetRecordsCount() - i->GetNullsCount(), i->GetValueRawBytes(), i->GetType(),
+                    Stats.GetValueType(idx));
             } else {
                 indexesToRemove.emplace_back(idx);
             }
@@ -60,21 +62,27 @@ void TColumnsData::TIterator::InitArrays() {
             FullArrayAddress = GlobalChunkedArray->GetArray(FullArrayAddress, CurrentIndex, GlobalChunkedArray);
             ChunkAddress = std::nullopt;
         }
-        const ui32 localIndex = FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex);
-        ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
-        AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow::binary()->id());
-        CurrentArrayData = static_cast<const arrow::BinaryArray*>(ChunkAddress->GetArray().get());
+        if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Dictionary) {
+            CurrentData = static_cast<const TDictionaryArray*>(FullArrayAddress->GetArray().get());
+            if (IsCurrentNull()) {
+                Next();
+            }
+            break;
+        }
+        ChunkAddress = GlobalChunkedArray->GetChunk(ChunkAddress, CurrentIndex);
+        const ui32 localIndex = ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex);
+        CurrentData = ChunkAddress->GetArray().get();
         if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array) {
-            if (CurrentArrayData->IsNull(localIndex)) {
+            if (IsCurrentNull()) {
                 Next();
             }
             break;
         } else if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::SparsedArray) {
-            AFL_VERIFY(localIndex < CurrentArrayData->length())
+            AFL_VERIFY(localIndex < ChunkAddress->GetArray()->length())
                 ("localIndex", localIndex)
-                ("CurrentArrayData->length()", CurrentArrayData->length())
-                ("CurrentArrayData", CurrentArrayData->ToString());
-            if (CurrentArrayData->IsNull(localIndex) &&
+                ("CurrentArray->length()", ChunkAddress->GetArray()->length())
+                ("CurrentArray", ChunkAddress->GetArray()->ToString());
+            if (ChunkAddress->GetArray()->IsNull(localIndex) &&
                 std::static_pointer_cast<TSparsedArray>(FullArrayAddress->GetArray())->GetDefaultValue() == nullptr) {
                 CurrentIndex = ChunkAddress->GetAddress().GetGlobalFinishPosition();
             } else {
@@ -85,11 +93,6 @@ void TColumnsData::TIterator::InitArrays() {
         }
     }
     AFL_VERIFY(CurrentIndex <= GlobalChunkedArray->GetRecordsCount())("index", CurrentIndex)("count", GlobalChunkedArray->GetRecordsCount());
-}
-
-NArrow::NAccessor::TBinaryJsonValueView TColumnsData::TIterator::GetValue() const {
-    auto view = CurrentArrayData->GetView(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
-    return NArrow::NAccessor::TBinaryJsonValueView(TStringBuf(view.data(), view.size()));
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

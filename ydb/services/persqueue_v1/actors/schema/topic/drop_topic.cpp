@@ -12,11 +12,6 @@ class TDropTopicActor: public TGrpcProxyActor<TDropTopicActor, NGRpcService::TEv
     using TRpcOpBase = NGRpcService::TRpcOperationRequestActor<TDropTopicActor, NGRpcService::TEvDropTopicRequest>;
 
 public:
-    TDropTopicActor(NGRpcService::TEvDropTopicRequest* request)
-        : TGrpcProxyActor<TDropTopicActor, NGRpcService::TEvDropTopicRequest>(request)
-    {
-    }
-
     TDropTopicActor(NGRpcService::IRequestOpCtx* request)
         : TGrpcProxyActor<TDropTopicActor, NGRpcService::TEvDropTopicRequest>(request)
     {
@@ -26,15 +21,15 @@ public:
         Become(&TDropTopicActor::StateWork);
 
         Register(NPQ::NSchema::CreateDropTopicActor(SelfId(), {
-            .Database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse("")),
+            .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
-            .Path = GetProtoRequest()->path(),
+            .Path = NormalizeTopicPath(GetProtoRequest()->path()),
             .UserToken = GetUserToken()
         }));
     }
 
 private:
-    void Handle(NPQ::NSchema::TEvDropTopicResponse::TPtr& ev) {
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyWithError(ev->Get()->Status, ev->Get()->ErrorMessage);
         } else {
@@ -44,7 +39,7 @@ private:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NSchema::TEvDropTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
             default:
                 TRpcOpBase::StateFuncBase(ev);
         }

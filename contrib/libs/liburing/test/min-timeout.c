@@ -146,6 +146,7 @@ static int test(int flags, int expected_ctx, int min_wait, int write_delay,
 		close(fds[i][1]);
 	}
 
+	io_uring_queue_exit(&ring);
 	return T_EXIT_PASS;
 }
 
@@ -155,7 +156,6 @@ int main(int argc, char *argv[])
 
 	if (argc > 1)
 		return T_EXIT_SKIP;
-
 	ret = test(0, NWRITES + 1, 0, 2000, NWRITES, WAIT_USEC / 1000);
 	if (ret == T_EXIT_FAIL)
 		return T_EXIT_FAIL;

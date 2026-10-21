@@ -1,5 +1,5 @@
 #ifdef USE_PYTHON3
-#include <contrib/python/numpy/py3/numpy/core/src/multiarray/item_selection.h>
+#include <contrib/python/numpy/py3/numpy/_core/src/multiarray/item_selection.h>
 #else
 #include <contrib/python/numpy/py2/numpy/core/src/multiarray/item_selection.h>
 #endif

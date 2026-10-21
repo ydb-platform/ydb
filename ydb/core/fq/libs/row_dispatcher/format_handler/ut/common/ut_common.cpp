@@ -1,9 +1,7 @@
 #include "ut_common.h"
 
 #include <ydb/core/base/backtrace.h>
-
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-
 #include <ydb/core/testlib/basics/appdata.h>
 
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
@@ -16,17 +14,20 @@ namespace NFq::NRowDispatcher::NTests {
 
 namespace {
 
-const NKikimr::NMiniKQL::IFunctionRegistry::TPtr FunctionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {});
+const NKikimr::NMiniKQL::IFunctionRegistry::TPtr FunctionRegistry =
+    NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {});
 
-class TPurecalcCompileServiceMock : public NActors::TActor<TPurecalcCompileServiceMock> {
+class TPurecalcCompileServiceMock: public NActors::TActor<TPurecalcCompileServiceMock> {
     using TBase = NActors::TActor<TPurecalcCompileServiceMock>;
 
 public:
-    TPurecalcCompileServiceMock(NActors::TActorId owner)
+    TPurecalcCompileServiceMock(NActors::TActorId owner, const TDuration& responseDelay = {})
         : TBase(&TPurecalcCompileServiceMock::StateFunc)
         , Owner(owner)
         , ProgramFactory(NYql::NPureCalc::MakeProgramFactory())
-    {}
+        , ResponseDelay(responseDelay)
+    {
+    }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle)
@@ -42,22 +43,29 @@ public:
             UNIT_FAIL("Failed to compile purecalc filter: sql: " << e.GetYql() << ", error: " << e.GetIssues());
         }
 
-        Send(ev->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(std::move(programHolder)), 0, ev->Cookie);
+        auto event = new TEvRowDispatcher::TEvPurecalcCompileResponse(std::move(programHolder));
+        if (!ResponseDelay) {
+            Send(ev->Sender, event, 0, ev->Cookie);
+        } else {
+            NActors::TActivationContext::Schedule(ResponseDelay, new NActors::IEventHandle(ev->Sender, ev->Sender, event, 0, ev->Cookie));
+        }
         Send(Owner, new NActors::TEvents::TEvPing());
     }
 
 private:
     const NActors::TActorId Owner;
     const NYql::NPureCalc::IProgramFactoryPtr ProgramFactory;
+    const TDuration ResponseDelay;
 };
 
 //// TBaseFixture::ICell
 
-class TOptionalCell : public TBaseFixture::ICell {
+class TOptionalCell: public TBaseFixture::ICell {
 public:
     TOptionalCell(ICell::TPtr value)
         : Value(value)
-    {}
+    {
+    }
 
 public:
     TString GetType() const override {
@@ -76,11 +84,12 @@ private:
     const ICell::TPtr Value;
 };
 
-class TStringSell : public TBaseFixture::ICell {
+class TStringSell: public TBaseFixture::ICell {
 public:
     TStringSell(const TString& value)
         : Value(value)
-    {}
+    {
+    }
 
 public:
     TString GetType() const override {
@@ -95,11 +104,12 @@ private:
     const TString Value;
 };
 
-class TUint64Sell : public TBaseFixture::ICell {
+class TUint64Sell: public TBaseFixture::ICell {
 public:
     TUint64Sell(ui64 value)
         : Value(value)
-    {}
+    {
+    }
 
 public:
     TString GetType() const override {
@@ -114,7 +124,7 @@ private:
     const ui64 Value;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 //// TBaseFixture::TRow
 
@@ -139,7 +149,8 @@ TBaseFixture::TRow& TBaseFixture::TRow::AddUint64(ui64 value, bool optional) {
 
 TBaseFixture::TBatch::TBatch(std::initializer_list<TRow> rows)
     : Rows(rows)
-{}
+{
+}
 
 TBaseFixture::TBatch& TBaseFixture::TBatch::AddRow(TRow row) {
     Rows.emplace_back(row);
@@ -187,7 +198,8 @@ void TBaseFixture::CheckMessageBatch(TRope serializedBatch, const TBatch& expect
     with_lock(Alloc) {
         // Parse messages
         const auto rowType = ProgramBuilder->NewMultiType(columnTypes);
-        const auto dataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(rowType, NKikimr::NMiniKQL::EValuePackerVersion::V0);
+        const auto dataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(
+            rowType, NKikimr::NMiniKQL::EValuePackerVersion::V0, NYql::DefaultDatumTestValidationMode);
 
         NKikimr::NMiniKQL::TUnboxedValueBatch parsedData(rowType);
         dataUnpacker->UnpackBatch(NYql::MakeChunkedBuffer(std::move(serializedBatch)), *HolderFactory, parsedData);
@@ -197,7 +209,7 @@ void TBaseFixture::CheckMessageBatch(TRope serializedBatch, const TBatch& expect
         UNIT_ASSERT_VALUES_EQUAL(parsedData.Width(), expectedFirstRow.size());
 
         ui64 rowIndex = 0;
-        parsedData.ForEachRowWide([&](NYql::NUdf::TUnboxedValue* values, ui32 width){
+        parsedData.ForEachRowWide([&](NYql::NUdf::TUnboxedValue* values, ui32 width) {
             UNIT_ASSERT_GE(expectedRows.size(), rowIndex + 1);
             const auto& expectedRow = expectedRows[rowIndex++].Cells;
 
@@ -209,15 +221,17 @@ void TBaseFixture::CheckMessageBatch(TRope serializedBatch, const TBatch& expect
     }
 }
 
-NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage TBaseFixture::GetMessage(ui64 offset, const TString& data) {
-    NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation info(offset, "", 0, TInstant::Zero(), TInstant::Zero(), nullptr, nullptr, 0, "");
-    return NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage(data, nullptr, info, nullptr);
+TMessageStreamRecord TBaseFixture::GetRecord(ui64 offset, const TString& data) {
+    TMessageStreamRecord record;
+    record.Data = data;
+    record.Id.Offset = offset;
+    return record;
 }
 
 //// Functions
 
-NActors::IActor* CreatePurecalcCompileServiceMock(NActors::TActorId owner) {
-    return new TPurecalcCompileServiceMock(owner);
+NActors::IActor* CreatePurecalcCompileServiceMock(NActors::TActorId owner, const TDuration& responseDelay) {
+    return new TPurecalcCompileServiceMock(owner, responseDelay);
 }
 
 void CheckSuccess(const TStatus& status) {
@@ -225,8 +239,11 @@ void CheckSuccess(const TStatus& status) {
 }
 
 void CheckError(const TStatus& status, TStatusCode expectedStatusCode, const TString& expectedMessage) {
-    UNIT_ASSERT_C(status.GetStatus() == expectedStatusCode, "Expected error status " << NYql::NDqProto::StatusIds_StatusCode_Name(expectedStatusCode) << ", but got: " << NYql::NDqProto::StatusIds_StatusCode_Name(status.GetStatus()) << " ("<< status.GetErrorMessage() << ")");
-    UNIT_ASSERT_STRING_CONTAINS_C(status.GetErrorMessage(), expectedMessage, "Unexpected error message, Status: " << NYql::NDqProto::StatusIds_StatusCode_Name(status.GetStatus()));
+    UNIT_ASSERT_C(status.GetStatus() == expectedStatusCode,
+        "Expected error status " << NYql::NDqProto::StatusIds_StatusCode_Name(expectedStatusCode) << ", but got: "
+                                 << NYql::NDqProto::StatusIds_StatusCode_Name(status.GetStatus()) << " (" << status.GetErrorMessage() << ")");
+    UNIT_ASSERT_STRING_CONTAINS_C(status.GetErrorMessage(), expectedMessage,
+        "Unexpected error message, Status: " << NYql::NDqProto::StatusIds_StatusCode_Name(status.GetStatus()));
 }
 
-}  // namespace NFq::NRowDispatcher::NTests
+}   // namespace NFq::NRowDispatcher::NTests

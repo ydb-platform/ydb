@@ -1,4 +1,4 @@
-"""Serial-style inject: one tick fans out to several agents with increasing ``sleep_before`` in payload."""
+"""Serial-style inject: one tick kills K node/slot entities in sequence, ``stagger_sec`` apart."""
 
 from __future__ import annotations
 
@@ -7,18 +7,23 @@ import uuid
 from typing import ClassVar
 
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand, dispatch
-from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import require_external_cluster
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget, TargetKind
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import (
+    NemesisPlannerBase,
+    normalize_candidates,
+)
 
 # Lower bound of tools ``schedule_between_kills`` (30, 60) for node serial nemeses.
 DEFAULT_SERIAL_STAGGER_SEC = 30.0
 
+MAX_ENTITIES_PER_TICK = 4
+
 
 class SerialStaggeredInjectPlanner(NemesisPlannerBase):
-    """
-    Each ``scheduled_tick``: sample ``K`` distinct hosts (``K`` in 1..4, capped by ``len(hosts)``),
-    dispatch inject to each with ``payload["sleep_before"] = i * stagger_sec`` and the same
-    ``node_id`` / ``slot_idx`` so every agent kills the same daemon (staggered in time).
+    """Kill ``K`` distinct node/slot entities per tick (``K`` up to :data:`MAX_ENTITIES_PER_TICK`).
+
+    One inject per entity, dispatched to that entity's own owner host, with
+    ``payload["sleep_before"] = i * stagger_sec`` so the kills are serial rather than simultaneous.
     """
 
     PAYLOAD_INJECT: ClassVar[dict] = {}
@@ -41,43 +46,45 @@ class SerialStaggeredInjectPlanner(NemesisPlannerBase):
     def nemesis_type(self) -> str:  # type: ignore[override]
         return self._nemesis_type_key
 
-    def scheduled_tick(self, hosts: list[str]) -> list[DispatchCommand]:
-        if not hosts:
+    def scheduled_tick(self, candidates: list[ChaosTarget]) -> list[DispatchCommand]:
+        targets = normalize_candidates(candidates)
+        if not targets:
             return []
-        cluster = require_external_cluster()
-        if cluster is None:
-            return []
+
         if self._target_kind == "node":
-            ids = list(cluster.nodes.keys())
-            if not ids:
-                return []
-            target_key, target_val = "node_id", random.choice(ids)
+            pool = [t for t in targets if t.kind is TargetKind.NODE] or targets
         elif self._target_kind == "slot":
-            ids = list(cluster.slots.keys())
-            if not ids:
-                return []
-            target_key, target_val = "slot_idx", random.choice(ids)
+            pool = [t for t in targets if t.kind is TargetKind.SLOT] or targets
         else:
             return []
 
-        k = min(random.randint(1, 4), len(hosts))
-        chosen = random.sample(hosts, k)
-        with self._lock:
-            self._last_hosts = list(chosen)
+        k = min(random.randint(1, MAX_ENTITIES_PER_TICK), len(pool))
+        chosen = random.sample(pool, k)
         scenario_id = str(uuid.uuid4())
-        return [
+        commands = [
             dispatch(
                 self._nemesis_type_key,
-                h,
+                target,
                 "inject",
-                {
-                    "sleep_before": float(i) * self._stagger_sec,
-                    target_key: target_val,
-                },
+                self._payload_for(target, sleep_before=float(i) * self._stagger_sec),
                 scenario_id=scenario_id,
             )
-            for i, h in enumerate(chosen)
+            for i, target in enumerate(chosen)
         ]
+        with self._lock:
+            self._last_hosts = [t.host for t in chosen]
+        return commands
+
+    def _payload_for(self, target: ChaosTarget, *, sleep_before: float) -> dict:
+        """Ids the agent needs to find the daemon, plus its wait before killing it."""
+        payload: dict = {"sleep_before": sleep_before}
+        if target.node_id is not None:
+            payload["node_id"] = target.node_id
+        if target.slot_idx is not None:
+            payload["slot_idx"] = target.slot_idx
+        if target.ic_port is not None:
+            payload["node_ic_port"] = target.ic_port
+        return payload
 
     def _drain_tracked_hosts(self) -> list[str]:
         out = list(self._last_hosts)

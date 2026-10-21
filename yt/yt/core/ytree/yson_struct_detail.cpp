@@ -77,7 +77,7 @@ IYsonStructParameterPtr TYsonStructMeta::GetParameter(const std::string& keyOrAl
         }
     }
     THROW_ERROR_EXCEPTION("Key or alias %Qv not found in YSON struct", keyOrAlias)
-        << TErrorAttribute("type", TypeName(GetStructType()));
+        .With("type", TypeName(GetStructType()));
 }
 
 void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const std::string& key, const NYTree::INodePtr& node) const
@@ -97,8 +97,8 @@ void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const std::string& 
                 "Postprocess failed while loading parameter %Qv from value %Qv",
                 key,
                 ConvertToYsonString(node, NYson::EYsonFormat::Text))
-                    << ex
-                    << TErrorAttribute("struct", TypeName(GetStructType()));
+                    .With(ex)
+                    .With("struct", TypeName(GetStructType()));
         }
     };
     auto loadOptions = TLoadParameterOptions{
@@ -123,8 +123,8 @@ void TYsonStructMeta::PostprocessStruct(TYsonStructBase* target, const std::func
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Postprocess failed at %v",
             !pathGetter ? "root" : pathGetter())
-                << ex
-                << TErrorAttribute("struct", TypeName(GetStructType()));
+                .With(ex)
+                .With("struct", TypeName(GetStructType()));
     }
 }
 
@@ -151,9 +151,9 @@ void TYsonStructMeta::LoadStruct(
             auto otherChild = mapNode->FindChild(alias);
             if (child && otherChild && !AreNodesEqual(child, otherChild)) {
                 THROW_ERROR_EXCEPTION("Different values for aliased parameters %Qv and %Qv", key, alias)
-                    << TErrorAttribute("struct", TypeName(GetStructType()))
-                    << TErrorAttribute("main_value", child)
-                    << TErrorAttribute("aliased_value", otherChild);
+                    .With("struct", TypeName(GetStructType()))
+                    .With("main_value", child)
+                    .With("aliased_value", otherChild);
             }
             if (!child && otherChild) {
                 child = otherChild;
@@ -179,9 +179,9 @@ void TYsonStructMeta::LoadStruct(
                 if (ShouldThrow(unrecognizedStrategy)) {
                     auto path = (pathGetter ? pathGetter() : TYPath(""));
                     THROW_ERROR_EXCEPTION("Unrecognized field %Qv has been encountered", path + "/" + ToYPathLiteral(key))
-                        << TErrorAttribute("struct", TypeName(GetStructType()))
-                        << TErrorAttribute("key", key)
-                        << TErrorAttribute("path", path);
+                        .With("struct", TypeName(GetStructType()))
+                        .With("key", key)
+                        .With("path", path);
                 }
                 target->LocalUnrecognized_->RemoveChild(key);
                 YT_VERIFY(target->LocalUnrecognized_->AddChild(key, ConvertToNode(child)));
@@ -243,9 +243,9 @@ void TYsonStructMeta::LoadStruct(
             auto secondNode = ConvertTo<INodePtr>(NYson::TYsonStringBuf(data));
             if (!AreNodesEqual(firstNode, secondNode)) {
                 THROW_ERROR_EXCEPTION("Different values for aliased parameters %Qv and %Qv", canonicalKey, key)
-                    << TErrorAttribute("struct", TypeName(GetStructType()))
-                    << TErrorAttribute("main_value", firstNode)
-                    << TErrorAttribute("aliased_value", secondNode);
+                    .With("struct", TypeName(GetStructType()))
+                    .With("main_value", firstNode)
+                    .With("aliased_value", secondNode);
             }
             return;
         }
@@ -266,9 +266,9 @@ void TYsonStructMeta::LoadStruct(
         if (ShouldThrow(unrecognizedStrategy)) {
             auto path = (pathGetter ? pathGetter() : TYPath(""));
             THROW_ERROR_EXCEPTION("Unrecognized field %Qv has been encountered", path + "/" + ToYPathLiteral(key))
-                << TErrorAttribute("struct", TypeName(GetStructType()))
-                << TErrorAttribute("key", key)
-                << TErrorAttribute("path", path);
+                .With("struct", TypeName(GetStructType()))
+                .With("key", key)
+                .With("path", path);
         }
         if (!target->LocalUnrecognized_) {
             target->LocalUnrecognized_ = GetEphemeralNodeFactory()->CreateMap();

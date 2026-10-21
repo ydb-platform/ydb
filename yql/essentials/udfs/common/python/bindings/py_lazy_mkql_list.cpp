@@ -103,7 +103,6 @@ class TBaseLazyList: public NUdf::TBoxedValue {
             UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
 
-    private:
         const TPyCastContext::TPtr CastCtx_;
         TPyObjectPtr PyIter_;
         const NUdf::TType* ItemType_;
@@ -338,7 +337,7 @@ public:
     }
 
     TPyObjectPtr GetIteratorImpl() const {
-        TPyObjectPtr generator = PyObject_CallObject(PyObject_.Get(), nullptr);
+        TPyObjectPtr generator = PyObject_CallObject(PyObject_.Get(), /*args=*/nullptr);
         if (!generator || !PyGen_Check(generator.Get())) {
             UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << "Expected generator as a result of function call").c_str());
         }

@@ -1,19 +1,12 @@
-import sys
 import datetime as dt
-from typing import Any, TypeVar
-from pathlib import Path
+from typing import Any, Literal, TypeVar, assert_type
 
 import numpy as np
 import numpy.typing as npt
 
-if sys.version_info >= (3, 11):
-    from typing import assert_type
-else:
-    from typing_extensions import assert_type
+_ScalarT_co = TypeVar("_ScalarT_co", bound=np.generic, covariant=True)
 
-_SCT = TypeVar("_SCT", bound=np.generic, covariant=True)
-
-class SubClass(np.ndarray[Any, np.dtype[_SCT]]): ...
+class SubClass(npt.NDArray[_ScalarT_co]): ...
 
 subclass: SubClass[np.float64]
 
@@ -38,7 +31,15 @@ date_scalar: dt.date
 date_seq: list[dt.date]
 timedelta_seq: list[dt.timedelta]
 
-def func(a: int) -> bool: ...
+n1: Literal[1]
+n2: Literal[2]
+n3: Literal[3]
+
+f8: np.float64
+
+def func11(a: int) -> bool: ...
+def func21(a: int, b: int) -> int: ...
+def func12(a: int) -> tuple[complex, bool]: ...
 
 assert_type(next(b_f8), tuple[Any, ...])
 assert_type(b_f8.reset(), None)
@@ -47,7 +48,7 @@ assert_type(b_f8.iters, tuple[np.flatiter[Any], ...])
 assert_type(b_f8.nd, int)
 assert_type(b_f8.ndim, int)
 assert_type(b_f8.numiter, int)
-assert_type(b_f8.shape, tuple[int, ...])
+assert_type(b_f8.shape, tuple[Any, ...])
 assert_type(b_f8.size, int)
 
 assert_type(next(b_i8_f8_f8), tuple[Any, ...])
@@ -57,7 +58,7 @@ assert_type(b_i8_f8_f8.iters, tuple[np.flatiter[Any], ...])
 assert_type(b_i8_f8_f8.nd, int)
 assert_type(b_i8_f8_f8.ndim, int)
 assert_type(b_i8_f8_f8.numiter, int)
-assert_type(b_i8_f8_f8.shape, tuple[int, ...])
+assert_type(b_i8_f8_f8.shape, tuple[Any, ...])
 assert_type(b_i8_f8_f8.size, int)
 
 assert_type(np.inner(AR_f8, AR_i8), Any)
@@ -71,21 +72,21 @@ assert_type(np.can_cast(np.dtype("i8"), int), bool)
 assert_type(np.can_cast(AR_f8, "f8"), bool)
 assert_type(np.can_cast(AR_f8, np.complex128, casting="unsafe"), bool)
 
-assert_type(np.min_scalar_type([1]), np.dtype[Any])
-assert_type(np.min_scalar_type(AR_f8), np.dtype[Any])
+assert_type(np.min_scalar_type([1]), np.dtype)
+assert_type(np.min_scalar_type(AR_f8), np.dtype)
 
-assert_type(np.result_type(int, [1]), np.dtype[Any])
-assert_type(np.result_type(AR_f8, AR_u1), np.dtype[Any])
-assert_type(np.result_type(AR_f8, np.complex128), np.dtype[Any])
+assert_type(np.result_type(int, [1]), np.dtype)
+assert_type(np.result_type(AR_f8, AR_u1), np.dtype)
+assert_type(np.result_type(AR_f8, np.complex128), np.dtype)
 
 assert_type(np.dot(AR_LIKE_f, AR_i8), Any)
 assert_type(np.dot(AR_u1, 1), Any)
 assert_type(np.dot(1.5j, 1), Any)
 assert_type(np.dot(AR_u1, 1, out=AR_f8), npt.NDArray[np.float64])
 
-assert_type(np.vdot(AR_LIKE_f, AR_i8), np.floating[Any])
-assert_type(np.vdot(AR_u1, 1), np.signedinteger[Any])
-assert_type(np.vdot(1.5j, 1), np.complexfloating[Any, Any])
+assert_type(np.vdot(AR_LIKE_f, AR_i8), np.floating)
+assert_type(np.vdot(AR_u1, 1), np.signedinteger)
+assert_type(np.vdot(1.5j, 1), np.complexfloating)
 
 assert_type(np.bincount(AR_i8), npt.NDArray[np.intp])
 
@@ -104,14 +105,59 @@ assert_type(np.shares_memory(AR_f8, AR_f8, max_work=1), bool)
 assert_type(np.may_share_memory(1, 2), bool)
 assert_type(np.may_share_memory(AR_f8, AR_f8, max_work=1), bool)
 
-assert_type(np.geterrobj(), list[Any])
+assert_type(np.promote_types(np.int32, np.int64), np.dtype)
+assert_type(np.promote_types("f4", float), np.dtype)
 
-assert_type(np.seterrobj([8192, 521, None]), None)
+assert_type(np.frompyfunc(func11, n1, n1).nin, Literal[1])
+assert_type(np.frompyfunc(func11, n1, n1).nout, Literal[1])
+assert_type(np.frompyfunc(func11, n1, n1).nargs, Literal[2])
+assert_type(np.frompyfunc(func11, n1, n1).ntypes, Literal[1])
+assert_type(np.frompyfunc(func11, n1, n1).identity, None)
+assert_type(np.frompyfunc(func11, n1, n1).signature, None)
+assert_type(np.frompyfunc(func11, n1, n1)(f8), bool)
+assert_type(np.frompyfunc(func11, n1, n1)(AR_f8), bool | npt.NDArray[np.object_])
+assert_type(np.frompyfunc(func11, n1, n1).at(AR_f8, AR_i8), None)
 
-assert_type(np.promote_types(np.int32, np.int64), np.dtype[Any])
-assert_type(np.promote_types("f4", float), np.dtype[Any])
+assert_type(np.frompyfunc(func21, n2, n1).nin, Literal[2])
+assert_type(np.frompyfunc(func21, n2, n1).nout, Literal[1])
+assert_type(np.frompyfunc(func21, n2, n1).nargs, Literal[3])
+assert_type(np.frompyfunc(func21, n2, n1).ntypes, Literal[1])
+assert_type(np.frompyfunc(func21, n2, n1).identity, None)
+assert_type(np.frompyfunc(func21, n2, n1).signature, None)
+assert_type(np.frompyfunc(func21, n2, n1)(f8, f8), int)
+assert_type(np.frompyfunc(func21, n2, n1)(AR_f8, f8), int | npt.NDArray[np.object_])
+assert_type(np.frompyfunc(func21, n2, n1)(f8, AR_f8), int | npt.NDArray[np.object_])
+assert_type(np.frompyfunc(func21, n2, n1).reduce(AR_f8, axis=0), int | npt.NDArray[np.object_])
+assert_type(np.frompyfunc(func21, n2, n1).accumulate(AR_f8), npt.NDArray[np.object_])
+assert_type(np.frompyfunc(func21, n2, n1).reduceat(AR_f8, AR_i8), npt.NDArray[np.object_])
+assert_type(np.frompyfunc(func21, n2, n1).outer(f8, f8), int)
+assert_type(np.frompyfunc(func21, n2, n1).outer(AR_f8, f8), int | npt.NDArray[np.object_])
 
-assert_type(np.frompyfunc(func, 1, 1, identity=None), np.ufunc)
+assert_type(np.frompyfunc(func21, n2, n1, identity=0).nin, Literal[2])
+assert_type(np.frompyfunc(func21, n2, n1, identity=0).nout, Literal[1])
+assert_type(np.frompyfunc(func21, n2, n1, identity=0).nargs, Literal[3])
+assert_type(np.frompyfunc(func21, n2, n1, identity=0).ntypes, Literal[1])
+assert_type(np.frompyfunc(func21, n2, n1, identity=0).identity, int)
+assert_type(np.frompyfunc(func21, n2, n1, identity=0).signature, None)
+
+assert_type(np.frompyfunc(func12, n1, n2).nin, Literal[1])
+assert_type(np.frompyfunc(func12, n1, n2).nout, Literal[2])
+assert_type(np.frompyfunc(func12, n1, n2).nargs, int)
+assert_type(np.frompyfunc(func12, n1, n2).ntypes, Literal[1])
+assert_type(np.frompyfunc(func12, n1, n2).identity, None)
+assert_type(np.frompyfunc(func12, n1, n2).signature, None)
+assert_type(
+    np.frompyfunc(func12, n2, n2)(f8, f8),
+    tuple[complex, complex, *tuple[complex, ...]],
+)
+assert_type(
+    np.frompyfunc(func12, n2, n2)(AR_f8, f8),
+    tuple[
+        complex | npt.NDArray[np.object_],
+        complex | npt.NDArray[np.object_],
+        *tuple[complex | npt.NDArray[np.object_], ...],
+    ],
+)
 
 assert_type(np.datetime_data("m8[D]"), tuple[str, int])
 assert_type(np.datetime_data(np.datetime64), tuple[str, int])
@@ -129,9 +175,9 @@ assert_type(np.busday_offset(M, timedelta_seq), npt.NDArray[np.datetime64])
 assert_type(np.busday_offset("2011-01", "2011-02", roll="forward"), np.datetime64)
 assert_type(np.busday_offset(["2011-01"], "2011-02", roll="forward"), npt.NDArray[np.datetime64])
 
-assert_type(np.is_busday("2012"), np.bool_)
-assert_type(np.is_busday(date_scalar), np.bool_)
-assert_type(np.is_busday(["2012"]), npt.NDArray[np.bool_])
+assert_type(np.is_busday("2012"), np.bool)
+assert_type(np.is_busday(date_scalar), np.bool)
+assert_type(np.is_busday(["2012"]), npt.NDArray[np.bool])
 
 assert_type(np.datetime_as_string(M), np.str_)
 assert_type(np.datetime_as_string(AR_M), npt.NDArray[np.str_])
@@ -139,10 +185,8 @@ assert_type(np.datetime_as_string(AR_M), npt.NDArray[np.str_])
 assert_type(np.busdaycalendar(holidays=date_seq), np.busdaycalendar)
 assert_type(np.busdaycalendar(holidays=[M]), np.busdaycalendar)
 
-assert_type(np.compare_chararrays("a", "b", "!=", rstrip=False), npt.NDArray[np.bool_])
-assert_type(np.compare_chararrays(b"a", b"a", "==", True), npt.NDArray[np.bool_])
-
-assert_type(np.add_docstring(func, "test"), None)
+assert_type(np.char.compare_chararrays("a", "b", "!=", rstrip=False), npt.NDArray[np.bool])
+assert_type(np.char.compare_chararrays(b"a", b"a", "==", True), npt.NDArray[np.bool])
 
 assert_type(np.nested_iters([AR_i8, AR_i8], [[0], [1]], flags=["c_index"]), tuple[np.nditer, ...])
 assert_type(np.nested_iters([AR_i8, AR_i8], [[0], [1]], op_flags=[["readonly", "readonly"]]), tuple[np.nditer, ...])

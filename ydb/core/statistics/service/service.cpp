@@ -25,24 +25,6 @@
 namespace NKikimr {
 namespace NStat {
 
-static constexpr TDuration DefaultAggregateKeepAlivePeriod = TDuration::MilliSeconds(500);
-static constexpr TDuration DefaultAggregateKeepAliveTimeout = TDuration::Seconds(3);
-static constexpr TDuration DefaultAggregateKeepAliveAckTimeout = TDuration::Seconds(3);
-static constexpr TDuration DefaultStatisticsRequestTimeout = TDuration::Seconds(5);
-static constexpr size_t DefaultMaxInFlightTabletRequests = 5;
-static constexpr size_t DefaultFanOutFactor = 5;
-
-
-
-TStatServiceSettings::TStatServiceSettings()
-    : AggregateKeepAlivePeriod(DefaultAggregateKeepAlivePeriod)
-    , AggregateKeepAliveTimeout(DefaultAggregateKeepAliveTimeout)
-    , AggregateKeepAliveAckTimeout(DefaultAggregateKeepAliveAckTimeout)
-    , StatisticsRequestTimeout(DefaultStatisticsRequestTimeout)
-    , MaxInFlightTabletRequests(DefaultMaxInFlightTabletRequests)
-    , FanOutFactor(DefaultFanOutFactor)
-{}
-
 NActors::TActorId MakeStatServiceID(ui32 node) {
     const char x[12] = "StatService";
     return NActors::TActorId(node, TStringBuf(x, 12));

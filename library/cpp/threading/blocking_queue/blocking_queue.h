@@ -3,6 +3,7 @@
 #include <util/generic/deque.h>
 #include <util/generic/maybe.h>
 #include <util/generic/yexception.h>
+#include <util/system/compiler.h>
 #include <util/system/condvar.h>
 #include <util/system/guard.h>
 #include <util/system/mutex.h>
@@ -10,10 +11,26 @@
 #include <utility>
 
 namespace NThreading {
+    template <class TValue>
+    struct TUniformSizeProvider {
+        size_t operator()(const TValue&) const {
+            return 1;
+        }
+    };
+
     ///
     /// TBlockingQueue is a queue of elements of limited or unlimited size.
     /// Queue provides Push and Pop operations that block if operation can't be executed
     /// (queue is empty or maximum size is reached).
+    ///
+    /// Size of each element is determined by TSizeProvider (default: 1 per element).
+    /// Maximum size is compared against the sum of element sizes (TotalSize).
+    /// Capacity policy: TotalSize + SizeProvider(e) must not exceed maxSize, except that
+    /// an empty queue always accepts one element — even if SizeProvider(e) > maxSize —
+    /// so progress is possible when nothing else fits.
+    ///
+    /// TSizeProvider must be thread-safe: Push / ElementSize may call it without holding
+    /// the queue mutex.
     ///
     /// Queue can be stopped, in that case all blocked operation will return `Nothing` / false.
     ///
@@ -35,14 +52,16 @@ namespace NThreading {
     ///     while (TMaybe<int> number = queue.Pop()) {
     ///         ProcessNumber(number.GetRef());
     ///     }
-    template <class TElement>
+    template <class TElement, class TSizeProvider = TUniformSizeProvider<TElement>>
     class TBlockingQueue {
     public:
         ///
         /// Creates blocking queue with given maxSize
         /// if maxSize == 0 then queue is unlimited
-        TBlockingQueue(size_t maxSize)
+        TBlockingQueue(size_t maxSize, TSizeProvider sizeProvider = TSizeProvider())
             : MaxSize(maxSize == 0 ? Max<size_t>() : maxSize)
+            , SizeProvider(sizeProvider)
+            , TotalSize_(0)
             , Stopped(false)
         {
         }
@@ -62,6 +81,7 @@ namespace NThreading {
             if (Stopped && Queue.empty()) {
                 return Nothing();
             }
+            TotalSize_ -= SizeProvider(Queue.front());
             TElement e = std::move(Queue.front());
             Queue.pop_front();
             CanPushCV.Signal();
@@ -86,6 +106,7 @@ namespace NThreading {
 
             TDeque<TElement> result;
             std::swap(result, Queue);
+            TotalSize_ = 0;
 
             CanPushCV.BroadCast();
 
@@ -97,8 +118,10 @@ namespace NThreading {
         }
 
         ///
-        /// Blocks until queue has space for new elements or queue is stopped or deadline is reached.
-        /// Returns false exception if queue is stopped and push failed or deadline is reached.
+        /// Blocks until queue has space for the element or queue is stopped or deadline is reached.
+        /// Accepts if TotalSize + SizeProvider(e) <= maxSize, or if the queue is empty
+        /// (always allow at least one element, even when SizeProvider(e) > maxSize).
+        /// Returns false if queue is stopped and push failed or deadline is reached.
         /// Pushes element to queue and returns true otherwise.
         bool Push(const TElement& e, TInstant deadline = TInstant::Max()) {
             return PushRef(e, deadline);
@@ -140,15 +163,28 @@ namespace NThreading {
         }
 
         ///
+        /// Returns total size of elements according to TSizeProvider.
+        size_t TotalSize() const {
+            TGuard<TMutex> g(Lock);
+            return TotalSize_;
+        }
+
+        ///
         /// Checks whether queue is stopped.
         bool IsStopped() const {
             TGuard<TMutex> g(Lock);
             return Stopped;
         }
 
+        ///
+        /// Returns SizeProvider(e). Does not take the queue mutex.
+        size_t ElementSize(const TElement& e) const {
+            return SizeProvider(e);
+        }
+
     private:
-        bool CanPush() const {
-            return Queue.size() < MaxSize || Stopped;
+        bool CanPush(size_t elemSize) const {
+            return Stopped || Queue.empty() || TotalSize_ + elemSize <= MaxSize;
         }
 
         bool CanPop() const {
@@ -157,14 +193,16 @@ namespace NThreading {
 
         template <typename Ref>
         bool PushRef(Ref e, TInstant deadline) {
+            const size_t elemSize = SizeProvider(e);
             TGuard<TMutex> g(Lock);
-            const auto canPush = [this]() { return CanPush(); };
+            const auto canPush = [this, elemSize]() { return CanPush(elemSize); };
             if (!CanPushCV.WaitD(Lock, deadline, canPush)) {
                 return false;
             }
             if (Stopped) {
                 return false;
             }
+            TotalSize_ += elemSize;
             Queue.push_back(std::forward<TElement>(e));
             CanPopCV.Signal();
             return true;
@@ -176,6 +214,8 @@ namespace NThreading {
         TCondVar CanPushCV;
         TDeque<TElement> Queue;
         size_t MaxSize;
+        Y_NO_UNIQUE_ADDRESS TSizeProvider SizeProvider;
+        size_t TotalSize_; // Trailing underscore: public accessor is TotalSize()
         bool Stopped;
     };
 

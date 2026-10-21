@@ -13,7 +13,7 @@ class TFairSchedulerTest
     : public ::testing::Test
 {
 protected:
-    const IFairSchedulerPtr<TString> Scheduler_ = CreateFairScheduler<TString>();
+    const IFairSchedulerPtr<std::string> Scheduler_ = CreateFairScheduler<std::string>();
 };
 
 TEST_F(TFairSchedulerTest, Simple)

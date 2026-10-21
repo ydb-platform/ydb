@@ -77,9 +77,8 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     //! but for no longer than BatchFlushInterval.
     //! Upon reaching FlushInterval or FlushSize limit, all messages will be written with one batch.
     //! Greatly increases performance for small messages.
-    //! Setting either value to zero means immediate write with no batching. (Unrecommended, especially for clients
-    //! sending small messages at high rate).
-    FLUENT_SETTING_OPTIONAL(TDuration, BatchFlushInterval);
+    //! Zero BatchFlushInterval or BatchFlushSizeBytes disables the corresponding limit (immediate flush).
+    FLUENT_SETTING_DEFAULT(TDuration, BatchFlushInterval, TDuration::Seconds(1));
     FLUENT_SETTING_OPTIONAL(ui64, BatchFlushSizeBytes);
 
     FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));

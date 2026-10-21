@@ -64,7 +64,6 @@ static void restore_errno(void)
 /************************************************************/
 
 
-#if PY_MAJOR_VERSION >= 3
 static PyObject *b_getwinerror(PyObject *self, PyObject *args, PyObject *kwds)
 {
     int err = -1;
@@ -113,54 +112,6 @@ static PyObject *b_getwinerror(PyObject *self, PyObject *args, PyObject *kwds)
     LocalFree(s_buf);
     return v;
 }
-#else
-static PyObject *b_getwinerror(PyObject *self, PyObject *args, PyObject *kwds)
-{
-    int err = -1;
-    int len;
-    char *s;
-    char *s_buf = NULL; /* Free via LocalFree */
-    char s_small_buf[40]; /* Room for "Windows Error 0xFFFFFFFFFFFFFFFF" */
-    PyObject *v;
-    static char *keywords[] = {"code", NULL};
-
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|i", keywords, &err))
-        return NULL;
-
-    if (err == -1) {
-        struct cffi_tls_s *p = get_cffi_tls();
-        if (p == NULL)
-            return PyErr_NoMemory();
-        err = p->saved_lasterror;
-    }
-
-    len = FormatMessage(
-        /* Error API error */
-        FORMAT_MESSAGE_ALLOCATE_BUFFER |
-        FORMAT_MESSAGE_FROM_SYSTEM |
-        FORMAT_MESSAGE_IGNORE_INSERTS,
-        NULL,           /* no message source */
-        err,
-        MAKELANGID(LANG_NEUTRAL,
-        SUBLANG_DEFAULT), /* Default language */
-        (LPTSTR) &s_buf,
-        0,              /* size not used */
-        NULL);          /* no args */
-    if (len==0) {
-        /* Only seen this in out of mem situations */
-        sprintf(s_small_buf, "Windows Error 0x%X", err);
-        s = s_small_buf;
-    } else {
-        s = s_buf;
-        /* remove trailing cr/lf and dots */
-        while (len > 0 && (s[len-1] <= ' ' || s[len-1] == '.'))
-            s[--len] = '\0';
-    }
-    v = Py_BuildValue("(is)", err, s);
-    LocalFree(s_buf);
-    return v;
-}
-#endif
 
 
 /************************************************************/
@@ -251,7 +202,9 @@ static int cffi_atomic_compare_exchange(void **ptr, void **expected,
 
 static void *cffi_atomic_load(void **ptr)
 {
-#if defined(_M_X64) || defined(_M_IX86)
+#if defined(__GNUC__) || defined(__clang__)
+    return __atomic_load_n(ptr, __ATOMIC_SEQ_CST);
+#elif defined(_M_X64) || defined(_M_IX86)
     return *(volatile void **)ptr;
 #elif defined(_M_ARM64)
     return (void *)__ldar64((volatile unsigned __int64 *)ptr);
@@ -262,7 +215,9 @@ static void *cffi_atomic_load(void **ptr)
 
 static uint8_t cffi_atomic_load_uint8(uint8_t *ptr)
 {
-#if defined(_M_X64) || defined(_M_IX86)
+#if defined(__GNUC__) || defined(__clang__)
+    return __atomic_load_n(ptr, __ATOMIC_SEQ_CST);
+#elif defined(_M_X64) || defined(_M_IX86)
     return *(volatile uint8_t *)ptr;
 #elif defined(_M_ARM64)
     return (uint8_t)__ldar8((volatile uint8_t *)ptr);
@@ -273,7 +228,9 @@ static uint8_t cffi_atomic_load_uint8(uint8_t *ptr)
 
 static Py_ssize_t cffi_atomic_load_ssize(Py_ssize_t *ptr)
 {
-#if defined(_M_X64) || defined(_M_IX86)
+#if defined(__GNUC__) || defined(__clang__)
+    return __atomic_load_n(ptr, __ATOMIC_SEQ_CST);
+#elif defined(_M_X64) || defined(_M_IX86)
     return *(volatile Py_ssize_t *)ptr;
 #elif defined(_M_ARM64)
     return (Py_ssize_t)__ldar64((volatile unsigned __int64 *)ptr);
@@ -284,17 +241,29 @@ static Py_ssize_t cffi_atomic_load_ssize(Py_ssize_t *ptr)
 
 static void cffi_atomic_store_ssize(Py_ssize_t *ptr, Py_ssize_t value)
 {
+#if defined(__GNUC__) || defined(__clang__)
+    __atomic_store_n(ptr, value, __ATOMIC_SEQ_CST);
+#else
     _InterlockedExchangePointer(ptr, value);
+#endif
 }
 
 static void cffi_atomic_store(void **ptr, void *value)
 {
+#if defined(__GNUC__) || defined(__clang__)
+    __atomic_store_n(ptr, value, __ATOMIC_SEQ_CST);
+#else
     _InterlockedExchangePointer(ptr, value);
+#endif
 }
 
 static void cffi_atomic_store_uint8(uint8_t *ptr, uint8_t value)
 {
+#if defined(__GNUC__) || defined(__clang__)
+    __atomic_store_n(ptr, value, __ATOMIC_SEQ_CST);
+#else
     _InterlockedExchange8(ptr, value);
+#endif
 }
 
 #endif /* CFFI_MISC_WIN32_H */

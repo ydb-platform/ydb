@@ -1,5 +1,8 @@
 #include "table_client.h"
 
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/bulk_upsert_retry_state.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
+
 namespace NYdb::inline Dev {
 
 namespace NTable {
@@ -8,6 +11,14 @@ using namespace NThreading;
 
 const TKeepAliveSettings TTableClient::TImpl::KeepAliveSettings = TKeepAliveSettings().ClientTimeout(KEEP_ALIVE_CLIENT_TIMEOUT);
 
+namespace {
+    NThreading::TFuture<void> MakeReadyFuture() {
+        auto promise = NThreading::NewPromise<void>();
+        auto future = promise.GetFuture();
+        promise.SetValue();
+        return future;
+    }
+}
 
 TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings) {
     return Min(settings.CloseIdleThreshold_, settings.KeepAliveIdleThreshold_);
@@ -70,7 +81,11 @@ std::shared_ptr<NObservability::TRequestSpan> TTableClient::TImpl::CreateRetryAt
 
 TTableClient::TImpl::~TImpl() {
     if (Connections_->GetDrainOnDtors()) {
-        Drain().Wait(DRAIN_TIMEOUT);
+        const bool waitForDrain = !TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback();
+        auto drainFuture = Drain();
+        if (waitForDrain) {
+            drainFuture.Wait(DRAIN_TIMEOUT);
+        }
     }
 }
 
@@ -83,9 +98,7 @@ void TTableClient::TImpl::InitStopper() {
     auto cb = [weak]() mutable {
         auto strong = weak.lock();
         if (!strong) {
-            auto promise = NThreading::NewPromise<void>();
-            promise.SetException("no more client");
-            return promise.GetFuture();
+            return MakeReadyFuture();
         }
         return strong->Drain();
     };
@@ -106,9 +119,13 @@ NThreading::TFuture<void> TTableClient::TImpl::Drain() {
     for (auto& s : sessions) {
         if (!s->GetId().empty()) {
             closeResults.push_back(CloseInternal(s.get()));
+            DbDriverState_->StatCollector.DecSessionsOnHost(s->GetEndpoint());
         }
     }
     sessions.clear();
+    if (closeResults.empty()) {
+        return MakeReadyFuture();
+    }
     return NThreading::WaitExceptionOrAll(closeResults);
 }
 
@@ -899,7 +916,8 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
         rpcSettings
     );
 
-    return promise.GetFuture();
+    return NSessionPool::InjectSessionStatusInterception(
+        session.SessionImpl_, promise.GetFuture(), true, GetMinTimeToTouch(Settings_.SessionPoolSettings_));
 }
 
 TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, const std::string& txId,
@@ -920,11 +938,12 @@ TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, c
         rpcSettings
     );
 
-    return future.Apply([obs](TAsyncStatus fut) {
-        auto status = fut.GetValue();
-        obs->End(status.GetStatus(), status.GetEndpoint());
-        return status;
-    });
+    return NSessionPool::InjectSessionStatusInterception(
+        session.SessionImpl_, future.Apply([obs](TAsyncStatus fut) {
+            auto status = fut.GetValue();
+            obs->End(status.GetStatus(), status.GetEndpoint());
+            return status;
+        }), true, GetMinTimeToTouch(Settings_.SessionPoolSettings_));
 }
 
 TAsyncExplainDataQueryResult TTableClient::TImpl::ExplainDataQuery(const TSession& session, const std::string& query,
@@ -1101,8 +1120,7 @@ TAsyncStatus TTableClient::TImpl::Close(const TKqpSessionCommon* sessionImpl, co
 }
 
 TAsyncStatus TTableClient::TImpl::CloseInternal(const TKqpSessionCommon* sessionImpl) {
-    static const auto internalCloseSessionSettings = TCloseSessionSettings()
-            .ClientTimeout(TDuration::Seconds(2));
+    const auto internalCloseSessionSettings = TCloseSessionSettings().ClientTimeout(TDuration::Seconds(2));
 
     auto driver = Connections_;
     return Close(sessionImpl, internalCloseSessionSettings)
@@ -1155,6 +1173,10 @@ void TTableClient::TImpl::DeleteSession(TKqpSessionCommon* sessionImpl) {
     delete sessionImpl;
 }
 
+void TTableClient::TImpl::PessimizeNode(std::uint64_t nodeId) {
+    DbDriverState_->EndpointPool.BanNodeId(nodeId);
+}
+
 ui32 TTableClient::TImpl::GetSessionRetryLimit() const {
     return Settings_.SessionPoolSettings_.RetryLimit_;
 }
@@ -1171,8 +1193,13 @@ void TTableClient::TImpl::SetStatCollector(const NSdkStats::TStatCollector::TCli
 TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings) {
     Ydb::Table::BulkUpsertRequest* request = nullptr;
     std::unique_ptr<Ydb::Table::BulkUpsertRequest> holder;
+    std::shared_ptr<Ydb::Table::BulkUpsertRequest> retryHolder;
 
-    if (settings.Arena_) {
+    if (settings.RetryRowsState_) {
+        retryHolder = std::make_shared<Ydb::Table::BulkUpsertRequest>(
+            MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings));
+        request = retryHolder.get();
+    } else if (settings.Arena_) {
         request = MakeOperationRequestOnArena<Ydb::Table::BulkUpsertRequest>(settings, settings.Arena_);
     } else {
         holder = std::make_unique<Ydb::Table::BulkUpsertRequest>(MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings));
@@ -1197,14 +1224,23 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
     auto obs = MakeObservation("BulkUpsert");
 
     auto promise = NewPromise<TBulkUpsertResult>();
-    auto extractor = [promise, obs](google::protobuf::Any* any, TPlainStatus status) mutable {
+    auto retryState = settings.RetryRowsState_;
+
+    auto extractor = [promise, obs, retryState, retryHolder](
+        google::protobuf::Any* any, TPlainStatus status) mutable
+    {
         Y_UNUSED(any);
+        if (retryState && retryHolder && !retryState->HasBackup()
+            && !status.Ok() && NRetry::ShouldRetryStatus(status.Status, retryState->Settings()))
+        {
+            retryState->CreateBackup(*retryHolder);
+        }
         obs->End(status.Status, status.Endpoint);
         TBulkUpsertResult val(TStatus(std::move(status)));
         promise.SetValue(std::move(val));
     };
 
-    if (settings.Arena_) {
+    if (settings.Arena_ || retryHolder) {
         Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>(
             request,
             extractor,
@@ -1403,6 +1439,9 @@ void TTableClient::TImpl::SetTxSettings(const TTxSettings& txSettings, Ydb::Tabl
             break;
         case TTxSettings::TS_SNAPSHOT_RW:
             proto->mutable_snapshot_read_write();
+            break;
+        case TTxSettings::TS_STRICT_SERIALIZABLE_RW:
+            proto->mutable_strict_serializable_read_write();
             break;
         default:
             throw TContractViolation("Unexpected transaction mode.");

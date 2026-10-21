@@ -380,7 +380,6 @@ cfg_builder_maybe_start_new_block(cfg_builder *g)
 static bool
 cfg_builder_check(cfg_builder *g)
 {
-    assert(g->g_entryblock->b_iused > 0);
     for (basicblock *block = g->g_block_list; block != NULL; block = block->b_list) {
         assert(!_PyMem_IsPtrFreed(block));
         if (block->b_instr != NULL) {
@@ -1244,6 +1243,14 @@ get_const_value(int opcode, int oparg, PyObject *co_consts)
     PyObject *constant = NULL;
     assert(OPCODE_HAS_CONST(opcode));
     if (opcode == LOAD_CONST) {
+        assert(PyList_Check(co_consts));
+        Py_ssize_t n = PyList_GET_SIZE(co_consts);
+        if (oparg < 0 || oparg >= n) {
+            PyErr_Format(PyExc_ValueError,
+                         "LOAD_CONST index %d is out of range for consts (len=%zd)",
+                         oparg, n);
+            return NULL;
+        }
         constant = PyList_GET_ITEM(co_consts, oparg);
     }
 
@@ -2032,6 +2039,7 @@ remove_unused_consts(basicblock *entryblock, PyObject *consts)
 
     index_map = PyMem_Malloc(nconsts * sizeof(Py_ssize_t));
     if (index_map == NULL) {
+        PyErr_NoMemory();
         goto end;
     }
     for (Py_ssize_t i = 1; i < nconsts; i++) {
@@ -2045,6 +2053,12 @@ remove_unused_consts(basicblock *entryblock, PyObject *consts)
         for (int i = 0; i < b->b_iused; i++) {
             if (OPCODE_HAS_CONST(b->b_instr[i].i_opcode)) {
                 int index = b->b_instr[i].i_oparg;
+                if (index < 0 || index >= nconsts) {
+                    PyErr_Format(PyExc_ValueError,
+                                 "LOAD_CONST index %d is out of range for consts (len=%zd)",
+                                 index, nconsts);
+                    goto end;
+                }
                 index_map[index] = index;
             }
         }
@@ -2083,6 +2097,7 @@ remove_unused_consts(basicblock *entryblock, PyObject *consts)
     /* adjust const indices in the bytecode */
     reverse_index_map = PyMem_Malloc(nconsts * sizeof(Py_ssize_t));
     if (reverse_index_map == NULL) {
+        PyErr_NoMemory();
         goto end;
     }
     for (Py_ssize_t i = 0; i < nconsts; i++) {
@@ -2470,6 +2485,7 @@ _PyCfg_OptimizeCodeUnit(cfg_builder *g, PyObject *consts, PyObject *const_cache,
                         int nlocals, int nparams, int firstlineno)
 {
     assert(cfg_builder_check(g));
+    assert(g->g_entryblock->b_iused > 0);
     /** Preprocessing **/
     /* Map labels to targets and mark exception handlers */
     RETURN_IF_ERROR(translate_jump_labels_to_targets(g->g_entryblock));

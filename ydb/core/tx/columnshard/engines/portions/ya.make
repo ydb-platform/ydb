@@ -19,6 +19,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/formats/arrow/filter
     ydb/core/tx/columnshard/engines/scheme
     ydb/core/tx/columnshard/splitter
     ydb/core/tx/columnshard/common

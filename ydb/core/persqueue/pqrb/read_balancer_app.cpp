@@ -5,11 +5,28 @@
 
 #include <ydb/core/persqueue/common/common_app.h>
 
+#include <library/cpp/cgiparam/cgiparam.h>
+
 namespace NKikimr::NPQ {
 
 bool TPersQueueReadBalancer::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {
     if (!ev) {
         return true;
+    }
+
+    const auto* request = ev->Get();
+    if (request->GetMethod() == HTTP_METHOD_POST && request->ExtendedQuery) {
+        TCgiParameters postParams;
+        for (const auto& kv : request->ExtendedQuery->GetPostParams()) {
+            postParams.emplace(kv.GetKey(), kv.GetValue());
+        }
+        if (postParams.Get("action") == "kill_session") {
+            const auto& consumer = postParams.Get("consumer");
+            const auto& session = postParams.Get("session");
+            if (!consumer.empty() && !session.empty()) {
+                Balancer->StopReadingSession(consumer, session, ctx);
+            }
+        }
     }
 
     TString str = GenerateStat();
@@ -99,6 +116,9 @@ TString TPersQueueReadBalancer::GenerateStat() {
                                 TABLED() {
                                     if (node) {
                                         for (auto* parent : node->DirectParents) {
+                                            if (!parent) {
+                                                continue;
+                                            }
                                             HREF("#" + partitionAnchor(parent->Id)) { str << parent->Id; }
                                             str << ", ";
                                         }
@@ -107,6 +127,9 @@ TString TPersQueueReadBalancer::GenerateStat() {
                                 TABLED() {
                                     if (node) {
                                         for (auto* child : node->DirectChildren) {
+                                            if (!child) {
+                                                continue;
+                                            }
                                             HREF("#" + partitionAnchor(child->Id)) { str << child->Id; }
                                             str << ", ";
                                         }

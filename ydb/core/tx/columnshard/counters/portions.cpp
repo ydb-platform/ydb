@@ -27,6 +27,7 @@ namespace NKikimr::NOlap {
 
 void TSimplePortionsGroupInfo::RemovePortion(const TPortionInfo& p) {
     BlobBytes.Sub(p.GetTotalBlobBytes());
+    IndexBlobBytes.Sub(p.GetIndexBlobBytes());
     RawBytes.Sub(p.GetTotalRawBytes());
     Count.Sub(1);
     RecordsCount.Sub(p.GetRecordsCount());
@@ -34,6 +35,7 @@ void TSimplePortionsGroupInfo::RemovePortion(const TPortionInfo& p) {
 
 void TSimplePortionsGroupInfo::AddPortion(const TPortionInfo& p) {
     BlobBytes.Add(p.GetTotalBlobBytes());
+    IndexBlobBytes.Add(p.GetIndexBlobBytes());
     RawBytes.Add(p.GetTotalRawBytes());
     Count.Inc();
     RecordsCount.Add(p.GetRecordsCount());

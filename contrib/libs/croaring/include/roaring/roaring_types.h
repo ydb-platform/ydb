@@ -1,5 +1,11 @@
 /*
-  Typedefs used by various components
+    Shared type definitions used across the CRoaring public API and internal
+    components.
+
+    This file centralizes common typedefs and small structs that are referenced
+    by multiple headers, including iterator callback signatures, roaring array
+    metadata, statistics structures, and compatibility types used to bridge the
+    C and C++ builds.
 */
 
 #ifndef ROARING_TYPES_H
@@ -39,6 +45,8 @@ struct container_s {};
 
 #define ROARING_FLAG_COW UINT8_C(0x1)
 #define ROARING_FLAG_FROZEN UINT8_C(0x2)
+// 64-bit only: ART node arrays alias a frozen buffer (do not art_free).
+#define ROARING_FLAG_FROZEN_ART UINT8_C(0x4)
 
 /**
  * Roaring arrays are array-based key-value pairs having containers as values

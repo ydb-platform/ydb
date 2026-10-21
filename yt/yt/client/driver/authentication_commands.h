@@ -17,8 +17,8 @@ public:
 private:
     std::string User_;
 
-    TString CurrentPasswordSha256_;
-    TString NewPasswordSha256_;
+    std::string CurrentPasswordSha256_;
+    std::string NewPasswordSha256_;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -36,7 +36,7 @@ public:
 private:
     std::string User_;
 
-    TString PasswordSha256_;
+    std::string PasswordSha256_;
 
     void DoExecute(ICommandContextPtr context);
 };
@@ -54,8 +54,8 @@ public:
 private:
     std::string User_;
 
-    TString PasswordSha256_;
-    TString TokenSha256_;
+    std::string PasswordSha256_;
+    std::string TokenSha256_;
 
     void DoExecute(ICommandContextPtr context);
 };
@@ -73,7 +73,7 @@ public:
 private:
     std::string User_;
 
-    TString PasswordSha256_;
+    std::string PasswordSha256_;
 
     void DoExecute(ICommandContextPtr context);
 };

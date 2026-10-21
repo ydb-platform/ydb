@@ -101,7 +101,7 @@ private:
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
-            hFunc(NPQ::NSchema::TEvCreateTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
             cFunc(TEvPoisonPill::EventType, PassAway);
         default:
             break;
@@ -200,12 +200,14 @@ private:
             params.DefaultProcessingTimeoutSeconds = Max<ui64>(1, LoadedAttrs_.VisibilityMs / 1000);
         }
         params.DefaultReceiveMessageWaitTimeMs = LoadedAttrs_.ReceiveWaitMs;
+        params.ReadRequestAttemptIdPeriodMs = Cfg().GetGroupsReadAttemptIdsPeriodMs();
         params.MaxReceiveCount = LoadedAttrs_.MaxReceiveCount;
         if (LoadedAttrs_.DlqName && LoadedAttrs_.MaxReceiveCount) {
             params.RedriveTargetQueueName = LoadedAttrs_.DlqName;
         }
         params.AccountName = UserName_;
         params.FolderId = FolderId_;
+        params.QueueName = QueueName_;
 
         auto tx = BuildCreateTopicTx(path.GetQueuePath(), versionName, IsFifo_, params);
         Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), {
@@ -215,7 +217,7 @@ private:
         }));
     }
 
-    void Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev) {
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
         const auto& response = *ev->Get();
         if (response.Status == Ydb::StatusIds::SUCCESS) {
             RequestMarkTopicCreated();

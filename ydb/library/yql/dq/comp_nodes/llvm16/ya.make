@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 INCLUDE(../ya.make.inc)
 

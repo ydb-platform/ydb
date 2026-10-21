@@ -1220,7 +1220,7 @@ class TBlockSplitter : public IBlockSplitter {
         std::vector<arrow::Datum> GetData() const {
             std::vector<arrow::Datum> result(Data);
             for (ui64 i : ArraysIdx) {
-                result[i] = DeepSlice(result[i].array(), Offset, Length);
+                result[i] = DeepSlice(*result[i].array(), Offset, Length);
             }
             result.back() = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Length));
             return result;

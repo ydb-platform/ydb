@@ -1,5 +1,4 @@
 PRAGMA DisableSimpleColumns;
-/* postgres can not */
 pragma yt.MapJoinLimit="1m";
 use plato;
 

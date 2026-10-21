@@ -48,6 +48,9 @@ message TProgram {
 
         bool HasCondense = 15;
         uint32 NodesCount = 16;
+
+        bool HasWatermarkGenerator = 17;
+        optional uint64 WatermarkGeneratorIdleTimeoutUs = 18;
     }
 
     uint32 RuntimeVersion = 1;

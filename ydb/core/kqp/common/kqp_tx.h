@@ -140,7 +140,7 @@ public:
     }
 
     bool TxHasEffects() const {
-        return HasImmediateEffects || !DeferredEffects.Empty();
+        return HasImmediateEffects || HasUnflushedEffectsInBuffer || !DeferredEffects.Empty();
     }
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
@@ -149,15 +149,25 @@ public:
 
     void Finish() final {
         YQL_ENSURE(DeferredEffects.Empty());
+        YQL_ENSURE(!HasUnflushedEffectsInBuffer);
         YQL_ENSURE(!BufferActorId);
 
         FinishTime = TInstant::Now();
+
+        SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
+        SnapshotHandle.Handle = NKqp::TSnapshotHandle();
 
         if (Implicit) {
             Reset();
         } else {
             Closed = true;
         }
+    }
+
+    void Invalidate() override {
+        SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
+        SnapshotHandle.Handle = NKqp::TSnapshotHandle();
+        TKikimrTransactionContextBase::Invalidate();
     }
 
     void Touch() {
@@ -182,6 +192,7 @@ public:
         SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
         SnapshotHandle.Handle = NKqp::TSnapshotHandle();
         HasImmediateEffects = false;
+        HasUnflushedEffectsInBuffer = false;
 
         HasOlapTable = false;
         HasOltpTable = false;
@@ -189,6 +200,7 @@ public:
         HasTableRead = false;
         NeedUncommittedChangesFlush = false;
         QueryTextCollector.Clear();
+        SchemaObjects.clear();
     }
 
     TKqpTransactionInfo GetInfo() const;
@@ -197,6 +209,11 @@ public:
         switch (settings.tx_mode_case()) {
             case Ydb::Table::TransactionSettings::kSerializableReadWrite:
                 EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
+                Readonly = false;
+                break;
+
+            case Ydb::Table::TransactionSettings::kStrictSerializableReadWrite:
+                EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
                 Readonly = false;
                 break;
 
@@ -240,7 +257,7 @@ public:
 
     bool ShouldExecuteDeferredEffects() const {
         if (NeedUncommittedChangesFlush || HasOlapTable) {
-            return !DeferredEffects.Empty();
+            return !DeferredEffects.Empty() || HasUnflushedEffectsInBuffer;
         }
 
         return false;
@@ -322,11 +339,26 @@ public:
 
     bool NeedUncommittedChangesFlush = false;
     THashSet<NKikimr::TTableId> ModifiedTablesSinceLastFlush;
+    bool HasUnflushedEffectsInBuffer = false;
 
     TActorId BufferActorId;
     IKqpTransactionManagerPtr TxManager = nullptr;
 
     TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
+
+    struct TSchemaIdentity {
+        NYql::TKikimrPathId PathId;
+        ui64 SchemaVersion = 0;
+
+        bool operator==(const TSchemaIdentity& other) const = default;
+    };
+
+    // A statement is compiled against one schema version of each object it uses, and every
+    // later statement of the transaction has to see that same version. This is what the
+    // earlier statements were compiled against.
+    // Keyed by path, not by path id: an object dropped and created anew under the same name is
+    // a different object, and the transaction must not read it as if nothing had changed.
+    THashMap<TString, TSchemaIdentity> SchemaObjects;
 
     NDataIntegrity::TQueryTextCollector QueryTextCollector;
 };
@@ -478,6 +510,9 @@ public:
 
 bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
     bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery);
+
+// Whether the mode promises that all reads of a transaction observe the same state.
+bool GuaranteesRepeatableReads(NKqpProto::EIsolationLevel isolationLevel);
 
 bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage);

@@ -10,6 +10,10 @@ class TGranuleMeta;
 namespace NKikimr::NOlap::NGranule::NPortionsIndex {
 
 class TPortionsIndex {
+public:
+    using TPortions = std::vector<TPortionInfo::TConstPtr>;
+    using TPortionsSnapshot = std::shared_ptr<const TPortions>;
+
 private:
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     const TGranuleMeta& Owner;
@@ -31,7 +35,22 @@ public:
         AFL_VERIFY(Portions.erase(p->GetPortionId()));
     }
 
-    bool HasOlderIntervals(const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions) const;
+    TPortionsSnapshot GetPortionsSnapshot() const {
+        auto result = std::make_shared<TPortions>();
+        result->reserve(Portions.size());
+        for (const auto& [_, portion] : Portions) {
+            result->emplace_back(portion);
+        }
+        return result;
+    }
+
+    using TKeyInterval = std::pair<NArrow::TSimpleRow, NArrow::TSimpleRow>;
+
+    // Primary key ranges of the portions in `portions` that intersect `inputPortion`, are not listed in `skipPortions` and may hold
+    // records older than the ones in `inputPortion`. Deletion markers of `inputPortion` are still required inside these ranges.
+    // The result is sorted by range start and intersecting ranges are merged.
+    static std::vector<TKeyInterval> GetOlderIntervals(
+        const TPortions& portions, const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions);
 };
 
 }   // namespace NKikimr::NOlap::NGranule::NPortionsIndex

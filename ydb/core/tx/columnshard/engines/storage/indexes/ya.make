@@ -17,4 +17,6 @@ END()
 
 RECURSE_FOR_TESTS(
     bits_storage
+    helper
+    portions
 )

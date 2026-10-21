@@ -4,7 +4,7 @@
 #include <yt/yt/core/actions/invoker_detail.h>
 #include <yt/yt/core/actions/current_invoker.h>
 
-#include <yt/yt/core/profiling/tscp.h>
+#include <library/cpp/yt/system/tscp.h>
 
 #include <library/cpp/yt/misc/tls.h>
 
@@ -373,7 +373,7 @@ private:
 
 template <class TQueueImpl>
 TInvokerQueue<TQueueImpl>::TInvokerQueue(
-    TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+    TIntrusivePtr<TEventCount> callbackEventCount,
     const TTagSet& counterTagSet,
     NProfiling::IRegistryPtr registry)
     : CallbackEventCount_(std::move(callbackEventCount))
@@ -383,7 +383,7 @@ TInvokerQueue<TQueueImpl>::TInvokerQueue(
 
 template <class TQueueImpl>
 TInvokerQueue<TQueueImpl>::TInvokerQueue(
-    TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+    TIntrusivePtr<TEventCount> callbackEventCount,
     const std::vector<TTagSet>& counterTagSets,
     const std::vector<NYTProf::TProfilerTagPtr>& profilerTags,
     NProfiling::IRegistryPtr registry)
@@ -443,9 +443,9 @@ TEnqueuedAction TInvokerQueue<TQueueImpl>::MakeAction(
     YT_ASSERT(callback);
     YT_ASSERT(profilingTag >= 0 && profilingTag < std::ssize(Counters_));
 
-    YT_LOG_TRACE("Callback enqueued (Callback: %v, ProfilingTag: %v)",
-        callback.GetHandle(),
-        profilingTag);
+    YT_TLOG_TRACE("Callback enqueued")
+        .With("Callback", callback.GetHandle())
+        .With("ProfilingTag", profilingTag);
 
     return {
         .Finished = false,
@@ -468,9 +468,8 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallback(
     if (!Running_.load(std::memory_order::relaxed)) {
         std::atomic_thread_fence(std::memory_order::acquire);
         TryDrainProducer();
-        YT_LOG_TRACE(
-            "Queue had been shut down, incoming action ignored (Callback: %v)",
-            callback.GetHandle());
+        YT_TLOG_TRACE("Queue had been shut down, incoming action ignored")
+            .With("Callback", callback.GetHandle());
         return GetCpuInstant();
     }
 
@@ -488,9 +487,8 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallback(
     std::atomic_thread_fence(std::memory_order::seq_cst); // <- (b)
     if (!Running_.load(std::memory_order::relaxed)) { // <- (c)
         TryDrainProducer(/*force*/ true);
-        YT_LOG_TRACE(
-            "Queue had been shut down concurrently, incoming action ignored (Callback: %v)",
-            callback.GetHandle());
+        YT_TLOG_TRACE("Queue had been shut down concurrently, incoming action ignored")
+            .With("Callback", callback.GetHandle());
     }
 
     return cpuInstant;
@@ -507,8 +505,7 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallbacks(
     if (!Running_.load(std::memory_order::relaxed)) {
         std::atomic_thread_fence(std::memory_order::acquire);
         TryDrainProducer();
-        YT_LOG_TRACE(
-            "Queue had been shut down, incoming actions ignored");
+        YT_TLOG_TRACE("Queue had been shut down, incoming actions ignored");
         return cpuInstant;
     }
 
@@ -530,8 +527,7 @@ TCpuInstant TInvokerQueue<TQueueImpl>::EnqueueCallbacks(
     std::atomic_thread_fence(std::memory_order::seq_cst); // <- (b')
     if (!Running_.load(std::memory_order::relaxed)) { // <- (c')
         TryDrainProducer(/*force*/ true);
-        YT_LOG_TRACE(
-            "Queue had been shut down concurrently, incoming actions ignored");
+        YT_TLOG_TRACE("Queue had been shut down concurrently, incoming actions ignored");
         return cpuInstant;
     }
 

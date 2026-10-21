@@ -1,5 +1,7 @@
 #include "dsproxy_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_PROXY
+
 namespace NKikimr {
 
     void TBlobStorageGroupProxy::HandleUpdateResponsiveness() {
@@ -20,7 +22,9 @@ namespace NKikimr {
             str << "}";
             return str.Str();
         };
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId << " Responsiveness# " << formatResponsiveness());
+        YDB_LOG_TRACE("HandleUpdateResponsiveness",
+            {"group", GroupId},
+            {"responsiveness", formatResponsiveness()});
 
         if (!ResponsivenessTracker.IsEmpty()) {
             ScheduleUpdateResponsiveness();
@@ -34,6 +38,9 @@ namespace NKikimr {
     void TBlobStorageGroupProxy::HandleUpdateGroupStat() {
         Y_ABORT_UNLESS(GroupStatUpdateScheduled);
         GroupStatUpdateScheduled = false;
+        if (IsDormant) {
+            return;
+        }
         if (Info) {
             Stat.Fadeout(TActivationContext::Now());
             for (ui32 i = 0, num = Info->GetTotalVDisksNum(); i < num; ++i) {
@@ -46,6 +53,10 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::ScheduleUpdateGroupStat() {
+        GroupStatUpdatesStarted = true;
+        if (IsDormant) {
+            return;
+        }
         if (!std::exchange(GroupStatUpdateScheduled, true)) {
             Schedule(GroupStatUpdateInterval, new TEvUpdateGroupStat);
         }

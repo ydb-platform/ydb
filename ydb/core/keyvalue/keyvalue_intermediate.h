@@ -148,6 +148,9 @@ struct TIntermediate {
     ui64 CopyRangeCount = 0;
     ui64 ConcatCount = 0;
 
+    TVector<ui32> AcquiredChannels;
+    ui32 PostponedQueuesLeft;
+
     ui64 Cookie;
     ui64 Generation;
     ui64 RequestUid;

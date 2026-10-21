@@ -152,7 +152,6 @@ class TTopKeeperWrapperBase {
 protected:
     TTopKeeperContainer<TUnboxedValue, TCompare, TUnboxedValue::TAllocator> Keeper_;
 
-protected:
     explicit TTopKeeperWrapperBase(TCompare compare)
         : Keeper_(compare)
     {
@@ -221,7 +220,6 @@ class TTopKeeperPairWrapperBase {
 protected:
     TTopKeeperContainer<TUnboxedValuePair, TCompare, TStdAllocatorForUdf<TUnboxedValuePair>> Keeper_;
 
-protected:
     explicit TTopKeeperPairWrapperBase(TCompare compare)
         : Keeper_(compare)
     {

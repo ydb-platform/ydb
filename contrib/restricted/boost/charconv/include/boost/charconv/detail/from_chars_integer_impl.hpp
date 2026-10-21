@@ -22,6 +22,8 @@
 
 namespace boost { namespace charconv { namespace detail {
 
+#if !(defined(BOOST_CHARCONV_ENABLE_CUDA) && defined(__CUDACC__))
+
 static constexpr unsigned char uchar_values[] =
      {255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
       255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
@@ -83,9 +85,33 @@ static constexpr double log_2_table[] =
     0.193426403617
 };
 
+#endif // __NVCC__
+
 // Convert characters for 0-9, A-Z, a-z to 0-35. Anything else is 255
-constexpr unsigned char digit_from_char(char val) noexcept
+BOOST_CHARCONV_HOST_DEVICE constexpr unsigned char digit_from_char(const char val) noexcept
 {
+    #if defined(BOOST_CHARCONV_ENABLE_CUDA) && defined(__CUDACC__)
+
+    constexpr unsigned char uchar_values[] =
+    {255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+       0,   1,   2,   3,   4,   5,   6,   7,   8,   9, 255, 255, 255, 255, 255, 255,
+     255,  10,  11,  12,  13,  14,  15,  16,  17,  18,  19,  20,  21,  22,  23,  24,
+      25,  26,  27,  28,  29,  30,  31,  32,  33,  34,  35, 255, 255, 255, 255, 255,
+     255,  10,  11,  12,  13,  14,  15,  16,  17,  18,  19,  20,  21,  22,  23,  24,
+      25,  26,  27,  28,  29,  30,  31,  32,  33,  34,  35, 255, 255, 255, 255, 255,
+     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255};
+
+    #endif // __NVCC__
+
     return uchar_values[static_cast<unsigned char>(val)];
 }
 
@@ -111,9 +137,75 @@ constexpr unsigned char digit_from_char(char val) noexcept
 
 #endif
 
-template <typename Integer, typename Unsigned_Integer>
-BOOST_CXX14_CONSTEXPR from_chars_result from_chars_integer_impl(const char* first, const char* last, Integer& value, int base) noexcept
+#if defined(BOOST_CHARCONV_ENABLE_CUDA) && defined(__CUDACC__)
+
+template <typename T>
+__host__ __device__ constexpr T get_max_value()
 {
+    using UT = typename std::make_unsigned<T>::type;
+    return std::is_signed<T>::value
+        ? static_cast<T>(static_cast<UT>(-1) >> 1)
+        : static_cast<T>(static_cast<UT>(-1));
+}
+
+#else
+
+template <typename T>
+constexpr T get_max_value()
+{
+    return (std::numeric_limits<T>::max)();
+}
+
+#endif
+
+template <typename Integer, typename Unsigned_Integer>
+BOOST_CHARCONV_HOST_DEVICE BOOST_CXX14_CONSTEXPR from_chars_result from_chars_integer_impl(const char* first, const char* last, Integer& value, int base) noexcept
+{
+    #if defined(BOOST_CHARCONV_ENABLE_CUDA) && defined(__CUDACC__)
+
+    constexpr double log_2_table[] =
+    {
+        0.0,
+        0.0,
+        1.0,
+        0.630929753571,
+        0.5,
+        0.430676558073,
+        0.386852807235,
+        0.356207187108,
+        0.333333333333,
+        0.315464876786,
+        0.301029995664,
+        0.289064826318,
+        0.278942945651,
+        0.270238154427,
+        0.262649535037,
+        0.255958024810,
+        0.25,
+        0.244650542118,
+        0.239812466568,
+        0.235408913367,
+        0.231378213160,
+        0.227670248697,
+        0.224243824218,
+        0.221064729458,
+        0.218104291986,
+        0.215338279037,
+        0.212746053553,
+        0.210309917857,
+        0.208014597677,
+        0.205846832460,
+        0.203795047091,
+        0.201849086582,
+        0.2,
+        0.198239863171,
+        0.196561632233,
+        0.194959021894,
+        0.193426403617
+    };
+
+    #endif // __NVCC__
+
     Unsigned_Integer result = 0;
     Unsigned_Integer overflow_value = 0;
     Unsigned_Integer max_digit = 0;
@@ -155,8 +247,8 @@ BOOST_CXX14_CONSTEXPR from_chars_result from_chars_integer_impl(const char* firs
         else
         #endif
         {
-            overflow_value = (std::numeric_limits<Integer>::max)();
-            max_digit = (std::numeric_limits<Integer>::max)();
+            overflow_value = static_cast<Unsigned_Integer>(get_max_value<Integer>());
+            max_digit = static_cast<Unsigned_Integer>(get_max_value<Integer>());
         }
 
         if (is_negative)
@@ -181,8 +273,8 @@ BOOST_CXX14_CONSTEXPR from_chars_result from_chars_integer_impl(const char* firs
         else
         #endif
         {
-            overflow_value = (std::numeric_limits<Unsigned_Integer>::max)();
-            max_digit = (std::numeric_limits<Unsigned_Integer>::max)();
+            overflow_value = get_max_value<Unsigned_Integer>();
+            max_digit = get_max_value<Unsigned_Integer>();
         }
     }
 
@@ -310,7 +402,7 @@ BOOST_CXX14_CONSTEXPR from_chars_result from_chars_integer_impl(const char* firs
 
 // Only from_chars for integer types is constexpr (as of C++23)
 template <typename Integer>
-BOOST_CHARCONV_GCC5_CONSTEXPR from_chars_result from_chars(const char* first, const char* last, Integer& value, int base = 10) noexcept
+BOOST_CHARCONV_HOST_DEVICE BOOST_CHARCONV_GCC5_CONSTEXPR from_chars_result from_chars(const char* first, const char* last, Integer& value, int base = 10) noexcept
 {
     using Unsigned_Integer = typename std::make_unsigned<Integer>::type;
     return detail::from_chars_integer_impl<Integer, Unsigned_Integer>(first, last, value, base);
@@ -325,10 +417,12 @@ BOOST_CHARCONV_GCC5_CONSTEXPR from_chars_result from_chars128(const char* first,
 }
 #endif
 
+#if !(defined(BOOST_CHARCONV_ENABLE_CUDA) && defined(__CUDACC__))
 BOOST_CHARCONV_GCC5_CONSTEXPR from_chars_result from_chars128(const char* first, const char* last, uint128& value, int base = 10) noexcept
 {
     return from_chars_integer_impl<uint128, uint128>(first, last, value, base);
 }
+#endif
 
 }}} // Namespaces
 

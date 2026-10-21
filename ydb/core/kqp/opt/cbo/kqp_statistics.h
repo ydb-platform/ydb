@@ -2,6 +2,7 @@
 
 #include "cbo_interesting_orderings.h"
 
+#include <yql/essentials/core/yql_statistics.h>
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <yql/essentials/core/histogram/eq_width_histogram.h>
 
@@ -25,7 +26,8 @@ namespace NKikimr::NKqp {
 enum EStatisticsType : ui32 {
     BaseTable,
     FilteredFactTable,
-    ManyManyJoin
+    ManyManyJoin,
+    Constant
 };
 
 enum EStorageType : ui32 {
@@ -47,7 +49,29 @@ struct TColumnStatistics {
     TString Type;
 
     TColumnStatistics() {}
+    TColumnStatistics(const NYql::TColumnStatistics& yqlStats) : NumUniqueVals(yqlStats.NumUniqueVals)
+        , HyperLogLog(yqlStats.HyperLogLog)
+        , CountMinSketch(yqlStats.CountMinSketch)
+        , EqWidthHistogramEstimator(yqlStats.EqWidthHistogramEstimator)
+        , Type(yqlStats.Type)
+    {}
 };
+
+struct TMultiColumnStatistics {
+    TVector<TString> Columns;
+    TVector<TString> Types;
+    std::shared_ptr<NKikimr::TEqHeightHistogram> EqHeightHistogram;
+    std::shared_ptr<NKikimr::TCountMinSketch> CountMinSketch;
+
+    TMultiColumnStatistics() {}
+    TMultiColumnStatistics(const NYql::TMultiColumnStatistics& yqlStats) : Columns(yqlStats.Columns)
+        , Types(yqlStats.Types)
+        , EqHeightHistogram(yqlStats.EqHeightHistogram)
+        , CountMinSketch(yqlStats.CountMinSketch)
+    {}
+};
+
+using NYql::MakeMultiColumnKey;
 
 class TShufflingOrderingsByJoinLabels {
 public:
@@ -101,8 +125,14 @@ struct TOptimizerStatistics {
 
     struct TColumnStatMap : public TSimpleRefCount<TColumnStatMap> {
         THashMap<TString, TColumnStatistics> Data;
+        THashMap<TString, TMultiColumnStatistics> MultiData;
         TColumnStatMap() {}
         explicit TColumnStatMap(THashMap<TString, TColumnStatistics> data) : Data(std::move(data)) {}
+        TColumnStatMap(THashMap<TString, TColumnStatistics> data,
+                       THashMap<TString, TMultiColumnStatistics> multiData)
+            : Data(std::move(data))
+            , MultiData(std::move(multiData))
+        {}
     };
 
     struct TShuffledByColumns : public TSimpleRefCount<TShuffledByColumns> {

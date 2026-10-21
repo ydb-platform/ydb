@@ -18,6 +18,36 @@ from github_issue_utils import (
 )
 from testowners_utils import normalize_github_team_owners_string
 
+NEW_BRANCH_MONITOR_LOOKBACK_DAYS = 30
+
+
+def _dedupe_monitor_rows(rows):
+    """One row per (full_name, date_window, branch, build_type); prefer deepest suite_folder."""
+    if not rows:
+        return rows
+    best = {}
+    for row in rows:
+        key = (row['full_name'], row['date_window'], row['branch'], row['build_type'])
+        suite_len = len(str(row.get('suite_folder') or ''))
+        if key not in best or suite_len > len(str(best[key].get('suite_folder') or '')):
+            best[key] = row
+    return list(best.values())
+
+
+def _dedupe_monitor_df(df):
+    """One row per (full_name, date_window, branch, build_type); prefer deepest suite_folder."""
+    if df is None or df.empty:
+        return df
+    keys = ['full_name', 'date_window', 'branch', 'build_type']
+    if not df.duplicated(keys).any():
+        return df
+    return (
+        df.assign(_suite_len=df['suite_folder'].fillna('').astype(str).str.len())
+        .sort_values(keys + ['_suite_len'], kind='mergesort')
+        .drop_duplicates(keys, keep='last')
+        .drop(columns='_suite_len')
+    )
+
 
 def create_tables(ydb_wrapper, table_path):
     print(f"> create table if not exists:'{table_path}'")
@@ -351,11 +381,20 @@ def main():
                 AND branch = '{branch}'
                 AND date_window = Date('{date_str}')
             """
-            try:
-                results = ydb_wrapper.execute_scan_query(query, query_name=f"get_monitor_data_for_date_{branch}")
-            except Exception as e:
-                print(f"Error fetching monitor data for {date_str}: {e}")
-                return None
+            _max_retries = 5
+            _retry_delay = 10  # seconds
+            for _attempt in range(1, _max_retries + 1):
+                try:
+                    results = ydb_wrapper.execute_scan_query(query, query_name=f"get_monitor_data_for_date_{branch}")
+                    break
+                except Exception as e:
+                    print(f"Attempt {_attempt}/{_max_retries}: error fetching monitor data for {date_str}: {e}")
+                    if _attempt == _max_retries:
+                        raise RuntimeError(
+                            f"Failed to fetch monitor baseline for {date_str} after {_max_retries} attempts. "
+                            "Aborting to avoid state recalculation from a missing previous day."
+                        ) from e
+                    time.sleep(_retry_delay)
 
             if not results:
                 return None
@@ -412,7 +451,7 @@ def main():
                     )
                 rows.append(rec)
 
-            return pd.DataFrame(rows)
+            return _dedupe_monitor_df(pd.DataFrame(rows))
 
         # Get last existing day
         print("Getting date of last collected monitor data")
@@ -423,12 +462,22 @@ def main():
             AND branch = '{branch}'
         """
         
-        try:
-            results = ydb_wrapper.execute_scan_query(query_last_exist_day, query_name=f"get_max_monitor_date_{branch}")
-            last_exist_day = results[0]['last_exist_day'] if results else None
-        except Exception as e:
-            print(f"Error during fetching last existing day: {e}")
-            last_exist_day = None
+        last_exist_day = None
+        _max_retries = 5
+        _retry_delay = 10  # seconds
+        for _attempt in range(1, _max_retries + 1):
+            try:
+                results = ydb_wrapper.execute_scan_query(query_last_exist_day, query_name=f"get_max_monitor_date_{branch}")
+                last_exist_day = results[0]['last_exist_day'] if results else None
+                break
+            except Exception as e:
+                print(f"Attempt {_attempt}/{_max_retries}: error fetching last existing day: {e}")
+                if _attempt == _max_retries:
+                    raise RuntimeError(
+                        f"Failed to fetch last existing monitor date after {_max_retries} attempts. "
+                        "Aborting to avoid cold-start backfill overwriting historical data."
+                    ) from e
+                time.sleep(_retry_delay)
 
         last_exist_df = None
 
@@ -480,11 +529,25 @@ def main():
                 branch_creation_date = None
 
             if branch_creation_date:
-                process_start_date = max(branch_creation_date, default_start_date)
-                print(f"Found branch creation date: {branch_creation_date}")
+                cold_start_date = max(
+                    today - datetime.timedelta(days=NEW_BRANCH_MONITOR_LOOKBACK_DAYS),
+                    default_start_date,
+                )
+                process_start_date = max(branch_creation_date, cold_start_date)
+                print(
+                    f"Found branch creation date: {branch_creation_date}, "
+                    f"collecting from {process_start_date} "
+                    f"(lookback capped at {NEW_BRANCH_MONITOR_LOOKBACK_DAYS} days)"
+                )
             else:
-                process_start_date = max(today - datetime.timedelta(days=7), default_start_date)
-                print(f"No test runs found for branch, using 1 week ago: {process_start_date}")
+                process_start_date = max(
+                    today - datetime.timedelta(days=NEW_BRANCH_MONITOR_LOOKBACK_DAYS),
+                    default_start_date,
+                )
+                print(
+                    f"No test runs found for branch, collecting from {process_start_date} "
+                    f"({NEW_BRANCH_MONITOR_LOOKBACK_DAYS} days ago)"
+                )
 
             date_list = [process_start_date + datetime.timedelta(days=x) for x in range((today - process_start_date).days + 1)]
             print(f"Init new monitor collecting from date {process_start_date}")
@@ -560,6 +623,7 @@ def main():
                     SELECT 
                         test_name,
                         suite_folder,
+                        full_name,
                         owners,
                         is_muted,
                         date,
@@ -573,12 +637,12 @@ def main():
                         AND run_timestamp_last >= Timestamp('{thirty_days_ago_ts}')
                 ) AS owners_t
                 ON 
-                    hist.test_name = owners_t.test_name
-                    AND hist.suite_folder = owners_t.suite_folder
+                    hist.full_name = owners_t.full_name
                     AND hist.date_window = owners_t.date
                     AND hist.build_type = owners_t.build_type;
             """
             results = ydb_wrapper.execute_scan_query(query_get_history, query_name=f"get_monitor_history_for_date_{branch}")
+            results = _dedupe_monitor_rows(results)
 
             if results:
                 for row in results:
@@ -610,7 +674,7 @@ def main():
                 )
 
         start_time = time.time()
-        df = pd.DataFrame(data)
+        df = _dedupe_monitor_df(pd.DataFrame(data))
 
         if df.empty:
             print(f"No test data found for branch='{branch}', build_type='{build_type}' in the date range. Nothing to process.")

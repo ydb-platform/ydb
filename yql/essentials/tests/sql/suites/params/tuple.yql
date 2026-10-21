@@ -1,4 +1,3 @@
-/* syntax version 1 */
 declare $x1 as Tuple<String, Int64?>;
 declare $x2 as Tuple<String, Int64?>;
 $a, $b = $x1;

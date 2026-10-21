@@ -60,11 +60,13 @@ jemalloc = GNUMakeNixProject(
         "include/jemalloc/jemalloc.h",
     ],
     disable_includes=[
-        "jemalloc/internal/atomic_gcc_sync.h",
         "jemalloc/internal/atomic_c11.h",
-        "jemalloc/internal/tsd_malloc_thread_cleanup.h",
+        "jemalloc/internal/atomic_gcc_sync.h",
+        "jemalloc/internal/jemalloc_probe_custom.h",
+        "jemalloc/internal/jemalloc_probe_stap.h",
         "jemalloc/internal/private_namespace_jet.h",
         "jemalloc/internal/public_namespace.h",
+        "jemalloc/internal/tsd_malloc_thread_cleanup.h",
         # ifdef __NetBSD__
         "sys/bitops.h",
     ],

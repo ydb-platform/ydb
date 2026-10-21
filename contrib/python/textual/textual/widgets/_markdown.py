@@ -222,7 +222,11 @@ class MarkdownBlock(Static):
         )
 
         super().__init__(
-            *args, name=token.type, classes=f"level-{token.level}", **kwargs
+            *args,
+            name=token.type,
+            classes=f"level-{token.level}",
+            expand=True,
+            **kwargs,
         )
 
     @property
@@ -667,9 +671,11 @@ class MarkdownTableContent(Widget):
                 header
             )
         for row_index, row in enumerate(self.rows, 1):
-            for cell in row:
+            for cell_index, cell in enumerate(row, 1):
                 yield MarkdownTableCellContents(
-                    cell, classes=f"row{row_index} cell"
+                    cell,
+                    classes=f"row{row_index} cell",
+                    name=f"cell{row_index}.{cell_index}",
                 ).with_tooltip(cell.plain)
             self.last_row = row_index
 
@@ -691,7 +697,10 @@ class MarkdownTableContent(Widget):
         for row_index, row in enumerate(updated_rows, self.last_row):
             for cell in row:
                 new_cells.append(
-                    Static(cell, classes=f"row{row_index} cell").with_tooltip(cell)
+                    Static(
+                        cell,
+                        classes=f"row{row_index} cell",
+                    ).with_tooltip(cell)
                 )
         self.last_row = row_index
         await self.mount_all(new_cells)
@@ -891,6 +900,8 @@ class MarkdownFence(MarkdownBlock):
             ansi=self.app.native_ansi_color,
             dark=self.app.current_theme.dark,
         )
+        # No links required in code
+        self.auto_links = False
 
     def notify_style_update(self) -> None:
         """Update highlight theme when App theme changes."""
@@ -924,13 +935,15 @@ class MarkdownFence(MarkdownBlock):
 
     def _copy_context(self, block: MarkdownBlock) -> None:
         if isinstance(block, MarkdownFence):
+            self.code = block.code
             self.lexer = block.lexer
-            self._token = block._token
+            self._highlighted_code = block._highlighted_code
+        super()._copy_context(block)
 
     async def _update_from_block(self, block: MarkdownBlock):
         if isinstance(block, MarkdownFence):
-            self.set_content(block._highlighted_code)
             self._copy_context(block)
+            self.set_content(block._highlighted_code)
         else:
             await super()._update_from_block(block)
 
@@ -940,7 +953,7 @@ class MarkdownFence(MarkdownBlock):
             self.query_one("#code-content", Label).update(content)
 
     def compose(self) -> ComposeResult:
-        yield Label(self._highlighted_code, id="code-content")
+        yield Label(self._highlighted_code, id="code-content", expand=True)
 
 
 NUMERALS = " ⅠⅡⅢⅣⅤⅥ"

@@ -21,6 +21,8 @@ namespace cloud
 
 /**
   The cloud account ID the resource is assigned to.
+  <p>
+  For Azure, this is the subscription ID.
  */
 static constexpr const char *kCloudAccountId = "cloud.account.id";
 
@@ -237,6 +239,11 @@ static constexpr const char *kOracleCloudCompute = "oracle_cloud_compute";
 static constexpr const char *kOracleCloudOke = "oracle_cloud_oke";
 
 /**
+  Compute on Scaleway Cloud
+ */
+static constexpr const char *kScalewayCloudCompute = "scaleway_cloud_compute";
+
+/**
   Tencent Cloud Cloud Virtual Machine (CVM)
  */
 static constexpr const char *kTencentCloudCvm = "tencent_cloud_cvm";
@@ -304,6 +311,11 @@ static constexpr const char *kIbmCloud = "ibm_cloud";
   Oracle Cloud Infrastructure (OCI)
  */
 static constexpr const char *kOracleCloud = "oracle_cloud";
+
+/**
+  Scaleway Cloud
+ */
+static constexpr const char *kScalewayCloud = "scaleway_cloud";
 
 /**
   Tencent Cloud

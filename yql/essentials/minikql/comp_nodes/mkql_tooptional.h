@@ -1,11 +1,9 @@
 #pragma once
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 IComputationNode* WrapHead(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapLast(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

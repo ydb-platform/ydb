@@ -1,6 +1,10 @@
 #include "config.h"
+
 #include <ydb/library/actors/core/log.h>
+
 #include <util/generic/ylimits.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
 
 namespace NKikimr::NMetadata::NProvider {
 
@@ -9,7 +13,7 @@ bool TConfig::DeserializeFromProto(const NKikimrConfig::TMetadataProviderConfig&
         Path = config.GetPath();
     }
     if (!Path) {
-        ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "incorrect path for metadata - empty";
+        YDB_LOG_ERROR("Incorrect path for metadata - empty");
         return false;
     }
     EnabledFlag = config.GetEnabled();
@@ -20,4 +24,4 @@ bool TConfig::DeserializeFromProto(const NKikimrConfig::TMetadataProviderConfig&
     return true;
 }
 
-}
+}   // namespace NKikimr::NMetadata::NProvider

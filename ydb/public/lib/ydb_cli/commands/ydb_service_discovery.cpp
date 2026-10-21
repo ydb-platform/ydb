@@ -21,7 +21,8 @@ void TCommandListEndpoints::Config(TConfig& config) {
 }
 
 int TCommandListEndpoints::Run(TConfig& config) {
-    NDiscovery::TDiscoveryClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NDiscovery::TDiscoveryClient client(driver);
     NDiscovery::TListEndpointsResult result = client.ListEndpoints(
         FillSettings(NDiscovery::TListEndpointsSettings())
     ).GetValueSync();
@@ -88,7 +89,6 @@ int TCommandWhoAmI::Run(TConfig& config) {
     ).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     PrintResponse(result);
-    driver.Stop(true);
     return EXIT_SUCCESS;
 }
 

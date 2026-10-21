@@ -1,0 +1,1050 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  0775f17ed13c3609fd7c31449f8749d3
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+FILE_INCLUDE AUTHORS found in files: system/lib/libc/musl/src/stdlib/qsort.c at line 16
+FILE_INCLUDE system/lib/libc/musl/COPYRIGHT found in files: system/lib/libc/musl/src/stdlib/qsort.c at line 16
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        system/lib/libc/musl/src/stdlib/qsort.c [3:19]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  0a02f4d8612e49355090dfbda5184a79
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        The musl libc project is bundled in this repo, and it has the MIT license, see
+        system/lib/libc/musl/COPYRIGHT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [96:97]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  0d68d16ea21ac74bb40bb928b752b06c
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        Valentin Ochs and is licensed under an MIT-style license.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 99.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [146:146]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     CC0-1.0              0e452072f6f72ebcfb29a0f4c64a3e1c
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         *   CC0 1.0 Universal (CC0 1.0) Public Domain Dedication
+         *   https://creativecommons.org/publicdomain/zero/1.0/
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 61.54
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        system/include/wasi/api.h [22:23]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     NCSA                 0e4c2b18f5a388b74a9380b0fc7da805
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Emscripten is available under two separate licenses, the MIT license and the
+         * University of Illinois/NCSA Open Source License.  Both these licenses can be
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        system/include/emscripten/atomic.h [3:4]
+        system/include/emscripten/bind.h [3:4]
+        system/include/emscripten/console.h [3:4]
+        system/include/emscripten/dom_pk_codes.h [3:4]
+        system/include/emscripten/em_asm.h [3:4]
+        system/include/emscripten/em_js.h [3:4]
+        system/include/emscripten/em_macros.h [3:4]
+        system/include/emscripten/em_math.h [3:4]
+        system/include/emscripten/em_types.h [3:4]
+        system/include/emscripten/eventloop.h [3:4]
+        system/include/emscripten/exports.h [3:4]
+        system/include/emscripten/fetch.h [3:4]
+        system/include/emscripten/fiber.h [3:4]
+        system/include/emscripten/heap.h [3:4]
+        system/include/emscripten/html5.h [3:4]
+        system/include/emscripten/html5_webgl.h [3:4]
+        system/include/emscripten/html5_webgpu.h [3:4]
+        system/include/emscripten/key_codes.h [3:4]
+        system/include/emscripten/promise.h [3:4]
+        system/include/emscripten/proxying.h [3:4]
+        system/include/emscripten/stack.h [3:4]
+        system/include/emscripten/threading.h [3:4]
+        system/include/emscripten/trace.h [3:4]
+        system/include/emscripten/val.h [3:4]
+        system/include/emscripten/wasmfs.h [3:4]
+        system/include/emscripten/webaudio.h [3:4]
+        system/include/emscripten/websocket.h [3:4]
+        system/include/emscripten/wget.h [3:4]
+        system/include/emscripten/wire.h [3:4]
+        system/include/wasi/wasi-helpers.h [3:4]
+        system/lib/libc/crt1_reactor.c [3:4]
+        system/lib/libc/dynlink.c [3:4]
+        system/lib/libc/emscripten_console.c [3:4]
+        system/lib/libc/emscripten_get_heap_size.c [3:4]
+        system/lib/libc/emscripten_internal.h [3:4]
+        system/lib/libc/emscripten_libc_stubs.c [3:4]
+        system/lib/libc/emscripten_mmap.c [3:4]
+        system/lib/libc/emscripten_scan_stack.c [3:4]
+        system/lib/libc/emscripten_syscall_stubs.c [3:4]
+        system/lib/libc/emscripten_time.c [3:4]
+        system/lib/libc/kill.c [3:4]
+        system/lib/libc/mktime.c [3:4]
+        system/lib/libc/musl/src/internal/progname.c [3:4]
+        system/lib/libc/musl/src/internal/proxying_notification_state.h [3:4]
+        system/lib/libc/pthread_sigmask.c [3:4]
+        system/lib/libc/raise.c [3:4]
+        system/lib/libc/sbrk.c [3:4]
+        system/lib/libc/sigaction.c [3:4]
+        system/lib/libc/sigtimedwait.c [3:4]
+        system/lib/libc/wasi-helpers.c [3:4]
+        system/lib/pthread/em_task_queue.h [3:4]
+        system/lib/pthread/library_pthread_stub.c [3:4]
+        system/lib/pthread/proxying_stub.c [3:4]
+        system/lib/pthread/pthread_self_stub.c [3:4]
+        system/lib/pthread/thread_mailbox.h [3:4]
+        system/lib/pthread/thread_profiler.c [3:4]
+        system/lib/pthread/threading_internal.h [3:4]
+        system/lib/standalone/__main_void.c [3:4]
+        system/lib/standalone/standalone.c [3:4]
+        system/lib/standalone/standalone_wasm_stdio.c [3:4]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     LicenseRef-scancode-unknown-license-reference 0f3fb1796479de63bc1cfcd50eb4cffa
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+FILE_INCLUDE LICENSE found in files: README.md at line 50
+    License text:
+        See `LICENSE` for the full content of the licenses.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        README.md [50:50]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  142894812404e7493f9a8780503d1954
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        // Emscripten is available under two separate licenses, the MIT license and the
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        system/lib/libc/emscripten_fiber.c [2:2]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     NCSA                 150573d1977767c2dc8b9f885539e12a
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Emscripten is available under two separate licenses, the MIT license and the
+         * University of Illinois/NCSA Open Source License.  Both these licenses can be
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        system/include/emscripten/emscripten.h [3:4]
+        system/include/emscripten/threading_legacy.h [3:4]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     LPL-1.02             1956f7a790e1a0a1d1e4b6e1b46c960e
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+FILE_INCLUDE LICENSE found in files: AUTHORS at line 10
+    License text:
+        a license to everyone to use it as detailed in LICENSE.)
+    Scancode info:
+        Original SPDX id: LPL-1.02
+        Score           : 16.13
+        Match type      : NOTICE
+        Links           : http://plan9.bell-labs.com/plan9/license.html, https://spdx.org/licenses/LPL-1.02
+    Files with this license:
+        AUTHORS [10:10]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     Public-Domain AND LicenseRef-scancode-other-permissive 2aab618490150d3157483bcbb52d35bf
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        originally written by Solar Designer and placed into the public
+        domain. The code also comes with a fallback permissive license for use
+        in jurisdictions that may not recognize the public domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [141:143]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [141:143]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT AND NCSA         2dc379ea1a061ad9a75b923759ba7abc
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [1:12]
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        LICENSE [1:12]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  3158a75221c70090b7e127aa7c980dd8
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        system/lib/libc/musl/src/math/exp.c [5:5]
+        system/lib/libc/musl/src/math/exp2.c [5:5]
+        system/lib/libc/musl/src/math/exp2f.c [5:5]
+        system/lib/libc/musl/src/math/exp2f_data.c [5:5]
+        system/lib/libc/musl/src/math/exp2f_data.h [3:3]
+        system/lib/libc/musl/src/math/exp_data.c [5:5]
+        system/lib/libc/musl/src/math/exp_data.h [3:3]
+        system/lib/libc/musl/src/math/expf.c [5:5]
+        system/lib/libc/musl/src/math/log.c [5:5]
+        system/lib/libc/musl/src/math/log2.c [5:5]
+        system/lib/libc/musl/src/math/log2_data.c [5:5]
+        system/lib/libc/musl/src/math/log2_data.h [3:3]
+        system/lib/libc/musl/src/math/log2f.c [5:5]
+        system/lib/libc/musl/src/math/log2f_data.c [5:5]
+        system/lib/libc/musl/src/math/log2f_data.h [3:3]
+        system/lib/libc/musl/src/math/log_data.c [5:5]
+        system/lib/libc/musl/src/math/log_data.h [3:3]
+        system/lib/libc/musl/src/math/logf.c [5:5]
+        system/lib/libc/musl/src/math/logf_data.c [5:5]
+        system/lib/libc/musl/src/math/logf_data.h [3:3]
+        system/lib/libc/musl/src/math/pow.c [5:5]
+        system/lib/libc/musl/src/math/pow_data.c [5:5]
+        system/lib/libc/musl/src/math/pow_data.h [3:3]
+        system/lib/libc/musl/src/math/powf.c [3:3]
+        system/lib/libc/musl/src/math/powf_data.c [5:5]
+        system/lib/libc/musl/src/math/powf_data.h [3:3]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     LicenseRef-scancode-other-permissive 3ebccdc40d604fc6de453f973b2dc1fb
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        Portions of this software are derived from third-party works licensed
+        under terms compatible with the above MIT license:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [111:112]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     Sunpro               422fbee1034f90a34082783fd34246ec
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Developed at SunSoft, a Sun Microsystems, Inc. business.
+         * Permission to use, copy, modify, and distribute this
+         * software is freely granted, provided that this notice
+         * is preserved.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-sunpro
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/sunpro.LICENSE
+    Files with this license:
+        system/lib/libc/musl/src/math/__cos.c [6:9]
+        system/lib/libc/musl/src/math/__cosl.c [8:11]
+        system/lib/libc/musl/src/math/__rem_pio2.c [6:9]
+        system/lib/libc/musl/src/math/__rem_pio2_large.c [6:9]
+        system/lib/libc/musl/src/math/__rem_pio2l.c [7:10]
+        system/lib/libc/musl/src/math/__sin.c [6:9]
+        system/lib/libc/musl/src/math/__sinl.c [8:11]
+        system/lib/libc/musl/src/math/acos.c [6:9]
+        system/lib/libc/musl/src/math/acosl.c [6:9]
+        system/lib/libc/musl/src/math/asin.c [6:9]
+        system/lib/libc/musl/src/math/asinl.c [6:9]
+        system/lib/libc/musl/src/math/atan2.c [6:9]
+        system/lib/libc/musl/src/math/atan2l.c [6:9]
+        system/lib/libc/musl/src/math/j0.c [6:9]
+        system/lib/libc/musl/src/math/j1.c [6:9]
+        system/lib/libc/musl/src/math/jn.c [6:9]
+        system/lib/libc/musl/src/math/lgamma_r.c [6:9]
+        system/lib/libc/musl/src/math/log10.c [6:9]
+        system/lib/libc/musl/src/math/scalb.c [6:9]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  5c40ba3f72a7e49276e1787fbcf485c1
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        can just consider Emscripten as MIT licensed (which allows
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [46:46]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  5debb370f50e1dfd24ff5144233a2ef6
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+FILE_INCLUDE AUTHORS found in files: LICENSE at line 31
+FILE_INCLUDE system/lib/libc/musl/COPYRIGHT found in files: LICENSE at line 31
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [18:34]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  61fbf4333470e10192a3b486d4405fb9
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        and later supplemented and integrated by John Spencer. It is licensed
+        under the standard MIT terms.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [160:161]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     Red-Hat-Attribution  66b3a3ffa338785b1521afa7c44a8d53
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Permission to use, copy, modify, and distribute this
+         * software is freely granted, provided that this notice
+         * is preserved.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-red-hat-attribution
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/red-hat-attribution.LICENSE
+    Files with this license:
+        system/lib/libc/musl/src/math/__tan.c [6:8]
+        system/lib/libc/musl/src/math/__tandf.c [10:12]
+        system/lib/libc/musl/src/math/__tanl.c [8:10]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     Public-Domain        678270c6bc063403d5bc2b6bbbd35f7a
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * public domain sha512 crypt implementation
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        system/lib/libc/musl/src/crypt/crypt_sha512.c [2:2]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     Public-Domain AND LicenseRef-scancode-other-permissive 6a32db2f4bb617dec13a6f1540a25e5e
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 99.36
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        system/lib/libc/musl/src/crypt/crypt_blowfish.c [15:32]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 99.36
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        system/lib/libc/musl/src/crypt/crypt_blowfish.c [15:32]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT AND NCSA         6bbea518655ffb34501b652ddb5cb828
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 65.75
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [32:41]
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 65.75
+        Match type      : NOTICE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        README.md [32:41]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  6bbeb35a9f8190eaff6c95d103b81b51
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        integration. It is licensed under the standard MIT terms.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [154:154]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  7151a188d7dc48558aef4051be67d957
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Emscripten is available under two separate licenses, the MIT license and the
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        system/include/emscripten/atomic.h [3:3]
+        system/include/emscripten/bind.h [3:3]
+        system/include/emscripten/console.h [3:3]
+        system/include/emscripten/dom_pk_codes.h [3:3]
+        system/include/emscripten/em_asm.h [3:3]
+        system/include/emscripten/em_js.h [3:3]
+        system/include/emscripten/em_macros.h [3:3]
+        system/include/emscripten/em_math.h [3:3]
+        system/include/emscripten/em_types.h [3:3]
+        system/include/emscripten/eventloop.h [3:3]
+        system/include/emscripten/exports.h [3:3]
+        system/include/emscripten/fetch.h [3:3]
+        system/include/emscripten/fiber.h [3:3]
+        system/include/emscripten/heap.h [3:3]
+        system/include/emscripten/html5.h [3:3]
+        system/include/emscripten/html5_webgl.h [3:3]
+        system/include/emscripten/html5_webgpu.h [3:3]
+        system/include/emscripten/key_codes.h [3:3]
+        system/include/emscripten/promise.h [3:3]
+        system/include/emscripten/proxying.h [3:3]
+        system/include/emscripten/stack.h [3:3]
+        system/include/emscripten/threading.h [3:3]
+        system/include/emscripten/trace.h [3:3]
+        system/include/emscripten/val.h [3:3]
+        system/include/emscripten/wasmfs.h [3:3]
+        system/include/emscripten/webaudio.h [3:3]
+        system/include/emscripten/websocket.h [3:3]
+        system/include/emscripten/wget.h [3:3]
+        system/include/emscripten/wire.h [3:3]
+        system/include/wasi/wasi-helpers.h [3:3]
+        system/lib/libc/crt1_reactor.c [3:3]
+        system/lib/libc/dynlink.c [3:3]
+        system/lib/libc/emscripten_console.c [3:3]
+        system/lib/libc/emscripten_get_heap_size.c [3:3]
+        system/lib/libc/emscripten_internal.h [3:3]
+        system/lib/libc/emscripten_libc_stubs.c [3:3]
+        system/lib/libc/emscripten_mmap.c [3:3]
+        system/lib/libc/emscripten_scan_stack.c [3:3]
+        system/lib/libc/emscripten_syscall_stubs.c [3:3]
+        system/lib/libc/emscripten_time.c [3:3]
+        system/lib/libc/kill.c [3:3]
+        system/lib/libc/mktime.c [3:3]
+        system/lib/libc/musl/src/internal/progname.c [3:3]
+        system/lib/libc/musl/src/internal/proxying_notification_state.h [3:3]
+        system/lib/libc/pthread_sigmask.c [3:3]
+        system/lib/libc/raise.c [3:3]
+        system/lib/libc/sbrk.c [3:3]
+        system/lib/libc/sigaction.c [3:3]
+        system/lib/libc/sigtimedwait.c [3:3]
+        system/lib/libc/wasi-helpers.c [3:3]
+        system/lib/pthread/em_task_queue.h [3:3]
+        system/lib/pthread/library_pthread_stub.c [3:3]
+        system/lib/pthread/proxying_stub.c [3:3]
+        system/lib/pthread/pthread_self_stub.c [3:3]
+        system/lib/pthread/thread_mailbox.h [3:3]
+        system/lib/pthread/thread_profiler.c [3:3]
+        system/lib/pthread/threading_internal.h [3:3]
+        system/lib/standalone/__main_void.c [3:3]
+        system/lib/standalone/standalone.c [3:3]
+        system/lib/standalone/standalone_wasm_stdio.c [3:3]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT WITH Musl-Exception 72aa9239157ee65b60341516fd59d34a
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-musl-exception
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.musl-libc.org/, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/musl-exception.LICENSE
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [171:186]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     LicenseRef-scancode-proprietary-license 740d5beb5e6ebf67163b383c5610ba3d
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        commercial and non-commercial use).
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-proprietary-license
+        Score           : 16.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
+    Files with this license:
+        README.md [48:48]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     Public-Domain        7da06ba768f9c02d13a09e420998e295
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        /* public domain sha512 implementation based on fips180-3 */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 75.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        system/lib/libc/musl/src/crypt/crypt_sha512.c [16:16]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     BSD-2-Clause         826cf61c5aa1b89f656ffdeed1b36317
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [114:116]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  856709dc8d612d2c52a0b98212e647f0
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        musl, pronounced like the word "mussel", is an MIT-licensed
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        system/lib/libc/musl/README [4:4]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     BSD-2-Clause         8cc69726f4355bc676145572cfc3e548
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        The Android Open Source Project and is licensed under a two-clause BSD
+        license. It was taken from Bionic libc, used on Android.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 44.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [131:132]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  8d18be6409468bae48b33b87db85824a
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+FILE_INCLUDE AUTHORS found in files: system/lib/libc/musl/COPYRIGHT at line 20
+FILE_INCLUDE system/lib/libc/musl/COPYRIGHT found in files: system/lib/libc/musl/COPYRIGHT at line 20
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [6:23]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  94890220f883df92236a2e64421f8224
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Emscripten is available under two separate licenses, the MIT license and the
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        system/include/emscripten/emscripten.h [3:3]
+        system/include/emscripten/threading_legacy.h [3:3]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  98b043fc10b11075310cf547ee64c7f4
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        The x86_64 port was written by Nicholas J. Kain and is licensed under
+        the standard MIT terms.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [148:149]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     CC0-1.0              9f72fd9803eec7feb1701e69a7f31fa7
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         Doug Lea and released to the public domain, as explained at
+         http://creativecommons.org/publicdomain/zero/1.0/ Send questions,
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        system/lib/dlmalloc.c [53:54]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     BSD-2-Clause         a380fc8226d63887858450c6a16da4c5
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+FILE_INCLUDE system/lib/libc/musl/COPYRIGHT found in files: system/lib/libc/musl/src/regex/regcomp.c at line 18, system/lib/libc/musl/src/regex/regcomp.c at line 21, system/lib/libc/musl/src/regex/regexec.c at line 18, system/lib/libc/musl/src/regex/regexec.c at line 21, system/lib/libc/musl/src/regex/tre-mem.c at line 18, system/lib/libc/musl/src/regex/tre-mem.c at line 21, system/lib/libc/musl/src/regex/tre.h at line 18, system/lib/libc/musl/src/regex/tre.h at line 21
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        system/lib/libc/musl/src/regex/regcomp.c [7:28]
+        system/lib/libc/musl/src/regex/regexec.c [7:28]
+        system/lib/libc/musl/src/regex/tre-mem.c [7:28]
+        system/lib/libc/musl/src/regex/tre.h [7:28]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     Public-Domain        a68ec7a64970bd4c2d47116674823105
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+           Public domain; no rights reserved.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        system/include/compat/sys/timeb.h [3:3]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     Public-Domain        abb28d101f4822fa073fb5ea4def210a
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        /* Public domain fmtmsg()
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        system/lib/libc/musl/src/misc/fmtmsg.c [1:1]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  adbdb319c9ef422a1087825501d7c54c
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+FILE_INCLUDE AUTHORS found in files: LICENSE at line 90
+FILE_INCLUDE system/lib/libc/musl/COPYRIGHT found in files: LICENSE at line 90
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [77:93]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     Apache-2.0           af208690987fb2207988ac8ee329171c
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        also, LLVM relicensed to Apache 2.0 + exceptions meanwhile. In practice you
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [45:45]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     Public-Domain        b9bcf976f8af7b7e073c3f2575ea45a7
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        /* public domain md5 implementation based on rfc1321 and libtomcrypt */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        system/lib/libc/musl/src/crypt/crypt_md5.c [12:12]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  bd2f12be24f914decf2312a6cd4d2185
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        The mips64 port was contributed by Imagination Technologies and is
+        licensed under the standard MIT terms.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [156:157]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  c19e434138fbe78836a6686742c6b183
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        musl as a whole is licensed under the following standard MIT license:
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [1:1]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     Sunpro               c283f7201a1512190a84864860824eb0
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * Developed at SunPro, a Sun Microsystems, Inc. business.
+         * Permission to use, copy, modify, and distribute this
+         * software is freely granted, provided that this notice
+         * is preserved.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-sunpro
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/sunpro.LICENSE
+    Files with this license:
+        system/lib/libc/musl/src/math/__cosdf.c [10:13]
+        system/lib/libc/musl/src/math/__rem_pio2f.c [10:13]
+        system/lib/libc/musl/src/math/__sindf.c [10:13]
+        system/lib/libc/musl/src/math/acosf.c [9:12]
+        system/lib/libc/musl/src/math/asinf.c [9:12]
+        system/lib/libc/musl/src/math/atan.c [6:9]
+        system/lib/libc/musl/src/math/atan2f.c [9:12]
+        system/lib/libc/musl/src/math/atanf.c [9:12]
+        system/lib/libc/musl/src/math/atanl.c [6:9]
+        system/lib/libc/musl/src/math/cbrt.c [6:9]
+        system/lib/libc/musl/src/math/cbrtf.c [10:13]
+        system/lib/libc/musl/src/math/cbrtl.c [7:10]
+        system/lib/libc/musl/src/math/cos.c [6:9]
+        system/lib/libc/musl/src/math/cosf.c [10:13]
+        system/lib/libc/musl/src/math/erf.c [6:9]
+        system/lib/libc/musl/src/math/erff.c [9:12]
+        system/lib/libc/musl/src/math/erfl.c [6:9]
+        system/lib/libc/musl/src/math/expm1.c [6:9]
+        system/lib/libc/musl/src/math/expm1f.c [9:12]
+        system/lib/libc/musl/src/math/j0f.c [9:12]
+        system/lib/libc/musl/src/math/j1f.c [9:12]
+        system/lib/libc/musl/src/math/jnf.c [9:12]
+        system/lib/libc/musl/src/math/lgammaf_r.c [9:12]
+        system/lib/libc/musl/src/math/lgammal.c [6:9]
+        system/lib/libc/musl/src/math/log10f.c [6:9]
+        system/lib/libc/musl/src/math/log1p.c [6:9]
+        system/lib/libc/musl/src/math/log1pf.c [6:9]
+        system/lib/libc/musl/src/math/scalbf.c [9:12]
+        system/lib/libc/musl/src/math/sin.c [6:9]
+        system/lib/libc/musl/src/math/sincos.c [6:9]
+        system/lib/libc/musl/src/math/sincosf.c [10:13]
+        system/lib/libc/musl/src/math/sinf.c [10:13]
+        system/lib/libc/musl/src/math/tan.c [6:9]
+        system/lib/libc/musl/src/math/tanf.c [10:13]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     MIT                  c60fa1814accacf35d85e3da9172707e
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        in accordance with the terms of the MIT license. Node's license follows:
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [73:73]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     NCSA                 c8360db4ae44f7ba8a0e3584f32341a4
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        // Emscripten is available under two separate licenses, the MIT license and the
+        // University of Illinois/NCSA Open Source License.  Both these licenses can be
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        system/lib/libc/emscripten_fiber.c [2:3]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     Bsd-Unmodified       d03391141ba79c78809a26eaefe69c59
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-bsd-unmodified
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsd-unmodified.LICENSE
+    Files with this license:
+        system/lib/libc/musl/src/complex/ccosh.c [6:25]
+        system/lib/libc/musl/src/complex/ccoshf.c [6:25]
+        system/lib/libc/musl/src/complex/csinh.c [6:25]
+        system/lib/libc/musl/src/complex/csinhf.c [6:25]
+        system/lib/libc/musl/src/complex/ctanh.c [6:25]
+        system/lib/libc/musl/src/complex/ctanhf.c [6:25]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     LicenseRef-scancode-unknown-license-reference d76ee91ec130f4ab9bdcc968d4d0b8ce
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        have been licensed under extremely permissive terms.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [128:128]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     Public-Domain        dfcb92e150b80d6cce6516ba0ddd47af
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+         * public domain sha256 crypt implementation
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        system/lib/libc/musl/src/crypt/crypt_sha256.c [2:2]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     ISC                  e6a382fc7564fdd1a5e46b2d97b3221f
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        system/lib/libc/musl/src/complex/catan.c [5:15]
+        system/lib/libc/musl/src/complex/catanf.c [5:15]
+        system/lib/libc/musl/src/complex/catanl.c [5:15]
+        system/lib/libc/musl/src/math/__polevll.c [5:15]
+        system/lib/libc/musl/src/math/erfl.c [15:25]
+        system/lib/libc/musl/src/math/expl.c [5:15]
+        system/lib/libc/musl/src/math/expm1l.c [5:15]
+        system/lib/libc/musl/src/math/lgammal.c [15:25]
+        system/lib/libc/musl/src/math/log10l.c [5:15]
+        system/lib/libc/musl/src/math/log1pl.c [5:15]
+        system/lib/libc/musl/src/math/log2l.c [5:15]
+        system/lib/libc/musl/src/math/logl.c [5:15]
+        system/lib/libc/musl/src/math/powl.c [5:15]
+        system/lib/libc/musl/src/math/tgammal.c [5:15]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     Public-Domain        f0b017ebdf2eeeeaf3e0a2ca82b667fb
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        /* public domain sha256 implementation based on fips180-3 */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        system/lib/libc/musl/src/crypt/crypt_sha256.c [16:16]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     BSD-2-Clause         f59cebb43ee786218189ac014af76fbb
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        system/lib/libc/musl/src/complex/__cexp.c [6:25]
+        system/lib/libc/musl/src/complex/__cexpf.c [6:25]
+        system/lib/libc/musl/src/complex/cexp.c [6:25]
+        system/lib/libc/musl/src/complex/cexpf.c [6:25]
+        system/lib/libc/musl/src/complex/csqrt.c [6:25]
+        system/lib/libc/musl/src/complex/csqrtf.c [6:25]
+        system/lib/libc/musl/src/crypt/crypt_md5.c [159:178]
+        system/lib/libc/musl/src/math/exp2l.c [6:25]
+        system/lib/libc/musl/src/math/fmaf.c [6:25]
+        system/lib/libc/musl/src/math/fmal.c [6:25]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     NCSA                 f5d929e2ab0c2a911b2c60516a15186c
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+FILE_INCLUDE system/lib/libc/musl/COPYRIGHT found in files: LICENSE at line 65
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        LICENSE [41:68]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     BSD-3-Clause         fb4d40337d6c3332a0b879df5e0b713d
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        system/lib/libc/musl/src/crypt/crypt_des.c [25:47]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+
+KEEP     BSD-3-Clause         fc3710d4d44a96ab9561881c4885f7b8
+BELONGS include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make
+    License text:
+        Copyright © 1994 David Burren. It is licensed under a BSD license.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 33.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        system/lib/libc/musl/COPYRIGHT [138:138]
+    Belongs difference:
+        + include/ya.make system/lib/c/ya.make system/lib/dlmalloc/ya.make system/lib/standalonewasm/ya.make system/lib/stubs/ya.make

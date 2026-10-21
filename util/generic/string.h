@@ -818,9 +818,9 @@ public:
     TBasicString& AppendNoAlias(const TCharType* pc, size_t len) Y_LIFETIME_BOUND {
         if (len) {
             auto s = this->size();
-
-            ReserveAndResize(s + len);
-            memcpy(&*(begin() + s), pc, len * sizeof(*pc));
+            auto& ref = MutRef();
+            ::ResizeUninitialized(ref, s + len);
+            memcpy(ref.data() + s, pc, len * sizeof(*pc));
         }
 
         return *this;
@@ -1366,3 +1366,9 @@ template <class TCharType, class TTraits>
 void ResizeUninitialized(TBasicString<TCharType, TTraits>& s, size_t len) {
     s.ReserveAndResize(len);
 }
+
+#ifdef __cpp_lib_format
+template <typename TCharType, typename TTraits>
+struct std::formatter<TBasicString<TCharType, TTraits>, TCharType>
+    : std::formatter<std::basic_string_view<TCharType>, TCharType> {};
+#endif

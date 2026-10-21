@@ -1,8 +1,10 @@
+import os
 import sys
 import argparse
 import base64
 import json
 import subprocess
+import shutil
 from pathlib import Path
 
 
@@ -145,13 +147,32 @@ class _GoToolCover(_GoTool):
 
     def __init__(self, args):
         super().__init__(args)
-        # For GO_TEST_FOR module in cover_module, else moddir is module for coverage
-        self.cover_module = self.args.cover_module if self.args.cover_module else self.args.moddir
+        # For GO_TEST_FOR module in cover_module, else moddir is module for coverage, strip first and last slashes
+        self.cover_module = (self.args.cover_module if self.args.cover_module else self.args.moddir).strip('/')
         self.cover_package = self.args.cover_package
+        self.source_root_for_clear = str(self.source_root) + os.sep
+
+    def _cover_go_path(self, go_file: str) -> Path:
+        # Match _GO_COVER_FILES in build/plugins/gobuild.py, including GO_TEST_FOR.
+        source = Path(os.path.normpath(self.source_root / go_file))
+        try:
+            relative = source.relative_to(self.source_root / self.cover_module)
+        except ValueError:
+            relative = Path('_external') / source.relative_to(self.source_root)
+        return self.bindir / relative.with_suffix(self.args.cover_ext)
 
     def execute(self) -> int:
         if not self.args.cover_srcs:
-            sys.stderr.write("Not found source files, skip covering\n")
+            sys.stderr.write("Not found source files for covering\n")
+            # But covervars.go and cover_outcfg declared as output, we must create empty they
+            cover_outcfg_path = self.bindir / self.args.cover_outcfg
+            os.makedirs(cover_outcfg_path.parent, exist_ok=True)
+            with open(cover_outcfg_path, 'w'):
+                pass
+            cover_covervars_path = self.bindir / self.args.cover_covervars
+            os.makedirs(cover_covervars_path.parent, exist_ok=True)
+            with open(cover_covervars_path, 'wt', encoding="utf-8") as f:
+                f.write(f'package {self.cover_package}\n')
             return 0
         # Extract go packages from all go files
         go_package2files = {}
@@ -190,7 +211,10 @@ class _GoToolCover(_GoTool):
         )
 
     def _make_empty_cover_go(self, go_file: str, go_pkg: str) -> None:
-        with open(self.bindir / Path(go_file).name.replace('.go', self.args.cover_ext), 'wt', encoding="utf-8") as f:
+        path = self._cover_go_path(go_file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open('wt', encoding="utf-8") as f:
+            f.write(f'// line {go_file.replace(self.source_root_for_clear, '')}:1:1\n')
             f.write(f'package {go_pkg}\n')
 
     def _do_package_coverage(
@@ -205,17 +229,28 @@ class _GoToolCover(_GoTool):
                     "PkgName": go_package,  # package name for generated covervars.go
                     "Granularity": "perblock",  # now always perblock, reserved as future extension point
                     "OutConfig": f'{self.args.cover_outcfg}',  # file with generated coverage config, which must be applied in -coveragecfg <HERE> in compile go-files
-                    "Local": True,  # in coverage report use only basename of files
+                    "Local": True,  # Preserve source directories in coverage profiles.
                     "ModulePath": f'a.yandex-team.ru/{Path(self.cover_module).parent}',
                 },
                 f,
             )
             f.write('\n')
-        cover_outs = [covervars_file] + [  # covervars MUST BE first, required by cover
-            Path(go_file).name.replace('.go', self.args.cover_ext) for go_file in go_files
+        cover_outs = [str(self.bindir / covervars_file)] + [  # covervars MUST BE first, required by cover
+            str(self._cover_go_path(go_file)) for go_file in go_files
         ]
+        for output in cover_outs:
+            Path(output).parent.mkdir(parents=True, exist_ok=True)
         with open(outfileslist_file, 'wt', encoding="utf-8") as f:
             f.write('\n'.join(cover_outs + ['']))
+
+        # Local coverage records input paths. Keep the Arcadia prefix without absolute build paths.
+        cover_inputs = []
+        for go_file in go_files:
+            name = Path('a.yandex-team.ru') / go_file
+            target = self.bindir / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(self.source_root / go_file, target)
+            cover_inputs.append(name.as_posix())
 
         # Unique prefix for all coverage variables of this package
         cover_var = 'GoCover' + base64.b32encode((self.args.moddir + '|' + go_package).encode('utf-8')).decode(
@@ -233,9 +268,23 @@ class _GoToolCover(_GoTool):
             cover_var,
             '-outfilelist',
             str(outfileslist_file),
-            *[str(Path(self.args.source_root) / go_file) for go_file in go_files],
+            *cover_inputs,
         ]
-        return _Go.cmd(cmd, self.bindir)
+        r = _Go.cmd(cmd, self.bindir)
+        if r != 0:
+            return r
+        for cover_out in cover_outs:
+            try:
+                with open(cover_out, 'rt', encoding="utf-8") as f:
+                    content = f.read()
+                patched_content = content.replace(self.source_root_for_clear, '').replace('//line', '// line')
+                if patched_content != content:
+                    with open(cover_out, 'wt', encoding="utf-8") as fw:
+                        fw.write(patched_content)
+            except Exception as e:
+                sys.stderr.write(f"Failed patch coverage file '{cover_out}': {str(e)}\n")
+                r = 1
+        return r
 
 
 class _GoToolCovdata(_GoTool):

@@ -9,6 +9,12 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
+// Distinguishes shared PQv1 / Topic API implementations.
+enum class EProtocol {
+    PQv1,
+    Topic,
+};
+
 static constexpr ui64 READ_BLOCK_SIZE = 8_KB; // metering
 
 using namespace Ydb;

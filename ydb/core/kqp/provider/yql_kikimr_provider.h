@@ -157,6 +157,7 @@ struct TKikimrQueryContext : TThrRefBase {
     bool DocumentApiRestricted = true;
     bool IsInternalCall = false;
     bool ConcurrentResults = true;
+    bool IsolateEffects = false;
     i32 RuntimeParameterSizeLimit = 0;
     bool RuntimeParameterSizeLimitSatisfied = false;
 
@@ -341,7 +342,7 @@ public:
         Closed = true;
     }
 
-    void Invalidate() {
+    virtual void Invalidate() {
         if (HasStarted()) {
             Invalidated = true;
         }

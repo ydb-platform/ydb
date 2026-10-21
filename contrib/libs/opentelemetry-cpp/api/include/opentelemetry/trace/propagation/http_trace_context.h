@@ -41,7 +41,7 @@ public:
   void Inject(context::propagation::TextMapCarrier &carrier,
               const context::Context &context) noexcept override
   {
-    SpanContext span_context = trace::GetSpan(context)->GetContext();
+    SpanContext span_context = trace::GetSpanContext(context);
     if (!span_context.IsValid())
     {
       return;
@@ -191,6 +191,7 @@ private:
     return ExtractContextFromTraceHeaders(trace_parent, trace_state);
   }
 
+public:
   bool Fields(nostd::function_ref<bool(nostd::string_view)> callback) const noexcept override
   {
     return (callback(kTraceParent) && callback(kTraceState));

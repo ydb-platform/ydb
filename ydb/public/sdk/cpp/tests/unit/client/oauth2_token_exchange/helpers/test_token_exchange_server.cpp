@@ -17,9 +17,7 @@ void TTestTokenExchangeServer::Run(const NYdb::TOauth2TokenExchangeParams& param
     std::string token;
     Run([&]() {
         auto factory = CreateOauth2TokenExchangeCredentialsProviderFactory(params);
-        if (!expectedToken.empty()) {
-            token = factory->CreateProvider()->GetAuthInfo();
-        }
+        token = factory->CreateProvider()->GetAuthInfo();
     },
     checkExpectations);
 
@@ -32,9 +30,7 @@ void TTestTokenExchangeServer::RunFromConfig(const std::string& fileName, const 
     std::string token;
     Run([&]() {
         auto factory = NYdb::CreateOauth2TokenExchangeFileCredentialsProviderFactory(fileName, explicitTokenEndpoint);
-        if (!expectedToken.empty()) {
-            token = factory->CreateProvider()->GetAuthInfo();
-        }
+        token = factory->CreateProvider()->GetAuthInfo();
     },
     checkExpectations);
 

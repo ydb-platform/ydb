@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
+
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NRpcService {
@@ -25,7 +26,7 @@ namespace NKikimr::NRpcService {
 // To finish rpc session before TEvFinishRequest owner actor should send IGRpcStreamingContext::TEvNotifiedWhenDone to rpc actor
 
 template <class TIn, class TOut>
-class TLocalRpcBiStreamingCtx : public NGRpcServer::IGRpcStreamingContext<TIn, TOut> {
+class TLocalRpcBiStreamingCtx: public NGRpcServer::IGRpcStreamingContext<TIn, TOut> {
     using TBase = NGRpcServer::IGRpcStreamingContext<TIn, TOut>;
 
 public:
@@ -40,31 +41,33 @@ public:
 
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-        struct TEvActorAttached : public TEventLocal<TEvActorAttached, EvActorAttached> {
+        struct TEvActorAttached: public TEventLocal<TEvActorAttached, EvActorAttached> {
             explicit TEvActorAttached(const TActorId& rpcActor)
                 : RpcActor(rpcActor)
-            {}
+            {
+            }
 
             const TActorId RpcActor;
         };
 
-        struct TEvReadRequest : public TEventLocal<TEvReadRequest, EvReadRequest> {
-        };
+        struct TEvReadRequest: public TEventLocal<TEvReadRequest, EvReadRequest> {};
 
-        struct TEvWriteRequest : public TEventLocal<TEvWriteRequest, EvWriteRequest> {
+        struct TEvWriteRequest: public TEventLocal<TEvWriteRequest, EvWriteRequest> {
             TEvWriteRequest(TOut&& message, const grpc::WriteOptions& options)
                 : Message(std::move(message))
                 , Options(options)
-            {}
+            {
+            }
 
             TOut Message;
             const grpc::WriteOptions Options;
         };
 
-        struct TEvFinishRequest : public TEventLocal<TEvFinishRequest, EvFinishRequest> {
+        struct TEvFinishRequest: public TEventLocal<TEvFinishRequest, EvFinishRequest> {
             explicit TEvFinishRequest(const grpc::Status& status)
                 : Status(status)
-            {}
+            {
+            }
 
             const grpc::Status Status;
         };
@@ -170,23 +173,23 @@ public:
 
     TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
         if (key == NYdb::YDB_DATABASE_HEADER) {
-            return {TStringBuf(Database)};
+            return { TStringBuf(Database) };
         }
         if (key == NYdb::YDB_AUTH_TICKET_HEADER) {
-            return Token ? TVector{TStringBuf(*Token)} : TVector<TStringBuf>();
+            return Token ? TVector{ TStringBuf(*Token) } : TVector<TStringBuf>();
         }
         if (key == NYdb::YDB_REQUEST_TYPE_HEADER) {
-            return RequestType ? TVector{TStringBuf(*RequestType)} : TVector<TStringBuf>();
+            return RequestType ? TVector{ TStringBuf(*RequestType) } : TVector<TStringBuf>();
         }
         if (key == NYdb::YDB_TRACE_ID_HEADER) {
-            return TraceId ? TVector{TStringBuf(TraceId)} : TVector<TStringBuf>();
+            return TraceId ? TVector{ TStringBuf(TraceId) } : TVector<TStringBuf>();
         }
         if (key == NYdb::OTEL_TRACE_HEADER) {
-            return ParentTraceId ? TVector{TStringBuf(ParentTraceId)} : TVector<TStringBuf>();
+            return ParentTraceId ? TVector{ TStringBuf(ParentTraceId) } : TVector<TStringBuf>();
         }
 
         const auto it = PeerMeta.find(TString(key));
-        return it != PeerMeta.end() ? TVector{TStringBuf(it->second)} : TVector<TStringBuf>();
+        return it != PeerMeta.end() ? TVector{ TStringBuf(it->second) } : TVector<TStringBuf>();
     }
 
     void PutPeerMeta(const TString& key, const TString& value) {
@@ -221,4 +224,4 @@ private:
     bool IsFinished = false;
 };
 
-} // namespace NKikimr::NRpcService
+}   // namespace NKikimr::NRpcService

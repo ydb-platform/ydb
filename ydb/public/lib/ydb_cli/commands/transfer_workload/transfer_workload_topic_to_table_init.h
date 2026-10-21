@@ -15,12 +15,18 @@ public:
 
 private:
     class TScenario : public TTopicOperationsScenario {
+    public:
+        // Number of rows preloaded into the read-only table. Configurable (hidden)
+        // primarily to keep tests fast; the default preserves the original behavior.
+        ui64 InitialRowCount = 1'000'000;
+
+    private:
         int DoRun(const TConfig& config) override;
 
         void CreateWriteOnlyTable(const TString& table, ui32 partitionCount);
         void CreateReadOnlyTable(const TString& table, ui32 partitionCount);
 
-        void UpsertRandomKeyBlock();
+        void UpsertRandomKeyBlock(ui64 rowCount);
     };
 
     TScenario Scenario;

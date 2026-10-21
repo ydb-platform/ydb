@@ -16,7 +16,7 @@
 
 Подкоманды:
 
-```
+```text
 fulltext            YDB fulltext workload
 ├─ init               Инициализация таблиц для нагрузки
 ├─ import             Загрузка данных и построение полнотекстового индекса
@@ -81,21 +81,26 @@ fulltext            YDB fulltext workload
 ### Генерация синтетических данных {#load-generator}
 
 Генерация случайного текста с помощью модели цепи Маркова и загрузка его в таблицу. Перед использованием необходимо [построить модель](#model) или загрузить готовую.
- - Чтобы загрузить уже готовую модель:
-     ```bash
-     wget https://storage.yandexcloud.net/ydb-public/markov_dict.tsv.gz
-     ```
- - Сделать свою модель из данных wikipedia:
-     ```python
-     from datasets import load_dataset
 
-     ds = load_dataset(
-        "rumbleFTW/wikipedia-20220301-en-raw",
-        split="train[:1000000]",
-        streaming=False,
-        )
-     ds.to_csv('wikipedia_sample.csv.gz', compression='gzip', index=False)
-     ```
+- Чтобы загрузить уже готовую модель:
+
+    ```bash
+    wget https://storage.yandexcloud.net/ydb-public/markov_dict.tsv.gz
+    ```
+
+- Сделать свою модель из данных wikipedia:
+
+    ```python
+    from datasets import load_dataset
+
+    ds = load_dataset(
+       "rumbleFTW/wikipedia-20220301-en-raw",
+       split="train[:1000000]",
+       streaming=False,
+       )
+    ds.to_csv('wikipedia_sample.csv.gz', compression='gzip', index=False)
+    ```
+
 Марковская модель считает что каждое следующее слово зависит от одного или нескольких предыдущих, количество предыдущих слов на основании которого определяется следующее, называется порядком модели. Сначала мы используем обычный случайный генератор с равномерным распределением, чтобы определить длину текста в диапазоне от `--min-sentence-len` до `--max-sentence-len`, который будем генерировать далее при помощью марковской модели слово за словом, пока не наберем нужное количество слов. Такое построение данных необходимо чтобы текст был похож на какой то реальный человеческий текст, а не был просто беспорядочным набором букв.
 
 ```bash
@@ -133,7 +138,7 @@ fulltext            YDB fulltext workload
 |---|---|---|
 | `--model <путь>` или `-m <путь>` | Путь к файлу модели цепи Маркова (`.tsv.gz`) для генерации запросов. Необходимо указать либо `--model`, либо `--query-table`. | |
 | `--query-table <имя>` | Имя таблицы с заранее загруженными запросами. Таблица должна содержать столбец `query`. Необходимо указать либо `--model`, либо `--query-table`. | |
-| `--index-name <имя>` | Имя полнотекстового индекса для использования. | `index` |
+| `--index <имя>` | Имя полнотекстового индекса для использования. | `index` |
 | `--min-query-len <значение>` | Минимальное количество слов в генерируемом запросе. | `1` |
 | `--max-query-len <значение>` | Максимальное количество слов в генерируемом запросе. | `5` |
 | `--top-size <значение>` | Количество строк для выборки из таблицы при формировании набора слов для запросов. | `1000` |
@@ -154,7 +159,7 @@ fulltext            YDB fulltext workload
 | Имя | Описание | Значение по умолчанию |
 |---|---|---|
 | `--model <путь>` или `-m <путь>` | Путь к файлу модели цепи Маркова (`.tsv.gz`). | Обязательный |
-| `--index-name <имя>` | Имя полнотекстового индекса для использования. | `index` |
+| `--index <имя>` | Имя полнотекстового индекса для использования. | `index` |
 | `--bulk-size <значение>` | Количество строк в одном пакете upsert. | `100` |
 | `--min-sentence-len <значение>` | Минимальное количество слов в генерируемом документе. | `100` |
 | `--max-sentence-len <значение>` | Максимальное количество слов в генерируемом документе. | `1000` |
@@ -192,11 +197,15 @@ fulltext            YDB fulltext workload
 ### Пример с генерируемым датасетом
 
 1. Скачать либо обучить Марковскую модель:
+
    - Скачать модель из S3:
+
      ```bash
      wget https://storage.yandexcloud.net/ydb-public/markov_dict.tsv.gz
      ```
+
    - Обучение модели на данных с Wikipedia:
+
      ```python
      from datasets import load_dataset
 
@@ -229,8 +238,10 @@ fulltext            YDB fulltext workload
     ```bash
     {{ ydb-cli }} workload fulltext run select --model markov_dict.tsv.gz
     ```
+
     Пример вывода:
-    ```
+
+    ```text
     Window      Txs Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
     1            23 23      0       0       242     407     453     453
     2            18 18      0       1       611     807     915     915
@@ -263,8 +274,10 @@ fulltext            YDB fulltext workload
     ```bash
     {{ ydb-cli }} workload fulltext run upsert --model markov_dict.tsv.gz
     ```
+
     Пример вывода:
-    ```
+
+    ```text
     Window      Txs Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
     1           255 255     0       0       31      34      117     123
     2           279 279     0       0       32      37      42      45
@@ -279,6 +292,7 @@ fulltext            YDB fulltext workload
 
     Total       Txs Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
     ```
+
 6. Удаление таблиц, созданных для нагрузочного тестирования:
 
     ```bash
@@ -311,8 +325,10 @@ fulltext            YDB fulltext workload
     ```bash
     {{ ydb-cli }} workload fulltext run select --quality
     ```
+
     Пример вывода:
-    ```
+
+    ```text
     Search quality measurement...
     Search quality measurement completed for 100 queries in 1 seconds.
     nDCG@10:  0.270
@@ -338,8 +354,10 @@ fulltext            YDB fulltext workload
     ```bash
     {{ ydb-cli }} workload fulltext run upsert
     ```
+
     Пример вывода:
-    ```
+
+    ```text
     Window      Txs Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
     1           255 255     0       0       31      34      117     123
     2           279 279     0       0       32      37      42      45

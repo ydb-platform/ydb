@@ -11,7 +11,7 @@ namespace NKikimr::NMiniKQL {
 
 class IFunctionRegistry;
 
-} // namespace NKikimr::NMiniKQL
+}   // namespace NKikimr::NMiniKQL
 
 namespace NYql {
 
@@ -22,21 +22,17 @@ struct TPqGatewayServices {
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     TPqGatewayConfigPtr Config;
     IMetricsRegistryPtr Metrics;
-    ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     ::NPq::NConfigurationManager::IConnections::TPtr CmConnections;
     NYdb::TDriver YdbDriver;
     TMaybe<NYdb::NTopic::TTopicClientSettings> CommonTopicClientSettings;
     IPqLocalClientFactory::TPtr LocalTopicClientFactory;
 
-    TPqGatewayServices(
-        NYdb::TDriver driver,
-        ::NPq::NConfigurationManager::IConnections::TPtr cmConnections,
-        ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-        TPqGatewayConfigPtr config,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        IMetricsRegistryPtr metrics = nullptr,
+    TPqGatewayServices(NYdb::TDriver driver, ::NPq::NConfigurationManager::IConnections::TPtr cmConnections,
+        IStructuredTokenCredentialsFactory::TPtr credentialsFactory, TPqGatewayConfigPtr config,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, IMetricsRegistryPtr metrics = nullptr,
         TMaybe<NYdb::NTopic::TTopicClientSettings> commonTopicClientSettings = Nothing(),
         IPqLocalClientFactory::TPtr localTopicClientFactory = nullptr);
 };
 
-} // namespace NYql
+}   // namespace NYql

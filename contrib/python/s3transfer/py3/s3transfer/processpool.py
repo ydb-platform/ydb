@@ -214,6 +214,7 @@ from s3transfer.utils import (
     OSUtils,
     calculate_num_parts,
     calculate_range_parameter,
+    create_nested_client,
 )
 
 logger = logging.getLogger(__name__)
@@ -577,9 +578,8 @@ class ClientFactory:
 
     def create_client(self):
         """Create a botocore S3 client"""
-        return botocore.session.Session().create_client(
-            's3', **self._client_kwargs
-        )
+        session = botocore.session.Session()
+        return create_nested_client(session, 's3', **self._client_kwargs)
 
 
 class TransferMonitor:

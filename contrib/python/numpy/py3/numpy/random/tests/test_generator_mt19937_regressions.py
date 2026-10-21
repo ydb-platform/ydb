@@ -1,7 +1,8 @@
-from numpy.testing import (assert_, assert_array_equal)
-import numpy as np
 import pytest
-from numpy.random import Generator, MT19937
+
+import numpy as np
+from numpy.random import MT19937, Generator
+from numpy.testing import assert_, assert_array_equal
 
 
 class TestRegression:
@@ -59,7 +60,7 @@ class TestRegression:
             mt19937 = Generator(MT19937(i))
             m = Generator(MT19937(4321))
             # If m.state is not honored, the result will change
-            assert_array_equal(m.choice(10, size=10, p=np.ones(10)/10.), res)
+            assert_array_equal(m.choice(10, size=10, p=np.ones(10) / 10.), res)
 
     def test_multivariate_normal_size_types(self):
         # Test for multivariate_normal issue with 'size' argument.
@@ -83,8 +84,31 @@ class TestRegression:
         # gh-24266: beta would generate nan when the parameters
         # were subnormal or a small multiple of the smallest normal.
         tiny = np.finfo(1.0).tiny
-        x = self.mt19937.beta(tiny/32, tiny/40, size=50)
+        x = self.mt19937.beta(tiny / 32, tiny / 40, size=50)
         assert not np.any(np.isnan(x))
+
+    def test_beta_expected_zero_frequency(self):
+        # gh-24475: For small a and b (e.g. a=0.0025, b=0.0025), beta
+        # would generate too many zeros.
+        a = 0.0025
+        b = 0.0025
+        n = 1000000
+        x = self.mt19937.beta(a, b, size=n)
+        nzeros = np.count_nonzero(x == 0)
+        # beta CDF at x = np.finfo(np.double).smallest_subnormal/2
+        # is p = 0.0776169083131899, e.g,
+        #
+        #    import numpy as np
+        #    from mpmath import mp
+        #    mp.dps = 160
+        #    x = mp.mpf(np.finfo(np.float64).smallest_subnormal)/2
+        #    # CDF of the beta distribution at x:
+        #    p = mp.betainc(a, b, x1=0, x2=x, regularized=True)
+        #    n = 1000000
+        #    exprected_freq = float(n*p)
+        #
+        expected_freq = 77616.90831318991
+        assert 0.95 * expected_freq < nzeros < 1.05 * expected_freq
 
     def test_choice_sum_of_probs_tolerance(self):
         # The sum of probs should be 1.0 with some tolerance.
@@ -97,7 +121,7 @@ class TestRegression:
             c = self.mt19937.choice(a, p=probs)
             assert_(c in a)
             with pytest.raises(ValueError):
-                self.mt19937.choice(a, p=probs*0.9)
+                self.mt19937.choice(a, p=probs * 0.9)
 
     def test_shuffle_of_array_of_different_length_strings(self):
         # Test that permuting an array of different length strings
@@ -140,7 +164,7 @@ class TestRegression:
         class M:
             a = np.arange(5)
 
-            def __array__(self):
+            def __array__(self, dtype=None, copy=None):
                 return self.a
 
         mt19937 = Generator(MT19937(1))
@@ -163,3 +187,21 @@ class TestRegression:
         # is 0.9999999999907766, so we expect the result to be all 2**63-1.
         assert_array_equal(self.mt19937.geometric(p=1e-30, size=3),
                            np.iinfo(np.int64).max)
+
+    def test_zipf_large_parameter(self):
+        # Regression test for part of gh-9829: a call such as rng.zipf(10000)
+        # would hang.
+        n = 8
+        sample = self.mt19937.zipf(10000, size=n)
+        assert_array_equal(sample, np.ones(n, dtype=np.int64))
+
+    def test_zipf_a_near_1(self):
+        # Regression test for gh-9829: a call such as rng.zipf(1.0000000000001)
+        # would hang.
+        n = 100000
+        sample = self.mt19937.zipf(1.0000000000001, size=n)
+        # Not much of a test, but let's do something more than verify that
+        # it doesn't hang.  Certainly for a monotonically decreasing
+        # discrete distribution truncated to signed 64 bit integers, more
+        # than half should be less than 2**62.
+        assert np.count_nonzero(sample < 2**62) > n / 2

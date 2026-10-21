@@ -1,13 +1,15 @@
 #pragma once
+#include <ydb/core/base/events.h>
+
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor_virtual.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/actor_virtual.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/accessor/accessor.h>
-#include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/api/protos/ydb_keyvalue.pb.h>
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
-#include <ydb/core/base/events.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 namespace NKikimr::NMetadata::NRequest {
 
@@ -52,10 +54,15 @@ enum EEvents {
     EvDeleteSessionInternalResponse,
     EvDeleteSessionResponse,
 
+    EvCreateKvVolumeRequest,
+    EvCreateKvVolumeInternalResponse,
+    EvCreateKvVolumeResponse,
+
     EvEnd
 };
 
-static_assert(EEvents::EvEnd < EventSpaceEnd(TKikimrEvents::ES_INTERNAL_REQUEST), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_INTERNAL_REQUESTS)");
+static_assert(
+    EEvents::EvEnd < EventSpaceEnd(TKikimrEvents::ES_INTERNAL_REQUEST), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_INTERNAL_REQUESTS)");
 
 // class with interaction features for ydb-yql request execution
 template <class TRequestExt, class TResponseExt, ui32 EvStartExt, ui32 EvResultInternalExt, ui32 EvResultExt>
@@ -78,22 +85,24 @@ public:
     virtual void OnRequestFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage) = 0;
 };
 
-using TDialogCreatePath = TDialogPolicyImpl<Ydb::Scheme::MakeDirectoryRequest, Ydb::Scheme::MakeDirectoryResponse,
-    EEvents::EvCreatePathRequest, EEvents::EvCreatePathInternalResponse, EEvents::EvCreatePathResponse>;
-using TDialogCreateTable = TDialogPolicyImpl<Ydb::Table::CreateTableRequest, Ydb::Table::CreateTableResponse,
-    EEvents::EvCreateTableRequest, EEvents::EvCreateTableInternalResponse, EEvents::EvCreateTableResponse>;
-using TDialogAlterTable = TDialogPolicyImpl<Ydb::Table::AlterTableRequest, Ydb::Table::AlterTableResponse,
-    EEvents::EvAlterTableRequest, EEvents::EvAlterTableInternalResponse, EEvents::EvAlterTableResponse>;
-using TDialogDropTable = TDialogPolicyImpl<Ydb::Table::DropTableRequest, Ydb::Table::DropTableResponse,
-    EEvents::EvDropTableRequest, EEvents::EvDropTableInternalResponse, EEvents::EvDropTableResponse>;
+using TDialogCreatePath = TDialogPolicyImpl<Ydb::Scheme::MakeDirectoryRequest, Ydb::Scheme::MakeDirectoryResponse, EEvents::EvCreatePathRequest,
+    EEvents::EvCreatePathInternalResponse, EEvents::EvCreatePathResponse>;
+using TDialogCreateTable = TDialogPolicyImpl<Ydb::Table::CreateTableRequest, Ydb::Table::CreateTableResponse, EEvents::EvCreateTableRequest,
+    EEvents::EvCreateTableInternalResponse, EEvents::EvCreateTableResponse>;
+using TDialogAlterTable = TDialogPolicyImpl<Ydb::Table::AlterTableRequest, Ydb::Table::AlterTableResponse, EEvents::EvAlterTableRequest,
+    EEvents::EvAlterTableInternalResponse, EEvents::EvAlterTableResponse>;
+using TDialogDropTable = TDialogPolicyImpl<Ydb::Table::DropTableRequest, Ydb::Table::DropTableResponse, EEvents::EvDropTableRequest,
+    EEvents::EvDropTableInternalResponse, EEvents::EvDropTableResponse>;
 using TDialogModifyPermissions = TDialogPolicyImpl<Ydb::Scheme::ModifyPermissionsRequest, Ydb::Scheme::ModifyPermissionsResponse,
     EEvents::EvModifyPermissionsRequest, EEvents::EvModifyPermissionsInternalResponse, EEvents::EvModifyPermissionsResponse>;
-using TDialogSelect = TDialogPolicyImpl<Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse,
-    EEvents::EvSelectRequest, EEvents::EvSelectInternalResponse, EEvents::EvSelectResponse>;
+using TDialogSelect = TDialogPolicyImpl<Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse, EEvents::EvSelectRequest,
+    EEvents::EvSelectInternalResponse, EEvents::EvSelectResponse>;
 using TDialogCreateSession = TDialogPolicyImpl<Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse,
     EEvents::EvCreateSessionRequest, EEvents::EvCreateSessionInternalResponse, EEvents::EvCreateSessionResponse>;
 using TDialogDeleteSession = TDialogPolicyImpl<Ydb::Table::DeleteSessionRequest, Ydb::Table::DeleteSessionResponse,
     EEvents::EvDeleteSessionRequest, EEvents::EvDeleteSessionInternalResponse, EEvents::EvDeleteSessionResponse>;
+using TDialogCreateKvVolume = TDialogPolicyImpl<Ydb::KeyValue::CreateVolumeRequest, Ydb::KeyValue::CreateVolumeResponse,
+    EEvents::EvCreateKvVolumeRequest, EEvents::EvCreateKvVolumeInternalResponse, EEvents::EvCreateKvVolumeResponse>;
 
 template <ui32 evResult = EEvents::EvGeneralYQLResponse>
 using TCustomDialogYQLRequest = TDialogPolicyImpl<Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse,
@@ -117,8 +126,7 @@ template <>
 class TOperatorChecker<Ydb::Scheme::MakeDirectoryResponse> {
 public:
     static bool IsSuccess(const Ydb::Scheme::MakeDirectoryResponse& r) {
-        return r.operation().status() == Ydb::StatusIds::SUCCESS ||
-            r.operation().status() == Ydb::StatusIds::ALREADY_EXISTS;
+        return r.operation().status() == Ydb::StatusIds::SUCCESS || r.operation().status() == Ydb::StatusIds::ALREADY_EXISTS;
     }
 };
 
@@ -126,8 +134,7 @@ template <>
 class TOperatorChecker<Ydb::Table::CreateTableResponse> {
 public:
     static bool IsSuccess(const Ydb::Table::CreateTableResponse& r) {
-        return r.operation().status() == Ydb::StatusIds::SUCCESS ||
-            r.operation().status() == Ydb::StatusIds::ALREADY_EXISTS;
+        return r.operation().status() == Ydb::StatusIds::SUCCESS || r.operation().status() == Ydb::StatusIds::ALREADY_EXISTS;
     }
 };
 
@@ -135,8 +142,15 @@ template <>
 class TOperatorChecker<Ydb::Table::DropTableResponse> {
 public:
     static bool IsSuccess(const Ydb::Table::DropTableResponse& r) {
-        return r.operation().status() == Ydb::StatusIds::SUCCESS ||
-            r.operation().status() == Ydb::StatusIds::NOT_FOUND;
+        return r.operation().status() == Ydb::StatusIds::SUCCESS || r.operation().status() == Ydb::StatusIds::NOT_FOUND;
+    }
+};
+
+template <>
+class TOperatorChecker<Ydb::KeyValue::CreateVolumeResponse> {
+public:
+    static bool IsSuccess(const Ydb::KeyValue::CreateVolumeResponse& r) {
+        return r.operation().status() == Ydb::StatusIds::SUCCESS || r.operation().status() == Ydb::StatusIds::ALREADY_EXISTS;
     }
 };
 
@@ -144,14 +158,15 @@ template <class TDialogPolicy>
 class TEvRequestResult: public NActors::TEventLocal<TEvRequestResult<TDialogPolicy>, TDialogPolicy::EvResult> {
 private:
     YDB_READONLY_DEF(typename TDialogPolicy::TResponse, Result);
+
 public:
     typename TDialogPolicy::TResponse&& DetachResult() {
         return std::move(Result);
     }
 
     TEvRequestResult(typename TDialogPolicy::TResponse&& result)
-        : Result(std::move(result)) {
-
+        : Result(std::move(result))
+    {
     }
 };
 
@@ -171,4 +186,4 @@ class TEvRequestFinished: public NActors::TEventLocal<TEvRequestFinished, EEvent
 public:
 };
 
-}
+}   // namespace NKikimr::NMetadata::NRequest

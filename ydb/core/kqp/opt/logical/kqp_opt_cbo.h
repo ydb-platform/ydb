@@ -116,9 +116,6 @@ struct TKqpProviderContext : public TBaseProviderContext {
     double CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR = 1.0;
     double CONSTS_OUTPUT_SIDE_BYTESIZE_FACTOR = 1.0;
 
-    double CONSTS_INTERACTION_MULT = 1.0;
-    double CONSTS_INTERACTION_POW = 1.0;
-
     double CONSTS_MAPJOIN_LEFT_SIDE_MULT = 1.0;
     double CONSTS_MAPJOIN_LEFT_SIDE_POW = 1.0;
     double CONSTS_MAPJOIN_RIGHT_SIDE_MULT = 2.8;

@@ -2,6 +2,7 @@
 #include "ydb_update.h"
 #include "ydb_version.h"
 
+#include <ydb/public/lib/ydb_cli/common/oidc.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
 #include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
@@ -10,7 +11,6 @@
 #include <library/cpp/getopt/small/completer.h>
 #include <library/cpp/resource/resource.h>
 #include <util/string/strip.h>
-#include <util/system/env.h>
 
 #include <filesystem>
 
@@ -57,6 +57,9 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
                 return CreateIamJwtFileCredentialsProviderFactory(
                     { {.Endpoint = config.IamEndpoint, .CaCerts = config.CaCerts}, config.SaKeyFile });
             }
+        }
+        if (config.Oidc.IsConfigured()) {
+            return CreateCliOidcCredentialsProviderFactory(config.Oidc);
         }
         return CreateInsecureCredentialsProviderFactory();
     };
@@ -128,10 +131,6 @@ int NewYdbClient(int argc, char** argv) {
         }
         return {"ydb-cli", version};
     };
-
-    if (TryGetEnv("YDB_CLI_AI_ENABLE").Defined()) {
-        settings.EnableAiInteractive = true;
-    }
 
     auto commandsRoot = MakeHolder<TYdbClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), settings);
     commandsRoot->Opts.SetTitle("YDB client");

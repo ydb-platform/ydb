@@ -4,6 +4,9 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT Service
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -48,7 +51,7 @@ void TWriterActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     auto& topic = topics.begin()->second;
     DescribeStatus = topic.Status;
     switch(topic.Status) {
-        case NDescriber::EStatus::SUCCESS: {
+        case NDescriber::EStatus::Success: {
             TopicInfo = topic.Info;
             return DoWrite();
         }
@@ -72,7 +75,7 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
 
     cmdWrite.SetSourceId("");
     cmdWrite.SetDisableDeduplication(true);
-    cmdWrite.SetCreateTimeMS(TInstant::Now().MilliSeconds());
+    cmdWrite.SetCreateTimeMS(TAppData::TimeProvider->Now().MilliSeconds());
     cmdWrite.SetUncompressedSize(item.MessageBody.size());
     cmdWrite.SetExternalOperation(true);
     if (item.MessageGroupId) {
@@ -109,7 +112,7 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
 
     TString dataStr;
     bool res = proto.SerializeToString(&dataStr);
-    Y_ABORT_UNLESS(res);
+    AFL_ENSURE(res);
     cmdWrite.SetData(dataStr);
 
     return totalSize;
@@ -242,8 +245,12 @@ void TWriterActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
 }
 
 bool TWriterActor::OnUnhandledException(const std::exception& exc) {
-    LOG_C("unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
-        << TBackTrace::FromCurrentException().PrintToString());
+    LOG_C(
+        "Unhandled exception",
+        {"exceptionType", TypeName(exc)},
+        {"exceptionMessage", exc.what()},
+        {"backTrace", TBackTrace::FromCurrentException().PrintToString()}
+    );
 
     PendingRequests = 0;
     ReplyIfPossible();
@@ -253,11 +260,17 @@ bool TWriterActor::OnUnhandledException(const std::exception& exc) {
 
 bool TWriterActor::IsSuccess(const NKikimrClient::TResponse& record) {
     if (record.HasErrorCode() && record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
-        LOG_W("Write error: " << record.ShortDebugString());
+        LOG_W(
+            "Write",
+            {"error", record.ShortDebugString()}
+        );
         return false;
     }
     if (!record.HasPartitionResponse()) {
-        LOG_W("Missing partition response: " << record.ShortDebugString());
+        LOG_W(
+            "Missing partition",
+            {"response", record.ShortDebugString()}
+        );
         return false;
     }
 
@@ -276,6 +289,9 @@ void TWriterActor::ReplyIfPossible() {
 
     auto response = std::make_unique<TEvWriteResponse>();
     response->DescribeStatus = DescribeStatus;
+    if (TopicInfo) {
+        response->BalancerTabletId = TopicInfo->Description.GetBalancerTabletID();
+    }
     for (auto& message : PendingMessages) {
         std::optional<TMessageId> messageId;
         if (message.Status == Ydb::StatusIds::SUCCESS || message.Status == Ydb::StatusIds::ALREADY_EXISTS) {

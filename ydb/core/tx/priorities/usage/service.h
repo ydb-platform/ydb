@@ -2,7 +2,7 @@
 #include "config.h"
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/core/tx/priorities/service/service.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/core/tx/priorities/usage/events.h>
 
 namespace NKikimr::NPrioritiesQueue {
@@ -12,6 +12,7 @@ class TServiceOperatorImpl {
 private:
     using TSelf = TServiceOperatorImpl<TQueuePolicy>;
     std::atomic<bool> IsEnabledFlag = false;
+public:
     static void Register(const TConfig& serviceConfig) {
         Singleton<TSelf>()->IsEnabledFlag = serviceConfig.IsEnabled();
     }
@@ -19,7 +20,6 @@ private:
         Y_ABORT_UNLESS(TQueuePolicy::Name.size() == 4);
         return TQueuePolicy::Name;
     }
-public:
     [[nodiscard]] static ui64 RegisterClient() {
         static TAtomicCounter Counter = 0;
         const ui64 id = Counter.Inc();
@@ -60,11 +60,6 @@ public:
     static NActors::TActorId MakeServiceId(const ui64 nodeId) {
         return NActors::TActorId(nodeId, "SrvcPrqe" + GetQueueName());
     }
-    static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> queueSignals) {
-        Register(config);
-        return new TDistributor(config, GetQueueName(), queueSignals);
-    }
-
 };
 
 class TCompConveyorPolicy {

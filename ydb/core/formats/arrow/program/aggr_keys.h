@@ -18,7 +18,7 @@ private:
     std::vector<std::string> GetRegistryFunctionNames() const override {
         return { GetFunctionName(AggregationType), GetHouseFunctionName(AggregationType) };
     }
-    virtual TConclusion<arrow::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override;
+    virtual TConclusion<TFunctionResult> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override;
 
     TConclusion<arrow::Datum> PrepareResult(arrow::Datum&& datum) const override {
         if (!datum.is_scalar()) {
@@ -165,7 +165,7 @@ private:
 
     virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator() const override;
 
-    virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
+    virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
     TWithKeysAggregationProcessor(std::vector<TColumnChainInfo>&& input, std::vector<TColumnChainInfo>&& output,
         std::vector<TColumnChainInfo>&& aggregationKeys, std::vector<TWithKeysAggregationOption>&& aggregations)

@@ -29,7 +29,7 @@ bool IsLastOpInStage(const TIntrusivePtr<TOpSort>& sort) {
 // We want to match pattern: stage(sort<-map<-read).
 bool CanPropagateSortOverMap(const TIntrusivePtr<TOpSort>& sort, const TIntrusivePtr<IOperator>& input) {
     const auto kind = input->GetKind();
-    if (kind != EOperator::Map || !input->IsSingleConsumer() || !IsLastOpInStage(sort)) {
+    if (kind != EOperator::Map || !IsLastOpInStage(sort)) {
         return false;
     }
     const auto map = CastOperator<TOpMap>(input);
@@ -42,30 +42,30 @@ bool CanPropagateSortOverMap(const TIntrusivePtr<TOpSort>& sort, const TIntrusiv
         return false;
     }
 
-    const auto& mapElements = CastOperator<TOpMap>(input)->GetMapElements();
-    return std::all_of(mapElements.begin(), mapElements.end(), [](const TMapElement& mapElement) { return mapElement.IsRename(); });
+    const auto& mapElements = map->GetMapElements().Items();
+    return std::all_of(mapElements.begin(), mapElements.end(), [](const auto& entry) { return entry.second.IsColumnAccess(); });
 }
 
 bool CanPushSortToStage(const TIntrusivePtr<TOpSort>& sort, const TIntrusivePtr<IOperator>& input) {
     const auto sortStageId = *sort->Props.StageId;
     const auto inputStageId = *input->Props.StageId;
-    return !(sortStageId == inputStageId || !input->IsSingleConsumer() ||
+    return !(sortStageId == inputStageId || input->Kind == EOperator::Replicate ||
              (input->GetKind() == EOperator::Source && CastOperator<TOpRead>(input)->GetTableStorageType() == NYql::EStorageType::RowStorage));
 }
 
-bool IsSuitableToPropagateTopSortThroughStage(const TIntrusivePtr<IOperator>& input) {
+bool IsSuitableToPropagateTopSortThroughStage(const TIntrusivePtr<IOperator>& input, TExprContext& ctx) {
     if (input->GetKind() != EOperator::Sort) {
         return false;
     }
 
-    const auto type = input->GetTypeAnn();
-    Y_ENSURE(type);
-    const auto items = type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems();
-    if (!(items.size() && items.front()->GetItemType()->GetKind() != ETypeAnnotationKind::Pg)) {
-        return false;
+    const auto sort = CastOperator<TOpSort>(input);
+    for (const auto& [column, order] : sort->GetSortElements().Items()) {
+        const auto* sortColumnType = sort->GetIUType(column, ctx);
+        if (!sortColumnType || RemoveOptionalType(sortColumnType)->GetKind() == ETypeAnnotationKind::Pg) {
+            return false;
+        }
     }
 
-    const auto sort = CastOperator<TOpSort>(input);
     return sort->GetSortPhase() != EOpPhase::Final;
 }
 
@@ -91,13 +91,16 @@ bool CanPropagateOverConnection(const ui32 prevStageId, const ui32 currentStageI
 
 TIntrusivePtr<IOperator> MaybePushToStageAndUpdateConnection(TIntrusivePtr<TOpSort>& sort, const TIntrusivePtr<IOperator>& input, TExprContext& ctx,
                                                              TPlanProps& planProps) {
+    Y_UNUSED(ctx);
+
     const auto prevStageId = *(input->Props.StageId);
     const auto currentStageId = *(sort->Props.StageId);
     if (!CanPropagateOverConnection(prevStageId, currentStageId, planProps)) {
         return sort;
     }
 
-    const auto mergeConnection = MakeIntrusive<TMergeConnection>(sort->GetSortElements());
+    // Merge connection always has a single consumer (i.e. outputIndex = 0)
+    const auto mergeConnection = MakeIntrusive<TMergeConnection>(sort->GetSortElements(), /*outputIndex=*/0u);
     // Update conection type.
     planProps.StageGraph.UpdateConnection(prevStageId, currentStageId, mergeConnection);
     // Push to stage.
@@ -107,32 +110,22 @@ TIntrusivePtr<IOperator> MaybePushToStageAndUpdateConnection(TIntrusivePtr<TOpSo
     if (!IsLastOpInStage(sort)) {
         return newSort;
     }
-    TVector<TMapElement> mapElements;
-    for (const auto& outputName : sort->GetOutputIUs()) {
-        mapElements.emplace_back(outputName, outputName, sort->Pos, &ctx, &planProps);
-    }
     auto props = sort->Props;
     props.StageId = currentStageId;
-    return MakeIntrusive<TOpMap>(newSort, sort->Pos, props, mapElements, true);
+    return MakeIntrusive<TOpMap>(newSort, sort->Pos, props, TMapIUs{});
 }
 
-void MaybeUpdateSortElements(TVector<TSortElement>& sortElements, const TVector<TMapElement>& mapElements) {
-    THashMap<TString, TInfoUnit> map;
-    for (const auto& mapElement : mapElements) {
-        Y_ENSURE(mapElement.IsRename());
-        map[mapElement.GetElementName().GetFullName()] = mapElement.GetRename();
-    }
-
-    for (auto& sortElement : sortElements) {
-        const auto fullName = sortElement.SortColumn.GetFullName();
-        const auto it = map.find(fullName);
-        if (it != map.end()) {
-            sortElement.SortColumn = it->second;
+void MaybeUpdateSortElements(TSortIUs& sortElements, const TMapIUs& mapElements) {
+    for (size_t i = 0; i < sortElements.Items().size(); ++i) {
+        const auto [column, order] = sortElements.Items()[i];
+        if (const auto* element = mapElements.Find(column)) {
+            Y_ENSURE(element->IsColumnAccess());
+            sortElements.ReplaceAt(i, element->GetColumnAccess(), order);
         }
     }
 }
 
-bool CanPushSortToOlapRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, ui32& sortDirection) {
+bool CanPushSortToOlapRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, const TInfoUnitRegistry& registry, ui32& sortDirection) {
     if (input->GetKind() != EOperator::Source) {
         return false;
     }
@@ -142,10 +135,10 @@ bool CanPushSortToOlapRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusiveP
         return false;
     }
 
-    const auto& sortElements = sort->GetSortElements();
-    std::for_each(sortElements.begin(), sortElements.end(), [&sortDirection](const TSortElement& sortElement) {
-        sortDirection = sortElement.Ascending ? static_cast<ui32>(ESortDir::Asc) : static_cast<ui32>(ESortDir::Desc);
-    });
+    const auto& sortElements = sort->GetSortElements().Items();
+    for (const auto& [column, order] : sortElements) {
+        sortDirection |= order.Ascending ? static_cast<ui32>(ESortDir::Asc) : static_cast<ui32>(ESortDir::Desc);
+    }
 
     // All keys should have the same sort direction.
     if (sortDirection != ESortDir::Asc && sortDirection != ESortDir::Desc) {
@@ -164,11 +157,13 @@ bool CanPushSortToOlapRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusiveP
         return false;
     }
 
-    // Only keys are allowed.
+    // Try to match pk prefix.
     const auto& keyColumns = metadataPtr->KeyColumnNames;
-    THashSet<TString> keys(keyColumns.begin(), keyColumns.end());
-    for (const auto& sortElement : sortElements) {
-        if (!keys.contains(sortElement.SortColumn.GetColumnName())) {
+    if (keyColumns.size() < sortElements.size()) {
+        return false;
+    }
+    for (ui32 i = 0, e = sortElements.size(); i < e; ++i) {
+        if (keyColumns[i] != registry.Get(sortElements[i].first).GetColumnName()) {
             return false;
         }
     }
@@ -176,12 +171,62 @@ bool CanPushSortToOlapRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusiveP
     return IsValidLimit(*sort->LimitCond);
 }
 
+bool CanPushSortToRowRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, const TInfoUnitRegistry& registry, ui32& sortDirection) {
+    if (input->GetKind() != EOperator::Source) {
+        return false;
+    }
+    const auto& read = CastOperator<TOpRead>(input);
+    if (read->GetTableStorageType() != NYql::EStorageType::RowStorage || read->Limit || read->SortDir != ESortDir::None ||
+        !sort->LimitCond.has_value()) {
+        return false;
+    }
+
+    const auto& sortElements = sort->GetSortElements().Items();
+    if (sortElements.empty()) {
+        return false;
+    }
+
+    const bool ascending = sortElements.front().second.Ascending;
+    for (const auto& [column, order] : sortElements) {
+        if (order.Ascending != ascending || order.NullsFirst != ascending) {
+            return false;
+        }
+    }
+
+    const auto tablePath = TExprBase(read->GetTable()).Cast<TKqpTable>().Path().StringValue();
+    auto& kqpCtx = ctx.KqpCtx;
+    const auto table = kqpCtx.Tables->EnsureTableExists(kqpCtx.Cluster, tablePath, read->Pos, ctx.ExprCtx);
+    if (!table || !table->Metadata) {
+        return false;
+    }
+
+    size_t pointPrefixLen = 0;
+    if (read->RangeInfo && read->RangeInfo->ExpectedMaxRanges && *read->RangeInfo->ExpectedMaxRanges == 1) {
+        pointPrefixLen = std::min(read->RangeInfo->PointPrefixLen, table->Metadata->KeyColumnNames.size());
+    }
+
+    TVector<TString> sortColumns;
+    sortColumns.reserve(sortElements.size());
+    for (const auto& [column, order] : sortElements) {
+        sortColumns.push_back(registry.Get(column).GetColumnName());
+    }
+
+    if (!SortMatchesKeyOrder(sortColumns, table->Metadata->KeyColumnNames, pointPrefixLen)) {
+        return false;
+    }
+
+    sortDirection = ascending ? static_cast<ui32>(ESortDir::Asc) : static_cast<ui32>(ESortDir::Desc);
+    return IsValidLimit(*sort->LimitCond);
+}
+
 } // namespace
 
-TIntrusivePtr<IOperator> TPropagateTopSortThroughStageRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    Y_UNUSED(ctx);
+bool TPropagateTopSortThroughStageRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Sort;
+}
 
-    if (!IsSuitableToPropagateTopSortThroughStage(input)) {
+TIntrusivePtr<IOperator> TPropagateTopSortThroughStageRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+    if (!IsSuitableToPropagateTopSortThroughStage(input, ctx.ExprCtx)) {
         return input;
     }
 
@@ -198,19 +243,25 @@ TIntrusivePtr<IOperator> TPropagateTopSortThroughStageRule::SimpleMatchAndApply(
         return MaybePushToStageAndUpdateConnection(sort, sortInput, ctx.ExprCtx, props);
     } else if (CanPropagateSortOverMap(sort, sortInput)) {
         const auto map = CastOperator<TOpMap>(sortInput);
-        TVector<TSortElement> sortElements = sort->GetSortElements();
+        auto sortElements = sort->GetSortElements();
         const auto mapElements = map->GetMapElements();
-        // If map renames a sort element, update it.
+        // Sort on the source of a direct copy while retaining the Map's output bindings.
         MaybeUpdateSortElements(sortElements, mapElements);
-        const auto propagatedSort = MakeIntrusive<TOpSort>(map->GetInput(), sort->Pos, sort->Props, sortElements, sort->LimitCond, EOpPhase::Intermediate);
-        return MakeIntrusive<TOpMap>(propagatedSort, map->Pos, map->Props, mapElements, map->Project, map->Ordered);
-    } else if (CanPushSortToOlapRead(sort, sortInput, ctx, sortDirecion)) {
+        auto propagatedSort = MakeIntrusive<TOpSort>(map->GetInput(), sort->Pos, sort->Props, sortElements, sort->LimitCond, EOpPhase::Intermediate);
+        return MakeIntrusive<TOpMap>(propagatedSort, map->Pos, map->Props, mapElements);
+    } else if (CanPushSortToOlapRead(sort, sortInput, ctx, props.InfoUnitRegistry, sortDirecion)) {
         const auto read = CastOperator<TOpRead>(sortInput);
         const auto limitCond = sort->LimitCond->Node->ChildPtr(1);
-        const auto newRead =
-            MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->OutputIUs, read->StorageType, read->TableCallable, read->OlapFilterLambda, limitCond,
-                                   read->GetRanges(), read->OriginalPredicate, static_cast<ESortDir>(sortDirecion), read->Props, read->Pos);
+        auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), read->GetTableStorageType(), read->TableCallable, read->OlapFilterLambda, limitCond,
+                                                    read->RangeInfo, read->OriginalPredicate, static_cast<ESortDir>(sortDirecion), read->Props, read->Pos);
         // We keep sort in stage even after push to read, because cs read can return values not sorted.
+        return MakeIntrusive<TOpSort>(newRead, sort->Pos, sort->Props, sort->GetSortElements(), sort->LimitCond, EOpPhase::Intermediate);
+    } else if (CanPushSortToRowRead(sort, sortInput, ctx, props.InfoUnitRegistry, sortDirecion)) {
+        const auto read = CastOperator<TOpRead>(sortInput);
+        const auto limitCond = sort->LimitCond->Node->ChildPtr(1);
+        auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), read->GetTableStorageType(), read->TableCallable, read->OlapFilterLambda, limitCond,
+                                      read->RangeInfo, read->OriginalPredicate, static_cast<ESortDir>(sortDirecion), read->Props, read->Pos);
+        // TODO: We need to handle merge connection for row storage. So we keep sort until add them.
         return MakeIntrusive<TOpSort>(newRead, sort->Pos, sort->Props, sort->GetSortElements(), sort->LimitCond, EOpPhase::Intermediate);
     }
 

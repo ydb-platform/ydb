@@ -15,6 +15,8 @@
 #include <ydb/library/login/sasl/scram.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SASL_AUTH
+
 
 namespace NKikimr::NSasl {
 
@@ -40,16 +42,14 @@ public:
         auto saslPrepRC = NLogin::NSasl::SaslPrep(StaticCreds.Username, prepUsername);
         if (saslPrepRC != NLogin::NSasl::ESaslPrepReturnCodes::Success) {
             response->Error = "Unsupported characters in username";
-            LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
-                "Hasher# " << ctx.SelfID.ToString() <<
-                ", username check failed" <<
-                ", reason: " << response->Error
+            YDB_LOG_ERROR_CTX(ctx, "Username check failed",
+                {"actorId", ctx.SelfID},
+                {"reason", response->Error}
             );
 
-            LOG_DEBUG_S(ctx, NKikimrServices::SASL_AUTH,
-                "Hasher# " << ctx.SelfID.ToString() <<
-                ", Send TEvComputedHashes: " <<
-                "{ error: " << response->Error << " }"
+            YDB_LOG_DEBUG_CTX(ctx, "Send TEvComputedHashes",
+                {"actorId", ctx.SelfID},
+                {"error", response->Error}
             );
 
             Send(Sender, response.release());
@@ -62,16 +62,14 @@ public:
         if (!passwordCheckResult.Success) {
             response->Error = passwordCheckResult.Error;
 
-            LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
-                "Hasher# " << ctx.SelfID.ToString() <<
-                ", password check failed" <<
-                ", reason: " << response->Error
+            YDB_LOG_ERROR_CTX(ctx, "Password check failed",
+                {"actorId", ctx.SelfID},
+                {"reason", response->Error}
             );
 
-            LOG_DEBUG_S(ctx, NKikimrServices::SASL_AUTH,
-                "Hasher# " << ctx.SelfID.ToString() <<
-                ", Send TEvComputedHashes: " <<
-                "{ error: " << response->Error << " }"
+            YDB_LOG_DEBUG_CTX(ctx, "Send TEvComputedHashes",
+                {"actorId", ctx.SelfID},
+                {"error", response->Error}
             );
 
             Send(Sender, response.release());
@@ -84,8 +82,7 @@ public:
                 const auto& hashTypeDescription = HashesRegistry.HashTypesMap.at(hashType);
                 switch (hashTypeDescription.Class) {
                 case EHashClass::Argon: {
-                    response->ArgonHash = GenerateArgonHash(hashTypeDescription);
-                    hashes[hashTypeDescription.Name] = *ArgonHashToNewFormat(response->ArgonHash);
+                    hashes[hashTypeDescription.Name] = GenerateArgonHash(hashTypeDescription);
                     break;
                 }
                 case EHashClass::Scram: {
@@ -115,13 +112,11 @@ public:
         }
 
         if (!response->Error.empty()) {
-            LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
-                "Hasher# " << ctx.SelfID.ToString() <<
-                ", " << response->Error
+            YDB_LOG_ERROR_CTX(ctx, response->Error,
+                {"actorId", ctx.SelfID}
             );
 
             hashes = NJson::TJsonValue();
-            response->ArgonHash.clear();
         }
 
         if (hashes.IsDefined()) {
@@ -129,13 +124,11 @@ public:
             response->Hashes = Base64Encode(NJson::WriteJson(hashes, false));
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::SASL_AUTH,
-            "Hasher# " << ctx.SelfID.ToString() <<
-            ", Send TEvComputedHashes: " <<
-            "{ error: " << response->Error <<
-            ", username: " << response->PreparedUsername <<
-            ", hashes: " << Base64StrictDecode(response->Hashes) <<
-            ", argon hash: " << response->ArgonHash << " }"
+        YDB_LOG_DEBUG_CTX(ctx, "Send TEvComputedHashes",
+            {"actorId", ctx.SelfID},
+            {"error", response->Error},
+            {"username", response->PreparedUsername},
+            {"hashes", Base64StrictDecode(response->Hashes)}
         );
 
         Send(Sender, response.release());
@@ -143,21 +136,22 @@ public:
     }
 
     std::string GenerateArgonHash(const THashTypeDescription& hashParams) const {
-        char salt[hashParams.SaltSize];
-        char hash[hashParams.HashSize];
-        RAND_bytes(reinterpret_cast<unsigned char*>(salt), hashParams.SaltSize);
+        std::string salt;
+        salt.resize(hashParams.SaltSize);
+        std::string hash;
+        hash.resize(hashParams.HashSize);
+        RAND_bytes(reinterpret_cast<unsigned char*>(salt.data()), salt.size());
         ArgonHasher->Hash(
             reinterpret_cast<const ui8*>(StaticCreds.Password.data()),
             StaticCreds.Password.size(),
-            reinterpret_cast<ui8*>(salt),
-            hashParams.SaltSize,
-            reinterpret_cast<ui8*>(hash),
-            hashParams.HashSize);
-        NJson::TJsonValue json;
-        json["type"] = hashParams.Name;
-        json["salt"] = Base64Encode(std::string_view(salt, hashParams.SaltSize));
-        json["hash"] = Base64Encode(std::string_view(hash, hashParams.HashSize));
-        return NJson::WriteJson(json, false);
+            reinterpret_cast<ui8*>(salt.data()),
+            salt.size(),
+            reinterpret_cast<ui8*>(hash.data()),
+            hash.size());
+
+        std::stringstream secret;
+        secret << Base64Encode(salt) << '$' << Base64Encode(hash);
+        return secret.str();
     }
 
     std::string GenerateScramHash(const THashTypeDescription& hashParams, std::string& error) const {

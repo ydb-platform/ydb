@@ -1,9 +1,7 @@
 RECURSE(
-    core
     dq
     providers
     public
-    tests
     tools
     udfs
     utils

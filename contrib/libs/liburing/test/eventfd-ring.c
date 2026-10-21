@@ -26,6 +26,8 @@ static int test(int flags)
 	p.flags = flags;
 	ret = io_uring_queue_init_params(8, &ring1, &p);
 	if (ret) {
+		if (ret == -EINVAL)
+			return T_EXIT_SKIP;
 		fprintf(stderr, "ring setup failed: %d\n", ret);
 		return T_EXIT_FAIL;
 	}
@@ -113,9 +115,7 @@ int main(int argc, char *argv[])
 	}
 
 	ret = test(IORING_SETUP_DEFER_TASKRUN|IORING_SETUP_SINGLE_ISSUER);
-	if (ret == T_EXIT_SKIP) {
-		return T_EXIT_SKIP;
-	} else if (ret != T_EXIT_PASS) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "test defer failed\n");
 		return T_EXIT_FAIL;
 	}

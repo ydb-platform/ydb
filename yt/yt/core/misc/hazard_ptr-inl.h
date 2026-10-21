@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "hazard_ptr.h"
 #endif
-#undef HAZARD_PTR_INL_H_
 
 #include <library/cpp/yt/misc/tls.h>
 

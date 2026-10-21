@@ -13,6 +13,7 @@ arabic          UTF_8                   arabic,ar,ara
 armenian        UTF_8                   armenian,hy,hye,arm
 basque          UTF_8,ISO_8859_1        basque,eu,eus,baq
 catalan         UTF_8,ISO_8859_1        catalan,ca,cat
+czech           UTF_8,ISO_8859_2        czech,cs,ces,cze
 danish          UTF_8,ISO_8859_1        danish,da,dan
 dutch           UTF_8,ISO_8859_1        dutch,nl,dut,nld,kraaij_pohlmann
 english         UTF_8,ISO_8859_1        english,en,eng
@@ -30,6 +31,8 @@ italian         UTF_8,ISO_8859_1        italian,it,ita
 lithuanian      UTF_8                   lithuanian,lt,lit
 nepali          UTF_8                   nepali,ne,nep
 norwegian       UTF_8,ISO_8859_1        norwegian,no,nor
+polish          UTF_8,ISO_8859_2        polish,pl,pol
+persian         UTF_8                   persian,fa,fas,pers
 portuguese      UTF_8,ISO_8859_1        portuguese,pt,por
 romanian        UTF_8                   romanian,ro,rum,ron
 russian         UTF_8,KOI8_R            russian,ru,rus
@@ -39,6 +42,7 @@ swedish         UTF_8,ISO_8859_1        swedish,sv,swe
 tamil           UTF_8                   tamil,ta,tam
 turkish         UTF_8                   turkish,tr,tur
 yiddish         UTF_8                   yiddish,yi,yid
+sesotho         UTF_8                   sesotho,st,sot
 
 # Also include the traditional porter algorithm for english.
 # The porter algorithm is included in the libstemmer distribution to assist

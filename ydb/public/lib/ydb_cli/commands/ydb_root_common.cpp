@@ -1,4 +1,6 @@
 #include "ydb_root_common.h"
+#include <ydb/public/lib/ydb_cli/common/oidc.h>
+#include <ydb/public/lib/ydb_cli/common/scoped_driver.h>
 #include "ydb_config.h"
 #include "ydb_profile.h"
 #include "ydb_admin.h"
@@ -215,9 +217,8 @@ int TClientCommandRootCommon::Process(TConfig& config) {
             TClientCommand::Prepare(config);
             ExtractParams(config);
             config.BuildInfoCommandTag = "completion-scheme";
-            TDriver driver(config.CreateDriverConfigWithBuildInfo());
+            TScopedDriver driver(TDriver(config.CreateDriverConfigWithBuildInfo()));
             RunSchemeCompletion(driver, config.Database, *SchemeCompletionContext_);
-            driver.Stop(true);
         } catch (...) {
         }
         return EXIT_SUCCESS;
@@ -314,6 +315,10 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
         config.EnableAiInteractive = *Settings.EnableAiInteractive;
     }
 
+    if (Settings.EnableInteractiveTransactions) {
+        config.EnableInteractiveTransactions = *Settings.EnableInteractiveTransactions;
+    }
+
     config.BuildInfoProvider = Settings.BuildInfoProvider;
 
     SetCredentialsGetter(config);
@@ -338,6 +343,9 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
             }
         }
 
+        if (config.Oidc.IsConfigured()) {
+            return CreateCliOidcCredentialsProviderFactory(config.Oidc);
+        }
         return CreateInsecureCredentialsProviderFactory();
     };
 }
@@ -580,7 +588,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 
         if (config.HelpCommandVerbosityLevel >= 2) {
             TStringBuilder additionalHelp;
-            additionalHelp << "Detailed information about OAuth 2.0 token exchange protocol: https://www.rfc-editor.org/rfc/rfc8693" << Endl << Endl;
+            additionalHelp << "Detailed information about OAuth 2.0 token exchange protocol: " << HttpsLink("www.rfc-editor.org/rfc/rfc8693", colors) << Endl << Endl;
 
             TStringBuilder supportedJwtAlgorithms;
             for (const std::string& alg : GetSupportedOauth2TokenExchangeJwtAlgorithms()) {
@@ -614,7 +622,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
                 << "Fields of " << colors.BoldColor() << "creds_json" << colors.OldColor() << " (FIXED):" << Endl
                 << FIELD("type") "                " TYPE("string") "Token source type. Set " << colors.BoldColor() << "FIXED" << colors.OldColor() << Endl
                 << FIELD("token") "               " TYPE("string") "Token value" << Endl
-                << FIELD("token-type") "          " TYPE("string") "Token type value. It will become subject_token_type/actor_token_type parameter in token exchange request (https://www.rfc-editor.org/rfc/rfc8693)" << Endl
+                << FIELD("token-type") "          " TYPE("string") "Token type value. It will become subject_token_type/actor_token_type parameter in token exchange request (" << HttpsLink("www.rfc-editor.org/rfc/rfc8693", colors) << ")" << Endl
                 << Endl;
 
             additionalHelp
@@ -646,6 +654,8 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     opts.AddLongOption("profile-file", "Path to config file with profile data in yaml format")
         .RequiredArgument("PATH").StoreResult(&ProfileFile);
 
+    auto& oidcAuth = AddOidcOptions(opts, config.Oidc, false);
+
     opts.SetAuthMethodsEnvPriority(
         iamTokenAuth,
         ycTokenAuth,
@@ -653,7 +663,8 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         saKeyAuth,
         ydbTokenAuth,
         ydbUserAuth,
-        oauth2TokenExchangeAuth
+        oauth2TokenExchangeAuth,
+        &oidcAuth
     );
 
     const TString programName(config.ArgC > 0 ? config.ArgV[0] : GetExecPath().data());
@@ -717,6 +728,13 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     }
     if (std::vector<TString> errors = ParseResult->ParseFromProfilesAndEnv(Profile, (!Profile && !config.OnlyExplicitProfile) ? ProfileManager->GetActiveProfile() : nullptr); !errors.empty()) {
         MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
+    }
+    if (MisuseErrors.empty()) {
+        try {
+            ResolveOidcOptions(config.Oidc, *ParseResult);
+        } catch (const std::exception& error) {
+            MisuseErrors.emplace_back(error.what());
+        }
     }
     if (IsVerbose()) {
         std::vector<TString> errors = ParseResult->LogConnectionParams([&](const TString& paramName, const TString& value, const TString& sourceText) {

@@ -244,6 +244,8 @@ public:
 
     TClientCommandOption& SetSupportsProfile(bool supports = true);
 
+    TClientCommandOption& DisableImplicitSourcesIf(std::function<bool()> condition);
+
     // Log connection params at high verbosity level
     TClientCommandOption& LogToConnectionParams(const TString& paramName);
 
@@ -305,6 +307,7 @@ protected:
     TString ProfileParamName;
     bool ProfileParamIsFileName = false;
     bool CanParseFromProfile = false;
+    std::function<bool()> ImplicitSourcesDisabled;
     TString ConnectionParamName;
     TString Documentation;
     bool HandlerIsSet = false;

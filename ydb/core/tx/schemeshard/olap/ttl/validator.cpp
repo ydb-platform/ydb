@@ -1,5 +1,6 @@
 #include "validator.h"
 
+#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 #include <ydb/core/tx/schemeshard/common/validation.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/tiering/tier/object.h>
@@ -52,6 +53,14 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
     const auto& columnType = GetType(*column);
     switch (columnType.GetTypeId()) {
         case NScheme::NTypeIds::DyNumber:
+        case NScheme::NTypeIds::Date32:
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Timestamp64:
+            if (!AppDataVerified().FeatureFlags.GetEnableColumnShardExtendedTtlTypes()) {
+                errors.AddError("TTL on DyNumber, Date32, Datetime64 and Timestamp64 in column tables is disabled");
+                return false;
+            }
+            break;
         case NScheme::NTypeIds::Pg:
             errors.AddError("Unsupported column type for TTL in column tables");
             return false;
@@ -87,10 +96,24 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
                     correct = true;
                     break;
                 }
+                if (proto.HasMinMaxIndex() && proto.GetMinMaxIndex().GetColumnId() == column->GetId()) {
+                    const TString& storageId = proto.GetStorageId();
+                    if (storageId != NKikimr::NOlap::NBlobOperations::TGlobal::LocalMetadataStorageId || proto.GetInheritPortionStorage()) {
+                        errors.AddError(Sprintf(
+                            "tried to use min_max index '%s' on column '%s' for TTL, failed because min_max index for tiering should be stored in LocalDB, "
+                            "i.e. have storage_id='%s' and inherit_portion_storage=false, but it has storage_id='%s' and inherit_portion_storage=%s",
+                            proto.GetName().c_str(), colName.c_str(),
+                            NKikimr::NOlap::NBlobOperations::TGlobal::LocalMetadataStorageId.c_str(),
+                            storageId.c_str(), proto.GetInheritPortionStorage() ? "true" : "false"));
+                        return false;
+                    }
+                    correct = true;
+                    break;
+                }
             }
         }
         if (!correct) {
-            errors.AddError("Haven't MAX-index for TTL column and TTL column is not first column in primary key");
+            errors.AddError(Sprintf("TTL column must either be the first PK column, or have a MIN_MAX index; none of these conditions are satisfied for '%s', so it can't be used as TTL column", colName.c_str()));
             return false;
         }
     }
@@ -99,6 +122,19 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         if (!tier.HasEvictToExternalStorage()) {
             continue;
         }
+
+        if (tier.GetEvictToExternalStorage().HasObjectKeyPrefix()) {
+            if (!AppDataVerified().FeatureFlags.GetEnableTieringObjectKeyTree()) {
+                errors.AddError(NKikimrScheme::StatusPreconditionFailed, "Tree object keys are disabled for OLAP tiering");
+                return false;
+            }
+
+            if (tier.GetEvictToExternalStorage().GetObjectKeyPrefix().size() > 800) {
+                errors.AddError("Tiering object key prefix must not exceed 800 bytes");
+                return false;
+            }
+        }
+
         const TString& tierPathString = tier.GetEvictToExternalStorage().GetStorage();
         TPath tierPath = TPath::Resolve(tierPathString, context.SS);
         if (!tierPath.IsResolved() || tierPath.IsDeleted() || tierPath.IsUnderDeleting()) {

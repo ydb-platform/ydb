@@ -133,3 +133,26 @@ T ConvertToProtobufEnumValue(
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYson
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NYT {
+
+template <CArcadiaEnum TProtobufEnum>
+    requires google::protobuf::is_proto_enum<TProtobufEnum>::value
+void FormatValue(TStringBuilderBase* builder, TProtobufEnum enumValue, TStringBuf format)
+{
+    static const auto* EnumDescriptor = google::protobuf::GetEnumDescriptor<TProtobufEnum>();
+    auto stringValue = NYson::FindProtobufEnumLiteralByValue<TProtobufEnum>(
+        NYson::ReflectProtobufEnumType(EnumDescriptor),
+        enumValue);
+    if (stringValue) {
+        FormatValue(builder, stringValue, format);
+    } else {
+        FormatValue(builder, static_cast<int>(enumValue), format);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT

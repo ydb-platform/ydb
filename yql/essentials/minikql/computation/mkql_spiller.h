@@ -11,8 +11,7 @@ public:
     using TMemoryReportCallback = std::function<void(ui64)>;
     using TKey = ui64;
 
-    virtual ~ISpiller() {
-    }
+    virtual ~ISpiller() = default;
     virtual NThreading::TFuture<TKey> Put(NYql::TChunkedBuffer&& blob) = 0;
 
     ///\return

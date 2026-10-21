@@ -37,8 +37,8 @@ protected:
 };
 
 struct TQueryStringParse: public TQueryStringConv {
-    explicit TQueryStringParse(TSourcePosition&& pos)
-        : Pos_(std::move(pos))
+    explicit TQueryStringParse(const TSourcePosition& pos)
+        : Pos_(pos)
     {
     }
 
@@ -81,8 +81,8 @@ struct TQueryStringToList: public TQueryStringParse {
 };
 
 struct TQueryStringToDict: public TQueryStringParse {
-    explicit TQueryStringToDict(TType* dictType, TSourcePosition&& pos)
-        : TQueryStringParse(std::move(pos))
+    explicit TQueryStringToDict(TType* dictType, const TSourcePosition& pos)
+        : TQueryStringParse(pos)
         , DictType_(dictType)
     {
     }
@@ -117,7 +117,7 @@ public:
     using TTypeAwareMarker = bool;
 
     explicit TBuildQueryString(TSourcePosition&& pos, EFirstArgTypeId firstArgTypeId)
-        : Pos_(std::move(pos))
+        : Pos_(pos)
         , FirstArgTypeId_(firstArgTypeId)
     {
     }

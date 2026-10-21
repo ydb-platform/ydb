@@ -1,13 +1,16 @@
 import logging
 from collections import namedtuple
-from typing import List, Tuple, Sequence, Collection, Any
+from collections.abc import Collection, Sequence
+from typing import Any
 from urllib.parse import unquote
 
-from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
+from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef, _TypeArgs
+from clickhouse_connect.datatypes.binary_value import _decode_binary_value
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.datatypes.string import String
+from clickhouse_connect.driver.binding import _decode_ch_string_literal, _format_identifier, format_str
 from clickhouse_connect.driver.bytesource import ByteArraySource
-from clickhouse_connect.driver.common import unescape_identifier, first_value, write_uint64
+from clickhouse_connect.driver.common import first_value, unescape_identifier, write_uint64
 from clickhouse_connect.driver.ctypes import data_conv
 from clickhouse_connect.driver.errors import handle_error
 from clickhouse_connect.driver.exceptions import DataError, InternalError
@@ -19,19 +22,24 @@ from clickhouse_connect.json_impl import any_to_json
 SHARED_DATA_TYPE: ClickHouseType
 STRING_DATA_TYPE: ClickHouseType
 SHARED_VARIANT_TYPE: ClickHouseType
-_JSON_NULL = b'null'
-_JSON_NULL_STR = 'null'
+_JSON_NULL = b"null"
+_JSON_NULL_STR = "null"
 
 logger = logging.getLogger(__name__)
 
-json_serialization_format = 0x1
+# Serialization version written in JSON insert prefixes.
+_JSON_SERIALIZATION_VERSION = 0x1
 
-VariantState = namedtuple('VariantState', 'discriminator_mode element_states')
+# Deprecated module attribute retained for compatibility. Assigning it does not
+# change insert behavior.
+json_serialization_format = _JSON_SERIALIZATION_VERSION
+
+VariantState = namedtuple("VariantState", "discriminator_mode element_states")
 
 
-def _json_path_segments(path: str) -> List[str]:
-    segments = path.split('.')
-    if '%' in path:
+def _json_path_segments(path: str) -> list[str]:
+    segments = path.split(".")
+    if "%" in path:
         return [unquote(segment) for segment in segments]
     return segments
 
@@ -54,7 +62,7 @@ class SharedDataString(String):
         return source.read_str_col(num_rows, None)
 
 
-TypedVariant = namedtuple('TypedVariant', 'value type_name')
+TypedVariant = namedtuple("TypedVariant", "value type_name")
 
 
 def typed_variant(value: Any, type_name: str) -> TypedVariant:
@@ -78,7 +86,7 @@ def typed_variant(value: Any, type_name: str) -> TypedVariant:
         client.insert('my_table', data, column_names=['variant_col'])
     """
     if value is None:
-        raise DataError('Use None directly instead of typed_variant for null Variant values')
+        raise DataError("Use None directly instead of typed_variant for null Variant values")
     try:
         return TypedVariant(value, get_from_name(type_name).name)
     except InternalError:
@@ -86,12 +94,16 @@ def typed_variant(value: Any, type_name: str) -> TypedVariant:
 
 
 class Variant(ClickHouseType):
-    __slots__ = ('element_types', '_python_map', '_name_index')
-    python_type = object
+    __slots__ = ("element_types", "_python_map", "_name_index")
+    python_type: type | None = object
+    valid_formats: str | tuple[str, ...] = "typed", "native"
+    _type_args = _TypeArgs(1, None, variadic_nested=0)
 
     def __init__(self, type_def: TypeDef):
-        super().__init__(type_def)
-        self.element_types: List[ClickHouseType] = [get_from_name(name) for name in type_def.values]
+        elements_by_name = {ch_type.name: ch_type for ch_type in (get_from_name(name) for name in type_def.values)}
+        self.element_types: list[ClickHouseType] = sorted(elements_by_name.values(), key=lambda ch_type: ch_type.name)
+        canonical_type_def = TypeDef(type_def.wrappers, type_def.keys, tuple(ch_type.name for ch_type in self.element_types))
+        super().__init__(canonical_type_def)
         self._name_suffix = f"({', '.join(ch_type.name for ch_type in self.element_types)})"
         self._build_dispatch()
 
@@ -109,7 +121,7 @@ class Variant(ClickHouseType):
         self._python_map = {pt: idx for pt, idx in seen.items() if pt not in collisions}
         self._name_index = {etype.name: i for i, etype in enumerate(self.element_types)}
 
-    def _resolve_disc(self, v: Any) -> Tuple[int, Any]:
+    def _resolve_disc(self, v: Any) -> tuple[int, Any]:
         if isinstance(v, TypedVariant):
             idx = self._name_index.get(v.type_name)
             if idx is None:
@@ -126,9 +138,9 @@ class Variant(ClickHouseType):
         element_states = [e_type.read_column_prefix(source, ctx) for e_type in self.element_types]
         return VariantState(discriminator_mode, element_states)
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext,
-                            read_state: VariantState) -> Sequence:
-        return read_variant_column(source, num_rows, ctx, self.element_types, read_state.element_states)
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, read_state: VariantState) -> Sequence:
+        typed = self.read_format(ctx) == "typed"
+        return read_variant_column(source, num_rows, ctx, self.element_types, read_state.element_states, typed=typed)
 
     def write_column_prefix(self, dest: bytearray):
         write_uint64(0, dest)  # discriminator_mode = 0
@@ -136,7 +148,7 @@ class Variant(ClickHouseType):
             e_type.write_column_prefix(dest)
 
     def write_column_data(self, column: Sequence, dest: bytearray, ctx: InsertContext):
-        sub_columns: List[list] = [[] for _ in range(len(self.element_types))]
+        sub_columns: list[list] = [[] for _ in range(len(self.element_types))]
         discriminators = bytearray()
         for v in column:
             if v is None:
@@ -156,7 +168,7 @@ class Variant(ClickHouseType):
         v_count = len(self.element_types)
         if v_count == 0:
             return 1
-        sub_samples = [[] for _ in range(v_count)]
+        sub_samples: list[list[Any]] = [[] for _ in range(v_count)]
         for v in sample:
             if v is None:
                 continue
@@ -175,19 +187,27 @@ class Variant(ClickHouseType):
         return (total_data_size // len(sample)) + 1
 
 
-def read_variant_column(source: ByteSource,
-                        num_rows: int,
-                        ctx: QueryContext,
-                        variant_types: List[ClickHouseType],
-                        element_states: List[Any]) -> Sequence:
+def read_variant_column(
+    source: ByteSource,
+    num_rows: int,
+    ctx: QueryContext,
+    variant_types: list[ClickHouseType],
+    element_states: list[Any],
+    typed: bool = False,
+) -> Sequence:
     v_count = len(variant_types)
-    discriminators = source.read_array('B', num_rows)
+    discriminators = source.read_array("B", num_rows)
     # We have to count up how many of each discriminator there are in the block to read the sub columns correctly
     disc_rows = [0] * v_count
     for disc in discriminators:
-        if disc != 255:
+        if disc < v_count:
             disc_rows[disc] += 1
-    sub_columns: List[Sequence] = [[]] * v_count
+        elif disc != 255:
+            raise DataError(
+                f"Column '{ctx.column_name or '<unknown>'}' has Variant discriminator {disc}, but the type definition has "
+                f"{v_count} alternatives. The server sent an unknown type member or the Native stream is corrupt."
+            )
+    sub_columns: list[Sequence] = [[]] * v_count
     # Read all the sub-columns
     for ix in range(v_count):
         if disc_rows[ix] > 0:
@@ -195,18 +215,27 @@ def read_variant_column(source: ByteSource,
     # Now we have to walk through each of the discriminators again to assign the correct value from
     # the sub-column to the final result column
     sub_indexes = [0] * v_count
-    col = []
+    col: list[Any] = []
     app_col = col.append
-    for disc in discriminators:
-        if disc == 255:
-            app_col(None)
-        else:
-            app_col(sub_columns[disc][sub_indexes[disc]])
-            sub_indexes[disc] += 1
+    if typed:
+        type_names = [t.name for t in variant_types]
+        for disc in discriminators:
+            if disc == 255:
+                app_col(None)
+            else:
+                app_col(TypedVariant(sub_columns[disc][sub_indexes[disc]], type_names[disc]))
+                sub_indexes[disc] += 1
+    else:
+        for disc in discriminators:
+            if disc == 255:
+                app_col(None)
+            else:
+                app_col(sub_columns[disc][sub_indexes[disc]])
+                sub_indexes[disc] += 1
     return col
 
 
-DynamicState = namedtuple('DynamicState', 'struct_version variant_types variant_states')
+DynamicState = namedtuple("DynamicState", "struct_version variant_types variant_states")
 
 
 def read_dynamic_prefix(_, source: ByteSource, ctx: QueryContext) -> DynamicState:
@@ -214,31 +243,41 @@ def read_dynamic_prefix(_, source: ByteSource, ctx: QueryContext) -> DynamicStat
     if struct_version == 1:
         source.read_leb128()  # max dynamic types, we ignore this value
     elif struct_version != 2:
-        raise DataError('Unrecognized dynamic structure version')
+        raise DataError("Unrecognized dynamic structure version")
     num_variants = source.read_leb128()
     variant_types = [get_from_name(source.read_leb128_str()) for _ in range(num_variants)]
-    variant_types.append(SHARED_VARIANT_TYPE)
+    variant_types.append(SHARED_VARIANT_TYPE)  # noqa: F821 (undefined-name)
+    # replicate the sort after appending SharedVariant
+    variant_types.sort(key=lambda t: t.name)
     if source.read_uint64() != 0:  # discriminator format, currently only 0 is recognized
-        raise DataError('Unexpected discriminator format in Variant column prefix')
+        raise DataError("Unexpected discriminator format in Variant column prefix")
     variant_states = [e_type.read_column_prefix(source, ctx) for e_type in variant_types]
     return DynamicState(struct_version, variant_types, variant_states)
 
 
 class Dynamic(ClickHouseType):
     python_type = object
-    read_column_prefix = read_dynamic_prefix
+    _type_args = _TypeArgs(0, 1, integer_bounds=(("max_types", 0, 254),))
+
+    def read_column_prefix(self, source: ByteSource, ctx: QueryContext) -> DynamicState:
+        return read_dynamic_prefix(self, source, ctx)
 
     @property
     def insert_name(self):
-        return 'String'
+        return "String"
 
     def __init__(self, type_def: TypeDef):
         super().__init__(type_def)
-        if type_def.keys and type_def.keys[0] == 'max_types':
-            self._name_suffix = f'(max_types={type_def.values[0]})'
+        if type_def.keys and type_def.keys[0] == "max_types":
+            self._name_suffix = f"(max_types={type_def.values[0]})"
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext,
-                            read_state: DynamicState) -> Sequence:
+    def _read_column_binary(
+        self,
+        source: ByteSource,
+        num_rows: int,
+        ctx: QueryContext,
+        read_state: DynamicState,
+    ) -> Sequence:
         return read_variant_column(source, num_rows, ctx, read_state.variant_types, read_state.variant_states)
 
     def write_column_data(self, column: Sequence, dest: bytearray, ctx: InsertContext):
@@ -263,8 +302,8 @@ def write_json(ch_type: ClickHouseType, column: Sequence, dest: bytearray, ctx: 
 
     first = first_value(column, ch_type.nullable)
     write_col = column
-    encoding = ctx.encoding or ch_type.encoding
-    if not isinstance(first, str) and ch_type.write_format(ctx) != 'string':
+    encoding: str | None = ctx.encoding or ch_type.encoding
+    if not isinstance(first, str) and ch_type.write_format(ctx) != "string":
         to_json = any_to_json
         if ch_type.nullable:
             write_col = [_JSON_NULL if v is None else to_json(v) for v in column]
@@ -279,10 +318,10 @@ def write_json(ch_type: ClickHouseType, column: Sequence, dest: bytearray, ctx: 
 
 def write_str_values(ch_type: ClickHouseType, column: Sequence, dest: bytearray, ctx: InsertContext):
     encoding = ctx.encoding or ch_type.encoding
-    col = [''] * len(column)
+    col = [""] * len(column)
     for ix, v in enumerate(column):
         if v is None:
-            col[ix] = 'NULL'
+            col[ix] = "NULL"
         else:
             col[ix] = str(v)
     handle_error(data_conv.write_str_col(col, False, encoding, dest), ctx)
@@ -315,36 +354,36 @@ STANDARD_DISCRIMINATOR_TYPES = {
 # Known fixed payload sizes for BinaryTypeIndex values outside STANDARD_DISCRIMINATOR_TYPES.
 # Used to validate variant-encoded data in the printable ASCII overlap range (0x20+).
 _EXTENDED_PAYLOAD_SIZE = {
-    0x0F: 2,   # Date (UInt16)
-    0x10: 4,   # Date32 (Int32)
-    0x11: 4,   # DateTimeUTC (UInt32)
-    0x13: 8,   # DateTime64UTC (Int64)
+    0x0F: 2,  # Date (UInt16)
+    0x10: 4,  # Date32 (Int32)
+    0x11: 4,  # DateTimeUTC (UInt32)
+    0x13: 8,  # DateTime64UTC (Int64)
     0x1D: 16,  # UUID
-    0x28: 4,   # IPv4
+    0x28: 4,  # IPv4
     0x29: 16,  # IPv6
-    0x31: 2,   # BFloat16
+    0x31: 2,  # BFloat16
 }
 
 # Expected payload sizes for fixed-size discriminator types.
 # Used to validate that binary data is actually variant-encoded vs a plain string
 # whose first byte happens to collide with a discriminator value.
 _DISCRIMINATOR_PAYLOAD_SIZE = {
-    0x00: 0,   # Nothing
-    0x01: 1,   # UInt8
-    0x02: 2,   # UInt16
-    0x03: 4,   # UInt32
-    0x04: 8,   # UInt64
+    0x00: 0,  # Nothing
+    0x01: 1,  # UInt8
+    0x02: 2,  # UInt16
+    0x03: 4,  # UInt32
+    0x04: 8,  # UInt64
     0x05: 16,  # UInt128
     0x06: 32,  # UInt256
-    0x07: 1,   # Int8
-    0x08: 2,   # Int16
-    0x09: 4,   # Int32
-    0x0A: 8,   # Int64
+    0x07: 1,  # Int8
+    0x08: 2,  # Int16
+    0x09: 4,  # Int32
+    0x0A: 8,  # Int64
     0x0B: 16,  # Int128
     0x0C: 32,  # Int256
-    0x0D: 4,   # Float32
-    0x0E: 8,   # Float64
-    0x2D: 1,   # Bool
+    0x0D: 4,  # Float32
+    0x0E: 8,  # Float64
+    0x2D: 1,  # Bool
     # String (0x15) is variable-length and validated separately
 }
 
@@ -369,7 +408,12 @@ def _validate_variant_length(binary_data: bytes, discriminator: int) -> bool:
     return True  # Unknown discriminator, skip validation
 
 
-def _decode_variant(binary_data: bytes, ctx: QueryContext, validate_length: bool = True):
+def _decode_variant(
+    binary_data: bytes,
+    ctx: QueryContext,
+    validate_length: bool = True,
+    decode_compound: bool = False,
+):
     """Try to decode variant-encoded binary data.
 
     Returns the decoded value on success, or the original bytes on failure
@@ -384,7 +428,18 @@ def _decode_variant(binary_data: bytes, ctx: QueryContext, validate_length: bool
 
     type_name = STANDARD_DISCRIMINATOR_TYPES.get(discriminator)
     if type_name is None:
-        return binary_data
+        # Compound decoding is opt-in. JSON shared data always stores
+        # <encoded type><serializeBinary value>, so the recursive decoder is
+        # always correct there. A Dynamic SharedVariant may instead hold a
+        # plain string, so that path keeps returning raw bytes until it has
+        # its own reproduction and tests.
+        if not decode_compound:
+            return binary_data
+        try:
+            return _decode_binary_value(binary_data, ctx)
+        except Exception as e:  # noqa: BLE001 - never raise out of a decode
+            logger.debug("Compound variant decode failed: %s", e)
+            return binary_data
 
     if validate_length and not _validate_variant_length(binary_data, discriminator):
         return None
@@ -396,7 +451,6 @@ def _decode_variant(binary_data: bytes, ctx: QueryContext, validate_length: bool
         result = value_type.read_column_data(byte_source, 1, ctx, read_state)
         return result[0] if result else None
 
-    # pylint: disable=broad-exception-caught
     except Exception as e:
         logger.debug("Variant decode failed: %s", e)
         return binary_data
@@ -413,10 +467,9 @@ def decode_shared_data_value(binary_data: bytes, ctx: QueryContext):
             return binary_data  # already decoded
         else:
             binary_data = bytes(binary_data)
-    return _decode_variant(binary_data, ctx)
+    return _decode_variant(binary_data, ctx, decode_compound=True)
 
 
-# pylint: disable=too-many-return-statements, too-many-branches
 def decode_shared_variant_value(binary_data: bytes, ctx: QueryContext):
     """Decode a value from a Dynamic column's shared variant.
 
@@ -480,94 +533,125 @@ class SharedVariant(String):
 
 
 class JSON(ClickHouseType):
-    __slots__ = "typed_paths", "typed_types", "skips"
+    __slots__ = "typed_paths", "typed_types", "skips", "skip_paths", "skip_regexps"
     python_type = dict
-    valid_formats = 'string', 'native'
+    valid_formats = "string", "native"
     _data_size = json_sample_size
     write_column_data = write_json
     shared_data_type: ClickHouseType
     max_dynamic_paths = 0
     max_dynamic_types = 0
+    typed_paths: list[str]
+    typed_types: list[ClickHouseType]
+    skips: list[str]
+    skip_paths: list[str]
+    skip_regexps: list[str]
+    _type_args = _TypeArgs(
+        0,
+        None,
+        integer_bounds=(("max_dynamic_paths", 0, 10000), ("max_dynamic_types", 0, 254)),
+    )
 
     def __init__(self, type_def: TypeDef):
-        super().__init__(type_def)
-        self.typed_paths = []
-        self.typed_types = []
-        self.skips = []
-        typed_paths = []
-        typed_types = []
-        skips = []
-        parts = []
-        for key, value in zip(type_def.keys, type_def.values):
-            if key == 'max_dynamic_paths':
+        limits: dict[str, int] = {}
+        typed: list[tuple[str, ClickHouseType]] = []
+        skip_paths: set[str] = set()
+        skip_regexps: list[str] = []
+        for raw_key, raw_value in zip(type_def.keys, type_def.values):
+            key = str(raw_key)
+            value = str(raw_value)
+            if key == "max_dynamic_paths":
                 try:
-                    self.max_dynamic_paths = int(value)
-                    parts.append(f'{key} = {value}')
+                    limits[key] = int(value)
                     continue
                 except ValueError:
                     pass
-            if key == 'max_dynamic_types':
+            if key == "max_dynamic_types":
                 try:
-                    self.max_dynamic_types = int(value)
-                    parts.append(f'{key} = {value}')
+                    limits[key] = int(value)
                     continue
                 except ValueError:
                     pass
-            if key == 'SKIP':
-                if value.startswith('REGEXP'):
-                    value = 'REGEXP ' + value[6:]
+            if key.upper() == "SKIP":
+                literal = value[6:].lstrip() if value[:6].upper() == "REGEXP" else ""
+                if len(literal) >= 2 and literal[0] == "'" and literal[-1] == "'":
+                    skip_regexps.append(_decode_ch_string_literal(literal))
                 else:
-                    if not value.startswith("`"):
-                        value = f'`{value}`'
-                skips.append(value)
+                    skip_paths.add(unescape_identifier(value))
             else:
-                key = unescape_identifier(key)
-                typed_paths.append(key)
-                typed_types.append(get_from_name(value))
-                key = f'`{key}`'
-            parts.append(f'{key} {value}')
-        if typed_paths:
-            self.typed_paths = typed_paths
-            self.typed_types = typed_types
-        if skips:
-            self.skips = skips
-        if parts:
-            self._name_suffix = f'({", ".join(parts)})'
+                typed.append((unescape_identifier(key), get_from_name(value)))
 
-    @property
-    def insert_name(self):
-        if json_serialization_format == 0:
-            return 'String'
-        return super().insert_name
+        typed.sort(key=lambda item: item[0])
+        sorted_skip_paths = sorted(skip_paths)
+        skip_regexps.sort()
+        self.typed_paths = [path for path, _ in typed]
+        self.typed_types = [ch_type for _, ch_type in typed]
+        self.skip_paths = sorted_skip_paths
+        self.skip_regexps = skip_regexps
+        self.skips = [_format_identifier(path) for path in sorted_skip_paths]
+        self.skips.extend(f"REGEXP {format_str(regexp)}" for regexp in skip_regexps)
+        self.max_dynamic_paths = limits.get("max_dynamic_paths", 0)
+        self.max_dynamic_types = limits.get("max_dynamic_types", 0)
+
+        keys: list[str] = []
+        values: list[str | int] = []
+        parts: list[str] = []
+        for key, default in (("max_dynamic_types", 32), ("max_dynamic_paths", 1024)):
+            limit_value = limits.get(key)
+            if limit_value is not None and limit_value != default:
+                keys.append(key)
+                values.append(limit_value)
+                parts.append(f"{key} = {limit_value}")
+        for path, ch_type in typed:
+            quoted_path = _format_identifier(path)
+            keys.append(quoted_path)
+            values.append(ch_type.name)
+            parts.append(f"{quoted_path} {ch_type.name}")
+        for path in sorted_skip_paths:
+            quoted_path = _format_identifier(path)
+            keys.append("SKIP")
+            values.append(quoted_path)
+            parts.append(f"SKIP {quoted_path}")
+        for regexp in skip_regexps:
+            value = f"REGEXP {format_str(regexp)}"
+            keys.append("SKIP")
+            values.append(value)
+            parts.append(f"SKIP {value}")
+
+        canonical_type_def = TypeDef(type_def.wrappers, tuple(keys), tuple(values))
+        super().__init__(canonical_type_def)
+        if parts:
+            self._name_suffix = f"({', '.join(parts)})"
 
     def write_column_prefix(self, dest: bytearray):
-        if json_serialization_format > 0:
-            write_uint64(json_serialization_format, dest)
+        write_uint64(_JSON_SERIALIZATION_VERSION, dest)
 
     def read_column_prefix(self, source: ByteSource, ctx: QueryContext) -> JSONState:
         serialize_version = source.read_uint64()
         if serialize_version == 0:
             source.read_leb128()  # max dynamic types, we ignore this value
         elif serialize_version != 2:
-            raise DataError(f'Unrecognized json structure version: {serialize_version} column: `{ctx.column_name}`')
+            raise DataError(f"Unrecognized json structure version: {serialize_version} column: `{ctx.column_name}`")
         dynamic_path_cnt = source.read_leb128()
         dynamic_paths = [source.read_leb128_str() for _ in range(dynamic_path_cnt)]
         typed_states = [typed.read_column_prefix(source, ctx) for typed in self.typed_types]
         dynamic_states = [read_dynamic_prefix(self, source, ctx) for _ in range(dynamic_path_cnt)]
-        shared_state = SHARED_DATA_TYPE.read_column_prefix(source, ctx)
+        shared_state = SHARED_DATA_TYPE.read_column_prefix(source, ctx)  # noqa: F821  (undefined-name)
         return JSONState(serialize_version, dynamic_paths, typed_states, dynamic_states, shared_state)
 
-    # pylint: disable=too-many-locals
     def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, read_state: JSONState):
-        typed_columns = [ch_type.read_column_data(source, num_rows, ctx, read_state)
-                         for ch_type, read_state in zip(self.typed_types, read_state.typed_states)]
+        typed_columns = [
+            ch_type.read_column_data(source, num_rows, ctx, read_state)
+            for ch_type, read_state in zip(self.typed_types, read_state.typed_states)
+        ]
         dynamic_columns = [
             read_variant_column(source, num_rows, ctx, dynamic_state.variant_types, dynamic_state.variant_states)
-            for dynamic_state in read_state.dynamic_states]
-        shared_columns = SHARED_DATA_TYPE.read_column_data(source, num_rows, ctx, read_state.shared_state)
+            for dynamic_state in read_state.dynamic_states
+        ]
+        shared_columns = SHARED_DATA_TYPE.read_column_data(source, num_rows, ctx, read_state.shared_state)  # noqa: F821 (undefined-name)
         col = []
         for row_num in range(num_rows):
-            top = {}
+            top: dict[str, Any] = {}
             for ix, field in enumerate(self.typed_paths):
                 _nest_value(top, field, typed_columns[ix][row_num])
             for ix, field in enumerate(read_state.dynamic_paths):
@@ -582,6 +666,6 @@ class JSON(ClickHouseType):
                         if value is not None:
                             _nest_value(top, key, value)
             col.append(top)
-        if self.read_format(ctx) == 'string':
+        if self.read_format(ctx) == "string":
             return [any_to_json(v) for v in col]
         return col

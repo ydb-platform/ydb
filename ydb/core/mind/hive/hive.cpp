@@ -45,6 +45,17 @@ TString EBalancerTypeName(EBalancerType value) {
     }
 }
 
+TString EResourceToBalanceName(EResourceToBalance value) {
+    switch (value) {
+        case EResourceToBalance::ComputeResources: return "ComputeResources";
+        case EResourceToBalance::Counter: return "Counter";
+        case EResourceToBalance::CPU: return "CPU";
+        case EResourceToBalance::Memory: return "Memory";
+        case EResourceToBalance::Network: return "Network";
+    }
+    return Sprintf("%d", static_cast<int>(value));
+}
+
 EResourceToBalance ToResourceToBalance(NMetrics::EResource resource) {
     switch (resource) {
         case NMetrics::EResource::CPU: return EResourceToBalance::CPU;
@@ -101,10 +112,11 @@ TArrayRef<const TSubDomainKey> TNodeFilter::GetEffectiveAllowedDomains() const {
 }
 
 bool TNodeFilter::IsAllowedDataCenter(TDataCenterId dc) const {
-    if (AllowedDataCenters.empty()) {
+    const auto& dcs = AllowedDataCenters.GetDataCenter();
+    if (dcs.empty()) {
         return true;
     }
-    return std::find(AllowedDataCenters.begin(), AllowedDataCenters.end(), dc) != AllowedDataCenters.end();
+    return std::find(dcs.begin(), dcs.end(), dc) != dcs.end();
 }
 
 bool TNodeFilter::IsAllowedPile(TBridgePileId pile) const {
@@ -186,7 +198,8 @@ const std::unordered_map<TTabletTypes::EType, TString> TABLET_TYPE_SHORT_NAMES =
                                                                                   {TTabletTypes::Coordinator, "C"},
                                                                                   {TTabletTypes::Mediator, "M"},
                                                                                   {TTabletTypes::BlockStoreVolume, "BV"},
-                                                                                  {TTabletTypes::BlockStorePartition2, "BP"},
+                                                                                  {TTabletTypes::BlockStorePartition, "BP"},
+                                                                                  {TTabletTypes::BlockStorePartition2, "BP2"},
                                                                                   {TTabletTypes::BlockStoreVolumeDirect, "DV"},
                                                                                   {TTabletTypes::BlockStorePartitionDirect, "DP"},
                                                                                   {TTabletTypes::Kesus, "K"},
@@ -201,9 +214,14 @@ const std::unordered_map<TTabletTypes::EType, TString> TABLET_TYPE_SHORT_NAMES =
                                                                                   {TTabletTypes::NodeBroker, "NB"},
                                                                                   {TTabletTypes::BlockStoreDiskRegistry, "BDR"},
                                                                                   {TTabletTypes::BackupController, "BCT"},
+                                                                                  {TTabletTypes::WasmCompileController, "WCC"},
                                                                                  };
 
 const std::unordered_map<TString, TTabletTypes::EType> TABLET_TYPE_BY_SHORT_NAME = MakeReverseMap(TABLET_TYPE_SHORT_NAMES);
+
+TFullTabletId ToFullTabletId(TTabletId tabletId) {
+    return {tabletId, 0};
+}
 
 } // NHive
 } // NKikimr

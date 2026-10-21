@@ -3,10 +3,13 @@
 #include <ydb/core/testlib/test_client.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/library/actors/core/mon.h>
 
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/protos/statistics.pb.h>
+
+#include <yql/essentials/core/histogram/eq_height_histogram_reader.h>
 
 #include <type_traits>
 
@@ -119,6 +122,45 @@ void ValidateCountMinSketch(TTestActorRuntime& runtime, const TPathId& pathId) {
     CheckCountMinSketch(runtime, pathId, expected);
 }
 
+class TMonRequestStub : public NMonitoring::IMonHttpRequest {
+public:
+    const TCgiParameters& GetParams() const override { return Params; }
+
+    IOutputStream& Output() override { Y_ABORT("Not implemented"); }
+    HTTP_METHOD GetMethod() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPath() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPathInfo() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetUri() const override { Y_ABORT("Not implemented"); }
+    const TCgiParameters& GetPostParams() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPostContent() const override { Y_ABORT("Not implemented"); }
+    const THttpHeaders& GetHeaders() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetHeader(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetCookie(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TString GetRemoteAddr() const override { Y_ABORT("Not implemented"); }
+    TString GetServiceTitle() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonPage* GetPage() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override { Y_ABORT("Not implemented"); }
+
+private:
+    TCgiParameters Params;
+};
+
+// Reads the LoadQueriesInFlight counter from the stat service monitoring page.
+size_t GetLoadQueriesInFlight(TTestActorRuntime& runtime, ui32 nodeIdx = 1) {
+    TMonRequestStub request;
+    auto sender = runtime.AllocateEdgeActor(nodeIdx);
+    runtime.Send(MakeStatServiceID(runtime.GetNodeId(nodeIdx)), sender,
+        new NMon::TEvHttpInfo(request), nodeIdx, true);
+    auto res = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(sender);
+    const TString& answer = static_cast<NMon::TEvHttpInfoRes*>(res->Get())->Answer;
+
+    constexpr TStringBuf prefix = "LoadQueriesInFlight: ";
+    const auto pos = answer.find(prefix);
+    UNIT_ASSERT_C(pos != TString::npos, answer);
+    TStringBuf value = TStringBuf(answer).substr(pos + prefix.size());
+    return FromString<size_t>(value.NextTok('\n'));
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(ColumnStatistics) {
@@ -131,6 +173,53 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
 
         ValidateCountMinSketch(runtime, tableInfo.PathId);
+    }
+
+    Y_UNIT_TEST(StablePickleManyTypes) {
+        TTestEnv env(1, 1);
+        CreateDatabase(env, "Database");
+
+        auto col = [](NScheme::TTypeId type, TStringBuf value) {
+            return TPickleColumnValue{.Type = type, .Value = TString(value)};
+        };
+
+        std::vector<TPickleColumnValue> columns = {
+            col(NScheme::NTypeIds::Bool, "true"),
+            col(NScheme::NTypeIds::Int8, "-8"),
+            col(NScheme::NTypeIds::Uint8, "200"),
+            col(NScheme::NTypeIds::Int16, "-16000"),
+            col(NScheme::NTypeIds::Uint16, "60000"),
+            col(NScheme::NTypeIds::Int32, "-100000"),
+            col(NScheme::NTypeIds::Uint32, "100000"),
+            col(NScheme::NTypeIds::Int64, "-5000000000"),
+            col(NScheme::NTypeIds::Uint64, "5000000000"),
+            col(NScheme::NTypeIds::Float, "1.5"),
+            col(NScheme::NTypeIds::Double, "2.25"),
+            col(NScheme::NTypeIds::String, "hello"),
+            col(NScheme::NTypeIds::Utf8, "мир"),
+            col(NScheme::NTypeIds::Yson, "[1;2]"),
+            col(NScheme::NTypeIds::Json, "{\"a\":1}"),
+            col(NScheme::NTypeIds::JsonDocument, "{\"b\":2}"),
+            col(NScheme::NTypeIds::Uuid, "f9d5cc3f-f1dc-4d9c-b97e-766e57ca4ccb"),
+            col(NScheme::NTypeIds::DyNumber, "-10.23"),
+            col(NScheme::NTypeIds::Date, "2019-09-09"),
+            col(NScheme::NTypeIds::Datetime, "2019-09-09T12:00:00Z"),
+            col(NScheme::NTypeIds::Timestamp, "2019-09-09T12:00:00.000000Z"),
+            col(NScheme::NTypeIds::Interval, "P1D"),
+            col(NScheme::NTypeIds::Date32, "2019-09-09"),
+            col(NScheme::NTypeIds::Datetime64, "2019-09-09T12:00:00Z"),
+            col(NScheme::NTypeIds::Timestamp64, "2019-09-09T12:00:00.000000Z"),
+            col(NScheme::NTypeIds::Interval64, "P1D"),
+            TPickleColumnValue{.Type = NScheme::NTypeIds::Decimal, .Value = "11.3",
+                .DecimalPrecision = 5, .DecimalScale = 2},
+        };
+
+        // The whole heterogeneous tuple at once...
+        CheckStablePickleTupleMatchesYql(env, columns);
+        // ...and each column individually, to localize any per-type mismatch.
+        for (const auto& c : columns) {
+            CheckStablePickleTupleMatchesYql(env, {c});
+        }
     }
 
     Y_UNIT_TEST(CountMinSketchServerlessStatistics) {
@@ -160,6 +249,29 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
 
         ValidateCountMinSketch(runtime, tableInfo.PathId);
+    }
+
+    Y_UNIT_TEST(CountMinSketchNestedTable) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTable(env, "Database", "subdir/Table1");
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        ValidateCountMinSketch(runtime, tableInfo.PathId);
+    }
+
+    Y_UNIT_TEST(CountMinSketchMultiColumnStatistics) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareMultiColumnColumnTable(env, "Database", "Table1");
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        CheckMultiColumnStatisticsProbes(env, runtime, tableInfo.PathId, {2, 3});
     }
 
     Y_UNIT_TEST(SimpleColumnStatistics) {
@@ -294,6 +406,41 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         UNIT_ASSERT_VALUES_EQUAL(estimator.EstimateLess<i64>(0), 500);
     }
 
+    Y_UNIT_TEST(EqHeightHistogram) {
+        // Service-level EQ_HEIGHT over (Value1, Value2). Only boundary probes:
+        // merge/compaction is not exact (see eq_height_histogram_ut.cpp).
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareMultiColumnEqHeightColumnTable(env, "Database", "Table1");
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        // Fetch the histogram via the stat service using the multi-column
+        // variant (the single-column GetStatistics would construct a
+        // TColumnTags(ui32) that only collides with the multi-column key by
+        // coincidence of SerializeColumnTags).
+        auto responses = GetStatisticsMultiColumn(
+            runtime, tableInfo.PathId, EStatType::EQ_HEIGHT_HISTOGRAM, {2, 3});
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+
+        const auto& resp = responses.at(0);
+        UNIT_ASSERT(resp.Success);
+        const auto& histogram = resp.EqHeightHistogram.Data;
+        UNIT_ASSERT(histogram);
+        UNIT_ASSERT_VALUES_EQUAL(histogram->GetTotalCount(), ColumnTableRowsNumber);
+        UNIT_ASSERT(histogram->GetNumBuckets() >= 1);
+
+        // Optional-null String tuple sorts first. "zz" is above all digit-only values.
+        UNIT_ASSERT_VALUES_EQUAL(
+            histogram->EstimateLessOrEqual(MakeNullStringTuplePresortKey(2)), 0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            histogram->EstimateLessOrEqual(
+                MakeStringTuplePresortKey({"zz", "zz"}, /*isOptional=*/true)),
+            ColumnTableRowsNumber);
+    }
+
     Y_UNIT_TEST(ManyColumns) {
         std::vector<TColumnDesc> columns;
         for (size_t i = 0; i < 100; ++i) {
@@ -321,6 +468,59 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         UNIT_ASSERT(resp.CountMinSketch.CountMin);
         UNIT_ASSERT_VALUES_EQUAL(
             resp.CountMinSketch.CountMin->GetElementCount(), ColumnTableRowsNumber);
+    }
+
+    Y_UNIT_TEST(LoadQueriesCleanedUpAfterReply) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTable(env, "Database", "Table1");
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        for (size_t i = 0; i < 3; ++i) {
+            ValidateCountMinSketch(runtime, tableInfo.PathId);
+            UNIT_ASSERT_VALUES_EQUAL(GetLoadQueriesInFlight(runtime), 0);
+        }
+    }
+
+    Y_UNIT_TEST(LoadQueriesCleanedUpAfterRequestFailed) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTable(env, "Database", "Table1");
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        // TBlockEvents can't be used here: it logs the sender name, and load responses
+        // are sent from a future callback without a sender actor.
+        std::vector<TEvStatistics::TEvLoadStatisticsQueryResponse::TPtr> blockedLoads;
+        auto blockObserver = runtime.AddObserver<TEvStatistics::TEvLoadStatisticsQueryResponse>(
+            [&](auto& ev) { blockedLoads.emplace_back(std::move(ev)); });
+
+        const ui32 nodeIdx = 1;
+        const auto statServiceId = MakeStatServiceID(runtime.GetNodeId(nodeIdx));
+        auto sender = runtime.AllocateEdgeActor(nodeIdx);
+
+        auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
+        evGet->StatType = EStatType::COUNT_MIN_SKETCH;
+        for (ui32 tag : {GetTag("Key"), GetTag("LowCardinalityString")}) {
+            evGet->StatRequests.push_back(TRequest{ .PathId = tableInfo.PathId, .ColumnTags = tag });
+        }
+        runtime.Send(statServiceId, sender, evGet.release(), nodeIdx, true);
+        runtime.WaitFor("load statistics responses", [&]{ return blockedLoads.size() == 2; });
+
+        // Fail the request while its load queries are still in flight.
+        runtime.Send(statServiceId, sender, new TEvStatistics::TEvStatisticsIsDisabled(), nodeIdx, true);
+        auto evResult = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvGetStatisticsResult>(sender);
+        UNIT_ASSERT(!evResult->Get()->Success);
+        UNIT_ASSERT_VALUES_EQUAL(GetLoadQueriesInFlight(runtime), 2);
+
+        blockObserver.Remove();
+        for (auto& ev : blockedLoads) {
+            runtime.Send(ev.Release(), nodeIdx, true);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(GetLoadQueriesInFlight(runtime), 0);
     }
 }
 

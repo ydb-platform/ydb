@@ -1,11 +1,15 @@
 #include "distconf.h"
 #include "node_warden_impl.h"
+#include <ydb/core/base/nameservice.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/mind/dynamic_nameserver.h>
 #include <ydb/core/protos/bridge.pb.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <library/cpp/streams/zstd/zstd.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
@@ -14,20 +18,13 @@ namespace NKikimr::NStorage {
         : IsSelfStatic(isSelfStatic)
         , Cfg(std::move(cfg))
         , BaseConfig(baseConfig)
-    {
-        if (Cfg && Cfg->BridgeConfig) {
-            const auto& piles = Cfg->BridgeConfig->GetPiles();
-            for (int i = 0; i < piles.size(); ++i) {
-                const auto [it, inserted] = BridgePileNameMap.emplace(piles[i].GetName(), TBridgePileId::FromPileIndex(i));
-                Y_ABORT_UNLESS(inserted);
-            }
-        }
-    }
+    {}
 
     void TDistributedConfigKeeper::Bootstrap() {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
+        YDB_LOG_DEBUG("Bootstrap",
+            {"marker", "NWDC00"});
 
-        auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
+        auto ns = NNodeBroker::BuildNameserverTable(*Cfg->NameserviceConfig);
         auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
 
         for (const auto& [nodeId, item] : ns->StaticNodeTable) {
@@ -36,22 +33,18 @@ namespace NKikimr::NStorage {
 
         std::shared_ptr<TEvInterconnect::TEvNodesInfo::TPileMap> pileMap;
         if (AppData()->BridgeModeEnabled) {
-            const auto& bridge = AppData()->BridgeConfig;
-            pileMap = std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>(bridge.PilesSize());
+            // there is no stored config read yet, so we use the registry of the base one
+            const auto registry = GetPileRegistry(BaseConfig ? *BaseConfig
+                : NKikimrBlobStorage::TStorageConfig::default_instance(), &AppData()->BridgeConfig);
+            Y_ABORT_UNLESS(registry);
+            pileMap = std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>(registry->PilesSize());
 
-            THashMap<TString, ui32> pileNames;
-            for (size_t i = 0; i < bridge.PilesSize(); ++i) {
-                pileNames.emplace(bridge.GetPiles(i).GetName(), i);
-            }
-
-            for (const auto& item : Cfg->NameserviceConfig.GetNode()) {
+            for (const auto& item : Cfg->NameserviceConfig->GetNode()) {
                 const TNodeLocation location = item.HasLocation() ? TNodeLocation(item.GetLocation())
                     : item.HasWalleLocation() ? TNodeLocation(item.GetWalleLocation())
                     : TNodeLocation();
-                if (const auto& bridgePileName = location.GetBridgePileName()) {
-                    if (const auto it = pileNames.find(*bridgePileName); it != pileNames.end()) {
-                        pileMap->at(it->second).push_back(item.GetNodeId());
-                    }
+                if (const auto bridgePileId = NBridge::ResolvePileId(*registry, location.GetBridgePileName())) {
+                    pileMap->at(bridgePileId.GetPileIndex()).push_back(item.GetNodeId());
                 }
             }
         }
@@ -68,6 +61,11 @@ namespace NKikimr::NStorage {
             ReadConfig(PrevDrivesToRead);
         } else {
             StorageConfigLoaded = true;
+        }
+
+        if (const TIntrusivePtr<NKikimr::TControlBoard>& icb = AppData()->Icb) {
+            TControlBoard::RegisterSharedControl(RootRetroTraceBatchIntervalSec,
+                    icb->RetroTracingControls.RootBatchIntervalSec);
         }
 
         Become(&TThis::StateWaitForInit);
@@ -292,6 +290,10 @@ namespace NKikimr::NStorage {
                     "Binding# " << Binding->ToString() << " Subscription# " << subs.ToString());
                 okay = true;
             }
+            if (RootProbe && RootProbe->NodeId == nodeId) {
+                Y_ABORT_UNLESS(!RootProbe->SessionId || subs.SessionId == RootProbe->SessionId);
+                okay = true;
+            }
             if (const auto it = DirectBoundNodes.find(nodeId); it != DirectBoundNodes.end()) {
                 Y_VERIFY_S(!subs.SessionId || subs.SessionId == it->second.SessionId, "sessionId# " << subs.SessionId
                     << " node.SessionId# " << it->second.SessionId);
@@ -327,6 +329,9 @@ namespace NKikimr::NStorage {
 
         if (Binding) {
             Y_ABORT_UNLESS(SubscribedSessions.contains(Binding->NodeId));
+        }
+        if (RootProbe) {
+            Y_ABORT_UNLESS(Scepter && !Binding && SubscribedSessions.contains(RootProbe->NodeId));
         }
         for (const auto& [nodeId, info] : DirectBoundNodes) {
             Y_VERIFY_S(SubscribedSessions.contains(nodeId), "NodeId# " << nodeId);
@@ -376,9 +381,12 @@ namespace NKikimr::NStorage {
 #endif
 
     STFUNC(TDistributedConfigKeeper::StateWaitForInit) {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC53, "StateWaitForInit event", (Type, ev->GetTypeRewrite()),
-            (StorageConfigLoaded, StorageConfigLoaded), (NodeListObtained, NodeListObtained),
-            (PendingEvents.size, PendingEvents.size()));
+        YDB_LOG_DEBUG("StateWaitForInit event",
+            {"marker", "NWDC53"},
+            {"type", ev->GetTypeRewrite()},
+            {"storageConfigLoaded", StorageConfigLoaded},
+            {"nodeListObtained", NodeListObtained},
+            {"pendingEventsSize", PendingEvents.size()});
 
         auto processPendingEvents = [&] {
             if (PendingEvents.empty()) {
@@ -419,8 +427,7 @@ namespace NKikimr::NStorage {
         if (change && NodeListObtained && StorageConfigLoaded) {
             if (IsSelfStatic) {
                 UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
-                UpdateQuorums();
-                IssueNextBindRequest();
+                ReconcileNodeRole();
             }
             processPendingEvents();
         }
@@ -443,11 +450,18 @@ namespace NKikimr::NStorage {
         THPTimer timer;
         Y_DEFER {
             if (auto duration = TDuration::Seconds(timer.Passed()); duration >= TDuration::MilliSeconds(5)) {
-                STLOG(PRI_WARN, BS_NODE, NWDC01, "StateFunc too long", (Type, type), (Duration, duration));
+                YDB_LOG_WARN("StateFunc too long",
+                    {"marker", "NWDC01"},
+                    {"type", type},
+                    {"duration", duration});
             }
         };
-        STLOG(PRI_DEBUG, BS_NODE, NWDC15, "StateFunc", (Type, ev->GetTypeRewrite()), (Sender, ev->Sender),
-            (SessionId, ev->InterconnectSession), (Cookie, ev->Cookie));
+        YDB_LOG_DEBUG("StateFunc",
+            {"marker", "NWDC15"},
+            {"type", ev->GetTypeRewrite()},
+            {"sender", ev->Sender},
+            {"sessionId", ev->InterconnectSession},
+            {"cookie", ev->Cookie});
         const ui32 senderNodeId = ev->Sender.NodeId();
         if (ev->InterconnectSession && SubscribedSessions.contains(senderNodeId)) {
             // keep session actors intact
@@ -460,7 +474,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeConfigScatter, Handle);
             hFunc(TEvNodeConfigGather, Handle);
             hFunc(TEvNodeConfigInvokeOnRoot, HandleInvokeOnRoot);
-            IgnoreFunc(TEvNodeConfigInvokeOnRootResult);
+            hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -468,7 +482,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvPrivate::TEvStorageConfigLoaded, Handle);
             hFunc(TEvPrivate::TEvStorageConfigStored, Handle);
             fFunc(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, HandleConfigConfirm);
-            fFunc(TEvBlobStorage::EvNodeWardenDynamicConfigSubscribe, HandleDynamicConfigSubscribe);
+            hFunc(TEvNodeWardenDynamicConfigSubscribe, Handle);
             hFunc(TEvNodeWardenDynamicConfigPush, Handle);
             cFunc(TEvPrivate::EvReconnect, HandleReconnect);
             hFunc(NMon::TEvHttpInfo, Handle);
@@ -487,21 +501,23 @@ namespace NKikimr::NStorage {
             fFunc(TEvPrivate::EvRetryCollectConfigsAndPropose, HandleRetryCollectConfigsAndPropose);
             cFunc(TEvPrivate::EvRetryPersistConfig, HandleRetryPersistConfig);
             cFunc(TEvPrivate::EvFlushRetroTraceBatch, HandleFlushRetroTraceBatch);
+            fFunc(TEvPrivate::EvRootProbeTimeout, HandleRootProbeTimeout);
+            fFunc(TEvPrivate::EvBindingTimeout, HandleBindingTimeout);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);
         }
-        if (IsSelfStatic && StorageConfig && NodeListObtained) {
-            UpdateQuorums();
-            IssueNextBindRequest();
-            CheckRootNodeStatus();
-        }
-        if (StorageConfig && NodeListObtained) {
-            ReportStorageConfigToNodeWarden();
-        }
+
         if (!InvokeOnRootPending.empty() && (!Binding || Binding->RootNodeId)) {
             std::ranges::for_each(std::exchange(InvokeOnRootPending, {}), std::bind(&TThis::HandleInvokeOnRoot,
                 this, std::placeholders::_1));
+        }
+
+        if (IsSelfStatic && StorageConfig && NodeListObtained) {
+            ReconcileNodeRole();
+        }
+        if (StorageConfig && NodeListObtained) {
+            ReportStorageConfigToNodeWarden();
         }
         ConsistencyCheck();
     }
@@ -561,48 +577,73 @@ namespace NKikimr::NStorage {
     }
 
     TBridgeInfo::TPtr TDistributedConfigKeeper::GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config) {
-        // prepare empty structure
+        Y_ABORT_UNLESS(Cfg);
+        return GenerateBridgeInfo(config, *Cfg, SelfNode.NodeId());
+    }
+
+    TBridgeInfo::TPtr TDistributedConfigKeeper::GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config,
+            const TNodeWardenConfig& cfg, ui32 selfNodeId) {
+        const auto registry = GetPileRegistry(config, cfg.BridgeConfig.get());
+        Y_ABORT_UNLESS(registry);
+
+        // prepare structure with all the piles of the registry
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
-        const size_t numPiles = Cfg->BridgeConfig->PilesSize();
+        const size_t numPiles = registry->PilesSize();
         bridgeInfo->Piles.resize(numPiles);
+        for (size_t i = 0; i < numPiles; ++i) {
+            auto& pile = bridgeInfo->Piles[i];
+            pile.BridgePileId = TBridgePileId::FromPileIndex(i);
+            pile.Name = registry->GetPiles(i).GetName();
+            pile.IsFreeSlot = !registry->GetPiles(i).HasName();
+        }
+        if (const auto implicitPileId = TBridgePileId::FromProto(&registry.value(),
+                &NKikimrBridge::TPileRegistry::GetImplicitPileId)) {
+            Y_ABORT_UNLESS(implicitPileId.GetPileIndex() < numPiles);
+            bridgeInfo->ImplicitPile = &bridgeInfo->Piles[implicitPileId.GetPileIndex()];
+        }
 
         for (const auto& node : config.GetAllNodes()) {
-            const TBridgePileId bridgePileId = ResolveNodePileId(TNodeLocation(node.GetLocation()));
-            Y_ABORT_UNLESS(bridgePileId);
+            const TNodeLocation location(node.GetLocation());
+            const auto bridgePileId = NBridge::ResolvePileId(*registry, location.GetBridgePileName());
+            Y_VERIFY_S(bridgePileId, "can't resolve bridge pile for static node NodeId# " << node.GetNodeId()
+                << " Location# " << location.ToString());
             auto& pile = bridgeInfo->Piles[bridgePileId.GetPileIndex()];
             const ui32 nodeId = node.GetNodeId();
             pile.StaticNodeIds.push_back(node.GetNodeId());
             bridgeInfo->StaticNodeIdToPile[nodeId] = &pile;
-            if (nodeId == SelfNode.NodeId()) {
+            if (nodeId == selfNodeId) {
                 bridgeInfo->SelfNodePile = &pile;
             }
         }
 
-        if (Cfg->DynamicNodeConfig && Cfg->DynamicNodeConfig->HasNodeInfo()) {
-            const auto& nodeInfo = Cfg->DynamicNodeConfig->GetNodeInfo();
+        if (cfg.DynamicNodeConfig && cfg.DynamicNodeConfig->HasNodeInfo()) {
+            const auto& nodeInfo = cfg.DynamicNodeConfig->GetNodeInfo();
             if (!nodeInfo.HasLocation()) {
                 Y_ABORT("missing Location in dynamic TNodeInfo");
             }
             const auto& bridgePileName = TNodeLocation(nodeInfo.GetLocation()).GetBridgePileName();
-            if (!bridgePileName) {
-                Y_ABORT("missing BridgePileName in dynamic TNodeLocation");
-            }
-            const auto it = BridgePileNameMap.find(*bridgePileName);
-            Y_ABORT_UNLESS(it != BridgePileNameMap.end(), "incorrect bridge pile name in dynamic TNodeLocation: %s",
-                bridgePileName->c_str());
-            bridgeInfo->SelfNodePile = &bridgeInfo->Piles[it->second.GetPileIndex()];
+            const auto bridgePileId = NBridge::ResolvePileId(*registry, bridgePileName);
+            Y_VERIFY_S(bridgePileId, "can't resolve bridge pile for dynamic node BridgePileName# "
+                << bridgePileName.value_or("<none>"));
+            bridgeInfo->SelfNodePile = &bridgeInfo->Piles[bridgePileId.GetPileIndex()];
         }
 
-        Y_VERIFY_S(bridgeInfo->SelfNodePile, "SelfNodeId# " << SelfNode.NodeId() << " Config# " << NKikimr::SecureDebugString(config));
+        Y_VERIFY_S(bridgeInfo->SelfNodePile, "SelfNodeId# " << selfNodeId << " Config# "
+            << NKikimr::SecureDebugString(config));
 
-        Y_ABORT_UNLESS(config.HasClusterState());
-        const NKikimrBridge::TClusterState& state = config.GetClusterState();
+        // the cluster may be not converted to bridged one yet; then it runs single pile in implicit state
+        std::optional<NKikimrBridge::TClusterState> implicitState;
+        if (!config.HasClusterState()) {
+            Y_VERIFY_S(numPiles == 1, "ClusterState is missing in StorageConfig while BridgeConfig contains "
+                << numPiles << " piles; only single-pile BridgeConfig is allowed for not yet bridged cluster");
+            implicitState.emplace(NBridge::MakeInitialClusterState(1));
+            bridgeInfo->IsImplicit = true;
+        }
+        const NKikimrBridge::TClusterState& state = implicitState ? *implicitState : config.GetClusterState();
 
         Y_ABORT_UNLESS(state.PerPileStateSize() == numPiles);
         for (size_t i = 0; i < numPiles; ++i) {
             auto& pile = bridgeInfo->Piles[i];
-            pile.BridgePileId = TBridgePileId::FromPileIndex(i);
-            pile.Name = Cfg->BridgeConfig->GetPiles(i).GetName();
             pile.State = state.GetPerPileState(i);
             std::ranges::sort(pile.StaticNodeIds);
         }

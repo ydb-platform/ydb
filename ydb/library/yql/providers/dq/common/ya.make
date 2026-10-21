@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     library/cpp/string_utils/parse_size
@@ -6,6 +6,7 @@ PEERDIR(
     yql/essentials/utils
     yql/essentials/core
     yql/essentials/utils/log
+    yql/essentials/providers/common/provider
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/proto
     yql/essentials/core/dq_integration
@@ -18,7 +19,5 @@ SRCS(
     yql_dq_common.cpp
     yql_dq_settings.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

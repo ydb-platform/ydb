@@ -153,6 +153,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                     TABLEH() { out << "Category"; }
                     TABLEH() { out << "Temporary"; }
                     TABLEH() { out << "Pending"; }
+                    TABLEH() { out << "PDiskConfig warning"; }
                 }
             }
             TABLEBODY() {
@@ -175,6 +176,7 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
                         TABLED() { out << value.Record.GetPDiskCategory(); }
                         TABLED() { out << value.Temporary; }
                         TABLED() { out << pending; }
+                        TABLED() { out << value.PDiskConfigWarning; }
                     }
                 }
             }
@@ -183,7 +185,9 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
             DIV() {
                 out << "PDiskRestartInFlight# [";
                 for (const auto& item : PDiskRestartInFlight) {
-                    out << "pdiskId:" << item.first << " -> needsAnotherRestart: " << item.second << ", ";
+                    out << "pdiskId:" << item.first << " -> needsAnotherRestart: " << item.second.RequiresAnotherRestart
+                        << " phase: " << (item.second.Phase == TPDiskRestart::EPhase::WaitingForDDisks ? "waiting for DDisks" : "restart sent")
+                        << " waitingFor: " << FormatList(item.second.WaitingFor) << ", ";
                 }
                 out << "]";
             }

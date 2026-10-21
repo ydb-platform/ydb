@@ -3,6 +3,8 @@
 
 #include <google/protobuf/util/json_util.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 namespace NKikimr::NStorage {
 
     namespace {
@@ -39,7 +41,9 @@ namespace NKikimr::NStorage {
                 if (!status.ok()) {
                     return FinishWithError("failed to parse JSON");
                 }
-                STLOG(PRI_DEBUG, BS_NODE, NWDC04, "sending TEvNodeConfigInvokeOnRoot", (Record, ev->Record));
+                YDB_LOG_DEBUG("Sending TEvNodeConfigInvokeOnRoot",
+                    {"marker", "NWDC04"},
+                    {"record", ev->Record});
 
                 // send it to the actor
                 const TActorId nondeliveryId = SelfId();
@@ -49,7 +53,9 @@ namespace NKikimr::NStorage {
             }
 
             void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
-                STLOG(PRI_DEBUG, BS_NODE, NWDC39, "receive TEvNodeConfigInvokeOnRootResult", (Record, ev->Get()->Record));
+                YDB_LOG_DEBUG("Receive TEvNodeConfigInvokeOnRootResult",
+                    {"marker", "NWDC39"},
+                    {"record", ev->Get()->Record});
 
                 TString data;
                 google::protobuf::util::MessageToJsonString(ev->Get()->Record, &data);

@@ -9,6 +9,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 using namespace NSchemeShard;
@@ -20,6 +22,8 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
     }
 
     STATEFN(StateAllocateTxId) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateAllocateTxId"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
         default:
@@ -28,11 +32,29 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
-        DropDst();
+        if (PendingDstPathId) {
+            DetachDst();
+        } else {
+            DropDst();
+        }
+    }
+
+    void DetachDst() {
+        auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
+        auto& tx = *ev->Record.AddTransaction();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+        tx.SetInternal(true);
+        PendingDstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
+        tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+
+        Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), SchemeShardId, true));
+        Become(&TThis::StateDropDst);
     }
 
     void DropDst() {
@@ -54,6 +76,8 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
     }
 
     STATEFN(StateDropDst) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateDropDst"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
@@ -64,7 +88,8 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
     }
 
     void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         const auto& record = ev->Get()->Record;
 
         switch (record.GetStatus()) {
@@ -72,6 +97,9 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
             Y_DEBUG_ABORT_UNLESS(TxId == record.GetTxId());
             return SubscribeTx(record.GetTxId());
         case NKikimrScheme::StatusMultipleModifications:
+            if (PendingDstPathId) {
+                return Retry();
+            }
             if (record.HasPathDropTxId()) {
                 return SubscribeTx(record.GetPathDropTxId());
             } else {
@@ -81,23 +109,29 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         case NKikimrScheme::StatusPathDoesNotExist:
             return Success();
         default:
+            if (PendingDstPathId) {
+                YDB_LOG_WARN("Retry detach dst", {"status", record.GetStatus()}, {"reason", record.GetReason()});
+                return Retry();
+            }
             return Error(record.GetStatus(), record.GetReason());
         }
     }
 
     void SubscribeTx(ui64 txId) {
-        LOG_D("Subscribe tx"
-            << ": txId# " << txId);
+        YDB_LOG_DEBUG("Subscribe tx",
+            {"txId", txId});
         Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         Success();
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         if (SchemeShardId == ev->Get()->TabletId) {
             return;
@@ -107,28 +141,29 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         Retry();
     }
 
     void Success() {
-        LOG_I("Success");
+        YDB_LOG_INFO("Success");
 
         Send(Parent, new TEvPrivate::TEvDropDstResult(ReplicationId, TargetId));
         PassAway();
     }
 
     void Error(NKikimrScheme::EStatus status, const TString& error) {
-        LOG_E("Error"
-            << ": status# " << status
-            << ", reason# " << error);
+        YDB_LOG_ERROR("Error",
+            {"status", status},
+            {"reason", error});
 
         Send(Parent, new TEvPrivate::TEvDropDstResult(ReplicationId, TargetId, status, error));
         PassAway();
     }
 
     void Retry() {
-        LOG_D("Retry");
+        YDB_LOG_DEBUG("Retry");
         Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
     }
 
@@ -144,7 +179,8 @@ public:
             ui64 rid,
             ui64 tid,
             TReplication::ETargetKind kind,
-            const TPathId& dstPathId)
+            const TPathId& dstPathId,
+            const TPathId& pendingDstPathId)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -152,11 +188,16 @@ public:
         , TargetId(tid)
         , Kind(kind)
         , DstPathId(dstPathId)
-        , LogPrefix("DstRemover", ReplicationId, TargetId)
+        , PendingDstPathId(pendingDstPathId)
+        , LogPrefix(CreateActorLogPrefix("DstRemover", ReplicationId, TargetId))
     {
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
+        if (PendingDstPathId) {
+            return AllocateTxId();
+        }
         if (!DstPathId) {
             Success();
         } else {
@@ -173,6 +214,8 @@ public:
     }
 
     STATEFN(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
@@ -188,7 +231,8 @@ private:
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;
     const TPathId DstPathId;
-    const TActorLogPrefix LogPrefix;
+    const TPathId PendingDstPathId;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     ui64 TxId = 0;
     TActorId PipeCache;
@@ -199,13 +243,15 @@ IActor* CreateDstRemover(TReplication* replication, ui64 targetId, const TActorC
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     return CreateDstRemover(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId());
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(),
+        target->GetPendingDstPathId());
 }
 
 IActor* CreateDstRemover(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
-        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId)
+        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId,
+        const TPathId& pendingDstPathId)
 {
-    return new TDstRemover(parent, schemeShardId, proxy, rid, tid, kind, dstPathId);
+    return new TDstRemover(parent, schemeShardId, proxy, rid, tid, kind, dstPathId, pendingDstPathId);
 }
 
 }

@@ -11,9 +11,11 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 #include <util/generic/deque.h>
 #include <util/generic/guid.h>
@@ -23,17 +25,6 @@
 #include <library/cpp/retry/retry_policy.h>
 
 namespace NKikimr::NPQ {
-
-#if defined(LOG_PREFIX) || defined(TRACE) || defined(DEBUG) || defined(INFO) || defined(ERROR)
-#error "Already defined LOG_PREFIX or TRACE or DEBUG or INFO or ERROR"
-#endif
-
-
-#define LOG_PREFIX "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") "
-#define TRACE(message) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
-#define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
-#define INFO(message)  LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
-#define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
 
 static const ui64 WRITE_BLOCK_SIZE = 4_KB;
 static const ui32 INVALID_PARTITION_ID = Max<ui32>();
@@ -80,7 +71,7 @@ TString TEvPartitionWriter::TEvWriteAccepted::ToString() const {
 }
 
 TString TEvPartitionWriter::TEvWriteResponse::DumpError() const {
-    Y_ENSURE(!IsSuccess());
+    AFL_ENSURE(!IsSuccess());
 
     return TStringBuilder() << "Error {"
         << " SessionId: " << SessionId
@@ -105,7 +96,10 @@ TString TEvPartitionWriter::TEvWriteResponse::ToString() const {
     return out;
 }
 
-class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPartitionWriterOpts::IGetter, private TRlHelpers {
+class TPartitionWriter : public TBaseActor<TPartitionWriter>
+                        , public TPartitionWriterOpts::IGetter
+                        , private TRlHelpers
+                        , public TConstantLogPrefix {
     using EErrorCode = TEvPartitionWriter::TEvWriteResponse::EErrorCode;
 
     struct TUserWriteRequest {
@@ -170,6 +164,27 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         return Opts.KafkaTransactionalId.has_value();
     }
 
+    bool IsDeferredPublishWriter() const {
+        return Opts.DeferredPublish.has_value();
+    }
+
+    TWriteId MakeDeferredWriteIdFromOpts() const {
+        AFL_ENSURE(Opts.DeferredPublish)("topic", Opts.TopicPath)("tablet_id", TabletId);
+        NKikimrPQ::TWriteId proto;
+        auto* deferred = proto.MutableDeferredPublicationApi();
+        deferred->SetIntPublicationId(Opts.DeferredPublish->IntPublicationId);
+        if (Opts.DeferredPublish->ExtPublicationId) {
+            deferred->SetExtPublicationId(*Opts.DeferredPublish->ExtPublicationId);
+        }
+        return TWriteId(std::move(proto));
+    }
+
+    void SetTopic(NKikimrClient::TPersQueuePartitionRequest& request) const {
+        if (!Opts.TopicPath.empty()) {
+            request.SetTopic(Opts.TopicPath);
+        }
+    }
+
     void BecomeZombie(EErrorCode errorCode, const TString& error) {
         ErrorCode = errorCode;
 
@@ -226,7 +241,8 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         }
 
         if (auto delay = RetryState->GetNextRetryDelay(code); delay.Defined()) {
-            DEBUG("Repeat the request to KQP in " << *delay);
+            LOG_D("Repeat the request to KQP",
+                {"delay", *delay});
             Schedule(*delay, new TEvents::TEvWakeup());
         }
     }
@@ -258,9 +274,9 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
     /// GetWriteId
 
     void GetWriteId(const TActorContext& ctx) {
-        DEBUG("Start of a request to KQP for a WriteId. " <<
-              "SessionId: " << Opts.SessionId <<
-              " TxId: " << Opts.TxId);
+        LOG_D("Start of a request to KQP for a WriteId",
+            {"sessionId", Opts.SessionId},
+            {"txId", Opts.TxId});
 
         auto ev = MakeWriteIdRequest();
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
@@ -278,10 +294,10 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
     }
 
     void HandleWriteId(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& /*ctx*/) {
-        DEBUG("End of the request to KQP for the WriteId. " <<
-              "SessionId: " << Opts.SessionId <<
-              " TxId: " << Opts.TxId <<
-              " Status: " << ev->Get()->Record.GetYdbStatus());
+        LOG_D("End of the request to KQP for the WriteId",
+            {"sessionId", Opts.SessionId},
+            {"txId", Opts.TxId},
+            {"status", ev->Get()->Record.GetYdbStatus()});
 
         auto& record = ev->Get()->Record;
         switch (record.GetYdbStatus()) {
@@ -296,9 +312,10 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
         WriteId = NPQ::GetWriteId(record.GetResponse().GetTopicOperations());
 
-        DEBUG("SessionId: " << Opts.SessionId <<
-              " TxId: " << Opts.TxId <<
-              " WriteId: " << WriteId);
+        LOG_D("",
+            {"sessionId", Opts.SessionId},
+            {"txId", Opts.TxId},
+            {"writeId", WriteId});
 
         GetOwnership();
     }
@@ -367,21 +384,75 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         cmd.SetForce(true);
 
         SetWriteId(request);
+        SetTopic(request);
         SetNeedSupportivePartition(request, true);
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
         Become(&TThis::StateGetOwnership);
     }
 
+    void AbortDeferredStaging() {
+        AFL_ENSURE(HasWriteId())("topic", Opts.TopicPath)("tablet_id", TabletId);
+
+        auto ev = MakeRequest(PartitionId, PipeClient);
+        auto& request = *ev->Record.MutablePartitionRequest();
+        request.MutableCmdAbortDeferredStaging();
+        SetWriteId(request);
+        SetTopic(request);
+
+        NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
+        Become(&TThis::StateAbortDeferredStaging);
+    }
+
+    STATEFN(StateAbortDeferredStaging) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPersQueue::TEvResponse, HandleAbortDeferredStagingResponse);
+            hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
+            hFunc(TEvPartitionWriter::TEvAbortDeferredStaging, IgnoreDuplicateAbort);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void HandleAbortDeferredStagingResponse(TEvPersQueue::TEvResponse::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+
+        TString error;
+        if (!BasicCheck(record, error)) {
+            LOG_E("CmdAbortDeferredStaging failed",
+                {"error", error});
+        } else if (!record.GetPartitionResponse().HasCmdAbortDeferredStagingResult()) {
+            LOG_E("CmdAbortDeferredStaging: absent result");
+        }
+
+        if (UpsertRollbackPending) {
+            NKikimrClient::TResponse response;
+            response.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+            response.SetErrorCode(NPersQueue::NErrorCode::BAD_REQUEST);
+            response.SetErrorReason("Failed to upsert deferred publish destination");
+            return InitResult("Failed to upsert deferred publish destination", std::move(response));
+        }
+
+        BecomeZombie(EErrorCode::InternalError, "Deferred staging aborted");
+    }
+
+    void IgnoreDuplicateAbort(TEvPartitionWriter::TEvAbortDeferredStaging::TPtr&) {
+    }
+
     STATEFN(StateGetOwnership) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPersQueue::TEvResponse, HandleOwnership);
             hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
+            hFunc(TEvPartitionWriter::TEvAbortDeferredStaging, HandleAbortDeferredStagingEvent);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, HandlePartitionIdSaved);
             SFunc(TEvents::TEvWakeup, SavePartitionIdToKqpTxn);
         default:
             return StateBase(ev);
         }
+    }
+
+    void HandleAbortDeferredStagingEvent(TEvPartitionWriter::TEvAbortDeferredStaging::TPtr&) {
+        AbortDeferredStaging();
     }
 
     void HandleOwnership(TEvPersQueue::TEvResponse::TPtr& ev) {
@@ -408,30 +479,72 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         }
 
         // we do not save partition id to KQP in Kafka transaction, because we do not have KQP transaction during write request in Kafka API
-        if (HasWriteId() && !IsKafkaTransactionWriter()) {
+        if (IsDeferredPublishWriter()) {
+            StartUpsertDestination();
+        } else if (HasWriteId() && !IsKafkaTransactionWriter()) {
             SavePartitionIdToKqpTxn(ActorContext());
         } else {
             GetMaxSeqNo();
         }
     }
 
-    void SavePartitionIdToKqpTxn(const TActorContext& ctx) {
-        Y_ENSURE(HasWriteId());
-        Y_ENSURE(HasSupportivePartitionId());
+    void StartUpsertDestination() {
+        AFL_ENSURE(IsDeferredPublishWriter())("topic", Opts.TopicPath)("tablet_id", TabletId);
+        AFL_ENSURE(!Opts.Database.empty())("topic", Opts.TopicPath)("tablet_id", TabletId);
 
-        DEBUG("Start of a request to KQP to save PartitionId. " <<
-              "SessionId: " << Opts.SessionId <<
-              " TxId: " << Opts.TxId);
+        auto* event = new TEvPartitionWriter::TEvRequestDeferredDestinationUpsert;
+        event->IntPublicationId = Opts.DeferredPublish->IntPublicationId;
+        event->TopicPath = Opts.TopicPath;
+        event->Database = Opts.Database;
+        event->PartitionId = PartitionId;
+        event->TabletId = TabletId;
+        Send(Client, event);
+        Become(&TThis::StateUpsertDestination);
+    }
+
+    void HandleUpsertPermanentFailure(const TString& reason) {
+        UpsertRollbackPending = true;
+        LOG_E("Upsert destination failed",
+            {"error", reason});
+        AbortDeferredStaging();
+    }
+
+    STATEFN(StateUpsertDestination) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPartitionWriter::TEvDeferredDestinationUpsertResult, HandleDeferredDestinationUpsertResult);
+            hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
+            hFunc(TEvPartitionWriter::TEvAbortDeferredStaging, HandleAbortDeferredStagingEvent);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void HandleDeferredDestinationUpsertResult(TEvPartitionWriter::TEvDeferredDestinationUpsertResult::TPtr& ev) {
+        if (ev->Get()->Success) {
+            GetMaxSeqNo();
+            return;
+        }
+
+        HandleUpsertPermanentFailure(ev->Get()->Reason);
+    }
+
+    void SavePartitionIdToKqpTxn(const TActorContext& ctx) {
+        AFL_ENSURE(HasWriteId())("topic", Opts.TopicPath)("tablet_id", TabletId);
+        AFL_ENSURE(HasSupportivePartitionId())("topic", Opts.TopicPath)("tablet_id", TabletId);
+
+        LOG_D("Start of a request to KQP to save PartitionId",
+            {"sessionId", Opts.SessionId},
+            {"txId", Opts.TxId});
 
         auto ev = MakeWriteIdRequest();
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
 
     void HandlePartitionIdSaved(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
-        DEBUG("End of a request to KQP to save PartitionId. " <<
-              "SessionId: " << Opts.SessionId <<
-              " TxId: " << Opts.TxId <<
-              " Status: " << ev->Get()->Record.GetYdbStatus());
+        LOG_D("End of a request to KQP to save PartitionId",
+            {"sessionId", Opts.SessionId},
+            {"txId", Opts.TxId},
+            {"status", ev->Get()->Record.GetYdbStatus()});
 
         auto& record = ev->Get()->Record;
         switch (record.GetYdbStatus()) {
@@ -452,8 +565,10 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
     void GetMaxSeqNo() {
         auto ev = MakeRequest(PartitionId, PipeClient);
 
-        auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetMaxSeqNo();
+        auto& request = *ev->Record.MutablePartitionRequest();
+        auto& cmd = *request.MutableCmdGetMaxSeqNo();
         cmd.AddSourceId(NSourceIdEncoding::EncodeSimple(SourceId));
+        SetTopic(request);
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
         Become(&TThis::StateGetMaxSeqNo);
@@ -463,6 +578,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvResponse, HandleMaxSeqNo);
             hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
+            hFunc(TEvPartitionWriter::TEvAbortDeferredStaging, HandleAbortDeferredStagingEvent);
         default:
             return StateBase(ev);
         }
@@ -503,7 +619,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
             }
         }
 
-        Y_VERIFY(sourceIdInfo.GetSeqNo() >= 0);
+        AFL_ENSURE(sourceIdInfo.GetSeqNo() >= 0)("topic", Opts.TopicPath)("tablet_id", TabletId)("source_id", SourceId)("seq_no", sourceIdInfo.GetSeqNo());
         if (Opts.InitialSeqNo && (ui64)sourceIdInfo.GetSeqNo() < Opts.InitialSeqNo.value()) {
             sourceIdInfo.SetSeqNo(Opts.InitialSeqNo.value());
         }
@@ -559,10 +675,12 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
     /// Work
 
     STATEFN(StateWork) {
-        DEBUG("Received event: " << (*ev.Get()).GetTypeName())
+        LOG_D("Received",
+            {"event", (*ev.Get()).GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPartitionWriter::TEvWriteRequest, Handle);
             hFunc(TEvPersQueue::TEvResponse, Handle);
+            hFunc(TEvPartitionWriter::TEvAbortDeferredStaging, HandleAbortDeferredStagingEvent);
             HFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
@@ -583,7 +701,8 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         auto writeValid = (PendingWrite.empty() || PendingWrite.back().Cookie < cookie);
 
         if (!(pendingValid && reserveValid && writeValid)) {
-            ERROR("The cookie of WriteRequest is invalid. Cookie=" << cookie);
+            LOG_E("The cookie of WriteRequest is invalid",
+                {"cookie", cookie});
             Disconnected(EErrorCode::InternalError);
             return false;
         }
@@ -636,6 +755,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
             auto& request = *ev->Record.MutablePartitionRequest();
             request.SetMessageNo(MessageNo++);
+            SetTopic(request);
 
             SetWriteId(request);
 
@@ -677,14 +797,16 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
     void EnqueueReservedAndProcess(ui64 cookie) {
         if (PendingReserve.empty()) {
-            ERROR("The state of the PartitionWriter is invalid. PendingReserve is empty. Marker #01");
+            LOG_E("The state of the PartitionWriter is invalid. PendingReserve is empty. Marker #01");
             Disconnected(EErrorCode::InternalError);
             return;
         }
         auto it = PendingReserve.begin();
 
         if(it->first != cookie) {
-            ERROR("The order of reservation is invalid. Cookie=" << cookie << ", ReserveCookie=" << it->first);
+            LOG_E("The order of reservation is invalid",
+                {"cookie", cookie},
+                {"reserveCookie", it->first});
             Disconnected(EErrorCode::InternalError);
             return;
         }
@@ -701,7 +823,10 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         while (rit != ReceivedReserve.end() && qit != ReceivedQuota.end()) {
             auto& request = rit->second;
             const auto cookie = rit->first;
-            TRACE("processing quota for request cookie=" << cookie << ", QuotaCheckEnabled=" << request.QuotaCheckEnabled << ", QuotaAccepted=" << request.QuotaAccepted);
+            LOG_T("Processing quota for request",
+                {"cookie", cookie},
+                {"quotaCheckEnabled", request.QuotaCheckEnabled},
+                {"quotaAccepted", request.QuotaAccepted});
             if (!request.QuotaCheckEnabled || request.QuotaAccepted) {
                 // A situation when a quota was not requested or was received while waiting for a reserve
                 Write(cookie, std::move(request));
@@ -710,7 +835,9 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
             }
 
             if (cookie != *qit) {
-                ERROR("The order of reservation and quota requests should be the same. ReserveCookie=" << cookie << ", QuotaCookie=" << *qit);
+                LOG_E("The order of reservation and quota requests should be the same",
+                    {"reserveCookie", cookie},
+                    {"quotaCookie", *qit});
                 Disconnected(EErrorCode::InternalError);
                 return;
             }
@@ -723,7 +850,10 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         while (rit != ReceivedReserve.end()) {
             auto& request = rit->second;
             const auto cookie = rit->first;
-            TRACE("processing quota for request cookie=" << cookie << ", QuotaCheckEnabled=" << request.QuotaCheckEnabled << ", QuotaAccepted=" << request.QuotaAccepted);
+            LOG_T("Processing quota for request",
+                {"cookie", cookie},
+                {"quotaCheckEnabled", request.QuotaCheckEnabled},
+                {"quotaAccepted", request.QuotaAccepted});
             if (request.QuotaCheckEnabled && !request.QuotaAccepted) {
                 break;
             }
@@ -735,11 +865,13 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
         while (qit != ReceivedQuota.end()) {
             auto cookie = *qit;
-            TRACE("processing quota for request cookie=" << cookie);
+            LOG_T("Processing quota for request",
+                {"cookie", cookie});
             auto pit = PendingReserve.find(cookie);
 
             if (pit == PendingReserve.end()) {
-                ERROR("The received quota does not apply to any request. Cookie=" << *qit);
+                LOG_E("The received quota does not apply to any request",
+                    {"cookie", *qit});
                 Disconnected(EErrorCode::InternalError);
                 return;
             }
@@ -763,6 +895,8 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         }
 
         SetWriteId(request);
+        SetTopic(request);
+        SetNeedSupportivePartition(request, true);
 
         if (!Opts.UseDeduplication) {
             request.SetPartition(PartitionId);
@@ -798,7 +932,8 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
             auto cookieWriteValid = (PendingWrite.empty() || PendingWrite.back().Cookie < cookie);
             if (!cookieWriteValid) {
-                ERROR("The cookie of Write is invalid. Cookie=" << cookie);
+                LOG_E("The cookie of Write is invalid",
+                    {"cookie", cookie});
                 Disconnected(EErrorCode::InternalError);
                 return;
             }
@@ -836,11 +971,15 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         auto msg = ev->Get();
-        DEBUG("TEvClientConnected Status " << msg->Status << ", TabletId: " << msg->TabletId << ", NodeId " << msg->ServerId.NodeId() << ", Generation: " << msg->Generation);
+        LOG_D("TEvClientConnected Status NodeId",
+            {"status", msg->Status},
+            {"serverIdNodeId", msg->ServerId.NodeId()},
+            {"generation", msg->Generation});
         Y_DEBUG_ABORT_UNLESS(msg->TabletId == TabletId);
 
         if (msg->Status != NKikimrProto::OK) {
-            ERROR("received TEvClientConnected with status " << ev->Get()->Status);
+            LOG_E("Received TEvClientConnected with status",
+                {"Status", ev->Get()->Status});
             Disconnected(EErrorCode::InternalError);
             return;
         }
@@ -851,13 +990,17 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         {
             if(*ExpectedGeneration != msg->Generation)
             {
-                INFO("received TEvClientConnected with wrong generation. Expected: " << *ExpectedGeneration << ", received " << msg->Generation);
+                LOG_I("Received TEvClientConnected with wrong generation. received",
+                    {"expected", *ExpectedGeneration},
+                    {"generation", msg->Generation});
                 Disconnected(EErrorCode::PartitionNotLocal);
                 return;
             }
             if (NActors::TActivationContext::ActorSystem()->NodeId != msg->ServerId.NodeId())
             {
-                INFO("received TEvClientConnected with wrong NodeId. Expected: " << NActors::TActivationContext::ActorSystem()->NodeId << ", received " << msg->ServerId.NodeId());
+                LOG_I("Received TEvClientConnected with wrong NodeId. received",
+                    {"expected", NActors::TActivationContext::ActorSystem()->NodeId},
+                    {"serverIdNodeId", msg->ServerId.NodeId()});
                 Disconnected(EErrorCode::PartitionNotLocal);
                 return;
             }
@@ -866,7 +1009,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         if (ev->Get()->TabletId == TabletId) {
-            DEBUG("received TEvClientDestroyed");
+            LOG_D("Received TEvClientDestroyed");
             Disconnected(EErrorCode::PartitionDisconnected);
         }
     }
@@ -877,7 +1020,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         }
         SendError("Unexpected termination");
         TRlHelpers::PassAway(SelfId());
-        TActorBootstrapped::PassAway();
+        TBaseActor::PassAway();
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
@@ -922,7 +1065,8 @@ public:
             ui64 tabletId,
             ui32 partitionId,
             const TPartitionWriterOpts& opts)
-        : TRlHelpers(opts.TopicPath, opts.RlCtx, WRITE_BLOCK_SIZE, !!opts.RlCtx)
+        : TBaseActor(NKikimrServices::PQ_WRITE_PROXY)
+        , TRlHelpers(opts.TopicPath, opts.RlCtx, WRITE_BLOCK_SIZE, !!opts.RlCtx)
         , Client(client)
         , TabletId(tabletId)
         , PartitionId(partitionId)
@@ -933,6 +1077,11 @@ public:
         if (Opts.MeteringMode) {
             SetMeteringMode(*Opts.MeteringMode);
         }
+    }
+
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"partition", PartitionId});
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -947,7 +1096,10 @@ public:
 
         PipeClient = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), TabletId, config));
 
-        if (Opts.Database && Opts.SessionId && Opts.TxId) {
+        if (IsDeferredPublishWriter()) {
+            WriteId = MakeDeferredWriteIdFromOpts();
+            GetOwnership();
+        } else if (Opts.Database && Opts.SessionId && Opts.TxId) {
             GetWriteId(ctx);
         } else {
             if (Opts.KafkaTransactionalId) {
@@ -978,6 +1130,9 @@ public:
         return Opts;
     }
 
+    const TActorId Client;
+    const ui64 TabletId;
+
 private:
     bool HasWriteId() const {
         return WriteId.Defined();
@@ -987,8 +1142,6 @@ private:
         return SupportivePartitionId != INVALID_PARTITION_ID;
     }
 
-    const TActorId Client;
-    const ui64 TabletId;
     const ui32 PartitionId;
     const std::optional<ui32> ExpectedGeneration;
     const TString SourceId;
@@ -1012,6 +1165,8 @@ private:
 
     TMaybe<NPQ::TWriteId> WriteId;
     ui32 SupportivePartitionId = INVALID_PARTITION_ID;
+
+    bool UpsertRollbackPending = false;
 
     using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;
     using IRetryState = IRetryPolicy::IRetryState;
@@ -1044,11 +1199,5 @@ IActor* CreatePartitionWriter(const TActorId& client,
                               const TPartitionWriterOpts& opts) {
     return new TPartitionWriter(client, tabletId, partitionId, opts);
 }
-
-#undef LOG_PREFIX
-#undef TRACE
-#undef DEBUG
-#undef INFO
-#undef ERROR
 
 }

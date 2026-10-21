@@ -24,7 +24,7 @@ class Settings:
         endpoint: str
         hmac_secret_file: str
 
-    token_accessor_mock: TokenAccessorMock
+    token_accessor_mock: Optional[TokenAccessorMock] = None
 
     @dataclass
     class MdbMock:
@@ -88,11 +88,12 @@ class Settings:
                 grpc_host='localhost',
                 grpc_port=endpoint_determiner.get_port('fq-connector-go', 2130),
             ),
-            token_accessor_mock=cls.TokenAccessorMock(
+        )
+        if "TOKEN_ACCESSOR_MOCK_ENDPOINT" in environ.keys():
+            s.token_accessor_mock = cls.TokenAccessorMock(
                 endpoint=environ['TOKEN_ACCESSOR_MOCK_ENDPOINT'],
                 hmac_secret_file=environ['TOKEN_ACCESSOR_HMAC_SECRET_FILE'],
-            ),
-        )
+            )
 
         if 'MDB_MOCK_ENDPOINT' in environ.keys():
             s.mdb_mock = cls.MdbMock(

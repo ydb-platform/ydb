@@ -145,11 +145,17 @@ TString EncodeReceiptHandle(const TReceipt& receipt) {
     return EncodeString(ProtobufToString(receipt));
 }
 
+bool TryDecodeReceiptHandle(const TString& receipt, TReceipt& out) {
+    const TString decoded = Base64DecodeUneven(receipt);
+    if (decoded.empty() || !out.ParseFromString(decoded)) {
+        return false;
+    }
+    return ProtobufToString(out) == decoded;
+}
+
 TReceipt DecodeReceiptHandle(const TString& receipt) {
-    TString decoded = Base64DecodeUneven(receipt);
     TReceipt ret;
-    Y_ENSURE(!decoded.empty());
-    Y_ENSURE(ret.ParseFromString(decoded));
+    Y_ENSURE(TryDecodeReceiptHandle(receipt, ret));
     return ret;
 }
 

@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(2.14)
+VERSION(2.15)
 
-ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.14.tar.gz)
+ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.15.tar.gz)
 
 LICENSE(
     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" AND
@@ -47,6 +47,7 @@ RECURSE(
     test/a0908ae19763.t
     test/a4c0b3decb33.t
     test/accept-link.t
+    test/accept-mshot-stress.t
     test/accept-non-empty.t
     test/accept-reuse.t
     test/accept-test.t
@@ -55,9 +56,15 @@ RECURSE(
     test/b19062a56726.t
     test/b5837bd5311d.t
     test/bind-listen.t
+    test/buf-ring-mshot.t
     test/buf-ring-nommap.t
     test/buf-ring-put.t
+    test/buf-ring-stress.t
+    test/buf-ring-upgrade.t
     test/buf-ring.t
+    test/cancel-fd-userdata.t
+    test/cancel-race.t
+    test/cbpf_filter.t
     test/ce593a6c480a.t
     test/close-opath.t
     test/cmd-discard.t
@@ -67,6 +74,7 @@ RECURSE(
     test/coredump.t
     test/cq-full.t
     test/cq-overflow.t
+    test/cq-peek-batch-mixed.t
     test/cq-peek-batch.t
     test/cq-ready.t
     test/cq-size.t
@@ -98,6 +106,7 @@ RECURSE(
     test/fdinfo.t
     test/fifo-futex-poll.t
     test/fifo-nonblock-read.t
+    test/file-alloc-range-hint.t
     test/file-exit-unreg.t
     test/file-register.t
     test/file-update.t
@@ -127,9 +136,11 @@ RECURSE(
     test/io_uring_setup.t
     test/iopoll-leak.t
     test/iopoll-overflow.t
+    test/iopoll-sync.t
     test/iopoll.t
     test/iowait.t
     test/kallsyms.t
+    test/large-resize.t
     test/lfs-openat-write.t
     test/lfs-openat.t
     test/link-timeout.t
@@ -145,11 +156,14 @@ RECURSE(
     test/msg-ring-flags.t
     test/msg-ring-overflow.t
     test/msg-ring.t
+    test/mshot-shutdown-race.t
     test/multicqes_drain.t
     test/napi-test.t
     test/no-mmap-inval.t
     test/nolibc.t
     test/nop-all-sizes.t
+    test/nop-fixed-file-leak.t
+    test/nop-flags.t
     test/nop.t
     test/nop32-overflow.t
     test/nop32.t
@@ -160,6 +174,7 @@ RECURSE(
     test/openat2.t
     test/personality.t
     test/pipe-bug.t
+    test/pipe-direct-fixed.t
     test/pipe-eof.t
     test/pipe-reuse.t
     test/pipe.t
@@ -170,6 +185,7 @@ RECURSE(
     test/poll-many.t
     test/poll-mshot-overflow.t
     test/poll-mshot-update.t
+    test/poll-mshot-wake.t
     test/poll-race-mshot.t
     test/poll-race.t
     test/poll-ring.t
@@ -179,17 +195,21 @@ RECURSE(
     test/pollfree.t
     test/probe.t
     test/read-before-exit.t
+    test/read-inc-buf-more.t
     test/read-inc-file.t
     test/read-mshot-empty.t
     test/read-mshot-stdin.t
     test/read-mshot.t
     test/read-write.t
+    test/recv-bundle-buf-len.t
     test/recv-bundle-short-ooo.t
     test/recv-inc-ooo.t
     test/recv-msgall-stream.t
     test/recv-msgall.t
+    test/recv-mshot-drain.t
     test/recv-mshot-fair.t
     test/recv-multishot.t
+    test/recvmsg-inc-tail.t
     test/recvsend_bundle-inc.t
     test/recvsend_bundle.t
     test/reg-fd-only.t
@@ -200,6 +220,7 @@ RECURSE(
     test/regbuf-merge.t
     test/register-restrictions.t
     test/rename.t
+    test/resize-mmap-fail.t
     test/resize-rings.t
     test/ring-leak.t
     test/ring-leak2.t
@@ -236,6 +257,7 @@ RECURSE(
     test/sq-poll-share.t
     test/sq-space_left.t
     test/sqe-mixed-bad-wrap.t
+    test/sqe-mixed-boundary.t
     test/sqe-mixed-nop.t
     test/sqe-mixed-uring_cmd.t
     test/sqpoll-disable-exit.t
@@ -249,8 +271,10 @@ RECURSE(
     test/submit-reuse.t
     test/symlink.t
     test/sync-cancel.t
+    test/task-restrict.t
     test/teardowns.t
     test/thread-exit.t
+    test/timens-abs-timer.t
     test/timeout-new.t
     test/timeout.t
     test/timerfd-short-read.t

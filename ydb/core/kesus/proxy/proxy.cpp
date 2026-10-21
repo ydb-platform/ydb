@@ -10,6 +10,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_PROXY
+
 namespace NKikimr {
 namespace NKesus {
 
@@ -78,15 +80,14 @@ private:
     void Handle(TEvKesusProxy::TEvResolveKesusProxy::TPtr& ev) {
         const auto* msg = ev->Get();
         const auto& ctx = TActivationContext::AsActorContext();
-        LOG_TRACE_S(ctx, NKikimrServices::KESUS_PROXY,
-            "Got TEvResolveKesusProxy for path " << msg->KesusPath.Quote());
+        YDB_LOG_TRACE_CTX(ctx, "Got TEvResolveKesusProxy",
+            {"path", msg->KesusPath});
         auto& entry = Cache[msg->KesusPath];
         switch (entry.State) {
             case CACHE_STATE_NEW:
                 entry.KesusPath = SplitPath(msg->KesusPath);
                 if (entry.KesusPath.empty()) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::KESUS_PROXY,
-                        "Not allowing requests with an empty KesusPath");
+                    YDB_LOG_DEBUG_CTX(ctx, "Not allowing requests with an empty KesusPath");
                     Send(ev->Sender,
                         new TEvKesusProxy::TEvProxyError(
                             Ydb::StatusIds::BAD_REQUEST,
@@ -95,14 +96,14 @@ private:
                     Cache.erase(msg->KesusPath);
                     return;
                 }
-                LOG_DEBUG_S(ctx, NKikimrServices::KESUS_PROXY,
-                    "Created new entry for kesus " << msg->KesusPath.Quote());
+                YDB_LOG_DEBUG_CTX(ctx, "Created new entry",
+                    {"path", msg->KesusPath});
                 [[fallthrough]];
 
             case CACHE_STATE_ACTIVE:
                 // Recheck schemecache for changes
-                LOG_TRACE_S(ctx, NKikimrServices::KESUS_PROXY,
-                    "Starting resolve for kesus " << msg->KesusPath.Quote());
+                YDB_LOG_TRACE_CTX(ctx, "Starting resolve",
+                    {"path", msg->KesusPath});
                 RegisterWithSameMailbox(CreateResolveActor(msg->Database, msg->KesusPath));
                 entry.State = CACHE_STATE_RESOLVING;
                 [[fallthrough]];
@@ -120,8 +121,8 @@ private:
     void Handle(TEvPrivate::TEvResolveResult::TPtr& ev) {
         const auto* msg = ev->Get();
         const auto& ctx = TActivationContext::AsActorContext();
-        LOG_TRACE_S(ctx, NKikimrServices::KESUS_PROXY,
-            "Got TEvResolveResult for path " << msg->KesusPath.Quote());
+        YDB_LOG_TRACE_CTX(ctx, "Got TEvResolveResult",
+            {"path", msg->KesusPath});
         auto& entry = Cache[msg->KesusPath];
         Y_ABORT_UNLESS(entry.State == CACHE_STATE_RESOLVING);
         Y_ABORT_UNLESS(msg->Event->Request->ResultSet.size() == 1);
@@ -131,9 +132,8 @@ private:
         switch (result.Status) {
             case TSchemeCacheNavigate::EStatus::Ok: {
                 if (!result.KesusInfo) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::KESUS_PROXY,
-                        "Received an OK result for " << msg->KesusPath.Quote()
-                        << " without KesusInfo: not found");
+                    YDB_LOG_DEBUG_CTX(ctx, "Received an OK result without KesusInfo: not found",
+                        {"path", msg->KesusPath});
                     entry.LastError.SetStatus(Ydb::StatusIds::NOT_FOUND);
                     entry.LastError.AddIssues()->set_message("Kesus not found");
                     break;
@@ -141,9 +141,8 @@ private:
                 const auto& desc = result.KesusInfo->Description;
                 const ui64 tabletId = desc.GetKesusTabletId();
                 if (!tabletId) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::KESUS_PROXY,
-                        "Received an OK result for " << msg->KesusPath.Quote()
-                        << " without tablet id: not found");
+                    YDB_LOG_DEBUG_CTX(ctx, "Received an OK result without tablet id: not found",
+                        {"path", msg->KesusPath});
                     entry.LastError.SetStatus(Ydb::StatusIds::NOT_FOUND);
                     entry.LastError.AddIssues()->set_message("Kesus not found");
                     break;
@@ -152,18 +151,18 @@ private:
                 entry.SecurityObject = result.SecurityObject;
                 if (entry.ProxyActor && entry.TabletId != tabletId) {
                     // Kill the old proxy
-                    LOG_DEBUG_S(ctx, NKikimrServices::KESUS_PROXY,
-                        "Tablet for " << msg->KesusPath.Quote() << " changed "
-                        << entry.TabletId << " -> " << tabletId
-                        << ": destroying the old proxy");
+                    YDB_LOG_DEBUG_CTX(ctx, "Tablet changed: destroying the old proxy",
+                        {"path", msg->KesusPath},
+                        {"oldTabletId", entry.TabletId},
+                        {"newTabletId", tabletId});
                     Send(entry.ProxyActor, new TEvents::TEvPoisonPill());
                     entry.ProxyActor = {};
                 }
                 if (!entry.ProxyActor) {
                     // Create a new proxy
-                    LOG_INFO_S(ctx, NKikimrServices::KESUS_PROXY,
-                        "Creating kesus proxy for tablet " << tabletId
-                        << " and path " << msg->KesusPath.Quote());
+                    YDB_LOG_INFO_CTX(ctx, "Creating kesus proxy",
+                        {"path", msg->KesusPath},
+                        {"tabletId", tabletId});
                     entry.ProxyActor = Register(CreateKesusProxyActor(SelfId(), tabletId, msg->KesusPath));
                     entry.TabletId = tabletId;
                 }
@@ -172,23 +171,23 @@ private:
             case TSchemeCacheNavigate::EStatus::RootUnknown:
             case TSchemeCacheNavigate::EStatus::PathErrorUnknown:
             case TSchemeCacheNavigate::EStatus::PathNotPath:
-                LOG_TRACE_S(ctx, NKikimrServices::KESUS_PROXY,
-                    "Resolve did not find path " << msg->KesusPath.Quote()
-                    << ": " << result.Status);
+                YDB_LOG_TRACE_CTX(ctx, "Resolve did not find path",
+                    {"path", msg->KesusPath},
+                    {"status", result.Status});
                 entry.LastError.SetStatus(Ydb::StatusIds::NOT_FOUND);
                 entry.LastError.AddIssues()->set_message("Kesus not found");
                 break;
             default:
-                LOG_ERROR_S(ctx, NKikimrServices::KESUS_PROXY,
-                    "Kesus resolve failed: " << result.Status);
+                YDB_LOG_ERROR_CTX(ctx, "Kesus resolve failed",
+                    {"status", result.Status});
                 entry.LastError.SetStatus(Ydb::StatusIds::INTERNAL_ERROR);
                 entry.LastError.AddIssues()->set_message(ToString(result.Status));
                 break;
         }
         if (entry.ProxyActor && entry.LastError.GetStatus() != Ydb::StatusIds::SUCCESS) {
             // Entry expired, kill the proxy
-            LOG_INFO_S(ctx, NKikimrServices::KESUS_PROXY,
-                "Destroying kesus proxy for path " << msg->KesusPath.Quote());
+            YDB_LOG_INFO_CTX(ctx, "Destroying kesus proxy",
+                {"path", msg->KesusPath});
             Send(entry.ProxyActor, new TEvents::TEvPoisonPill());
             entry.ProxyActor = {};
         }
@@ -231,8 +230,8 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::KESUS_PROXY,
-            "Sending resolve request to SchemeCache: " << KesusPath.Quote());
+        YDB_LOG_TRACE_CTX(ctx, "Sending resolve request to SchemeCache",
+            {"path", KesusPath});
         auto request = MakeHolder<TSchemeCacheNavigate>();
         request->DatabaseName = Database;
 
@@ -250,8 +249,8 @@ public:
 private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& ctx = TActivationContext::AsActorContext();
-        LOG_TRACE_S(ctx, NKikimrServices::KESUS_PROXY,
-            "Forwarding resolve result from SchemeCache: " << KesusPath.Quote());
+        YDB_LOG_TRACE_CTX(ctx, "Forwarding resolve result from SchemeCache",
+            {"path", KesusPath});
         Send(Owner, new TEvPrivate::TEvResolveResult(KesusPath, THolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(ev->Release().Release())));
         PassAway();
     }

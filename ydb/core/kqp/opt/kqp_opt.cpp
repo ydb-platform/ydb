@@ -54,8 +54,13 @@ TKqpOptimizeContext::TKqpOptimizeContext(const TString& cluster, const TIntrusiv
     , UserRequestContext(userRequestContext)
     , UsePessimisticLocks(usePessimisticLocks)
 {
+    YQL_ENSURE(Config);
     YQL_ENSURE(QueryCtx);
     YQL_ENSURE(Tables);
+}
+
+bool TKqpOptimizeContext::NeedPessimisticLocks() const {
+    return UsePessimisticLocks && !Config->KqpDisablePessimisticLocks.Get().GetOrElse(false);
 }
 
 std::shared_ptr<NJson::TJsonValue> TKqpOptimizeContext::GetOverrideStatistics() {
@@ -95,8 +100,8 @@ bool TKqpOptimizeContext::IsGenericQuery() const {
     return QueryCtx->Type == NYql::EKikimrQueryType::Query || QueryCtx->Type == NYql::EKikimrQueryType::Script;
 }
 
-bool IsKqpPureLambda(const TCoLambda& lambda) {
-    return !FindNode(lambda.Body().Ptr(), [](const TExprNode::TPtr& node) {
+bool IsKqpPureExpr(const TExprBase& expr, bool checkDqSources, bool checkIndexReads) {
+    return !FindNode(expr.Ptr(), [checkDqSources, checkIndexReads](const TExprNode::TPtr& node) {
         if (TMaybeNode<TKqlReadTableBase>(node)) {
             return true;
         }
@@ -113,8 +118,22 @@ bool IsKqpPureLambda(const TCoLambda& lambda) {
             return true;
         }
 
+        if (checkDqSources && (TCoDataSource::Match(node.Get()) || TDqSource::Match(node.Get())
+            || TDqReadWrapBase::Match(node.Get()))) {
+            return true;
+        }
+
+        if (checkIndexReads && (TKqlReadTableFullTextIndex::Match(node.Get())
+            || TKqpReadTableFullTextIndex::Match(node.Get()) || TKqlReadTableVectorIndex::Match(node.Get()))) {
+            return true;
+        }
+
         return false;
     });
+}
+
+bool IsKqpPureLambda(const TCoLambda& lambda) {
+    return IsKqpPureExpr(lambda.Body());
 }
 
 bool IsKqpPureInputs(const TExprList& inputs) {
@@ -136,17 +155,6 @@ bool IsKqpPureInputs(const TExprList& inputs) {
 
         return false;
     });
-}
-
-bool IsKqpEffectsStage(const TDqStageBase& stage) {
-    return stage.Program().Body().Maybe<TKqpEffects>().IsValid();
-}
-
-bool NeedSinks(const TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx) {
-    return (kqpCtx.IsGenericQuery()
-            || (kqpCtx.IsDataQuery() && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->GetAllowOlapDataQuery())))
-        && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->GetEnableOlapSink())
-        && (table.Metadata->Kind != EKikimrTableKind::Datashard || kqpCtx.Config->GetEnableOltpSink());
 }
 
 bool CanEnableStreamWrite(const NYql::TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx) {

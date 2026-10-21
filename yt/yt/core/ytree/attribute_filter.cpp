@@ -11,6 +11,7 @@
 
 #include <yt/yt/core/yson/async_writer.h>
 #include <yt/yt/core/yson/async_consumer.h>
+#include <yt/yt/core/yson/attribute_consumer.h>
 #include <yt/yt/core/yson/pull_parser.h>
 #include <yt/yt/core/yson/string_filter.h>
 
@@ -29,8 +30,8 @@ using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Used only for YT_LOG_ALERT.
-static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "AttributeFilter");
+//! Used only for YT_TLOG_ALERT.
+static YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "AttributeFilter");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -59,7 +60,7 @@ void CanonizeAndValidatePath(TYPath& path)
             tokenizer.Advance();
         }
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(TError("Error validating attribute path %Qv", path) << ex);
+        THROW_ERROR_EXCEPTION(TError("Error validating attribute path %Qv", path).With(ex));
     }
 
     path = std::move(result);
@@ -159,7 +160,7 @@ std::unique_ptr<IHeterogenousFilterConsumer> CreateFilteringConsumerImpl(
             if (Sync_) {
                 // This could be YT_VERIFY if this code was not so heavily used in master. Hope trace id
                 // of the log message below will help in investigation.
-                YT_LOG_ALERT_UNLESS(asyncFilteredYson.IsSet(), "Unexpected unset future in synchronous attribute filtering");
+                YT_TLOG_ALERT_UNLESS(asyncFilteredYson.IsSet(), "Unexpected unset future in synchronous attribute filtering");
                 if (!asyncFilteredYson.IsSet()) {
                     THROW_ERROR_EXCEPTION("Unexpected unset future in synchronous attribute filtering");
                 }
@@ -202,7 +203,7 @@ TAttributeFilter::TAttributeFilter(std::vector<IAttributeDictionary::TKey> keys,
     , Universal_(false)
 { }
 
-TAttributeFilter::TAttributeFilter(std::initializer_list<TString> keys)
+TAttributeFilter::TAttributeFilter(std::initializer_list<std::string> keys)
     : Keys_({keys.begin(), keys.end()})
     , Universal_(false)
 { }
@@ -358,6 +359,49 @@ void TAttributeFilter::Remove(const std::vector<IAttributeDictionary::TKey>& key
             return false;
         }
     );
+}
+
+void WriteAttributeDictionaryFragment(
+    IAsyncYsonConsumer* consumer,
+    const IAttributeDictionary& attributes,
+    const TAttributeFilter& attributeFilter,
+    bool stable)
+{
+    auto pairs = attributes.ListPairs();
+    if (stable) {
+        std::sort(pairs.begin(), pairs.end(), [] (const auto& lhs, const auto& rhs) {
+            return lhs.first < rhs.first;
+        });
+    }
+
+    TAttributeFilter::TKeyToFilter keyToFilter;
+    if (attributeFilter) {
+        keyToFilter = attributeFilter.Normalize();
+    }
+
+    for (const auto& [key, value] : pairs) {
+        if (!attributeFilter) {
+            consumer->OnKeyedItem(key);
+            consumer->OnRaw(value);
+        } else if (auto it = keyToFilter.find(key); it != keyToFilter.end()) {
+            const auto& pathFilter = it->second;
+            TAttributeValueConsumer valueConsumer(consumer, key);
+            auto filteringConsumer = TAttributeFilter::CreateFilteringConsumer(&valueConsumer, pathFilter);
+            filteringConsumer->GetConsumer()->OnRaw(value);
+            filteringConsumer->Finish();
+        }
+    }
+}
+
+void WriteAttributeDictionary(
+    IAsyncYsonConsumer* consumer,
+    const IAttributeDictionary& attributes,
+    const TAttributeFilter& attributeFilter,
+    bool stable)
+{
+    TAttributeFragmentConsumer attributesConsumer(consumer);
+    WriteAttributeDictionaryFragment(&attributesConsumer, attributes, attributeFilter, stable);
+    attributesConsumer.Finish();
 }
 
 std::unique_ptr<TAttributeFilter::IFilteringConsumer> TAttributeFilter::CreateFilteringConsumer(

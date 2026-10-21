@@ -32,7 +32,7 @@ public:
      * Note that this constructor could be racy due to unsynchronized operations
      * on the object and on the counter.
      *
-     * Note that it notoriously hard to make this constructor explicit
+     * Note that it is notoriously hard to make this constructor explicit
      * given the current amount of code written.
      */
     constexpr TIntrusivePtr(T* obj, bool addReference = true) noexcept
@@ -320,10 +320,10 @@ bool operator==(const TIntrusivePtr<T>& lhs, std::nullptr_t)
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Abseil hash support for TIntrusivePtr.
-template <class THash, class T>
-THash AbslHashValue(THash hash, const TIntrusivePtr<T>& ptr)
+template <class THashState, class T>
+THashState AbslHashValue(THashState hash, const TIntrusivePtr<T>& ptr)
 {
-    return THash::combine(std::move(hash), ptr.Get());
+    return THashState::combine(std::move(hash), ptr.Get());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

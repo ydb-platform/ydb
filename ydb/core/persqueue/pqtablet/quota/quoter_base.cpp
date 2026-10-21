@@ -2,6 +2,8 @@
 
 #include <ydb/core/persqueue/public/constants.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 
 namespace NKikimr::NPQ {
 
@@ -29,8 +31,15 @@ TAccountQuoterHolder::TAccountQuoterHolder(const TActorId& actor, const TTabletC
 }
 
 
-TConsumerReadQuota::TConsumerReadQuota(THolder<TAccountQuoterHolder> accountQuotaTracker, ui64 readQuotaBurst, ui64 readQuotaSpeed)
+TConsumerReadQuota::TConsumerReadQuota(
+    THolder<TAccountQuoterHolder> accountQuotaTracker,
+    ui64 readQuotaBurst,
+    ui64 readQuotaSpeed,
+    ui64 readMessageQuotaBurst,
+    ui64 readMessageQuotaSpeed
+)
     : PartitionPerConsumerQuotaTracker(readQuotaBurst, readQuotaSpeed, TAppData::TimeProvider->Now())
+    , PartitionPerConsumerMessageQuotaTracker(readMessageQuotaBurst, readMessageQuotaSpeed, TAppData::TimeProvider->Now())
     , AccountQuotaTracker(std::move(accountQuotaTracker))
 {
 }
@@ -152,9 +161,14 @@ void TPartitionQuoterBase::HandleConsumed(TEvPQ::TEvConsumed::TPtr& ev, const TA
         RequestsInflight--;
         ProcessInflightQueue();
     } else {
-        LOG_E("Attempt to make the inflight counter below zero. Topic " << TopicConverter->GetClientsideName() <<
-              " partition " << Partition <<
-              " readCookie " << ev->Get()->RequestCookie);
+        LOG_E(
+            "Attempt to make the inflight counter below zero. Topic partition readCookie",
+            {"clientSideName", TopicConverter->GetClientsideName()},
+                    {"partition",
+            Partition},
+                    {"requestCookie",
+            ev->Get()->RequestCookie}
+        );
     }
 
     if (!RequestsInflight && (ExclusiveLockState == EExclusiveLockState::EAcquiring)) {

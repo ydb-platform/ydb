@@ -33,6 +33,9 @@ protected:
     virtual ui32 DoGetNullsCount() const override {
         return Array->null_count();
     }
+    virtual std::optional<bool> DoHasNulls() const override {
+        return Array->null_count() != 0;
+    }
     virtual ui32 DoGetValueRawBytes() const override;
 
     virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override;
@@ -70,36 +73,36 @@ public:
     {
     }
 
-    template <class TArrowDataType = arrow::StringType>
-    class TPlainBuilder {
+    class TPlainBuilderBase {
     private:
         std::unique_ptr<arrow::ArrayBuilder> Builder;
         std::optional<ui32> LastRecordIndex;
 
-    public:
-        TPlainBuilder(const ui32 reserveItems = 0, const ui32 reserveSize = 0) {
-            Builder = NArrow::MakeBuilder(arrow::TypeTraits<TArrowDataType>::type_singleton(), reserveItems, reserveSize);
+    protected:
+        arrow::ArrayBuilder& GetBuilder() {
+            return *Builder;
         }
 
-        void AddRecord(const ui32 recordIndex, const std::string_view value) {
+        template <class TAppender>
+        void AddAt(const ui32 recordIndex, const TAppender& append) {
             if (LastRecordIndex) {
                 AFL_VERIFY(*LastRecordIndex < recordIndex)("last", LastRecordIndex)("index", recordIndex);
                 TStatusValidator::Validate(Builder->AppendNulls(recordIndex - *LastRecordIndex - 1));
             } else {
                 TStatusValidator::Validate(Builder->AppendNulls(recordIndex));
             }
+            append(*Builder);
             LastRecordIndex = recordIndex;
-            AFL_VERIFY(NArrow::Append<TArrowDataType>(*Builder, arrow::util::string_view(value.data(), value.size())));
+        }
+
+    public:
+        TPlainBuilderBase(std::unique_ptr<arrow::ArrayBuilder> builder)
+            : Builder(std::move(builder)) {
+            AFL_VERIFY(!!Builder);
         }
 
         void AddNull(const ui32 recordIndex) {
-            if (LastRecordIndex) {
-                AFL_VERIFY(*LastRecordIndex < recordIndex)("last", LastRecordIndex)("index", recordIndex);
-                TStatusValidator::Validate(Builder->AppendNulls(recordIndex - *LastRecordIndex));
-            } else {
-                TStatusValidator::Validate(Builder->AppendNulls(recordIndex + 1));
-            }
-            LastRecordIndex = recordIndex;
+            AddAt(recordIndex, [](arrow::ArrayBuilder& builder) { TStatusValidator::Validate(builder.AppendNull()); });
         }
 
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
@@ -110,6 +113,23 @@ public:
                 TStatusValidator::Validate(Builder->AppendNulls(recordsCount));
             }
             return std::make_shared<TTrivialArray>(NArrow::FinishBuilder(std::move(Builder)));
+        }
+    };
+
+    template <class TArrowDataType = arrow::StringType>
+    class TPlainBuilder: public TPlainBuilderBase {
+    public:
+        TPlainBuilder(const ui32 reserveItems = 0, const ui32 reserveSize = 0)
+            : TPlainBuilderBase(NArrow::MakeBuilder(arrow::TypeTraits<TArrowDataType>::type_singleton(), reserveItems, reserveSize)) {
+        }
+
+        void AddRecord(const ui32 recordIndex, const std::string_view value) {
+            AddValue(recordIndex, arrow::util::string_view(value.data(), value.size()));
+        }
+
+        template <class TValue>
+        void AddValue(const ui32 recordIndex, const TValue& value) {
+            AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) { AFL_VERIFY(NArrow::Append<TArrowDataType>(builder, value)); });
         }
     };
 
@@ -141,6 +161,9 @@ protected:
     virtual ui32 DoGetValueRawBytes() const override;
     virtual ui32 DoGetNullsCount() const override {
         return Array->null_count();
+    }
+    virtual std::optional<bool> DoHasNulls() const override {
+        return Array->null_count() != 0;
     }
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual std::optional<ui64> DoGetRawSize() const override;

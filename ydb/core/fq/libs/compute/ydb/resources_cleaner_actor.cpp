@@ -8,29 +8,23 @@
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/util/backoff.h>
-#include <ydb/library/services/services.pb.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
-
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResourcesCleaner] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " << stream)
-#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResourcesCleaner] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " << stream)
-#define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResourcesCleaner] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResourcesCleaner] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResourcesCleaner] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
 namespace NFq {
 
 using namespace NActors;
 using namespace NFq;
 
-class TResourcesCleanerActor : public TBaseComputeActor<TResourcesCleanerActor> {
+class TResourcesCleanerActor: public TBaseComputeActor<TResourcesCleanerActor> {
 public:
     enum ERequestType {
         RT_FORGET_OPERATION,
@@ -38,9 +32,8 @@ public:
     };
 
     class TCounters: public virtual TThrRefBase {
-        std::array<TComputeRequestCountersPtr, RT_MAX> Requests = CreateArray<RT_MAX, TComputeRequestCountersPtr>({
-            { MakeIntrusive<TComputeRequestCounters>("ForgetOperation") }
-        });
+        std::array<TComputeRequestCountersPtr, RT_MAX> Requests =
+            CreateArray<RT_MAX, TComputeRequestCountersPtr>({ { MakeIntrusive<TComputeRequestCounters>("ForgetOperation") } });
 
         ::NMonitoring::TDynamicCounterPtr Counters;
 
@@ -48,7 +41,7 @@ public:
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
         {
-            for (auto& request: Requests) {
+            for (auto& request : Requests) {
                 request->Register(Counters);
             }
         }
@@ -58,7 +51,8 @@ public:
         }
     };
 
-    TResourcesCleanerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const NYdb::TOperation::TOperationId& operationId, const ::NYql::NCommon::TServiceCounters& queryCounters)
+    TResourcesCleanerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector,
+        const NYdb::TOperation::TOperationId& operationId, const ::NYql::NCommon::TServiceCounters& queryCounters)
         : TBaseComputeActor(queryCounters, "ResourcesCleaner")
         , Params(params)
         , Parent(parent)
@@ -66,16 +60,25 @@ public:
         , OperationId(operationId)
         , Counters(GetStepCountersSubgroup())
         , BackoffTimer(20, 1000)
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "FQ_RESOURCES_CLEANER_ACTOR";
 
     void SendForgetOperation(const TDuration& delay = TDuration::Zero()) {
-        Register(new TRetryActor<TEvYdbCompute::TEvForgetOperationRequest, TEvYdbCompute::TEvForgetOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_FORGET_OPERATION), delay, SelfId(), Connector, OperationId));
+        Register(
+            new TRetryActor<TEvYdbCompute::TEvForgetOperationRequest, TEvYdbCompute::TEvForgetOperationResponse, NYdb::TOperation::TOperationId>(
+                Counters.GetCounters(ERequestType::RT_FORGET_OPERATION), delay, SelfId(), Connector, OperationId));
     }
 
     void Start() {
-        LOG_I("Start resources cleaner actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
+        YDB_LOG_INFO("[ydb] [ResourcesCleaner] Start resources cleaner actor. Compute",
+            {"cloudId", Params.CloudId},
+            {"scope", Params.Scope},
+            {"queryId", Params.QueryId},
+            {"jobId", Params.JobId},
+            {"operationId", OperationId},
+            {"state", FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)});
         Become(&TResourcesCleanerActor::StateFunc);
         SendForgetOperation();
     }
@@ -87,17 +90,35 @@ public:
     void Handle(const TEvYdbCompute::TEvForgetOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Status == NYdb::EStatus::TIMEOUT || response.Status == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED) {
-            LOG_I("Operation partly forgotten, will be retried: " << response.Status);
+            YDB_LOG_INFO("[ydb] [ResourcesCleaner] Operation partly forgotten, will be",
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId},
+                {"operationId", OperationId},
+                {"retried", response.Status});
             SendForgetOperation(BackoffTimer.Next());
             return;
         }
         if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::NOT_FOUND) {
-            LOG_E("Can't forget operation: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ResourcesCleaner] Can't forget",
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId},
+                {"operationId", OperationId},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
             Send(Parent, new TEvYdbCompute::TEvResourcesCleanerResponse(ev->Get()->Issues, ev->Get()->Status));
             FailedAndPassAway();
             return;
         }
-        LOG_I("Operation successfully forgotten " << response.Status);
+        YDB_LOG_INFO("[ydb] [ResourcesCleaner] Operation successfully forgotten",
+            {"cloudId", Params.CloudId},
+            {"scope", Params.Scope},
+            {"queryId", Params.QueryId},
+            {"jobId", Params.JobId},
+            {"operationId", OperationId},
+            {"status", response.Status});
         Send(Parent, new TEvYdbCompute::TEvResourcesCleanerResponse({}, NYdb::EStatus::SUCCESS));
         CompleteAndPassAway();
     }
@@ -111,12 +132,9 @@ private:
     NKikimr::TBackoffTimer BackoffTimer;
 };
 
-std::unique_ptr<NActors::IActor> CreateResourcesCleanerActor(const TRunActorParams& params,
-                                                             const TActorId& parent,
-                                                             const TActorId& connector,
-                                                             const NYdb::TOperation::TOperationId& operationId,
-                                                             const ::NYql::NCommon::TServiceCounters& queryCounters) {
+std::unique_ptr<NActors::IActor> CreateResourcesCleanerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector,
+    const NYdb::TOperation::TOperationId& operationId, const ::NYql::NCommon::TServiceCounters& queryCounters) {
     return std::make_unique<TResourcesCleanerActor>(params, parent, connector, operationId, queryCounters);
 }
 
-}
+}   // namespace NFq

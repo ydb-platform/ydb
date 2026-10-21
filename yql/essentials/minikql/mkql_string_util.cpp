@@ -44,7 +44,7 @@ NUdf::TUnboxedValuePod AppendString(const NUdf::TUnboxedValuePod value, const NU
                 if (str->Size() == valueRef.Size() + offset) {
                     if (str->TryExpandOn(ref.Size())) {
                         std::memcpy(str->Data() + offset + valueRef.Size(), ref.Data(), ref.Size());
-                        return NUdf::TUnboxedValuePod(NYql::NUdf::TStringValue(std::move(str)), newSize, offset);
+                        return NUdf::TUnboxedValuePod(NYql::NUdf::TStringValue(str), newSize, offset);
                     }
                 }
             }

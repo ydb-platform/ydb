@@ -146,6 +146,10 @@ public:
     TFuture<NApi::IPrerequisitePtr> StartChaosLease(
         const TChaosLeaseStartOptions& options = {}) override;
 
+    TFuture<void> PingChaosLease(
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeasePingOptions& options = {}) override;
+
     TFuture<void> SetUserBanned(
         const std::string& user,
         bool isBanned,
@@ -169,14 +173,14 @@ public:
         const TFileFragmentWriterOptions& options) override;
 
     // Queues.
-    TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(
+    TFuture<TPullQueueResult> PullQueue(
         const NYPath::TRichYPath& queuePath,
         i64 offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
         const TPullQueueOptions& options = {}) override;
 
-    TFuture<NQueueClient::IQueueRowsetPtr> PullQueueConsumer(
+    TFuture<TPullQueueResult> PullQueueConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         std::optional<i64> offset,
@@ -214,13 +218,22 @@ public:
 
     // Files.
     TFuture<NApi::TGetFileFromCacheResult> GetFileFromCache(
-        const TString& md5,
+        const std::string& md5,
         const NApi::TGetFileFromCacheOptions& options) override;
 
     TFuture<NApi::TPutFileToCacheResult> PutFileToCache(
         const NYPath::TYPath& path,
-        const TString& expectedMD5,
+        const std::string& expectedMD5,
         const NApi::TPutFileToCacheOptions& options) override;
+
+    TFuture<TFilePartitions> PartitionFile(
+        const NYPath::TYPath& path,
+        const std::vector<TFileReadRange>& ranges,
+        const TPartitionFileOptions& options) override;
+
+    TFuture<IFileReaderPtr> CreateFilePartitionReader(
+        const TFilePartitionCookiePtr& cookie,
+        const TReadFilePartitionOptions& options) override;
 
     // Security.
     TFuture<TGetCurrentUserResult> GetCurrentUser(
@@ -369,7 +382,7 @@ public:
 
     TFuture<TPollJobShellResponse> PollJobShell(
         NJobTrackerClient::TJobId jobId,
-        const std::optional<TString>& shellName,
+        const std::optional<std::string>& shellName,
         const NYson::TYsonString& parameters,
         const NApi::TPollJobShellOptions& options) override;
 
@@ -482,7 +495,7 @@ public:
         const std::string& address,
         const NApi::TKillProcessOptions& options) override;
 
-    TFuture<TString> WriteCoreDump(
+    TFuture<std::string> WriteCoreDump(
         const std::string& address,
         const NApi::TWriteCoreDumpOptions& options) override;
 
@@ -490,7 +503,7 @@ public:
         const std::string& address,
         const TWriteLogBarrierOptions& options) override;
 
-    TFuture<TString> WriteOperationControllerCoreDump(
+    TFuture<std::string> WriteOperationControllerCoreDump(
         NJobTrackerClient::TOperationId operationId,
         const NApi::TWriteOperationControllerCoreDumpOptions& options) override;
 
@@ -530,7 +543,7 @@ public:
         EMaintenanceComponent component,
         const std::string& address,
         EMaintenanceType type,
-        const TString& comment,
+        const std::string& comment,
         const TAddMaintenanceOptions& options) override;
 
     TFuture<TMaintenanceCountsPerTarget> RemoveMaintenance(
@@ -567,7 +580,7 @@ public:
 
     TFuture<NQueryTrackerClient::TQueryId> StartQuery(
         NQueryTrackerClient::EQueryEngine engine,
-        const TString& query,
+        const std::string& query,
         const TStartQueryOptions& options) override;
 
     TFuture<void> AbortQuery(
@@ -605,24 +618,24 @@ public:
 
     virtual TFuture<void> SetUserPassword(
         const std::string& user,
-        const TString& currentPasswordSha256,
-        const TString& newPasswordSha256,
+        const std::string& currentPasswordSha256,
+        const std::string& newPasswordSha256,
         const TSetUserPasswordOptions& options) override;
 
     TFuture<TIssueTokenResult> IssueToken(
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TIssueTokenOptions& options) override;
 
     TFuture<void> RevokeToken(
         const std::string& user,
-        const TString& passwordSha256,
-        const TString& tokenSha256,
+        const std::string& passwordSha256,
+        const std::string& tokenSha256,
         const TRevokeTokenOptions& options) override;
 
     TFuture<TListUserTokensResult> ListUserTokens(
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TListUserTokensOptions& options) override;
 
     // Bundle Controller
@@ -693,19 +706,18 @@ public:
     TFuture<IRowBatchReaderPtr> CreateShuffleReader(
         const TSignedShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        std::optional<std::pair<int, int>> writerIndexRange,
+        std::optional<std::pair<int, int>> logicalWriterIndexRange,
         const TShuffleReaderOptions& options) override;
 
     TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
         const TSignedShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
-        std::optional<int> writerIndex,
+        std::optional<int> logicalWriterIndex,
         const TShuffleWriterOptions& options) override;
 
 private:
     const TConnectionPtr Connection_;
     const TClientOptions ClientOptions_;
-    const NRpc::TDynamicChannelPoolPtr ChannelPool_;
     const NRpc::IChannelPtr RetryingChannel_;
 
     TLazyIntrusivePtr<NTabletClient::ITableMountCache> TableMountCache_;

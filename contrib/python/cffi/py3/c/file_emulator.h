@@ -51,7 +51,7 @@ static FILE *PyFile_AsFile(PyObject *ob_file)
         ob_mode = PyObject_GetAttrString(ob_file, "mode");
         if (ob_mode == NULL)
             goto fail;
-        mode = PyText_AsUTF8(ob_mode);
+        mode = PyUnicode_AsUTF8(ob_mode);
         if (mode == NULL)
             goto fail;
 

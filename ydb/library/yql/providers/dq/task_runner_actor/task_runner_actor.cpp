@@ -10,6 +10,7 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -155,7 +156,7 @@ public:
             hFunc(TEvInputChannelData, OnInputChannelData);
             hFunc(TEvSinkDataRequest, OnSinkDataRequest);
             hFunc(TEvSinkData, OnSinkData);
-            IgnoreFunc(TEvStatistics);
+            hFunc(TEvStatistics, OnStatisticsRequest);
             default: {
                 auto message = TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << ev->GetTypeName() << ")" << " stageId: " << StageId;
                 auto issue = TIssue(message).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
@@ -293,6 +294,16 @@ private:
         Run(ev);
     }
 
+    void OnStatisticsRequest(TEvStatistics::TPtr& ev) {
+        // Task runner stats live in the child process and reach the compute actor as sensors
+        // attached to command responses, so the view stays undefined here. The reply itself is
+        // still required: it is the only thing that lets the compute actor answer a state
+        // request from the controller.
+        const auto replyTo = ev->Sender;
+        const auto cookie = ev->Cookie;
+        Send(replyTo, ev->Release().Release(), /*flags=*/0, cookie);
+    }
+
     void OnInputChannelData(TEvInputChannelData::TPtr& ev) {
         auto* actorSystem = TActivationContext::ActorSystem();
         auto replyTo = ev->Sender;
@@ -348,7 +359,8 @@ private:
         YQL_ENSURE(!batch.IsWide());
 
         auto* source = TaskRunner->GetSource(index);
-        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), DataTransportVersion, ValuePackerVersion);
+        Y_ENSURE(RuntimeSettings, "RuntimeSettings is not set. Expected to be set in OnDqTask stage.");
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), DataTransportVersion, ValuePackerVersion, RuntimeSettings->DatumValidation.Get());
         TDqSerializedBatch serialized = dataSerializer.Serialize(batch, source->GetInputType());
 
         Invoker->Invoke([serialized=std::move(serialized), taskRunner=TaskRunner, actorSystem, selfId, cookie, parentId=ParentId, space, finish, index, settings=Settings, stageId=StageId]() mutable {
@@ -431,10 +443,12 @@ private:
         auto guard = TaskRunner->BindAllocator();
         NKikimr::NMiniKQL::TUnboxedValueBatch batch;
         auto sink = TaskRunner->GetSink(ev->Get()->Index);
+        Y_ENSURE(RuntimeSettings, "RuntimeSettings must be set on OnDqTask stage.");
         TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(),
                                          TaskRunner->GetHolderFactory(),
                                          (NDqProto::EDataTransportVersion)ev->Get()->Batch.Proto.GetTransportVersion(),
-                                         FromProto(ev->Get()->Batch.Proto.GetValuePackerVersion()));
+                                         FromProto(ev->Get()->Batch.Proto.GetValuePackerVersion()),
+                                         RuntimeSettings->DatumValidation.Get());
         dataSerializer.Deserialize(std::move(ev->Get()->Batch), sink->GetOutputType(), batch);
 
         Parent->SinkSend(
@@ -528,6 +542,7 @@ private:
             Settings->FreezeDefaults();
             DataTransportVersion = Settings->GetDataTransportVersion();
             ValuePackerVersion = FromProto(Settings->GetValuePackerVersion());
+            RuntimeSettings = DeserializeRuntimeSettingsFromProto(ev->Get()->Task.GetProgram().GetRuntimeSettings());
             StageId = taskMeta.GetStageId();
 
             NDq::TDqTaskSettings settings(&ev->Get()->Task);
@@ -655,6 +670,7 @@ private:
     TIntrusivePtr<TDqConfiguration> Settings;
     NDqProto::EDataTransportVersion DataTransportVersion;
     NKikimr::NMiniKQL::EValuePackerVersion ValuePackerVersion;
+    TRuntimeSettings::TConstPtr RuntimeSettings;
     ui64 StageId;
     TWorkerRuntimeData* RuntimeData;
     TString ClusterName;

@@ -68,6 +68,8 @@ message TCounterOptions {
      *       If more than one counter is defined, their values are combined together.
      */
     repeated TSourceCounter SourceCounters = 5;
+
+    optional bool LeaderOnly = 6;
 }
 
 message TTxTypeOptions {

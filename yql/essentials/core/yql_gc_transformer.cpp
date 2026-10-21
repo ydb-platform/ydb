@@ -5,23 +5,23 @@ namespace NYql {
 
 namespace {
 
-class TGcNodeTransformer : public TSyncTransformerBase {
+class TGcNodeTransformer: public TSyncTransformerBase {
 public:
-    TGcNodeTransformer()
-    {}
+    TGcNodeTransformer() = default;
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         output = input;
 
-        if (!CurrentThreshold_)
+        if (!CurrentThreshold_) {
             CurrentThreshold_ = ctx.GcConfig.Settings.NodeCountThreshold;
+        }
 
         if (ctx.NodeAllocationCounter < LastGcCount_ + CurrentThreshold_) {
             return TStatus::Ok;
         }
 
         const auto oldSize = ctx.ExprNodes.size();
-        const auto zombies = std::partition(ctx.ExprNodes.begin(), ctx.ExprNodes.end(), std::bind(std::logical_not<bool>(), std::bind(&TExprNode::Dead, std::placeholders::_1)));
+        const auto zombies = std::partition(ctx.ExprNodes.begin(), ctx.ExprNodes.end(), std::bind(std::logical_not<>(), std::bind(&TExprNode::Dead, std::placeholders::_1)));
 
         for (auto it = zombies; ctx.ExprNodes.cend() != it; ++it) {
             const auto dead = it->get();
@@ -51,17 +51,21 @@ public:
         CurrentThreshold_ = Max(ctx.GcConfig.Settings.NodeCountThreshold, liveSize);
 
         if (liveSize > ctx.NodesAllocationLimit) {
-            ctx.AddError(YqlIssue(TPosition(), TIssuesIds::CORE_GC_NODES_LIMIT_EXCEEDED, TStringBuilder()
-                << "Too many allocated nodes, allowed: " << ctx.NodesAllocationLimit
-                << ", current: " << liveSize));
+            ctx.AddError(YqlIssue(
+                TPosition(), TIssuesIds::CORE_GC_NODES_LIMIT_EXCEEDED,
+                TStringBuilder()
+                    << "Too many allocated nodes, allowed: " << ctx.NodesAllocationLimit
+                    << ", current: " << liveSize));
             return TStatus::Error;
         }
 
         const auto poolSize = ctx.StringPool.MemoryAllocated() + ctx.StringPool.MemoryWaste();
         if (poolSize > ctx.StringsAllocationLimit) {
-            ctx.AddError(YqlIssue(TPosition(), TIssuesIds::CORE_GC_STRINGS_LIMIT_EXCEEDED, TStringBuilder()
-                << "Too large string pool, allowed: " << ctx.StringsAllocationLimit
-                << ", current: " << poolSize));
+            ctx.AddError(YqlIssue(
+                TPosition(), TIssuesIds::CORE_GC_STRINGS_LIMIT_EXCEEDED,
+                TStringBuilder()
+                    << "Too large string pool, allowed: " << ctx.StringsAllocationLimit
+                    << ", current: " << poolSize));
             return TStatus::Error;
         }
         return TStatus::Ok;
@@ -77,10 +81,10 @@ private:
     ui64 CurrentThreshold_ = 0;
 };
 
-}
+} // namespace
 
 TAutoPtr<IGraphTransformer> CreateGcNodeTransformer() {
     return new TGcNodeTransformer();
 }
 
-}
+} // namespace NYql

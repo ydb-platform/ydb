@@ -1,0 +1,15 @@
+syntax = "proto2";
+
+package NYamlConfigTest;
+
+message TTestServiceConfig {
+    optional string ServiceName = 1;
+    optional uint32 MaxConnections = 2;
+    optional bool TlsEnabled = 3;
+    repeated TEndpoint Endpoints = 4;
+
+    message TEndpoint {
+        optional string Host = 1;
+        optional uint32 Port = 2;
+    }
+}

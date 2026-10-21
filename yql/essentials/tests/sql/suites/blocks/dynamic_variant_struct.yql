@@ -1,0 +1,10 @@
+$structVariantType = Variant<x: Int32, y: Int32>;
+
+$data = [
+    <|payload: 10, index: Just("x"u)|>,
+    <|payload: 20, index: Just("y"u)|>,
+    <|payload: 30, index: Just("z"u)|>,
+    <|payload: 40, index: Nothing(Utf8?)|>,
+];
+
+SELECT DynamicVariant(payload, index, $structVariantType) AS variant FROM as_table($data);

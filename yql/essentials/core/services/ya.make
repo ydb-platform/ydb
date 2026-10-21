@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_eval_expr.cpp
@@ -17,6 +17,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/string_utils/base64
+    library/cpp/time_provider
     library/cpp/yson
     yql/essentials/ast/serialize
     yql/essentials/minikql
@@ -32,8 +33,6 @@ PEERDIR(
     yql/essentials/providers/common/schema/expr
     yql/essentials/providers/result/expr_nodes
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

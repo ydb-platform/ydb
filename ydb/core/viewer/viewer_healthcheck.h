@@ -253,6 +253,7 @@ public:
                 TActorId cache = MakeDatabaseMetadataCacheId(activeNode);
                 auto request = MakeHolder<NHealthCheck::TEvSelfCheckRequestProto>();
                 Send(cache, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
+                SubscriptionNodeIds.push_back(activeNode);
                 return;
             }
         }

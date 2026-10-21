@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from .prettytable import PrettyTable
 
+TYPE_CHECKING = False
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from typing import ClassVar, Final
+
 try:
     from colorama import init
 
@@ -10,10 +15,18 @@ except ImportError:
     pass
 
 
-RESET_CODE = "\x1b[0m"
+RESET_CODE: Final = "\x1b[0m"
 
 
 class Theme:
+    default_color: Final[str]
+    vertical_char: Final[str]
+    vertical_color: Final[str]
+    horizontal_char: Final[str]
+    horizontal_color: Final[str]
+    junction_char: Final[str]
+    junction_color: Final[str]
+
     def __init__(
         self,
         default_color: str = "",
@@ -44,50 +57,50 @@ class Theme:
 
 
 class Themes:
-    DEFAULT = Theme()
-    DYSLEXIA_FRIENDLY = Theme(
+    DEFAULT: ClassVar[Theme] = Theme()
+    DYSLEXIA_FRIENDLY: ClassVar[Theme] = Theme(
         default_color="38;5;223",
         vertical_color="38;5;22",
         horizontal_color="38;5;22",
         junction_color="38;5;58",
     )
-    EARTH = Theme(
+    EARTH: ClassVar[Theme] = Theme(
         default_color="33",
         vertical_color="38;5;94",
         horizontal_color="38;5;22",
         junction_color="38;5;130",
     )
-    GLARE_REDUCTION = Theme(
+    GLARE_REDUCTION: ClassVar[Theme] = Theme(
         default_color="38;5;252",
         vertical_color="38;5;240",
         horizontal_color="38;5;240",
         junction_color="38;5;246",
     )
-    HIGH_CONTRAST = Theme(
+    HIGH_CONTRAST: ClassVar[Theme] = Theme(
         default_color="97",
         vertical_color="91",
         horizontal_color="94",
         junction_color="93",
     )
-    LAVENDER = Theme(
+    LAVENDER: ClassVar[Theme] = Theme(
         default_color="38;5;183",
         vertical_color="35",
         horizontal_color="38;5;147",
         junction_color="38;5;219",
     )
-    OCEAN = Theme(
+    OCEAN: ClassVar[Theme] = Theme(
         default_color="96",
         vertical_color="34",
         horizontal_color="34",
         junction_color="36",
     )
-    OCEAN_DEEP = Theme(
+    OCEAN_DEEP: ClassVar[Theme] = Theme(
         default_color="96",
         vertical_color="34",
         horizontal_color="36",
         junction_color="94",
     )
-    PASTEL = Theme(
+    PASTEL: ClassVar[Theme] = Theme(
         default_color="38;5;223",
         vertical_color="38;5;152",
         horizontal_color="38;5;187",
@@ -96,7 +109,7 @@ class Themes:
 
 
 class ColorTable(PrettyTable):
-    def __init__(self, field_names=None, **kwargs) -> None:
+    def __init__(self, field_names: Sequence[str] | None = None, **kwargs) -> None:
         super().__init__(field_names=field_names, **kwargs)
         # TODO: Validate option
 

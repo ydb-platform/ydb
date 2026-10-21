@@ -1,7 +1,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/converter.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/reader/result_builder.h>

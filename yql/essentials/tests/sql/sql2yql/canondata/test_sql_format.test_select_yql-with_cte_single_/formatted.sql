@@ -1,0 +1,43 @@
+PRAGMA YqlSelect = 'force';
+
+WITH x AS (
+    SELECT
+        1
+)
+SELECT
+    *
+FROM
+    x
+;
+
+WITH x AS (
+    VALUES
+        (1)
+)
+SELECT
+    *
+FROM
+    x
+;
+
+WITH x AS (
+    SELECT
+        1 AS a
+)
+SELECT
+    a AS a1,
+    x.a AS a2
+FROM
+    x
+;
+
+WITH x AS (
+    SELECT
+        1 AS a
+)
+SELECT
+    a AS a1,
+    y.a AS a2
+FROM
+    x AS y
+;

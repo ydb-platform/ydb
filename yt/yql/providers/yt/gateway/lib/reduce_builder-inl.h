@@ -6,8 +6,7 @@ template<class ExecCtxPtr>
 TString TReduceJobBuilder::SetReduceLambdaCode(TYqlUserJobBase* reduceJob, NNodes::TYtReduce reduce, ExecCtxPtr execCtx, TExprContext& ctx) {
     TString reduceLambda;
     {
-        TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-            execCtx->FunctionRegistry_->SupportsSizedAllocators());
+        TScopedAlloc alloc(__LOCATION__);
         alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
         TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc);
         reduceLambda = builder.BuildLambdaWithIO(*execCtx->MkqlCompiler_, reduce.Reducer(), ctx);
@@ -26,9 +25,8 @@ void TReduceJobBuilder::SetReduceJobParams(
     const THashSet<TString>& auxColumns
 ) {
     const bool useSkiff = execCtx->Options_.Config()->UseSkiff.Get(execCtx->Cluster_).GetOrElse(DEFAULT_USE_SKIFF);
-    const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-    reduceJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff, nativeTypeCompat, false));
-    reduceJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
+    reduceJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff, false));
+    reduceJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff));
 
     YQL_ENSURE(!groups.empty());
     if (groups.back() != 0) {
@@ -45,6 +43,7 @@ void TReduceJobBuilder::SetReduceJobParams(
     reduceJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
     reduceJob->SetLangVer(execCtx->Options_.LangVer());
     reduceJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
+    reduceJob->SetBridgeMode(execCtx->Options_.BridgeMode());
 }
 
 } // namespace NYql

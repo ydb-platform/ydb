@@ -9,6 +9,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    compute
     control_plane_storage
     http_api
     mem_alloc
@@ -18,5 +19,5 @@ RECURSE_FOR_TESTS(
     s3
     streaming
     yds
-    streaming/streaming_large
+    streaming_common
 )

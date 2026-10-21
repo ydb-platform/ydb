@@ -35,6 +35,7 @@ public:
     TEndpointRecord GetEndpoint(const TEndpointKey& preferredEndpoint, bool onlyPreferred = false) const;
     TDuration TimeSinceLastUpdate() const;
     void BanEndpoint(const std::string& endpoint);
+    void BanNodeId(std::uint64_t nodeId);
     int GetPessimizationRatio();
     bool LinkObjToEndpoint(const TEndpointKey& endpoint, TEndpointObj* obj, const void* tag);
     void ForEachEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;

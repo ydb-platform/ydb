@@ -14,7 +14,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
     NActors::TActorSystem const* actorSystem,
-    TChildLogTitle logTitle,
+    const TLogTitle& logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     TReadHint readHint,
@@ -22,21 +22,24 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
     : ActorSystem(actorSystem)
-    , LogTitle(std::move(logTitle))
+    , LogTitle(logTitle.GetChildWithTags(
+          GetCycleCount(),
+          {{"t", "MultiRead"}, {"r", request->Headers.Range}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , CallContext(std::move(callContext))
     , Request(std::move(request))
     , TraceId(std::move(traceId))
+    , SgList(Request->Sglist.CreateDepender())
 {
     Y_ASSERT(Request->Headers.VolumeConfig);
     Y_ASSERT(Request->Headers.VolumeConfig->BlockSize != 0);
 
     const size_t blockSize = Request->Headers.VolumeConfig->BlockSize;
 
-    auto guard = Request->Sglist.Acquire();
+    auto guard = SgList.Acquire();
     if (!guard) {
-        Reply(MakeError(E_CANCELLED, "Failed to acquire sglist guard"), 0);
+        Reply(MakeCanNotAcquireDataError(), 0);
         return;
     }
 
@@ -47,21 +50,20 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
         const size_t offsetBytes = offsetBlocks * blockSize;
         const size_t sizeBytes = hint.RequestRelativeRange.Size() * blockSize;
 
-        auto subRequest = std::make_shared<TReadBlocksLocalRequest>(
-            Request->Headers.Clone(hint.VChunkRange));
+        auto subRequest =
+            std::make_shared<TReadBlocksLocalRequest>(Request->Headers.Clone(
+                ConvertRangeSafe<TBlockRange64>(hint.VChunkRange)));
 
         // Create subbuffer Sglist for current range
-        subRequest->Sglist = Request->Sglist.CreateDepender(
+        subRequest->Sglist = SgList.CreateDepender(
             CreateSgListSubRange(guard.Get(), offsetBytes, sizeBytes));
 
-        TReadHint singleHint;
-        singleHint.RangeHints.push_back(std::move(hint));
         auto executor = std::make_shared<TReadSingleLocationRequestExecutor>(
             ActorSystem,
-            LogTitle,
+            logTitle,
             VChunkConfig,
             DirectBlockGroup,
-            std::move(singleHint),
+            std::move(hint),
             CallContext,
             subRequest,
             NWilson::TTraceId(TraceId));
@@ -87,12 +89,24 @@ void TReadMultipleLocationRequestExecutor::Run()
 {
     for (size_t i = 0; i < SubRequestExecutors.size(); ++i) {
         auto future = SubRequestExecutors[i]->GetFuture();
-        future.Subscribe([self = shared_from_this(),
-                          i](const NThreading::TFuture<TResponse>& f)
-                         { self->OnSubRequestComplete(f.GetValue(), i); });
+        future.Subscribe([self = shared_from_this(), i]   //
+                         (const NThreading::TFuture<TResponse>& f)
+                         {   //
+                             self->OnSubRequestComplete(f.GetValue(), i);
+                         });
 
         SubRequestExecutors[i]->Run();
     }
+}
+
+TString TReadMultipleLocationRequestExecutor::Print()
+{
+    TStringBuilder result;
+    result << LogTitle.GetWithTime();
+    result << " Subrequests: " << CompletedCount << "/"
+           << SubRequestExecutors.size();
+    result << (Promise.IsReady() ? " Replied" : "Not replied");
+    return result;
 }
 
 NThreading::TFuture<IReadRequestExecutor::TResponse>
@@ -130,10 +144,10 @@ void TReadMultipleLocationRequestExecutor::Reply(
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s Request: %zu, Error: %s",
+            "%s SubRequest: %zu, Error: %s",
             LogTitle.GetWithTime().c_str(),
             index,
-            FormatError(error).c_str());
+            FormatError(error).Quote().c_str());
     } else {
         LOG_DEBUG(
             *ActorSystem,
@@ -142,7 +156,7 @@ void TReadMultipleLocationRequestExecutor::Reply(
             LogTitle.GetWithTime().c_str());
     }
 
-    Request->Sglist.Close();
+    SgList.Close();
 
     Promise.TrySetValue(TResponse{.Error = std::move(error)});
 }

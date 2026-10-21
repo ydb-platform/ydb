@@ -1,0 +1,6 @@
+-- reserved columns are still writable before the YtReservedColumnPrefix language version
+INSERT INTO plato.Output WITH TRUNCATE
+SELECT
+    key   AS `_yql_a`,
+    value
+FROM plato.Input;

@@ -257,20 +257,28 @@ namespace boost { namespace spirit { namespace karma
             //    generate(sink, right_align(precision, '0')[ulong], n);
             // but it's spelled out to avoid inter-modular dependencies.
 
-	    unsigned int digits=1; //should be number of digits n(truncating any fraction)
-	    if(!boost::spirit::traits::test_zero(n)) {
-	      static constexpr uint64_t limit = UINT64_MAX / 10;
-	      const T num = floor(n);
-	      for (uint64_t x = 10u, i = 1u;; x *= 10, i++) {
-		if (num < x) {
-		  digits=i;break;
-		}
-		if (x > limit) {
-		  digits= i + 1;break;
-		}
-	      }
-	    }
-	    
+            // should be number of digits n(truncating any fraction)
+            typename remove_const<T>::type digits = 1;
+
+            if (!boost::spirit::traits::test_zero(n)) {
+                BOOST_CONSTEXPR_OR_CONST uint64_t limit =
+                    std::numeric_limits<uint64_t>::max() / 10;
+                // Cannot cast T to uint64_t since the former might be a mocked
+                // type that does not support type casting
+                const T num = floor(n);
+
+                if (num > limit) {
+                    // uint64_t cannot represent the fractional part of an 80
+                    // bit floating point type at full precision. Fallback to
+                    // convential computation.
+                    digits = ceil(log10(n + T(1.)));
+                } else {
+                    for (uint64_t x = 10; num >= x; x *= 10) {
+                        ++digits;
+                    }
+                }
+            }
+
             bool r = true;
             for (/**/; r && digits < precision_; digits = digits + 1)
                 r = char_inserter<>::call(sink, '0');

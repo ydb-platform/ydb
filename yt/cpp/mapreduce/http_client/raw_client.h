@@ -136,7 +136,8 @@ public:
 
     void CommitTransaction(
         TMutationId& mutationId,
-        const TTransactionId& transactionId) override;
+        const TTransactionId& transactionId,
+        const TCommitTransactionOptions& options = {}) override;
 
     // Operations
 
@@ -214,6 +215,10 @@ public:
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TFileReaderOptions& options = {}) override;
+
+    std::unique_ptr<IAbortableInputStream> ReadFilePartition(
+        const TString& cookie,
+        const TFilePartitionReaderOptions& options = {}) override;
 
     std::unique_ptr<IOutputStream> WriteFile(
         const TTransactionId& transactionId,
@@ -399,6 +404,15 @@ public:
         const TVector<TRichYPath>& paths,
         const TGetTablePartitionsOptions& options = {}) override;
 
+    TFilePartitions GetFilePartitions(
+        const TTransactionId& transactionId,
+        const TYPath& path,
+        const TVector<TFileReadRange>& ranges,
+        const TGetFilePartitionsOptions& options = {}) override;
+
+    void CheckClusterLiveness(
+        const TCheckClusterLivenessOptions& options = {}) override;
+
     ui64 GenerateTimestamp() override;
 
     IRawBatchRequestPtr CreateRawBatchRequest() override;
@@ -408,13 +422,12 @@ public:
     IRawClientPtr Clone(const TClientContext& context) override;
 
 private:
-    void InitAsyncClient();
-    void PostAsync(const TString& command, TNode params);
+    void InitPingClient();
 
 private:
     const TClientContext Context_;
-    NHttp::IClientPtr AsyncHttpClient_;
-    std::once_flag AsyncHttpClientInitOnceFlag_;
+    NHttp::IClientPtr PingHttpClient_;
+    std::once_flag PingClientInitOnceFlag_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

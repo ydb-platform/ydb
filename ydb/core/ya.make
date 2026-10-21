@@ -35,7 +35,7 @@ RECURSE(
     keyvalue
     kqp
     load_test
-    local_pgwire
+    local_indexes
     local_proxy
     log_backend
     metering
@@ -45,8 +45,8 @@ RECURSE(
     memory_controller
     nbs
     node_whiteboard
+    path_aliasing
     persqueue
-    pgproxy
     public_http
     quoter
     raw_socket
@@ -55,6 +55,7 @@ RECURSE(
     scheme_types
     security
     statistics
+    subsystems
     sys_view
     tablet
     tablet_flat

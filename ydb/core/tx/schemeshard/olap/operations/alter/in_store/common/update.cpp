@@ -9,17 +9,21 @@ NKikimr::TConclusionStatus TInStoreTableUpdate::DoStartImpl(const TUpdateStartCo
 
     auto tableInfo = GetTargetTableInfoVerified();
     const auto storePathId = tableInfo->GetOlapStorePathIdVerified();
-    TPath storePath = TPath::Init(storePathId, context.GetSSOperationContext()->SS);
+    auto* ssContext = context.GetSSOperationContext();
+    TPath storePath = TPath::Init(storePathId, ssContext->SS);
+
+    ssContext->MemChanges.GrabPath(ssContext->SS, storePathId);
+    ssContext->MemChanges.GrabOlapStore(ssContext->SS, storePathId);
 
     Y_ABORT_UNLESS(inStoreTable.GetStoreInfo()->ColumnTables.contains((*context.GetObjectPath())->PathId));
     inStoreTable.GetStoreInfo()->ColumnTablesUnderOperation.insert((*context.GetObjectPath())->PathId);
 
     // Sequentially chain operations in the same olap store
-    if (context.GetSSOperationContext()->SS->Operations.contains(storePath.Base()->LastTxId)) {
-        context.GetSSOperationContext()->OnComplete.Dependence(storePath.Base()->LastTxId, (*context.GetObjectPath())->LastTxId);
+    if (ssContext->SS->Operations.contains(storePath.Base()->LastTxId)) {
+        ssContext->OnComplete.Dependence(storePath.Base()->LastTxId, (*context.GetObjectPath())->LastTxId);
     }
     storePath.Base()->LastTxId = (*context.GetObjectPath())->LastTxId;
-    context.GetSSOperationContext()->SS->PersistLastTxId(*context.GetDB(), storePath.Base());
+    ssContext->DbChanges.PersistPath(storePathId);
     return DoStartInStoreImpl(context);
 }
 

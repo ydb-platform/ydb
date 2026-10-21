@@ -1,0 +1,68 @@
+[
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didOpen",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "languageId": "yql",
+        "version": 1,
+        "text": "'"
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "textDocument/diagnostic",
+    "params": {
+      "identifier": "YQL",
+      "textDocument": {
+        "uri": "file:///tmp/a.yql"
+      },
+      "previousResultId": "0"
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "items": [
+        {
+          "code": "DEFAULT_ERROR",
+          "message": "token recognition error at: '''",
+          "range": {
+            "end": {
+              "character": 1,
+              "line": 0
+            },
+            "start": {
+              "character": 0,
+              "line": 0
+            }
+          },
+          "severity": 1,
+          "source": "format"
+        },
+        {
+          "code": "DEFAULT_ERROR",
+          "message": "token recognition error at: '''",
+          "range": {
+            "end": {
+              "character": 1,
+              "line": 0
+            },
+            "start": {
+              "character": 0,
+              "line": 0
+            }
+          },
+          "severity": 1,
+          "source": "lexer"
+        }
+      ],
+      "kind": "full",
+      "resultId": "1"
+    }
+  }
+]

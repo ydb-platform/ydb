@@ -13,6 +13,8 @@
 
 namespace NYdb::inline Dev::NPersQueue {
 
+namespace NGrpc = NTopic::NWriteSessionGrpc;
+
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -27,11 +29,10 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
-    , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
     , InitSeqNoPromise(NThreading::NewPromise<ui64>())
     , WakeupInterval(
-            Settings.BatchFlushInterval_.value_or(TDuration::Zero()) ?
-                std::min(Settings.BatchFlushInterval_.value_or(TDuration::Seconds(1)) / 5, TDuration::MilliSeconds(100))
+            Settings.BatchFlushInterval_ != TDuration::Zero() ?
+                std::min(Settings.BatchFlushInterval_ / 5, TDuration::MilliSeconds(100))
                 :
                 TDuration::MilliSeconds(100)
     )
@@ -165,7 +166,10 @@ void TWriteSessionImpl::DoCdsRequest(TDuration delay) {
                     &Ydb::PersQueue::V1::ClusterDiscoveryService::Stub::AsyncDiscoverClusters,
                     dbState,
                     INITIAL_DEFERRED_CALL_DELAY,
-                    TRpcRequestSettings::Make(settings)); // TODO: make client timeout setting
+                    TRpcRequestSettings::Make(
+                        settings,
+                        {},
+                        TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint)); // TODO: make client timeout setting
             };
             Connections->ScheduleDelayedTask(std::move(cdsRequestCall), TDeadline::SafeDurationCast(delay));
             return;
@@ -366,8 +370,10 @@ void TWriteSessionImpl::WriteInternal(
         std::lock_guard guard(Lock);
         CurrentBatch.Add(GetNextIdImpl(seqNo), createdAtValue, data, codec, originalSize);
 
+        ContinuationTokenIssued = false;
+        OnMemoryUsageChangedImpl(bufferSize);
+        readyToAccept = TryIssueContinuationTokenImpl();
         FlushWriteIfRequiredImpl();
-        readyToAccept = OnMemoryUsageChangedImpl(bufferSize).NowOk;
     }
     if (readyToAccept) {
         EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
@@ -426,7 +432,9 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const std::string& end
         auto clientContext = subclient->CreateContext();
         if (!clientContext) {
             AbortImpl();
-            // Grpc and WriteSession is closing right now.
+            // Driver is stopping. Do not keep ClientContext: children of an
+            // existing context can still be created after TDriver::Stop, which
+            // leaves CQ Contexts_ non-empty and deadlocks Stop(true).
             return;
         }
         auto prevClientContext = std::exchange(ClientContext, clientContext);
@@ -441,14 +449,24 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const std::string& end
             connectDelayContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
 
+        const bool missingDelayContext = delay && !connectDelayContext;
+        if (!connectContext || !connectTimeoutContext || missingDelayContext) {
+            Cancel(connectContext);
+            Cancel(connectDelayContext);
+            Cancel(connectTimeoutContext);
+            connectContext.reset();
+            connectDelayContext.reset();
+            connectTimeoutContext.reset();
+            AbortImpl();
+            return;
+        }
+
         // Previous operations contexts.
 
         // Set new context
         prevConnectContext = std::exchange(ConnectContext, connectContext);
         prevConnectTimeoutContext = std::exchange(ConnectTimeoutContext, connectTimeoutContext);
         prevConnectDelayContext = std::exchange(ConnectDelayContext, connectDelayContext);
-        Y_ASSERT(ConnectContext);
-        Y_ASSERT(ConnectTimeoutContext);
 
         if (Processor) {
             Processor->Cancel();
@@ -582,7 +600,8 @@ void TWriteSessionImpl::InitImpl() {
 }
 
 // Called under lock. Invokes Processor->Write, which is assumed to be deadlock-safe
-void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&& req) {
+void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&& req,
+                                             size_t requestMemoryUsage) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     Y_ASSERT(Processor);
@@ -590,12 +609,31 @@ void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&&
         return;
     }
     auto callback = [cbContext = SelfContext,
-                     connectionGeneration = ConnectionGeneration](NYdbGrpc::TGrpcStatus&& grpcStatus) {
-        if (auto self = cbContext->LockShared()) {
-            self->OnWriteDone(std::move(grpcStatus), connectionGeneration);
+                     connectionGeneration = ConnectionGeneration,
+                     requestMemoryUsage](NYdbGrpc::TGrpcStatus&& grpcStatus) {
+        const bool success = grpcStatus.Ok();
+        auto complete = [cbContext, connectionGeneration, requestMemoryUsage, status = std::move(grpcStatus)](bool ok) mutable {
+            // Scheduling can fail inline during driver shutdown.
+            if (!ok) {
+                return;
+            }
+            if (auto self = cbContext->LockShared()) {
+                if (requestMemoryUsage) {
+                    self->OnWriteRequestDone(requestMemoryUsage);
+                } else {
+                    self->OnWriteDone(std::move(status), connectionGeneration);
+                }
+            }
+        };
+        if (success) {
+            complete(true);
+        } else if (auto self = cbContext->LockShared()) {
+            // A rejected Write calls back inline while the session lock is held.
+            self->Connections->ScheduleCallback(TDuration::Zero(), std::move(complete));
         }
     };
 
+    OnMemoryUsageChangedImpl(static_cast<i64>(requestMemoryUsage));
     Processor->Write(std::move(req), std::move(callback));
 }
 
@@ -639,6 +677,27 @@ void TWriteSessionImpl::OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t conne
         }
     }
     ProcessHandleResult(handleResult);
+}
+
+void TWriteSessionImpl::OnWriteRequestDone(size_t requestMemoryUsage) {
+    bool readyToAccept = false;
+    {
+        std::lock_guard guard(Lock);
+        OnMemoryUsageChangedImpl(-static_cast<i64>(requestMemoryUsage));
+        readyToAccept = TryIssueContinuationTokenImpl();
+    }
+    if (readyToAccept) {
+        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
+    }
+}
+
+bool TWriteSessionImpl::TryIssueContinuationTokenImpl() {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    if (Aborting || ContinuationTokenIssued || MemoryUsage > Settings.MaxMemoryUsage_) {
+        return false;
+    }
+    ContinuationTokenIssued = true;
+    return true;
 }
 
 void TWriteSessionImpl::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration) {
@@ -749,6 +808,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             if (!FirstTokenSent) {
                 result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
                 FirstTokenSent = true;
+                ContinuationTokenIssued = true;
             }
             // Kickstart send after session reestablishment
             SendImpl();
@@ -822,8 +882,8 @@ bool TWriteSessionImpl::CleanupOnAcknowledged(ui64 id, TProcessSrvMessageResult&
     ui64 size = 0;
     ui64 compressedSize = 0;
     if(!SentPackedMessage.empty() && SentPackedMessage.front().Offset == id) {
-        auto memoryUsage = OnMemoryUsageChangedImpl(-SentPackedMessage.front().Data.size());
-        result = memoryUsage.NowOk && !memoryUsage.WasOk;
+        OnMemoryUsageChangedImpl(-SentPackedMessage.front().Data.size());
+        result = TryIssueContinuationTokenImpl();
         const auto& front = SentPackedMessage.front();
         if (front.Compressed) {
             compressedSize = front.Data.size();
@@ -852,7 +912,6 @@ bool TWriteSessionImpl::CleanupOnAcknowledged(ui64 id, TProcessSrvMessageResult&
 
     Y_ABORT_UNLESS(sentFront.Id == id);
 
-    (*Counters->BytesInflightTotal) = MemoryUsage;
     SentOriginalMessages.pop();
     return result;
 }
@@ -860,11 +919,16 @@ bool TWriteSessionImpl::CleanupOnAcknowledged(ui64 id, TProcessSrvMessageResult&
 TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
+    if (diff != 0) {
+        UpdateTimedCountersImpl();
+    }
+
     bool wasOk = MemoryUsage <= Settings.MaxMemoryUsage_;
     //if (diff < 0) {
     //    Y_ABORT_UNLESS(MemoryUsage >= static_cast<size_t>(std::abs(diff)));
     //}
     MemoryUsage += diff;
+    (*Counters->BytesInflightTotal) = MemoryUsage;
     bool nowOk = MemoryUsage <= Settings.MaxMemoryUsage_;
     if (wasOk != nowOk) {
         if (wasOk) {
@@ -884,9 +948,8 @@ TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
     return {wasOk, nowOk};
 }
 
-TBuffer CompressBuffer(std::shared_ptr<TPersQueueClient::TImpl> client, std::vector<std::string_view>& data, ECodec codec, i32 level) {
+TBuffer CompressBuffer(std::vector<std::string_view>& data, ECodec codec, i32 level) {
     TBuffer result;
-    Y_UNUSED(client);
     std::unique_ptr<IOutputStream> coder = TCodecMap::GetTheCodecMap().GetOrThrow((ui32)codec)->CreateCoder(result, level);
     for (auto& buffer : data) {
         coder->Write(buffer.data(), buffer.size());
@@ -906,17 +969,17 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
 
     std::shared_ptr<TBlock> blockPtr(std::make_shared<TBlock>());
     blockPtr->Move(block_);
+    // Client owns CompressionExecutor. Capturing it here keeps that pool alive until this
+    // task finishes on a pool thread, and destroying the pool from its own thread leaves the
+    // sibling workers unjoined (YDBBUGS-957).
     auto lambda = [cbContext = SelfContext,
                    codec = Settings.Codec_,
                    level = Settings.CompressionLevel_,
                    isSyncCompression = !CompressionExecutor->IsAsync(),
-                   blockPtr,
-                   client = Client]() mutable {
+                   blockPtr]() mutable {
         Y_ABORT_UNLESS(!blockPtr->Compressed);
 
-        auto compressedData = CompressBuffer(
-            std::move(client), blockPtr->OriginalDataRefs, codec, level
-        );
+        auto compressedData = CompressBuffer(blockPtr->OriginalDataRefs, codec, level);
         Y_ABORT_UNLESS(!compressedData.Empty());
         blockPtr->Data = std::move(compressedData);
         blockPtr->Compressed = true;
@@ -930,14 +993,25 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
 }
 
 void TWriteSessionImpl::OnCompressed(TBlock&& block, bool isSyncCompression) {
-    TMemoryUsageChange memoryUsage;
+    bool readyToAccept = false;
     if (!isSyncCompression) {
         std::lock_guard guard(Lock);
-        memoryUsage = OnCompressedImpl(std::move(block));
+        OnCompressedImpl(std::move(block));
+        readyToAccept = TryIssueContinuationTokenImpl();
     } else {
-        memoryUsage = OnCompressedImpl(std::move(block));
+        OnCompressedImpl(std::move(block));
+        readyToAccept = TryIssueContinuationTokenImpl();
     }
-    if (memoryUsage.NowOk && !memoryUsage.WasOk) {
+    if (readyToAccept && isSyncCompression) {
+        // The caller still holds Lock; a synchronous handler may call Write again.
+        Connections->ScheduleCallback(TDuration::Zero(), [cbContext = SelfContext](bool ok) {
+            if (ok) {
+                if (auto self = cbContext->LockShared()) {
+                    self->EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{self->IssueContinuationToken()});
+                }
+            }
+        });
+    } else if (readyToAccept) {
         EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
     }
 }
@@ -992,7 +1066,7 @@ void TWriteSessionImpl::FlushWriteIfRequiredImpl() {
 
     if (!CurrentBatch.Empty() && !CurrentBatch.FlushRequested) {
         MessagesAcquired += static_cast<ui64>(CurrentBatch.Acquire());
-        if (TInstant::Now() - CurrentBatch.StartedAt >= Settings.BatchFlushInterval_.value_or(TDuration::Zero())
+        if (TInstant::Now() - CurrentBatch.StartedAt >= Settings.BatchFlushInterval_
             || CurrentBatch.CurrentSize >= Settings.BatchFlushSizeBytes_.value_or(0)
             || CurrentBatch.CurrentSize >= MaxBlockSize
             || CurrentBatch.Messages.size() >= MaxBlockMessageCount
@@ -1062,8 +1136,33 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     return size;
 }
 
-size_t GetMaxGrpcMessageSize() {
-    return 120_MB;
+size_t EstimatePackedInt64FieldUpperBound(ui32 fieldNumber, size_t itemsCount) {
+    static constexpr size_t MaxInt64VarintPayloadSize = 10;
+
+    return NGrpc::ProtoPackedInt64FieldSize(fieldNumber, itemsCount * MaxInt64VarintPayloadSize);
+}
+
+template <typename TBlock>
+size_t EstimateWriteRequestBlockSize(const TBlock& block) {
+    size_t size = 0;
+    size += EstimatePackedInt64FieldUpperBound(2, block.MessageCount); // sequence_numbers
+    size += EstimatePackedInt64FieldUpperBound(3, block.MessageCount); // created_at_ms
+    size += EstimatePackedInt64FieldUpperBound(4, block.MessageCount); // sent_at_ms
+    size += EstimatePackedInt64FieldUpperBound(5, block.MessageCount); // message_sizes
+
+    size += NGrpc::ProtoPackedInt64FieldSize(6, NGrpc::TWireFormatLite::Int64Size(static_cast<i64>(block.Offset)));
+    size += NGrpc::ProtoPackedInt64FieldSize(7, NGrpc::TWireFormatLite::Int64Size(static_cast<i64>(block.PartNumber)));
+    size += NGrpc::ProtoPackedInt64FieldSize(8, NGrpc::TWireFormatLite::Int64Size(static_cast<i64>(block.MessageCount)));
+    size += NGrpc::ProtoPackedInt64FieldSize(9, NGrpc::TWireFormatLite::Int64Size(static_cast<i64>(block.OriginalSize)));
+    size += NGrpc::ProtoBytesFieldSize(10, block.CodecID.size());
+    if (block.Compressed) {
+        size += NGrpc::ProtoBytesFieldSize(11, block.Data.size());
+    } else {
+        for (const auto& buffer : block.OriginalDataRefs) {
+            size += NGrpc::ProtoBytesFieldSize(11, buffer.size());
+        }
+    }
+    return size;
 }
 
 bool TWriteSessionImpl::IsReadyToSendNextImpl() {
@@ -1156,35 +1255,86 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: try to update token");
 
-    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished)
+    auto credentialsProvider = DbDriverState->GetCredentialsProvider();
+    if (!credentialsProvider || UpdateTokenInProgress || !SessionEstablished || Aborting)
         return;
-    TClientMessage clientMessage;
-    auto* updateRequest = clientMessage.mutable_update_token_request();
-    auto token = DbDriverState->CredentialsProvider->GetAuthInfo();
-    if (token == PrevToken)
+    auto authInfo = credentialsProvider->GetAuthInfoAsync();
+    if (authInfo.IsReady()) {
+        UpdateTokenImpl(authInfo);
         return;
+    }
     UpdateTokenInProgress = true;
-    updateRequest->set_token(TStringType{token});
+    try {
+        authInfo.Subscribe([cbContext = SelfContext](const auto& future) {
+            if (auto self = cbContext->LockShared()) try {
+                self->Connections->ScheduleCallback(TDuration::Zero(), [cbContext, future](bool ok) {
+                    if (auto self = cbContext->LockShared()) {
+                        if (!ok) {
+                            self->UpdateTokenInProgress = false;
+                            return;
+                        }
+                        std::lock_guard guard(self->Lock);
+                        self->UpdateTokenImpl(future);
+                    }
+                });
+            } catch (...) {
+                self->UpdateTokenInProgress = false;
+            }
+        });
+    } catch (...) {
+        UpdateTokenInProgress = false;
+    }
+}
+
+void TWriteSessionImpl::UpdateTokenImpl(const NThreading::TFuture<std::string>& future) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    UpdateTokenInProgress = false;
+    if (!SessionEstablished || Aborting) {
+        return;
+    }
+
+    std::string token;
+    try {
+        token = future.GetValue();
+    } catch (...) {
+        CloseImpl(EStatus::CLIENT_UNAUTHENTICATED, CurrentExceptionMessage());
+        return;
+    }
+    if (token == PrevToken) {
+        return;
+    }
+
+    UpdateTokenInProgress = true;
     PrevToken = token;
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: updating token");
 
+    TClientMessage clientMessage;
+    clientMessage.mutable_update_token_request()->set_token(TStringType{token});
     Processor->Write(std::move(clientMessage));
 }
 
 void TWriteSessionImpl::SendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    // External cycle splits ready blocks into multiple gRPC messages. Current gRPC message size hard limit is 64MiB
-    while(IsReadyToSendNextImpl()) {
+    // Split ready blocks into requests bounded by the driver's outbound limit.
+    while (IsReadyToSendNextImpl()) {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
         auto sentAtMs = TInstant::Now().MilliSeconds();
+        NGrpc::TRequestSizeLimiter sizeLimiter(2, NGrpc::GetMaxGrpcMessageSize(*Connections));
 
         // Sent blocks while we can without messages reordering
-        while (IsReadyToSendNextImpl() && clientMessage.ByteSizeLong() < GetMaxGrpcMessageSize()) {
+        while (IsReadyToSendNextImpl()) {
             const auto& block = PackedMessagesToSend.top();
             Y_ABORT_UNLESS(block.Valid);
+
+            const size_t blockSize = EstimateWriteRequestBlockSize(block);
+            if (!sizeLimiter.CanAdd(blockSize)) {
+                break;
+            }
+
             for (size_t i = 0; i != block.MessageCount; ++i) {
                 Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
 
@@ -1216,6 +1366,7 @@ void TWriteSessionImpl::SendImpl() {
             moveBlock.Move(block);
             SentPackedMessage.emplace(std::move(moveBlock));
             PackedMessagesToSend.pop();
+            sizeLimiter.Add(blockSize);
         }
         UpdateTokenIfNeededImpl();
         LOG_LAZY(DbDriverState->Log,
@@ -1224,7 +1375,8 @@ void TWriteSessionImpl::SendImpl() {
                 << OriginalMessagesToSend.size() << " left), first sequence number is "
                 << writeRequest->sequence_numbers(0)
         );
-        Processor->Write(std::move(clientMessage));
+        const size_t requestMemoryUsage = clientMessage.SpaceUsedLong();
+        WriteToProcessorImpl(std::move(clientMessage), requestMemoryUsage);
     }
 }
 
@@ -1359,7 +1511,9 @@ void TWriteSessionImpl::AbortImpl() {
         Cancel(ConnectDelayContext);
         if (Processor)
             Processor->Cancel();
-
+        ConnectContext.reset();
+        ConnectTimeoutContext.reset();
+        ConnectDelayContext.reset();
         Cancel(ClientContext);
         ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
     }

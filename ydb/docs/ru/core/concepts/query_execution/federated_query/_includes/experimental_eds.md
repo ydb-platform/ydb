@@ -1,0 +1,6 @@
+- [ClickHouse](../clickhouse.md)
+- [Greenplum](../greenplum.md)
+- [Microsoft SQL Server](../ms_sql_server.md)
+- [MySQL](../mysql.md)
+- [PostgreSQL](../postgresql.md)
+- [{{ ydb-short-name }}](../ydb.md) (федеративные запросы между базами {{ ydb-short-name }})

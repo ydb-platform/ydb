@@ -5,6 +5,7 @@ SET(antlr_templates ${antlr_output}/org/antlr/v4/tool/templates/codegen)
 SET(sql_grammar ${antlr_output}/SQLv1Antlr4.g)
 
 SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
+SET(ANTLR_AST_NAME TSQLv1ParserAST)
 
 CONFIGURE_FILE(${ARCADIA_ROOT}/yql/essentials/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Java/Java.stg.in ${antlr_templates}/Java/Java.stg)
 
@@ -68,6 +69,9 @@ RUN_PYTHON3(
     SQLv1Antlr4Parser.pb.data.cc
     SQLv1Antlr4Parser.pb.classes.h
     SQLv1Antlr4Parser.pb.main.h
+    OUTPUT_INCLUDES
+    SQLv1Antlr4Parser.pb.h
+    SQLv1Antlr4Parser.pb.cc
     CWD ${antlr_output}
 )
 

@@ -1,7 +1,8 @@
 #pragma once
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NFq {
 
@@ -66,4 +67,4 @@ public:
     virtual ~TFinalStatusCounters() override;
 };
 
-} // NFq
+}   // namespace NFq

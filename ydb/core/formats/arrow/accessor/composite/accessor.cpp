@@ -1,6 +1,6 @@
 #include "accessor.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 namespace NKikimr::NArrow::NAccessor {
@@ -92,7 +92,7 @@ IChunkedArray::TLocalChunkedArrayAddress TCompositeChunkedArray::DoGetLocalChunk
 }
 
 std::optional<bool> TCompositeChunkedArray::DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
-    std::optional<std::shared_ptr<arrow::Scalar>> result;
+    std::shared_ptr<arrow::Scalar> result;
     for (auto&& i : Chunks) {
         std::shared_ptr<arrow::Scalar> valLocal;
         auto res = i->CheckOneValueAccessor(valLocal);
@@ -101,13 +101,31 @@ std::optional<bool> TCompositeChunkedArray::DoCheckOneValueAccessor(std::shared_
         }
         if (!result) {
             result = valLocal;
-        } else if (!NArrow::ScalarCompareNullable(*result, valLocal)) {
+        } else if (!result->Equals(*valLocal)) {
             return false;
         }
     }
-    AFL_VERIFY(!!result);
-    value = *result;
+    AFL_VERIFY(result);
+    value = result;
     return true;
+}
+
+std::optional<bool> TCompositeChunkedArray::DoHasNulls() const {
+    if (Chunks.empty()) {
+        return false;
+    }
+    bool unknown = false;
+    for (const auto& chunk : Chunks) {
+        const std::optional<bool> hasNulls = chunk->HasNulls();
+        if (hasNulls == true) {
+            return true;
+        }
+        if (!hasNulls) {
+            // May still get a definite `true` later
+            unknown = true;
+        }
+    }
+    return unknown ? std::optional<bool>() : std::optional<bool>(false);
 }
 
 std::shared_ptr<arrow::ChunkedArray> TCompositeChunkedArray::DoGetChunkedArray(const TColumnConstructionContext& context) const {

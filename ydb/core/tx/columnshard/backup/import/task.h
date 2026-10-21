@@ -20,8 +20,9 @@ public:
 
 private:
     using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
+    using TColumns = THashMap<ui32, TNameTypeInfo>;
     NColumnShard::TSchemeShardLocalPathId SchemeShardLocalPathId;
-    YDB_READONLY_DEF(TVector<TNameTypeInfo>, Columns);
+    YDB_READONLY_DEF(TColumns, Columns);
     YDB_READONLY_DEF(NKikimrSchemeOp::TRestoreTask, RestoreTask);
     YDB_READONLY_DEF(std::optional<ui64>, TxId);
     YDB_READONLY_DEF(std::optional<ui64>, SchemaVersion);
@@ -42,7 +43,7 @@ public:
 
     TImportTask() = default;
 
-    TImportTask(const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId, const TVector<TNameTypeInfo>& columns,
+    TImportTask(const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId, const TColumns& columns,
         const NKikimrSchemeOp::TRestoreTask& restoreTask, const std::optional<ui64> schemaVersion, const std::optional<ui64> txId = {});
 
     TString DebugString() const;

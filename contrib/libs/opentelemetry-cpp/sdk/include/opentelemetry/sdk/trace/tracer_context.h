@@ -14,6 +14,7 @@
 #include "opentelemetry/sdk/trace/random_id_generator.h"
 #include "opentelemetry/sdk/trace/sampler.h"
 #include "opentelemetry/sdk/trace/samplers/always_on.h"
+#include "opentelemetry/sdk/trace/span_limits.h"
 #include "opentelemetry/sdk/trace/tracer_config.h"
 #include "opentelemetry/version.h"
 
@@ -50,7 +51,8 @@ public:
           std::make_unique<instrumentationscope::ScopeConfigurator<TracerConfig>>(
               instrumentationscope::ScopeConfigurator<TracerConfig>::Builder(
                   TracerConfig::Default())
-                  .Build())) noexcept;
+                  .Build()),
+      SpanLimits span_limits = SpanLimits::NoLimits()) noexcept;
 
   TracerContext(const TracerContext &)            = delete;
   TracerContext(TracerContext &&)                 = delete;
@@ -103,6 +105,21 @@ public:
   opentelemetry::sdk::trace::IdGenerator &GetIdGenerator() const noexcept;
 
   /**
+   * Obtain the SpanLimits associated with this tracer context.
+   * @return The SpanLimits for this tracer context.
+   */
+  const SpanLimits &GetSpanLimits() const noexcept;
+
+  /**
+   * Replace the TracerConfigurator for this context.
+   *
+   * Note: This method is not thread safe.
+   * @param tracer_configurator The new configurator.
+   */
+  void SetTracerConfigurator(std::unique_ptr<instrumentationscope::ScopeConfigurator<TracerConfig>>
+                                 tracer_configurator) noexcept;
+
+  /**
    * Force all active SpanProcessors to flush any buffered spans
    * within the given timeout.
    */
@@ -120,6 +137,7 @@ private:
   std::unique_ptr<IdGenerator> id_generator_;
   std::unique_ptr<SpanProcessor> processor_;
   std::unique_ptr<instrumentationscope::ScopeConfigurator<TracerConfig>> tracer_configurator_;
+  SpanLimits span_limits_;
 };
 
 }  // namespace trace

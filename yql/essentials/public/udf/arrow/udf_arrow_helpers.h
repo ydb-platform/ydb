@@ -199,7 +199,7 @@ public:
                 auto arr = ARROW_RESULT(arrow::MakeArrayFromScalar(*res.scalar(), 1));
                 ArrowArray a;
                 ARROW_OK(arrow::ExportArray(*arr, &a));
-                return valueBuilder->ImportArrowBlock(&a, 1, true, *ReturnArrowTypeHandle_);
+                return valueBuilder->ImportArrowBlock(&a, 1, /*isScalar=*/true, *ReturnArrowTypeHandle_);
             } else {
                 TVector<ArrowArray> a;
                 if (res.is_array()) {
@@ -213,7 +213,7 @@ public:
                     }
                 }
 
-                return valueBuilder->ImportArrowBlock(a.data(), a.size(), false, *ReturnArrowTypeHandle_);
+                return valueBuilder->ImportArrowBlock(a.data(), a.size(), /*isScalar=*/false, *ReturnArrowTypeHandle_);
             }
         } catch (const std::exception& ex) {
             TStringBuilder sb;

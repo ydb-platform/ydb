@@ -8,6 +8,17 @@ namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+constexpr TStringBuf DestroyErrorMessage =
+    "TICStorageTransportActor is destroyed";
+constexpr TStringBuf CantAcquireDataErrorMessage = "can't acquire data";
+constexpr TStringBuf UndeliveryErrorMessage = "Undelivered";
+constexpr TStringBuf SessionBrokenErrorMessage = "Session broken";
+constexpr TStringBuf TabletGenerationBlockedErrorMessage =
+    "Tablet generation blocked";
+constexpr TStringBuf DeviceBrokenErrorMessage = "Device is broken";
+
+////////////////////////////////////////////////////////////////////////////////
+
 enum class ETranslateFlags
 {
     None,
@@ -49,6 +60,27 @@ template <typename T>
 bool HasSuccessOrOutdated(const T& response)
 {
     return HasSuccessOrOutdated(response.GetStatus());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <typename T>
+void SetCantAcquireStatus(T& record)
+{
+    record.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN);
+    record.SetErrorReason(TString(CantAcquireDataErrorMessage));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <typename T>
+void SetErrorStatus(
+    NKikimrBlobStorage::NDDisk::TReplyStatus_E status,
+    TStringBuf reason,
+    T& record)
+{
+    record.SetStatus(status);
+    record.SetErrorReason(TString(reason));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

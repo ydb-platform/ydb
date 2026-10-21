@@ -13,6 +13,7 @@ class TestYdbWorkload(StressFixture):
             extra_feature_flags={
                 "enable_export_auto_dropping": True,
                 "enable_changefeeds_export": True,
+                "enable_column_tables_backup": True,
             }
         )
 

@@ -1,4 +1,3 @@
-/* postgres can not */
 -- not supported on windows
 $value = "1000000000000";
 $negative = -1000000000000;

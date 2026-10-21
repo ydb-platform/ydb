@@ -65,6 +65,7 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
         }
         column.NotNull = phyColumn.GetNotNull();
         column.IsBuildInProgress = phyColumn.GetIsBuildInProgress();
+        column.SetNotNullInProgress = phyColumn.GetSetNotNullInProgress();
 
         Columns.emplace(phyColumn.GetId().GetName(), std::move(column));
     }

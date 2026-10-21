@@ -1,11 +1,13 @@
 #include "http_req.h"
 
 #include "auth_factory.h"
+#include "sqs_xml/params.h"
 #include "utils.h"
 
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/library/http_proxy/error/error.h>
+#include <ydb/library/net/source_address.h>
 
 #include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/http/misc/parsed_request.h>
@@ -14,7 +16,6 @@
 
 #include <util/string/ascii.h>
 #include <util/string/vector.h>
-
 
 namespace NKikimr::NHttpProxy {
 
@@ -67,29 +68,35 @@ namespace NKikimr::NHttpProxy {
         NActors::TActorId sender,
         NYdb::TDriver* driver,
         std::shared_ptr<NYdb::ICredentialsProvider> serviceAccountCredentialsProvider)
-        : ServiceConfig(config)
+        : NPQ::TLogPrefix(NKikimrServices::HTTP_PROXY)
+        , ServiceConfig(config)
         , Request(request)
         , Sender(sender)
         , Driver(driver)
         , ServiceAccountCredentialsProvider(serviceAccountCredentialsProvider) {
-        char address[INET6_ADDRSTRLEN];
-        if (inet_ntop(AF_INET6, &(Request->Address), address, INET6_ADDRSTRLEN) == nullptr) {
-            SourceAddress = "unknown";
-        } else {
-            SourceAddress = address;
-        }
+        SourceAddress = NKikimr::NNet::FormatSourceAddress(
+            Request->Address ? Request->Address->SockAddr() : nullptr);
 
-        DatabasePath = Request->URL.Before('?');
-        if (DatabasePath == "/") {
-           DatabasePath = "";
-        }
-        auto params = TCgiParameters(Request->URL.After('?'));
-        if (auto it = params.Find("folderId"); it != params.end()) {
+        DatabasePath = ParseDatabasePathFromRequestUrl(Request->URL);
+        CgiParameters = TCgiParameters(Request->URL.After('?'));
+        if (auto it = CgiParameters.Find("folderId"); it != CgiParameters.end()) {
             FolderId = it->second;
         }
 
         //TODO: find out databaseId
         ParseHeaders(Request->Headers);
+
+        if (Request->Method == "POST" && RawContentType == "application/x-www-form-urlencoded" && !Request->Body.empty()) {
+            CgiParameters = TCgiParameters(Request->Body);
+        }
+
+        if (MethodName.empty() && ContentType == MIME_XML && !Request->Body.empty()) {
+            auto it = CgiParameters.Find("Action");
+            if (it != CgiParameters.end()) {
+                ApiVersion = "AmazonSQS";
+                MethodName = it->second;
+            }
+        }
     }
 
     THolder<NKikimr::NSQS::TAwsRequestSignV4> THttpRequestContext::GetSignature() {
@@ -108,8 +115,9 @@ namespace NKikimr::NHttpProxy {
 
     void THttpRequestContext::DoReply(THttpResponseData&& data) {
         auto ctx = TlsActivationContext->AsActorContext();
-        LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
-            "reply with status: " << data.HttpCode << " message: " << data.Message);
+        LOG_I("Reply with",
+            {"status", data.HttpCode},
+            {"message", data.Message});
 
         NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(
             Request,
@@ -183,14 +191,21 @@ namespace NKikimr::NHttpProxy {
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_ID_HEADER)) {
                 sourceReqId = header.second;
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_FORWARDED_FOR)) {
-                SourceAddress = header.second;
+                if (TString sourceAddress = NKikimr::NNet::ExtractFirstForwardedForAddress(header.second)) {
+                    SourceAddress = std::move(sourceAddress);
+                }
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_TARGET_HEADER)) {
                 TString requestTarget = TString(header.second);
                 TVector<TString> parts = SplitString(requestTarget, ".");
                 ApiVersion = parts.size() > 0 ? parts[0] : "";
                 MethodName = parts.size() > 1 ? parts[1] : "";
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_CONTENT_TYPE_HEADER)) {
-                ContentType = mimeByStr(header.second);
+                RawContentType = StripString(TStringBuf(header.second).Before(';'));
+                if (AsciiEqualsIgnoreCase(RawContentType, "application/x-www-form-urlencoded")) {
+                    ContentType = MIME_XML;
+                } else {
+                    ContentType = mimeByStr(header.second);
+                }
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_DATE_HEADER)) {
             }
         }

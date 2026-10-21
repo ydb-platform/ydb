@@ -19,11 +19,11 @@ class TStaticEndpointProvider
     : public IEndpointProvider
 {
 public:
-    explicit TStaticEndpointProvider(std::vector<TString> addresses)
+    explicit TStaticEndpointProvider(std::vector<std::string> addresses)
         : Addresses_(std::move(addresses))
     { }
 
-    TString GetComponentName() const override
+    std::string GetComponentName() const override
     {
         return "static";
     }
@@ -39,7 +39,7 @@ public:
     }
 
 private:
-    std::vector<TString> Addresses_;
+    std::vector<std::string> Addresses_;
 };
 
 int main(int argc, char* argv[])
@@ -55,7 +55,7 @@ int main(int argc, char* argv[])
 
         auto proxy = New<TSolomonProxy>(New<TSolomonProxyConfig>(), poller);
 
-        std::vector<TString> addresses = {
+        std::vector<std::string> addresses = {
             "list",
             "your",
             "hosts",

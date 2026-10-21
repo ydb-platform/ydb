@@ -1,0 +1,17 @@
+use plato;
+
+pragma config.flags('OptimizerFlags', 'EmitPruneKeys');
+
+select * from Input3
+where Input3.value in (
+    select a.value
+    from Input1 as a inner join Input2 as b
+    on a.key = b.key
+);
+
+select * from Input3
+where Input3.value in (
+    select a.value
+    from Input1 as a inner join Input2 as b
+    on a.subkey = b.subkey
+);

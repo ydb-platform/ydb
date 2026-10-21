@@ -8,7 +8,7 @@ namespace NYT::NNodeTrackerClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, NodeTrackerClientLogger, "NodeTrackerClient");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, NodeTrackerClientLogger, "NodeTrackerClient");
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -88,7 +88,7 @@ protected:
     }
 
     TResponse DoExecute() final {
-        const TDriver& driver = LazyDriver->Get();
+        TDriver driver = LazyDriver->Get();
         TStringStream outputStream;
         TDescribeLogic describeLogic(driver, outputStream);
 

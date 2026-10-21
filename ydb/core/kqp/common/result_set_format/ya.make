@@ -1,12 +1,12 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
-    kqp_formats_arrow.cpp
     kqp_result_set_builders.cpp
 )
 
 PEERDIR(
     contrib/libs/apache/arrow
+    ydb/core/formats/arrow
     ydb/public/api/protos
     ydb/library/mkql_proto/protos
     ydb/library/yql/dq/proto
@@ -14,7 +14,5 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/public/udf
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

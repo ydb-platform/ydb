@@ -36,6 +36,12 @@ CFLAGS(
 ENDIF()
 
 CFLAGS(
+    -Dadd_size=yql_add_size
+    -Dmul_size=yql_mul_size
+    -Dpalloc_mul=yql_palloc_mul
+    -Dpalloc0_mul=yql_palloc0_mul
+    -Drepalloc_mul=yql_repalloc_mul
+    -Dpalloc_mul_extended=yql_palloc_mul_extended
     -Dmonths=yql_months
     -Dpg_popcount32=yql_pg_popcount32
     -Dpg_popcount64=yql_pg_popcount64

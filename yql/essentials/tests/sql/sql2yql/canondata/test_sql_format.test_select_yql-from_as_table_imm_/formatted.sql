@@ -1,0 +1,12 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    k,
+    v
+FROM
+    AsTable(AsList(
+        AsStruct(1u AS k, 'v1' AS v),
+        AsStruct(2u AS k, 'v2' AS v),
+        AsStruct(3u AS k, 'v3' AS v)
+    ))
+;

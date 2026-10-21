@@ -4,6 +4,6 @@
 
 namespace NYql {
 
-THolder<IGraphTransformer> CreateDqDataSinkConstraintTransformer();
+THolder<IGraphTransformer> CreateDqDataSinkConstraintTransformer(bool processSortConstraint);
 
 } // NYql

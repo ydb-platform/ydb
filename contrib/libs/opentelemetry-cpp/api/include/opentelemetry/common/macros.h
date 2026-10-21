@@ -244,6 +244,31 @@
 #  define OPENTELEMETRY_DEPRECATED_MESSAGE(msg)
 #endif
 
+// Suppress -Wdeprecated-declarations within a region.
+// Used by generated semconv headers to wrap deprecated helper bodies
+// that reference deprecated constants.
+/* clang-format off */
+#if defined(__clang__)
+#  define OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN                   \
+    _Pragma("clang diagnostic push")                                \
+    _Pragma("clang diagnostic ignored \"-Wdeprecated-declarations\"")
+#  define OPENTELEMETRY_SUPPRESS_DEPRECATED_END _Pragma("clang diagnostic pop")
+#elif defined(__GNUC__)
+#  define OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN                   \
+    _Pragma("GCC diagnostic push")                                  \
+    _Pragma("GCC diagnostic ignored \"-Wdeprecated-declarations\"")
+#  define OPENTELEMETRY_SUPPRESS_DEPRECATED_END _Pragma("GCC diagnostic pop")
+#elif defined(_MSC_VER)
+#  define OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN                   \
+    __pragma(warning(push))                                         \
+    __pragma(warning(disable : 4996))
+#  define OPENTELEMETRY_SUPPRESS_DEPRECATED_END __pragma(warning(pop))
+#else
+#  define OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
+#  define OPENTELEMETRY_SUPPRESS_DEPRECATED_END
+#endif
+/* clang-format on */
+
 // Regex support
 #if (__GNUC__ == 4 && (__GNUC_MINOR__ == 8 || __GNUC_MINOR__ == 9))
 // NOLINTNEXTLINE(cppcoreguidelines-macro-to-enum)

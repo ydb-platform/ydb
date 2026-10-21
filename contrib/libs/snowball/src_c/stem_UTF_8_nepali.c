@@ -1,6 +1,10 @@
-/* Generated from nepali.sbl by Snowball 3.0.1 - https://snowballstem.org/ */
+/* Generated from nepali.sbl by Snowball 3.1.1 - https://snowballstem.org/ */
 
-#include "../runtime/header.h"
+#include "stem_UTF_8_nepali.h"
+
+#include <stddef.h>
+
+#include "../runtime/snowball_runtime.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,21 +13,19 @@ extern int nepali_UTF_8_stem(struct SN_env * z);
 #ifdef __cplusplus
 }
 #endif
+
 static int r_remove_category_3(struct SN_env * z);
 static int r_remove_category_2(struct SN_env * z);
 static int r_remove_category_1(struct SN_env * z);
-#ifdef __cplusplus
-extern "C" {
-#endif
 
+static const symbol s_0[] = { 0xE0, 0xA4, 0x8F };
+static const symbol s_1[] = { 0xE0, 0xA5, 0x87 };
+static const symbol s_2[] = { 0xE0, 0xA4, 0xAF, 0xE0, 0xA5, 0x8C };
+static const symbol s_3[] = { 0xE0, 0xA4, 0x9B, 0xE0, 0xA5, 0x8C };
+static const symbol s_4[] = { 0xE0, 0xA4, 0xA8, 0xE0, 0xA5, 0x8C };
+static const symbol s_5[] = { 0xE0, 0xA4, 0xA5, 0xE0, 0xA5, 0x87 };
+static const symbol s_6[] = { 0xE0, 0xA4, 0xA4, 0xE0, 0xA5, 0x8D, 0xE0, 0xA4, 0xB0 };
 
-extern struct SN_env * nepali_UTF_8_create_env(void);
-extern void nepali_UTF_8_close_env(struct SN_env * z);
-
-
-#ifdef __cplusplus
-}
-#endif
 static const symbol s_0_0[6] = { 0xE0, 0xA4, 0x95, 0xE0, 0xA5, 0x80 };
 static const symbol s_0_1[9] = { 0xE0, 0xA4, 0xB2, 0xE0, 0xA4, 0xBE, 0xE0, 0xA4, 0x87 };
 static const symbol s_0_2[6] = { 0xE0, 0xA4, 0xB2, 0xE0, 0xA5, 0x87 };
@@ -255,18 +257,10 @@ static const struct among a_2[91] = {
 { 12, s_2_90, 0, 1, 0}
 };
 
-static const symbol s_0[] = { 0xE0, 0xA4, 0x8F };
-static const symbol s_1[] = { 0xE0, 0xA5, 0x87 };
-static const symbol s_2[] = { 0xE0, 0xA4, 0xAF, 0xE0, 0xA5, 0x8C };
-static const symbol s_3[] = { 0xE0, 0xA4, 0x9B, 0xE0, 0xA5, 0x8C };
-static const symbol s_4[] = { 0xE0, 0xA4, 0xA8, 0xE0, 0xA5, 0x8C };
-static const symbol s_5[] = { 0xE0, 0xA4, 0xA5, 0xE0, 0xA5, 0x87 };
-static const symbol s_6[] = { 0xE0, 0xA4, 0xA4, 0xE0, 0xA5, 0x8D, 0xE0, 0xA4, 0xB0 };
-
 static int r_remove_category_1(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
-    among_var = find_among_b(z, a_0, 17);
+    among_var = find_among_b(z, a_0, 17, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -277,22 +271,18 @@ static int r_remove_category_1(struct SN_env * z) {
             }
             break;
         case 2:
-            {
-                int v_1 = z->l - z->c;
-                if (!(eq_s_b(z, 3, s_0))) goto lab1;
-                goto lab0;
+            do {
+                if (!(eq_s_b(z, 3, s_0))) goto lab0;
+                break;
+            lab0:
+                if (!(eq_s_b(z, 3, s_1))) goto lab1;
+                break;
             lab1:
-                z->c = z->l - v_1;
-                if (!(eq_s_b(z, 3, s_1))) goto lab2;
-                goto lab0;
-            lab2:
-                z->c = z->l - v_1;
                 {
                     int ret = slice_del(z);
                     if (ret < 0) return ret;
                 }
-            }
-        lab0:
+            } while (0);
             break;
     }
     return 1;
@@ -302,28 +292,23 @@ static int r_remove_category_2(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c - 2 <= z->lb || z->p[z->c - 1] >> 5 != 4 || !((262 >> (z->p[z->c - 1] & 0x1f)) & 1)) return 0;
-    among_var = find_among_b(z, a_1, 3);
+    among_var = find_among_b(z, a_1, 3, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
         case 1:
-            {
-                int v_1 = z->l - z->c;
-                if (!(eq_s_b(z, 6, s_2))) goto lab1;
-                goto lab0;
+            do {
+                if (!(eq_s_b(z, 6, s_2))) goto lab0;
+                break;
+            lab0:
+                if (!(eq_s_b(z, 6, s_3))) goto lab1;
+                break;
             lab1:
-                z->c = z->l - v_1;
-                if (!(eq_s_b(z, 6, s_3))) goto lab2;
-                goto lab0;
+                if (!(eq_s_b(z, 6, s_4))) goto lab2;
+                break;
             lab2:
-                z->c = z->l - v_1;
-                if (!(eq_s_b(z, 6, s_4))) goto lab3;
-                goto lab0;
-            lab3:
-                z->c = z->l - v_1;
                 if (!(eq_s_b(z, 6, s_5))) return 0;
-            }
-        lab0:
+            } while (0);
             {
                 int ret = slice_del(z);
                 if (ret < 0) return ret;
@@ -342,7 +327,7 @@ static int r_remove_category_2(struct SN_env * z) {
 
 static int r_remove_category_3(struct SN_env * z) {
     z->ket = z->c;
-    if (!find_among_b(z, a_2, 91)) return 0;
+    if (!find_among_b(z, a_2, 91, 0)) return 0;
     z->bra = z->c;
     {
         int ret = slice_del(z);
@@ -385,7 +370,11 @@ extern int nepali_UTF_8_stem(struct SN_env * z) {
     return 1;
 }
 
-extern struct SN_env * nepali_UTF_8_create_env(void) { return SN_create_env(0, 0); }
+extern struct SN_env * nepali_UTF_8_create_env(void) {
+    return SN_new_env(sizeof(struct SN_env));
+}
 
-extern void nepali_UTF_8_close_env(struct SN_env * z) { SN_close_env(z, 0); }
+extern void nepali_UTF_8_close_env(struct SN_env * z) {
+    SN_delete_env(z);
+}
 

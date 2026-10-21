@@ -18,6 +18,7 @@ void TConsumerActor::UpdateMetrics() {
     values->Resize(NAux::GetLabeledCounterOpts<EMLPConsumerLabeledCounters_descriptor>()->Size, 0);
     values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_COMMITTED_COUNT, metrics.CommittedMessageCount);
     values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_LOCKED_COUNT, metrics.LockedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_MESSAGE_GROUP_COUNT, metrics.InflightMessageGroupCount);
     values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_DELAYED_COUNT, metrics.DelayedMessageCount);
     values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_UNLOCKED_COUNT, metrics.UnprocessedMessageCount);
     values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_SCHEDULED_TO_DLQ_COUNT, metrics.DLQMessageCount);
@@ -55,6 +56,7 @@ TDetailedMetrics::TDetailedMetrics(const NKikimrPQ::TPQTabletConfig::TConsumer& 
 
     InflightCommittedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.committed_messages", false);
     InflightLockedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.locked_messages", false);
+    InflightMessageGroupCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.message_groups", false);
     InflightDelayedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.delayed_messages", false);
     InflightUnlockedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.unlocked_messages", false);
     InflightScheduledToDLQCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.scheduled_to_dlq_messages", false);
@@ -88,6 +90,7 @@ void SetCounters(NMonitoring::THistogramPtr& counter, const TTabletPercentileCou
 void TDetailedMetrics::UpdateMetrics(const TMetrics& metrics) {
     InflightCommittedCount->Set(metrics.CommittedMessageCount);
     InflightLockedCount->Set(metrics.LockedMessageCount);
+    InflightMessageGroupCount->Set(metrics.InflightMessageGroupCount);
     InflightDelayedCount->Set(metrics.DelayedMessageCount);
     InflightUnlockedCount->Set(metrics.UnprocessedMessageCount);
     InflightScheduledToDLQCount->Set(metrics.DLQMessageCount);

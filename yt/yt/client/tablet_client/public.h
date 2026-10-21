@@ -99,6 +99,9 @@ YT_DEFINE_ERROR_ENUM(
     ((HunkTabletStoreToggleConflict)          (1745))
     ((HunkStoreAllocationFailed)              (1746))
     ((TabletResharded)                        (1747))
+    ((ReadOnlySmoothMovementStage)            (1748))
+    ((CellHasNoLeader)                        (1749))
+    ((TabletReplicationEraIsUnknown)          (1750))
 
     // Test error codes.
     ((TestingFailureBeforeWrite)              (1798))
@@ -227,11 +230,6 @@ DEFINE_ENUM(ETabletActionState,
     ((AbortingSmoothMove)       (13))
 );
 
-DEFINE_ENUM(ETabletServiceFeatures,
-    ((WriteGenerations)         (0))
-    ((SharedWriteLocks)         (1))
-);
-
 DEFINE_ENUM(ERowMergerType,
     ((Legacy)               (0))
     ((Watermark)            (1))
@@ -250,6 +248,7 @@ DEFINE_ENUM(ESecondaryIndexKind,
     ((Unique)                   (2))
 );
 
+struct TUnfoldedColumns;
 struct TIndexInfo;
 
 DEFINE_ENUM(ETableToIndexCorrespondence,

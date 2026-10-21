@@ -1,13 +1,9 @@
 #pragma once
-#include <yql/essentials/public/issue/yql_issue.h>
-#include <yql/essentials/utils/yql_panic.h>
-
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
 #include <library/cpp/threading/future/future.h>
-
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
@@ -15,18 +11,18 @@
 #include <util/generic/typetraits.h>
 #include <util/generic/yexception.h>
 #include <util/system/defaults.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <variant>
 
 namespace {
 
 [[noreturn]] void AbortUnimplemented(const char* methodName) {
-    Y_ABORT(
-        "Method %s is not implemented in IClient descendant",
-        methodName);
+    Y_ABORT("Method %s is not implemented in IClient descendant", methodName);
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
 namespace NPq::NConfigurationManager {
 
@@ -54,7 +50,7 @@ enum class EStatus {
     SESSION_BUSY
 };
 
-class TException : public yexception {
+class TException: public yexception {
 public:
     explicit TException(EStatus status)
         : Status(status)
@@ -69,6 +65,37 @@ private:
     EStatus Status = EStatus::STATUS_CODE_UNSPECIFIED;
 };
 
+enum class EPermission {
+    READ_TOPIC /* "ReadTopic" */,
+    WRITE_TOPIC /* "WriteTopic" */,
+    READ_AS_CONSUMER /* "ReadAsConsumer" */,
+    MODIFY_PERMISSIONS /* "ModifyPermissions" */,
+    CREATE_RESOURCES /* "CreateResources" */,
+    MODIFY_RESOURCES /* "ModifyResources" */,
+    LIST_RESOURCES /* "ListResources" */,
+    CREATE_READ_RULES /* "CreateReadRules" */,
+    DESCRIBE_RESOURCES /* "DescribeResources" */,
+};
+
+struct TPermission {
+    using TSelf = TPermission;
+
+    FLUENT_SETTING_VECTOR(EPermission, PermissionNames);
+    FLUENT_SETTING(TString, Subject);
+
+    // Subject type and name used only in describe
+    FLUENT_SETTING_OPTIONAL(TString, SubjectType);
+    // Printable subject name
+    FLUENT_SETTING_OPTIONAL(TString, SubjectName);
+};
+
+struct TReadRule {
+    TString TopicPath;
+    TString ConsumerPath;
+    // Cluster name for mirror_to_cluster mode, or "all_original" for all_original mode.
+    TString MirrorToCluster;
+};
+
 struct TObjectDescriptionBase {
     explicit TObjectDescriptionBase(const TString& path)
         : Path(path)
@@ -76,33 +103,34 @@ struct TObjectDescriptionBase {
     }
 
     TString Path;
-    THashMap<TString, TString> Metadata; // Arbitrary key-value pairs.
+    THashMap<TString, TString> Metadata;   // Arbitrary key-value pairs.
+    TVector<TPermission> Permissions;
+    TVector<TPermission> EffectivePermissions;
 };
 
-struct TAccountDescription : public TObjectDescriptionBase {
+struct TAccountDescription: public TObjectDescriptionBase {
     using TObjectDescriptionBase::TObjectDescriptionBase;
 
     // TODO: If you need other properties, add them.
 };
 
-struct TPathDescription : public TObjectDescriptionBase {
+struct TPathDescription: public TObjectDescriptionBase {
     using TObjectDescriptionBase::TObjectDescriptionBase;
 
     // TODO: If you need other properties, add them.
 };
 
-struct TTopicDescription : public TObjectDescriptionBase {
+struct TTopicDescription: public TObjectDescriptionBase {
     using TObjectDescriptionBase::TObjectDescriptionBase;
 
     size_t PartitionsCount = 0;
-
-    // TODO: If you need other properties, add them.
+    TVector<TReadRule> ReadRules;
 };
 
-struct TConsumerDescription : public TObjectDescriptionBase {
+struct TConsumerDescription: public TObjectDescriptionBase {
     using TObjectDescriptionBase::TObjectDescriptionBase;
 
-    // TODO: If you need other properties, add them.
+    TVector<TReadRule> ReadRules;
 };
 
 struct TDescribePathResult {
@@ -116,7 +144,7 @@ struct TDescribePathResult {
         return Description;
     }
 
-    template<class T>
+    template <class T>
     const T& Get() const {
         return std::get<T>(Description);
     }
@@ -153,13 +181,13 @@ struct TDescribePathResult {
         return std::holds_alternative<TConsumerDescription>(Description);
     }
 
-    template<class TResultType, class... T>
+    template <class TResultType, class... T>
     static TDescribePathResult Make(T&&... params) {
-        return {std::in_place_type_t<TResultType>(), std::forward<T>(params)...};
+        return { std::in_place_type_t<TResultType>(), std::forward<T>(params)... };
     }
 
 private:
-    template<class... T>
+    template <class... T>
     TDescribePathResult(T&&... params)
         : Description(std::forward<T>(params)...)
     {
@@ -244,23 +272,10 @@ enum class ELimitsMode {
     NOTIFY /* "notify" */,
 };
 
-enum class EPermission {
-    READ_TOPIC /* "ReadTopic" */,
-    WRITE_TOPIC /* "WriteTopic" */,
-    READ_AS_CONSUMER /* "ReadAsConsumer" */,
-    MODIFY_PERMISSIONS /* "ModifyPermissions" */,
-    CREATE_RESOURCES /* "CreateResources" */,
-    MODIFY_RESOURCES /* "ModifyResources" */,
-    LIST_RESOURCES /* "ListResources" */,
-    CREATE_READ_RULES /* "CreateReadRules" */,
-    DESCRIBE_RESOURCES /* "DescribeResources" */,
-};
-
 struct TExtraSettings {
     TExtraSettings& AddExtraSetting(const TString& name, const TString& value) {
         auto [iterator, emplaced] = Settings_.emplace(name, value);
-        YQL_ENSURE(emplaced, "Duplicate setting name found: " << name
-            << " (previous value: " << iterator->second << ", new value: " << value);
+        YQL_ENSURE(emplaced, "Duplicate setting name found: " << name << " (previous value: " << iterator->second << ", new value: " << value);
 
         return *this;
     }
@@ -348,25 +363,13 @@ struct TCreateReadRuleOptions {
     FLUENT_SETTING(TString, MirrorToCluster);
 };
 
-struct TPermission {
-    using TSelf = TPermission;
-
-    FLUENT_SETTING_VECTOR(EPermission, PermissionNames);
-    FLUENT_SETTING(TString, Subject);
-
-    // Subject type and name used only in describe
-    FLUENT_SETTING_OPTIONAL(TString, SubjectType);
-    // Printable subject name
-    FLUENT_SETTING_OPTIONAL(TString, SubjectName);
-};
-
 struct TGrantPermissionsOptions {
     using TSelf = TGrantPermissionsOptions;
 
     FLUENT_SETTING_VECTOR(TPermission, Permissions);
 };
 
-struct IClient : public TThrRefBase {
+struct IClient: public TThrRefBase {
     using TPtr = TIntrusivePtr<IClient>;
 
     virtual TAsyncDescribePathResult DescribePath(const TString& /*path*/) const {
@@ -385,15 +388,12 @@ struct IClient : public TThrRefBase {
         AbortUnimplemented(__FUNCTION__);
     }
 
-    virtual TAsyncCreateReadRuleResult CreateReadRule(const TString& /*topicPath*/, const TString& /*consumerPath*/,
-        const TCreateReadRuleOptions& /*options*/) const
-    {
+    virtual TAsyncCreateReadRuleResult CreateReadRule(
+        const TString& /*topicPath*/, const TString& /*consumerPath*/, const TCreateReadRuleOptions& /*options*/) const {
         AbortUnimplemented(__FUNCTION__);
     }
 
-    virtual TAsyncGrantPermissionsResult GrantPermissions(const TString& /*path*/,
-        const TGrantPermissionsOptions& /*options*/) const
-    {
+    virtual TAsyncGrantPermissionsResult GrantPermissions(const TString& /*path*/, const TGrantPermissionsOptions& /*options*/) const {
         AbortUnimplemented(__FUNCTION__);
     }
 
@@ -404,17 +404,18 @@ struct IClient : public TThrRefBase {
     // TODO: If you need other methods, add them.
 };
 
-#define OPTION(type, name, default_exp)             \
-    private:                                        \
-        type name default_exp;                      \
-    public:                                         \
-        TTypeTraits<type>::TFuncParam Y_CAT(Get, name)() const { \
-            return name;                            \
-        }                                           \
-        TSelf& Y_CAT(Set, name)(TTypeTraits<type>::TFuncParam val) { \
-            name = val;                             \
-            return *this;                           \
-        }                                           \
+#define OPTION(type, name, default_exp)                          \
+private:                                                         \
+    type name default_exp;                                       \
+                                                                 \
+public:                                                          \
+    TTypeTraits<type>::TFuncParam Y_CAT(Get, name)() const {     \
+        return name;                                             \
+    }                                                            \
+    TSelf& Y_CAT(Set, name)(TTypeTraits<type>::TFuncParam val) { \
+        name = val;                                              \
+        return *this;                                            \
+    }
 
 struct TClientOptions {
     using TSelf = TClientOptions;
@@ -428,7 +429,7 @@ struct TClientOptions {
 #undef OPTION
 
 // Factory interface for creation clients to different pq clusters.
-struct IConnections : public TThrRefBase {
+struct IConnections: public TThrRefBase {
     using TPtr = TIntrusivePtr<IConnections>;
 
     virtual ~IConnections() = default;
@@ -438,4 +439,4 @@ struct IConnections : public TThrRefBase {
     virtual IClient::TPtr GetClient(const TClientOptions&) = 0;
 };
 
-} // namespace NPq::NConfigurationManager
+}   // namespace NPq::NConfigurationManager

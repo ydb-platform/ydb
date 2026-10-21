@@ -1,4 +1,3 @@
-/* syntax version 1 */
 $x = Yson::Parse("{}");
 select Yson::ConvertToDict($x) is null,
     DictLength(Yson::ConvertToDict($x)),

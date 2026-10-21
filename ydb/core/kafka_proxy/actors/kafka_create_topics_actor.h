@@ -15,12 +15,12 @@ public:
     }
 
     void Bootstrap(const NActors::TActorContext& ctx);
-    void Handle(const NKikimr::NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev);
+    void Handle(const NKikimr::NPQ::NSchema::TEvSchemaResponse::TPtr& ev);
     void Reply(const TActorContext& ctx);
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NKikimr::NPQ::NSchema::TEvCreateTopicResponse, Handle);
+            hFunc(NKikimr::NPQ::NSchema::TEvSchemaResponse, Handle);
         }
     }
 

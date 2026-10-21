@@ -1,0 +1,7 @@
+{%- if idea_content_root %}
+idea {
+    module {
+        contentRoot = file("$arcadia_root/{{ curdir }}")
+    }
+}
+{%- endif -%}

@@ -1,6 +1,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 #include <ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_write_session.h>
 
+#include <ydb/core/persqueue/ut/common/sdk_ut_common.h>
+
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 #include <ydb/public/sdk/cpp/src/client/federated_topic/ut/fds_mock/fds_mock.h>
 
@@ -19,6 +21,7 @@ public:
             testName, false, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, 1))
         , ThreadPool(CreateThreadPool(2))
     {
+        NKikimr::NPQ::NTest::EnableTopicBatching(Setup->GetServer().ServerSettings);
         Setup->Start(true, true);
 
         FdsMock.Port = Setup->GetGrpcPort();
@@ -78,11 +81,19 @@ public:
     }
 
     std::shared_ptr<IFederatedReadSession> CreateReadSession() {
+        return CreateReadSession(DefaultReadSettings());
+    }
+
+    TFederatedReadSessionSettings DefaultReadSettings() {
         TFederatedReadSessionSettings settings;
         settings
             .ConsumerName("shared/user")
             .MaxMemoryUsageBytes(1_MB)
             .AppendTopics(std::string(Setup->GetTestTopicPath()));
+        return settings;
+    }
+
+    std::shared_ptr<IFederatedReadSession> CreateReadSession(const TFederatedReadSessionSettings& settings) {
         return TopicClient->CreateReadSession(settings);
     }
 
@@ -116,7 +127,13 @@ public:
 
     // Creates a read session with single-database FDS response (avoids partition competition)
     std::shared_ptr<IFederatedReadSession> CreateReadSessionWithSingleDatabaseFdsResponse() {
-        auto session = CreateReadSession();
+        return CreateReadSessionWithSingleDatabaseFdsResponse(DefaultReadSettings());
+    }
+
+    std::shared_ptr<IFederatedReadSession> CreateReadSessionWithSingleDatabaseFdsResponse(
+        const TFederatedReadSessionSettings& settings
+    ) {
+        auto session = CreateReadSession(settings);
 
         auto fdsRequest = FdsMock.WaitNextPendingRequest();
         fdsRequest.Result.SetValue(FdsMock.ComposeOkResultSingleDatabase());
@@ -174,6 +191,22 @@ public:
 
     TString GetTestTopic() const { return Setup->GetTestTopic(); }
     TFederationDiscoveryServiceMock& GetFdsMock() { return FdsMock; }
+
+    void WriteKafkaBatchMessages(
+        const TString& producerId,
+        size_t dataSize,
+        ui64 maxBatchMessageCount,
+        const TVector<std::tuple<ui64, ui32, char>>& writes
+    ) {
+        NTopic::TTopicClient client(Setup->GetDriver());
+        NKikimr::NPQ::NTest::WriteKafkaBatchMessages(
+            client,
+            Setup->GetTestTopicPath(),
+            producerId,
+            dataSize,
+            maxBatchMessageCount,
+            writes);
+    }
 
     // Helper to verify that messages were written correctly by reading them back
     void VerifyMessagesWritten(const TVector<TString>& expectedMessages) {
@@ -395,6 +428,101 @@ Y_UNIT_TEST_SUITE(SimpleBlockingFederatedWriteSession) {
         // Write should fail after session is closed
         UNIT_ASSERT_C(!session->Write("after close", std::nullopt, std::nullopt, TDuration::MilliSeconds(100)),
                       "Write should fail after session is closed");
+    }
+
+    Y_UNIT_TEST(DeferredCommitKafkaBatches) {
+        TSimpleBlockingWriteSessionTestFixture fixture(TEST_CASE_NAME);
+
+        const TString producerId = "federated-kafka-batch-producer";
+        constexpr size_t dataSize = 16;
+        constexpr ui64 maxBatchMessageCount = 5;
+        constexpr ui64 totalMessages = 8;
+
+        fixture.WriteKafkaBatchMessages(
+            producerId,
+            dataSize,
+            maxBatchMessageCount,
+            {
+                {1, 5, 'a'},
+                {6, 3, 'b'},
+            });
+
+        auto readSettings = fixture.DefaultReadSettings();
+        readSettings.Decompress(false);
+
+        {
+            auto readSession = fixture.CreateReadSessionWithSingleDatabaseFdsResponse(readSettings);
+            fixture.GetFdsMock().SetAutoRespondSingleDatabase(true);
+
+            TDeferredCommit deferredCommit;
+            TFederatedPartitionSession::TPtr partitionSession;
+            ui64 logicalMessagesRead = 0;
+            ui64 compressedBatchesRead = 0;
+            bool sawMultiMessageBatch = false;
+            const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+            while (logicalMessagesRead < totalMessages && TInstant::Now() < deadline) {
+                UNIT_ASSERT_C(readSession->WaitEvent().Wait(TDuration::Seconds(5)),
+                    "Read session event timeout");
+                auto event = readSession->GetEvent(false);
+                UNIT_ASSERT(event.has_value());
+
+                if (auto* start = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                    partitionSession = start->GetFederatedPartitionSession();
+                    start->Confirm();
+                    continue;
+                }
+                if (auto* stop = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                    stop->Confirm();
+                    continue;
+                }
+                if (auto* data = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    UNIT_ASSERT(data->HasCompressedMessages());
+                    for (const auto& message : data->GetCompressedMessages()) {
+                        UNIT_ASSERT_VALUES_EQUAL(message.GetOffset(), logicalMessagesRead);
+                        logicalMessagesRead += message.GetLogicalMessageCount();
+                        sawMultiMessageBatch |= message.GetLogicalMessageCount() > 1;
+                        ++compressedBatchesRead;
+                    }
+                    deferredCommit.Add(*data);
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(logicalMessagesRead, totalMessages);
+            UNIT_ASSERT_VALUES_EQUAL(compressedBatchesRead, 2u);
+            UNIT_ASSERT(sawMultiMessageBatch);
+
+            deferredCommit.Commit();
+
+            UNIT_ASSERT(partitionSession);
+            partitionSession->RequestStatus();
+
+            bool gotStatus = false;
+            const TInstant statusDeadline = TInstant::Now() + TDuration::Seconds(30);
+            while (!gotStatus && TInstant::Now() < statusDeadline) {
+                if (!readSession->WaitEvent().Wait(TDuration::Seconds(1))) {
+                    partitionSession->RequestStatus();
+                    continue;
+                }
+                auto event = readSession->GetEvent(false);
+                UNIT_ASSERT(event.has_value());
+
+                if (auto* status = std::get_if<TReadSessionEvent::TPartitionSessionStatusEvent>(&*event)) {
+                    if (status->GetCommittedOffset() == totalMessages) {
+                        gotStatus = true;
+                    } else {
+                        partitionSession->RequestStatus();
+                    }
+                    continue;
+                }
+                if (auto* stop = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                    stop->Confirm();
+                }
+            }
+
+            UNIT_ASSERT_C(gotStatus, "Did not observe committed offset " << totalMessages);
+
+            UNIT_ASSERT(readSession->Close(TDuration::Seconds(5)));
+        }
     }
 
 }

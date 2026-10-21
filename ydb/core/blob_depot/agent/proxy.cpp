@@ -1,9 +1,11 @@
 #include "agent_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::SendToProxy(ui32 groupId, std::unique_ptr<IEventBase> event, TRequestSender *sender,
-            TRequestContext::TPtr context) {
+            TRequestContext::TPtr context, NWilson::TTraceId traceId) {
         auto executionRelay = std::make_shared<TEvBlobStorage::TExecutionRelay>();
 
         switch (event->Type()) {
@@ -25,12 +27,18 @@ namespace NKikimr::NBlobDepot {
             auto *p = dynamic_cast<TQuery*>(sender);
             return p ? std::make_optional(p->GetQueryId()) : std::nullopt;
         };
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA46, "SendToProxy", (AgentId, LogId), (QueryId, getQueryId()),
-            (GroupId, groupId), (DecommitGroupId, DecommitGroupId), (Type, event->Type()), (Cookie, id));
+        YDB_LOG_DEBUG("SendToProxy",
+            {"marker", "BDA46"},
+            {"agentId", LogId},
+            {"queryId", getQueryId()},
+            {"groupId", groupId},
+            {"decommitGroupId", DecommitGroupId},
+            {"type", event->Type()},
+            {"cookie", id});
         if (groupId != DecommitGroupId) {
-            SendToBSProxy(SelfId(), groupId, event.release(), id);
+            SendToBSProxy(SelfId(), groupId, event.release(), id, std::move(traceId));
         } else if (ProxyId) {
-            Send(ProxyId, event.release(), 0, id);
+            Send(ProxyId, event.release(), 0, id, std::move(traceId));
         } else {
             std::unique_ptr<IEventBase> response;
             switch (const ui32 type = event->Type()) {

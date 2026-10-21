@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2025-01-30)
+VERSION(2025-02-22)
 
-ORIGINAL_SOURCE(https://github.com/google/tcmalloc/archive/c8dfee3e4c489c5ae0d30c484c92db102a69ec51.tar.gz)
+ORIGINAL_SOURCE(https://github.com/google/tcmalloc/archive/7dd049e3367acff457a20cc4fb4c8b366cb2892d.tar.gz)
 
 NO_COMPILER_WARNINGS()
 
@@ -29,6 +29,7 @@ IF (NOT DLL_FOR)
     RECURSE(
         default
         dynamic
+        internal_utils
         malloc_extension
         no_percpu_cache
         numa_256k

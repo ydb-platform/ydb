@@ -556,7 +556,6 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
 
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableTableDatetime64(enableDatetime64);
-        featureFlags.SetEnablePgSyntax(true);
         featureFlags.SetEnableTablePgTypes(true);
 
         TPortManager pm;

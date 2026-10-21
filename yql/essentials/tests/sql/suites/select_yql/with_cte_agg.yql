@@ -1,0 +1,10 @@
+/* custom error: Too many CTE iterations: 500 */
+/* FIXME(YQL-20631): aggregation should be forbidden in recursive queries */
+PRAGMA YqlSelect = 'force';
+
+WITH RECURSIVE agg AS (
+    SELECT CAST(1 AS Int32?) AS n
+    UNION ALL
+    SELECT Max(n) + 1 AS n FROM agg WHERE n < 5
+)
+SELECT * FROM agg;

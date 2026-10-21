@@ -1,0 +1,6 @@
+/* custom error: Cannot create symlink "Link" after another modification of the same path in this epoch */
+USE plato;
+
+CREATE SYMLINK Link TO Input;
+
+CREATE SYMLINK Link TO Input;

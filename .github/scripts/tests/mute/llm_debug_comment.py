@@ -3,9 +3,9 @@
 After a mute issue is created we post one markdown comment listing the latest
 failing/muted CI run for every test in the issue (job run URL, history
 dashboard, stderr / stdout / log / logsdir) and attach an AI review label so
-a downstream LLM workflow can pick the issue up. The comment carries a hidden
-hint asking the LLM to classify the failure, find a likely root cause and
-propose a fix.
+a downstream LLM workflow can pick the issue up. Compact LLM instructions are
+inlined in a collapsed ``<details>`` block (``<!-- mute-llm-prompt:v5 -->``).
+Allowed ``area/*`` labels come from ``.github/config/areas.json``.
 
 Best-effort: any YDB / GitHub failure is logged but never raised — issue
 creation is the primary action and must not regress because of this module.
@@ -14,6 +14,7 @@ creation is the primary action and must not regress because of this module.
 from __future__ import annotations
 
 import datetime
+import json
 import logging
 import os
 from typing import Dict, Sequence
@@ -31,6 +32,88 @@ AI_REVIEW_LABEL = 'need_ai_review'
 FAILURE_LOOKBACK_DAYS = 7
 MAX_COMMENT_LENGTH = 60000
 _COMMENT_MARKER = '<!-- mute-llm-debug-links:v1 -->'
+MUTE_LLM_PROMPT_VERSION = 'v5'
+_PROMPT_MARKER = f'<!-- mute-llm-prompt:{MUTE_LLM_PROMPT_VERSION} -->'
+_AREAS_JSON = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', '..', '..', 'config', 'areas.json')
+)
+
+
+def _load_areas_config(path: str = _AREAS_JSON) -> dict:
+    with open(path, encoding='utf-8') as handle:
+        return json.load(handle)
+
+
+def _llm_instructions_text(areas: dict | None = None) -> str:
+    """Build the mute-issue LLM prompt; area allow-list comes from areas.json."""
+    areas = areas if areas is not None else _load_areas_config()
+    allowed = ', '.join(areas.get('canonical') or [])
+    aliases = areas.get('aliases') or {}
+    alias_line = ', '.join(f'{src}→{dst}' for src, dst in aliases.items())
+    return f"""\
+Classify: TEST_ISSUE | YDB_ISSUE | TEST_INFRA_ISSUE
+- YDB_ISSUE: product bug under ydb/core, ydb/library, ydb/services, etc.
+- TEST_ISSUE: test logic, stale refs in helpers/workloads, missing waits. A fixture PR
+  that only exposed a latent bug in an older test → TEST_ISSUE (the older test, not
+  the fixture author).
+- TEST_INFRA_ISSUE: shared harness/runner/CI broken for many unrelated tests. One
+  directory / one test pattern → usually TEST_ISSUE, not TEST_INFRA_ISSUE.
+
+Find root cause and introducing commit/PR; severity HIGH/MEDIUM/LOW; propose a fix.
+In Root Cause list Suspect PR(s) most-likely-first (#12345 + why; tie to code/regression window).
+
+Summary history (success_rate, p-*, f-*, total-*, dates): 50% often = runs before vs after a
+merge, not a timing race. Compare failing tests with sibling tests (same fixture, still pass).
+
+After fixture stop_driver(): "Driver was stopped" / "Topic client closed" → check stale driver
+snapshot in workload/helpers before suggesting retries, sleeps, or graceful-shutdown revert.
+
+VERIFY/SANITIZER — use status_description in exactly 3 lines:
+  VERIFY failed (<ISO_UTC>): / ydb/.../file:line / assertion text (no stack frames, no +0x...)
+
+Responsible (never copy issue-body Owner: — mute assignee only):
+Allowed labels only (from .github/config/areas.json): {allowed}
+Aliases (rewrite to canonical): {alias_line}
+Forbidden: area/topic, TEAM:@ydb-platform/..., area/@ydb-platform/..., any label not listed.
+
+Pick first match:
+  1) A human comment already named the cause (CI CPU/RAM, OOM, …) → follow it.
+     Host/CI resources with no product bug → area/engineering.
+  2) YDB_ISSUE: product file that actually failed (VERIFY / SIGSEGV stack),
+     not the test file. Responsible = CODEOWNERS of that file (longest prefix),
+     then owner_area_mapping.json + areas.json aliases.
+     Example: test in tests/stress/topic_balancing, crash in
+     ydb/core/persqueue/pqrb/read_balancer__balancing.cpp → area/topics.
+     Timeout / OOM / "query compilation" in a shared compile actor is not the
+     failed file unless VERIFY or SIGSEGV is in that file. Timeout-only: use
+     CODEOWNERS of the feature the test exercises.
+  3) The introducing PR added this test/helper and it was wrong from day one
+     (forgot a sibling test, immediately too heavy, flakes on /proc, …)
+     → PR author's GitHub org team, then areas.json / gh_teams.
+  4) TEST_ISSUE → TESTOWNERS of the broken test or helper (longest prefix),
+     then areas.json. Do not use these prefixes alone:
+       /ydb/tests/compatibility
+       /ydb/tests/stress
+     A more specific child wins (topic/, topic_kafka/, oltp_workload, …).
+     If the test sits only under a catch-all, use (2) or (3).
+  5) Else area/engineering.
+
+TESTOWNERS mute Owner in the issue body is not Responsible.
+
+Reply exactly:
+## Analysis
+### Classification:
+#### Error type: <TYPE>
+#### Severity: <LEVEL>
+#### Responsible: area/<team>
+### Root Cause
+<what broke>
+Suspect PR(s), ordered by causality (most likely first):
+1. #<pr> — <why>
+### Suggested Fix
+<fix or investigation>
+### Summary
+<2-4 sentences: failure, root cause, who fixes, next step>"""
 
 # CI jobs whose artifacts are meaningful for debugging mutes. Restricting to
 # this allowlist keeps PR / manual reruns out of the "latest failing run".
@@ -45,19 +128,17 @@ _JOB_NAMES = (
     'Postcommit_asan',
 )
 
-_LLM_HINT = (
-    "<!-- LLM: please classify the failure as one of "
-    "TEST_ISSUE / YDB_ISSUE / TEST_INFRA_ISSUE; try to find the root cause "
-    "and the commit that most likely introduced it; estimate severity "
-    "(HIGH / MEDIUM / LOW); when possible, propose a fix. "
-    "If error_type is VERIFY or SANITIZER, explicitly mention the concrete problem "
-    "being investigated using status_description in this exact 3-line shape: "
-    "'VERIFY failed (<ISO_UTC_TIMESTAMP>):' then "
-    "'<source_file>:<line>' then "
-    "'<assertion/message line>'. "
-    "Prefer lines like 'ydb/.../*.cpp:<line>' and requirement/assert text, and do NOT include "
-    "stacktrace frames or addresses (e.g. '+0x...', function backtrace lines). -->"
-)
+def _format_llm_instructions() -> str:
+    return (
+        f'{_PROMPT_MARKER}\n'
+        '<details>\n'
+        '<summary>LLM instructions</summary>\n'
+        '\n'
+        '```\n'
+        f'{_llm_instructions_text()}\n'
+        '```\n'
+        '</details>'
+    )
 
 
 def _is_need_ai_review_enabled() -> bool:
@@ -164,9 +245,10 @@ def _load_latest_failures(ydb_wrapper, branch, build_type, full_names) -> Dict[s
 def _build_comment(full_names: Sequence[str], rows: Dict[str, Dict],
                    branch: str, build_type: str) -> str:
     lines = [
-        '### Links to recent failed test runs',
-        _LLM_HINT,
+        _format_llm_instructions(),
         _COMMENT_MARKER,
+        '',
+        '### Links to recent failed test runs',
         '',
         '| test | status | type | last_run | history | run | stderr | stdout | log | logsdir |',
         '|---|---|---|---|---|---|---|---|---|---|',

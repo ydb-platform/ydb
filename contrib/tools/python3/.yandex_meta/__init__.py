@@ -154,6 +154,7 @@ def post_install(self):
             f'-DVERSION="{self.version[:4]}"',
             '-DVPATH=""',
             '-DPLATLIBDIR="lib"',
+            '$CORE_LIBS_OPTIMIZATION',
         ],
         SRCS=src_srcs,
         NO_COMPILER_WARNINGS=True,

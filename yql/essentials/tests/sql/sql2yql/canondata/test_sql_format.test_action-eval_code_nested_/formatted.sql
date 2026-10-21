@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 SELECT
     EvaluateCode(
         ReprCode(1)

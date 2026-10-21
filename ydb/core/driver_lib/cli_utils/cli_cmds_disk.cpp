@@ -14,6 +14,15 @@ namespace NDriverClient {
 
 namespace {
 
+NPDisk::TMainKey MakeMetadataMainKey(const TVector<NPDisk::TKey>& keys) {
+    NPDisk::TMainKey mainKey;
+    for (const auto& key : keys) {
+        mainKey.Keys.push_back(key);
+    }
+    mainKey.Initialize();
+    return mainKey;
+}
+
 void PrintDiskOpenError(const TString& path, const TString& details) {
     if (details.Contains("Permission denied")) {
         Cerr << "Cannot open disk '" << path << "': permission denied." << Endl;
@@ -144,6 +153,7 @@ public:
     TString Path;
     NSize::TSize DiskSize;
     NSize::TSize ChunkSize;
+    NSize::TSize PhysicalChunkSize;
     NSize::TSize SectorSize;
     ui64 Guid;
     TVector<NPDisk::TKey> MainKeyTmp;
@@ -155,6 +165,7 @@ public:
         MainKey = {};
         DiskSize = 0;
         ChunkSize = 128 << 20;
+        PhysicalChunkSize = 0;
         SectorSize = 4 << 10;
         Guid = 0;
         IsErasureEncode = false;
@@ -167,6 +178,11 @@ public:
             "kikimr needs chunks of at least 32 MiB, but was designed to work with 128 MiB chunks in mind.\n"
             "It is not recommended to format disks with more than 64000 chunks.")
             .OptionalArgument("BYTES").StoreResult(&ChunkSize);
+        config.Opts->AddLongOption("physical-chunk-size", "physical chunk size to set (supports K/M/G/T suffixes)\n"
+            "unlike --chunk-size, this is the space a chunk occupies on the device, including the per-sector\n"
+            "PDisk metadata; the user-accessible size is derived from it and is slightly smaller.\n"
+            "Mutually exclusive with --chunk-size, must be a multiple of 2 MiB and of the sector size.")
+            .OptionalArgument("BYTES").StoreResult(&PhysicalChunkSize);
         config.Opts->AddLongOption('s', "sector-size", "sector size to set (suppords K/M/G/T suffixes, default = 4k)\n"
             "you must specify here the actual sector size of the physical device!")
             .OptionalArgument("BYTES").StoreResult(&SectorSize);
@@ -205,6 +221,16 @@ public:
         if (!hasMainOption && !hasMasterOption && !hasKOption)
             ythrow yexception() << "missing main-key param";
 
+        if (config.ParseResult->Has("physical-chunk-size") &&
+                (config.ParseResult->Has("chunk-size") || config.ParseResult->Has('c'))) {
+            ythrow yexception() << "chunk-size and physical-chunk-size are mutually exclusive";
+        }
+        if (config.ParseResult->Has("physical-chunk-size") &&
+                (!PhysicalChunkSize || PhysicalChunkSize.GetValue() > Max<ui32>())) {
+            ythrow yexception() << "physical-chunk-size must be non-zero and fit in uint32, got "
+                << PhysicalChunkSize.GetValue();
+        }
+
         for (auto& key : MainKeyTmp) {
             MainKey.Keys.push_back(key);
         }
@@ -213,6 +239,9 @@ public:
     virtual int Run(TConfig&) override {
         TFormatOptions options;
         options.IsErasureEncodeUserLog = IsErasureEncode;
+        if (PhysicalChunkSize) {
+            options.PhysicalChunkSizeBytes = static_cast<ui32>(PhysicalChunkSize.GetValue());
+        }
         FormatPDisk(Path, DiskSize, SectorSize, ChunkSize, Guid, ChunkKey, LogKey, SysLogKey,
                 MainKey.Keys.back(), TextMessage, options);
         return 0;
@@ -317,25 +346,34 @@ public:
     void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         Path = config.ParseResult->GetFreeArgs()[0];
-        MainKey = {};
-        for (auto& key : MainKeyTmp) {
-            MainKey.Keys.push_back(key);
-        }
-        if (MainKey.Keys.empty()) {
-            MainKey.Initialize();
-        } else {
-            MainKey.IsInitialized = true;
-        }
+        MainKey = MakeMetadataMainKey(MainKeyTmp);
     }
 
     int Run(TConfig& /*config*/) override {
-        auto rec = ReadPDiskMetadata(Path, MainKey);
-        if (rec.ByteSizeLong() == 0) {
-            Cerr << "Failed to read PDisk metadata from: " << Path << Endl;
+        const bool requestedYaml = !CommittedYamlPath.empty() || !ProposedYamlPath.empty() || !PrevYamlPath.empty();
+
+        std::optional<NKikimrBlobStorage::TPDiskMetadataRecord> metadata;
+        try {
+            metadata = ReadPDiskMetadata(Path, MainKey);
+        } catch (const yexception& ex) {
+            Cerr << "Failed to read PDisk metadata from '" << Path << "': " << ex.what() << Endl;
             return EXIT_FAILURE;
         }
 
-        const bool requestedYaml = !CommittedYamlPath.empty() || !ProposedYamlPath.empty() || !PrevYamlPath.empty();
+        if (!metadata || metadata->ByteSizeLong() == 0) {
+            const char* message = metadata ? "PDisk metadata is empty: " : "No PDisk metadata found: ";
+            if (requestedYaml) {
+                Cerr << message << Path << "; requested YAML files were not written" << Endl;
+                return EXIT_FAILURE;
+            }
+            if (JsonOut) {
+                Cout << "{}" << Endl;
+            } else {
+                Cout << message << Path << Endl;
+            }
+            return EXIT_SUCCESS;
+        }
+        const auto& rec = *metadata;
 
         auto decomposeToFile = [&](const TString& outPath, const char* label, auto getComposite, bool hasComposite) -> bool {
             if (outPath.empty()) {
@@ -446,15 +484,7 @@ public:
     void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         Path = config.ParseResult->GetFreeArgs()[0];
-        MainKey = {};
-        for (auto& key : MainKeyTmp) {
-            MainKey.Keys.push_back(key);
-        }
-        if (MainKey.Keys.empty()) {
-            MainKey.Initialize();
-        } else {
-            MainKey.IsInitialized = true;
-        }
+        MainKey = MakeMetadataMainKey(MainKeyTmp);
     }
 
     int Run(TConfig& /*config*/) override {
@@ -512,11 +542,15 @@ public:
             *rec.MutableCommittedStorageConfig()->MutablePrevConfig() = oldCommitted;
         }
 
-        if (!applyYaml(CommittedYamlPath, "committed", rec.MutableCommittedStorageConfig())) {
-            return EXIT_FAILURE;
+        if (!CommittedYamlPath.empty()) {
+            if (!applyYaml(CommittedYamlPath, "committed", rec.MutableCommittedStorageConfig())) {
+                return EXIT_FAILURE;
+            }
         }
-        if (!applyYaml(ProposedYamlPath, "proposed", rec.MutableProposedStorageConfig())) {
-            return EXIT_FAILURE;
+        if (!ProposedYamlPath.empty()) {
+            if (!applyYaml(ProposedYamlPath, "proposed", rec.MutableProposedStorageConfig())) {
+                return EXIT_FAILURE;
+            }
         }
 
         if (rec.HasCommittedStorageConfig() && rec.GetCommittedStorageConfig().HasPrevConfig()) {
@@ -553,6 +587,43 @@ public:
     }
 };
 
+class TClientCommandDiskMetadataClean : public TClientCommand {
+public:
+    TClientCommandDiskMetadataClean()
+        : TClientCommand("clean", {}, "Clean PDisk metadata")
+    {}
+
+    TString Path;
+    TVector<NPDisk::TKey> MainKeyTmp;
+    NPDisk::TMainKey MainKey;
+
+    void Config(TConfig& config) override {
+        TClientCommand::Config(config);
+        config.SetFreeArgsNum(1);
+        SetFreeArgTitle(0, "<PATH>", "PDisk device path");
+        config.Opts->AddLongOption('k', "main-key", "Encryption main-key to use while cleaning metadata")
+            .RequiredArgument("NUM").Optional().AppendTo(&MainKeyTmp);
+    }
+
+    void Parse(TConfig& config) override {
+        TClientCommand::Parse(config);
+        Path = config.ParseResult->GetFreeArgs()[0];
+        MainKey = MakeMetadataMainKey(MainKeyTmp);
+    }
+
+    int Run(TConfig& /*config*/) override {
+        try {
+            const NKikimrBlobStorage::TPDiskMetadataRecord emptyRecord;
+            WritePDiskMetadata(Path, emptyRecord, MainKey);
+            Cout << "PDisk metadata cleaned: " << Path << Endl;
+            return EXIT_SUCCESS;
+        } catch (const yexception& ex) {
+            Cerr << ex.what() << Endl;
+            return EXIT_FAILURE;
+        }
+    }
+};
+
 class TClientCommandDiskMetadata : public TClientCommandTree {
 public:
     TClientCommandDiskMetadata()
@@ -560,6 +631,7 @@ public:
     {
         AddCommand(std::make_unique<TClientCommandDiskMetadataRead>());
         AddCommand(std::make_unique<TClientCommandDiskMetadataWrite>());
+        AddCommand(std::make_unique<TClientCommandDiskMetadataClean>());
     }
 };
 

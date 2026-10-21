@@ -3,14 +3,20 @@
 #include "defs.h"
 
 #include <arrow/array/array_base.h>
+#include <arrow/array/builder_base.h>
 #include <arrow/array/util.h>
 #include <arrow/chunked_array.h>
 #include <arrow/record_batch.h>
+#include <arrow/type.h>
 #include <arrow/util/bitmap_ops.h>
 
 namespace NYql::NUdf {
 
 namespace {
+
+std::shared_ptr<arrow::ArrayData> DeepSlice(const std::shared_ptr<arrow::ArrayData>& data, size_t offset, size_t len) {
+    return ::NYql::NUdf::DeepSlice(*data, offset, len);
+}
 
 ui64 GetSizeOfDatumInBytes(const arrow::Datum& datum) {
     ui64 size = sizeof(datum);
@@ -70,35 +76,62 @@ std::shared_ptr<arrow::Buffer> MakeDenseFalseBitmap(int64_t len, arrow::MemoryPo
     return bitmap;
 }
 
-std::shared_ptr<arrow::ArrayData> DeepSlice(const std::shared_ptr<arrow::ArrayData>& data, size_t offset, size_t len) {
-    Y_ENSURE(data->length >= 0);
-    Y_ENSURE(offset + len <= (size_t)data->length);
-    if (offset == 0 && len == (size_t)data->length) {
-        return data;
+std::shared_ptr<arrow::ArrayData> MakeEmptyArray(std::shared_ptr<arrow::DataType> type,
+                                                 arrow::MemoryPool* memory_pool) {
+    std::unique_ptr<arrow::ArrayBuilder> builder;
+    ARROW_OK(arrow::MakeBuilder(memory_pool, type, &builder));
+    ARROW_OK(builder->Resize(0));
+    auto result = ARROW_RESULT(builder->Finish())->data();
+    Y_ENSURE(result->offset == 0, "Expected offset to be 0. It guarantees that empty array is compatable with all minikql types.");
+    Y_ENSURE(!result->buffers.empty(), "Expected at least one buffer.");
+    Y_ENSURE(result->buffers[0] == nullptr, "Expected null mask bitmap buffer to be nullptr. It guarantees that empty array is compatable with all minikql types.");
+    return result;
+}
+
+std::unique_ptr<arrow::ResizableBuffer> CopyBuffer(const arrow::Buffer& src, size_t offset, size_t length, arrow::MemoryPool* pool) {
+    Y_ENSURE(offset + length <= static_cast<size_t>(src.size()));
+    auto result = AllocateResizableBuffer(length, pool);
+    ARROW_OK(result->Resize(static_cast<i64>(length)));
+    std::copy(src.data() + offset, src.data() + offset + length, result->mutable_data());
+    return result;
+}
+
+std::shared_ptr<arrow::ArrayData> DeepSlice(const arrow::ArrayData& data, size_t offset, size_t len) {
+    Y_ENSURE(data.length >= 0);
+    Y_ENSURE(offset + len <= (size_t)data.length);
+    if (offset == 0 && len == (size_t)data.length) {
+        return data.Copy();
     }
 
-    std::shared_ptr<arrow::ArrayData> result = data->Copy();
-    result->offset = data->offset + offset;
+    std::shared_ptr<arrow::ArrayData> result = data.Copy();
+    result->offset = data.offset + offset;
     result->length = len;
 
-    if (data->null_count == data->length) {
+    if (data.null_count == data.length) {
         result->null_count = len;
     } else if (len == 0) {
         result->null_count = 0;
     } else {
-        result->null_count = data->null_count != 0 ? arrow::kUnknownNullCount : 0;
+        result->null_count = data.null_count != 0 ? arrow::kUnknownNullCount : 0;
     }
-
-    for (size_t i = 0; i < data->child_data.size(); ++i) {
-        result->child_data[i] = DeepSlice(data->child_data[i], offset, len);
+    Y_ENSURE(data.type, "Data type is required for slicing.");
+    const bool isDenseUnion = data.type->id() == arrow::Type::DENSE_UNION;
+    if (!isDenseUnion) {
+        for (size_t i = 0; i < data.child_data.size(); ++i) {
+            result->child_data[i] = DeepSlice(data.child_data[i], offset, len);
+        }
     }
 
     return result;
 }
 
+std::shared_ptr<arrow::ArrayData> DeepSlice(const std::shared_ptr<arrow::ArrayData>& data, size_t offset, size_t len) {
+    return DeepSlice(*data, offset, len);
+}
+
 std::shared_ptr<arrow::ArrayData> Chop(std::shared_ptr<arrow::ArrayData>& data, size_t len) {
-    auto first = DeepSlice(data, 0, len);
-    data = DeepSlice(data, len, data->length - len);
+    auto first = DeepSlice(*data, 0, len);
+    data = DeepSlice(*data, len, data->length - len);
     return first;
 }
 

@@ -103,8 +103,6 @@ protected:
     void ReportCompileRequestRejected();
     void ReportCompileRequestTimeout();
     void ReportCompileDurations(TDuration duration, TDuration cpuTime);
-    void ReportCompileEnforceConfigSuccess();
-    void ReportCompileEnforceConfigFailed();
     void ReportCompileNewRBOSuccess();
     void ReportCompileNewRBOFailed();
     void ReportRecompileRequestGet();
@@ -130,7 +128,6 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr ParametersBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr YdbParametersBytes;
 
-    ::NMonitoring::TDynamicCounters::TCounterPtr SqlV0Translations;
     ::NMonitoring::TDynamicCounters::TCounterPtr SqlV1Translations;
     ::NMonitoring::TDynamicCounters::TCounterPtr SqlUnknownTranslations;
 
@@ -214,8 +211,6 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileTotal;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileErrors;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileActive;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CompileEnforceConfigSuccess;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CompileEnforceConfigFailed;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileNewRBOSuccess;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileNewRBOFailed;
     NMonitoring::THistogramPtr CompileCpuTime;
@@ -345,8 +340,6 @@ public:
     void ReportCompileRequestRejected(TKqpDbCountersPtr dbCounters);
     void ReportCompileRequestTimeout(TKqpDbCountersPtr dbCounters);
     void ReportCompileDurations(TKqpDbCountersPtr dbCounters, TDuration duration, TDuration cpuTime);
-    void ReportCompileEnforceConfigSuccess(TKqpDbCountersPtr dbCounters);
-    void ReportCompileEnforceConfigFailed(TKqpDbCountersPtr dbCounters);
     void ReportCompileNewRBOSuccess(TKqpDbCountersPtr dbCounters);
     void ReportCompileNewRBOFailed(TKqpDbCountersPtr dbCounters);
     void ReportRecompileRequestGet(TKqpDbCountersPtr dbCounters);
@@ -397,6 +390,14 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesTruncated;
     ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesEmptyQueryType;
 
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileCacheViewPeerScanWarnings;
+
+    // Accumulate only during a short window after first non-warmup client
+    // compile -- attribute warmup impact on cold-start traffic.
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupHitsInWindow;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupMissesInWindow;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupSavedCompileMs;
+
     // Compile computation pattern service
     ::NMonitoring::TDynamicCounters::TCounterPtr CompiledComputationPatterns;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileComputationPatternsQueueSize;
@@ -406,12 +407,21 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr RmMemory;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExternalMemory;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughMemory;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmOptionalMemoryRefused; // optional Memory refused at the spilling threshold
     ::NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughComputeActors;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemAllocs;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmOnStartAllocs;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemFree;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmOnCompleteFree;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
+    // Memory arena (see TKqpResourceManager::ResizeArenaLocked)
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaSize;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaUsed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaDeficit;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaGrows;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaShrinks;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaGrowFailures;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaBurstGrows; // growth rounds made by AllocateResources itself
     NMonitoring::THistogramPtr RmSnapshotLatency;
     NMonitoring::THistogramPtr NodeServiceStartEventDelivery;
     NMonitoring::THistogramPtr NodeServiceProcessTime;
@@ -448,6 +458,8 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr ModifiedRowsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr LockedRowsCount;
     NMonitoring::THistogramPtr MaxInFlightLockTimeOnExit;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupLockTotalQuotaBytesInFlight;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupLockTotalQuotaBytesExceeded;
 
     // Sink write counters
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsShardResolve;
@@ -461,6 +473,9 @@ public:
 
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorWriteOnlyOperations;
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorReadWriteOperations;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorLocalShardWrites;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorRemoteShardWrites;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorFlushes;
     ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorImmediateCommits;

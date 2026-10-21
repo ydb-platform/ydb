@@ -1,0 +1,14 @@
+'(
+    (lambda '($stream)
+        (WideToBlocks
+            (FromFlow
+                (WideMap (ToFlow (WideFromBlocks $stream))
+                    (lambda '($input) (block '(
+                        (let $value (SafeCast $input (DataType 'Uint64)))
+                        (return $value $value $value $value $value)
+                    )))
+                )
+            )
+        )
+    )
+)

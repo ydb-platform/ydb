@@ -223,7 +223,7 @@ public:
     void StartBlobsFetching(const THashSet<TBlobRange>& rangesInProgress);
 
     bool AddError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status);
-    void AddData(const TString& storageId, const TBlobRange& range, const TString& data);
+    void AddData(const TString& storageId, const TBlobRange& range, const TString& data, const bool fromCache);
 
     class TReadSubscriber: public NResourceBroker::NSubscribe::ITask {
     private:

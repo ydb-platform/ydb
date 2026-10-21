@@ -1,22 +1,25 @@
 #include "yql_s3_provider.h"
 
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
+
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NYql {
 
-TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, NActors::TActorSystem* actorSystem, TS3Configuration::TSetupper configurationInit) {
-    return [gateway, credentialsFactory, actorSystem, configurationInit] (
-        const TString& userName,
-        const TString& sessionId,
-        const TGatewaysConfig* gatewaysConfig,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        TIntrusivePtr<IRandomProvider> randomProvider,
-        TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-        const TOperationProgressWriter& progressWriter,
-        const TYqlOperationOptions& operationOptions,
-        THiddenQueryAborter hiddenAborter,
-        const TQContext& qContext) {
+TS3State::TS3State(bool strictConfigValidation)
+    : Configuration(MakeIntrusive<TS3Configuration>(strictConfigValidation))
+    , GatewayRetryPolicy(GetHTTPDefaultRetryPolicy())
+{
+}
+
+TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    NActors::TActorSystem* actorSystem, TS3Configuration::TSetupper configurationInit) {
+    return [gateway, credentialsFactory, actorSystem, configurationInit](const TString& userName, const TString& sessionId,
+               const TGatewaysConfig* gatewaysConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+               TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
+               const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions, THiddenQueryAborter hiddenAborter,
+               const TQContext& qContext) {
         Y_UNUSED(sessionId);
         Y_UNUSED(userName);
         Y_UNUSED(randomProvider);
@@ -25,7 +28,7 @@ TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway
         Y_UNUSED(hiddenAborter);
         Y_UNUSED(qContext);
 
-        auto state = MakeIntrusive<TS3State>();
+        auto state = MakeIntrusive<TS3State>(typeCtx->StrictConfigValidation);
 
         state->Types = typeCtx.Get();
         state->FunctionRegistry = functionRegistry;
@@ -44,7 +47,7 @@ TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway
 
         TDataProviderInfo info;
 
-        info.Names.insert({TString{S3ProviderName}});
+        info.Names.insert({ TString{ S3ProviderName } });
         info.Source = CreateS3DataSource(state);
         info.Sink = CreateS3DataSink(state);
 
@@ -52,4 +55,4 @@ TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway
     };
 }
 
-} // namespace NYql
+}   // namespace NYql

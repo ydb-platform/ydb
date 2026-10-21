@@ -14,7 +14,6 @@ class TYsonResultWriter {
 public:
     static constexpr TStringBuf VoidString = "Void";
 
-public:
     explicit TYsonResultWriter(NYson::TYsonConsumerBase& writer)
         : Writer_(writer)
     {
@@ -92,7 +91,6 @@ private:
         Writer_.OnStringScalar(::ToString(value));
     }
 
-private:
     NYson::TYsonConsumerBase& Writer_;
 };
 } // namespace NYql::NResult

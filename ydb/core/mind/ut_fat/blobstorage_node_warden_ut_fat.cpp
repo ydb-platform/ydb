@@ -216,12 +216,9 @@ void SetupServices(TTestActorRuntime &runtime) {
 
         SubstGlobal(staticConfig, "$Node1", Sprintf("%" PRIu32, runtime.GetNodeId(0)));
 
-        TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(
-            STRAND_PDISK && !runtime.IsRealThreads() ?
-            static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime)) :
-            static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())));
+        TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig());
 //            nodeWardenConfig->Monitoring = monitoring;
-        google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig.MutableServiceSet());
+        google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig->MutableServiceSet());
 
         app.SetKeyForNode(keyfile, nodeIndex);
         ObtainTenantKey(&nodeWardenConfig->TenantKey, app.Keys[nodeIndex]);
@@ -230,7 +227,7 @@ void SetupServices(TTestActorRuntime &runtime) {
         if (nodeIndex == 0) {
             static TTempDir tempDir;
             TString pDiskPath = tempDir() + "/pdisk0.dat";
-            nodeWardenConfig->BlobStorageConfig.MutableServiceSet()->MutablePDisks(0)->SetPath(pDiskPath);
+            nodeWardenConfig->BlobStorageConfig->MutableServiceSet()->MutablePDisks(0)->SetPath(pDiskPath);
 
             ui64 pDiskGuid = 1;
             static ui64 iteration = 0;
@@ -246,6 +243,7 @@ void SetupServices(TTestActorRuntime &runtime) {
         SetupTabletResolver(runtime, nodeIndex);
     }
 
+    SetupPDiskSubsystem(&runtime, STRAND_PDISK);
     runtime.Initialize(app.Unwrap());
 
     for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {

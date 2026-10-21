@@ -15,7 +15,7 @@ FROM
 WHERE
     i_manufact_id == 269
     AND i_item_sk == cs_item_sk
-    AND d_date BETWEEN CAST('1998-03-18' AS Date) AND (
+    AND CAST(d_date AS Date) BETWEEN CAST('1998-03-18' AS Date) AND (
         CAST('1998-03-18' AS Date) + DateTime::IntervalFromDays(90)
     )
     AND d_date_sk == cs_sold_date_sk
@@ -29,7 +29,7 @@ WHERE
             `/Root/test/ds/date_dim`
         WHERE
             cs_item_sk == i_item_sk
-            AND d_date BETWEEN CAST('1998-03-18' AS Date) AND (
+            AND CAST(d_date AS Date) BETWEEN CAST('1998-03-18' AS Date) AND (
                 CAST('1998-03-18' AS Date) + DateTime::IntervalFromDays(90)
             )
             AND d_date_sk == cs_sold_date_sk

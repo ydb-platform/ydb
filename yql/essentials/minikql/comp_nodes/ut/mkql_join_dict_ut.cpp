@@ -3,8 +3,7 @@
 
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
 Y_UNIT_TEST_LLVM(TestInner) {
@@ -20,7 +19,7 @@ Y_UNIT_TEST_LLVM(TestInner) {
                                                                     {{{2U}, {"B"}}},
                                                                     {{{2U}, {"C"}}},
                                                                 });
-        const auto dict1 = pb.ToSortedDict(list1, true,
+        const auto dict1 = pb.ToSortedDict(list1, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                            [&](TRuntimeNode item) { return pb.Member(item, "Payload"); });
 
@@ -29,21 +28,21 @@ Y_UNIT_TEST_LLVM(TestInner) {
                                                                     {{{2U}, {"Y"}}},
                                                                     {{{3U}, {"Z"}}},
                                                                 });
-        const auto dict2 = pb.ToSortedDict(list2, true,
+        const auto dict2 = pb.ToSortedDict(list2, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                            [&](TRuntimeNode item) { return pb.Member(item, "Payload"); });
 
-        const auto pgmReturn = pb.JoinDict(dict1, true, dict2, true, EJoinKind::Inner);
+        const auto pgmReturn = pb.JoinDict(dict1, /*isMulti1=*/true, dict2, /*isMulti2=*/true, EJoinKind::Inner);
         const auto graph = setup.BuildGraph(pgmReturn);
 
         using TOutRow = std::tuple<TString, TString>;
 
-        NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
-                                                                          {"B", "X"},
-                                                                          {"B", "Y"},
-                                                                          {"C", "X"},
-                                                                          {"C", "Y"},
-                                                                      });
+        AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
+                                                              {"B", "X"},
+                                                              {"B", "Y"},
+                                                              {"C", "X"},
+                                                              {"C", "Y"},
+                                                          });
     }
 }
 
@@ -60,7 +59,7 @@ Y_UNIT_TEST_LLVM(TestLeft) {
                                                                     {{{2U}, {"B"}}},
                                                                     {{{2U}, {"C"}}},
                                                                 });
-        const auto dict1 = pb.ToSortedDict(list1, true,
+        const auto dict1 = pb.ToSortedDict(list1, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                            [&](TRuntimeNode item) { return pb.Member(item, "Payload"); });
 
@@ -69,22 +68,22 @@ Y_UNIT_TEST_LLVM(TestLeft) {
                                                                     {{{2U}, {"Y"}}},
                                                                     {{{3U}, {"Z"}}},
                                                                 });
-        const auto dict2 = pb.ToSortedDict(list2, true,
+        const auto dict2 = pb.ToSortedDict(list2, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                            [&](TRuntimeNode item) { return pb.Member(item, "Payload"); });
 
-        const auto pgmReturn = pb.JoinDict(dict1, true, dict2, true, EJoinKind::Left);
+        const auto pgmReturn = pb.JoinDict(dict1, /*isMulti1=*/true, dict2, /*isMulti2=*/true, EJoinKind::Left);
         const auto graph = setup.BuildGraph(pgmReturn);
 
         using TOutRow = std::tuple<TString, TMaybe<TString>>;
 
-        NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
-                                                                          {"A", TMaybe<TString>{}},
-                                                                          {"B", TMaybe<TString>{"X"}},
-                                                                          {"B", TMaybe<TString>{"Y"}},
-                                                                          {"C", TMaybe<TString>{"X"}},
-                                                                          {"C", TMaybe<TString>{"Y"}},
-                                                                      });
+        AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
+                                                              {"A", {}},
+                                                              {"B", TString("X")},
+                                                              {"B", TString("Y")},
+                                                              {"C", TString("X")},
+                                                              {"C", TString("Y")},
+                                                          });
     }
 }
 
@@ -101,7 +100,7 @@ Y_UNIT_TEST_LLVM(TestRight) {
                                                                     {{{2U}, {"B"}}},
                                                                     {{{2U}, {"C"}}},
                                                                 });
-        const auto dict1 = pb.ToSortedDict(list1, true,
+        const auto dict1 = pb.ToSortedDict(list1, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                            [&](TRuntimeNode item) { return pb.Member(item, "Payload"); });
 
@@ -110,22 +109,22 @@ Y_UNIT_TEST_LLVM(TestRight) {
                                                                     {{{2U}, {"Y"}}},
                                                                     {{{3U}, {"Z"}}},
                                                                 });
-        const auto dict2 = pb.ToSortedDict(list2, true,
+        const auto dict2 = pb.ToSortedDict(list2, /*all=*/true,
                                            [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                            [&](TRuntimeNode item) { return pb.Member(item, "Payload"); });
 
-        const auto pgmReturn = pb.JoinDict(dict1, true, dict2, true, EJoinKind::Right);
+        const auto pgmReturn = pb.JoinDict(dict1, /*isMulti1=*/true, dict2, /*isMulti2=*/true, EJoinKind::Right);
         const auto graph = setup.BuildGraph(pgmReturn);
 
         using TOutRow = std::tuple<TMaybe<TString>, TString>;
 
-        NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
-                                                                          {TMaybe<TString>{"B"}, "X"},
-                                                                          {TMaybe<TString>{"B"}, "Y"},
-                                                                          {TMaybe<TString>{"C"}, "X"},
-                                                                          {TMaybe<TString>{"C"}, "Y"},
-                                                                          {TMaybe<TString>{}, "Z"},
-                                                                      });
+        AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
+                                                              {TString("B"), "X"},
+                                                              {TString("B"), "Y"},
+                                                              {TString("C"), "X"},
+                                                              {TString("C"), "Y"},
+                                                              {{}, "Z"},
+                                                          });
     }
 }
 
@@ -141,7 +140,7 @@ Y_UNIT_TEST_LLVM(TestFull) {
                                                                 {{{2U}, {"B"}}},
                                                                 {{{2U}, {"C"}}},
                                                             });
-    const auto dict1 = pb.ToSortedDict(list1, true,
+    const auto dict1 = pb.ToSortedDict(list1, /*all=*/true,
                                        [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                        [&](TRuntimeNode item) { return pb.Member(item, "Payload"); });
 
@@ -150,23 +149,23 @@ Y_UNIT_TEST_LLVM(TestFull) {
                                                                 {{{2U}, {"Y"}}},
                                                                 {{{3U}, {"Z"}}},
                                                             });
-    const auto dict2 = pb.ToSortedDict(list2, true,
+    const auto dict2 = pb.ToSortedDict(list2, /*all=*/true,
                                        [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
                                        [&](TRuntimeNode item) { return pb.Member(item, "Payload"); });
 
-    const auto pgmReturn = pb.JoinDict(dict1, true, dict2, true, EJoinKind::Full);
+    const auto pgmReturn = pb.JoinDict(dict1, /*isMulti1=*/true, dict2, /*isMulti2=*/true, EJoinKind::Full);
     const auto graph = setup.BuildGraph(pgmReturn);
 
     using TOutRow = std::tuple<TMaybe<TString>, TMaybe<TString>>;
 
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
-                                                                      {TMaybe<TString>{"A"}, TMaybe<TString>{}},
-                                                                      {TMaybe<TString>{"B"}, TMaybe<TString>{"X"}},
-                                                                      {TMaybe<TString>{"B"}, TMaybe<TString>{"Y"}},
-                                                                      {TMaybe<TString>{"C"}, TMaybe<TString>{"X"}},
-                                                                      {TMaybe<TString>{"C"}, TMaybe<TString>{"Y"}},
-                                                                      {TMaybe<TString>{}, TMaybe<TString>{"Z"}},
-                                                                  });
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
+                                                          {TString("A"), {}},
+                                                          {TString("B"), TString("X")},
+                                                          {TString("B"), TString("Y")},
+                                                          {TString("C"), TString("X")},
+                                                          {TString("C"), TString("Y")},
+                                                          {{}, TString("Z")},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestInnerFlat) {
@@ -195,15 +194,15 @@ Y_UNIT_TEST_LLVM(TestInnerFlat) {
 
     const auto pgmReturn = pb.FlatMap(listList,
                                       [&](TRuntimeNode left) {
-                                          const auto dict1 = pb.ToSortedDict(left, false,
+                                          const auto dict1 = pb.ToSortedDict(left, /*all=*/false,
                                                                              [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
-                                                                             [&](TRuntimeNode item) { return pb.Member(item, "Payload"); }, false, 0);
+                                                                             [&](TRuntimeNode item) { return pb.Member(item, "Payload"); }, /*isCompact=*/false, 0);
                                           return pb.FlatMap(listList,
                                                             [&](TRuntimeNode right) {
-                                                                const auto dict2 = pb.ToSortedDict(right, false,
+                                                                const auto dict2 = pb.ToSortedDict(right, /*all=*/false,
                                                                                                    [&](TRuntimeNode item) { return pb.Member(item, "Key"); },
-                                                                                                   [&](TRuntimeNode item) { return pb.Member(item, "Payload"); }, false, 0);
-                                                                return pb.JoinDict(dict1, false, dict2, false, EJoinKind::Inner);
+                                                                                                   [&](TRuntimeNode item) { return pb.Member(item, "Payload"); }, /*isCompact=*/false, 0);
+                                                                return pb.JoinDict(dict1, /*isMulti1=*/false, dict2, /*isMulti2=*/false, EJoinKind::Inner);
                                                             });
                                       });
 
@@ -212,24 +211,23 @@ Y_UNIT_TEST_LLVM(TestInnerFlat) {
 
     using TOutRow = std::tuple<TString, TString>;
 
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
-                                                                      {"A", "A"},
-                                                                      {"B", "B"},
-                                                                      {"C", "C"},
-                                                                      {"D", "D"},
-                                                                      {"B", "H"},
-                                                                      {"C", "G"},
-                                                                      {"D", "F"},
-                                                                      {"H", "B"},
-                                                                      {"G", "C"},
-                                                                      {"F", "D"},
-                                                                      {"H", "H"},
-                                                                      {"G", "G"},
-                                                                      {"F", "F"},
-                                                                      {"E", "E"},
-                                                                  });
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TOutRow>{
+                                                          {"A", "A"},
+                                                          {"B", "B"},
+                                                          {"C", "C"},
+                                                          {"D", "D"},
+                                                          {"B", "H"},
+                                                          {"C", "G"},
+                                                          {"D", "F"},
+                                                          {"H", "B"},
+                                                          {"G", "C"},
+                                                          {"F", "D"},
+                                                          {"H", "H"},
+                                                          {"G", "G"},
+                                                          {"F", "F"},
+                                                          {"E", "E"},
+                                                      });
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

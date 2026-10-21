@@ -1,40 +1,53 @@
-# Ruler Configuration File
+# Ruler Configuration for YDB
 # See https://ai.intellectronica.net/ruler for documentation.
 
-# To specify which agents are active by default when --agents is not used,
-# uncomment and populate the following line. If omitted, all agents are active.
-# default_agents = ["copilot", "claude"]
-
-# Enable nested rule loading from nested .ruler directories
-# When enabled, ruler will search for and process .ruler directories throughout the project hierarchy
-# nested = false
+default_agents = [
+  "claude",
+  "codex",
+  "cursor",
+  "copilot",
+  "jetbrains-ai",
+  "cline",
+  "windsurf",
+  "aider",
+]
 
 # --- Agent Specific Configurations ---
-# You can enable/disable agents and override their default output paths here.
-# Use lowercase agent identifiers: aider, amp, claude, cline, codex, copilot, cursor, jetbrains-ai, kilocode, pi, windsurf
+# All agents will receive instructions from concatenated .ruler/*.md files
 
-# [agents.copilot]
-# enabled = true
-# output_path = ".github/copilot-instructions.md"
+[skills]
+enabled = true
 
-# [agents.aider]
-# enabled = true
-# output_path_instructions = "AGENTS.md"
-# output_path_config = ".aider.conf.yml"
+[agents.claude]
+enabled = true
+output_path = "AGENTS.md"
 
-# [agents.gemini-cli]
-# enabled = true
+[agents.codex]
+enabled = true
+output_path = "AGENTS.md"
+output_path_config = ".codex/config.toml"
 
-# --- MCP Servers ---
-# Define Model Context Protocol servers here. Two examples:
-# 1. A stdio server (local executable)
-# 2. A remote server (HTTP-based)
+[agents.cursor]
+enabled = true
+output_path = ".cursor/rules"
 
-# [mcp_servers.example_stdio]
-# command = "node"
-# args = ["scripts/your-mcp-server.js"]
-# env = { API_KEY = "replace_me" }
+[agents.copilot]
+enabled = true
+output_path = ".github/copilot-instructions.md"
 
-# [mcp_servers.example_remote]
-# url = "https://api.example.com/mcp"
-# headers = { Authorization = "Bearer REPLACE_ME" }
+[agents.jetbrains-ai]
+enabled = true
+output_path = ".idea/ai.xml"
+
+[agents.cline]
+enabled = true
+output_path = ".cline/rules"
+
+[agents.windsurf]
+enabled = true
+output_path = ".windsurf/rules"
+
+[agents.aider]
+enabled = true
+output_path_instructions = "AGENTS.md"
+output_path_config = ".aider.conf.yml"

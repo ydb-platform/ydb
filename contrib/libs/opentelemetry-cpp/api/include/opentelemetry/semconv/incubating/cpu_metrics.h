@@ -37,30 +37,38 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricCpuFrequency = "
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Gauge<int64_t>>
 CreateSyncInt64MetricCpuFrequency(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64Gauge(kMetricCpuFrequency, descrMetricCpuFrequency,
                                  unitMetricCpuFrequency);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Gauge<double>>
 CreateSyncDoubleMetricCpuFrequency(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleGauge(kMetricCpuFrequency, descrMetricCpuFrequency,
                                   unitMetricCpuFrequency);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 #endif /* OPENTELEMETRY_ABI_VERSION_NO */
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricCpuFrequency(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableGauge(kMetricCpuFrequency, descrMetricCpuFrequency,
                                            unitMetricCpuFrequency);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricCpuFrequency(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableGauge(kMetricCpuFrequency, descrMetricCpuFrequency,
                                             unitMetricCpuFrequency);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -78,26 +86,34 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricCpuTime = "s";
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricCpuTime(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Counter(kMetricCpuTime, descrMetricCpuTime, unitMetricCpuTime);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricCpuTime(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleCounter(kMetricCpuTime, descrMetricCpuTime, unitMetricCpuTime);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricCpuTime(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableCounter(kMetricCpuTime, descrMetricCpuTime, unitMetricCpuTime);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricCpuTime(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableCounter(kMetricCpuTime, descrMetricCpuTime,
                                               unitMetricCpuTime);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -117,30 +133,38 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricCpuUtilization =
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Gauge<int64_t>>
 CreateSyncInt64MetricCpuUtilization(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64Gauge(kMetricCpuUtilization, descrMetricCpuUtilization,
                                  unitMetricCpuUtilization);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Gauge<double>>
 CreateSyncDoubleMetricCpuUtilization(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleGauge(kMetricCpuUtilization, descrMetricCpuUtilization,
                                   unitMetricCpuUtilization);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 #endif /* OPENTELEMETRY_ABI_VERSION_NO */
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricCpuUtilization(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableGauge(kMetricCpuUtilization, descrMetricCpuUtilization,
                                            unitMetricCpuUtilization);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricCpuUtilization(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableGauge(kMetricCpuUtilization, descrMetricCpuUtilization,
                                             unitMetricCpuUtilization);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 }  // namespace cpu

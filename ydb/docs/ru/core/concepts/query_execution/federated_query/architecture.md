@@ -29,12 +29,8 @@
 
 ## Перечень поддерживаемых внешних источников данных {#supported-datasources}
 
-| Источник | Поддержка |
-| -------- | --------- |
-| [ClickHouse](https://clickhouse.com/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [Greenplum](https://greenplum.org/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [Microsoft SQL Server](https://learn.microsoft.com/ru-ru/sql/?view=sql-server-ver16) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [MySQL](https://www.mysql.org/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [PostgreSQL](https://www.postgresql.org/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [S3](https://aws.amazon.com/ru/s3/) | Встроенная в `ydbd` |
-| [{{ydb-short-name}}](https://ydb.tech/) | Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
+{{ ydb-full-name }} имеет встроенную в `ydbd` поддержку следующих внешних источников данных:
+
+{% include [!](_includes/supported_eds.md) %}
+
+Через коннектор [fq-connector-go](../../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) дополнительно поддерживается доступ к ряду экспериментальных внешних СУБД. Подробности см. в разделе [{#T}](index.md).

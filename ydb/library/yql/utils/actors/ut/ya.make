@@ -8,8 +8,7 @@ IF (OS_LINUX OR OS_DARWIN)
     )
 
     PEERDIR(
-        ydb/core/testlib/basics/default
-        yql/essentials/minikql/comp_nodes/llvm16
+        ydb/library/actors/testlib
     )
 
     END()

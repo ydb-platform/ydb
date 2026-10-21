@@ -11,6 +11,7 @@
 #include "opentelemetry/common/timestamp.h"
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/sdk/trace/recordable.h"
+#include "opentelemetry/sdk/trace/sampler.h"
 #include "opentelemetry/sdk/trace/tracer.h"
 #include "opentelemetry/trace/span.h"
 #include "opentelemetry/trace/span_context.h"
@@ -32,8 +33,9 @@ public:
        const opentelemetry::common::KeyValueIterable &attributes,
        const opentelemetry::trace::SpanContextKeyValueIterable &links,
        const opentelemetry::trace::StartSpanOptions &options,
+       const opentelemetry::sdk::trace::SamplingResult &sampling_result,
        const opentelemetry::trace::SpanContext &parent_span_context,
-       std::unique_ptr<opentelemetry::trace::SpanContext> span_context) noexcept;
+       opentelemetry::trace::SpanContext span_context) noexcept;
 
   Span(const Span &)            = delete;
   Span(Span &&)                 = delete;
@@ -74,17 +76,15 @@ public:
 
   bool IsRecording() const noexcept override;
 
-  opentelemetry::trace::SpanContext GetContext() const noexcept override
-  {
-    return *span_context_.get();
-  }
+  opentelemetry::trace::SpanContext GetContext() const noexcept override { return span_context_; }
 
 private:
   std::shared_ptr<Tracer> tracer_;
   mutable std::mutex mu_;
   std::unique_ptr<Recordable> recordable_;
   opentelemetry::common::SteadyTimestamp start_steady_time;
-  std::unique_ptr<opentelemetry::trace::SpanContext> span_context_;
+  opentelemetry::trace::SpanContext span_context_;
+  opentelemetry::trace::StatusCode status_code_{opentelemetry::trace::StatusCode::kUnset};
   bool has_ended_{false};
 };
 }  // namespace trace

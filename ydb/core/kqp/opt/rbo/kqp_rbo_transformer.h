@@ -2,6 +2,7 @@
 
 #include "kqp_rbo.h"
 
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
 #include <ydb/core/kqp/opt/kqp_column_statistics_utils.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 
@@ -28,6 +29,7 @@ struct TKqlTransformContext;
 class IOperator;
 class TExpression;
 class TOpRoot;
+class TOpJoin;
 struct TPhysicalOpProps;
 
 namespace NOpt {
@@ -39,7 +41,7 @@ struct TKqpOptimizeContext;
 class TKqpRewriteSelectTransformer : public NYql::TSyncTransformerBase {
 public:
     TKqpRewriteSelectTransformer(const TIntrusivePtr<NOpt::TKqpOptimizeContext>& kqpCtx, NYql::TTypeAnnotationContext& typeCtx)
-        : TypeCtx(typeCtx), KqpCtx(*kqpCtx), UniqueSourceIdCounter(0) {}
+        : TypeCtx(typeCtx), KqpCtx(*kqpCtx), UniqueSourceIdCounter(0), UniqueColumnIdCounter(0) {}
 
     // Main method of the transformer
     IGraphTransformer::TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) final;
@@ -47,8 +49,10 @@ public:
 
 private:
     NYql::TTypeAnnotationContext& TypeCtx;
-    const NOpt::TKqpOptimizeContext& KqpCtx;
+    NOpt::TKqpOptimizeContext& KqpCtx;
     ui64 UniqueSourceIdCounter = 0;
+    ui64 UniqueColumnIdCounter = 0;
+    bool RboTraceRewriteSelectStarted = false;
 };
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePtr<NOpt::TKqpOptimizeContext>& kqpCtx,
@@ -72,9 +76,12 @@ private:
     TStatus ContinueOptimizations(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx);
     bool IsSuitableToRequestStatistics();
     void CollectTablesAndColumnsNames(NYql::TExprContext& ctx);
-    void CollectTablesAndColumnsNames(const TIntrusivePtr<IOperator>& op);
-    void CollectTablesAndColumnsNames(const TExpression& expr, const TPhysicalOpProps& props);
-    bool IsSuitableToCollectStatistics(const TIntrusivePtr<IOperator>& op) const;
+    void CollectTablesAndColumnsNames(IOperator* op, const TColumnLineage& lineage);
+    void CollectTablesAndColumnsNames(const TExpression& expr, const IOperator& input, const TColumnLineage& lineage);
+    void CollectJoinKeysColumns(TOpJoin* join, const TColumnLineage& lineage);
+    void CollectJoinKeysTuple(const TVector<const TColumnLineageEntry*>& joinKeys);
+    std::optional<TVector<TString>> FindEqHeightHistogramTuple(const TString& tableName, const THashSet<TString>& columns) const;
+    bool IsSuitableToCollectStatistics(IOperator* op) const;
     void ApplyColumnStatistics();
     void InitializeRBOOptimizationStages();
 
@@ -92,12 +99,16 @@ private:
     TString Cluster;
     TString Database;
     NActors::TActorSystem* ActorSystem;
-    std::optional<TColumnStatisticsResponse> ColumnStatisticsResponse;
+    std::shared_ptr<TColumnStatisticsSharedState> SharedState;
     NThreading::TFuture<void> ColumnStatisticsReadiness;
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
     THashMap<TString, THashSet<TString>> HistColumnsByTableName;
+    THashMap<TString, THashMap<TString, TVector<TString>>> EqHeightHistTuplesByTableName;
 
-    TIntrusivePtr<TOpRoot> OpRoot;
+    // Flag to reset the check of original type for multiple statement queries
+    bool ResetTypes = false;
+
+    TVector<TIntrusivePtr<TOpRoot>> Roots;
     TRuleBasedOptimizer RBO;
 };
 
@@ -122,7 +133,10 @@ private:
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpRBOCleanupTransformer(NYql::TTypeAnnotationContext& typeCtx);
 
-NYql::TExprNode::TPtr RewriteSelect(const NYql::TExprNode::TPtr& node, NYql::TExprContext& ctx, const NYql::TTypeAnnotationContext& typeCtx, const NOpt::TKqpOptimizeContext& kqpCtx,
-                              ui64& uniqueSourceIdCounter, bool pgSyntax = false);
+TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
+                              ui64& uniqueSourceIdCounter, ui64& uniqueColumnIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated,
+                              bool generateRoot = false);
+
+TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx);
 
 } // namespace NKikimr::NKqp

@@ -4,6 +4,7 @@
 #include "blobstorage_pdisk_blockdevice.h"
 #include <ydb/library/pdisk_io/buffers.h>
 #include "blobstorage_pdisk_chunk_tracker.h"
+#include "blobstorage_pdisk_compaction_arbiter.h"
 #include "blobstorage_pdisk_crypto.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_delayed_cost_loop.h"
@@ -32,8 +33,17 @@
 #include <util/generic/queue.h>
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
+#include <array>
 
+#include <atomic>
+#include <functional>
+#include <memory>
+#include <list>
 #include <queue>
+
+#if defined(__linux__)
+#include <ydb/library/pdisk_io/uring_router.h>
+#endif
 
 namespace NKikimr {
 namespace NPDisk {
@@ -47,6 +57,12 @@ class TCompletionEventSender;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class TPDisk : public IPDisk {
+#if defined(__linux__)
+    friend class TPDiskTestPeer;
+    // Configured under StateMutex before the first router creation attempt.
+    std::function<void(TUringRouter&)> ConfigureRouterForTest;
+#endif
+
 public:
 #ifdef ENABLE_PDISK_SHRED
     static constexpr bool IS_SHRED_ENABLED = true;
@@ -88,7 +104,8 @@ public:
     TVector<std::unique_ptr<TChunkForget>> JointChunkForgets;
     TVector<std::unique_ptr<TRequestBase>> FastOperationsQueue;
     TDeque<TRequestBase*> PausedQueue;
-    std::set<std::unique_ptr<TYardInit>> PendingYardInits;
+    // Preserve arrival order among ready owners; busy owners may still be skipped.
+    std::list<std::unique_ptr<TYardInit>> PendingYardInits;
     ui64 LastFlushId = 0;
     bool IsQueuePaused = false;
     bool IsQueueStep = false;
@@ -107,12 +124,37 @@ public:
     TControlWrapper ForsetiMilliBatchSize;
     TControlWrapper ForsetiMaxLogBatchNs;
     TControlWrapper ForsetiOpPieceSize;
+    TControlWrapper EnableFreeChunksSortingHDD;
     TControlWrapper UseNoopSchedulerSSD;
     TControlWrapper UseNoopSchedulerHDD;
     TControlWrapper ChunkBaseLimitPerMille;
     TControlWrapper SemiStrictSpaceIsolation;
+    // If enabled (default), the merged (cross-source) device overestimation metric
+    // replaces the legacy PDisk-only DeviceOverestimationRatio/DeviceNonperformanceMs
+    // sensors. Can be toggled via ICB without a cluster restart to revert to the
+    // old algorithm if something goes wrong with the new one.
+    TControlWrapper UseDeviceOverestimationRatioMerged;
+    // Seconds without successful physical I/O before issuing a one-sector
+    // health read. Zero disables the probe; the ICB default is zero.
+    TControlWrapper IdleDeviceProbeIntervalSeconds;
     i64 SemiStrictSpaceIsolationCached = 0;
+    TControlWrapper StaticGroupChunkReservePerMille;
+    i64 StaticGroupChunkReservePerMilleCached = 0;
     TControlWrapper ForcedPDiskSpaceColor;
+    TControlWrapper CompactionAdmissionColor;
+    TControlWrapper SystemReserveChunks;
+    TControlWrapper MaintenanceReserveChunks;
+    std::array<::NMonitoring::TDynamicCounters::TCounterPtr, size_t(EAllocationPurpose::Count)> AllocatedByPurpose;
+    std::array<::NMonitoring::TDynamicCounters::TCounterPtr, size_t(EAllocationPurpose::Count)> RefusedByPurpose;
+    std::array<::NMonitoring::TDynamicCounters::TCounterPtr, size_t(EAllocationPurpose::Count)> HeadroomByPurpose;
+    std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> GetForcedPDiskSpaceColorIcb() const {
+        if (i64 forcedColor = ForcedPDiskSpaceColor; forcedColor != 0) {
+            if (NKikimrBlobStorage::TPDiskSpaceColor_E_IsValid(static_cast<int>(forcedColor))) {
+                return static_cast<NKikimrBlobStorage::TPDiskSpaceColor::E>(forcedColor);
+            }
+        }
+        return std::nullopt;
+    }
     NKikimrBlobStorage::TPDiskSpaceColor::E GetColorBorderIcb() {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         switch (SemiStrictSpaceIsolation) {
@@ -208,6 +250,14 @@ public:
     // Incapsulated components
     TPDiskThread PDiskThread;
     THolder<IBlockDevice> BlockDevice;
+#if defined(__linux__)
+    // Created and used by the PDisk worker. Normal Stop() joins that worker
+    // before retiring the router; error stop runs on the worker. DDisk/PB may
+    // retain client references, but StopSync closes the duplicated device fd.
+    std::shared_ptr<TUringRouter> SharedUringRouter;
+#endif
+    bool SharedUringCreateAttempted = false;
+    bool SharedUringFailureReported = false;
     THolder<TLogWriter> CommonLogger;
     THolder<TSysLogWriter> SysLogger;
 
@@ -221,6 +271,12 @@ public:
     TAtomic IsStarted = false;
     TMutex StopMutex;
 
+    ui64 ObservedDeviceIoCompletionGeneration = 0;
+    NHPTimer::STime LastDeviceIoCompletionGenerationChange = 0;
+    // The generic device-halt watchdog detects an accepted probe that does not
+    // complete. Keep one probe in flight so its buffer remains uniquely owned.
+    std::atomic<bool> IdleDeviceProbeInFlight = false;
+
     TIntrusivePtr<TPDiskConfig> Cfg;
     TInstant CreationTime;
     // Last chunk and sector indexes we have seen on initial log read.
@@ -229,6 +285,7 @@ public:
     ui64 LastInitialSectorIdx;
 
     ui32 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
+    ui64 ExpectedSlotSize = 0; // Slot size to use for space limit calculation, 0 if not set.
 
     TAtomic TotalOwners = 0; // number of registered owners
 
@@ -280,6 +337,7 @@ public:
     // Destruction
     virtual ~TPDisk();
     void Stop(); // Called by actor
+    void StopDeviceIo(bool isError);
     void ObliterateCommonLogSectorSet();
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Generic format-related calculations
@@ -308,10 +366,12 @@ public:
     void WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NWilson::TTraceId *traceId);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Common log writing
+    // firstLsnToKeep, when nonzero, asks for the RED exception only if the record really
+    // moves this owner's retention point forward; it is compared under StateMutex.
     bool PreallocateLogChunks(ui64 headedRecordSize, TOwner owner, ui64 lsn, EOwnerGroupType ownerGroupType,
-            bool isAllowedForSpaceRed);
+            bool isAllowedForSpaceRed, ui64 firstLsnToKeep = 0);
     bool AllocateLogChunks(ui32 chunksNeeded, ui32 chunksContainingPayload, TOwner owner, ui64 lsn,
-            EOwnerGroupType ownerGroupType, bool isAllowedForSpaceRed);
+            EOwnerGroupType ownerGroupType, bool isAllowedForSpaceRed, ui64 firstLsnToKeep = 0);
     void LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit);
     void CommitLogChunks(TCommitLogChunks &req);
     void OnLogCommitDone(TLogCommitDone &req);
@@ -354,9 +414,13 @@ public:
     void ChunkUnlock(TChunkUnlock &evChunkUnlock);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk reservation
-    TVector<TChunkIdx> AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason);
+    TVector<TChunkIdx> AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason,
+            bool forHousekeeping = false,
+            NKikimrBlobStorage::TPDiskSpaceColor::E refuseAtColor = NKikimrBlobStorage::TPDiskSpaceColor::BLACK,
+            NKikimrBlobStorage::TPDiskSpaceColor::E *estimatedColor = nullptr,
+            EAllocationPurpose purpose = EAllocationPurpose::Recovery);
     void ChunkReserve(TChunkReserve &evChunkReserve);
-    bool ValidateForgetChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason);
+    bool ValidateForgetChunk(ui32 chunkIdx, TOwner owner, bool isDDisk, TStringStream& outErrorReason);
     void ChunkForget(TChunkForget &evChunkForget);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Whiteboard and HTTP reports creation
@@ -373,16 +437,38 @@ public:
     void WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes, const ui64 &diskGuid,
             const TKey &chunkKey, const TKey &logKey, const TKey &sysLogKey, const TKey &mainKey,
             TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice,
-            std::optional<TRcBuf> metadata, bool plainDataChunks, std::optional<bool> forceRandomizeMagic);
+            std::optional<TRcBuf> metadata, bool plainDataChunks, std::optional<bool> forceRandomizeMagic,
+            std::optional<ui32> physicalChunkSizeBytes = std::nullopt);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Owner initialization
     void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str, NKikimrProto::EReplyStatus status = NKikimrProto::ERROR);
     TOwner FindNextOwnerId();
     bool YardInitStart(TYardInit &evYardInit);
     void YardInitFinish(TYardInit &evYardInit);
+    ui32 ReleaseUncommittedChunks(TOwner owner);
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
+    void AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitResult& result);
+    void EnsureSharedUringRouter(ui32 idleSpinUs, bool devNullMode);
+#if defined(__linux__)
+    TDeviceIoSampleSink MakeUringSampleSink() const;
+    TIoCompletionSink MakeUringCompletionSink() const;
+#endif
+    void CheckSharedUringRouter(); // Called by the PDisk worker
     void YardResize(TYardResize &evYardResize);
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Planned level compaction (EnableVDiskPlannedCompaction); all of it runs under StateMutex
+    std::unique_ptr<TCompactionArbiter> CompactionArbiter; // set when the feature is enabled
+    struct TCompactionArbiterSpace;
+    std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> CompactionArbiterForcedColor;
+    i64 CompactionAdmissionColorCached = 0;
+    void ProcessCompactionBidder(TCompactionBidder& req);
+    void UpdateCompactionArbiter(); // Called by the PDisk worker
+    void DropCompactionBidders(TOwner owner);
+    void SendCompactionArbiterOutbox(TCompactionArbiter::TOutbox& out);
     void ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request);
+    void NormalizeExpectedSlotSettings();
+    i64 GetExpectedOwnerSizeInChunks() const;
+    ui32 GetOwnerWeight(ui32 groupSizeInUnits) const;
 
     // Scheduler weight configuration
     void ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight);
@@ -407,7 +493,7 @@ public:
     void ProcessChunkWriteQueue();
     void ProcessChunkReadQueue();
     void ProcessLogReadQueue();
-    void ProcessYardInitSet();
+    void ProcessPendingYardInits();
     void TrimAllUntrimmedChunks();
     void ProcessChunkTrimQueue();
     void ClearQuarantineChunks();
@@ -476,6 +562,9 @@ public:
     void EnqueueAll();
     void GetJobsFromForsetti();
     void Update() override;
+    // The result is used by tests to observe submission without racing its
+    // completion; production intentionally needs no action on successful submit.
+    bool MaybeScheduleIdleDeviceProbe();
     void Wakeup() override;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // External interface

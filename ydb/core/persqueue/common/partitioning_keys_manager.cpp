@@ -3,6 +3,7 @@
 #include <util/generic/vector.h>
 
 #include <random>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ {
 
@@ -11,7 +12,7 @@ TPartitioningKeysManager::TPartitioningKeysManager(size_t numSketches, TDuration
       Rng(std::random_device{}()),
       InitialWeight(initialWeight)
 {
-    Y_ENSURE(numSketches > 0, "numSketches must be greater than 0");
+    AFL_ENSURE(numSketches > 0)("reason", "numSketches must be greater than 0");
     SketchWindowSize = Max(Min(TDuration::Seconds(1), windowSize), windowSize / numSketches);
 }
 

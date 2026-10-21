@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/core/blobstorage/pdisk/mock/subsystem.h>
 
 #include "node_warden_mock.h"
 #include "ydb/core/blobstorage/dsproxy/dsproxy.h"
@@ -8,10 +9,12 @@
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/retro_tracing_impl/distributed_collector/distributed_retro_collector.h>
+#include <ydb/core/tablet/resource_broker.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <optional>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
-#include <ydb/library/actors/retro_tracing/retro_collector.h>
+#include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
 
 static auto& Cconf = Cnull;
 
@@ -25,7 +28,7 @@ struct TEnvironmentSetup {
     const TString StoragePoolName = "test";
     const ui32 NumGroups = 1;
     TIntrusivePtr<NFake::TProxyDS> Group0 = MakeIntrusive<NFake::TProxyDS>();
-    std::map<std::pair<ui32, ui32>, TIntrusivePtr<TPDiskMockState>> PDiskMockStates;
+    TPDiskMockStates PDiskMockStates;
     TVector<TActorId> PDiskActors;
     std::set<TActorId> CommencedReplication;
     std::unordered_map<ui32, TString> Cache;
@@ -67,6 +70,7 @@ struct TEnvironmentSetup {
         const ui64 PDiskSize = 10_TB;
         const ui64 PDiskChunkSize = 0;
         const bool TrackSharedQuotaInPDiskMock = false;
+        const bool ReportVDiskMetricsInPDiskMock = false;
         const bool SelfManagementConfig = false;
         const bool EnableDeepScrubbing = false;
         const ui32 NumPiles = 0;
@@ -74,42 +78,25 @@ struct TEnvironmentSetup {
         const std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator = nullptr;
         const bool EnablePhantomFlagStorage = false;
         const ui64 PhantomFlagStorageLimitPerVDiskBytes = 10'000'000; // 10_MB
+        const ui64 VolatilePhantomFlagStorageBlobSizeLimitBytes = 1;
         const bool TinySyncLog = false;
         const TDuration MaxPutTimeoutDSProxy = TDuration::Seconds(60);
         const bool StartFakeWilsonCollectors = false;
         const bool EnableChunkKeeper = true;
         const bool EnablePersistentPhantomFlagStorage = false;
+        const bool SetupResourceBroker = false;
+        // Global blob_storage_config knob. Unset stays unset, so the flag alone leaves the size-class heap.
+        const std::optional<ui32> VDiskHeapAllocatorNumLeadingDisks = std::nullopt;
+        // number of nodes listed in the initial config of automatically bootstrapped cluster (all of them, if zero);
+        // nodes not listed there are not started until the test adds them to the config, see ConfiguredNodeCount
+        const ui32 InitialConfiguredNodeCount = 0;
     };
 
     const TSettings Settings;
 
-    class TMockPDiskServiceFactory : public IPDiskServiceFactory {
-        TEnvironmentSetup& Env;
-
-    public:
-        TMockPDiskServiceFactory(TEnvironmentSetup& env)
-            : Env(env)
-        {}
-
-        void Create(const TActorContext& ctx, ui32 pdiskId, const TIntrusivePtr<TPDiskConfig>& cfg,
-                const NPDisk::TMainKey& /*mainKey*/, ui32 poolId, ui32 nodeId) override {
-            const auto key = std::make_pair(nodeId, pdiskId);
-            TIntrusivePtr<TPDiskMockState>& state = Env.PDiskMockStates[key];
-            if (!state) {
-                ui64 chunkSize = Env.Settings.PDiskChunkSize ? Env.Settings.PDiskChunkSize : cfg->ChunkSize;
-                TPDiskMockState::ESpaceColorPolicy spaceColorPolicy = Env.Settings.TrackSharedQuotaInPDiskMock
-                        ? TPDiskMockState::ESpaceColorPolicy::SharedQuota
-                        : TPDiskMockState::ESpaceColorPolicy::None;
-                state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, Env.Settings.PDiskSize, chunkSize,
-                        cfg->ReadOnly, Env.Settings.DiskType, spaceColorPolicy));
-            }
-            const TActorId& actorId = ctx.Register(CreatePDiskMockActor(state), TMailboxType::HTSwap, poolId);
-            const TActorId& serviceId = MakeBlobStoragePDiskID(nodeId, pdiskId);
-            ctx.ActorSystem()->RegisterLocalService(serviceId, actorId);
-            Env.PDiskActors.push_back(actorId);
-        }
-    };
-
+    // number of first nodes listed in the config of automatically bootstrapped cluster; the test changes it when it
+    // adds nodes to the cluster config, so that nodes started afterwards get the new startup config
+    ui32 ConfiguredNodeCount = 0;
 
     class TFakeConfigDispatcher : public TActor<TFakeConfigDispatcher> {
         std::unordered_set<TActorId> Subscribers;
@@ -227,6 +214,7 @@ struct TEnvironmentSetup {
 
     TEnvironmentSetup(TSettings&& settings)
         : Settings(std::move(settings))
+        , ConfiguredNodeCount(Settings.InitialConfiguredNodeCount ? Settings.InitialConfiguredNodeCount : Settings.NodeCount)
     {
         struct TSetupEnv { TSetupEnv() { TEnvironmentSetup::SetupEnv(); } };
         Singleton<TSetupEnv>();
@@ -251,11 +239,11 @@ struct TEnvironmentSetup {
         return TAppData::TimeProvider->Now();
     }
 
-    TString GenerateRandomString(ui32 len) {
+    static TString GenerateRandomString(ui32 len, ui64 seed) {
         TString res = TString::Uninitialized(len);
         char *p = res.Detach();
         char *end = p + len;
-        TReallyFastRng32 rng(RandomNumber<ui64>());
+        TReallyFastRng32 rng(seed);
         for (; p + sizeof(ui32) < end; p += sizeof(ui32)) {
             WriteUnaligned<ui32>(p, rng());
         }
@@ -263,6 +251,10 @@ struct TEnvironmentSetup {
             *p = rng();
         }
         return res;
+    }
+
+    TString GenerateRandomString(ui32 len) {
+        return GenerateRandomString(len, RandomNumber<ui64>());
     }
 
     ui32 GetNumDataCenters() const {
@@ -296,6 +288,21 @@ struct TEnvironmentSetup {
 
     void Initialize() {
         Runtime = MakeRuntime();
+        Runtime->SetupNodeSubSystems = [this](ui32, TActorSystemSetup* setup) {
+            setup->RegisterSubSystem<IPDiskSubsystem>(std::make_unique<TMockPDiskSubsystem>(&PDiskMockStates,
+                [this](ui32 nodeId, ui32 pdiskId, const TPDiskConfig& cfg) {
+                    const ui32 chunkSize = Settings.PDiskChunkSize
+                        ? static_cast<ui32>(Settings.PDiskChunkSize) : cfg.ChunkSize;
+                    const auto policy = Settings.TrackSharedQuotaInPDiskMock
+                        ? TPDiskMockState::ESpaceColorPolicy::SharedQuota
+                        : TPDiskMockState::ESpaceColorPolicy::None;
+                    auto state = MakeIntrusive<TPDiskMockState>(nodeId, pdiskId, cfg.PDiskGuid,
+                        Settings.PDiskSize, chunkSize, cfg.ReadOnly, Settings.DiskType, policy);
+                    state->SetReportVDiskMetrics(Settings.ReportVDiskMetricsInPDiskMock);
+                    return state;
+                },
+                [this](TActorId actorId) { PDiskActors.push_back(actorId); }));
+        };
         TAppData::TimeProvider = TTestActorSystem::CreateTimeProvider();
         if (Settings.PrepareRuntime) {
             Settings.PrepareRuntime(*Runtime);
@@ -314,6 +321,17 @@ struct TEnvironmentSetup {
         SetupStaticStorage();
         SetupStorage();
         SetupTablet();
+        for (ui32 nodeId : Runtime->GetNodes()) {
+            if (IsNodeConfigured(nodeId)) {
+                SetupTenantPool(nodeId);
+            } else {
+                Runtime->StopNode(nodeId); // node is not part of the cluster config yet
+            }
+        }
+    }
+
+    bool IsNodeConfigured(ui32 nodeId) const {
+        return nodeId <= ConfiguredNodeCount;
     }
 
     void StopNode(ui32 nodeId) {
@@ -329,9 +347,13 @@ struct TEnvironmentSetup {
         }
         if (nodeId == Settings.ControllerNodeId) {
             SetupStaticStorage();
+        }
+        // node warden must be started before tablets as bootstrapper queries it for storage config in bridge mode
+        SetupStorage(nodeId);
+        if (nodeId == Settings.ControllerNodeId) {
             SetupTablet();
         }
-        SetupStorage(nodeId);
+        SetupTenantPool(nodeId);
     }
 
     void RestartNode(ui32 nodeId) {
@@ -423,7 +445,7 @@ struct TEnvironmentSetup {
 
     void SetupStorage(ui32 targetNodeId = 0) {
         for (ui32 nodeId : Runtime->GetNodes()) {
-            if (targetNodeId && nodeId != targetNodeId) {
+            if (targetNodeId ? nodeId != targetNodeId : !IsNodeConfigured(nodeId)) {
                 continue;
             }
 
@@ -432,9 +454,9 @@ struct TEnvironmentSetup {
             if (Settings.NodeWardenMockSetup) {
                 warden.reset(new TNodeWardenMockActor(Settings.NodeWardenMockSetup));
             } else {
-                auto config = MakeIntrusive<TNodeWardenConfig>(new TMockPDiskServiceFactory(*this));
+                auto config = MakeIntrusive<TNodeWardenConfig>();
                 if (Settings.SelfManagementConfig) {
-                    config->SelfManagementConfig = std::make_optional(NKikimrConfig::TSelfManagementConfig());
+                    config->SelfManagementConfig = std::make_unique<NKikimrConfig::TSelfManagementConfig>();
                     config->SelfManagementConfig->SetEnabled(true);
                     if (Settings.AutomaticBootstrap) {
                         config->SelfManagementConfig->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()));
@@ -442,16 +464,18 @@ struct TEnvironmentSetup {
                         config->SelfManagementConfig->SetAutomaticBootstrap(true);
                     }
                     if (Settings.AutomaticBootstrap && Settings.LocationGenerator) {
-                        auto *hostconf = config->BlobStorageConfig.AddDefineHostConfig();
+                        auto *hostconf = config->BlobStorageConfig->AddDefineHostConfig();
                         hostconf->SetHostConfigId(1);
                         auto *drive = hostconf->AddDrive();
                         drive->SetPath("SectorMap:X:1000");
                         drive->SetType(NKikimrBlobStorage::EPDiskType::NVME);
 
-                        auto& ns = config->NameserviceConfig;
-                        auto *box = config->BlobStorageConfig.MutableDefineBox();
+                        auto *box = config->BlobStorageConfig->MutableDefineBox();
                         for (ui32 nodeId : Runtime->GetNodes()) {
-                            auto *node = ns.AddNode();
+                            if (!IsNodeConfigured(nodeId)) {
+                                continue;
+                            }
+                            auto *node = config->NameserviceConfig->AddNode();
                             node->SetNodeId(nodeId);
                             node->SetHost(TStringBuilder() << "host_" << nodeId);
                             node->SetInterconnectHost(node->GetHost());
@@ -465,9 +489,28 @@ struct TEnvironmentSetup {
                         auto makeHosts = [&] {
                             TStringBuilder res;
                             for (ui32 nodeId : Runtime->GetNodes()) {
+                                if (!IsNodeConfigured(nodeId)) {
+                                    continue;
+                                }
                                 res << "  - {host: host_" << nodeId << ", location: {data_center: my_dc, rack: rack_"
-                                    << nodeId << ", unit: unit_" << nodeId << ", bridge_pile_name: pile_"
-                                    << (nodeId - 1) / 8 + 1 << "}}\n";
+                                    << nodeId << ", unit: unit_" << nodeId;
+                                if (Settings.NumPiles) {
+                                    res << ", bridge_pile_name: pile_" << (nodeId - 1) / 8 + 1;
+                                }
+                                res << "}}\n";
+                            }
+                            return res;
+                        };
+
+                        auto makeBridgeConfig = [&] {
+                            TStringBuilder res;
+                            if (Settings.NumPiles) {
+                                // the test may change the set of piles, then nodes started after that get new one
+                                res << "  bridge_config:\n";
+                                res << "    piles:\n";
+                                for (const auto& pile : Runtime->GetAppDataBridgeConfig().GetPiles()) {
+                                    res << "    - name: " << pile.GetName() << "\n";
+                                }
                             }
                             return res;
                         };
@@ -484,23 +527,14 @@ config:
   self_management_config:
     enabled: true
     automatic_bootstrap: true
-  bridge_config:
-    piles:
-    - name: pile_1
-    - name: pile_2
-    - name: pile_3
-  host_configs:
+)" << makeBridgeConfig() << R"(  host_configs:
   - nvme:
-    - SectorMap:0:1000
-    - SectorMap:1:1000
-    - SectorMap:2:1000
-    - SectorMap:3:1000
-    - SectorMap:4:1000
+    - SectorMap:X:1000
   hosts:
 )" << makeHosts();
                     }
                 }
-                config->BlobStorageConfig.MutableServiceSet()->AddAvailabilityDomains(DomainId);
+                config->BlobStorageConfig->MutableServiceSet()->AddAvailabilityDomains(DomainId);
                 config->VDiskReplPausedAtStart = Settings.VDiskReplPausedAtStart;
                 if (Settings.ReplMaxQuantumBytes) {
                     config->ReplMaxQuantumBytes = Settings.ReplMaxQuantumBytes;
@@ -525,13 +559,20 @@ config:
                     };
                     config->CacheAccessor = std::make_unique<TAccessor>(Cache[nodeId]);
                 }
-                config->FeatureFlags = Settings.FeatureFlags;
+                config->FeatureFlags = std::make_unique<NKikimrConfig::TFeatureFlags>(Settings.FeatureFlags);
+                if (Settings.VDiskHeapAllocatorNumLeadingDisks) {
+                    config->BlobStorageConfig->SetVDiskHeapAllocatorNumLeadingDisks(
+                        *Settings.VDiskHeapAllocatorNumLeadingDisks);
+                }
 
-                if (Settings.NumPiles) {
-                    config->BridgeConfig.emplace().CopyFrom(Runtime->GetAppDataBridgeConfig());
+                // bridge config is taken from the runtime when the node starts, so the test may change it between
+                // node restarts (this is what happens when the cluster is being converted into bridged one)
+                if (const auto& bridgeConfig = Runtime->GetAppDataBridgeConfig(); bridgeConfig.PilesSize()) {
+                    config->BridgeConfig = std::make_unique<NKikimrConfig::TBridgeConfig>(bridgeConfig);
                 }
 
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
+                appData->FeatureFlags.MergeFrom(Settings.FeatureFlags);
 
                 auto& icb = *appData->Icb;
 #define ADD_ICB_CONTROL(ICB_CONTROL_PATH, defaultVal, minVal, maxVal, currentValue) {       \
@@ -567,8 +608,15 @@ config:
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksHDD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksSSD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL(DSProxyControls.MaxPutTimeoutSeconds, 60, 1, 1'000'000, Settings.MaxPutTimeoutDSProxy.Seconds());
+                ADD_ICB_CONTROL(DSProxyControls.DormantTimeoutMinutes, DefaultDormantTimeout.Minutes(), 0,
+                    1'000'000, DefaultDormantTimeout.Minutes());
+                ADD_ICB_CONTROL(DSProxyControls.EnableChecksumCalcAndValidationOnDsProxy, false, false, true, false);
 
                 ADD_ICB_CONTROL(BlobDepotControls.MaxLoadedTrashRecords, 1'000'000, 1, 100'000'000, 1'000'000);
+
+                ADD_ICB_CONTROL(RetroTracingControls.EnableStorageGeneration, false, false, true, false);
+                ADD_ICB_CONTROL(RetroTracingControls.EnableStorageCollectionSlowRequests, false, false, true, false);
+                ADD_ICB_CONTROL(DSProxyControls.LongRequestThresholdMs, 50'000, 1, 1'000'000'000, 50'000);
 
                 ADD_ICB_CONTROL(VDiskControls.EnableDeepScrubbing, false, false, true, Settings.EnableDeepScrubbing);
                 ADD_ICB_CONTROL(VDiskControls.HullCompThrottlerBytesRate, 0, 0, 10737418240, 0);
@@ -585,12 +633,18 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, true, false, true, Settings.EnablePhantomFlagStorage);
                 ADD_ICB_CONTROL(VDiskControls.EnablePersistentPhantomFlagStorage, false, false, true, Settings.EnablePersistentPhantomFlagStorage);
                 ADD_ICB_CONTROL(VDiskControls.PhantomFlagStorageLimitPerVDiskBytes, 10'000'000, 0, 100'000'000'000, Settings.PhantomFlagStorageLimitPerVDiskBytes);
+                ADD_ICB_CONTROL(VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes, 1'000'000, 1, 10'000'000, Settings.VolatilePhantomFlagStorageBlobSizeLimitBytes);
+                ADD_ICB_CONTROL(VDiskControls.EnableChecksumReadValidationOnVDisk, false, false, true, false);
+                ADD_ICB_CONTROL(VDiskControls.EnableChecksumWriteValidationOnVDisk, false, false, true, false);
                 ADD_ICB_CONTROL(VDiskControls.EnableChunkKeeper, true, false, true, Settings.EnableChunkKeeper);
                 ADD_ICB_CONTROL(VDiskControls.HullCompFreeSpaceThresholdPerMille, 2000, 0, 100'000, 2000);
+                ADD_ICB_CONTROL(VDiskControls.HullCompEmergencyMaxSsts, 8, 0, 64, 8);
+                ADD_ICB_CONTROL(VDiskControls.HullCompEmergencyChunkReserve, 1, 0, 64, 1);
+                ADD_ICB_CONTROL(VDiskControls.HullCompEmergencyEnableAtColor, 15, 0, 60, 15);
 #undef ADD_ICB_CONTROL
 
                 {
-                    auto* type = config->BlobStorageConfig.MutableVDiskPerformanceSettings()->AddVDiskTypes();
+                    auto* type = config->BlobStorageConfig->MutableVDiskPerformanceSettings()->AddVDiskTypes();
                     type->SetPDiskType(PDiskTypeToPDiskType(Settings.DiskType));
                     if (Settings.MinHugeBlobInBytes) {
                         type->SetMinHugeBlobSizeInBytes(Settings.MinHugeBlobInBytes);
@@ -612,6 +666,12 @@ config:
             }
             Runtime->RegisterService(NRetroTracing::MakeRetroCollectorId(),
                     Runtime->Register(CreateDistributedRetroCollector(), nodeId));
+            if (Settings.SetupResourceBroker) {
+                NKikimrResourceBroker::TResourceBrokerConfig brokerConfig = NResourceBroker::MakeDefaultConfig();
+                Runtime->RegisterService(NResourceBroker::MakeResourceBrokerID(),
+                    Runtime->Register(NResourceBroker::CreateResourceBrokerActor(
+                        brokerConfig, MakeIntrusive<::NMonitoring::TDynamicCounters>()), nodeId));
+            }
         }
     }
 
@@ -638,6 +698,13 @@ config:
             bool working = true;
             Runtime->Sim([&] { return working; }, [&](IEventHandle& event) { working = event.GetTypeRewrite() != TEvTablet::EvBoot; });
         }
+    }
+
+    // start services making node able to run tablets launched by Hive
+    void SetupTenantPool(ui32 nodeId) {
+        if (!Settings.SetupHive) {
+            return;
+        }
 
         auto localConfig = MakeIntrusive<TLocalConfig>();
 
@@ -652,16 +719,11 @@ config:
         auto tenantPoolConfig = MakeIntrusive<TTenantPoolConfig>(localConfig);
         tenantPoolConfig->AddStaticSlot(DomainName);
 
-        if (Settings.SetupHive) {
-            for (ui32 nodeId : Runtime->GetNodes()) {
-                Runtime->RegisterService(MakeTenantPoolRootID(),
-                    Runtime->Register(CreateTenantPool(tenantPoolConfig), nodeId));
-                Runtime->RegisterService(NSysView::MakeSysViewServiceID(nodeId),
-                    Runtime->Register(NSysView::CreateSysViewServiceForTests().Release(), nodeId));
-                Runtime->Register(CreateTenantNodeEnumerationPublisher(), nodeId);
-                Runtime->Register(CreateLabelsMaintainer({}), nodeId);
-            }
-        }
+        Runtime->RegisterService(MakeTenantPoolRootID(), Runtime->Register(CreateTenantPool(tenantPoolConfig), nodeId));
+        Runtime->RegisterService(NSysView::MakeSysViewServiceID(nodeId),
+            Runtime->Register(NSysView::CreateSysViewServiceForTests().Release(), nodeId));
+        Runtime->Register(CreateTenantNodeEnumerationPublisher(), nodeId);
+        Runtime->Register(CreateLabelsMaintainer({}), nodeId);
     }
 
     void CreateBoxAndPool(ui32 numDrivesPerNode = 0, ui32 numGroups = 0, ui32 numStorageNodes = 0,
@@ -895,8 +957,10 @@ config:
     void CompactVDisk(const TActorId& actorId, bool freshOnly = false) {
         const TActorId& edge = Runtime->AllocateEdgeActor(actorId.NodeId());
         for (;;) {
+            // track delivery, so that a VDisk that is not running yet (e.g. right after a wipe) gets the request again
             Runtime->Send(new IEventHandle(actorId, edge, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, freshOnly ?
-                TEvCompactVDisk::EMode::FRESH_ONLY : TEvCompactVDisk::EMode::FULL)), actorId.NodeId());
+                TEvCompactVDisk::EMode::FRESH_ONLY : TEvCompactVDisk::EMode::FULL), IEventHandle::FlagTrackDelivery),
+                actorId.NodeId());
             auto res = Runtime->WaitForEdgeActorEvent({edge});
             if (res->GetTypeRewrite() == TEvents::TSystem::Undelivered) {
                 Sim(TDuration::Seconds(5));
@@ -1077,6 +1141,7 @@ config:
             request.SetIgnoreDegradedGroupsChecks(true);
             request.SetIgnoreDisintegratedGroupsChecks(true);
             request.SetIgnoreGroupSanityChecks(true);
+            request.SetIgnoreGroupLayoutChecks(true);
         }
         auto *cmd = request.AddCommand();
         auto *ds = cmd->MutableUpdateDriveStatus();
@@ -1105,12 +1170,22 @@ config:
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
         TControlWrapper enablePutBatching(true, false, true);
         TControlWrapper enableVPatch(false, false, true);
+        TControlWrapper enableChecksumCalcAndValidationOnDsProxy(false, false, true);
+        TControlWrapper dormantTimeoutMinutes(DefaultDormantTimeout.Minutes(), 0, 1'000'000);
+        if (auto it = IcbControls.find({nodeId, "DSProxyControls.EnableChecksumCalcAndValidationOnDsProxy"}); it != IcbControls.end()) {
+            enableChecksumCalcAndValidationOnDsProxy = it->second;
+        }
+        if (auto it = IcbControls.find({nodeId, "DSProxyControls.DormantTimeoutMinutes"}); it != IcbControls.end()) {
+            dormantTimeoutMinutes = it->second;
+        }
         auto info = GetGroupInfo(groupId);
         IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(info), nullptr, true, nodeMon,
             std::move(storagePoolCounters), TBlobStorageProxyParameters{
                     .Controls = TBlobStorageProxyControlWrappers{
                         .EnablePutBatching = enablePutBatching,
                         .EnableVPatch = enableVPatch,
+                        .DormantTimeoutMinutes = dormantTimeoutMinutes,
+                        .EnableChecksumCalcAndValidationOnDsProxy = enableChecksumCalcAndValidationOnDsProxy,
                     }
                 }
             );

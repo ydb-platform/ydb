@@ -9,6 +9,9 @@
 
 namespace NMVP::NTest {
 
+using ILinkSource = NSupportLinks::ILinkSource;
+using TLinkResolveInput = ILinkSource::TLinkResolveInput;
+
 inline TVector<NSupportLinks::TResolvedLink> MakeMockLinks() {
     return {
         NSupportLinks::TResolvedLink{
@@ -28,7 +31,7 @@ public:
         : SourceConfig(std::move(config))
     {}
 
-    TResolveOutput Resolve(const TLinkResolveInput&, const TResolveContext&) const override {
+    TResolveOutput Resolve(const TLinkResolveInput&, const ILinkSource::TResolveContext&) const override {
         TResolveOutput out;
         out.Name = SourceConfig.GetSource();
         out.Links = MakeMockLinks();
@@ -65,7 +68,7 @@ public:
         : SourceConfig(std::move(config))
     {}
 
-    TResolveOutput Resolve(const TLinkResolveInput&, const TResolveContext& context) const override {
+    TResolveOutput Resolve(const TLinkResolveInput&, const ILinkSource::TResolveContext& context) const override {
         TResolveOutput out;
         out.Name = SourceConfig.GetSource();
         auto actorId = NActors::TActivationContext::Register(

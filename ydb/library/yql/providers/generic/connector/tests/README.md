@@ -11,7 +11,7 @@ The basic scenario typically should imply the following steps:
 1. Deploy datasource and connector services using `docker-compose`.
 1. Initialize datasource in any way you like (either with predefined `*.sql` files mounted into container or programmatically from the test app).
 1. Prepare `YQL` script to query data from the datasource.
-1. Execute script with YDB-based CLI tools: `dqrun` and `kqprun`.
+1. Execute script with the YDB-based CLI tool: `kqprun`.
 1. Validate output.
 
 ## Directory structure
@@ -21,5 +21,5 @@ The basic scenario typically should imply the following steps:
 * `join` contains tests checking cross-datasource scenarios.
 * `utils` contains building blocks for tests:
     * `utils/clients` stores code performing network IO;
-    * `utils/scenario` describes the typical scenarios of the data source usage (e. g. creating table, fullfilling it with test data etc.);
+    * `utils/scenario` describes the typical scenarios of the data source usage (e. g. creating table, filling it with test data etc.);
     * `utils/types` describes the external data source's type system.

@@ -18,7 +18,7 @@
 #include "util_basics.h"
 
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/generic/deque.h>
@@ -183,7 +183,7 @@ public:
 
     void Update(ERowOp, TRawVals key, TOpsRef, TArrayRef<const TMemGlob> apart, TRowVersion rowVersion);
 
-    void UpdateTx(ERowOp, TRawVals key, TOpsRef, TArrayRef<const TMemGlob> apart, ui64 txId);
+    void UpdateTx(ERowOp, TRawVals key, TOpsRef, TArrayRef<const TMemGlob> apart, ui64 txId, ui32 savepointSeqNum = 0);
     void LockRowTx(ELockMode, TRawVals key, ui64 txId);
     void CommitTx(ui64 txId, TRowVersion rowVersion);
     void RemoveTx(ui64 txId);

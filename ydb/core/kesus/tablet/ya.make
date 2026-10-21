@@ -1,8 +1,9 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     events.cpp
     probes.cpp
+    public_counters.cpp
     quoter_resource_tree.cpp
     quoter_runtime.cpp
     rate_accounting.cpp

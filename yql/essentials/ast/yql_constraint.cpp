@@ -131,7 +131,7 @@ NYT::TNode TPartOfConstraintBase::SetOfSetsToNode(const TPartOfConstraintBase::T
     return std::accumulate(sets.cbegin(), sets.cend(),
                            NYT::TNode::CreateList(),
                            [](NYT::TNode node, const TSetType& s) {
-                               return std::move(node).Add(TPartOfConstraintBase::SetToNode(s, true));
+                               return std::move(node).Add(TPartOfConstraintBase::SetToNode(s, /*withShortcut=*/true));
                            });
 }
 
@@ -165,6 +165,15 @@ TPartOfConstraintBase::TSetOfSetsType TPartOfConstraintBase::NodeToSetOfSets(TEx
         sets.insert_unique(NodeToSet(ctx, s));
     }
     return sets;
+}
+
+TPartOfConstraintBase::TPathType TPartOfConstraintBase::GetSimplePath(const TPartOfConstraintBase::TSetType& set) {
+    for (const auto& p : set) {
+        if (p.size() == 1) {
+            return p;
+        }
+    }
+    return set.empty() ? TPathType{} : set.front();
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -296,7 +305,7 @@ std::deque<std::string_view> GetAllItemTypeFields(const TTypeAnnotationNode* typ
 
 TPartOfConstraintBase::TSetOfSetsType MakeFullSet(const TPartOfConstraintBase::TSetType& keys) {
     TPartOfConstraintBase::TSetOfSetsType sets;
-    sets.reserve(sets.size());
+    sets.reserve(keys.size());
     for (const auto& key : keys) {
         sets.insert_unique(TPartOfConstraintBase::TSetType{key});
     }
@@ -309,7 +318,7 @@ TPartOfConstraintBase::TSetOfSetsType MakeFullSet(const TPartOfConstraintBase::T
 
 TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, TContainerType&& content)
     : TConstraintWithFieldsT(ctx, Name())
-    , Content_(std::move(content))
+    , Content_(content)
 {
     YQL_ENSURE(!Content_.empty());
     for (const auto& c : Content_) {
@@ -327,6 +336,7 @@ TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, const NYT::TNode
 
 TSortedConstraintNode::TContainerType TSortedConstraintNode::NodeToContainer(TExprContext& ctx, const NYT::TNode& serialized) {
     TSortedConstraintNode::TContainerType sorted;
+    sorted.reserve(serialized.AsList().size());
     try {
         for (const auto& pair : serialized.AsList()) {
             TPartOfConstraintBase::TSetType set = TPartOfConstraintBase::NodeToSet(ctx, pair.AsList().front());
@@ -409,7 +419,7 @@ NYT::TNode TSortedConstraintNode::ToYson() const {
     return std::accumulate(Content_.cbegin(), Content_.cend(),
                            NYT::TNode::CreateList(),
                            [](NYT::TNode node, const std::pair<TSetType, bool>& pair) {
-                               return std::move(node).Add(NYT::TNode::CreateList().Add(TPartOfConstraintBase::SetToNode(pair.first, false)).Add(pair.second));
+                               return std::move(node).Add(NYT::TNode::CreateList().Add(TPartOfConstraintBase::SetToNode(pair.first, /*withShortcut=*/false)).Add(pair.second));
                            });
 }
 
@@ -686,7 +696,7 @@ TSortedConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode& type, T
                     }
 
                     if (ssize_t(GetElementsCount(subType)) == std::distance(from, it)) {
-                        *from = std::make_pair(TPartOfConstraintBase::TSetType{std::move(prefix)}, from->second);
+                        *from = std::make_pair(TPartOfConstraintBase::TSetType{prefix}, from->second);
                         ++from;
                         it = content.erase(from, it);
                         changed = setChanged = true;
@@ -905,7 +915,7 @@ TChoppedConstraintNode::DoFilterFields(TExprContext& ctx, const TPathFilter& pre
             return nullptr;
         };
 
-        chopped.insert_unique(std::move(newSet));
+        chopped.insert_unique(newSet);
     }
     return ctx.MakeConstraint<TChoppedConstraintNode>(std::move(chopped));
 }
@@ -931,7 +941,7 @@ TChoppedConstraintNode::DoRenameFields(TExprContext& ctx, const TPathReduce& red
             return nullptr;
         }
 
-        chopped.insert_unique(std::move(newSet));
+        chopped.insert_unique(newSet);
     }
 
     return ctx.MakeConstraint<TChoppedConstraintNode>(std::move(chopped));
@@ -986,7 +996,7 @@ TChoppedConstraintNode::DoGetComplicatedForType(const TTypeAnnotationNode& type,
                 for (auto& path : paths) {
                     path.back() = fields.front();
                 }
-                it = sets.insert_unique(std::move(paths)).first;
+                it = sets.insert_unique(paths).first;
             }
         }
     }
@@ -1021,7 +1031,7 @@ TChoppedConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode& type, 
                 }
 
                 if (ssize_t(GetElementsCount(GetSubTypeByPath(prefix, rowType))) == std::distance(from, it)) {
-                    *from++ = TPartOfConstraintBase::TSetType{std::move(prefix)};
+                    *from++ = TPartOfConstraintBase::TSetType{prefix};
                     it = sets.erase(from, it);
                     changed = setChanged = true;
                 }
@@ -1081,12 +1091,12 @@ TUniqueConstraintNodeBase<Distinct>::MakeCommonContent(const TContentType& one, 
                         set.reserve(std::min(setOne.size(), setTwo.size()));
                         std::set_intersection(setOne.cbegin(), setOne.cend(), setTwo.cbegin(), setTwo.cend(), std::back_inserter(set));
                         if (!set.empty()) {
-                            sets.insert_unique(std::move(set));
+                            sets.insert_unique(set);
                         }
                     }
                 }
                 if (sets.size() == setsOne.size()) {
-                    both.insert_unique(std::move(sets));
+                    both.insert_unique(sets);
                 }
             }
         }
@@ -1349,9 +1359,9 @@ TUniqueConstraintNodeBase<Distinct>::DoFilterFields(TExprContext& ctx, const TPa
                 TPartOfConstraintBase::TSetType newSet;
                 newSet.reserve(set.size());
                 std::copy_if(set.cbegin(), set.cend(), std::back_inserter(newSet), predicate);
-                newSets.insert_unique(std::move(newSet));
+                newSets.insert_unique(newSet);
             });
-            content.insert_unique(std::move(newSets));
+            content.insert_unique(newSets);
         }
     }
     return content.empty() ? nullptr : ctx.MakeConstraint<TUniqueConstraintNodeBase>(std::move(content));
@@ -1377,11 +1387,11 @@ TUniqueConstraintNodeBase<Distinct>::DoRenameFields(TExprContext& ctx, const TPa
                 newSet.insert_unique(newPaths.cbegin(), newPaths.cend());
             }
             if (!newSet.empty()) {
-                newSets.insert_unique(std::move(newSet));
+                newSets.insert_unique(newSet);
             }
         }
         if (sets.size() == newSets.size()) {
-            content.insert_unique(std::move(newSets));
+            content.insert_unique(newSets);
         }
     }
     return content.empty() ? nullptr : ctx.MakeConstraint<TUniqueConstraintNodeBase>(std::move(content));
@@ -1445,7 +1455,7 @@ TUniqueConstraintNodeBase<Distinct>::DoGetComplicatedForType(const TTypeAnnotati
                     for (auto& path : paths) {
                         path.back() = fields.front();
                     }
-                    it = sets.insert_unique(std::move(paths)).first;
+                    it = sets.insert_unique(paths).first;
                 }
             }
         }
@@ -2026,7 +2036,7 @@ NYT::TNode TStreamingConstraintNode::ToYson() const {
 }
 
 bool TStreamingConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type) const {
-    return IsIn({ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, type.GetKind());
+    return IsIn({ETypeAnnotationKind::Tuple, ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, type.GetKind());
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2048,6 +2058,7 @@ TVarIndexConstraintNode::TVarIndexConstraintNode(TExprContext& ctx, size_t mapIt
     : TConstraintNode(ctx, Name())
 {
     YQL_ENSURE(mapItemsCount > 0);
+    Mapping_.reserve(mapItemsCount);
     for (size_t i = 0; i < mapItemsCount; ++i) {
         Mapping_.push_back(std::make_pair(i, i));
     }

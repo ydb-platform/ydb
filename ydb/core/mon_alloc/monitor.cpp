@@ -20,6 +20,8 @@
 #include <util/stream/str.h>
 #include <util/stream/file.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::MEMORY_PROFILER
+
 
 namespace NKikimr {
     using TDynamicCountersPtr = TIntrusivePtr<::NMonitoring::TDynamicCounters>;
@@ -323,13 +325,12 @@ namespace NKikimr {
             void Bootstrap(const TActorContext& ctx) {
                 NActors::TMon* mon = AppData(ctx)->Mon;
                 if (!mon) {
-                    LOG_ERROR(ctx, NKikimrServices::MEMORY_PROFILER,
-                              "Could not register actor page, 'mon' is null");
+                    YDB_LOG_ERROR_CTX(ctx, "Could not register actor page, 'mon' is null");
                     Die(ctx);
                     return;
                 }
 
-                LOG_NOTICE_S(ctx, NKikimrServices::MEMORY_PROFILER, "Bootstrapped");
+                YDB_LOG_NOTICE_CTX(ctx, "Bootstrapped");
 
                 auto* indexPage = mon->RegisterIndexPage("memory", "Memory");
                 mon->RegisterActorPage(
@@ -356,7 +357,7 @@ namespace NKikimr {
                 auto processMemoryInfo = ProcessMemoryInfoProvider->Get();
                 if (processMemoryInfo.AnonRss.has_value()) {
                     return TMemoryUsage{
-                        processMemoryInfo.AnonRss.value(), 
+                        processMemoryInfo.AnonRss.value(),
                         processMemoryInfo.CGroupLimit.value_or(0)};
                 }
                 return {};
@@ -372,9 +373,11 @@ namespace NKikimr {
                         TString fileName = FilePathPrefix + name + ".mem";
                         TFileOutput out(fileName);
                         AllocMonitor->DumpForLog(out, limit);
-                        LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER, "Memory stats saved to " + fileName);
+                        YDB_LOG_WARN_CTX(ctx, "Memory stats saved",
+                            {"filename", fileName});
                     } catch (const std::exception& err) {
-                        LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER, err.what());
+                        YDB_LOG_WARN_CTX(ctx, "Memory stats save error",
+                            {"err", err.what()});
                     }
                 } else {
                     TStringStream out;
@@ -382,14 +385,15 @@ namespace NKikimr {
                     TVector<TString> split;
                     Split(out.Str(), "\n", split);
                     for (const auto& line : split) {
-                        LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER, line);
+                        YDB_LOG_WARN_CTX(ctx, line);
                     }
                 }
             }
 
             void LogMemoryStatsIfNeeded(const TActorContext& ctx, TMemoryUsage memoryUsage) noexcept {
                 auto usage = memoryUsage.Usage();
-                LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_PROFILER, memoryUsage.ToString());
+                YDB_LOG_DEBUG_CTX(ctx, "Dump memory usage",
+                    {"memoryUsage", memoryUsage});
                 if (IsDangerous && usage < TDumpLogConfig::RssUsageSoft) {
                     IsDangerous = false;
                 } else if (!IsDangerous && usage > TDumpLogConfig::RssUsageHard) {
@@ -416,7 +420,8 @@ namespace NKikimr {
                 if (IsDangerous) {
                     std::optional<TMemoryUsage> memoryUsage = TryGetMemoryUsage();
                     if (memoryUsage) {
-                        LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER, memoryUsage->ToString());
+                        YDB_LOG_WARN_CTX(ctx, "Dum memory usage",
+                            {"memoryUsage", memoryUsage->ToString()});
                         LogMemoryStats(ctx, 256);
                     }
                 }

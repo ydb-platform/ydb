@@ -1,18 +1,26 @@
 #include "common.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/cms/console/console.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
-#include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
+#include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/federated_query/generic_ut/iceberg_ut_data.h>
 #include <ydb/core/kqp/ut/federated_query/s3/s3_recipe_ut_helpers.h>
+#include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/replication.pb.h>
+
+#include <ydb/library/grpc/server/actors/logger.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+#include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
 #include <fmt/format.h>
-
 #include <library/cpp/protobuf/interop/cast.h>
+#include <util/string/builder.h>
 
+#include <atomic>
 
 namespace NKikimr::NKqp {
 
@@ -24,7 +32,54 @@ using namespace NYdb::NQuery;
 using namespace NYql::NConnector::NApi;
 using namespace NYql::NConnector::NTest;
 
-TStreamingTestFixture::~TStreamingTestFixture () {
+namespace {
+
+class TCheckpointCreationBlocker: public TActor<TCheckpointCreationBlocker> {
+public:
+    explicit TCheckpointCreationBlocker(TActorId storageProxy)
+        : TActor(&TCheckpointCreationBlocker::StateFunc)
+        , StorageProxy(storageProxy)
+    {
+    }
+
+private:
+    STFUNC(StateFunc) {
+        if (ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
+            Blocked = false;
+            for (auto& pending : Pending) {
+                Forward(pending, StorageProxy);
+            }
+            Pending.clear();
+            return;
+        }
+
+        if (Blocked && ev->GetTypeRewrite() == NFq::TEvCheckpointStorage::TEvCreateCheckpointRequest::EventType &&
+            ev->Get<NFq::TEvCheckpointStorage::TEvCreateCheckpointRequest>()->CheckpointId.SeqNo > 1)
+        {
+            Pending.emplace_back(ev.Release());
+            return;
+        }
+
+        Forward(ev, StorageProxy);
+    }
+
+    const TActorId StorageProxy;
+    bool Blocked = true;
+    std::vector<THolder<IEventHandle>> Pending;
+};
+
+}   // anonymous namespace
+
+TString MakeExternalName(TStringBuf prefix) {
+    // Recipes are shared by multiple tests; the counter distinguishes calls within one clock tick.
+    static std::atomic<ui64> sequence{ 0 };
+    return TStringBuilder() << prefix << "_" << TInstant::Now().MicroSeconds() << "_" << sequence.fetch_add(1, std::memory_order_relaxed);
+}
+
+TStreamingTestFixture::~TStreamingTestFixture() {
+    if (PqGatewayDriver) {
+        PqGatewayDriver.reset();
+    }
     if (InternalDriver) {
         InternalDriver->Stop(true);
     }
@@ -40,7 +95,6 @@ NKikimrConfig::TAppConfig& TStreamingTestFixture::SetupAppConfig() {
     EnsureNotInitialized("AppConfig");
 
     auto& result = AppConfig.emplace();
-    result.MutableTableServiceConfig()->SetDqChannelVersion(2u);
     return result;
 }
 
@@ -62,14 +116,35 @@ void TStreamingTestFixture::UpdateConfig(NKikimrConfig::TAppConfig& appConfig) {
     UNIT_ASSERT(response);
 }
 
-TIntrusivePtr<IMockPqGateway> TStreamingTestFixture::SetupMockPqGateway() {
+TIntrusivePtr<IMockPqGateway> TStreamingTestFixture::SetupMockPqGateway(NTestUtils::TMockPqGatewaySettings settings) {
     UNIT_ASSERT_C(!PqGateway, "PqGateway is already initialized");
     EnsureNotInitialized("MockPqGateway");
 
-    const auto mockPqGateway = CreateMockPqGateway({.OperationTimeout = TEST_OPERATION_TIMEOUT});
+    settings.OperationTimeout = TEST_OPERATION_TIMEOUT;
+    const auto mockPqGateway = CreateMockPqGateway(settings);
     PqGateway = mockPqGateway;
 
     return mockPqGateway;
+}
+
+TIntrusivePtr<NYql::IPqGateway> TStreamingTestFixture::SetupRealPqGateway() {
+    UNIT_ASSERT_C(!PqGateway, "PqGateway is already initialized");
+
+    auto& runtime = GetRuntime();
+    auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
+    actorSystemPtr->store(runtime.GetActorSystem(0));
+
+    auto uniqueDriver = NKqp::MakeYdbDriver(actorSystemPtr, AppConfig->GetQueryServiceConfig().GetStreamingQueries().GetTopicSdkSettings());
+    PqGatewayDriver = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
+
+    PqGateway = NKqp::MakePqGatewayFactory(PqGatewayDriver, NYql::CreateStructuredTokenCredentialsFactory(),
+        NKqp::TLocalTopicClientSettings{
+            .ActorSystem = runtime.GetActorSystem(0),
+            .ChannelBufferSize = AppConfig->GetTableServiceConfig().GetResourceManager().GetChannelBufferSize(),
+        })
+                    ->CreatePqGateway();
+
+    return PqGateway;
 }
 
 std::shared_ptr<TConnectorClientMock> TStreamingTestFixture::SetupMockConnectorClient() {
@@ -90,6 +165,33 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
             AppConfig.emplace();
         }
 
+        {
+            using TExecutor = NKikimrConfig::TActorSystemConfig::TExecutor;
+
+            auto& actorSystemConfig = *AppConfig->MutableActorSystemConfig();
+            actorSystemConfig.ClearExecutor();
+
+            const auto addPool = [&](const TString& name, ui32 threads, TExecutor::EType type) {
+                auto& executor = *actorSystemConfig.AddExecutor();
+                executor.SetType(type);
+                executor.SetName(name);
+                executor.SetThreads(threads);
+                if (type == TExecutor::BASIC) {
+                    executor.SetSpinThreshold(1);
+                }
+            };
+
+            // Pools: 0=System, 1=User, 2=Batch, 3=IO.
+            addPool("System", 1, TExecutor::BASIC);
+            actorSystemConfig.SetSysExecutor(0);
+            addPool("User", 3, TExecutor::BASIC);
+            actorSystemConfig.SetUserExecutor(1);
+            addPool("Batch", 1, TExecutor::BASIC);
+            actorSystemConfig.SetBatchExecutor(2);
+            addPool("IO", 1, TExecutor::IO);
+            actorSystemConfig.SetIoExecutor(3);
+        }
+
         auto& featureFlags = *AppConfig->MutableFeatureFlags();
         featureFlags.SetEnableStreamingQueries(true);
         featureFlags.SetEnableSchemaSecrets(true);
@@ -97,29 +199,72 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
         auto& queryServiceConfig = *AppConfig->MutableQueryServiceConfig();
         queryServiceConfig.SetEnableMatchRecognize(true);
 
-        auto& tableServiceConfig = *AppConfig->MutableTableServiceConfig();
-        tableServiceConfig.SetDqChannelVersion(2u);
+        if (ConnectorClient) {
+            auto& connector = *queryServiceConfig.MutableGeneric()->MutableConnector();
+            connector.AddDatabaseNames("test_db");
+            connector.MutableEndpoint()->set_host("localhost");
+            connector.MutableEndpoint()->set_port(1234);
+        }
 
-        LogSettings
-            .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
+        AppConfig->MutableTableServiceConfig()->SetDqChannelVersion(DqChannelsVersion);
+
+        auto& authConfig = *AppConfig->MutableAuthConfig();
+
+        if (auto vmMetadataEmulatorHost = getenv("VM_METADATA_EMULATOR_HOST")) {
+            auto& localMetadataService = *authConfig.MutableLocalMetadataService();
+            localMetadataService.SetHost(vmMetadataEmulatorHost);
+            localMetadataService.SetPort(FromString<ui16>(getenv("VM_METADATA_EMULATOR_PORT")));
+        }
+
+        if (auto iamEndpoint = getenv("IAM_EMULATOR_ENDPOINT")) {
+            auto& iamServiceControl = *AppConfig->MutableReplicationConfig()->MutableIamServiceControl();
+            iamServiceControl.SetEndpoint(iamEndpoint);
+            iamServiceControl.SetEnableSsl(false);
+
+            iamServiceControl.SetServiceId("ydb");
+            iamServiceControl.SetMicroserviceId("data-plane");
+            iamServiceControl.SetResourceType("resource-manager.cloud");
+
+            authConfig.SetAccessServiceEndpoint(iamEndpoint);
+            authConfig.SetUseAccessServiceTLS(false);
+        }
+
+        LogSettings.AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
             .AddLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG)
             .AddLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG)
             .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_INFO);
 
-        Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
-            .NodeCount = NodeCount,
-            .DynamicNodeCount = DynamicNodeCount,
-            .CredentialsFactory = CreateCredentialsFactory(),
-            .PqGateway = PqGateway,
-            .CheckpointPeriod = CheckpointPeriod,
-            .LogSettings = LogSettings,
-            .UseLocalCheckpointsInStreamingQueries = true,
-            .InternalInitFederatedQuerySetupFactory = InternalInitFederatedQuerySetupFactory,
-            .StoragePoolTypes = StoragePoolTypes,
-        });
+        Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(),
+            {
+                .NodeCount = NodeCount,
+                .DynamicNodeCount = DynamicNodeCount,
+                .CredentialsFactory = CreateCredentialsFactory(BUILTIN_ACL_ROOT),
+                .PqGateway = PqGateway,
+                .CheckpointPeriod = CheckpointPeriod,
+                .LogSettings = LogSettings,
+                .UseLocalCheckpointsInStreamingQueries = true,
+                .InternalInitFederatedQuerySetupFactory = InternalInitFederatedQuerySetupFactory,
+                .NeedsStatsCollectors = NeedsStatsCollectors,
+                .StoragePoolTypes = StoragePoolTypes,
+            });
 
-        Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
-        Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableStreamingQueries(true);
+        auto& server = Kikimr->GetTestServer();
+        auto& runtime = *server.GetRuntime();
+        TPortManager portManager;
+        for (ui64 nodeIndex = 0; nodeIndex < NodeCount; ++nodeIndex) {
+            auto& featureFlags = runtime.GetAppData(nodeIndex).FeatureFlags;
+            featureFlags.SetEnableStreamingQueries(true);
+            featureFlags.SetEnableSchemaSecrets(true);
+
+            if (nodeIndex) {
+                server.EnableGRpc(NYdbGrpc::TServerOptions()
+                                      .SetHost("[::]")
+                                      .SetPort(portManager.GetPort())
+                                      .SetGRpcShutdownDeadline(TDuration::Seconds(30))
+                                      .SetLogger(NYdbGrpc::CreateActorSystemLogger(
+                                          *runtime.GetActorSystem(nodeIndex), NKikimrServices::GRPC_SERVER)), nodeIndex, TEST_DATABASE);
+            }
+        }
     }
 
     return Kikimr;
@@ -139,9 +284,7 @@ std::shared_ptr<TDriver> TStreamingTestFixture::GetInternalDriver() {
 
 std::shared_ptr<TQueryClient> TStreamingTestFixture::GetQueryClient() {
     if (!QueryClient) {
-        QueryClient = std::make_shared<TQueryClient>(
-            GetKikimrRunner()->GetQueryClient(QueryClientSettings)
-        );
+        QueryClient = std::make_shared<TQueryClient>(GetKikimrRunner()->GetQueryClient(QueryClientSettings));
     }
 
     return QueryClient;
@@ -165,9 +308,7 @@ std::shared_ptr<NYdb::NOperation::TOperationClient> TStreamingTestFixture::GetOp
 
 std::shared_ptr<NYdb::NTable::TSession> TStreamingTestFixture::GetTableClientSession() {
     if (!TableClientSession) {
-        TableClientSession = std::make_shared<NYdb::NTable::TSession>(
-            GetTableClient()->CreateSession().ExtractValueSync().GetSession()
-        );
+        TableClientSession = std::make_shared<NYdb::NTable::TSession>(GetTableClient()->CreateSession().ExtractValueSync().GetSession());
     }
 
     return TableClientSession;
@@ -176,11 +317,8 @@ std::shared_ptr<NYdb::NTable::TSession> TStreamingTestFixture::GetTableClientSes
 std::shared_ptr<NKikimr::NPersQueueTests::TFlatMsgBusPQClient> TStreamingTestFixture::GetLocalFlatMsgBusPQClient() {
     if (!LocalFlatMsgBusPQClient) {
         const auto& server = GetKikimrRunner()->GetTestServer();
-        LocalFlatMsgBusPQClient = std::make_shared<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(
-            server.GetSettings(),
-            server.GetGRpcServer().GetPort(),
-            "/Root"
-        );
+        LocalFlatMsgBusPQClient =
+            std::make_shared<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(server.GetSettings(), server.GetGRpcServer().GetPort(), "/Root");
     }
 
     return LocalFlatMsgBusPQClient;
@@ -188,21 +326,23 @@ std::shared_ptr<NKikimr::NPersQueueTests::TFlatMsgBusPQClient> TStreamingTestFix
 
 void TStreamingTestFixture::KillTopicPqrbTablet(const std::string& topicPath) {
     const auto tabletClient = GetLocalFlatMsgBusPQClient();
-    const auto& describeResult = tabletClient->Ls(JoinPath(TVector{TString{"/Root"}, TString{topicPath}}));
+    const auto& describeResult = tabletClient->Ls(JoinPath(TVector{ TString{ "/Root" }, TString{ topicPath } }));
     UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasPersQueueGroup(), describeResult->Record);
 
     const auto& persQueueGroup = describeResult->Record.GetPathDescription().GetPersQueueGroup();
     tabletClient->KillTablet(GetKikimrRunner()->GetTestServer(), persQueueGroup.GetBalancerTabletID());
 }
 
+TIntrusivePtr<::NMonitoring::TDynamicCounters> TStreamingTestFixture::GetCounters(const TString& svc, ui32 nodeIdx) {
+    return NKikimr::GetServiceCounters(GetRuntime().GetAppData(nodeIdx).Counters, svc);
+}
+
 // External YDB recipe
 
 std::shared_ptr<TDriver> TStreamingTestFixture::GetExternalDriver() {
     if (!ExternalDriver) {
-        ExternalDriver = std::make_shared<TDriver>(TDriverConfig()
-            .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
-            .SetEndpoint(YDB_ENDPOINT)
-            .SetDatabase(YDB_DATABASE));
+        ExternalDriver = std::make_shared<TDriver>(
+            TDriverConfig().SetDiscoveryMode(NYdb::EDiscoveryMode::Async).SetEndpoint(YDB_ENDPOINT).SetDatabase(YDB_DATABASE));
     }
 
     return ExternalDriver;
@@ -214,19 +354,34 @@ std::shared_ptr<NYdb::NTopic::TTopicClient> TStreamingTestFixture::GetTopicClien
     }
 
     if (!TopicClient) {
-        TopicClient = std::make_shared<NYdb::NTopic::TTopicClient>(*GetExternalDriver(), NYdb::NTopic::TTopicClientSettings()
-            .DiscoveryEndpoint(YDB_ENDPOINT)
-            .Database(YDB_DATABASE));
+        TopicClient = std::make_shared<NYdb::NTopic::TTopicClient>(
+            *GetExternalDriver(), NYdb::NTopic::TTopicClientSettings().DiscoveryEndpoint(YDB_ENDPOINT).Database(YDB_DATABASE));
     }
 
     return local ? LocalTopicClient : TopicClient;
 }
 
+std::shared_ptr<NYdb::NTopic::TDeferredPublishClient> TStreamingTestFixture::GetDeferredPublishClient(
+    bool local, const TString& user, std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory) {
+    auto settings = credentialsProviderFactory ? NYdb::TCommonClientSettings().CredentialsProviderFactory(credentialsProviderFactory)
+                                               : NYdb::TCommonClientSettings().AuthToken(user);
+
+    if (local && !LocalDeferredPublishClient) {
+        LocalDeferredPublishClient = std::make_shared<NYdb::NTopic::TDeferredPublishClient>(*GetInternalDriver(), settings);
+    }
+
+    if (!DeferredPublishClient) {
+        DeferredPublishClient = std::make_shared<NYdb::NTopic::TDeferredPublishClient>(
+            *GetExternalDriver(), settings.DiscoveryEndpoint(YDB_ENDPOINT).Database(YDB_DATABASE));
+    }
+
+    return local ? LocalDeferredPublishClient : DeferredPublishClient;
+}
+
 std::shared_ptr<TQueryClient> TStreamingTestFixture::GetExternalQueryClient() {
     if (!ExternalQueryClient) {
-        ExternalQueryClient = std::make_shared<TQueryClient>(*GetExternalDriver(), TClientSettings()
-            .DiscoveryEndpoint(YDB_ENDPOINT)
-            .Database(YDB_DATABASE));
+        ExternalQueryClient =
+            std::make_shared<TQueryClient>(*GetExternalDriver(), TClientSettings().DiscoveryEndpoint(YDB_ENDPOINT).Database(YDB_DATABASE));
     }
 
     return ExternalQueryClient;
@@ -242,67 +397,85 @@ std::vector<TResultSet> TStreamingTestFixture::ExecExternalQuery(const std::stri
 
 void TStreamingTestFixture::CreateTopic(const std::string& topicName, std::optional<NYdb::NTopic::TCreateTopicSettings> settings, bool local) {
     if (!settings) {
-        settings.emplace()
-            .PartitioningSettings(1, 1)
-            .BeginAddConsumer("test_consumer");
+        settings.emplace().PartitioningSettings(1, 1).BeginAddConsumer("test_consumer");
     }
 
     const auto result = GetTopicClient(local)->CreateTopic(topicName, *settings).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 }
 
+void TStreamingTestFixture::DropTopic(const std::string& topicName, bool local) {
+    const auto result = GetTopicClient(local)->DropTopic(topicName).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+}
+
+void TStreamingTestFixture::AlterTopic(const std::string& topicName, NYdb::NTopic::TAlterTopicSettings settings, bool local) {
+    const auto result = GetTopicClient(local)->AlterTopic(topicName, settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+}
+
 void TStreamingTestFixture::WriteTopicMessage(const std::string& topicName, const std::string& message, ui64 partition, bool local) {
-    auto writeSession = GetTopicClient(local)->CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
-        .Path(topicName)
-        .PartitionId(partition));
+    auto writeSession =
+        GetTopicClient(local)->CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings().Path(topicName).PartitionId(partition));
 
     writeSession->Write(NYdb::NTopic::TWriteMessage(message));
     writeSession->Close();
 }
 
-void TStreamingTestFixture::WriteTopicMessages(const std::string& topicName, const std::vector<std::string>& messages, ui64 partition) {
+void TStreamingTestFixture::WriteTopicMessages(
+    const std::string& topicName, const std::vector<std::string>& messages, ui64 partition, bool local) {
     for (const auto& message : messages) {
-        WriteTopicMessage(topicName, message, partition);
+        WriteTopicMessage(topicName, message, partition, local);
     }
 }
 
-void TStreamingTestFixture::ReadTopicMessage(const std::string& topicName, const std::string& expectedMessage, TInstant disposition, bool local) {
-    ReadTopicMessages(topicName, {expectedMessage}, disposition, /* sort */ false, local);
+void TStreamingTestFixture::ReadTopicMessage(const TString& topicName, const std::string& expectedMessage, TInstant disposition, bool local) {
+    ReadTopicMessages(topicName, { expectedMessage }, disposition, /* sort */ false, local);
 }
 
 std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMessages(
-    const std::string& topicName,
-    std::vector<std::string> expectedMessages,
-    TInstant disposition,
-    bool sort,
-    bool local,
-    bool checkResult) {
+    const TString& topicName, std::vector<std::string> expectedMessages, TInstant disposition, bool sort, bool local, bool checkResult) {
+    return ReadTopicMessages(topicName, expectedMessages, *GetTopicClient(local), disposition, sort, checkResult);
+}
+
+std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMessages(const TString& topicName,
+    std::vector<std::string> expectedMessages, NYdb::NTopic::TTopicClient& topicClient, TInstant disposition, bool sort, bool checkResult) {
     NYdb::NTopic::TReadSessionSettings readSettings;
-    readSettings
-        .WithoutConsumer()
-        .AppendTopics(
-            NYdb::NTopic::TTopicReadSettings(topicName).ReadFromTimestamp(disposition)
-                .AppendPartitionIds(0)
-        );
+    readSettings.WithoutConsumer().AppendTopics(
+        NYdb::NTopic::TTopicReadSettings(topicName).ReadFromTimestamp(disposition).AppendPartitionIds(0));
 
-    readSettings.EventHandlers_.StartPartitionSessionHandler(
-        [](NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
-            event.Confirm(0);
-        }
-    );
+    readSettings.EventHandlers_.StartPartitionSessionHandler([](NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
+        event.Confirm(0);
+    });
 
-    auto readSession = GetTopicClient(local)->CreateReadSession(readSettings);
+    auto readSession = topicClient.CreateReadSession(readSettings);
     std::vector<std::pair<std::string, TInstant>> received;
+    ui64 seenMessagesMaxOffset = 0;
+
+    auto receivedStrings = [&]() {
+        std::vector<std::string> result;
+        result.reserve(received.size());
+        for (const auto& p : received) {
+            result.push_back(p.first);
+        }
+        return result;
+    };
 
     WaitFor(TEST_OPERATION_TIMEOUT, "topic output messages", [&](TString& error) {
         if (!readSession->WaitEvent().HasValue()) {
-            error = TStringBuilder() << "no event set, received #" << received.size() << " / " << expectedMessages.size() << " messages";
+            error = TStringBuilder() << "no event set, received #" << received.size() << " / " << expectedMessages.size() << " messages"
+                                     << "; received: (" << JoinSeq(", ", receivedStrings()) << ")"
+                                     << "; expected: (" << JoinSeq(", ", expectedMessages) << ")";
             return false;
         }
 
         auto event = readSession->GetEvent(/* block */ true);
         if (const auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
             for (const auto& message : dataEvent->GetMessages()) {
+                seenMessagesMaxOffset = std::max(seenMessagesMaxOffset, static_cast<ui64>(message.GetOffset()));
+                if (message.GetWriteTime() < disposition) {
+                    continue;
+                }
                 received.push_back(std::make_pair(message.GetData(), message.GetWriteTime()));
             }
 
@@ -311,33 +484,53 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
             }
         }
 
-        auto firsts_view = received | std::views::transform([](const auto& p) { return p.first; });
-        UNIT_ASSERT_C(expectedMessages.size() >= received.size(), TStringBuilder()
-            << "expected #" << expectedMessages.size() << " messages ("
-            << JoinSeq(", ", expectedMessages) << "), got #" << received.size() << " messages ("
-            << JoinSeq(", ",  std::vector<std::string>(firsts_view.begin(), firsts_view.end())) << ")");
+        UNIT_ASSERT_C(expectedMessages.size() >= received.size(),
+            TStringBuilder() << "expected #" << expectedMessages.size() << " messages (" << JoinSeq(", ", expectedMessages) << "), got #"
+                             << received.size() << " messages (" << JoinSeq(", ", receivedStrings()) << ")");
 
-        error = TStringBuilder() << "got new event, received #" << received.size() << " / " << expectedMessages.size() << " messages";
+        error = TStringBuilder() << "got new event, received #" << received.size() << " / " << expectedMessages.size() << " messages"
+                                 << "; received: (" << JoinSeq(", ", receivedStrings()) << ")"
+                                 << "; expected: (" << JoinSeq(", ", expectedMessages) << ")";
         return false;
     });
+
+    // Check that there is no extra messages in the topic
+    EnsureTopicEndOffset(topicName, seenMessagesMaxOffset + 1, topicClient);
 
     if (checkResult) {
         if (sort) {
             Sort(expectedMessages);
             Sort(received);
         }
-        
+
         UNIT_ASSERT(received.size() == expectedMessages.size());
         for (size_t i = 0; i < received.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(received[i].first, expectedMessages[i]);
         }
     }
+
     return received;
 }
+
+void TStreamingTestFixture::EnsureTopicEndOffset(const TString& topicName, ui64 endOffset, bool local) {
+    EnsureTopicEndOffset(topicName, endOffset, *GetTopicClient(local));
+}
+
+void TStreamingTestFixture::EnsureTopicEndOffset(const TString& topicName, ui64 endOffset, NYdb::NTopic::TTopicClient& topicClient) {
+    const auto result = topicClient.DescribeTopic(topicName, NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true)).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+    const auto& partitions = result.GetTopicDescription().GetPartitions();
+    UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+    const auto& stats = partitions[0].GetPartitionStats();
+    UNIT_ASSERT(stats);
+    UNIT_ASSERT_VALUES_EQUAL(stats->GetStartOffset(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(stats->GetEndOffset(), endOffset);
+}
+
 void TStreamingTestFixture::TestReadTopicBasic(const std::string& testSuffix) {
     const std::string sourceName = "sourceName" + testSuffix;
     const std::string topicName = "topicName" + testSuffix;
-    CreateTopic(topicName);
+    CreateScopedTopic(topicName);
 
     CreatePqSourceBasicAuth(sourceName, UseSchemaSecrets());
 
@@ -352,11 +545,7 @@ void TStreamingTestFixture::TestReadTopicBasic(const std::string& testSuffix) {
                 )
             )
             LIMIT 1;
-        )sql",
-        "source"_a=sourceName,
-        "topic"_a=topicName,
-        "id"_a=testSuffix
-    ));
+        )sql", "source"_a = sourceName, "topic"_a = topicName, "id"_a = testSuffix));
 
     WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})");
 
@@ -380,14 +569,18 @@ void TStreamingTestFixture::ExecSchemeQuery(const std::string& query, NYdb::ESta
 
 // Query client SDK
 
-std::vector<TResultSet> TStreamingTestFixture::ExecQuery(const std::string& query, NYdb::EStatus expectedStatus, const std::string& expectedError, std::function<void(const std::string&)> astValidator) {
+std::vector<TResultSet> TStreamingTestFixture::ExecQuery(const std::string& query, NYdb::EStatus expectedStatus,
+    const std::string& expectedError, std::function<void(const std::string&)> astValidator) {
     auto settings = TExecuteQuerySettings();
     if (astValidator) {
         settings.StatsMode(EStatsMode::Full);
     }
+    if (expectedStatus != NYdb::EStatus::SUCCESS) {
+        settings.RetrySettings(NYdb::NRetry::TRetryOperationSettings().MaxRetries(0));
+    }
 
     auto result = GetQueryClient()->ExecuteQuery(query, TTxControl::NoTx(), settings).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString() << "\nQuery text:\n" << query);
 
     if (astValidator) {
         const auto& stats = result.GetStats();
@@ -398,7 +591,7 @@ std::vector<TResultSet> TStreamingTestFixture::ExecQuery(const std::string& quer
     }
 
     if (!expectedError.empty()) {
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), expectedError);
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedError, "Query text:\n" << query);
     }
 
     return result.GetResultSets();
@@ -413,29 +606,24 @@ void TStreamingTestFixture::CreatePqSource(const std::string& pqSourceName) {
                 DATABASE_NAME = "{pq_database_name}",
                 AUTH_METHOD = "NONE"
             );
-        )sql",
-        "pq_source"_a = pqSourceName,
-        "pq_location"_a = YDB_ENDPOINT,
-        "pq_database_name"_a = YDB_DATABASE
-    ));
+        )sql", "pq_source"_a = pqSourceName, "pq_location"_a = YDB_ENDPOINT, "pq_database_name"_a = YDB_DATABASE));
 }
 
-void TStreamingTestFixture::CreatePqSourceBasicAuth(const std::string& pqSourceName, const bool useSchemaSecrets) {
-    const std::string secretName = useSchemaSecrets ? "/Root/secret_local_password" : "secret_local_password";
-    if (useSchemaSecrets) {
-        ExecQuery(fmt::format(
-            R"sql(
-                CREATE SECRET `{secret_name}` WITH (value = "1234");
-            )sql",
-            "secret_name"_a = secretName
-        ));
-    } else {
-        ExecQuery(fmt::format(
-            R"sql(
-                CREATE OBJECT `{secret_name}` (TYPE SECRET) WITH (value = "1234");
-            )sql",
-            "secret_name"_a = secretName
-        ));
+void TStreamingTestFixture::CreatePqSourceBasicAuth(const std::string& pqSourceName, const bool useSchemaSecrets, const bool createSecrets) {
+    const auto secretName = useSchemaSecrets ? "/Root/secret_local_password" : "secret_local_password";
+
+    if (createSecrets) {
+        if (useSchemaSecrets) {
+            ExecQuery(fmt::format(
+                R"sql(
+                    CREATE SECRET `{secret_name}` WITH (value = "1234");
+                )sql", "secret_name"_a = secretName));
+        } else {
+            ExecQuery(fmt::format(
+                R"sql(
+                    CREATE OBJECT `{secret_name}` (TYPE SECRET) WITH (value = "1234");
+                )sql", "secret_name"_a = secretName));
+        }
     }
 
     ExecQuery(fmt::format(
@@ -448,12 +636,7 @@ void TStreamingTestFixture::CreatePqSourceBasicAuth(const std::string& pqSourceN
                 LOGIN = "root",
                 PASSWORD_SECRET_NAME = "{secret_name}"
             );
-        )sql",
-        "pq_source"_a = pqSourceName,
-        "pq_location"_a = YDB_ENDPOINT,
-        "pq_database_name"_a = YDB_DATABASE,
-        "secret_name"_a = secretName
-    ));
+        )sql", "pq_source"_a = pqSourceName, "pq_location"_a = YDB_ENDPOINT, "pq_database_name"_a = YDB_DATABASE, "secret_name"_a = secretName));
 }
 
 void TStreamingTestFixture::CreateS3Source(const std::string& bucket, const std::string& s3SourceName) {
@@ -464,13 +647,13 @@ void TStreamingTestFixture::CreateS3Source(const std::string& bucket, const std:
                 LOCATION="{s3_location}",
                 AUTH_METHOD="NONE"
             );
-        )sql",
-        "s3_source"_a = s3SourceName,
-        "s3_location"_a = GetBucketLocation(bucket)
-    ));
+        )sql", "s3_source"_a = s3SourceName, "s3_location"_a = GetBucketLocation(bucket)));
 }
 
 void TStreamingTestFixture::CreateYdbSource(const std::string& ydbSourceName) {
+    // Use a fixed non-empty database name that matches DatabaseNames in the
+    // connector config, so YDB EDS is routed to the connector (table access).
+    constexpr char YDB_TEST_DATABASE[] = "test_db";
     ExecQuery(fmt::format(
         R"sql(
             CREATE SECRET ydb_source_secret WITH (value = "{token}");
@@ -482,35 +665,35 @@ void TStreamingTestFixture::CreateYdbSource(const std::string& ydbSourceName) {
                 TOKEN_SECRET_PATH = "ydb_source_secret",
                 USE_TLS = "FALSE"
             );
-        )sql",
-        "ydb_source"_a = ydbSourceName,
-        "ydb_location"_a = YDB_ENDPOINT,
-        "ydb_database_name"_a = YDB_DATABASE,
-        "token"_a = BUILTIN_ACL_ROOT
-    ));
+        )sql", "ydb_source"_a = ydbSourceName, "ydb_location"_a = YDB_ENDPOINT, "ydb_database_name"_a = YDB_TEST_DATABASE,
+        "token"_a = BUILTIN_ACL_ROOT));
 }
 
 void TStreamingTestFixture::CreateSolomonSource(const std::string& solomonSourceName) {
     ExecQuery(fmt::format(
         R"sql(
             CREATE EXTERNAL DATA SOURCE `{solomon_source}` WITH (
-                SOURCE_TYPE = "Solomon",
+                SOURCE_TYPE = "Monium.Metrics",
                 LOCATION = "localhost:{solomon_port}",
                 AUTH_METHOD = "NONE",
                 USE_TLS = "false"
             );
-        )sql",
-        "solomon_source"_a = solomonSourceName,
-        "solomon_port"_a = getenv("SOLOMON_HTTP_PORT")
-    ));
+        )sql", "solomon_source"_a = solomonSourceName, "solomon_port"_a = getenv("SOLOMON_HTTP_PORT")));
+}
+
+void TStreamingTestFixture::DropSource(const TString& sourceName) {
+    ExecQuery(fmt::format(
+        R"sql(
+            DROP EXTERNAL DATA SOURCE `{source_name}`;
+        )sql", "source_name"_a = sourceName));
 }
 
 // Script executions (using query client SDK)
 
-TOperation::TOperationId TStreamingTestFixture::ExecScript(const std::string& query, std::optional<TExecuteScriptSettings> settings, bool waitRunning) {
+TOperation::TOperationId TStreamingTestFixture::ExecScript(
+    const std::string& query, std::optional<TExecuteScriptSettings> settings, bool waitRunning) {
     if (!settings) {
-        settings.emplace()
-            .StatsMode(EStatsMode::Profile);
+        settings.emplace().StatsMode(EStatsMode::Profile);
     }
 
     const auto operation = GetQueryClient()->ExecuteScript(query, *settings).ExtractValueSync();
@@ -536,8 +719,9 @@ TScriptExecutionOperation TStreamingTestFixture::GetScriptExecutionOperation(con
     return operation;
 }
 
-TScriptExecutionOperation TStreamingTestFixture::WaitScriptExecution(const TOperation::TOperationId& operationId, EExecStatus finalStatus, bool waitRetry) {
-    const bool waitForFinalStatus = !waitRetry && IsIn({EExecStatus::Completed, EExecStatus::Failed}, finalStatus);
+TScriptExecutionOperation TStreamingTestFixture::WaitScriptExecution(
+    const TOperation::TOperationId& operationId, EExecStatus finalStatus, bool waitRetry) {
+    const bool waitForFinalStatus = !waitRetry && IsIn({ EExecStatus::Completed, EExecStatus::Failed }, finalStatus);
 
     std::optional<TScriptExecutionOperation> operation;
     WaitFor(TEST_OPERATION_TIMEOUT, TStringBuilder() << "script execution status" << finalStatus, [&](TString& error) {
@@ -549,8 +733,10 @@ TScriptExecutionOperation TStreamingTestFixture::WaitScriptExecution(const TOper
         }
 
         const auto& status = operation->Status();
-        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), NYdb::EStatus::SUCCESS, TStringBuilder() << "Status: " << execStatus << ", Issues: " << status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_C(!operation->Ready(), "Operation unexpectedly ready in status " << execStatus << " (expected status " << finalStatus << ")");
+        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), NYdb::EStatus::SUCCESS,
+            TStringBuilder() << "Status: " << execStatus << ", Issues: " << status.GetIssues().ToOneLineString());
+        UNIT_ASSERT_C(
+            !operation->Ready(), "Operation unexpectedly ready in status " << execStatus << " (expected status " << finalStatus << ")");
 
         error = TStringBuilder() << "operation status: " << execStatus << ", ready: " << operation->Ready();
         return false;
@@ -568,7 +754,8 @@ TScriptExecutionOperation TStreamingTestFixture::WaitScriptExecution(const TOper
     return *operation;
 }
 
-TScriptExecutionOperation TStreamingTestFixture::ExecAndWaitScript(const std::string& query, EExecStatus finalStatus, std::optional<TExecuteScriptSettings> settings) {
+TScriptExecutionOperation TStreamingTestFixture::ExecAndWaitScript(
+    const std::string& query, EExecStatus finalStatus, std::optional<TExecuteScriptSettings> settings) {
     return WaitScriptExecution(ExecScript(query, settings, /* waitRunning */ false), finalStatus, false);
 }
 
@@ -581,7 +768,8 @@ TResultSet TStreamingTestFixture::FetchScriptResult(const TOperation::TOperation
     return result.ExtractResultSet();
 }
 
-void TStreamingTestFixture::CheckScriptResult(const TResultSet& result, ui64 columnsCount, ui64 rowsCount, std::function<void(TResultSetParser&)> validator) {
+void TStreamingTestFixture::CheckScriptResult(
+    const TResultSet& result, ui64 columnsCount, ui64 rowsCount, std::function<void(TResultSetParser&)> validator) {
     TResultSetParser resultSet(result);
     UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), columnsCount);
     UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), rowsCount);
@@ -592,7 +780,8 @@ void TStreamingTestFixture::CheckScriptResult(const TResultSet& result, ui64 col
     }
 }
 
-void TStreamingTestFixture::CheckScriptResult(const TOperation::TOperationId& operationId, ui64 columnsCount, ui64 rowsCount, std::function<void(TResultSetParser&)> validator, ui64 resultSetId) {
+void TStreamingTestFixture::CheckScriptResult(const TOperation::TOperationId& operationId, ui64 columnsCount, ui64 rowsCount,
+    std::function<void(TResultSetParser&)> validator, ui64 resultSetId) {
     CheckScriptResult(FetchScriptResult(operationId, resultSetId), columnsCount, rowsCount, validator);
 }
 
@@ -603,15 +792,17 @@ void TStreamingTestFixture::CancelScriptExecution(const TOperation::TOperationId
 
 // Script executions (native events API)
 
-std::pair<std::string, TOperation::TOperationId> TStreamingTestFixture::ExecScriptNative(const std::string& query, const TScriptQuerySettings& settings, bool waitRunning) {
+std::pair<std::string, TOperation::TOperationId> TStreamingTestFixture::ExecScriptNative(
+    const std::string& query, const TScriptQuerySettings& settings, bool waitRunning) {
     auto& runtime = GetRuntime();
 
     NKikimrKqp::TEvQueryRequest queryProto;
-    queryProto.SetUserToken(NACLib::TUserToken(BUILTIN_ACL_ROOT, TVector<NACLib::TSID>{runtime.GetAppData().AllAuthenticatedUsers}).SerializeAsString());
+    queryProto.SetUserToken(
+        NACLib::TUserToken(BUILTIN_ACL_ROOT, TVector<NACLib::TSID>{ runtime.GetAppData().AllAuthenticatedUsers }).SerializeAsString());
 
     auto& req = *queryProto.MutableRequest();
     req.SetDatabase(TEST_DATABASE);
-    req.SetQuery(TString{query});
+    req.SetQuery(TString{ query });
     req.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     req.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
     req.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
@@ -620,7 +811,7 @@ std::pair<std::string, TOperation::TOperationId> TStreamingTestFixture::ExecScri
     ev->Record = queryProto;
     ev->ForgetAfter = settings.Timeout;
     ev->ResultsTtl = settings.Timeout;
-    ev->RetryMapping = {settings.RetryMapping};
+    ev->RetryMapping = { settings.RetryMapping };
     ev->SaveQueryPhysicalGraph = settings.SaveState;
     ev->QueryPhysicalGraph = settings.PhysicalGraph;
     ev->CheckpointId = settings.CheckpointId;
@@ -642,10 +833,11 @@ std::pair<std::string, TOperation::TOperationId> TStreamingTestFixture::ExecScri
         Sleep(TDuration::Seconds(1));
     }
 
-    return {executionId, operationId};
+    return { executionId, operationId };
 }
 
-NKikimrKqp::TScriptExecutionRetryState::TMapping TStreamingTestFixture::CreateRetryMapping(const std::vector<Ydb::StatusIds::StatusCode>& statuses, TDuration backoffDuration) {
+NKikimrKqp::TScriptExecutionRetryState::TMapping TStreamingTestFixture::CreateRetryMapping(
+    const std::vector<Ydb::StatusIds::StatusCode>& statuses, TDuration backoffDuration) {
     NKikimrKqp::TScriptExecutionRetryState::TMapping retryMapping;
     for (const auto status : statuses) {
         retryMapping.AddStatusCode(status);
@@ -662,7 +854,7 @@ NKikimrKqp::TScriptExecutionRetryState::TMapping TStreamingTestFixture::CreateRe
 NKikimrKqp::TQueryPhysicalGraph TStreamingTestFixture::LoadPhysicalGraph(const std::string& executionId) {
     auto& runtime = GetRuntime();
     const auto edgeActor = runtime.AllocateEdgeActor();
-    runtime.Register(CreateGetScriptExecutionPhysicalGraphActor(edgeActor, TEST_DATABASE, TString{executionId}));
+    runtime.Register(CreateGetScriptExecutionPhysicalGraphActor(edgeActor, TEST_DATABASE, TString{ executionId }));
 
     const auto graph = runtime.GrabEdgeEvent<TEvGetScriptPhysicalGraphResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
     UNIT_ASSERT_C(graph, "Empty graph response");
@@ -670,6 +862,7 @@ NKikimrKqp::TQueryPhysicalGraph TStreamingTestFixture::LoadPhysicalGraph(const s
 
     const auto& graphProto = graph->Get()->PhysicalGraph;
     UNIT_ASSERT(graphProto);
+    UNIT_ASSERT_VALUES_EQUAL(graphProto->GetPreparedQuery().GetVersion(), static_cast<ui32>(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1));
 
     return *graphProto;
 }
@@ -679,8 +872,7 @@ void TStreamingTestFixture::CheckScriptExecutionsCount(ui64 expectedExecutionsCo
         R"sql(
             SELECT COUNT(*) FROM `.metadata/script_executions`;
             SELECT COUNT(*) FROM `.metadata/script_execution_leases`;
-        )sql"
-    );
+        )sql");
 
     UNIT_ASSERT_VALUES_EQUAL(result.size(), 2);
 
@@ -693,41 +885,207 @@ void TStreamingTestFixture::CheckScriptExecutionsCount(ui64 expectedExecutionsCo
     });
 }
 
-void TStreamingTestFixture::WaitCheckpointUpdate(const std::string& checkpointId) {
-    std::optional<uint64_t> minSeqNo;
+std::function<void()> TStreamingTestFixture::BlockCheckpointCreation() {
+    auto& runtime = GetRuntime();
+    std::vector<TActorId> blockers;
+    for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+        const auto serviceId = NYql::NDq::MakeCheckpointStorageID();
+        const auto storageProxy = runtime.GetLocalServiceId(serviceId, nodeIndex);
+        UNIT_ASSERT(storageProxy);
+        const auto blocker = runtime.Register(new TCheckpointCreationBlocker(storageProxy), nodeIndex);
+        runtime.RegisterService(serviceId, blocker, nodeIndex);
+        blockers.push_back(blocker);
+    }
+
+    return [&runtime, blockers = std::move(blockers)] {
+        for (const auto& blocker : blockers) {
+            runtime.Send(new IEventHandle(blocker, TActorId(), new TEvents::TEvWakeup()), blocker.NodeId() - runtime.GetFirstNodeId());
+        }
+    };
+}
+
+void TStreamingTestFixture::WaitCheckpointUpdate(const TString& checkpointId, std::optional<std::pair<ui64, ui64>> initialBound) {
+    std::optional<ui64> minGeneration;
+    std::optional<ui64> minSeqNo;
+
+    if (initialBound) {
+        minGeneration = initialBound->first;
+        minSeqNo = initialBound->second;
+    }
+
     WaitFor(TEST_OPERATION_TIMEOUT, "checkpoint update", [&](TString& error) {
         const auto& result = ExecQuery(fmt::format(
             R"sql(
-                SELECT MIN(seq_no) AS seq_no FROM `.metadata/streaming/checkpoints/checkpoints_metadata`
-                WHERE graph_id = "{checkpoint_id}";
-            )sql",
-            "checkpoint_id"_a = checkpointId
-        ));
+                SELECT coordinator_generation, MIN(seq_no) AS seq_no FROM `.metadata/streaming/checkpoints/checkpoints_metadata`
+                WHERE graph_id = "{checkpoint_id}"
+                GROUP BY coordinator_generation
+                ORDER BY coordinator_generation
+                LIMIT 1;
+            )sql", "checkpoint_id"_a = checkpointId));
         UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
 
-        std::optional<uint64_t> seqNo;
-        CheckScriptResult(result[0], 1, 1, [&seqNo](TResultSetParser& resultSet) {
-            seqNo = resultSet.ColumnParser(0).GetOptionalUint64();
+        if (!result[0].RowsCount()) {
+            error = "checkpoints not found";
+            return false;
+        }
+
+        std::optional<ui64> generation;
+        std::optional<ui64> seqNo;
+        CheckScriptResult(result[0], 2, 1, [&generation, &seqNo](TResultSetParser& resultSet) {
+            generation = resultSet.ColumnParser("coordinator_generation").GetOptionalUint64();
+            seqNo = resultSet.ColumnParser("seq_no").GetOptionalUint64();
         });
 
-        if (!seqNo) {
-            error = "seq_no is null";
+        if (!seqNo || !generation) {
+            error = "seq_no or generation is null";
             return false;
         }
 
         if (!minSeqNo) {
             minSeqNo = *seqNo;
-            error = TStringBuilder() << "found initial seq_no: " << *minSeqNo;
+            minGeneration = *generation;
+            error = TStringBuilder() << "found initial checkpoint: " << *minGeneration << "." << *minSeqNo;
             return false;
         }
 
-        if (*minSeqNo != *seqNo) {
+        if (*minGeneration != *generation || *minSeqNo != *seqNo) {
+            Cerr << TString(TStringBuilder() << "Wait checkpoint update: checkpoint changed from " << *minGeneration << "." << *minSeqNo
+                                             << " to " << *generation << "." << *seqNo << "\n")
+                 << Flush;
             return true;
         }
 
-        error = TStringBuilder() << "seq_no is not changed from: " << *minSeqNo;
+        error = TStringBuilder() << "seq_no and generation is not changed from: " << *minGeneration << "." << *minSeqNo;
         return false;
+    }, TDuration::Seconds(1));
+}
+
+ui64 TStreamingTestFixture::GetLastCheckpointSeqNo(const TString& checkpointId) {
+    const auto& result = ExecQuery(fmt::format(R"sql(
+        SELECT MAX(seq_no) AS seq_no FROM `.metadata/streaming/checkpoints/checkpoints_metadata`
+        WHERE graph_id = "{checkpoint_id}";
+    )sql", "checkpoint_id"_a = checkpointId));
+    UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+    std::optional<ui64> seqNo;
+    CheckScriptResult(result[0], 1, 1, [&seqNo](TResultSetParser& resultSet) {
+        seqNo = resultSet.ColumnParser(0).GetOptionalUint64();
     });
+    UNIT_ASSERT_C(seqNo, "Checkpoints not found for graph " << checkpointId);
+
+    return *seqNo;
+}
+
+ui64 TStreamingTestFixture::CheckNoCheckpointUpdate(const TString& checkpointId, TDuration waitDuration, std::optional<ui64> expectedSeqNo) {
+    std::unordered_set<ui64> expectedSeqNoSet;
+
+    if (!expectedSeqNo) {
+        Sleep(TDuration::Seconds(2));   // Wait for checkpoints garbage collection after query start / restart
+        expectedSeqNoSet.emplace(GetLastCheckpointSeqNo(checkpointId));
+    } else {
+        expectedSeqNoSet.emplace(*expectedSeqNo);
+        expectedSeqNoSet.emplace(*expectedSeqNo + 1);   // May be allocated at most one checkpoint since last check
+    }
+
+    Sleep(waitDuration);
+    const auto seqNo = GetLastCheckpointSeqNo(checkpointId);
+    UNIT_ASSERT_C(expectedSeqNoSet.contains(seqNo),
+        "Unexpected checkpoint " << seqNo << " for graph " << checkpointId << ", expected set: " << JoinSeq(", ", expectedSeqNoSet));
+
+    return seqNo;
+}
+
+TString TStreamingTestFixture::GetStreamingQueryCheckpointId(const TString& queryName) {
+    const TString queryPath = TStringBuilder() << "/Root/" << queryName;
+
+    TString checkpointId;
+    WaitFor(TDuration::Seconds(30), TStringBuilder() << "checkpoint graph for " << queryPath, [&](TString& error) {
+        const auto& result = ExecQuery(fmt::format(R"sql(
+            SELECT DISTINCT graph_id FROM `.metadata/streaming/checkpoints/checkpoints_metadata`
+            WHERE graph_id LIKE "%{query_path}";
+        )sql", "query_path"_a = queryPath));
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+        TResultSetParser resultSet(result[0]);
+        if (resultSet.RowsCount() != 1) {
+            error = TStringBuilder() << "found " << resultSet.RowsCount() << " checkpoint graphs";
+            return false;
+        }
+
+        UNIT_ASSERT(resultSet.TryNextRow());
+        checkpointId = resultSet.ColumnParser(0).GetOptionalString().value_or("");
+        UNIT_ASSERT(!checkpointId.empty());
+        return true;
+    });
+
+    return checkpointId;
+}
+
+void TStreamingTestFixture::CheckStreamingQueryProperty(const TString& queryName, const TString& propertyName, const TString& expectedValue) {
+    auto& runtime = GetRuntime();
+    const auto& queryDesc =
+        Navigate(runtime, runtime.AllocateEdgeActor(), JoinPath({ "Root", queryName }), NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+
+    const auto& resultSet = queryDesc->ResultSet;
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.size(), 1);
+
+    const auto& streamingQuery = resultSet.at(0);
+    UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindStreamingQuery);
+    UNIT_ASSERT(streamingQuery.StreamingQueryInfo);
+
+    const auto& properties = streamingQuery.StreamingQueryInfo->Description.GetProperties().GetProperties();
+    const auto it = properties.find(propertyName);
+    UNIT_ASSERT_C(it != properties.end(), "Property '" << propertyName << "' not found");
+    UNIT_ASSERT_VALUES_EQUAL(it->second, expectedValue);
+}
+
+void TStreamingTestFixture::WaitStreamingQueryStatus(const TString& queryName, const TString& expectedStatus) {
+    WaitFor(TEST_OPERATION_TIMEOUT, TStringBuilder() << "streaming query status " << expectedStatus, [&](TString& error) {
+        const auto& result = ExecQuery(fmt::format(R"(
+            SELECT Status FROM `.sys/streaming_queries` WHERE Path = "/Root/{query_name}";)", "query_name"_a = queryName));
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+        std::string status;
+        CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+            status = resultSet.ColumnParser("Status").GetOptionalUtf8().value_or("");
+        });
+
+        error = TStringBuilder() << "query status: " << status;
+        return status == expectedStatus;
+    });
+}
+
+void TStreamingTestFixture::ValidateStreamingQueryAst(const TString& queryName, std::function<void(const TString&)> validator) {
+    WaitFor(TEST_OPERATION_TIMEOUT, "wait streaming query ast", [&]() {
+        const auto& result = ExecQuery(fmt::format(R"(
+            SELECT Ast FROM `.sys/streaming_queries` WHERE Path = "/Root/{query_name}")", "query_name"_a = queryName));
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+        TString ast;
+        CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+            ast = resultSet.ColumnParser("Ast").GetOptionalUtf8().value_or("");
+        });
+
+        if (!ast) {
+            return false;
+        }
+
+        validator(ast);
+        return true;
+    });
+}
+
+TString TStreamingTestFixture::GetStreamingQueryIssues(const TString& queryName) {
+    const auto& result = ExecQuery(fmt::format(R"(
+        SELECT Issues FROM `.sys/streaming_queries` WHERE Path = "/Root/{query_name}")", "query_name"_a = queryName));
+    UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+    TString issues;
+    CheckScriptResult(result[0], 1, 1, [&issues](TResultSetParser& resultSet) {
+        issues = resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or("");
+    });
+
+    return issues;
 }
 
 // Mock Connector utils
@@ -735,13 +1093,13 @@ void TStreamingTestFixture::WaitCheckpointUpdate(const std::string& checkpointId
 NYql::TGenericDataSourceInstance TStreamingTestFixture::GetMockConnectorSourceInstance() {
     NYql::TGenericDataSourceInstance dataSourceInstance;
     dataSourceInstance.set_kind(NYql::YDB);
-    dataSourceInstance.set_database(YDB_DATABASE);
+    dataSourceInstance.set_database("test_db");
     dataSourceInstance.set_use_tls(false);
     dataSourceInstance.set_protocol(NYql::NATIVE);
 
     auto& endpoint = *dataSourceInstance.mutable_endpoint();
     TIpPort port;
-    NHttp::CrackAddress(TString{YDB_ENDPOINT}, *endpoint.mutable_host(), port);
+    NHttp::CrackAddress(TString{ YDB_ENDPOINT }, *endpoint.mutable_host(), port);
     endpoint.set_port(port);
 
     auto& iamToken = *dataSourceInstance.mutable_credentials()->mutable_token();
@@ -752,14 +1110,14 @@ NYql::TGenericDataSourceInstance TStreamingTestFixture::GetMockConnectorSourceIn
 }
 
 // Should be called at most once
-void TStreamingTestFixture::SetupMockConnectorTableDescription(std::shared_ptr<TConnectorClientMock> mockClient, const TMockConnectorTableDescriptionSettings& settings) {
+void TStreamingTestFixture::SetupMockConnectorTableDescription(
+    std::shared_ptr<TConnectorClientMock> mockClient, const TMockConnectorTableDescriptionSettings& settings) {
     TTypeMappingSettings typeMappingSettings;
     typeMappingSettings.set_date_time_format(STRING_FORMAT);
 
     if (settings.DescribeCount) {
         auto describeTableBuilder = mockClient->ExpectDescribeTable();
-        describeTableBuilder
-            .Table(settings.TableName)
+        describeTableBuilder.Table(settings.TableName)
             .DataSourceInstance(GetMockConnectorSourceInstance())
             .TypeMappingSettings(typeMappingSettings);
 
@@ -771,32 +1129,38 @@ void TStreamingTestFixture::SetupMockConnectorTableDescription(std::shared_ptr<T
 
     if (settings.ListSplitsCount) {
         auto listSplitsBuilder = mockClient->ExpectListSplits();
+        // clang-format off
         auto fillListSplitExpectation = listSplitsBuilder
             .ValidateArgs(settings.ValidateListSplitsArgs ? TConnectorClientMock::EArgsValidation::Strict : TConnectorClientMock::EArgsValidation::DataSourceInstance)
             .Select()
                 .DataSourceInstance(GetMockConnectorSourceInstance())
                 .Table(settings.TableName)
                 .What();
+        // clang-format on
 
         FillMockConnectorRequestColumns(fillListSplitExpectation, settings.Columns);
 
         for (ui64 i = 0; i < settings.ListSplitsCount; ++i) {
+            // clang-format off
             auto responseBuilder = listSplitsBuilder.Result()
                 .AddResponse(NYql::NConnector::NewSuccess())
                     .Description("some binary description")
                     .Select()
                         .DataSourceInstance(GetMockConnectorSourceInstance())
                         .What();
+            // clang-format on
             FillMockConnectorRequestColumns(responseBuilder, settings.Columns);
         }
     }
 }
 
 // Should be called at most once
-void TStreamingTestFixture::SetupMockConnectorTableData(std::shared_ptr<TConnectorClientMock> mockClient, const TMockConnectorReadSplitsSettings& settings) {
+void TStreamingTestFixture::SetupMockConnectorTableData(
+    std::shared_ptr<TConnectorClientMock> mockClient, const TMockConnectorReadSplitsSettings& settings) {
     auto readSplitsBuilder = mockClient->ExpectReadSplits();
 
     {
+        // clang-format off
         auto columnsBuilder = readSplitsBuilder
             .Filtering(TReadSplitsRequest::FILTERING_OPTIONAL)
             .ValidateArgs(settings.ValidateReadSplitsArgs ? TConnectorClientMock::EArgsValidation::Strict : TConnectorClientMock::EArgsValidation::DataSourceInstance)
@@ -806,37 +1170,20 @@ void TStreamingTestFixture::SetupMockConnectorTableData(std::shared_ptr<TConnect
                     .Table(settings.TableName)
                     .DataSourceInstance(GetMockConnectorSourceInstance())
                     .What();
+        // clang-format on
         FillMockConnectorRequestColumns(columnsBuilder, settings.Columns);
     }
 
     for (ui64 i = 0; i < settings.NumberReadSplits; ++i) {
-        readSplitsBuilder.Result()
-            .AddResponse(settings.ResultFactory(), NYql::NConnector::NewSuccess());
+        readSplitsBuilder.Result().AddResponse(settings.ResultFactory(), NYql::NConnector::NewSuccess());
     }
 }
 
-// Other helpers
-
-std::function<void(const std::string&)> TStreamingTestFixture::AstChecker(ui64 txCount, ui64 stagesCount) {
-    const auto stringCounter = [](const std::string& str, const std::string& subStr) {
-        ui64 count = 0;
-        for (size_t i = str.find(subStr); i != std::string::npos; i = str.find(subStr, i + subStr.size())) {
-            ++count;
-        }
-        return count;
-    };
-
-    return [txCount, stagesCount, stringCounter](const std::string& ast) {
-        UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "KqpPhysicalTx"), txCount);
-        UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "DqPhyStage"), stagesCount);
-    };
-}
-
 void TStreamingTestFixture::EnsureNotInitialized(const std::string& info) {
-    UNIT_ASSERT_C(!Kikimr, "Kikimr runner is already initialized, can not setup " << info);
+    UNIT_ASSERT_C(!Kikimr, "Kikimr runner is already initialized, cannot setup " << info);
 }
 
-void TStreamingTestFixture::TearDown(NUnitTest::TTestContext& context)  {
+void TStreamingTestFixture::TearDown(NUnitTest::TTestContext& context) {
     PqGateway.Reset();
     TBase::TearDown(context);
 }
@@ -865,18 +1212,13 @@ void TStreamingSysViewTestFixture::StartQuery(const std::string& name) {
     ExecQuery(fmt::format(
         R"sql(
             CREATE STREAMING QUERY `{query_name}` AS DO BEGIN{text}END DO
-        )sql",
-        "query_name"_a = name,
-        "text"_a = GetQueryText(name)
-    ));
+        )sql", "query_name"_a = name, "text"_a = GetQueryText(name)));
 }
 
-std::vector<TStreamingSysViewTestFixture::TSysViewResult> TStreamingSysViewTestFixture::CheckSysView(std::vector<TSysViewRow> rows, const std::string& filter, const std::string& order) {
-    const auto& result = ExecQuery(TStringBuilder()
-        << "SELECT * FROM `.sys/streaming_queries`"
-        << (filter.empty() ? "" : " WHERE " + filter)
-        << (order.empty() ? "" : " ORDER BY " + order)
-    );
+std::vector<TStreamingSysViewTestFixture::TSysViewResult> TStreamingSysViewTestFixture::CheckSysView(
+    std::vector<TSysViewRow> rows, const std::string& filter, const std::string& order) {
+    const auto& result = ExecQuery(TStringBuilder() << "SELECT * FROM `.sys/streaming_queries`" << (filter.empty() ? "" : " WHERE " + filter)
+                                                    << (order.empty() ? "" : " ORDER BY " + order));
     UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
 
     if (order.ends_with("ASC")) {
@@ -893,14 +1235,19 @@ std::vector<TStreamingSysViewTestFixture::TSysViewResult> TStreamingSysViewTestF
     CheckScriptResult(result[0], SYS_VIEW_COLUMNS_COUNT, rows.size(), [&](TResultSetParser& resultSet) {
         const auto& row = rows[results.size()];
         auto& result = results.emplace_back();
-        UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Path").GetOptionalUtf8(), JoinPath(TVector{TString{"/Root"}, TString{row.Name}}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            *resultSet.ColumnParser("Path").GetOptionalUtf8(), JoinPath(TVector{ TString{ "/Root" }, TString{ row.Name } }));
         UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Status").GetOptionalUtf8(), row.Status);
         UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Issues").GetOptionalUtf8(), row.Issues);
 
-        const bool expectExecutions = row.Run && IsIn({"RUNNING", "COMPLETED", "CANCELLED", "FAILED"}, row.Status);
+        const bool expectExecutions = row.Run && IsIn({ "RUNNING", "COMPLETED", "CANCELLED", "FAILED" }, row.Status);
         if (expectExecutions || row.CheckPlan) {
-            UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), TStringBuilder() << "Write " << PQ_SOURCE);
-            UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Ast").GetOptionalUtf8(), row.Ast ? *row.Ast : JoinPath({"/Root", PQ_SOURCE}));
+            if (row.CheckPlan || IsIn({ "RUNNING", "COMPLETED", "CANCELLED" }, row.Status)) {
+                UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), TStringBuilder() << "Write " << PQ_SOURCE);
+            } else {
+                UNIT_ASSERT(resultSet.ColumnParser("Plan").GetOptionalUtf8());
+            }
+            UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Ast").GetOptionalUtf8(), row.Ast ? *row.Ast : JoinPath({ "/Root", PQ_SOURCE }));
         }
 
         UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Text").GetOptionalUtf8(), row.Text.value_or(GetQueryText(row.Name)));
@@ -916,14 +1263,15 @@ std::vector<TStreamingSysViewTestFixture::TSysViewResult> TStreamingSysViewTestF
         }
 
         if (row.SuspendedUntil) {
-            const auto delta = abs(resultSet.ColumnParser("SuspendedUntil").GetOptionalTimestamp()->SecondsFloat() - row.SuspendedUntil->SecondsFloat());
+            const auto delta =
+                abs(resultSet.ColumnParser("SuspendedUntil").GetOptionalTimestamp()->SecondsFloat() - row.SuspendedUntil->SecondsFloat());
             UNIT_ASSERT_GE(5, delta);
         } else {
             UNIT_ASSERT(!resultSet.ColumnParser("SuspendedUntil").GetOptionalTimestamp());
         }
 
         result.ExecutionId = *resultSet.ColumnParser("LastExecutionId").GetOptionalUtf8();
-        UNIT_ASSERT_VALUES_EQUAL(!result.ExecutionId.empty(), expectExecutions);
+        UNIT_ASSERT_VALUES_EQUAL(!result.ExecutionId.empty(), expectExecutions && IsIn({ "RUNNING", "COMPLETED", "CANCELLED" }, row.Status));
 
         const auto previousExecutionIds = *resultSet.ColumnParser("PreviousExecutionIds").GetOptionalUtf8();
         NJson::TJsonValue value;
@@ -939,6 +1287,19 @@ std::vector<TStreamingSysViewTestFixture::TSysViewResult> TStreamingSysViewTestF
 
             result.PreviousExecutionIds.emplace_back(executionId->GetString());
         }
+
+        if (!row.CreatedBy.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("CreatedBy").GetOptionalUtf8(), row.CreatedBy);
+        }
+        if (!row.ModifiedBy.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("ModifiedBy").GetOptionalUtf8(), row.ModifiedBy);
+        }
+        if (!row.StartedBy.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("StartedBy").GetOptionalUtf8(), row.StartedBy);
+        }
+        if (!row.StoppedBy.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("StoppedBy").GetOptionalUtf8(), row.StoppedBy);
+        }
     });
 
     return results;
@@ -952,24 +1313,17 @@ std::string TStreamingSysViewTestFixture::GetQueryText(const std::string& name) 
             ;INSERT INTO `{pq_source}`.`{output_topic}`
             /* {query_name} */
             SELECT * FROM `{pq_source}`.`{input_topic}`;
-        )sql",
-        "query_name"_a = name,
-        "pq_source"_a = PQ_SOURCE,
-        "input_topic"_a = InputTopic,
-        "output_topic"_a = OutputTopic
-    );
+        )sql", "query_name"_a = name, "pq_source"_a = PQ_SOURCE, "input_topic"_a = InputTopic, "output_topic"_a = OutputTopic);
 }
 
-TTestTopicLoader::TTestTopicLoader(const std::string& endpoint, const std::string& database, const std::string& topic, NThreading::TFuture<void> feature)
-    : Client(TDriver(TDriverConfig()
-        .SetEndpoint(endpoint)
-        .SetDatabase(database)
-    ))
+TTestTopicLoader::TTestTopicLoader(
+    const std::string& endpoint, const std::string& database, const std::string& topic, NThreading::TFuture<void> feature)
+    : Client(TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase(database)))
     , WriteSession(Client.CreateWriteSession(NYdb::NTopic::TWriteSessionSettings().Path(topic)))
     , Feature(feature)
     , Message(1_KB, 'x')
-{}
-
+{
+}
 
 void TTestTopicLoader::Bootstrap() {
     Become(&TTestTopicLoader::StateFunc);
@@ -998,10 +1352,7 @@ void TTestTopicLoader::WriteMessages() {
     }
 
     if (std::holds_alternative<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(*event)) {
-        WriteSession->Write(
-            std::move(std::get<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(*event).ContinuationToken),
-            Message
-        );
+        WriteSession->Write(std::move(std::get<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(*event).ContinuationToken), Message);
     }
 
     Schedule(TDuration::Zero(), new TEvents::TEvWakeup());
@@ -1010,7 +1361,8 @@ void TTestTopicLoader::WriteMessages() {
 TTabletKiller::TTabletKiller(ui64 tabletId, TDuration killerInterval)
     : TabletId(tabletId)
     , KillerInterval(killerInterval)
-{}
+{
+}
 
 void TTabletKiller::Bootstrap() {
     Become(&TThis::StateFunc);
@@ -1022,4 +1374,8 @@ void TTabletKiller::KillTablet() const {
     Schedule(KillerInterval, new TEvents::TEvWakeup());
 }
 
-} // namespace NKikimr::NKqp
+void TStreamingTestFixture::WaitForClassifierPropagation() {
+    NWorkloadManager::WaitForClassifierPropagation(GetRuntime());
+}
+
+}   // namespace NKikimr::NKqp

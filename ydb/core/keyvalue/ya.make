@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     defs.h
@@ -6,6 +6,8 @@ SRCS(
     keyvalue_collect_operation.h
     keyvalue_collector.cpp
     keyvalue_collector.h
+    keyvalue_copy_blob.cpp
+    keyvalue_copy_blob.h
     keyvalue_const.h
     keyvalue.cpp
     keyvalue_data.cpp
@@ -32,6 +34,7 @@ SRCS(
     keyvalue_state.cpp
     keyvalue_state.h
     keyvalue_state_collect.cpp
+    keyvalue_state_move_data.cpp
     keyvalue_storage_read_request.cpp
     keyvalue_storage_request.cpp
     keyvalue_storage_request.h
@@ -41,6 +44,13 @@ SRCS(
     keyvalue_utils.cpp
     keyvalue_utils.h
 )
+
+# ya make -DKIKIMR_KEYVALUE_CONSISTENCY_CHECKS=yes: recheck the index and the state size before every request transaction
+IF (KIKIMR_KEYVALUE_CONSISTENCY_CHECKS)
+    CFLAGS(
+        -DKIKIMR_KEYVALUE_CONSISTENCY_CHECKS=1
+    )
+ENDIF()
 
 PEERDIR(
     ydb/library/actors/core

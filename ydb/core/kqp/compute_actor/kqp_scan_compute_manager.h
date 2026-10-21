@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/kqp/tracing/kqp_scan_rendering.h>
 #include "kqp_compute_actor.h"
 #include "kqp_compute_state.h"
 #include "kqp_scan_common.h"
@@ -30,6 +31,7 @@ public:
     const ui64 ScanId;
     const ui64 TabletId;
     const ui64 Generation;
+    TShardScanTrace Trace;
     i64 DataChunksInFlightCount = 0;
     bool TracingStarted = false;
     const ui64 FreeSpace = (ui64)8 << 20;
@@ -42,10 +44,14 @@ public:
 
     void DoAck() {
         if (Finished) {
-            AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "scan_ack_on_finished")("actor_id", ActorId);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+                {"event", "scan_ack_on_finished"},
+                {"actorId", ActorId});
             return;
         }
-        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "scan_ack")("actor_id", ActorId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+            {"event", "scan_ack"},
+            {"actorId", ActorId});
         AFL_ENSURE(NeedAck);
         NeedAck = false;
         AFL_ENSURE(ActorId);
@@ -62,10 +68,12 @@ public:
     }
 
 public:
-    TShardScannerInfo(const ui64 scanId, TShardState& state, const IExternalObjectsProvider& externalObjectsProvider)
+    TShardScannerInfo(const ui64 scanId, TShardState& state, const IExternalObjectsProvider& externalObjectsProvider,
+        const NWilson::TTraceId& traceId)
         : ScanId(scanId)
         , TabletId(state.TabletId)
-        , Generation(state.Generation) {
+        , Generation(state.Generation)
+        , Trace(traceId, state.TabletId, state.TotalRetries) {
         const bool subscribed = std::exchange(state.SubscribedOnTablet, true);
 
         const auto& keyColumnTypes = externalObjectsProvider.GetKeyColumnTypes();
@@ -80,12 +88,18 @@ public:
         const auto ranges = state.GetScanRanges(keyColumnTypes, /* allRanges = */ hasCursor);
         auto ev = externalObjectsProvider.BuildEvKqpScan(ScanId, Generation, ranges, state.LastCursorProto);
 
-        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")("tablet_id", TabletId)("generation", Generation)(
-            "info", state.ToString(keyColumnTypes))("range", DebugPrintRanges(keyColumnTypes, ranges, *AppData()->TypeRegistry))(
-            "subscribed", subscribed)("cursor", state.CursorDebugString());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+            {"event", "start_scanner"},
+            {"tabletId", TabletId},
+            {"generation", Generation},
+            {"info", state.ToString(keyColumnTypes)},
+            {"range", DebugPrintRanges(keyColumnTypes, ranges, *AppData()->TypeRegistry)},
+            {"subscribed", subscribed},
+            {"cursor", state.CursorDebugString()});
 
         NActors::TActivationContext::AsActorContext().Send(
-            MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev.release(), TabletId, !subscribed), IEventHandle::FlagTrackDelivery);
+            MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev.release(), TabletId, !subscribed),
+            IEventHandle::FlagTrackDelivery, 0, Trace.GetTraceId());
     }
 
     ui64 GetTabletId() const {
@@ -105,7 +119,12 @@ public:
     }
 
     void Stop(const bool finalFlag, const TString& message) {
-        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "stop_scanner")("actor_id", ActorId)("message", message)("final_flag", finalFlag);
+        Trace.Finish(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+            {"event", "stop_scanner"},
+            {"actorId", ActorId},
+            {"message", message},
+            {"finalFlag", finalFlag});
         if (ActorId) {
             auto abortEv =
                 std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, message ? message : "stop from fetcher");
@@ -130,7 +149,9 @@ public:
     }
 
     void Start(const TActorId& actorId, bool allowPings) {
-        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")("actor_id", actorId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+            {"event", "start_scanner"},
+            {"actorId", actorId});
         AFL_ENSURE(!ActorId);
         ActorId = actorId;
         AllowPings = allowPings;
@@ -218,7 +239,8 @@ public:
     }
 
     void Finish() {
-        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "stop_scanner");
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+            {"event", "stop_scanner"});
         AFL_ENSURE(!Finished);
         Finished = true;
         Info->FinishWaitSendData();
@@ -237,8 +259,12 @@ public:
         std::deque<std::unique_ptr<TComputeTaskData>> DataQueue;
 
         bool SendData() {
-            AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "send_data_to_compute")("space", FreeSpace)("queue", DataQueue.size())(
-                "compute_actor_id", ActorId)("rows", DataQueue.size() ? DataQueue.front()->GetRowsCount() : 0);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+                {"event", "send_data_to_compute"},
+                {"space", FreeSpace},
+                {"queue", DataQueue.size()},
+                {"computeActorId", ActorId},
+                {"rows", DataQueue.size() ? DataQueue.front()->GetRowsCount() : 0});
             if (FreeSpace && DataQueue.size()) {
                 NActors::TActivationContext::AsActorContext().Send(ActorId, DataQueue.front()->ExtractEvent());
                 DataQueue.front()->Finish();
@@ -272,7 +298,9 @@ public:
         }
 
         void AddDataToSend(std::unique_ptr<TComputeTaskData>&& sendTask) {
-            AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "add_data_to_compute")("rows", sendTask->GetRowsCount());
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+                {"event", "add_data_to_compute"},
+                {"rows", sendTask->GetRowsCount()});
             DataQueue.emplace_back(std::move(sendTask));
             SendData();
         }
@@ -318,7 +346,9 @@ public:
     }
 
     bool OnComputeAck(const TActorId& computeActorId, const ui64 freeSpace) {
-        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "ack")("compute_actor_id", computeActorId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+            {"event", "ack"},
+            {"computeActorId", computeActorId});
         auto it = ComputeActorsById.find(computeActorId);
         AFL_ENSURE(it != ComputeActorsById.end())("compute_actor_id", computeActorId);
         it->second->IncTotalAcksFromCompute();
@@ -335,7 +365,9 @@ public:
     }
 
     void OnReceiveData(const std::optional<ui32> computeShardId, std::unique_ptr<TComputeTaskData>&& sendTask) {
-        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "on_receive")("compute_shard_id", computeShardId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+            {"event", "on_receive"},
+            {"computeShardId", computeShardId});
         if (!computeShardId) {
             for (auto&& i : ComputeActors) {
                 if (i.IsFree()) {
@@ -361,10 +393,13 @@ private:
     THashMap<ui64, std::shared_ptr<TShardScannerInfo>> ShardScanners;
     const ui64 ScanId;
     const IExternalObjectsProvider& ExternalObjectsProvider;
+    const NWilson::TTraceId TraceId;
 
 public:
     void AbortAllScanners(const TString& errorMessage) {
-        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "abort_all_scanners")("error_message", errorMessage);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+            {"event", "abort_all_scanners"},
+            {"errorMessage", errorMessage});
         for (auto&& itTablet : ShardScanners) {
             itTablet.second->Stop(true, errorMessage);
         }
@@ -402,13 +437,21 @@ public:
     void RegisterScannerActor(const ui64 tabletId, const ui64 generation, const TActorId& scanActorId, bool allowPings) {
         auto state = GetShardState(tabletId);
         if (!state || generation != state->Generation) {
-            AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "register_scanner_actor_dropped")("actor_id", scanActorId)(
-                "is_state_initialized", !!state)("generation", generation);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+                {"event", "register_scanner_actor_dropped"},
+                {"actorId", scanActorId},
+                {"isStateInitialized", !!state},
+                {"generation", generation});
             return;
         }
 
-        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "register_scanner_actor")("actor_id", scanActorId)("state", state->State)(
-            "tablet_id", state->TabletId)("generation", state->Generation)("shard_actor", state->ActorId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+            {"event", "register_scanner_actor"},
+            {"actorId", scanActorId},
+            {"state", state->State},
+            {"tabletId", state->TabletId},
+            {"generation", state->Generation},
+            {"shardActor", state->ActorId});
 
         AFL_ENSURE(state->State == NComputeActor::EShardState::Starting)("state", state->State)("tablet_id", tabletId);
         AFL_ENSURE(!state->ActorId)("actor_id", state->ActorId);
@@ -423,19 +466,25 @@ public:
 
     void StartScanner(TShardState& state) {
         NYDBTest::TControllers::GetKqpController()->OnInitTabletScan(state.TabletId);
-        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")("state", state.State)("tablet_id", state.TabletId)(
-            "generation", state.Generation);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+            {"event", "start_scanner"},
+            {"state", state.State},
+            {"tabletId", state.TabletId},
+            {"generation", state.Generation});
 
         AFL_ENSURE(state.State == NComputeActor::EShardState::Initial)("state", state.State);
         AFL_ENSURE(state.TabletId);
         AFL_ENSURE(!state.ActorId)("actor_id", state.ActorId);
         state.State = NComputeActor::EShardState::Starting;
-        auto newScanner = std::make_shared<TShardScannerInfo>(ScanId, state, ExternalObjectsProvider);
+        auto newScanner = std::make_shared<TShardScannerInfo>(ScanId, state, ExternalObjectsProvider, TraceId);
         AFL_ENSURE(ShardScanners.emplace(state.TabletId, newScanner).second);
     }
 
     void StopScanner(const ui64 tabletId, const bool stopShard = true) {
-        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "scanner_finished")("tablet_id", tabletId)("stop_shard", stopShard);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+            {"event", "scanner_finished"},
+            {"tabletId", tabletId},
+            {"stopShard", stopShard});
         auto& state = GetShardStateVerified(tabletId);
         const auto actorId = state->ActorId;
         if (actorId) {
@@ -476,15 +525,19 @@ public:
         return nullptr;
     }
 
-    TInFlightShards(const ui64 scanId, const IExternalObjectsProvider& externalObjectsProvider)
+    TInFlightShards(const ui64 scanId, const IExternalObjectsProvider& externalObjectsProvider,
+        NWilson::TTraceId traceId)
         : ScanId(scanId)
-        , ExternalObjectsProvider(externalObjectsProvider) {
+        , ExternalObjectsProvider(externalObjectsProvider)
+        , TraceId(std::move(traceId)) {
     }
     bool IsActive() const {
         return IsActiveFlag;
     }
     void Stop() {
-        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "wait_all_scanner_finished")("scans", GetScansCount());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+            {"event", "wait_all_scanner_finished"},
+            {"scans", GetScansCount()});
         Y_ABORT_UNLESS(GetScansCount() == 0);
         IsActiveFlag = false;
     }

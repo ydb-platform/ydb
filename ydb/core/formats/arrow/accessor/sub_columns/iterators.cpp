@@ -1,17 +1,12 @@
 #include "iterators.h"
-#include <yql/essentials/types/binary_json/read.h>
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 NJson::TJsonValue TGeneralIterator::GetValue() const {
     AFL_VERIFY(IsValidFlag);
-    if (RawValue.empty()) {
-        return NJson::TJsonValue(NJson::JSON_UNDEFINED);
-    }
-    auto data = NBinaryJson::SerializeToJson(TStringBuf(RawValue.data(), RawValue.size()));
-    NJson::TJsonValue res;
-    AFL_VERIFY(NJson::ReadJsonTree(data, &res));
-    return res;
+    AFL_VERIFY(CurrentValue);
+    return CurrentValue->ToJsonValue();
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

@@ -1,6 +1,6 @@
 #include "suspendable_action_queue.h"
 
-#include "profiling_helpers.h"
+#include "helpers.h"
 #include "single_queue_scheduler_thread.h"
 #include "system_invokers.h"
 
@@ -75,7 +75,7 @@ public:
 
 private:
     const TSuspendableActionQueueOptions Options_;
-    const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_ = New<NThreading::TEventCount>();
+    const TIntrusivePtr<TEventCount> CallbackEventCount_ = New<TEventCount>();
     const TMpscInvokerQueuePtr Queue_;
     const IInvokerPtr Invoker_;
     const TMpscSuspendableSingleQueueSchedulerThreadPtr Thread_;

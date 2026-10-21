@@ -5,8 +5,11 @@
 #include <yt/yt/client/chaos_client/public.h>
 
 #include <yt/yt/client/table_client/unversioned_row.h>
+#include <yt/yt/client/table_client/schema.h>
 
-#include <yt/yt/client/tablet_client/public.h>
+#include <yt/yt/client/tablet_client/index_info.h>
+
+#include <yt/yt/core/ytree/yson_struct.h>
 
 namespace NYT::NChaosClient {
 
@@ -80,6 +83,7 @@ struct TReplicationCard
     NTransactionClient::TTimestamp CurrentTimestamp = NTransactionClient::NullTimestamp;
     NTabletClient::TReplicatedTableOptionsPtr ReplicatedTableOptions;
     TReplicationCardCollocationId ReplicationCardCollocationId;
+    THashMap<TReplicationCardId, NTabletClient::TIndexInfo> SecondaryIndices;
 
     //! Returns pointer to replica with a given id, nullptr if none.
     TReplicaInfo* FindReplica(TReplicaId replicaId);
@@ -138,7 +142,7 @@ void FormatValue(
     const TReplicationCard& replicationCard,
     TStringBuf /*spec*/,
     std::optional<TReplicationProgressProjection> replicationProgressProjection = std::nullopt);
-TString ToString(
+std::string ToString(
     const TReplicationCard& replicationCard,
     std::optional<TReplicationProgressProjection> replicationProgressProjection = std::nullopt);
 
@@ -172,6 +176,9 @@ void CanonizeReplicationProgress(TReplicationProgress* progress);
 
 NTransactionClient::TTimestamp GetReplicationProgressMinTimestamp(const TReplicationProgress& progress);
 NTransactionClient::TTimestamp GetReplicationProgressMaxTimestamp(const TReplicationProgress& progress);
+std::pair<NTransactionClient::TTimestamp, NTransactionClient::TTimestamp> GetReplicationProgressMinMaxTimestamp(
+    const TReplicationProgress& progress);
+
 NTransactionClient::TTimestamp GetReplicationCardProgressMinTimestamp(
     const TReplicationCard& replicationCard,
     NTableClient::TLegacyKey lower,

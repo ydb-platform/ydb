@@ -61,6 +61,7 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
 {
     Owner_ = Proto_.self().owner();
     CreationTimestamp_ = NScheme::TVirtualTimestamp(Proto_.self().created_at());
+    InterruptInheritance_ = Proto_.self().interrupt_permission_inheritance();
     PermissionToSchemeEntry(Proto_.self().permissions(), &Permissions_);
     PermissionToSchemeEntry(Proto_.self().effective_permissions(), &EffectivePermissions_);
 
@@ -282,6 +283,10 @@ const std::vector<NScheme::TPermissions>& TTopicDescription::GetPermissions() co
 
 const std::vector<NScheme::TPermissions>& TTopicDescription::GetEffectivePermissions() const {
     return EffectivePermissions_;
+}
+
+bool TTopicDescription::GetInterruptInheritance() const {
+    return InterruptInheritance_;
 }
 
 TPartitioningSettings::TPartitioningSettings(const Ydb::Topic::PartitioningSettings& settings)
@@ -627,6 +632,11 @@ std::shared_ptr<IWriteSession> TTopicClient::CreateWriteSession(const TWriteSess
 TAsyncStatus TTopicClient::CommitOffset(const std::string& path, uint64_t partitionId, const std::string& consumerName, uint64_t offset,
     const TCommitOffsetSettings& settings) {
     return Impl_->CommitOffset(path, partitionId, consumerName, offset, settings);
+}
+
+TAsyncStatus TTopicClient::ResetOffset(const std::string& path, const std::string& consumerName,
+    const TResetOffsetSettings& settings) {
+    return Impl_->ResetOffset(path, consumerName, settings);
 }
 
 namespace {

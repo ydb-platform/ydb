@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/library/actors/core/allocation_cache_families.h>
 #include "mailbox.h"
 
 #include <atomic>
@@ -28,11 +29,6 @@ namespace NActors {
         ESendingType SendingType = ESendingType::Common;
     };
 
-    struct TLocalQueueContext {
-        ui32 WriteTurn = 0;
-        ui16 LocalQueueSize = 0;
-    };
-
     struct TThreadActivityContext {
         std::atomic<i64> StartOfProcessingEventTS = GetCycleCountFast();
         std::atomic<i64> ActivationStartTS = 0;
@@ -50,7 +46,6 @@ namespace NActors {
         ui64 TimePerMailboxTs = 0;
         ui32 EventsPerMailbox = 0;
         ui64 SoftDeadlineTs = ui64(-1);
-        bool UseRingQueueValue = false;
 
         TWorkerContext(TWorkerId workerId, IExecutorPool* pool, IExecutorPool* sharedPool);
 
@@ -58,7 +53,6 @@ namespace NActors {
         TString PoolName() const;
         ui32 OwnerPoolId() const;
         bool IsShared() const;
-        bool UseRingQueue() const;
         void AssignPool(IExecutorPool* pool, ui64 softDeadlineTs = -1);
         void FreeMailbox(TMailbox* mailbox);
     };
@@ -68,7 +62,6 @@ namespace NActors {
         ui32 ExecutedEvents = 0;
         ui32 OverwrittenEventsPerMailbox = 0;
         ui64 OverwrittenTimePerMailboxTs = 0;
-        TStackVec<TActorId, 1> PreemptionSubscribed;
         bool IsNeededToWaitNextActivation = true;
         ESendingType SendingType = ESendingType::Common;
         NHPTimer::STime HPStart = 0;
@@ -87,12 +80,12 @@ namespace NActors {
 
     struct TThreadContext {
         TWorkerContext WorkerContext;
-        TLocalQueueContext LocalQueueContext;
         TThreadActivityContext ActivityContext;
         TExecutionContext ExecutionContext;
         TMailboxContext MailboxContext;
         TExecutionStats *ExecutionStats = nullptr;
-
+        // Borrowed family caches, populated by the allocation-cache subsystem.
+        TAllocationCachePointers AllocationCachePointers;
 
         bool IsEnoughCpu = true;
         TWaitingStats<ui64> *WaitingStats = nullptr;
@@ -127,7 +120,6 @@ namespace NActors {
         ui32 EventsPerMailbox() const;
         ui64 SoftDeadlineTs() const;
         void FreeMailbox(TMailbox* mailbox);
-        bool UseRingQueue() const;
         void AssignPool(IExecutorPool* pool, ui64 softDeadlineTs = Max<ui64>());
 
         bool CheckSendingType(ESendingType type) const;
@@ -156,6 +148,11 @@ namespace NActors {
         void ResetMailboxContext();
     };
 
-    extern Y_POD_THREAD(TThreadContext*) TlsThreadContext; // in actor.cpp
+    // Native TLS is constant-initialized; avoid an initialization check on access.
+    extern
+#ifdef Y_HAVE_FAST_POD_TLS
+        constinit
+#endif
+        Y_POD_THREAD(TThreadContext*) TlsThreadContext; // in actor.cpp
 
 }

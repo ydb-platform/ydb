@@ -1,14 +1,14 @@
+import json
 import ydb.apps.dstool.lib.common as common
 import ydb.public.api.protos.draft.ydb_nbs_pb2 as nbs
-
-from ydb.public.api.grpc.draft import ydb_nbs_v1_pb2_grpc as nbs_grpc_server
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 
 
 description = 'Delete NBS 2.0 partition'
 
 
 def add_options(p):
-    p.add_argument('--id', type=str, required=True, help='Partition tablet id')
+    p.add_argument('--disk-id', type=str, required=True, help='Disk id')
 
 
 def is_successful_response(response):
@@ -16,13 +16,17 @@ def is_successful_response(response):
 
 
 def do(args):
-    request = nbs.DeletePartitionRequest(TabletId=args.id)
-    response = invoke_nbs_request('DeletePartition', request)
+    request = nbs.DeletePartitionRequest(DiskId=args.disk_id)
+    response = common.invoke_nbs_request('DeletePartition', request)
 
     common.print_nbs_request_result(args, request, response)
 
+    output = {
+        'status': StatusIds.StatusCode.Name(response.operation.status),
+    }
+    if common.get_status(response):
+        result = nbs.DeletePartitionResult()
+        response.operation.result.Unpack(result)
+        output['diskId'] = result.DiskId
 
-def invoke_nbs_request(request_type, request):
-    response = common.invoke_grpc(request_type, request, stub_factory=nbs_grpc_server.NbsServiceStub)
-
-    return response
+    print(json.dumps(output))

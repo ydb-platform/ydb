@@ -1,0 +1,10 @@
+{"event_dt"="9";"key"="023";"subkey"="3";"value"="aaa"};
+{"event_dt"="8";"key"="037";"subkey"="5";"value"="ddd"};
+{"event_dt"="7";"key"="075";"subkey"="1";"value"="abc"};
+{"event_dt"="6";"key"="150";"subkey"="1";"value"="aaa"};
+{"event_dt"="5";"key"="150";"subkey"="3";"value"="iii"};
+{"event_dt"="4";"key"="150";"subkey"="8";"value"="zzz"};
+{"event_dt"="3";"key"="200";"subkey"="7";"value"="qqq"};
+{"event_dt"="2";"key"="527";"subkey"="4";"value"="bbb"};
+{"event_dt"="1";"key"="761";"subkey"="6";"value"="ccc"};
+{"event_dt"="0";"key"="911";"subkey"="2";"value"="kkk"};

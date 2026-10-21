@@ -1,7 +1,6 @@
 #include "mkql_builtins_impl.h" // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -56,5 +55,4 @@ void RegisterFind(IBuiltinFunctionRegistry& registry) {
     RegisterFindOpt<NUdf::TDataType<NUdf::TUtf8>, true>(registry, "RFind");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

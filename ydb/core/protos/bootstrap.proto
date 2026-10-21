@@ -40,6 +40,8 @@ message TBootstrap {
         TENANT_SLOT_BROKER = 53;
         CONSOLE = 54;
 
+        DBS_CONTROLLER = 60;
+
         FAKE_DATASHARD = 700;
     }
 
@@ -55,7 +57,7 @@ message TBootstrap {
         optional bool StandBy = 4;
         optional uint64 WatchThreshold = 5;
         optional bool StartFollowers = 6;
-        optional bool AllowDynamicConfiguration = 7 [default = true];
+        optional bool AllowDynamicConfiguration = 7 [default = false];
         optional EBootType BootType = 8;
     }
 

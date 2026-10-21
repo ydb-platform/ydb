@@ -8,6 +8,7 @@
 #include <util/random/random.h>
 #include <util/system/info.h>
 
+#include <cstdint>
 #include <thread>
 
 namespace NMonitoring {
@@ -28,6 +29,52 @@ protected:
         }
     }
 };
+
+TEST_F(TAllocatorSuite32, SmallPageAlignedAllocationsReturnToPageAlignedChain) {
+    using namespace NInterconnect::NRdma;
+
+    const TMemPoolSettings settings {
+        .SizeLimitMb = 32
+    };
+    static auto pool = CreateSlotMemPool(nullptr, settings);
+
+    constexpr ui32 batchSize = 32 * 1024 * 1024;
+    constexpr ui32 smallSize = 1;
+    constexpr ui32 smallSlotSize = 512;
+    const ui32 pageSize = NSystemInfo::GetPageSize();
+
+    ASSERT_GT(pageSize, smallSlotSize) << "test assumes page-aligned allocations use a larger slot class";
+    ASSERT_EQ(batchSize % pageSize, 0u);
+
+    const ui32 pageSlots = batchSize / pageSize;
+
+    {
+        std::vector<TMemRegionPtr> pageAlignedRegions;
+        pageAlignedRegions.reserve(pageSlots);
+
+        for (ui32 i = 0; i < pageSlots; ++i) {
+            auto reg = pool->Alloc(smallSize, IMemPool::PAGE_ALIGNED);
+            ASSERT_TRUE(reg) << "small page-aligned allocation failed at index " << i;
+            ASSERT_EQ(reg->GetSize(), smallSize);
+            ASSERT_EQ(reinterpret_cast<uintptr_t>(reg->GetAddr()) % pageSize, 0u);
+            pageAlignedRegions.push_back(std::move(reg));
+        }
+
+        ASSERT_FALSE(pool->Alloc(smallSize, IMemPool::PAGE_ALIGNED))
+            << "single 32MB pool must be exhausted by page-sized slots";
+    }
+
+    std::vector<TMemRegionPtr> smallRegions;
+    smallRegions.reserve(pageSlots + 1);
+
+    for (ui32 i = 0; i < pageSlots + 1; ++i) {
+        auto reg = pool->Alloc(smallSlotSize, IMemPool::EMPTY);
+        ASSERT_TRUE(reg) << "small allocation failed at index " << i
+            << "; freed page-aligned slots were likely returned to the 512-byte chain";
+        ASSERT_EQ(reg->GetSize(), smallSlotSize);
+        smallRegions.push_back(std::move(reg));
+    }
+}
 
 TEST_F(TAllocatorSuite32, SlotPoolLimit) {
     const NInterconnect::NRdma::TMemPoolSettings settings {

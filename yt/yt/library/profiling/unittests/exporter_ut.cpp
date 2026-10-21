@@ -149,7 +149,7 @@ TEST(TSolomonExporterTest, SplitRateHistogramIntoGauges)
     EraseIf(sensors, [] (const auto& sensor) {
         return sensor["labels"]["sensor"].GetStringSafe() != "ytyt.foo";
     });
-    THashSet<TString> buckets = {"0.001", "0.002", "0.004", "0.008", "0.016", "0.032", "0.064", "0.125", "0.25", "0.5", "1", "inf"};
+    THashSet<std::string> buckets = {"0.001", "0.002", "0.004", "0.008", "0.016", "0.032", "0.064", "0.125", "0.25", "0.5", "1", "inf"};
     ASSERT_EQ(buckets.size(), sensors.size());
     for (const auto& sensor : sensors) {
         auto bin = sensor["labels"]["bin"].GetStringSafe();

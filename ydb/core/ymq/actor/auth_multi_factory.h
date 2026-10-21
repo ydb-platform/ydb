@@ -75,6 +75,7 @@ public:
         , FolderId_(std::move(data.FolderID))
         , CloudId_(std::move(data.CloudID))
         , ResourceId_(std::move(data.ResourceID))
+        , SourceAddress_(std::move(data.SourceAddress))
         , Counters_(*data.Counters)
         , UserSidCallback_(std::move(data.UserSidCallback))
     {
@@ -103,15 +104,12 @@ public:
     void HandleQueueFolderIdAndCustomName(TSqsEvents::TEvQueueFolderIdAndCustomName::TPtr& ev);
     void OnFinishedRequest();
 
-    template<typename TSignatureProto>
-    void FillSignatureProto(TSignatureProto& signature) const;
-
     void ProcessAuthentication(TAutoPtr<::NActors ::IEventHandle> &ev);
     void ProcessAuthorization(TAutoPtr<::NActors::IEventHandle> &ev);
     void Authenticate();
     void Authorize();
     void RequestFolderService();
-    void RetrieveCachedFolderId();
+    void RequestQueueFolderId();
 
     template<typename TProto>
     void ProposeStaticCreds(TProto& req);
@@ -147,8 +145,10 @@ protected:
     TString UserSID_;
     TString AuthType_;
     TString ResourceId_;
+    TString SourceAddress_;
     ui32 RequestsToWait_ = 0;
     EActionClass ActionClass_ = EActionClass::QueueSpecified;
+    bool AuthenticateIamToken_ = false;
     TCloudAuthCounters& Counters_;
     TInstant AuthenticateRequestStartTimestamp_;
     TInstant AuthorizeRequestStartTimestamp_;

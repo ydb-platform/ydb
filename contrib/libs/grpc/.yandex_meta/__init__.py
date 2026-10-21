@@ -98,6 +98,8 @@ def post_install(self):
         upb.ADDINCL.add("contrib/restricted/google/utf8_range")
 
     with self.yamakes["."] as m:
+        m.PEERDIR.add("contrib/libs/zstd")
+        m.ADDINCL.add("contrib/libs/zstd/include")
         # fmt: off
         m.RECURSE += [
             os.path.dirname(path)
@@ -113,6 +115,7 @@ grpc = CMakeNinjaNixProject(
     nixattr="grpc",
     license="Apache-2.0",
     keep_paths=[
+        "README_YANDEX.md",
         "src/core/lib/security/security_connector/add_arcadia_root_certs.*",
     ],
     ignore_targets=[
@@ -134,8 +137,10 @@ grpc = CMakeNinjaNixProject(
         "grpcpp_channelz",
         # third_party libraries
         "address_sorting",
-        "upb",
+        "upb_base_lib",
         "upb_json_lib",
+        "upb_mem_lib",
+        "upb_message_lib",
         "upb_textformat_lib",
         "utf8_range_lib",
     ],
@@ -147,12 +152,17 @@ grpc = CMakeNinjaNixProject(
         "grpcpp_channelz": "grpcpp_channelz",
         # third_party libraries
         "address_sorting": "third_party/address_sorting",
-        "upb": "third_party/upb",
+        "upb_base_lib": "third_party/upb",
         "utf8_range_lib": "third_party/utf8_range",
     },
     put_with={
         "grpc": ["grpc++", "gpr"],
-        "upb": ["upb_json_lib", "upb_textformat_lib"],
+        "upb_base_lib": [
+            "upb_json_lib",
+            "upb_mem_lib",
+            "upb_message_lib",
+            "upb_textformat_lib",
+        ],
     },
     unbundle_from={
         "xxhash": "third_party/xxhash",
@@ -175,6 +185,7 @@ grpc = CMakeNinjaNixProject(
         "src/core/lib/event_engine/cf_engine/*.h",
         "src/core/lib/event_engine/nameser.h",
         "src/core/lib/event_engine/windows/grpc_polled_fd_windows.h",
+        "src/core/lib/event_engine/windows/native_windows_dns_resolver.h",
         "src/core/lib/event_engine/windows/windows_endpoint.h",
         "src/core/lib/event_engine/windows/windows_engine.h",
         "src/core/lib/event_engine/windows/windows_listener.h",

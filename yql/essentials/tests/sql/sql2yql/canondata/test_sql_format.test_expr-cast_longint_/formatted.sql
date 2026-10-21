@@ -1,4 +1,3 @@
-/* postgres can not */
 $value = CAST(-7 AS Decimal (10, 0));
 
 SELECT

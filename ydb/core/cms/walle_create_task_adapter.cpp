@@ -7,6 +7,8 @@
 
 #include <optional>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 using namespace NKikimrCms;
@@ -26,8 +28,8 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         auto &rec = RequestEvent->Get()->Record;
 
-        LOG_INFO(ctx, NKikimrServices::CMS, "Processing Wall-E request: %s",
-                  rec.ShortDebugString().data());
+        YDB_LOG_INFO_CTX(ctx, "Processing Wall-E request",
+            {"ev", rec.ShortDebugString()});
 
         if (!Actions.contains(rec.GetAction())) {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "Unsupported action", ctx);
@@ -52,9 +54,9 @@ private:
             CFunc(TEvCms::EvWalleTaskStored, Finish);
             HFunc(TEvCms::TEvStoreWalleTaskFailed, Handle);
         default:
-            LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS,
-                      "TWalleCreateTaskAdapter::StateWork ignored event type: %" PRIx32 " event: %s",
-                      ev->GetTypeRewrite(), ev->ToString().data());
+            YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TWalleCreateTaskAdapter::StateWork ignored event",
+                {"type", ev->GetTypeRewrite()},
+                {"ev", ev->ToString()});
         }
     }
 
@@ -127,7 +129,7 @@ private:
         } else {
             request->Record.SetPriority(WALLE_DEFAULT_PRIORITY);
         }
-        
+
         auto it = Actions.find(action);
         Y_ABORT_UNLESS(it != Actions.end());
 

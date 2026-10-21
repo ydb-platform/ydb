@@ -11,29 +11,33 @@
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
 
-""" The interfaces in this module are not intended for public use.
+"""The interfaces in this module are not intended for public use.
 
 This module defines interfaces for applying checksums to HTTP requests within
 the context of botocore. This involves both resolving the checksum to be used
 based on client configuration and environment, as well as application of the
 checksum to the request.
 """
+
 import base64
 import io
 import logging
 from binascii import crc32
 from hashlib import sha1, sha256
 
-from botocore.compat import HAS_CRT
+from botocore.compat import HAS_CRT, has_minimum_crt_version, urlparse
 from botocore.exceptions import (
     AwsChunkedWrapperError,
     FlexibleChecksumError,
     MissingDependencyException,
 )
+from botocore.model import StructureShape
 from botocore.response import StreamingBody
+from botocore.useragent import register_feature_id
 from botocore.utils import (
     conditionally_calculate_md5,
     determine_content_length,
+    has_checksum_header,
 )
 
 if HAS_CRT:
@@ -42,6 +46,8 @@ else:
     crt_checksums = None
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_CHECKSUM_ALGORITHM = "CRC32"
 
 
 class BaseChecksum:
@@ -106,6 +112,19 @@ class CrtCrc32cChecksum(BaseChecksum):
 
     def digest(self):
         return self._int_crc32c.to_bytes(4, byteorder="big")
+
+
+class CrtCrc64NvmeChecksum(BaseChecksum):
+    # Note: This class is only used if the CRT is available
+    def __init__(self):
+        self._int_crc64nvme = 0
+
+    def update(self, chunk):
+        new_checksum = crt_checksums.crc64nvme(chunk, self._int_crc64nvme)
+        self._int_crc64nvme = new_checksum & 0xFFFFFFFFFFFFFFFF
+
+    def digest(self):
+        return self._int_crc64nvme.to_bytes(8, byteorder="big")
 
 
 class Sha1Checksum(BaseChecksum):
@@ -225,6 +244,17 @@ class StreamingChecksumBody(StreamingBody):
             self._validate_checksum()
         return chunk
 
+    def readinto(self, b):
+        amount_read = super().readinto(b)
+        if amount_read == len(b):
+            view = b
+        else:
+            view = memoryview(b)[:amount_read]
+        self._checksum.update(view)
+        if amount_read == 0 and len(b) > 0:
+            self._validate_checksum()
+        return amount_read
+
     def _validate_checksum(self):
         if self._checksum.digest() != base64.b64decode(self._expected):
             error_msg = (
@@ -245,7 +275,19 @@ def resolve_request_checksum_algorithm(
     params,
     supported_algorithms=None,
 ):
+    # If the header is already set by the customer, skip calculation
+    if has_checksum_header(request):
+        return
+
+    checksum_context = request["context"].get("checksum", {})
+    request_checksum_calculation = request["context"][
+        "client_config"
+    ].request_checksum_calculation
     http_checksum = operation_model.http_checksum
+    request_checksum_required = (
+        operation_model.http_checksum_required
+        or http_checksum.get("requestChecksumRequired")
+    )
     algorithm_member = http_checksum.get("requestAlgorithmMember")
     if algorithm_member and algorithm_member in params:
         # If the client has opted into using flexible checksums and the
@@ -264,37 +306,61 @@ def resolve_request_checksum_algorithm(
                     )
                 )
             raise FlexibleChecksumError(
-                error_msg="Unsupported checksum algorithm: %s" % algorithm_name
+                error_msg=f"Unsupported checksum algorithm: {algorithm_name}"
             )
-
-        location_type = "header"
-        if operation_model.has_streaming_input:
-            # Operations with streaming input must support trailers.
-            if request["url"].startswith("https:"):
-                # We only support unsigned trailer checksums currently. As this
-                # disables payload signing we'll only use trailers over TLS.
-                location_type = "trailer"
-
-        algorithm = {
-            "algorithm": algorithm_name,
-            "in": location_type,
-            "name": "x-amz-checksum-%s" % algorithm_name,
-        }
-
-        if algorithm["name"] in request["headers"]:
-            # If the header is already set by the customer, skip calculation
-            return
-
-        checksum_context = request["context"].get("checksum", {})
-        checksum_context["request_algorithm"] = algorithm
-        request["context"]["checksum"] = checksum_context
-    elif operation_model.http_checksum_required or http_checksum.get(
-        "requestChecksumRequired"
+    elif request_checksum_required or (
+        algorithm_member and request_checksum_calculation == "when_supported"
     ):
-        # Otherwise apply the old http checksum behavior via Content-MD5
-        checksum_context = request["context"].get("checksum", {})
-        checksum_context["request_algorithm"] = "conditional-md5"
-        request["context"]["checksum"] = checksum_context
+        # Don't use a default checksum for presigned requests.
+        if request["context"].get("is_presign_request"):
+            return
+        algorithm_name = DEFAULT_CHECKSUM_ALGORITHM.lower()
+        algorithm_member_header = _get_request_algorithm_member_header(
+            operation_model, request, algorithm_member
+        )
+        if algorithm_member_header is not None:
+            checksum_context["request_algorithm_header"] = {
+                "name": algorithm_member_header,
+                "value": DEFAULT_CHECKSUM_ALGORITHM,
+            }
+    else:
+        return
+
+    location_type = "header"
+    if (
+        operation_model.has_streaming_input
+        and urlparse(request["url"]).scheme == "https"
+    ):
+        if request["context"]["client_config"].signature_version != 's3':
+            # Operations with streaming input must support trailers.
+            # We only support unsigned trailer checksums currently. As this
+            # disables payload signing we'll only use trailers over TLS.
+            location_type = "trailer"
+
+    algorithm = {
+        "algorithm": algorithm_name,
+        "in": location_type,
+        "name": f"x-amz-checksum-{algorithm_name}",
+    }
+
+    checksum_context["request_algorithm"] = algorithm
+    request["context"]["checksum"] = checksum_context
+
+
+def _get_request_algorithm_member_header(
+    operation_model, request, algorithm_member
+):
+    """Get the name of the header targeted by the "requestAlgorithmMember"."""
+    operation_input_shape = operation_model.input_shape
+    if not isinstance(operation_input_shape, StructureShape):
+        return
+
+    algorithm_member_shape = operation_input_shape.members.get(
+        algorithm_member
+    )
+
+    if algorithm_member_shape:
+        return algorithm_member_shape.serialization.get("name")
 
 
 def apply_request_checksum(request):
@@ -313,7 +379,12 @@ def apply_request_checksum(request):
         _apply_request_trailer_checksum(request)
     else:
         raise FlexibleChecksumError(
-            error_msg="Unknown checksum variant: %s" % algorithm["in"]
+            error_msg="Unknown checksum variant: {}".format(algorithm["in"])
+        )
+    if "request_algorithm_header" in checksum_context:
+        request_algorithm_header = checksum_context["request_algorithm_header"]
+        request["headers"][request_algorithm_header["name"]] = (
+            request_algorithm_header["value"]
         )
 
 
@@ -327,6 +398,7 @@ def _apply_request_header_checksum(request):
     checksum_cls = _CHECKSUM_CLS.get(algorithm["algorithm"])
     digest = checksum_cls().handle(request["body"])
     request["headers"][location_name] = digest
+    _register_checksum_algorithm_feature_id(algorithm)
 
 
 def _apply_request_trailer_checksum(request):
@@ -350,12 +422,19 @@ def _apply_request_trailer_checksum(request):
     else:
         headers["Content-Encoding"] = "aws-chunked"
     headers["X-Amz-Trailer"] = location_name
+    _register_checksum_algorithm_feature_id(algorithm)
 
     content_length = determine_content_length(body)
     if content_length is not None:
         # Send the decoded content length if we can determine it. Some
         # services such as S3 may require the decoded content length
         headers["X-Amz-Decoded-Content-Length"] = str(content_length)
+
+        if "Content-Length" in headers:
+            del headers["Content-Length"]
+            logger.debug(
+                "Removing the Content-Length header since 'chunked' is specified for Transfer-Encoding."
+            )
 
     if isinstance(body, (bytes, bytearray)):
         body = io.BytesIO(body)
@@ -365,6 +444,16 @@ def _apply_request_trailer_checksum(request):
         checksum_cls=checksum_cls,
         checksum_name=location_name,
     )
+
+
+def _register_checksum_algorithm_feature_id(algorithm):
+    checksum_algorithm_name = algorithm["algorithm"].upper()
+    if checksum_algorithm_name == "CRC64NVME":
+        checksum_algorithm_name = "CRC64"
+    checksum_algorithm_name_feature_id = (
+        f"FLEXIBLE_CHECKSUMS_REQ_{checksum_algorithm_name}"
+    )
+    register_feature_id(checksum_algorithm_name_feature_id)
 
 
 def resolve_response_checksum_algorithms(
@@ -400,7 +489,7 @@ def handle_checksum_body(http_response, response, context, operation_model):
         return
 
     for algorithm in algorithms:
-        header_name = "x-amz-checksum-%s" % algorithm
+        header_name = f"x-amz-checksum-{algorithm}"
         # If the header is not found, check the next algorithm
         if header_name not in headers:
             continue
@@ -426,15 +515,15 @@ def handle_checksum_body(http_response, response, context, operation_model):
         response["context"]["checksum"] = checksum_context
         return
 
-    logger.info(
-        f'Skipping checksum validation. Response did not contain one of the '
-        f'following algorithms: {algorithms}.'
+    logger.debug(
+        'Skipping checksum validation. Response did not contain one of the following algorithms: %s.',
+        algorithms,
     )
 
 
 def _handle_streaming_response(http_response, response, algorithm):
     checksum_cls = _CHECKSUM_CLS.get(algorithm)
-    header_name = "x-amz-checksum-%s" % algorithm
+    header_name = f"x-amz-checksum-{algorithm}"
     return StreamingChecksumBody(
         http_response.raw,
         response["headers"].get("content-length"),
@@ -445,18 +534,15 @@ def _handle_streaming_response(http_response, response, algorithm):
 
 def _handle_bytes_response(http_response, response, algorithm):
     body = http_response.content
-    header_name = "x-amz-checksum-%s" % algorithm
+    header_name = f"x-amz-checksum-{algorithm}"
     checksum_cls = _CHECKSUM_CLS.get(algorithm)
     checksum = checksum_cls()
     checksum.update(body)
     expected = response["headers"][header_name]
     if checksum.digest() != base64.b64decode(expected):
         error_msg = (
-            "Expected checksum %s did not match calculated checksum: %s"
-            % (
-                expected,
-                checksum.b64digest(),
-            )
+            f"Expected checksum {expected} did not match calculated "
+            f"checksum: {checksum.b64digest()}"
         )
         raise FlexibleChecksumError(error_msg=error_msg)
     return body
@@ -467,17 +553,22 @@ _CHECKSUM_CLS = {
     "sha1": Sha1Checksum,
     "sha256": Sha256Checksum,
 }
-_CRT_CHECKSUM_ALGORITHMS = ["crc32", "crc32c"]
+_CRT_CHECKSUM_ALGORITHMS = ["crc32", "crc32c", "crc64nvme"]
 if HAS_CRT:
     # Use CRT checksum implementations if available
     _CRT_CHECKSUM_CLS = {
         "crc32": CrtCrc32Checksum,
         "crc32c": CrtCrc32cChecksum,
     }
+
+    if has_minimum_crt_version((0, 23, 4)):
+        # CRC64NVME support wasn't officially added until 0.23.4
+        _CRT_CHECKSUM_CLS["crc64nvme"] = CrtCrc64NvmeChecksum
+
     _CHECKSUM_CLS.update(_CRT_CHECKSUM_CLS)
     # Validate this list isn't out of sync with _CRT_CHECKSUM_CLS keys
     assert all(
         name in _CRT_CHECKSUM_ALGORITHMS for name in _CRT_CHECKSUM_CLS.keys()
     )
 _SUPPORTED_CHECKSUM_ALGORITHMS = list(_CHECKSUM_CLS.keys())
-_ALGORITHMS_PRIORITY_LIST = ['crc32c', 'crc32', 'sha1', 'sha256']
+_ALGORITHMS_PRIORITY_LIST = ['crc64nvme', 'crc32c', 'crc32', 'sha1', 'sha256']

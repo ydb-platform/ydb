@@ -3,26 +3,16 @@
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/events/events.h>
 
-#include <ydb/library/services/services.pb.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
-
-#include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
-#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::STREAMS, QueryId << ": " << stream)
-
-#define LOG_I(stream) \
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::STREAMS, QueryId << ": " << stream)
-
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STREAMS, QueryId << ": " << stream)
-
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STREAMS
 
 namespace NFq {
 namespace {
@@ -31,7 +21,7 @@ using namespace NActors;
 
 struct TEvPrivate {
     // Event ids.
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
 
         EvSingleReadRuleCreatorResult = EvBegin,
@@ -44,7 +34,7 @@ struct TEvPrivate {
 
     // Events.
 
-    struct TEvSingleReadRuleCreatorResult : TEventLocal<TEvSingleReadRuleCreatorResult, EvSingleReadRuleCreatorResult> {
+    struct TEvSingleReadRuleCreatorResult: TEventLocal<TEvSingleReadRuleCreatorResult, EvSingleReadRuleCreatorResult> {
         TEvSingleReadRuleCreatorResult() = default;
 
         explicit TEvSingleReadRuleCreatorResult(const NYql::TIssues& issues)
@@ -55,7 +45,7 @@ struct TEvPrivate {
         NYql::TIssues Issues;
     };
 
-    struct TEvAddReadRuleStatus : TEventLocal<TEvAddReadRuleStatus, EvAddReadRuleStatus> {
+    struct TEvAddReadRuleStatus: TEventLocal<TEvAddReadRuleStatus, EvAddReadRuleStatus> {
         TEvAddReadRuleStatus(NYdb::TStatus status)
             : Status(std::move(status))
         {
@@ -66,17 +56,10 @@ struct TEvPrivate {
 };
 
 // Actor for creating read rule for one topic.
-class TSingleReadRuleCreator : public TActorBootstrapped<TSingleReadRuleCreator> {
+class TSingleReadRuleCreator: public TActorBootstrapped<TSingleReadRuleCreator> {
 public:
-    TSingleReadRuleCreator(
-        NActors::TActorId owner,
-        TString queryId,
-        NYdb::TDriver ydbDriver,
-        const NYql::IPqGateway::TPtr& pqGateway,
-        const Fq::Private::TopicConsumer& topicConsumer,
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProvider,
-        ui64 index
-    )
+    TSingleReadRuleCreator(NActors::TActorId owner, TString queryId, NYdb::TDriver ydbDriver, const NYql::IPqGateway::TPtr& pqGateway,
+        const Fq::Private::TopicConsumer& topicConsumer, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProvider, ui64 index)
         : Owner(owner)
         , QueryId(std::move(queryId))
         , TopicConsumer(topicConsumer)
@@ -107,26 +90,22 @@ public:
     void StartRequest() {
         Y_ABORT_UNLESS(!RequestInFlight);
         RequestInFlight = true;
-        LOG_D("Make request for read rule creation for topic `" << TopicConsumer.topic_path() << "` [" << Index << "]");
+        YDB_LOG_DEBUG("Make request for read rule creation",
+            {"queryId", QueryId},
+            {"topicPath", TopicConsumer.topic_path()},
+            {"index", Index});
 
         const NYdb::NTopic::TAlterTopicSettings alterTopicSettings =
             NYdb::NTopic::TAlterTopicSettings()
                 .BeginAddConsumer(TopicConsumer.consumer_name())
                 .SetSupportedCodecs(
-                    {
-                        NYdb::NTopic::ECodec::RAW,
-                        NYdb::NTopic::ECodec::GZIP,
-                        NYdb::NTopic::ECodec::LZOP,
-                        NYdb::NTopic::ECodec::ZSTD
-                    })
+                    { NYdb::NTopic::ECodec::RAW, NYdb::NTopic::ECodec::GZIP, NYdb::NTopic::ECodec::LZOP, NYdb::NTopic::ECodec::ZSTD })
                 .EndAddConsumer();
 
-        TopicClient.AlterTopic(GetTopicPath(), alterTopicSettings)
-            .Subscribe([actorSystem = TActivationContext::ActorSystem(),
-                        selfId = SelfId()](const NYdb::TAsyncStatus& status) {
-              actorSystem->Send(selfId, new TEvPrivate::TEvAddReadRuleStatus(
-                                            status.GetValue()));
-            });
+        TopicClient.AlterTopic(GetTopicPath(), alterTopicSettings).Subscribe([actorSystem = TActivationContext::ActorSystem(),
+                                                                                 selfId = SelfId()](const NYdb::TAsyncStatus& status) {
+            actorSystem->Send(selfId, new TEvPrivate::TEvAddReadRuleStatus(status.GetValue()));
+        });
     }
 
     void Handle(TEvPrivate::TEvAddReadRuleStatus::TPtr& ev) {
@@ -142,11 +121,16 @@ public:
             }
             TMaybe<TDuration> nextRetryDelay = RetryState->GetNextRetryDelay(status.GetStatus());
             if (status.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
-                nextRetryDelay = Nothing(); // Not retryable
+                nextRetryDelay = Nothing();   // Not retryable
             }
 
-            LOG_D("Failed to add read rule to `" << TopicConsumer.topic_path() << "`: " << status.GetIssues().ToOneLineString() << ". Status: " << status.GetStatus() << ". Retry after: " << nextRetryDelay);
-            if (!nextRetryDelay) { // Not retryable
+            YDB_LOG_DEBUG("Failed to add read rule",
+                {"queryId", QueryId},
+                {"topicPath", TopicConsumer.topic_path()},
+                {"statusIssues", status.GetIssues().ToOneLineString()},
+                {"status", status.GetStatus()},
+                {"nextRetryDelay", nextRetryDelay});
+            if (!nextRetryDelay) {   // Not retryable
                 Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleCreatorResult>(NYdb::NAdapters::ToYqlIssues(status.GetIssues())), 0, Index);
                 PassAway();
             } else {
@@ -208,16 +192,11 @@ private:
 };
 
 // Actor for creating read rules for all topics in the query.
-class TReadRuleCreator : public TActorBootstrapped<TReadRuleCreator> {
+class TReadRuleCreator: public TActorBootstrapped<TReadRuleCreator> {
 public:
-    TReadRuleCreator(
-        NActors::TActorId owner,
-        TString queryId,
-        NYdb::TDriver ydbDriver,
-        const NYql::IPqGateway::TPtr& pqGateway,
+    TReadRuleCreator(NActors::TActorId owner, TString queryId, NYdb::TDriver ydbDriver, const NYql::IPqGateway::TPtr& pqGateway,
         const ::google::protobuf::RepeatedPtrField<Fq::Private::TopicConsumer>& topicConsumers,
-        TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials
-    )
+        TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials)
         : Owner(owner)
         , QueryId(std::move(queryId))
         , YdbDriver(std::move(ydbDriver))
@@ -237,8 +216,12 @@ public:
         Children.reserve(TopicConsumers.size());
         Results.reserve(TopicConsumers.size());
         for (size_t i = 0; i < TopicConsumers.size(); ++i) {
-            LOG_D("Create read rule creation actor for `" << TopicConsumers[i].topic_path() << "` [" << i << "]");
-            Children.push_back(Register(new TSingleReadRuleCreator(SelfId(), QueryId, YdbDriver, PqGateway, TopicConsumers[i], Credentials[i], i)));
+            YDB_LOG_DEBUG("Create read rule creation actor",
+                {"queryId", QueryId},
+                {"topicPath", TopicConsumers[i].topic_path()},
+                {"index", i});
+            Children.push_back(
+                Register(new TSingleReadRuleCreator(SelfId(), QueryId, YdbDriver, PqGateway, TopicConsumers[i], Credentials[i], i)));
         }
     }
 
@@ -296,25 +279,13 @@ private:
     TVector<NActors::TActorId> Children;
 };
 
-} // namespace
+}   // namespace
 
-NActors::IActor* MakeReadRuleCreatorActor(
-    NActors::TActorId owner,
-    TString queryId,
-    NYdb::TDriver ydbDriver,
-    const NYql::IPqGateway::TPtr& pqGateway,
-    const ::google::protobuf::RepeatedPtrField<Fq::Private::TopicConsumer>& topicConsumers,
-    TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials
-)
+NActors::IActor* MakeReadRuleCreatorActor(NActors::TActorId owner, TString queryId, NYdb::TDriver ydbDriver,
+    const NYql::IPqGateway::TPtr& pqGateway, const ::google::protobuf::RepeatedPtrField<Fq::Private::TopicConsumer>& topicConsumers,
+    TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials)
 {
-    return new TReadRuleCreator(
-        owner,
-        std::move(queryId),
-        std::move(ydbDriver),
-        pqGateway,
-        topicConsumers,
-        std::move(credentials)
-    );
+    return new TReadRuleCreator(owner, std::move(queryId), std::move(ydbDriver), pqGateway, topicConsumers, std::move(credentials));
 }
 
-} // namespace NFq
+}   // namespace NFq

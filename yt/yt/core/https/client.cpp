@@ -107,11 +107,7 @@ IClientPtr CreateClient(
     const IPollerPtr& poller)
 {
     auto sslContext =  New<TSslContext>();
-    if (config->Credentials) {
-        sslContext->ApplyConfig(config->Credentials);
-    } else {
-        sslContext->UseBuiltinOpenSslX509Store();
-    }
+    sslContext->ApplyConfig(config->Credentials);
     sslContext->Commit();
 
     auto dialerConfig = New<TDialerConfig>();

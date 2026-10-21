@@ -32,11 +32,7 @@ Testing
 
 If you have the source code installation you can run the tests with
 
- `$ python src/tests/test.py -v`
-
-or (if you have setuptools installed)
-
- `$ python setup.py test`
+ `$ python tests/test.py -v`
 
 Notice that you may run into trouble if in your system there
 is an older version of the decorator module; in such a case remove the
@@ -82,7 +78,7 @@ operations:
        result = func(*args, **kw)
        dt = time.time() - t0
        if dt > timelimit:
-           logging.warn('%s took %d seconds', func.__name__, dt)
+           logging.warning('%s took %d seconds', func.__name__, dt)
        else:
            logging.info('%s took %d seconds', func.__name__, dt)
        return result

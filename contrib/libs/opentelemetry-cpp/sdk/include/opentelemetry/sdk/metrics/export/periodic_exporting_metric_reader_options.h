@@ -17,7 +17,7 @@ constexpr std::chrono::milliseconds kExportIntervalMillis = std::chrono::millise
 constexpr std::chrono::milliseconds kExportTimeOutMillis  = std::chrono::milliseconds(30000);
 
 /**
- * Struct to hold PeriodicExortingMetricReader options.
+ * Struct to hold PeriodicExportingMetricReader options.
  */
 
 struct OPENTELEMETRY_EXPORT PeriodicExportingMetricReaderOptions

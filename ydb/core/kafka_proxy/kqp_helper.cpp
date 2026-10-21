@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/services/metadata/service.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKafka {
 
@@ -9,14 +10,15 @@ TKqpTxHelper::TKqpTxHelper(TString database)
     : DataBase(database)
 {}
 
-void TKqpTxHelper::SendCreateSessionRequest(const TActorContext& ctx) {
+void TKqpTxHelper::SendCreateSessionRequest(const TActorContext& ctx, ui64 cookie) {
     auto ev = MakeCreateSessionRequest();
-    ctx.Send(MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0);
+    ctx.Send(MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, cookie);
 }
 
 void TKqpTxHelper::BeginTransaction(ui64 cookie, const TActorContext& ctx) {
     auto begin = MakeHolder<TEvKqp::TEvQueryRequest>();
 
+    begin->Record.MutableRequest()->SetIsInternalCall(true);
     begin->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);
     begin->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
     begin->Record.MutableRequest()->SetSessionId(KqpSessionId);
@@ -33,7 +35,7 @@ bool TKqpTxHelper::HandleCreateSessionResponse(TEvKqp::TEvCreateSessionResponse:
     }
 
     KqpSessionId = record.GetResponse().GetSessionId();
-    Y_ABORT_UNLESS(!KqpSessionId.empty());
+    AFL_ENSURE(!KqpSessionId.empty())("reason", "KqpSessionId is empty")("database", DataBase);
 
     return true;
 }
@@ -65,6 +67,7 @@ void TKqpTxHelper::SendRequest(THolder<TEvKqp::TEvQueryRequest> request, ui64 co
 void TKqpTxHelper::SendYqlRequest(const TString& yqlRequest, NYdb::TParams sqlParams, ui64 cookie, const TActorContext& ctx, bool commit) {
     auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
 
+    ev->Record.MutableRequest()->SetIsInternalCall(true);
     ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
     ev->Record.MutableRequest()->SetQuery(yqlRequest);
@@ -87,6 +90,7 @@ void TKqpTxHelper::SendYqlRequest(const TString& yqlRequest, NYdb::TParams sqlPa
 void TKqpTxHelper::CommitTx(ui64 cookie, const TActorContext& ctx) {
     auto commit = MakeHolder<TEvKqp::TEvQueryRequest>();
 
+    commit->Record.MutableRequest()->SetIsInternalCall(true);
     commit->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_COMMIT_TX);
     commit->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
     commit->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);

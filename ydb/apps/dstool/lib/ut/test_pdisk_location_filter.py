@@ -6,11 +6,11 @@ from ydb.apps.dstool.lib import common
 class TestPDiskLocationFilter(unittest.TestCase):
     def setUp(self):
         self.config = common.kikimr_bsconfig.TBaseConfig()
-        self.pdisk = self.config.PDisk.add(NodeId=1, PDiskId=1, BoxId=1, Type=common.kikimr_bsconfig.ROT)
+        self.pdisk = self.config.PDisk.add(NodeId=1, PDiskId=1, BoxId=1, Type=common.EPDiskType.ROT)
         self.location = self.config.Node.add(NodeId=1).Location
         self.pool = common.kikimr_bsconfig.TDefineStoragePool(BoxId=1, StoragePoolId=1)
         self.filter = self.pool.PDiskFilter.add()
-        self.filter.Property.add(Type=common.kikimr_bsconfig.ROT)
+        self.filter.Property.add(Type=common.EPDiskType.ROT)
         self.required = self.filter.Property.add().Location
         self.required.SetInParent()
 
@@ -40,9 +40,9 @@ class TestPDiskLocationFilter(unittest.TestCase):
         self.pool.PDiskFilter.add().CopyFrom(self.filter)
         self.pool.PDiskFilter[1].Property[1].Location.Rack = 'rack2'
         self.assertTrue(self.matches())
-        self.pdisk.Type = common.kikimr_bsconfig.SSD
+        self.pdisk.Type = common.EPDiskType.SSD
         self.assertFalse(self.matches())
-        self.pdisk.Type = common.kikimr_bsconfig.ROT
+        self.pdisk.Type = common.EPDiskType.ROT
         self.pdisk.BoxId = 2
         self.assertFalse(self.matches())
 
@@ -51,7 +51,7 @@ class TestPDiskLocationFilter(unittest.TestCase):
         self.required.DataCenter = 'dc1'
         self.pdisk.NumStaticSlots = 2
         self.config.Node.add(NodeId=2).Location.DataCenter = 'dc2'
-        self.config.PDisk.add(NodeId=2, PDiskId=1, BoxId=1, Type=common.kikimr_bsconfig.ROT)
+        self.config.PDisk.add(NodeId=2, PDiskId=1, BoxId=1, Type=common.EPDiskType.ROT)
         self.assertEqual(common.build_pdisk_usage_map(self.config, storage_pool=self.pool), {(1, 1): 2})
         self.assertEqual(set(common.build_pdisk_usage_map(self.config)), {(1, 1), (2, 1)})
         self.required.DataCenter = 'missing'

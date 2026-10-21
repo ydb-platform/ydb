@@ -539,11 +539,16 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         const auto current = FindActiveVSlot(config, source);
         request = MakeReassignRequest(current, config.GetGroup(0).GetGroupGeneration());
         request.SetIgnoreGroupFailModelChecks(true);
+        request.SetIgnoreGroupLayoutChecks(true); // Isolate the location filter from cross-DC layout checks.
         auto* target = request.MutableCommand(0)->MutableReassignGroupDisk()->MutableTargetPDiskId();
         for (const auto& node : config.GetNode()) {
             if (node.GetLocation().GetDataCenter() == "2") {
                 target->SetNodeId(node.GetNodeId());
-                target->SetPDiskId(1);
+                const auto disk = std::ranges::find_if(config.GetPDisk(), [&](const auto& pdisk) {
+                    return pdisk.GetNodeId() == node.GetNodeId();
+                });
+                UNIT_ASSERT(disk != config.GetPDisk().end());
+                target->SetPDiskId(disk->GetPDiskId());
                 break;
             }
         }

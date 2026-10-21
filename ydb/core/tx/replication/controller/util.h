@@ -43,7 +43,11 @@ inline bool IsRetryableError(const NYdb::TStatus status, const TVector<NYdb::ESt
         return false;
     case NYdb::EStatus::TRANSPORT_UNAVAILABLE:
         for (const auto& issue : status.GetIssues()) {
-            if (issue.GetMessage().contains("Misformatted domain name") || issue.GetMessage().contains("Domain name not found")) {
+            // A malformed name is an invalid setting. A missing DNS name can
+            // recover (including a discovered endpoint), like other outages.
+            if (issue.GetMessage().contains("Misformatted domain name")
+                || issue.GetMessage().contains("Client TLS credentials validation failed"))
+            {
                 return false;
             }
         }
@@ -56,6 +60,15 @@ inline bool IsRetryableError(const NYdb::TStatus status, const TVector<NYdb::ESt
 inline bool IsRetryableError(const NYdb::TStatus status) {
     static auto defaultRetryableErrors = DefaultRetryableErrors();
     return IsRetryableError(status, defaultRetryableErrors);
+}
+
+inline bool IsRetryableEndpointError(const NYdb::TStatus& status) {
+    // Endpoint availability has no finite recovery deadline. Preserve the
+    // discovery budget for server errors, and the terminal setting/auth checks.
+    return (status.GetStatus() == NYdb::EStatus::TRANSPORT_UNAVAILABLE
+        || status.GetStatus() == NYdb::EStatus::CLIENT_DISCOVERY_FAILED
+        || status.GetStatus() == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED)
+        && IsRetryableError(status);
 }
 
 }

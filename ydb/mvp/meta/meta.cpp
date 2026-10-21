@@ -8,6 +8,8 @@
 #include "meta_capabilities.h"
 #include "meta_support_links.h"
 #include "meta_cache.h"
+#include "meta_health.h"
+#include "meta_database_statuses.h"
 
 #include <ydb/mvp/core/http_check.h>
 #include <ydb/mvp/core/http_sensors.h>
@@ -32,6 +34,10 @@ NHttp::TCachePolicy GetIncomingMetaCachePolicy(const NHttp::THttpRequest* reques
         return policy;
     }
     TStringBuf url(request->URL);
+    // Do not serve a cached HC override past its TTL (including KeepOnError).
+    if (InstanceMVP && InstanceMVP->MetaSettings.Healthcheck.Enabled && url.starts_with("/meta/cp_databases")) {
+        return policy;
+    }
     if (!TMVP::DbUserTokenSource && url.starts_with("/meta/cp_databases")) {
         policy.TimeToExpire = TDuration::Days(3);
         policy.TimeToRefresh = TDuration::Seconds(60);
@@ -182,6 +188,21 @@ void TMVP::InitMeta() {
     MetaLocation.RootDomain = MetaDatabase;
 
     LocalEndpoint = StartupOptions.GetLocalEndpoint();
+
+    if (MetaSettings.Healthcheck.Enabled) {
+        HealthQueryServiceId = ActorSystem.Register(CreateHealthQueryService(MetaLocation));
+        // Authorization must run on every request, bypassing both incoming caches.
+        RegisterMetaHandler(HttpProxyId, "/meta/database_statuses",
+            ActorSystem.Register(CreateDatabaseStatusesHandler(HttpProxyId, HealthQueryServiceId,
+                MetaLocation, MetaSettings.Healthcheck, MetaSettings.ServiceEndpoint)));
+        if (MetaSettings.Healthcheck.Collect) {
+            HealthMonitorId = ActorSystem.Register(CreateHealthMonitor(HttpProxyId, HealthQueryServiceId, MetaDatabase,
+                                                      MetaDatabaseTokenName, MetaSettings, LocalEndpoint));
+        }
+        RegisterMetaHandler(HttpProxyId, "/meta/healthcheck",
+            ActorSystem.Register(CreateCachedHealthcheckHandler(HttpProxyId, HealthQueryServiceId,
+                HealthMonitorId, MetaLocation, MetaSettings, LocalEndpoint)));
+    }
 
     TActorId httpIncomingProxyId = ActorSystem.Register(NHttp::CreateIncomingHttpCache(HttpProxyId, GetIncomingMetaCachePolicy));
 

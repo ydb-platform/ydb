@@ -11,6 +11,7 @@ TMetaSettings BuildMetaSettings(const NMvp::NMeta::TMetaConfig& config, NMvp::EA
     TMetaSettings settings;
     settings.MetaApiEndpoint = config.GetMetaApiEndpoint();
     settings.MetaDatabase = config.GetMetaDatabase();
+    settings.ServiceEndpoint = config.GetServiceEndpoint();
     settings.AccessServiceType = accessServiceType;
 
     if (settings.MetaApiEndpoint.empty()) {
@@ -18,6 +19,28 @@ TMetaSettings BuildMetaSettings(const NMvp::NMeta::TMetaConfig& config, NMvp::EA
     }
     if (settings.MetaDatabase.empty()) {
         ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.meta_database must be specified";
+    }
+
+    const auto& healthcheck = config.GetHealthcheck();
+    settings.Healthcheck.Enabled = healthcheck.GetEnabled();
+    settings.Healthcheck.Collect = healthcheck.GetCollect();
+    settings.Healthcheck.CheckPeriod = TDuration::Seconds(healthcheck.GetCheckPeriodSeconds());
+    settings.Healthcheck.DiscoveryPeriod = TDuration::Seconds(healthcheck.GetDiscoveryPeriodSeconds());
+    settings.Healthcheck.StatusTtl = TDuration::Seconds(healthcheck.GetStatusTtlSeconds());
+    settings.Healthcheck.RequestTimeout = TDuration::Seconds(healthcheck.GetRequestTimeoutSeconds());
+    if (!settings.Healthcheck.CheckPeriod || !settings.Healthcheck.DiscoveryPeriod
+        || !settings.Healthcheck.StatusTtl || !settings.Healthcheck.RequestTimeout) {
+        ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.healthcheck periods and timeout must be positive";
+    }
+    if (settings.Healthcheck.Enabled && settings.ServiceEndpoint.empty()) {
+        ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.healthcheck requires service_endpoint";
+    }
+    if (!settings.ServiceEndpoint.empty()
+        && !settings.ServiceEndpoint.StartsWith("https://") && !settings.ServiceEndpoint.StartsWith("http://")) {
+        ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.service_endpoint must be an HTTP(S) URL";
+    }
+    if (settings.Healthcheck.Enabled && settings.Healthcheck.Collect && config.GetMetaDatabaseTokenName().empty()) {
+        ythrow yexception() << CONFIG_ERROR_PREFIX << "meta.healthcheck collection requires meta_database_token_name";
     }
 
     if (config.HasGrafana()) {

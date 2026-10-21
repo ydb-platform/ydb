@@ -1,5 +1,7 @@
 #pragma once
 
+#include "meta_health.h"
+
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/mvp/core/core_ydb_impl.h>
 #include <ydb/mvp/core/core_ydbc.h>
@@ -47,6 +49,7 @@ public:
     TDuration DatabaseRequestRetryDelta = TDuration::MilliSeconds(50);
     TString ControlPlaneName;
     TString MvpTokenName;
+    TDatabaseHealthMap HealthStatuses;
 
     THandlerActorMetaCpDatabasesGET(
             const NActors::TActorId& httpProxyId,
@@ -59,6 +62,11 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
+        RequestClusterInfo(ctx);
+        Become(&THandlerActorMetaCpDatabasesGET::StateWork, GetTimeout(Request, TDuration::Seconds(60)), new NActors::TEvents::TEvWakeup());
+    }
+
+    virtual void RequestClusterInfo(const NActors::TActorContext& ctx) {
         NActors::TActorSystem* actorSystem = ctx.ActorSystem();
         NActors::TActorId actorId = ctx.SelfID;
 
@@ -68,8 +76,6 @@ public:
                 actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(res.ExtractValue()));
             });
         }
-
-        Become(&THandlerActorMetaCpDatabasesGET::StateWork, GetTimeout(Request, TDuration::Seconds(60)), new NActors::TEvents::TEvWakeup());
     }
 
     void Handle(TEvPrivate::TEvCreateSessionResult::TPtr event, const NActors::TActorContext& ctx) {
@@ -147,6 +153,12 @@ public:
             auto resultSet = result.GetResultSet(0);
             NYdb::TResultSetParser rsParser(resultSet);
             if (rsParser.TryNextRow()) {
+                // Only enrich a cluster after the caller's metadata query
+                // succeeds. The status query uses the same auth policy.
+                if (InstanceMVP->MetaSettings.Healthcheck.Enabled) {
+                    ctx.Send(InstanceMVP->HealthQueryServiceId, MakeLoadDatabaseHealthQuery(Location, Request));
+                    ++Requests;
+                }
                 TString name = ColumnValueToString(rsParser.GetValue("name"));
                 TString balancer = ColumnValueToString(rsParser.GetValue("balancer"));
                 TString apiUserTokenName = ColumnValueToString(rsParser.GetValue("api_user_token"));
@@ -197,6 +209,20 @@ public:
 
     void Handle(TEvPrivate::TEvRetryRequest::TPtr, const NActors::TActorContext& ctx) {
         SendDatabaseRequest(ctx);
+    }
+
+    void Handle(TEvHealthQueryResult::TPtr event, const NActors::TActorContext& ctx) {
+        if (event->Get()->IsSuccess() && event->Get()->Result->GetResultSets().size() == 1) {
+            try {
+                HealthStatuses = ParseDatabaseHealth(event->Get()->Result->GetResultSet(0));
+            } catch (const std::exception&) {
+                // Optional enrichment must not break the viewer response.
+                HealthStatuses.clear();
+            }
+        }
+        if (--Requests == 0) {
+            ReplyAndDie(ctx);
+        }
     }
 
     void Handle(TEvPrivate::TEvListAllDatabaseResponse::TPtr event, const NActors::TActorContext& ctx) {
@@ -271,6 +297,7 @@ public:
             }
             NJson::TJsonValue& jsonDatabase = databases.AppendValue(NJson::TJsonValue());
             jsonDatabase = std::move(tenant);
+            ApplyDatabaseHealth(jsonDatabase, HealthStatuses, ctx.Now(), InstanceMVP->MetaSettings.Healthcheck.StatusTtl);
             TString id = jsonDatabase["Id"].GetStringRobust();
             if (!id.empty()) {
                 indexJsonDatabaseById[id] = &jsonDatabase;
@@ -367,6 +394,7 @@ public:
             HFunc(TEvPrivate::TEvListAllDatabaseResponse, Handle);
             HFunc(TEvPrivate::TEvRetryRequest, Handle);
             HFunc(TEvPrivate::TEvErrorResponse, Handle);
+            HFunc(TEvHealthQueryResult, Handle);
             HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
             CFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
         }

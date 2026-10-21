@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/util/queue_oneone_inplace.h>
+#include <ydb/library/actors/util/queue_oneone_inplace.h>
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
 

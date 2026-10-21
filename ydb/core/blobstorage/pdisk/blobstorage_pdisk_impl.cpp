@@ -4,6 +4,7 @@
 #include "blobstorage_pdisk_completion_impl.h"
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_request_id.h"
+#include <ydb/library/pdisk_io/request_id.h>
 #include "blobstorage_pdisk_util_space_color.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>

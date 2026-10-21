@@ -7,7 +7,7 @@
 #include "blobstorage_pdisk_thread.h"
 #include "blobstorage_pdisk_util_atomicblockcounter.h"
 #include "blobstorage_pdisk_util_countedqueuemanyone.h"
-#include "blobstorage_pdisk_util_countedqueueoneone.h"
+#include <ydb/library/pdisk_io/counted_queue_one_one.h>
 #include "blobstorage_pdisk_util_flightcontrol.h"
 #include "blobstorage_pdisk_util_idlecounter.h"
 

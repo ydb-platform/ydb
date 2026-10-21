@@ -1,9 +1,9 @@
 #pragma once
 #include "defs.h"
 
-#include "blobstorage_pdisk_completion.h"
-#include "blobstorage_pdisk_request_id.h"
-#include "blobstorage_pdisk_util_devicemode.h"
+#include <ydb/library/pdisk_io/completion.h>
+#include <ydb/library/pdisk_io/request_id.h>
+#include <ydb/library/pdisk_io/device_mode.h>
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>

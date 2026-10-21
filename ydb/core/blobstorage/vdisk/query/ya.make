@@ -5,7 +5,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/blobstorage/base
     ydb/core/blobstorage/groupinfo
-    ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/pdisk/common
     ydb/core/blobstorage/vdisk/chunk_keeper
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/huge

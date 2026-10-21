@@ -547,9 +547,7 @@ bool FillAccessor(
 }
 
 template <typename T>
-bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T& metadata,
-    bool allowVirtualGenerated, Ydb::StatusIds::StatusCode& code, TString& error)
-{
+bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T& metadata, Ydb::StatusIds::StatusCode& code, TString& error) {
     Y_ENSURE(metadata.ColumnOrder.size() == metadata.Columns.size());
 
     if (!metadata.ColumnFamilies.empty()) {
@@ -575,12 +573,6 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
             return false;
         }
 
-        if (columnIt->second.IsDefaultFromExpression() && !allowVirtualGenerated) {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Generated columns are not supported in TABLESTORE schema presets";
-            return false;
-        }
-
         NKikimrSchemeOp::TOlapColumnDescription& columnDesc = *schema.AddColumns();
         columnDesc.SetId(nextColumnId++);
         columnDesc.SetName(columnIt->second.Name);
@@ -595,27 +587,23 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         if (columnIt->second.IsDefaultFromExpression()) {
             Y_ENSURE(columnIt->second.DefaultExpression);
             const auto& generated = *columnIt->second.DefaultExpression;
-            if (generated.Stored) {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "STORED generated column '" << name
-                    << "' is not supported for column tables";
-                return false;
-            }
-
             auto* generatedProto = columnDesc.MutableDefaultFromExpression();
             generatedProto->SetExprText(generated.ExprText);
-            generatedProto->SetStored(false);
+            generatedProto->SetStored(generated.Stored);
             for (const auto& dependency : generated.Dependencies) {
                 generatedProto->AddDependencyColumnNames(dependency);
             }
-        } else {
-            if (!FillSerializer(columnIt->second.Compression, name, columnDesc, error, code)) {
-                return false;
+            if (!columnIt->second.Families.empty()) {
+                columnDesc.SetColumnFamilyName(columnIt->second.Families.front());
             }
+        }
 
-            if (!FillAccessor(columnIt->second.Encoding, name, columnDesc, error, code)) {
-                return false;
-            }
+        if (!FillSerializer(columnIt->second.Compression, name, columnDesc, error, code)) {
+            return false;
+        }
+
+        if (!FillAccessor(columnIt->second.Encoding, name, columnDesc, error, code)) {
+            return false;
         }
     }
 
@@ -2570,8 +2558,7 @@ public:
             NKikimrSchemeOp::TColumnTableDescription* tableDesc = schemeTx.MutableCreateColumnTable();
 
             tableDesc->SetName(pathPair.second);
-            if (!FillColumnTableSchema(*tableDesc->MutableSchema(), *metadata,
-                    /* allowVirtualGenerated */ true, code, error)) {
+            if (!FillColumnTableSchema(*tableDesc->MutableSchema(), *metadata, code, error)) {
                 IKqpGateway::TGenericResult errResult;
                 errResult.AddIssue(NYql::TIssue(error));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
@@ -2942,8 +2929,7 @@ public:
 
             Ydb::StatusIds::StatusCode code;
             TString error;
-            if (!FillColumnTableSchema(*schemaPreset->MutableSchema(), settings,
-                    /* allowVirtualGenerated */ false, code, error)) {
+            if (!FillColumnTableSchema(*schemaPreset->MutableSchema(), settings, code, error)) {
                 IKqpGateway::TGenericResult errResult;
                 errResult.AddIssue(NYql::TIssue(error));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));

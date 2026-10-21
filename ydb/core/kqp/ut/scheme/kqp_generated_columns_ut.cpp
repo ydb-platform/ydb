@@ -6677,13 +6677,21 @@ Y_UNIT_TEST_SUITE(GeneratedVirtualColumnTable) {
         )", "Encoding cannot be applied to VIRTUAL generated column 'v'");
 
         rejects(R"(
+            CREATE TABLE VirtualColumnFamily (
+                k Int32 NOT NULL,
+                v Int32 GENERATED ALWAYS AS (k + 1) VIRTUAL FAMILY default,
+                PRIMARY KEY (k)
+            ) WITH (STORE = COLUMN);
+        )", "Column family cannot be applied to VIRTUAL generated column 'v'");
+
+        rejects(R"(
             CREATE TABLE TtlVirtual (
                 k Int32 NOT NULL,
                 ts Timestamp,
                 expires Timestamp GENERATED ALWAYS AS (ts) VIRTUAL,
                 PRIMARY KEY (k)
             ) WITH (STORE = COLUMN, TTL = Interval("PT1H") ON expires);
-        )", "TTL column expires can not reference a VIRTUAL generated column");
+        )", "TTL column 'expires' cannot reference a VIRTUAL generated column");
 
         rejects(R"(
             CREATE TABLE IndexedVirtual (

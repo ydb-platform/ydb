@@ -2654,6 +2654,15 @@ message TImmediateControlsConfig {
             DefaultValue: 1 }];
     }
     optional TViewerControls ViewerControls = 24;
+
+    message TDetailedMetricsControls {
+        optional uint64 MaxNodeOutputBytes = 1 [(ControlOptions) = {
+            Description: "Estimated in-memory bytes of one node's ydb_detailed series (all its SysView Processors): their labels and values, without any scrape format overhead, so a JSON or Prometheus scrape is larger; over it the databases with the most partition output publish table metrics only, until they fit in 80% of it for 1 min; 0 forces table metrics",
+            MinValue: 0,
+            MaxValue: 9223372036854775807,
+            DefaultValue: 100000000 }];
+    }
+    optional TDetailedMetricsControls DetailedMetricsControls = 25;
 };
 
 message TMeteringConfig {

@@ -228,20 +228,48 @@ class TJsonParserDeliveryFixture: public TBaseFixture {
 public:
     class TClient: public IClientDataConsumer {
     public:
-        bool IsStarted() const override { return Started; }
-        const TVector<TSchemaColumn>& GetColumns() const override { return Columns; }
-        const TString& GetWatermarkExpr() const override { return Empty; }
-        const TString& GetFilterExpr() const override { return Empty; }
-        TPurecalcCompileSettings GetPurecalcSettings() const override { return {}; }
-        NActors::TActorId GetClientId() const override { return NActors::TActorId(1, 0, 0, 0); }
-        std::optional<ui64> GetNextMessageOffset() const override { return NextOffset; }
-        void OnClientError(TStatus status) override { CheckSuccess(status); }
-        void StartClientSession() override { Started = true; }
+        bool IsStarted() const override {
+            return Started;
+        }
+
+        const TVector<TSchemaColumn>& GetColumns() const override {
+            return Columns;
+        }
+
+        const TString& GetWatermarkExpr() const override {
+            return Empty;
+        }
+
+        const TString& GetFilterExpr() const override {
+            return Empty;
+        }
+
+        TPurecalcCompileSettings GetPurecalcSettings() const override {
+            return {};
+        }
+
+        NActors::TActorId GetClientId() const override {
+            return NActors::TActorId(1, 0, 0, 0);
+        }
+
+        std::optional<ui64> GetNextMessageOffset() const override {
+            return NextOffset;
+        }
+
+        void OnClientError(TStatus status) override {
+            CheckSuccess(status);
+        }
+
+        void StartClientSession() override {
+            Started = true;
+        }
+
         void AddDataToClient(ui64 offset, ui64 rows, ui64, TMaybe<TInstant>) override {
             UNIT_ASSERT_C(offset >= NextOffset, "Unexpected historical offset");
             NextOffset = offset + 1;
             Rows += rows;
         }
+
         void UpdateClientOffset(ui64 offset) override {
             NextOffset = std::max(NextOffset, offset + 1);
         }
@@ -252,15 +280,16 @@ public:
     private:
         bool Started = false;
         const TString Empty;
-        const TVector<TSchemaColumn> Columns = {{ "col", "[DataType; String]" }};
+        const TVector<TSchemaColumn> Columns = { { "col", "[DataType; String]" } };
     };
 
     void SetUp(NUnitTest::TTestContext& ctx) override {
         TBaseFixture::SetUp(ctx);
         Handler = CreateTestFormatHandler({
-            .FunctionRegistry = FunctionRegistry,
-            .JsonParserConfig = { .FunctionRegistry = FunctionRegistry, .LatencyLimit = TDuration::Zero() },
-        }, { .ParsingFormat = "json_each_row" });
+                                              .FunctionRegistry = FunctionRegistry,
+                                              .JsonParserConfig = { .FunctionRegistry = FunctionRegistry, .LatencyLimit = TDuration::Zero() },
+                                          },
+            { .ParsingFormat = "json_each_row" });
         Client = MakeIntrusive<TClient>();
         CheckSuccess(Handler->AddClient(Client));
         UNIT_ASSERT(Client->IsStarted());
@@ -1876,21 +1905,20 @@ namespace NFq::NRowDispatcher::NTests {
 Y_UNIT_TEST_SUITE(TestJsonParserDelivery) {
     Y_UNIT_TEST_F(MultipleRowsAdvanceOffsetAfterWholeMessage, TJsonParserDeliveryFixture) {
         Handler->ParseRecords({
-            GetRecord(42, R"({"col":"first"}{"col":"second"})"),
-            GetRecord(43, R"([{"col":"third"},{"col":"fourth"}])"),
+            GetRecord(42, R"({"col":"first"}{"col":"second"})"), GetRecord(43, R"([{"col":"third"},{"col":"fourth"}])"),
         });
         UNIT_ASSERT_VALUES_EQUAL(Client->Rows, 4);
         UNIT_ASSERT_VALUES_EQUAL(Client->NextOffset, 44);
         auto batches = Handler->ExtractClientData(Client->GetClientId(), MAX_BATCH_SIZE);
         UNIT_ASSERT_VALUES_EQUAL(batches.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(batches.front().Offsets, (TVector<ui64>{42, 42, 43, 43}));
-        CheckMessageBatch(std::move(batches.front().SerializedData), {
-            TRow().AddString("first"), TRow().AddString("second"), TRow().AddString("third"), TRow().AddString("fourth"),
-        });
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().Offsets, (TVector<ui64>{ 42, 42, 43, 43 }));
+        CheckMessageBatch(std::move(batches.front().SerializedData),
+            {
+                TRow().AddString("first"), TRow().AddString("second"), TRow().AddString("third"), TRow().AddString("fourth"),
+            });
         // Replayed messages must still be ignored.
         Handler->ParseRecords({
-            GetRecord(43, R"({"col":"replayed"})"),
-            GetRecord(44, R"({"col":"fifth"}{"col":"sixth"})"),
+            GetRecord(43, R"({"col":"replayed"})"), GetRecord(44, R"({"col":"fifth"}{"col":"sixth"})"),
         });
         UNIT_ASSERT_VALUES_EQUAL(Client->Rows, 6);
         UNIT_ASSERT_VALUES_EQUAL(Client->NextOffset, 45);
@@ -1898,26 +1926,26 @@ Y_UNIT_TEST_SUITE(TestJsonParserDelivery) {
 
     Y_UNIT_TEST_F(LargeMessageIsNotSplitAcrossBatches, TJsonParserDeliveryFixture) {
         const TString large(MAX_BATCH_SIZE + 1, 'x');
-        Handler->ParseRecords({GetRecord(42, TStringBuilder() << R"({"col":")" << large << R"("}{"col":"last"})")});
+        Handler->ParseRecords({ GetRecord(42, TStringBuilder() << R"({"col":")" << large << R"("}{"col":"last"})") });
         UNIT_ASSERT_VALUES_EQUAL(Client->Rows, 2);
         UNIT_ASSERT_VALUES_EQUAL(Client->NextOffset, 43);
         auto batches = Handler->ExtractClientData(Client->GetClientId(), MAX_BATCH_SIZE);
         UNIT_ASSERT_VALUES_EQUAL(batches.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(batches.front().Offsets, (TVector<ui64>{42, 42}));
-        CheckMessageBatch(std::move(batches.front().SerializedData), {TRow().AddString(large), TRow().AddString("last")});
+        UNIT_ASSERT_VALUES_EQUAL(batches.front().Offsets, (TVector<ui64>{ 42, 42 }));
+        CheckMessageBatch(std::move(batches.front().SerializedData), { TRow().AddString(large), TRow().AddString("last") });
     }
 
     Y_UNIT_TEST_F(EmptyMessagesAdvanceOffsetWithoutRows, TJsonParserDeliveryFixture) {
-        Handler->ParseRecords({GetRecord(42, ""), GetRecord(44, " \n"), GetRecord(47, "[]")});
+        Handler->ParseRecords({ GetRecord(42, ""), GetRecord(44, " \n"), GetRecord(47, "[]") });
         UNIT_ASSERT_VALUES_EQUAL(Client->Rows, 0);
         UNIT_ASSERT_VALUES_EQUAL(Client->NextOffset, 48);
         UNIT_ASSERT(!Handler->HasClientData(Client->GetClientId()));
     }
 
     Y_UNIT_TEST_F(TrailingEmptyMessagesAdvanceOffset, TJsonParserDeliveryFixture) {
-        Handler->ParseRecords({GetRecord(42, R"({"col":"first"})"), GetRecord(43, "[]"), GetRecord(45, " ")});
+        Handler->ParseRecords({ GetRecord(42, R"({"col":"first"})"), GetRecord(43, "[]"), GetRecord(45, " ") });
         UNIT_ASSERT_VALUES_EQUAL(Client->Rows, 1);
         UNIT_ASSERT_VALUES_EQUAL(Client->NextOffset, 46);
     }
 }
-} // namespace NFq::NRowDispatcher::NTests
+}   // namespace NFq::NRowDispatcher::NTests

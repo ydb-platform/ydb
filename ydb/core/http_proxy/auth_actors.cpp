@@ -127,9 +127,9 @@ namespace NKikimr::NHttpProxy {
 
         void HandleTicketParser(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
             NACLib::TUserToken userToken = NACLibProto::TUserToken();
-            if (ev->Get()->HasError()) {
+            if (ev->Get()->Error.has_value()) {
                 if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
-                    return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->Error.Message});
+                    return ReplyWithError(ctx, ev->Get()->Error->Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->Error->Message});
                 }
             } else {
                 userToken = *ev->Get()->Token;

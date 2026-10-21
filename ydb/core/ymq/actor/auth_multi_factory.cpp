@@ -254,20 +254,20 @@ void TBaseCloudAuthRequestProxy::ProcessAuthorizationResult(const TEvTicketParse
     ChangeCounters([this, &result](){
         Counters_.IncAuthorizeCounter(
             (AccessKeySignature_ ? NCloudAuth::ECredentialType::Signature : NCloudAuth::ECredentialType::IamToken),
-            result.Error
+            result.Error.has_value()
         );
         Counters_.AuthorizeDuration->Collect((TActivationContext::Now() - AuthorizeRequestStartTimestamp_).MilliSeconds());
     });
 
-    if (result.HasError()) {
-        if (CanRetry() && result.Error.Retryable) {
+    if (result.Error.has_value()) {
+        if (CanRetry() && result.Error->Retryable) {
             ScheduleAuthorizationRetry();
             return;
         } else {
             if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
-                RLOG_SQS_INFO("Authorize failed. Error: " << result.Error.ToString());
+                RLOG_SQS_INFO("Authorize failed. Error: " << result.Error->ToString());
                 SetError(
-                    result.Error.Retryable ? NErrors::SERVICE_UNAVAILABLE : NErrors::ACCESS_DENIED,
+                    result.Error->Retryable ? NErrors::SERVICE_UNAVAILABLE : NErrors::ACCESS_DENIED,
                     "IAM authorization error."
                 );
                 SendReplyAndDie();
@@ -431,15 +431,15 @@ void TBaseCloudAuthRequestProxy::Authorize() {
     } else {
         TEvTicketParser::TEvAuthorizeTicketResult result("fake_token", nullptr);
         if (AccessKeySignature_ && AccessKeySignature_->AccessKeyId.empty()) {
-            result.SetError({
+            result.Error = TEvTicketParser::TError{
                 .Message = "mocked_auth_error: empty access key",
                 .Retryable = false
-            });
+            };
         } else if (AccessKeySignature_ && AccessKeySignature_->AccessKeyId == "TEST_ID_FOR_RETRYIES") {
-            result.SetError({
+            result.Error = TEvTicketParser::TError{
                 .Message = "mocked_auth_error: correct process retries",
                 .Retryable = true
-            });
+            };
         } else {
             result.Token = MakeIntrusive<NACLib::TUserToken>("fake_user_sid@as", TVector<TString>());
         }

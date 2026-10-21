@@ -902,9 +902,9 @@ private:
 
     void HandleTicketParserResponse(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
         const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
-        if (result.HasError()) {
+        if (result.Error.has_value()) {
             if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
-                RLOG_SQS_ERROR("Got ticket parser error: " << result.Error << ". " << Action_ << " was rejected");
+                RLOG_SQS_ERROR("Got ticket parser error: " << *result.Error << ". " << Action_ << " was rejected");
                 MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);
                 SendReplyAndDie();
                 return;

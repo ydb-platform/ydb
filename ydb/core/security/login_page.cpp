@@ -300,8 +300,8 @@ public:
 
     void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
         const TEvTicketParser::TEvAuthorizeTicketResult& result = *ev->Get();
-        if (result.HasError()) {
-            return ReplyErrorAndPassAway("403", "Forbidden", result.Error.Message);
+        if (result.Error.has_value()) {
+            return ReplyErrorAndPassAway("403", "Forbidden", result.Error->Message);
         }
         if (result.Token == nullptr) {
             return ReplyErrorAndPassAway("403", "Forbidden", "Empty token");

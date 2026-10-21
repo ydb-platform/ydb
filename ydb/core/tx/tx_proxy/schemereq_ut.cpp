@@ -306,7 +306,7 @@ void CreateLocalUser2(TTestEnv& env, const TString& database, const TString& nam
         auto event = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         Cerr << __FUNCTION__ << " grab ticket_parser result" << Endl;
 
-        UNIT_ASSERT_C(!event->HasError(), event->Error);
+        UNIT_ASSERT_C(!event->Error.has_value(), *event->Error);
         UNIT_ASSERT(event->Token != nullptr);
         userToken = event->Token->SerializeAsString();
     }
@@ -354,7 +354,7 @@ void CreateLocalGroup2(TTestEnv& env, const TString& database, const TString& na
         auto event = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         Cerr << __FUNCTION__ << " grab ticket_parser result" << Endl;
 
-        UNIT_ASSERT_C(!event->HasError(), event->Error);
+        UNIT_ASSERT_C(!event->Error.has_value(), *event->Error);
         UNIT_ASSERT(event->Token != nullptr);
         userToken = event->Token->SerializeAsString();
     }

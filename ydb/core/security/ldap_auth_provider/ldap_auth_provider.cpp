@@ -2,6 +2,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/util/address_classifier.h>
+#include <optional>
 #include <queue>
 #include "ldap_auth_provider.h"
 #include "ldap_utils.h"
@@ -52,7 +53,7 @@ private:
 
     struct TBasicResponse {
         TEvLdapAuthProvider::EStatus Status = TEvLdapAuthProvider::EStatus::SUCCESS;
-        TEvLdapAuthProvider::TError Error;
+        std::optional<TEvLdapAuthProvider::TError> Error;
     };
 
     struct TInitializeLdapConnectionResponse : TBasicResponse {};
@@ -108,14 +109,14 @@ private:
                                                                 .RequestedAttributes = NKikimrLdap::noAttributes});
         if (searchUserResponse.Status != TEvLdapAuthProvider::EStatus::SUCCESS) {
             NKikimrLdap::Unbind(ld);
-            Send(ev->Sender, new TEvLdapAuthProvider::TEvAuthenticateResponse(searchUserResponse.Status, searchUserResponse.Error));
+            Send(ev->Sender, new TEvLdapAuthProvider::TEvAuthenticateResponse(searchUserResponse.Status, std::move(searchUserResponse.Error)));
             return;
         }
         auto entry = NKikimrLdap::FirstEntry(ld, searchUserResponse.SearchMessage);
         TAuthenticateUserResponse authResponse = AuthenticateUser({.Ld = &ld, .Entry = entry, .Login = request->Login, .Password = request->Password});
         NKikimrLdap::MsgFree(entry);
         NKikimrLdap::Unbind(ld);
-        Send(ev->Sender, new TEvLdapAuthProvider::TEvAuthenticateResponse(authResponse.Status, authResponse.Error));
+        Send(ev->Sender, new TEvLdapAuthProvider::TEvAuthenticateResponse(authResponse.Status, std::move(authResponse.Error)));
     }
 
     void Handle(TEvLdapAuthProvider::TEvEnrichGroupsRequest::TPtr& ev) {
@@ -134,7 +135,7 @@ private:
                                                                 .RequestedAttributes = RequestedAttributes});
         if (searchUserResponse.Status != TEvLdapAuthProvider::EStatus::SUCCESS) {
             NKikimrLdap::Unbind(ld);
-            Send(ev->Sender, new TEvLdapAuthProvider::TEvEnrichGroupsResponse(request->Key, searchUserResponse.Status, searchUserResponse.Error));
+            Send(ev->Sender, new TEvLdapAuthProvider::TEvEnrichGroupsResponse(request->Key, searchUserResponse.Status, std::move(searchUserResponse.Error)));
             return;
         }
         LDAPMessage* entry = NKikimrLdap::FirstEntry(ld, searchUserResponse.SearchMessage);
@@ -170,8 +171,8 @@ private:
 
     TInitAndBindResponse InitAndBind(LDAP** ld, std::function<THolder<IEventBase>(const TEvLdapAuthProvider::EStatus&, const TEvLdapAuthProvider::TError&)> eventFabric) {
         const auto initializeResponse = InitializeLDAPConnection(ld);
-        if (initializeResponse.Error) {
-            return {.Success = false, .Event = eventFabric(initializeResponse.Status, initializeResponse.Error)};
+        if (initializeResponse.Status != TEvLdapAuthProvider::EStatus::SUCCESS) {
+            return {.Success = false, .Event = eventFabric(initializeResponse.Status, *initializeResponse.Error)};
         }
 
         int result = 0;
@@ -246,7 +247,7 @@ private:
                 {"error", NKikimrLdap::LdapError(*ld)}
             );
             return {{TEvLdapAuthProvider::EStatus::UNAVAILABLE,
-                    {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = false}}};
+                    TEvLdapAuthProvider::TError{.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = false}}};
         }
 
         result = NKikimrLdap::SetProtocolVersion(*ld);
@@ -258,7 +259,7 @@ private:
                 {"error", NKikimrLdap::ErrorToString(result)}
             );
             return {{NKikimrLdap::ErrorToStatus(result),
-                    {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
+                    TEvLdapAuthProvider::TError{.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
         }
 
         if (Settings.GetScheme() == NKikimrLdap::LDAPS_SCHEME || Settings.GetUseTls().GetEnable()) {
@@ -284,7 +285,7 @@ private:
                 );
                 NKikimrLdap::Unbind(*ld);
                 return {{NKikimrLdap::ErrorToStatus(result),
-                        {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
+                        TEvLdapAuthProvider::TError{.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
             }
 
             const TString& certFile = Settings.GetUseTls().GetCertFile();
@@ -300,7 +301,7 @@ private:
                     );
                     NKikimrLdap::Unbind(*ld);
                     return {{NKikimrLdap::ErrorToStatus(result),
-                            {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
+                            TEvLdapAuthProvider::TError{.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
                 }
                 result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_KEYFILE, keyFile.c_str());
                 if (!NKikimrLdap::IsSuccess(result)) {
@@ -312,7 +313,7 @@ private:
                     );
                     NKikimrLdap::Unbind(*ld);
                     return {{NKikimrLdap::ErrorToStatus(result),
-                            {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
+                            TEvLdapAuthProvider::TError{.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
                 }
             }
 
@@ -326,7 +327,7 @@ private:
                     {"error", NKikimrLdap::ErrorToString(result)}
                 );
                 return {{NKikimrLdap::ErrorToStatus(result),
-                        {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
+                        TEvLdapAuthProvider::TError{.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
             }
 
             // Force OpenLDAP to rebuild the per-connection TLS context from the options we just
@@ -342,7 +343,7 @@ private:
                 );
                 NKikimrLdap::Unbind(*ld);
                 return {{NKikimrLdap::ErrorToStatus(result),
-                        {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
+                        TEvLdapAuthProvider::TError{.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)}}};
             }
         }
 
@@ -361,7 +362,7 @@ private:
                 {"error", NKikimrLdap::LdapError(*request.Ld)}
             );
             return {{TEvLdapAuthProvider::EStatus::UNAUTHORIZED,
-                    {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = false}}};
+                    TEvLdapAuthProvider::TError{.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = false}}};
         }
         if (request.Password.empty()) {
             TStringBuilder logErrorMessage;
@@ -370,9 +371,9 @@ private:
                 {"user", TString(dn)}
             );
             NKikimrLdap::MemFree(dn);
-            return {{.Status = TEvLdapAuthProvider::EStatus::UNAUTHORIZED, .Error = {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = false}}};
+            return {{.Status = TEvLdapAuthProvider::EStatus::UNAUTHORIZED, .Error = TEvLdapAuthProvider::TError{.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = false}}};
         }
-        TEvLdapAuthProvider::TError error;
+        std::optional<TEvLdapAuthProvider::TError> error;
         YDB_LOG_DEBUG("Bind",
             {"bindDn", dn}
         );
@@ -387,9 +388,11 @@ private:
                 {"server", UrisCreator.GetUris()},
                 {"error", NKikimrLdap::ErrorToString(result)}
             );
-            error.Message = ERROR_MESSAGE;
-            error.LogMessage = logErrorMessage;
-            error.Retryable = NKikimrLdap::IsRetryableError(result);
+            error = TEvLdapAuthProvider::TError{
+                .Message = ERROR_MESSAGE,
+                .LogMessage = logErrorMessage,
+                .Retryable = NKikimrLdap::IsRetryableError(result)
+            };
         }
         NKikimrLdap::MemFree(dn);
         return {{NKikimrLdap::ErrorToStatus(result), error}};
@@ -418,7 +421,7 @@ private:
             logErrorMessage << "Could not perform search for filter " << searchFilter << " on server " << UrisCreator.GetUris() << ". "
                             << NKikimrLdap::ErrorToString(result);
             response.Status = NKikimrLdap::ErrorToStatus(result);
-            response.Error = {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)};
+            response.Error = TEvLdapAuthProvider::TError{.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = NKikimrLdap::IsRetryableError(result)};
             YDB_LOG_DEBUG("Could not perform search",
                 {"filter", searchFilter},
                 {"server", UrisCreator.GetUris()},
@@ -448,7 +451,7 @@ private:
                     {"entryCount", countEntries}
                 );
             }
-            response.Error = {.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = false};
+            response.Error = TEvLdapAuthProvider::TError{.Message = ERROR_MESSAGE, .LogMessage = logErrorMessage, .Retryable = false};
             response.Status = TEvLdapAuthProvider::EStatus::UNAUTHORIZED;
             NKikimrLdap::MsgFree(searchMessage);
             return response;
@@ -554,16 +557,16 @@ private:
 
     TInitializeLdapConnectionResponse CheckRequiredSettingsParameters() const {
         if (Settings.GetHosts().empty() && Settings.GetHost().empty()) {
-            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "List of ldap server hosts is empty", .Retryable = false}};
+            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, TEvLdapAuthProvider::TError{.Message = ERROR_MESSAGE, .LogMessage = "List of ldap server hosts is empty", .Retryable = false}};
         }
         if (Settings.GetBaseDn().empty()) {
-            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "Parameter BaseDn is empty", .Retryable = false}};
+            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, TEvLdapAuthProvider::TError{.Message = ERROR_MESSAGE, .LogMessage = "Parameter BaseDn is empty", .Retryable = false}};
         }
         if (Settings.GetBindDn().empty() && !Settings.GetExtendedSettings().GetEnableSaslExternalBind()) {
-            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "Parameter BindDn is empty", .Retryable = false}};
+            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, TEvLdapAuthProvider::TError{.Message = ERROR_MESSAGE, .LogMessage = "Parameter BindDn is empty", .Retryable = false}};
         }
         if (Settings.GetBindPassword().empty() && !Settings.GetExtendedSettings().GetEnableSaslExternalBind()) {
-            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "Parameter BindPassword is empty", .Retryable = false}};
+            return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, TEvLdapAuthProvider::TError{.Message = ERROR_MESSAGE, .LogMessage = "Parameter BindPassword is empty", .Retryable = false}};
         }
         return {TEvLdapAuthProvider::EStatus::SUCCESS, {}};
     }

@@ -4,6 +4,8 @@
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/protos/auth.pb.h>
 
+#include <optional>
+
 namespace NKikimr {
 
 struct TEvLdapAuthProvider {
@@ -53,11 +55,11 @@ struct TEvLdapAuthProvider {
     template <typename TResponse, ui32 TEvent>
     struct TEvResponse : TEventLocal<TResponse, TEvent> {
         EStatus Status;
-        TError Error;
+        std::optional<TError> Error;
 
-        TEvResponse(const EStatus& status = EStatus::SUCCESS, const TError& error = {})
+        TEvResponse(const EStatus& status = EStatus::SUCCESS, std::optional<TError> error = std::nullopt)
             : Status(status)
-            , Error(error)
+            , Error(std::move(error))
         {}
     };
 
@@ -72,15 +74,15 @@ struct TEvLdapAuthProvider {
             , Groups(groups)
         {}
 
-        TEvEnrichGroupsResponse(const TString& key, const EStatus& status, const TError& error)
-            : TEvResponse<TEvEnrichGroupsResponse, EvEnrichGroupsResponse>(status, error)
+        TEvEnrichGroupsResponse(const TString& key, const EStatus& status, std::optional<TError> error)
+            : TEvResponse<TEvEnrichGroupsResponse, EvEnrichGroupsResponse>(status, std::move(error))
             , Key(key)
         {}
     };
 
     struct TEvAuthenticateResponse : TEvResponse<TEvAuthenticateResponse, EvAuthenticateResponse> {
-        TEvAuthenticateResponse(const EStatus& status, const TError& error)
-            : TEvResponse<TEvAuthenticateResponse, EvAuthenticateResponse>(status, error)
+        TEvAuthenticateResponse(const EStatus& status, std::optional<TError> error)
+            : TEvResponse<TEvAuthenticateResponse, EvAuthenticateResponse>(status, std::move(error))
         {}
     };
 };

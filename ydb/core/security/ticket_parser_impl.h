@@ -35,6 +35,8 @@
 
 #include <util/string/join.h>
 
+#include <optional>
+
 namespace NKikimr {
 
 inline bool IsRetryableGrpcError(const NYdbGrpc::TGrpcStatus& status) {
@@ -72,11 +74,11 @@ private:
         TString Subject;
         bool Required = false;
         TTypeCase SubjectType = TTypeCase::TYPE_NOT_SET;
-        TEvTicketParser::TError Error;
+        std::optional<TEvTicketParser::TError> Error;
         TStackVec<std::pair<TString, TString>> Attributes;
 
         bool IsPermissionReady() const {
-            return !Subject.empty() || !Error.empty();
+            return !Subject.empty() || Error.has_value();
         }
 
         bool IsPermissionOk() const {
@@ -137,7 +139,7 @@ protected:
         THashMap<TString, TPermissionRecord> Permissions;
         TString Subject; // login
         typename TPermissionRecord::TTypeCase SubjectType = TPermissionRecord::TTypeCase::TYPE_NOT_SET;
-        TEvTicketParser::TError Error;
+        std::optional<TEvTicketParser::TError> Error;
         TDeque<THolder<TEventHandle<TEvTicketParser::TEvAuthorizeTicket>>> AuthorizeRequests;
         ui64 ResponsesLeft = 0;
         TInstant InitTime;
@@ -181,19 +183,6 @@ protected:
                 }
             }
             return TString();
-        }
-
-        template <typename T>
-        void SetErrorRefreshTime(TTicketParserImpl<T>* ticketParser, TInstant now) {
-            if (Error.Retryable) {
-                SetRefreshTime(now, CurrentDelay);
-                if (CurrentDelay < ticketParser->MaxErrorRefreshTime - ticketParser->MinErrorRefreshTime) {
-                    static const double scaleFactor = 2.0;
-                    CurrentDelay = Min(CurrentDelay * scaleFactor, ticketParser->MaxErrorRefreshTime - ticketParser->MinErrorRefreshTime);
-                }
-            } else {
-                SetRefreshTime(now, ticketParser->RefreshTime);
-            }
         }
 
         template <typename T>
@@ -789,10 +778,10 @@ private:
         }
         CounterTicketsCertificate->Inc();
         TCertificateChecker::TCertificateCheckResult certificateCheckResult = CertificateChecker.Check(record.Ticket);
-        if (!certificateCheckResult.Error.empty()) {
+        if (certificateCheckResult.Error.has_value()) {
             TEvTicketParser::TError error;
-            error.Message = "Cannot create token from certificate. " + certificateCheckResult.Error.Message;
-            error.Retryable = certificateCheckResult.Error.Retryable;
+            error.Message = "Cannot create token from certificate. " + certificateCheckResult.Error->Message;
+            error.Retryable = certificateCheckResult.Error->Retryable;
             SetError(key, record, error);
             return false;
         }
@@ -1026,7 +1015,11 @@ private:
                     .AuthType = record.GetAuthType()
                 }));
             } else {
-                SetError(key, record, response->Error);
+                if (response->Error.has_value()) {
+                    SetError(key, record, *response->Error);
+                } else {
+                    SetError(key, record, {.Message = "Unknown error", .Retryable = false});
+                }
             }
             if (record.ResponsesLeft == 0) {
                 Respond(record);
@@ -1139,10 +1132,10 @@ private:
                 // token already have built
                 record.AccessTime = now;
                 Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.GetToken()), 0, cookie);
-            } else if (record.Error) {
+            } else if (record.Error.has_value()) {
                 // token stores information about previous error
                 record.AccessTime = now;
-                Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.Error), 0, cookie);
+                Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, *record.Error), 0, cookie);
             } else {
                 // token building in progress
                 record.AuthorizeRequests.emplace_back(ev.Release());
@@ -1174,14 +1167,14 @@ private:
         SetTokenType(record, ticket, ticketType);
 
         InitTokenRecord(key, record);
-        if (record.Error) {
+        if (record.Error.has_value()) {
             YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, "Ticket error",
                 {"ticket", record.GetMaskedTicket()},
-                {"error", record.Error},
+                {"error", *record.Error},
                 {"peerName", record.TraceContext.PeerName},
                 {"requestId", record.TraceContext.RequestId}
             );
-            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.Error), 0, cookie);
+            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, *record.Error), 0, cookie);
             return;
         }
         if (record.IsTokenReady()) {
@@ -1412,7 +1405,7 @@ private:
     void SetAccessServiceBulkAuthorizeError(const TString& key, TTokenRecord& record, const TString& errorMessage, bool isRetryableError) {
         for (auto& [permissionName, permissionRecord] : record.Permissions) {
             permissionRecord.Subject.clear();
-            permissionRecord.Error = {.Message = errorMessage, .Retryable = isRetryableError};
+            permissionRecord.Error = TEvTicketParser::TError{.Message = errorMessage, .Retryable = isRetryableError};
             YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket now has an error",
                 {"ticket", record.GetMaskedTicket()},
                 {"permission", permissionName},
@@ -1429,13 +1422,16 @@ private:
 
     static TString ConcatenateErrorMessages(const std::vector<typename THashMap<TString, TPermissionRecord>::iterator>& requiredPermissions) {
         TStringBuilder errorMessage;
-        auto it = requiredPermissions.cbegin();
-        errorMessage << (*it)->second.Error.Message;
-        ++it;
-        for (; it != requiredPermissions.cend(); ++it) {
-            errorMessage << ", " << (*it)->second.Error.Message;
+        TStringBuf separator;
+        for (const auto& permission : requiredPermissions) {
+            if (permission->second.Error.has_value()) {
+                errorMessage << separator << permission->second.Error->Message;
+            } else {
+                errorMessage << separator << "Unknown error";
+            }
+            separator = ", ";
         }
-        return std::move(errorMessage);
+        return errorMessage;
     }
 
     void Handle(NNebiusCloud::TEvAccessService::TEvAuthorizeResponse::TPtr& ev) {
@@ -1457,7 +1453,7 @@ private:
                     SetAccessServiceBulkAuthorizeError(key, record, TStringBuilder() << "Internal error: no results in authorize response", false);
                 } else {
                     for (auto& [permissionName, permissionRecord] : examinedPermissions) {
-                        permissionRecord.Error.clear();
+                        permissionRecord.Error.reset();
                     }
 
                     size_t permissionDeniedCount = 0;
@@ -1491,7 +1487,7 @@ private:
                             }
                             record.SubjectType = ConvertSubjectType(account.type_case(), result.impersonation_info());
                             for (auto& [_, permissionRecord] : record.Permissions) {
-                                if (permissionRecord.Error.empty()) {
+                                if (!permissionRecord.Error.has_value()) {
                                     permissionRecord.Subject = record.Subject;
                                     permissionRecord.SubjectType = record.SubjectType;
                                 }
@@ -1528,7 +1524,7 @@ private:
                                     requiredPermissions.push_back(permissionIt);
                                 }
                                 errorMessage << nebius::iam::v1::AuthorizeResult::ResultCode_Name(result.resultcode());
-                                permissionRecord.Error = {.Message = errorMessage, .Retryable = false};
+                                permissionRecord.Error = TEvTicketParser::TError{.Message = errorMessage, .Retryable = false};
                             }
                         } else {
                             YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Received response for unknown permission for ticket",
@@ -1611,7 +1607,7 @@ private:
                         for (auto& [permissionName, permissionRecord] : examinedPermissions) {
                             permissionRecord.Subject = record.Subject;
                             permissionRecord.SubjectType = record.SubjectType;
-                            permissionRecord.Error.clear();
+                            permissionRecord.Error.reset();
                         }
                     }
 
@@ -1645,7 +1641,7 @@ private:
                             }
                             permissionDeniedError = result.permission_denied_error().message();
                             errorMessage << permissionDeniedError;
-                            permissionDeniedRecord.Error = {.Message = errorMessage, .Retryable = false};
+                            permissionDeniedRecord.Error = TEvTicketParser::TError{.Message = errorMessage, .Retryable = false};
                         } else {
                             YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Received response for unknown permission for ticket",
                                 {"permission", result.permission()},
@@ -1750,7 +1746,7 @@ private:
                     {"requestId", record.TraceContext.RequestId}
                 );
                 if (!record.AuthorizeRequests.empty()) {
-                    record.Error = {.Message = "Timed out", .Retryable = true};
+                    record.Error = TEvTicketParser::TError{.Message = "Timed out", .Retryable = true};
                     Respond(record);
                 }
                 userTokens.erase(it);
@@ -1982,8 +1978,7 @@ protected:
         }
 
         if (record.TokenType == TDerived::ETokenType::Unknown && record.ResponsesLeft == 0) {
-            record.Error.Message = "Could not find correct token validator";
-            record.Error.Retryable = false;
+            record.Error = TEvTicketParser::TError{.Message = "Could not find correct token validator", .Retryable = false};
         }
     }
 
@@ -2009,7 +2004,7 @@ protected:
         record.ExpireTime = GetDerived()->GetExpireTime(record, now);
         record.RefreshTime = GetRefreshTime(now);
 
-        if (record.Error) {
+        if (record.Error.has_value()) {
             return;
         }
 
@@ -2027,7 +2022,7 @@ protected:
     void SetToken(const TString& key, TTokenRecord& record, TIntrusivePtr<NACLib::TUserToken> token) {
         token->SetSubjectType(ConvertSubjectTypeToProto(record.SubjectType));
         TInstant now = TlsActivationContext->Now();
-        record.Error.clear();
+        record.Error.reset();
         EnrichUserTokenWithBuiltins(record, token);
         record.SetToken(token);
         if (!token->GetUserSID().empty()) {
@@ -2062,12 +2057,16 @@ protected:
         record.Error = error;
         TInstant now = TlsActivationContext->Now();
         TStringBuilder errorLogMessage;
-        if (error.HasLogMessage()) {
+        if (!error.LogMessage.empty()) {
             errorLogMessage << " (" << error.LogMessage << ")";
         }
-        if (record.Error.Retryable) {
+        if (record.Error->Retryable) {
             record.ExpireTime = GetDerived()->GetExpireTime(record, now);
-            record.SetErrorRefreshTime(this, now);
+            record.SetRefreshTime(now, record.CurrentDelay);
+            if (record.CurrentDelay < MaxErrorRefreshTime - MinErrorRefreshTime) {
+                static const double scaleFactor = 2.0;
+                record.CurrentDelay = Min(record.CurrentDelay * scaleFactor, MaxErrorRefreshTime - MinErrorRefreshTime);
+            }
             CounterTicketsErrorsRetryable->Inc();
             YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Failed to process ticket",
                 {"ticket", record.GetMaskedTicket()},
@@ -2103,11 +2102,35 @@ protected:
     void Respond(TTokenRecordBase& record) {
         if (record.IsTokenReady()) {
             for (const auto& request : record.AuthorizeRequests) {
-                Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.GetToken()), 0, request->Cookie);
+                Send(
+                    request->Sender,
+                    new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.GetToken()),
+                    0,
+                    request->Cookie
+                );
             }
         } else {
-            for (const auto& request : record.AuthorizeRequests) {
-                Send(request->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.Error), 0, request->Cookie);
+            if (record.Error.has_value()) {
+                for (const auto& request : record.AuthorizeRequests) {
+                    Send(
+                        request->Sender,
+                        new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.Error.value()),
+                        0,
+                        request->Cookie
+                    );
+                }
+            } else {
+                for (const auto& request : record.AuthorizeRequests) {
+                    Send(
+                        request->Sender,
+                        new TEvTicketParser::TEvAuthorizeTicketResult(
+                            record.Ticket,
+                            TEvTicketParser::TError{.Message = "Unknown error", .Retryable = false}
+                        ),
+                        0,
+                        request->Cookie
+                    );
+                }
             }
         }
         record.AuthorizeRequests.clear();
@@ -2119,12 +2142,10 @@ protected:
             record.TokenType = GetDerived()->ParseTokenType(ticketType);
             switch (record.TokenType) {
                 case TDerived::ETokenType::Unsupported:
-                    record.Error.Message = "Token is not supported";
-                    record.Error.Retryable = false;
+                    record.Error = TEvTicketParser::TError{.Message = "Token is not supported", .Retryable = false};
                     break;
                 case TDerived::ETokenType::Unknown:
-                    record.Error.Message = "Unknown token";
-                    record.Error.Retryable = false;
+                    record.Error = TEvTicketParser::TError{.Message = "Unknown token", .Retryable = false};
                     break;
                 default:
                     break;
@@ -2168,19 +2189,19 @@ protected:
             return false;
         }
         if (record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::NebiusAccessService || record.TokenType == TDerived::ETokenType::ApiKey) {
-            return (record.Error && record.Error.Retryable) || !record.Signature.AccessKeyId;
+            return (record.Error.has_value() && record.Error->Retryable) || !record.Signature.AccessKeyId;
         }
         return record.TokenType == TDerived::ETokenType::Unknown;
     }
 
     template <typename TTokenRecord>
     bool CanRefreshLoginTicket(const TTokenRecord& record) {
-        return record.TokenType == TDerived::ETokenType::Login && record.Error.Retryable;
+        return record.TokenType == TDerived::ETokenType::Login && (!record.Error.has_value() || record.Error->Retryable);
     }
 
     template <typename TTokenRecord>
     bool CanRefreshExternalIdpTicket(const TTokenRecord& record) {
-        return record.TokenType == TDerived::ETokenType::ExternalIdp && record.Error.Retryable;
+        return record.TokenType == TDerived::ETokenType::ExternalIdp && (!record.Error.has_value() || record.Error->Retryable);
     }
 
     template <typename TTokenRecord>
@@ -2209,7 +2230,7 @@ protected:
 
     template <typename TTokenRecord>
     bool RefreshLoginTicket(const TString& key, TTokenRecord& record) {
-        if (record.Error.empty()) {
+        if (!record.Error.has_value()) {
             GetDerived()->ResetTokenRecord(record);
             const TString userSID = record.GetToken()->GetUserSID();
             if (record.IsExternalAuthEnabled()) {
@@ -2286,7 +2307,7 @@ protected:
         html << "<tr><td>Database</td><td>" << record.Database << "</td></tr>";
         html << "<tr><td>Subject</td><td>" << record.Subject << "</td></tr>";
         html << "<tr><td>Additional SIDs</td><td>" << JoinStrings(record.AdditionalSIDs.begin(), record.AdditionalSIDs.end(), ", ") << "</td></tr>";
-        html << "<tr><td>Error</td><td>" << record.Error << "</td></tr>";
+        html << "<tr><td>Error</td><td>" << (record.Error.has_value() ? record.Error->Message : TString()) << "</td></tr>";
         html << "<tr><td>Requests Infly</td><td>" << record.AuthorizeRequests.size() << "</td></tr>";
         html << "<tr><td>Responses Left</td><td>" << record.ResponsesLeft << "</td></tr>";
         html << "<tr><td>Refresh Time</td><td>" << record.RefreshTime << "</td></tr>";
@@ -2302,7 +2323,7 @@ protected:
         }
         for (const auto& [permissionName, perm] : record.Permissions) {
             html << "<tr><td></td><td></td></tr>";
-            html << "<tr><td>Permission \"" << permissionName << (perm.Required ? " (required)" : "") << "\"</td><td>" << (perm.Error ? "Error:" + perm.Error.ToString() : perm.Subject) << "</td></tr>";
+            html << "<tr><td>Permission \"" << permissionName << (perm.Required ? " (required)" : "") << "\"</td><td>" << (perm.Error.has_value() ? "Error:" + perm.Error->ToString() : perm.Subject) << "</td></tr>";
             for (const auto& [attributeName, value] : perm.Attributes) {
                 html << "<tr><td>Attribute \"" << attributeName << "\"</td><td>" << value << "</td></tr>";
             }
@@ -2328,7 +2349,7 @@ protected:
         html << "<td>" << record.GetMaskedTicket() << "</td>";
         html << "<td>" << record.Database << "</td>";
         html << "<td>" << record.Subject << "</td>";
-        html << "<td>" << record.Error << "</td>";
+        html << "<td>" << (record.Error.has_value() ? record.Error->Message : TString()) << "</td>";
         html << "<td>" << "<a href='ticket_parser?token=" << MD5::Calc(key) << "'>" << HtmlBool(record.IsTokenReady()) << "</a>" << "</td>";
         html << "<td>" << record.AuthorizeRequests.size() << "</td>";
         html << "<td>" << record.ResponsesLeft << "</td>";

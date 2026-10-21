@@ -6,6 +6,8 @@
 #include <ydb/library/login/login.h>
 #include <util/string/builder.h>
 
+#include <optional>
+
 namespace NKikimr {
     struct TEvTicketParser {
         enum EEv {
@@ -130,28 +132,6 @@ namespace NKikimr {
             TString LogMessage;
             bool Retryable = true;
 
-            bool empty() const {
-                return Message.empty() && LogMessage.empty();
-            }
-
-            bool HasMessage() const {
-                return !Message.empty();
-            }
-
-            bool HasLogMessage() const {
-                return !LogMessage.empty();
-            }
-
-            void clear() {
-                Message.clear();
-                LogMessage.clear();
-                Retryable = true;
-            }
-
-            operator bool() const {
-                return !empty();
-            }
-
             TString ToString() const {
                 return TStringBuilder()
                     << "{message:\"" << Message << "\",retryable:" << Retryable << "}";
@@ -160,32 +140,21 @@ namespace NKikimr {
 
         struct TEvAuthorizeTicketResult : TEventLocal<TEvAuthorizeTicketResult, EvAuthorizeTicketResult> {
             TString Ticket;
-            TError Error;
+            std::optional<TError> Error;
             TIntrusiveConstPtr<NACLib::TUserToken> Token;
             const TString SerializedToken;
-            bool IsSuccess = false;
 
             TEvAuthorizeTicketResult(const TString& ticket, const TIntrusiveConstPtr<NACLib::TUserToken>& token)
                 : Ticket(ticket)
                 , Token(token)
                 , SerializedToken(token ? token->GetSerializedToken() : "")
-                , IsSuccess(true)
             {
             }
 
             TEvAuthorizeTicketResult(const TString& ticket, const TError& error)
                 : Ticket(ticket)
                 , Error(error)
-                , IsSuccess(false)
-            {}
-
-            void SetError(const TError& error) {
-                Error = error;
-                IsSuccess = false;
-            }
-
-            bool HasError() const {
-                return !IsSuccess;
+            {
             }
         };
 

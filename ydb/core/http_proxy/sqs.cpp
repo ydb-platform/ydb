@@ -158,12 +158,12 @@ namespace NKikimr::NHttpProxy {
             void HandleSecurityTokenAuth(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
                 const auto& token = ev->Get()->Token;
                 const bool isEnforceUserTokenRequirement = AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->EnforceUserTokenCheckRequirement;
-                if (ev->Get()->HasError()) {
+                if (ev->Get()->Error.has_value()) {
                     if (isEnforceUserTokenRequirement) {
                         return ReplyWithYdbError(
                             ctx,
-                            ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED,
-                            TString{ev->Get()->Error.Message});
+                            ev->Get()->Error->Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED,
+                            TString{ev->Get()->Error->Message});
                     }
                 } else if (!token) {
                     if (isEnforceUserTokenRequirement) {

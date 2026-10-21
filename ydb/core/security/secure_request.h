@@ -60,9 +60,9 @@ private:
     }
 
     void ProcessAuthorizeTicketResult(THolder<TEvTicketParser::TEvAuthorizeTicketResult> result, const TActorContext& ctx) {
-        if (result->HasError()) {
+        if (result->Error.has_value()) {
             if (IsTokenRequired()) {
-                return static_cast<TDerived*>(this)->OnAccessDenied(result->Error, ctx);
+                return static_cast<TDerived*>(this)->OnAccessDenied(*result->Error, ctx);
             }
         }
 

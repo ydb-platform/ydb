@@ -744,17 +744,17 @@ protected:
         }
         TokenRecheckInFlight = false;
         auto* result = ev->Get();
-        if (result->HasError()) {
-            if (result->Error.Retryable) {
+        if (result->Error.has_value()) {
+            if (result->Error->Retryable) {
                 Context->Token.Status = ETokenCheckStatus::Unavailable;
                 YDB_LOG_WARN("Token recheck unavailable",
                     {LogPrefix()},
-                    {"error", result->Error.ToString()});
+                    {"error", result->Error->ToString()});
             } else {
                 Context->Token.Status = ETokenCheckStatus::Invalid;
                 YDB_LOG_ERROR("Token recheck failed",
                     {LogPrefix()},
-                    {"error", result->Error.ToString()});
+                    {"error", result->Error->ToString()});
             }
         } else if (result->Token && !result->Token->GetSerializedToken().empty()) {
             Context->Token.Status = ETokenCheckStatus::Ok;

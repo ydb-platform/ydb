@@ -146,6 +146,11 @@ message TGroupWriteLayout {
     repeated uint32 PartsPerFailRealm = 1;
 }
 
+// Minimal guaranteed layouts for all confirmed blobs, including old data.
+message TConfirmedWrites {
+    repeated TGroupWriteLayout Layout = 1;
+}
+
 message TGroupWritePolicy {
     // Alternatives are OR-ed; requirements inside a layout are AND-ed.
     repeated TGroupWriteLayout WriteOk = 1;
@@ -184,6 +189,7 @@ message TGroupInfo {
     optional TFailRealmStates FailRealmStates = 26;
     optional TGroupWritePolicy WritePolicy = 25;
     optional TMirror3dcGroupState Mirror3dcState = 27;
+    optional TConfirmedWrites ConfirmedWrites = 28;
 }
 
 // VDiskStatus ordering is assumed to be lower for bad statuses and higher for good ones

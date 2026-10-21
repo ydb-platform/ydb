@@ -1487,6 +1487,18 @@ namespace NKikimr::NBsController {
             if (GroupContentChanged.contains(group->ID)) {
                 throw TExError() << "Mirror-3-dc transition requires a separate group configuration transaction";
             }
+            auto confirmed = previous.GetConfirmedWrites({});
+            if (group->ConfirmedWrites) {
+                const auto parsed = TBlobStorageGroupInfo::TConfirmedWrites::Parse(
+                    *group->ConfirmedWrites, *group->Topology, &error);
+                if (!parsed) {
+                    throw TExError() << "Invalid persisted ConfirmedWrites: " << error.Str();
+                }
+                confirmed = *parsed;
+            } else if (group->Mirror3dcState) {
+                throw TExError() << "Managed mirror-3-dc group is missing ConfirmedWrites";
+            }
+            group->ConfirmedWrites = next->GetConfirmedWrites(confirmed).ToProto();
             group->Mirror3dcState = next->ToProto();
             group->FailRealmStates.Clear();
             for (const auto& realm : next->GetFailRealmStates()) {
@@ -1512,6 +1524,9 @@ namespace NKikimr::NBsController {
             pb->MutableFailRealmStates()->CopyFrom(group.FailRealmStates);
             if (group.Mirror3dcState) {
                 pb->MutableMirror3dcState()->CopyFrom(*group.Mirror3dcState);
+            }
+            if (group.ConfirmedWrites) {
+                pb->MutableConfirmedWrites()->CopyFrom(*group.ConfirmedWrites);
             }
             if (group.WritePolicy) {
                 pb->MutableWritePolicy()->CopyFrom(*group.WritePolicy);
@@ -1662,6 +1677,9 @@ namespace NKikimr::NBsController {
             group->MutableFailRealmStates()->CopyFrom(groupInfo.FailRealmStates);
             if (groupInfo.Mirror3dcState) {
                 group->MutableMirror3dcState()->CopyFrom(*groupInfo.Mirror3dcState);
+            }
+            if (groupInfo.ConfirmedWrites) {
+                group->MutableConfirmedWrites()->CopyFrom(*groupInfo.ConfirmedWrites);
             }
             if (groupInfo.WritePolicy) {
                 group->MutableWritePolicy()->CopyFrom(*groupInfo.WritePolicy);

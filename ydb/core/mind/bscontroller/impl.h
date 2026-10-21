@@ -707,6 +707,7 @@ public:
 
         Table::GroupSizeInUnits::Type GroupSizeInUnits;
         NKikimrBlobStorage::TFailRealmStates FailRealmStates;
+        std::optional<NKikimrBlobStorage::TConfirmedWrites> ConfirmedWrites;
         std::optional<NKikimrBlobStorage::TGroupWritePolicy> WritePolicy;
         std::optional<NKikimrBlobStorage::TMirror3dcGroupState> Mirror3dcState;
 
@@ -792,6 +793,7 @@ public:
                     Table::FailRealmStates,
                     Table::WritePolicy,
                     Table::Mirror3dcState,
+                    Table::ConfirmedWrites,
                     Table::BridgePileId,
                     Table::VirtualGroupName,
                     Table::VirtualGroupState,
@@ -820,6 +822,7 @@ public:
                     &TGroupInfo::FailRealmStates,
                     &TGroupInfo::WritePolicy,
                     &TGroupInfo::Mirror3dcState,
+                    &TGroupInfo::ConfirmedWrites,
                     &TGroupInfo::BridgePileId,
                     &TGroupInfo::VirtualGroupName,
                     &TGroupInfo::VirtualGroupState,

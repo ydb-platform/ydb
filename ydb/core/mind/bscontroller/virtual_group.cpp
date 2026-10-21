@@ -1151,6 +1151,7 @@ namespace NKikimr::NBsController {
                     group->FailRealmStates.Clear();
                     group->WritePolicy.reset();
                     group->Mirror3dcState.reset();
+                    group->ConfirmedWrites.reset();
                     group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::DONE;
                     group->Topology = std::make_shared<TBlobStorageGroupInfo::TTopology>(group->Topology->GType, 0, 0, 0);
                     state.GroupContentChanged.insert(TGroupId::FromValue(groupId));

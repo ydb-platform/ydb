@@ -453,6 +453,14 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         combined.AddCommand()->CopyFrom(second);
         UNIT_ASSERT(!env.Invoke(combined).GetSuccess());
         UNIT_ASSERT(!query().HasMirror3dcState());
+        using TConfirmed = TBlobStorageGroupInfo::TConfirmedWrites;
+        const TVector<TConfirmed> expectedConfirmed = {
+            {{{1, 1, 1}, {2, 2}}}, {{{1, 1}}}, {{{1, 1}}}, {{{1, 1}}}, {{{2, 2}}},
+            {{{2, 2}}}, {{{2}}}, {{{2}}}, {{{2}}}, {{{2, 2}}},
+            {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(path.size(), expectedConfirmed.size());
+        size_t step = 0;
         for (const auto& state : path) {
             auto req = request(state);
             req.SetRollback(true);
@@ -466,6 +474,9 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), generation + 1);
             UNIT_ASSERT_VALUES_EQUAL(group.GetMirror3dcState().SerializeAsString(), state.ToProto().SerializeAsString());
             UNIT_ASSERT_VALUES_EQUAL(group.GetWritePolicy().SerializeAsString(), state.GetWritePolicy().ToProto().SerializeAsString());
+            UNIT_ASSERT(group.HasConfirmedWrites());
+            UNIT_ASSERT_VALUES_EQUAL(group.GetConfirmedWrites().SerializeAsString(),
+                expectedConfirmed[step++].ToProto().SerializeAsString());
             UNIT_ASSERT(!env.Invoke(req).GetSuccess()); // stale generation, even for the same mode
             UNIT_ASSERT(env.Invoke(request(state)).GetSuccess());
             UNIT_ASSERT_VALUES_EQUAL(query().GetGroupGeneration(), generation + 1);
@@ -474,6 +485,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_VALUES_EQUAL(restored.GetMirror3dcState().SerializeAsString(), group.GetMirror3dcState().SerializeAsString());
             UNIT_ASSERT_VALUES_EQUAL(restored.GetFailRealmStates().SerializeAsString(), group.GetFailRealmStates().SerializeAsString());
             UNIT_ASSERT_VALUES_EQUAL(restored.GetWritePolicy().SerializeAsString(), group.GetWritePolicy().SerializeAsString());
+            UNIT_ASSERT_VALUES_EQUAL(restored.GetConfirmedWrites().SerializeAsString(), group.GetConfirmedWrites().SerializeAsString());
             group = restored;
         }
         NKikimrBlobStorage::TConfigRequest custom;

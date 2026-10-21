@@ -114,6 +114,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                 }
             }
             group.MutableMirror3dcState()->CopyFrom(state.ToProto());
+            group.MutableConfirmedWrites()->CopyFrom(state.GetConfirmedWrites(normal.GetConfirmedWrites({})).ToProto());
             group.MutableWritePolicy()->CopyFrom(state.GetWritePolicy().ToProto());
             for (const auto& realm : state.GetFailRealmStates()) {
                 auto* item = group.MutableFailRealmStates()->AddFailRealm();
@@ -125,11 +126,63 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
             UNIT_ASSERT(info->Mirror3dcState == state);
             TInfo copy(info, TVDiskID(0, 2, 0, 0, 0), TActorId());
             UNIT_ASSERT(copy.Mirror3dcState == state);
+            UNIT_ASSERT(copy.ConfirmedWrites == info->ConfirmedWrites);
             UNIT_ASSERT(!copy.HasStoragePolicyChanged(*info));
+            auto missingConfirmed = group;
+            missingConfirmed.ClearConfirmedWrites();
+            UNIT_ASSERT(!TInfo::Parse(missingConfirmed, nullptr, nullptr));
             group.ClearWritePolicy();
             UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr));
         }
         UNIT_ASSERT(!TInfo::TWritePolicy::Parse(normal.GetWritePolicy().ToProto(), empty));
+    }
+
+    Y_UNIT_TEST(ConfirmedWrites) {
+        using TInfo = TBlobStorageGroupInfo;
+        using TConfirmed = TInfo::TConfirmedWrites;
+        using TState = TInfo::TMirror3dcState;
+        using T = NKikimrBlobStorage::TMirror3dcGroupState;
+        const TInfo::TTopology topology(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1, true);
+        const auto minimize = [](TInfo::TWritePolicy::TLayouts layouts) { return TConfirmed::Minimize(std::move(layouts)); };
+        const auto normal = minimize({{1, 1, 1}, {2, 2}});
+        UNIT_ASSERT(minimize({{2, 2}, {1, 1, 1}, {2, 2, 2}, {2, 2}}) == normal);
+        UNIT_ASSERT(minimize({{2}, {1, 1, 1}, {2, 2, 2}}) == minimize({{2}, {1, 1, 1}}));
+        UNIT_ASSERT(minimize({{2, 2, 2}, {2, 2, 2}}) == minimize({{2, 2, 2}}));
+        UNIT_ASSERT(minimize({{1, 2}, {2, 1}, {2, 2}}) == minimize({{2, 1}}));
+        UNIT_ASSERT(TConfirmed::Parse(normal.ToProto(), topology) == normal);
+        UNIT_ASSERT(!TConfirmed::Parse({}, topology));
+        UNIT_ASSERT(!TConfirmed::Parse(minimize({{4}}).ToProto(), topology));
+        UNIT_ASSERT(!TConfirmed::Parse(minimize({{1, 1, 1, 1}}).ToProto(), topology));
+        UNIT_ASSERT(!TConfirmed::Parse(minimize({{0}}).ToProto(), topology));
+        const TInfo::TTopology empty(TBlobStorageGroupType::ErasureMirror3dc, 0, 0, 0);
+        UNIT_ASSERT(!TConfirmed::Parse(normal.ToProto(), empty));
+        UNIT_ASSERT(normal.Covers({{2, 2, 2}, {1, 1, 1}}));
+        UNIT_ASSERT(!normal.Covers({{2}}));
+
+        const auto failure = minimize({{1, 1}});
+        const auto inv2 = minimize({{2, 2}});
+        const auto solo = minimize({{2}});
+        auto check = [&](T::EMode mode, const TConfirmed& before, const TConfirmed& expected) {
+            TState state;
+            state.Mode = mode;
+            UNIT_ASSERT_C(state.GetConfirmedWrites(before) == expected, T::EMode_Name(mode));
+        };
+        check(T::NORMAL, {}, normal);
+        check(T::DC_FAILURE_PENDING, normal, normal);
+        check(T::DC_FAILURE, normal, failure); // Weaker new writes weaken the guarantee immediately.
+        check(T::DC_FAILURE_INV_1, failure, failure);
+        check(T::DC_FAILURE_INV_2_PENDING, failure, failure);
+        check(T::DC_FAILURE_INV_2, failure, inv2);
+        check(T::SOLO_DC_INV_2_PENDING, inv2, inv2);
+        check(T::SOLO_DC_INV_2, inv2, solo);
+        check(T::SOLO_DC_INV_1, failure, minimize({{1, 1}, {2}}));
+        check(T::SOLO_DC_RECOVERY_PENDING, solo, solo);
+        check(T::SOLO_DC_RECOVERY, solo, solo);
+        check(T::DC_FAILURE_INV_2, solo, inv2);
+        check(T::DC_RECOVERY_PENDING, inv2, normal);
+        check(T::DC_RECOVERY, failure, failure);
+        check(T::NORMAL_PENDING, failure, failure);
+        check(T::NORMAL, failure, normal);
     }
 
     Y_UNIT_TEST(FailRealmStates) {

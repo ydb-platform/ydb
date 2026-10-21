@@ -655,6 +655,7 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGro
     , Type(info->Type)
     , GroupSizeInUnits(info->GroupSizeInUnits)
     , WritePolicy(info->WritePolicy)
+    , ConfirmedWrites(info->ConfirmedWrites)
     , FailRealmStates(info->FailRealmStates)
     , Mirror3dcState(info->Mirror3dcState)
     , Topology(info->Topology)
@@ -676,6 +677,7 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TBlobStorageGroupInfo& other,
     , Type(other.Type)
     , GroupSizeInUnits(other.GroupSizeInUnits)
     , WritePolicy(other.WritePolicy)
+    , ConfirmedWrites(other.ConfirmedWrites)
     , FailRealmStates(other.FailRealmStates)
     , Mirror3dcState(other.Mirror3dcState)
     , BlobDepotId(other.BlobDepotId)
@@ -778,6 +780,55 @@ NKikimrBlobStorage::TGroupWritePolicy TBlobStorageGroupInfo::TWritePolicy::ToPro
     serialize(WriteOk, result.MutableWriteOk());
     serialize(WriteDurability, result.MutableWriteDurability());
     return result;
+}
+
+std::optional<TBlobStorageGroupInfo::TConfirmedWrites> TBlobStorageGroupInfo::TConfirmedWrites::Parse(
+        const NKikimrBlobStorage::TConfirmedWrites& proto, const TTopology& topology, IOutputStream* err) {
+    NKikimrBlobStorage::TGroupWritePolicy policy;
+    policy.MutableWriteOk()->CopyFrom(proto.GetLayout());
+    policy.MutableWriteDurability()->CopyFrom(proto.GetLayout());
+    const auto parsed = TWritePolicy::Parse(policy, topology, err);
+    if (!parsed) {
+        return std::nullopt;
+    }
+    return Minimize(parsed->WriteOk);
+}
+
+NKikimrBlobStorage::TConfirmedWrites TBlobStorageGroupInfo::TConfirmedWrites::ToProto() const {
+    NKikimrBlobStorage::TConfirmedWrites result;
+    for (const auto& layout : Layouts) {
+        auto* item = result.AddLayout();
+        for (ui32 count : layout) {
+            item->AddPartsPerFailRealm(count);
+        }
+    }
+    return result;
+}
+
+TBlobStorageGroupInfo::TConfirmedWrites TBlobStorageGroupInfo::TConfirmedWrites::Minimize(
+        TWritePolicy::TLayouts layouts) {
+    for (auto& layout : layouts) {
+        Sort(layout, std::greater<ui32>());
+    }
+    SortUnique(layouts);
+    TConfirmedWrites result;
+    for (size_t i = 0; i < layouts.size(); ++i) {
+        bool redundant = false;
+        for (size_t j = 0; j < layouts.size() && !redundant; ++j) {
+            if (i != j) {
+                redundant = TWritePolicy{ {layouts[j]}, {} }.CheckWriteOk(layouts[i]);
+            }
+        }
+        if (!redundant) {
+            result.Layouts.push_back(layouts[i]);
+        }
+    }
+    return result;
+}
+
+bool TBlobStorageGroupInfo::TConfirmedWrites::Covers(const TWritePolicy::TLayouts& layouts) const {
+    const TWritePolicy policy{Layouts, {}};
+    return AllOf(layouts, [&](const auto& layout) { return policy.CheckWriteOk(layout); });
 }
 
 bool TBlobStorageGroupInfo::TWritePolicy::CheckLayouts(const TLayouts& layouts, TVector<ui32> partsPerFailRealm) {
@@ -1026,6 +1077,27 @@ TBlobStorageGroupInfo::TWritePolicy TBlobStorageGroupInfo::TMirror3dcState::GetW
     }
 }
 
+TBlobStorageGroupInfo::TConfirmedWrites TBlobStorageGroupInfo::TMirror3dcState::GetConfirmedWrites(
+        const TConfirmedWrites& previous) const {
+    using T = NKikimrBlobStorage::TMirror3dcGroupState;
+    const auto policy = GetWritePolicy();
+    auto layouts = previous.Layouts;
+    switch (Mode) {
+        case T::NORMAL:
+        case T::DC_FAILURE_INV_1:
+        case T::DC_FAILURE_INV_2:
+        case T::SOLO_DC_INV_2:
+            // The administrator asserts completion for old data. New writes only promise WriteOk.
+            layouts = policy.WriteDurability;
+            break;
+        default:
+            // Pending/recovery states and SOLO_DC_INV_1 do not assert full replication of old data.
+            break;
+    }
+    layouts.insert(layouts.end(), policy.WriteOk.begin(), policy.WriteOk.end());
+    return TConfirmedWrites::Minimize(std::move(layouts));
+}
+
 TBlobStorageGroupInfo::~TBlobStorageGroupInfo()
 {}
 
@@ -1085,13 +1157,24 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
         }
     }
 
+    if (group.HasConfirmedWrites()) {
+        res->ConfirmedWrites = TConfirmedWrites::Parse(group.GetConfirmedWrites(), res->GetTopology(), err);
+        if (!res->ConfirmedWrites || (res->WritePolicy && !res->ConfirmedWrites->Covers(res->WritePolicy->WriteOk))) {
+            if (err) {
+                *err << "ConfirmedWrites must cover every WriteOk layout";
+            }
+            return nullptr;
+        }
+    }
+
     if (group.HasMirror3dcState()) {
         res->Mirror3dcState = TMirror3dcState::Parse(group.GetMirror3dcState(), res->GetTopology(), err);
         if (!res->Mirror3dcState) {
             return nullptr;
         }
         if (res->FailRealmStates != res->Mirror3dcState->GetFailRealmStates()
-                || !res->WritePolicy || *res->WritePolicy != res->Mirror3dcState->GetWritePolicy()) {
+                || !res->WritePolicy || *res->WritePolicy != res->Mirror3dcState->GetWritePolicy()
+                || !res->ConfirmedWrites) {
             if (err) {
                 *err << "Internal policies do not match the administrative mirror3dc state";
             }

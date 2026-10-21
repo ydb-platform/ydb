@@ -531,7 +531,19 @@ public:
         static bool CheckLayouts(const TLayouts& layouts, TVector<ui32> partsPerFailRealm);
     };
 
+    struct TConfirmedWrites {
+        TWritePolicy::TLayouts Layouts;
+        bool operator==(const TConfirmedWrites&) const = default;
+        static std::optional<TConfirmedWrites> Parse(const NKikimrBlobStorage::TConfirmedWrites& proto,
+            const TTopology& topology, IOutputStream* err = nullptr);
+        NKikimrBlobStorage::TConfirmedWrites ToProto() const;
+        // Remove duplicates and alternatives implied by a weaker layout.
+        static TConfirmedWrites Minimize(TWritePolicy::TLayouts layouts);
+        bool Covers(const TWritePolicy::TLayouts& layouts) const;
+    };
+
     std::optional<TWritePolicy> WritePolicy;
+    std::optional<TConfirmedWrites> ConfirmedWrites;
     enum class EFailRealmState : ui32 {
         Included = 0,
         Excluded = 1,
@@ -571,12 +583,14 @@ public:
         bool RequiresSurvivingRealm() const;
         TVector<TFailRealmState> GetFailRealmStates() const;
         TWritePolicy GetWritePolicy() const;
+        // Only manual completion of recovery may strengthen existing guarantees.
+        TConfirmedWrites GetConfirmedWrites(const TConfirmedWrites& previous) const;
     };
     std::optional<TMirror3dcState> Mirror3dcState;
 
     bool HasStoragePolicyChanged(const TBlobStorageGroupInfo& previous) const {
         return FailRealmStates != previous.FailRealmStates || WritePolicy != previous.WritePolicy
-            || Mirror3dcState != previous.Mirror3dcState;
+            || Mirror3dcState != previous.Mirror3dcState || ConfirmedWrites != previous.ConfirmedWrites;
     }
 
     // virtual group BlobDepot tablet id

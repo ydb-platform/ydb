@@ -248,6 +248,9 @@ public:
                 if (groups.HaveValue<T::Mirror3dcState>()) {
                     group.Mirror3dcState = groups.GetValue<T::Mirror3dcState>();
                 }
+                if (groups.HaveValue<T::ConfirmedWrites>()) {
+                    group.ConfirmedWrites = groups.GetValue<T::ConfirmedWrites>();
+                }
                 if (groups.HaveValue<T::WritePolicy>()) {
                     group.WritePolicy = groups.GetValue<T::WritePolicy>();
                 }

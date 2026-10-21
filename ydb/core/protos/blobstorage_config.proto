@@ -898,6 +898,7 @@ message TBaseConfig {
         NKikimrBlobStorage.TFailRealmStates FailRealmStates = 18;
         NKikimrBlobStorage.TGroupWritePolicy WritePolicy = 17;
         NKikimrBlobStorage.TMirror3dcGroupState Mirror3dcState = 19;
+        NKikimrBlobStorage.TConfirmedWrites ConfirmedWrites = 20;
     }
     message TNode {
         uint32 NodeId = 1;

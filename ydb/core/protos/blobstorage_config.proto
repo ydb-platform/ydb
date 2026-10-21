@@ -164,6 +164,8 @@ message TDefineStoragePool {
     NActorsInterconnect.TScopeId ScopeId = 13; // scope id for the pool clients
     bool RandomizeGroupMapping = 14; // minimize correlation of groups and drives
     repeated uint64 ExpectedGroupSlotSize = 15; // primarily for debugging purposes; expected slot size for group allocation
+    // Creation-time override of the cluster default. Omitted updates preserve the stored policy.
+    optional bool BridgeMode = 16;
 
     // item's generation to prevent concurrent modification
     uint64 ItemConfigGeneration = 100;

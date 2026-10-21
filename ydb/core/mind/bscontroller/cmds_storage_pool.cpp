@@ -50,6 +50,23 @@ namespace NKikimr::NBsController {
         const TBoxStoragePoolId id(boxId, storagePoolId);
         const ui64 nextGen = CheckGeneration(cmd, StoragePools.Get(), id);
 
+        const auto current = StoragePools.Get().find(id);
+        const bool existing = current != StoragePools.Get().end();
+        if (cmd.HasBridgeMode()) {
+            const auto& details = Self.StorageConfig
+                ? Self.StorageConfig->GetClusterStateDetails()
+                : NKikimrBridge::TClusterStateDetails::default_instance();
+            if (!BridgeInfo || BridgeInfo->IsImplicit || details.GetBscConversionPending()) {
+                throw TExError() << "BridgeMode override requires a bridged cluster with BSC conversion complete";
+            }
+            if (!details.GetNonUniformStorageEnabled()) {
+                throw TExError() << "BridgeMode override requires bridge_config.enable_non_uniform_storage";
+            }
+            if (existing && cmd.GetBridgeMode() != current->second.BridgeMode) {
+                throw TExError() << "can't change storage pool BridgeMode";
+            }
+        }
+
         TStoragePoolInfo storagePool;
         storagePool.Name = cmd.GetName();
         storagePool.Generation = nextGen;
@@ -57,6 +74,21 @@ namespace NKikimr::NBsController {
         const TString &erasureSpecies = cmd.GetErasureSpecies();
         if (!TBlobStorageGroupType::ParseErasureName(storagePool.ErasureSpecies, erasureSpecies)) {
             throw TExError() << "invalid ErasureSpecies# " << erasureSpecies;
+        }
+
+        // The override is immutable once supplied; an omitted update retains it. Legacy pools keep their
+        // resolved policy even if the cluster default has changed since their creation.
+        storagePool.BridgeMode = existing ? current->second.BridgeMode : BridgeInfo && !BridgeInfo->IsImplicit;
+        if (existing) {
+            storagePool.BridgeModeOverride = current->second.BridgeModeOverride;
+        }
+        if (cmd.HasBridgeMode()) {
+            storagePool.BridgeModeOverride = cmd.GetBridgeMode();
+            storagePool.BridgeMode = cmd.GetBridgeMode();
+        }
+        if (storagePool.BridgeModeOverride && !*storagePool.BridgeModeOverride
+                && storagePool.ErasureSpecies != TBlobStorageGroupType::ErasureMirror3dc) {
+            throw TExError() << "ordinary storage in a bridged cluster requires mirror-3-dc";
         }
 
         if (cmd.HasGeometry()) {
@@ -177,15 +209,8 @@ namespace NKikimr::NBsController {
                 }
             }
             // retain some fields; TStoragePoolSettings are changed by UpdateStoragePoolSettings only
-            storagePool.BridgeMode = cur.BridgeMode;
             storagePool.VDiskHeapAllocatorNumLeadingDisks = cur.VDiskHeapAllocatorNumLeadingDisks;
             cur = std::move(storagePool); // update existing storage pool
-        } else {
-            // enable bridge mode by default for new pools (when the cluster is bridged one; bridge-capable cluster
-            // that has not been converted yet runs in implicit single-pile state and keeps creating ordinary pools)
-            Y_DEBUG_ABORT_UNLESS(AppData()->BridgeModeEnabled == static_cast<bool>(BridgeInfo));
-            const bool bridgeMode = BridgeInfo && !BridgeInfo->IsImplicit;
-            spIt->second.BridgeMode = bridgeMode;
         }
         Fit.PoolsAndGroups.emplace(id, std::nullopt);
     }
@@ -488,6 +513,9 @@ namespace NKikimr::NBsController {
 
         if (origin.DDisk || target.DDisk) {
             throw TExError() << "can't move groups between DDisk pools";
+        }
+        if (origin.BridgeMode != target.BridgeMode) {
+            throw TExError() << "can't move groups between pools with different BridgeMode";
         }
 
         auto& storagePoolGroups = StoragePoolGroups.Unshare();

@@ -482,7 +482,7 @@ namespace NKikimr {
                 const TVDiskIdShort replacedVDisk = Geometry.RepairGroupLayout(*Mapper, groupInfo.ID, placement.Group,
                                                                              std::move(forbidden), groupInfo.GroupSizeInUnits,
                                                                              placement.RequiredSpace,
-                                                                             GetPlacementPileId(groupInfo.BridgePileId));
+                                                                             GetPlacementScope(groupInfo.BridgePileId));
                 if (reassignment.ReplacedSlots.empty()) {
                     const TVSlotInfo *slot = groupInfo.VDisksInGroup[groupInfo.Topology->GetOrderNumber(replacedVDisk)];
                     reassignment.ReplacedSlots.emplace(replacedVDisk, slot->VSlotId);
@@ -499,7 +499,7 @@ namespace NKikimr {
                 request.GroupSizeInUnits = groupInfo.GroupSizeInUnits;
                 request.TryToRelocateLocallyFirst = State.Self.TryToRelocateBrokenDisksLocallyFirst;
                 request.IgnoreGroupLayoutChecks = LayoutPolicy.AllowsRelaxedPlacement();
-                request.BridgePileId = GetPlacementPileId(groupInfo.BridgePileId);
+                request.PileScope = GetPlacementScope(groupInfo.BridgePileId);
 
                 EnsureGroupMapper();
                 auto outcome = Mapper->AllocateGroupReassignment(std::move(request));
@@ -663,7 +663,11 @@ namespace NKikimr {
                 }
             }
 
-            TBridgePileId GetPlacementPileId(TBridgePileId groupPileId) const {
+            TGroupMapper::TPileScope GetPlacementScope(TBridgePileId groupPileId) const {
+                if (StoragePool.BridgeModeOverride && !*StoragePool.BridgeModeOverride) {
+                    Y_ABORT_UNLESS(!groupPileId && !StoragePool.BridgeMode);
+                    return TGroupMapper::TPileScope::AcrossPiles();
+                }
                 return NBridge::GetPlacementPileId(groupPileId, State.BridgeInfo.get());
             }
 
@@ -672,7 +676,7 @@ namespace NKikimr {
                 EnsureGroupMapper();
                 TGroupMapper::TGroupConstraintsDefinition constraints;
                 Geometry.AllocateGroup(*Mapper, groupId, group, constraints, {}, {}, groupSizeInUnits, requiredSpace,
-                    GetPlacementPileId(bridgePileId));
+                    GetPlacementScope(bridgePileId));
             }
 
             void PopulateGroupMapper() {
@@ -704,6 +708,14 @@ namespace NKikimr {
                     }
                     if (!usable && !RequiredPDisks.contains(id)) {
                         return;
+                    }
+
+                    if (StoragePool.BridgeModeOverride && !*StoragePool.BridgeModeOverride && State.BridgeInfo) {
+                        const auto *pile = State.BridgeInfo->GetPileForNode(id.NodeId);
+                        // Keep existing placements for accounting, but don't allocate into disconnected,
+                        // inactive or suspended piles. Ordinary VDisks recover without bridge synchronization.
+                        usable &= pile && NBridge::PileStateTraits(pile->State).AllowsConnection
+                            && pile->State != NKikimrBridge::TClusterState::SUSPENDED;
                     }
 
                     TGroupMapper::TPDiskState pdisk;
@@ -908,6 +920,8 @@ namespace NKikimr {
                 try {
                     TStringBuilder identifier;
                     identifier << "Erasure# " << storagePool.ErasureSpecies
+                        << " BridgeMode# " << storagePool.BridgeMode
+                        << " AcrossPiles# " << (storagePool.BridgeModeOverride && !*storagePool.BridgeModeOverride)
                         << " Geometry# " << storagePool.RealmLevelBegin << "," << storagePool.RealmLevelEnd
                         << "," << storagePool.DomainLevelBegin << "," << storagePool.DomainLevelEnd
                         << "," << storagePool.NumFailRealms << "," << storagePool.NumFailDomainsPerFailRealm

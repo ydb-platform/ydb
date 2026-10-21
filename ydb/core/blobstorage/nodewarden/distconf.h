@@ -964,10 +964,11 @@ namespace NKikimr::NStorage {
         // piles are added and removed with pending operations, static group ids are never reused, static groups going
         // away are ejected, inline pile may be removed
         BridgeFeatureLevelPileOps = 2,
+        BridgeFeatureLevelNonUniformStorage = 3,
     };
 
     // bridge feature level of this version; every node has to support it to change the list of piles, add and remove them
-    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelPileOps;
+    constexpr ui32 BridgeFeatureLevel = BridgeFeatureLevelNonUniformStorage;
 
     inline ui32 GetRequiredBridgeFeatureLevel(const NKikimrBlobStorage::TStorageConfig& config) {
         const auto& registry = config.GetClusterStateDetails().GetPileRegistry();

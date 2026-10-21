@@ -1340,6 +1340,7 @@ public:
         bool RandomizeGroupMapping;
         Table::DefaultGroupSizeInUnits::Type DefaultGroupSizeInUnits;
         Table::BridgeMode::Type BridgeMode = false;
+        TMaybe<Table::BridgeModeOverride::Type> BridgeModeOverride;
         Table::DDisk::Type DDisk = false;
         Table::PersistentBufferAllocationMode::Type PersistentBufferAllocationMode = NKikimrBlobStorage::BALANCED;
         TMaybe<Table::VDiskHeapAllocatorNumLeadingDisks::Type> VDiskHeapAllocatorNumLeadingDisks;
@@ -1447,6 +1448,7 @@ public:
                     Table::RandomizeGroupMapping,
                     Table::DefaultGroupSizeInUnits,
                     Table::BridgeMode,
+                    Table::BridgeModeOverride,
                     Table::DDisk,
                     Table::VDiskHeapAllocatorNumLeadingDisks,
                     Table::PersistentBufferAllocationMode,
@@ -1478,6 +1480,7 @@ public:
                     &TStoragePoolInfo::RandomizeGroupMapping,
                     &TStoragePoolInfo::DefaultGroupSizeInUnits,
                     &TStoragePoolInfo::BridgeMode,
+                    &TStoragePoolInfo::BridgeModeOverride,
                     &TStoragePoolInfo::DDisk,
                     &TStoragePoolInfo::VDiskHeapAllocatorNumLeadingDisks,
                     &TStoragePoolInfo::PersistentBufferAllocationMode,

@@ -438,8 +438,8 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TInvokeRequestHandlerActor::ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml,
-            ui64 expectedMainYamlVersion, ui64 expectedStorageYamlVersion, bool enablingDistconf) {
+    void TInvokeRequestHandlerActor::ValidateReplaceStorageConfig(const std::optional<TString>& storageConfigYaml,
+            ui64 expectedMainYamlVersion, ui64 expectedStorageYamlVersion) {
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         Y_ABORT_UNLESS(op);
         const auto& request = op->Command.GetReplaceStorageConfig();
@@ -486,6 +486,18 @@ namespace NKikimr::NStorage {
         } else if (auto error = ValidateConfigUpdate(*Self->StorageConfig, ProposedStorageConfig)) {
             throw TExError() << "ReplaceStorageConfig config validation failed: " << *error;
         }
+    }
+
+    void TInvokeRequestHandlerActor::ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml,
+            ui64 expectedMainYamlVersion, ui64 expectedStorageYamlVersion, bool enablingDistconf) {
+        ValidateReplaceStorageConfig(storageConfigYaml, expectedMainYamlVersion, expectedStorageYamlVersion);
+
+        auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        Y_ABORT_UNLESS(op);
+        const auto& request = op->Command.GetReplaceStorageConfig();
+        const bool targetDedicatedStorageSection = request.HasSwitchDedicatedStorageSection()
+            ? request.GetSwitchDedicatedStorageSection()
+            : storageConfigYaml.has_value();
 
         // update main config yaml in the StorageConfig
         if (NewYaml) {
@@ -729,6 +741,9 @@ namespace NKikimr::NStorage {
                 break;
 
             case EControllerOp::DISABLE_DISTCONF:
+                ValidateReplaceStorageConfig(Self->StorageConfigYaml,
+                    Self->MainConfigYamlVersion ? *Self->MainConfigYamlVersion + 1 : 0,
+                    Self->StorageConfig->GetExpectedStorageYamlVersion());
                 record.SetOperation(NKikimrBlobStorage::TEvControllerDistconfRequest::DisableDistconf);
                 record.SetDryRun(IsDryRun);
                 if (ProposedStorageConfig.HasExpectedStorageYamlVersion()) {

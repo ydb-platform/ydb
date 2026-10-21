@@ -15,15 +15,12 @@ from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
 import ydb.public.api.protos.ydb_config_pb2 as config
-from ydb.public.api.protos.ydb_keyvalue_pb2 import ReadResult
+
+from common import kv_readable, kv_works
 
 logger = logging.getLogger(__name__)
 
 PILE_NAME = "r1"
-
-
-def value_for(key, tablet_id):
-    return "Value: <key = {key}, tablet_id = {tablet_id}>".format(key=key, tablet_id=tablet_id)
 
 
 class TestBridgeConversion(object):
@@ -76,23 +73,10 @@ class TestBridgeConversion(object):
         return yaml.safe_load(result.config[0].config)
 
     def kv_works(self, table_path, tablet_ids, key):
-        for partition_id, tablet_id in enumerate(tablet_ids):
-            write_resp = self.cluster.kv_client.kv_write(table_path, partition_id, key, value_for(key, tablet_id))
-            if write_resp.operation.status != StatusIds.SUCCESS:
-                logger.debug("kv_write failed: %s", write_resp)
-                return False
-        return self.kv_readable(table_path, tablet_ids, key)
+        return kv_works(self.cluster.kv_client, table_path, tablet_ids, key, logger)
 
     def kv_readable(self, table_path, tablet_ids, key):
-        for partition_id, tablet_id in enumerate(tablet_ids):
-            read_resp = self.cluster.kv_client.kv_read(table_path, partition_id, key)
-            if read_resp.operation.status != StatusIds.SUCCESS:
-                logger.debug("kv_read failed: %s", read_resp)
-                return False
-            result = ReadResult()
-            assert_that(read_resp.operation.result.Unpack(result))
-            assert_that(result.value.decode("utf-8") == value_for(key, tablet_id))
-        return True
+        return kv_readable(self.cluster.kv_client, table_path, tablet_ids, key, logger)
 
     def get_cluster_state(self):
         response = self.bridge_client.get_cluster_state()

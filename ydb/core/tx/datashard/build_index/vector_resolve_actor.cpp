@@ -2,6 +2,9 @@
 
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -51,9 +54,12 @@ class TVectorResolveActor : public NActors::TActorBootstrapped<TVectorResolveAct
         TVector<TClusterList> PrevClusters;
         TVector<TClusterList> NextClusters;
         TMap<TClusterId, TVector<size_t>> LevelClusters;
-        TVector<TString> CurCentroids;
-        TVector<TStringBuf> CurCentroidRefs;
+        // Centroids of ReadingChildClustersOf as cells referencing either
+        // CachedLevel or LevelBatches; both keep the referenced data alive.
+        TVector<TCell> CurCentroids;
         TVector<TClusterId> CurClusterIds;
+        NKqp::TEvKqp::TCachedLevelTableDataPtr CachedLevel;
+        TVector<TEvDataShard::TEvReadResult::TPtr> LevelBatches;
         ui32 ResolvedLevel = 0;
         bool LevelsFinished = false;
         bool ReadingChildClusters = false;
@@ -77,6 +83,12 @@ public:
     }
 
     void Bootstrap() {
+        // The cache is shared with KQP and provisioned lazily, so it is used
+        // opportunistically: requests served before the pointer arrives (or
+        // when KQP is disabled) read the level table directly.
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()),
+            new NKqp::TEvKqp::TEvGetVectorIndexLevelsCacheRequest(),
+            IEventHandle::FlagTrackDelivery);
         ReaderId = RegisterWithSameMailbox(CreateTableRangeReader());
         Become(&TVectorResolveActor::StateFunc);
     }
@@ -85,6 +97,8 @@ private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvVectorResolveRequest, HandleRequest);
+            hFunc(NKqp::TEvKqp::TEvGetVectorIndexLevelsCacheResponse, HandleLevelsCacheResponse);
+            hFunc(TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(TEvReadTableRangeResponse, HandleReadResponse);
             hFunc(NSequenceProxy::TEvSequenceProxy::TEvNextValResult, HandleNextValResult);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
@@ -137,6 +151,21 @@ private:
         Queue.push_back(std::move(state));
 
         StartNextRequest();
+    }
+
+    void HandleLevelsCacheResponse(NKqp::TEvKqp::TEvGetVectorIndexLevelsCacheResponse::TPtr& ev) {
+        LevelsCache = std::move(ev->Get()->CachePtr);
+        YDB_LOG_DEBUG("VectorResolveActor: got vector index levels cache",
+            {"logPrefix", LogPrefix},
+            {"maxBytes", LevelsCache ? LevelsCache->MaxBytes() : 0});
+    }
+
+    void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType != NKqp::TEvKqp::TEvGetVectorIndexLevelsCacheRequest::EventType) {
+            return;
+        }
+        YDB_LOG_DEBUG("VectorResolveActor: vector index levels cache is unavailable",
+            {"logPrefix", LogPrefix});
     }
 
     void StartNextRequest() {
@@ -252,8 +281,10 @@ private:
             return;
         }
 
-        if (response.Rows.GetRowsCount() > 0) {
-            const auto row = response.Rows.GetRow(0);
+        // A batch with rows always holds at least one row, and the prefix range
+        // matches at most one of them.
+        if (!response.Batches.empty()) {
+            const auto row = response.Batches.front()->Get()->GetCells(0);
             if (row.empty()) {
                 FailCurrent("Empty row returned for a prefix lookup");
                 return;
@@ -373,8 +404,10 @@ private:
                 const TClusterId parent = cluster->first;
 
                 if (!request.HaveClusters) {
-                    ReadChildClusters(parent);
-                    return;
+                    if (!LoadChildClustersFromCache(request, parent)) {
+                        ReadChildClusters(parent);
+                        return;
+                    }
                 }
 
                 auto rows = std::move(cluster->second);
@@ -383,16 +416,13 @@ private:
                 for (size_t row : rows) {
                     const TStringBuf embedding(request.Vectors[row]);
                     TmpClusters.clear();
-                    Clusters->FindClusters(request.CurCentroidRefs, embedding, TmpClusters, OverlapClusters, OverlapRatio);
+                    Clusters->FindClusters(request.CurCentroids, embedding, TmpClusters, OverlapClusters, OverlapRatio);
                     for (const auto& [pos, distance] : TmpClusters) {
                         request.NextClusters[row].push_back(std::make_pair(request.CurClusterIds[pos], distance));
                     }
                 }
 
-                request.HaveClusters = false;
-                request.CurCentroids.clear();
-                request.CurCentroidRefs.clear();
-                request.CurClusterIds.clear();
+                ClearChildClusters(request);
             }
 
             if (OverlapClusters > 1) {
@@ -408,15 +438,62 @@ private:
         FinishCurrent();
     }
 
+    // Level tables are immutable, so the cache is keyed by the level table
+    // PathId and the parent cluster id only; the snapshot does not matter.
+    bool UseLevelCache() const {
+        return LevelsCache && LevelTablePathId && LevelsCache->MaxBytes() > 0;
+    }
+
+    static TString SerializeParentKey(TClusterId parent) {
+        return TSerializedCellVec::Serialize({TCell::Make(parent)});
+    }
+
+    // Drops the child cluster list together with the data it references.
+    static void ClearChildClusters(TRequest& request) {
+        request.HaveClusters = false;
+        request.CurCentroids.clear();
+        request.CurClusterIds.clear();
+        request.CachedLevel.Reset();
+        request.LevelBatches.clear();
+    }
+
+    // Fills the current cluster list from the shared level cache. Returns false
+    // on a miss (empty results are not cached) so the caller reads the table.
+    bool LoadChildClustersFromCache(TRequest& request, TClusterId parent) {
+        if (!UseLevelCache()) {
+            return false;
+        }
+
+        auto data = LevelsCache->Get(*LevelTablePathId, SerializeParentKey(parent));
+        if (!data || data->BatchRows.empty()) {
+            return false;
+        }
+
+        request.CurCentroids.clear();
+        request.CurClusterIds.clear();
+        request.CachedLevel = std::move(data);
+
+        // Cells reference the cached batch rows, which CachedLevel keeps alive.
+        const auto& rows = request.CachedLevel->BatchRows;
+        request.CurCentroids.reserve(rows.Size());
+        request.CurClusterIds.reserve(rows.Size());
+        for (TConstArrayRef<TCell> row : rows) {
+            // Cached row layout: [id (Uint64), centroid (String)], the same as
+            // written by the KQP vector search actor.
+            request.CurClusterIds.push_back(row[0].AsValue<ui64>());
+            request.CurCentroids.push_back(row[1]);
+        }
+        request.HaveClusters = true;
+
+        return true;
+    }
+
     void BuildLevelClusters() {
         auto& request = *Current;
 
         request.NextClusters.assign(request.Vectors.size(), {});
         request.LevelClusters.clear();
-        request.CurCentroids.clear();
-        request.CurCentroidRefs.clear();
-        request.CurClusterIds.clear();
-        request.HaveClusters = false;
+        ClearChildClusters(request);
 
         if (request.ResolvedLevel == 0) {
             if (IsPrefixed) {
@@ -483,7 +560,7 @@ private:
         Send(ReaderId, request.Release());
     }
 
-    void HandleLevelReadResponse(const TEvReadTableRangeResponse& response) {
+    void HandleLevelReadResponse(TEvReadTableRangeResponse& response) {
         auto& request = *Current;
         request.ReadingChildClusters = false;
 
@@ -492,38 +569,64 @@ private:
             return;
         }
 
+        if (response.PathId) {
+            LevelTablePathId = response.PathId;
+        }
+
         request.CurCentroids.clear();
-        request.CurCentroidRefs.clear();
         request.CurClusterIds.clear();
 
+        size_t rowsCount = 0;
+        for (const auto& batch : response.Batches) {
+            rowsCount += batch->Get()->GetRowsCount();
+        }
+        request.CurCentroids.reserve(rowsCount);
+        request.CurClusterIds.reserve(rowsCount);
+
+        NKqp::TEvKqp::TCachedLevelTableDataPtr cacheData;
+        if (UseLevelCache()) {
+            cacheData = MakeIntrusive<NKqp::TEvKqp::TCachedLevelTableData>();
+        }
+
         TString error;
-        response.Rows.ForEachRow([&](size_t, TConstArrayRef<TCell> row) {
-            if (row.size() < 3) {
-                error = "Level table row has less than 3 columns";
-                return false;
+        for (const auto& batch : response.Batches) {
+            if (!error.empty()) {
+                break;
             }
-            const TClusterId parent = row[0].AsValue<ui64>();
-            if (parent != request.ReadingChildClustersOf) {
-                error = TStringBuilder() << "Returned clusters for invalid parent " << parent
-                    << ", expected " << request.ReadingChildClustersOf;
-                return false;
+            const TEvDataShard::TEvReadResult* result = batch->Get();
+            const size_t rows = result->GetRowsCount();
+            for (size_t i = 0; i < rows; ++i) {
+                const auto row = result->GetCells(i);
+                if (row.size() < 3) {
+                    error = "Level table row has less than 3 columns";
+                    break;
+                }
+                const TClusterId parent = row[0].AsValue<ui64>();
+                if (parent != request.ReadingChildClustersOf) {
+                    error = TStringBuilder() << "Returned clusters for invalid parent " << parent
+                        << ", expected " << request.ReadingChildClustersOf;
+                    break;
+                }
+                request.CurClusterIds.push_back(row[1].AsValue<ui64>());
+                // The cell references the read result rows, which LevelBatches
+                // keeps alive below.
+                request.CurCentroids.push_back(row[2]);
+                if (cacheData) {
+                    cacheData->BatchRows.Append(row.Slice(1, 2));
+                }
             }
-            const TClusterId child = row[1].AsValue<ui64>();
-            const TStringBuf centroid = row[2].AsBuf();
-            request.CurClusterIds.push_back(child);
-            request.CurCentroids.emplace_back(centroid.data(), centroid.size());
-            return true;
-        });
+        }
 
         if (!error.empty()) {
             FailCurrent(error);
             return;
         }
 
-        request.CurCentroidRefs.reserve(request.CurCentroids.size());
-        for (const TString& centroid : request.CurCentroids) {
-            request.CurCentroidRefs.push_back(centroid);
+        if (cacheData && !cacheData->BatchRows.empty()) {
+            LevelsCache->Put(*LevelTablePathId, SerializeParentKey(request.ReadingChildClustersOf), cacheData);
         }
+
+        request.LevelBatches = std::move(response.Batches);
         request.HaveClusters = true;
 
         ContinueDescent();
@@ -612,6 +715,10 @@ private:
 
     std::unique_ptr<NKMeans::IClusters> Clusters;
     TString InitError;
+
+    NKqp::TEvKqp::IVectorIndexLevelsCachePtr LevelsCache;
+    // Learned from the first level table read; the shared cache key.
+    TMaybe<TPathId> LevelTablePathId;
 
     NActors::TActorId ReaderId;
     TDeque<TRequest> Queue;

@@ -2776,6 +2776,9 @@ void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
     case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDebeziumJson:
         out.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
         break;
+    case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatBinary:
+        out.set_format(Ydb::Table::ChangefeedFormat::FORMAT_BINARY);
+        break;
     default:
         break;
     }
@@ -2850,6 +2853,9 @@ bool FillChangefeedDescriptionCommon(NKikimrSchemeOp::TCdcStreamDescription& out
         break;
     case Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON:
         out.SetFormat(NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatDebeziumJson);
+        break;
+    case Ydb::Table::ChangefeedFormat::FORMAT_BINARY:
+        out.SetFormat(NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatBinary);
         break;
     default:
         status = Ydb::StatusIds::BAD_REQUEST;

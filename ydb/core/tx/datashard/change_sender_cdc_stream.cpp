@@ -615,7 +615,11 @@ class TCdcChangeSenderMain
         if (topicAutoPartitioning) {
             Y_ENSURE(entry.PQGroupInfo->PartitionChooser);
             SetPartitionResolver(new TBoundaryPartitionResolver(entry.PQGroupInfo->PartitionChooser));
-        } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format) {
+        } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format
+            || NKikimrSchemeOp::ECdcStreamFormatBinary == Stream.Format)
+        {
+            // Binary records do not carry an MD5 partition key. Route them by
+            // the same key cells the table partitions already use.
             SetPartitionResolver(CreateDefaultPartitionResolver(*KeyDesc.Get()));
         } else {
             SetPartitionResolver(new TMd5PartitionResolver(KeyDesc->GetPartitions().size()));

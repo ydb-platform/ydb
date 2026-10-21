@@ -3771,6 +3771,9 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     case Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON:
         format = EChangefeedFormat::DebeziumJson;
         break;
+    case Ydb::Table::ChangefeedFormat::FORMAT_BINARY:
+        format = EChangefeedFormat::Binary;
+        break;
     default:
         format = EChangefeedFormat::Unknown;
         break;
@@ -3866,6 +3869,9 @@ void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
         break;
     case EChangefeedFormat::DebeziumJson:
         proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
+        break;
+    case EChangefeedFormat::Binary:
+        proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_BINARY);
         break;
     case EChangefeedFormat::Unknown:
         break;

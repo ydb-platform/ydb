@@ -90,6 +90,17 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
         checker.Write(ordinary);
         checker.Write(bridged);
 
+        WaitUntil(env, [&] {
+            const auto config = env.FetchBaseConfig();
+            ui32 ready = 0;
+            for (const auto& slot : config.GetVSlot()) {
+                if (slot.GetGroupId() == ordinary && slot.GetReady()) {
+                    ++ready;
+                }
+            }
+            return ready == 9;
+        }, "ordinary VDisks ready for reassignment");
+
         const auto before = env.FetchBaseConfig();
         for (const auto& slot : before.GetVSlot()) {
             if (slot.GetGroupId() != ordinary) {
@@ -206,10 +217,30 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
         checker.Write(ordinary);
         checker.Write(bridged);
 
-        for (ui32 node = 19; node <= 27; ++node) {
-            env.StopNode(node);
-        }
-        SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::DISCONNECTED);
+        auto disconnect = [&](ui32 pile) {
+            // Like BridgeFailover, pause the test bootstrapper's immediate retries
+            // while distconf commits the state that makes static storage available again.
+            std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> pendingDeaths;
+            env.Runtime->FilterFunction = [&](ui32 destination, std::unique_ptr<IEventHandle>& event) {
+                if (event->GetTypeRewrite() == TEvTablet::TEvTabletDead::EventType
+                        && event->Get<TEvTablet::TEvTabletDead>()->TabletID == env.TabletId) {
+                    pendingDeaths.emplace_back(destination, std::move(event));
+                    return false;
+                }
+                return true;
+            };
+            for (ui32 node = pile * 9 + 1; node <= (pile + 1) * 9; ++node) {
+                env.StopNode(node);
+            }
+            SwitchBridgePileState(env, pile, NKikimrBridge::TClusterState::DISCONNECTED);
+            env.Sim(TDuration::Seconds(10));
+            env.Runtime->FilterFunction = {};
+            for (auto& [destination, event] : pendingDeaths) {
+                env.Runtime->Send(event.release(), destination);
+            }
+        };
+
+        disconnect(2);
         const auto removal = InvokeDistconf(env, [](auto& record) {
             record.MutableRemoveBridgePile()->SetPileName("pile_3");
         });
@@ -219,10 +250,7 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
         checker.Write(bridged);
         checker.CheckAll();
 
-        for (ui32 node = 10; node <= 18; ++node) {
-            env.StopNode(node);
-        }
-        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        disconnect(1);
         checker.Write(bridged);
         const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
         const TString data = "ordinary write without quorum";

@@ -259,28 +259,6 @@ public:                                                                         
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
-        // TCostGroup
-        ///////////////////////////////////////////////////////////////////////////////////
-        class TCostGroup : public TBase {
-        public:
-            GROUP_CONSTRUCTOR(TCostGroup)
-            {
-                COUNTER_INIT_IF_EXTENDED(DiskTimeAvailableNs, false);
-                COUNTER_INIT_IF_EXTENDED(SkeletonFrontUserCostNs, true);
-                COUNTER_INIT_IF_EXTENDED(SkeletonFrontInternalCostNs, true);
-                COUNTER_INIT_IF_EXTENDED(DefragCostNs, true);
-                COUNTER_INIT_IF_EXTENDED(CompactionCostNs, true);
-                COUNTER_INIT_IF_EXTENDED(ScrubCostNs, true);
-            }
-            COUNTER_DEF(DiskTimeAvailableNs);
-            COUNTER_DEF(SkeletonFrontUserCostNs);
-            COUNTER_DEF(SkeletonFrontInternalCostNs);
-            COUNTER_DEF(DefragCostNs);
-            COUNTER_DEF(CompactionCostNs);
-            COUNTER_DEF(ScrubCostNs);
-        };
-
-        ///////////////////////////////////////////////////////////////////////////////////
         // TSyncerGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TSyncerGroup : public TBase {

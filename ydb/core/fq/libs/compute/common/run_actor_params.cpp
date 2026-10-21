@@ -6,65 +6,26 @@ namespace NFq {
 
 using namespace NActors;
 
-TRunActorParams::TRunActorParams(
-    TYqSharedResources::TPtr yqSharedResources,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    NYql::IHTTPGateway::TPtr s3Gateway,
-    NYql::NConnector::IClient::TPtr connectorClient,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-    TIntrusivePtr<IRandomProvider> randomProvider,
-    NYql::IModuleResolver::TPtr& moduleResolver,
-    ui64 nextUniqueId,
-    NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
-    ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
-    const ::NFq::NConfig::TConfig& config,
-    const TString& sql,
-    const NYdb::NFq::TScope& scope,
-    const TString& authToken,
-    const TActorId& databaseResolver,
-    const TString& queryId,
-    const TString& userId,
-    const TString& owner,
-    const int64_t previousQueryRevision,
-    TVector<FederatedQuery::Connection> connections,
-    TVector<FederatedQuery::Binding> bindings,
-    NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-    THashMap<TString, TString> accountIdSignatures,
-    FederatedQuery::QueryContent::QueryType queryType,
-    FederatedQuery::QueryContent::QuerySyntax querySyntax,
-    FederatedQuery::ExecuteMode executeMode,
-    const TString& resultId,
-    const FederatedQuery::StateLoadMode stateLoadMode,
-    const FederatedQuery::StreamingDisposition& streamingDisposition,
-    FederatedQuery::QueryMeta::ComputeStatus status,
-    const TString& cloudId,
-    TVector<FederatedQuery::ResultSetMeta> resultSetMetas,
-    TVector<TString> dqGraphs,
-    int32_t dqGraphIndex,
-    bool automatic,
-    const TString& queryName,
-    const TInstant& deadline,
-    const ::NMonitoring::TDynamicCounterPtr& clientCounters,
-    TInstant createdAt,
-    const TString& tenantName,
-    uint64_t resultBytesLimit,
-    TDuration executionTtl,
-    TInstant requestSubmittedAt,
-    TInstant requestStartedAt,
-    ui32 restartCount,
-    const TString& jobId,
-    const Fq::Private::TaskResources& resources,
-    const TString& executionId,
-    const TString& operationId,
-    const NFq::NConfig::TYdbStorageConfig& computeConnection,
-    TDuration resultTtl,
-    std::map<TString, Ydb::TypedValue>&& queryParameters,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-    const ::NFq::NConfig::TWorkloadManagerConfig& workloadManager,
-    NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
-    const std::vector<std::pair<TString, TString>>& taskSensorLabels,
-    const std::vector<ui64>& nodeIds
-    )
+TRunActorParams::TRunActorParams(TYqSharedResources::TPtr yqSharedResources,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, NYql::IHTTPGateway::TPtr s3Gateway,
+    NYql::NConnector::IClient::TPtr connectorClient, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    TIntrusivePtr<IRandomProvider> randomProvider, NYql::IModuleResolver::TPtr& moduleResolver, ui64 nextUniqueId,
+    NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory, ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
+    const ::NFq::NConfig::TConfig& config, const TString& sql, const NYdb::NFq::TScope& scope, const TString& authToken,
+    const TActorId& databaseResolver, const TString& queryId, const TString& userId, const TString& owner, const int64_t previousQueryRevision,
+    TVector<FederatedQuery::Connection> connections, TVector<FederatedQuery::Binding> bindings,
+    NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory, THashMap<TString, TString> accountIdSignatures,
+    FederatedQuery::QueryContent::QueryType queryType, FederatedQuery::QueryContent::QuerySyntax querySyntax,
+    FederatedQuery::ExecuteMode executeMode, const TString& resultId, const FederatedQuery::StateLoadMode stateLoadMode,
+    const FederatedQuery::StreamingDisposition& streamingDisposition, FederatedQuery::QueryMeta::ComputeStatus status, const TString& cloudId,
+    TVector<FederatedQuery::ResultSetMeta> resultSetMetas, TVector<TString> dqGraphs, int32_t dqGraphIndex, bool automatic,
+    const TString& queryName, const TInstant& deadline, const ::NMonitoring::TDynamicCounterPtr& clientCounters, TInstant createdAt,
+    const TString& tenantName, uint64_t resultBytesLimit, TDuration executionTtl, TInstant requestSubmittedAt, TInstant requestStartedAt,
+    ui32 restartCount, const TString& jobId, const Fq::Private::TaskResources& resources, const TString& executionId, const TString& operationId,
+    const NFq::NConfig::TYdbStorageConfig& computeConnection, TDuration resultTtl, std::map<TString, Ydb::TypedValue>&& queryParameters,
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory, const ::NFq::NConfig::TWorkloadManagerConfig& workloadManager,
+    NYql::IPqGatewayFactory::TPtr pqGatewayFactory, const std::vector<std::pair<TString, TString>>& taskSensorLabels,
+    const std::vector<ui64>& nodeIds)
     : YqSharedResources(yqSharedResources)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , S3Gateway(s3Gateway)
@@ -123,46 +84,29 @@ TRunActorParams::TRunActorParams(
     , PqGatewayFactory(std::move(pqGatewayFactory))
     , TaskSensorLabels(taskSensorLabels)
     , NodeIds(nodeIds)
-    {
-    }
-
-IOutputStream& operator<<(IOutputStream& out, const TRunActorParams& params) {
-    return out  << "Run actors params: { QueryId: " << params.QueryId
-                << " CloudId: " << params.CloudId
-                << " Scope: " << params.Scope.ToString()
-                << " Automatic: " << params.Automatic
-                << " TenantName: " << params.TenantName
-                << " ResultBytesLimit: " << params.ResultBytesLimit
-                << " ExecutionTtl: " << params.ExecutionTtl
-                << " RequestSubmittedAt: " << params.RequestSubmittedAt
-                << " RequestStartedAt: " << params.RequestStartedAt
-                << " RestartCount: " << params.RestartCount
-                << " JobId: " << params.JobId
-                << " UserId: " << params.UserId
-                << " Owner: " << params.Owner
-                << " PreviousQueryRevision: " << params.PreviousQueryRevision
-                << " Connections: " << params.Connections.size()
-                << " Bindings: " << params.Bindings.size()
-                << " AccountIdSignatures: " << params.AccountIdSignatures.size()
-                << " QueryType: " << FederatedQuery::QueryContent::QueryType_Name(params.QueryType)
-                << " QuerySyntax: " << FederatedQuery::QueryContent::QuerySyntax_Name(params.QuerySyntax)
-                << " ExecuteMode: " << FederatedQuery::ExecuteMode_Name(params.ExecuteMode)
-                << " ResultId: " << params.ResultId
-                << " StateLoadMode: " << FederatedQuery::StateLoadMode_Name(params.StateLoadMode)
-                << " StreamingDisposition: " << params.StreamingDisposition.ShortDebugString()
-                << " Status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(params.Status)
-                << " DqGraphs: " << params.DqGraphs.size()
-                << " DqGraphIndex: " << params.DqGraphIndex
-                << " Resource.TopicConsumers: " << params.Resources.topic_consumers().size()
-                << " ExecutionId: " << params.ExecutionId
-                << " OperationId: " << (params.OperationId.GetKind() != NKikimr::NOperationId::TOperationId::UNUSED ? params.OperationId.ToString() : "<empty>")
-                << " ComputeConnection: " << params.ComputeConnection.ShortDebugString()
-                << " ResultTtl: " << params.ResultTtl
-                << " QueryParameters: " << params.QueryParameters.size()
-                << " WorkloadManager: " << params.WorkloadManager.ShortDebugString()
-                << " NextUniqueId: " << params.NextUniqueId
-                << " NodeIds: " << params.NodeIds.size()
-                << "}";
+{
 }
 
-} /* NFq */
+IOutputStream& operator<<(IOutputStream& out, const TRunActorParams& params) {
+    return out << "Run actors params: { QueryId: " << params.QueryId << " CloudId: " << params.CloudId << " Scope: " << params.Scope.ToString()
+               << " Automatic: " << params.Automatic << " TenantName: " << params.TenantName << " ResultBytesLimit: " << params.ResultBytesLimit
+               << " ExecutionTtl: " << params.ExecutionTtl << " RequestSubmittedAt: " << params.RequestSubmittedAt
+               << " RequestStartedAt: " << params.RequestStartedAt << " RestartCount: " << params.RestartCount << " JobId: " << params.JobId
+               << " UserId: " << params.UserId << " Owner: " << params.Owner << " PreviousQueryRevision: " << params.PreviousQueryRevision
+               << " Connections: " << params.Connections.size() << " Bindings: " << params.Bindings.size()
+               << " AccountIdSignatures: " << params.AccountIdSignatures.size()
+               << " QueryType: " << FederatedQuery::QueryContent::QueryType_Name(params.QueryType)
+               << " QuerySyntax: " << FederatedQuery::QueryContent::QuerySyntax_Name(params.QuerySyntax)
+               << " ExecuteMode: " << FederatedQuery::ExecuteMode_Name(params.ExecuteMode) << " ResultId: " << params.ResultId
+               << " StateLoadMode: " << FederatedQuery::StateLoadMode_Name(params.StateLoadMode)
+               << " StreamingDisposition: " << params.StreamingDisposition.ShortDebugString()
+               << " Status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(params.Status) << " DqGraphs: " << params.DqGraphs.size()
+               << " DqGraphIndex: " << params.DqGraphIndex << " Resource.TopicConsumers: " << params.Resources.topic_consumers().size()
+               << " ExecutionId: " << params.ExecutionId << " OperationId: "
+               << (params.OperationId.GetKind() != NKikimr::NOperationId::TOperationId::UNUSED ? params.OperationId.ToString() : "<empty>")
+               << " ComputeConnection: " << params.ComputeConnection.ShortDebugString() << " ResultTtl: " << params.ResultTtl
+               << " QueryParameters: " << params.QueryParameters.size() << " WorkloadManager: " << params.WorkloadManager.ShortDebugString()
+               << " NextUniqueId: " << params.NextUniqueId << " NodeIds: " << params.NodeIds.size() << "}";
+}
+
+}   // namespace NFq

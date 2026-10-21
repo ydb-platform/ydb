@@ -337,7 +337,114 @@ void RunVDiskIterationTest(bool reverse) {
     }
 }
 
+// DS proxy restarts the assimilation request when the group generation changes; the items it has merged by then are not
+// returned to the caller, so the restarted request must start from the caller's cursors
+void RunAssimilationRestartTest() {
+    TEnvironmentSetup env{{
+        .NodeCount = 9, // spare node for disk reassignment
+        .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+    }};
+    auto& runtime = env.Runtime;
+    runtime->SetLogPriority(NKikimrServices::BS_PROXY_ASSIMILATE, NLog::PRI_DEBUG);
+
+    env.CreateBoxAndPool(1, 1);
+    env.Sim(TDuration::Seconds(30));
+    const auto groups = env.GetGroups();
+    UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+    const ui32 groupId = groups.front();
+    const auto edge = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+
+    std::set<TLogoBlobID> blobs;
+    for (ui32 step = 1; step <= 10; ++step) {
+        const TString data = TStringBuilder() << "blob " << step;
+        const TLogoBlobID id(1, 1, step, 0, data.size(), 0);
+        runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        });
+        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        blobs.insert(id);
+    }
+
+    // hold continuation requests of the DS proxy, which are issued with some items merged already
+    bool holding = true;
+    std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> held;
+    runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+        if (holding && ev->GetTypeRewrite() == TEvBlobStorage::EvVAssimilate) {
+            const auto& record = ev->Get<TEvBlobStorage::TEvVAssimilate>()->Record;
+            if (record.HasSkipBlocksUpTo() || record.HasSkipBarriersUpTo() || record.HasSkipBlobsUpTo()) {
+                held.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+        }
+        return true;
+    };
+
+    runtime->WrapInActorContext(edge, [&] {
+        SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvAssimilate(std::nullopt, std::nullopt, std::nullopt,
+            /*ignoreDecommitState=*/ true, /*reverse=*/ false));
+    });
+    for (ui32 i = 0; i < 100 && held.empty(); ++i) {
+        env.Sim(TDuration::MilliSeconds(10));
+    }
+    UNIT_ASSERT(!held.empty());
+
+    // change the group generation; VDisks answer RACE to the continuations then
+    const auto baseConfig = env.FetchBaseConfig();
+    const NKikimrBlobStorage::TBaseConfig::TVSlot *target = nullptr;
+    for (const auto& vslot : baseConfig.GetVSlot()) {
+        if (vslot.GetGroupId() == groupId) {
+            target = &vslot;
+            break;
+        }
+    }
+    UNIT_ASSERT(target);
+    NKikimrBlobStorage::TConfigRequest request;
+    auto *reassign = request.AddCommand()->MutableReassignGroupDisk();
+    reassign->SetGroupId(groupId);
+    reassign->SetGroupGeneration(target->GetGroupGeneration());
+    reassign->SetFailRealmIdx(target->GetFailRealmIdx());
+    reassign->SetFailDomainIdx(target->GetFailDomainIdx());
+    reassign->SetVDiskIdx(target->GetVDiskIdx());
+    const auto response = env.Invoke(request);
+    UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    env.Sim(TDuration::Seconds(10));
+
+    holding = false;
+    for (auto& [nodeId, ev] : std::exchange(held, {})) {
+        const TActorId forwardOnNondelivery = ev->GetForwardOnNondeliveryRecipient();
+        const TActorId *forward = forwardOnNondelivery ? &forwardOnNondelivery : nullptr;
+        runtime->Send(ev->HasEvent()
+            ? new IEventHandle(ev->Recipient, ev->Sender, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie, forward)
+            : new IEventHandle(ev->Type, ev->Flags, ev->Recipient, ev->Sender, ev->ReleaseChainBuffer(), ev->Cookie,
+                forward), nodeId);
+    }
+
+    std::set<TLogoBlobID> assimilated;
+    std::optional<TLogoBlobID> skipBlobsUpTo;
+    for (;;) {
+        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvAssimilateResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ErrorReason);
+        if (res->Get()->Blobs.empty()) {
+            break;
+        }
+        for (const auto& blob : res->Get()->Blobs) {
+            assimilated.insert(blob.Id);
+            skipBlobsUpTo = blob.Id;
+        }
+        runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvAssimilate(Max<ui64>(),
+                std::make_tuple(Max<ui64>(), Max<ui8>()), skipBlobsUpTo, true, false));
+        });
+    }
+    UNIT_ASSERT_EQUAL(assimilated, blobs);
+}
+
 Y_UNIT_TEST_SUITE(VDiskAssimilation) {
+    Y_UNIT_TEST(RestartKeepsCallerCursors) {
+        RunAssimilationRestartTest();
+    }
+
     Y_UNIT_TEST(Test) {
         RunAssimilationTest(false);
     }

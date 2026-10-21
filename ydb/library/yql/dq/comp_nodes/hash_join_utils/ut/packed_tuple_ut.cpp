@@ -1,7 +1,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <array>
+#include <bit>
 #include <chrono>
+#include <limits>
 #include <string>
 #include <vector>
 #include <random>
@@ -102,25 +104,23 @@ Y_UNIT_TEST(CreateLayout) {
     UNIT_ASSERT(tl->TotalRowSize == 45);
 }
 
-// A row of 4-byte and 1-byte columns that is short enough for the small-tuple
-// SIMD path, but has more packable columns than PackTupleOr is instantiated for.
-Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
+template <size_t ColsNum>
+static void TestPackFixedColumnsRoundTrip(
+    THolder<TTupleLayout> (*createLayout)(const std::vector<TColumnDesc>&),
+    const std::array<size_t, ColsNum>& colSizes, size_t expectedRowSize) {
 
     TScopedAlloc alloc(__LOCATION__);
-
-    constexpr size_t ColsNum = 6;
-    constexpr size_t ColSizes[ColsNum] = {4, 1, 4, 1, 4, 1};
 
     std::vector<TColumnDesc> columns;
     for (size_t col = 0; col != ColsNum; ++col) {
         TColumnDesc desc;
         desc.Role = col == 0 ? EColumnRole::Key : EColumnRole::Payload;
-        desc.DataSize = ColSizes[col];
+        desc.DataSize = colSizes[col];
         columns.push_back(desc);
     }
 
-    auto tl = TTupleLayout::Create(columns);
-    UNIT_ASSERT_VALUES_EQUAL(tl->TotalRowSize, 20);
+    auto tl = createLayout(columns);
+    UNIT_ASSERT_VALUES_EQUAL(tl->TotalRowSize, expectedRowSize);
 
     constexpr ui32 NTuples = 1000;
 
@@ -131,9 +131,9 @@ Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
     const ui8* colsValid[ColsNum];
     ui8* mutableColsValid[ColsNum];
     for (size_t col = 0; col != ColsNum; ++col) {
-        colsData[col].resize(ColSizes[col] * NTuples);
+        colsData[col].resize(colSizes[col] * NTuples);
         for (ui32 row = 0; row != NTuples; ++row) {
-            colsData[col][row * ColSizes[col]] = row + col;
+            colsData[col][row * colSizes[col]] = row + col;
         }
         cols[col] = colsData[col].data();
 
@@ -157,6 +157,44 @@ Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
 
     for (size_t col = 0; col != ColsNum; ++col) {
         UNIT_ASSERT_VALUES_EQUAL_C(unpackedData[col], colsData[col], "column " << col);
+    }
+}
+
+// A row of 4-byte and 1-byte columns that is short enough for the AVX2
+// small-tuple path, but has more packable columns than PackTupleOr supports.
+static void TestPackNarrowRowWithManySmallColumns(
+    THolder<TTupleLayout> (*createLayout)(const std::vector<TColumnDesc>&)) {
+    TestPackFixedColumnsRoundTrip(createLayout, std::array<size_t, 6>{4, 1, 4, 1, 4, 1}, 20);
+}
+
+Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
+    TestPackNarrowRowWithManySmallColumns(TTupleLayout::Create);
+}
+
+Y_UNIT_TEST(PackNarrowRowFallback) {
+    TestPackNarrowRowWithManySmallColumns(
+        [](const std::vector<TColumnDesc>& columns) -> THolder<TTupleLayout> {
+            return MakeHolder<TTupleLayoutFallback>(columns);
+        });
+}
+
+Y_UNIT_TEST(PackNarrowRowSSE42) {
+    if (NX86::HaveSSE42()) {
+        TestPackNarrowRowWithManySmallColumns(CreateSSE42TupleLayout);
+    }
+}
+
+Y_UNIT_TEST(PackSmallRowSSE42) {
+    if (NX86::HaveSSE42()) {
+        // Three data bytes, four hash bytes and one null-mask byte: the
+        // 8-byte row fits the SSE small-tuple path with a 16-byte register.
+        TestPackFixedColumnsRoundTrip(CreateSSE42TupleLayout, std::array<size_t, 3>{1, 1, 1}, 8);
+    }
+}
+
+Y_UNIT_TEST(PackNarrowRowAVX2) {
+    if (NX86::HaveAVX2()) {
+        TestPackNarrowRowWithManySmallColumns(CreateAVX2TupleLayout);
     }
 }
 
@@ -1208,6 +1246,109 @@ Y_UNIT_TEST(EqualNullsSupportsVariableKeyAfter64FixedKeys) {
     UNIT_ASSERT_VALUES_UNEQUAL(lhs[variableKey.Offset], rhs[variableKey.Offset]);
     UNIT_ASSERT(tl->KeysEqual(lhs, overflow.data(), rhs, overflow.data()));
     UNIT_ASSERT_VALUES_EQUAL(Hash(lhs), Hash(rhs));
+}
+
+namespace {
+
+void CheckFloatKeysCanonicalized(const TTupleLayout& tl) {
+    constexpr ui32 floatNaN = std::bit_cast<ui32>(std::numeric_limits<float>::quiet_NaN());
+    constexpr ui64 doubleNaN = std::bit_cast<ui64>(std::numeric_limits<double>::quiet_NaN());
+    // -0, +0, quiet NaN with payload, negative NaN, signaling NaN, 1.5, -inf, +inf
+    const std::vector<ui32> floats = {
+        0x80000000u, 0x00000000u, 0x7fc00001u, 0xffc01234u, 0x7f800001u, 0x3fc00000u, 0xff800000u, 0x7f800000u};
+    const std::vector<ui64> doubles = {
+        0x8000000000000000ull, 0x0000000000000000ull, 0x7ff8000000000001ull, 0xfff8000000001234ull,
+        0x7ff0000000000001ull, 0x3ff8000000000000ull, 0xfff0000000000000ull, 0x7ff0000000000000ull};
+    const std::vector<ui32> expectedFloats = {
+        0u, 0u, floatNaN, floatNaN, floatNaN, 0x3fc00000u, 0xff800000u, 0x7f800000u};
+    const std::vector<ui64> expectedDoubles = {
+        0ull, 0ull, doubleNaN, doubleNaN, doubleNaN, 0x3ff8000000000000ull, 0xfff0000000000000ull,
+        0x7ff0000000000000ull};
+    const std::vector<ui64> payload(doubles.size(), 0x8000000000000000ull);
+    const ui32 rows = floats.size();
+
+    const ui8* cols[] = {reinterpret_cast<const ui8*>(floats.data()), reinterpret_cast<const ui8*>(doubles.data()),
+                         reinterpret_cast<const ui8*>(payload.data())};
+    const ui8* validBits[] = {nullptr, nullptr, nullptr};
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    std::vector<ui8> packed(tl.TotalRowSize * rows, 0);
+    tl.Pack(cols, validBits, packed.data(), overflow, 0, rows);
+
+    auto row = [&](ui32 i) { return packed.data() + i * tl.TotalRowSize; };
+    auto keyOffset = [&](ui32 size) {
+        for (const auto& col : tl.KeyColumns) {
+            if (col.DataSize == size) {
+                return col.Offset;
+            }
+        }
+        UNIT_FAIL("no key column of size " << size);
+        return 0u;
+    };
+    const ui32 floatOffset = keyOffset(sizeof(float));
+    const ui32 doubleOffset = keyOffset(sizeof(double));
+    const ui32 payloadOffset = tl.PayloadColumns.front().Offset;
+    auto originalOffset = [&](ui32 keyOffset) {
+        for (const auto& orig : tl.FloatOriginals) {
+            if (orig.KeyOffset == keyOffset) {
+                return orig.PayloadOffset;
+            }
+        }
+        UNIT_FAIL("no original slot for key at " << keyOffset);
+        return 0u;
+    };
+    const ui32 floatOriginalOffset = originalOffset(floatOffset);
+    const ui32 doubleOriginalOffset = originalOffset(doubleOffset);
+
+    for (ui32 i = 0; i < rows; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(ReadUnaligned<ui32>(row(i) + floatOffset), expectedFloats[i], "row " << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(ReadUnaligned<ui64>(row(i) + doubleOffset), expectedDoubles[i], "row " << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(ReadUnaligned<ui32>(row(i) + floatOriginalOffset), floats[i], "row " << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(ReadUnaligned<ui64>(row(i) + doubleOriginalOffset), doubles[i], "row " << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(ReadUnaligned<ui64>(row(i) + payloadOffset), payload[i], "row " << i);
+    }
+
+    std::vector<ui32> unpackedFloats(rows);
+    std::vector<ui64> unpackedDoubles(rows);
+    std::vector<ui64> unpackedPayload(rows);
+    ui8* outCols[] = {reinterpret_cast<ui8*>(unpackedFloats.data()),
+                      reinterpret_cast<ui8*>(unpackedDoubles.data()),
+                      reinterpret_cast<ui8*>(unpackedPayload.data())};
+    ui8* outValid[] = {nullptr, nullptr, nullptr};
+    tl.Unpack(outCols, outValid, packed.data(), overflow, 0, rows);
+    for (ui32 i = 0; i < rows; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(unpackedFloats[i], floats[i], "unpacked row " << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(unpackedDoubles[i], doubles[i], "unpacked row " << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(unpackedPayload[i], payload[i], "unpacked row " << i);
+    }
+
+    auto assertSameKey = [&](ui32 lhs, ui32 rhs) {
+        UNIT_ASSERT_C(tl.KeysEqual(row(lhs), overflow.data(), row(rhs), overflow.data()), lhs << " vs " << rhs);
+        UNIT_ASSERT_VALUES_EQUAL_C(Hash(row(lhs)), Hash(row(rhs)), lhs << " vs " << rhs);
+    };
+    assertSameKey(0, 1);
+    assertSameKey(2, 3);
+    assertSameKey(2, 4);
+    UNIT_ASSERT(!tl.KeysEqual(row(6), overflow.data(), row(7), overflow.data()));
+    UNIT_ASSERT(!tl.KeysEqual(row(1), overflow.data(), row(2), overflow.data()));
+}
+
+} // namespace
+
+Y_UNIT_TEST(FloatKeysAreCanonicalized) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    TColumnDesc floatKey;
+    floatKey.Role = EColumnRole::Key;
+    floatKey.DataSize = sizeof(float);
+    floatKey.FloatingPoint = true;
+    TColumnDesc doubleKey = floatKey;
+    doubleKey.DataSize = sizeof(double);
+    TColumnDesc doublePayload = doubleKey;
+    doublePayload.Role = EColumnRole::Payload;
+    const std::vector<TColumnDesc> columns = {floatKey, doubleKey, doublePayload};
+
+    CheckFloatKeysCanonicalized(TTupleLayoutFallback(columns));
+    CheckFloatKeysCanonicalized(*TTupleLayout::Create(columns));
 }
 
 }

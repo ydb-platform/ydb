@@ -1,21 +1,20 @@
 #pragma once
 
-#include <yql/essentials/sql/v1/translation/node.h>
-
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
+#include <yql/essentials/sql/v1/translation/node.h>
 
 namespace NKikimrSchemeOp {
 
 class TStreamingQueryProperties;
 
-} // namespace NKikimrSchemeOp
+}   // namespace NKikimrSchemeOp
 
 namespace NYql::NPq::NProto {
 
 class StreamingDisposition;
 
-} // namespace NYql::NPq::NProto
+}   // namespace NYql::NPq::NProto
 
 namespace NKikimr::NKqp {
 
@@ -89,4 +88,4 @@ public:
     TString InflightOperation;
 };
 
-}  // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

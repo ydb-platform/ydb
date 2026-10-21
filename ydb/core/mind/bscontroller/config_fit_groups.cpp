@@ -146,18 +146,54 @@ namespace NKikimr {
                     const auto& bridgeInfo = State.BridgeInfo;
                     Y_ABORT_UNLESS(bridgeInfo);
                     bridgeInfo->ForEachPile([&](TBridgePileId bridgePileId) {
-                        const TGroupId groupId = CreateGroup(bridgePileId, mainGroupId);
                         NKikimrBridge::TGroupState::TPile *pile = mainGroupState->AddPile();
+                        if (bridgeInfo->GetPile(bridgePileId)->State == NKikimrBridge::TClusterState::INACTIVE ||
+                                State.Self.IsBridgePileBeingRemoved(bridgePileId)) {
+                            pile->SetAbsent(true); // there are no resources in this pile (or they are going away)
+                            return;
+                        }
+                        const TGroupId groupId = CreateGroup(bridgePileId, mainGroupId);
                         groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
                         pile->SetGroupGeneration(1);
                         pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
                     });
+                    while (mainGroupState->PileSize() && mainGroupState->GetPile(mainGroupState->PileSize() - 1).GetAbsent()) {
+                        mainGroupState->MutablePile()->RemoveLast(); // absent piles at the end are not stored
+                    }
                 } else {
                     CreateGroup(TBridgePileId(), std::nullopt); // regular single group
                 }
             }
 
-            TGroupId CreateGroup(TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
+            // create the part of existing bridged group in the pile it has no part in yet; the part is unsynced
+            TGroupId AddPileToGroup(TGroupId proxyGroupId, TBridgePileId bridgePileId, ui64 becameUnsyncedGeneration) {
+                const TGroupInfo *proxyGroup = State.Groups.Find(proxyGroupId);
+                Y_ABORT_UNLESS(proxyGroup && proxyGroup->BridgeGroupInfo);
+                std::optional<ui32> groupSizeInUnits; // the same as other parts of the group have
+                NBridge::FindGroupPile(proxyGroup->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
+                    const TGroupInfo *group = State.Groups.Find(TGroupId::FromProto(&pile,
+                        &NKikimrBridge::TGroupState::TPile::GetGroupId));
+                    if (group) {
+                        groupSizeInUnits = group->GroupSizeInUnits;
+                    }
+                    return group != nullptr;
+                });
+
+                const TGroupId groupId = CreateGroup(bridgePileId, proxyGroupId, groupSizeInUnits);
+
+                TGroupInfo *mutableProxyGroup = State.Groups.FindForUpdate(proxyGroupId);
+                auto *pile = NBridge::AddGroupPile(mutableProxyGroup->BridgeGroupInfo->MutableBridgeGroupState(),
+                    bridgePileId);
+                groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
+                pile->SetGroupGeneration(1); // gets adjusted along with generation bump on commit
+                pile->SetBecameUnsyncedGeneration(becameUnsyncedGeneration);
+                State.GroupContentChanged.insert(proxyGroupId);
+                return groupId;
+            }
+
+            TGroupId CreateGroup(TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId,
+                    std::optional<ui32> groupSizeInUnitsOverride = std::nullopt) {
                 ////////////////////////////////////////////////////////////////////////////////////////////
                 // ALLOCATE GROUP ID FOR THE NEW GROUP
                 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -172,7 +208,7 @@ namespace NKikimr {
                     requiredSpace = ExpectedSlotSize.front();
                     ExpectedSlotSize.pop_front();
                 }
-                ui32 groupSizeInUnits = StoragePool.DefaultGroupSizeInUnits;
+                ui32 groupSizeInUnits = groupSizeInUnitsOverride.value_or(StoragePool.DefaultGroupSizeInUnits);
                 AllocateNewGroup(groupId, group, groupSizeInUnits, requiredSpace, bridgePileId);
 
                 // scan all comprising PDisks for PDiskCategory
@@ -425,7 +461,8 @@ namespace NKikimr {
                 placement.RequiredSpace = TGroupMapper::CalculateRequiredSpace(reassignment.Disks);
                 const TVDiskIdShort replacedVDisk = Geometry.RepairGroupLayout(*Mapper, groupInfo.ID, placement.Group,
                                                                              std::move(forbidden), groupInfo.GroupSizeInUnits,
-                                                                             placement.RequiredSpace, groupInfo.BridgePileId);
+                                                                             placement.RequiredSpace,
+                                                                             GetPlacementPileId(groupInfo.BridgePileId));
                 if (reassignment.ReplacedSlots.empty()) {
                     const TVSlotInfo *slot = groupInfo.VDisksInGroup[groupInfo.Topology->GetOrderNumber(replacedVDisk)];
                     reassignment.ReplacedSlots.emplace(replacedVDisk, slot->VSlotId);
@@ -442,7 +479,7 @@ namespace NKikimr {
                 request.GroupSizeInUnits = groupInfo.GroupSizeInUnits;
                 request.TryToRelocateLocallyFirst = State.Self.TryToRelocateBrokenDisksLocallyFirst;
                 request.IgnoreGroupLayoutChecks = LayoutPolicy.AllowsRelaxedPlacement();
-                request.BridgePileId = groupInfo.BridgePileId;
+                request.BridgePileId = GetPlacementPileId(groupInfo.BridgePileId);
 
                 EnsureGroupMapper();
                 auto outcome = Mapper->AllocateGroupReassignment(std::move(request));
@@ -606,11 +643,16 @@ namespace NKikimr {
                 }
             }
 
+            TBridgePileId GetPlacementPileId(TBridgePileId groupPileId) const {
+                return NBridge::GetPlacementPileId(groupPileId, State.BridgeInfo.get());
+            }
+
             void AllocateNewGroup(TGroupId groupId, TGroupMapper::TGroupDefinition& group, ui32 groupSizeInUnits,
                                   i64 requiredSpace, TBridgePileId bridgePileId) {
                 EnsureGroupMapper();
                 TGroupMapper::TGroupConstraintsDefinition constraints;
-                Geometry.AllocateGroup(*Mapper, groupId, group, constraints, {}, {}, groupSizeInUnits, requiredSpace, bridgePileId);
+                Geometry.AllocateGroup(*Mapper, groupId, group, constraints, {}, {}, groupSizeInUnits, requiredSpace,
+                    GetPlacementPileId(bridgePileId));
             }
 
             void PopulateGroupMapper() {
@@ -648,8 +690,11 @@ namespace NKikimr {
                     pdisk.PDiskId = id;
                     pdisk.Location = State.HostRecords->GetLocation(id.NodeId);
                     pdisk.Usable = usable;
-                    pdisk.NumActiveSlots = info.NumActiveDynamicSlots + info.StaticSlotUsage;
-                    pdisk.NumActiveUnits = info.StaticSlotUsage; // static groups are single-unit
+                    // static usage comes from the storage config of the state, which may be the one being validated
+                    const auto staticIt = State.StaticPDisks.find(id);
+                    const ui32 staticSlotUsage = staticIt != State.StaticPDisks.end() ? staticIt->second.StaticSlotUsage : 0;
+                    pdisk.NumActiveSlots = info.NumActiveDynamicSlots + staticSlotUsage;
+                    pdisk.NumActiveUnits = staticSlotUsage; // static groups are single-unit
                     for (const auto& [_, slot] : info.VSlotsOnPDisk) {
                         if (!slot->IsBeingDeleted()) {
                             const auto* group = State.Groups.Find(slot->GroupId);
@@ -750,8 +795,8 @@ namespace NKikimr {
                                     const auto currentVSlotId = pdiskInfo->NextVSlotId;
                                     pdiskInfo->NextVSlotId = currentVSlotId + 1;
                                     vslotId = TVSlotId(pdiskId, currentVSlotId);
-                                    if (!State.VSlots.Find(vslotId)) {
-                                        break;
+                                    if (!State.VSlots.Find(vslotId) && !State.StaticVSlots.contains(vslotId)) {
+                                        break; // static VDisks may be placed on PDisks of BSC too
                                     }
                                 }
 
@@ -857,7 +902,7 @@ namespace NKikimr {
 
                     for (const TGroupId groupId : groupIds) {
                         fitter.FitExistingGroup(groupId, state.Fit.GroupsToAllocate.contains(groupId));
-                        if (const TGroupInfo *group = state.Groups.Find(groupId); group && !group->BridgePileId) {
+                        if (const TGroupInfo *group = state.Groups.Find(groupId); group && !group->IsBridgePileOnly()) {
                             ++numActualGroups;
                         }
                     }
@@ -922,6 +967,46 @@ namespace NKikimr {
                     TGroupFitter fitter(state, availabilityDomainId, cmd, expectedSlotSize, {}, PDiskSpaceMarginPromille,
                         storagePoolId, storagePool, status, VSlotReadyTimestampQ, requireCorrectLayout);
                     fitter.CheckReserve(numGroups, GroupReserveMin, GroupReservePart);
+                }
+            }
+
+            state.CheckConsistency();
+        }
+
+        void TBlobStorageController::AddBridgePileGroups(TConfigState& state, TBridgePileId pileId,
+                ui64 becameUnsyncedGeneration, std::vector<std::tuple<TGroupId, TGroupId>> *added) {
+            // bridged groups lacking their part in the pile, by storage pool
+            std::map<TBoxStoragePoolId, std::vector<TGroupId>> groups;
+            state.Groups.ForEach([&](TGroupId groupId, const TGroupInfo& group) {
+                if (group.BridgeGroupInfo && !NBridge::GetGroupPile(group.BridgeGroupInfo->GetBridgeGroupState(), pileId)) {
+                    groups[group.StoragePoolId].push_back(groupId);
+                }
+            });
+
+            const NKikimrBlobStorage::TConfigRequest cmd; // default allocation settings
+            const auto availabilityDomainId = AppData()->DomainsInfo->GetDomain()->DomainUid;
+            for (const auto& [storagePoolId, groupIds] : groups) {
+                const auto& storagePools = state.StoragePools.Get();
+                const auto it = storagePools.find(storagePoolId);
+                if (it == storagePools.end()) {
+                    throw TExError() << "storage pool of bridged group not found"
+                        << " BoxId# " << std::get<0>(storagePoolId)
+                        << " StoragePoolId# " << std::get<1>(storagePoolId);
+                }
+                NKikimrBlobStorage::TConfigResponse::TStatus status;
+                std::deque<ui64> expectedSlotSize;
+                TGroupFitter fitter(state, availabilityDomainId, cmd, expectedSlotSize, {}, PDiskSpaceMarginPromille, storagePoolId,
+                    it->second, status, VSlotReadyTimestampQ, false);
+                for (const TGroupId groupId : groupIds) {
+                    try {
+                        added->emplace_back(groupId, fitter.AddPileToGroup(groupId, pileId, becameUnsyncedGeneration));
+                    } catch (const TExFitGroupError& ex) {
+                        throw TExError() << "Group fit error"
+                            << " BoxId# " << std::get<0>(storagePoolId)
+                            << " StoragePoolId# " << std::get<1>(storagePoolId)
+                            << " GroupId# " << groupId
+                            << " Error# " << ex.what();
+                    }
                 }
             }
 

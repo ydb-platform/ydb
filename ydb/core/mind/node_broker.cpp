@@ -3,9 +3,11 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/bridge.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/protos/counters_node_broker.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
@@ -1634,6 +1636,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
         NActors::TScopeId ScopeId;
         TSubDomainKey ServicedSubDomain;
         TString Error;
+        std::optional<TString> ImplicitPileName;
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1646,30 +1649,52 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
         {}
 
         void Bootstrap(const TActorContext& ctx) {
+            if (AppData()->BridgeModeEnabled) {
+                // pile names are resolved against pile registry of the cluster, which comes from the storage config
+                Become(&TThis::StateWaitStorageConfig);
+                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false),
+                    IEventHandle::FlagTrackDelivery);
+            } else {
+                if (GetBridgePileName()) {
+                    Error = "Bridge pile specified while bridge mode is disabled";
+                }
+                ResolveTenant(ctx);
+            }
+        }
+
+        std::optional<TString> GetBridgePileName() const {
+            return TNodeLocation(Ev->Get()->Record.GetLocation()).GetBridgePileName();
+        }
+
+        void CheckBridgePile(const TBridgeInfo *bridgeInfo, const TActorContext& ctx) {
+            const auto bridgePileName = GetBridgePileName();
+            const bool resolved = bridgeInfo
+                ? static_cast<bool>(bridgeInfo->ResolvePile(bridgePileName))
+                : NBridge::ResolvePileIndex(AppData()->BridgeConfig, bridgePileName).has_value();
+            if (!resolved && bridgePileName) {
+                Error = TStringBuilder() << "Incorrect bridge pile name " << *bridgePileName;
+            } else if (!resolved) {
+                // pile name may be omitted only when there is implicit pile (for cluster converted from non-bridged one)
+                Error = "Bridge pile not specified while bridge mode is enabled";
+            }
+            if (bridgeInfo && bridgeInfo->ImplicitPile) {
+                ImplicitPileName = bridgeInfo->ImplicitPile->Name;
+            }
+            ResolveTenant(ctx);
+        }
+
+        void Handle(TEvNodeWardenStorageConfig::TPtr& ev, const TActorContext& ctx) {
+            CheckBridgePile(ev->Get()->BridgeInfo.get(), ctx);
+        }
+
+        void HandleStorageConfigUndelivered(const TActorContext& ctx) {
+            CheckBridgePile(nullptr, ctx);
+        }
+
+        void ResolveTenant(const TActorContext& ctx) {
             Become(&TThis::StateFunc);
 
             auto& record = Ev->Get()->Record;
-
-            if (const auto& bridgePileName = TNodeLocation(record.GetLocation()).GetBridgePileName()) {
-                if (AppData()->BridgeModeEnabled) {
-                    const auto& bridge = AppData()->BridgeConfig;
-                    const auto& piles = bridge.GetPiles();
-                    bool found = false;
-                    for (int i = 0; i < piles.size(); ++i) {
-                        if (piles[i].GetName() == *bridgePileName) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        Error = TStringBuilder() << "Incorrect bridge pile name " << *bridgePileName;
-                    }
-                } else {
-                    Error = "Bridge pile specified while bridge mode is disabled";
-                }
-            } else if (AppData()->BridgeModeEnabled) {
-                Error = "Bridge pile not specified while bridge mode is enabled";
-            }
 
             if (record.HasPath()) {
                 auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
@@ -1722,9 +1747,15 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 {"scopeId", ScopeIdToString(ScopeId)},
                 {"servicedSubDomain", ServicedSubDomain});
 
-            Send(ReplyTo, new TEvPrivate::TEvResolvedRegistrationRequest(Ev, ScopeId, ServicedSubDomain, std::move(Error)));
+            Send(ReplyTo, new TEvPrivate::TEvResolvedRegistrationRequest(Ev, ScopeId, ServicedSubDomain, std::move(Error),
+                std::move(ImplicitPileName)));
             Die(ctx);
         }
+
+        STRICT_STFUNC(StateWaitStorageConfig, {
+            HFunc(TEvNodeWardenStorageConfig, Handle)
+            CFunc(TEvents::TSystem::Undelivered, HandleStorageConfigUndelivered)
+        })
 
         STRICT_STFUNC(StateFunc, {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle)

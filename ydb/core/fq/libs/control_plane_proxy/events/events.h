@@ -2,25 +2,25 @@
 
 #include "type_traits.h"
 
-#include <util/generic/maybe.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
-
-#include <ydb/public/api/protos/draft/fq.pb.h>
 
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/interconnect/events_local.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <util/generic/maybe.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+
 #include <memory>
 
 namespace NFq {
 
 struct TEvControlPlaneProxy {
     // Event ids.
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvCreateQueryRequest = YqEventSubspaceBegin(NFq::TYqEventSubspace::ControlPlaneProxy),
         EvCreateQueryResponse,
         EvListQueriesRequest,
@@ -70,20 +70,15 @@ struct TEvControlPlaneProxy {
 
     static_assert(EvEnd <= YqEventSubspaceEnd(NFq::TYqEventSubspace::ControlPlaneProxy), "All events must be in their subspace");
 
-    template<class Request>
+    template <class Request>
     struct TResponseSelector;
 
-    template<typename TDerived, typename ProtoMessage, ui32 EventType>
-    struct TBaseControlPlaneRequest : NActors::TEventLocal<TDerived, EventType> {
+    template <typename TDerived, typename ProtoMessage, ui32 EventType>
+    struct TBaseControlPlaneRequest: NActors::TEventLocal<TDerived, EventType> {
         using TProxyResponse = typename TResponseSelector<TDerived>::type;
 
-        TBaseControlPlaneRequest(const TString& scope,
-                                 const ProtoMessage& request,
-                                 const TString& user,
-                                 const TString& token,
-                                 const TVector<TString>& permissions,
-                                 TMaybe<TQuotaMap> quotas     = Nothing(),
-                                 TTenantInfo::TPtr tenantInfo = nullptr)
+        TBaseControlPlaneRequest(const TString& scope, const ProtoMessage& request, const TString& user, const TString& token,
+            const TVector<TString>& permissions, TMaybe<TQuotaMap> quotas = Nothing(), TTenantInfo::TPtr tenantInfo = nullptr)
             : Scope(scope)
             , Request(request)
             , User(user)
@@ -92,7 +87,9 @@ struct TEvControlPlaneProxy {
             , Quotas(std::move(quotas))
             , TenantInfo(tenantInfo)
             , ComputeYDBOperationWasPerformed(false)
-            , ControlPlaneYDBOperationWasPerformed(false) { }
+            , ControlPlaneYDBOperationWasPerformed(false)
+        {
+        }
 
         TString Scope;
         TString CloudId;
@@ -111,11 +108,11 @@ struct TEvControlPlaneProxy {
         bool RequestValidationPassed = false;
     };
 
-    template<typename ProtoMessage, ui32 EventType>
+    template <typename ProtoMessage, ui32 EventType>
     struct TControlPlaneRequest;
 
-    template<typename TDerived, typename ProtoMessage, ui32 EventType>
-    struct TControlPlaneResponse : NActors::TEventLocal<TDerived, EventType> {
+    template <typename TDerived, typename ProtoMessage, ui32 EventType>
+    struct TControlPlaneResponse: NActors::TEventLocal<TDerived, EventType> {
         TControlPlaneResponse(const ProtoMessage& result, const TString& subjectType)
             : Result(result)
             , SubjectType(subjectType)
@@ -133,8 +130,9 @@ struct TEvControlPlaneProxy {
         TString SubjectType;
     };
 
-    template<typename ProtoMessage, ui32 EventType>
-    struct TControlPlaneNonAuditableResponse : TControlPlaneResponse<TControlPlaneNonAuditableResponse<ProtoMessage, EventType>, ProtoMessage, EventType> {
+    template <typename ProtoMessage, ui32 EventType>
+    struct TControlPlaneNonAuditableResponse
+        : TControlPlaneResponse<TControlPlaneNonAuditableResponse<ProtoMessage, EventType>, ProtoMessage, EventType> {
         TControlPlaneNonAuditableResponse(const ProtoMessage& result, const TString& subjectType)
             : TControlPlaneResponse<TControlPlaneNonAuditableResponse<ProtoMessage, EventType>, ProtoMessage, EventType>(result, subjectType)
         {
@@ -146,18 +144,19 @@ struct TEvControlPlaneProxy {
         }
     };
 
-    template<typename ProtoMessage, typename AuditMessage, ui32 EventType>
-    struct TControlPlaneAuditableResponse : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType> {
-        TControlPlaneAuditableResponse(const ProtoMessage& result,
-                                       const TAuditDetails<AuditMessage>& auditDetails,
-                                       const TString& subjectType)
-            : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>(result, subjectType)
+    template <typename ProtoMessage, typename AuditMessage, ui32 EventType>
+    struct TControlPlaneAuditableResponse
+        : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType> {
+        TControlPlaneAuditableResponse(const ProtoMessage& result, const TAuditDetails<AuditMessage>& auditDetails, const TString& subjectType)
+            : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>(
+                  result, subjectType)
             , AuditDetails(auditDetails)
         {
         }
 
         TControlPlaneAuditableResponse(const NYql::TIssues& issues, const TString& subjectType)
-            : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>(issues, subjectType)
+            : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>(
+                  issues, subjectType)
         {
         }
 
@@ -165,7 +164,8 @@ struct TEvControlPlaneProxy {
     };
 
     using TEvCreateQueryRequest = TControlPlaneRequest<FederatedQuery::CreateQueryRequest, EvCreateQueryRequest>;
-    using TEvCreateQueryResponse = TControlPlaneAuditableResponse<FederatedQuery::CreateQueryResult, FederatedQuery::Query, EvCreateQueryResponse>;
+    using TEvCreateQueryResponse =
+        TControlPlaneAuditableResponse<FederatedQuery::CreateQueryResult, FederatedQuery::Query, EvCreateQueryResponse>;
     using TEvListQueriesRequest = TControlPlaneRequest<FederatedQuery::ListQueriesRequest, EvListQueriesRequest>;
     using TEvListQueriesResponse = TControlPlaneNonAuditableResponse<FederatedQuery::ListQueriesResult, EvListQueriesResponse>;
     using TEvDescribeQueryRequest = TControlPlaneRequest<FederatedQuery::DescribeQueryRequest, EvDescribeQueryRequest>;
@@ -173,11 +173,14 @@ struct TEvControlPlaneProxy {
     using TEvGetQueryStatusRequest = TControlPlaneRequest<FederatedQuery::GetQueryStatusRequest, EvGetQueryStatusRequest>;
     using TEvGetQueryStatusResponse = TControlPlaneNonAuditableResponse<FederatedQuery::GetQueryStatusResult, EvGetQueryStatusResponse>;
     using TEvModifyQueryRequest = TControlPlaneRequest<FederatedQuery::ModifyQueryRequest, EvModifyQueryRequest>;
-    using TEvModifyQueryResponse = TControlPlaneAuditableResponse<FederatedQuery::ModifyQueryResult, FederatedQuery::Query, EvModifyQueryResponse>;
+    using TEvModifyQueryResponse =
+        TControlPlaneAuditableResponse<FederatedQuery::ModifyQueryResult, FederatedQuery::Query, EvModifyQueryResponse>;
     using TEvDeleteQueryRequest = TControlPlaneRequest<FederatedQuery::DeleteQueryRequest, EvDeleteQueryRequest>;
-    using TEvDeleteQueryResponse = TControlPlaneAuditableResponse<FederatedQuery::DeleteQueryResult, FederatedQuery::Query, EvDeleteQueryResponse>;
+    using TEvDeleteQueryResponse =
+        TControlPlaneAuditableResponse<FederatedQuery::DeleteQueryResult, FederatedQuery::Query, EvDeleteQueryResponse>;
     using TEvControlQueryRequest = TControlPlaneRequest<FederatedQuery::ControlQueryRequest, EvControlQueryRequest>;
-    using TEvControlQueryResponse = TControlPlaneAuditableResponse<FederatedQuery::ControlQueryResult, FederatedQuery::Query, EvControlQueryResponse>;
+    using TEvControlQueryResponse =
+        TControlPlaneAuditableResponse<FederatedQuery::ControlQueryResult, FederatedQuery::Query, EvControlQueryResponse>;
     using TEvGetResultDataRequest = TControlPlaneRequest<FederatedQuery::GetResultDataRequest, EvGetResultDataRequest>;
     using TEvGetResultDataResponse = TControlPlaneNonAuditableResponse<FederatedQuery::GetResultDataResult, EvGetResultDataResponse>;
     using TEvListJobsRequest = TControlPlaneRequest<FederatedQuery::ListJobsRequest, EvListJobsRequest>;
@@ -185,150 +188,166 @@ struct TEvControlPlaneProxy {
     using TEvDescribeJobRequest = TControlPlaneRequest<FederatedQuery::DescribeJobRequest, EvDescribeJobRequest>;
     using TEvDescribeJobResponse = TControlPlaneNonAuditableResponse<FederatedQuery::DescribeJobResult, EvDescribeJobResponse>;
     using TEvCreateConnectionRequest = TControlPlaneRequest<FederatedQuery::CreateConnectionRequest, EvCreateConnectionRequest>;
-    using TEvCreateConnectionResponse = TControlPlaneAuditableResponse<FederatedQuery::CreateConnectionResult, FederatedQuery::Connection, EvCreateConnectionResponse>;
+    using TEvCreateConnectionResponse =
+        TControlPlaneAuditableResponse<FederatedQuery::CreateConnectionResult, FederatedQuery::Connection, EvCreateConnectionResponse>;
     using TEvListConnectionsRequest = TControlPlaneRequest<FederatedQuery::ListConnectionsRequest, EvListConnectionsRequest>;
     using TEvListConnectionsResponse = TControlPlaneNonAuditableResponse<FederatedQuery::ListConnectionsResult, EvListConnectionsResponse>;
     using TEvDescribeConnectionRequest = TControlPlaneRequest<FederatedQuery::DescribeConnectionRequest, EvDescribeConnectionRequest>;
-    using TEvDescribeConnectionResponse = TControlPlaneNonAuditableResponse<FederatedQuery::DescribeConnectionResult, EvDescribeConnectionResponse>;
+    using TEvDescribeConnectionResponse =
+        TControlPlaneNonAuditableResponse<FederatedQuery::DescribeConnectionResult, EvDescribeConnectionResponse>;
     using TEvModifyConnectionRequest = TControlPlaneRequest<FederatedQuery::ModifyConnectionRequest, EvModifyConnectionRequest>;
-    using TEvModifyConnectionResponse = TControlPlaneAuditableResponse<FederatedQuery::ModifyConnectionResult, FederatedQuery::Connection, EvModifyConnectionResponse>;
+    using TEvModifyConnectionResponse =
+        TControlPlaneAuditableResponse<FederatedQuery::ModifyConnectionResult, FederatedQuery::Connection, EvModifyConnectionResponse>;
     using TEvDeleteConnectionRequest = TControlPlaneRequest<FederatedQuery::DeleteConnectionRequest, EvDeleteConnectionRequest>;
-    using TEvDeleteConnectionResponse = TControlPlaneAuditableResponse<FederatedQuery::DeleteConnectionResult, FederatedQuery::Connection, EvDeleteConnectionResponse>;
+    using TEvDeleteConnectionResponse =
+        TControlPlaneAuditableResponse<FederatedQuery::DeleteConnectionResult, FederatedQuery::Connection, EvDeleteConnectionResponse>;
     using TEvTestConnectionRequest = TControlPlaneRequest<FederatedQuery::TestConnectionRequest, EvTestConnectionRequest>;
     using TEvTestConnectionResponse = TControlPlaneNonAuditableResponse<FederatedQuery::TestConnectionResult, EvTestConnectionResponse>;
     using TEvCreateBindingRequest = TControlPlaneRequest<FederatedQuery::CreateBindingRequest, EvCreateBindingRequest>;
-    using TEvCreateBindingResponse = TControlPlaneAuditableResponse<FederatedQuery::CreateBindingResult, FederatedQuery::Binding, EvCreateBindingResponse>;
+    using TEvCreateBindingResponse =
+        TControlPlaneAuditableResponse<FederatedQuery::CreateBindingResult, FederatedQuery::Binding, EvCreateBindingResponse>;
     using TEvListBindingsRequest = TControlPlaneRequest<FederatedQuery::ListBindingsRequest, EvListBindingsRequest>;
     using TEvListBindingsResponse = TControlPlaneNonAuditableResponse<FederatedQuery::ListBindingsResult, EvListBindingsResponse>;
     using TEvDescribeBindingRequest = TControlPlaneRequest<FederatedQuery::DescribeBindingRequest, EvDescribeBindingRequest>;
     using TEvDescribeBindingResponse = TControlPlaneNonAuditableResponse<FederatedQuery::DescribeBindingResult, EvDescribeBindingResponse>;
     using TEvModifyBindingRequest = TControlPlaneRequest<FederatedQuery::ModifyBindingRequest, EvModifyBindingRequest>;
-    using TEvModifyBindingResponse = TControlPlaneAuditableResponse<FederatedQuery::ModifyBindingResult, FederatedQuery::Binding, EvModifyBindingResponse>;
+    using TEvModifyBindingResponse =
+        TControlPlaneAuditableResponse<FederatedQuery::ModifyBindingResult, FederatedQuery::Binding, EvModifyBindingResponse>;
     using TEvDeleteBindingRequest = TControlPlaneRequest<FederatedQuery::DeleteBindingRequest, EvDeleteBindingRequest>;
-    using TEvDeleteBindingResponse = TControlPlaneAuditableResponse<FederatedQuery::DeleteBindingResult, FederatedQuery::Binding, EvDeleteBindingResponse>;
+    using TEvDeleteBindingResponse =
+        TControlPlaneAuditableResponse<FederatedQuery::DeleteBindingResult, FederatedQuery::Binding, EvDeleteBindingResponse>;
 
-    template<>
+    template <>
     struct TResponseSelector<TEvCreateQueryRequest> {
         using type = TEvCreateQueryResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvListQueriesRequest> {
         using type = TEvListQueriesResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvDescribeQueryRequest> {
         using type = TEvDescribeQueryResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvGetQueryStatusRequest> {
         using type = TEvGetQueryStatusResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvModifyQueryRequest> {
         using type = TEvModifyQueryResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvDeleteQueryRequest> {
         using type = TEvDeleteQueryResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvControlQueryRequest> {
         using type = TEvControlQueryResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvGetResultDataRequest> {
         using type = TEvGetResultDataResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvListJobsRequest> {
         using type = TEvListJobsResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvDescribeJobRequest> {
         using type = TEvDescribeJobResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvCreateConnectionRequest> {
         using type = TEvCreateConnectionResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvListConnectionsRequest> {
         using type = TEvListConnectionsResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvDescribeConnectionRequest> {
         using type = TEvDescribeConnectionResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvModifyConnectionRequest> {
         using type = TEvModifyConnectionResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvDeleteConnectionRequest> {
         using type = TEvDeleteConnectionResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvTestConnectionRequest> {
         using type = TEvTestConnectionResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvCreateBindingRequest> {
         using type = TEvCreateBindingResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvListBindingsRequest> {
         using type = TEvListBindingsResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvDescribeBindingRequest> {
         using type = TEvDescribeBindingResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvModifyBindingRequest> {
         using type = TEvModifyBindingResponse;
     };
-    template<>
+
+    template <>
     struct TResponseSelector<TEvDeleteBindingRequest> {
         using type = TEvDeleteBindingResponse;
     };
 
-    template<typename ProtoMessage, ui32 EventType>
-    struct TControlPlaneRequest :
-        public TBaseControlPlaneRequest<TControlPlaneRequest<ProtoMessage, EventType>,
-                                        ProtoMessage,
-                                        EventType> {
-        using TBaseControlPlaneRequest<TControlPlaneRequest<ProtoMessage, EventType>,
-                                       ProtoMessage,
-                                       EventType>::TBaseControlPlaneRequest;
+    template <typename ProtoMessage, ui32 EventType>
+    struct TControlPlaneRequest: public TBaseControlPlaneRequest<TControlPlaneRequest<ProtoMessage, EventType>, ProtoMessage, EventType> {
+        using TBaseControlPlaneRequest<TControlPlaneRequest<ProtoMessage, EventType>, ProtoMessage, EventType>::TBaseControlPlaneRequest;
     };
 
-    enum class EEntityType : ui8 { Connection, Binding };
+    enum class EEntityType: ui8 {
+        Connection,
+        Binding
+    };
 
-    template<>
-    struct TControlPlaneRequest<FederatedQuery::CreateConnectionRequest,
-                                EvCreateConnectionRequest> :
-        public TBaseControlPlaneRequest<TEvCreateConnectionRequest,
-                                        FederatedQuery::CreateConnectionRequest,
-                                        EvCreateConnectionRequest> {
-        using TBaseControlPlaneRequest<
-            TControlPlaneRequest<FederatedQuery::CreateConnectionRequest, EvCreateConnectionRequest>,
-            FederatedQuery::CreateConnectionRequest,
-            EvCreateConnectionRequest>::TBaseControlPlaneRequest;
+    template <>
+    struct TControlPlaneRequest<FederatedQuery::CreateConnectionRequest, EvCreateConnectionRequest>
+        : public TBaseControlPlaneRequest<TEvCreateConnectionRequest, FederatedQuery::CreateConnectionRequest, EvCreateConnectionRequest> {
+        using TBaseControlPlaneRequest<TControlPlaneRequest<FederatedQuery::CreateConnectionRequest, EvCreateConnectionRequest>,
+            FederatedQuery::CreateConnectionRequest, EvCreateConnectionRequest>::TBaseControlPlaneRequest;
 
         TMaybe<EEntityType> EntityWithSameNameType;
         bool ConnectionsWithSameNameWereListed = false;
-        bool BindingWithSameNameWereListed     = false;
+        bool BindingWithSameNameWereListed = false;
     };
 
-    template<>
-    struct TControlPlaneRequest<FederatedQuery::ModifyConnectionRequest, EvModifyConnectionRequest> :
-        public TBaseControlPlaneRequest<TEvModifyConnectionRequest,
-                                        FederatedQuery::ModifyConnectionRequest,
-                                        EvModifyConnectionRequest> {
-        using TBaseControlPlaneRequest<
-            TControlPlaneRequest<FederatedQuery::ModifyConnectionRequest, EvModifyConnectionRequest>,
-            FederatedQuery::ModifyConnectionRequest,
-            EvModifyConnectionRequest>::TBaseControlPlaneRequest;
+    template <>
+    struct TControlPlaneRequest<FederatedQuery::ModifyConnectionRequest, EvModifyConnectionRequest>
+        : public TBaseControlPlaneRequest<TEvModifyConnectionRequest, FederatedQuery::ModifyConnectionRequest, EvModifyConnectionRequest> {
+        using TBaseControlPlaneRequest<TControlPlaneRequest<FederatedQuery::ModifyConnectionRequest, EvModifyConnectionRequest>,
+            FederatedQuery::ModifyConnectionRequest, EvModifyConnectionRequest>::TBaseControlPlaneRequest;
 
         TMaybe<FederatedQuery::ConnectionContent> OldConnectionContent;
         // ListBindings
@@ -339,71 +358,51 @@ struct TEvControlPlaneProxy {
         std::vector<FederatedQuery::BindingContent> OldBindingContents;
     };
 
-    template<>
-    struct TControlPlaneRequest<FederatedQuery::DeleteConnectionRequest, EvDeleteConnectionRequest> :
-        public TBaseControlPlaneRequest<TEvDeleteConnectionRequest,
-                                        FederatedQuery::DeleteConnectionRequest,
-                                        EvDeleteConnectionRequest> {
-        using TBaseControlPlaneRequest<
-            TControlPlaneRequest<FederatedQuery::DeleteConnectionRequest, EvDeleteConnectionRequest>,
-            FederatedQuery::DeleteConnectionRequest,
-            EvDeleteConnectionRequest>::TBaseControlPlaneRequest;
+    template <>
+    struct TControlPlaneRequest<FederatedQuery::DeleteConnectionRequest, EvDeleteConnectionRequest>
+        : public TBaseControlPlaneRequest<TEvDeleteConnectionRequest, FederatedQuery::DeleteConnectionRequest, EvDeleteConnectionRequest> {
+        using TBaseControlPlaneRequest<TControlPlaneRequest<FederatedQuery::DeleteConnectionRequest, EvDeleteConnectionRequest>,
+            FederatedQuery::DeleteConnectionRequest, EvDeleteConnectionRequest>::TBaseControlPlaneRequest;
 
         TMaybe<FederatedQuery::ConnectionContent> ConnectionContent;
     };
 
-    template<>
-    struct TControlPlaneRequest<FederatedQuery::CreateBindingRequest, EvCreateBindingRequest> :
-        public TBaseControlPlaneRequest<TEvCreateBindingRequest,
-                                        FederatedQuery::CreateBindingRequest,
-                                        EvCreateBindingRequest> {
-        using TBaseControlPlaneRequest<
-            TControlPlaneRequest<FederatedQuery::CreateBindingRequest, EvCreateBindingRequest>,
-            FederatedQuery::CreateBindingRequest,
-            EvCreateBindingRequest>::TBaseControlPlaneRequest;
+    template <>
+    struct TControlPlaneRequest<FederatedQuery::CreateBindingRequest, EvCreateBindingRequest>
+        : public TBaseControlPlaneRequest<TEvCreateBindingRequest, FederatedQuery::CreateBindingRequest, EvCreateBindingRequest> {
+        using TBaseControlPlaneRequest<TControlPlaneRequest<FederatedQuery::CreateBindingRequest, EvCreateBindingRequest>,
+            FederatedQuery::CreateBindingRequest, EvCreateBindingRequest>::TBaseControlPlaneRequest;
 
         TMaybe<FederatedQuery::ConnectionContent> ConnectionContent;
         TMaybe<EEntityType> EntityWithSameNameType;
         bool ConnectionsWithSameNameWereListed = false;
-        bool BindingWithSameNameWereListed     = false;
+        bool BindingWithSameNameWereListed = false;
     };
 
-    template<>
-    struct TControlPlaneRequest<FederatedQuery::ModifyBindingRequest, EvModifyBindingRequest> :
-        public TBaseControlPlaneRequest<TEvModifyBindingRequest,
-                                        FederatedQuery::ModifyBindingRequest,
-                                        EvModifyBindingRequest> {
-        using TBaseControlPlaneRequest<
-            TControlPlaneRequest<FederatedQuery::ModifyBindingRequest, EvModifyBindingRequest>,
-            FederatedQuery::ModifyBindingRequest,
-            EvModifyBindingRequest>::TBaseControlPlaneRequest;
+    template <>
+    struct TControlPlaneRequest<FederatedQuery::ModifyBindingRequest, EvModifyBindingRequest>
+        : public TBaseControlPlaneRequest<TEvModifyBindingRequest, FederatedQuery::ModifyBindingRequest, EvModifyBindingRequest> {
+        using TBaseControlPlaneRequest<TControlPlaneRequest<FederatedQuery::ModifyBindingRequest, EvModifyBindingRequest>,
+            FederatedQuery::ModifyBindingRequest, EvModifyBindingRequest>::TBaseControlPlaneRequest;
 
         TMaybe<FederatedQuery::BindingContent> OldBindingContent;
         TMaybe<FederatedQuery::ConnectionContent> ConnectionContent;
     };
 
-    template<>
-    struct TControlPlaneRequest<FederatedQuery::DeleteBindingRequest, EvDeleteBindingRequest> :
-        public TBaseControlPlaneRequest<TEvDeleteBindingRequest,
-                                        FederatedQuery::DeleteBindingRequest,
-                                        EvDeleteBindingRequest> {
-        using TBaseControlPlaneRequest<
-            TControlPlaneRequest<FederatedQuery::DeleteBindingRequest, EvDeleteBindingRequest>,
-            FederatedQuery::DeleteBindingRequest,
-            EvDeleteBindingRequest>::TBaseControlPlaneRequest;
+    template <>
+    struct TControlPlaneRequest<FederatedQuery::DeleteBindingRequest, EvDeleteBindingRequest>
+        : public TBaseControlPlaneRequest<TEvDeleteBindingRequest, FederatedQuery::DeleteBindingRequest, EvDeleteBindingRequest> {
+        using TBaseControlPlaneRequest<TControlPlaneRequest<FederatedQuery::DeleteBindingRequest, EvDeleteBindingRequest>,
+            FederatedQuery::DeleteBindingRequest, EvDeleteBindingRequest>::TBaseControlPlaneRequest;
 
         TMaybe<FederatedQuery::BindingContent> OldBindingContent;
     };
 
     using TEvDeleteFolderResourcesResponse = TControlPlaneNonAuditableResponse<Ydb::Operations::Operation, EvDeleteFolderResourcesResponse>;
 
-    struct TEvDeleteFolderResourcesRequest : NActors::TEventLocal<TEvDeleteFolderResourcesRequest, EvDeleteFolderResourcesRequest> {
-        TEvDeleteFolderResourcesRequest(const TString& scope,
-                                        const TString& user,
-                                        const TString& token,
-                                        const TVector<TString>& permissions,
-                                        TMaybe<TQuotaMap> quotas = Nothing(),
-                                        TTenantInfo::TPtr tenantInfo = nullptr)
+    struct TEvDeleteFolderResourcesRequest: NActors::TEventLocal<TEvDeleteFolderResourcesRequest, EvDeleteFolderResourcesRequest> {
+        TEvDeleteFolderResourcesRequest(const TString& scope, const TString& user, const TString& token, const TVector<TString>& permissions,
+            TMaybe<TQuotaMap> quotas = Nothing(), TTenantInfo::TPtr tenantInfo = nullptr)
             : Scope(scope)
             , User(user)
             , Token(token)
@@ -412,14 +411,11 @@ struct TEvControlPlaneProxy {
             , TenantInfo(tenantInfo)
             , ComputeYDBOperationWasPerformed(false)
             , ControlPlaneYDBOperationWasPerformed(false)
-        {}
+        {
+        }
 
         size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.size()
-                    + User.size()
-                    + Token.size()
-                    + CloudId.size();
+            return sizeof(*this) + Scope.size() + User.size() + Token.size() + CloudId.size();
         }
 
         TString Scope;
@@ -443,4 +439,4 @@ struct TEvControlPlaneProxy {
 
 NActors::TActorId ControlPlaneProxyActorId();
 
-} // namespace NFq
+}   // namespace NFq

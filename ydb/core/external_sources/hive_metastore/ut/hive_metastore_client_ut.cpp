@@ -1,8 +1,8 @@
 #include <ydb/core/external_sources/hive_metastore/hive_metastore_client.h>
 #include <ydb/core/external_sources/hive_metastore/ut/common.h>
 
-#include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/common/env.h>
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
 
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(HiveMetastoreClient) {
             Apache::Hadoop::Hive::TableStatsRequest request;
             request.__set_dbName("default");
             request.__set_tblName("my_table");
-            request.__set_colNames({"id"});
+            request.__set_colNames({ "id" });
             auto result = client.GetTableStatistics(request).GetValue(TDuration::Seconds(10));
             UNIT_ASSERT_VALUES_EQUAL(result.tableStats.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(result.tableStats[0].colName, "id");
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(HiveMetastoreClient) {
             partition.__set_dbName("default");
             partition.__set_tableName("my_table");
             partition.__set_sd(descriptor);
-            partition.__set_values({"1970", "1", "1"});
+            partition.__set_values({ "1970", "1", "1" });
 
             auto future = client.AddPartition(partition);
             UNIT_ASSERT_NO_EXCEPTION(future.GetValue(TDuration::Seconds(10)));
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(HiveMetastoreClient) {
             Apache::Hadoop::Hive::TableStatsRequest request;
             request.__set_dbName("iceberg");
             request.__set_tblName("request_logs");
-            request.__set_colNames({"request_time", "url", "ip", "user_agent"});
+            request.__set_colNames({ "request_time", "url", "ip", "user_agent" });
             auto statisctics = client.GetTableStatistics(request).GetValue(TDuration::Seconds(10));
             UNIT_ASSERT_VALUES_EQUAL(statisctics.tableStats.size(), 0);
             UNIT_ASSERT(!statisctics.__isset.isStatsCompliant);
@@ -436,8 +436,9 @@ Y_UNIT_TEST_SUITE(HiveMetastoreClient) {
             UNIT_ASSERT(partitions[0].parameters.contains("totalSize"));
             UNIT_ASSERT(partitions[0].parameters.contains("transient_lastDdlTime"));
             UNIT_ASSERT(partitions[0].parameters.contains("trino_query_id"));
-            UNIT_ASSERT(partitions[0].parameters.contains("trino_version"));    
-            UNIT_ASSERT_VALUES_EQUAL(partitions[0].parameters["COLUMN_STATS_ACCURATE"], R"({"COLUMN_STATS":{"ip":"true","request_time":"true","url":"true","user_agent":"true"}})");
+            UNIT_ASSERT(partitions[0].parameters.contains("trino_version"));
+            UNIT_ASSERT_VALUES_EQUAL(partitions[0].parameters["COLUMN_STATS_ACCURATE"],
+                R"({"COLUMN_STATS":{"ip":"true","request_time":"true","url":"true","user_agent":"true"}})");
             UNIT_ASSERT_VALUES_EQUAL(partitions[0].parameters["STATS_GENERATED_VIA_STATS_TASK"], "workaround for potential lack of HIVE-12730");
             UNIT_ASSERT_VALUES_EQUAL(partitions[0].parameters["numFiles"], "3");
             UNIT_ASSERT_VALUES_EQUAL(partitions[0].parameters["numRows"], "3");
@@ -455,7 +456,7 @@ Y_UNIT_TEST_SUITE(HiveMetastoreClient) {
             Apache::Hadoop::Hive::TableStatsRequest request;
             request.__set_dbName("hive");
             request.__set_tblName("request_logs");
-            request.__set_colNames({"request_time", "url", "ip", "user_agent"});
+            request.__set_colNames({ "request_time", "url", "ip", "user_agent" });
 
             auto statisctics = client.GetTableStatistics(request).GetValue(TDuration::Seconds(10));
             UNIT_ASSERT_VALUES_EQUAL(statisctics.tableStats.size(), 0);
@@ -464,4 +465,4 @@ Y_UNIT_TEST_SUITE(HiveMetastoreClient) {
     }
 }
 
-}
+}   // namespace NKikimr::NExternalSource

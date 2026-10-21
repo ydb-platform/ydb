@@ -1,4 +1,5 @@
 #include "fetcher.h"
+
 #include <util/string/join.h>
 
 namespace NKikimr::NMetadata::NFetcher {
@@ -21,4 +22,4 @@ TString ISnapshotsFetcher::GetComponentId() const {
     return JoinSeq("-", ids);
 }
 
-}
+}   // namespace NKikimr::NMetadata::NFetcher

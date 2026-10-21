@@ -3,9 +3,7 @@
 #include "settings_common.h"
 
 #include <contrib/libs/protobuf/src/google/protobuf/map.h>
-
 #include <util/datetime/base.h>
-
 
 namespace NKikimr::NResourcePool {
 
@@ -13,19 +11,19 @@ inline constexpr char DEFAULT_POOL_ID[] = "default";
 
 inline constexpr i64 POOL_MAX_CONCURRENT_QUERY_LIMIT = 1000;
 
-struct TPoolSettings : public TSettingsBase {
+struct TPoolSettings: public TSettingsBase {
     typedef double TPercent;
 
     using TBase = TSettingsBase;
     using TProperty = std::variant<i32*, TDuration*, TPercent*>;
 
-    struct TParser : public TBase::TParser {
+    struct TParser: public TBase::TParser {
         void operator()(i32* setting) const;
         void operator()(TDuration* setting) const;
         void operator()(TPercent* setting) const;
     };
 
-    struct TExtractor : public TBase::TExtractor {
+    struct TExtractor: public TBase::TExtractor {
         TString operator()(i32* setting) const;
         TString operator()(double* setting) const;
         TString operator()(TDuration* setting) const;
@@ -41,9 +39,7 @@ struct TPoolSettings : public TSettingsBase {
 
     // True iff admission control (concurrency, CPU-threshold, cancel-after) applies to this pool.
     bool IsAdmissionRequired() const {
-        return ConcurrentQueryLimit != -1
-            || DatabaseLoadCpuThreshold >= 0.0
-            || QueryCancelAfter;
+        return ConcurrentQueryLimit != -1 || DatabaseLoadCpuThreshold >= 0.0 || QueryCancelAfter;
     }
 
     // True iff any pool-scoped setting is configured (admission, per-node caps, resource
@@ -55,25 +51,21 @@ struct TPoolSettings : public TSettingsBase {
     // here even though the current planner path only propagates Total{Cpu,Memory}Limit.
     // Including them now avoids a stale-check hazard when their enforcement plumbing lands.
     bool IsWorkloadServiceRequired() const {
-        return IsAdmissionRequired()
-            || TotalCpuLimitPercentPerNode > 0
-            || TotalCpuGuaranteePercentPerNode > 0
-            || TotalMemoryLimitPercentPerNode > 0
-            || QueryCpuLimitPercentPerNode > 0
-            || QueryMemoryLimitPercentPerNode > 0
-            || ResourceWeight >= 0;
+        return IsAdmissionRequired() || TotalCpuLimitPercentPerNode > 0 || TotalCpuGuaranteePercentPerNode > 0 ||
+               TotalMemoryLimitPercentPerNode > 0 || QueryCpuLimitPercentPerNode > 0 || QueryMemoryLimitPercentPerNode > 0 ||
+               ResourceWeight >= 0;
     }
 
-    i32 ConcurrentQueryLimit = -1;  // -1 = disabled
-    i32 QueueSize = -1;  // -1 = disabled
-    TDuration QueryCancelAfter = TDuration::Zero();  // 0 = disabled
-    TPercent QueryMemoryLimitPercentPerNode = -1;  // RESERVED for future per-query enforcement, currently ignored
-    TPercent TotalMemoryLimitPercentPerNode = -1;  // Percent from node memory capacity for all pool queries combined, -1 = disabled
-    TPercent DatabaseLoadCpuThreshold = -1;  // -1 = disabled
-    TPercent TotalCpuLimitPercentPerNode = -1;  // -1 = disabled
-    TPercent TotalCpuGuaranteePercentPerNode = -1;  // -1 = disabled
-    TPercent QueryCpuLimitPercentPerNode = -1; // -1 = disabled;
+    i32 ConcurrentQueryLimit = -1;   // -1 = disabled
+    i32 QueueSize = -1;   // -1 = disabled
+    TDuration QueryCancelAfter = TDuration::Zero();   // 0 = disabled
+    TPercent QueryMemoryLimitPercentPerNode = -1;   // RESERVED for future per-query enforcement, currently ignored
+    TPercent TotalMemoryLimitPercentPerNode = -1;   // Percent from node memory capacity for all pool queries combined, -1 = disabled
+    TPercent DatabaseLoadCpuThreshold = -1;   // -1 = disabled
+    TPercent TotalCpuLimitPercentPerNode = -1;   // -1 = disabled
+    TPercent TotalCpuGuaranteePercentPerNode = -1;   // -1 = disabled
+    TPercent QueryCpuLimitPercentPerNode = -1;   // -1 = disabled;
     double ResourceWeight = -1;
 };
 
-}  // namespace NKikimr::NResourcePool
+}   // namespace NKikimr::NResourcePool

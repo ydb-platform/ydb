@@ -6,6 +6,7 @@ PEERDIR(
     yql/essentials/types/binary_json
     contrib/libs/apache/arrow
     ydb/library/arrow_kernels
+    ydb/library/formats/arrow/helpers
     ydb/library/formats/arrow/simple_builder
     ydb/core/formats/arrow/filter
     ydb/core/formats/arrow/hash

@@ -82,14 +82,6 @@ std::pair<ui32, ui32> GetNewRBOCompileCounters(TKikimrRunner& kikimr) {
             counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Failed")->Val()};
 }
 
-// Keeps every log record on its own line.
-class TLineLogStream : public TStringStream {
-    void DoWrite(const void* data, size_t size) override {
-        TStringStream::DoWrite(data, size);
-        TStringStream::DoWrite("\n", 1);
-    }
-};
-
 // Returns the `request` object of the [REQ_JSON] completed record whose query text contains `marker`.
 std::optional<NJson::TJsonValue> FindReqJsonCompleted(TStringBuf logs, TStringBuf marker) {
     constexpr TStringBuf fieldPrefix = "requestJson=";
@@ -203,8 +195,10 @@ const NJson::TJsonValue* FindOperatorByStringField(const NJson::TJsonValue& plan
     return nullptr;
 }
 
-const NJson::TJsonValue* FindOperatorByStringFieldContaining(const NJson::TJsonValue& planNode, const TString& fieldName, const TString& fieldValue) {
-    if (!planNode.IsMap()) {
+// The subtree of skipNode is not searched.
+const NJson::TJsonValue* FindOperatorByStringFieldContaining(const NJson::TJsonValue& planNode, const TString& fieldName, const TString& fieldValue,
+    const NJson::TJsonValue* skipNode = nullptr) {
+    if (!planNode.IsMap() || &planNode == skipNode) {
         return nullptr;
     }
 
@@ -221,8 +215,36 @@ const NJson::TJsonValue* FindOperatorByStringFieldContaining(const NJson::TJsonV
 
     if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
         for (const auto& child : plans->second.GetArraySafe()) {
-            if (const auto* op = FindOperatorByStringFieldContaining(child, fieldName, fieldValue)) {
+            if (const auto* op = FindOperatorByStringFieldContaining(child, fieldName, fieldValue, skipNode)) {
                 return op;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+// Return the lowest plan node with an operator of the given name.
+const NJson::TJsonValue* FindLowestPlanNodeByOperatorName(const NJson::TJsonValue& planNode, const TString& name) {
+    if (!planNode.IsMap()) {
+        return nullptr;
+    }
+
+    const auto& planMap = planNode.GetMapSafe();
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (const auto& child : plans->second.GetArraySafe()) {
+            if (const auto* node = FindLowestPlanNodeByOperatorName(child, name)) {
+                return node;
+            }
+        }
+    }
+
+    if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+        for (const auto& opNode : operators->second.GetArraySafe()) {
+            const auto& op = opNode.GetMapSafe();
+            const auto field = op.find("Name");
+            if (field != op.end() && field->second.IsString() && field->second.GetStringSafe() == name) {
+                return &planNode;
             }
         }
     }
@@ -1151,6 +1173,150 @@ FROM (
         UNIT_ASSERT_C(!FindOperatorByStringFieldContaining(simplifiedPlan, "Name", "TableFullScan"), plan);
     }
 
+    Y_UNIT_TEST_TWIN(PushFilterThroughAggregateOnLeftJoinInput, ColumnStore) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(CreateExplainPlanTestAppConfig()).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto tableSession = db.CreateSession().GetValueSync().GetSession();
+        const TString store = ColumnStore ? "WITH (STORE = COLUMN)" : "";
+        auto schemeResult = tableSession.ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                c Int64,
+                PRIMARY KEY (a)
+            ) )" << store << R"(;
+
+            CREATE TABLE `/Root/t2` (
+                a Int64 NOT NULL,
+                b Int64,
+                c Int64,
+                PRIMARY KEY (a)
+            ) )" << store << R"(;
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder t1Rows;
+        t1Rows.BeginList();
+        for (i64 a = 1; a <= 12; ++a) {
+            t1Rows.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(a)
+                .AddMember("b").OptionalInt64(a % 4)
+                .AddMember("c").OptionalInt64(a * 100)
+                .EndStruct();
+        }
+        t1Rows.EndList();
+        auto upsertResult = db.BulkUpsert("/Root/t1", t1Rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder t2Rows;
+        t2Rows.BeginList();
+        for (i64 a = 1; a <= 3; ++a) {
+            t2Rows.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(a)
+                .AddMember("b").OptionalInt64(a)
+                .AddMember("c").OptionalInt64(a * 1000)
+                .EndStruct();
+        }
+        t2Rows.EndList();
+        upsertResult = db.BulkUpsert("/Root/t2", t2Rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto session = CreateQuerySession(kikimr);
+
+        struct TTestCase {
+            TString Query;
+            TString PushedPredicate;
+            TString RemainingPredicate;
+            TString Result;
+        };
+
+        const TVector<TTestCase> testCases = {
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT s.b, s.cnt, s.total, t2.c
+                FROM (
+                    SELECT b, COUNT(*) AS cnt, SUM(c) AS total
+                    FROM `/Root/t1`
+                    GROUP BY b
+                ) AS s
+                LEFT JOIN `/Root/t2` AS t2 ON s.b = t2.a
+                WHERE s.b = 2;
+            )", "b == 2", "", R"([[[2];3u;[1800];[2000]]])"},
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT s.b, s.total, t2.c
+                FROM (
+                    SELECT b, SUM(c) AS total
+                    FROM `/Root/t1`
+                    GROUP BY b
+                ) AS s
+                LEFT JOIN `/Root/t2` AS t2 ON s.b = t2.a
+                WHERE s.b = 2 AND s.total > 500;
+            )", "b == 2", "> 500", R"([[[2];[1800];[2000]]])"},
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT s.b, t2.c
+                FROM (
+                    SELECT DISTINCT b
+                    FROM `/Root/t1`
+                ) AS s
+                LEFT JOIN `/Root/t2` AS t2 ON s.b = t2.a
+                WHERE s.b = 2;
+            )", "b == 2", "", R"([[[2];[2000]]])"},
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT s.b, s.total, t2.c
+                FROM (
+                    SELECT b, SUM(c) AS total
+                    FROM `/Root/t1`
+                    GROUP BY b
+                ) AS s
+                LEFT JOIN `/Root/t2` AS t2 ON s.b = t2.a
+                WHERE s.total = 1800;
+            )", "", "== 1800", R"([[[2];[1800];[2000]]])"},
+        };
+
+        for (const auto& testCase : testCases) {
+            auto plan = ExecuteExplain(session, testCase.Query);
+            const auto simplifiedPlan = GetSimplifiedPlan(plan);
+            const auto* aggregate = FindLowestPlanNodeByOperatorName(simplifiedPlan, "Aggregate");
+            UNIT_ASSERT_C(aggregate, plan);
+            if (!testCase.PushedPredicate.empty()) {
+                UNIT_ASSERT_C(FindOperatorByStringFieldContaining(*aggregate, "Predicate", testCase.PushedPredicate),
+                    testCase.Query << plan);
+                UNIT_ASSERT_C(!FindOperatorByStringFieldContaining(simplifiedPlan, "Predicate", testCase.PushedPredicate, aggregate),
+                    testCase.Query << plan);
+            }
+            if (!testCase.RemainingPredicate.empty()) {
+                UNIT_ASSERT_C(!FindOperatorByStringFieldContaining(*aggregate, "Predicate", testCase.RemainingPredicate),
+                    testCase.Query << plan);
+                UNIT_ASSERT_C(FindOperatorByStringFieldContaining(simplifiedPlan, "Predicate", testCase.RemainingPredicate, aggregate),
+                    testCase.Query << plan);
+            }
+
+            auto result = session.ExecuteQuery(testCase.Query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, testCase.Query << result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), testCase.Result, testCase.Query);
+        }
+
+        const TString scalarQuery = R"(
+            PRAGMA YqlSelect = 'force';
+            DECLARE $p AS Int64;
+            SELECT s.cnt
+            FROM (
+                SELECT COUNT(*) AS cnt
+                FROM `/Root/t1`
+            ) AS s
+            WHERE $p > 100;
+        )";
+        auto params = TParamsBuilder().AddParam("$p").Int64(0).Build().Build();
+        auto result = session.ExecuteQuery(scalarQuery, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([])");
+    }
+
     Y_UNIT_TEST(ExplainOriginalRowsHintsOldRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
@@ -1634,6 +1800,40 @@ FROM (
         auto plan = ExecuteExplainAnalyze(session, R"(
             SELECT * from `/Root/t1`; SELECT * from `/Root/t1`;
         )");
+        plan = ExecuteExplainAnalyze(session, R"(
+            SELECT 1; SELECT 1;
+        )");
+    }
+
+    Y_UNIT_TEST_TWIN(ExplainAnalyzeMultipleResultContainers, ConcurrentResults) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(CreateExplainPlanTestAppConfig()).SetWithSampleTables(false));
+        auto session = CreateQuerySession(kikimr);
+        // ExecuteQuery enables concurrent results internally. Use streaming to
+        // exercise separate query blocks as well as a shared result container.
+        auto stream = session.StreamExecuteQuery("SELECT 1 AS x; SELECT 2 AS y, 3 AS z;",
+            NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()
+                .ConcurrentResultSets(ConcurrentResults).StatsMode(NYdb::NQuery::EStatsMode::Full)).ExtractValueSync();
+        UNIT_ASSERT_C(stream.IsSuccess(), stream.GetIssues().ToString());
+
+        TMap<ui64, TString> results;
+        bool hasPlan = false;
+        for (;;) {
+            auto part = stream.ReadNext().ExtractValueSync();
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                break;
+            }
+            if (part.HasResultSet()) {
+                results[part.GetResultSetIndex()] += FormatResultSetYson(part.ExtractResultSet());
+            }
+            if (part.GetStats() && part.GetStats()->GetPlan()) {
+                hasPlan = true;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(results.at(0), "[[1]]");
+        UNIT_ASSERT_VALUES_EQUAL(results.at(1), "[[2;3]]");
+        UNIT_ASSERT(hasPlan);
     }
 
     Y_UNIT_TEST(Explain) {
@@ -2207,10 +2407,8 @@ FROM (
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
 
-        TLineLogStream logs;
-        auto logsMutex = std::make_shared<TMutex>();
-        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false).SetLogStream(&logs);
-        settings.LogStreamMutex = logsMutex;
+        TCapturedLog logs(/* appendNewline */ true);
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false).SetLogCapture(logs);
         // Successful queries are logged to [REQ_JSON] at DEBUG.
         settings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_REQUEST, NActors::NLog::PRI_DEBUG);
         settings.LogSettings->DefaultLogPriority = NActors::NLog::PRI_CRIT;
@@ -2232,11 +2430,7 @@ FROM (
         const auto getCompletedRequest = [&](TStringBuf marker) -> NJson::TJsonValue {
             const TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
             while (true) {
-                TString text;
-                {
-                    TGuard<TMutex> guard(*logsMutex);
-                    text = logs.Str();
-                }
+                const TString text = logs.Snapshot();
 
                 if (auto request = FindReqJsonCompleted(text, marker)) {
                     UNIT_ASSERT_C(request->Has("used_new_rbo"), request->GetStringRobust());
@@ -7814,6 +8008,42 @@ FROM (
                         // Still explain these queries, but do not require the CBO stats invariant when CBO is explicitly disabled
                         // in the query or until the known gaps are fixed.
                         /*queriesWithoutCboCheck=*/{});
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeMultipleSelectTPCDS23) {
+        auto appConfig = CreateExplainPlanTestAppConfig();
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(tableSession, BenchmarkSchemaPathPrefix[EBenchType::TPCDS],
+            BenchmarkSchemaPath[EBenchType::TPCDS], true);
+        auto session = CreateQuerySession(kikimr);
+        const TString query = R"(
+            $round = ($x, $y) -> { return $x; };
+            $to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };
+            $to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };
+        )" + GetFullPath(BenchmarkQueryPath[EBenchType::TPCDS], "23.yql");
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full)).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).ColumnsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[[#]]");
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(1).ColumnsCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(1).RowsCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(1).GetColumnsMeta()[0].Name, "c_last_name");
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(1).GetColumnsMeta()[1].Name, "c_first_name");
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(1).GetColumnsMeta()[2].Name, "sales");
+        UNIT_ASSERT(result.GetStats());
+        UNIT_ASSERT(result.GetStats()->GetPlan());
+        PrintPlan(TString(*result.GetStats()->GetPlan()), /*analyzeMode=*/true);
+
+        auto stream = session.StreamExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ConcurrentResultSets(false)
+                .StatsMode(NYdb::NQuery::EStatsMode::Full)).ExtractValueSync();
+        UNIT_ASSERT_C(stream.IsSuccess(), stream.GetIssues().ToString());
+        const auto sequential = CollectStreamResult(stream);
+        CompareYson("[[#]]", sequential.ResultSetYson);
+        UNIT_ASSERT(sequential.PlanJson);
     }
 
     Y_UNIT_TEST(ClickBench_YQL) {

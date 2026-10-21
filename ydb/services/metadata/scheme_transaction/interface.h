@@ -15,4 +15,4 @@ public:
     virtual NActors::IActor* CreateActor(TEvTxUserProxy::TEvProposeTransaction::TPtr request) const = 0;
 };
 
-} // namespace NKikimr::NMetadata
+}   // namespace NKikimr::NMetadata

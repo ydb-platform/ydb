@@ -180,7 +180,9 @@ namespace NKikimr {
         TActorId ReplJobActorId;
         std::list<std::optional<TDonorQueueItem>> DonorQueue;
         std::deque<std::pair<TVDiskID, TDonorQueueActors>> Donors;
-        std::set<TVDiskID> ConnectedPeerDisks, ConnectedDonorDisks;
+        // peers are tracked by their position in the group, as their generation changes with the group's one
+        std::set<TVDiskIdShort> ConnectedPeerDisks;
+        std::set<TVDiskID> ConnectedDonorDisks;
         TEvResumeForce *ResumeForceToken = nullptr;
         TInstant ReplicationEndTime;
         bool UnrecoveredNonphantomBlobs = false;
@@ -265,13 +267,20 @@ namespace NKikimr {
 
         void Handle(TEvProxyQueueState::TPtr ev) {
             const TVDiskID& vdiskId = ev->Get()->VDiskId;
-            auto& set = vdiskId.GroupGeneration == ReplCtx->GInfo->GroupGeneration
-                ? ConnectedPeerDisks
-                : ConnectedDonorDisks;
-            if (ev->Get()->IsConnected) {
-                set.insert(vdiskId);
+            // A peer queue keeps reporting after a generation change, possibly with the VDiskId of the previous
+            // generation, so tell peers from donors by the queue actor rather than by the generation.
+            const TVDiskIdShort shortId(vdiskId);
+            const auto it = QueueActorMapPtr->find(shortId);
+            if (it != QueueActorMapPtr->end() && it->second == ev->Sender) {
+                if (ev->Get()->IsConnected) {
+                    ConnectedPeerDisks.insert(shortId);
+                } else {
+                    ConnectedPeerDisks.erase(shortId);
+                }
+            } else if (ev->Get()->IsConnected) {
+                ConnectedDonorDisks.insert(vdiskId);
             } else {
-                set.erase(vdiskId);
+                ConnectedDonorDisks.erase(vdiskId);
             }
             if (ResumeForceToken) { // if the process is blocked by number of available queues, try to kick it
                 ResumeIfReady();

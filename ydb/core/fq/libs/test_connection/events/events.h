@@ -1,14 +1,13 @@
 #pragma once
 
-#include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/core/fq/libs/events/event_subspace.h>
-
 #include <ydb/core/fq/libs/control_plane_config/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
+#include <ydb/core/fq/libs/events/event_subspace.h>
 
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/interconnect/events_local.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 
@@ -16,7 +15,7 @@ namespace NFq {
 
 struct TEvTestConnection {
     // Event ids.
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvTestConnectionRequest = YqEventSubspaceBegin(::NFq::TYqEventSubspace::TestConnection),
         EvTestConnectionResponse,
         EvEnd,
@@ -24,16 +23,10 @@ struct TEvTestConnection {
 
     static_assert(EvEnd <= YqEventSubspaceEnd(::NFq::TYqEventSubspace::TestConnection), "All events must be in their subspace");
 
-    struct TEvTestConnectionRequest : NActors::TEventLocal<TEvTestConnectionRequest, EvTestConnectionRequest> {
-        explicit TEvTestConnectionRequest(const TString& scope,
-                                          const FederatedQuery::TestConnectionRequest& request,
-                                          const TString& user,
-                                          const TString& token,
-                                          const TString& cloudId,
-                                          const TPermissions& permissions,
-                                          TMaybe<TQuotaMap> quotas,
-                                          TTenantInfo::TPtr tenantInfo,
-                                          const FederatedQuery::Internal::ComputeDatabaseInternal& computeDatabase)
+    struct TEvTestConnectionRequest: NActors::TEventLocal<TEvTestConnectionRequest, EvTestConnectionRequest> {
+        explicit TEvTestConnectionRequest(const TString& scope, const FederatedQuery::TestConnectionRequest& request, const TString& user,
+            const TString& token, const TString& cloudId, const TPermissions& permissions, TMaybe<TQuotaMap> quotas,
+            TTenantInfo::TPtr tenantInfo, const FederatedQuery::Internal::ComputeDatabaseInternal& computeDatabase)
             : CloudId(cloudId)
             , Scope(scope)
             , Request(request)
@@ -57,7 +50,7 @@ struct TEvTestConnection {
         TMaybe<FederatedQuery::Internal::ComputeDatabaseInternal> ComputeDatabase;
     };
 
-    struct TEvTestConnectionResponse : NActors::TEventLocal<TEvTestConnectionResponse, EvTestConnectionResponse> {
+    struct TEvTestConnectionResponse: NActors::TEventLocal<TEvTestConnectionResponse, EvTestConnectionResponse> {
         explicit TEvTestConnectionResponse(const FederatedQuery::TestConnectionResult& result)
             : Result(result)
         {
@@ -73,4 +66,4 @@ struct TEvTestConnection {
     };
 };
 
-}
+}   // namespace NFq

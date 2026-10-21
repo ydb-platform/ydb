@@ -4,19 +4,13 @@
 
 namespace NYql::NDq {
 
-TDqWatermarkGeneratorTracker::TDqWatermarkGeneratorTracker(
-    const TString& logPrefix,
-    const ::NMonitoring::TDynamicCounterPtr& counters
-)
+TDqWatermarkGeneratorTracker::TDqWatermarkGeneratorTracker(const TString& logPrefix, const ::NMonitoring::TDynamicCounterPtr& counters)
     : Impl_(logPrefix, counters)
-{}
+{
+}
 
 void TDqWatermarkGeneratorTracker::SetSettings(
-    TDuration granularity,
-    bool idlePartitionsEnabled,
-    TDuration lateArrivalDelay,
-    TDuration idleTimeout
-) {
+    TDuration granularity, bool idlePartitionsEnabled, TDuration lateArrivalDelay, TDuration idleTimeout) {
     Granularity_ = granularity;
     IdlePartitionsEnabled_ = idlePartitionsEnabled;
     LateArrivalDelay_ = lateArrivalDelay;
@@ -36,11 +30,8 @@ void TDqWatermarkGeneratorTracker::SetNotifyHandler(TNotifyHandler notifyHandler
 }
 
 bool TDqWatermarkGeneratorTracker::RegisterPartition(const TPartitionKey& partitionKey, TInstant systemTime) {
-    const auto registered = Impl_.RegisterInput(
-        partitionKey,
-        ToNextDiscreteTime(systemTime),
-        IdlePartitionsEnabled_ ? IdleTimeout_ : TDuration::Max()
-    );
+    const auto registered =
+        Impl_.RegisterInput(partitionKey, ToNextDiscreteTime(systemTime), IdlePartitionsEnabled_ ? IdleTimeout_ : TDuration::Max());
     PrepareIdlenessCheck(systemTime);
     return registered;
 }
@@ -50,16 +41,9 @@ bool TDqWatermarkGeneratorTracker::ProcessIdlenessCheck(TInstant systemTime) {
 }
 
 TMaybe<TInstant> TDqWatermarkGeneratorTracker::NotifyNewPartitionTime(
-    const TPartitionKey& partitionKey,
-    TInstant partitionTime,
-    TInstant systemTime
-) {
+    const TPartitionKey& partitionKey, TInstant partitionTime, TInstant systemTime) {
     const auto watermark = ToDiscreteTime(partitionTime - LateArrivalDelay_);
-    const auto newWatermark = Impl_.NotifyNewWatermark(
-        partitionKey,
-        watermark,
-        ToNextDiscreteTime(systemTime)
-    ).first;
+    const auto newWatermark = Impl_.NotifyNewWatermark(partitionKey, watermark, ToNextDiscreteTime(systemTime)).first;
     PrepareIdlenessCheck(systemTime);
     return newWatermark;
 }
@@ -91,4 +75,4 @@ TInstant TDqWatermarkGeneratorTracker::ToNextDiscreteTime(TInstant time) const {
     return TInstant::MicroSeconds(time.MicroSeconds() - time.MicroSeconds() % Granularity_.MicroSeconds()) + Granularity_;
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

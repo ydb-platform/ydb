@@ -1,0 +1,21 @@
+PDiskTestList {
+    PDiskTestList {
+        PDiskLogLoad {
+            Tag: 1
+            PDiskId: 1
+            PDiskGuid: 12345
+            DurationSeconds: 2
+            DelayBeforeMeasurementsSeconds: 0
+            Workers {
+                VDiskId { GroupID: 1 GroupGeneration: 5 Ring: 1 Domain: 1 VDisk: 1 }
+                MaxInFlight: 1
+                SizeIntervalMin: 65536
+                SizeIntervalMax: 65536
+                BurstInterval: 65536
+                BurstSize: 65536
+                StorageDuration: 1048576
+            }
+            IsWardenlessTest: true
+        }
+    }
+}

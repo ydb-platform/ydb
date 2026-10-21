@@ -53,8 +53,8 @@ struct TWasmTypeNode {
     ui8 Precision = 0;
     ui8 Scale = 0;
     bool NamedVariant = false;
-    std::shared_ptr<TWasmTypeNode> Item;      // Optional / List
-    std::shared_ptr<TWasmTypeNode> Key;       // Dict
+    std::shared_ptr<TWasmTypeNode> Item;   // Optional / List
+    std::shared_ptr<TWasmTypeNode> Key;   // Dict
     std::shared_ptr<TWasmTypeNode> Payload;   // Dict
     //! Tuple elements (unnamed) or Struct / Variant-over-Struct members.
     TVector<TMember> Members;
@@ -121,4 +121,4 @@ struct TWasmManifest {
     TVector<TWasmObjectDescriptor> Objects;
 };
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

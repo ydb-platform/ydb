@@ -1,8 +1,7 @@
 #pragma once
-#include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb/public/api/protos/ydb_table.pb.h>
-
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 
 namespace NKikimr::NMetadata::NInternal {
 
@@ -10,12 +9,15 @@ class TTableRecord {
 private:
     using TValues = std::map<TString, Ydb::Value>;
     YDB_READONLY_DEF(TValues, Values);
+
 public:
     std::vector<Ydb::Column> SelectOwnedColumns(const std::vector<Ydb::Column>& columns) const;
     Ydb::ResultSet BuildRecordSet() const;
+
     ui32 GetColumnsCount() const {
         return Values.size();
     }
+
     TTableRecord& SetColumn(const TString& columnId, const Ydb::Value& v);
     bool CompareColumns(const TTableRecord& item, const std::vector<TString>& columnIds) const;
     bool HasColumns(const std::vector<TString>& columnIds) const;
@@ -63,9 +65,11 @@ public:
         Y_ABORT_UNLESS(Columns.empty());
         Columns = columns;
     }
+
     void ReserveRows(const ui32 rowsCount) {
         Records.reserve(rowsCount);
     }
+
     bool AddRecordAllValues(const TTableRecord& record) {
         if (AddRecordImpl(record) != record.GetValues().size()) {
             PopRecord();
@@ -73,6 +77,7 @@ public:
         }
         return true;
     }
+
     bool AddRecordNativeValues(const TTableRecord& record) {
         if (AddRecordImpl(record) != Columns.size()) {
             PopRecord();
@@ -80,6 +85,7 @@ public:
         }
         return true;
     }
+
     bool AddRecordSomeValues(const TTableRecord& record) {
         if (!AddRecordImpl(record)) {
             PopRecord();
@@ -89,4 +95,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NMetadata::NInternal

@@ -1,7 +1,6 @@
 #include "blob_chunks.h"
 
 #include <library/cpp/digest/md5/md5.h>
-
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
@@ -35,17 +34,10 @@ TString JoinBlobs(const TVector<TString>& chunks) {
 }
 
 bool JoinAndVerifyBlobs(
-    const TVector<TString>& chunks,
-    ui64 expectedChunkCount,
-    ui64 expectedSize,
-    TMaybe<TStringBuf> expectedMd5,
-    TString& body,
-    TString& error)
+    const TVector<TString>& chunks, ui64 expectedChunkCount, ui64 expectedSize, TMaybe<TStringBuf> expectedMd5, TString& body, TString& error)
 {
     if (chunks.size() != expectedChunkCount) {
-        error = TStringBuilder()
-            << "chunk_count mismatch: meta=" << expectedChunkCount
-            << " actual=" << chunks.size();
+        error = TStringBuilder() << "chunk_count mismatch: meta=" << expectedChunkCount << " actual=" << chunks.size();
         return false;
     }
 
@@ -62,16 +54,14 @@ bool JoinAndVerifyBlobs(
     body = JoinBlobs(chunks);
 
     if (body.size() != expectedSize) {
-        error = TStringBuilder()
-            << "size mismatch: meta=" << expectedSize << " actual=" << body.size();
+        error = TStringBuilder() << "size mismatch: meta=" << expectedSize << " actual=" << body.size();
         return false;
     }
 
     if (expectedMd5) {
         const TString actualMd5 = MD5::Calc(body);
         if (actualMd5 != *expectedMd5) {
-            error = TStringBuilder()
-                << "md5 mismatch: meta=" << *expectedMd5 << " actual=" << actualMd5;
+            error = TStringBuilder() << "md5 mismatch: meta=" << *expectedMd5 << " actual=" << actualMd5;
             return false;
         }
     }
@@ -88,7 +78,7 @@ NKikimrSchemeOp::TColumnDescription MakeCol(const TString& name, const char* typ
     return col;
 }
 
-} // namespace
+}   // namespace
 
 TVector<NKikimrSchemeOp::TColumnDescription> TSourceChunkSchema::GetColumnDescription() {
     return {
@@ -99,7 +89,7 @@ TVector<NKikimrSchemeOp::TColumnDescription> TSourceChunkSchema::GetColumnDescri
 }
 
 TVector<TString> TSourceChunkSchema::GetPk() {
-    return {OwnerKeyColName, ChunkIdxColName};
+    return { OwnerKeyColName, ChunkIdxColName };
 }
 
 TVector<NKikimrSchemeOp::TColumnDescription> TArtifactChunkSchema::GetColumnDescription() {
@@ -114,7 +104,7 @@ TVector<NKikimrSchemeOp::TColumnDescription> TArtifactChunkSchema::GetColumnDesc
 }
 
 TVector<TString> TArtifactChunkSchema::GetPk() {
-    return {IdColName, KindColName, UidColName, BlobKindColName, ChunkIdxColName};
+    return { IdColName, KindColName, UidColName, BlobKindColName, ChunkIdxColName };
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

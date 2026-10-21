@@ -1,0 +1,141 @@
+#include "bridge_common.h"
+
+#include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/nodewarden/distconf.h>
+
+using NBridgeTest::GetBridgedLocation;
+using NBridgeTest::QueryStorageConfig;
+using NBridgeTest::SwitchBridgePileState;
+
+Y_UNIT_TEST_SUITE(BridgeRejoin) {
+    Y_UNIT_TEST(TwoDisconnectedPilesRecoverData) {
+        TEnvironmentSetup env{{
+            .NodeCount = 24,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        }};
+        env.CreatePool();
+        const ui32 groupId = env.GetGroups().front();
+        auto& runtime = env.Runtime;
+        ui32 configErrors = 0;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
+                const auto& record = event->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record;
+                if (record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+                    // A tight retry loop can prevent simulated timeouts from firing.
+                    UNIT_ASSERT_C(++configErrors < 1000, record.DebugString());
+                }
+            }
+            return true;
+        };
+        const auto sender = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        auto groupRequest = std::make_unique<TEvBlobStorage::TEvControllerGetGroup>();
+        groupRequest->Record.AddGroupIDs(groupId);
+        runtime->SendToPipe(env.TabletId, sender, groupRequest.release(), Max<ui64>(),
+            TTestActorSystem::GetPipeConfigWithRetries());
+        auto groupResponse = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(sender, false,
+            runtime->GetClock() + TDuration::Seconds(30));
+        UNIT_ASSERT_C(groupResponse, "Timed out waiting for bridge group configuration");
+        std::vector<TGroupId> pileGroups;
+        for (const auto& group : groupResponse->Get()->Record.GetServiceSet().GetGroups()) {
+            if (group.GetGroupID() == groupId) {
+                for (const auto& pile : group.GetBridgeGroupState().GetPile()) {
+                    pileGroups.push_back(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(pileGroups.size(), 3, groupResponse->Get()->Record.DebugString());
+
+        std::vector<std::pair<TLogoBlobID, TString>> blobs;
+        auto put = [&](TString data) {
+            const TLogoBlobID id(100500, 1, blobs.size() + 1, 0, data.size(), 0);
+            runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvPut(id, data,
+                    runtime->GetClock() + TDuration::Seconds(30)));
+            });
+            auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, false,
+                runtime->GetClock() + TDuration::Seconds(30));
+            UNIT_ASSERT_C(response, "Timed out waiting for Put");
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, NKikimrProto::OK);
+            blobs.emplace_back(id, std::move(data));
+        };
+        auto checkData = [&](ui32 readGroupId, ui32 nodeId, bool rejoined = true) {
+            runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), sender,
+                new TEvNodeWardenQueryGroupInfo(readGroupId)), 1);
+            auto info = env.WaitForEdgeActorEvent<TEvNodeWardenGroupInfo>(sender, false,
+                runtime->GetClock() + TDuration::Seconds(30));
+            UNIT_ASSERT_C(info, "Timed out waiting for the pile group configuration");
+            UNIT_ASSERT_C(info->Get()->Record.HasGroup(), info->Get()->Record.DebugString());
+            const auto generation = info->Get()->Record.GetGroup().GetGroupGeneration();
+            for (const auto& [id, data] : blobs) {
+                runtime->WrapInActorContext(sender, [&] {
+                    auto *request = new TEvBlobStorage::TEvGet(id, 0, 0,
+                        runtime->GetClock() + TDuration::Seconds(30), NKikimrBlobStorage::FastRead);
+                    request->ForceGroupGeneration = generation;
+                    SendToBSProxy(sender, readGroupId, request);
+                });
+                auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, false,
+                    runtime->GetClock() + TDuration::Seconds(30));
+                UNIT_ASSERT_C(response, "Timed out waiting for Get");
+                UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(response->Get()->ResponseSz, 1);
+                if (rejoined || id.Step() <= 2) {
+                    UNIT_ASSERT_VALUES_EQUAL(response->Get()->Responses[0].Status, NKikimrProto::OK);
+                    UNIT_ASSERT_VALUES_EQUAL(response->Get()->Responses[0].Buffer.ConvertToString(), data);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(response->Get()->Responses[0].Status, NKikimrProto::NODATA);
+                }
+            }
+        };
+
+        put("before disconnect");
+        put(TString(128_KB, 'a'));
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::DISCONNECTED);
+        // The root's acknowledgement can precede propagation to the local bridge proxy.
+        runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), sender,
+            new TEvNodeWardenQueryStorageConfig(true)), 1);
+        const auto disconnectDeadline = runtime->GetClock() + TDuration::Seconds(30);
+        for (;;) {
+            auto response = env.WaitForEdgeActorEvent<TEvNodeWardenStorageConfig>(sender, false, disconnectDeadline);
+            UNIT_ASSERT_C(response, "Timed out waiting for the local disconnected state");
+            const auto& state = response->Get()->Config->GetClusterState();
+            if (state.GetPerPileState(1) == NKikimrBridge::TClusterState::DISCONNECTED &&
+                    state.GetPerPileState(2) == NKikimrBridge::TClusterState::DISCONNECTED) {
+                break;
+            }
+        }
+        runtime->Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0,
+            MakeBlobStorageNodeWardenID(1), sender, nullptr, 0), 1);
+        put("while two piles are disconnected");
+        put(TString(128_KB, 'b'));
+        checkData(pileGroups[0].GetRawId(), 1);
+        for (size_t i = 1; i < pileGroups.size(); ++i) {
+            checkData(pileGroups[i].GetRawId(), 1 + 8 * i, false);
+        }
+
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        const auto deadline = runtime->GetClock() + TDuration::Minutes(5);
+        for (;;) {
+            auto config = QueryStorageConfig(env, 1, runtime->GetClock() + TDuration::Seconds(30));
+            const auto& state = config.GetClusterState();
+            if (state.GetPerPileState(1) == NKikimrBridge::TClusterState::SYNCHRONIZED &&
+                    state.GetPerPileState(2) == NKikimrBridge::TClusterState::SYNCHRONIZED) {
+                UNIT_ASSERT_VALUES_EQUAL(config.GetClusterStateDetails().PileSyncStateSize(), 0);
+                break;
+            }
+            UNIT_ASSERT_C(runtime->GetClock() < deadline, config.GetClusterStateDetails().DebugString()
+                + state.DebugString());
+            env.Sim(TDuration::Seconds(1));
+        }
+        // Read the underlying groups directly: the bridge proxy must not mask missing copies.
+        for (size_t i = 0; i < pileGroups.size(); ++i) {
+            checkData(pileGroups[i].GetRawId(), 1 + 8 * i);
+        }
+    }
+
+}

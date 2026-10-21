@@ -6,6 +6,8 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
+
 namespace NKikimr::NUdfStore {
 
 namespace {
@@ -16,9 +18,7 @@ constexpr TDuration ControllerTickInterval = TDuration::Seconds(10);
 //! controller actually owns this node's compiles.
 constexpr ui64 ResolveDomainCookie = 1;
 
-void AddNavigateByPathId(
-    NSchemeCache::TSchemeCacheNavigate::TResultSet& items,
-    const TPathId& pathId)
+void AddNavigateByPathId(NSchemeCache::TSchemeCacheNavigate::TResultSet& items, const TPathId& pathId)
 {
     auto& entry = items.emplace_back();
     entry.TableId = TTableId(pathId.OwnerId, pathId.LocalPathId);
@@ -28,7 +28,7 @@ void AddNavigateByPathId(
     entry.ShowPrivatePath = true;
 }
 
-} // namespace
+}   // namespace
 
 void TUdfStoreService::ResolveCompileController() {
     if (ControllerResolveStage == EControllerResolveStage::InFlight) {
@@ -62,9 +62,8 @@ void TUdfStoreService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TP
     }
     const auto& entry = navigate->ResultSet.front();
     if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok || !entry.DomainInfo) {
-        ALS_WARN(NKikimrServices::METADATA_PROVIDER)
-            << "TUdfStoreService: failed to resolve the compile controller, status "
-            << (ui32)entry.Status;
+        YDB_LOG_WARN("TUdfStoreService: failed to resolve the compile controller",
+            {"status", (ui32)entry.Status});
         return;
     }
 
@@ -76,14 +75,12 @@ void TUdfStoreService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TP
         second->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         AddNavigateByPathId(second->ResultSet, domainInfo->ResourcesDomainKey);
         ControllerResolveStage = EControllerResolveStage::InFlight;
-        Send(MakeSchemeCacheID(),
-            new TEvTxProxySchemeCache::TEvNavigateKeySet(second.release()), 0, ResolveDomainCookie);
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(second.release()), 0, ResolveDomainCookie);
         return;
     }
 
     if (!domainInfo->Params.HasWasmCompileController()) {
-        ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-            << "TUdfStoreService: database has no compile controller yet";
+        YDB_LOG_INFO("TUdfStoreService: database has no compile controller yet");
         return;
     }
 
@@ -104,8 +101,7 @@ void TUdfStoreService::ConnectToCompileController() {
     config.RetryPolicy = {
         .RetryLimitCount = 3,
     };
-    CompileControllerPipe = Register(NTabletPipe::CreateClient(
-        SelfId(), CompileControllerTabletId, config));
+    CompileControllerPipe = Register(NTabletPipe::CreateClient(SelfId(), CompileControllerTabletId, config));
     SendRegister();
 }
 
@@ -172,8 +168,8 @@ void TUdfStoreService::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         ControllerResolveStage = EControllerResolveStage::Initial;
         return;
     }
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TUdfStoreService: connected to compile controller " << CompileControllerTabletId;
+    YDB_LOG_INFO("TUdfStoreService: connected to compile controller",
+        {"compileControllerTabletId", CompileControllerTabletId});
 }
 
 void TUdfStoreService::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
@@ -191,8 +187,8 @@ void TUdfStoreService::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
 void TUdfStoreService::Handle(TEvCompileController::TEvRegisterResult::TPtr& ev) {
     const ui64 generation = ev->Get()->Record.GetControllerGeneration();
     ControllerGeneration = Max(ControllerGeneration, generation);
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TUdfStoreService: registered with compile controller, generation " << generation;
+    YDB_LOG_INFO("TUdfStoreService: registered with compile controller",
+        {"generation", generation});
     // Assignments held from a previous leader are re-declared right away so
     // that it does not wait for the first periodic heartbeat to learn of them.
     SendHeartbeat();
@@ -207,9 +203,10 @@ void TUdfStoreService::RequestArtifact(const TString& name, const TString& uid, 
         auto& knownUid = GapsWithoutController[name];
         if (knownUid != uid) {
             knownUid = uid;
-            ALS_WARN(NKikimrServices::METADATA_PROVIDER)
-                << "TUdfStoreService: no compile controller to report a gap to, dropping "
-                << (isLibrary ? "library " : "module ") << name << " uid " << uid;
+            YDB_LOG_WARN("TUdfStoreService: no compile controller to report a gap to, dropping uid",
+                {"isLibrary", (isLibrary ? "library " : "module ")},
+                {"name", name},
+                {"uid", uid});
         }
         GapsWithoutControllerGauge->Set(GapsWithoutController.size());
         return;
@@ -226,19 +223,13 @@ void TUdfStoreService::RequestArtifact(const TString& name, const TString& uid, 
     auto request = std::make_unique<TEvCompileController::TEvNeedArtifact>();
     auto& key = *request->Record.MutableKey();
     key.SetName(name);
-    key.SetKind(isLibrary
-        ? NKikimrUdfStore::ARTIFACT_KIND_LIBRARY
-        : NKikimrUdfStore::ARTIFACT_KIND_MODULE);
+    key.SetKind(isLibrary ? NKikimrUdfStore::ARTIFACT_KIND_LIBRARY : NKikimrUdfStore::ARTIFACT_KIND_MODULE);
     key.SetUid(uid);
     key.SetCpuSpec(LocalCpuSpec);
     NTabletPipe::SendData(SelfId(), CompileControllerPipe, request.release());
 }
 
-void TUdfStoreService::ReportCompileResult(
-    const TActiveAssignment& assignment,
-    bool success,
-    bool stale,
-    const TString& error)
+void TUdfStoreService::ReportCompileResult(const TActiveAssignment& assignment, bool success, bool stale, const TString& error)
 {
     if (!CompileControllerPipe) {
         return;
@@ -261,9 +252,7 @@ void TUdfStoreService::ReportCompileResult(
     NTabletPipe::SendData(SelfId(), CompileControllerPipe, failed.release());
 }
 
-void TUdfStoreService::RejectAssignment(
-    const NKikimrUdfStore::TEvAssignCompile& record,
-    const TString& reason)
+void TUdfStoreService::RejectAssignment(const NKikimrUdfStore::TEvAssignCompile& record, const TString& reason)
 {
     if (!CompileControllerPipe) {
         return;
@@ -287,9 +276,9 @@ void TUdfStoreService::Handle(TEvCompileController::TEvAssignCompile::TPtr& ev) 
     if (key.GetCpuSpec() != LocalCpuSpec) {
         // Object code is only valid on the platform that produced it, so an
         // assignment for another one can only be a stale route.
-        ALS_WARN(NKikimrServices::METADATA_PROVIDER)
-            << "TUdfStoreService: rejecting assignment for cpu_spec " << key.GetCpuSpec()
-            << ", local cpu_spec is " << LocalCpuSpec;
+        YDB_LOG_WARN("TUdfStoreService: rejecting assignment for cpu_spec",
+            {"cpuSpec", key.GetCpuSpec()},
+            {"localCpuSpec", LocalCpuSpec});
         RejectAssignment(record, "cpu_spec mismatch");
         return;
     }
@@ -300,9 +289,9 @@ void TUdfStoreService::Handle(TEvCompileController::TEvAssignCompile::TPtr& ev) 
     // registration reply has not arrived yet, and is trusted.
     const ui64 generation = record.GetControllerGeneration();
     if (generation < ControllerGeneration) {
-        ALS_WARN(NKikimrServices::METADATA_PROVIDER)
-            << "TUdfStoreService: rejecting assignment from controller generation " << generation
-            << ", already registered with generation " << ControllerGeneration;
+        YDB_LOG_WARN("TUdfStoreService: rejecting assignment from controller generation already registered with generation",
+            {"generation", generation},
+            {"controllerGeneration", ControllerGeneration});
         RejectAssignment(record, "stale controller generation");
         return;
     }
@@ -316,9 +305,10 @@ void TUdfStoreService::Handle(TEvCompileController::TEvAssignCompile::TPtr& ev) 
             // a re-upload. Refusing it outright is what lets the controller
             // hand it to someone else instead of waiting for a claim that this
             // node cannot make while the previous compile runs.
-            ALS_WARN(NKikimrServices::METADATA_PROVIDER)
-                << "TUdfStoreService: rejecting assignment " << record.GetAssignmentId()
-                << " for '" << name << "', still compiling " << existing->second.AssignmentId;
+            YDB_LOG_WARN("TUdfStoreService: rejecting assignment for still compiling",
+                {"recordAassignmentId", record.GetAssignmentId()},
+                {"name", name},
+                {"existingAssignmentId", existing->second.AssignmentId});
             RejectAssignment(record, "another uid of the same name is being compiled");
         }
         // The same id twice is just a re-delivery and is already accounted for.
@@ -329,14 +319,15 @@ void TUdfStoreService::Handle(TEvCompileController::TEvAssignCompile::TPtr& ev) 
         .Key = key,
     };
 
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-        << "TUdfStoreService: assigned to compile " << (isLibrary ? "library" : "module")
-        << " '" << name << "' uid " << key.GetUid()
-        << ", assignment " << record.GetAssignmentId();
+    YDB_LOG_INFO("TUdfStoreService: assigned to compile uid assignment",
+        {"isLibrary", (isLibrary ? "library" : "module")},
+        {"name", name},
+        {"keyUid", key.GetUid()},
+        {"assignmentId", record.GetAssignmentId()});
 
     if (isLibrary) {
         if (!IsLibraryPending(name)) {
-            PendingLibraryCompile.push_back(TPendingLibrary{.Name = name});
+            PendingLibraryCompile.push_back(TPendingLibrary{ .Name = name });
         }
         if (!LibraryCompileInProgress) {
             FetchNextLibraryCompile();
@@ -352,8 +343,7 @@ void TUdfStoreService::Handle(TEvCompileController::TEvAssignCompile::TPtr& ev) 
         PendingWasmCompile.push_back(TPendingUdf{
             .Name = name,
             .Uid = key.GetUid(),
-            .Type = EUdfType::WASM,
-            // The manifest travels with the assignment: this node must compile
+            .Type = EUdfType::WASM,   // The manifest travels with the assignment: this node must compile
             // the upload the controller decided on, not whatever its own
             // snapshot happens to show right now.
             .Manifest = record.GetManifest(),
@@ -389,4 +379,4 @@ void TUdfStoreService::Handle(TEvCompileController::TEvArtifactReady::TPtr& ev) 
     }
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

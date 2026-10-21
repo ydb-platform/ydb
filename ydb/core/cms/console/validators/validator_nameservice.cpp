@@ -74,13 +74,6 @@ bool TNameserviceConfigValidator::CheckConfig(const NKikimrConfig::TAppConfig &o
             return false;
         }
 
-        if (node.GetWalleLocation().GetDataCenter().size() > 4) {
-            AddError(issues,
-                     TStringBuilder() << "node " << id << " has data center in"
-                     << " Wall-E location longer than 4 symbols");
-            return false;
-        }
-
         idMap.emplace(id, TTableNameserverSetup::TNodeInfo(addr, host, ihost, port, {}));
         hostMap.emplace(hostPort, id);
         ihostMap.emplace(ihostPort, id);

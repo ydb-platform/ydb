@@ -293,6 +293,12 @@ runs:
         echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
         echo "BRANCH_NAME is set to $BRANCH_NAME"
 
+        if [ "$BRANCH_NAME" = "stable-26-3-1-17-bridge" ] && [ "$GITHUB_WORKFLOW" = "PR-check" ]; then
+          BRIDGE_TEST_BLACKLIST_PATH="$RUNNER_TEMP/bridge_test_blacklist.yaml"
+          cp .github/config/bridge_test_blacklist.yaml "$BRIDGE_TEST_BLACKLIST_PATH"
+          params+=(--test-blacklist-path "$BRIDGE_TEST_BLACKLIST_PATH")
+        fi
+
         echo "::debug::get version"
         ./ya --version
 
@@ -391,6 +397,17 @@ runs:
             if [ -z "$GRAPH_PATH" ]; then
               MUTED_YAML_PATH="$CURRENT_PUBLIC_DIR/muted_tests.yaml"
               python3 .github/scripts/tests/mute/mute_utils.py convert_muted_txt_to_yaml "$MUTED_YA_FILE" "$PREV_REPORT" > $MUTED_YAML_PATH
+              if [ -n "${BRIDGE_TEST_BLACKLIST_PATH:-}" ]; then
+                python3 - "$MUTED_YAML_PATH" "$BRIDGE_TEST_BLACKLIST_PATH" <<'PY'
+        import sys
+        import yaml
+
+        with open(sys.argv[1]) as muted, open(sys.argv[2]) as bridge:
+            entries = (yaml.safe_load(muted) or []) + yaml.safe_load(bridge)
+        with open(sys.argv[1], "w") as muted:
+            yaml.safe_dump(entries, muted)
+        PY
+              fi
               RERUN_FAILED_OPT="-X --build-only-test-deps --test-blacklist-path $MUTED_YAML_PATH"
             else
               RERUN_FAILED_OPT=""

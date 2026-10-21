@@ -180,6 +180,16 @@ A barrier record contains a single field `resolved` with a virtual timestamp:
 
 {% endnote %}
 
+### Binary format {#binary-record-structure}
+
+`FORMAT = 'BINARY'` stores a little-endian record without column names. The header is a version byte (`1`), a kind (`1` data, `2` heartbeat, `3` schema), an operation (`1` upsert, `2` reset, `3` erase), flags, and the counts of key and value cells.
+
+Key cells follow the primary key order. Each value cell is prefixed with the index of a non-key column. Indexes are the positions of non-key columns sorted by name in the schema version that produced the record. A fixed-width cell is its raw bytes. A variable-length cell is a 32-bit length plus raw bytes. NULL is allowed on value cells: the high bit of the index is set and the cell body is omitted.
+
+With virtual timestamps enabled, the record stores `step` and `txId` as two 64-bit integers. A heartbeat is that header and the timestamp. A schema record wraps the same JSON snapshot as [JSON format](#json-record-structure). User SID and trace id, when enabled, follow the cells as a 16-bit length and raw bytes.
+
+Async replication creates changefeeds in this format. Column names, base64, and the partition-key digest are not part of the stored payload.
+
 {% if audience == "tech" %}
 
 ### Amazon DynamoDB-Compatible JSON Format {#dynamodb-streams-json-record-structure}

@@ -1,7 +1,10 @@
 #include "json_change_record.h"
 
+#include <ydb/core/change_exchange/binary_cdc.h>
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/aclib/user_context.h>
@@ -483,6 +486,186 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
             UNIT_ASSERT_C(!record->TryGetSchemaChange(schema, error), body);
             UNIT_ASSERT_C(!error.empty(), body);
         }
+    }
+
+    TLightweightSchema::TCPtr MakeBinarySchema() {
+        auto schema = MakeIntrusive<TLightweightSchema>();
+        schema->KeyColumns.push_back(NScheme::TTypeInfo(NScheme::NTypeIds::Uint64));
+        schema->ValueColumns.emplace("b", TLightweightSchema::TColumn{
+            static_cast<NTable::TTag>(10),
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uint64),
+        });
+        schema->ValueColumns.emplace("a", TLightweightSchema::TColumn{
+            static_cast<NTable::TTag>(11),
+            NScheme::TTypeInfo(NScheme::NTypeIds::Utf8),
+        });
+        return schema;
+    }
+
+    TString MakeBinaryData(NChangeExchange::EBinaryCdcOp op, bool nullA, ui64 step, ui64 txId) {
+        const ui64 key = 7;
+        const ui64 valueB = 42;
+        const TString valueA = "hi";
+
+        NChangeExchange::TBinaryCdcHeader header;
+        header.Version = NChangeExchange::BinaryCdcVersion;
+        header.Kind = NChangeExchange::EBinaryCdcKind::Data;
+        header.Op = op;
+        header.KeyCount = 1;
+        header.ValueCount = op == NChangeExchange::EBinaryCdcOp::Erase ? 0 : 2;
+        if (step || txId) {
+            header.Flags = static_cast<ui8>(NChangeExchange::EBinaryCdcFlag::HasTs);
+            header.Step = step;
+            header.TxId = txId;
+        }
+
+        NChangeExchange::TBinaryCdcWriter writer;
+        writer.Start(header);
+        writer.AddKey(TCell::Make(key), NScheme::TTypeInfo(NScheme::NTypeIds::Uint64));
+        if (op != NChangeExchange::EBinaryCdcOp::Erase) {
+            // Non-key columns are indexed in name order: "a" is 0, "b" is 1.
+            if (nullA) {
+                writer.AddValue(0, TCell(), NScheme::TTypeInfo(NScheme::NTypeIds::Utf8));
+            } else {
+                writer.AddValue(0, TCell(valueA.data(), valueA.size()), NScheme::TTypeInfo(NScheme::NTypeIds::Utf8));
+            }
+            writer.AddValue(1, TCell::Make(valueB), NScheme::TTypeInfo(NScheme::NTypeIds::Uint64));
+        }
+        return writer.Finish();
+    }
+
+    Y_UNIT_TEST(BinaryData) {
+        auto record = TChangeRecordBuilder()
+            .WithBody(MakeBinaryData(NChangeExchange::EBinaryCdcOp::Upsert, false, 10, 20))
+            .WithSchema(MakeBinarySchema())
+            .Build();
+        UNIT_ASSERT_VALUES_EQUAL(record->GetKind(), TChangeRecord::EKind::CdcDataChange);
+        UNIT_ASSERT_VALUES_EQUAL(record->GetStep(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(record->GetTxId(), 20);
+
+        NKikimrTxDataShard::TEvApplyReplicationChanges::TChange change;
+        TMemoryPool pool(256);
+        record->Serialize(change, pool);
+        UNIT_ASSERT(change.HasUpsert());
+        UNIT_ASSERT_VALUES_EQUAL(change.GetUpsert().TagsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(change.GetUpsert().GetTags(0), 11);
+        UNIT_ASSERT_VALUES_EQUAL(change.GetUpsert().GetTags(1), 10);
+
+        TSerializedCellVec key;
+        UNIT_ASSERT(TSerializedCellVec::TryParse(TString(change.GetKey()), key));
+        ui64 keyValue = 0;
+        TString error;
+        UNIT_ASSERT(key.GetCells()[0].ToValue(keyValue, error));
+        UNIT_ASSERT_VALUES_EQUAL(keyValue, 7);
+
+        TSerializedCellVec values;
+        UNIT_ASSERT(TSerializedCellVec::TryParse(TString(change.GetUpsert().GetData()), values));
+        UNIT_ASSERT_VALUES_EQUAL(TString(values.GetCells()[0].AsBuf()), "hi");
+        ui64 valueB = 0;
+        UNIT_ASSERT(values.GetCells()[1].ToValue(valueB, error));
+        UNIT_ASSERT_VALUES_EQUAL(valueB, 42);
+
+        const auto keyCells = record->GetKey();
+        UNIT_ASSERT_VALUES_EQUAL(keyCells.size(), 1);
+        UNIT_ASSERT(keyCells[0].ToValue(keyValue, error));
+        UNIT_ASSERT_VALUES_EQUAL(keyValue, 7);
+    }
+
+    Y_UNIT_TEST(BinaryNullAndErase) {
+        auto schema = MakeBinarySchema();
+        auto nullRecord = TChangeRecordBuilder()
+            .WithBody(MakeBinaryData(NChangeExchange::EBinaryCdcOp::Upsert, true, 0, 0))
+            .WithSchema(schema)
+            .Build();
+        UNIT_ASSERT_VALUES_EQUAL(nullRecord->GetStep(), 0);
+
+        NKikimrTxDataShard::TEvApplyReplicationChanges::TChange change;
+        TMemoryPool pool(256);
+        nullRecord->Serialize(change, pool);
+        TSerializedCellVec values;
+        UNIT_ASSERT(TSerializedCellVec::TryParse(TString(change.GetUpsert().GetData()), values));
+        UNIT_ASSERT(values.GetCells()[0].IsNull());
+
+        auto erase = TChangeRecordBuilder()
+            .WithBody(MakeBinaryData(NChangeExchange::EBinaryCdcOp::Erase, false, 3, 4))
+            .WithSchema(schema)
+            .Build();
+        NKikimrTxDataShard::TEvApplyReplicationChanges::TChange erased;
+        erase->Serialize(erased, pool);
+        UNIT_ASSERT(erased.HasErase());
+        UNIT_ASSERT_VALUES_EQUAL(erase->GetStep(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(erase->GetTxId(), 4);
+
+        auto reset = TChangeRecordBuilder()
+            .WithBody(MakeBinaryData(NChangeExchange::EBinaryCdcOp::Reset, false, 1, 2))
+            .WithSchema(schema)
+            .Build();
+        NKikimrTxDataShard::TEvApplyReplicationChanges::TChange resetChange;
+        reset->Serialize(resetChange, pool);
+        UNIT_ASSERT(resetChange.HasReset());
+        UNIT_ASSERT_VALUES_EQUAL(resetChange.GetReset().GetTags(0), 11);
+    }
+
+    Y_UNIT_TEST(BinaryHeartbeat) {
+        NChangeExchange::TBinaryCdcHeader header;
+        header.Version = NChangeExchange::BinaryCdcVersion;
+        header.Kind = NChangeExchange::EBinaryCdcKind::Heartbeat;
+        header.Flags = static_cast<ui8>(NChangeExchange::EBinaryCdcFlag::HasTs);
+        header.Step = 10;
+        header.TxId = 20;
+        NChangeExchange::TBinaryCdcWriter writer;
+        writer.Start(header);
+
+        auto record = TChangeRecordBuilder()
+            .WithBody(writer.Finish())
+            .Build();
+        UNIT_ASSERT_VALUES_EQUAL(record->GetKind(), TChangeRecord::EKind::CdcHeartbeat);
+        UNIT_ASSERT_VALUES_EQUAL(record->GetStep(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(record->GetTxId(), 20);
+    }
+
+    Y_UNIT_TEST(BinarySchemaUnwrap) {
+        const TString json = R"json({
+            "tableChanges": [{
+                "table": {
+                    "schemaVersion": 2,
+                    "columns": {"key": {"type": "Uint64"}},
+                    "primaryKeyColumnNames": ["key"]
+                }
+            }],
+            "ts": [10, 20]
+        })json";
+        NChangeExchange::TBinaryCdcHeader header;
+        header.Version = NChangeExchange::BinaryCdcVersion;
+        header.Kind = NChangeExchange::EBinaryCdcKind::Schema;
+        NChangeExchange::TBinaryCdcWriter writer;
+        writer.Start(header);
+        writer.SetSchemaJson(json);
+
+        auto record = TChangeRecordBuilder()
+            .WithBody(writer.Finish())
+            .Build();
+        UNIT_ASSERT_VALUES_EQUAL(record->GetKind(), TChangeRecord::EKind::CdcSchemaChange);
+        UNIT_ASSERT_VALUES_EQUAL(record->GetStep(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(record->GetTxId(), 20);
+
+        NKikimrReplication::TSchemaChange schema;
+        TString error;
+        UNIT_ASSERT_C(record->TryGetSchemaChange(schema, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetSourceSchemaVersion(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(0).GetName(), "key");
+    }
+
+    Y_UNIT_TEST(BinaryRejectsUnknownVersion) {
+        TString body(8, '\0');
+        body[0] = 2;
+        body[1] = 1;
+        auto record = TChangeRecordBuilder()
+            .WithBody(std::move(body))
+            .Build();
+        TString error;
+        UNIT_ASSERT(!record->IsValidJson(error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "unsupported binary CDC version");
     }
 }
 

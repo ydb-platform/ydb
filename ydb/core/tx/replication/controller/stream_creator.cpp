@@ -32,7 +32,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     {
         using namespace NYdb::NTable;
 
-        auto desc = TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json)
+        auto desc = TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Binary)
             .WithRetentionPeriod(retentionPeriod)
             .AddAttribute("__async_replication", NJson::WriteJson(attrs, false));
 

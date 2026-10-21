@@ -556,6 +556,8 @@ message ChangefeedFormat {
         FORMAT_DYNAMODB_STREAMS_JSON = 2;
         // Debezium-like change record JSON format for common (row oriented) tables
         FORMAT_DEBEZIUM_JSON = 3;
+        // Compact binary change record: raw cells and column indexes
+        FORMAT_BINARY = 4;
     }
 }
 

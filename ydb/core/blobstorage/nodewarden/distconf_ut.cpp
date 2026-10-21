@@ -13,6 +13,7 @@
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 
 #include <ydb/library/pdisk_io/sector_map.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/core/util/random.h>
 
 #include <google/protobuf/text_format.h>
@@ -867,6 +868,33 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
             SubscribeDynamicNode(runtime, keepers.front(), 5 + level, level, pushes);
             UNIT_ASSERT_VALUES_EQUAL_C(pushes.front().HasConfig(), level >= requiredLevel, level);
         }
+    }
+
+    Y_UNIT_TEST(NonUniformStorageActivationValidation) {
+        auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
+        NKikimrConfig::TBridgeConfig bridge;
+        bridge.AddPiles()->SetName("pile0");
+        bridge.AddPiles()->SetName("pile1");
+        bridge.SetEnableNonUniformStorage(true);
+        bool pileListChanged = false;
+        auto pending = config;
+        pending.MutableClusterStateDetails()->SetBscConversionPending(true);
+        auto error = NStorage::UpdatePileRegistry(bridge, &pending, &bridge, &bridge, &pileListChanged);
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_STRING_CONTAINS(*error, "conversion to complete");
+
+        error = NStorage::UpdatePileRegistry(bridge, &config, &bridge, &bridge, &pileListChanged);
+        UNIT_ASSERT_C(!error, error.value_or(TString()));
+        UNIT_ASSERT(!pileListChanged);
+        UNIT_ASSERT(!NStorage::ValidateConfig(config));
+        auto proposed = config;
+        proposed.SetGeneration(config.GetGeneration() + 1);
+        proposed.MutableClusterStateDetails()->SetNonUniformStorageEnabled(false);
+        UNIT_ASSERT(NStorage::ValidateConfigUpdate(config, proposed));
+        proposed = config;
+        proposed.MutableClusterStateDetails()->MutablePileRegistry()->SetRequiredFeatureLevel(
+            NStorage::BridgeFeatureLevelPileOps);
+        UNIT_ASSERT(NStorage::ValidateConfig(proposed));
     }
 
     // the list of piles can't be changed, piles can't be added or removed unless every node supports these bridge

@@ -4,9 +4,9 @@
 using namespace NBridgeTest;
 
 namespace {
-    TEnvironmentSetup::TSettings MixedSettings(bool enabled = true) {
+    TEnvironmentSetup::TSettings MixedSettings(bool enabled = true, ui32 numPiles = 3) {
         return {
-            .NodeCount = 27,
+            .NodeCount = 9 * numPiles,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
             .PrepareRuntime = [enabled](TTestActorSystem& runtime) {
                 runtime.GetAppDataBridgeConfig().SetEnableNonUniformStorage(enabled);
@@ -21,7 +21,7 @@ namespace {
                 return TNodeLocation(location);
             },
             .SelfManagementConfig = true,
-            .NumPiles = 3,
+            .NumPiles = numPiles,
             .AutomaticBootstrap = true,
         };
     }
@@ -210,6 +210,11 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
             env.StopNode(node);
         }
         SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::DISCONNECTED);
+        const auto removal = InvokeDistconf(env, [](auto& record) {
+            record.MutableRemoveBridgePile()->SetPileName("pile_3");
+        });
+        UNIT_ASSERT_EQUAL(removal.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(removal.GetErrorReason(), "its data would be lost");
         checker.Write(ordinary);
         checker.Write(bridged);
         checker.CheckAll();
@@ -240,5 +245,13 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
         checker.CheckAll();
         checker.Write(ordinary);
         UNIT_ASSERT_VALUES_EQUAL(OrdinaryGroup(env), ordinary);
+    }
+
+    Y_UNIT_TEST(OrdinaryPoolRequiresThreeDatacenters) {
+        TEnvironmentSetup env(MixedSettings(true, 2));
+        env.CreatePool();
+        const auto response = DefinePool(env, NewPool(env, 2, false));
+        UNIT_ASSERT(!response.GetSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "failed to allocate group");
     }
 }

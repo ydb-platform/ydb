@@ -12,6 +12,12 @@
 
 namespace NKikimr::NStorage {
 
+    namespace {
+        bool IsBootstrapProposition(const NKikimrBlobStorage::TStorageConfig& config) {
+            return config.GetGeneration() == 1 && config.HasPrevConfig() && !config.GetPrevConfig().GetGeneration();
+        }
+    }
+
     void TDistributedConfigKeeper::UpdateQuorums() {
         // update quorum flags, if something has changed
         if (!std::exchange(QuorumValid, true)) {
@@ -24,14 +30,14 @@ namespace NKikimr::NStorage {
 
             // recalculate global and local pile quorums
             Y_ABORT_UNLESS(StorageConfig);
-            GlobalQuorum = HasNodeQuorum(*StorageConfig, connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, true);
+            GlobalQuorum = HasNodeQuorum(*StorageConfig, connected, TBridgePileId(), *Cfg, nullptr, true);
 
             // recalculate unsynced piles' quorum too
             if (BridgeInfo) {
                 ConnectedUnsyncedPiles.clear();
                 for (const auto& pile : BridgeInfo->Piles) {
                     if (pile.State == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1 && HasNodeQuorum(*StorageConfig,
-                            connected, BridgePileNameMap, pile.BridgePileId, *Cfg, nullptr, true)) {
+                            connected, pile.BridgePileId, *Cfg, nullptr, true)) {
                         ConnectedUnsyncedPiles.insert(pile.BridgePileId);
                     }
                 }
@@ -79,6 +85,7 @@ namespace NKikimr::NStorage {
         if (ev->Cookie == InvokePipelineGeneration) {
             Y_ABORT_UNLESS(Scepter);
             Y_ABORT_UNLESS(!Binding);
+            ConfigRecoveryScheduled = true;
             Invoke(TCollectConfigsAndPropose{});
         }
     }
@@ -97,7 +104,18 @@ namespace NKikimr::NStorage {
         Y_VERIFY_S(RootState == ERootState::INITIAL, "RootState# " << RootState);
         RootState = ERootState::RELAX;
 
+        KnownAppliedConfig.reset();
+        KnownAppliedConfigConflicting = false;
+        MaxObservedConfigGeneration = StorageConfig->GetGeneration();
+        RememberAppliedConfig(*StorageConfig);
+        for (const auto& [nodeId, node] : AllBoundNodes) {
+            RememberAppliedConfig(node.Configs.back());
+        }
+        ConfigRecoveryRequired = !IsBridged() && (StorageConfig->GetGeneration() || KnownAppliedConfig);
+        ++ConfigRecoveryGeneration;
+
         // start config collection
+        ConfigRecoveryScheduled = true;
         Invoke(TCollectConfigsAndPropose{});
         CollectConfigsBackoffTimer.Reset();
     }
@@ -125,6 +143,11 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::StopRootActivities(const TString& reason) {
+        ConfigPropagationRetryScheduled = false;
+        ConfigRecoveryScheduled = false;
+        ConfigRecoveryRequired = false;
+        KnownAppliedConfig.reset();
+        KnownAppliedConfigConflicting = false;
         if (Scepter) {
             UnbecomeRoot();
             Scepter.reset();
@@ -187,6 +210,10 @@ namespace NKikimr::NStorage {
             case TEvGather::kDemandRetroTrace:
                 return;
 
+            case TEvGather::kCollectBridgeCapability:
+                Y_DEBUG_ABORT();
+                break;
+
             case TEvGather::RESPONSE_NOT_SET:
                 return SwitchToError("response not set");
         }
@@ -200,12 +227,115 @@ namespace NKikimr::NStorage {
         for (const auto& [nodeId, node] : AllBoundNodes) {
             connected.push_back(nodeId);
         }
-        return HasNodeQuorum(config, connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, true);
+        return HasNodeQuorum(config, connected, TBridgePileId(), *Cfg, nullptr, true);
+    }
+
+    bool TDistributedConfigKeeper::RememberAppliedConfig(const TStorageConfigMeta& meta) {
+        if (!Scepter || IsBridged() || !meta.GetGeneration()) {
+            return false;
+        }
+        MaxObservedConfigGeneration = Max(MaxObservedConfigGeneration, meta.GetGeneration());
+        if (!KnownAppliedConfig || KnownAppliedConfig->GetGeneration() < meta.GetGeneration()) {
+            KnownAppliedConfig = meta;
+            KnownAppliedConfigConflicting = false;
+            return true;
+        } else if (KnownAppliedConfig->GetGeneration() == meta.GetGeneration() && *KnownAppliedConfig != meta) {
+            return !std::exchange(KnownAppliedConfigConflicting, true);
+        }
+        return false;
+    }
+
+    void TDistributedConfigKeeper::RequestConfigRecovery(bool invalidateInFlight) {
+        if (!Scepter || IsBridged() || (!StorageConfig->GetGeneration() && !KnownAppliedConfig)) {
+            return;
+        }
+        if (invalidateInFlight) {
+            ConfigRecoveryRequired = true;
+            ++ConfigRecoveryGeneration;
+        }
+        ScheduleConfigRecovery();
+    }
+
+    void TDistributedConfigKeeper::ScheduleConfigRecovery() {
+        if (Scepter && !ConfigRecoveryScheduled) {
+            ConfigRecoveryScheduled = true;
+            Invoke(TCollectConfigsAndPropose{});
+        }
+    }
+
+    bool TDistributedConfigKeeper::HasLocalConfig() const {
+        return (LocalCommittedStorageConfig && LocalCommittedStorageConfig->GetGeneration())
+               || std::ranges::any_of(MetadataByPath | std::views::values, [](const auto& record) {
+                   return record.GetCommittedStorageConfig().GetGeneration()
+                          || record.GetProposedStorageConfig().GetGeneration();
+               });
+    }
+
+    bool TDistributedConfigKeeper::ObserveConfigGeneration(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (!CheckFingerprint(config)) {
+            YDB_LOG_ERROR("PersistentConfig fingerprint error",
+                {"marker", "NWDC58"},
+                {"configRecord", config});
+            Y_DEBUG_ABORT("PersistentConfig fingerprint error");
+            return false;
+        }
+        MaxObservedConfigGeneration = Max(MaxObservedConfigGeneration, config.GetGeneration());
+        return true;
     }
 
     TDistributedConfigKeeper::TProcessCollectConfigsResult TDistributedConfigKeeper::ProcessCollectConfigs(
-            TEvGather::TCollectConfigs *res, std::optional<TString> selfAssemblyUUID, bool dryRun) {
+            TEvGather::TCollectConfigs *res, std::optional<TString> selfAssemblyUUID, bool dryRun,
+            bool allowConflictingGenerationAdvance) {
+        if (res->GetMetadataOnly()) {
+            return {.ErrorReason = "Configuration bodies are required for recovery"};
+        }
+        struct TDiskConfigInfo {
+            NKikimrBlobStorage::TStorageConfig Config;
+            std::vector<TSuccessfulDisk> HavingDisksProposedOrCommitted;
+            std::vector<TSuccessfulDisk> HavingDisksCommitted;
+        };
+        THashMap<TStorageConfigMeta, TDiskConfigInfo> persistentConfigs;
+        ui64 maxSeenGeneration = 0;
+        bool bootstrapProposalSeen = false;
+        for (auto&& [field, isCommitted] : {
+                    std::make_tuple(&res->GetCommittedConfigs(), true),
+                    std::make_tuple(&res->GetProposedConfigs(), false),
+                }) {
+            for (const TEvGather::TCollectConfigs::TPersistentConfig& item : *field) {
+                const NKikimrBlobStorage::TStorageConfig& config = item.GetConfig();
+                if (!ObserveConfigGeneration(config)) {
+                    continue;
+                }
+                const auto [it, inserted] = persistentConfigs.try_emplace(config);
+                bootstrapProposalSeen |= !isCommitted && IsBootstrapProposition(config) && item.DisksSize();
+                TDiskConfigInfo& r = it->second;
+                if (inserted) {
+                    r.Config.CopyFrom(config);
+                }
+                for (const auto& disk : item.GetDisks()) {
+                    r.HavingDisksProposedOrCommitted.emplace_back(disk.GetNodeId(), disk.GetPath(),
+                        disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
+                    if (isCommitted) {
+                        // A committed copy must be accounted for even before its quorum joins the collection.
+                        maxSeenGeneration = Max(maxSeenGeneration, config.GetGeneration());
+                        r.HavingDisksCommitted.emplace_back(disk.GetNodeId(), disk.GetPath(),
+                            disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
+                    }
+                }
+            }
+        }
+
         TStringStream err;
+        const bool recoverNonzero = !IsBridged()
+                                    && (StorageConfig->GetGeneration()
+                                        || KnownAppliedConfig
+                                        || std::ranges::any_of(res->GetCommittedConfigs(), [](const auto& item) {
+                                            return item.GetConfig().GetGeneration();
+                                        })
+                                        || std::ranges::any_of(res->GetProposedConfigs(), [](const auto& item) {
+                                            const auto& config = item.GetConfig();
+                                            return config.HasPrevConfig() && config.GetPrevConfig().GetGeneration();
+                                        }));
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Calculate connected node quorum
@@ -216,7 +346,7 @@ namespace NKikimr::NStorage {
                 successfulNodes.emplace_back(node);
             }
         }
-        const bool nodeQuorum = HasNodeQuorum(*StorageConfig, successfulNodes, BridgePileNameMap, TBridgePileId(), *Cfg,
+        const bool nodeQuorum = HasNodeQuorum(*StorageConfig, successfulNodes, TBridgePileId(), *Cfg,
             &err, true);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -227,20 +357,18 @@ namespace NKikimr::NStorage {
             successfulDisks.emplace_back(TNodeIdentifier(disk.GetNodeId()), disk.GetPath(),
                 disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
         };
-        for (const auto& item : res->GetCommittedConfigs()) {
-            for (const auto& disk : item.GetDisks()) {
+        for (const auto& r : persistentConfigs | std::views::values) {
+            if (!recoverNonzero || r.Config.GetGeneration()) {
+                successfulDisks.insert(successfulDisks.end(), r.HavingDisksProposedOrCommitted.begin(),
+                    r.HavingDisksProposedOrCommitted.end());
+            }
+        }
+        if (!recoverNonzero) {
+            for (const auto& disk : res->GetNoMetadata()) {
                 addSuccessfulDisk(disk);
             }
         }
-        for (const auto& item : res->GetProposedConfigs()) {
-            for (const auto& disk : item.GetDisks()) {
-                addSuccessfulDisk(disk);
-            }
-        }
-        for (const auto& disk : res->GetNoMetadata()) {
-            addSuccessfulDisk(disk);
-        }
-        const bool configQuorum = HasConfigQuorum(*StorageConfig, successfulDisks, BridgePileNameMap, TBridgePileId(),
+        const bool configQuorum = HasConfigQuorum(*StorageConfig, successfulDisks, TBridgePileId(),
             *Cfg, false, &err);
 
         YDB_LOG_DEBUG("ProcessCollectConfigs",
@@ -262,7 +390,7 @@ namespace NKikimr::NStorage {
                     nodesWithoutDistconf.emplace_back(node);
                 }
             }
-            if (HasNodeQuorum(*StorageConfig, nodesWithoutDistconf, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr)) {
+            if (HasNodeQuorum(*StorageConfig, nodesWithoutDistconf, TBridgePileId(), *Cfg, nullptr)) {
                 // yes, distconf is disabled on the majority of the nodes, so we can't do anything about it
                 return {.IsDistconfDisabledQuorum = true};
             }
@@ -305,7 +433,7 @@ namespace NKikimr::NStorage {
         }
         for (auto it = baseConfigs.begin(); it != baseConfigs.end(); ) { // filter out configs not having node quorum
             TBaseConfigInfo& r = it->second;
-            if (HasNodeQuorum(r.Config, r.HavingNodeIds, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr)) {
+            if (HasNodeQuorum(r.Config, r.HavingNodeIds, TBridgePileId(), *Cfg, nullptr)) {
                 ++it;
             } else {
                 baseConfigs.erase(it++);
@@ -328,54 +456,24 @@ namespace NKikimr::NStorage {
         // Create quorums for committed and proposed configurations; we have one such quorum for main cluster part
         // (when in bridge mode) and for every unsynced pile
 
-        // first pass: split all found configs into buckets according to the config body itself
-        struct TDiskConfigInfo {
-            NKikimrBlobStorage::TStorageConfig Config;
-            std::vector<TSuccessfulDisk> HavingDisksProposedOrCommitted;
-            std::vector<TSuccessfulDisk> HavingDisksCommitted;
-        };
-        THashMap<TStorageConfigMeta, TDiskConfigInfo> persistentConfigs;
-        ui64 maxSeenGeneration = 0;
-        for (auto&& [field, isCommitted] : {
-                    std::make_tuple(&res->GetCommittedConfigs(), true),
-                    std::make_tuple(&res->GetProposedConfigs(), false),
-                }) {
-            for (const TEvGather::TCollectConfigs::TPersistentConfig& item : *field) {
-                const NKikimrBlobStorage::TStorageConfig& config = item.GetConfig();
-                if (!CheckFingerprint(config)) {
-                    YDB_LOG_ERROR("PersistentConfig fingerprint error",
-                        {"marker", "NWDC58"},
-                        {"configRecord", config});
-                    Y_DEBUG_ABORT("PersistentConfig fingerprint error");
-                    continue;
-                }
-                const auto [it, inserted] = persistentConfigs.try_emplace(config);
-                TDiskConfigInfo& r = it->second;
-                if (inserted) {
-                    r.Config.CopyFrom(config);
-                }
-                for (const auto& disk : item.GetDisks()) {
-                    r.HavingDisksProposedOrCommitted.emplace_back(disk.GetNodeId(), disk.GetPath(),
-                        disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
-                    if (isCommitted) {
-                        // A committed copy must be accounted for even before its quorum joins the collection.
-                        maxSeenGeneration = Max(maxSeenGeneration, config.GetGeneration());
-                        r.HavingDisksCommitted.emplace_back(disk.GetNodeId(), disk.GetPath(),
-                            disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
-                    }
-                }
-            }
-        }
-
         // find the configuration that we can call 'committed' (persisted in any way -- either in committed, or in
         // proposed, but having a quorum)
         std::map<ui64, std::tuple<bool, NKikimrBlobStorage::TStorageConfig*>> configsWithQuorum;
+        THashSet<ui64> conflictingGenerations;
         for (auto& [meta, r] : persistentConfigs) {
             for (auto&& [candidateCommitted, havingDisksPtr] : {
                         std::make_tuple(true, &r.HavingDisksCommitted),
                         std::make_tuple(false, &r.HavingDisksProposedOrCommitted)
                     }) {
-                if (HasConfigQuorum(r.Config, *havingDisksPtr, BridgePileNameMap, TBridgePileId(), *Cfg, false)) {
+                const bool published = recoverNonzero && candidateCommitted
+                                       && (!r.HavingDisksCommitted.empty()
+                                           || (KnownAppliedConfig && *KnownAppliedConfig == meta
+                                               && !r.HavingDisksProposedOrCommitted.empty()));
+                const bool bootstrapQuorum = !candidateCommitted && !StorageConfig->GetGeneration()
+                    && IsBootstrapProposition(r.Config) && !ValidateConfig(r.Config)
+                    && HasDiskQuorum(r.Config, *havingDisksPtr, TBridgePileId(), *Cfg, nullptr, "bootstrap");
+                if (published || bootstrapQuorum
+                    || HasConfigQuorum(r.Config, *havingDisksPtr, TBridgePileId(), *Cfg, false)) {
                     const ui64 generation = r.Config.GetGeneration();
                     auto& [committed, configPtr] = configsWithQuorum[generation];
                     if (configPtr && configPtr->GetFingerprint() != r.Config.GetFingerprint()) {
@@ -383,10 +481,10 @@ namespace NKikimr::NStorage {
                             {"marker", "NWDC37"},
                             {"generation", generation},
                             {"config", *configPtr},
-                            {"committed", candidateCommitted},
+                            {"committed", committed},
                             {"otherConfig", r.Config},
                             {"otherCommitted", candidateCommitted});
-                        Y_DEBUG_ABORT("Persistent config quorum with different fingerprints");
+                        conflictingGenerations.insert(generation);
                         continue;
                     }
                     configPtr = &r.Config;
@@ -406,14 +504,67 @@ namespace NKikimr::NStorage {
         if (maxSeenGeneration && (!persistedConfig || persistedConfig->GetGeneration() < maxSeenGeneration)) {
             return {.ErrorReason = "Couldn't obtain quorum for configuration that was seen in effect"};
         }
+        const bool persistentConflict = persistedConfig && conflictingGenerations.contains(persistedConfig->GetGeneration());
+        const bool appliedConflict = recoverNonzero && KnownAppliedConfig
+                                     && (!persistedConfig || IsBelowKnownAppliedConfig(*persistedConfig));
+        if (persistentConflict || appliedConflict) {
+            if (allowConflictingGenerationAdvance && persistedConfig
+                && persistedConfig->GetGeneration() == StorageConfig->GetGeneration()
+                && persistentConfigs.contains(TStorageConfigMeta(*StorageConfig))
+                && (!KnownAppliedConfig || KnownAppliedConfig->GetGeneration() <= StorageConfig->GetGeneration())) {
+                return {.RecoveredConfig = *StorageConfig, .RequiresGenerationAdvance = true};
+            }
+            return {.ErrorReason = persistentConflict
+                                   ? "Persistent config quorum with different fingerprints"
+                                   : "The newest applied configuration has not been recovered yet"};
+        }
 
-        NKikimrBlobStorage::TStorageConfig *proposedConfig = nullptr;
+        if (!StorageConfig->GetGeneration() && bootstrapProposalSeen && !persistedConfig) {
+            std::vector<TSuccessfulDisk> emptyDisks;
+            for (const auto& disk : res->GetNoMetadata()) {
+                emptyDisks.emplace_back(TNodeIdentifier(disk.GetNodeId()), disk.GetPath(),
+                    disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
+            }
+            if (!HasConfigQuorum(*StorageConfig, emptyDisks, TBridgePileId(), *Cfg, false)) {
+                THashSet<std::pair<TNodeIdentifier, TString>> readableDrives;
+                for (const auto& [node, path, guid] : emptyDisks) {
+                    readableDrives.emplace(node, path);
+                }
+                for (const auto& r : persistentConfigs | std::views::values) {
+                    for (const auto& [node, path, guid] : r.HavingDisksProposedOrCommitted) {
+                        readableDrives.emplace(node, path);
+                    }
+                }
+                const auto fullyRead = [&](const auto& config) {
+                    bool complete = true;
+                    EnumerateConfigDrives(config, 0, [&](const auto& node, const auto& drive) {
+                        complete &= readableDrives.contains(std::make_pair(TNodeIdentifier(node), drive.GetPath()));
+                    });
+                    return complete;
+                };
+                const bool completeBootstrapRead = res->GetErrors().empty() && baseConfig && !baseConfig->GetGeneration()
+                    && fullyRead(*StorageConfig) && fullyRead(*baseConfig)
+                    && std::ranges::all_of(persistentConfigs | std::views::values, [&](const auto& r) {
+                        return (!r.Config.GetGeneration() || IsBootstrapProposition(r.Config))
+                            && !ValidateConfig(r.Config) && fullyRead(r.Config)
+                            && (!r.Config.HasPrevConfig() || fullyRead(r.Config.GetPrevConfig()));
+                    });
+                if (!completeBootstrapRead) {
+                    return {.ErrorReason = "Bootstrap proposals without quorum require a complete configuration collection"};
+                }
+            }
+        }
+
+        TProcessCollectConfigsResult result;
+        if (persistedConfig) {
+            result.RecoveredConfig = *persistedConfig;
+        }
 
         if (persistedConfig && !dryRun) { // we have a committed config, apply and spread it
+            ConfigRecoveryRequired = false;
             ApplyCommittedStorageConfig(*persistedConfig);
         }
 
-        NKikimrBlobStorage::TStorageConfig tempConfig;
         NKikimrBlobStorage::TStorageConfig *configToPropose = nullptr;
         std::optional<NKikimrBlobStorage::TStorageConfig> propositionBase;
 
@@ -424,18 +575,12 @@ namespace NKikimr::NStorage {
             {"marker", "NWDC59"},
             {"baseConfig", baseConfig},
             {"persistedConfig", persistedConfig},
-            {"proposedConfig", proposedConfig},
             {"canPropose", canPropose});
 
         bool automaticBootstrap = false;
 
         if (!canPropose) {
             // we can't propose any configuration here, just ignore
-        } else if (proposedConfig) { // we have proposition in progress, resume
-            if (persistedConfig) {
-                propositionBase.emplace(*persistedConfig);
-            }
-            configToPropose = proposedConfig;
         } else if (persistedConfig) { // we have committed config, check if we need to update it
             propositionBase.emplace(*persistedConfig);
             if (UpdateConfig(persistedConfig)) {
@@ -466,14 +611,32 @@ namespace NKikimr::NStorage {
         }
 
         if (configToPropose) {
-            return {
-                .PropositionBase = std::move(propositionBase),
-                .ConfigToPropose = *configToPropose,
-                .AutomaticBootstrap = automaticBootstrap,
-            };
+            result.PropositionBase = std::move(propositionBase);
+            result.ConfigToPropose = *configToPropose;
+            result.AutomaticBootstrap = automaticBootstrap;
         }
 
-        return {};
+        return result;
+    }
+
+    bool TDistributedConfigKeeper::IsBelowKnownAppliedConfig(const NKikimrBlobStorage::TStorageConfig& config) const {
+        return KnownAppliedConfig
+               && (config.GetGeneration() < KnownAppliedConfig->GetGeneration()
+                   || (config.GetGeneration() == KnownAppliedConfig->GetGeneration()
+                       && (TStorageConfigMeta(config) != *KnownAppliedConfig || KnownAppliedConfigConflicting)));
+    }
+
+    bool TDistributedConfigKeeper::IsConflictingGenerationAdvance(const TProposition& proposition) const {
+        const ui64 generation = proposition.StorageConfig.GetGeneration();
+        return proposition.AdvancesConflictingGeneration
+               && generation > MaxObservedConfigGeneration
+               && generation > StorageConfig->GetGeneration()
+               && (!KnownAppliedConfig || generation > KnownAppliedConfig->GetGeneration());
+    }
+
+    bool TDistributedConfigKeeper::IsPropositionCurrent(const TProposition& proposition) const {
+        return IsBridged() || ((!ConfigRecoveryRequired || IsConflictingGenerationAdvance(proposition))
+                   && proposition.ConfigRecoveryGeneration == ConfigRecoveryGeneration);
     }
 
     void TDistributedConfigKeeper::ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res) {
@@ -498,9 +661,16 @@ namespace NKikimr::NStorage {
             }
         }
 
-        if (TStringStream err; HasConfigQuorum(proposition.StorageConfig, successfulDisks, BridgePileNameMap, TBridgePileId(),
+        const bool advancesConflict = IsConflictingGenerationAdvance(proposition);
+        if (!IsPropositionCurrent(proposition)) {
+            finishWithError("Configuration changed while proposing; configuration recovery is required");
+            ScheduleConfigRecovery();
+        } else if (TStringStream err; HasConfigQuorum(proposition.StorageConfig, successfulDisks, TBridgePileId(),
                 *Cfg, proposition.MindPrev, &err)) {
             // apply configuration and spread it
+            if (advancesConflict) {
+                ConfigRecoveryRequired = false;
+            }
             ApplyCommittedStorageConfig(proposition.StorageConfig);
 
             // this proposition came from actor -- we notify that actor and finish operation
@@ -539,16 +709,152 @@ namespace NKikimr::NStorage {
         }
     }
 
+    class TDistributedConfigKeeper::TTargetedPropositionValidationActor
+        : public TActorBootstrapped<TTargetedPropositionValidationActor> {
+        TDistributedConfigKeeper *const Keeper;
+        const std::weak_ptr<TLifetimeToken> Lifetime;
+        const ui64 Cookie;
+        const TStorageConfigMeta Meta;
+        const TScatterTaskOriginTargeted Origin;
+        const ui64 ScatterCookie;
+        const ui64 TaskId;
+
+        bool IsCurrent() const {
+            if (Lifetime.expired()) {
+                return false;
+            }
+            const auto it = Keeper->ScatterTasks.find(Cookie);
+            return it != Keeper->ScatterTasks.end()
+                   && it->second.TargetedPropositionValidationActor == SelfId()
+                   && it->second.Request.HasProposeStorageConfig()
+                   && TStorageConfigMeta(it->second.Request.GetProposeStorageConfig().GetConfig()) == Meta;
+        }
+
+        void Complete(bool confirmed) {
+            if (IsCurrent()) {
+                InvokeOtherActor(*Keeper, &TDistributedConfigKeeper::CompleteTargetedPropositionValidation,
+                                 Cookie, SelfId(), Meta, confirmed);
+            }
+            PassAway();
+        }
+
+        void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
+            if (ev->Cookie != 1 || ev->Sender != Origin.Sender
+                || ev->InterconnectSession != Origin.InterconnectSessionId) {
+                return;
+            }
+            const auto& result = ev->Get()->Record;
+            Complete(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK
+                     && result.HasValidateTargetedProposition()
+                     && result.GetValidateTargetedProposition().GetConfirmed()
+                     && result.HasScepter() && result.GetScepter().GetNodeId() == Origin.Sender.NodeId());
+        }
+
+        void HandleTimeout() {
+            Complete(false);
+        }
+
+        STFUNC(StateFunc) {
+            if (!IsCurrent()) {
+                return PassAway();
+            }
+            STRICT_STFUNC_BODY(
+                hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
+                cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+                cFunc(TEvents::TSystem::Poison, HandleTimeout);
+            )
+        }
+
+    public:
+        TTargetedPropositionValidationActor(TDistributedConfigKeeper *keeper, ui64 cookie, const TScatterTask& task)
+            : Keeper(keeper)
+            , Lifetime(keeper->LifetimeToken)
+            , Cookie(cookie)
+            , Meta(task.Request.GetProposeStorageConfig().GetConfig())
+            , Origin(std::get<TScatterTaskOriginTargeted>(task.Origin))
+            , ScatterCookie(task.Request.GetCookie())
+            , TaskId(task.Request.GetTaskId())
+        {}
+
+        void Bootstrap() {
+            if (!IsCurrent()) {
+                return PassAway();
+            }
+            Become(&TThis::StateFunc);
+
+            auto request = std::make_unique<TEvNodeConfigInvokeOnRoot>();
+            auto *validation = request->Record.MutableValidateTargetedProposition();
+            validation->MutableConfig()->CopyFrom(Meta);
+            validation->SetScatterCookie(ScatterCookie);
+            validation->SetTaskId(TaskId);
+            auto handle = std::make_unique<IEventHandle>(Origin.Sender, SelfId(), request.release(), 0, 1);
+            Y_ABORT_UNLESS(Origin.InterconnectSessionId);
+            handle->Rewrite(TEvInterconnect::EvForward, Origin.InterconnectSessionId);
+            TActivationContext::Send(handle.release());
+            Schedule(TDuration::Seconds(30), new TEvents::TEvWakeup);
+        }
+    };
+
+    void TDistributedConfigKeeper::CompleteTargetedPropositionValidation(ui64 cookie, TActorId actorId,
+            const TStorageConfigMeta& meta, bool confirmed) {
+        const auto it = ScatterTasks.find(cookie);
+        if (it == ScatterTasks.end()) {
+            return;
+        }
+        TScatterTask& task = it->second;
+        if (task.TargetedPropositionValidationActor != actorId || !task.Request.HasProposeStorageConfig()
+            || TStorageConfigMeta(task.Request.GetProposeStorageConfig().GetConfig()) != meta) {
+            return;
+        }
+        task.TargetedPropositionValidationActor = {};
+        if (confirmed) {
+            task.TargetedPropositionAdmitted = true;
+            PrepareScatterTask(cookie, task);
+        } else {
+            auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
+            SelfNode.Serialize(status->MutableNodeId());
+            status->SetStatus(TEvGather::TProposeStorageConfig::ERROR);
+        }
+        FinishAsyncOperation(cookie);
+    }
+
     void TDistributedConfigKeeper::PrepareScatterTask(ui64 cookie, TScatterTask& task) {
+        if (task.Request.HasProposeStorageConfig()) {
+            const auto& proposed = task.Request.GetProposeStorageConfig().GetConfig();
+            const bool bootstrap = IsBootstrapProposition(proposed);
+            if (!IsBridged() && std::holds_alternative<TScatterTaskOriginTargeted>(task.Origin)
+                && (!LocalCommittedStorageConfig || !LocalCommittedStorageConfig->GetGeneration())
+                && !bootstrap && !task.TargetedPropositionAdmitted) {
+                const auto containsSelf = [this](const auto& node) { return node.GetNodeId() == SelfNode.NodeId(); };
+                if (!task.Request.HasCookie() || !task.Request.HasTaskId() || !proposed.HasPrevConfig()
+                    || std::ranges::any_of(proposed.GetPrevConfig().GetAllNodes(), containsSelf)
+                    || !std::ranges::any_of(proposed.GetAllNodes(), containsSelf)) {
+                    auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
+                    SelfNode.Serialize(status->MutableNodeId());
+                    status->SetStatus(TEvGather::TProposeStorageConfig::ERROR);
+                } else if (!task.TargetedPropositionValidationActor) {
+                    ++task.AsyncOperationsPending;
+                    task.TargetedPropositionValidationActor = RegisterWithSameMailbox(
+                        new TTargetedPropositionValidationActor(this, cookie, task));
+                }
+                return;
+            }
+        }
         switch (task.Request.GetRequestCase()) {
             case TEvScatter::kCollectConfigs: {
-                ReadConfig(GetDrives(*StorageConfig), cookie);
+                task.ConfigReaderActor = ReadConfig(GetDrives(*StorageConfig), cookie);
                 ++task.AsyncOperationsPending;
                 break;
             }
 
             case TEvScatter::kProposeStorageConfig:
-                if (PersistProposedStorageConfigInFlight) {
+                if (const auto& proposed = task.Request.GetProposeStorageConfig().GetConfig();
+                    !IsBridged() && !HasLocalConfig() && !task.TargetedPropositionAdmitted
+                    && !IsBootstrapProposition(proposed)) {
+                    auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
+                    SelfNode.Serialize(status->MutableNodeId());
+                    status->SetStatus(TEvGather::TProposeStorageConfig::ERROR);
+                } else if (PersistProposedStorageConfigInFlight) {
                     auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                     SelfNode.Serialize(status->MutableNodeId());
                     status->SetStatus(TEvGather::TProposeStorageConfig::RACE);
@@ -578,13 +884,20 @@ namespace NKikimr::NStorage {
                 } else {
                     auto callback = [this, cookie](TEvPrivate::TEvStorageConfigStored& msg) {
                         Y_ABORT_UNLESS(PersistProposedStorageConfigInFlight);
-                        PersistProposedStorageConfigInFlight = false;
+                        if (msg.Complete) {
+                            PersistProposedStorageConfigInFlight = false;
+                        }
 
-                        if (auto it = ScatterTasks.find(cookie); it != ScatterTasks.end()) {
+                        if (auto it = ScatterTasks.find(cookie); it != ScatterTasks.end()
+                                && !it->second.LocalContributionExpired) {
                             TScatterTask& task = it->second;
-                            auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
-                            SelfNode.Serialize(status->MutableNodeId());
-                            status->SetStatus(TEvGather::TProposeStorageConfig::ACCEPTED);
+                            auto *response = task.Response.MutableProposeStorageConfig();
+                            if (!response->StatusSize()) {
+                                auto *status = response->AddStatus();
+                                SelfNode.Serialize(status->MutableNodeId());
+                                status->SetStatus(TEvGather::TProposeStorageConfig::ACCEPTED);
+                            }
+                            auto *status = response->MutableStatus(0);
                             for (const auto& [path, ok, guid] : msg.StatusPerPath) {
                                 if (ok) {
                                     auto *drive = status->AddSuccessfulDrives();
@@ -598,13 +911,15 @@ namespace NKikimr::NStorage {
                                 {"marker", "NWDC48"},
                                 {"cookie", cookie},
                                 {"status", *status});
+                            if (msg.Complete) {
+                                task.PersistCookie = 0;
+                                FinishAsyncOperation(cookie);
+                            }
                         } else {
                             YDB_LOG_DEBUG("ProposeStorageConfig TEvStorageConfigStored no scatter task",
                                 {"marker", "NWDC45"},
                                 {"cookie", cookie});
                         }
-
-                        FinishAsyncOperation(cookie);
                     };
 
                     Y_ABORT_UNLESS(!CommittedStorageConfig || CommittedStorageConfig->GetGeneration() <= proposed.GetGeneration());
@@ -627,7 +942,7 @@ namespace NKikimr::NStorage {
                     const auto [begin, end] = std::ranges::unique(drivesToWrite);
                     drivesToWrite.erase(begin, end);
 
-                    PersistConfig(callback, drivesToWrite);
+                    task.PersistCookie = PersistConfig(callback, drivesToWrite);
                     PersistProposedStorageConfigInFlight = true;
 
                     ++task.AsyncOperationsPending;
@@ -635,6 +950,7 @@ namespace NKikimr::NStorage {
                 break;
 
             case TEvScatter::kDemandRetroTrace:
+            case TEvScatter::kCollectBridgeCapability:
                 break;
 
             case TEvScatter::REQUEST_NOT_SET:
@@ -656,6 +972,10 @@ namespace NKikimr::NStorage {
                 Perform(task.Response.MutableDemandRetroTrace(), task.Request.GetDemandRetroTrace(), task);
                 break;
 
+            case TEvScatter::kCollectBridgeCapability:
+                Perform(task.Response.MutableCollectBridgeCapability(), task.Request.GetCollectBridgeCapability(), task);
+                break;
+
             case TEvScatter::REQUEST_NOT_SET:
                 // unexpected case
                 break;
@@ -663,24 +983,28 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Perform(TEvGather::TCollectConfigs *response,
-            const TEvScatter::TCollectConfigs& /*request*/, TScatterTask& task) {
-        THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TNode*> baseConfigs;
-        THashSet<TNodeIdentifier> nodesAlreadyReplied{SelfNode};
+            const TEvScatter::TCollectConfigs& request, TScatterTask& task) {
+        TEvGather::TCollectConfigs local;
+        local.Swap(response);
+        auto *self = local.AddNodes();
+        self->MutableBaseConfig()->CopyFrom(*BaseConfig);
+        SelfNode.Serialize(self->AddNodeIds());
 
-        auto *ptr = response->AddNodes();
-        ptr->MutableBaseConfig()->CopyFrom(*BaseConfig);
-        SelfNode.Serialize(ptr->AddNodeIds());
-        baseConfigs.emplace(*BaseConfig, ptr);
+        const bool metadataOnly = request.GetMetadataOnly();
+        response->SetMetadataOnly(metadataOnly);
+        auto copyConfig = [metadataOnly](auto *target, const auto& config) {
+            if (metadataOnly) {
+                target->SetGeneration(config.GetGeneration());
+                target->SetFingerprint(config.GetFingerprint());
+            } else {
+                target->CopyFrom(config);
+            }
+        };
+        THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TNode*> baseConfigs;
+        THashSet<TNodeIdentifier> nodesAlreadyReplied;
 
         THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> committedConfigs;
         THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> proposedConfigs;
-        for (auto& item : *response->MutableCommittedConfigs()) {
-            committedConfigs[item.GetConfig()] = &item;
-        }
-        for (auto& item : *response->MutableProposedConfigs()) {
-            proposedConfigs[item.GetConfig()] = &item;
-        }
-
         auto addBaseConfig = [&](const TEvGather::TCollectConfigs::TNode& item, auto *nodesToIgnore) {
             const auto& config = item.GetBaseConfig();
             auto& ptr = baseConfigs[config];
@@ -689,7 +1013,7 @@ namespace NKikimr::NStorage {
                 if (const auto [_, inserted] = nodesAlreadyReplied.emplace(n); inserted) {
                     if (!ptr) {
                         ptr = response->AddNodes();
-                        ptr->MutableBaseConfig()->CopyFrom(config);
+                        copyConfig(ptr->MutableBaseConfig(), config);
                     }
                     ptr->AddNodeIds()->CopyFrom(nodeId);
                 } else {
@@ -699,44 +1023,59 @@ namespace NKikimr::NStorage {
         };
 
         auto addPerDiskConfig = [&](const TEvGather::TCollectConfigs::TPersistentConfig& item, auto addFunc, auto& set,
-                const auto& nodesToIgnore) {
+                const auto& nodesToIgnore, bool configValidated) {
             const auto& config = item.GetConfig();
+            if (metadataOnly && !configValidated && !CheckFingerprint(config)) {
+                for (const auto& disk : item.GetDisks()) {
+                    if (!nodesToIgnore.contains(TNodeIdentifier(disk.GetNodeId()))) {
+                        response->AddErrors()->CopyFrom(disk);
+                    }
+                }
+                return;
+            }
             auto& ptr = set[config];
             for (const auto& disk : item.GetDisks()) {
                 if (!nodesToIgnore.contains(TNodeIdentifier(disk.GetNodeId()))) {
                     if (!ptr) {
                         ptr = (response->*addFunc)();
-                        ptr->MutableConfig()->CopyFrom(config);
+                        copyConfig(ptr->MutableConfig(), config);
                     }
                     ptr->AddDisks()->CopyFrom(disk);
                 }
             }
         };
 
+        auto addResponse = [&](const TEvGather::TCollectConfigs& cc, bool localConfigsValidated) {
+            if (!metadataOnly && cc.GetMetadataOnly()) {
+                return;
+            }
+            THashSet<TNodeIdentifier> nodesToIgnore;
+            for (const auto& item : cc.GetNodes()) {
+                addBaseConfig(item, &nodesToIgnore);
+            }
+            for (const auto& item : cc.GetCommittedConfigs()) {
+                addPerDiskConfig(item, &TEvGather::TCollectConfigs::AddCommittedConfigs, committedConfigs,
+                    nodesToIgnore, localConfigsValidated || cc.GetMetadataOnly());
+            }
+            for (const auto& item : cc.GetProposedConfigs()) {
+                addPerDiskConfig(item, &TEvGather::TCollectConfigs::AddProposedConfigs, proposedConfigs,
+                    nodesToIgnore, localConfigsValidated || cc.GetMetadataOnly());
+            }
+            for (const auto& item : cc.GetNoMetadata()) {
+                if (!nodesToIgnore.contains(TNodeIdentifier(item.GetNodeId()))) {
+                    response->AddNoMetadata()->CopyFrom(item);
+                }
+            }
+            for (const auto& item : cc.GetErrors()) {
+                if (!nodesToIgnore.contains(TNodeIdentifier(item.GetNodeId()))) {
+                    response->AddErrors()->CopyFrom(item);
+                }
+            }
+        };
+        addResponse(local, true);
         for (const auto& reply : task.CollectedResponses) {
             if (reply.HasCollectConfigs()) {
-                const auto& cc = reply.GetCollectConfigs();
-
-                THashSet<TNodeIdentifier> nodesToIgnore;
-                for (const auto& item : cc.GetNodes()) {
-                    addBaseConfig(item, &nodesToIgnore);
-                }
-                for (const auto& item : cc.GetCommittedConfigs()) {
-                    addPerDiskConfig(item, &TEvGather::TCollectConfigs::AddCommittedConfigs, committedConfigs, nodesToIgnore);
-                }
-                for (const auto& item : cc.GetProposedConfigs()) {
-                    addPerDiskConfig(item, &TEvGather::TCollectConfigs::AddProposedConfigs, proposedConfigs, nodesToIgnore);
-                }
-                for (const auto& item : cc.GetNoMetadata()) {
-                    if (!nodesToIgnore.contains(TNodeIdentifier(item.GetNodeId()))) {
-                        response->AddNoMetadata()->CopyFrom(item);
-                    }
-                }
-                for (const auto& item : cc.GetErrors()) {
-                    if (!nodesToIgnore.contains(TNodeIdentifier(item.GetNodeId()))) {
-                        response->AddErrors()->CopyFrom(item);
-                    }
-                }
+                addResponse(reply.GetCollectConfigs(), false);
             }
         }
     }
@@ -752,6 +1091,46 @@ namespace NKikimr::NStorage {
                         response->AddStatus()->CopyFrom(status);
                     }
                 }
+            }
+        }
+    }
+
+    void TDistributedConfigKeeper::Perform(TEvGather::TCollectBridgeCapability *response,
+            const TEvScatter::TCollectBridgeCapability& /*request*/, TScatterTask& task) {
+        auto add = [&](ui32 nodeId, bool capable, ui32 bridgeFeatureLevel) {
+            if (capable) {
+                response->AddCapableNodeIds(nodeId);
+                if (bridgeFeatureLevel >= BridgeFeatureLevelPileList) {
+                    response->AddPileListChangeCapableNodeIds(nodeId);
+                }
+                if (bridgeFeatureLevel) {
+                    auto *item = response->AddFeatureLevels();
+                    item->SetNodeId(nodeId);
+                    item->SetLevel(bridgeFeatureLevel);
+                }
+            } else {
+                response->AddNotCapableNodeIds(nodeId);
+            }
+        };
+
+        add(SelfId().NodeId(), static_cast<bool>(Cfg->BridgeConfig), BridgeFeatureLevel);
+        for (const ui32 nodeId : ConnectedDynamicNodes) {
+            const auto it = DynamicNodeFeatureLevels.find(nodeId);
+            add(nodeId, BridgeCapableDynamicNodes.contains(nodeId), it != DynamicNodeFeatureLevels.end() ? it->second : 0);
+        }
+        for (const auto& reply : task.CollectedResponses) {
+            if (reply.HasCollectBridgeCapability()) {
+                const auto& item = reply.GetCollectBridgeCapability();
+                for (const ui32 nodeId : item.GetCapableNodeIds()) {
+                    response->AddCapableNodeIds(nodeId);
+                }
+                for (const ui32 nodeId : item.GetNotCapableNodeIds()) {
+                    response->AddNotCapableNodeIds(nodeId);
+                }
+                for (const ui32 nodeId : item.GetPileListChangeCapableNodeIds()) {
+                    response->AddPileListChangeCapableNodeIds(nodeId);
+                }
+                response->MutableFeatureLevels()->MergeFrom(item.GetFeatureLevels());
             }
         }
     }
@@ -794,22 +1173,73 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TDistributedConfigKeeper::FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *committedStorageConfig) {
+    bool TDistributedConfigKeeper::NeedsConfigUpdate(ui32 refererNodeId, const TBoundNode& node,
+                                                     const NKikimrBlobStorage::TStorageConfig& config) const {
+        bool outdated = false;
+        for (const auto& nodeId : node.BoundNodeIds) {
+            const auto& meta = *AllBoundNodes.at(nodeId).Refs.at(refererNodeId);
+            if (meta.GetGeneration() > config.GetGeneration()
+                || (meta.GetGeneration() == config.GetGeneration() && meta.GetFingerprint() != config.GetFingerprint())) {
+                return false;
+            }
+            outdated |= meta.GetGeneration() < config.GetGeneration();
+        }
+        return outdated;
+    }
+
+    void TDistributedConfigKeeper::HandleRetryConfigPropagation(STATEFN_SIG) {
+        if (ev->Cookie != ScepterCounter) {
+            return;
+        }
+        ConfigPropagationRetryScheduled = false;
+        if (Scepter && SelfManagementEnabled && CommittedStorageConfig) {
+            if (ConfigRecoveryRequired) {
+                ScheduleConfigRecovery();
+            } else {
+                FanOutReversePush(CommittedStorageConfig.get(), true);
+            }
+        }
+    }
+
+    void TDistributedConfigKeeper::FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *committedStorageConfig,
+                                                     bool onlyOutdated) {
         const ui32 rootNodeId = GetRootNodeId();
+        if (committedStorageConfig && !IsBridged()) {
+            const ui64 generation = committedStorageConfig->GetGeneration();
+            const bool belowKnown = IsBelowKnownAppliedConfig(*committedStorageConfig);
+            if (generation < StorageConfig->GetGeneration() || (Scepter && (ConfigRecoveryRequired || belowKnown))) {
+                committedStorageConfig = nullptr;
+            }
+        }
+        if (committedStorageConfig && !onlyOutdated) {
+            ConfigPropagationRetryDelay = TDuration::Seconds(1);
+        }
+        bool configSent = false;
         for (auto& [nodeId, info] : DirectBoundNodes) {
             if (committedStorageConfig || info.LastReportedRootNodeId != rootNodeId) {
+                if (onlyOutdated && committedStorageConfig && !NeedsConfigUpdate(nodeId, info, *committedStorageConfig)) {
+                    continue;
+                }
                 auto ev = std::make_unique<TEvNodeConfigReversePush>(rootNodeId);
                 if (committedStorageConfig) {
                     ev->Record.MutableCommittedStorageConfig()->CopyFrom(*committedStorageConfig);
+                    configSent = true;
                 }
                 SendEvent(nodeId, info, std::move(ev));
                 info.LastReportedRootNodeId = GetRootNodeId();
             }
         }
+        if (configSent && Scepter && !ConfigPropagationRetryScheduled) {
+            ConfigPropagationRetryScheduled = true;
+            TActivationContext::Schedule(ConfigPropagationRetryDelay, new IEventHandle(TEvPrivate::EvRetryConfigPropagation, 0,
+                                                                                     SelfId(), {}, nullptr, ScepterCounter));
+            ConfigPropagationRetryDelay = Min(ConfigPropagationRetryDelay * 2, TDuration::Seconds(30));
+        }
     }
 
     std::optional<TString> TDistributedConfigKeeper::StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
-            const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool mindPrev) {
+            const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool mindPrev,
+            bool advancesConflictingGeneration) {
         // ensure we are not proposing any other config right now
         Y_ABORT_UNLESS(!CurrentProposition);
 
@@ -824,6 +1254,11 @@ namespace NKikimr::NStorage {
 
             configToPropose->MutablePrevConfig()->CopyFrom(*propositionBase);
             configToPropose->MutablePrevConfig()->ClearPrevConfig();
+        }
+
+        if (StorageConfig->GetGeneration()) {
+            const ui64 observedGeneration = Max(MaxObservedConfigGeneration, StorageConfig->GetGeneration());
+            configToPropose->SetGeneration(Max(configToPropose->GetGeneration(), observedGeneration + 1));
         }
 
         if (auto error = TransformConfigBeforeCommit(configToPropose)) {
@@ -857,6 +1292,8 @@ namespace NKikimr::NStorage {
             .StorageConfig = *configToPropose,
             .ActorId = actorId,
             .MindPrev = mindPrev,
+            .ConfigRecoveryGeneration = ConfigRecoveryGeneration,
+            .AdvancesConflictingGeneration = advancesConflictingGeneration,
         });
 
         Y_ABORT_UNLESS(StorageConfig);
@@ -881,6 +1318,7 @@ namespace NKikimr::NStorage {
                 addedOrChangedNodeIdentifiers.push_back(std::move(node));
             }
         }
+        std::ranges::sort(addedOrChangedNodeIdentifiers, {}, &TNodeIdentifier::NodeId);
 
         if (!addedOrChangedNodeIdentifiers.empty()) {
             for (TActorId actorId : {MakeDistconfBridgeConnectionCheckerActorId(), GetNameserviceActorId()}) {

@@ -234,6 +234,25 @@ TVector<ui32> ExtractJoinColumnIndices(const TExprNode& tupleNode) {
     return indices;
 }
 
+NMiniKQL::TBlockHashJoinSettings ParseHashJoinSettings(const TExprNode& settingsNode, size_t keyCount) {
+    NMiniKQL::TBlockHashJoinSettings settings;
+    for (const auto& setting : settingsNode.Children()) {
+        const auto name = setting->Child(0)->Content();
+        if (name == "BuildSide") {
+            if (setting->Child(1)->Content() == "Left") {
+                settings.BuildSide = NMiniKQL::EBuildSide::Left;
+            }
+        } else if (name == NMiniKQL::EqualNullsSettingName) {
+            const auto& value = *setting->Child(1);
+            YQL_ENSURE(value.IsCallable("Uint32"), "EqualNulls setting value must be Uint32");
+            const ui32 keyIndex = FromString<ui32>(value.Head().Content());
+            YQL_ENSURE(keyIndex < keyCount, "EqualNulls key index is out of range");
+            settings.EqualNullsKeys.push_back(keyIndex);
+        }
+    }
+    return settings;
+}
+
 TGraceJoinRenames MakeHashJoinRenames(int leftWidth, int rightWidth, NMiniKQL::EJoinKind joinKind) {
     TDqUserRenames renames{};
     for (int index = 0; index < leftWidth; ++index) {
@@ -415,21 +434,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 wideStreamComponentsSize(leftInput) - 1, wideStreamComponentsSize(rightInput) - 1, joinKind);
 
 
-            NMiniKQL::TBlockHashJoinSettings settings;
-            for (const auto& setting : node.Child(7)->Children()) {
-                const auto name = setting->Child(0)->Content();
-                if (name == "BuildSide") {
-                    if (setting->Child(1)->Content() == "Left") {
-                        settings.BuildSide = NMiniKQL::EBuildSide::Left;
-                    }
-                } else if (name == NMiniKQL::EqualNullsSettingName) {
-                    const auto& value = *setting->Child(1);
-                    YQL_ENSURE(value.IsCallable("Uint32"), "EqualNulls setting value must be Uint32");
-                    const ui32 keyIndex = FromString<ui32>(value.Head().Content());
-                    YQL_ENSURE(keyIndex < leftKeyColumns.size(), "EqualNulls key index is out of range");
-                    settings.EqualNullsKeys.push_back(keyIndex);
-                }
-            }
+            const auto settings = ParseHashJoinSettings(*node.Child(7), leftKeyColumns.size());
 
             auto IsEmptyLambda = [](const TExprNode::TPtr input) -> bool {
                 auto lambda = TCoLambda(input);
@@ -481,9 +486,13 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             };
             const auto renames = MakeHashJoinRenames(
                 wideFlowComponentsSize(leftInput), wideFlowComponentsSize(rightInput), joinKind);
+            NMiniKQL::TBlockHashJoinSettings settings;
+            if (const auto maybeSettings = join.Settings()) {
+                settings = ParseHashJoinSettings(maybeSettings.Cast().Ref(), leftKeyColumns.size());
+            }
 
             return ctx.PgmBuilder().DqScalarHashJoin(leftInput, rightInput, joinKind, leftKeyColumns, rightKeyColumns,
-                                                     renames.Left, renames.Right, returnType);
+                                                     renames.Left, renames.Right, returnType, settings);
         });
 
     compiler->AddCallable(TDqPhyHashCombine::CallableName(), [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {

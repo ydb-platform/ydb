@@ -3,9 +3,10 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/common/common.h>
 #include <ydb/core/fq/libs/row_dispatcher/memory/memory_quota.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <yql/essentials/minikql/aligned_page_pool.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
@@ -18,7 +19,7 @@ namespace {
 
 struct TEvPrivate {
     // Event ids
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvCompileFinished = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvEnd
     };
@@ -26,25 +27,28 @@ struct TEvPrivate {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
 
     // Events
-    struct TEvCompileFinished : public NActors::TEventLocal<TEvCompileFinished, EvCompileFinished> {
+    struct TEvCompileFinished: public NActors::TEventLocal<TEvCompileFinished, EvCompileFinished> {
         TEvCompileFinished(NActors::TActorId requestActor, ui64 requestId)
             : RequestActor(requestActor)
             , RequestId(requestId)
-        {}
+        {
+        }
 
         const NActors::TActorId RequestActor;
         const ui64 RequestId;
     };
 };
 
-class TPurecalcCompileActor : public NActors::TActorBootstrapped<TPurecalcCompileActor> {
+class TPurecalcCompileActor: public NActors::TActorBootstrapped<TPurecalcCompileActor> {
 public:
-    TPurecalcCompileActor(NActors::TActorId owner, NYql::NPureCalc::IProgramFactoryPtr factory, TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr request)
+    TPurecalcCompileActor(
+        NActors::TActorId owner, NYql::NPureCalc::IProgramFactoryPtr factory, TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr request)
         : Owner(owner)
         , Factory(factory)
         , LogPrefix(TStringBuilder() << "TPurecalcCompileActor " << request->Sender << " [id " << request->Cookie << "]: ")
         , Request(std::move(request))
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_COMPILE_ACTOR";
 
@@ -64,16 +68,18 @@ public:
             status = TStatus::Fail(EStatusId::OVERLOADED, GetMemoryLimitExceededMessage(error, "while preparing a filter"));
         } catch (const NYql::NPureCalc::TCompileError& error) {
             status = TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Compile issues: " << error.GetIssues())
-                .AddIssue(TStringBuilder() << "Final yql: " << error.GetYql())
-                .AddParentIssue(TStringBuilder() << "Failed to compile purecalc program");
+                         .AddIssue(TStringBuilder() << "Final yql: " << error.GetYql())
+                         .AddParentIssue(TStringBuilder() << "Failed to compile purecalc program");
         } catch (...) {
-            status = TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to compile purecalc program, got unexpected exception: " << CurrentExceptionMessage());
+            status = TStatus::Fail(EStatusId::INTERNAL_ERROR,
+                TStringBuilder() << "Failed to compile purecalc program, got unexpected exception: " << CurrentExceptionMessage());
         }
 
         if (status.IsFail()) {
             YDB_LOG_ERROR("Compilation failed",
                 {"logPrefix", LogPrefix});
-            Send(Request->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(status.GetStatus(), status.GetErrorDescription()), 0, Request->Cookie);
+            Send(Request->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(status.GetStatus(), status.GetErrorDescription()), 0,
+                Request->Cookie);
         } else {
             YDB_LOG_TRACE("Compilation completed",
                 {"logPrefix", LogPrefix});
@@ -95,7 +101,7 @@ private:
     TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr Request;
 };
 
-class TPurecalcCompileService : public NActors::TActor<TPurecalcCompileService> {
+class TPurecalcCompileService: public NActors::TActor<TPurecalcCompileService> {
     using TBase = NActors::TActor<TPurecalcCompileService>;
 
     struct TCounters {
@@ -124,7 +130,8 @@ public:
         , InFlightLimit(Config.GetParallelCompilationLimit() ? Config.GetParallelCompilationLimit() : 1)
         , LogPrefix("TPurecalcCompileService: ")
         , Counters(counters)
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_COMPILE_SERVICE";
 
@@ -230,10 +237,11 @@ private:
     const TCounters Counters;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
-NActors::IActor* CreatePurecalcCompileService(const TRowDispatcherSettings::TCompileServiceSettings& config, NMonitoring::TDynamicCounterPtr counters) {
+NActors::IActor* CreatePurecalcCompileService(
+    const TRowDispatcherSettings::TCompileServiceSettings& config, NMonitoring::TDynamicCounterPtr counters) {
     return new TPurecalcCompileService(config, counters);
 }
 
-}  // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

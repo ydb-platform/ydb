@@ -3,9 +3,7 @@
 #include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/retry/retry.h>
-
 #include <util/system/guard.h>
-
 
 namespace NYql::NDq {
 
@@ -32,28 +30,16 @@ void FillDqSolomonScheme(NSo::NProto::TDqSolomonShardScheme& scheme, NUdf::TData
     scheme.MutableSensors()->Add(std::move(sensor));
 }
 
-}
+}   // namespace
 
-void InitAsyncOutput(
-    TFakeCASetup& caSetup,
-    NSo::NProto::TDqSolomonShard&& settings,
-    i64 freeSpace)
+void InitAsyncOutput(TFakeCASetup& caSetup, NSo::NProto::TDqSolomonShard&& settings, i64 freeSpace)
 {
     auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     const THashMap<TString, TString> secureParams;
 
     caSetup.Execute([&](TFakeActor& actor) {
-        auto [dqAsyncOutput, dqAsyncOutputAsActor] = CreateDqSolomonWriteActor(
-            std::move(settings),
-            0,
-            NYql::NDq::TCollectStatsLevel::None,
-            "TxId-42",
-            777,
-            secureParams,
-            &actor.GetAsyncOutputCallbacks(),
-            counters,
-            CreateStructuredTokenCredentialsFactory(),
-            freeSpace);
+        auto [dqAsyncOutput, dqAsyncOutputAsActor] = CreateDqSolomonWriteActor(std::move(settings), 0, NYql::NDq::TCollectStatsLevel::None,
+            "TxId-42", 777, secureParams, &actor.GetAsyncOutputCallbacks(), counters, CreateStructuredTokenCredentialsFactory(), freeSpace);
 
         actor.InitAsyncOutput(dqAsyncOutput, dqAsyncOutputAsActor);
     });
@@ -80,9 +66,7 @@ NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(bool isCloud, NUdf::TData
     return settings;
 }
 
-NUdf::TUnboxedValue CreateStruct(
-    NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    std::initializer_list<NUdf::TUnboxedValuePod> fields)
+NUdf::TUnboxedValue CreateStruct(NKikimr::NMiniKQL::THolderFactory& holderFactory, std::initializer_list<NUdf::TUnboxedValuePod> fields)
 {
     NUdf::TUnboxedValue* itemsPtr = nullptr;
     auto structValues = holderFactory.CreateDirectArrayHolder(fields.size(), itemsPtr);
@@ -98,4 +82,4 @@ int GetMetricsCount(TString metrics) {
     return json.GetArray().size();
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

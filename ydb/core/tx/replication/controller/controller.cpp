@@ -92,6 +92,8 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvResolveTenantResult, Handle);
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
         HFunc(TEvPrivate::TEvProcessQueues, Handle);
+        HFunc(TEvPrivate::TEvRestoreSession, Handle);
+        HFunc(TEvPrivate::TEvBootPersistedWorkers, Handle);
         HFunc(TEvPrivate::TEvRemoveWorker, Handle);
         HFunc(TEvPrivate::TEvCompleteWorkerSet, Handle);
         HFunc(TEvPrivate::TEvResumeDeferredAlter, Handle);
@@ -180,6 +182,22 @@ void TController::SwitchToWork(const TActorContext& ctx) {
 
         replication->Progress(ctx);
     }
+
+    // Workers are persisted once allowed to run (a root, or all parents ended),
+    // but their commands are not. Otherwise a child partition that is not running
+    // anywhere is never read. Boot them after a grace period, so that workers still
+    // running on nodes are re-adopted from TEvStatus first instead of being doubled.
+    for (auto& [id, worker] : Workers) {
+        if (worker.HasCommand() || !IsValidWorker(id)) {
+            continue;
+        }
+
+        if (const auto* target = FindTarget(id)) {
+            auto ev = MakeRunWorkerEv(Find(id.ReplicationId()), *target, id.WorkerId());
+            worker.SetCommand(ev->Record.MutableCommand());
+        }
+    }
+    Schedule(BootPersistedWorkersDelay, new TEvPrivate::TEvBootPersistedWorkers());
 
     for (const auto& [key, barrier] : SchemaBarriers) {
         if (barrier.Phase == ESchemaBarrierPhase::FlushingTarget) {
@@ -534,6 +552,13 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
         }
 
         auto* worker = GetOrCreateWorker(id);
+        if (!worker->HasCommand()) {
+            if (const auto* target = FindTarget(id)) {
+                auto ev = MakeRunWorkerEv(Find(id.ReplicationId()), *target, id.WorkerId());
+                worker->SetCommand(ev->Record.MutableCommand());
+            }
+        }
+
         if (worker->HasSession()) {
             if (const auto sessionId = worker->GetSession(); sessionId != nodeId) {
                 Y_ABORT_UNLESS(Sessions.contains(sessionId));
@@ -659,6 +684,11 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
 
     const auto& record = ev->Get()->Record;
     const auto id = TWorkerId::Parse(record.GetWorker());
+    // DataEnd is resent on every handshake, the worker might be gone or about to be stopped
+    if (!Sessions[nodeId].HasWorker(id) || !IsValidWorker(id)) {
+        return;
+    }
+
     auto* worker = GetOrCreateWorker(id);
     worker->SetDataEnded(true);
 
@@ -1081,6 +1111,25 @@ void TController::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const T
 
     if (Sessions.contains(nodeId)) {
         DeleteSession(nodeId, ctx);
+        // the node is still in discovery, so it will not be reported as a new one
+        Schedule(RestoreSessionInterval, new TEvPrivate::TEvRestoreSession(nodeId));
+    }
+}
+
+void TController::Handle(TEvPrivate::TEvBootPersistedWorkers::TPtr&, const TActorContext&) {
+    for (const auto& [id, worker] : Workers) {
+        if (!worker.HasSession() && worker.HasCommand() && IsValidWorker(id)) {
+            BootQueue.insert(id);
+        }
+    }
+
+    ScheduleProcessQueues();
+}
+
+void TController::Handle(TEvPrivate::TEvRestoreSession::TPtr& ev, const TActorContext& ctx) {
+    const ui32 nodeId = ev->Get()->NodeId;
+    if (!Sessions.contains(nodeId) && NodesManager.HasNode(nodeId)) {
+        CreateSession(nodeId, ctx);
     }
 }
 

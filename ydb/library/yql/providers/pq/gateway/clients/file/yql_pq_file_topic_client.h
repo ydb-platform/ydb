@@ -9,11 +9,10 @@
 
 namespace NYql {
 
-std::shared_ptr<NFq::IMessageStreamClient> CreateFileTopicClient(const TString& stream, const THashMap<TClusterNPath, TDummyTopic>& topics, const TFileTopicClientSettings& settings);
+std::shared_ptr<NFq::IMessageStreamClient> CreateFileTopicClient(
+    const TString& stream, const THashMap<TClusterNPath, TDummyTopic>& topics, const TFileTopicClientSettings& settings);
 
-std::shared_ptr<NYdb::NTopic::IWriteSession> CreateFileTopicWriteSession(
-    const THashMap<TClusterNPath, TDummyTopic>& topics,
-    const TFileTopicClientSettings& settings,
-    const NYdb::NTopic::TWriteSessionSettings& writeSettings);
+std::shared_ptr<NYdb::NTopic::IWriteSession> CreateFileTopicWriteSession(const THashMap<TClusterNPath, TDummyTopic>& topics,
+    const TFileTopicClientSettings& settings, const NYdb::NTopic::TWriteSessionSettings& writeSettings);
 
-} // namespace NYql
+}   // namespace NYql

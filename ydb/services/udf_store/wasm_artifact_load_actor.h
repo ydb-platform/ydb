@@ -2,17 +2,19 @@
 
 #include "events.h"
 #include "table_query.h"
+
 #include "wasm/manifest.h"
 #include "wasm/registry_helpers.h"
 
 #include <ydb/core/kqp/common/dynamic_function_registry.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/services/metadata/request/common.h>
 
 namespace NKikimr::NUdfStore {
 
-class TWasmArtifactLoadActor : public NActors::TActorBootstrapped<TWasmArtifactLoadActor> {
+class TWasmArtifactLoadActor: public NActors::TActorBootstrapped<TWasmArtifactLoadActor> {
 private:
     using TBase = NActors::TActorBootstrapped<TWasmArtifactLoadActor>;
 
@@ -60,14 +62,8 @@ private:
     void RegisterLoadedModule();
 
 public:
-    TWasmArtifactLoadActor(
-        const NActors::TActorId& replyTo,
-        const TString& name,
-        const TString& manifest,
-        const TString& uid,
-        const TString& artifactTablePath,
-        const TString& artifactChunksTablePath,
-        THashMap<TString, TString> libraryUids,
+    TWasmArtifactLoadActor(const NActors::TActorId& replyTo, const TString& name, const TString& manifest, const TString& uid,
+        const TString& artifactTablePath, const TString& artifactChunksTablePath, THashMap<TString, TString> libraryUids,
         TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry)
         : ReplyTo_(replyTo)
         , Name_(name)
@@ -77,7 +73,8 @@ public:
         , ArtifactChunksTablePath_(artifactChunksTablePath)
         , LibraryUids_(std::move(libraryUids))
         , FunctionRegistry_(std::move(functionRegistry))
-    {}
+    {
+    }
 
     void Bootstrap();
 
@@ -91,4 +88,4 @@ public:
     }
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

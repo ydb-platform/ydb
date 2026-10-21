@@ -2,14 +2,13 @@
 
 #include "settings.h"
 
-#include <library/cpp/colorizer/colors.h>
-#include <library/cpp/threading/future/core/future.h>
-
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#include <library/cpp/colorizer/colors.h>
+#include <library/cpp/threading/future/core/future.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -18,7 +17,7 @@
 namespace NKikimrRun {
 
 struct TEvPrivate {
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvStartAsyncQuery = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvAsyncQueryFinished,
         EvFinalizeAsyncQueryRunner,
@@ -28,38 +27,41 @@ struct TEvPrivate {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
 
     template <typename TQueryRequest>
-    struct TEvStartAsyncQuery : public NActors::TEventLocal<TEvStartAsyncQuery<TQueryRequest>, EvStartAsyncQuery> {
+    struct TEvStartAsyncQuery: public NActors::TEventLocal<TEvStartAsyncQuery<TQueryRequest>, EvStartAsyncQuery> {
         TEvStartAsyncQuery(TQueryRequest request, NThreading::TPromise<void> startPromise)
             : Request(std::move(request))
             , StartPromise(startPromise)
-        {}
+        {
+        }
 
         TQueryRequest Request;
         NThreading::TPromise<void> StartPromise;
     };
 
     template <typename TQueryResponse>
-    struct TEvAsyncQueryFinished : public NActors::TEventLocal<TEvAsyncQueryFinished<TQueryResponse>, EvAsyncQueryFinished> {
+    struct TEvAsyncQueryFinished: public NActors::TEventLocal<TEvAsyncQueryFinished<TQueryResponse>, EvAsyncQueryFinished> {
         TEvAsyncQueryFinished(ui64 requestId, TQueryResponse result)
             : RequestId(requestId)
             , Result(std::move(result))
-        {}
+        {
+        }
 
         const ui64 RequestId;
         const TQueryResponse Result;
     };
 
-    struct TEvFinalizeAsyncQueryRunner : public NActors::TEventLocal<TEvFinalizeAsyncQueryRunner, EvFinalizeAsyncQueryRunner> {
+    struct TEvFinalizeAsyncQueryRunner: public NActors::TEventLocal<TEvFinalizeAsyncQueryRunner, EvFinalizeAsyncQueryRunner> {
         explicit TEvFinalizeAsyncQueryRunner(NThreading::TPromise<void> finalizePromise)
             : FinalizePromise(finalizePromise)
-        {}
+        {
+        }
 
         NThreading::TPromise<void> FinalizePromise;
     };
 };
 
 template <typename TQueryRequest, typename TQueryResponse>
-class TAsyncQueryRunnerActorBase : public NActors::TActor<TAsyncQueryRunnerActorBase<TQueryRequest, TQueryResponse>> {
+class TAsyncQueryRunnerActorBase: public NActors::TActor<TAsyncQueryRunnerActorBase<TQueryRequest, TQueryResponse>> {
     using TBase = NActors::TActor<TAsyncQueryRunnerActorBase<TQueryRequest, TQueryResponse>>;
 
     struct TRequestInfo {
@@ -96,15 +98,20 @@ public:
         if (response.IsSuccess()) {
             Completed_++;
             if (Settings_.Verbosity == TAsyncQueriesSettings::EVerbosity::EachQuery) {
-                Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " completed. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << Endl;
+                Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " completed. "
+                     << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << Endl;
             }
         } else {
             Failed_++;
-            Cout << CoutColors_.Red() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " failed " << response.GetStatus() << ". " << CoutColors_.Yellow() << GetInfoString() << "\n" << CoutColors_.Red() << "Issues:\n" << response.GetError() << CoutColors_.Default() << Endl;
+            Cout << CoutColors_.Red() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " failed " << response.GetStatus()
+                 << ". " << CoutColors_.Yellow() << GetInfoString() << "\n"
+                 << CoutColors_.Red() << "Issues:\n"
+                 << response.GetError() << CoutColors_.Default() << Endl;
         }
 
         if (Settings_.Verbosity == TAsyncQueriesSettings::EVerbosity::Final && TInstant::Now() - LastReportTime_ > TDuration::Seconds(1)) {
-            Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Finished " << Failed_ + Completed_ << " requests. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << Endl;
+            Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Finished " << Failed_ + Completed_ << " requests. "
+                 << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << Endl;
             LastReportTime_ = TInstant::Now();
         }
 
@@ -115,7 +122,8 @@ public:
     void Handle(TEvPrivate::TEvFinalizeAsyncQueryRunner::TPtr& ev) {
         FinalizePromise_ = ev->Get()->FinalizePromise;
         if (!TryFinalize()) {
-            Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Waiting for " << DelayedRequests_.size() + RunningRequests_.size() << " async queries..." << CoutColors_.Default() << Endl;
+            Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Waiting for "
+                 << DelayedRequests_.size() + RunningRequests_.size() << " async queries..." << CoutColors_.Default() << Endl;
         }
     }
 
@@ -130,16 +138,15 @@ private:
 
             auto promise = NThreading::NewPromise<TQueryResponse>();
             RunQuery(std::move(request->Get()->Request), promise);
-            RunningRequests_[RequestId_] = {
-                .StartTime = TInstant::Now(),
+            RunningRequests_[RequestId_] = { .StartTime = TInstant::Now(),
                 .RequestFuture = promise.GetFuture().Subscribe([id = RequestId_, this](const NThreading::TFuture<TQueryResponse>& f) {
                     this->Send(this->SelfId(), new TEvPrivate::TEvAsyncQueryFinished(id, std::move(f.GetValue())));
-                })
-            };
+                }) };
 
             MaxInFlight_ = std::max(MaxInFlight_, RunningRequests_.size());
             if (Settings_.Verbosity == TAsyncQueriesSettings::EVerbosity::EachQuery) {
-                Cout << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " Request #" << RequestId_ << " started. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
+                Cout << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " Request #" << RequestId_ << " started. "
+                     << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
             }
 
             RequestId_++;
@@ -153,7 +160,8 @@ private:
         }
 
         if (Settings_.Verbosity == TAsyncQueriesSettings::EVerbosity::Final) {
-            Cout << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " All async requests finished. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
+            Cout << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " All async requests finished. " << CoutColors_.Yellow()
+                 << GetInfoString() << CoutColors_.Default() << "\n";
         }
 
         FinalizePromise_->SetValue();
@@ -162,7 +170,9 @@ private:
     }
 
     TString GetInfoString() const {
-        TStringBuilder result = TStringBuilder() << "completed: " << Completed_ << ", failed: " << Failed_ << ", in flight: " << RunningRequests_.size() << ", max in flight: " << MaxInFlight_ << ", spend time: " << TInstant::Now() - StartTime_;
+        TStringBuilder result = TStringBuilder() << "completed: " << Completed_ << ", failed: " << Failed_
+                                                 << ", in flight: " << RunningRequests_.size() << ", max in flight: " << MaxInFlight_
+                                                 << ", spend time: " << TInstant::Now() - StartTime_;
         if (const auto amountRequests = Completed_ + Failed_) {
             result << ", average latency: " << RequestsLatency_ / amountRequests;
         }
@@ -186,4 +196,4 @@ private:
     TDuration RequestsLatency_;
 };
 
-}  // namespace NKikimrRun
+}   // namespace NKikimrRun

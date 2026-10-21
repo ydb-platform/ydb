@@ -91,6 +91,9 @@ namespace NKikimr {
         return TActorId(0, TStringBuf("DistConfCCkr", 12));
     }
 
-    IActor *CreateDistconfBridgeConnectionCheckerActor(TBridgePileId selfBridgePileId);
+    // selfBridgePileId is the pile id resolved against local bridge config (it is used until the storage config is
+    // received), selfBridgePileName is the pile name from node's location
+    IActor *CreateDistconfBridgeConnectionCheckerActor(TBridgePileId selfBridgePileId,
+        std::optional<TString> selfBridgePileName);
 
 } // NKikimr

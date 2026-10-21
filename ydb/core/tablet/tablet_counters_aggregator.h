@@ -162,10 +162,12 @@ TStringBuf GetHistogramAggregateSimpleName(TStringBuf name);
 bool IsHistogramAggregateSimpleName(TStringBuf name);
 
 ////////////////////////////////////////////
+// A null externalGroup publishes no ydb metrics; followerGroup adds the follower ones to them
 TIntrusivePtr<NSysView::IDbCounters> CreateTabletDbCounters(
     ::NMonitoring::TDynamicCounterPtr externalGroup,
     ::NMonitoring::TDynamicCounterPtr internalGroup,
-    THolder<TTabletCountersBase> executorCounters);
+    THolder<TTabletCountersBase> executorCounters,
+    ::NMonitoring::TDynamicCounterPtr followerGroup = {});
 
 ////////////////////////////////////////////
 IActor* CreateTabletCountersAggregator(bool follower);

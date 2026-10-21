@@ -351,7 +351,13 @@ struct TPDiskTest : public TPerfTest {
         const ui32 numDevices = Cfg.NumDevices();
         PDiskActorIds.resize(numDevices);
         PDiskGuids.resize(numDevices);
+        const ui32 chunkSize = Cfg.PhysicalChunkSize ? Cfg.PhysicalChunkSize : ChunkSize;
         for (ui32 i = 0; i < numDevices; ++i) {
+            // Sector maps disable small-disk optimization, so check the formatter's
+            // minimum capacity before initialization can format any device.
+            Y_ENSURE(!Cfg.SectorMaps[i] || Cfg.SectorMaps[i]->DeviceSize / chunkSize > 200,
+                "Sector map '" << Cfg.Paths[i] << "' is too small for PDisk: requires at least "
+                << ui64(chunkSize) * 201 << " bytes (201 chunks of " << chunkSize << " bytes)");
             PDiskActorIds[i] = MakeBlobStoragePDiskID(SelfNodeId, i + 1);
             PDiskGuids[i] = 12345 + i;
         }

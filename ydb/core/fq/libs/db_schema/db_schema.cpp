@@ -1,6 +1,7 @@
 #include "db_schema.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
 #include <util/string/printf.h>
 
 namespace NFq {
@@ -10,7 +11,8 @@ using namespace NYdb;
 TSqlQueryBuilder::TSqlQueryBuilder(const TString& tablePrefix, const TString& queryName)
     : TablePrefix(tablePrefix)
     , QueryName(queryName)
-{ }
+{
+}
 
 TSqlQueryBuilder& TSqlQueryBuilder::PushPk() {
     PkStack.emplace_back(Pk);
@@ -39,14 +41,15 @@ TSqlQueryBuilder& TSqlQueryBuilder::AddValue(const TString& name, const NYdb::TV
         ParametersOrdered.emplace_back(name, typeStr);
         ParamsBuilder.AddParam("$" + name, value);
     } else if (it->second != typeStr) {
-        ythrow yexception() << "Parameter `" << name << "' type " << typeStr << " != " << it->second;
+        ythrow yexception() << "Parameter `" << name << "' type " << typeStr << " != " << it -> second;
     }
     return *this;
 }
 
 TSqlQueryBuilder& TSqlQueryBuilder::AddValue(const TString& name, const TValue& value, const TString& pred)
 {
-    TStringBuilder var; var << name;
+    TStringBuilder var;
+    var << name;
     if (Op) {
         var << Counter;
     }
@@ -60,7 +63,7 @@ TSqlQueryBuilder& TSqlQueryBuilder::AddValue(const TString& name, const TValue& 
             Fields.emplace_back(name, var, pred);
         }
     } else if (it->second != typeStr) {
-        ythrow yexception() << "Parameter `" << name << "' type " << typeStr << " != " << it->second;
+        ythrow yexception() << "Parameter `" << name << "' type " << typeStr << " != " << it -> second;
     }
     return *this;
 }
@@ -89,14 +92,13 @@ TSqlQueryBuilder& TSqlQueryBuilder::AddText(const TString& sql, const TString& t
     return *this;
 }
 
-TSqlQueryBuilder& TSqlQueryBuilder::AddBeforeQuery(const TString& sql, const TString& tableName ) {
+TSqlQueryBuilder& TSqlQueryBuilder::AddBeforeQuery(const TString& sql, const TString& tableName) {
     if (tableName) {
         BeforeQuery << SubstGlobalCopy(sql, TString("{TABLENAME}"), tableName);
     } else {
         BeforeQuery << sql;
     }
     return *this;
-
 }
 
 TSqlQueryBuilder& TSqlQueryBuilder::Upsert(const TString& tableName) {
@@ -154,9 +156,9 @@ void TSqlQueryBuilder::ConstructWhereFilter(TStringBuilder& text) {
     }
     i = 0;
     for (const auto& t : Fields) {
-        auto k = std::get<0>(t); // structured capture don't work on win32
-        auto v = std::get<1>(t); // structured capture don't work on win32
-        auto p = std::get<2>(t); // structured capture don't work on win32
+        auto k = std::get<0>(t);   // structured capture don't work on win32
+        auto v = std::get<1>(t);   // structured capture don't work on win32
+        auto p = std::get<2>(t);   // structured capture don't work on win32
 
         text << "`" << k << "` " << p << " " << "$" << v;
         ++i;
@@ -217,9 +219,9 @@ TSqlQueryBuilder& TSqlQueryBuilder::End()
                 text << ", ";
             }
         }
-        text << "\n FROM $todelete" << (Counter-1) << ";\n";
+        text << "\n FROM $todelete" << (Counter - 1) << ";\n";
     } else if (Op == "SELECT COUNT(*)") {
-        text << Op ;
+        text << Op;
         text << "\nFROM `" << Table << "`\n";
         ConstructWhereFilter(text);
         text << ";\n";
@@ -231,9 +233,9 @@ TSqlQueryBuilder& TSqlQueryBuilder::End()
         text << "SET\n";
         size_t i = 0;
         for (const auto& t : Fields) {
-            auto k = std::get<0>(t); // structured capture don't work on win32
-            auto v = std::get<1>(t); // structured capture don't work on win32
-            auto p = std::get<2>(t); // structured capture don't work on win32
+            auto k = std::get<0>(t);   // structured capture don't work on win32
+            auto v = std::get<1>(t);   // structured capture don't work on win32
+            auto p = std::get<2>(t);   // structured capture don't work on win32
 
             text << "`" << k << "` " << " = " << "$" << v;
             ++i;
@@ -256,7 +258,7 @@ TSqlQueryBuilder& TSqlQueryBuilder::End()
         }
         size_t i = 0;
         for (const auto& t : Fields) {
-            auto field = std::get<0>(t); // structured capture don't work on win32
+            auto field = std::get<0>(t);   // structured capture don't work on win32
             text << "`" << field << "`";
             i++;
             if (i != Fields.size()) {
@@ -271,7 +273,7 @@ TSqlQueryBuilder& TSqlQueryBuilder::End()
         }
         i = 0;
         for (const auto& t : Fields) {
-            auto field = std::get<1>(t); // structured capture don't work on win32
+            auto field = std::get<1>(t);   // structured capture don't work on win32
             text << "$" << field;
             i++;
             if (i != Fields.size()) {
@@ -282,7 +284,7 @@ TSqlQueryBuilder& TSqlQueryBuilder::End()
     }
     Fields.clear();
     AddText(text);
-    Counter ++;
+    Counter++;
     return *this;
 }
 
@@ -298,7 +300,7 @@ TSqlQueryBuilder::TResult TSqlQueryBuilder::Build()
     declr << "\n\n";
     declr << BeforeQuery;
     declr << Text;
-    return {declr, ParamsBuilder.Build()};
+    return { declr, ParamsBuilder.Build()};
 }
 
-} // namespace NFq
+}   // namespace NFq

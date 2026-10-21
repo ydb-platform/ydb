@@ -120,3 +120,5 @@ path.bash.inc
 
 # Local configuration for `ya`
 /local.ymake
+
+/.ydb-build/

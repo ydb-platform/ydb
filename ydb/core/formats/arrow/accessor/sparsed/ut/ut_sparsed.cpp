@@ -133,4 +133,29 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
                 "string", PrepareToCompare(arrFiltered->ToString()));
         }
     }
+
+    Y_UNIT_TEST(HasNoNullsWithValidDefault) {
+        TSparsedArray::TSparsedBuilder<arrow::StringType> builder(std::make_shared<arrow::StringScalar>("default"), 1, 0);
+        builder.AddRecord(1, "other");
+        UNIT_ASSERT(builder.Finish(3)->HasNulls() == false);
+    }
+
+    Y_UNIT_TEST(HasNullsWithValidDefaultAndExplicitNull) {
+        TSparsedArray::TSparsedBuilder<arrow::StringType> builder(std::make_shared<arrow::StringScalar>("default"), 1, 0);
+        builder.AddNull(1);
+        UNIT_ASSERT(builder.Finish(3)->HasNulls() == true);
+    }
+
+    Y_UNIT_TEST(HasNullsWithMissingNullDefault) {
+        TSparsedArray::TSparsedBuilder<arrow::StringType> builder(nullptr, 1, 0);
+        builder.AddRecord(1, "value");
+        UNIT_ASSERT(builder.Finish(3)->HasNulls() == true);
+    }
+
+    Y_UNIT_TEST(HasNoNullsWhenNullDefaultIsFullyOverridden) {
+        TSparsedArray::TSparsedBuilder<arrow::StringType> builder(nullptr, 2, 0);
+        builder.AddRecord(0, "first");
+        builder.AddRecord(1, "second");
+        UNIT_ASSERT(builder.Finish(2)->HasNulls() == false);
+    }
 };

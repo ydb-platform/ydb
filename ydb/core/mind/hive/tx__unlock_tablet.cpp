@@ -68,6 +68,8 @@ public:
 
         // Mark tablet unlocked
         PreviousOwner = tablet->ClearLockedToActor();
+        Self->RecordTabletEvent(*tablet, EHiveEventType::Unlocked, EHiveEventReason::UnlockRequest,
+            TStringBuilder() << "owner=" << PreviousOwner << " lockLostReason=" << NKikimrHive::ELockLostReason_Name(Reason));
 
         // Persist to database
         NIceDb::TNiceDb db(txc.DB);
@@ -77,7 +79,7 @@ public:
 
         if (PreviousOwner) {
             if (!tablet->IsDeleting()) {
-                tablet->BecomeStopped();
+                tablet->BecomeStopped(EHiveEventReason::UnlockRequest);
             }
             // Notify previous owner that its lock ownership has been lost
             SideEffects.Send(PreviousOwner, new TEvHive::TEvLockTabletExecutionLost(TabletId, Reason));

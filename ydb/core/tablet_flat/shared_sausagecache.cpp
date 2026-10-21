@@ -198,6 +198,19 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         return Cache.GetTierSize(tier) + pageSize <= Cache.GetTierLimit(tier);
     }
 
+    ui64 InMemoryTierRoomBytes() const {
+        const ui32 tier = static_cast<ui32>(ECacheMode::TryKeepInMemory);
+        const ui64 limit = Cache.GetTierLimit(tier);
+        const ui64 size = Cache.GetTierSize(tier);
+        return limit > size ? limit - size : 0;
+    }
+
+    // An evicted page may be reloaded only when its tier can take it, whatever the call site.
+    bool CanReloadEvictedPage(const TPage* page) const {
+        return page->CacheMode != ECacheMode::TryKeepInMemory
+            || InMemoryTierHasRoomFor(TPageTraits::GetSize(page));
+    }
+
     void ActualizeCacheSizeLimit() {
         Counters.ConfigLimitBytes->Set(Config.HasMemoryLimit() ? Config.GetMemoryLimit() : 0);
 
@@ -998,10 +1011,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             if (page->State == PageStateEvicted) {
                 if (page->GetFrequency() > 0) {
                     // page was accessed while being passive, load it back
-                    ReloadEvictedPage(page);
-                } else if (page->CacheMode == NTable::NPage::ECacheMode::TryKeepInMemory
+                    if (CanReloadEvictedPage(page)) {
+                        ReloadEvictedPage(page);
+                    }
+                } else if (page->CacheMode == ECacheMode::TryKeepInMemory
                     && ActiveInMemoryBytes + TPageTraits::GetSize(page) <= GetInMemoryLimitBytes()
-                    && InMemoryTierHasRoomFor(TPageTraits::GetSize(page)))
+                    && CanReloadEvictedPage(page))
                 {
                     ReloadEvictedPage(page, false);
                 }
@@ -1324,7 +1339,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
                         break;
                     case PageStateEvicted:
                         // also we need to notify about pages that can be reloaded
-                        if (ActiveInMemoryBytes + TPageTraits::GetSize(page) <= GetInMemoryLimitBytes()) {
+                        if (ActiveInMemoryBytes + TPageTraits::GetSize(page) <= GetInMemoryLimitBytes()
+                            && CanReloadEvictedPage(page)) {
                             ReloadEvictedPage(page, false);
                             loadedPages.push_back(page);
                         }
@@ -1371,8 +1387,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
                 loadedPages.push_back(page);
                 break;
             case PageStateEvicted:
-                ReloadEvictedPage(page);
-                loadedPages.push_back(page);
+                if (CanReloadEvictedPage(page)) {
+                    ReloadEvictedPage(page);
+                    loadedPages.push_back(page);
+                }
                 break;
             }
         };
@@ -1472,6 +1490,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             Cache.GetLimit() > GetStatAllBytes() ? Cache.GetLimit() - GetStatAllBytes() : 0,                               // available in cache
             Config.GetInMemoryInFlyLimit() > InFlyInMemoryBytes ? Config.GetInMemoryInFlyLimit() - InFlyInMemoryBytes : 0  // available in in-fly limit
         );
+        // A preloaded page is inserted into the tier on arrival, so it must fit or it evicts a partner.
+        remainBytes = Min(remainBytes, InMemoryTierRoomBytes());
 
         while (PendingInMemoryPages) {
             auto it = PendingInMemoryPages.begin();

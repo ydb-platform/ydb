@@ -12,7 +12,6 @@ ENDIF()
 SRCS(
     kqp_kill_session_proxy_ut.cpp
     kqp_proxy_ut.cpp
-    kqp_proxy_wlm_ut.cpp
 )
 
 PEERDIR(

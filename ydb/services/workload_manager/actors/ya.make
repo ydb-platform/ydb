@@ -2,7 +2,6 @@ YQL_LIBRARY()
 
 SRCS(
     cpu_load_actors.cpp
-    database_readiness_tracker.cpp
     pool_handlers_actors.cpp
     resource_pool_tracker.cpp
     scheme_actors.cpp

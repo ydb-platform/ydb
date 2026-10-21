@@ -37,8 +37,6 @@
 #include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_pool_cap_pusher.h>
-#include <ydb/services/workload_manager/gateway.h>
-#include <ydb/services/workload_manager/query_classifier.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -65,8 +63,7 @@
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_pool_cap_pusher.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
-#include <ydb/services/workload_manager/events.h>
-#include <ydb/services/workload_manager/query_classifier.h>
+#include <ydb/services/metadata/service.h>
 
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -284,7 +281,6 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
         ListScriptExecutionOperations,
         CancelScriptExecutionOperation,
         GetScriptExecutionPhysicalGraph,
-        WorkloadManagerClassifierReady,
     };
 
 public:
@@ -655,12 +651,6 @@ public:
 
         DatabasesCache.StopSubscriberActor(ActorContext());
 
-        for (auto& [_, parked] : ParkedClassifierReady) {
-            HandleDelayedRequestError(EDelayedRequestType::WorkloadManagerClassifierReady, std::move(parked),
-                Ydb::StatusIds::UNAVAILABLE, {NYql::TIssue("KQP proxy is shutting down")});
-        }
-        ParkedClassifierReady.clear();
-
         return TActor::PassAway();
     }
 
@@ -719,10 +709,6 @@ public:
 
             case NNodeWhiteboard::TEvWhiteboard::EvSystemStateRequest:
                 YDB_LOG_DEBUG("Failed to get system details");
-                break;
-
-            case NWorkloadManager::TEvSubscribeOnWorkloadManagerReady::EventType:
-                FailParkedQuery(ev->Cookie, Ydb::StatusIds::UNAVAILABLE, TString(NWorkloadManager::WORKLOAD_MANAGER_NOT_READY_MESSAGE));
                 break;
 
             case TKqpEvents::EvCreateSessionRequest: {
@@ -854,15 +840,7 @@ public:
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        if (auto& gateway = AppData()->WorkloadManagerGateway) {
-            gateway->Warmup(ev->Get()->GetDatabase());
-        }
-        
         if (!DatabasesCache.SetDatabaseIdOrDefer(ev, static_cast<i32>(EDelayedRequestType::QueryRequest), ActorContext())) {
-            return;
-        }
-
-        if (!EnsureWorkloadManagerReady(ev)) {
             return;
         }
 
@@ -982,8 +960,6 @@ public:
             ev->Get()->SetWmSessionUpdater(sessionInfo->WmState);
         }
 
-        SetupWorkloadManagerQueryClassifier(ev, sessionInfo, requestId);
-
         TActorId targetId;
         if (sessionInfo) {
             targetId = sessionInfo->WorkerId;
@@ -1050,7 +1026,6 @@ public:
 
         if (sessionInfo) {
             LocalSessions->SetSessionClosing(sessionInfo);
-            FailParkedQueries(sessionId, Ydb::StatusIds::BAD_SESSION, "Session is closing");
             Send(sessionInfo->WorkerId, ev->Release().Release());
         } else {
             if (!sessionId.empty()) {
@@ -1140,7 +1115,6 @@ public:
                 reason += TStringBuilder() << " (initiator: " << initiatorSid << ")";
             }
             LocalSessions->SetSessionTerminating(sessionInfo, reason);
-            FailParkedQueries(sessionId, Ydb::StatusIds::CANCELLED, reason);
 
             YDB_LOG_INFO("Administrative session termination requested",
                 {"sessionId", sessionId},
@@ -1287,7 +1261,6 @@ public:
         Counters->ReportCancelQuery(dbCounters, request.ByteSize());
 
         PendingRequests.SetSessionId(requestId, sessionId, dbCounters);
-        FailParkedQueries(sessionId, Ydb::StatusIds::CANCELLED, "Request was canceled by user");
 
         TActorId targetId;
         if (sessionInfo) {
@@ -1798,7 +1771,6 @@ public:
             hFunc(TEvKqp::TEvListProxyNodesRequest, Handle);
             hFunc(TEvKqp::TEvUpdateDatabaseInfo, Handle);
             hFunc(TEvKqp::TEvDelayedRequestError, Handle);
-            hFunc(NWorkloadManager::TEvWorkloadManagerReady, Handle);
         default:
             Y_ABORT("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -2027,84 +1999,6 @@ private:
         }
     }
 
-    // Returns true if the caller should continue processing the query; false if the query was
-    // deferred (parked awaiting workload-manager readiness) or replied to with an error.
-    // Called right after SetDatabaseIdOrDefer and before any session/request state is created,
-    // so a deferred query can restart cleanly on re-dispatch.
-    [[nodiscard]] bool EnsureWorkloadManagerReady(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        if (ev->Get()->IsInternalCall() || ev->Get()->GetIsWarmupCompilation()) {
-            return true;
-        }
-
-        auto& gateway = AppData()->WorkloadManagerGateway;
-        if (!gateway) {
-            return true;
-        }
-
-        const TString& databaseId = ev->Get()->GetDatabaseId();
-        const auto info = gateway->EnsureReady(databaseId);
-        switch (info.State) {
-            case NWorkloadManager::EReadyState::Ready:
-            case NWorkloadManager::EReadyState::Disabled:
-                return true;
-
-            case NWorkloadManager::EReadyState::Failed: {
-                NYql::TIssues issues;
-                if (info.FailureMessage) {
-                    issues.AddIssue(NYql::TIssue(info.FailureMessage));
-                }
-                Send(SelfId(),
-                     new TEvKqp::TEvDelayedRequestError(THolder<IEventHandle>(ev.Release()), info.FailureStatus, std::move(issues)),
-                     0,
-                     static_cast<ui64>(EDelayedRequestType::WorkloadManagerClassifierReady));
-                return false;
-            }
-
-            case NWorkloadManager::EReadyState::Pending: {
-                const ui64 cookie = ++NextClassifierReadyCookie;
-                ParkedClassifierReady[cookie] = THolder<IEventHandle>(ev.Release());
-                gateway->SubscribeOnReady(databaseId, SelfId(), cookie);
-                return false;
-            }
-        }
-        return true;
-    }
-
-    void FailParkedQueries(const TString& sessionId, Ydb::StatusIds::StatusCode status, const TString& message) {
-        if (sessionId.empty()) {
-            return;
-        }
-        for (auto it = ParkedClassifierReady.begin(); it != ParkedClassifierReady.end();) {
-            if (it->second->Get<TEvKqp::TEvQueryRequest>()->GetSessionId() != sessionId) {
-                ++it;
-                continue;
-            }
-            HandleDelayedRequestError(EDelayedRequestType::WorkloadManagerClassifierReady, std::move(it->second),
-                status, {NYql::TIssue(message)});
-            ParkedClassifierReady.erase(it++);
-        }
-    }
-
-    void SetupWorkloadManagerQueryClassifier(TEvKqp::TEvQueryRequest::TPtr& ev, const TKqpSessionInfo* sessionInfo, ui64 /*requestId*/) {
-        if (ev->Get()->IsInternalCall() || ev->Get()->GetIsWarmupCompilation()) {
-            return;
-        }
-
-        auto& gateway = AppData()->WorkloadManagerGateway;
-        if (!gateway) {
-            return;
-        }
-
-        auto context = NWorkloadManager::TClassifyContext{
-            .PoolId = ev->Get()->GetPoolId(),
-            .AppName = sessionInfo ? sessionInfo->ClientApplicationName : "",
-            .UserToken = ev->Get()->GetUserToken(),
-        };
-        if (auto classifier = gateway->TryCreateQueryClassifier(ev->Get()->GetDatabaseId(), std::move(context))) {
-            ev->Get()->SetWmQueryClassifier(std::move(classifier));
-        }
-    }
-
     void UpdateYqlLogLevels() {
         const auto& kqpYqlName = NKikimrServices::EServiceKikimr_Name(NKikimrServices::KQP_YQL);
         for (auto &entry : LogConfig.GetEntry()) {
@@ -2128,8 +2022,7 @@ private:
 
     void HandleDelayedRequestError(EDelayedRequestType requestType, THolder<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
         switch (requestType) {
-            case EDelayedRequestType::QueryRequest:
-            case EDelayedRequestType::WorkloadManagerClassifierReady: {
+            case EDelayedRequestType::QueryRequest: {
                 auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
                 response->Record.SetYdbStatus(status);
                 NYql::IssuesToMessage(issues, response->Record.MutableResponse()->MutableQueryIssues());
@@ -2384,42 +2277,6 @@ private:
         HandleDelayedRequestError(static_cast<EDelayedRequestType>(ev->Cookie), std::move(ev->Get()->RequestEvent), ev->Get()->Status, std::move(ev->Get()->Issues));
     }
 
-    void Handle(NWorkloadManager::TEvWorkloadManagerReady::TPtr& ev) {
-        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            FailParkedQuery(ev->Get()->Cookie, ev->Get()->Status, ev->Get()->Message);
-            return;
-        }
-        if (auto parked = TakeParkedQuery(ev->Get()->Cookie)) {
-            TActivationContext::Send(parked.Release());
-        }
-    }
-
-    THolder<IEventHandle> TakeParkedQuery(ui64 cookie) {
-        auto it = ParkedClassifierReady.find(cookie);
-        if (it == ParkedClassifierReady.end()) {
-            YDB_LOG_DEBUG("Parked query not found", {"cookie", cookie});
-            return nullptr;
-        }
-        THolder<IEventHandle> parked = std::move(it->second);
-        ParkedClassifierReady.erase(it);
-        return parked;
-    }
-
-    void FailParkedQuery(ui64 cookie, Ydb::StatusIds::StatusCode status, const TString& message) {
-        auto parked = TakeParkedQuery(cookie);
-        if (!parked) {
-            return;
-        }
-        NYql::TIssues issues;
-        if (message) {
-            issues.AddIssue(NYql::TIssue(message));
-        }
-        Send(SelfId(),
-             new TEvKqp::TEvDelayedRequestError(std::move(parked), status, std::move(issues)),
-             0,
-             static_cast<ui64>(EDelayedRequestType::WorkloadManagerClassifierReady));
-    }
-
     void InitSharedReading() {
         if (!FeatureFlags.GetEnableSharedReadingInStreamingQueries() || RowDispatcherService) {
             return;
@@ -2590,9 +2447,6 @@ private:
     TActorId KqpTempTablesAgentActor;
 
     TDatabasesCache DatabasesCache;
-
-    ui64 NextClassifierReadyCookie = 0;
-    THashMap<ui64, THolder<IEventHandle>> ParkedClassifierReady;
 
     std::unique_ptr<TEvKqp::TEvCloseSessionResponse> CreateEvCloseSessionResponse(
         const TString& sessionId)

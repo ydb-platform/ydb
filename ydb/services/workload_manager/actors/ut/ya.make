@@ -3,7 +3,6 @@ UNITTEST_FOR(ydb/services/workload_manager/actors)
 SIZE(SMALL)
 
 SRCS(
-    database_readiness_tracker_ut.cpp
     resource_pool_tracker_ut.cpp
 )
 

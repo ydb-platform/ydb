@@ -1,15 +1,10 @@
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/kqp/common/simple/services.h>
-#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
-#include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/gateway.h>
 #include <ydb/services/workload_manager/gateway_internal.h>
-#include <ydb/services/workload_manager/service/service.h>
 #include <ydb/services/workload_manager/ut/common/query_classifier_ut_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -31,17 +26,12 @@ struct TGatewayFixture: public NUnitTest::TBaseFixture {
         StateActorEdge = Runtime.AllocateEdgeActor();
     }
 
-    void Publish(THashMap<TString, NPrivate::TDatabaseInfo> databases, bool enableResourcePools = true, THashSet<TString> readyPaths = {}) {
+    void Publish(bool enableResourcePools = true, bool enableResourcePoolsOnServerless = false) {
         auto* snapshot = new NPrivate::TSnapshot();
-        snapshot->Databases = std::move(databases);
-        snapshot->ReadyPaths = std::move(readyPaths);
         snapshot->StateActorId = StateActorEdge;
         snapshot->EnableResourcePools = enableResourcePools;
+        snapshot->EnableResourcePoolsOnServerless = enableResourcePoolsOnServerless;
         Gateway->PublishSnapshot(NPrivate::TSnapshotPtr(snapshot));
-    }
-
-    static NPrivate::TDatabaseInfo DatabaseInfo(NPrivate::EDatabaseState state, bool serverless = false) {
-        return NPrivate::TDatabaseInfo{ .State = state, .Serverless = serverless };
     }
 
     static TClassifyContext MakeContext() {
@@ -57,19 +47,6 @@ struct TGatewayFixture: public NUnitTest::TBaseFixture {
             return AppData()->WorkloadManagerGateway->TryCreateQueryClassifier(databaseId, MakeContext());
         });
     }
-
-    void Warmup(const TString& databasePath) {
-        Runtime.RunCall([databasePath] {
-            AppData()->WorkloadManagerGateway->Warmup(databasePath);
-            return 0;
-        });
-    }
-
-    TReadyInfo EnsureReady(const TString& databaseId) {
-        return Runtime.RunCall([databaseId] {
-            return AppData()->WorkloadManagerGateway->EnsureReady(databaseId);
-        });
-    }
 };
 
 }   // namespace
@@ -80,25 +57,9 @@ Y_UNIT_TEST_SUITE(WorkloadManagerGateway) {
         UNIT_ASSERT(!TryCreateQueryClassifier(TEST_DB));
     }
 
-    // No snapshot (no state actor). The gateway:
-    // - returns Disabled from EnsureReady,
-    // - replies UNAVAILABLE to a subscriber at once.
-    Y_UNIT_TEST_F(TestNoSnapshotMeansNoStateActor, TGatewayFixture) {
-        UNIT_ASSERT(EnsureReady(TEST_DB).State == EReadyState::Disabled);
-
-        const TActorId subscriber = Runtime.AllocateEdgeActor();
-        Runtime.RunCall([subscriber] {
-            AppData()->WorkloadManagerGateway->SubscribeOnReady(TEST_DB, subscriber, /*cookie=*/1);
-            return 0;
-        });
-        auto ready = Runtime.GrabEdgeEvent<TEvWorkloadManagerReady>(subscriber, TDuration::Seconds(10));
-        UNIT_ASSERT(ready);
-        UNIT_ASSERT_EQUAL(ready->Get()->Status, Ydb::StatusIds::UNAVAILABLE);
-    }
-
     // State actor registered, Bootstrap not processed yet. The published snapshot:
     // - carries the state actor id,
-    // - has resource pools enabled from AppData, so EnsureReady waits instead of skipping admission.
+    // - has resource pools enabled from AppData.
     Y_UNIT_TEST_F(TestSnapshotPublishedOnRegister, TGatewayFixture) {
         const TActorId stateActor = Runtime.Register(CreateWorkloadManagerStateActor(Gateway));
 
@@ -106,80 +67,34 @@ Y_UNIT_TEST_SUITE(WorkloadManagerGateway) {
         UNIT_ASSERT(snapshot);
         UNIT_ASSERT_EQUAL(snapshot->StateActorId, stateActor);
         UNIT_ASSERT(snapshot->EnableResourcePools);
-        UNIT_ASSERT(snapshot->Databases.empty());
-    }
-
-    // State actor publishes a Ready database: TryCreateQueryClassifier returns a classifier.
-    Y_UNIT_TEST_F(TestStateActorPublishesSnapshot, TGatewayFixture) {
-        const ui32 nodeId = Runtime.GetNodeId(0);
-        const TActorId edge = Runtime.AllocateEdgeActor();
-        const TActorId schemeCacheEdge = Runtime.AllocateEdgeActor();
-        Runtime.RegisterService(NKqp::MakeKqpSchedulerServiceId(nodeId), edge);
-        Runtime.RegisterService(MakeServiceId(nodeId), edge);
-        Runtime.RegisterService(MakeSchemeCacheID(), schemeCacheEdge);
-        const TActorId stateActor = Runtime.Register(CreateWorkloadManagerStateActor(Gateway));
-
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
-        Runtime.DispatchEvents(options);
-
-        // Publish a known non-serverless entry so IsResourcePoolsEnabled(TEST_DB) is true.
-        const TActorId sender = Runtime.AllocateEdgeActor();
-        Runtime.Send(new IEventHandle(stateActor, sender,
-            new TEvFetchDatabaseResponse(Ydb::StatusIds::SUCCESS, TEST_DB, TEST_DB, /*serverless=*/false, TPathId(1, 1), {})));
-        auto watch = Runtime.GrabEdgeEvent<TEvTxProxySchemeCache::TEvWatchPathId>(schemeCacheEdge, TDuration::Seconds(10));
-        UNIT_ASSERT(watch);
-
-        UNIT_ASSERT(TryCreateQueryClassifier(TEST_DB));
+        UNIT_ASSERT(!snapshot->Classifiers);
     }
 
     // Resource pools disabled: TryCreateQueryClassifier returns nullptr.
     Y_UNIT_TEST_F(TestTryCreateQueryClassifierNullWhenPoolsDisabled, TGatewayFixture) {
-        Publish({ { TEST_DB, DatabaseInfo(NPrivate::EDatabaseState::Ready) } }, /*enableResourcePools=*/false);
+        Publish(/*enableResourcePools=*/false);
         UNIT_ASSERT(!TryCreateQueryClassifier(TEST_DB));
     }
 
-    // Database state mapping. EnsureReady returns:
-    // - Pending for an unknown or Pending database,
-    // - Ready for a Ready database, Disabled for a serverless one,
-    // - Disabled for an Unsupported database.
-    Y_UNIT_TEST_F(TestEnsureReadyDatabaseStates, TGatewayFixture) {
-        using EState = NPrivate::EDatabaseState;
-        Publish({
-            { "/Root/pending", DatabaseInfo(EState::Pending) },
-            { "/Root/ready", DatabaseInfo(EState::Ready) },
-            { "/Root/serverless", DatabaseInfo(EState::Ready, /*serverless=*/true) },
-            { "/Root/unsupported", DatabaseInfo(EState::Unsupported) },
-        });
-
-        UNIT_ASSERT(EnsureReady("/Root/unknown").State == EReadyState::Pending);
-        UNIT_ASSERT(EnsureReady("/Root/pending").State == EReadyState::Pending);
-        UNIT_ASSERT(EnsureReady("/Root/ready").State == EReadyState::Ready);
-        UNIT_ASSERT(EnsureReady("/Root/serverless").State == EReadyState::Disabled);
-        UNIT_ASSERT(EnsureReady("/Root/unsupported").State == EReadyState::Disabled);
+    // Empty database id: TryCreateQueryClassifier returns nullptr.
+    Y_UNIT_TEST_F(TestTryCreateQueryClassifierNullForEmptyDatabaseId, TGatewayFixture) {
+        Publish();
+        UNIT_ASSERT(!TryCreateQueryClassifier(""));
     }
 
-    // Resource pools off: EnsureReady returns Disabled for a Ready database.
-    Y_UNIT_TEST_F(TestEnsureReadyWhenPoolsDisabled, TGatewayFixture) {
-        Publish({ { "/Root/ready", DatabaseInfo(NPrivate::EDatabaseState::Ready) } }, /*enableResourcePools=*/false);
-        UNIT_ASSERT(EnsureReady("/Root/ready").State == EReadyState::Disabled);
-    }
+    // Serverless gate by database id. TryCreateQueryClassifier:
+    // - returns nullptr for a serverless id while resource pools on serverless are off,
+    // - returns a classifier for a dedicated id,
+    // - returns a classifier for a serverless id once resource pools on serverless are on.
+    Y_UNIT_TEST_F(TestTryCreateQueryClassifierServerlessGate, TGatewayFixture) {
+        const TString serverlessId = "72075186224037888:5:/Root/serverless";
 
-    // Warmup gating. The gateway:
-    // - sends nothing for a path whose database is Ready,
-    // - sends nothing while resource pools are off,
-    // - sends a warmup for any other path.
-    Y_UNIT_TEST_F(TestWarmupSkipsReadyDatabase, TGatewayFixture) {
-        Publish({}, /*enableResourcePools=*/false);
-        Warmup("/Root/disabled");
+        Publish(/*enableResourcePools=*/true, /*enableResourcePoolsOnServerless=*/false);
+        UNIT_ASSERT(!TryCreateQueryClassifier(serverlessId));
+        UNIT_ASSERT(TryCreateQueryClassifier("/Root/dedicated"));
 
-        Publish({}, /*enableResourcePools=*/true, { "/Root/ready" });
-        Warmup("/Root/ready");
-        Warmup("/Root/other");
-
-        auto warmup = Runtime.GrabEdgeEvent<TEvWarmupDatabaseInfo>(StateActorEdge, TDuration::Seconds(10));
-        UNIT_ASSERT(warmup);
-        UNIT_ASSERT_VALUES_EQUAL(warmup->Get()->DatabasePath, "/Root/other");
+        Publish(/*enableResourcePools=*/true, /*enableResourcePoolsOnServerless=*/true);
+        UNIT_ASSERT(TryCreateQueryClassifier(serverlessId));
     }
 }
 

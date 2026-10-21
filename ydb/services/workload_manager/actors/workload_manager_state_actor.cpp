@@ -2,23 +2,18 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
-#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/services/metadata/service.h>
-#include <ydb/services/workload_manager/actors/actors.h>
-#include <ydb/services/workload_manager/actors/database_readiness_tracker.h>
 #include <ydb/services/workload_manager/actors/resource_pool_tracker.h>
 #include <ydb/services/workload_manager/common/helpers.h>
 #include <ydb/services/workload_manager/events.h>
@@ -26,21 +21,9 @@
 #include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/fetcher.h>
 #include <ydb/services/workload_manager/service/service.h>
 
-#include <unordered_map>
-#include <unordered_set>
-
 namespace NKikimr::NWorkloadManager {
 
 namespace {
-
-constexpr TDuration IN_FLIGHT_REQUEST_TIMEOUT = TDuration::Seconds(5);
-constexpr TDuration IN_FLIGHT_REQUESTS_CHECK_PERIOD = TDuration::Seconds(1);
-constexpr TDuration CLASSIFIER_METADATA_CHECK_PERIOD = TDuration::Seconds(30);
-
-enum EWakeupTag: ui64 {
-    InFlightRequestsCheck,
-    ClassifierMetadataCheck,
-};
 
 bool IsResourcePoolsEnabled(
     const NKikimrConfig::TFeatureFlags& featureFlags, const NKikimrConfig::TWorkloadManagerConfig& workloadManagerConfig) {
@@ -53,6 +36,10 @@ bool IsResourcePoolsOnServerlessEnabled(
 }
 
 }   // namespace
+
+bool NPrivate::TSnapshot::IsResourcePoolsEnabled(const TString& databaseId) const {
+    return EnableResourcePools && !databaseId.empty() && (EnableResourcePoolsOnServerless || !IsServerlessDatabaseId(databaseId));
+}
 
 std::shared_ptr<IQueryClassifier> NPrivate::TWorkloadManagerGateway::TryCreateQueryClassifier(
     const TString& databaseId, TClassifyContext context)
@@ -74,64 +61,6 @@ std::shared_ptr<IQueryClassifier> NPrivate::TWorkloadManagerGateway::TryCreateQu
         snapshot->Pools, TClassifierConfigsView(snapshot->Classifiers, databaseId), databaseId, std::move(context), *AppData());
 }
 
-TReadyInfo NPrivate::TWorkloadManagerGateway::EnsureReady(const TString& databaseId) {
-    TSnapshotPtr snapshot = Snapshot_;
-
-    if (!snapshot) {
-        return TReadyInfo{ .State = EReadyState::Disabled };
-    }
-
-    if (!snapshot->EnableResourcePools) {
-        return TReadyInfo{ .State = EReadyState::Disabled };
-    }
-
-    const auto it = snapshot->Databases.find(databaseId);
-    if (it == snapshot->Databases.end()) {
-        return TReadyInfo{ .State = EReadyState::Pending };
-    }
-
-    const auto& info = it->second;
-    switch (info.State) {
-        case EDatabaseState::Pending:
-            return TReadyInfo{ .State = EReadyState::Pending };
-
-        case EDatabaseState::Unsupported:
-            return TReadyInfo{ .State = EReadyState::Disabled };
-
-        case EDatabaseState::Ready:
-            break;
-    }
-
-    if (!snapshot->EnableResourcePoolsOnServerless && info.Serverless) {
-        return TReadyInfo{ .State = EReadyState::Disabled };
-    }
-
-    return TReadyInfo{ .State = EReadyState::Ready };
-}
-
-void NPrivate::TWorkloadManagerGateway::SubscribeOnReady(const TString& databaseId, NActors::TActorId subscriber, ui64 cookie) {
-    TSnapshotPtr snapshot = Snapshot_;
-    if (!snapshot) {
-        NActors::TActivationContext::Send(new NActors::IEventHandle(
-            subscriber, {}, new TEvWorkloadManagerReady(cookie, Ydb::StatusIds::UNAVAILABLE, "Workload manager gateway not initialized")));
-        return;
-    }
-    NActors::TActivationContext::Send(new NActors::IEventHandle(snapshot->StateActorId, subscriber,
-        new TEvSubscribeOnWorkloadManagerReady(databaseId, subscriber, cookie), NActors::IEventHandle::FlagTrackDelivery, cookie));
-}
-
-void NPrivate::TWorkloadManagerGateway::Warmup(const TString& databasePath) {
-    TSnapshotPtr snapshot = Snapshot_;
-    if (!snapshot || !databasePath) {
-        return;
-    }
-    const TString path = CanonizePath(databasePath);
-    if (!snapshot->NeedsWarmup(path)) {
-        return;
-    }
-    NActors::TActivationContext::Send(new NActors::IEventHandle(snapshot->StateActorId, {}, new TEvWarmupDatabaseInfo(path)));
-}
-
 namespace {
 
 using namespace NActors;
@@ -140,18 +69,14 @@ using namespace NActors;
 /// Actor which owns the read-side workload manager state:
 /// - pools,
 /// - classifiers,
-/// - configs,
-/// - database info (via its own fetcher + scheme-cache watches).
+/// - configs.
 ///
-/// Publishes an immutable snapshot to the shared `TWorkloadManagerGateway`,
-/// serves EnsureReady / SubscribeOnReady / Warmup requests routed through
-/// the gateway.
+/// Publishes an immutable snapshot to the shared `TWorkloadManagerGateway`.
 ///
 class TWorkloadManagerStateActor: public TActorBootstrapped<TWorkloadManagerStateActor> {
 public:
     explicit TWorkloadManagerStateActor(std::shared_ptr<NPrivate::TWorkloadManagerGateway> gateway)
         : Gateway_(std::move(gateway))
-        , DatabaseTracker_(IN_FLIGHT_REQUEST_TIMEOUT)
     {
     }
 
@@ -177,12 +102,7 @@ public:
 
     void PassAway() override {
         Gateway_->OnUnregistered();
-        ReplyToAll(DatabaseTracker_.TakeAllSubscribers(), Ydb::StatusIds::UNAVAILABLE, TString(WORKLOAD_MANAGER_NOT_READY_MESSAGE));
         UnsubscribeFromMetadataForClassifiers();
-
-        for (const auto& [_, watchKey] : WatchKeys_) {
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove(watchKey));
-        }
 
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest());
 
@@ -196,13 +116,6 @@ private:
         hFunc(TEvUpdatePoolInfo, Handle);
         hFunc(TEvEnsurePoolSubscribed, Handle);
         hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
-        hFunc(TEvWarmupDatabaseInfo, Handle);
-        hFunc(TEvSubscribeOnWorkloadManagerReady, Handle);
-        hFunc(TEvFetchDatabaseResponse, Handle);
-        hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
-        IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated);
-        IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable);
-        hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         hFunc(TEvents::TEvUndelivered, Handle);
     )
@@ -249,6 +162,10 @@ private:
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
+        if (!SubscribedOnMetadataForClassifiers_) {
+            return;
+        }
+
         LastClassifierSnapshot_ = ev->Get()->GetValidatedSnapshotAs<TResourcePoolClassifierSnapshot>();
 
         for (const auto& [databaseId, poolId] : PoolTracker_.TrySubscribeClassifierPools(*LastClassifierSnapshot_)) {
@@ -256,168 +173,6 @@ private:
         }
 
         Rebuild();
-    }
-
-    void Handle(TEvWarmupDatabaseInfo::TPtr& ev) {
-        const TString& path = ev->Get()->DatabasePath;
-        if (!path || !EnableResourcePools_) {
-            return;
-        }
-
-        if (const auto fetchPath = DatabaseTracker_.OnWarmup(path)) {
-            StartFetchDatabaseInfo(*fetchPath);
-        }
-    }
-
-    void Handle(TEvSubscribeOnWorkloadManagerReady::TPtr& ev) {
-        const auto* msg = ev->Get();
-        if (!EnableResourcePools_) {
-            Send(msg->Subscriber, new TEvWorkloadManagerReady(msg->Cookie, Ydb::StatusIds::SUCCESS));
-            return;
-        }
-
-        const auto fetchPath = DatabaseTracker_.AddSubscriber(
-            msg->DatabaseId, NPrivate::TPendingSubscriber{ msg->Subscriber, msg->Cookie }, TActivationContext::Now());
-        if (fetchPath) {
-            StartFetchDatabaseInfo(*fetchPath);
-        }
-
-        ReplySettled();
-        ScheduleInFlightRequestsCheck();
-    }
-
-    void Handle(TEvFetchDatabaseResponse::TPtr& ev) {
-        const auto* msg = ev->Get();
-        const TString message = msg->Issues.ToOneLineString();
-
-        if (msg->Status == Ydb::StatusIds::SUCCESS) {
-            LOG_D("Fetched database info: " << msg->Database << ", DatabaseId: " << msg->DatabaseId << ", Serverless: " << msg->Serverless
-                                            << ", PathId: " << msg->PathId);
-            WatchDatabase(msg->DatabaseId, msg->PathId);
-        } else {
-            LOG_W("Failed to fetch database info, path: " << msg->Database << ", status: " << msg->Status << ", issues: " << message);
-        }
-
-        const auto replies =
-            DatabaseTracker_.OnFetchResult(msg->Database, msg->DatabaseId, msg->Status, message, msg->Serverless, TActivationContext::Now());
-        PublishAndReply();
-        Reply(replies);
-    }
-
-    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev) {
-        const ui32 watchKey = ev->Get()->Key;
-        const TString& path = ev->Get()->Path;
-
-        const auto keyIt = WatchKeyToDbId_.find(watchKey);
-        if (keyIt == WatchKeyToDbId_.end()) {
-            return;
-        }
-        const TString databaseId = keyIt->second;
-        WatchKeyToDbId_.erase(keyIt);
-        WatchKeys_.erase(databaseId);
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove(watchKey));
-
-        LOG_I("Database deleted: " << path << ", DatabaseId: " << databaseId);
-
-        const auto subscribers = DatabaseTracker_.OnDatabaseDeleted(databaseId, path);
-        Rebuild();
-        ReplyToAll(subscribers, Ydb::StatusIds::NOT_FOUND, "Database was deleted");
-    }
-
-    void Handle(TEvents::TEvWakeup::TPtr& ev) {
-        switch (ev->Get()->Tag) {
-            case EWakeupTag::InFlightRequestsCheck:
-                HandleInFlightRequestsCheck();
-                break;
-            case EWakeupTag::ClassifierMetadataCheck:
-                HandleClassifierMetadataCheck();
-                break;
-        }
-    }
-
-    void HandleClassifierMetadataCheck() {
-        ClassifierMetadataCheckScheduled_ = false;
-        if (!SubscribedOnMetadataForClassifiers_ || LastClassifierSnapshot_) {
-            return;
-        }
-        const TDuration waiting = TActivationContext::Now() - MetadataSubscribedAt_;
-        if (waiting >= CLASSIFIER_METADATA_CHECK_PERIOD) {
-            LOG_W("Classifier metadata snapshot not received for " << waiting << ", queries are classified without classifiers");
-        }
-        ScheduleClassifierMetadataCheck();
-    }
-
-    void HandleInFlightRequestsCheck() {
-        InFlightRequestsCheckScheduled_ = false;
-        const TInstant now = TActivationContext::Now();
-
-        const auto timedOut = DatabaseTracker_.TimeOutPending(now);
-        if (!timedOut.empty()) {
-            LOG_W("Database info request timed out, waiting queries get retryable UNAVAILABLE");
-        }
-        PublishAndReply();
-        Reply(timedOut);
-
-        if (HasInFlightRequests()) {
-            ScheduleInFlightRequestsCheck();
-        }
-    }
-
-private:
-    void PublishAndReply() {
-        Rebuild();
-        ReplySettled();
-    }
-
-    void ReplySettled() {
-        Reply(DatabaseTracker_.TakeSettledSubscribers());
-    }
-
-    void Reply(const std::vector<NPrivate::TSubscriberReply>& replies) {
-        for (const auto& reply : replies) {
-            Send(reply.Actor, new TEvWorkloadManagerReady(reply.Cookie, reply.Status, reply.Message));
-        }
-    }
-
-    void ReplyToAll(const std::vector<NPrivate::TPendingSubscriber>& subscribers, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
-        const TString& message = {}) {
-        for (const auto& sub : subscribers) {
-            Send(sub.Actor, new TEvWorkloadManagerReady(sub.Cookie, status, message));
-        }
-    }
-
-    bool HasInFlightRequests() const {
-        return DatabaseTracker_.HasPending();
-    }
-
-    void ScheduleInFlightRequestsCheck() {
-        if (!InFlightRequestsCheckScheduled_ && HasInFlightRequests()) {
-            InFlightRequestsCheckScheduled_ = true;
-            Schedule(IN_FLIGHT_REQUESTS_CHECK_PERIOD, new TEvents::TEvWakeup(EWakeupTag::InFlightRequestsCheck));
-        }
-    }
-
-    void ScheduleClassifierMetadataCheck() {
-        if (!ClassifierMetadataCheckScheduled_) {
-            ClassifierMetadataCheckScheduled_ = true;
-            Schedule(CLASSIFIER_METADATA_CHECK_PERIOD, new TEvents::TEvWakeup(EWakeupTag::ClassifierMetadataCheck));
-        }
-    }
-
-    void StartFetchDatabaseInfo(const TString& path) {
-        LOG_D("Fetching database info for " << path);
-        Register(CreateDatabaseFetcherActor(SelfId(), path));
-    }
-
-    void WatchDatabase(const TString& databaseId, TPathId pathId) {
-        if (WatchKeys_.contains(databaseId)) {
-            return;
-        }
-
-        const ui32 watchKey = ++FreeWatchKey_;
-        WatchKeys_[databaseId] = watchKey;
-        WatchKeyToDbId_[watchKey] = databaseId;
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(pathId, watchKey));
     }
 
     void SubscribeOnPool(const TString& databaseId, const TString& poolId) {
@@ -435,26 +190,21 @@ private:
             UnsubscribeFromMetadataForClassifiers();
         }
 
-        PublishAndReply();
-
-        if (!EnableResourcePools_) {
-            ReplyToAll(DatabaseTracker_.TakeAllSubscribers());
-        }
+        Rebuild();
     }
 
     void SubscribeOnMetadataForClassifiers() {
         if (!SubscribedOnMetadataForClassifiers_ && NMetadata::NProvider::TServiceOperator::IsEnabled()) {
             SubscribedOnMetadataForClassifiers_ = true;
-            MetadataSubscribedAt_ = TActivationContext::Now();
             Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
                 new NMetadata::NProvider::TEvSubscribeExternal(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()));
-            ScheduleClassifierMetadataCheck();
         }
     }
 
     void UnsubscribeFromMetadataForClassifiers() {
         if (SubscribedOnMetadataForClassifiers_) {
             SubscribedOnMetadataForClassifiers_ = false;
+            LastClassifierSnapshot_ = nullptr;
             Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
                 new NMetadata::NProvider::TEvUnsubscribeExternal(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()));
         }
@@ -464,7 +214,6 @@ private:
         auto* snapshot = new NPrivate::TSnapshot();
         snapshot->Pools = PoolTracker_.BuildSnapshot();
         snapshot->Classifiers = LastClassifierSnapshot_;
-        DatabaseTracker_.Fill(*snapshot);
         snapshot->StateActorId = SelfId();
         snapshot->EnableResourcePools = EnableResourcePools_;
         snapshot->EnableResourcePoolsOnServerless = EnableResourcePoolsOnServerless_;
@@ -477,20 +226,13 @@ private:
 
 private:
     std::shared_ptr<NPrivate::TWorkloadManagerGateway> Gateway_;
-    NPrivate::TDatabaseReadinessTracker DatabaseTracker_;
     NPrivate::TResourcePoolTracker PoolTracker_;
 
-    std::unordered_map<TString, ui32> WatchKeys_;
-    std::unordered_map<ui32, TString> WatchKeyToDbId_;
     std::shared_ptr<const TResourcePoolClassifierSnapshot> LastClassifierSnapshot_;
 
     bool EnableResourcePools_ = false;
     bool EnableResourcePoolsOnServerless_ = false;
     bool SubscribedOnMetadataForClassifiers_ = false;
-    bool InFlightRequestsCheckScheduled_ = false;
-    bool ClassifierMetadataCheckScheduled_ = false;
-    TInstant MetadataSubscribedAt_;
-    ui32 FreeWatchKey_ = 0;
 };
 
 }   // namespace

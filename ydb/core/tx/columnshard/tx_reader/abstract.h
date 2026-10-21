@@ -15,7 +15,6 @@ private:
     TMonotonic FirstAttemptInstant;
     ui32 Attempts = 0;
     TDuration ExecutionDuration;
-    NActors::NLog::EPriority FinishLogPriority = NActors::NLog::PRI_INFO;
     std::shared_ptr<ITxReader> NextReaderAfterLoad;
     NColumnShard::TLoadTimeSignals PrechargeCounters;
     NColumnShard::TLoadTimeSignals ReaderCounters;
@@ -31,9 +30,6 @@ private:
     virtual void DoAddNamePrefix(const TString& /*prefix*/) {
     }
 
-    virtual void DoSetFinishLogPriority(const NActors::NLog::EPriority /*priority*/) {
-    }
-
 public:
     virtual ~ITxReader() = default;
 
@@ -41,11 +37,6 @@ public:
         NamePrefix = prefix + NamePrefix;
         StageName = prefix + StageName;
         DoAddNamePrefix(prefix);
-    }
-
-    void SetFinishLogPriority(const NActors::NLog::EPriority priority) {
-        FinishLogPriority = priority;
-        DoSetFinishLogPriority(priority);
     }
 
     // the name in the counters stays as constructed, so a suffix never multiplies them

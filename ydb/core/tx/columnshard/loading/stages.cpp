@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/tracing/startup_probes.h>
 #include <ydb/core/tx/columnshard/transactions/locks_db.h>
 #include <ydb/core/tx/tiering/manager.h>
 
@@ -214,10 +215,7 @@ bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
         { "schema_preset_versions", LoadDurations.SchemaPresetVersions },
     };
     for (const auto& [step, duration] : steps) {
-        YDB_LOG_INFO("",
-            {"event", "startup_stage_finished"},
-            {"stage", GetStageName() + "/" + step},
-            {"duration_us", duration.MicroSeconds()});
+        TraceStartupStageFinished(Self->TabletID(), GetStageName() + "/" + step, duration);
     }
     Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, tablesManagerLocal.GetTables().size());
     Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, tablesManagerLocal.GetSchemaPresets().size());

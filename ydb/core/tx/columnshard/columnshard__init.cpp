@@ -107,6 +107,9 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 }
 
 void TTxInit::Complete(const TActorContext& ctx) {
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", Self->TabletID()},
+        {"process", "TTxInit::Complete"});
     Self->StartupTimeline.OnTxInitFinished();
     AFL_VERIFY(!Self->IsTxInitFinished);
     Self->IsTxInitFinished = true;

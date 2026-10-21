@@ -1,5 +1,7 @@
 #include "abstract.h"
 
+#include <ydb/core/tx/columnshard/tracing/startup_probes.h>
+
 #include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr {
@@ -26,13 +28,7 @@ bool ITxReader::Execute(NTabletFlatExecutor::TTransactionContext& txc, const TAc
     }
     IsReady = true;
     const TDuration duration = attemptFinish - FirstAttemptInstant;
-    YDB_LOG_COMP(FinishLogPriority, NKikimrServices::TX_COLUMNSHARD, "",
-        {"event", "startup_stage_finished"},
-        {"stage", StageName},
-        {"duration_us", duration.MicroSeconds()},
-        {"execution_us", ExecutionDuration.MicroSeconds()},
-        {"waiting_us", (duration - ExecutionDuration).MicroSeconds()},
-        {"attempts", Attempts});
+    NColumnShard::TraceStartupTxStageFinished(txc.Tablet, StageName, duration, ExecutionDuration, Attempts);
     NextReaderAfterLoad = BuildNextReaderAfterLoad();
     if (!NextReaderAfterLoad) {
         return true;

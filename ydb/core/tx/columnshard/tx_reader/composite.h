@@ -27,12 +27,6 @@ private:
         }
     }
 
-    virtual void DoSetFinishLogPriority(const NActors::NLog::EPriority priority) override {
-        for (auto&& i : Children) {
-            i->SetFinishLogPriority(priority);
-        }
-    }
-
 public:
     using TBase::TBase;
 

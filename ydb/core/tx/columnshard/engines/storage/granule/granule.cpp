@@ -274,8 +274,6 @@ std::shared_ptr<NKikimr::ITxReader> TGranuleMeta::BuildLoader(
     }
     result->AddChildren(commonFinish);
     result->AddChildren(optimizerLoader);
-    // one set of lines per table: the parent "granules" line keeps their total at INFO
-    result->SetFinishLogPriority(NActors::NLog::PRI_DEBUG);
     return result;
 }
 

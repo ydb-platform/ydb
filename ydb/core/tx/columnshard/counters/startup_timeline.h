@@ -17,7 +17,7 @@ private:
     TMonotonic TxInitCreateInstant;
     TMonotonic TxInitFinishInstant;
 
-    void LogStageFinished(const TString& stage, const TDuration duration) const;
+    void TraceStageFinished(const TString& stage, const TDuration duration) const;
 
 public:
     TStartupTimeline(const ui64 tabletId, const TCSInitialization& counters)

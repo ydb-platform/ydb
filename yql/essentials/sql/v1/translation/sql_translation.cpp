@@ -3911,13 +3911,13 @@ bool TSqlTranslation::ImportStatement(const TRule_import_stmt& stmt, TVector<TSt
     return true;
 }
 
-bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TVector<TSortSpecificationPtr>& sortSpecs) {
+TSQLStatus TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TVector<TSortSpecificationPtr>& sortSpecs) {
     bool asc = true;
     TSqlExpression expr(*this);
     TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-    TNodePtr exprNode = Unwrap(expr.Build(node.GetRule_expr1()));
+    auto exprNode = expr.Build(node.GetRule_expr1());
     if (!exprNode) {
-        return false;
+        return std::unexpected(exprNode.error());
     }
     if (node.HasBlock2()) {
         const auto& token = node.GetBlock2().GetToken1();
@@ -3931,26 +3931,26 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
         } else {
             Ctx_.IncrementMonCounter("sql_errors", "UnknownOrderBy");
             Error() << "Unsupported direction token: " << token.GetId();
-            return false;
+            return std::unexpected(ESQLError::Basic);
         }
     } else {
         Ctx_.IncrementMonCounter("sql_features", "OrderByDefault");
     }
-    sortSpecs.emplace_back(MakeIntrusive<TSortSpecification>(exprNode, asc));
-    return true;
+    sortSpecs.emplace_back(MakeIntrusive<TSortSpecification>(*exprNode, asc));
+    return std::monostate();
 }
 
-bool TSqlTranslation::SortSpecificationList(const TRule_sort_specification_list& node, TVector<TSortSpecificationPtr>& sortSpecs) {
-    if (!SortSpecification(node.GetRule_sort_specification1(), sortSpecs)) {
-        return false;
+TSQLStatus TSqlTranslation::SortSpecificationList(const TRule_sort_specification_list& node, TVector<TSortSpecificationPtr>& sortSpecs) {
+    if (auto status = SortSpecification(node.GetRule_sort_specification1(), sortSpecs); !status) {
+        return std::unexpected(status.error());
     }
     for (auto sortSpec : node.GetBlock2()) {
         Token(sortSpec.GetToken1());
-        if (!SortSpecification(sortSpec.GetRule_sort_specification2(), sortSpecs)) {
-            return false;
+        if (auto status = SortSpecification(sortSpec.GetRule_sort_specification2(), sortSpecs); !status) {
+            return std::unexpected(status.error());
         }
     }
-    return true;
+    return std::monostate();
 }
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node) const {
@@ -4105,7 +4105,7 @@ bool TSqlTranslation::IsValidFrameSettings(TContext& ctx, const TFrameSpecificat
     return true;
 }
 
-bool TSqlTranslation::FrameBound(const TRule_window_frame_bound& rule, TFrameBoundPtr& bound) {
+TSQLStatus TSqlTranslation::FrameBound(const TRule_window_frame_bound& rule, TFrameBoundPtr& bound) {
     // window_frame_bound:
     //    CURRENT ROW
     //  | (expr | UNBOUNDED) (PRECEDING | FOLLOWING)
@@ -4121,10 +4121,11 @@ bool TSqlTranslation::FrameBound(const TRule_window_frame_bound& rule, TFrameBou
             switch (block.Alt_case()) {
                 case TRule_window_frame_bound_TAlt2_TBlock1::kAlt1: {
                     TSqlExpression boundExpr(*this);
-                    bound->Bound = Unwrap(boundExpr.Build(block.GetAlt1().GetRule_expr1()));
-                    if (!bound->Bound) {
-                        return false;
+                    auto result = boundExpr.Build(block.GetAlt1().GetRule_expr1());
+                    if (!result) {
+                        return std::unexpected(result.error());
                     }
+                    bound->Bound = std::move(*result);
                     bound->Pos = bound->Bound->GetPos();
                     break;
                 }
@@ -4148,10 +4149,10 @@ bool TSqlTranslation::FrameBound(const TRule_window_frame_bound& rule, TFrameBou
         case TRule_window_frame_bound::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
     }
-    return true;
+    return std::monostate();
 }
 
-bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& node, TFrameSpecificationPtr& frameSpec, size_t sortSpecSize) {
+TSQLStatus TSqlTranslation::FrameClause(const TRule_window_frame_clause& node, TFrameSpecificationPtr& frameSpec, size_t sortSpecSize) {
     // window_frame_clause: window_frame_units window_frame_extent window_frame_exclusion?;
     frameSpec = new TFrameSpecification;
     const TString frameUnitStr = to_lower(Token(node.GetRule_window_frame_units1().GetToken1()));
@@ -4169,8 +4170,8 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& node, TFrameS
     switch (frameExtent.Alt_case()) {
         case TRule_window_frame_extent::kAltWindowFrameExtent1: {
             auto start = frameExtent.GetAlt_window_frame_extent1().GetRule_window_frame_bound1();
-            if (!FrameBound(start, frameSpec->FrameBegin)) {
-                return false;
+            if (auto status = FrameBound(start, frameSpec->FrameBegin); !status) {
+                return std::unexpected(status.error());
             }
 
             // frame end is CURRENT ROW
@@ -4182,11 +4183,11 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& node, TFrameS
         case TRule_window_frame_extent::kAltWindowFrameExtent2: {
             // window_frame_between: BETWEEN window_frame_bound AND window_frame_bound;
             auto between = frameExtent.GetAlt_window_frame_extent2().GetRule_window_frame_between1();
-            if (!FrameBound(between.GetRule_window_frame_bound2(), frameSpec->FrameBegin)) {
-                return false;
+            if (auto status = FrameBound(between.GetRule_window_frame_bound2(), frameSpec->FrameBegin); !status) {
+                return std::unexpected(status.error());
             }
-            if (!FrameBound(between.GetRule_window_frame_bound4(), frameSpec->FrameEnd)) {
-                return false;
+            if (auto status = FrameBound(between.GetRule_window_frame_bound4(), frameSpec->FrameEnd); !status) {
+                return std::unexpected(status.error());
             }
             break;
         }
@@ -4196,7 +4197,7 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& node, TFrameS
     YQL_ENSURE(frameSpec->FrameBegin);
     YQL_ENSURE(frameSpec->FrameEnd);
     if (!IsValidFrameSettings(Ctx_, *frameSpec, sortSpecSize)) {
-        return false;
+        return std::unexpected(ESQLError::Basic);
     }
 
     if (node.HasBlock3()) {
@@ -4221,13 +4222,13 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& node, TFrameS
 
     if (frameSpec->FrameExclusion != FrameExclNone) {
         Ctx_.Error() << "Frame exclusion is not supported yet";
-        return false;
+        return std::unexpected(ESQLError::Basic);
     }
 
-    return true;
+    return std::monostate();
 }
 
-TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_specification_details& rule) {
+TSQLResult<TWindowSpecificationPtr> TSqlTranslation::WindowSpecification(const TRule_window_specification_details& rule) {
     /*
     window_specification_details:
         existing_window_name?
@@ -4238,7 +4239,7 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
     TWindowSpecificationPtr winSpecPtr = new TWindowSpecification;
     if (rule.HasBlock1()) {
         Ctx_.Error() << "Existing window name is not supported in window specification yet!";
-        return {};
+        return std::unexpected(ESQLError::Basic);
     }
     if (rule.HasBlock2()) {
         /*
@@ -4251,8 +4252,8 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
             winSpecPtr->IsCompact = AnyOf(hints, [](const NSQLTranslation::TSQLHint& hint) { return to_lower(hint.Name) == "compact"; });
         }
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-        if (!NamedExprList(partitionClause.GetRule_named_expr_list4(), winSpecPtr->Partitions)) {
-            return {};
+        if (auto status = NamedExprList(partitionClause.GetRule_named_expr_list4(), winSpecPtr->Partitions); !status) {
+            return std::unexpected(status.error());
         }
         // ignore empty unnamed tuples:
         // "PARTITION BY (), foo(x) as y, (), (z)" is allowed and will work exactly the same as
@@ -4266,14 +4267,14 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
         winSpecPtr->Partitions.erase(removed, winSpecPtr->Partitions.end());
     }
     if (rule.HasBlock3()) {
-        if (!OrderByClause(rule.GetBlock3().GetRule_window_order_clause1().GetRule_order_by_clause1(), winSpecPtr->OrderBy)) {
-            return {};
+        if (auto status = OrderByClause(rule.GetBlock3().GetRule_window_order_clause1().GetRule_order_by_clause1(), winSpecPtr->OrderBy); !status) {
+            return std::unexpected(status.error());
         }
     }
     const bool ordered = !winSpecPtr->OrderBy.empty();
     if (rule.HasBlock4()) {
-        if (!FrameClause(rule.GetBlock4().GetRule_window_frame_clause1(), winSpecPtr->Frame, winSpecPtr->OrderBy.size())) {
-            return {};
+        if (auto status = FrameClause(rule.GetBlock4().GetRule_window_frame_clause1(), winSpecPtr->Frame, winSpecPtr->OrderBy.size()); !status) {
+            return std::unexpected(status.error());
         }
     } else {
         winSpecPtr->Frame = new TFrameSpecification;

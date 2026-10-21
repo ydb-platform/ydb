@@ -262,9 +262,9 @@ protected:
     TMaybe<TTableHints> TableHintsImpl(const TRule_table_hints& node, const TString& provider, const TString& keyFunc = "");
     bool TableHintImpl(const TRule_table_hint& rule, TTableHints& hints, const TString& provider, const TString& keyFunc = "");
     bool SimpleTableRefImpl(const TRule_simple_table_ref& node, TTableRef& result);
-    TWindowSpecificationPtr WindowSpecification(const TRule_window_specification_details& rule);
-    bool OrderByClause(const TRule_order_by_clause& node, TVector<TSortSpecificationPtr>& orderBy);
-    bool SortSpecificationList(const TRule_sort_specification_list& node, TVector<TSortSpecificationPtr>& sortSpecs);
+    TSQLResult<TWindowSpecificationPtr> WindowSpecification(const TRule_window_specification_details& rule);
+    TSQLStatus OrderByClause(const TRule_order_by_clause& node, TVector<TSortSpecificationPtr>& orderBy);
+    TSQLStatus SortSpecificationList(const TRule_sort_specification_list& node, TVector<TSortSpecificationPtr>& sortSpecs);
 
     [[nodiscard]] bool IsDistinctOptSet(const TRule_opt_set_quantifier& node) const;
     bool IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const;
@@ -314,9 +314,9 @@ private:
     static bool IsValidFrameSettings(TContext& ctx, const TFrameSpecification& frameSpec, size_t sortSpecSize);
     static TString FrameSettingsToString(EFrameSettings settings, bool isUnbounded);
 
-    bool FrameBound(const TRule_window_frame_bound& rule, TFrameBoundPtr& bound);
-    bool FrameClause(const TRule_window_frame_clause& node, TFrameSpecificationPtr& frameSpec, size_t sortSpecSize);
-    bool SortSpecification(const TRule_sort_specification& node, TVector<TSortSpecificationPtr>& sortSpecs);
+    TSQLStatus FrameBound(const TRule_window_frame_bound& rule, TFrameBoundPtr& bound);
+    TSQLStatus FrameClause(const TRule_window_frame_clause& node, TFrameSpecificationPtr& frameSpec, size_t sortSpecSize);
+    TSQLStatus SortSpecification(const TRule_sort_specification& node, TVector<TSortSpecificationPtr>& sortSpecs);
 
     bool ClusterExpr(const TRule_cluster_expr& node, bool allowWildcard, bool allowBinding, TString& service, TDeferredAtom& cluster, bool& isBinding);
     TSQLStatus StructLiteralItem(TVector<TNodePtr>& labels, const TRule_expr& label, TVector<TNodePtr>& values, const TRule_expr& value);

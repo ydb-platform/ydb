@@ -22,7 +22,7 @@ public:
     }
 
     TStatus HandleServiceCall(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 3, ctx) || !EnsureCallableType(input->Head(), ctx) ||
+        if (!EnsureMinMaxArgsCount(*input, 3, 4, ctx) || !EnsureCallableType(input->Head(), ctx) ||
             !EnsureStructType(*input->Child(1), ctx)) return TStatus::Error;
         const auto* callable = input->Head().GetTypeAnn()->Cast<TCallableExprType>();
         const auto* args = callable->GetArguments()[0].Type->Cast<TListExprType>()->GetItemType();

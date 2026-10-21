@@ -117,6 +117,7 @@ struct TQueryTransformEnv {
     TTempFile Manifest;
     bool UsesStore = false;
     bool Enriched = false;
+    bool Masked = false;
     NYql::NDq::TDqAsyncIoFactory Factory;
     std::shared_ptr<TQueryOutput> Output = std::make_shared<TQueryOutput>();
     NYql::NDq::TFakeCASetup Setup;
@@ -124,7 +125,8 @@ struct TQueryTransformEnv {
 
     TQueryTransformEnv(const TBinding& binding, ui32 timeoutMs = 5000, ui32 batchRows = 1, ui32 batchBytes = 0, ui32 maxBufferedRows = 65536,
         ui64 maxBufferedBytes = 0, bool grpcInsecure = true, bool useStore = false, bool realChannel = false,
-        std::function<void(NFq::NConfig::TWasmServicesConfig&)> configure = {}, std::optional<ui32> batchSize = {}, bool enriched = false)
+        std::function<void(NFq::NConfig::TWasmServicesConfig&)> configure = {}, std::optional<ui32> batchSize = {}, bool enriched = false,
+        bool masked = false)
         : Module(MakeTempName())
         , Manifest(MakeTempName())
     {
@@ -169,6 +171,7 @@ struct TQueryTransformEnv {
         }
         UsesStore = useStore;
         Enriched = enriched;
+        Masked = masked;
         if (useStore) {
             config.SetModuleSource(NFq::NConfig::TWasmServicesConfig::UDF_STORE);
             config.ClearModules();
@@ -203,6 +206,9 @@ struct TQueryTransformEnv {
             inputBuilder.Add("id", TDataType::Create(NYql::NUdf::TDataType<ui64>::Id, actor.TypeEnv));
             if (Enriched) {
                 inputBuilder.Add("_yql_service_payload", TDataType::Create(NYql::NUdf::TDataType<char*>::Id, actor.TypeEnv));
+            }
+            if (Masked) {
+                inputBuilder.Add("_yql_service_enabled", TDataType::Create(NYql::NUdf::TDataType<bool>::Id, actor.TypeEnv));
             }
             auto* input = inputBuilder.Build();
             auto outputBuilder = TStructTypeBuilder(actor.TypeEnv)
@@ -257,18 +263,21 @@ struct TQueryTransformEnv {
         }
     }
 
-    void Start(TVector<ui64> ids = { 42 }, bool finished = true, TVector<TString> payloads = {}) {
+    void Start(TVector<ui64> ids = { 42 }, bool finished = true, TVector<TString> payloads = {}, TVector<bool> enabled = {}) {
         Setup.AsyncOutputWrite([&](NKikimr::NMiniKQL::THolderFactory& holders) {
             NKikimr::NMiniKQL::TUnboxedValueBatch batch;
             size_t index = 0;
             for (const auto id : ids) {
                 NYql::NUdf::TUnboxedValue* members;
-                auto row = holders.CreateDirectArrayHolder(Enriched ? 2 : 1, members);
+                auto row = holders.CreateDirectArrayHolder((Enriched ? 2 : 1) + (Masked ? 1 : 0), members);
+                if (Masked) {
+                    members[0] = NYql::NUdf::TUnboxedValuePod(enabled.at(index));
+                }
                 if (Enriched) {
-                    members[0] = NKikimr::NMiniKQL::MakeString(payloads.empty() ? ToString(index) : payloads.at(index));
+                    members[Masked ? 1 : 0] = NKikimr::NMiniKQL::MakeString(payloads.empty() ? ToString(index) : payloads.at(index));
                 }
                 ++index;
-                members[Enriched ? 1 : 0] = NYql::NUdf::TUnboxedValuePod(id);
+                members[(Enriched ? 1 : 0) + (Masked ? 1 : 0)] = NYql::NUdf::TUnboxedValuePod(id);
                 batch.emplace_back(std::move(row));
             }
             return batch;

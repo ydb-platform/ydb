@@ -9,6 +9,37 @@
 namespace NYql::NDqFunction {
     namespace {
 
+        TExprNode::TPtr AttachRowDependency(const TExprNode::TPtr& lambda, TExprContext& ctx) {
+            THashMap<const TExprNode*, TExprNode::TPtr> visited;
+            std::function<TExprNode::TPtr(const TExprNode::TPtr&)> attach = [&](const auto& part) -> TExprNode::TPtr {
+                if (part->IsLambda()) {
+                    return part;
+                }
+                if (auto it = visited.find(part.Get()); it != visited.end()) {
+                    return it->second;
+                }
+                auto children = part->ChildrenList();
+                bool changed = false;
+                for (auto& child : children) {
+                    auto next = attach(child);
+                    changed |= next != child;
+                    child = next;
+                }
+                if (part->IsCallable("WasmServiceCall") && children.size() == 3) {
+                    // Even constant arguments describe a per-row external effect.
+                    // Keep the call in its row scope until async lowering; otherwise
+                    // a singleton projection can be evaluated as a pure constant.
+                    children.push_back(ctx.NewCallable(part->Pos(), "DependsOn", {lambda->Head().HeadPtr()}));
+                    changed = true;
+                }
+                auto result = changed ? ctx.ChangeChildren(*part, std::move(children)) : part;
+                visited.emplace(part.Get(), result);
+                return result;
+            };
+            auto body = attach(lambda->TailPtr());
+            return body == lambda->TailPtr() ? lambda : ctx.ChangeChild(*lambda, 1, std::move(body));
+        }
+
         class TDiscovery final: public TSyncTransformerBase {
         public:
             explicit TDiscovery(TDqFunctionState::TPtr state)
@@ -20,7 +51,22 @@ namespace NYql::NDqFunction {
                 TOptimizeExprSettings settings(State->Types);
                 settings.VisitTuples = true;
                 return OptimizeExpr(input, output, [&](const auto& node, auto& exprCtx) {
-                    return RewriteServiceExpression(node, *State->GatewayFactory, exprCtx);
+                    auto rewritten = RewriteServiceExpression(node, *State->GatewayFactory, exprCtx);
+                    if (!rewritten) {
+                        return TExprNode::TPtr{};
+                    }
+                    auto children = rewritten->ChildrenList();
+                    bool changed = false;
+                    // OptimizeExpr visits lambda bodies but invokes this callback
+                    // only for callables/tuples. Bind through their lambda children.
+                    for (auto& child : children) {
+                        if (child->IsLambda() && child->Head().ChildrenSize() == 1) {
+                            auto next = AttachRowDependency(child, exprCtx);
+                            changed |= next != child;
+                            child = next;
+                        }
+                    }
+                    return changed ? exprCtx.ChangeChildren(*rewritten, std::move(children)) : rewritten;
                 }, ctx, settings);
             }
 
@@ -31,43 +77,27 @@ namespace NYql::NDqFunction {
             TDqFunctionState::TPtr State;
         };
 
-        TExprNode::TPtr AddPayloadType(const TTypeAnnotationNode* row, TPositionHandle pos, TExprContext& ctx) {
+        TExprNode::TPtr AddPayloadType(const TTypeAnnotationNode* row, TPositionHandle pos, TExprContext& ctx, bool masked = false) {
             auto expanded = ExpandType(pos, *row, ctx);
             auto fields = expanded->ChildrenList();
             fields.push_back(
                 ctx.NewList(pos, {ctx.NewAtom(pos, "_yql_service_payload"), ctx.NewCallable(pos, "DataType", {ctx.NewAtom(pos, "String")})}));
+            if (masked) {
+                fields.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, "_yql_service_enabled"),
+                                                   ctx.NewCallable(pos, "DataType", {ctx.NewAtom(pos, "Bool")})}));
+            }
             return ctx.NewCallable(pos, "StructType", std::move(fields));
         }
 
-        // Preserve shared argument values, not just the input row: evaluating
-        // RandomNumber again in the continuation would change SQL row semantics.
-        TExprNode::TListType SharedArguments(const TExprNode::TPtr& body, const TExprNode::TPtr& call) {
-            THashSet<const TExprNode*> arguments;
-            std::function<void(const TExprNode::TPtr&)> collect = [&](const auto& part) {
-                if (part->IsLambda() || !arguments.insert(part.Get()).second) {
-                    return;
-                }
-                for (const auto& child : part->Children()) {
-                    collect(child);
-                }
-            };
-            collect(call->ChildPtr(1));
-            TExprNode::TListType shared;
-            THashSet<const TExprNode*> visited;
-            std::function<void(const TExprNode::TPtr&)> find = [&](const auto& part) {
-                if (part == call || part->IsLambda() || !visited.insert(part.Get()).second) {
-                    return;
-                }
-                if (part->IsCallable() && arguments.contains(part.Get()) && part->GetTypeAnn() && part->GetTypeAnn()->IsPersistable()) {
-                    shared.push_back(part);
-                    return;
-                }
-                for (const auto& child : part->Children()) {
-                    find(child);
-                }
-            };
-            find(body);
-            return shared;
+        TExprNode::TPtr EmptyArguments(const TStructExprType& type, TPositionHandle pos, TExprContext& ctx) {
+            TExprNode::TListType fields;
+            for (const auto* field : type.GetItems()) {
+                const auto slot = field->GetItemType()->Cast<TDataExprType>()->GetSlot();
+                const auto value = slot == EDataSlot::Bool ? "false" : (slot == EDataSlot::String || slot == EDataSlot::Utf8 ? "" : "0");
+                fields.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, field->GetName()),
+                                                   ctx.NewCallable(pos, NUdf::GetDataTypeInfo(slot).Name, {ctx.NewAtom(pos, value)})}));
+            }
+            return ctx.NewCallable(pos, "AsStruct", std::move(fields));
         }
 
         TExprNode::TPtr Lower(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -76,33 +106,49 @@ namespace NYql::NDqFunction {
                 return node;
             }
             const auto lambda = node->TailPtr();
+            struct TGuard {
+                TExprNode::TPtr Parent;
+                ui32 Index;
+                bool Positive;
+            };
+            using TGuards = std::vector<TGuard>;
             TExprNode::TPtr call;
-            bool guarded = false, nested = false;
-            std::function<void(const TExprNode::TPtr&, bool, bool)> visit = [&](const auto& part, bool condition, bool innerLambda) {
+            TGuards guards;
+            bool unsupported = false;
+            std::function<void(const TExprNode::TPtr&, const TGuards&, bool)> visit = [&](const auto& part, const auto& path, bool invalid) {
                 if (call) {
                     return;
                 }
                 if (part->IsCallable("WasmServiceCall")) {
-                    // Dependencies first: lower the innermost service call in a chain.
-                    visit(part->ChildPtr(1), condition, innerLambda);
+                    visit(part->ChildPtr(1), path, invalid);
                     if (!call) {
                         call = part;
-                        guarded = condition;
-                        nested = innerLambda;
+                        guards = path;
+                        unsupported = invalid;
                     }
                     return;
                 }
+                if (part->IsCallable("If")) {
+                    auto branch = path;
+                    for (ui32 i = 0; i + 1 < part->ChildrenSize(); i += 2) {
+                        visit(part->ChildPtr(i), branch, invalid);
+                        branch.push_back({part, i, true});
+                        visit(part->ChildPtr(i + 1), branch, invalid);
+                        branch.back().Positive = false;
+                    }
+                    visit(part->TailPtr(), branch, invalid);
+                    return;
+                }
                 for (const auto& child : part->Children()) {
-                    visit(child, condition || part->IsCallable({"If", "IfStrict", "IfPresent", "Coalesce", "And", "Or"}),
-                          innerLambda || part->IsLambda());
+                    visit(child, path, invalid || part->IsLambda() || part->IsCallable({"IfStrict", "IfPresent", "Coalesce", "And", "Or"}));
                 }
             };
-            visit(lambda->TailPtr(), false, false);
+            visit(lambda->TailPtr(), {}, false);
             if (!call) {
                 return node;
             }
-            if (guarded || nested) {
-                ctx.AddError(TIssue(ctx.GetPosition(call->Pos()), "Service calls in conditional or nested collection lambdas are not supported here"));
+            if (unsupported) {
+                ctx.AddError(TIssue(ctx.GetPosition(call->Pos()), "Service calls require a row lambda; use IF/CASE for conditional calls"));
                 return {};
             }
             const auto inputType = node->Head().GetTypeAnn();
@@ -113,38 +159,52 @@ namespace NYql::NDqFunction {
             const auto rowType = inputType->Cast<TListExprType>()->GetItemType();
             const auto pos = node->Pos();
             auto argument = ctx.NewArgument(pos, "service_input");
-            const auto shared = SharedArguments(lambda->TailPtr(), call);
             auto input = node->HeadPtr();
             const TTypeAnnotationNode* payloadType = rowType;
             auto originalInput = argument;
-            if (!shared.empty()) {
-                auto row = ctx.NewArgument(pos, "capture_input");
-                TNodeOnNodeOwnedMap remap;
-                remap.emplace(&lambda->Head().Head(), row);
+            TExprNode::TPtr enabled;
+            const auto boolean = [&](bool value) { return ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, value ? "true" : "false")}); };
+            if (!guards.empty()) {
+                auto row = ctx.NewArgument(pos, "guard_input");
                 TExprNode::TListType fields{ctx.NewList(pos, {ctx.NewAtom(pos, "row"), row})};
                 TVector<const TItemExprType*> types{ctx.MakeType<TItemExprType>("row", rowType)};
-                for (ui32 i = 0; i < shared.size(); ++i) {
-                    const auto name = "captured" + ToString(i);
-                    fields.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, name), ctx.ReplaceNodes(TExprNode::TPtr(shared[i]), remap)}));
-                    types.push_back(ctx.MakeType<TItemExprType>(name, shared[i]->GetTypeAnn()));
+                TExprNode::TPtr active = boolean(true);
+                enabled = boolean(true);
+                TNodeOnNodeOwnedMap rowRemap;
+                rowRemap.emplace(&lambda->Head().Head(), row);
+                for (ui32 i = 0; i < guards.size(); ++i) {
+                    const auto& guard = guards[i];
+                    auto condition = ctx.ReplaceNodes(guard.Parent->ChildPtr(guard.Index), rowRemap);
+                    const auto name = "condition" + ToString(i);
+                    auto saved = ctx.NewCallable(pos, "If", {active, condition, boolean(false)});
+                    fields.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, name), saved}));
+                    types.push_back(ctx.MakeType<TItemExprType>(name, ctx.MakeType<TDataExprType>(EDataSlot::Bool)));
+                    auto selection = guard.Positive ? saved : ctx.NewCallable(pos, "Not", {saved});
+                    active = ctx.NewCallable(pos, "And", {active, selection});
+                    auto cached = ctx.NewCallable(pos, "Member", {argument, ctx.NewAtom(pos, name)});
+                    if (!guard.Positive) {
+                        cached = ctx.NewCallable(pos, "Not", {cached});
+                    }
+                    enabled = ctx.NewCallable(pos, "And", {enabled, cached});
                 }
-                input = ctx.NewCallable(pos, "Map", {input, ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), ctx.NewCallable(pos, "AsStruct", std::move(fields)))});
+                auto saved = ctx.NewCallable(pos, "AsStruct", std::move(fields));
+                input = ctx.NewCallable(pos, "Map", {input, ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(saved))});
                 payloadType = ctx.MakeType<TStructExprType>(types);
                 originalInput = ctx.NewCallable(pos, "Member", {argument, ctx.NewAtom(pos, "row")});
             }
             TNodeOnNodeOwnedMap inputRemap;
             inputRemap.emplace(&lambda->Head().Head(), originalInput);
-            for (ui32 i = 0; i < shared.size(); ++i) {
-                inputRemap.emplace(shared[i].Get(), ctx.NewCallable(pos, "Member", {argument, ctx.NewAtom(pos, "captured" + ToString(i))}));
-            }
             auto args = ctx.ReplaceNodes(call->ChildPtr(1), inputRemap);
-            auto encoded =
-                ctx.NewCallable(pos, "AddMember", {args, ctx.NewAtom(pos, "_yql_service_payload"), ctx.NewCallable(pos, "Pickle", {argument})});
+            if (enabled) {
+                args = ctx.NewCallable(pos, "If", {enabled, args, EmptyArguments(*call->Child(1)->GetTypeAnn()->Cast<TStructExprType>(), pos, ctx)});
+                args = ctx.NewCallable(pos, "AddMember", {args, ctx.NewAtom(pos, "_yql_service_enabled"), enabled});
+            }
+            auto encoded = ctx.NewCallable(pos, "AddMember", {args, ctx.NewAtom(pos, "_yql_service_payload"), ctx.NewCallable(pos, "Pickle", {argument})});
             auto projected = ctx.NewCallable(pos, "Map", {input, ctx.NewLambda(pos, ctx.NewArguments(pos, {argument}), std::move(encoded))});
             auto settings = call->Head().Child(2)->ChildrenList();
             for (auto& entry : settings) {
                 if (entry->Head().IsAtom("input_type")) {
-                    entry = ctx.NewList(pos, {entry->HeadPtr(), AddPayloadType(call->Child(1)->GetTypeAnn(), pos, ctx)});
+                    entry = ctx.NewList(pos, {entry->HeadPtr(), AddPayloadType(call->Child(1)->GetTypeAnn(), pos, ctx, bool(enabled))});
                 } else if (entry->Head().IsAtom("output_type")) {
                     entry = ctx.NewList(pos, {entry->HeadPtr(), AddPayloadType(call->GetTypeAnn(), pos, ctx)});
                 }
@@ -156,15 +216,33 @@ namespace NYql::NDqFunction {
             auto result = ctx.NewArgument(pos, "service_output");
             auto payload = ctx.NewCallable(pos, "Member", {result, ctx.NewAtom(pos, "_yql_service_payload")});
             auto saved = ctx.NewCallable(pos, "Unpickle", {ExpandType(pos, *payloadType, ctx), payload});
-            auto original = shared.empty() ? saved : ctx.NewCallable(pos, "Member", {saved, ctx.NewAtom(pos, "row")});
+            auto original = guards.empty() ? saved : ctx.NewCallable(pos, "Member", {saved, ctx.NewAtom(pos, "row")});
             auto value = ctx.NewCallable(pos, "RemoveMember", {result, ctx.NewAtom(pos, "_yql_service_payload")});
-            TNodeOnNodeOwnedMap outputRemap;
-            outputRemap.emplace(&lambda->Head().Head(), original);
-            outputRemap.emplace(call.Get(), value);
-            for (ui32 i = 0; i < shared.size(); ++i) {
-                outputRemap.emplace(shared[i].Get(), ctx.NewCallable(pos, "Member", {saved, ctx.NewAtom(pos, "captured" + ToString(i))}));
-            }
-            auto body = ctx.ReplaceNodes(lambda->TailPtr(), outputRemap);
+            // Restore exactly the decisions made before suspension. Do not reevaluate
+            // predicates after an external call, or change other uses of a shared predicate.
+            std::function<TExprNode::TPtr(const TExprNode::TPtr&)> continuation = [&](const auto& part) -> TExprNode::TPtr {
+                if (part.Get() == &lambda->Head().Head()) {
+                    return original;
+                }
+                if (part == call) {
+                    return value;
+                }
+                auto children = part->ChildrenList();
+                bool changed = false;
+                for (ui32 i = 0; i < children.size(); ++i) {
+                    auto child = continuation(children[i]);
+                    for (ui32 g = 0; g < guards.size(); ++g) {
+                        if (guards[g].Parent == part && guards[g].Index == i) {
+                            child = ctx.NewCallable(pos, "Member", {saved, ctx.NewAtom(pos, "condition" + ToString(g))});
+                            break;
+                        }
+                    }
+                    changed |= child != children[i];
+                    children[i] = child;
+                }
+                return changed ? ctx.ChangeChildren(*part, std::move(children)) : part;
+            };
+            auto body = continuation(lambda->TailPtr());
             return ctx.NewCallable(pos, node->Content(), {enriched, ctx.NewLambda(pos, ctx.NewArguments(pos, {result}), std::move(body))});
         }
 

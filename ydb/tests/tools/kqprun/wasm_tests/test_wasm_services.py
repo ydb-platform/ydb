@@ -114,9 +114,11 @@ def test_mock_tvm_and_real_provider_stub(service, tmp_path, protocol):
 
 
 @pytest.mark.parametrize('protocol', ['HTTP', 'GRPC'])
-def test_deadline_and_shutdown(service, tmp_path, protocol):
+@pytest.mark.parametrize('expression', [False, True])
+def test_deadline_and_shutdown(service, tmp_path, protocol, expression):
     runner = Runner(tmp_path, service, protocol, timeout=250)
-    process = runner.start(ids=[999])
+    sql = service_expression_query('/Root/profiles', [999], batch_size=1) if expression else None
+    process = runner.start(ids=[999], sql=sql)
     assert service.started.wait(60), runner.output()
     # The embedded database must shut down without waiting for this response.
     assert runner.wait(process, timeout=15) != 0
@@ -135,7 +137,8 @@ def test_local_module_option_independent_of_config_order(service, tmp_path):
 
 @pytest.mark.parametrize('wasm_auth', [False, True])
 @pytest.mark.parametrize('sql_batch_size', [None, 8])
-def test_udf_store_upload_after_start(service, tmp_path, wasm_auth, sql_batch_size):
+@pytest.mark.parametrize('expression', [False, True])
+def test_udf_store_upload_after_start(service, tmp_path, wasm_auth, sql_batch_size, expression):
     import time
     import grpc
     import ydb
@@ -200,8 +203,8 @@ def test_udf_store_upload_after_start(service, tmp_path, wasm_auth, sql_batch_si
                 deadline = time.monotonic() + 60
                 while True:
                     try:
-                        result = pool.execute_with_retries(profile_query(
-                            database + '/profiles', range(1000, 1200), batch_size=sql_batch_size))
+                        query = service_expression_query if expression else profile_query
+                        result = pool.execute_with_retries(query(database + '/profiles', range(1000, 1200), batch_size=sql_batch_size))
                         break
                     except ydb.Error as error:
                         assert time.monotonic() < deadline and ('Unknown' in str(error) or 'not loaded' in str(error)), error
@@ -272,7 +275,8 @@ def test_store_restores_persistent_tenant(service, tmp_path):
 
 
 @pytest.mark.parametrize('protocol', ['HTTP', 'GRPC'])
-def test_wasm_auth_schema_secret(service, tmp_path, protocol):
+@pytest.mark.parametrize('mode', ['external', 'select', 'skipped'])
+def test_wasm_auth_schema_secret(service, tmp_path, protocol, mode):
     service.auth_secret = b'public-test-secret'
     runner = Runner(tmp_path, service, protocol)
     root = Path(yatest.common.source_path('ydb/udfs/wasm/auth_test'))
@@ -287,8 +291,15 @@ def test_wasm_auth_schema_secret(service, tmp_path, protocol):
     ddl = ddl.replace('AUTH_METHOD = "WASM"', 'AUTH_METHOD = "WASM", AUTH_PROVIDER = "TEST_AUTH", AUTH_PARAMETERS = ' +
                       json.dumps(json.dumps({'secret': '/Root/auth_secret'})))
     runner.scheme.write_text("CREATE SECRET `/Root/auth_secret` WITH (value='public-test-secret');\n" + ddl)
-    assert runner.wait(runner.start(ids=range(1000, 1200), extra=['--wasm-service-module', str(module), '--threads=1'])) == 0, runner.output()
+    sql = profile_query('/Root/profiles', range(1000, 1200)) if mode == 'external' else service_expression_query('/Root/profiles', skipped=mode == 'skipped')
+    if mode == 'skipped':
+        runner.scheme.write_text(runner.scheme.read_text().replace('public-test-secret', 'invalid-secret'))
+    assert runner.wait(runner.start(sql=sql, extra=['--wasm-service-module', str(module), '--threads=1'])) == 0, runner.output()
     assert len(runner.rows()) == 200
+    if mode == 'skipped':
+        assert not service.requests and not service.auth_requests
+        assert all(row['name'] == 'skipped' for row in runner.rows())
+        return
     assert service.auth_requests and all(value == service.auth_secret for value in service.auth_requests)
     assert len(service.auth_requests) < len(service.requests)
     assert len(service.auth_headers) == len(service.requests)
@@ -440,34 +451,66 @@ def test_service_expression_invalid_before_network(service, tmp_path, expression
     assert 'Service' in runner.output()
 
 
-@pytest.mark.parametrize('batch_size', [1, 8])
-def test_service_expression_sibling_occurrences(service, tmp_path, batch_size):
-    runner = Runner(tmp_path, service)
-    source = ','.join('AsStruct(%dul AS id)' % i for i in range(1000, 1020))
-    sql = ("$options=AsStruct('/Root/profiles' AS connection, %d AS batch_size);" % batch_size +
-           "$input=SELECT * FROM AS_TABLE(AsList(" + source + "));"
-           "$a=SELECT WASM_PROFILE::Profile(id,$options).id AS id FROM $input;"
-           "$b=SELECT WASM_PROFILE::Profile(id,$options).id AS id FROM $input;"
-           "SELECT * FROM $a UNION ALL SELECT * FROM $b;")
-    assert runner.wait(runner.start(sql=sql)) == 0, runner.output()
-    expected = sorted(list(range(1000, 1020)) * 2)
-    assert sorted(int(row['id']) for row in runner.rows()) == expected
-    received = [value for _, request, _ in service.requests
-                for value in (request if isinstance(request, tuple) else (request,))]
-    assert sorted(received) == expected
-
-
-def test_service_expression_preserves_shared_argument_value(service, tmp_path):
+@pytest.mark.parametrize('kind', ['if', 'case', 'none'])
+def test_service_expression_conditional_200_rows(service, tmp_path, kind):
     runner = Runner(tmp_path, service)
     source = ','.join('AsStruct(%dul AS id)' % i for i in range(1000, 1200))
-    value = '1000ul + Unwrap(RandomNumber(id) % 1000000ul)'
+    expression = {
+        'if': 'IF(id % 2ul == 0ul, WASM_PROFILE::Profile(id, $options).id, id)',
+        'case': 'CASE WHEN id % 2ul == 0ul THEN WASM_PROFILE::Profile(id, $options).id '
+                'WHEN id % 3ul == 0ul THEN WASM_PROFILE::Profile(id, $options).id ELSE id END',
+        'none': 'IF(id < 1000ul, WASM_PROFILE::Profile(0ul, $options).id, id)',
+    }[kind]
+    sql = ("$options=AsStruct('/Root/profiles' AS connection, 8 AS batch_size);"
+           "$lookup=($id)->{ RETURN " + expression.replace('id', '$id') + "; };"
+           "$input=SELECT * FROM AS_TABLE(AsList(" + source + "));"
+           "SELECT id, $lookup(id) AS result FROM $input ORDER BY id;")
+    # Replace only the lambda argument references, not the result member name.
+    sql = sql.replace('.$id', '.id')
+    assert runner.wait(runner.start(sql=sql)) == 0, runner.output()
+    assert [(int(row['id']), int(row['result'])) for row in runner.rows()] == [(i, i) for i in range(1000, 1200)]
+    expected = [] if kind == 'none' else [i for i in range(1000, 1200) if i % 2 == 0 or (kind == 'case' and i % 3 == 0)]
+    batches = [request if isinstance(request, tuple) else (request,) for _, request, _ in service.requests]
+    assert sorted(value for batch in batches for value in batch) == expected
+    assert all(len(batch) <= 8 for batch in batches)
+    if expected:
+        assert any(len(batch) > 1 for batch in batches)
+    else:
+        assert not service.auth_requests
+
+
+def service_expression_query(connection, ids=range(1000, 1200), batch_size=8, skipped=False):
+    source = ','.join('AsStruct(%dul AS id)' % i for i in ids)
+    options = "AsStruct(%s AS connection%s)" % (json.dumps(connection),
+                                                '' if batch_size is None else ', %d AS batch_size' % batch_size)
+    call = 'WASM_PROFILE::Profile(id, $options)'
+    if skipped:
+        call = "IF(id < 1000ul, " + call + ", AsStruct(id AS id, 'skipped'u AS name, 0u AS score))"
+    return ("$options=" + options + ";$input=SELECT * FROM AS_TABLE(AsList(" + source + "));"
+            "$result=SELECT " + call + " AS profile FROM $input;"
+            "SELECT profile.id AS id, profile.name AS name, profile.score AS score FROM $result ORDER BY id;")
+
+
+def test_service_expression_singleton(service, tmp_path):
+    runner = Runner(tmp_path, service)
+    sql = "SELECT WASM_PROFILE::Profile(42ul, AsStruct('/Root/profiles' AS connection)).id AS id;"
+    assert runner.wait(runner.start(sql=sql)) == 0, runner.output()
+    assert [int(row['id']) for row in runner.rows()] == [42]
+    assert len(service.requests) == 1
+
+
+def test_service_expression_preserves_random_branch_decision(service, tmp_path):
+    runner = Runner(tmp_path, service)
+    source = ','.join('AsStruct(%dul AS id)' % i for i in range(1000, 1200))
     sql = ("$options=AsStruct('/Root/profiles' AS connection, 8 AS batch_size);"
            "$input=SELECT * FROM AS_TABLE(AsList(" + source + "));"
-           "SELECT " + value + " AS sent, WASM_PROFILE::Profile(" + value + ",$options).id AS received FROM $input;")
+           "SELECT id, IF(RandomNumber(id) % 2ul == 0ul, WASM_PROFILE::Profile(id, $options).id, 0ul) AS result "
+           "FROM $input ORDER BY id;")
     assert runner.wait(runner.start(sql=sql)) == 0, runner.output()
     rows = runner.rows()
     assert len(rows) == 200
-    assert all(int(row['sent']) == int(row['received']) for row in rows)
+    selected = [int(row['id']) for row in rows if int(row['result']) != 0]
+    assert all(int(row['result']) in (0, int(row['id'])) for row in rows)
     received = [value for _, request, _ in service.requests
                 for value in (request if isinstance(request, tuple) else (request,))]
-    assert sorted(received) == sorted(int(row['sent']) for row in rows)
+    assert sorted(received) == selected

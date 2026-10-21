@@ -175,3 +175,22 @@ cap: a config default of one still permits SQL batching. Valid SQL values are
 constant Int32 values in 1..64; one selects scalar mode. Omitting the SQL option
 preserves the configured default. Manifest and byte limits may reduce actual
 batch cardinality. This is shared with fqrun and ydbd, for local and Store modules.
+
+
+### Service methods in SELECT
+
+The [fqrun SELECT and row-lambda syntax](../fqrun/README.md#service-calls-in-select-and-row-lambdas)
+also works through KQP. Use a YDB connection path in the constant options struct:
+
+```sql
+$options = AsStruct('/Root/profiles' AS connection, 8 AS batch_size);
+$input = SELECT 42ul AS id;
+$enriched = SELECT id, WASM_PROFILE::Profile(id, $options) AS profile FROM $input;
+SELECT id, profile.name AS name FROM $enriched;
+```
+
+This uses the same async transform, batching, limits and authorization as explicit
+EXTERNAL FUNCTION. `--wasm-service-module` retains local loading;
+`--wasm-service-store` resolves the method from the existing UDF Store. It does not
+introduce module version pinning or an asynchronous scalar UDF ABI. See the linked
+syntax description for IF/CASE and the initial expression restrictions.

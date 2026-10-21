@@ -142,10 +142,10 @@ ui32 Scheme(EValueType type) {
     return 0;
 }
 
-TVector<ui32> BindFields(TType* type, const TVector<TServiceField>& fields, bool enrich = false) {
+TVector<ui32> BindFields(TType* type, const TVector<TServiceField>& fields, ui32 extraFields = 0) {
     Y_ENSURE(type->GetKind() == TType::EKind::Struct, "WASM service row must be a struct");
     const auto* row = AS_TYPE(TStructType, type);
-    Y_ENSURE(row->GetMembersCount() == fields.size() + (enrich ? 1 : 0), "Invalid WASM service row shape");
+    Y_ENSURE(row->GetMembersCount() == fields.size() + extraFields, "Invalid WASM service row shape");
     TVector<ui32> positions;
     for (const auto& field : fields) {
         const auto index = row->FindMemberIndex(field.Name);
@@ -247,7 +247,17 @@ public:
         const auto& desc = args.OutputDesc.GetTransform();
         auto* inputType = static_cast<TType*>(DeserializeNode(desc.GetInputType(), args.TypeEnv));
         auto* outputType = static_cast<TType*>(DeserializeNode(desc.GetOutputType(), args.TypeEnv));
-        InputPositions = BindFields(inputType, Method.Input, Config->EnrichRows);
+        if (Config->EnrichRows) {
+            Y_ENSURE(inputType->GetKind() == TType::EKind::Struct, "Service input must be a struct");
+            const auto* inputRow = AS_TYPE(TStructType, inputType);
+            InputEnabledIndex = inputRow->FindMemberIndex("_yql_service_enabled");
+            if (InputEnabledIndex) {
+                const auto* enabledType = inputRow->GetMemberType(*InputEnabledIndex);
+                Y_ENSURE(enabledType->GetKind() == TType::EKind::Data && AS_TYPE(TDataType, enabledType)->GetSchemeType() ==
+                                                                             NUdf::TDataType<bool>::Id, "Service selection mask must be Bool");
+            }
+        }
+        InputPositions = BindFields(inputType, Method.Input, ui32(Config->EnrichRows) + ui32(bool(InputEnabledIndex)));
         OutputPositions = BindFields(outputType, Method.Output, Config->EnrichRows);
         if (Config->EnrichRows) {
             const auto payloadIndex = [](TType* type) {
@@ -260,6 +270,13 @@ public:
             };
             InputPayloadIndex = payloadIndex(inputType);
             OutputPayloadIndex = payloadIndex(outputType);
+        }
+        // Inactive slots have an internal placeholder, never exposed by the
+        // continuation and never sent to the guest or the authorization provider.
+        for (const auto& field : Method.Output) {
+            const size_t bytes =
+                field.Type == EValueType::Bool ? 1 : (field.Type == EValueType::Uint64 || field.Type == EValueType::Int64 ? 8 : 4);
+            EmptyResult.append(bytes, '\0');
         }
         RowReservation = std::max(Method.MaxInputRowBytes, Method.MaxOutputRowBytes);
         MaxRows = std::min<ui64>(Config->MaxRows, Config->MaxBufferedBytes / RowReservation);
@@ -400,6 +417,7 @@ public:
                     PayloadBytes += payload.Size();
                 }
                 Pending.push_back(std::move(bytes));
+                PendingEnabled.push_back(!InputEnabledIndex || row.GetElement(*InputEnabledIndex).Get<bool>());
             });
             PendingWatermark = watermark;
             PendingCheckpoint = checkpoint;
@@ -448,7 +466,7 @@ private:
     }
 
     size_t BufferedRows() const {
-        return Pending.size() + ActiveCount + Results.size();
+        return Pending.size() + ActiveMask.size() + Results.size();
     }
 
     bool DecodeResults(TStringBuf bytes) {
@@ -482,8 +500,16 @@ private:
         if (!reader.Remaining().empty()) {
             return false;
         }
+        for (const bool enabled : ActiveMask) {
+            if (enabled) {
+                Results.push_back(std::move(results.front()));
+                results.pop_front();
+            } else {
+                Results.push_back(EmptyResult);
+            }
+        }
+        ActiveMask.clear();
         ActiveCount = 0;
-        Results = std::move(results);
         return true;
     }
 
@@ -552,11 +578,24 @@ private:
                         return;
                     }
                 }
-                ActiveCount = std::min<size_t>(DispatchRows, Pending.size());
+                const auto slots = std::min<size_t>(DispatchRows, Pending.size());
                 TString rows;
-                for (ui32 i = 0; i < ActiveCount; ++i) {
-                    rows += Pending.front();
+                ActiveCount = 0;
+                for (ui32 i = 0; i < slots; ++i) {
+                    const bool enabled = PendingEnabled.front();
+                    PendingEnabled.pop_front();
+                    ActiveMask.push_back(enabled);
+                    if (enabled) {
+                        rows += Pending.front();
+                        ++ActiveCount;
+                    }
                     Pending.pop_front();
+                }
+                if (!ActiveCount) {
+                    Results.assign(slots, EmptyResult);
+                    ActiveMask.clear();
+                    Send(SelfId(), new TEvReady);
+                    return;
                 }
                 const TServiceRequest header{ ServiceMagic, ServiceVersion, Method.Id, 0, Binding.Protocol == EProtocol::Http ? 0u : 1u,
                     ActiveCount, Config->BatchBytes, Config->BatchRows > 1 ? 1u : 0u };
@@ -625,6 +664,8 @@ private:
         }
         Runtime.reset();
         Pending.clear();
+        PendingEnabled.clear();
+        ActiveMask.clear();
         Results.clear();
         Payloads.clear();
         PayloadBytes = 0;
@@ -648,6 +689,8 @@ private:
         Runtime.reset();
         Transport.reset();
         Pending.clear();
+        PendingEnabled.clear();
+        ActiveMask.clear();
         Results.clear();
         Payloads.clear();
         PayloadBytes = 0;
@@ -670,6 +713,10 @@ private:
     ui32 MaxRows, DispatchRows, ActiveCount = 0;
     TDqAsyncStats Stats;
     TDeque<TString> Pending, Results, Payloads;
+    TDeque<bool> PendingEnabled;
+    TVector<bool> ActiveMask;
+    TMaybe<ui32> InputEnabledIndex;
+    TString EmptyResult;
     ui64 PayloadBytes = 0;
     ui32 RowReservation = 0;
     ui32 InputPayloadIndex = 0, OutputPayloadIndex = 0;

@@ -66,6 +66,14 @@ Y_UNIT_TEST_SUITE(TServiceExpressionContract) {
         UNIT_ASSERT(result && result->IsCallable("WasmServiceCall"));
     }
 
+    Y_UNIT_TEST(RejectsScalarUdfConfigurationInsteadOfSilentlyDroppingIt) {
+        TFixture f;
+        auto args = f.Ctx.NewCallable(f.Pos, "PositionalArgs", { f.Value("Uint64", "42"), f.Options(f.Value("String", "/Root/profiles")) });
+        auto call = f.Ctx.NewCallable(
+            f.Pos, "SqlCall", { f.Ctx.NewAtom(f.Pos, "Profiles.Lookup"), f.Ctx.NewList(f.Pos, { args }), f.Value("String", "udf-type-config") });
+        UNIT_ASSERT(!RewriteServiceExpression(call, f.Factory, f.Ctx));
+    }
+
     Y_UNIT_TEST(RejectsDynamicOrInvalidOptionsBeforeExecution) {
         for (const TString batch : { "0", "-1", "65", "2147483648", "not-a-number" }) {
             TFixture f;

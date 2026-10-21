@@ -500,3 +500,39 @@ The synthetic issuer accepts `POST /auth` containing the test secret and respond
 In fqrun pass `--secrets-file` with `{"test_secret":"local-test-value"}`. WASM auth rereads that file asynchronously at every refresh; replace it atomically to rotate secrets. In kqprun use the existing `CREATE SECRET` and an absolute path in `AUTH_PARAMETERS`, as on ydbd; an explicit `AuthSecretsFile` config is available for trusted local tests. No resolver falls back to a previously read secret. A valid cached ticket remains usable until its TTL.
 
 Kqprun local mode uses repeated `--wasm-service-module` options for application/auth artifacts (each with its adjacent manifest). Store mode uses `--wasm-service-store` and existing UDF upload APIs for both artifacts. Uploading an auth artifact does not approve it: `AuthProviders` is always operator configuration. No real TVM code or artifacts are shipped in these examples.
+
+
+### Service calls in SELECT and row lambdas
+
+A manifest service method can be used in a row projection. The last argument is
+an options struct with a constant connection name and an optional constant
+`batch_size` (Int32, 1..64). Omitting it uses the configured default.
+
+```sql
+$options = AsStruct('profiles_http' AS connection, 8 AS batch_size);
+$lookup = ($id) -> {
+    RETURN WASM_PROFILE::Profile($id, $options);
+};
+$input = SELECT * FROM AS_TABLE(AsList(AsStruct(42ul AS id), AsStruct(43ul AS id)));
+$enriched = SELECT id, $lookup(id) AS profile FROM $input;
+SELECT id, profile.name AS name, profile.score AS score FROM $enriched;
+```
+
+`WASM_PROFILE::Profile(id, $options)` can also appear directly in SELECT. Its
+arguments and result fields are defined by `service_methods` in the manifest.
+The lambda receives one row; the compiler batches calls across rows using the
+existing asynchronous transform. Original rows stay on the host and count
+against its byte quota. Duplicate input keys remain separate rows.
+
+IF/CASE calls execute only for selected rows, and branch decisions are retained
+across the asynchronous wait. An unselected call performs no guest invocation,
+network request or auth-ticket acquisition. Connection resolution and ACL checks
+still apply during preparation. Separate calls become separate transforms, each
+with its own compartment and auth cache; independent calls are not promised
+parallel fan-out.
+
+The synchronous UDF ABI and `PROCESS ... USING EXTERNAL FUNCTION` remain available.
+Arbitrary collection lambdas such as ListMap/Fold and service calls under
+Coalesce/IfPresent/And/Or are outside this interface; use IF/CASE for conditional
+calls. The existing checkpoint/recovery model applies, including possible replay
+of external effects after recovery.

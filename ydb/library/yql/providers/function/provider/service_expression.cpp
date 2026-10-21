@@ -22,6 +22,10 @@ namespace NYql::NDqFunction {
                                              const TDqFunctionGatewayFactory& factory, TExprContext& ctx) {
         if (apply->IsCallable("SqlCall") && apply->ChildrenSize() >= 2 && apply->Head().IsAtom() &&
             factory.FindServiceFunction(TString(apply->Head().Content()))) {
+            if (apply->ChildrenSize() != 2) {
+                ctx.AddError(TIssue(ctx.GetPosition(apply->Pos()), "Service calls do not accept UDF type or run configuration"));
+                return {};
+            }
             const auto& tuple = *apply->Child(1);
             if (!tuple.ChildrenSize() || !tuple.Head().IsCallable("PositionalArgs") || tuple.ChildrenSize() > 2 ||
                 (tuple.ChildrenSize() == 2 && (!tuple.Tail().IsCallable("AsStruct") || tuple.Tail().ChildrenSize()))) {

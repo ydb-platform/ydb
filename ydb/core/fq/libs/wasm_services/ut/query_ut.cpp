@@ -201,6 +201,87 @@ Y_UNIT_TEST_SUITE(TFqWasmQueryTest) {
         }
     }
 
+    Y_UNIT_TEST(MaskedRowsPreserveCheckpointAndRecovery200Rows) {
+        THttpMock http;
+        TGrpcMock grpc;
+        TVector<ui64> delivered;
+        TVector<TString> saved;
+        size_t requestIndex = 0;
+        for (ui32 epoch = 0; epoch < 2; ++epoch) {
+            TQueryTransformEnv env(Bindings(http, grpc)[2], 5000, 1, 0, 65536, 0, true, false, false, {}, 8, true, true);
+            if (epoch) {
+                env.Setup.LoadSink({}, NYql::NDq::CreateCheckpoint(1));
+            }
+            TVector<ui64> ids;
+            TVector<TString> payloads;
+            TVector<bool> enabled;
+            for (ui64 i = 1000 + epoch * 100; i < 1100 + epoch * 100; ++i) {
+                ids.push_back(1000 + i % 3);
+                enabled.push_back(i % 100 >= 8 && i % 2 == 0);
+                payloads.push_back(TStringBuilder() << "original-row-" << i);
+            }
+            env.Output->BlockAfterRows = 1;
+            env.Start(ids, false, payloads, enabled);
+            env.Setup.AsyncOutputWrite([](auto&) {
+                return NKikimr::NMiniKQL::TUnboxedValueBatch{};
+            }, NYql::NDq::CreateCheckpoint(epoch + 1));
+            for (size_t offset = 0; offset < ids.size(); offset += 8) {
+                TVector<ui64> batch;
+                for (size_t i = offset; i < std::min(offset + 8, ids.size()); ++i) {
+                    if (enabled[i]) {
+                        batch.push_back(ids[i]);
+                    }
+                }
+                if (!batch.empty()) {
+                    const auto request = http.State->Wait(requestIndex);
+                    NJson::TJsonValue payload;
+                    UNIT_ASSERT(NJson::ReadJsonTree(request->Payload, &payload));
+                    const auto& actual = payload["ids"].GetArraySafe();
+                    UNIT_ASSERT_VALUES_EQUAL(actual.size(), batch.size());
+                    for (size_t i = 0; i < batch.size(); ++i) {
+                        UNIT_ASSERT_VALUES_EQUAL(actual[i].GetUIntegerSafe(), batch[i]);
+                    }
+                    http.State->Reply(requestIndex++, HttpBatchPayload(batch), 200);
+                }
+                if (!offset) {
+                    Eventually([&] {
+                        return env.Output->Blocked.load();
+                    });
+                    {
+                        std::lock_guard lock(env.Output->Mutex);
+                        UNIT_ASSERT_VALUES_EQUAL(env.Output->Events, (TVector<TString>{ TStringBuilder() << "row:" << 0 }));
+                    }
+                    env.Output->BlockAfterRows = 0;
+                    env.Output->Blocked = false;
+                    env.Setup.Execute([](auto& actor) {
+                        actor.DqAsyncOutput->OnOutputConsumerReady();
+                    });
+                }
+            }
+            Eventually([&] {
+                std::lock_guard lock(env.Output->Mutex);
+                return env.Output->Events.size() == 101;
+            });
+            {
+                std::lock_guard lock(env.Output->Mutex);
+                UNIT_ASSERT_VALUES_EQUAL(env.Output->Events.back(), TStringBuilder() << "checkpoint:" << epoch + 1);
+                saved.insert(saved.end(), env.Output->Payloads.begin(), env.Output->Payloads.end());
+                for (const auto& row : env.Output->Rows) {
+                    delivered.push_back(row.Id);
+                }
+            }
+            env.Setup.Execute([&](auto& actor) {
+                actor.DqAsyncOutput->CommitState(NYql::NDq::CreateCheckpoint(epoch + 1));
+            });
+            env.Setup.Terminate();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(delivered.size(), 200);
+        for (size_t i = 0; i < delivered.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(delivered[i], i % 100 >= 8 && i % 2 == 0 ? 1000 + (1000 + i) % 3 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(saved.at(i), TStringBuilder() << "original-row-" << 1000 + i);
+        }
+    }
+
     Y_UNIT_TEST(QueryBatchSizeOverridesDefaultAndByteLimitStillApplies) {
         for (const bool useStore : { false, true }) {
             for (const ui32 requested : { 1, 8, 64 }) {

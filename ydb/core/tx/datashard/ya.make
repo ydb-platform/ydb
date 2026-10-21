@@ -34,6 +34,7 @@ SRCS(
     setup_sys_locks.h
     build_index/table_range_reader.h
     build_index/vector_resolve_actor.h
+    build_index/delta_kmeans.cpp
     build_index/filter_kmeans.cpp
     build_index/fulltext.cpp
     build_index/fulltext_dict.cpp

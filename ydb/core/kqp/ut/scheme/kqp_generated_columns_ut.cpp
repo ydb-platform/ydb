@@ -4151,7 +4151,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
                 g Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) STORED,
                 PRIMARY KEY (k)
             ) WITH (STORE = COLUMN);
-        )", "Generated columns are not supported in column tables");
+        )", "STORED generated column 'g' is not supported for column tables");
     }
 
     Y_UNIT_TEST(StoredTypesPgDecimalStringUtf8) {

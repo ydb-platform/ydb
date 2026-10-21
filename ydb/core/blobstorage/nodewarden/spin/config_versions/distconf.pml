@@ -18,6 +18,9 @@
 #ifndef SCENARIO
 #define SCENARIO 1
 #endif
+#ifndef VARIANT
+#define VARIANT 0
+#endif
 #ifndef CHECK_SAFETY
 #define CHECK_SAFETY 1
 #endif
@@ -48,8 +51,10 @@
 #ifndef REQUIRE_NONZERO_RECOVERY_BASE
 #define REQUIRE_NONZERO_RECOVERY_BASE 1
 #endif
+#if (SCENARIO == 37 && VARIANT > 2) || (SCENARIO == 40 && VARIANT > 5)
+#error Unknown VARIANT
+#endif
 #define LEGACY_CASE (SCENARIO >= 30 && SCENARIO <= 36)
-#define PAYLOAD_CASE ((SCENARIO >= 37 && SCENARIO <= 39) || SCENARIO == 46 || SCENARIO == 47 || SCENARIO == 49)
 #define N 3
 #define Q 2
 #define A 0
@@ -74,12 +79,6 @@
 
 byte generation[VALUES];
 byte previous[VALUES];
-byte origin[VALUES];
-#if PAYLOAD_CASE
-bool payload[VALUES];
-bool acknowledged_payload;
-byte acknowledged_generation;
-#endif
 byte disk_c[N];
 byte disk_p[N];
 byte memory_c[N];
@@ -158,6 +157,11 @@ byte violation;
 byte max_bad;
 byte observer_node;
 byte observer_copies;
+byte history_generation;
+byte history_cursor;
+byte history_steps;
+byte history_value;
+bool history_proved;
 bool suffix;
 bool done;
 byte recovered;
@@ -225,6 +229,37 @@ inline require(condition, code) {
     fi
 }
 
+inline history_extends(value, ancestor) {
+    history_cursor = value; history_steps = 0;
+    do
+    :: (history_cursor != ancestor && history_cursor != NONE && history_steps < VALUES
+        && GEN(previous[history_cursor]) < GEN(history_cursor)) ->
+        history_cursor = previous[history_cursor]; history_steps++
+    :: else -> break
+    od;
+    history_proved = history_cursor == ancestor;
+    history_cursor = NONE; history_steps = 0
+}
+
+inline observe_choice_history(value) {
+    history_generation = 1;
+    do
+    :: history_generation <= MAX_GEN ->
+        if
+        :: ok_value[history_generation] != NONE && history_generation < GEN(value) ->
+            history_extends(value, ok_value[history_generation]);
+            if
+            :: !history_proved -> violation = 10; assert(history_proved)
+            :: else -> skip
+            fi
+        :: else -> skip
+        fi;
+        history_generation++
+    :: else -> break
+    od;
+    history_generation = 0; history_proved = false
+}
+
 inline check_budget() {
     count = 0; j = 0;
     do
@@ -239,17 +274,23 @@ inline check_budget() {
 
 inline observe_committed_quorum(value) {
     if
-    :: value != NONE && origin[value] == last_admin ->
-        observer_copies = 0; observer_node = 0;
-        do
-        :: observer_node < N ->
-            if :: disk_c[observer_node] == value -> observer_copies++ :: else -> skip fi;
-            observer_node++
-        :: else -> break
-        od;
-        if :: observer_copies >= Q -> expected = value :: else -> skip fi
+    :: value != NONE && last_admin != NONE ->
+        history_extends(value, last_admin);
+        if
+        :: history_proved ->
+            observer_copies = 0; observer_node = 0;
+            do
+            :: observer_node < N ->
+                if :: disk_c[observer_node] == value -> observer_copies++ :: else -> skip fi;
+                observer_node++
+            :: else -> break
+            od;
+            if :: observer_copies >= Q -> expected = value :: else -> skip fi
+        :: else -> skip
+        fi
     :: else -> skip
-    fi
+    fi;
+    history_proved = false
 }
 
 inline observe_committed_fork() {
@@ -384,14 +425,8 @@ inline install(node, value) {
     if
     :: GEN(value) > GEN(applied[node]) ->
         require(chosen_once[value], 14);
+        observe_choice_history(value);
         applied[node] = value; memory_c[node] = value;
-#if PAYLOAD_CASE
-        if
-        :: acknowledged_generation != 0 && GEN(value) > acknowledged_generation ->
-            require(payload[value] == acknowledged_payload, 10)
-        :: else -> skip
-        fi;
-#endif
         assert(len(writes[node]) < 3);
         writes[node]!memory_c[node],memory_p[node],NONE,0;
         feedback[node] = true
@@ -513,7 +548,7 @@ inline complete_vote(node) {
 }
 
 inline prepare_proposal(value) {
-    assert(value > BASE);
+    assert(value > BASE && GEN(value) == 0);
     previous[value] = memory_c[root];
     operation = value; op_cookie++; votes = 0; learned = false; replied = false;
     i = 0;
@@ -534,7 +569,7 @@ inline prepare_proposal(value) {
 
 inline start_write(value) {
     assert(!recovery_pending);
-    last_admin = value; expected = NONE; origin[value] = value;
+    last_admin = value; expected = NONE;
     prepare_proposal(value)
 }
 
@@ -548,10 +583,6 @@ inline start_recovery_proposal(candidate) {
     fi;
     prepare_proposal(recovery_operation);
     previous[recovery_operation] = candidate;
-    origin[recovery_operation] = origin[candidate];
-#if PAYLOAD_CASE
-    payload[recovery_operation] = payload[candidate];
-#endif
 #else
     recovery_operation = candidate; operation = candidate;
     op_cookie++; votes = 0; learned = false; replied = false;
@@ -571,7 +602,7 @@ inline learn() {
     legacy_granted = false;
     recovery_needed = false; applied_conflict = false; applied_floor = operation;
 #endif
-    assert(votes >= Q); chosen_once[operation] = true;
+    assert(votes >= Q); observe_choice_history(operation); chosen_once[operation] = true;
     learned = true; apply_publication(operation)
 }
 
@@ -591,15 +622,20 @@ inline reply_ok() {
     :: root_new && replace_request -> count_reads(); assert(committed_copies[operation] >= Q)
     :: else -> assert(votes >= Q)
     fi;
-#if PAYLOAD_CASE
-    if
-    :: acknowledged_generation == 0 ->
-        acknowledged_generation = GEN(operation); acknowledged_payload = payload[operation]
-    :: else -> skip
-    fi;
-#endif
     require(ok_value[GEN(operation)] == NONE || ok_value[GEN(operation)] == operation, 1);
     ok_value[GEN(operation)] = operation; ok_count++;
+    history_value = BASE;
+    do
+    :: history_value < VALUES ->
+        if
+        :: chosen_once[history_value] && GEN(history_value) > GEN(operation) ->
+            observe_choice_history(history_value)
+        :: else -> skip
+        fi;
+        history_value++
+    :: else -> break
+    od;
+    history_value = NONE;
     if :: last_admin == operation -> expected = operation :: else -> skip fi;
     replied = true
 }
@@ -868,7 +904,7 @@ inline select_recovery() {
     :: !blocked ->
         if
         :: committed_copies[chosen] != 0 || copies[chosen] >= Q || chosen == applied_floor ->
-            chosen_once[chosen] = true;
+            observe_choice_history(chosen); chosen_once[chosen] = true;
             recovered = chosen; recovery_needed = false; repair_pending = false;
             apply_publication(chosen); answer_refill_queries(chosen)
         :: else ->
@@ -918,12 +954,6 @@ inline check_done() {
     :: else -> break
     od;
     if :: expected != NONE && common != expected -> agreement = false :: else -> skip fi;
-#if PAYLOAD_CASE
-    if
-    :: acknowledged_generation != 0 && payload[common] != acknowledged_payload -> agreement = false
-    :: else -> skip
-    fi;
-#endif
 #if LEGACY_CASE
     done = suffix && agreement && legacy_request_done;
 #if LEGACY_CLOSURE
@@ -1260,10 +1290,22 @@ inline complete_refill(node) {
 #endif
 }
 
+inline acknowledge_on_AB() {
+    replace_request = false;
+    stop_node(C); start_write(X);
+    complete_vote(A); complete_vote(B); learn(); reply_ok()
+}
+
+inline advance_on_BC(value) {
+    complete_commit(B); complete_commit(C); start_write(value);
+    if :: GEN(value) <= GEN(X) -> violation = 12 :: else -> skip fi;
+    assert(GEN(value) > GEN(X));
+    complete_vote(B); complete_vote(C); learn(); reply_ok();
+    complete_commit(B); complete_commit(C)
+}
+
 init {
     atomic {
-        i = 0;
-        do :: i < VALUES -> origin[i] = i; i++ :: else -> break od;
         chosen_once[BASE] = true;
         generation[BASE] = 1; i = 0;
         do
@@ -1512,14 +1554,14 @@ init {
         :: collecting -> collect_mask(6); select_recovery(); complete_recovery_proposal()
         :: else -> skip
         fi;
-        assert(!blocked && origin[memory_c[root]] == X);
+        assert(!blocked && memory_c[root] == X);
         drain_disk(B); assert(expected == X && ok_count == 0);
         restart_node(A); defer_feedback[A] = true;
         format_node(B); defer_feedback[B] = false;
         coordinator_turn();
         assert(repair_pending && collecting && len(commits[B]) == 0);
         collect_mask(5); select_recovery(); complete_recovery_proposal();
-        assert(!blocked && origin[recovered] == X && origin[memory_c[root]] == X);
+        assert(!blocked && recovered == X && memory_c[root] == X);
         complete_commit(B); complete_refill(B); assert(disk_c[B] != NONE);
         format_node(A); defer_feedback[A] = false;
         assert(max_bad == 1);
@@ -1612,35 +1654,23 @@ init {
         assert(disk_c[A] == BASE && disk_c[B] == BASE && applied[C] == X);
         do :: len(writes[C]) != 0 -> writes[C]?scratch_c,scratch_p,scratch_v,scratch_cookie :: else -> break od;
         lose_commits(A); lose_commits(B);
-        start_write(Y); payload[Y] = true;
+        start_write(Y);
         complete_vote(A); complete_vote(B); learn(); reply_ok();
         do :: len(writes[C]) != 0 -> writes[C]?scratch_c,scratch_p,scratch_v,scratch_cookie :: else -> break od;
         lose_commits(A); lose_commits(B);
-        start_write(Z); payload[Z] = payload[memory_c[root]]; complete_vote(B);
+        start_write(Z); complete_vote(B);
         assert(votes == 1 && disk_p[A] == Y && disk_p[B] == Z);
         stop_node(A); restart_node(A);
         stop_node(B); restart_node(B);
         stop_node(C); restart_node(C);
         change_root(C, true); collect_mask(7); select_recovery();
         require(blocked && recovered == NONE, 16);
-#elif SCENARIO == 48
-        generation[X] = 2; generation[Y] = 3;
-        previous[X] = BASE; previous[Y] = X; disk_p[B] = Y;
-        i = 0;
-        do
-        :: i < N -> memory_c[i] = disk_c[i]; memory_p[i] = disk_p[i]; applied[i] = disk_c[i]; i++
-        :: else -> break
-        od;
-        change_root(C, true); collect_mask(7); select_recovery();
-        require(blocked && recovered == NONE && memory_c[root] == BASE, 13);
 #elif SCENARIO == 47
-        replace_request = false;
-        stop_node(C); start_write(X); payload[X] = true;
-        complete_vote(A); complete_vote(B); learn(); reply_ok();
+        acknowledge_on_AB();
         lose_commits(B);
         collect_mask(3); select_recovery(); complete_recovery_proposal();
         assert(!blocked && memory_c[root] == X && previous[X] == BASE);
-        start_write(Y); payload[Y] = payload[memory_c[root]];
+        start_write(Y);
         assert(previous[Y] == X && GEN(Y) > GEN(X));
         complete_vote(B);
         assert(votes == 1 && disk_c[A] == BASE && disk_p[A] == X && disk_c[B] == BASE && disk_p[B] == Y);
@@ -1649,15 +1679,9 @@ init {
         stop_node(C); restart_node(C);
         change_root(C, true); collect_mask(7); select_recovery(); complete_recovery_proposal();
         assert(!blocked && !recovery_pending);
-        complete_commit(B); complete_commit(C);
-        start_write(Z); payload[Z] = payload[memory_c[root]];
-        assert(GEN(Z) > acknowledged_generation);
-        complete_vote(B); complete_vote(C); learn(); reply_ok();
-        complete_commit(B); complete_commit(C); abandon_request();
+        advance_on_BC(Z); abandon_request();
 #elif SCENARIO == 46
-        replace_request = false;
-        stop_node(C); start_write(X); payload[X] = true;
-        complete_vote(A); complete_vote(B); learn(); reply_ok();
+        acknowledge_on_AB();
         lose_commits(B); restart_node(C); stop_node(A);
         change_root(C, true); collect_mask(6); select_recovery();
         require(recovery_pending && applied[B] == BASE && applied[C] == BASE, 14);
@@ -1670,11 +1694,7 @@ init {
         stop_node(A); restart_node(A);
         change_root(C, true); collect_mask(7); select_recovery();
         require(!blocked && !recovery_pending, 11);
-        complete_commit(B); complete_commit(C);
-        start_write(Y); payload[Y] = payload[memory_c[root]];
-        require(GEN(Y) > acknowledged_generation, 12);
-        complete_vote(B); complete_vote(C); learn(); reply_ok();
-        complete_commit(B); complete_commit(C); abandon_request();
+        advance_on_BC(Y); abandon_request();
 #elif SCENARIO == 44
         replace_request = false;
         start_write(X); complete_vote(B); stop_node(A); change_root(C, true);
@@ -1689,57 +1709,59 @@ init {
         collect_mask(5); select_recovery();
         require(applied[A] == BASE && applied[C] == BASE, 14);
         restart_node(B);
-#elif (SCENARIO >= 40 && SCENARIO <= 43) || SCENARIO == 45
+#elif SCENARIO == 40
         generation[X] = 2; generation[Y] = 3;
         previous[X] = BASE; previous[Y] = X;
-#if SCENARIO == 40
+#if VARIANT == 0
         previous[Y] = BASE; disk_c[B] = X; disk_c[C] = X; disk_p[B] = Y;
-#elif SCENARIO == 41
+#elif VARIANT == 1 || VARIANT == 5
         disk_p[B] = Y;
-#elif SCENARIO == 42
+#elif VARIANT == 2
         disk_p[B] = Y; disk_p[C] = X;
-#elif SCENARIO == 43
+#elif VARIANT == 3
         generation[Y] = 2; previous[Y] = BASE; disk_p[B] = X; disk_p[C] = Y;
-#else
+#elif VARIANT == 4
         previous[Y] = BASE; disk_p[B] = X; disk_p[C] = Y;
+#else
+#error Unknown VARIANT
 #endif
         i = 0;
         do
         :: i < N -> memory_c[i] = disk_c[i]; memory_p[i] = disk_p[i]; applied[i] = disk_c[i]; i++
         :: else -> break
         od;
-        change_root(C, true); collect_mask(6); select_recovery(); complete_recovery_proposal();
-#if SCENARIO == 42
+        change_root(C, true);
+#if VARIANT == 5
+        collect_mask(7); select_recovery();
+        require(blocked && recovered == NONE && memory_c[root] == BASE, 13);
+#else
+        collect_mask(6); select_recovery(); complete_recovery_proposal();
+#if VARIANT == 2
         require(!blocked && recovered == Y, 13);
 #else
         require(blocked && recovered == NONE, 13);
 #endif
-#elif PAYLOAD_CASE
-        assert(!ALL_OLD && root_new); replace_request = false;
-        stop_node(C); start_write(X); payload[X] = true;
-        complete_vote(A); complete_vote(B); learn(); reply_ok();
+#endif
+#elif SCENARIO == 37
+        assert(!ALL_OLD && root_new); acknowledge_on_AB();
         if :: drain_disk(A) :: skip fi;
         lose_commits(B); restart_node(C); stop_node(A);
-#if SCENARIO == 38
+#if VARIANT == 1
         restart_node(A);
-#elif SCENARIO == 39
+#elif VARIANT == 2
         format_node(A);
 #endif
         change_root(C, true);
-#if SCENARIO == 38
+#if VARIANT == 1
         if :: collect_mask(3) :: collect_mask(5) :: collect_mask(6) :: collect_mask(7) fi;
-#elif SCENARIO == 39
+#elif VARIANT == 2
         collect_mask(7);
 #else
         collect_mask(6);
 #endif
         select_recovery(); complete_recovery_proposal(); require(!blocked, 11);
-        complete_commit(B); complete_commit(C);
-        start_write(Y); payload[Y] = payload[memory_c[root]];
-        require(GEN(Y) > acknowledged_generation, 12);
-        complete_vote(B); complete_vote(C); learn(); reply_ok();
-        complete_commit(B); complete_commit(C);
-#if SCENARIO == 37
+        advance_on_BC(Y);
+#if VARIANT == 0
         restart_node(A);
 #endif
         abandon_request();

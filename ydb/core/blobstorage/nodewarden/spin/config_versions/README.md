@@ -21,8 +21,8 @@ expansion. Only explicitly declared counterexamples are accepted. Timeout,
 resource exhaustion, incomplete search or a missing witness never count as PASS.
 Runners print the directory containing model snapshots, commands and traces.
 
-The recovery suite checks that acknowledged changes survive quorum turnover and
-that recovery obtains a durable quorum before publishing a possibly chosen proposal.
+Every newly chosen configuration must extend earlier acknowledged configurations.
+Recovery variants cover quorum turnover and interrupted persistence.
 
 The primary model is nonbridge: `N=3/Q=2`, one disk per node, fixed membership,
 bounded fault prefixes and a stable suffix under weak process fairness. It checks

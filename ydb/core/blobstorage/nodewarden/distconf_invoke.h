@@ -31,6 +31,7 @@ namespace NKikimr::NStorage {
         bool EnablingDistconf = false;
         bool Detached = false;
         bool AdvancesConflictingGeneration = false;
+        bool RecoveryProposition = false;
 
     public: // Error handling
         struct TExError : yexception {
@@ -197,6 +198,7 @@ namespace NKikimr::NStorage {
         void AdvanceGeneration();
         void QueryConfig(const TQuery::TQueryConfig& request);
         void CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback, bool allowConflictingGenerationAdvance = false);
+        void StartRecoveryProposition(TProcessCollectConfigsResult& result);
         void CollectBridgeConfig(const NKikimrBlobStorage::TStorageConfig& config, std::function<void()> callback);
         void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev = true,
             const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr, bool fromBootstrap = false);

@@ -3,7 +3,6 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/grpc_services/rpc_common/rpc_common.h>
-#include <ydb/core/base/auth.h>
 #include <ydb/core/base/bridge.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/driver_lib/run/grpc_servers_manager.h>
@@ -16,11 +15,18 @@ using TEvGetClusterStateRequest =
 using TEvUpdateClusterStateRequest =
     TGrpcRequestOperationCall<Ydb::Bridge::UpdateClusterStateRequest,
         Ydb::Bridge::UpdateClusterStateResponse>;
+using TEvConvertToBridgeRequest =
+    TGrpcRequestOperationCall<Ydb::Bridge::ConvertToBridgeRequest,
+        Ydb::Bridge::ConvertToBridgeResponse>;
 
 using namespace NActors;
 using namespace Ydb;
 
 namespace {
+    // cluster got converted into bridged one while this node was running without BridgeConfig
+    const TString NoBridgeConfigError = "Bridge cluster state is available, but this node runs without BridgeConfig;"
+        " send the request to another node or restart this one with BridgeConfig";
+
     Ydb::Bridge::PileState::State GetPublicState(const NKikimrBridge::TClusterState& from, TBridgePileId pileId) {
         if (pileId == TBridgePileId::FromProto(&from, &NKikimrBridge::TClusterState::GetPrimaryPile)) {
             return Ydb::Bridge::PileState::PRIMARY;
@@ -37,6 +43,8 @@ namespace {
                     return Ydb::Bridge::PileState::NOT_SYNCHRONIZED;
                 case NKikimrBridge::TClusterState::SYNCHRONIZED:
                     return Ydb::Bridge::PileState::SYNCHRONIZED;
+                case NKikimrBridge::TClusterState::INACTIVE:
+                    return Ydb::Bridge::PileState::INACTIVE;
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
                     Y_ABORT();
@@ -47,12 +55,19 @@ namespace {
 
 void CopyFromInternalClusterState(const NKikimrBridge::TClusterState& from, const TBridgeInfo& bridgeInfo, Ydb::Bridge::GetClusterStateResult& to) {
     for (ui32 i = 0; i < from.PerPileStateSize(); ++i) {
+        const auto* pile = bridgeInfo.FindPile(TBridgePileId::FromPileIndex(i));
+        if (!pile || pile->IsFreeSlot) {
+            continue;
+        }
         auto* state = to.add_pile_states();
-        const auto* pile = bridgeInfo.GetPile(TBridgePileId::FromPileIndex(i));
         state->set_pile_name(pile->Name);
         state->set_state(GetPublicState(from, TBridgePileId::FromPileIndex(i)));
     }
     to.set_generation(from.GetGeneration());
+}
+
+void CopyFromInternalClusterStateDetails(const NKikimrBridge::TClusterStateDetails& from, Ydb::Bridge::GetClusterStateResult& to) {
+    to.set_conversion_in_progress(from.GetBscConversionPending());
 }
 
 class TUpdateClusterStateRequest : public TBridgeRequestGrpc<TUpdateClusterStateRequest, TEvUpdateClusterStateRequest,
@@ -84,9 +99,7 @@ public:
     }
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
-        if (!IsAdministrator(AppData(), Request_->GetSerializedToken())) {
-            status = Ydb::StatusIds::UNAUTHORIZED;
-            issues.AddIssue("Bridge operations require administrator privileges");
+        if (!CheckAdministrator(status, issues)) {
             return false;
         }
 
@@ -147,10 +160,18 @@ private:
             return;
         }
 
-        THashMap<TString, TBridgePileId> nameToId;
         const auto& bridgeInfo = ev->Get()->BridgeInfo;
+        if (!bridgeInfo) {
+            self->Reply(Ydb::StatusIds::UNAVAILABLE, NoBridgeConfigError, NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                self->ActorContext());
+            return;
+        }
+
+        THashMap<TString, TBridgePileId> nameToId;
         for (const auto& pile : bridgeInfo->Piles) {
-            nameToId.emplace(pile.Name, pile.BridgePileId);
+            if (!pile.IsFreeSlot) {
+                nameToId.emplace(pile.Name, pile.BridgePileId);
+            }
         }
 
         const auto& currentClusterState = config->GetClusterState();
@@ -170,11 +191,15 @@ private:
             updates[pileId] = update.state();
         }
 
-        // prohibit updates to suspended piles
+        // prohibit updates to suspended piles and to the ones not added to the cluster
         for (const auto& [pileId, state] : updates) {
             if (currentClusterState.GetPerPileState(pileId.GetPileIndex()) == NKikimrBridge::TClusterState::SUSPENDED) {
                 self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "cannot update suspended pile: " << pileId,
                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                return;
+            } else if (currentClusterState.GetPerPileState(pileId.GetPileIndex()) == NKikimrBridge::TClusterState::INACTIVE) {
+                self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "pile is not added to the cluster: "
+                    << bridgeInfo->GetPile(pileId)->Name, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
                 return;
             }
         }
@@ -185,7 +210,8 @@ private:
         for (ui32 i = 0; i < currentClusterState.PerPileStateSize(); ++i) {
             const TBridgePileId pileId = TBridgePileId::FromPileIndex(i);
             Ydb::Bridge::PileState::State publicState;
-            if (auto it = updates.find(pileId); it != updates.end()) {
+            const auto it = updates.find(pileId);
+            if (it != updates.end()) {
                 publicState = it->second;
             } else {
                 publicState = GetPublicState(currentClusterState, pileId);
@@ -205,6 +231,10 @@ private:
                 finalPromoted = pileId;
             }
 
+            if (it == updates.end()) {
+                continue; // piles not mentioned in the request keep their exact internal state
+            }
+
             NKikimrBridge::TClusterState::EPileState internalState;
             switch (publicState) {
                 case Ydb::Bridge::PileState::PRIMARY:
@@ -221,6 +251,10 @@ private:
                 case Ydb::Bridge::PileState::SUSPENDED:
                     internalState = NKikimrBridge::TClusterState::SUSPENDED;
                     break;
+                case Ydb::Bridge::PileState::INACTIVE:
+                    self->Reply(Ydb::StatusIds::BAD_REQUEST, "Pile can't be switched to INACTIVE state, it has to be"
+                        " removed from the cluster instead", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                    return;
                 default:
                     self->Reply(Ydb::StatusIds::INTERNAL_ERROR, "Unsupported pile state", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
                     return;
@@ -351,13 +385,70 @@ private:
             return;
         }
 
-        if (config->HasClusterState()) {
+        if (config->HasClusterState() && !bridgeInfo) {
+            self->Reply(Ydb::StatusIds::UNAVAILABLE, NoBridgeConfigError, NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                self->ActorContext());
+        } else if (config->HasClusterState()) {
             Ydb::Bridge::GetClusterStateResult result;
             CopyFromInternalClusterState(config->GetClusterState(), *bridgeInfo, result);
+            CopyFromInternalClusterStateDetails(config->GetClusterStateDetails(), result);
             self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
         } else {
             self->Reply(Ydb::StatusIds::NOT_FOUND, "Bridge cluster state is not configured",
                 NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+        }
+    }
+};
+
+class TConvertToBridgeRequest : public TBridgeRequestGrpc<TConvertToBridgeRequest, TEvConvertToBridgeRequest,
+    Ydb::Bridge::ConvertToBridgeResult> {
+    using TBase = TBridgeRequestGrpc<TConvertToBridgeRequest, TEvConvertToBridgeRequest, Ydb::Bridge::ConvertToBridgeResult>;
+
+public:
+    using TBase::TBase;
+
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
+        return CheckAdministrator(status, issues);
+    }
+
+    void SendRequest(const TActorContext& ctx) {
+        // all the preconditions are checked by distconf on the root node
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableConvertToBridge();
+        ctx.Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+    }
+
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
+        }
+    }
+
+private:
+    void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+
+        const auto& record = ev->Get()->Record;
+        auto* self = Self();
+        switch (record.GetStatus()) {
+            case TResult::OK:
+                self->ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::Bridge::ConvertToBridgeResult(), self->ActorContext());
+                break;
+
+            case TResult::NO_QUORUM:
+                self->Reply(Ydb::StatusIds::UNAVAILABLE, record.GetErrorReason(),
+                    NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, self->ActorContext());
+                break;
+
+            case TResult::RACE:
+                self->Reply(Ydb::StatusIds::ABORTED, record.GetErrorReason(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                    self->ActorContext());
+                break;
+
+            default:
+                self->Reply(Ydb::StatusIds::GENERIC_ERROR, record.GetErrorReason(),
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                break;
         }
     }
 };
@@ -368,6 +459,10 @@ void DoUpdateClusterState(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvi
 
 void DoGetClusterState(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TGetClusterStateRequest(p.release()));
+}
+
+void DoConvertToBridge(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TConvertToBridgeRequest(p.release()));
 }
 
 } // namespace NKikimr::NGRpcService

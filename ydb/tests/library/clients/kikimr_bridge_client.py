@@ -122,6 +122,10 @@ class BridgeClient(object):
         response.operation.result.Unpack(result)
         return result
 
+    def convert_to_bridge(self):
+        request = bridge_api.ConvertToBridgeRequest()
+        return self.invoke(request, 'ConvertToBridge')
+
     @property
     def per_pile_state(self):
         """

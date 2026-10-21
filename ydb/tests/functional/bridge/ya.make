@@ -3,6 +3,7 @@ PY3TEST()
 TEST_SRCS(
     common.py
     test_bridge.py
+    test_conversion.py
     test_discovery.py
     test_three_piles.py
     test_sdk_cleanup.py

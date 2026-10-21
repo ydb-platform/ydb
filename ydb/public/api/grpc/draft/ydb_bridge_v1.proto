@@ -19,4 +19,7 @@ service BridgeService {
     // This is the main operation for failover and promotion scenarios
     rpc UpdateClusterState(Ydb.Bridge.UpdateClusterStateRequest) returns (Ydb.Bridge.UpdateClusterStateResponse);
 
+    // Convert a running non-bridged cluster into a bridged one with a single pile
+    rpc ConvertToBridge(Ydb.Bridge.ConvertToBridgeRequest) returns (Ydb.Bridge.ConvertToBridgeResponse);
+
 }

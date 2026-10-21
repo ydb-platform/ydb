@@ -35,6 +35,7 @@ void TBridgeGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     SETUP_BRIDGE_METHOD(GetClusterState, DoGetClusterState, RLMODE(Rps), BRIDGE_GETCLUSTERSTATE, TAuditMode::NonModifying());
     SETUP_BRIDGE_METHOD(UpdateClusterState, DoUpdateClusterState, RLMODE(Rps), BRIDGE_UPDATECLUSTERSTATE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_BRIDGE_METHOD(ConvertToBridge, DoConvertToBridge, RLMODE(Rps), BRIDGE_CONVERTTOBRIDGE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
 #undef SETUP_BRIDGE_METHOD
 }

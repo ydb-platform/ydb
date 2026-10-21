@@ -216,6 +216,12 @@ namespace NKikimr::NStorage {
                     case TQuery::kDemandRetroTrace:
                         return DemandRetroTrace(op.Command.GetDemandRetroTrace());
 
+                    case TQuery::kConvertToBridge:
+                        return ConvertToBridge(op.Command.GetConvertToBridge());
+
+                    case TQuery::kNotifyBscConversionFinished:
+                        return NotifyBscConversionFinished(op.Command.GetNotifyBscConversionFinished());
+
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
 
@@ -445,7 +451,7 @@ namespace NKikimr::NStorage {
                 }
             }
             TStringStream err;
-            if (!HasConfigQuorum(quorumConfig, successfulDisks, Self->BridgePileNameMap, TBridgePileId(), *Self->Cfg, false, &err)) {
+            if (!HasConfigQuorum(quorumConfig, successfulDisks, TBridgePileId(), *Self->Cfg, false, &err)) {
                 throw TExNoQuorum() << "No quorum for bridge configuration collection:" << err.Str();
             }
             auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true, false,

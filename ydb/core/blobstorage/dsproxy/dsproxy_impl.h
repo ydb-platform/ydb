@@ -447,9 +447,20 @@ public:
         }
     }
 
+    template<typename TPtr>
+    void HandleWork(TPtr& ev) {
+        if (InlinePileBridgeProxyId && !ev->Get()->ForceGroupGeneration) {
+            // this request was sent to the group's service id before the bridge proxy was put in front of us; route it
+            // through the bridge proxy now
+            TActivationContext::Send(ev->Forward(InlinePileBridgeProxyId));
+            return;
+        }
+        HandleNormal(ev);
+    }
+
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HANDLE_EVENTS(HandleNormal);
+            HANDLE_EVENTS(HandleWork);
             default: return StateCommon(ev);
         }
     }
@@ -462,6 +473,7 @@ public:
     }
 
     TActorId BridgeProxyId;
+    TActorId InlinePileBridgeProxyId; // bridge proxy in front of us when we serve the inline pile of the group
 
     STFUNC(StateForward) {
         switch (ev->GetTypeRewrite()) {

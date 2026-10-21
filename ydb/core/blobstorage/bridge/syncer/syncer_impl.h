@@ -72,6 +72,7 @@ namespace NKikimr::NBridge {
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
+        void Handle(TEvents::TEvUndelivered::TPtr ev);
         TQueryPayload OnQueryFinished(ui64 cookie, bool success);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

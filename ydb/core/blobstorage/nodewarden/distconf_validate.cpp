@@ -281,17 +281,26 @@ namespace NKikimr::NStorage {
             } else if (!group.HasGroupGeneration()) {
                 return "GroupGeneration field missing";
             } else if (group.HasBridgeGroupState()) {
-                // TODO(alexvru): validate number of piles and so on
-                for (const auto& pile : group.GetBridgeGroupState().GetPile()) {
+                // the set of piles is validated against cluster state, see below
+                const char *error = nullptr;
+                NBridge::FindGroupPile(group.GetBridgeGroupState(), [&](TBridgePileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
                     const auto refGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                     if (const auto it = groupMap.find(refGroupId); it == groupMap.end()) {
-                        return "missing referenced group";
+                        error = "missing referenced group";
                     } else if (it->second->GetGroupGeneration() != pile.GetGroupGeneration()) {
-                        return "incorrect referenced group generation";
+                        error = "incorrect referenced group generation";
                     }
+                    return error != nullptr;
+                });
+                if (error) {
+                    return error;
                 }
-                continue;
-            } else if (!group.HasErasureSpecies()) {
+                if (!group.HasBridgeProxyGroupId() || group.GetBridgeProxyGroupId() != group.GetGroupID()) {
+                    continue; // bridge proxy group has no VDisks of its own; inline pile has them and is validated below
+                }
+            }
+            if (!group.HasErasureSpecies()) {
                 return "ErasureSpecies field missing";
             }
 
@@ -401,6 +410,44 @@ namespace NKikimr::NStorage {
             if (auto error = ValidateConfig(config.GetBlobStorageConfig(), nodeIds)) {
                 return error;
             }
+        }
+
+        if (const auto& details = config.GetClusterStateDetails(); details.HasPileRegistry()) {
+            if (!config.HasClusterState()) {
+                return "PileRegistry is set for not bridged cluster";
+            } else if (auto error = NBridge::ValidatePileRegistry(details.GetPileRegistry(), config.GetClusterState())) {
+                return *error;
+            }
+        }
+
+        if (config.HasClusterState()) {
+            // bridged static group has its part in every pile, except for INACTIVE ones
+            const auto& clusterState = config.GetClusterState();
+            for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+                if (!group.HasBridgeGroupState()) {
+                    continue;
+                }
+                const auto& state = group.GetBridgeGroupState();
+                if (clusterState.PerPileStateSize() < state.PileSize()) {
+                    return TStringBuilder() << "bridged static group has more piles than ClusterState GroupId# "
+                        << group.GetGroupID();
+                }
+                for (size_t i = 0; i < clusterState.PerPileStateSize(); ++i) {
+                    const bool inactive = clusterState.GetPerPileState(i) == NKikimrBridge::TClusterState::INACTIVE;
+                    if (inactive != !NBridge::GetGroupPile(state, TBridgePileId::FromPileIndex(i))) {
+                        return TStringBuilder() << "bridged static group " << (inactive ? "has" : "lacks")
+                            << " its part in pile in state "
+                            << NKikimrBridge::TClusterState::EPileState_Name(clusterState.GetPerPileState(i))
+                            << " GroupId# " << group.GetGroupID() << " PileIndex# " << i;
+                    }
+                }
+            }
+        }
+
+        if (config.GetClusterStateDetails().GetBscConversionPending() &&
+                config.GetClusterState().PerPileStateSize() != 1) {
+            // piles can't be added until BSC converts its groups into bridged ones
+            return "BscConversionPending is set while ClusterState doesn't contain exactly one pile";
         }
 
         return {};

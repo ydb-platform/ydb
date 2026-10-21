@@ -25,6 +25,9 @@ message GetClusterStateResult {
     repeated PileState pile_states = 1;
     // Generation of the cluster state
     uint64 generation = 2;
+    // Set after the cluster has been converted from a non-bridged one, until all its storage groups are converted
+    // too; no piles can be added to the cluster meanwhile
+    bool conversion_in_progress = 3;
 }
 
 message UpdateClusterStateRequest {
@@ -42,6 +45,20 @@ message UpdateClusterStateResponse {
 }
 
 message UpdateClusterStateResult {
+}
+
+// Convert a running non-bridged cluster into a bridged one with a single pile. All nodes of the cluster must already
+// run with a single-pile bridge config. Storage groups are converted in the background after the call succeeds; see
+// GetClusterStateResult.conversion_in_progress.
+message ConvertToBridgeRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message ConvertToBridgeResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ConvertToBridgeResult {
 }
 
 message BridgeHistoryEvent {

@@ -426,7 +426,8 @@ namespace NKikimr::NStorage {
             }
 
             auto* ssConfig = (config.*configMutableFunc)();
-            if (newSSConfig.RingGroupsSize() == 1) {
+            if (newSSConfig.RingGroupsSize() == 1 && !config.HasClusterState()) {
+                // single ring group is stored in legacy form for compatibility, but bridged config requires RingGroups
                 ssConfig->MutableRing()->CopyFrom(newSSConfig.GetRingGroups(0));
                 ssConfig->ClearRingGroups();
             } else {

@@ -1,23 +1,10 @@
+#include "bridge_common.h"
+
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
-namespace {
+using NBridgeTest::GetBridgedLocation;
 
-    TNodeLocation GetLocation(ui32 nodeId) {
-        NActorsInterconnect::TNodeLocation location;
-        if (1 <= nodeId && nodeId <= 8) {
-            location.SetBridgePileName("pile_1");
-        } else if (9 <= nodeId && nodeId <= 16) {
-            location.SetBridgePileName("pile_2");
-        } else if (17 <= nodeId && nodeId <= 24) {
-            location.SetBridgePileName("pile_3");
-        } else {
-            Y_ABORT();
-        }
-        location.SetDataCenter("my_dc");
-        location.SetRack(TStringBuilder() << "rack_" << nodeId);
-        location.SetUnit(TStringBuilder() << "unit_" << nodeId);
-        return TNodeLocation(location);
-    }
+namespace {
 
     template<typename T>
     T *FillInGroupGeneration(T *ev) {
@@ -33,7 +20,7 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
         TEnvironmentSetup env{{
             .NodeCount = 8 * 3,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetLocation,
+            .LocationGenerator = GetBridgedLocation,
             .SelfManagementConfig = true,
             .NumPiles = 3,
             .AutomaticBootstrap = true,
@@ -116,7 +103,7 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
         TEnvironmentSetup env{{
             .NodeCount = 8 * 3,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetLocation,
+            .LocationGenerator = GetBridgedLocation,
             .SelfManagementConfig = true,
             .NumPiles = 3,
             .AutomaticBootstrap = true,
@@ -197,7 +184,7 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
         TEnvironmentSetup env{{
             .NodeCount = 8 * 3,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetLocation,
+            .LocationGenerator = GetBridgedLocation,
             .SelfManagementConfig = true,
             .NumPiles = 3,
             .AutomaticBootstrap = true,

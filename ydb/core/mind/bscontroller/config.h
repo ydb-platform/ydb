@@ -302,6 +302,27 @@ namespace NKikimr {
                 return res;
             }
 
+            // delete the group along with its VDisks
+            void DeleteExistingGroupWithVSlots(const TGroupInfo& group) {
+                const TGroupId groupId = group.ID;
+                const TBoxStoragePoolId storagePoolId = group.StoragePoolId;
+                const bool bridgePileOnly = group.IsBridgePileOnly();
+                for (const TVSlotInfo *vslot : group.VDisksInGroup) {
+                    DestroyVSlot(vslot->VSlotId);
+                }
+                auto& storagePools = StoragePools.Unshare();
+                const auto pool = storagePools.find(storagePoolId);
+                Y_ABORT_UNLESS(pool != storagePools.end());
+                if (auto& numGroups = pool->second.NumGroups; !bridgePileOnly && numGroups) {
+                    --numGroups;
+                } else {
+                    Y_DEBUG_ABORT_UNLESS(bridgePileOnly);
+                }
+                const size_t numErased = StoragePoolGroups.Unshare().erase({storagePoolId, groupId});
+                Y_ABORT_UNLESS(numErased == 1);
+                DeleteExistingGroup(groupId);
+            }
+
             void DeleteExistingGroup(TGroupId groupId) {
                 const TGroupInfo *group = Groups.Find(groupId);
                 Y_ABORT_UNLESS(group);

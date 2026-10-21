@@ -543,13 +543,13 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
         AssertPushdownPreservesMatch(R"ast(
             (Apply
                 (Udf '"Re2.Match" '(
-                    (Apply (Udf '"Re2.PatternFromLike") (String '"_%_") (String '"%"))
+                    (Apply (Udf '"Re2.PatternFromLike") (String '"_!_") (String '"!"))
                     (NamedApply (Udf '"Re2.Options") '()
                         (AsStruct '('"CaseSensitive" (Bool '"true"))))
                 ))
                 (Member $row '"col_string")
             )
-        )ast", R"sql(Re2::Match(Udf(Re2::PatternFromLike)("_%_", "%"), Re2::Options(true AS CaseSensitive))(col_string))sql", "col_string",
+        )ast", R"sql(Re2::Match(Udf(Re2::PatternFromLike)("_!_", "!"), Re2::Options(true AS CaseSensitive))(col_string))sql", "col_string",
             TString("a_"));
     }
 

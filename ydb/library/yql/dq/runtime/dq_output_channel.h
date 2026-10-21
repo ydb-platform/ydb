@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/library/yql/dq/task_scheduler/task_trace.h>
 #include "dq_output.h"
 #include "dq_channel_settings.h"
 
@@ -37,6 +38,8 @@ public:
     using TPtr = TIntrusivePtr<IDqOutputChannel>;
 
     virtual ui64 GetChannelId() const = 0;
+    // Diagnostic read: must not arm notifications or report scheduler waits.
+    virtual TTaskChannelSnapshot GetTraceSnapshot() const { return {}; }
     virtual ui64 GetValuesCount() const = 0;
     virtual const TDqOutputChannelStats& GetPopStats() const = 0;
 

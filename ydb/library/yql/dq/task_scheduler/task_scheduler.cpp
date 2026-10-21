@@ -6,6 +6,7 @@
 #include <library/cpp/monlib/metrics/histogram_collector.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
+#include <util/string/cast.h>
 
 #include <array>
 #include <deque>
@@ -108,8 +109,9 @@ bool TTaskWaitCondition::IsSatisfied(const THashMap<TTaskDependencyId, ui64>& ve
 
 TTaskSchedulingHandle::TTaskSchedulingHandle(NActors::TActorId actor, NActors::TActorId query, TEnqueue enqueue, TRelease release,
                                              std::shared_ptr<TTaskSchedulerMetrics> metrics, bool observeOnly, ui64 taskId,
-                                             TStateReporter reportState, std::shared_ptr<const TQueryGraphRegistration> graphRegistration)
-    : Actor(actor), Query(query), TaskId(taskId), ObserveOnly(observeOnly), Enqueue(std::move(enqueue)), Release(std::move(release)),
+                                             TStateReporter reportState, std::shared_ptr<const TQueryGraphRegistration> graphRegistration,
+                                             std::shared_ptr<TQueryTaskTrace> trace)
+    : Actor(actor), Query(query), TaskId(taskId), ObserveOnly(observeOnly), Trace(std::move(trace)), Enqueue(std::move(enqueue)), Release(std::move(release)),
       Metrics(std::move(metrics)), ReportState(std::move(reportState)), GraphRegistration(std::move(graphRegistration)) {}
 
 bool TTaskSchedulingHandle::MakeReadyLocked() {
@@ -119,6 +121,7 @@ bool TTaskSchedulingHandle::MakeReadyLocked() {
     State = EState::Ready;
     ++Revision;
     ReadySince = TMonotonic::Now();
+    if (Trace) { Trace->State(SnapshotLocked()); }
     if (Metrics) {
         ++*Metrics->Enqueued;
     }
@@ -135,7 +138,14 @@ void TTaskSchedulingHandle::RequestExecution() {
         ++Versions[0];
         ++Versions[AnyDependency];
         Continue = true;
+        const auto notifiedAt = Trace ? TMonotonic::Now() : TMonotonic();
         enqueue = MakeReadyLocked();
+        if (Trace) {
+            NJson::TJsonValue args(NJson::JSON_MAP);
+            args["ready"] = enqueue;
+            args["version"] = Versions[0];
+            Trace->Event("continuation", TaskId, Actor, std::move(args), notifiedAt);
+        }
         if (Metrics && !enqueue) {
             ++*Metrics->Coalesced;
         }
@@ -154,6 +164,7 @@ void TTaskSchedulingHandle::Signal(TTaskDependencyId dependency, ETaskPriority p
         }
         ++Versions[dependency];
         ++Versions[AnyDependency];
+        const auto notifiedAt = Trace ? TMonotonic::Now() : TMonotonic();
         if (priority == ETaskPriority::Drain && Priority != priority) {
             Priority = priority;
             ++Revision;
@@ -166,6 +177,13 @@ void TTaskSchedulingHandle::Signal(TTaskDependencyId dependency, ETaskPriority p
         }
         if (Metrics && !enqueue) {
             ++*Metrics->Coalesced;
+        }
+        if (Trace) {
+            NJson::TJsonValue args(NJson::JSON_MAP);
+            args["dependency"] = ToString(dependency);
+            args["version"] = Versions[dependency];
+            args["ready"] = enqueue;
+            Trace->Event("signal", TaskId, Actor, std::move(args), notifiedAt);
         }
     }
     if (enqueue) {
@@ -291,6 +309,13 @@ void TTaskSchedulingHandle::RecordOutputBytes(ui64 bytes) {
     }
 }
 
+TTaskRunProgress TTaskSchedulingHandle::GetRunProgressForTrace(TTaskRunProgress progress) const {
+    std::lock_guard lock(Mutex);
+    progress.InputBytes += InputBytes;
+    progress.OutputBytes += OutputBytes;
+    return progress;
+}
+
 std::optional<ui64> TTaskSchedulingHandle::TryDispatch() {
     std::lock_guard lock(Mutex);
     if (State != EState::Ready) {
@@ -301,7 +326,9 @@ std::optional<ui64> TTaskSchedulingHandle::TryDispatch() {
     if (Metrics) {
         ++*Metrics->Dispatched;
     }
-    return ++Generation;
+    ++Generation;
+    if (Trace) { Trace->State(SnapshotLocked()); }
+    return Generation;
 }
 
 bool TTaskSchedulingHandle::Start(ui64 generation) {
@@ -334,6 +361,13 @@ bool TTaskSchedulingHandle::Start(ui64 generation) {
         InputBytes = OutputBytes = 0;
         if (Metrics) {
             Metrics->ReadyWaitUs->Collect((TMonotonic::Now() - ReadySince).MicroSeconds());
+        }
+        if (Trace) {
+            Trace->State(SnapshotLocked());
+            NJson::TJsonValue args(NJson::JSON_MAP);
+            args["ready_wait_us"] = (TMonotonic::Now() - ReadySince).MicroSeconds();
+            args["generation"] = Generation;
+            Trace->Event("started", TaskId, Actor, std::move(args));
         }
         if (ReportState) {
             snapshot = SnapshotLocked();
@@ -410,6 +444,7 @@ void TTaskSchedulingHandle::Complete(TTaskRunProgress progress, std::optional<TT
         State = EState::Blocked;
         ++Revision;
         enqueue = (Continue || progress.BudgetExhausted || Wait.IsSatisfied(Versions)) && MakeReadyLocked();
+        if (Trace && !enqueue) { Trace->State(SnapshotLocked()); }
         if (ReportState) {
             snapshot = SnapshotLocked();
         }
@@ -437,6 +472,7 @@ void TTaskSchedulingHandle::Cancel(bool completed) {
         State = completed ? EState::Finished : EState::Cancelled;
         LastStopReason = completed ? ETaskStopReason::RunnerFinished : ETaskStopReason::Cancelled;
         ++Revision;
+        if (Trace) { Trace->State(SnapshotLocked()); }
         if (ReportState) {
             snapshot = SnapshotLocked();
         }
@@ -645,8 +681,9 @@ class TTaskScheduler : public IDqTaskScheduler, public std::enable_shared_from_t
 public:
     TTaskScheduler(NActors::TActorSystem* actorSystem, ui32 poolId, NMonitoring::TDynamicCounterPtr counters,
                    TTaskSchedulerSettings settings)
-        : ActorSystem(actorSystem), Settings(settings), Metrics(std::make_shared<TTaskSchedulerMetrics>(counters)) {
-        Y_ENSURE(Settings.Shards && Settings.MaxInFlightPerShard && Settings.MaxRowsPerRun);
+        : ActorSystem(actorSystem), Settings(settings), Metrics(std::make_shared<TTaskSchedulerMetrics>(counters)),
+          Traces(actorSystem->NodeId, settings.Trace) {
+        Y_ENSURE(Settings.Shards && Settings.MaxInFlightPerShard);
         Y_ENSURE(Settings.WorkerSliceCpuUs && Settings.WorkerActivationUs);
         if (!Settings.ObserveOnly && Settings.UseWorkerPool) {
             WorkPool = std::make_shared<TTaskWorkPool>(Settings.MaxInFlightPerShard,
@@ -662,14 +699,14 @@ public:
     std::shared_ptr<const TQueryGraphRegistration> RegisterGraph(NActors::TActorId query,
         std::shared_ptr<const TQueryTaskGraph> graph, TVector<ui64> localTasks) override
     {
-        if (Settings.ObserveOnly) {
+        if (Settings.ObserveOnly && !Settings.Trace.Enabled) {
             return {};
         }
         Y_ENSURE(graph);
         for (ui64 id : localTasks) {
             Y_ENSURE(graph->FindTask(id), "Local task is absent from the query graph");
         }
-        const auto dispatcher = WorkPool ? NActors::TActorId{} : GetDispatcher(query);
+        const auto dispatcher = WorkPool || Settings.ObserveOnly ? NActors::TActorId{} : GetDispatcher(query);
         std::shared_ptr<const TQueryGraphRegistration> registration;
         ui64 id;
         {
@@ -679,8 +716,11 @@ public:
             if (!registration) {
                 entry.Id = ++NextRegistration;
                 const ui64 registrationId = entry.Id;
+                auto trace = Traces.GetOrCreate(query);
+                if (trace) { trace->Graph(*graph, localTasks); }
                 registration = std::make_shared<TQueryGraphRegistration>(std::move(graph),
-                    [weak = weak_from_this(), query, dispatcher, registrationId] {
+                    [weak = weak_from_this(), query, dispatcher, registrationId, trace] {
+                        if (trace) { trace->Finish(); }
                         if (auto self = weak.lock()) {
                             {
                                 std::lock_guard lock(self->RegistrationsMutex);
@@ -691,18 +731,24 @@ public:
                             }
                             if (self->WorkPool) {
                                 self->WorkPool->ForgetGraph(query, registrationId);
-                            } else {
+                            } else if (!self->Settings.ObserveOnly) {
                                 self->ActorSystem->Send(dispatcher, new TEvForgetGraph(query, registrationId));
                             }
                         }
-                    });
+                    }, trace);
                 entry.Registration = registration;
             }
             id = entry.Id;
         }
+        if (const auto& trace = registration->Trace) {
+            NJson::TJsonValue args(NJson::JSON_MAP), local(NJson::JSON_ARRAY);
+            for (ui64 task : localTasks) { local.AppendValue(ToString(task)); }
+            args["local_tasks"] = std::move(local);
+            trace->Event("local_tasks_registered", 0, {}, std::move(args));
+        }
         if (WorkPool) {
             WorkPool->RegisterGraph(query, id, registration->Graph, localTasks);
-        } else {
+        } else if (!Settings.ObserveOnly) {
             ActorSystem->Send(dispatcher, new TEvRegisterGraph(query, id, registration->Graph, std::move(localTasks)));
         }
         return registration;
@@ -710,9 +756,9 @@ public:
 
     std::shared_ptr<TTaskSchedulingHandle> Register(NActors::TActorId actor, NActors::TActorId query, ui64 taskId) override {
         if (Settings.ObserveOnly) {
-            return std::make_shared<TTaskSchedulingHandle>(actor, query, [](auto) {}, [] {}, Metrics, true, taskId);
+            return RegisterObserver(actor, query, taskId);
         }
-        const auto dispatcher = WorkPool ? NActors::TActorId{} : GetDispatcher(query);
+        const auto dispatcher = WorkPool || Settings.ObserveOnly ? NActors::TActorId{} : GetDispatcher(query);
         std::shared_ptr<const TQueryGraphRegistration> registration;
         ui64 registrationId = 0;
         {
@@ -727,11 +773,12 @@ public:
         if (registration && taskId) {
             Y_ENSURE(registration->Graph->FindTask(taskId));
         }
+        auto trace = registration ? registration->Trace : Traces.GetOrCreate(query);
         if (WorkPool) {
             auto pool = WorkPool;
             auto task = std::make_shared<TTaskSchedulingHandle>(actor, query,
                 [pool](auto task) { pool->Enqueue(std::move(task)); }, [] {}, Metrics, false, taskId,
-                [pool, registrationId](auto state) { pool->Report(registrationId, std::move(state)); }, std::move(registration));
+                [pool, registrationId](auto state) { pool->Report(registrationId, std::move(state)); }, std::move(registration), std::move(trace));
             pool->RegisterTask(task);
             return task;
         }
@@ -745,12 +792,27 @@ public:
         auto task = std::make_shared<TTaskSchedulingHandle>(
             actor, query, [actorSystem, dispatcher](auto task) { actorSystem->Send(dispatcher, new TEvTaskReady(std::move(task))); },
             [actorSystem, dispatcher]() { actorSystem->Send(dispatcher, new TEvTaskReleased()); }, Metrics, false, taskId,
-            std::move(report), std::move(registration));
+            std::move(report), std::move(registration), std::move(trace));
         if (registrationId && taskId) {
             ActorSystem->Send(dispatcher, new TEvTaskRegistered(registrationId, task->GetSnapshot()));
         }
         return task;
     }
+
+    std::shared_ptr<TTaskSchedulingHandle> RegisterObserver(NActors::TActorId actor, NActors::TActorId query, ui64 taskId) override {
+        std::shared_ptr<const TQueryGraphRegistration> registration;
+        {
+            std::lock_guard lock(RegistrationsMutex);
+            if (auto it = Registrations.find(query); it != Registrations.end()) {
+                registration = it->second.Registration.lock();
+            }
+        }
+        auto trace = registration ? registration->Trace : Traces.GetOrCreate(query);
+        return std::make_shared<TTaskSchedulingHandle>(actor, query, [](auto) {}, [] {}, Metrics, true, taskId,
+            TTaskSchedulingHandle::TStateReporter{}, std::move(registration), std::move(trace));
+    }
+
+    TString ExportTrace(TStringBuf query) override { return Traces.Export(query); }
 
     void DescribeQuery(NActors::TActorId query, NActors::TActorId recipient) override {
         if (Settings.ObserveOnly) {
@@ -789,6 +851,7 @@ private:
     NActors::TActorSystem* const ActorSystem;
     const TTaskSchedulerSettings Settings;
     const std::shared_ptr<TTaskSchedulerMetrics> Metrics;
+    TTaskTraceRegistry Traces;
     TVector<NActors::TActorId> Dispatchers;
     std::shared_ptr<TTaskWorkPool> WorkPool;
     struct TRegistration {

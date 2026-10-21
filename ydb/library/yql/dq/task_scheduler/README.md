@@ -3,7 +3,8 @@
 This PoC has a [pool of reusable anonymous compute workers](worker_pool_design.md)
 with ready-query and per-query ready-task queues. The older dispatcher mode is
 retained as a comparison baseline. Task scheduling is disabled by default and
-requires DQ channels v2. These source changes have not been built or run yet.
+requires DQ channels v2. The trace and worker paths have been built and exercised
+with a 16-node kqprun Q5 run; see [trace validation](trace/README.md#validation).
 
 Configure `TTableServiceConfig` before starting the node:
 
@@ -15,11 +16,17 @@ DqChannelConfig {
     TaskSchedulerUseWorkerPool: true
     TaskSchedulerShards: 4
     TaskSchedulerMaxInFlightPerShard: 2
-    TaskSchedulerMaxRowsPerRun: 4096
+    TaskSchedulerMaxRowsPerRun: 0
     TaskSchedulerWorkerSliceCpuUs: 1000
     TaskSchedulerWorkerActivationUs: 2000
 }
 ```
+
+`TaskSchedulerMaxRowsPerRun: 0` disables voluntary runner yields by row count,
+CPU slice and activation deadline (the default). A runner continues until its
+normal input/output wait or completion. A positive value opts into cooperative
+runner budgets. Worker activation limits still apply between task executions;
+CPU quota admission and accounting remain enabled.
 
 With `TaskSchedulerObserveOnly: true`, the same per-run instrumentation is active,
 but original notifications, execution order, and unlimited runner slices are
@@ -215,6 +222,16 @@ runner CPU, output rows / CPU, query latency, and peak channel memory. Increasin
 the slice budget alone raises rows/run, so keep the budget visible in comparisons.
 Per-row input-size metering and dependency locks add overhead in this PoC; measure
 that overhead with observation mode before drawing throughput conclusions.
+
+## Execution timeline
+
+Optional bounded per-query capture records task contents/topology, state changes,
+worker selection criteria, runner/worker intervals, progress and passive channel
+snapshots. Captures survive local graph cleanup and can be downloaded from
+`/actors/kqp_channels?task_traces=1`. A stdlib Python utility merges node captures
+into a Perfetto timeline with waiting intervals and a per-task CSV summary.
+See [capture configuration, download commands and semantics](trace/README.md).
+Trace-only mode observes synchronous channels-v2 tasks without enabling queues.
 
 ## Validation
 

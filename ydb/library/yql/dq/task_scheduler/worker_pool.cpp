@@ -6,6 +6,7 @@
 #include <util/generic/scope.h>
 #include <util/generic/yexception.h>
 #include <util/system/datetime.h>
+#include <util/string/cast.h>
 
 #include <cmath>
 #include <limits>
@@ -266,7 +267,24 @@ std::optional<TTaskWorkPool::TClaim> TTaskWorkPool::Take(NActors::TActorId worke
     if (selectedQuery->ReadyTasks.empty()) {
         ReadyQueries.erase(selectedQueryId);
     }
+    NJson::TJsonValue selection;
+    if (task->Trace) {
+        selection.SetType(NJson::JSON_MAP);
+        selection["worker"] = ToString(worker);
+        selection["query_service_score"] = service;
+        selection["query_weight"] = selectedQuery->Weight;
+        selection["query_running"] = selectedQuery->Running;
+        selection["reserved_cpu_us"] = reserveCpuUs;
+        selection["aging_override"] = !std::get<0>(taskKey);
+        selection["known_ready"] = !std::get<1>(taskKey);
+        selection["result_distance"] = std::get<2>(taskKey) == std::numeric_limits<ui32>::max()
+            ? NJson::TJsonValue() : NJson::TJsonValue(std::get<2>(taskKey));
+        selection["fifo_sequence"] = std::get<3>(taskKey);
+        selection["selection"] = Selections;
+    }
+    const auto selectedAt = task->Trace ? TMonotonic::Now() : TMonotonic();
     lock.unlock();
+    if (task->Trace) { task->Trace->Event("selected", task->TaskId, task->Actor, std::move(selection), selectedAt); }
     return TClaim{std::move(task), execution.lock(), reserveCpuUs};
 }
 
@@ -287,6 +305,9 @@ void TTaskWorkPool::Finish(const TClaim& claim, ui64 cpuUs) {
 }
 
 void TTaskWorkPool::Return(TClaim claim) {
+    if (claim.Task->Trace) {
+        claim.Task->Trace->Event("lease_retry", claim.Task->TaskId, claim.Task->Actor, NJson::TJsonValue(NJson::JSON_MAP));
+    }
     if (LeaseRetries) {
         ++*LeaseRetries;
     }
@@ -397,6 +418,7 @@ private:
             }
             TTaskSliceResult result;
             const auto cpuStart = ThreadCPUTime();
+            const auto sliceStart = claim->Task->Trace ? TMonotonic::Now() : TMonotonic();
             {
                 Y_DEFER { claim->Execution->Release(); };
                 auto generation = claim->Task->TryDispatch();
@@ -411,6 +433,19 @@ private:
                 }
             }
             const auto cpuUs = Max<ui64>(1, ThreadCPUTime() - cpuStart);
+            if (claim->Task->Trace) {
+                NJson::TJsonValue args(NJson::JSON_MAP);
+                args["worker"] = ToString(SelfId());
+                args["cpu_us"] = cpuUs;
+                args["requested_cpu_us"] = Settings.WorkerSliceCpuUs;
+                args["runner_invoked"] = result.Progress.RunnerInvoked;
+                args["quota_rejected"] = result.Progress.QuotaRejected;
+                args["failed"] = bool(result.Error);
+                args["runner_status"] = result.Status;
+                if (result.RetryAfter) { args["retry_after_us"] = result.RetryAfter->MicroSeconds(); }
+                claim->Task->Trace->Event("worker_slice", claim->Task->TaskId, claim->Task->Actor,
+                    std::move(args), sliceStart, (TMonotonic::Now() - sliceStart).MicroSeconds());
+            }
             Pool->RecordExecution(result.Progress, cpuUs);
             if (result.RetryAfter) {
                 Pool->DeferQuery(claim->Task->Query, TMonotonic::Now() + *result.RetryAfter);

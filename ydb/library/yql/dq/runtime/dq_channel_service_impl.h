@@ -197,6 +197,7 @@ public:
 
     ~TLocalBuffer() override;
 
+    TTaskChannelSnapshot GetTraceSnapshot() const override;
     EDqFillLevel GetFillLevel() const override;
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override;
     void Push(TDataChunk&& data) override;
@@ -266,7 +267,7 @@ public:
 
     // written under Mutex only, atomic to be readable from the mon page
     std::atomic<bool> MemoryPressure = false;
-    bool FinishPushed = false;
+    std::atomic<bool> FinishPushed = false;
     std::atomic<TInstant> LastOutputNotificationTime;
     std::atomic<TInstant> LastInputNotificationTime;
     TInstant FinishTime;
@@ -514,6 +515,7 @@ public:
     }
 
     ~TOutputBuffer() override;
+    TTaskChannelSnapshot GetTraceSnapshot() const override;
     EDqFillLevel GetFillLevel() const override;
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator>aggregator) override;
     void Push(TDataChunk&& data) override;
@@ -650,6 +652,7 @@ public:
     ~TInputBuffer() override;
 
 
+    TTaskChannelSnapshot GetTraceSnapshot() const override;
     EDqFillLevel GetFillLevel() const override {
         return EDqFillLevel::NoLimit;
     }
@@ -1027,8 +1030,10 @@ public:
         , Counters(counters)
         , Limits(limits)
         , PoolId(poolId) {
-        if (Limits.EnableTaskScheduling) {
-            TaskScheduler = CreateDqTaskScheduler(actorSystem, poolId, counters, Limits.TaskScheduling);
+        if (Limits.EnableTaskScheduling || Limits.TaskScheduling.Trace.Enabled) {
+            auto scheduling = Limits.TaskScheduling;
+            scheduling.ObserveOnly |= !Limits.EnableTaskScheduling;
+            TaskScheduler = CreateDqTaskScheduler(actorSystem, poolId, counters, scheduling);
         }
         LocalBufferRegistry = std::make_shared<TLocalBufferRegistry>(actorSystem, counters,
             Limits.LocalChannelInflightBytes, Limits.LocalChannelInflightBytes * 8 / 10, Limits.LocalChannelColdInflightBytes,
@@ -1096,6 +1101,10 @@ public:
     const TDqOutputStats& GetPushStats() const override {
         Serializer->Buffer->ExportPushStats(PushStats);
         return PushStats;
+    }
+
+    TTaskChannelSnapshot GetTraceSnapshot() const override {
+        return Serializer->Buffer->GetTraceSnapshot();
     }
 
     EDqFillLevel GetFillLevel() const override {
@@ -1284,6 +1293,12 @@ public:
     const TDqInputStats& GetPopStats() const override {
         Buffer->ExportPopStats(PopStats);
         return PopStats;
+    }
+
+    TTaskChannelSnapshot GetTraceSnapshot() const override {
+        auto snapshot = Buffer->GetTraceSnapshot();
+        snapshot.Paused = PausedByCheckpoint;
+        return snapshot;
     }
 
     bool Empty() const override {

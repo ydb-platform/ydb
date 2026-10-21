@@ -447,7 +447,9 @@ protected:
         });
 
         if (this->TaskScheduling) {
-            TaskRunner->ConfigureScheduling(this->TaskScheduling, this->RuntimeSettings.TaskScheduler->GetSettings().MaxRowsPerRun);
+            const auto scheduler = this->RuntimeSettings.TaskScheduler
+                ? this->RuntimeSettings.TaskScheduler : this->RuntimeSettings.TaskTraceScheduler;
+            TaskRunner->ConfigureScheduling(this->TaskScheduling, scheduler->GetSettings().MaxRowsPerRun);
         }
         TaskRunner->Prepare(this->Task, limits, execCtx, &this->WatermarksTracker, &this->WatermarkGeneratorTracker);
 

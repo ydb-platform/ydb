@@ -704,7 +704,6 @@ message TDeleteSpecificGroups {
 
 message TConfigRequest {
     message TCommand {
-        reserved 65; // Former SetGroupVDiskStates experimental command.
         oneof Command {
             TDefineHostConfig DefineHostConfig = 1;
             TReadHostConfig ReadHostConfig = 2;
@@ -883,7 +882,6 @@ message TBaseConfig {
         NKikimrBlobStorage.TGroupDecommitStatus.E DecommitStatus = 5;
     }
     message TGroup {
-        reserved 16; // Former VDiskStates experimental contract.
         uint32 GroupId = 1;
         uint32 GroupGeneration = 2;
         string ErasureSpecies = 3;

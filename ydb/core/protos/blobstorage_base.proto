@@ -181,7 +181,6 @@ message TGroupInfo {
     optional uint32 BridgeProxyGroupId = 19; // proxy group when running in Bridge mode
     optional uint32 BridgePileId = 20;
     optional bool DDisk = 21; // is this a Direct Block Group?
-    reserved 24; // Former VDiskStates experimental contract.
     optional TFailRealmStates FailRealmStates = 26;
     optional TGroupWritePolicy WritePolicy = 25;
     optional TMirror3dcGroupState Mirror3dcState = 27;

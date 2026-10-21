@@ -448,6 +448,11 @@ public:
             limits.TaskScheduling.UseWorkerPool = config.GetTaskSchedulerUseWorkerPool();
             limits.TaskScheduling.WorkerSliceCpuUs = config.GetTaskSchedulerWorkerSliceCpuUs();
             limits.TaskScheduling.WorkerActivationUs = config.GetTaskSchedulerWorkerActivationUs();
+            limits.TaskScheduling.Trace.Enabled = config.GetEnableTaskExecutionTrace();
+            limits.TaskScheduling.Trace.MaxQueries = config.GetTaskExecutionTraceMaxQueries();
+            limits.TaskScheduling.Trace.MaxEvents = config.GetTaskExecutionTraceMaxEvents();
+            limits.TaskScheduling.Trace.MaxBytes = config.GetTaskExecutionTraceMaxBytes();
+            limits.TaskScheduling.Trace.Retention = TDuration::MilliSeconds(config.GetTaskExecutionTraceRetentionMs());
             limits.UnboundWaitPeriod = TDuration::MilliSeconds(config.GetUnboundWaitPeriodMs());
         } else { // deprecated
             limits.LocalChannelInflightBytes  = TableServiceConfig.GetLocalChannelInflightBytes();

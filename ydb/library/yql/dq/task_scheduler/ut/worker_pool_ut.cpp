@@ -1,3 +1,4 @@
+#include <library/cpp/json/json_reader.h>
 #include <ydb/library/yql/dq/task_scheduler/worker_pool.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -222,7 +223,7 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
     Y_UNIT_TEST(AReusableWorkerExecutesDifferentQueriesWithoutTaskActorPermits) {
         TTestRuntime runtime;
         auto scheduler = CreateDqTaskScheduler(runtime.SingleSys(), 0, MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            {.Shards = 1, .MaxInFlightPerShard = 1, .UseWorkerPool = true, .WorkerSliceCpuUs = 100});
+            {.Trace = {.Enabled = true}, .Shards = 1, .MaxInFlightPerShard = 1, .UseWorkerPool = true, .WorkerSliceCpuUs = 100});
         const auto edge = runtime.AllocateEdgeActor();
         TVector<std::shared_ptr<TExecution>> executions;
         for (ui32 i = 0; i < 2; ++i) {
@@ -248,6 +249,21 @@ Y_UNIT_TEST_SUITE(DqTaskWorkerPool) {
             }
             worker = done->Get()->Worker;
             UNIT_ASSERT(done->Get()->Query == execution->Task->Query);
+            NJson::TJsonValue capture;
+            UNIT_ASSERT(NJson::ReadJsonTree(scheduler->ExportTrace(ToString(execution->Task->Query)), &capture, true));
+            bool selected = false, ran = false;
+            for (const auto& event : capture["traceEvents"].GetArraySafe()) {
+                if (event["name"].GetString() == "selected") {
+                    selected = true;
+                    UNIT_ASSERT_VALUES_EQUAL(event["args"]["worker"].GetString(), ToString(worker));
+                    UNIT_ASSERT_VALUES_EQUAL(event["args"]["reserved_cpu_us"].GetUInteger(), 100);
+                } else if (event["name"].GetString() == "worker_slice") {
+                    ran = true;
+                    UNIT_ASSERT(event["args"]["runner_invoked"].GetBoolean());
+                    UNIT_ASSERT_VALUES_EQUAL(event["ph"].GetString(), "X");
+                }
+            }
+            UNIT_ASSERT(selected && ran);
         }
     }
 }

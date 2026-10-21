@@ -34,6 +34,7 @@
 
 #include <util/generic/scope.h>
 #include <util/system/datetime.h>
+#include <exception>
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -596,6 +597,7 @@ public:
         RuntimeSettings = DeserializeRuntimeSettingsFromProto(task.GetProgram().GetRuntimeSettings());
 
         auto entry = BuildTask(task);
+        TraceTask(task);
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId);
         auto startTime = TInstant::Now();
@@ -955,7 +957,64 @@ public:
         SliceDeadline = deadline;
     }
 
+    NJson::TJsonValue TraceChannels() const {
+        NJson::TJsonValue channels(NJson::JSON_ARRAY);
+        // The runner/endpoint lease excludes accesses to the channel wrappers.
+        // Transport buffers provide their own passive, synchronized snapshots.
+        for (const auto& [id, channel] : AllocatedHolder->InputChannels) {
+            auto snapshot = channel->GetTraceSnapshot().ToJson(id, true);
+            snapshot["local"] = channel->IsLocal();
+            snapshot["sampled_monotonic_us"] = TMonotonic::Now().GetValue();
+            channels.AppendValue(std::move(snapshot));
+        }
+        for (const auto& [id, channel] : AllocatedHolder->OutputChannels) {
+            auto snapshot = channel->GetTraceSnapshot().ToJson(id, false);
+            snapshot["local"] = channel->IsLocal();
+            snapshot["sampled_monotonic_us"] = TMonotonic::Now().GetValue();
+            channels.AppendValue(std::move(snapshot));
+        }
+        return channels;
+    }
+
+    void TraceTask(const TDqTaskSettings& task) const {
+        if (!Scheduling || !Scheduling->Trace) { return; }
+        NJson::TJsonValue args(NJson::JSON_MAP);
+        args["stage_id"] = StageId;
+        args["execution_mode"] = Scheduling->ObserveOnly ? "endpoint" : "scheduled";
+        // Decode in a private arena only when capture is enabled. Walking the
+        // shared pattern cache's nodes would mutate cookies and race its users.
+        {
+            TScopedAlloc traceAlloc(__LOCATION__);
+            TTypeEnvironment traceEnv(traceAlloc);
+            const auto root = DeserializeRuntimeNode(task.GetProgram().GetRaw(), traceEnv);
+            TExploringNodeVisitor explorer;
+            explorer.Walk(root.GetNode(), traceEnv);
+            NJson::TJsonValue operators(NJson::JSON_MAP);
+            THashMap<TString, ui64> counts;
+            for (auto* node : explorer.GetNodes()) {
+                if (node->GetType()->IsCallable()) {
+                    ++counts[TString(static_cast<TCallable*>(node)->GetType()->GetName())];
+                }
+            }
+            for (const auto& [name, count] : counts) { operators[name] = count; }
+            args["callables"] = std::move(operators);
+        }
+        NJson::TJsonValue sources(NJson::JSON_ARRAY), sinks(NJson::JSON_ARRAY);
+        for (const auto& input : task.GetInputs()) {
+            if (input.HasSource()) { sources.AppendValue(input.GetSource().GetType()); }
+        }
+        for (const auto& output : task.GetOutputs()) {
+            if (output.HasSink()) { sinks.AppendValue(output.GetSink().GetType()); }
+        }
+        args["sources"] = std::move(sources);
+        args["sinks"] = std::move(sinks);
+        Scheduling->Trace->Event("task", TaskId, Scheduling->Actor, std::move(args));
+    }
+
     ERunStatus Run() final {
+        const auto trace = Scheduling ? Scheduling->Trace : nullptr;
+        auto channelsBefore = trace ? TraceChannels() : NJson::TJsonValue();
+        const int exceptionsBefore = std::uncaught_exceptions();
         const ui64 cpuStart = Scheduling ? ThreadCPUTime() : 0;
         SliceCpuStart = cpuStart;
         const auto wallStart = Scheduling ? TMonotonic::Now() : TMonotonic();
@@ -982,6 +1041,11 @@ public:
                 LastRunProgress.InputItems = InputsConsumed;
                 LastRunProgress.CpuTimeUs = ThreadCPUTime() - cpuStart;
                 LastRunProgress.ElapsedTimeUs = (TMonotonic::Now() - wallStart).MicroSeconds();
+                if (trace) {
+                    trace->Run(TaskId, Scheduling->Actor, wallStart, Scheduling->GetRunProgressForTrace(LastRunProgress),
+                        std::move(channelsBefore), TraceChannels(), std::uncaught_exceptions() > exceptionsBefore,
+                        std::uncaught_exceptions() > exceptionsBefore ? std::nullopt : std::optional(static_cast<ui32>(LastFetchStatus)));
+                }
             }
         };
         LOG(TStringBuilder() << "Run task: " << TaskId);
@@ -1252,7 +1316,7 @@ private:
                         ++Stats->TotalOutputsProduced;
                     }
                     dataConsumed = true;
-                    if (Scheduling && !Scheduling->ObserveOnly && (LastRunProgress.OutputRows >= MaxRowsPerRun
+                    if (Scheduling && !Scheduling->ObserveOnly && MaxRowsPerRun && (LastRunProgress.OutputRows >= MaxRowsPerRun
                         || (SliceCpuUs && ThreadCPUTime() - SliceCpuStart >= SliceCpuUs)
                         || (SliceDeadline && TMonotonic::Now() >= SliceDeadline))) {
                         LastRunProgress.BudgetExhausted = true;

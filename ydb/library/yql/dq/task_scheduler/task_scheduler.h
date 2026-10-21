@@ -1,6 +1,7 @@
 #pragma once
 
 #include "task_graph.h"
+#include "task_trace.h"
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -103,12 +104,14 @@ struct TTaskSchedulingSnapshot {
 // The last owner unregisters this node's graph, including failed task starts.
 class TQueryGraphRegistration {
 public:
-    TQueryGraphRegistration(std::shared_ptr<const TQueryTaskGraph> graph, std::function<void()> release)
-        : Graph(std::move(graph)), Release(std::move(release)) {}
+    TQueryGraphRegistration(std::shared_ptr<const TQueryTaskGraph> graph, std::function<void()> release,
+        std::shared_ptr<TQueryTaskTrace> trace = {})
+        : Graph(std::move(graph)), Trace(std::move(trace)), Release(std::move(release)) {}
     ~TQueryGraphRegistration() { Release(); }
     TQueryGraphRegistration(const TQueryGraphRegistration&) = delete;
     TQueryGraphRegistration& operator=(const TQueryGraphRegistration&) = delete;
     const std::shared_ptr<const TQueryTaskGraph> Graph;
+    const std::shared_ptr<TQueryTaskTrace> Trace;
 private:
     const std::function<void()> Release;
 };
@@ -122,10 +125,12 @@ struct TQueryGraphSnapshot {
 };
 
 struct TTaskSchedulerSettings {
+    TTaskTraceSettings Trace;
     bool ObserveOnly = false;
     ui32 Shards = 4;
     ui32 MaxInFlightPerShard = 2;
-    ui64 MaxRowsPerRun = 4096;
+    // Zero disables cooperative runner yields, including CPU/deadline yields.
+    ui64 MaxRowsPerRun = 0;
     bool UseWorkerPool = false;
     ui64 WorkerSliceCpuUs = 1000;
     ui64 WorkerActivationUs = 2000;
@@ -142,7 +147,8 @@ public:
 
     TTaskSchedulingHandle(NActors::TActorId actor, NActors::TActorId query, TEnqueue enqueue, TRelease release, std::shared_ptr<TTaskSchedulerMetrics> metrics = {},
                           bool observeOnly = false, ui64 taskId = 0, TStateReporter reportState = {},
-                          std::shared_ptr<const TQueryGraphRegistration> graphRegistration = {});
+                          std::shared_ptr<const TQueryGraphRegistration> graphRegistration = {},
+                          std::shared_ptr<TQueryTaskTrace> trace = {});
 
     void RequestExecution();
     void Signal(TTaskDependencyId dependency, ETaskPriority priority = ETaskPriority::Normal);
@@ -161,6 +167,7 @@ public:
     void MakeRunnable();
     void RecordInputBytes(ui64 bytes);
     void RecordOutputBytes(ui64 bytes);
+    TTaskRunProgress GetRunProgressForTrace(TTaskRunProgress progress) const;
 
     std::optional<ui64> TryDispatch();
     bool Start(ui64 generation);
@@ -173,6 +180,7 @@ public:
     const NActors::TActorId Query;
     const ui64 TaskId;
     const bool ObserveOnly;
+    const std::shared_ptr<TQueryTaskTrace> Trace;
 
 private:
     using EState = ETaskSchedulingState;
@@ -224,6 +232,9 @@ public:
     virtual std::shared_ptr<const TQueryGraphRegistration> RegisterGraph(NActors::TActorId query,
         std::shared_ptr<const TQueryTaskGraph> graph, TVector<ui64> localTaskIds) = 0;
     virtual std::shared_ptr<TTaskSchedulingHandle> Register(NActors::TActorId actor, NActors::TActorId query, ui64 taskId = 0) = 0;
+    // Trace-only registration preserves the original task-bound execution path.
+    virtual std::shared_ptr<TTaskSchedulingHandle> RegisterObserver(NActors::TActorId, NActors::TActorId, ui64) { return {}; }
+    virtual TString ExportTrace(TStringBuf = {}) { return "{\"enabled\":false,\"queries\":[]}"; }
     virtual void BindExecution(NActors::TActorId query, NActors::TActorId actor, std::shared_ptr<IDqTaskExecution> execution) = 0;
     virtual void NotifyExecutionAvailable() = 0;
     virtual void SetQueryWeight(NActors::TActorId query, double weight) = 0;

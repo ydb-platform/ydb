@@ -85,7 +85,7 @@ public:
 
     bool IsTaskSchedulingEnabled() const override {
         const auto scheduler = ChannelService ? ChannelService->GetTaskScheduler() : nullptr;
-        return scheduler && !scheduler->GetSettings().ObserveOnly;
+        return scheduler && (!scheduler->GetSettings().ObserveOnly || scheduler->GetSettings().Trace.Enabled);
     }
 
     std::shared_ptr<const NYql::NDq::TQueryGraphRegistration> RegisterSchedulingGraph(NActors::TActorId query,
@@ -177,6 +177,9 @@ public:
         runtimeSettings.ChannelService = ChannelService;
         if (ChannelService && args.Task->GetDqChannelVersion() >= 2u) {
             runtimeSettings.TaskScheduler = ChannelService->GetTaskScheduler();
+            if (runtimeSettings.TaskScheduler && runtimeSettings.TaskScheduler->GetSettings().Trace.Enabled) {
+                runtimeSettings.TaskTraceScheduler = runtimeSettings.TaskScheduler;
+            }
             runtimeSettings.TaskGraphRegistration = std::move(args.SchedulingGraphRegistration);
             if (runtimeSettings.TaskScheduler && runtimeSettings.TaskScheduler->GetSettings().UseWorkerPool
                 && !runtimeSettings.TaskScheduler->GetSettings().ObserveOnly) {

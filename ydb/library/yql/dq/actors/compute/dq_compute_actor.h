@@ -279,6 +279,7 @@ struct TComputeRuntimeSettings {
 
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
     std::shared_ptr<IDqTaskScheduler> TaskScheduler;
+    std::shared_ptr<IDqTaskScheduler> TaskTraceScheduler;
     std::shared_ptr<const TQueryGraphRegistration> TaskGraphRegistration;
 };
 

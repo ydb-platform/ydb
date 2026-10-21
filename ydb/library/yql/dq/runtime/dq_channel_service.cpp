@@ -137,6 +137,23 @@ void IChannelBuffer::SendFinish() {
     Push(TDataChunk(true));
 }
 
+TTaskChannelSnapshot TLocalBuffer::GetTraceSnapshot() const {
+    std::lock_guard lock(Mutex);
+    TTaskChannelSnapshot snapshot;
+    snapshot.BufferedBytes = InflightBytes.load();
+    snapshot.BufferedChunks = Queue.size();
+    snapshot.InflightBytes = InflightBytes.load();
+    snapshot.SpilledBytes = SpilledBytes.load();
+    snapshot.CapacityBytes = GetMaxInflightBytes();
+    snapshot.Empty = Queue.empty();
+    snapshot.Finished = Finished.load();
+    snapshot.FinishPushed = FinishPushed.load();
+    snapshot.EarlyFinished = EarlyFinished.load();
+    snapshot.Aborted = Aborted.load();
+    snapshot.FillLevel = static_cast<ui32>(FillLevel);
+    return snapshot;
+}
+
 EDqFillLevel TLocalBuffer::GetFillLevel() const {
     std::lock_guard lock(Mutex);
     return FillLevel;
@@ -952,6 +969,38 @@ TOutputItem::~TOutputItem() {
 
 TOutputBuffer::~TOutputBuffer() {
     NodeState->TerminateOutputDescriptor(Descriptor);
+}
+
+TTaskChannelSnapshot TOutputBuffer::GetTraceSnapshot() const {
+    std::lock_guard lock(Descriptor->FlowControlMutex);
+    TTaskChannelSnapshot snapshot;
+    snapshot.BufferedBytes = Descriptor->WaitQueueBytes.load();
+    snapshot.BufferedChunks = Descriptor->WaitQueueSize.load();
+    const auto pushed = Descriptor->PushBytes.load();
+    const auto popped = Descriptor->RemotePopBytes.load();
+    snapshot.InflightBytes = pushed > popped ? pushed - popped : 0;
+    snapshot.SpilledBytes = Descriptor->SpilledBytes.load();
+    snapshot.CapacityBytes = Descriptor->GetMaxInflightBytes();
+    snapshot.Finished = Descriptor->Finished.load();
+    snapshot.FinishPushed = Descriptor->FinishPushed.load();
+    snapshot.EarlyFinished = Descriptor->EarlyFinished.load();
+    snapshot.Aborted = Descriptor->Aborted.load();
+    snapshot.FillLevel = static_cast<ui32>(Descriptor->FillLevel);
+    return snapshot;
+}
+
+TTaskChannelSnapshot TInputBuffer::GetTraceSnapshot() const {
+    std::lock_guard lock(Descriptor->QueueMutex);
+    TTaskChannelSnapshot snapshot;
+    snapshot.BufferedBytes = Descriptor->QueueBytes.load();
+    snapshot.BufferedChunks = Descriptor->QueueSize.load();
+    snapshot.InflightBytes = Descriptor->InflightBytes.load();
+    snapshot.Empty = Descriptor->Queue.empty();
+    snapshot.Finished = Descriptor->Finished.load();
+    snapshot.FinishPushed = Descriptor->FinishPushed.load();
+    snapshot.EarlyFinished = Descriptor->EarlyFinished.load();
+    snapshot.Aborted = Descriptor->Aborted.load();
+    return snapshot;
 }
 
 EDqFillLevel TOutputBuffer::GetFillLevel() const {
@@ -3037,6 +3086,14 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
         Y_ENSURE(batch.RowCount() > 0);
     } else if (popResult) {
         // a chunk without rows (the finish): false, and the buffer may have more
+        // Remote EOF still needs its finish confirmation. A merge may have
+        // already probed a different, finished input in this Fetch; relying on
+        // that input's wait would lose this channel's confirmation, including
+        // one arriving between Pop and the scheduler's Complete.
+        if (Scheduling) {
+            LastEmptySchedulingVersion = version;
+            Scheduling->Await(dependency, version);
+        }
         ReadyHook.Mark();
     }
 
@@ -3090,9 +3147,18 @@ void TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorI
 }
 
 void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
-    std::lock_guard lock(ChannelService->Mutex);
-
     const TCgiParameters &cgiParams = ev->Get()->Request.GetParams();
+    if (cgiParams.Has("task_traces")) {
+        const auto scheduler = ChannelService->GetTaskScheduler();
+        const TString body = scheduler ? scheduler->ExportTrace(cgiParams.Get("query"))
+            : TString("{\"enabled\":false,\"queries\":[]}");
+        TStringStream response;
+        response << "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nCache-Control: no-store\r\n"
+            << "Content-Length: " << body.size() << "\r\n\r\n" << body;
+        Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(response.Str(), 0, NActors::NMon::IEvHttpInfoRes::EContentType::Custom));
+        return;
+    }
+    std::lock_guard lock(ChannelService->Mutex);
     auto node = cgiParams.Get("node");
     if (node) {
         ui32 nodeId;

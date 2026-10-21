@@ -182,6 +182,8 @@ public:
                 && !Checkpoints && Task.GetDqChannelVersion() >= 2u)
             {
                 TaskScheduling = RuntimeSettings.TaskScheduler->Register(this->SelfId(), ExecuterId, Task.GetId());
+            } else if (RuntimeSettings.TaskTraceScheduler && !TDerived::HasAsyncTaskRunner && Task.GetDqChannelVersion() >= 2u) {
+                TaskScheduling = RuntimeSettings.TaskTraceScheduler->RegisterObserver(this->SelfId(), ExecuterId, Task.GetId());
             }
 
             if (RuntimeSettings.Timeout) {

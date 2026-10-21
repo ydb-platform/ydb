@@ -105,6 +105,7 @@ public:
     std::shared_ptr<TTaskSchedulingHandle> GetOutputTask() const { return std::atomic_load(&OutputTask); }
     std::shared_ptr<TTaskSchedulingHandle> InputTask, OutputTask;
 
+    virtual TTaskChannelSnapshot GetTraceSnapshot() const { return {}; }
     virtual EDqFillLevel GetFillLevel() const = 0;
     virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) = 0;
     virtual void Push(TDataChunk&& data) = 0;

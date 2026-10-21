@@ -112,8 +112,8 @@ public:
         return nullptr;
     }
 
-    TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
-        auto pathResult = NSubColumns::ResolveBestPath(ColumnsData.GetStats(), OthersData.GetStats(), svPath);
+    TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const NSubColumns::TParsedJsonPath& parsedPath, const ui32 recordsCount) const {
+        auto pathResult = NSubColumns::ResolveBestPath(ColumnsData.GetStats(), OthersData.GetStats(), parsedPath);
         if (pathResult.IsFail()) {
             return TConclusionStatus::Fail(pathResult.GetErrorMessage());
         }
@@ -125,6 +125,14 @@ public:
             return OthersData.GetPathAccessor(std::move(path->Path), recordsCount);
         }
         return NSubColumns::TOthersData::BuildEmptyPathAccessor(recordsCount);
+    }
+
+    TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
+        auto parsed = NSubColumns::ParseJsonPath(svPath);
+        if (parsed.IsFail()) {
+            return TConclusionStatus::Fail(parsed.GetErrorMessage());
+        }
+        return GetPathAccessor(parsed.GetResult(), recordsCount);
     }
 };
 

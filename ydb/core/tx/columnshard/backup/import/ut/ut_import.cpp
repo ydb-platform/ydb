@@ -257,7 +257,8 @@ Y_UNIT_TEST_SUITE(Restore) {
         PlanTx(runtime, sender, txKind, NOlap::TSnapshot(planStep, txId), false);
         auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
         UNIT_ASSERT(ev);
-        UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
+        const auto& result = ev->Get()->Record.GetOpResult();
+        UNIT_ASSERT_C(result.GetSuccess(), "txId=" << txId << ", txKind=" << txKind << ": " << result.GetExplain());
     }
 
     template <class TCounter>
@@ -289,6 +290,7 @@ Y_UNIT_TEST_SUITE(Restore) {
         {
             TTestBasicRuntime runtime;
             TTester::Setup(runtime);
+            runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
 
             auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
             auto planStep = PrepareTablet(runtime, tableId, schema, 2);

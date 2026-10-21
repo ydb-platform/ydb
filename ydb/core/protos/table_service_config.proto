@@ -31,9 +31,6 @@ message TTableServiceConfig {
         reserved 3;
         optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 1048576];    // 1 MiB
         optional uint64 MkqlHeavyProgramMemoryLimit = 5 [default = 31457280, (InvalidateCompileCache) = true];   // 30 MB
-        // With FeatureFlags.EnableComputeSchedulerMemory: the initial memory limit of all the queries on the node in the
-        // compute scheduler - until the memory controller gives the one of the query execution (see
-        // TMemoryControllerConfig::QueryExecutionLimitPercent).
         optional uint64 QueryMemoryLimit = 6 [default = 32212254720];           // 30 GB
         optional uint32 PublishStatisticsIntervalSec = 7 [default = 2];
         reserved 8;  // optional bool EnableInstantMkqlMemoryAlloc = 8 [default = true];
@@ -54,8 +51,6 @@ message TTableServiceConfig {
         optional uint64 KqpPatternCacheCompiledCapacityBytes = 21 [default = 104857600]; // 100 MiB
         // Percent of the query memory limit (node total and resource pool) past which the tasks see memory
         // pressure: spilling, optional memory requests refused, channel back pressure. Above 100 behaves as 100.
-        // With FeatureFlags.EnableComputeSchedulerMemory: the elastic part of the fair-share of the pool and of the
-        // total limit in the compute scheduler, see NScheduler::TSchedulableMemory.
         optional double SpillingPercent = 22 [default = 80];
 
         optional uint64 MinMemAllocSize = 23 [default = 1048576]; // 1 MiB

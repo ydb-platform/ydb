@@ -75,9 +75,7 @@ namespace NKikimr::NKqp::NScheduler {
     struct TOptions {
         bool Enabled = true;
         TDelayParams DelayParams;
-        // The memory of the queries is accounted and limited by the scheduler, see FeatureFlags.EnableComputeSchedulerMemory.
-        // Only with Enabled, see TComputeScheduler::IsMemoryEnabled
-        bool MemoryEnabled = true;
+        bool MemoryEnabled = true; // TODO: remove later when FeatureFlags.EnableComputeSchedulerMemory=true always.
     };
 
 } // namespace NKikimr::NKqp::NScheduler

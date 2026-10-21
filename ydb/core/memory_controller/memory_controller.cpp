@@ -719,8 +719,6 @@ private:
         TResourceBrokerConfig config{
             .LimitBytes = activitiesLimitBytes,
             .QueueLimits = {
-                // All the queries or, with FeatureFlags.EnableComputeSchedulerMemory, the services other than the
-                // queries, see TKqpResourceManager
                 {NLocalDb::KqpResourceManagerQueue, GetQueryExecutionLimitBytes(Config, hardLimitBytes)},
                 {NLocalDb::ColumnShardCompactionIndexationQueue, GetColumnTablesCompactionIndexationQueueLimitBytes(Config, hardLimitBytes)},
                 {NLocalDb::ColumnShardCompactionTtlQueue, GetColumnTablesTtlQueueLimitBytes(Config, hardLimitBytes)},
@@ -737,8 +735,6 @@ private:
 
         // TODO: counters and logs for all column table queues
         if (Collections.contains(EMemoryConsumerKind::QueryExecution)) {
-            // the registered query execution consumer (the compute scheduler) reports the consumption itself and gets
-            // the limit, see FeatureFlags.EnableComputeSchedulerMemory
             memoryStats.SetQueryExecutionLimit(GetQueryExecutionLimitBytes(Config, hardLimitBytes));
         } else {
             ui64 queryExecutionConsumption = TAlignedPagePool::GetGlobalPagePoolSize();

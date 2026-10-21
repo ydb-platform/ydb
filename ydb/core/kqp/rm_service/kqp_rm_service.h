@@ -359,9 +359,6 @@ struct TResourceSnapshotState {
     TVector<ui32> InitialBoardNodeIds;
 };
 
-// With the feature flag EnableComputeSchedulerMemory the memory of the queries is accounted and limited by the compute
-// scheduler, which pushes its state: then it's published to the other nodes and used for the local placement of the
-// tasks instead of the memory of the resource manager (which keeps only the memory of the node services).
 struct TEvQueryMemoryState : public TEventLocal<TEvQueryMemoryState, TKqpResourceManagerEvents::EvQueryMemoryState> {
     TEvQueryMemoryState(ui64 limit, ui64 usage)
         : Limit(limit)

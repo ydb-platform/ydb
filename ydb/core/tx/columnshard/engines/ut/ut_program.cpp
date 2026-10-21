@@ -92,6 +92,42 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
     }
 
+    // During a rolling upgrade a newer KQP can send a kernel logic name this ColumnShard does not know, as with "Just"
+    // (#55950) and "ToString" (#52781). The kernel function itself loads from the serialized registry; the program
+    // must be rejected instead of being built with no kernel logic.
+    Y_UNIT_TEST(YqlKernelUnknownKernelName) {
+        TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
+        NReader::NCommon::TIndexColumnResolver columnResolver(indexInfo);
+
+        NKikimrSSA::TProgram programProto;
+        {
+            auto* command = programProto.AddCommand();
+            command->MutableAssign()->MutableColumn()->SetId(15);
+            auto* functionProto = command->MutableAssign()->MutableFunction();
+            functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL);
+            functionProto->SetKernelIdx(0);
+            functionProto->SetKernelName("KernelLogicFromNewerVersion");
+            functionProto->AddArguments()->SetId(columnResolver.GetColumnIdVerified("sum"));
+            functionProto->AddArguments()->SetId(columnResolver.GetColumnIdVerified("vat"));
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* prjectionProto = command->MutableProjection();
+            auto* column = prjectionProto->AddColumns();
+            column->SetId(15);
+        }
+
+        TKernelsWrapper kernels;
+        kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::Add);
+        programProto.SetKernels(kernels.Serialize());
+        const auto programSerialized = SerializeProgram(programProto);
+
+        TProgramContainer program;
+        const auto status =
+            program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized);
+        UNIT_ASSERT_C(status.IsFail(), "a program with an unknown kernel name must be rejected");
+    }
+
     Y_UNIT_TEST(YqlKernelStartsWithScalar) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
         NReader::NCommon::TIndexColumnResolver columnResolver(indexInfo);

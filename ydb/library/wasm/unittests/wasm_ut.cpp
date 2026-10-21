@@ -3,10 +3,12 @@
 #include <ydb/library/wasm/api/function.h>
 #include <ydb/library/wasm/api/memory_pool.h>
 #include <ydb/library/wasm/api/pointer.h>
+#include <ydb/library/wasm/engine/builtins.h>
 #include <ydb/library/wasm/engine/wavm_private_imports.h>
 
 #include <WAVM/IR/Module.h>
 #include <WAVM/WASM/WASM.h>
+#include <library/cpp/resource/resource.h>
 #include <library/cpp/testing/gtest/gtest.h>
 #include <util/generic/scope.h>
 
@@ -21,6 +23,21 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TWebAssemblyTest: public ::testing::Test {};
+
+TEST_F(TWebAssemblyTest, BuiltinSdkRequiresNonEmptyResource)
+{
+    constexpr auto resource = "libemscripten-system-libraries-dll.so";
+    if (NResource::Has(resource) && !NResource::Find(resource).empty()) {
+        EXPECT_FALSE(GetBuiltinSdk().Data.Empty());
+    } else {
+        try {
+            GetBuiltinSdk();
+            FAIL() << "An absent or empty SDK resource must be rejected";
+        } catch (const std::exception& ex) {
+            EXPECT_NE(std::string(ex.what()).find("is missing or empty"), std::string::npos);
+        }
+    }
+}
 
 TEST_F(TWebAssemblyTest, Create)
 {

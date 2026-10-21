@@ -191,7 +191,8 @@ void AssertNullConstantWithInput(const NKikimr::NKernels::EOperation operation, 
 Y_UNIT_TEST_SUITE(JsonValue) {
     Y_UNIT_TEST(UsesNativeStringBuffers) {
         auto input = BuildSubColumns({ R"({"s":"x"})", R"({"s":"yy"})", R"({"s":"zzz"})" }, BuildSettings(0, 1024));
-        auto accessor = input->GetPathAccessor("$.s", input->GetRecordsCount()).DetachResult();
+        auto accessor = input->GetPathAccessor(
+            NAccessor::NSubColumns::ParseJsonPath("$.s").DetachResult(), input->GetRecordsCount()).DetachResult();
         const auto& source = accessor->GetChunkedArrayAccessor();
         UNIT_ASSERT(source->GetType() == NAccessor::IChunkedArray::EType::Array);
 
@@ -212,7 +213,8 @@ Y_UNIT_TEST_SUITE(JsonValue) {
             dictionaryDocs.emplace_back(TStringBuilder() << R"({"s":")" << (index % 2 ? "x" : "yy") << R"("})");
         }
         auto dictionaryInput = BuildSubColumns(dictionaryDocs, BuildSettings(1, 1024));
-        auto accessor = dictionaryInput->GetPathAccessor("$.s", dictionaryInput->GetRecordsCount()).DetachResult();
+        auto accessor = dictionaryInput->GetPathAccessor(
+            NAccessor::NSubColumns::ParseJsonPath("$.s").DetachResult(), dictionaryInput->GetRecordsCount()).DetachResult();
         const auto& source = accessor->GetChunkedArrayAccessor();
         UNIT_ASSERT(source->GetType() == NAccessor::IChunkedArray::EType::Dictionary);
         UNIT_ASSERT(source->GetDataType()->id() == arrow::Type::STRING);

@@ -126,14 +126,6 @@ public:
         }
         return NSubColumns::TOthersData::BuildEmptyPathAccessor(recordsCount);
     }
-
-    TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
-        auto parsed = NSubColumns::ParseJsonPath(svPath);
-        if (parsed.IsFail()) {
-            return TConclusionStatus::Fail(parsed.GetErrorMessage());
-        }
-        return GetPathAccessor(parsed.GetResult(), recordsCount);
-    }
 };
 
 class TJsonRestorer {

@@ -20,6 +20,10 @@ namespace {
     // Keeps completed objects alive so tests can verify when ownership is transferred.
     class TCollectingEventDestructor final : public IEventDestructor {
     public:
+        ui64 GetAndResetDestroyEventsCycles() override {
+            return 0;
+        }
+
         void DestroyEvent(
                 std::unique_ptr<IEventBase> event,
                 TIntrusivePtr<TEventSerializedData> buffer) override {

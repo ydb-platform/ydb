@@ -16,6 +16,11 @@ namespace NActors {
         virtual void DestroyEvent(
             std::unique_ptr<IEventBase> event,
             TIntrusivePtr<TEventSerializedData> buffer) = 0;
+
+        // Atomically takes the accumulated time spent in DestroyEvent, in CPU cycles,
+        // including mutex waits. Concurrent callers receive disjoint deltas.
+        // Excludes asynchronous destruction.
+        virtual ui64 GetAndResetDestroyEventsCycles() = 0;
     };
 
 }

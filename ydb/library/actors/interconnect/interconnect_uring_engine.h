@@ -34,11 +34,6 @@ namespace NActors {
         // Completes pending client work, including the final destruction batch.
         virtual void Stop() = 0;
 
-        // Atomically takes the accumulated time spent in DestroyEvent, in CPU cycles,
-        // including mutex waits. Concurrent callers receive disjoint deltas.
-        // Excludes asynchronous destruction.
-        virtual ui64 GetAndResetDestroyEventsCycles() = 0;
-
         // Takes ownership of the event. May be called concurrently from engine worker threads.
         virtual void Send(std::unique_ptr<IEventHandle> ev) = 0;
     };

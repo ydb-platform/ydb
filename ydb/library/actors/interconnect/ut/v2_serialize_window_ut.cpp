@@ -18,6 +18,10 @@ namespace {
     // Counts objects released as the two socket windows are committed independently.
     class TCountingEventDestructor final : public IEventDestructor {
     public:
+        ui64 GetAndResetDestroyEventsCycles() override {
+            return 0;
+        }
+
         void DestroyEvent(
                 std::unique_ptr<IEventBase> event,
                 TIntrusivePtr<TEventSerializedData> buffer) override {

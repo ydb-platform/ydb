@@ -8,10 +8,9 @@
 #include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
-#include <util/random/random.h>
 #include <util/generic/algorithm.h>
+#include <util/random/random.h>
 #include <util/string/join.h>
-
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/utils/log/log.h>
@@ -93,7 +92,8 @@ struct TEvPrivate {
     struct TEvReconnectCluster: public TEventLocal<TEvReconnectCluster, EvReconnectCluster> {
         explicit TEvReconnectCluster(ui32 clusterIndex)
             : ClusterIndex(clusterIndex)
-        {}
+        {
+        }
 
         const ui32 ClusterIndex;
     };
@@ -373,20 +373,19 @@ public:
 
 private:
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvSourceDataReady, Handle);
-        hFunc(TEvPrivate::TEvPartitionIdleness, Handle);
-        hFunc(TEvPrivate::TEvReconnectSession, Handle);
-        hFunc(TEvExecuteMessageStreamCallback, HandleCallback);
-        hFunc(TEvPrivate::TEvResumeCallbacks, Handle);
-        hFunc(TEvPrivate::TEvCheckPartitionTimer, Handle);
-        hFunc(TEvPrivate::TEvCheckPartitionCount, Handle);
-        hFunc(TEvPrivate::TEvCheckPartitionCountResult, Handle);
-        hFunc(TEvPrivate::TEvRequestPartitionStatus, Handle);
-        hFunc(TEvPrivate::TEvReconnectCluster, Handle);
-        hFunc(TEvents::TEvWakeup, Handle);
-        hFunc(TEvents::TEvInvokeResult, HandleConsumerOffsets);
-        cFunc(TEvents::TEvPoison::EventType, PassAway);
-    )
+                      hFunc(TEvPrivate::TEvSourceDataReady, Handle);
+                      hFunc(TEvPrivate::TEvPartitionIdleness, Handle);
+                      hFunc(TEvPrivate::TEvReconnectSession, Handle);
+                      hFunc(TEvExecuteMessageStreamCallback, HandleCallback);
+                      hFunc(TEvPrivate::TEvResumeCallbacks, Handle);
+                      hFunc(TEvPrivate::TEvCheckPartitionTimer, Handle);
+                      hFunc(TEvPrivate::TEvCheckPartitionCount, Handle);
+                      hFunc(TEvPrivate::TEvCheckPartitionCountResult, Handle);
+                      hFunc(TEvPrivate::TEvRequestPartitionStatus, Handle);
+                      hFunc(TEvPrivate::TEvReconnectCluster, Handle);
+                      hFunc(TEvents::TEvWakeup, Handle);
+                      hFunc(TEvents::TEvInvokeResult, HandleConsumerOffsets);
+                      cFunc(TEvents::TEvPoison::EventType, PassAway);)
 
     void HandleCallback(TEvExecuteMessageStreamCallback::TPtr& ev) {
         if (!CpuQuotaRegistered) {
@@ -1057,22 +1056,23 @@ private:
         }
 
         void operator()(NFq::TMessageStreamSessionClosedEvent& ev) {
-            TString message = (TStringBuilder() << "Read session to topic \"" << Self.Settings.Stream << "\"" << (Cluster ? (" [" + Cluster + ']') : "") << " was closed");
+            TString message = (TStringBuilder() << "Read session to topic \"" << Self.Settings.Stream << "\""
+                                                << (Cluster ? (" [" + Cluster + ']') : "") << " was closed");
             SRC_LOG_W("SessionId: " << Self.GetSessionId(Index) << " " << message << ": " << ev.Issues.ToOneLineString());
 
             ClusterState.Available = false;
             Self.UpdateAvailableClustersMetric();
 
             const bool isLogbroker = Self.Clusters.size() > 2;
-            const bool canReconnect = ev.Status == NFq::EMessageStreamStatus::Unavailable
-                || ev.Status == NFq::EMessageStreamStatus::Timeout
-                || ev.Status == NFq::EMessageStreamStatus::NotFound;
+            const bool canReconnect = ev.Status == NFq::EMessageStreamStatus::Unavailable || ev.Status == NFq::EMessageStreamStatus::Timeout ||
+                                      ev.Status == NFq::EMessageStreamStatus::NotFound;
             if (!isLogbroker || !canReconnect) {
                 TIssue issue(message);
                 for (const auto& subIssue : ev.Issues) {
                     issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));
                 }
-                Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({issue}), NYql::NDqProto::StatusIds::BAD_REQUEST));
+                Self.Send(
+                    Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({ issue }), NYql::NDqProto::StatusIds::BAD_REQUEST));
                 return;
             }
 
@@ -1084,11 +1084,11 @@ private:
             }
             if (unavailableClusters.size() == Self.Clusters.size()) {
                 TStringBuilder message;
-                message << "Failed to read topic \"" << Self.Settings.Stream
-                    << "\": " << unavailableClusters.size() << " clusters are unavailable simultaneously: "
-                    << JoinSeq(", ", unavailableClusters);
+                message << "Failed to read topic \"" << Self.Settings.Stream << "\": " << unavailableClusters.size()
+                        << " clusters are unavailable simultaneously: " << JoinSeq(", ", unavailableClusters);
                 SRC_LOG_E(message);
-                Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::UNAVAILABLE));
+                Self.Send(Self.ComputeActorId,
+                    new TEvAsyncInputError(Self.InputIndex, TIssues({ TIssue(message) }), NYql::NDqProto::StatusIds::UNAVAILABLE));
             }
 
             if (!ClusterState.ReconnectScheduled) {

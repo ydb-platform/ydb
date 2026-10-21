@@ -55,9 +55,7 @@ google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask> MakeTopicSourceTasks
     return tasks;
 }
 
-google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask> MakeFederatedTopicSourceTasks(
-    ui64 topicPartitionsCount,
-    ui64 clusterCount)
+google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask> MakeFederatedTopicSourceTasks(ui64 topicPartitionsCount, ui64 clusterCount)
 {
     google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask> tasks;
     auto* task = tasks.Add();
@@ -242,29 +240,22 @@ Y_UNIT_TEST_SUITE(TStreamingQueryNodesManagerTest) {
 
         // One read actor reads four logical partitions from each of three clusters.
         const TActorId manager = runtime.Register(CreateStreamingQueryNodesManager(
-            edgeActor,
-            "/Root/test",
-            "query",
-            MakeFederatedTopicSourceTasks(4, 3),
-            TDuration::Seconds(1),
-            TDuration::Zero(),
-            0));
+            edgeActor, "/Root/test", "query", MakeFederatedTopicSourceTasks(4, 3), TDuration::Seconds(1), TDuration::Zero(), 0));
         runtime.EnableScheduleForActor(manager, true);
 
         TDispatchOptions options;
         options.OnlyMailboxes.emplace_back(manager);
         options.FinalEvents.emplace_back([manager](IEventHandle& event) {
-            return event.GetRecipientRewrite() == manager
-                && event.GetTypeRewrite() == TEvents::TSystem::Bootstrap;
+            return event.GetRecipientRewrite() == manager && event.GetTypeRewrite() == TEvents::TSystem::Bootstrap;
         });
         runtime.DispatchEvents(options);
 
-        InjectReadyState(runtime, manager, {1});
-        CompleteCheck(runtime, manager, {1, 2, 3, 4});
+        InjectReadyState(runtime, manager, { 1 });
+        CompleteCheck(runtime, manager, { 1, 2, 3, 4 });
 
         // The federated source has four logical partitions, so one query node is enough.
         UNIT_ASSERT_VALUES_EQUAL(TakeAbortCount(runtime, edgeActor), 0);
     }
-}   // Y_UNIT_TEST_SUITE
+}   // Y_UNIT_TEST_SUITE(TStreamingQueryNodesManagerTest)
 
 }   // namespace NKikimr::NKqp

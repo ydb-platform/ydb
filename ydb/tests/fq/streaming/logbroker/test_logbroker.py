@@ -86,9 +86,7 @@ class TestLogbroker(StreamingTestBase):
 
         self.logbrokers_client = {}
         for cluster_name, endpoint in logbroker_federation.ydb_cluster_endpoints.items():
-            logbroker = YdbClient.from_driver_config(
-                f"grpc://{endpoint}", f"/Root{database}"
-            )
+            logbroker = YdbClient.from_driver_config(f"grpc://{endpoint}", f"/Root{database}")
             cleanup.callback(logbroker.stop)
             self.logbrokers_client[cluster_name] = logbroker
 
@@ -130,7 +128,9 @@ class TestLogbroker(StreamingTestBase):
             actual = []
             for cluster_name, count in counts.items():
                 if count:
-                    actual.extend(self.logbrokers_client[cluster_name].topic_read(self.output_topic, self.consumer, count))
+                    actual.extend(
+                        self.logbrokers_client[cluster_name].topic_read(self.output_topic, self.consumer, count)
+                    )
             assert sorted(actual) == sorted(messages), counts
 
     def wait_available_clusters(self, kikimr, expected_count, timeout=120):
@@ -141,12 +141,14 @@ class TestLogbroker(StreamingTestBase):
         while True:
             values = {}
             for node_id in counter_nodes(kikimr.cluster):
-                value = get_sensors(kikimr.cluster, node_id, "kqp").find_sensor({
-                    "subsystem": "DqSourceTracker",
-                    "source": "PqRead",
-                    "tx_id": path,
-                    "sensor": "AvailableClusters",
-                })
+                value = get_sensors(kikimr.cluster, node_id, "kqp").find_sensor(
+                    {
+                        "subsystem": "DqSourceTracker",
+                        "source": "PqRead",
+                        "tx_id": path,
+                        "sensor": "AvailableClusters",
+                    }
+                )
                 if value is not None:
                     values[node_id] = value
             if values != previous_values:
@@ -155,9 +157,9 @@ class TestLogbroker(StreamingTestBase):
             if values and all(value == expected_count for value in values.values()):
                 logging.info("Query %s reached AvailableClusters=%s", path, expected_count)
                 return
-            assert time.monotonic() < deadline, (
-                f"Expected AvailableClusters={expected_count}; per-node values: {values}"
-            )
+            assert (
+                time.monotonic() < deadline
+            ), f"Expected AvailableClusters={expected_count}; per-node values: {values}"
             time.sleep(1)
 
     def test_stop_cluster(self, kikimr, logbroker_federation):
@@ -169,7 +171,9 @@ class TestLogbroker(StreamingTestBase):
             initial_state = self.get_query_state(kikimr, self.query_name)
             assert initial_state.Status == "RUNNING", initial_state
             retry_count = initial_state.RetryCount
-            logging.info("Query %s initial status=%s, RetryCount=%s", self.query_name, initial_state.Status, retry_count)
+            logging.info(
+                "Query %s initial status=%s, RetryCount=%s", self.query_name, initial_state.Status, retry_count
+            )
 
             cluster_names = list(logbroker_federation.ydb_cluster_endpoints)
             assert len(cluster_names) == 3, cluster_names
@@ -192,9 +196,9 @@ class TestLogbroker(StreamingTestBase):
                 for cluster_name, count in counts.items():
                     unread_count = count - read_counts[cluster_name]
                     if unread_count:
-                        actual_messages.extend(clients[cluster_name].topic_read(
-                            self.output_topic, self.consumer, unread_count
-                        ))
+                        actual_messages.extend(
+                            clients[cluster_name].topic_read(self.output_topic, self.consumer, unread_count)
+                        )
                     read_counts[cluster_name] = count
                 assert sorted(actual_messages) == sorted(expected_messages), counts
 
@@ -206,7 +210,11 @@ class TestLogbroker(StreamingTestBase):
             cleanup.callback(logbroker_federation.start_cluster, cluster2)
             logging.info("Stopping cluster %s", cluster2)
             logbroker_federation.stop_cluster(cluster2)
-            logging.info("Cluster %s stopped; checking that query %s stays running without retries for 20 seconds", cluster2, self.query_name)
+            logging.info(
+                "Cluster %s stopped; checking that query %s stays running without retries for 20 seconds",
+                cluster2,
+                self.query_name,
+            )
 
             deadline = time.monotonic() + 20
             while True:
@@ -250,9 +258,21 @@ class TestLogbroker(StreamingTestBase):
             deadline = time.monotonic() + 120
             while True:
                 state = self.get_query_state(kikimr, self.query_name)
-                logging.debug("Query %s status=%s, RetryCount=%s, issues=%s", self.query_name, state.Status, state.RetryCount, state.Issues)
+                logging.debug(
+                    "Query %s status=%s, RetryCount=%s, issues=%s",
+                    self.query_name,
+                    state.Status,
+                    state.RetryCount,
+                    state.Issues,
+                )
                 if state.RetryCount > retry_count:
-                    logging.info("Query %s retried: RetryCount %s -> %s; issues=%s", self.query_name, retry_count, state.RetryCount, state.Issues)
+                    logging.info(
+                        "Query %s retried: RetryCount %s -> %s; issues=%s",
+                        self.query_name,
+                        retry_count,
+                        state.RetryCount,
+                        state.Issues,
+                    )
                     break
                 assert time.monotonic() < deadline, (
                     "Query did not retry after stopping all three clusters: "

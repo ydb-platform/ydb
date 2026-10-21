@@ -37,15 +37,13 @@
 #include <util/generic/hash.h>
 #include <util/generic/utility.h>
 #include <util/string/join.h>
+#include <util/system/env.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <util/system/env.h>
-
-#include <queue>
 #include <map>
 #include <queue>
 #include <variant>

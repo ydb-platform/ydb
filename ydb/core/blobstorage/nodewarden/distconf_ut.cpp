@@ -3052,9 +3052,9 @@ selector_config: []
         UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig().GetGeneration(), 1);
     }
 
-    Y_UNIT_TEST(RecoveryRetainsPublishedProposal) {
+    void TestRecoveryRetainsPublishedProposal(const NKikimrConfig::TBridgeConfig *bridgeConfig) {
         TCommitConfirmationFixture fixture(true);
-        fixture.Start(true);
+        fixture.Start(true, bridgeConfig);
         const TActorId root = fixture.Root();
         const ui32 sourceNodeId = root.NodeId() % 3 + 1;
         const auto updated = MakeNextConfig(fixture.Config);
@@ -3073,6 +3073,18 @@ selector_config: []
         UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig().GetFingerprint(),
                                  updated.GetFingerprint());
         CheckDurableConfigConverges(fixture, updated);
+    }
+
+    Y_UNIT_TEST(RecoveryRetainsPublishedProposal) {
+        TestRecoveryRetainsPublishedProposal(nullptr);
+    }
+
+    // nodes of the cluster prepared for conversion to bridged one run with single-pile BridgeConfig, while the cluster
+    // is still the ordinary one for configuration management, and its configuration is recovered the same way
+    Y_UNIT_TEST(RecoveryRetainsPublishedProposalBeforeConversion) {
+        NKikimrConfig::TBridgeConfig bridgeConfig;
+        bridgeConfig.AddPiles()->SetName("pile_1");
+        TestRecoveryRetainsPublishedProposal(&bridgeConfig);
     }
 
     Y_UNIT_TEST(RecoveryIgnoresUnpublishedMinorityProposal) {
@@ -8433,6 +8445,58 @@ Y_UNIT_TEST_SUITE(TDeriveStorageConfigBridgeTest) {
         UNIT_ASSERT_STRING_CONTAINS(error, "unknown pile name '' for node 2");
         UNIT_ASSERT(!derive({std::nullopt, "a"}, {"a", "b"}, &error));
         UNIT_ASSERT_STRING_CONTAINS(error, "mandatory pile name is missing for node 1");
+    }
+
+    // parts of static groups get new generations when the pile becomes unsynced; donors and VDisks being destroyed are
+    // separate entries of older generations, which must stay as they are (otherwise they look as active ones)
+    Y_UNIT_TEST(ResetStaticGroupPilePartsKeepsDonors) {
+        NKikimrBlobStorage::TStorageConfig config;
+        auto *ss = config.MutableBlobStorageConfig()->MutableServiceSet();
+        auto addGroup = [&](ui32 groupId) {
+            auto *group = ss->AddGroups();
+            group->SetGroupID(groupId);
+            group->SetGroupGeneration(2);
+            return group;
+        };
+        auto *proxyGroup = addGroup(0); // inline pile of itself in pile 0, part in pile 1 is group 1
+        addGroup(1);
+        for (ui32 pileGroupId : {0, 1}) {
+            auto *pile = proxyGroup->MutableBridgeGroupState()->AddPile();
+            pile->SetGroupId(pileGroupId);
+            pile->SetGroupGeneration(2);
+            pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
+        }
+        auto addVDisk = [&](ui32 groupId, ui32 generation, ui32 slotId) {
+            auto *vdisk = ss->AddVDisks();
+            VDiskIDFromVDiskID(TVDiskID(TGroupId::FromValue(groupId), generation, 0, 0, 0), vdisk->MutableVDiskID());
+            vdisk->MutableVDiskLocation()->SetNodeID(1);
+            vdisk->MutableVDiskLocation()->SetPDiskID(1);
+            vdisk->MutableVDiskLocation()->SetVDiskSlotID(slotId);
+            return vdisk;
+        };
+        addVDisk(0, 2, 1); // active VDisks
+        addVDisk(1, 2, 2);
+        addVDisk(0, 1, 3)->MutableDonorMode()->SetErasureSpecies(0); // donor left after reassignment
+        addVDisk(1, 1, 4)->SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+
+        NStorage::ResetStaticGroupPileParts(&config, {TBridgePileId::FromPileIndex(1)}, 7);
+
+        for (const auto& group : ss->GetGroups()) {
+            UNIT_ASSERT_VALUES_EQUAL_C(group.GetGroupGeneration(), 3, group.ShortDebugString());
+        }
+        const auto& state = ss->GetGroups(0).GetBridgeGroupState();
+        UNIT_ASSERT_EQUAL(state.GetPile(0).GetStage(), NKikimrBridge::TGroupState::SYNCED);
+        UNIT_ASSERT_EQUAL(state.GetPile(1).GetStage(), NKikimrBridge::TGroupState::BLOCKS);
+        UNIT_ASSERT_VALUES_EQUAL(state.GetPile(1).GetBecameUnsyncedGeneration(), 7);
+        for (const auto& pile : state.GetPile()) {
+            UNIT_ASSERT_VALUES_EQUAL(pile.GetGroupGeneration(), 3);
+        }
+        const std::vector<ui32> expected{3, 3, 1, 1};
+        for (size_t i = 0; i < expected.size(); ++i) {
+            const auto& vdisk = ss->GetVDisks(i);
+            UNIT_ASSERT_VALUES_EQUAL_C(VDiskIDFromVDiskID(vdisk.GetVDiskID()).GroupGeneration, expected[i],
+                vdisk.ShortDebugString());
+        }
     }
 }
 

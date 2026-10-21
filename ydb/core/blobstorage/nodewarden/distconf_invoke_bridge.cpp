@@ -163,45 +163,11 @@ namespace NKikimr::NStorage {
         }
 
         if (!disconnectedPileIndices.empty()) {
-            // Bump each static group once per configuration, even when several piles fail.
-            auto *ss = config.MutableBlobStorageConfig()->MutableServiceSet();
-            THashMap<TGroupId, NKikimrBlobStorage::TGroupInfo*> groupMap;
-            for (auto& group : *ss->MutableGroups()) {
-                groupMap.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), &group);
+            std::vector<TBridgePileId> pileIds;
+            for (size_t pileIndex : disconnectedPileIndices) {
+                pileIds.push_back(TBridgePileId::FromPileIndex(pileIndex));
             }
-            THashSet<TGroupId> changedGroupIds;
-            for (const auto& [groupId, group] : groupMap) {
-                if (!group->HasBridgeGroupState()) {
-                    continue;
-                }
-                auto *state = group->MutableBridgeGroupState();
-                for (size_t pileIndex : disconnectedPileIndices) {
-                    auto *pile = NBridge::GetGroupPile(state, TBridgePileId::FromPileIndex(pileIndex));
-                    Y_ABORT_UNLESS(pile); // disconnected pile is not INACTIVE, so the group has its part there
-                    pile->ClearStage();
-                    pile->SetBecameUnsyncedGeneration(clusterState->GetGeneration() + 1);
-                }
-                NBridge::ForEachGroupPile(state, [&](TBridgePileId, NKikimrBridge::TGroupState::TPile& pile) {
-                    const auto refGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
-                    auto *refGroup = groupMap[refGroupId];
-                    Y_ABORT_UNLESS(refGroup);
-                    Y_ABORT_UNLESS(refGroup->GetGroupGeneration() == pile.GetGroupGeneration());
-                    refGroup->SetGroupGeneration(refGroup->GetGroupGeneration() + 1);
-                    pile.SetGroupGeneration(refGroup->GetGroupGeneration());
-                    changedGroupIds.insert(refGroupId);
-                });
-                BumpBridgeProxyGeneration(group, [&](TGroupId id) { return changedGroupIds.contains(id); });
-            }
-            for (auto& vdisk : *ss->MutableVDisks()) {
-                auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-                if (!changedGroupIds.contains(vdiskId.GroupID)) {
-                    continue;
-                }
-                auto *group = groupMap[vdiskId.GroupID];
-                Y_ABORT_UNLESS(group);
-                vdiskId.GroupGeneration = group->GetGroupGeneration();
-                VDiskIDFromVDiskID(vdiskId, vdisk.MutableVDiskID());
-            }
+            ResetStaticGroupPileParts(&config, pileIds, clusterState->GetGeneration());
         }
 
         StartProposition(&config, /*mindPrev=*/ false);
@@ -298,13 +264,7 @@ namespace NKikimr::NStorage {
         });
 
         // update vdisk generations
-        for (auto& vdisk : *ss->MutableVDisks()) {
-            auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-            if (const auto it = referencedGroups.find(vdiskId.GroupID); it != referencedGroups.end()) {
-                vdiskId.GroupGeneration = it->second;
-                VDiskIDFromVDiskID(vdiskId, vdisk.MutableVDiskID());
-            }
-        }
+        UpdateStaticVDiskGenerations(ss, referencedGroups);
 
         StartProposition(&config);
     }

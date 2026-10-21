@@ -111,7 +111,7 @@ namespace NKikimr::NStorage {
         for (const auto& [nodeId, node] : AllBoundNodes) {
             RememberAppliedConfig(node.Configs.back());
         }
-        ConfigRecoveryRequired = !BridgeInfo && (StorageConfig->GetGeneration() || KnownAppliedConfig);
+        ConfigRecoveryRequired = !IsBridged() && (StorageConfig->GetGeneration() || KnownAppliedConfig);
         ++ConfigRecoveryGeneration;
 
         // start config collection
@@ -231,7 +231,7 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::RememberAppliedConfig(const TStorageConfigMeta& meta) {
-        if (!Scepter || BridgeInfo || !meta.GetGeneration()) {
+        if (!Scepter || IsBridged() || !meta.GetGeneration()) {
             return false;
         }
         MaxObservedConfigGeneration = Max(MaxObservedConfigGeneration, meta.GetGeneration());
@@ -246,7 +246,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::RequestConfigRecovery(bool invalidateInFlight) {
-        if (!Scepter || BridgeInfo || (!StorageConfig->GetGeneration() && !KnownAppliedConfig)) {
+        if (!Scepter || IsBridged() || (!StorageConfig->GetGeneration() && !KnownAppliedConfig)) {
             return;
         }
         if (invalidateInFlight) {
@@ -326,7 +326,7 @@ namespace NKikimr::NStorage {
         }
 
         TStringStream err;
-        const bool recoverNonzero = !BridgeInfo
+        const bool recoverNonzero = !IsBridged()
                                     && (StorageConfig->GetGeneration()
                                         || KnownAppliedConfig
                                         || std::ranges::any_of(res->GetCommittedConfigs(), [](const auto& item) {
@@ -635,7 +635,7 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::IsPropositionCurrent(const TProposition& proposition) const {
-        return BridgeInfo || ((!ConfigRecoveryRequired || IsConflictingGenerationAdvance(proposition))
+        return IsBridged() || ((!ConfigRecoveryRequired || IsConflictingGenerationAdvance(proposition))
                    && proposition.ConfigRecoveryGeneration == ConfigRecoveryGeneration);
     }
 
@@ -822,7 +822,7 @@ namespace NKikimr::NStorage {
         if (task.Request.HasProposeStorageConfig()) {
             const auto& proposed = task.Request.GetProposeStorageConfig().GetConfig();
             const bool bootstrap = IsBootstrapProposition(proposed);
-            if (!BridgeInfo && std::holds_alternative<TScatterTaskOriginTargeted>(task.Origin)
+            if (!IsBridged() && std::holds_alternative<TScatterTaskOriginTargeted>(task.Origin)
                 && (!LocalCommittedStorageConfig || !LocalCommittedStorageConfig->GetGeneration())
                 && !bootstrap && !task.TargetedPropositionAdmitted) {
                 const auto containsSelf = [this](const auto& node) { return node.GetNodeId() == SelfNode.NodeId(); };
@@ -849,7 +849,7 @@ namespace NKikimr::NStorage {
 
             case TEvScatter::kProposeStorageConfig:
                 if (const auto& proposed = task.Request.GetProposeStorageConfig().GetConfig();
-                    !BridgeInfo && !HasLocalConfig() && !task.TargetedPropositionAdmitted
+                    !IsBridged() && !HasLocalConfig() && !task.TargetedPropositionAdmitted
                     && !IsBootstrapProposition(proposed)) {
                     auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                     SelfNode.Serialize(status->MutableNodeId());
@@ -1204,7 +1204,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *committedStorageConfig,
                                                      bool onlyOutdated) {
         const ui32 rootNodeId = GetRootNodeId();
-        if (committedStorageConfig && !BridgeInfo) {
+        if (committedStorageConfig && !IsBridged()) {
             const ui64 generation = committedStorageConfig->GetGeneration();
             const bool belowKnown = IsBelowKnownAppliedConfig(*committedStorageConfig);
             if (generation < StorageConfig->GetGeneration() || (Scepter && (ConfigRecoveryRequired || belowKnown))) {

@@ -293,6 +293,52 @@ namespace NBridgeTest {
         Y_UNREACHABLE();
     }
 
+    // ids of the parts of the bridged group, indexed by pile
+    inline std::vector<ui32> GetPileGroups(TEnvironmentSetup& env, ui32 groupId) {
+        const auto info = GetGroupInfo(env, groupId);
+        std::vector<ui32> res;
+        for (const auto& pile : info.GetBridgeGroupState().GetPile()) {
+            res.push_back(pile.GetGroupId());
+        }
+        return res;
+    }
+
+    // current generation of the group as the node knows it
+    inline ui32 GetNodeGroupGeneration(TEnvironmentSetup& env, ui32 groupId, ui32 nodeId) {
+        const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge,
+            new TEvNodeWardenQueryGroupInfo(groupId)), nodeId);
+        auto info = env.WaitForEdgeActorEvent<TEvNodeWardenGroupInfo>(edge, false);
+        UNIT_ASSERT_C(info->Get()->Record.HasGroup(), info->Get()->Record.DebugString());
+        return info->Get()->Record.GetGroup().GetGroupGeneration();
+    }
+
+    // send the request to the physical group of the pile directly, bypassing the bridge proxy, and wait for the result
+    template<typename TResult, typename TRequest>
+    inline std::unique_ptr<TResult> QueryPileGroup(TEnvironmentSetup& env, ui32 pileGroupId, ui32 nodeId,
+            TRequest *request) {
+        request->ForceGroupGeneration = GetNodeGroupGeneration(env, pileGroupId, nodeId);
+        const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, pileGroupId, request);
+        });
+        auto res = env.WaitForEdgeActorEvent<TResult>(edge, false);
+        return std::unique_ptr<TResult>(res->Release().Release());
+    }
+
+    // read the blob from the physical group of the pile, so that the bridge proxy can't restore it
+    inline NKikimrProto::EReplyStatus ReadFromPileGroup(TEnvironmentSetup& env, ui32 pileGroupId, ui32 nodeId,
+            const TLogoBlobID& id, const TString& data) {
+        const auto res = QueryPileGroup<TEvBlobStorage::TEvGetResult>(env, pileGroupId, nodeId,
+            new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead));
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res->ResponseSz, 1);
+        if (res->Responses[0].Status == NKikimrProto::OK) {
+            UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].Buffer.ConvertToString(), data);
+        }
+        return res->Responses[0].Status;
+    }
+
     // create storage pool with the designated number of groups and wait for them to start; returns the first group id
     inline ui32 CreatePoolAndGetGroup(TEnvironmentSetup& env, ui32 numGroups = 1) {
         env.CreatePool(numGroups);

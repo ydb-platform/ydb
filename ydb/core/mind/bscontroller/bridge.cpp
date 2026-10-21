@@ -584,6 +584,19 @@ size_t TBlobStorageController::RemoveBridgePileGroups(TConfigState& state, TBrid
     return proxyGroupIds.size();
 }
 
+const NKikimrBridge::TClusterStateDetails::TPileSyncState *TBlobStorageController::FindPileSyncState(
+        TBridgePileId pileId) const {
+    if (StorageConfig) {
+        for (const auto& pss : StorageConfig->GetClusterStateDetails().GetPileSyncState()) {
+            if (TBridgePileId::FromProto(&pss, &NKikimrBridge::TClusterStateDetails::TPileSyncState::GetBridgePileId) ==
+                    pileId) {
+                return &pss;
+            }
+        }
+    }
+    return nullptr;
+}
+
 TBridgePileId TBlobStorageController::GetPendingOperationPileId() const {
     return StorageConfig ? NBridge::GetPendingPileOperationPileId(StorageConfig->GetClusterStateDetails()) : TBridgePileId();
 }
@@ -991,6 +1004,12 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
             }
             if (pile.GetStage() == NKikimrBridge::TGroupState::SYNCED) {
                 continue; // this group is synced
+            }
+            if (const auto *pss = FindPileSyncState(TBridgePileId::FromPileIndex(pileIndex));
+                    pss && pile.GetBecameUnsyncedGeneration() < pss->GetBecameUnsyncedGeneration()) {
+                // the part is not reset for the current sync of the pile yet, its stage and generation are the ones
+                // writers that skip the pile may be using; TTxCheckUnsynced (or distconf for static groups) resets it
+                continue;
             }
 
             // pick the pile to sync from

@@ -1447,11 +1447,21 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
 
     // We have to tell client that there were some locks (even if we don't set them)
     TVector<TLock> out;
-    for (auto& table : Update->AffectedTables) {
+    // Operations that register no key ranges but consume a write seq num (e.g. an
+    // empty re-routed batch for a covering shard after a split/merge) have no
+    // affected tables; echo the lock over the tables of the lock itself instead, so
+    // the client still learns the lock with its updated write chain.
+    THashSet<TPathId> chainOnlyTables;
+    if (Update->AffectedTables.Empty() && Update->WriteSeqNumUpdate && Update->Lock) {
+        chainOnlyTables = Update->Lock->GetReadTables();
+        chainOnlyTables.insert(Update->Lock->GetWriteTables().begin(), Update->Lock->GetWriteTables().end());
+    }
+
+    auto makeEchoLocks = [&](const TPathId& tableId) {
         out.push_back(MakeLock(
             Update->LockTxId, Self->TabletID(),
             lock ? lock->GetGeneration() : Self->Generation(), counter,
-            table.GetTableId(), Update->Lock && Update->Lock->IsWriteLock(),
+            tableId, Update->Lock && Update->Lock->IsWriteLock(),
             Update->Lock ? Update->Lock->GetLockWriteSeqNum() : TLockWriteSeqNum{}));
 
         if (Update->WriteSeqNumUpdate) {
@@ -1469,9 +1479,16 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                 out.push_back(MakeLock(
                     Update->LockTxId, shardId,
                     ancestorLock.Generation, ancestorCounter,
-                    table.GetTableId(), lock->IsWriteLock(), writerSeqNum));
+                    tableId, lock->IsWriteLock(), writerSeqNum));
             }
         }
+    };
+
+    for (auto& table : Update->AffectedTables) {
+        makeEchoLocks(table.GetTableId());
+    }
+    for (const auto& table : chainOnlyTables) {
+        makeEchoLocks(table);
     }
 
     if (Update->HasSeqNumDuplicateWrites()) {

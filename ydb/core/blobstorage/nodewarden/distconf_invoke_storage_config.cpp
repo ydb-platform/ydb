@@ -985,6 +985,8 @@ namespace NKikimr::NStorage {
                 throw TExRace() << "Storage config generation regenerated while collecting configs";
             } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID); r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
+            } else if (r.RequiresRecoveryProposition) {
+                return StartRecoveryProposition(r);
             } else if (r.ConfigToPropose) {
                 // config validation, which is basically done in Console
                 TString mainYaml;

@@ -3590,6 +3590,107 @@ selector_config: []
         CheckBootstrapMinorityProposals(true);
     }
 
+    Y_UNIT_TEST(BootstrapReproposesPossiblyChosenConfig) {
+        TCommitConfirmationFixture fixture(true);
+        auto committed = fixture.Config;
+        committed.SetSelfAssemblyUUID("existing-bootstrap");
+        const auto yaml = fixture.MakeReplacementYaml(committed, 0, "none");
+        const auto compositeError = NStorage::TDistributedConfigKeeper::UpdateConfigComposite(committed, yaml, yaml);
+        UNIT_ASSERT_C(!compositeError, compositeError.value_or(""));
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&committed);
+        auto accepted = MakeNextConfig(committed);
+        accepted.MutableSelfManagementConfig()->SetAutomaticBootstrap(true);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&accepted);
+
+        std::array<ui32, 4> reads{};
+        ui32 failedAutomaticReads = 0;
+        ui32 recoveryProposals = 0;
+        bool allowCollection = false;
+        bool allowThirdRead = false;
+        bool holdRecovery = true;
+        TActorId edge;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        std::vector<std::unique_ptr<IEventHandle>> delayedWrites;
+        fixture.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (edge && CaptureInvokeResult(*ev, edge, response)) {
+                return false;
+            }
+            const ui32 type = ev->GetTypeRewrite();
+            if (type == NStorage::TEvNodeWardenReadMetadata::EventType) {
+                if (++reads[nodeId] == 1) {
+                    if (nodeId != 1) {
+                        fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(committed);
+                        if (nodeId == 2) {
+                            fixture.Metadata(nodeId).MutableProposedStorageConfig()->CopyFrom(accepted);
+                        }
+                    }
+                } else if (!allowCollection || (nodeId == 3 && !allowThirdRead)) {
+                    failedAutomaticReads += !allowCollection;
+                    fixture.Runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                        new NStorage::TEvNodeWardenReadMetadataResult(std::nullopt, NPDisk::EPDiskMetadataOutcome::ERROR,
+                            NKikimrBlobStorage::TPDiskMetadataRecord()), 0, ev->Cookie), nodeId);
+                    return false;
+                }
+            } else if (type == NStorage::TEvNodeConfigScatter::EventType) {
+                const auto& scatter = ev->Get<NStorage::TEvNodeConfigScatter>()->Record;
+                if (allowCollection && scatter.HasProposeStorageConfig()) {
+                    const auto& proposed = scatter.GetProposeStorageConfig().GetConfig();
+                    ++recoveryProposals;
+                    UNIT_ASSERT_VALUES_EQUAL(proposed.GetGeneration(), accepted.GetGeneration());
+                    UNIT_ASSERT_VALUES_EQUAL(proposed.GetPrevConfig().GetFingerprint(), committed.GetFingerprint());
+                    UNIT_ASSERT_VALUES_EQUAL(proposed.GetFingerprint(), accepted.GetFingerprint());
+                    UNIT_ASSERT_VALUES_EQUAL(proposed.SerializeAsString(), accepted.SerializeAsString());
+                }
+            } else if (holdRecovery && nodeId == 2 && type == NStorage::TEvNodeWardenWriteMetadata::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeWardenWriteMetadata>()->Record;
+                if (record.GetProposedStorageConfig().GetGeneration() == accepted.GetGeneration()) {
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetProposedStorageConfig().SerializeAsString(), accepted.SerializeAsString());
+                    delayedWrites.push_back(std::move(ev));
+                    return false;
+                }
+            }
+            return true;
+        };
+        StartZeroGenerationRoot(fixture);
+        UNIT_ASSERT(failedAutomaticReads);
+        fixture.Metadata(1).MutableCommittedStorageConfig()->CopyFrom(committed);
+        allowCollection = true;
+        edge = fixture.Runtime.AllocateEdgeActor(1);
+        const auto invokeBootstrap = [&](const TString& uuid) {
+            response.reset();
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            request->Record.MutableBootstrapCluster()->SetSelfAssemblyUUID(uuid);
+            fixture.Runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        };
+        invokeBootstrap("different-bootstrap");
+        UNIT_ASSERT_C(SimUntil(fixture.Runtime, [&] { return !delayedWrites.empty() || response; }),
+            "bootstrap did not start recovery of the persisted proposal");
+        UNIT_ASSERT_C(!response.has_value(), (response ? response->DebugString() : TString()));
+        UNIT_ASSERT(recoveryProposals);
+        UNIT_ASSERT(!delayedWrites.empty());
+        SimUntil(fixture.Runtime, [] { return false; }, TDuration::MilliSeconds(100));
+        UNIT_ASSERT(!response.has_value());
+        holdRecovery = false;
+        ReplayDelayedEvents(fixture.Runtime, delayedWrites);
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] { return response.has_value(); }));
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        UNIT_ASSERT_C(response->GetStatus() == TResult::RACE, response->DebugString());
+        allowThirdRead = true;
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig().SerializeAsString(),
+            accepted.SerializeAsString());
+        invokeBootstrap(accepted.GetSelfAssemblyUUID());
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] { return response.has_value(); }));
+        UNIT_ASSERT_C(response->GetStatus() == TResult::OK, response->DebugString());
+        invokeBootstrap("different-bootstrap");
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] { return response.has_value(); }));
+        UNIT_ASSERT_C(response->GetStatus() == TResult::ERROR, response->DebugString());
+        CheckDurableConfigConverges(fixture, accepted);
+        for (ui32 nodeId : {1, 2, 3}) {
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().SerializeAsString(),
+                accepted.SerializeAsString());
+        }
+    }
+
     Y_UNIT_TEST(ZeroRootCollectsPublishedConfig) {
         TCommitConfirmationFixture fixture(true);
         StartZeroGenerationRoot(fixture);

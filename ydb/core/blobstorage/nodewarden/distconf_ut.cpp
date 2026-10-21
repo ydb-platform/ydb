@@ -3047,7 +3047,7 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
 
     void Reallocate(TSetup& s, const NProtoBuf::RepeatedField<ui32>& allowedNodeIds, bool applyNodeAllowList,
                     i32 erasureSpecies = TBlobStorageGroupType::ErasureNone, ui32 numFailDomains = 1) {
-        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+        NKikimr::NStorage::TDistributedConfigKeeper keeper(MakeNodeWardenConfig(s.Config), nullptr, true);
         THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
         replacedDisks.emplace(TVDiskIdShort(0, 0, 0), NBsController::TPDiskId());
         NBsController::TGroupMapper::TForbiddenPDisks forbid;

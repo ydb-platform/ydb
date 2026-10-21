@@ -9,12 +9,7 @@ SPLIT_FACTOR(10)
 
 TEST_SRCS(
     test_topic.py
-<<<<<<< HEAD
-=======
-    test_direct_read.py
     test_cluster_discovery.py
-    test_sqs_topic_boto.py
->>>>>>> 33ea0ba5afe ([PQ] Hide FNX clusters in DiscoverClusters unless :authority matches a Balancer (LOGBROKER-10621) (#53259))
     test_kafka_topic.py
 )
 

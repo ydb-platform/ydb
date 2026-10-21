@@ -108,6 +108,10 @@ protected:
     ETabletRole TabletRole;
     TInstant VolatileStateChangeTime;
     TInstant LastBalancerDecisionTime;
+    // Stamp of the last balancer run that counted this tablet and the bit set of the counters
+    // (TBalancerRunStats::ETabletCounter) it was counted in, see MarkCountedByBalancerRun.
+    ui32 BalancerRunId = 0;
+    ui16 BalancerRunCounted = 0;
 
 public:
     static TString EVolatileStateName(EVolatileState value) {
@@ -136,6 +140,21 @@ public:
 
     bool IsAllowedByBalancerPolicy() const; // balancer policy allows moves and the tablet type is not in the ignore list
     bool IsInBalancerCooldown(TInstant now) const; // moved by the balancer too recently
+
+    // Returns true the first time balancer run runId marks this tablet with the given counter bit, false on
+    // repeats within the same run. Lets a run count a tablet once per counter without a per-run map of tablets.
+    bool MarkCountedByBalancerRun(ui32 runId, ui8 counterBit) {
+        if (BalancerRunId < runId) { // stamped by an older run, ids only grow
+            BalancerRunId = runId;
+            BalancerRunCounted = 0;
+        }
+        const ui16 mask = static_cast<ui16>(1) << counterBit;
+        if (BalancerRunCounted & mask) {
+            return false;
+        }
+        BalancerRunCounted |= mask;
+        return true;
+    }
 
     void MakeBalancerDecision(TInstant now) {
         LastBalancerDecisionTime = now;

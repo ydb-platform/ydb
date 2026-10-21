@@ -423,6 +423,7 @@ protected:
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
     std::unordered_set<TNodeId> BalancerNodes; // all nodes, affected by running balancers
     EBalancerType LastBalancerTrigger = EBalancerType::Manual;
+    ui32 NextBalancerRunId = 0; // stamps the tablets a balancer run counted, see TTabletInfo::BalancerRunId
     // last "balancer not started" line written at INFO, repeats of it go to DEBUG
     std::optional<std::pair<TString, EBalancerSuppressReason>> LastBalancerSuppression;
     std::array<TBalancerStats, EBalancerTypeSize> BalancerStats;

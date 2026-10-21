@@ -129,6 +129,9 @@ protected:
     std::vector<TFullTabletId> Tablets;
     std::vector<TFullTabletId>::iterator NextTablet;
     TBalancerRunStats RunStats;
+    const ui32 RunId; // see CountTablet
+    using TTabletCounters = TBalancerRunStats::TTabletCounters;
+    using ETabletCounter = TBalancerRunStats::ETabletCounter;
 
     static constexpr ui64 MAX_TABLETS_PROCESSED = 10;
 
@@ -153,19 +156,32 @@ protected:
             {"duration", RunStats.EndTime - RunStats.StartTime},
             {"passes", RunStats.Passes},
             {"nodesConsidered", RunStats.NodesConsidered},
-            {"tabletsOnNodes", RunStats.TabletsOnNodes},
-            {"tabletsEligible", RunStats.TabletsEligible},
-            {"skippedPolicy", RunStats.SkippedPolicy},
-            {"skippedCooldown", RunStats.SkippedCooldown},
-            {"skippedNoMetric", RunStats.SkippedNoMetric},
-            {"skippedPinned", RunStats.SkippedPinned},
-            {"skippedObjectFilter", RunStats.SkippedObjectFilter},
-            {"tabletsExamined", RunStats.TabletsExamined},
-            {"rejectedNoNode", RunStats.RejectedNoNode},
-            {"rejectedNotEnoughResources", RunStats.RejectedNotEnoughResources},
-            {"rejectedTooManyStarting", RunStats.RejectedTooManyStarting},
-            {"rejectedSameNode", RunStats.RejectedSameNode},
-            {"rejectedNotExpedient", RunStats.RejectedNotExpedient});
+            {"tabletsOnNodes", RunStats.Raw.TabletsOnNodes},
+            {"tabletsEligible", RunStats.Raw.TabletsEligible},
+            {"skippedPolicy", RunStats.Raw.SkippedPolicy},
+            {"skippedCooldown", RunStats.Raw.SkippedCooldown},
+            {"skippedNoMetric", RunStats.Raw.SkippedNoMetric},
+            {"skippedPinned", RunStats.Raw.SkippedPinned},
+            {"skippedObjectFilter", RunStats.Raw.SkippedObjectFilter},
+            {"tabletsExamined", RunStats.Raw.TabletsExamined},
+            {"rejectedNoNode", RunStats.Raw.RejectedNoNode},
+            {"rejectedNotEnoughResources", RunStats.Raw.RejectedNotEnoughResources},
+            {"rejectedTooManyStarting", RunStats.Raw.RejectedTooManyStarting},
+            {"rejectedSameNode", RunStats.Raw.RejectedSameNode},
+            {"rejectedNotExpedient", RunStats.Raw.RejectedNotExpedient},
+            {"uniqueTabletsOnNodes", RunStats.Unique.TabletsOnNodes},
+            {"uniqueTabletsEligible", RunStats.Unique.TabletsEligible},
+            {"uniqueSkippedPolicy", RunStats.Unique.SkippedPolicy},
+            {"uniqueSkippedCooldown", RunStats.Unique.SkippedCooldown},
+            {"uniqueSkippedNoMetric", RunStats.Unique.SkippedNoMetric},
+            {"uniqueSkippedPinned", RunStats.Unique.SkippedPinned},
+            {"uniqueSkippedObjectFilter", RunStats.Unique.SkippedObjectFilter},
+            {"uniqueTabletsExamined", RunStats.Unique.TabletsExamined},
+            {"uniqueRejectedNoNode", RunStats.Unique.RejectedNoNode},
+            {"uniqueRejectedNotEnoughResources", RunStats.Unique.RejectedNotEnoughResources},
+            {"uniqueRejectedTooManyStarting", RunStats.Unique.RejectedTooManyStarting},
+            {"uniqueRejectedSameNode", RunStats.Unique.RejectedSameNode},
+            {"uniqueRejectedNotExpedient", RunStats.Unique.RejectedNotExpedient});
         Stats.TotalRuns++;
         Stats.TotalMovements += Movements;
         Stats.LastRunMovements = Movements;
@@ -265,28 +281,38 @@ protected:
         Tablets.clear();
     }
 
+    // Counts the tablet in RunStats.Raw, and in RunStats.Unique unless this run has already counted it there.
+    // The tablet remembers the run that last counted it and the counters it was counted in, so no per-run
+    // map of tablets is needed.
+    void CountTablet(TTabletInfo* tablet, ui64 TTabletCounters::* counter, ETabletCounter bit) {
+        ++(RunStats.Raw.*counter);
+        if (tablet->MarkCountedByBalancerRun(RunId, static_cast<ui8>(bit))) {
+            ++(RunStats.Unique.*counter);
+        }
+    }
+
     // counts the reason a tablet is not suitable in RunStats
-    bool IsTabletSuitableForBalancing(const TTabletInfo* tablet, TInstant now) {
+    bool IsTabletSuitableForBalancing(TTabletInfo* tablet, TInstant now) {
         if (!tablet->IsAllowedByBalancerPolicy()) {
-            ++RunStats.SkippedPolicy;
+            CountTablet(tablet, &TTabletCounters::SkippedPolicy, ETabletCounter::SkippedPolicy);
             return false;
         }
         if (tablet->IsInBalancerCooldown(now)) {
-            ++RunStats.SkippedCooldown;
+            CountTablet(tablet, &TTabletCounters::SkippedCooldown, ETabletCounter::SkippedCooldown);
             return false;
         }
         if (Settings.FilterObjectId && tablet->GetObjectId() != *Settings.FilterObjectId) {
-            ++RunStats.SkippedObjectFilter;
+            CountTablet(tablet, &TTabletCounters::SkippedObjectFilter, ETabletCounter::SkippedObjectFilter);
             return false;
         }
         if (!tablet->HasMetric(Settings.ResourceToBalance)) {
-            ++RunStats.SkippedNoMetric;
+            CountTablet(tablet, &TTabletCounters::SkippedNoMetric, ETabletCounter::SkippedNoMetric);
             return false;
         }
         if (tablet->IsPinnedToNode()) {
             // The tablet accounts for most of its node's usage, so moving it would only relocate the
             // load. Leave it where it is and let the balancer drain the rest of the node instead.
-            ++RunStats.SkippedPinned;
+            CountTablet(tablet, &TTabletCounters::SkippedPinned, ETabletCounter::SkippedPinned);
             return false;
         }
         return true;
@@ -343,10 +369,10 @@ protected:
             std::vector<TTabletInfo*> tablets;
             tablets.reserve(nodeTablets.size());
             ++RunStats.NodesConsidered;
-            RunStats.TabletsOnNodes += nodeTablets.size();
             for (TTabletInfo* tablet : nodeTablets) {
+                CountTablet(tablet, &TTabletCounters::TabletsOnNodes, ETabletCounter::TabletsOnNodes);
                 if (IsTabletSuitableForBalancing(tablet, now)) {
-                    ++RunStats.TabletsEligible;
+                    CountTablet(tablet, &TTabletCounters::TabletsEligible, ETabletCounter::TabletsEligible);
                     tablet->UpdateWeight();
                     tablets.emplace_back(tablet);
                 }
@@ -410,14 +436,14 @@ protected:
             YDB_LOG_TRACE("Balancer selected tablet",
                 {"logPrefix", GetLogPrefix()},
                 {"tablet", tablet->ToString()});
-            ++RunStats.TabletsExamined;
+            CountTablet(tablet, &TTabletCounters::TabletsExamined, ETabletCounter::TabletsExamined);
             THive::TBestNodeResult result = Hive->FindBestNode(*tablet);
             if (std::holds_alternative<THive::TNotEnoughResources>(result)) {
-                ++RunStats.RejectedNotEnoughResources;
+                CountTablet(tablet, &TTabletCounters::RejectedNotEnoughResources, ETabletCounter::RejectedNotEnoughResources);
             } else if (std::holds_alternative<THive::TTooManyTabletsStarting>(result)) {
-                ++RunStats.RejectedTooManyStarting;
+                CountTablet(tablet, &TTabletCounters::RejectedTooManyStarting, ETabletCounter::RejectedTooManyStarting);
             } else if (!std::holds_alternative<TNodeInfo*>(result)) {
-                ++RunStats.RejectedNoNode;
+                CountTablet(tablet, &TTabletCounters::RejectedNoNode, ETabletCounter::RejectedNoNode);
             }
             if (std::holds_alternative<TNodeInfo*>(result)) {
                 TNodeInfo* node = std::get<TNodeInfo*>(result);
@@ -425,10 +451,10 @@ protected:
                 if (node != tablet->Node) {
                     expediency = Hive->CheckTabletMoveExpediency(*tablet, *node);
                     if (!expediency.Expedient) {
-                        ++RunStats.RejectedNotExpedient;
+                        CountTablet(tablet, &TTabletCounters::RejectedNotExpedient, ETabletCounter::RejectedNotExpedient);
                     }
                 } else {
-                    ++RunStats.RejectedSameNode;
+                    CountTablet(tablet, &TTabletCounters::RejectedSameNode, ETabletCounter::RejectedSameNode);
                 }
 
                 if (expediency.Expedient) {
@@ -496,6 +522,7 @@ public:
         , Movements(0)
         , Settings(std::move(settings))
         , Stats(Hive->BalancerStats[static_cast<std::size_t>(Settings.Type)])
+        , RunId(++Hive->NextBalancerRunId)
     {
         Stats.IsRunningNow = true;
         Stats.CurrentMaxMovements = Settings.MaxMovements ? Settings.MaxMovements : Hive->TabletsTotal;

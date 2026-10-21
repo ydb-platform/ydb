@@ -147,6 +147,24 @@ public:
         }
     }
 
+    // bridge info as node warden reports it, with piles assigned the way MockBridgeModePiles() does; piles without the
+    // state given are synchronized
+    void MockBridgeInfo(ui32 numPiles, const std::vector<NKikimrBridge::TClusterState::EPileState>& states = {}) {
+        auto info = std::make_shared<TBridgeInfo>();
+        info->Piles.resize(numPiles);
+        for (ui32 i = 0; i < numPiles; ++i) {
+            auto& pile = info->Piles[i];
+            pile.BridgePileId = TBridgePileId::FromPileIndex(i);
+            pile.State = i < states.size() ? states[i] : NKikimrBridge::TClusterState::SYNCHRONIZED;
+        }
+        for (const auto& [id, _] : State->ClusterInfo->AllNodes()) {
+            auto& pile = info->Piles[id % numPiles];
+            pile.StaticNodeIds.push_back(id);
+            info->StaticNodeIdToPile[id] = &pile;
+        }
+        State->BridgeInfo = std::move(info);
+    }
+
     TPDiskID RandomPDiskID() const {
         const auto& config = MockConfig.GetResponse().GetStatus(0).GetBaseConfig();
         const auto& pdisk = config.GetPDisk(RandomNumber(config.PDiskSize() - 1));

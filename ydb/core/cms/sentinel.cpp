@@ -1168,6 +1168,11 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         StartUpdater<TStateUpdater>(StateUpdater);
     }
 
+    bool IsPileCutOff(ui32 nodeId) const {
+        const auto *pile = CmsState->BridgeInfo ? CmsState->BridgeInfo->GetPileForNode(nodeId) : nullptr;
+        return pile && !NBridge::PileStateTraits(pile->State).AllowsConnection;
+    }
+
     void OnStateUpdated() {
         YDB_LOG_DEBUG("State was updated",
             {"name", Name()},
@@ -1200,6 +1205,16 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                     {"PDiskId", id});
                 info.IgnoreReason = NKikimrCms::TPDiskInfo::MISSING_NODE;
                 continue;
+            }
+
+            if (IsPileCutOff(id.NodeId)) {
+                // nodes of the pile that is disconnected or is not in the cluster can't be reached on purpose, which says
+                // nothing about their drives; the drives are judged anew once the pile connects back
+                info.Reset();
+                info.IgnoreReason = NKikimrCms::TPDiskInfo::PILE_CUT_OFF;
+                continue;
+            } else if (info.IgnoreReason == NKikimrCms::TPDiskInfo::PILE_CUT_OFF) {
+                info.IgnoreReason = NKikimrCms::TPDiskInfo::NOT_IGNORED; // the pile has connected back
             }
 
             bool hasGoodState = NKikimrBlobStorage::TPDiskState::Normal == info.GetState();

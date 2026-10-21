@@ -11,6 +11,7 @@
 #include <util/generic/xrange.h>
 #include <util/random/random.h>
 #include <util/string/builder.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NCmsTest {
 
@@ -680,6 +681,46 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
             env.SetPDiskState(pdisks, NKikimrBlobStorage::TPDiskState::Normal);
         }
         env.SetPDiskState(pdisks, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
+    }
+
+    Y_UNIT_TEST(PDiskOfCutOffPileUntouched) {
+        TTestEnv env(8, 4);
+        env.MockBridgeModePiles(2);
+
+        const auto pdisks = env.PDisksForRandomPile();
+        const ui32 pileIndex = pdisks.begin()->NodeId % 2;
+
+        TSet<TPDiskID> requested;
+        auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+            for (const auto& command : event->Get()->Record.GetRequest().GetCommand()) {
+                if (command.HasUpdateDriveStatus()) {
+                    const auto& update = command.GetUpdateDriveStatus();
+                    const TPDiskID id(update.GetHostKey().GetNodeId(), update.GetPDiskId());
+                    if (pdisks.contains(id)) {
+                        requested.insert(id);
+                    }
+                }
+            }
+        });
+
+        // the pile is disconnected, then removed from the cluster: its drives look bad for longer than it takes to make
+        // them FAULTY, but nobody can tell how they are
+        for (const auto state : {NKikimrBridge::TClusterState::DISCONNECTED, NKikimrBridge::TClusterState::INACTIVE}) {
+            std::vector<NKikimrBridge::TClusterState::EPileState> states(2, NKikimrBridge::TClusterState::SYNCHRONIZED);
+            states[pileIndex] = state;
+            env.MockBridgeInfo(2, states);
+            for (ui32 i = 0; i < DefaultErrorStateLimit + 1; ++i) {
+                env.SetPDiskState(pdisks, ErrorStates[0]);
+            }
+        }
+        env.SimulateSleep(TDuration::Minutes(5));
+
+        observerHolder.Remove();
+        UNIT_ASSERT_C(requested.empty(), "status of drives of the cut off pile has been changed: " << JoinSeq(", ", requested));
+
+        // once the pile connects back, its drives are judged anew
+        env.MockBridgeInfo(2);
+        env.SetPDiskState(pdisks, ErrorStates[0], EPDiskStatus::INACTIVE);
     }
 
     Y_UNIT_TEST(PDiskFaultyGuard) {

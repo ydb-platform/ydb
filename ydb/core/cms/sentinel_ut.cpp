@@ -512,6 +512,15 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
 } // TSentinelBaseTests
 
 Y_UNIT_TEST_SUITE(TSentinelTests) {
+    Y_UNIT_TEST(SelfHealStatePullReportsDisabledSentinel) {
+        TCmsTestEnv env(TTestEnvOpts(8).WithoutSentinel());
+        env.SendToCms(new NStorage::TEvNodeConfigGetSelfHealState);
+        auto reply = env.GrabEdgeEventRethrow<NStorage::TEvNodeConfigInvokeOnRootResult>(env.GetSender());
+        UNIT_ASSERT_C(reply->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR,
+            reply->Get()->Record.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(reply->Get()->Record.GetErrorReason(), "Sentinel is disabled");
+    }
+
     void CheckSelfHealStatePull(bool enabled) {
         NKikimrCms::TCmsConfig config;
         auto *selfheal = config.MutableSentinelConfig()->MutableStateStorageSelfHealConfig();

@@ -4,6 +4,11 @@
 
 namespace NKikimr::NStorage {
 
+    // Returns no source when competing readable versions cannot be compared
+    // because Sentinel has not classified their nodes yet.
+    std::optional<ui32> ChooseStateStorageSelfHealSource(const NKikimrConfig::TStateStorageConfig& config,
+        ui32 pileId, const std::unordered_map<ui32, ui32>& nodeStates);
+
     class TStateStorageSelfhealActor : public TActorBootstrapped<TStateStorageSelfhealActor> {
         enum EReconfigurationStep {
             NONE = 0,

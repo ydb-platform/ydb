@@ -335,26 +335,17 @@ namespace NKikimr::NStorage {
                 return;
             }
             const auto current = cfg->GetRingGroups();
-            auto badReplicas = [&](const auto& group) {
-                ui32 bad = 0;
-                for (const auto& ring : group.GetRing()) {
-                    for (ui32 nodeId : ring.GetNode()) {
-                        const auto it = Self->SelfHealNodesState.find(nodeId);
-                        bad += it == Self->SelfHealNodesState.end() || it->second != 0;
-                    }
-                }
-                return bad;
-            };
             std::unordered_map<ui32, ui32> selected;
             for (ui32 i : xrange(current.size())) {
                 const auto& group = current.Get(i);
-                if (group.GetWriteOnly()) {
+                if (group.GetWriteOnly() || selected.contains(group.GetBridgePileId())) {
                     continue;
                 }
-                auto [it, inserted] = selected.emplace(group.GetBridgePileId(), i);
-                if (!inserted && badReplicas(group) < badReplicas(current.Get(it->second))) {
-                    it->second = i;
+                const auto source = ChooseStateStorageSelfHealSource(*cfg, group.GetBridgePileId(), Self->SelfHealNodesState);
+                if (!source) {
+                    throw TExError() << "Node states are not ready for choosing a readable State Storage group";
                 }
+                selected.emplace(group.GetBridgePileId(), *source);
             }
             std::vector<ui32> readable;
             for (const auto& [pileId, index] : selected) {

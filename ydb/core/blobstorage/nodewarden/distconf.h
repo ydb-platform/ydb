@@ -381,6 +381,7 @@ namespace NKikimr::NStorage {
         std::optional<TActorId> StateStorageSelfHealActor;
         class TStateStorageSelfHealRefreshActor;
         std::optional<TActorId> StateStorageSelfHealRefreshActor;
+        bool StateStorageSelfHealRefreshStarted = false;
         void StartStateStorageSelfHealRefresh();
         void CancelStateStorageSelfHealRefresh();
 

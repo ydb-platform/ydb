@@ -66,6 +66,7 @@ class BridgeStateStorageSelfHeal:
                 "node_pretty_good_state_limit": 2,
                 "node_bad_state_limit": 3,
                 "wait_for_config_step": self.step_seconds * 1_000_000,
+                "self_heal_state_request_timeout": 1_000_000,
                 # Keep a new Sentinel request from interrupting a four-step heal.
                 "relax_time": self.relax_seconds * 1_000_000,
                 "pileup_replicas": True,
@@ -289,65 +290,6 @@ class BridgeStateStorageSelfHeal:
             return config
 
         return self.wait(healed, f"automatic replacement of {victims}")
-
-    def assert_reassign(self, before, after, victims):
-        assert len(victims) == 1
-        victim = victims[0]
-        pile_id = self.node_piles[victim]
-        for name in CONFIG_NAMES:
-            initial_group = groups(before, name, pile_id)[0]
-            final_group = groups(after, name, pile_id)[0]
-            assert initial_group.get("RingGroupActorIdOffset", 0) == final_group.get("RingGroupActorIdOffset", 0)
-            assert len(initial_group["Ring"]) == len(final_group["Ring"])
-            removed = replicas(initial_group) - replicas(final_group)
-            added = replicas(final_group) - replicas(initial_group)
-            assert removed == {victim}, (name, removed)
-            assert len(added) == 1, (name, added)
-            for old_ring, new_ring in zip(initial_group["Ring"], final_group["Ring"]):
-                assert [node for node in old_ring["Node"] if node != victim] == [
-                    node for node in new_ring["Node"] if node not in added
-                ], (name, old_ring, new_ring)
-            assert any(
-                any(ring.get("IsDisabled", False) and victim in ring["Node"] for ring in group["Ring"])
-                for _, config in self.snapshots for group in groups(config, name, pile_id)
-            ), f"{name}: did not observe the disabled source ring"
-            assert all(len(groups(config, name)) == 3 for _, config in self.snapshots), name
-            for other in set(range(1, 4)) - {pile_id}:
-                assert groups(before, name, other) == groups(after, name, other), (name, other)
-
-    def assert_full_reconfiguration(self, before, after):
-        for name in CONFIG_NAMES:
-            old = {pile_id: groups(before, name, pile_id)[0] for pile_id in range(1, 4)}
-            new = {pile_id: groups(after, name, pile_id)[0] for pile_id in range(1, 4)}
-            for pile_id in range(1, 4):
-                assert old[pile_id].get("RingGroupActorIdOffset", 0) != new[pile_id].get("RingGroupActorIdOffset", 0)
-            expected_phases = [
-                [("old", False), ("new", True)],
-                [("old", False), ("new", False)],
-                [("new", False), ("old", True)],
-                [("new", False)],
-            ]
-            next_phase = 0
-            for _, config in self.snapshots:
-                if next_phase == len(expected_phases):
-                    break
-                matches = True
-                for pile_id in range(1, 4):
-                    observed = groups(config, name, pile_id)
-                    expected = expected_phases[next_phase]
-                    if len(observed) != len(expected):
-                        matches = False
-                        break
-                    for group, (version, write_only) in zip(observed, expected):
-                        reference = old[pile_id] if version == "old" else new[pile_id]
-                        matches &= (
-                            placement(group) == placement(reference)
-                            and group.get("RingGroupActorIdOffset", 0) == reference.get("RingGroupActorIdOffset", 0)
-                            and group.get("WriteOnly", False) == write_only
-                        )
-                if matches:
-                    next_phase += 1
-            assert next_phase == len(expected_phases), (name, next_phase, self.snapshots)
 
     def wait_converged(self, expected):
         def local_meta(node):

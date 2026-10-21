@@ -127,6 +127,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::UnbecomeRoot() {
         AbortRootProbe();
         CancelStateStorageSelfHealRefresh();
+        StateStorageSelfHealRefreshStarted = false;
         if (StateStorageSelfHealActor) {
             Send(new IEventHandle(TEvents::TSystem::Poison, 0, StateStorageSelfHealActor.value(), SelfId(), nullptr, 0));
             StateStorageSelfHealActor.reset();

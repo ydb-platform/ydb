@@ -182,6 +182,39 @@ Y_UNIT_TEST_SUITE(OlapGeneratedVirtualColumns) {
         ui64 txId = 100;
         bool hasVirtualColumn = true;
         ui32 addedPhysicalId = 0;
+        ui32 createSchemaTransactions = 0;
+        ui32 alterSchemaTransactions = 0;
+
+        const auto checkColumnShardSchema = [](const NKikimrSchemeOp::TColumnTableSchema& schema) {
+            UNIT_ASSERT_VALUES_EQUAL(FindColumn(schema, "key").GetId(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(FindColumn(schema, "source").GetId(), 2u);
+            for (const auto& column : schema.GetColumns()) {
+                UNIT_ASSERT_C(column.GetName() != "derived", schema.ShortDebugString());
+                UNIT_ASSERT_C(!column.HasDefaultFromExpression(), schema.ShortDebugString());
+            }
+        };
+
+        auto schemaObserver = runtime.AddObserver<TEvColumnShard::TEvProposeTransaction>([&](const auto& event) {
+            const auto& record = event->Get()->Record;
+            if (record.GetTxKind() != NKikimrTxColumnShard::TX_KIND_SCHEMA || record.GetTxId() != txId) {
+                return;
+            }
+
+            NKikimrTxColumnShard::TSchemaTxBody body;
+            UNIT_ASSERT(body.ParseFromString(record.GetTxBody()));
+            if (body.HasInitShard()) {
+                UNIT_ASSERT_VALUES_EQUAL(body.GetInitShard().TablesSize(), 1);
+                const auto& table = body.GetInitShard().GetTables(0);
+                UNIT_ASSERT(table.HasSchema());
+                checkColumnShardSchema(table.GetSchema());
+                ++createSchemaTransactions;
+            } else if (body.HasAlterTable()) {
+                const auto& table = body.GetAlterTable();
+                UNIT_ASSERT(table.HasSchema());
+                checkColumnShardSchema(table.GetSchema());
+                ++alterSchemaTransactions;
+            }
+        });
 
         const auto checkSchemas = [&] {
             const auto describe = DescribePrivatePath(runtime, "/MyRoot/GeneratedTable");
@@ -220,17 +253,21 @@ Y_UNIT_TEST_SUITE(OlapGeneratedVirtualColumns) {
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot", ValidGeneratedTable);
         env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT_C(createSchemaTransactions > 0, "No CREATE schema transaction reached ColumnShard");
         checkSchemas();
         const ui64 columnShardId = csController->GetTheOnlyShard()->TabletID();
 
         // Loading and altering an existing table must not depend on the creation flag.
         runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(false);
         if (DropVirtual) {
+            const auto alterTransactionsBeforeDrop = alterSchemaTransactions;
             TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
                 Name: "GeneratedTable"
                 AlterSchema { DropColumns { Name: "derived" } }
             )");
             env.TestWaitNotification(runtime, txId);
+            UNIT_ASSERT_C(alterSchemaTransactions > alterTransactionsBeforeDrop,
+                "No DROP COLUMN schema transaction reached ColumnShard");
             hasVirtualColumn = false;
             checkSchemas();
         }
@@ -240,6 +277,7 @@ Y_UNIT_TEST_SUITE(OlapGeneratedVirtualColumns) {
         GracefulRestartTablet(runtime, columnShardId, runtime.AllocateEdgeActor());
         checkSchemas();
 
+        const auto alterTransactionsBeforeAdd = alterSchemaTransactions;
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "GeneratedTable"
             AlterSchema {
@@ -247,6 +285,8 @@ Y_UNIT_TEST_SUITE(OlapGeneratedVirtualColumns) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT_C(alterSchemaTransactions > alterTransactionsBeforeAdd,
+            "No ADD COLUMN schema transaction reached ColumnShard");
         addedPhysicalId = 4;
         checkSchemas();
 

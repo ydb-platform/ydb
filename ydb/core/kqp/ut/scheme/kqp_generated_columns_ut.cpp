@@ -4,7 +4,9 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
@@ -15,6 +17,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/json/json_reader.h>
+
+#include <atomic>
 
 namespace NKikimr::NKqp {
 
@@ -6265,23 +6269,220 @@ Y_UNIT_TEST_SUITE(GeneratedVirtualColumnTable) {
         ) WITH (STORE = COLUMN);
     )";
 
+    Y_UNIT_TEST(UpdateOnPreservesOmittedDependencies) {
+        TTestFixture fixture(ColumnTableDdl,
+            "UPSERT INTO ColumnGenerated (k, a, b) VALUES (1, 1, 2), (2, 3, 4);");
+
+        fixture.Exec("UPDATE ColumnGenerated ON (k, a) VALUES (1, 5), (99, 9);");
+        fixture.Check("SELECT k, a, b, derived FROM ColumnGenerated ORDER BY k;",
+            "[[1;[5];[2];[52]];[2;[3];[4];[34]]]");
+
+        fixture.Exec("UPDATE ColumnGenerated ON (k, a, b) VALUES (2, NULL, 7);");
+        fixture.Check("SELECT k, a, b, derived FROM ColumnGenerated ORDER BY k;",
+            "[[1;[5];[2];[52]];[2;#;[7];[7]]]");
+
+        fixture.Exec(R"(
+            UPDATE ColumnGenerated ON
+            SELECT k, derived AS a FROM ColumnGenerated WHERE derived = 7;
+        )");
+        fixture.Check("SELECT k, a, b, derived FROM ColumnGenerated ORDER BY k;",
+            "[[1;[5];[2];[52]];[2;[7];[7];[77]]]");
+    }
+
+    Y_UNIT_TEST(DeleteOnUsesPhysicalKeys) {
+        TTestFixture fixture(ColumnTableDdl,
+            "UPSERT INTO ColumnGenerated (k, a, b) VALUES (1, 1, 2), (2, 3, 4), (3, 5, 6);");
+        fixture.Check("SELECT k, a, b, derived FROM ColumnGenerated ORDER BY k;",
+            "[[1;[1];[2];[12]];[2;[3];[4];[34]];[3;[5];[6];[56]]]");
+
+        fixture.Exec("DELETE FROM ColumnGenerated ON (k) VALUES (2), (99);");
+        fixture.Check("SELECT k, a, b, derived FROM ColumnGenerated ORDER BY k;",
+            "[[1;[1];[2];[12]];[3;[5];[6];[56]]]");
+
+        fixture.Exec(R"(
+            DELETE FROM ColumnGenerated ON
+            SELECT k FROM ColumnGenerated WHERE derived = 12;
+        )");
+        fixture.Check("SELECT k, a, b, derived FROM ColumnGenerated;", "[[3;[5];[6];[56]]]");
+
+        fixture.Exec(R"(
+            DELETE FROM ColumnGenerated ON
+            SELECT k FROM ColumnGenerated WHERE derived < 0;
+        )");
+        fixture.Check("SELECT k, a, b, derived FROM ColumnGenerated;", "[[3;[5];[6];[56]]]");
+    }
+
+    Y_UNIT_TEST(DmlSelectSourceFiltersVirtualColumn) {
+        auto appConfig = GeneratedColumnsAppConfig();
+        appConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
+        TTestFixture fixture(ColumnTableDdl,
+            "UPSERT INTO ColumnGenerated (k, a, b) VALUES (2, 2, 7), (4, 4, 9);", appConfig);
+        fixture.Exec(R"(
+            CREATE TABLE VirtualSource (
+                k Int32 NOT NULL,
+                a Int32,
+                b Int32,
+                v Int32 GENERATED ALWAYS AS (COALESCE(a, 0) * 10 + COALESCE(b, 0)) VIRTUAL,
+                PRIMARY KEY (k)
+            ) WITH (STORE = COLUMN);
+        )");
+        fixture.Exec("UPSERT INTO VirtualSource (k, a, b) VALUES (1, 1, 2), (2, 3, 4), (3, 5, 6), (4, 7, 8);");
+
+        fixture.Exec("INSERT INTO ColumnGenerated (k, a, b) SELECT k, v, 2 FROM VirtualSource WHERE v = 12;");
+        fixture.Exec("UPSERT INTO ColumnGenerated (k, a) SELECT k, v FROM VirtualSource WHERE v IN (34, 56);");
+        fixture.Exec("REPLACE INTO ColumnGenerated (k, a) SELECT k, v FROM VirtualSource WHERE v = 78;");
+        fixture.Check("SELECT k, a, b, derived FROM ColumnGenerated ORDER BY k;",
+            "[[1;[12];[2];[122]];[2;[34];[7];[347]];[3;[56];#;[560]];[4;[78];#;[780]]]");
+
+        for (const std::string operation : {"INSERT", "UPSERT", "REPLACE"}) {
+            fixture.Exec(operation + " INTO ColumnGenerated (k, a) SELECT k + 10, v + 1 FROM VirtualSource WHERE v < 0;");
+        }
+        fixture.Check("SELECT k, a, b, derived FROM ColumnGenerated ORDER BY k;",
+            "[[1;[12];[2];[122]];[2;[34];[7];[347]];[3;[56];#;[560]];[4;[78];#;[780]]]");
+    }
+
+    Y_UNIT_TEST(PhysicalPredicateDmlPreservesVirtualValues) {
+        auto appConfig = GeneratedColumnsAppConfig();
+        appConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
+        TTestFixture fixture(ColumnTableDdl,
+            "UPSERT INTO ColumnGenerated (k, a, b) VALUES (1, 1, 2), (2, 3, 4), (3, NULL, 5);", appConfig);
+
+        fixture.Exec("UPDATE ColumnGenerated SET a = 7 WHERE k = 1;");
+        fixture.Exec("UPDATE ColumnGenerated SET b = a WHERE k = 2;");
+        fixture.Check("SELECT k, a, b, derived FROM ColumnGenerated ORDER BY k;",
+            "[[1;[7];[2];[72]];[2;[3];[3];[33]];[3;#;[5];[5]]]");
+
+        fixture.Exec("DELETE FROM ColumnGenerated WHERE a IS NULL;");
+        fixture.Exec("UPDATE ColumnGenerated SET a = 99 WHERE k = 99;");
+        fixture.Exec("DELETE FROM ColumnGenerated WHERE k = 99;");
+        fixture.Exec("UPDATE ColumnGenerated SET a = 99 WHERE derived < 0;");
+        fixture.Exec("DELETE FROM ColumnGenerated WHERE derived < 0;");
+        fixture.Check("SELECT k, a, b, derived FROM ColumnGenerated ORDER BY k;",
+            "[[1;[7];[2];[72]];[2;[3];[3];[33]]]");
+    }
+
+    Y_UNIT_TEST(PhysicalOnlyReadsDoNotFetchVirtualDependencies) {
+        TTestFixture fixture(ColumnTableDdl,
+            "UPSERT INTO ColumnGenerated (k, a, b) VALUES (1, 1, 2), (2, 1, 2), (3, 3, 4);");
+
+        fixture.Check("SELECT k FROM ColumnGenerated WHERE k = 1;", "[[1]]");
+        fixture.Check("SELECT k FROM ColumnGenerated WHERE a = 3;", "[[3]]");
+        fixture.Check("SELECT k, COUNT(*) FROM ColumnGenerated GROUP BY k ORDER BY k;",
+            "[[1;1u];[2;1u];[3;1u]]");
+
+        for (const std::string query : {
+            "SELECT k FROM ColumnGenerated WHERE k = 1;",
+            "SELECT k, COUNT(*) FROM ColumnGenerated GROUP BY k;"})
+        {
+            const auto plan = fixture.ExplainPlan(query);
+            const auto columns = GetSinglePhysicalReadColumns(plan, "ColumnGenerated");
+            UNIT_ASSERT_VALUES_EQUAL_C(columns.size(), 1u, plan.GetStringRobust());
+            // Range scans can append their bounds to the displayed key name.
+            UNIT_ASSERT_VALUES_EQUAL_C(TStringBuf(columns.front()).Before(' '), "k", plan.GetStringRobust());
+        }
+    }
+
+    Y_UNIT_TEST(GroupByVirtualWithoutProjectingIt) {
+        TTestFixture fixture(ColumnTableDdl,
+            "UPSERT INTO ColumnGenerated (k, a, b) VALUES (1, 1, 2), (2, 1, 2), (3, 3, 4);");
+        fixture.CheckUnordered("SELECT COUNT(*) FROM ColumnGenerated GROUP BY derived;",
+            "[[2u];[1u]]");
+    }
+
+    void CheckReturningRejected(const TVector<std::string>& statements) {
+        TTestFixture fixture(ColumnTableDdl,
+            "UPSERT INTO ColumnGenerated (k, a, b) VALUES (1, 1, 2), (2, 3, 4);");
+
+        for (const auto& statement : statements) {
+            for (const std::string projection : {"k", "derived", "k, derived", "*"}) {
+                const auto query = statement + " RETURNING " + projection + ";";
+                const auto result = fixture.QuerySession().ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST,
+                    query << "\n" << result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                    "RETURNING is not supported for column-oriented tables", query);
+                fixture.Check("SELECT k, a, b, derived FROM ColumnGenerated ORDER BY k;",
+                    "[[1;[1];[2];[12]];[2;[3];[4];[34]]]");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ReturningRejectedForAllWriteForms) {
+        CheckReturningRejected({
+            "INSERT INTO ColumnGenerated (k, a, b) VALUES (3, 5, 6)",
+            "UPSERT INTO ColumnGenerated (k, a, b) VALUES (1, 5, 6)",
+            "REPLACE INTO ColumnGenerated (k, a, b) VALUES (1, 5, 6)",
+            "UPDATE ColumnGenerated SET a = 5 WHERE k = 1",
+            "UPDATE ColumnGenerated SET a = 5 WHERE derived = 12",
+            "UPDATE ColumnGenerated ON (k, a) VALUES (1, 5)",
+            "DELETE FROM ColumnGenerated WHERE k = 1",
+            "DELETE FROM ColumnGenerated WHERE derived = 12",
+            "DELETE FROM ColumnGenerated ON (k) VALUES (1)",
+        });
+    }
+
+    Y_UNIT_TEST(ReturningRejectedForFilteredSelectSources) {
+        TVector<std::string> statements;
+        for (const std::string predicate : {"k = 1", "derived = 12"}) {
+            for (const std::string operation : {"INSERT", "UPSERT", "REPLACE"}) {
+                statements.push_back(operation + " INTO ColumnGenerated (k, a) "
+                    "SELECT k + 10, derived FROM ColumnGenerated WHERE " + predicate);
+            }
+            statements.push_back("UPDATE ColumnGenerated ON "
+                "SELECT k, derived AS a FROM ColumnGenerated WHERE " + predicate);
+            statements.push_back("DELETE FROM ColumnGenerated ON "
+                "SELECT k FROM ColumnGenerated WHERE " + predicate);
+        }
+        CheckReturningRejected(statements);
+    }
+
     Y_UNIT_TEST(BulkUpsertRequiresOnlyPhysicalColumns) {
         auto appConfig = GeneratedColumnsAppConfig();
         appConfig.MutableColumnShardConfig()->SetBulkUpsertRequireAllColumns(true);
-        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false).SetUseRealThreads(false));
         auto queryClient = kikimr.GetQueryClient();
         auto tableClient = kikimr.GetTableClient();
 
-        auto create = queryClient.ExecuteQuery(ColumnTableDdl, TTxControl::NoTx()).GetValueSync();
+        auto create = kikimr.RunCall([&] {
+            return queryClient.ExecuteQuery(ColumnTableDdl, TTxControl::NoTx()).GetValueSync();
+        });
         UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        const auto describe = kikimr.RunCall([&] {
+            return kikimr.GetTestClient().Ls("/Root/ColumnGenerated");
+        });
+        const auto& path = describe->Record.GetPathDescription();
+        const auto tableId = path.GetSelf().GetPathId();
+        std::atomic<ui32> observedWrites = 0;
+        auto observer = kikimr.GetTestServer().GetRuntime()->AddObserver<NEvents::TDataEvents::TEvWrite>(
+            [&](NEvents::TDataEvents::TEvWrite::TPtr& ev) {
+                for (const auto& operation : ev->Get()->Record.GetOperations()) {
+                    if (operation.GetTableId().GetTableId() != tableId) {
+                        continue;
+                    }
+                    UNIT_ASSERT_C(operation.HasPayloadSchema(), operation.ShortDebugString());
+                    const auto schema = NArrow::DeserializeSchema(operation.GetPayloadSchema());
+                    UNIT_ASSERT_C(schema, operation.ShortDebugString());
+                    UNIT_ASSERT_VALUES_EQUAL_C(schema->num_fields(), 3, operation.ShortDebugString());
+                    THashSet<TString> columns;
+                    for (const auto& name : schema->field_names()) {
+                        columns.insert(TString(name));
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL_C(columns, THashSet<TString>({"k", "a", "b"}), operation.ShortDebugString());
+                    ++observedWrites;
+                }
+            });
 
         auto rows = TValueBuilder().BeginList().AddListItem().BeginStruct()
             .AddMember("k").Int32(1)
             .AddMember("a").Int32(4)
             .AddMember("b").Int32(2)
             .EndStruct().EndList().Build();
-        auto upsert = tableClient.BulkUpsert("/Root/ColumnGenerated", std::move(rows)).GetValueSync();
+        auto upsert = kikimr.RunCall([&] {
+            return tableClient.BulkUpsert("/Root/ColumnGenerated", std::move(rows)).GetValueSync();
+        });
         UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+        UNIT_ASSERT(observedWrites.load() > 0);
 
         auto explicitGenerated = TValueBuilder().BeginList().AddListItem().BeginStruct()
             .AddMember("k").Int32(2)
@@ -6289,7 +6490,9 @@ Y_UNIT_TEST_SUITE(GeneratedVirtualColumnTable) {
             .AddMember("b").Int32(3)
             .AddMember("derived").Int32(53)
             .EndStruct().EndList().Build();
-        auto rejectedGenerated = tableClient.BulkUpsert("/Root/ColumnGenerated", std::move(explicitGenerated)).GetValueSync();
+        auto rejectedGenerated = kikimr.RunCall([&] {
+            return tableClient.BulkUpsert("/Root/ColumnGenerated", std::move(explicitGenerated)).GetValueSync();
+        });
         UNIT_ASSERT_C(!rejectedGenerated.IsSuccess(), "Explicit generated values must be rejected");
         UNIT_ASSERT_STRING_CONTAINS(rejectedGenerated.GetIssues().ToString(), "cannot be set explicitly");
 
@@ -6297,14 +6500,18 @@ Y_UNIT_TEST_SUITE(GeneratedVirtualColumnTable) {
             .AddMember("k").Int32(3)
             .AddMember("a").Int32(6)
             .EndStruct().EndList().Build();
-        auto rejectedMissing = tableClient.BulkUpsert("/Root/ColumnGenerated", std::move(missingPhysical)).GetValueSync();
+        auto rejectedMissing = kikimr.RunCall([&] {
+            return tableClient.BulkUpsert("/Root/ColumnGenerated", std::move(missingPhysical)).GetValueSync();
+        });
         UNIT_ASSERT_C(!rejectedMissing.IsSuccess(), "Physical columns must still be required");
         UNIT_ASSERT_STRING_CONTAINS(rejectedMissing.GetIssues().ToString(), "Missing columns: b");
 
-        auto select = queryClient.ExecuteQuery(
-            "SELECT k, derived FROM ColumnGenerated ORDER BY k;", TTxControl::NoTx()).GetValueSync();
+        auto select = kikimr.RunCall([&] {
+            return queryClient.ExecuteQuery(
+                "SELECT k, a, b, derived FROM ColumnGenerated ORDER BY k;", TTxControl::NoTx()).GetValueSync();
+        });
         UNIT_ASSERT_C(select.IsSuccess(), select.GetIssues().ToString());
-        CompareYson("[[1;[42]]]", FormatResultSetYson(select.GetResultSet(0)));
+        CompareYson("[[1;[4];[2];[42]]]", FormatResultSetYson(select.GetResultSet(0)));
     }
 
     Y_UNIT_TEST(AlterTableRpcRejectsNullableGeneratedDependency) {
@@ -6680,9 +6887,10 @@ Y_UNIT_TEST_SUITE(GeneratedVirtualColumnTable) {
             CREATE TABLE VirtualColumnFamily (
                 k Int32 NOT NULL,
                 v Int32 GENERATED ALWAYS AS (k + 1) VIRTUAL FAMILY default,
-                PRIMARY KEY (k)
+                PRIMARY KEY (k),
+                FAMILY default ()
             ) WITH (STORE = COLUMN);
-        )", "Column family cannot be applied to VIRTUAL generated column 'v'");
+        )", "Column FAMILY is not supported for column tables");
 
         rejects(R"(
             CREATE TABLE TtlVirtual (

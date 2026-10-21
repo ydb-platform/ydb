@@ -129,12 +129,19 @@ namespace NKikimr {
                     const auto& bridgeInfo = State.BridgeInfo;
                     Y_ABORT_UNLESS(bridgeInfo);
                     bridgeInfo->ForEachPile([&](TBridgePileId bridgePileId) {
-                        const TGroupId groupId = CreateGroup(bridgePileId, mainGroupId);
                         NKikimrBridge::TGroupState::TPile *pile = mainGroupState->AddPile();
+                        if (bridgeInfo->GetPile(bridgePileId)->State == NKikimrBridge::TClusterState::INACTIVE) {
+                            pile->SetAbsent(true); // there are no resources in this pile
+                            return;
+                        }
+                        const TGroupId groupId = CreateGroup(bridgePileId, mainGroupId);
                         groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
                         pile->SetGroupGeneration(1);
                         pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
                     });
+                    while (mainGroupState->PileSize() && mainGroupState->GetPile(mainGroupState->PileSize() - 1).GetAbsent()) {
+                        mainGroupState->MutablePile()->RemoveLast(); // absent piles at the end are not stored
+                    }
                 } else {
                     CreateGroup(TBridgePileId(), std::nullopt); // regular single group
                 }
@@ -609,7 +616,8 @@ namespace NKikimr {
                     }
                 } unregister{*this, removeQ};
                 return std::invoke(func, Geometry, *Mapper, groupId, group, constraints, replacedDisks,
-                    std::move(forbid), groupSizeInUnits, requiredSpace, bridgePileId);
+                    std::move(forbid), groupSizeInUnits, requiredSpace,
+                    NBridge::GetPlacementPileId(bridgePileId, State.BridgeInfo.get()));
             }
 
             template<typename T>
@@ -907,7 +915,7 @@ namespace NKikimr {
 
                     enumerateGroups([&](TGroupId groupId) {
                         fitter.CheckExistingGroup(groupId, state.Fit.GroupsToAllocate.contains(groupId));
-                        if (const TGroupInfo *group = state.Groups.Find(groupId); group && !group->BridgePileId) {
+                        if (const TGroupInfo *group = state.Groups.Find(groupId); group && !group->IsBridgePileOnly()) {
                             ++numActualGroups;
                         }
                     });

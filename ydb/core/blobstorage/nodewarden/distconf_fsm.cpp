@@ -23,14 +23,14 @@ namespace NKikimr::NStorage {
 
             // recalculate global and local pile quorums
             Y_ABORT_UNLESS(StorageConfig);
-            GlobalQuorum = HasNodeQuorum(*StorageConfig, connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, true);
+            GlobalQuorum = HasNodeQuorum(*StorageConfig, connected, TBridgePileId(), *Cfg, nullptr, true);
 
             // recalculate unsynced piles' quorum too
             if (BridgeInfo) {
                 ConnectedUnsyncedPiles.clear();
                 for (const auto& pile : BridgeInfo->Piles) {
                     if (pile.State == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1 && HasNodeQuorum(*StorageConfig,
-                            connected, BridgePileNameMap, pile.BridgePileId, *Cfg, nullptr, true)) {
+                            connected, pile.BridgePileId, *Cfg, nullptr, true)) {
                         ConnectedUnsyncedPiles.insert(pile.BridgePileId);
                     }
                 }
@@ -186,6 +186,10 @@ namespace NKikimr::NStorage {
             case TEvGather::kDemandRetroTrace:
                 return;
 
+            case TEvGather::kCollectBridgeCapability:
+                Y_DEBUG_ABORT();
+                break;
+
             case TEvGather::RESPONSE_NOT_SET:
                 return SwitchToError("response not set");
         }
@@ -199,7 +203,7 @@ namespace NKikimr::NStorage {
         for (const auto& [nodeId, node] : AllBoundNodes) {
             connected.push_back(nodeId);
         }
-        return HasNodeQuorum(config, connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, true);
+        return HasNodeQuorum(config, connected, TBridgePileId(), *Cfg, nullptr, true);
     }
 
     TDistributedConfigKeeper::TProcessCollectConfigsResult TDistributedConfigKeeper::ProcessCollectConfigs(
@@ -215,7 +219,7 @@ namespace NKikimr::NStorage {
                 successfulNodes.emplace_back(node);
             }
         }
-        const bool nodeQuorum = HasNodeQuorum(*StorageConfig, successfulNodes, BridgePileNameMap, TBridgePileId(), *Cfg,
+        const bool nodeQuorum = HasNodeQuorum(*StorageConfig, successfulNodes, TBridgePileId(), *Cfg,
             &err, true);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -239,7 +243,7 @@ namespace NKikimr::NStorage {
         for (const auto& disk : res->GetNoMetadata()) {
             addSuccessfulDisk(disk);
         }
-        const bool configQuorum = HasConfigQuorum(*StorageConfig, successfulDisks, BridgePileNameMap, TBridgePileId(),
+        const bool configQuorum = HasConfigQuorum(*StorageConfig, successfulDisks, TBridgePileId(),
             *Cfg, false, &err);
 
         YDB_LOG_DEBUG("ProcessCollectConfigs",
@@ -261,7 +265,7 @@ namespace NKikimr::NStorage {
                     nodesWithoutDistconf.emplace_back(node);
                 }
             }
-            if (HasNodeQuorum(*StorageConfig, nodesWithoutDistconf, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr)) {
+            if (HasNodeQuorum(*StorageConfig, nodesWithoutDistconf, TBridgePileId(), *Cfg, nullptr)) {
                 // yes, distconf is disabled on the majority of the nodes, so we can't do anything about it
                 return {.IsDistconfDisabledQuorum = true};
             }
@@ -304,7 +308,7 @@ namespace NKikimr::NStorage {
         }
         for (auto it = baseConfigs.begin(); it != baseConfigs.end(); ) { // filter out configs not having node quorum
             TBaseConfigInfo& r = it->second;
-            if (HasNodeQuorum(r.Config, r.HavingNodeIds, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr)) {
+            if (HasNodeQuorum(r.Config, r.HavingNodeIds, TBridgePileId(), *Cfg, nullptr)) {
                 ++it;
             } else {
                 baseConfigs.erase(it++);
@@ -371,7 +375,7 @@ namespace NKikimr::NStorage {
                         std::make_tuple(true, &r.HavingDisksCommitted),
                         std::make_tuple(false, &r.HavingDisksProposedOrCommitted)
                     }) {
-                if (HasConfigQuorum(r.Config, *havingDisksPtr, BridgePileNameMap, TBridgePileId(), *Cfg, false)) {
+                if (HasConfigQuorum(r.Config, *havingDisksPtr, TBridgePileId(), *Cfg, false)) {
                     const ui64 generation = r.Config.GetGeneration();
                     auto& [committed, configPtr] = configsWithQuorum[generation];
                     if (configPtr && configPtr->GetFingerprint() != r.Config.GetFingerprint()) {
@@ -499,7 +503,7 @@ namespace NKikimr::NStorage {
             }
         }
 
-        if (TStringStream err; HasConfigQuorum(proposition.StorageConfig, successfulDisks, BridgePileNameMap, TBridgePileId(),
+        if (TStringStream err; HasConfigQuorum(proposition.StorageConfig, successfulDisks, TBridgePileId(),
                 *Cfg, proposition.MindPrev, &err)) {
             // apply configuration and spread it
             ApplyCommittedStorageConfig(proposition.StorageConfig);
@@ -636,6 +640,7 @@ namespace NKikimr::NStorage {
                 break;
 
             case TEvScatter::kDemandRetroTrace:
+            case TEvScatter::kCollectBridgeCapability:
                 break;
 
             case TEvScatter::REQUEST_NOT_SET:
@@ -655,6 +660,10 @@ namespace NKikimr::NStorage {
 
             case TEvScatter::kDemandRetroTrace:
                 Perform(task.Response.MutableDemandRetroTrace(), task.Request.GetDemandRetroTrace(), task);
+                break;
+
+            case TEvScatter::kCollectBridgeCapability:
+                Perform(task.Response.MutableCollectBridgeCapability(), task.Request.GetCollectBridgeCapability(), task);
                 break;
 
             case TEvScatter::REQUEST_NOT_SET:
@@ -752,6 +761,40 @@ namespace NKikimr::NStorage {
                     if (const auto [_, inserted] = nodesAlreadyReplied.insert(status.GetNodeId()); inserted) {
                         response->AddStatus()->CopyFrom(status);
                     }
+                }
+            }
+        }
+    }
+
+    void TDistributedConfigKeeper::Perform(TEvGather::TCollectBridgeCapability *response,
+            const TEvScatter::TCollectBridgeCapability& /*request*/, TScatterTask& task) {
+        auto add = [&](ui32 nodeId, bool capable, bool pileListChangeCapable) {
+            if (capable) {
+                response->AddCapableNodeIds(nodeId);
+                if (pileListChangeCapable) {
+                    response->AddPileListChangeCapableNodeIds(nodeId);
+                }
+            } else {
+                response->AddNotCapableNodeIds(nodeId);
+            }
+        };
+
+        // this version supports changes of the list of piles
+        add(SelfId().NodeId(), static_cast<bool>(Cfg->BridgeConfig), true);
+        for (const ui32 nodeId : ConnectedDynamicNodes) {
+            add(nodeId, BridgeCapableDynamicNodes.contains(nodeId), PileListChangeCapableDynamicNodes.contains(nodeId));
+        }
+        for (const auto& reply : task.CollectedResponses) {
+            if (reply.HasCollectBridgeCapability()) {
+                const auto& item = reply.GetCollectBridgeCapability();
+                for (const ui32 nodeId : item.GetCapableNodeIds()) {
+                    response->AddCapableNodeIds(nodeId);
+                }
+                for (const ui32 nodeId : item.GetNotCapableNodeIds()) {
+                    response->AddNotCapableNodeIds(nodeId);
+                }
+                for (const ui32 nodeId : item.GetPileListChangeCapableNodeIds()) {
+                    response->AddPileListChangeCapableNodeIds(nodeId);
                 }
             }
         }

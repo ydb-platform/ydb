@@ -1,3 +1,5 @@
+* Added `TBridgeClient::ConvertToBridge()` to convert a non-bridged cluster into a bridged one with a single pile, and `TGetClusterStateResult::IsConversionInProgress()`.
+
 * Driver now supports async credentials initialisation: the first request is delayed until they are ready.
 
 * Added a flag to support deferred session creation(when client timeout exceeded, the session is created in the backgroud)

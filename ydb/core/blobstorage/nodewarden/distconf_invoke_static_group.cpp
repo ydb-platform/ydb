@@ -6,6 +6,36 @@ namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
+    namespace {
+
+        // Propagate new generation of the group to the bridge group state referencing it; the referencing bridge proxy
+        // group gets its generation bumped too, unless this is an inline pile referencing itself.
+        void UpdateBridgePileGeneration(NKikimrBlobStorage::TNodeWardenServiceSet *ss, TGroupId groupId) {
+            std::optional<ui32> generation;
+            for (const auto& group : ss->GetGroups()) {
+                if (TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID) == groupId) {
+                    generation.emplace(group.GetGroupGeneration());
+                    break;
+                }
+            }
+            Y_ABORT_UNLESS(generation);
+
+            for (auto& group : *ss->MutableGroups()) {
+                if (!group.HasBridgeGroupState()) {
+                    continue;
+                }
+                NBridge::ForEachGroupPile(group.MutableBridgeGroupState(), [&](TBridgePileId,
+                        NKikimrBridge::TGroupState::TPile& pile) {
+                    if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == groupId) {
+                        pile.SetGroupGeneration(*generation);
+                        BumpBridgeProxyGeneration(&group, [&](TGroupId id) { return id == groupId; });
+                    }
+                });
+            }
+        }
+
+    }
+
     void TInvokeRequestHandlerActor::ReassignGroupDisk(const TQuery::TReassignGroupDisk& cmd) {
         RunCommonChecks();
 
@@ -258,6 +288,8 @@ namespace NKikimr::NStorage {
                         {"error", ex.what()});
                     throw TExError() << "Failed to allocate group: " << ex.what();
                 }
+
+                UpdateBridgePileGeneration(config.MutableBlobStorageConfig()->MutableServiceSet(), vdiskId.GroupID);
 
                 return StartProposition(&config);
             }

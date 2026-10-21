@@ -158,7 +158,9 @@ namespace NKikimr::NBsController {
         for (auto it = spToGroups.lower_bound({id, Min<TGroupId>()}); it != spToGroups.end() && it->first == id; ++it) {
             const TGroupInfo *group = Groups.Find(it->second);
             Y_ABORT_UNLESS(group);
-            if (!group->BridgeGroupInfo && group->ErasureSpecies != storagePool.ErasureSpecies) {
+            // inline pile keeps its own VDisks, so it must match the pool geometry like any physical group
+            const bool physical = !group->BridgeGroupInfo || group->IsInlinePile();
+            if (physical && group->ErasureSpecies != storagePool.ErasureSpecies) {
                 throw TExError() << "GroupId# " << it->second << " has different erasure species";
             }
         }
@@ -178,9 +180,10 @@ namespace NKikimr::NBsController {
             storagePool.BridgeMode = cur.BridgeMode;
             cur = std::move(storagePool); // update existing storage pool
         } else {
-            // enable bridge mode by default for new pools (when bridge mode is enabled cluster-wide)
-            const bool bridgeMode = AppData()->BridgeModeEnabled;
-            Y_DEBUG_ABORT_UNLESS(bridgeMode == static_cast<bool>(BridgeInfo));
+            // enable bridge mode by default for new pools (when the cluster is bridged one; bridge-capable cluster
+            // that has not been converted yet runs in implicit single-pile state and keeps creating ordinary pools)
+            Y_DEBUG_ABORT_UNLESS(AppData()->BridgeModeEnabled == static_cast<bool>(BridgeInfo));
+            const bool bridgeMode = BridgeInfo && !BridgeInfo->IsImplicit;
             spIt->second.BridgeMode = bridgeMode;
         }
         Fit.PoolsAndGroups.emplace(id, std::nullopt);
@@ -243,15 +246,15 @@ namespace NKikimr::NBsController {
             throw TExError() << "can't invoke DeleteStoragePool against DDisk pool";
         }
 
-        auto& storagePoolGroups = StoragePoolGroups.Unshare();
+        std::vector<TGroupId> groups;
+        const auto& storagePoolGroups = StoragePoolGroups.Get();
         for (auto it = storagePoolGroups.lower_bound({id, Min<TGroupId>()});
-                it != storagePoolGroups.end() && it->first == id; it = storagePoolGroups.erase(it)) {
-            const TGroupId groupId = it->second;
+                it != storagePoolGroups.end() && it->first == id; ++it) {
+            groups.push_back(it->second);
+        }
+        for (const TGroupId groupId : groups) {
             if (const TGroupInfo *groupInfo = Groups.Find(groupId)) {
-                for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
-                    DestroyVSlot(vslot->VSlotId);
-                }
-                DeleteExistingGroup(groupId);
+                DeleteExistingGroupWithVSlots(*groupInfo);
             } else {
                 throw TExError() << "GroupId# " << groupId << " not found";
             }
@@ -835,22 +838,7 @@ namespace NKikimr::NBsController {
             if (!groupInfo) {
                 throw TExGroupNotFound(groupId);
             }
-            for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
-                DestroyVSlot(vslot->VSlotId);
-            }
-
-            // adjust number of groups in storage pool
-            auto& storagePools = StoragePools.Unshare();
-            const auto spIt = storagePools.find(groupInfo->StoragePoolId);
-            Y_ABORT_UNLESS(spIt != storagePools.end());
-            --spIt->second.NumGroups;
-
-            // remove group from storage pool group mapping
-            auto& storagePoolGroups = StoragePoolGroups.Unshare();
-            const size_t numErased = storagePoolGroups.erase({spIt->first, groupInfo->ID});
-            Y_ABORT_UNLESS(numErased == 1);
-
-            DeleteExistingGroup(groupInfo->ID);
+            DeleteExistingGroupWithVSlots(*groupInfo);
         }
     }
 

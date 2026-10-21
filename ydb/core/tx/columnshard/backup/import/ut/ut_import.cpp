@@ -1,9 +1,6 @@
-<<<<<<< HEAD
-=======
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/protos/data_format_settings.pb.h>
->>>>>>> 663bfeb7316 (import verify has been fixed (#56015))
 #include <ydb/core/tx/columnshard/backup/import/session.h>
 #include <ydb/core/tx/columnshard/backup/import/task.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -13,17 +10,14 @@
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
+#include <ydb/core/tx/datashard/backup_restore_traits.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
-<<<<<<< HEAD
-=======
 #include <ydb/library/formats/arrow/simple_builder/array.h>
 #include <ydb/library/formats/arrow/simple_builder/batch.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
-#include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
->>>>>>> 663bfeb7316 (import verify has been fixed (#56015))
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
@@ -33,6 +27,7 @@ namespace NKikimr {
 
 using namespace NColumnShard;
 using namespace NTxUT;
+using NDataShard::NBackupRestoreTraits::EDataFormat;
 
 Y_UNIT_TEST_SUITE(ImportSessionStateMachine) {
     static std::shared_ptr<NOlap::NImport::TSession> MakeSession() {
@@ -255,11 +250,6 @@ Y_UNIT_TEST_SUITE(Restore) {
         AFL_VERIFY(checker());
     }
 
-<<<<<<< HEAD
-    Y_UNIT_TEST(ProposeRestore) {
-        Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
-        NTestUtils::CreateBucket("test", s3Client);
-=======
     void PlanAndWait(TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind, const TPlanStep planStep,
         const ui64 txId) {
         auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(txId);
@@ -295,7 +285,6 @@ Y_UNIT_TEST_SUITE(Restore) {
         NTestUtils::CreateBucket(bucketName, s3Client);
         const auto schema = MakeRestoreSchema();
         const ui64 tableId = 1;
->>>>>>> 663bfeb7316 (import verify has been fixed (#56015))
 
         {
             TTestBasicRuntime runtime;
@@ -314,55 +303,12 @@ Y_UNIT_TEST_SUITE(Restore) {
                 return true;
             }, TDuration::Seconds(1000));
 
-<<<<<<< HEAD
-            NKikimrTxColumnShard::TBackupTxBody txBody;
-            NOlap::TSnapshot backupSnapshot(planStep.Val(), txId);
-            auto& backupTask = *txBody.MutableBackupTask();
-            backupTask.SetTableName("abcde");
-            backupTask.SetTableId(tableId);
-            backupTask.SetSnapshotStep(backupSnapshot.GetPlanStep());
-            backupTask.SetSnapshotTxId(backupSnapshot.GetTxId());
-            backupTask.MutableS3Settings()->SetEndpoint(GetEnv("S3_ENDPOINT"));
-            backupTask.MutableS3Settings()->SetBucket("test");
-
-            auto& table = *backupTask.MutableTable();
-            auto& tableDescription = *table.MutableColumnTableDescription();
-            tableDescription.SetColumnShardCount(4);
-            auto& schemaBackup = *tableDescription.MutableSchema();
-
-            auto& col1 = *schemaBackup.MutableColumns()->Add();
-            col1.SetName("key1");
-            col1.SetType("Uint64");
-
-            auto& col2 = *schemaBackup.MutableColumns()->Add();
-            col2.SetName("key2");
-            col2.SetType("Uint64");
-
-            auto& col3 = *schemaBackup.MutableColumns()->Add();
-            col3.SetName("field");
-            col3.SetType("Utf8");
-            table.MutableSelf();
-            AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
-            planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
-            AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
-            {
-                auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(txId);
-                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
-            }
-            PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false);
-            {
-                auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
-                UNIT_ASSERT(ev);
-                UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
-            }
-=======
             RunCountedTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP,
                 MakeBackupTxBody(tableId, NOlap::TSnapshot(planStep.Val(), txId), bucketName, {}, dataFormat).SerializeAsString(), txId, [&]() {
                     return csControllerGuard->GetFinishedExportsCount();
                 });
->>>>>>> 663bfeb7316 (import verify has been fixed (#56015))
             TestWaitCondition(runtime, "export", [&]() {
-                return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
+                return NTestUtils::GetObjectKeys(bucketName, s3Client).size() == 3;
             });
             VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
         }
@@ -376,57 +322,10 @@ Y_UNIT_TEST_SUITE(Restore) {
             ui64 txId = 111;
             TActorId sender = runtime.AllocateEdgeActor();
 
-<<<<<<< HEAD
-            NKikimrTxColumnShard::TRestoreTxBody txBody;
-            auto& restoreTask = *txBody.MutableRestoreTask();
-            restoreTask.SetTableId(1);
-            restoreTask.MutableS3Settings()->SetEndpoint(GetEnv("S3_ENDPOINT"));
-            restoreTask.MutableS3Settings()->SetBucket("test");
-
-            auto& schemaRestore = *restoreTask.MutableTableDescription();
-
-            auto& col1 = *schemaRestore.MutableColumns()->Add();
-            col1.SetName("key1");
-            col1.SetType("Uint64");
-            col1.SetId(1);
-            col1.SetTypeId(NScheme::NTypeIds::Uint64);
-
-            auto& col2 = *schemaRestore.MutableColumns()->Add();
-            col2.SetName("key2");
-            col2.SetType("Uint64");
-            col2.SetId(2);
-            col2.SetTypeId(NScheme::NTypeIds::Uint64);
-
-            auto& col3 = *schemaRestore.MutableColumns()->Add();
-            col3.SetName("field");
-            col3.SetType("Utf8");
-            col3.SetId(3);
-            col3.SetTypeId(NScheme::NTypeIds::Utf8);
-
-            schemaRestore.AddKeyColumnNames("key1");
-            schemaRestore.AddKeyColumnNames("key2");
-            schemaRestore.AddKeyColumnIds(1);
-            schemaRestore.AddKeyColumnIds(2);
-
-            AFL_VERIFY(csControllerGuard->GetFinishedImportsCount() == 0);
-            planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, txBody.SerializeAsString(), ++txId);
-            AFL_VERIFY(csControllerGuard->GetFinishedImportsCount() == 1);
-            {
-                auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(txId);
-                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
-            }
-            PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, NOlap::TSnapshot(planStep, txId), false);
-            {
-                auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
-                UNIT_ASSERT(ev);
-                UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
-            }
-=======
             RunCountedTx(
                 runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, MakeRestoreTxBody(tableId, bucketName).SerializeAsString(), txId, [&]() {
                     return csControllerGuard->GetFinishedImportsCount();
                 });
->>>>>>> 663bfeb7316 (import verify has been fixed (#56015))
             TestWaitCondition(runtime, "import", [&]() {
                 return true;
             });
@@ -449,6 +348,14 @@ Y_UNIT_TEST_SUITE(Restore) {
                 "\"4\",\n    \"15\",\n    \"16\",\n    \"17\",\n    \"18\",\n    \"19\",\n    \"20\",\n    \"21\",\n    \"22\",\n    "
                 "\"23\",\n    \"24\"\n  ]\n");
         }
+    }
+
+    Y_UNIT_TEST(ProposeRestoreYdbDump) {
+        ProposeRestore(EDataFormat::YdbDump);
+    }
+
+    Y_UNIT_TEST(ProposeRestoreParquet) {
+        ProposeRestore(EDataFormat::Parquet);
     }
 
     Y_UNIT_TEST(RestoreOversizedBatch) {

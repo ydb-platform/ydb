@@ -283,6 +283,10 @@ static struct aws_error_info errors[] = {
     AWS_DEFINE_ERROR_INFO_COMMON(
         AWS_ERROR_CBOR_RESOURCE_LIMIT_EXCEEDED,
         "Cbor decoder resource limit exceeded."),
+    AWS_DEFINE_ERROR_INFO_COMMON(
+        AWS_ERROR_EXTERNAL_REQUEST_SHUTDOWN,
+        "Shutdown by external request."),
+
 };
 /* clang-format on */
 

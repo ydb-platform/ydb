@@ -18,13 +18,9 @@ struct TNamedModuleBytecode {
     NYdb::NWasm::TModuleBytecode Bytecode;
 };
 
-void AddPrecompiledModule(
-    NYdb::NWasm::IWebAssemblyCompartment* compartment,
-    const NYdb::NWasm::TModuleBytecode& bytecode,
-    TStringBuf name);
+void AddPrecompiledModule(NYdb::NWasm::IWebAssemblyCompartment* compartment, const NYdb::NWasm::TModuleBytecode& bytecode, TStringBuf name);
 
-std::unique_ptr<NYdb::NWasm::IWebAssemblyCompartment> CreateRegistryCompartment(
-    const TVector<TNamedModuleBytecode>& libraries);
+std::unique_ptr<NYdb::NWasm::IWebAssemblyCompartment> CreateRegistryCompartment(const TVector<TNamedModuleBytecode>& libraries);
 
 //! Bridge string builders use ui32 lengths; reject oversized host strings.
 ui32 CheckedAbiLength(size_t size, TStringBuf what);
@@ -41,19 +37,10 @@ private:
     NYdb::NWasm::IWebAssemblyCompartment* Previous_;
 };
 
-void InvokeUdfExport(
-    NYdb::NWasm::IWebAssemblyCompartment* compartment,
-    void* runtimeFunction,
-    const TString& functionNameForErrors,
-    uintptr_t context,
-    uintptr_t result,
-    const TVector<uintptr_t>& args);
+void InvokeUdfExport(NYdb::NWasm::IWebAssemblyCompartment* compartment, void* runtimeFunction, const TString& functionNameForErrors,
+    uintptr_t context, uintptr_t result, const TVector<uintptr_t>& args);
 
-void InvokeUdfExport(
-    NYdb::NWasm::IWebAssemblyCompartment* compartment,
-    const TString& functionName,
-    uintptr_t context,
-    uintptr_t result,
+void InvokeUdfExport(NYdb::NWasm::IWebAssemblyCompartment* compartment, const TString& functionName, uintptr_t context, uintptr_t result,
     const TVector<uintptr_t>& args);
 
 enum class EWasmExportValueType: ui8 {
@@ -77,13 +64,8 @@ struct TWasmExportSignature {
     TVector<EWasmExportValueType> ParamTypes;
 };
 
-THashMap<TString, TWasmExportSignature> CollectWasmExports(
-    TStringBuf bytes,
-    NYdb::NWasm::EBytecodeFormat format);
+THashMap<TString, TWasmExportSignature> CollectWasmExports(TStringBuf bytes, NYdb::NWasm::EBytecodeFormat format);
 
-NYdb::NWasm::TModuleBytecode MakeModuleBytecode(
-    TStringBuf wasmData,
-    TStringBuf objectCode,
-    NYdb::NWasm::EBytecodeFormat format);
+NYdb::NWasm::TModuleBytecode MakeModuleBytecode(TStringBuf wasmData, TStringBuf objectCode, NYdb::NWasm::EBytecodeFormat format);
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

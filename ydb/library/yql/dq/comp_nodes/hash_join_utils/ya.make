@@ -10,6 +10,13 @@ PEERDIR(
     ydb/library/yql/dq/comp_nodes/hash_join_utils/simd
 )
 
+IF (ARCH_X86_64 AND OS_LINUX)
+    PEERDIR(
+        ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/layout/avx2
+        ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/layout/sse42
+    )
+ENDIF()
+
 SRCS(
     tuple.cpp
     accumulator.cpp
@@ -22,15 +29,6 @@ SRCS(
     join_defs.cpp
     print_unboxed_value.cpp
 )
-
-IF (ARCH_X86_64 AND OS_LINUX)
-
-CFLAGS(
-    -mprfchw
-    -mavx2
-)
-
-ENDIF()
 
 END()
 

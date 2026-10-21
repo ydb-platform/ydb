@@ -22,6 +22,7 @@
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
+#include <library/cpp/yt/misc/immortal.h>
 #include <library/cpp/yt/misc/tls.h>
 
 #include <library/cpp/yt/string/format.h>
@@ -62,17 +63,12 @@ struct TGlobalTracerStorage
     ITracerPtr Tracer;
 };
 
-// TODO(prime@): Switch constinit global variable, once gcc supports it.
-static TGlobalTracerStorage* GlobalTracerStorage()
-{
-    return LeakySingleton<TGlobalTracerStorage>();
-}
+static constinit TImmortal<TGlobalTracerStorage> GlobalTracerStorage;
 
 ITracerPtr GetGlobalTracer()
 {
-    auto tracerStorage = GlobalTracerStorage();
-    auto guard = Guard(tracerStorage->Lock);
-    return tracerStorage->Tracer;
+    auto guard = Guard(GlobalTracerStorage->Lock);
+    return GlobalTracerStorage->Tracer;
 }
 
 void SetGlobalTracer(const ITracerPtr& tracer)
@@ -80,10 +76,9 @@ void SetGlobalTracer(const ITracerPtr& tracer)
     ITracerPtr oldTracer;
 
     {
-        auto tracerStorage = GlobalTracerStorage();
-        auto guard = Guard(tracerStorage->Lock);
-        oldTracer = tracerStorage->Tracer;
-        tracerStorage->Tracer = tracer;
+        auto guard = Guard(GlobalTracerStorage->Lock);
+        oldTracer = GlobalTracerStorage->Tracer;
+        GlobalTracerStorage->Tracer = tracer;
     }
 
     if (oldTracer) {

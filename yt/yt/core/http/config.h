@@ -69,7 +69,7 @@ struct TServerConfig
 
     //! Transparently decodes request bodies per Content-Encoding and
     //! encodes response bodies per Accept-Encoding for all handlers.
-    bool EnableContentEncoding;
+    std::optional<bool> EnableContentEncoding;
     int CompressionThreadCount;
 
     REGISTER_YSON_STRUCT(TServerConfig);

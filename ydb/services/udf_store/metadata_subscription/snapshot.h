@@ -1,8 +1,8 @@
 #pragma once
 #include "udf_module.h"
 
-#include <ydb/services/metadata/abstract/common.h>
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/services/metadata/abstract/common.h>
 
 namespace NKikimr::NUdfStore {
 
@@ -13,9 +13,11 @@ private:
     using TLibraries = std::map<TString, TUdfModule>;
     YDB_READONLY_DEF(TUdfs, Udfs);
     YDB_READONLY_DEF(TLibraries, Libraries);
+
 protected:
     virtual bool DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) override;
     virtual TString DoSerializeToString() const override;
+
 public:
     using TBase::TBase;
 
@@ -25,4 +27,4 @@ public:
     std::vector<TString> GetLibraryNames() const;
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

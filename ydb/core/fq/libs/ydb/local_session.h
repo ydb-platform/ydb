@@ -6,4 +6,4 @@ namespace NFq {
 
 ISession::TPtr CreateLocalSession();
 
-} // namespace NFq
+}   // namespace NFq

@@ -42,6 +42,7 @@ RECURSE(
     other
     pdisk
     storagepoolmon
+    subsystem
     testing
     vdisk
 )

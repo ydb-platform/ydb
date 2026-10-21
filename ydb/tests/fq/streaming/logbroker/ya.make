@@ -1,5 +1,7 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner.inc)
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")

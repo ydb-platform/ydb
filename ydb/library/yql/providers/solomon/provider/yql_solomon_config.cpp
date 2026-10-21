@@ -14,13 +14,12 @@ TSolomonConfiguration::TSolomonConfiguration(bool strictConfigValidation)
     REGISTER_SETTING(*this, _EnableSolomonClientPostApi);
     REGISTER_SETTING(*this, _TruePointsFindRange);
     REGISTER_SETTING(*this, _MaxListingPageSize);
-    REGISTER_SETTING(*this, Auth)
-        .ValueSetter([this](const TString&, const TString& value) {
-            Auth = value;
-            for (auto& token: Tokens) {
-                token.second = ComposeStructuredTokenJsonForServiceAccount("", "", value);
-            }
-        });
+    REGISTER_SETTING(*this, Auth).ValueSetter([this](const TString&, const TString& value) {
+        Auth = value;
+        for (auto& token : Tokens) {
+            token.second = ComposeStructuredTokenJsonForServiceAccount("", "", value);
+        }
+    });
     REGISTER_SETTING(*this, MetricsQueueBatchCountLimit);
     REGISTER_SETTING(*this, MetricsQueuePrefetchSize);
     REGISTER_SETTING(*this, ComputeActorBatchSize);
@@ -36,4 +35,4 @@ TSolomonSettings::TConstPtr TSolomonConfiguration::Snapshot() const {
     return std::make_shared<const TSolomonSettings>(*this);
 }
 
-} // NYql
+}   // namespace NYql

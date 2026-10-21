@@ -220,6 +220,8 @@ private:
         auto responseEv = MakeHolder<TEvKqp::TEvSplitResponse>(
             GetYdbStatus(result), result.Issues(),
             QueryId, std::move(result.Exprs), std::move(result.World), std::move(result.Ctx));
+        AsyncSplitResult.Reset();
+        KqpHost.Reset();
         Send(Owner, responseEv.Release());
 
         Counters->ReportCompileFinish(DbCounters);
@@ -507,6 +509,7 @@ private:
         } else {
             KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, CompileCpuTime, std::move(KqpCompileResult->Query), std::move(KqpCompileResult->QueryAst), meta);
         }
+        KqpCompileResult->UsedNewRbo = EnableNewRBO;
 
         Reply();
     }

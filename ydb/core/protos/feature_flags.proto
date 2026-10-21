@@ -44,7 +44,7 @@ message TFeatureFlags {
     optional bool CheckDatabaseAccessPermission = 23 [default = false];
     optional bool AllowOnlineIndexBuild = 24 [default = true]; // deprecated: always true
     optional bool EnablePersistentQueryStats = 25 [default = true, (RequireRestart) = true];
-    optional bool DisableDataShardBarrier = 26 [default = false];
+    reserved 26; // DisableDataShardBarrier
     optional bool EnablePutBatchingForBlobStorage = 27 [default = true];
     optional bool EnableKqpWideFlow = 28 [default = true]; // deprecated: always true
     optional bool EnableKqpScanQueries = 29 [default = true]; // deprecated: always true
@@ -249,6 +249,7 @@ message TFeatureFlags {
     optional bool EnableStreamingQueriesCounters = 219 [default = false];
     optional bool UseYdsTopicStorageMetering = 220 [default = false];
     optional bool EnableIndexMaterialization = 221 [default = false];
+    optional bool EnableTenantSystemTabletBackup = 362 [default = true];
     optional bool EnableFsBackups = 222 [default = false];
     optional bool EnableCmsLocksPriority = 223 [default = true];
     optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
@@ -325,7 +326,7 @@ message TFeatureFlags {
     optional bool EnableCompactFulltextIndex = 280 [default = true];
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
     optional bool EnableFulltextIndexPrefix = 282 [default = true];
-    optional bool EnableAccessServiceV2Interface = 283 [default = true, (RequireRestart) = true];
+    reserved 283; reserved "EnableAccessServiceV2Interface";
     optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
     optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
     optional bool EnableTopicDeferredPublish = 286 [default = false];
@@ -369,7 +370,7 @@ message TFeatureFlags {
     optional bool EnableTopicSourceIdMappingById = 313 [default = false];
     optional bool EnableSharedReadingStructuredJsonParsing = 314 [default = false];
     optional bool EnableExactlyOnceTopicsWriting = 315 [default = false];
-    optional bool EnableUpdatingPartitionsOnStreamingQueryRestart = 316 [default = false];
+    optional bool EnableUpdatingPartitionsOnStreamingQueryRestart = 316 [default = true];
     // Offloads TEvDataShard::TEvPeriodicTableStats parsing to a dedicated aux actor to reduce
     // SchemeShard's single-threaded load.
     optional bool EnablePeriodicTableStatsParseOffload = 317 [default = false];
@@ -444,4 +445,16 @@ message TFeatureFlags {
     // Enables memory of table partitions split/merge demands
     optional bool EnableSplitMergeDemandTracking = 360 [default = false];
     optional bool EnableStreamingQuerySchemeOperations = 361 [default = true];
+    optional bool EnableKeyValueRequestInFlightLimit = 363 [default = false];
+    // Use optimized compaction selection strategy.
+    optional bool EnableHullCompStorageRatioOptimization = 364 [default = false];
+    // Skip StorageRatio calculation at compaction rank >= 10 while continuing compaction selection.
+    optional bool EnableHullCompStorageRatioHighRankSkip = 365 [default = false];
+    // Enables configuring column-table TTL on DyNumber, Date32, Datetime64 and Timestamp64.
+    // Existing TTL settings continue to execute when the flag is disabled.
+    optional bool EnableColumnShardExtendedTtlTypes = 366 [default = false];
+    optional bool EnableColumnShardSetNotNull = 367 [default = false];
+    // Allows client data writes and schema modifications.
+    optional bool EnableClientModifications = 368 [default = true];
+    optional bool EnableCompileCacheV2 = 369 [default = false];
 }

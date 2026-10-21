@@ -974,7 +974,7 @@ private:
 
     std::atomic<bool> Active_ = false;
 
-    THashMap<std::string, TRuntimeMethodInfoPtr, THash<std::string>, TEqualTo<>> MethodMap_;
+    THashMap<std::string, TRuntimeMethodInfoPtr> MethodMap_;
 
     THashSet<int> SupportedServerFeatureIds_;
 

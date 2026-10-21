@@ -1,38 +1,34 @@
 #include "read_actor.h"
+
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
-#include <yql/essentials/minikql/mkql_string_util.h>
-#include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/utils/yql_panic.h>
+
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 #include <util/random/random.h>
 #include <util/generic/algorithm.h>
 #include <util/string/join.h>
-#include <deque>
-#include <set>
-#include <map>
 
-#define SRC_LOG_T(s) \
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SRC_LOG_D(s) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SRC_LOG_I(s) \
-    LOG_INFO_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SRC_LOG_W(s) \
-    LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SRC_LOG_N(s) \
-    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SRC_LOG_E(s) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SRC_LOG_C(s) \
-    LOG_CRIT_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SRC_LOG(prio, s) \
-    LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+
+#include <deque>
+#include <map>
+#include <set>
+
+#define SRC_LOG_T(s) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SRC_LOG_D(s) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SRC_LOG_I(s) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SRC_LOG_W(s) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SRC_LOG_N(s) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SRC_LOG_E(s) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SRC_LOG_C(s) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SRC_LOG(prio, s) LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 
 namespace NFq::NMessageStream {
 
@@ -45,11 +41,9 @@ using namespace NKikimr::NMiniKQL;
 
 namespace {
 
-
-
 struct TEvPrivate {
     // Event ids
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = EventSpaceBegin(TEvents::ES_PRIVATE),
 
         EvSourceDataReady = EvBegin,
@@ -68,33 +62,35 @@ struct TEvPrivate {
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-    struct TEvResumeCallbacks : public TEventLocal<TEvResumeCallbacks, EvResumeCallbacks> {
+    struct TEvResumeCallbacks: public TEventLocal<TEvResumeCallbacks, EvResumeCallbacks> {
         explicit TEvResumeCallbacks(ui64 generation)
             : Generation(generation)
-        {}
+        {
+        }
+
         const ui64 Generation;
     };
 
     // Events
 
-    struct TEvSourceDataReady : public TEventLocal<TEvSourceDataReady, EvSourceDataReady> {};
+    struct TEvSourceDataReady: public TEventLocal<TEvSourceDataReady, EvSourceDataReady> {};
 
-    struct TEvPartitionIdleness : public TEventLocal<TEvPartitionIdleness, EvPartitionIdleness> {
+    struct TEvPartitionIdleness: public TEventLocal<TEvPartitionIdleness, EvPartitionIdleness> {
         explicit TEvPartitionIdleness(TInstant notifyTime)
             : NotifyTime(notifyTime)
-        {}
+        {
+        }
 
         TInstant NotifyTime;
     };
 
-    struct TEvReconnectSession : public TEventLocal<TEvReconnectSession, EvReconnectSession> {};
+    struct TEvReconnectSession: public TEventLocal<TEvReconnectSession, EvReconnectSession> {};
 
+    struct TEvCheckPartitionTimer: public TEventLocal<TEvCheckPartitionTimer, EvCheckPartitionTimer> {};
 
-    struct TEvCheckPartitionTimer : public TEventLocal<TEvCheckPartitionTimer, EvCheckPartitionTimer> {};
+    struct TEvRequestPartitionStatus: public TEventLocal<TEvRequestPartitionStatus, EvRequestPartitionStatus> {};
 
-    struct TEvRequestPartitionStatus : public TEventLocal<TEvRequestPartitionStatus, EvRequestPartitionStatus> {};
-
-    struct TEvReconnectCluster : public TEventLocal<TEvReconnectCluster, EvReconnectCluster> {
+    struct TEvReconnectCluster: public TEventLocal<TEvReconnectCluster, EvReconnectCluster> {
         explicit TEvReconnectCluster(ui32 clusterIndex)
             : ClusterIndex(clusterIndex)
         {}
@@ -102,44 +98,48 @@ struct TEvPrivate {
         const ui32 ClusterIndex;
     };
 
-    struct TEvCheckPartitionCount : public TEventLocal<TEvCheckPartitionCount, EvCheckPartitionCount> {
+    struct TEvCheckPartitionCount: public TEventLocal<TEvCheckPartitionCount, EvCheckPartitionCount> {
         explicit TEvCheckPartitionCount(ui32 clusterIndex)
             : ClusterIndex(clusterIndex)
-        {}
+        {
+        }
+
         const ui32 ClusterIndex = 0;
     };
 
-    struct TEvCheckPartitionCountResult : public TEventLocal<TEvCheckPartitionCountResult, EvCheckPartitionCountResult> {
+    struct TEvCheckPartitionCountResult: public TEventLocal<TEvCheckPartitionCountResult, EvCheckPartitionCountResult> {
         TEvCheckPartitionCountResult(ui32 clusterIndex, ui32 partitionsCount)
             : ClusterIndex(clusterIndex)
             , PartitionsCount(partitionsCount)
-        {}
+        {
+        }
+
         TEvCheckPartitionCountResult(ui32 clusterIndex, TIssues issues)
             : ClusterIndex(clusterIndex)
             , PartitionsCount(0)
             , Issues(std::move(issues))
-        {}
+        {
+        }
+
         const ui32 ClusterIndex = 0;
         const ui32 PartitionsCount = 0;
         TMaybe<TIssues> Issues;
     };
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-class TMessageStreamReadActor : public TActor<TMessageStreamReadActor>, public IDqComputeActorAsyncInput {
+class TMessageStreamReadActor: public TActor<TMessageStreamReadActor>, public IDqComputeActorAsyncInput {
     static constexpr ui64 HealthCheckWakeupTag = 1;
     static constexpr TDuration CHECK_HANGING_PERIOD = TDuration::Minutes(1);
 
     struct TMetrics {
-        TMetrics(
-            const TTxId& txId,
-            ui64 taskId,
-            const ::NMonitoring::TDynamicCounterPtr& counters,
-            const TMessageStreamReadActorSettings& settings,
-            bool enableStreamingQueriesCounters,
-            bool enableCountersPerTask = false)
-            : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
+        TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters,
+            const TMessageStreamReadActorSettings& settings, bool enableStreamingQueriesCounters, bool enableCountersPerTask = false)
+            : TxId(std::visit(
+                  [](auto arg) {
+                      return ToString(arg);
+                  }, txId))
             , Counters(counters)
         {
             if (counters) {
@@ -167,7 +167,7 @@ class TMessageStreamReadActor : public TActor<TMessageStreamReadActor>, public I
             ReconnectRate = Task->GetCounter("ReconnectRate", true);
             DataRate = Task->GetCounter("DataRate", true);
             AvailableClusters = Source->GetCounter("AvailableClusters");
-            WaitEventTimeMs = Source->GetHistogram("WaitEventTimeMs", NMonitoring::ExplicitHistogram({5, 20, 100, 500, 2000}));
+            WaitEventTimeMs = Source->GetHistogram("WaitEventTimeMs", NMonitoring::ExplicitHistogram({ 5, 20, 100, 500, 2000 }));
         }
 
         ~TMetrics() {
@@ -206,8 +206,7 @@ class TMessageStreamReadActor : public TActor<TMessageStreamReadActor>, public I
 public:
     static constexpr char ActorName[] = "DQ_MESSAGE_STREAM_READ_ACTOR";
 
-    TMessageStreamReadActor(TMessageStreamReadActorSettings settings,
-        std::unique_ptr<IMessageStreamReadActorState> state)
+    TMessageStreamReadActor(TMessageStreamReadActorSettings settings, std::unique_ptr<IMessageStreamReadActorState> state)
         : TActor<TMessageStreamReadActor>(&TMessageStreamReadActor::StateFunc)
         , Settings(std::move(settings))
         , CpuQuota(Settings.WorkFactory)
@@ -226,8 +225,10 @@ public:
         , MetadataFields(Settings.MetadataFields)
         , WithoutConsumer(Settings.Consumer.empty())
         , CheckPartitionCountPeriod(Settings.CheckPartitionCountPeriod)
-        , BeginOffset(Settings.BeginOffset), EndOffset(Settings.EndOffset)
-        , BeginWriteTime(Settings.BeginWriteTime), EndWriteTime(Settings.EndWriteTime)
+        , BeginOffset(Settings.BeginOffset)
+        , EndOffset(Settings.EndOffset)
+        , BeginWriteTime(Settings.BeginWriteTime)
+        , EndWriteTime(Settings.EndWriteTime)
     {
         Y_ENSURE(Alloc, "Message stream read actor requires an allocator");
         InitWatermarkTracker();
@@ -243,10 +244,17 @@ public:
         ClearMkqlData();
     }
 
-    TDuration GetCpuTime() override { return CpuQuota.GetCpuTime(); }
+    TDuration GetCpuTime() override {
+        return CpuQuota.GetCpuTime();
+    }
 
-    ui64 GetInputIndex() const override { return InputIndex; }
-    const TDqAsyncStats& GetIngressStats() const override { return IngressStats; }
+    ui64 GetInputIndex() const override {
+        return InputIndex;
+    }
+
+    const TDqAsyncStats& GetIngressStats() const override {
+        return IngressStats;
+    }
 
     void SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) override {
         State->SaveState(checkpoint, state);
@@ -294,7 +302,8 @@ public:
     NFq::IMessageStreamReadSession* GetReadSession(TClusterState& cluster) {
         if (!cluster.ReadSession) {
             if (!cluster.PendingSession.Initialized()) {
-                cluster.PendingSession = cluster.Config.CreateSession(ActorContext(), GetTopicClient(cluster), GetMessageStreamReadSettings(cluster));
+                cluster.PendingSession =
+                    cluster.Config.CreateSession(ActorContext(), GetTopicClient(cluster), GetMessageStreamReadSettings(cluster));
                 if (!cluster.PendingSession.IsReady()) {
                     cluster.PendingSession.Subscribe([system = TActivationContext::ActorSystem(), self = SelfId()](const auto&) {
                         system->Send(self, new TEvPrivate::TEvSourceDataReady());
@@ -311,7 +320,7 @@ public:
             ScheduleStatusRequest();
             if (WatermarkTracker) {
                 for (auto id : cluster.Config.Partitions) {
-                    WatermarkTracker->RegisterPartition({cluster.Config.Name, id}, TInstant::Now());
+                    WatermarkTracker->RegisterPartition({ cluster.Config.Name, id }, TInstant::Now());
                 }
             }
         }
@@ -327,7 +336,12 @@ public:
             if (cluster.PendingSession.Initialized()) {
                 // A factory may finish after the actor has gone away.
                 cluster.PendingSession.Subscribe([](const auto& future) {
-                    try { if (auto session = future.GetValue()) { session->Close(); } } catch (...) {}
+                    try {
+                        if (auto session = future.GetValue()) {
+                            session->Close();
+                        }
+                    } catch (...) {
+                    }
                 });
                 cluster.PendingSession = {};
             }
@@ -354,7 +368,7 @@ public:
     }
 
     TString GetSessionId(ui32 index) const {
-        return !Clusters.empty() && Clusters[index].ReadSession ? TString{Clusters[index].ReadSession->GetSessionId()} : TString{"empty"};
+        return !Clusters.empty() && Clusters[index].ReadSession ? TString{ Clusters[index].ReadSession->GetSessionId() } : TString{ "empty" };
     }
 
 private:
@@ -412,8 +426,14 @@ private:
             ExecuteCallback();
         }
     }
-    void HandleConsumerOffsets(TEvents::TEvInvokeResult::TPtr& event) { State->HandleConsumerOffsets(event); }
-    bool ConsumerOffsetsInitialized() const { return State->ConsumerOffsetsInitialized(); }
+
+    void HandleConsumerOffsets(TEvents::TEvInvokeResult::TPtr& event) {
+        State->HandleConsumerOffsets(event);
+    }
+
+    bool ConsumerOffsetsInitialized() const {
+        return State->ConsumerOffsetsInitialized();
+    }
 
     void Handle(TEvPrivate::TEvSourceDataReady::TPtr& ev) {
         if (ev.Get()->Cookie && !Clusters.empty()) {
@@ -449,7 +469,8 @@ private:
 
     void Handle(TEvPrivate::TEvReconnectSession::TPtr&) {
         for (auto& clusterState : Clusters) {
-            SRC_LOG_D("SessionId: " << GetSessionId(clusterState.Index) << ", Reconnect epoch: " << (Metrics.ReconnectRate ? Metrics.ReconnectRate->Val() : 0));
+            SRC_LOG_D("SessionId: " << GetSessionId(clusterState.Index)
+                                    << ", Reconnect epoch: " << (Metrics.ReconnectRate ? Metrics.ReconnectRate->Val() : 0));
         }
         CloseSessions();
         Reconnected = true;
@@ -461,7 +482,7 @@ private:
     }
 
     // IActor & IDqComputeActorAsyncInput
-    void PassAway() override { // Is called from Compute Actor
+    void PassAway() override {   // Is called from Compute Actor
         CpuQuota.Cancel();
         ++CallbackResumeGeneration;
         PendingCallbacks = {};
@@ -484,7 +505,7 @@ private:
             cluster.Index = index++;
             cluster.Config = config;
             for (auto partition : config.Partitions) {
-                Partitions[TPartitionKey{config.Name, partition}];
+                Partitions[TPartitionKey{ config.Name, partition }];
             }
             if (!WithoutConsumer) {
                 GetTopicClient(cluster);
@@ -506,11 +527,8 @@ private:
         ScheduleStatusRequest();
     }
 
-
     void ScheduleStatusRequest() {
-        if (!StatusRequestScheduled
-            && !FinishedByOffsets && Settings.StopAtCurrentEndOffsets
-            && (BeginWriteTime || EndWriteTime)) {
+        if (!StatusRequestScheduled && !FinishedByOffsets && Settings.StopAtCurrentEndOffsets && (BeginWriteTime || EndWriteTime)) {
             StatusRequestScheduled = true;
             Schedule(TDuration::Seconds(1), new TEvPrivate::TEvRequestPartitionStatus());
         }
@@ -566,10 +584,12 @@ private:
 
         if (Reconnected) {
             Reconnected = false;
-            ReadyBuffer = std::deque<TReadyBatch>{}; // clear read buffer
+            ReadyBuffer = std::deque<TReadyBatch>{};   // clear read buffer
         }
 
-        if (freeSpace <= 0) { return 0; }
+        if (freeSpace <= 0) {
+            return 0;
+        }
         i64 usedSpace = 0;
         if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
             finished = FinishedByOffsets && ReadyBuffer.empty();
@@ -587,7 +607,9 @@ private:
                     continue;
                 }
                 auto* session = GetReadSession(clusterState);
-                if (!session) { continue; }
+                if (!session) {
+                    continue;
+                }
                 auto events = session->GetEvents({
                     .Block = false,
                     .MaxByteSize = static_cast<size_t>(freeSpace),
@@ -603,7 +625,8 @@ private:
                     }
                 }
 
-                TTopicEventProcessor topicEventProcessor {*this, clusterState, batchItemsEstimatedCount, LogPrefix, TString(clusterState.Config.Name), clusterState.Index };
+                TTopicEventProcessor topicEventProcessor{ *this, clusterState, batchItemsEstimatedCount, LogPrefix,
+                    TString(clusterState.Config.Name), clusterState.Index };
                 for (auto& event : events) {
                     std::visit(topicEventProcessor, event);
                 }
@@ -611,7 +634,7 @@ private:
         }
 
         if (WatermarkTracker) {
-            WatermarkTracker->ProcessIdlenessCheck(now); // drop obsolete checks
+            WatermarkTracker->ProcessIdlenessCheck(now);   // drop obsolete checks
             const auto watermark = WatermarkTracker->HandleIdleness(now);
 
             if (watermark) {
@@ -629,7 +652,7 @@ private:
             usedSpace = 0;
             if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
                 finished = FinishedByOffsets && ReadyBuffer.empty();
-            return usedSpace;
+                return usedSpace;
             }
         }
 
@@ -641,9 +664,7 @@ private:
     }
 
     void CheckFinishedByOffsets() {
-        if (!Settings.StopAtCurrentEndOffsets
-            || Clusters.empty()
-            || FinishedByOffsets) {
+        if (!Settings.StopAtCurrentEndOffsets || Clusters.empty() || FinishedByOffsets) {
             return;
         }
         if (Partitions.size() != FinishedPartitions.size()) {
@@ -657,13 +678,15 @@ private:
         Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
     }
 
-    const std::vector<ui64>& GetPartitionsToRead(const TClusterState& cluster) const { return cluster.Config.Partitions; }
+    const std::vector<ui64>& GetPartitionsToRead(const TClusterState& cluster) const {
+        return cluster.Config.Partitions;
+    }
 
     void InitWatermarkTracker() {
         WatermarkTracker.Clear();
         if (Settings.WatermarksEnabled) {
-            WatermarkTracker.ConstructInPlace(Settings.WatermarkGranularity, Settings.IdlePartitionsEnabled,
-                Settings.LateArrivalDelay, Settings.IdleTimeout, LogPrefix, Metrics.Counters ? Metrics.Source : nullptr);
+            WatermarkTracker.ConstructInPlace(Settings.WatermarkGranularity, Settings.IdlePartitionsEnabled, Settings.LateArrivalDelay,
+                Settings.IdleTimeout, LogPrefix, Metrics.Counters ? Metrics.Source : nullptr);
         }
     }
 
@@ -680,14 +703,13 @@ private:
     }
 
     bool RequiresWriteTime() const {
-        return Settings.RequireWriteTime || Settings.WatermarksEnabled
-            || HasReadTimeLowerBound() || EndWriteTime.Defined();
+        return Settings.RequireWriteTime || Settings.WatermarksEnabled || HasReadTimeLowerBound() || EndWriteTime.Defined();
     }
 
     NFq::TMessageStreamReadSessionSettings GetMessageStreamReadSettings(TClusterState& clusterState) const {
         NFq::TMessageStreamReadSessionSettings settings;
         for (const auto partitionId : GetPartitionsToRead(clusterState)) {
-            settings.PartitionIds.push_back(NFq::TMessageStreamPartitionId{partitionId});
+            settings.PartitionIds.push_back(NFq::TMessageStreamPartitionId{ partitionId });
         }
         if (HasReadTimeLowerBound()) {
             settings.ReadFromWriteTime = StartingMessageTimestamp;
@@ -701,7 +723,6 @@ private:
         }
         return settings;
     }
-
 
     static TPartitionKey MakePartitionKey(const TString& cluster, const std::shared_ptr<NFq::IMessageStreamPartitionControl>& partition) {
         Y_DEBUG_ABORT_UNLESS(partition, "Missing partition session for partition key creation");
@@ -726,13 +747,15 @@ private:
             return;
         }
         auto* session = GetReadSession(clusterState);
-        if (!session) { return; }
+        if (!session) {
+            return;
+        }
         if (!clusterState.SubscribedOnEvent) {
             clusterState.SubscribedOnEvent = true;
             Metrics.InFlySubscribe->Inc();
             TActorSystem* actorSystem = TActivationContext::ActorSystem();
             clusterState.WaitEventStartedAt = TInstant::Now();
-            clusterState.EventFuture = session->WaitEvent().Subscribe([actorSystem, selfId = SelfId(), index = clusterState.Index](const auto&){
+            clusterState.EventFuture = session->WaitEvent().Subscribe([actorSystem, selfId = SelfId(), index = clusterState.Index](const auto&) {
                 actorSystem->Send(selfId, new TEvPrivate::TEvSourceDataReady(), 0, 1 + index);
             });
         }
@@ -779,7 +802,8 @@ private:
     struct TReadyBatch {
     public:
         TReadyBatch(TMaybe<TInstant> watermark, ui32 dataCapacity)
-          : Watermark(watermark) {
+            : Watermark(watermark)
+        {
             Data.reserve(dataCapacity);
         }
 
@@ -787,7 +811,8 @@ private:
         TMaybe<TInstant> Watermark;
         TUnboxedValueVector Data;
         i64 UsedSpace = 0;
-        std::map<std::shared_ptr<NFq::IMessageStreamPartitionControl>, std::pair<std::string, TList<std::pair<ui64, ui64>>>, std::owner_less<>> OffsetRanges; // [start, end)
+        std::map<std::shared_ptr<NFq::IMessageStreamPartitionControl>, std::pair<std::string, TList<std::pair<ui64, ui64>>>, std::owner_less<>>
+            OffsetRanges;   // [start, end)
         TInstant LastWriteTime;
     };
 
@@ -833,9 +858,8 @@ private:
         }
 
         SRC_LOG_T("SessionId: " << GetSessionId() << " Return ready batch."
-            << " DataCount = " << buffer.RowCount()
-            << " Watermark = " << (watermark ? ToString(*watermark) : "none")
-            << " Used space = " << usedSpace);
+                                << " DataCount = " << buffer.RowCount() << " Watermark = " << (watermark ? ToString(*watermark) : "none")
+                                << " Used space = " << usedSpace);
         return true;
     }
 
@@ -882,25 +906,21 @@ private:
 
         GetTopicClient(clusterState)
             .DescribeStream()
-            .Subscribe([
-                index = clusterState.Index,
-                actorSystem = TActivationContext::ActorSystem(),
-                selfId = SelfId()](const auto& describeTopicFuture)
-            {
-                try {
-                    const auto& describeTopic = describeTopicFuture.GetValue();
-                    if (!describeTopic.IsSuccess()) {
-                        actorSystem->Send(selfId, new TEvPrivate::TEvCheckPartitionCountResult(index,
-                            describeTopic.Issues));
-                        return;
+            .Subscribe(
+                [index = clusterState.Index, actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](const auto& describeTopicFuture)
+                {
+                    try {
+                        const auto& describeTopic = describeTopicFuture.GetValue();
+                        if (!describeTopic.IsSuccess()) {
+                            actorSystem->Send(selfId, new TEvPrivate::TEvCheckPartitionCountResult(index, describeTopic.Issues));
+                            return;
+                        }
+                        actorSystem->Send(selfId,
+                            new TEvPrivate::TEvCheckPartitionCountResult(index, static_cast<ui32>(describeTopic.Value.Partitions.size())));
+                    } catch (const std::exception& ex) {
+                        actorSystem->Send(selfId, new TEvPrivate::TEvCheckPartitionCountResult(index, TIssues{ TIssue(ex.what()) }));
                     }
-                    actorSystem->Send(selfId, new TEvPrivate::TEvCheckPartitionCountResult(index, static_cast<ui32>(describeTopic.Value.Partitions.size())));
-                } catch (const std::exception& ex) {
-                    actorSystem->Send(selfId, new TEvPrivate::TEvCheckPartitionCountResult(index,
-                        TIssues{TIssue(ex.what())}
-                    ));
-                }
-            });
+                });
     }
 
     void Handle(TEvPrivate::TEvCheckPartitionCountResult::TPtr& ev) {
@@ -909,7 +929,8 @@ private:
 
         if (ev->Get()->Issues) {
             SRC_LOG_W("Periodic DescribeTopic failed for topic \"" << Settings.Stream << "\""
-                << " on cluster index " << clusterIndex << ": " << ev->Get()->Issues->ToOneLineString());
+                                                                   << " on cluster index " << clusterIndex << ": "
+                                                                   << ev->Get()->Issues->ToOneLineString());
             return;
         }
         if (clusterIndex < Clusters.size() && Clusters[clusterIndex].Config.PartitionsCount != partitionsCount) {
@@ -919,9 +940,9 @@ private:
                 message << " (on cluster \"" << Clusters[clusterIndex].Config.Name << "\")";
             }
             message << " is changed from " << Clusters[clusterIndex].Config.PartitionsCount << " to " << partitionsCount
-                << ". You need to restart (alter with text or drop / create) query to read all partitions.";
+                    << ". You need to restart (alter with text or drop / create) query to read all partitions.";
             SRC_LOG_E(message);
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::SCHEME_ERROR));
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, TIssues({ TIssue(message) }), NYql::NDqProto::StatusIds::SCHEME_ERROR));
             return;
         }
     }
@@ -968,12 +989,16 @@ private:
                 }
                 const TString& data = *record.Data;
                 Self.IngressStats.Bytes += data.size();
-                if (Self.Settings.TraceRecord) { Self.Settings.TraceRecord(record); }
-                SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Data received, offset " << record.Id.Offset);
+                if (Self.Settings.TraceRecord) {
+                    Self.Settings.TraceRecord(record);
+                }
+                SRC_LOG_T(
+                    "SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Data received, offset " << record.Id.Offset);
 
                 bool needSkip = false;
                 if (Self.Settings.StopAtCurrentEndOffsets && partitionInfo.EndOffset && *partitionInfo.EndOffset <= record.Id.Offset) {
-                    SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Skip data. Message offset: " << record.Id.Offset << ", end offset: " << *partitionInfo.EndOffset << ")");
+                    SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Skip data. Message offset: "
+                                            << record.Id.Offset << ", end offset: " << *partitionInfo.EndOffset << ")");
                     needSkip = true;
                 }
 
@@ -983,7 +1008,8 @@ private:
                 }
                 const auto partitionTime = record.WriteTime.value_or(TInstant::Zero());
                 if (Self.Settings.StopAtCurrentEndOffsets && partitionInfo.EndWriteTime && *partitionInfo.EndWriteTime <= partitionTime) {
-                    SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Skip data. Message writetime: " << partitionTime << ", end write time: " << *partitionInfo.EndWriteTime << ")");
+                    SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Skip data. Message writetime: "
+                                            << partitionTime << ", end write time: " << *partitionInfo.EndWriteTime << ")");
                     needSkip = true;
                 }
 
@@ -992,7 +1018,8 @@ private:
                 }
 
                 if (partitionTime < Self.StartingMessageTimestamp) {
-                    SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Skip data. StartingMessageTimestamp: " << Self.StartingMessageTimestamp << ". Write time: " << partitionTime);
+                    SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Skip data. StartingMessageTimestamp: "
+                                            << Self.StartingMessageTimestamp << ". Write time: " << partitionTime);
                     needSkip = true;
                 }
 
@@ -1020,11 +1047,7 @@ private:
                 if (!Self.WatermarkTracker) {
                     continue;
                 }
-                const auto maybeNewWatermark = Self.WatermarkTracker->NotifyNewPartitionTime(
-                    partitionKey,
-                    partitionTime,
-                    TInstant::Now()
-                );
+                const auto maybeNewWatermark = Self.WatermarkTracker->NotifyNewPartitionTime(partitionKey, partitionTime, TInstant::Now());
                 if (!maybeNewWatermark) {
                     continue;
                 }
@@ -1092,24 +1115,19 @@ private:
             if (!partitionInfo.Offset && Self.BeginOffset) {
                 partitionInfo.Offset = *Self.BeginOffset;
             }
-            if (!partitionInfo.Offset && event.CommittedOffset) {
+            if (Self.Settings.StopAtCurrentEndOffsets && !partitionInfo.Offset && event.CommittedOffset) {
                 partitionInfo.Offset = event.CommittedOffset;
             }
             partitionInfo.EndWriteTime = Self.EndWriteTime;
 
-            if (!Self.Settings.StopAtCurrentEndOffsets
-                && partitionInfo.Offset
-                && event.EndOffset && *partitionInfo.Offset > endOffset) {
+            if (!Self.Settings.StopAtCurrentEndOffsets && partitionInfo.Offset && event.EndOffset && *partitionInfo.Offset > endOffset) {
                 TStringBuilder message;
-                message << "Requested offsets do not exist in the topic \"" << Self.Settings.Stream
-                    << "\": offset " << *partitionInfo.Offset << " for partition " << partitionKey.PartitionId
-                    << " exceeds the end offset " << endOffset
-                    << ". The topic may have been recreated. Recreate or restart the streaming query.";
+                message << "Requested offsets do not exist in the topic \"" << Self.Settings.Stream << "\": offset " << *partitionInfo.Offset
+                        << " for partition " << partitionKey.PartitionId << " exceeds the end offset " << endOffset
+                        << ". The topic may have been recreated. Recreate or restart the streaming query.";
                 SRC_LOG_E("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " " << message);
-                Self.Send(Self.ComputeActorId, new TEvAsyncInputError(
-                    Self.InputIndex,
-                    TIssues({TIssue(message)}),
-                    NYql::NDqProto::StatusIds::BAD_REQUEST));
+                Self.Send(Self.ComputeActorId,
+                    new TEvAsyncInputError(Self.InputIndex, TIssues({ TIssue(message) }), NYql::NDqProto::StatusIds::BAD_REQUEST));
                 return;
             }
 
@@ -1117,7 +1135,8 @@ private:
                 partitionInfo.EndOffset = endOffset;
                 if (Self.EndOffset && *Self.EndOffset < *partitionInfo.EndOffset) {
                     *partitionInfo.EndOffset = *Self.EndOffset;
-                    SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " End offset was changed to " << *partitionInfo.EndOffset);
+                    SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " End offset was changed to "
+                                            << *partitionInfo.EndOffset);
                 }
 
                 if (Self.Settings.StopAtCurrentEndOffsets && partitionInfo.IsFinishedInTableMode()) {
@@ -1130,9 +1149,10 @@ private:
                 maxOffset = *partitionInfo.EndOffset - 1;
             }
 
-            SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << "StartPartitionSessionEvent received (end offset " << endOffset
-                << "), confirm StartPartitionSession with start offset " << (partitionInfo.Offset ? ToString(*partitionInfo.Offset) : "<null>")
-                << ", max offset " << (maxOffset ? ToString(*maxOffset) : "<null>"));
+            SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << "StartPartitionSessionEvent received (end offset "
+                                    << endOffset << "), confirm StartPartitionSession with start offset "
+                                    << (partitionInfo.Offset ? ToString(*partitionInfo.Offset) : "<null>") << ", max offset "
+                                    << (maxOffset ? ToString(*maxOffset) : "<null>"));
             event.PartitionControl->ConfirmStart(partitionInfo.Offset, maxOffset);
         }
 
@@ -1153,7 +1173,8 @@ private:
                 TStringBuilder message;
                 message << "Topic (" << Self.Settings.Stream << ") with auto partitioning is not supported.";
                 SRC_LOG_E(message);
-                Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::SCHEME_ERROR));
+                Self.Send(Self.ComputeActorId,
+                    new TEvAsyncInputError(Self.InputIndex, TIssues({ TIssue(message) }), NYql::NDqProto::StatusIds::SCHEME_ERROR));
             } else {
                 Self.ExhaustedPartitions.push_back(event.PartitionControl);
             }
@@ -1166,12 +1187,11 @@ private:
             if (active == Self.ActivePartitionSessions.end() || active->second != event.PartitionControl) {
                 return;
             }
-            SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey
-                << " PartitionSessionStatusEvent:"
-                << " CommittedOffset=" << (event.CommittedOffset ? ToString(*event.CommittedOffset) : "<unknown>")
-                << " ReadOffset=" << (event.ReadOffset ? ToString(*event.ReadOffset) : "<unknown>")
-                << " EndOffset=" << (event.EndOffset ? ToString(*event.EndOffset) : "<unknown>")
-                << " WriteTimeHighWatermark=" << (event.WriteTimeHighWatermark ? ToString(*event.WriteTimeHighWatermark) : "<none>"));
+            SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " PartitionSessionStatusEvent:"
+                                    << " CommittedOffset=" << (event.CommittedOffset ? ToString(*event.CommittedOffset) : "<unknown>")
+                                    << " ReadOffset=" << (event.ReadOffset ? ToString(*event.ReadOffset) : "<unknown>") << " EndOffset="
+                                    << (event.EndOffset ? ToString(*event.EndOffset) : "<unknown>") << " WriteTimeHighWatermark="
+                                    << (event.WriteTimeHighWatermark ? ToString(*event.WriteTimeHighWatermark) : "<none>"));
 
             if (Self.Settings.StopAtCurrentEndOffsets) {
                 auto& partitionInfo = Self.Partitions[partitionKey];
@@ -1185,8 +1205,9 @@ private:
                 // session but does not clear ReadyBuffer.
                 if (partitionInfo.EndOffset && event.ReadOffset && *event.ReadOffset >= *partitionInfo.EndOffset) {
                     SRC_LOG_I("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey
-                        << " Partition finished by status check: ReadOffset=" << (event.ReadOffset ? ToString(*event.ReadOffset) : "<unknown>")
-                        << " EndOffset=" << *partitionInfo.EndOffset);
+                                            << " Partition finished by status check: ReadOffset="
+                                            << (event.ReadOffset ? ToString(*event.ReadOffset) : "<unknown>")
+                                            << " EndOffset=" << *partitionInfo.EndOffset);
                     Self.FinishedPartitions.insert(partitionKey);
                     Self.CheckFinishedByOffsets();
                 }
@@ -1260,6 +1281,7 @@ private:
     const i64 BufferSize;
     const std::shared_ptr<TScopedAlloc> Alloc;
     std::vector<TClusterState> Clusters;
+
     struct TStreamDeferredCommit {
         using TPartitionControl = std::shared_ptr<NFq::IMessageStreamPartitionControl>;
 
@@ -1311,6 +1333,6 @@ private:
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateMessageStreamReadActor(
     TMessageStreamReadActorSettings settings, std::unique_ptr<IMessageStreamReadActorState> state) {
     auto* actor = new TMessageStreamReadActor(std::move(settings), std::move(state));
-    return {actor, actor};
+    return { actor, actor };
 }
-} // namespace NFq::NMessageStream
+}   // namespace NFq::NMessageStream

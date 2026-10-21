@@ -134,11 +134,10 @@ public:
         TSerializedCellVec suffixColumns;
         if (Ev->Get()->Record.GetSerializedStartAfterKeySuffix().empty()) {
             if (Ev->Get()->Record.HasLastPath()) {
-                TString reqLastPath = Ev->Get()->Record.GetLastPath();
+                // key holds a view into the string: it must be the function-scope one
+                startAfterPath = Ev->Get()->Record.GetLastPath();
 
-                key.emplace_back(reqLastPath, NScheme::NTypeIds::Utf8);
-
-                startAfterPath = reqLastPath;
+                key.emplace_back(startAfterPath, NScheme::NTypeIds::Utf8);
             } else {
                 minKeyInclusive = true;
                 key.emplace_back(pathPrefix.data(), pathPrefix.size(), NScheme::NTypeIds::Utf8);
@@ -149,16 +148,15 @@ public:
             size_t prefixSize = prefixColumns.GetCells().size();
 
             if (Ev->Get()->Record.HasLastPath()) {
-                TString reqLastPath = Ev->Get()->Record.GetLastPath();
+                // key holds a view into the string: it must be the function-scope one
+                startAfterPath = Ev->Get()->Record.GetLastPath();
 
-                key.emplace_back(reqLastPath, tableInfo.KeyColumnTypes[prefixSize].GetTypeId());
+                key.emplace_back(startAfterPath, tableInfo.KeyColumnTypes[prefixSize].GetTypeId());
 
                 for (size_t i = 1; i < suffixColumns.GetCells().size(); ++i) {
                     size_t ki = prefixSize + i;
                     key.emplace_back(suffixColumns.GetCells()[i].Data(), suffixColumns.GetCells()[i].Size(), tableInfo.KeyColumnTypes[ki].GetTypeId());
                 }
-
-                startAfterPath = reqLastPath;
             } else {
                 for (size_t i = 0; i < suffixColumns.GetCells().size(); ++i) {
                     size_t ki = prefixSize + i;

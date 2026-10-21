@@ -682,9 +682,13 @@ public:
 
         // Check that ranges are sorted in ascending order
         TVector<TCell> prevKey;
+        // The cells of prevKey point into the buffer of the key they were taken
+        // from (a copy of EndOfRange), so those keys must stay alive.
+        TVector<TSerializedCellVec> keyHolders;
+        keyHolders.reserve(rangeEnds.size() + 1);
         if (srcPartitionIdx != 0) {
             // Take the end of previous shard
-            TSerializedCellVec key(tableInfo->GetPartitions()[srcPartitionIdx-1]->EndOfRange);
+            const TSerializedCellVec& key = keyHolders.emplace_back(tableInfo->GetPartitions()[srcPartitionIdx-1]->EndOfRange);
             prevKey.assign(key.GetCells().begin(), key.GetCells().end());
         } else {
             // Or start from (NULL, NULL, .., NULL)
@@ -694,7 +698,7 @@ public:
         srcRange->SetKeyRangeBegin(firstRangeBegin);
 
         for (ui32 i = 0; i < rangeEnds.size(); ++i) {
-            TSerializedCellVec key(rangeEnds[i]);
+            const TSerializedCellVec& key = keyHolders.emplace_back(rangeEnds[i]);
             if (CompareBorders<true, true>(prevKey, key.GetCells(), true, true, keyColTypeIds) >= 0) {
                 errStr = Sprintf("Partition ranges are not sorted at index %u", i);
                 return false;

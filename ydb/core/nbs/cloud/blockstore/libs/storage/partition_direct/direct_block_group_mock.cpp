@@ -352,13 +352,16 @@ TDirectBlockGroupMock::WriteBlocksToDDisk(
     THostIndex hostIndex,
     TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
+    const TBlockChecksums& checksums,
     const NWilson::TTraceId& traceId)
 {
+    LastWriteChecksums = checksums;
     return WriteBlocksToDDiskHandler(
         vChunkIndex,
         hostIndex,
         range,
         guardedSglist,
+        checksums,
         traceId);
 }
 
@@ -369,14 +372,17 @@ TDirectBlockGroupMock::WriteBlocksToPBuffer(
     TPBufferKey pBufferKey,
     TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
+    const TBlockChecksums& checksums,
     const NWilson::TTraceId& traceId)
 {
+    LastWriteChecksums = checksums;
     return WriteBlocksToPBufferHandler(
         vChunkIndex,
         hostIndex,
         pBufferKey,
         range,
         guardedSglist,
+        checksums,
         traceId);
 }
 
@@ -388,9 +394,11 @@ void TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
     TBlockRange16 range,
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
+    const TBlockChecksums& checksums,
     const NWilson::TTraceId& traceId,
     TWriteBlocksToManyPBuffersCallback callback)
 {
+    LastWriteChecksums = checksums;
     WriteBlocksToManyPBuffersHandler(
         vChunkIndex,
         coordinatorHostIndex,
@@ -399,6 +407,7 @@ void TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
         range,
         replyTimeout,
         guardedSglist,
+        checksums,
         traceId,
         std::move(callback));
 }

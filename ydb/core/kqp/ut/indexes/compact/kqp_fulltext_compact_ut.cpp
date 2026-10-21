@@ -1542,6 +1542,70 @@ Y_UNIT_TEST_TWIN(FulltextReadYourOwnWrite, Compact) {
     CompareYson(R"([[[150u]]])", NYdb::FormatResultSetYson(selectResult.GetResultSet(0)));
 }
 
+Y_UNIT_TEST_TWIN(FulltextTxIsolation, Compact) {
+    auto kikimr = KikimrWithCompact(Compact);
+    auto db = kikimr.GetQueryClient();
+
+    ExecuteQuery(db, R"sql(
+        CREATE TABLE `/Root/Texts2` (
+            Key Uint64,
+            Text String,
+            Data String,
+            PRIMARY KEY (Key)
+        );
+    )sql");
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, "fulltext_plain");
+
+    auto session = db.GetSession().GetValueSync().GetSession();
+
+    // begin tx1
+    auto tx1 = session.BeginTransaction(NQuery::TTxSettings::SerializableRW())
+        .ExtractValueSync()
+        .GetTransaction();
+    UNIT_ASSERT(tx1.IsActive());
+
+    // select in tx1
+    auto selectResult = session.ExecuteQuery(R"sql(
+        SELECT `Key`
+        FROM `/Root/Texts` VIEW `fulltext_idx`
+        WHERE FulltextMatch(`Text`, "cats")
+        ORDER BY `Key`;
+    )sql", NQuery::TTxControl::Tx(tx1)).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(selectResult.GetStatus(), EStatus::SUCCESS, selectResult.GetIssues().ToString());
+    CompareYson(R"([[[100u]]])", NYdb::FormatResultSetYson(selectResult.GetResultSet(0)));
+
+    // begin tx2
+    auto tx2 = session.BeginTransaction(NQuery::TTxSettings::SerializableRW())
+        .ExtractValueSync()
+        .GetTransaction();
+    UNIT_ASSERT(tx2.IsActive());
+
+    // insert in tx2
+    auto insertResult = session.ExecuteQuery(R"(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, "Zebras love cats.", "zebras data")
+    )", NQuery::TTxControl::Tx(tx2)).ExtractValueSync();
+    UNIT_ASSERT(insertResult.IsSuccess());
+
+    auto commitResult = tx2.Commit().ExtractValueSync();
+    UNIT_ASSERT(commitResult.IsSuccess());
+
+    // insert in tx1 to make it R/W
+    insertResult = session.ExecuteQuery(R"(
+        INSERT INTO `/Root/Texts2` (Key, Text, Data) VALUES
+            (250, "Eagles love cats.", "eagles data")
+    )", NQuery::TTxControl::Tx(tx1)).ExtractValueSync();
+    UNIT_ASSERT(insertResult.IsSuccess());
+
+    // Should fail - serializability broken
+    commitResult = tx1.Commit().ExtractValueSync();
+    UNIT_ASSERT(!commitResult.IsSuccess());
+    UNIT_ASSERT(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED));
+}
+
 } // Y_UNIT_TEST_SUITE(KqpFulltextCompact)
 
 Y_UNIT_TEST_SUITE(KqpJsonCompact) {

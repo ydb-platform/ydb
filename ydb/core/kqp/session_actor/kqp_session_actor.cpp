@@ -1572,6 +1572,20 @@ public:
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
 
+        const bool allowModifications = QueryState->IsInternalCall() || QueryState->IsCreateTableAs()
+            || AppData()->FeatureFlags.GetEnableClientModifications();
+        if (!allowModifications) {
+            for (const auto& op : phyQuery.GetTableOps()) {
+                if (TYdbOperation(op.GetOperation()) & KikimrModifyOps()) {
+                    const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
+                    std::vector<TIssue> issues{YqlIssue(pos, TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                        "Client data writes are disabled")};
+                    ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "", MessageFromIssues(issues));
+                    return false;
+                }
+            }
+        }
+
         auto checkSchemeTx = [&]() {
             for (const auto &tx : phyQuery.GetTransactions()) {
                 if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
@@ -2402,7 +2416,7 @@ public:
             txCtx->TxManager->AddTopicsToShards();
 
             auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
-                __LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+                __LOCATION__, NKikimr::TAlignedPagePoolCounters(), false);
 
             const auto& queryLimitsProto = Settings.TableService.GetQueryLimits();
             const auto& bufferLimitsProto = queryLimitsProto.GetBufferLimits();
@@ -3194,6 +3208,7 @@ public:
             stats->Compilation->FromCache = (QueryState->CompileStats.FromCache);
             stats->Compilation->DurationUs = (QueryState->CompileStats.DurationUs);
             stats->Compilation->CpuTimeUs = (QueryState->CompileStats.CpuTimeUs);
+            stats->Compilation->UsedNewRbo = QueryState->CompileResult->UsedNewRbo;
         }
 
         if (IsExecuteAction(QueryState->GetAction())) {

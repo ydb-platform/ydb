@@ -6,6 +6,7 @@
 
 #include <library/cpp/threading/future/future.h>
 
+#include <util/system/guard.h>
 #include <util/system/yassert.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
@@ -77,6 +78,31 @@ void TTransportChaosInjector::EnableNode(ui32 nodeId)
     next->NodeIds = current->NodeIds;
     next->NodeIds.erase(nodeId);
     DisabledNodes.AtomicStore(next);
+}
+
+bool TTransportChaosInjector::IsNodeDisabled(ui32 nodeId) const
+{
+    return DisabledNodes.AtomicLoad()->NodeIds.contains(nodeId);
+}
+
+void TTransportChaosInjector::ArmFaultRule(TFaultRule rule)
+{
+    TGuard lock(FaultRulesLock);
+    auto next = MakeIntrusive<TFaultRules>();
+    next->Items = FaultRules.AtomicLoad()->Items;
+    next->Items.push_back(std::move(rule));
+    FaultRules.AtomicStore(next);
+}
+
+void TTransportChaosInjector::ClearFaultRules()
+{
+    TGuard lock(FaultRulesLock);
+    FaultRules.AtomicStore(MakeIntrusive<TFaultRules>());
+}
+
+TVector<TFaultRule> TTransportChaosInjector::GetFaultRules() const
+{
+    return FaultRules.AtomicLoad()->Items;
 }
 
 IStorageTransport::TConnectResultFutures TTransportChaosInjector::Connect(
@@ -293,11 +319,6 @@ TTransportChaosInjector::DeleteTabletChunks(const THostConnection& connection)
         return MakeUndeliveredFuture<TEvDeleteTabletChunksResult>();
     }
     return UnderlyingTransport->DeleteTabletChunks(connection);
-}
-
-bool TTransportChaosInjector::IsNodeDisabled(ui32 nodeId) const
-{
-    return DisabledNodes.AtomicLoad()->NodeIds.contains(nodeId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

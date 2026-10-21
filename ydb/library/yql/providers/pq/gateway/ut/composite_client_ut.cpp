@@ -6,7 +6,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_session.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
 #include <util/string/cast.h>
 
 #include <functional>
@@ -22,12 +21,12 @@ using namespace NYql::NDq;
 
 namespace {
 
-struct TTestCompositeSettings : TCompositeTopicReadSessionSettings {
+struct TTestCompositeSettings: TCompositeTopicReadSessionSettings {
     TString TopicPath;
 };
 
 struct TEvCompositeSessionTest {
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = EventSpaceBegin(TEvents::ES_USERSPACE),
         EvCreateSession = EvBegin,
         EvSessionCreated,
@@ -37,44 +36,48 @@ struct TEvCompositeSessionTest {
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_USERSPACE), "event space overflow");
 
-    struct TEvCreateSession : public TEventLocal<TEvCreateSession, EvCreateSession> {
+    struct TEvCreateSession: public TEventLocal<TEvCreateSession, EvCreateSession> {
         IMockPqGateway* Gateway = nullptr;
         TTestCompositeSettings Settings;
 
         TEvCreateSession(IMockPqGateway* gateway, TTestCompositeSettings settings)
             : Gateway(gateway)
             , Settings(std::move(settings))
-        {}
+        {
+        }
     };
 
-    struct TEvSessionCreated : public TEventLocal<TEvSessionCreated, EvSessionCreated> {
+    struct TEvSessionCreated: public TEventLocal<TEvSessionCreated, EvSessionCreated> {
         std::shared_ptr<NFq::IMessageStreamReadSession> Session;
         ICompositeTopicReadSessionControl::TPtr Control;
 
         TEvSessionCreated(std::shared_ptr<NFq::IMessageStreamReadSession> session, ICompositeTopicReadSessionControl::TPtr control)
             : Session(std::move(session))
             , Control(std::move(control))
-        {}
+        {
+        }
     };
 
     // Carries an action to be performed on the creator-actor mailbox, so it
     // serializes with TDqPqReadBalancerActor (registered on the same mailbox).
     // The test thread only waits on a promise — it never touches the session
     // directly, which keeps TSAN's happens-before graph clean.
-    struct TEvRunAction : public TEventLocal<TEvRunAction, EvRunAction> {
+    struct TEvRunAction: public TEventLocal<TEvRunAction, EvRunAction> {
         std::function<void()> Action;
 
         explicit TEvRunAction(std::function<void()> action)
             : Action(std::move(action))
-        {}
+        {
+        }
     };
 };
 
-class TCompositeSessionCreatorActor : public TActor<TCompositeSessionCreatorActor> {
+class TCompositeSessionCreatorActor: public TActor<TCompositeSessionCreatorActor> {
 public:
     TCompositeSessionCreatorActor()
         : TActor(&TCompositeSessionCreatorActor::StateFunc)
-    {}
+    {
+    }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvCompositeSessionTest::TEvCreateSession, Handle)
@@ -105,7 +108,7 @@ private:
     }
 };
 
-class TCompositeClientTestFixture : public TTestWithActorSystemFixture {
+class TCompositeClientTestFixture: public TTestWithActorSystemFixture {
     using TBase = TTestWithActorSystemFixture;
 
     class TSessionHolder {
@@ -161,19 +164,18 @@ class TCompositeClientTestFixture : public TTestWithActorSystemFixture {
             auto promise = NThreading::NewPromise<TResult>();
 
             Runtime->Send(SessionCreator, Runtime->AllocateEdgeActor(),
-                new TEvCompositeSessionTest::TEvRunAction(
-                    [f = std::forward<TFunc>(func), promise]() mutable {
-                        try {
-                            if constexpr (std::is_void_v<TResult>) {
-                                f();
-                                promise.SetValue();
-                            } else {
-                                promise.SetValue(f());
-                            }
-                        } catch (...) {
-                            promise.SetException(std::current_exception());
+                new TEvCompositeSessionTest::TEvRunAction([f = std::forward<TFunc>(func), promise]() mutable {
+                    try {
+                        if constexpr (std::is_void_v<TResult>) {
+                            f();
+                            promise.SetValue();
+                        } else {
+                            promise.SetValue(f());
                         }
-                    }));
+                    } catch (...) {
+                        promise.SetException(std::current_exception());
+                    }
+                }));
 
             return promise.GetFuture().GetValueSync();
         }
@@ -201,17 +203,13 @@ public:
     }
 
 protected:
-    TTestCompositeSettings MakeSettings(
-        const TString& topicPath = "topic",
-        std::vector<ui64> partitionIds = {0},
-        NActors::TActorId aggregatorActor = {},
-        std::optional<TDuration> idleTimeout = std::nullopt,
-        std::optional<TDuration> maxPartitionReadSkew = std::nullopt,
-        std::optional<ui64> inputIndex = std::nullopt)
+    TTestCompositeSettings MakeSettings(const TString& topicPath = "topic", std::vector<ui64> partitionIds = { 0 },
+        NActors::TActorId aggregatorActor = {}, std::optional<TDuration> idleTimeout = std::nullopt,
+        std::optional<TDuration> maxPartitionReadSkew = std::nullopt, std::optional<ui64> inputIndex = std::nullopt)
     {
         NFq::TMessageStreamReadSessionSettings baseSettings;
         for (const auto partitionId : partitionIds) {
-            baseSettings.PartitionIds.push_back(NFq::TMessageStreamPartitionId{partitionId});
+            baseSettings.PartitionIds.push_back(NFq::TMessageStreamPartitionId{ partitionId });
         }
 
         TTestCompositeSettings settings;
@@ -239,42 +237,45 @@ protected:
     std::vector<TSessionHolder::TPtr> Sessions;
 };
 
-
 std::optional<NFq::TMessageStreamReadEvent> ReadOne(NFq::IMessageStreamReadSession& session) {
-    auto events = session.GetEvents({.Block = false, .MaxEventsCount = 1, .MaxByteSize = 4096});
+    auto events = session.GetEvents({ .Block = false, .MaxEventsCount = 1, .MaxByteSize = 4096 });
     if (events.empty()) {
         return std::nullopt;
     }
     return std::move(events.front());
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
     Y_UNIT_TEST_F(SessionCreationAndGetSessionId, TCompositeClientTestFixture) {
-        auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
-        auto settings = MakeSettings("topic", {0});
+        auto gateway = CreateMockPqGateway({ .OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime });
+        auto settings = MakeSettings("topic", { 0 });
 
         auto holder = CreateSession(gateway.Get(), settings);
 
-        auto sessionId = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return s.GetSessionId(); });
+        auto sessionId = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return s.GetSessionId();
+        });
         UNIT_ASSERT(!sessionId.empty());
         UNIT_ASSERT(sessionId.find("0=") != std::string::npos);
     }
 
     Y_UNIT_TEST_F(GetEventWhenNoDataReturnsNullopt, TCompositeClientTestFixture) {
-        auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
-        auto settings = MakeSettings("topic", {0});
+        auto gateway = CreateMockPqGateway({ .OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime });
+        auto settings = MakeSettings("topic", { 0 });
 
         auto holder = CreateSession(gateway.Get(), settings);
 
-        auto event = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto event = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(!event.has_value());
     }
 
     Y_UNIT_TEST_F(GetEventReturnsDataFromMock, TCompositeClientTestFixture) {
-        auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
-        auto settings = MakeSettings("topic", {0});
+        auto gateway = CreateMockPqGateway({ .OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime });
+        auto settings = MakeSettings("topic", { 0 });
 
         auto holder = CreateSession(gateway.Get(), settings);
 
@@ -282,7 +283,9 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         UNIT_ASSERT(mockSession != nullptr);
         mockSession->AddDataReceivedEvent(0, "msg1");
 
-        auto event = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto event = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(event.has_value());
 
         const auto* dataEv = std::get_if<NFq::TMessageStreamDataEvent>(&*event);
@@ -292,8 +295,8 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
     }
 
     Y_UNIT_TEST_F(AdvancePartitionTimeAfterGetEvent, TCompositeClientTestFixture) {
-        auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
-        auto settings = MakeSettings("topic", {0});
+        auto gateway = CreateMockPqGateway({ .OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime });
+        auto settings = MakeSettings("topic", { 0 });
 
         auto holder = CreateSession(gateway.Get(), settings);
 
@@ -301,7 +304,9 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         UNIT_ASSERT(mockSession != nullptr);
         mockSession->AddDataReceivedEvent(0, "msg1");
 
-        auto event = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto event = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(event.has_value());
 
         const auto* dataEv = std::get_if<NFq::TMessageStreamDataEvent>(&*event);
@@ -310,12 +315,20 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         const ui64 partitionId = dataEv->PartitionControl->GetPartitionId().Value;
         const TInstant eventTime = TInstant::MilliSeconds(100);
 
-        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(partitionId, eventTime); });
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+            c.AdvancePartitionTime(partitionId, eventTime);
+        });
 
         mockSession->AddDataReceivedEvent(1, "msg2");
-        holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(2));
+        holder
+            ->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+                return s.WaitEvent();
+            })
+            .Wait(TDuration::Seconds(2));
 
-        auto event2 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto event2 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(event2.has_value());
         const auto* dataEv2 = std::get_if<NFq::TMessageStreamDataEvent>(&*event2);
         UNIT_ASSERT(dataEv2 != nullptr);
@@ -324,8 +337,8 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
 
     Y_UNIT_TEST_F(GetEventsReturnsBatch, TCompositeClientTestFixture) {
         const TInstant T0 = TInstant::MilliSeconds(100);
-        auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
-        auto settings = MakeSettings("topic", {0});
+        auto gateway = CreateMockPqGateway({ .OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime });
+        auto settings = MakeSettings("topic", { 0 });
 
         auto holder = CreateSession(gateway.Get(), settings);
 
@@ -333,17 +346,27 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         UNIT_ASSERT(mockSession != nullptr);
         mockSession->AddDataReceivedEvent(0, "a", T0);
 
-        auto event1 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto event1 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(event1.has_value());
         const auto* data1 = std::get_if<NFq::TMessageStreamDataEvent>(&*event1);
         UNIT_ASSERT(data1 != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(std::string(data1->Records[0].Data.value()), "a");
         const ui64 partitionId = data1->PartitionControl->GetPartitionId().Value;
-        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(partitionId, T0); });
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+            c.AdvancePartitionTime(partitionId, T0);
+        });
 
-        mockSession->AddDataReceivedEvent({{.Offset = 1, .Data = "b", .MessageTime = T0}, {.Offset = 2, .Data = "c", .MessageTime = T0}});
-        holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(2));
-        auto event2 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        mockSession->AddDataReceivedEvent({ { .Offset = 1, .Data = "b", .MessageTime = T0 }, { .Offset = 2, .Data = "c", .MessageTime = T0 } });
+        holder
+            ->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+                return s.WaitEvent();
+            })
+            .Wait(TDuration::Seconds(2));
+        auto event2 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(event2.has_value());
         const auto* data2 = std::get_if<NFq::TMessageStreamDataEvent>(&*event2);
         UNIT_ASSERT(data2 != nullptr);
@@ -353,15 +376,17 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
     }
 
     Y_UNIT_TEST_F(WaitEventCompletesWhenDataAvailable, TCompositeClientTestFixture) {
-        auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
-        auto settings = MakeSettings("topic", {0});
+        auto gateway = CreateMockPqGateway({ .OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime });
+        auto settings = MakeSettings("topic", { 0 });
 
         auto holder = CreateSession(gateway.Get(), settings);
 
         auto mockSession = gateway->ExtractReadSession("topic");
         UNIT_ASSERT(mockSession != nullptr);
 
-        NThreading::TFuture<void> waitFuture = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return s.WaitEvent(); });
+        NThreading::TFuture<void> waitFuture = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return s.WaitEvent();
+        });
         UNIT_ASSERT(!waitFuture.HasValue());
 
         mockSession->AddDataReceivedEvent(0, "wake");
@@ -371,18 +396,20 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
     }
 
     Y_UNIT_TEST_F(CloseSucceeds, TCompositeClientTestFixture) {
-        auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
-        auto settings = MakeSettings("topic", {0});
+        auto gateway = CreateMockPqGateway({ .OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime });
+        auto settings = MakeSettings("topic", { 0 });
 
         auto holder = CreateSession(gateway.Get(), settings);
 
-        auto closed = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return s.Close(); });
+        auto closed = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return s.Close();
+        });
         UNIT_ASSERT(closed.HasValue());
     }
 
     Y_UNIT_TEST_F(AdvancePartitionTimeNoOpWhenTimeNotAdvanced, TCompositeClientTestFixture) {
-        auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
-        auto settings = MakeSettings("topic", {0});
+        auto gateway = CreateMockPqGateway({ .OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime });
+        auto settings = MakeSettings("topic", { 0 });
 
         auto holder = CreateSession(gateway.Get(), settings);
 
@@ -390,7 +417,9 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         UNIT_ASSERT(mockSession != nullptr);
         mockSession->AddDataReceivedEvent(0, "msg1");
 
-        auto event = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto event = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(event.has_value());
 
         const auto* dataEv = std::get_if<NFq::TMessageStreamDataEvent>(&*event);
@@ -398,14 +427,26 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         const ui64 partitionId = dataEv->PartitionControl->GetPartitionId().Value;
         const TInstant eventTime = TInstant::MilliSeconds(100);
 
-        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(partitionId, eventTime); });
-        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(partitionId, TInstant::MilliSeconds(50)); });
-        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(partitionId, eventTime); });
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+            c.AdvancePartitionTime(partitionId, eventTime);
+        });
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+            c.AdvancePartitionTime(partitionId, TInstant::MilliSeconds(50));
+        });
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+            c.AdvancePartitionTime(partitionId, eventTime);
+        });
 
         mockSession->AddDataReceivedEvent(1, "msg2");
-        holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(2));
+        holder
+            ->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+                return s.WaitEvent();
+            })
+            .Wait(TDuration::Seconds(2));
 
-        auto event2 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto event2 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(event2.has_value());
         const auto* dataEv2 = std::get_if<NFq::TMessageStreamDataEvent>(&*event2);
         UNIT_ASSERT(dataEv2 != nullptr);
@@ -413,8 +454,8 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
     }
 
     Y_UNIT_TEST_F(GetEventsRespectsMaxEventsCount, TCompositeClientTestFixture) {
-        auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
-        auto settings = MakeSettings("topic", {0});
+        auto gateway = CreateMockPqGateway({ .OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime });
+        auto settings = MakeSettings("topic", { 0 });
 
         auto holder = CreateSession(gateway.Get(), settings);
 
@@ -425,18 +466,16 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         mockSession->AddDataReceivedEvent(2, "c");
 
         auto events = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
-            return s.GetEvents({.Block = false, .MaxEventsCount = 1, .MaxByteSize = 65536});
+            return s.GetEvents({ .Block = false, .MaxEventsCount = 1, .MaxByteSize = 65536 });
         });
         UNIT_ASSERT_VALUES_EQUAL(events.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(
-            std::string(std::get<NFq::TMessageStreamDataEvent>(events[0]).Records[0].Data.value()),
-            "a");
+        UNIT_ASSERT_VALUES_EQUAL(std::string(std::get<NFq::TMessageStreamDataEvent>(events[0]).Records[0].Data.value()), "a");
     }
 
     Y_UNIT_TEST_F(StartSessionEventThenDataDelivered, TCompositeClientTestFixture) {
         const TInstant T0 = TInstant::MilliSeconds(100);
-        auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
-        auto settings = MakeSettings("topic", {0});
+        auto gateway = CreateMockPqGateway({ .OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime });
+        auto settings = MakeSettings("topic", { 0 });
 
         auto holder = CreateSession(gateway.Get(), settings);
 
@@ -445,15 +484,25 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         mockSession->AddStartSessionEvent();
         mockSession->AddDataReceivedEvent(0, "after_start", T0);
 
-        auto event = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto event = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(event.has_value());
         const auto* startEv = std::get_if<NFq::TMessageStreamPartitionStartRequestedEvent>(&*event);
         UNIT_ASSERT(startEv != nullptr);
         const ui64 partitionId = startEv->PartitionControl ? startEv->PartitionControl->GetPartitionId().Value : 0u;
-        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(partitionId, T0); });
-        holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(2));
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+            c.AdvancePartitionTime(partitionId, T0);
+        });
+        holder
+            ->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+                return s.WaitEvent();
+            })
+            .Wait(TDuration::Seconds(2));
 
-        auto event2 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto event2 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(event2.has_value());
         const auto* dataEv = std::get_if<NFq::TMessageStreamDataEvent>(&*event2);
         UNIT_ASSERT(dataEv != nullptr);
@@ -465,8 +514,8 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         const TDuration skew = TDuration::Seconds(1);
         const TInstant T0 = TInstant::MilliSeconds(10000);
         const TInstant T1 = TInstant::MilliSeconds(90000);
-        auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
-        auto settings = MakeSettings("topic", {0, 1}, {}, shortIdle, skew);
+        auto gateway = CreateMockPqGateway({ .OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime });
+        auto settings = MakeSettings("topic", { 0, 1 }, {}, shortIdle, skew);
 
         auto holder = CreateSession(gateway.Get(), settings);
         auto mockP0 = gateway->GetReadSession("topic", 0);
@@ -476,33 +525,49 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
 
         mockP0->AddDataReceivedEvent(0, "p0_first", T0);
         mockP1->AddDataReceivedEvent(0, "p1_first", T1);
-        auto ev0 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto ev0 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(ev0.has_value());
         const auto* d0 = std::get_if<NFq::TMessageStreamDataEvent>(&*ev0);
         UNIT_ASSERT(d0 != nullptr);
         {
             const ui64 pid = d0->PartitionControl->GetPartitionId().Value;
             const TInstant t = pid == 0 ? T0 : T1;
-            holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(pid, t); });
+            holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+                c.AdvancePartitionTime(pid, t);
+            });
         }
-        auto ev1 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto ev1 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(ev1.has_value());
         const auto* d1 = std::get_if<NFq::TMessageStreamDataEvent>(&*ev1);
         UNIT_ASSERT(d1 != nullptr);
         {
             const ui64 pid = d1->PartitionControl->GetPartitionId().Value;
             const TInstant t = pid == 0 ? T0 : T1;
-            holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(pid, t); });
+            holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+                c.AdvancePartitionTime(pid, t);
+            });
         }
 
-        TString state = holder->RunOnControl([](ICompositeTopicReadSessionControl& c) { return c.GetInternalState(); });
+        TString state = holder->RunOnControl([](ICompositeTopicReadSessionControl& c) {
+            return c.GetInternalState();
+        });
         UNIT_ASSERT_C(state.Contains("SuspendedPartitions"), "Partition 1 should be suspended: " << state);
 
         Sleep(shortIdle + TDuration::Seconds(3));
 
         mockP1->AddDataReceivedEvent(1, "p1_after_idle_unsuspend", T1);
-        holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(2));
-        auto event1 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        holder
+            ->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+                return s.WaitEvent();
+            })
+            .Wait(TDuration::Seconds(2));
+        auto event1 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(event1.has_value());
         const auto* dataEv1 = std::get_if<NFq::TMessageStreamDataEvent>(&*event1);
         UNIT_ASSERT(dataEv1 != nullptr);
@@ -510,8 +575,14 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         UNIT_ASSERT_C(content1 == "p1_after_idle_unsuspend", "Expected p1_after_idle_unsuspend, got: " << content1);
 
         mockP0->AddDataReceivedEvent(1, "after_idle", T1);
-        holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(2));
-        auto event2 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        holder
+            ->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+                return s.WaitEvent();
+            })
+            .Wait(TDuration::Seconds(2));
+        auto event2 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(event2.has_value());
         const auto* dataEv2 = std::get_if<NFq::TMessageStreamDataEvent>(&*event2);
         UNIT_ASSERT(dataEv2 != nullptr);
@@ -523,8 +594,8 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         const TDuration skew = TDuration::Seconds(1);
         const TInstant T0 = TInstant::MilliSeconds(10000);
         const TInstant T1 = TInstant::MilliSeconds(90000);
-        auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
-        auto settings = MakeSettings("topic", {0, 1}, {}, std::nullopt, skew);
+        auto gateway = CreateMockPqGateway({ .OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime });
+        auto settings = MakeSettings("topic", { 0, 1 }, {}, std::nullopt, skew);
 
         auto holder = CreateSession(gateway.Get(), settings);
 
@@ -534,33 +605,53 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         UNIT_ASSERT(mockP1 != nullptr);
 
         mockP0->AddDataReceivedEvent(0, "p0_msg", T0);
-        auto ev0 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto ev0 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(ev0.has_value());
         const auto* data0 = std::get_if<NFq::TMessageStreamDataEvent>(&*ev0);
         UNIT_ASSERT(data0 != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(std::string(data0->Records[0].Data.value()), "p0_msg");
-        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(0, T0); });
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+            c.AdvancePartitionTime(0, T0);
+        });
 
         mockP1->AddDataReceivedEvent(0, "p1_msg", T1);
-        auto ev1 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto ev1 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(ev1.has_value());
         const auto* data1 = std::get_if<NFq::TMessageStreamDataEvent>(&*ev1);
         UNIT_ASSERT(data1 != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(std::string(data1->Records[0].Data.value()), "p1_msg");
-        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(1, T1); });
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+            c.AdvancePartitionTime(1, T1);
+        });
 
-        TString state = holder->RunOnControl([](ICompositeTopicReadSessionControl& c) { return c.GetInternalState(); });
+        TString state = holder->RunOnControl([](ICompositeTopicReadSessionControl& c) {
+            return c.GetInternalState();
+        });
         UNIT_ASSERT_C(state.Contains("SuspendedPartitions"), "Expected suspended partitions: " << state);
         UNIT_ASSERT_C(state.Contains("PartitionId: 1"), "Partition 1 should be suspended (ahead in time): " << state);
 
-        auto evNone = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto evNone = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT_C(!evNone.has_value(), "No event while partition 1 is suspended");
 
-        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(0, T1); });
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+            c.AdvancePartitionTime(0, T1);
+        });
 
         mockP1->AddDataReceivedEvent(1, "after_unsuspend", T1);
-        holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(2));
-        auto ev2 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        holder
+            ->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+                return s.WaitEvent();
+            })
+            .Wait(TDuration::Seconds(2));
+        auto ev2 = holder->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(ev2.has_value());
         const auto* data2 = std::get_if<NFq::TMessageStreamDataEvent>(&*ev2);
         UNIT_ASSERT(data2 != nullptr);
@@ -568,12 +659,12 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
     }
 
     Y_UNIT_TEST_F(TwoSessionsSameAggregatorBothWork, TCompositeClientTestFixture) {
-        auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
+        auto gateway = CreateMockPqGateway({ .OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime });
 
-        auto settingsA = MakeSettings("topic_a", {0}, {}, std::nullopt, std::nullopt, 0);
+        auto settingsA = MakeSettings("topic_a", { 0 }, {}, std::nullopt, std::nullopt, 0);
         auto holderA = CreateSession(gateway.Get(), settingsA);
 
-        auto settingsB = MakeSettings("topic_b", {0}, {}, std::nullopt, std::nullopt, 1);
+        auto settingsB = MakeSettings("topic_b", { 0 }, {}, std::nullopt, std::nullopt, 1);
         auto holderB = CreateSession(gateway.Get(), settingsB);
 
         auto mockA = gateway->ExtractReadSession("topic_a");
@@ -584,8 +675,12 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         mockA->AddDataReceivedEvent(0, "data_a");
         mockB->AddDataReceivedEvent(0, "data_b");
 
-        auto evA = holderA->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
-        auto evB = holderB->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto evA = holderA->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
+        auto evB = holderB->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
 
         UNIT_ASSERT(evA.has_value());
         UNIT_ASSERT(evB.has_value());
@@ -600,8 +695,8 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
     Y_UNIT_TEST_F(ReconnectSessionRecreationWithSameAggregator, TCompositeClientTestFixture) {
         const TInstant T0 = TInstant::MilliSeconds(100);
         const TInstant T1 = TInstant::MilliSeconds(200);
-        auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
-        auto settings = MakeSettings("topic", {0, 1});
+        auto gateway = CreateMockPqGateway({ .OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime });
+        auto settings = MakeSettings("topic", { 0, 1 });
 
         auto holder1 = CreateSession(gateway.Get(), settings);
         auto mockP0_1 = gateway->GetReadSession("topic", 0);
@@ -611,30 +706,44 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
 
         mockP0_1->AddDataReceivedEvent(0, "first_p0", T0);
         mockP1_1->AddDataReceivedEvent(0, "first_p1", T1);
-        auto ev0 = holder1->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto ev0 = holder1->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(ev0.has_value());
         const auto* d0 = std::get_if<NFq::TMessageStreamDataEvent>(&*ev0);
         UNIT_ASSERT(d0 != nullptr);
         ui64 pid0 = d0->PartitionControl->GetPartitionId().Value;
         {
             const TInstant t = pid0 == 0 ? T0 : T1;
-            holder1->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(pid0, t); });
+            holder1->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+                c.AdvancePartitionTime(pid0, t);
+            });
         }
-        auto ev1 = holder1->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto ev1 = holder1->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(ev1.has_value());
         const auto* d1 = std::get_if<NFq::TMessageStreamDataEvent>(&*ev1);
         UNIT_ASSERT(d1 != nullptr);
         ui64 pid1 = d1->PartitionControl->GetPartitionId().Value;
         {
             const TInstant t = pid1 == 0 ? T0 : T1;
-            holder1->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(pid1, t); });
+            holder1->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+                c.AdvancePartitionTime(pid1, t);
+            });
         }
         UNIT_ASSERT(pid0 != pid1);
 
-        holder1->RunOnSession([](NFq::IMessageStreamReadSession& s) { s.Close().GetValueSync(); });
+        holder1->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            s.Close().GetValueSync();
+        });
 
         auto holder2 = CreateSession(gateway.Get(), settings);
-        UNIT_ASSERT(!holder2->RunOnSession([](NFq::IMessageStreamReadSession& s) { return s.GetSessionId(); }).empty());
+        UNIT_ASSERT(!holder2
+                         ->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+                             return s.GetSessionId();
+                         })
+                         .empty());
         auto mockP0_2 = gateway->GetReadSession("topic", 0);
         auto mockP1_2 = gateway->GetReadSession("topic", 1);
         UNIT_ASSERT(mockP0_2 != nullptr);
@@ -642,7 +751,9 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
 
         mockP0_2->AddDataReceivedEvent(1, "reconnected_p0", T0);
         mockP1_2->AddDataReceivedEvent(1, "reconnected_p1", T1);
-        auto ev2a = holder2->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto ev2a = holder2->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(ev2a.has_value());
         const auto* d2a = std::get_if<NFq::TMessageStreamDataEvent>(&*ev2a);
         UNIT_ASSERT(d2a != nullptr);
@@ -651,10 +762,18 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         ui64 pid2a = d2a->PartitionControl->GetPartitionId().Value;
         {
             const TInstant t = pid2a == 0 ? T0 : T1;
-            holder2->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(pid2a, t); });
+            holder2->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+                c.AdvancePartitionTime(pid2a, t);
+            });
         }
-        holder2->RunOnSession([](NFq::IMessageStreamReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(2));
-        auto ev2b = holder2->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        holder2
+            ->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+                return s.WaitEvent();
+            })
+            .Wait(TDuration::Seconds(2));
+        auto ev2b = holder2->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(ev2b.has_value());
         const auto* d2b = std::get_if<NFq::TMessageStreamDataEvent>(&*ev2b);
         UNIT_ASSERT(d2b != nullptr);
@@ -667,10 +786,10 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         const TDuration skew = TDuration::Seconds(1);
         const TInstant T0 = TInstant::MilliSeconds(10000);
         const TInstant T1 = TInstant::MilliSeconds(120000);
-        auto gateway = CreateMockPqGateway({.OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime});
+        auto gateway = CreateMockPqGateway({ .OperationTimeout = TDuration::Seconds(5), .Runtime = &Runtime });
 
-        auto settingsA = MakeSettings("topic", {0}, {}, std::nullopt, skew, 0);
-        auto settingsB = MakeSettings("topic", {1}, {}, std::nullopt, skew, 0);
+        auto settingsA = MakeSettings("topic", { 0 }, {}, std::nullopt, skew, 0);
+        auto settingsB = MakeSettings("topic", { 1 }, {}, std::nullopt, skew, 0);
         // Both sessions share one aggregator: use total partition count so AllPartitionsStarted
         // becomes true when both have started and aggregator can propagate read_time.
         settingsA.AmountPartitionsCount = 2;
@@ -684,34 +803,54 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         UNIT_ASSERT(mockP1 != nullptr);
 
         mockP0->AddDataReceivedEvent(0, "p0_msg", T0);
-        auto evA = holderA->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto evA = holderA->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(evA.has_value());
         const auto* dataA = std::get_if<NFq::TMessageStreamDataEvent>(&*evA);
         UNIT_ASSERT(dataA != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(std::string(dataA->Records[0].Data.value()), "p0_msg");
-        holderA->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(0, T0); });
+        holderA->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+            c.AdvancePartitionTime(0, T0);
+        });
 
         mockP1->AddDataReceivedEvent(0, "p1_msg", T1);
-        auto evB = holderB->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto evB = holderB->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT(evB.has_value());
         const auto* dataB = std::get_if<NFq::TMessageStreamDataEvent>(&*evB);
         UNIT_ASSERT(dataB != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(std::string(dataB->Records[0].Data.value()), "p1_msg");
-        holderB->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(1, T1); });
+        holderB->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+            c.AdvancePartitionTime(1, T1);
+        });
 
-        TString stateB = holderB->RunOnControl([](ICompositeTopicReadSessionControl& c) { return c.GetInternalState(); });
+        TString stateB = holderB->RunOnControl([](ICompositeTopicReadSessionControl& c) {
+            return c.GetInternalState();
+        });
         UNIT_ASSERT_C(stateB.Contains("SuspendedPartitions"), "Session B should have suspended partition: " << stateB);
 
         mockP1->AddDataReceivedEvent(1, "blocked_until_a_advances", T1);
-        auto evNone = holderB->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+        auto evNone = holderB->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+            return ReadOne(s);
+        });
         UNIT_ASSERT_C(!evNone.has_value(), "Session B should not get event while its partition is suspended (waiting for A)");
 
-        holderA->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(0, T1); });
+        holderA->RunOnControl([&](ICompositeTopicReadSessionControl& c) {
+            c.AdvancePartitionTime(0, T1);
+        });
         std::optional<NFq::TMessageStreamReadEvent> evB2;
         const auto deadline = TInstant::Now() + TDuration::Seconds(10);
         while (TInstant::Now() < deadline) {
-            holderB->RunOnSession([](NFq::IMessageStreamReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(1));
-            evB2 = holderB->RunOnSession([](NFq::IMessageStreamReadSession& s) { return ReadOne(s); });
+            holderB
+                ->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+                    return s.WaitEvent();
+                })
+                .Wait(TDuration::Seconds(1));
+            evB2 = holderB->RunOnSession([](NFq::IMessageStreamReadSession& s) {
+                return ReadOne(s);
+            });
             if (evB2.has_value()) {
                 break;
             }
@@ -723,4 +862,4 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
     }
 }
 
-} // namespace NYql
+}   // namespace NYql

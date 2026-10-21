@@ -1,5 +1,3 @@
 #include "alter.h"
 
-namespace NKikimr::NMetadata::NModifications {
-
-}
+namespace NKikimr::NMetadata::NModifications {}

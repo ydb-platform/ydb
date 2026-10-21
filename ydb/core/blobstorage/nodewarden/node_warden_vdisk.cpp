@@ -726,8 +726,9 @@ namespace NKikimr::NStorage {
         if (!vdisk.RuntimeData) {
             return;
         }
-        if (newInfo->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
-            return; // group is decomitted, VDisks will be deleted soon
+        if (newInfo->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE || !newInfo->GetTotalVDisksNum()) {
+            // group has no VDisks anymore (it is decommitted, or it has lost its inline pile), they will be deleted soon
+            return;
         }
 
         TIntrusivePtr<TBlobStorageGroupInfo>& currentInfo = vdisk.RuntimeData->GroupInfo;

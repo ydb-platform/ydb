@@ -250,65 +250,56 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
             auto response = runtime.GrabEdgeEventRethrow<TEvInMemoryMetricsSnapshot>(edge, TDuration::Seconds(5));
             auto captured = response->Get()->Snapshot;
             using namespace NHarmonizerMetrics;
-            static_assert(sizeof(TGlobalFrontend::TStorageRecord) == 40);
-            static_assert(sizeof(TPoolFrontend::TStorageRecord) == 32);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Stats.Lines, 6);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Stats.CommittedBytes, 184);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Stats.Lines, 3);
+            UNIT_ASSERT(response->Get()->Stats.CommittedBytes < 331);
             const auto checkCaptured = [&](const TSnapshotView& snapshot) {
-                UNIT_ASSERT_VALUES_EQUAL(snapshot.LinesSize(), 6);
+                UNIT_ASSERT_VALUES_EQUAL(snapshot.LinesSize(), 3);
                 snapshot.ForEachLine([&](const TLineSnapshot& line) {
                     UNIT_ASSERT(!line.Closed);
-                    if (line.Name.StartsWith("harmonizer.pool.")) {
-                        UNIT_ASSERT_VALUES_EQUAL(line.Labels.size(), 2);
-                        UNIT_ASSERT_VALUES_EQUAL(line.Labels[0].Name, "pool");
-                        UNIT_ASSERT_VALUES_EQUAL(line.Labels[0].Value, "MockPool");
-                        UNIT_ASSERT_VALUES_EQUAL(line.Labels[1].Name, "pool_id");
-                        UNIT_ASSERT_VALUES_EQUAL(line.Labels[1].Value, "0");
-                    } else {
-                        UNIT_ASSERT(line.Labels.empty());
-                    }
+                    UNIT_ASSERT(line.Labels.empty());
                     if (line.Name == TGlobal::Name) {
                         const auto records = TGlobalFrontend::ReadRecords(line);
                         UNIT_ASSERT_VALUES_EQUAL(records.size(), 1);
                         const auto& values = records.front().Value;
-                        UNIT_ASSERT_VALUES_EQUAL(values.Get<TGlobal::TAvgAwakeningTimeUs>(), stats.AvgAwakeningTimeUs);
-                        UNIT_ASSERT_VALUES_EQUAL(values.Get<TGlobal::TAvgWakingUpTimeUs>(), stats.AvgWakingUpTimeUs);
-                        UNIT_ASSERT_VALUES_EQUAL(values.Get<TGlobal::TBudget>(), stats.Budget);
-                        UNIT_ASSERT_VALUES_EQUAL(values.Get<TGlobal::TSharedFreeCpu>(), stats.SharedFreeCpu);
+                        UNIT_ASSERT_DOUBLES_EQUAL(values.Get<TGlobal::TAvgAwakeningTimeUs>(), stats.AvgAwakeningTimeUs, 0.0051);
+                        UNIT_ASSERT_DOUBLES_EQUAL(values.Get<TGlobal::TAvgWakingUpTimeUs>(), stats.AvgWakingUpTimeUs, 0.0051);
+                        UNIT_ASSERT_DOUBLES_EQUAL(values.Get<TGlobal::TBudget>(), stats.Budget, 0.0051);
+                        UNIT_ASSERT_DOUBLES_EQUAL(values.Get<TGlobal::TSharedFreeCpu>(), stats.SharedFreeCpu, 0.0051);
                         const auto fields = line.Meta.Frontend->Fields;
                         UNIT_ASSERT_VALUES_EQUAL(fields.size(), 4);
                         UNIT_ASSERT_VALUES_EQUAL(fields[0].Name, "harmonizer.avg_awakening_time_us");
                         UNIT_ASSERT_VALUES_EQUAL(fields[1].Name, "harmonizer.avg_waking_up_time_us");
                         UNIT_ASSERT_VALUES_EQUAL(fields[2].Name, "harmonizer.budget");
                         UNIT_ASSERT_VALUES_EQUAL(fields[3].Name, "harmonizer.shared_free_cpu");
-                    } else if (line.Name == TPool::Name) {
-                        const auto records = TPoolFrontend::ReadRecords(line);
-                        UNIT_ASSERT_VALUES_EQUAL(records.size(), 1);
-                        const auto& values = records.front().Value;
-                        UNIT_ASSERT_VALUES_EQUAL(values.Get<TPool::TAvgUsedCpu>(), poolStats.AvgUsedCpu);
-                        UNIT_ASSERT_VALUES_EQUAL(values.Get<TPool::TAvgElapsedCpu>(), poolStats.AvgElapsedCpu);
-                        UNIT_ASSERT_VALUES_EQUAL(values.Get<TPool::TPotentialMaxThreadCount>(), poolStats.PotentialMaxThreadCount);
-                        const auto fields = line.Meta.Frontend->Fields;
-                        UNIT_ASSERT_VALUES_EQUAL(fields.size(), 3);
-                        UNIT_ASSERT_VALUES_EQUAL(fields[0].Name, "harmonizer.pool.avg_used_cpu");
-                        UNIT_ASSERT_VALUES_EQUAL(fields[1].Name, "harmonizer.pool.avg_elapsed_cpu");
-                        UNIT_ASSERT_VALUES_EQUAL(fields[2].Name, "harmonizer.pool.potential_max_thread_count");
-                    } else if (line.Name.StartsWith("harmonizer.pool.is_")) {
-                        const auto values = line.ReadValuesAs<bool>();
-                        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-                        if (line.Name == "harmonizer.pool.is_needy") {
-                            UNIT_ASSERT_VALUES_EQUAL(values.front(), poolStats.IsNeedy);
-                        } else if (line.Name == "harmonizer.pool.is_starved") {
-                            UNIT_ASSERT_VALUES_EQUAL(values.front(), poolStats.IsStarved);
-                        } else {
-                            UNIT_ASSERT_VALUES_EQUAL(line.Name, "harmonizer.pool.is_hoggish");
-                            UNIT_ASSERT_VALUES_EQUAL(values.front(), poolStats.IsHoggish);
-                        }
                     } else {
-                        UNIT_ASSERT_VALUES_EQUAL(line.Name, "harmonizer.pool.shared_cpu_quota");
-                        const auto values = line.ReadValuesAs<float>();
-                        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-                        UNIT_ASSERT_VALUES_EQUAL(values.front(), poolStats.SharedCpuQuota);
+                        TVector<TLineNumericValue> values;
+                        line.Meta.Frontend->ReadNumericRange(line, TInstant::Zero(), TInstant::Max(), &values,
+                            [](void* opaque, TInstant, std::span<const TLineNumericValue> row) {
+                                *static_cast<TVector<TLineNumericValue>*>(opaque) = TVector<TLineNumericValue>(row.begin(), row.end());
+                            });
+                        const auto fields = line.Meta.Frontend->Fields;
+                        for (const auto& field : fields) {
+                            UNIT_ASSERT_VALUES_EQUAL(field.Labels.size(), 2);
+                            UNIT_ASSERT_VALUES_EQUAL(field.Labels[0].Name, "pool");
+                            UNIT_ASSERT_VALUES_EQUAL(field.Labels[0].Value, "MockPool");
+                            UNIT_ASSERT_VALUES_EQUAL(field.Labels[1].Name, "pool_id");
+                            UNIT_ASSERT_VALUES_EQUAL(field.Labels[1].Value, "0");
+                        }
+                        if (line.Name == "harmonizer.pools.cpu") {
+                            UNIT_ASSERT_VALUES_EQUAL(fields.size(), 3);
+                            UNIT_ASSERT_VALUES_EQUAL(fields[0].Name, "harmonizer.pool.avg_used_cpu");
+                            UNIT_ASSERT_DOUBLES_EQUAL(std::get<double>(values[0]), poolStats.AvgUsedCpu, 0.0051);
+                            UNIT_ASSERT_DOUBLES_EQUAL(std::get<double>(values[1]), poolStats.AvgElapsedCpu, 0.0051);
+                            UNIT_ASSERT_DOUBLES_EQUAL(std::get<double>(values[2]), poolStats.PotentialMaxThreadCount, 0.0051);
+                        } else {
+                            UNIT_ASSERT_VALUES_EQUAL(line.Name, "harmonizer.pools.state");
+                            UNIT_ASSERT_VALUES_EQUAL(fields.size(), 4);
+                            UNIT_ASSERT_VALUES_EQUAL(fields[0].Name, "harmonizer.pool.shared_cpu_quota");
+                            UNIT_ASSERT_DOUBLES_EQUAL(std::get<double>(values[0]), poolStats.SharedCpuQuota, 0.0051);
+                            UNIT_ASSERT_VALUES_EQUAL(std::get<bool>(values[1]), poolStats.IsNeedy);
+                            UNIT_ASSERT_VALUES_EQUAL(std::get<bool>(values[2]), poolStats.IsStarved);
+                            UNIT_ASSERT_VALUES_EQUAL(std::get<bool>(values[3]), poolStats.IsHoggish);
+                        }
                     }
                 });
             };

@@ -1,17 +1,14 @@
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 
-#include <ydb/services/workload_manager/common/cpu_quota_manager.h>
-
-#include <ydb/library/services/services.pb.h>
-
-#include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/library/ycloud/api/events.h>
-#include <ydb/library/grpc/actor_client/grpc_service_client.h>
-
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/grpc/actor_client/grpc_service_client.h>
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/ycloud/api/events.h>
+#include <ydb/services/workload_manager/common/cpu_quota_manager.h>
 
 #include <util/generic/queue.h>
 
@@ -19,7 +16,7 @@
 
 namespace NFq {
 
-class TComputeDatabaseMonitoringActor : public NActors::TActorBootstrapped<TComputeDatabaseMonitoringActor> {
+class TComputeDatabaseMonitoringActor: public NActors::TActorBootstrapped<TComputeDatabaseMonitoringActor> {
     struct TCounters {
         ::NMonitoring::TDynamicCounterPtr Counters;
         ::NMonitoring::TDynamicCounterPtr SubComponent;
@@ -46,27 +43,25 @@ class TComputeDatabaseMonitoringActor : public NActors::TActorBootstrapped<TComp
         }
 
         static ::NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() {
-            return ::NMonitoring::ExplicitHistogram({0, 10, 100, 1000, 10000});
+            return ::NMonitoring::ExplicitHistogram({ 0, 10, 100, 1000, 10000 });
         }
     };
 
 public:
     using TBase = NActors::TActorBootstrapped<TComputeDatabaseMonitoringActor>;
-    TComputeDatabaseMonitoringActor(const TActorId& monitoringClientActorId, NFq::NConfig::TLoadControlConfig config, const ::NMonitoring::TDynamicCounterPtr& counters)
+
+    TComputeDatabaseMonitoringActor(
+        const TActorId& monitoringClientActorId, NFq::NConfig::TLoadControlConfig config, const ::NMonitoring::TDynamicCounterPtr& counters)
         : MonitoringClientActorId(monitoringClientActorId)
         , Counters(counters)
         , MaxClusterLoad(std::min<ui32>(config.GetMaxClusterLoadPercentage(), 100) / 100.0)
         , PendingQueueSize(config.GetPendingQueueSize())
         , Strict(config.GetStrict())
-        , CpuQuotaManager(
-            GetDuration(config.GetMonitoringRequestDelay(), TDuration::Seconds(1)),
-            std::max<TDuration>(GetDuration(config.GetAverageLoadInterval(), TDuration::Seconds(10)), TDuration::Seconds(1)),
-            TDuration::Zero(),
+        ,
+        CpuQuotaManager(GetDuration(config.GetMonitoringRequestDelay(), TDuration::Seconds(1)),
+            std::max<TDuration>(GetDuration(config.GetAverageLoadInterval(), TDuration::Seconds(10)), TDuration::Seconds(1)), TDuration::Zero(),
             config.GetDefaultQueryLoadPercentage() ? std::min<ui32>(config.GetDefaultQueryLoadPercentage(), 100) / 100.0 : 0.1,
-            config.GetStrict(),
-            config.GetCpuNumber(),
-            Counters.SubComponent
-        )
+            config.GetStrict(), config.GetCpuNumber(), Counters.SubComponent)
     {
         *Counters.TargetLoadPercentage = static_cast<ui64>(MaxClusterLoad * 100);
     }
@@ -123,7 +118,9 @@ public:
         auto& request = *ev.Get()->Get();
 
         if (request.Quota > 1.0) {
-            Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(-1, NYdb::EStatus::OVERLOADED, NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Incorrect quota value (exceeds 1.0) " << request.Quota}}), 0, ev->Cookie);
+            Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(-1, NYdb::EStatus::OVERLOADED,
+                                 NYql::TIssues{ NYql::TIssue{ TStringBuilder{} << "Incorrect quota value (exceeds 1.0) " << request.Quota } }),
+                0, ev->Cookie);
         } else {
             auto response = CpuQuotaManager.RequestCpuQuota(request.Quota, MaxClusterLoad);
             CheckPendingQueue();
@@ -155,7 +152,8 @@ public:
         if (Strict && !CpuQuotaManager.CheckLoadIsOutdated()) {
             while (PendingQueue.size()) {
                 auto& ev = PendingQueue.front();
-                Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(-1, NYdb::EStatus::OVERLOADED, NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Cluster load info is not available"}}), 0, ev->Cookie);
+                Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(-1, NYdb::EStatus::OVERLOADED,
+                                     NYql::TIssues{ NYql::TIssue{ TStringBuilder{} << "Cluster load info is not available" } }), 0, ev->Cookie);
                 PendingQueue.pop();
                 Counters.PendingQueueSize->Dec();
             }
@@ -170,8 +168,9 @@ public:
             auto& ev = PendingQueue.front();
             auto& request = *ev.Get()->Get();
             if (request.Deadline && now >= request.Deadline) {
-                Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(-1, NYdb::EStatus::CANCELLED, NYql::TIssues{
-                    NYql::TIssue{TStringBuilder{} << "Deadline reached " << request.Deadline}}), 0, ev->Cookie);
+                Send(ev->Sender, new TEvYdbCompute::TEvCpuQuotaResponse(-1, NYdb::EStatus::CANCELLED,
+                                     NYql::TIssues{ NYql::TIssue{ TStringBuilder{} << "Deadline reached " << request.Deadline } }), 0,
+                    ev->Cookie);
             } else {
                 auto response = CpuQuotaManager.RequestCpuQuota(request.Quota, MaxClusterLoad);
                 if (response.Status == NYdb::EStatus::OVERLOADED) {
@@ -199,8 +198,9 @@ private:
     TInstant StartCpuLoad;
 };
 
-std::unique_ptr<NActors::IActor> CreateDatabaseMonitoringActor(const NActors::TActorId& monitoringClientActorId, NFq::NConfig::TLoadControlConfig config, const ::NMonitoring::TDynamicCounterPtr& counters) {
+std::unique_ptr<NActors::IActor> CreateDatabaseMonitoringActor(const NActors::TActorId& monitoringClientActorId,
+    NFq::NConfig::TLoadControlConfig config, const ::NMonitoring::TDynamicCounterPtr& counters) {
     return std::make_unique<TComputeDatabaseMonitoringActor>(monitoringClientActorId, config, counters);
 }
 
-}
+}   // namespace NFq

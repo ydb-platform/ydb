@@ -3265,7 +3265,6 @@ TExprBase DqBuildJoin(
     bool shuffleEliminationWithMap,
     bool buildCollectStage,
     bool blockHashJoinBuildSideLeft,
-    bool enableBlockHashJoinEqualNulls,
     bool useScalarHashJoinForMap
 ) {
     if (!node.Maybe<TDqJoin>()) {
@@ -3325,8 +3324,7 @@ TExprBase DqBuildJoin(
             shuffleElimination,
             shuffleEliminationWithMap,
             useBlockHashJoin,
-            blockHashJoinBuildSideLeft,
-            enableBlockHashJoinEqualNulls);
+            blockHashJoinBuildSideLeft);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {

@@ -1,5 +1,7 @@
 #include "config.h"
+
 #include <ydb/library/actors/core/log.h>
+
 #include <util/generic/ylimits.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
@@ -22,4 +24,4 @@ bool TConfig::DeserializeFromProto(const NKikimrConfig::TMetadataProviderConfig&
     return true;
 }
 
-}
+}   // namespace NKikimr::NMetadata::NProvider

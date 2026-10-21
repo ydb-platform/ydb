@@ -15,8 +15,8 @@ export function formatMetricValue(value,{unit='number',precision=null}={}){
  if(unit==='number'&&precision===null)return fmt(value);
  let number=Number(value),suffix='';
  if(!Number.isFinite(number))return String(value);
- if(unit==='bytes'){const units=['B','KiB','MiB','GiB','TiB','PiB'];let index=0;while(Math.abs(number)>=1024&&index<units.length-1){number/=1024;index++;}suffix=' '+units[index];}
- else suffix={percent:'%',seconds:' s',milliseconds:' ms',cores:' cores'}[unit]||'';
+ if(unit==='bytes'||unit==='bytesPerSecond'){const units=['B','KiB','MiB','GiB','TiB','PiB'];let index=0;while(Math.abs(number)>=1024&&index<units.length-1){number/=1024;index++;}suffix=' '+units[index]+(unit==='bytesPerSecond'?'/s':'');}
+ else suffix={iops:' ops/s',percent:'%',seconds:' s',milliseconds:' ms',cores:' cores'}[unit]||'';
  return number.toLocaleString(undefined,precision===null?{maximumSignificantDigits:3}:{minimumFractionDigits:precision,maximumFractionDigits:precision})+suffix;
 }
 // Interpolate sampled lines and preserve discontinuities of on-change lines.
@@ -39,7 +39,7 @@ export function prepareChartKitSeries(series,begin,end){
  const allTimes=[...new Set([begin,end,...series.flatMap(s=>s.points.filter(p=>p.time>=begin&&p.time<=end).map(p=>p.time))])].sort((a,b)=>a-b);
  // Bound aligned cells, not only source samples: unrelated timestamps would
  // otherwise multiply each retained history by every other history's length.
- const graphCount=series.reduce((count,s)=>count+(s.type==='area'?2*(Number(s.points.some(p=>p.value!==null&&p.value>=0))+Number(s.points.some(p=>p.value<0))):1),0);
+ const graphCount=series.reduce((count,s)=>count+(s.type==='area'?2*(Number(s.points.some(p=>p.value!==null&&p.value>=0))+Number(s.points.some(p=>p.value<0))):2),0);
  const limit=Math.max(2,Math.floor(1000000/(2*Math.max(1,graphCount))));
  const sampled=allTimes.length>limit;
  const times=sampled?Array.from({length:limit},(_,i)=>allTimes[Math.round(i*(allTimes.length-1)/(limit-1))]):allTimes;
@@ -56,12 +56,14 @@ export function prepareChartKitSeries(series,begin,end){
    for(const negative of [false,true]){
     if(!samples.some(p=>p.value!==null&&(p.value<0)===negative))continue;
     const top=graphs.length,sign=p=>p.value!==null&&(p.value<0)===negative;
-    graphs.push({...common,id:s.key+':'+negative+':top',color:'transparent',data:samples.map(p=>sign(p)?p.top:null)});
+    graphs.push({...common,id:s.key+':'+negative+':top',color:s.width===undefined?'transparent':s.color,lineWidth:s.width??0,width:s.width??0,data:samples.map(p=>sign(p)?p.top:null)});
     graphs.push({...common,id:s.key+':'+negative+':base',color:'transparent',data:samples.map(p=>sign(p)?p.base:null)});
-    pairs.push({top,base:top+1,negative,color:s.color});
+    pairs.push({top,base:top+1,negative,color:s.width!==undefined&&/^#[0-9a-f]{6}$/i.test(s.color)?s.color+'59':s.color});
    }
   }else{
-   graphs.push({...common,color:s.fill&&/^#[0-9a-f]{6}$/i.test(s.color)?s.color+'2e':s.color,type:(!s.step&&s.points.filter(p=>p.value!==null).length===1?'dots':s.fill?'area':'line'),pointsSize:6,lineColor:s.color,lineWidth:s.width||2,width:s.width||2,data:align(s)});
+   const isolated=new Set(s.points.filter((p,i)=>p.value!==null&&(i===0||s.points[i-1].value===null)&&(i+1===s.points.length||s.points[i+1].value===null)).map(p=>p.time));
+   graphs.push({...common,color:s.fill&&/^#[0-9a-f]{6}$/i.test(s.color)?s.color+'2e':s.color,type:(!s.step&&s.points.filter(p=>p.value!==null).length===isolated.size?'dots':s.fill?'area':'line'),pointsSize:6,lineColor:s.color,lineWidth:s.width||2,width:s.width||2,data:align(s)});
+   if(!s.step&&isolated.size&&graphs.at(-1).type!=='dots')graphs.push({...common,id:s.key+':isolated',type:'dots',pointsSize:6,data:timeline.map(t=>isolated.has(t)?sampleAt(s,t):null)});
   }
  }
  // Yagr reverses graph order before handing it to uPlot; bands use uPlot indices.
@@ -140,7 +142,7 @@ export function createMetricChart(chart,options={}){
   const x=t=>u.valToPos(t,'x'),y=v=>u.valToPos(v,'y');
   const cursor=text('div','','ymc-cursor'),selection=text('div','','ymc-selection');cursor.dataset.cursor='time';plot.append(selection,cursor);
   drawCursor=()=>{const visible=cursorTime!==null&&cursorTime>=begin&&cursorTime<=end;cursor.hidden=!visible;if(visible)cursor.style.left=x(cursorTime)+'px';};drawCursor();
-  const tip=text('div','','ymc-tooltip');tip.hidden=true;tooltipLayer=text('div','','ymc ymc-tooltip-layer');tooltipLayer.append(tip);document.body.append(tooltipLayer);let start=null,pinned=false,tooltipSort='value',tooltipDirection=-1,tooltipData=null;
+  const tip=text('div','','ymc-tooltip');tip.hidden=true;tooltipLayer=text('div','','ymc ymc-tooltip-layer');tooltipLayer.append(tip);document.body.append(tooltipLayer);let start=null,pinned=false,tooltipSort=options.tooltipOrder==='series'?'series':'value',tooltipDirection=-1,tooltipData=null;
   const pos=e=>{
    const rect=plot.getBoundingClientRect(),px=(e.clientX-rect.left)*plot.clientWidth/rect.width,py=(e.clientY-rect.top)*plot.clientHeight/rect.height;
    const inside=px>=0&&px<=plot.clientWidth&&py>=0&&py<=plot.clientHeight;
@@ -153,9 +155,9 @@ export function createMetricChart(chart,options={}){
   function renderTooltip(){
    const {time,rows,nearest}=tooltipData;tip.replaceChildren();const header=text('header',''),close=text('button','Close');close.type='button';close.setAttribute('aria-label','Close tooltip');close.addEventListener('click',()=>{setPinned(false);tip.hidden=true;cursorTime=null;drawCursor();publishCursor(null);});header.append(text('strong',new Date(time).toLocaleString()),close);tip.append(header);
    const table=document.createElement('table'),head=document.createElement('thead'),headRow=document.createElement('tr');for(const [key,title] of [['name','Series'],['value','Value']]){const cell=document.createElement('th'),button=text('button',title+(tooltipSort===key?(tooltipDirection<0?' \u2193':' \u2191'):''),'ymc-sort');button.type='button';button.addEventListener('click',()=>{tooltipDirection=tooltipSort===key?-tooltipDirection:key==='value'?-1:1;tooltipSort=key;renderTooltip();});cell.append(button);headRow.append(cell);}head.append(headRow);table.append(head);const body=document.createElement('tbody');
-   const ordered=[...rows].sort((a,b)=>{if(tooltipSort==='name')return tooltipDirection*(a.series.display).localeCompare(b.series.display);const av=a.point&&a.point.value,bv=b.point&&b.point.value;return av===null?bv===null?0:1:bv===null?-1:tooltipDirection*(av-bv);});
+   const ordered=tooltipSort==='series'?rows:[...rows].sort((a,b)=>{if(tooltipSort==='name')return tooltipDirection*(a.series.display).localeCompare(b.series.display);const av=a.point&&a.point.value,bv=b.point&&b.point.value;return av===null?bv===null?0:1:bv===null?-1:tooltipDirection*(av-bv);});
    for(const row of ordered){const tr=document.createElement('tr');if(row.series.key===nearest)tr.className='ymc-tooltip-nearest';const label=text('td',row.series.display),dot=text('span','','ymc-dot');dot.style.background=row.series.color;label.prepend(dot);tr.append(label,text('td',row.point&&row.point.value!==null?format(row.point.raw):'\u2014'));body.append(tr);}table.append(body);
-   const sumRows=rows.filter(row=>row.point&&row.point.value!==null),sum=sumRows.reduce((total,row)=>total+row.point.value,0),foot=document.createElement('tfoot'),sumRow=document.createElement('tr');sumRow.append(text('th','Sum'),text('th',sumRows.length&&Number.isFinite(sum)?format(sum):'\u2014'));foot.append(sumRow);table.append(foot);tip.append(table,text('footer',pinned?'Pinned. Click the chart again to move the tooltip.':'Click the chart to pin the tooltip.'));
+   if(options.tooltipTotal!==false){const sumRows=rows.filter(row=>row.point&&row.point.value!==null),sum=sumRows.reduce((total,row)=>total+row.point.value,0),foot=document.createElement('tfoot'),sumRow=document.createElement('tr');sumRow.append(text('th',typeof options.tooltipTotal==='string'?options.tooltipTotal:'Sum'),text('th',sumRows.length&&Number.isFinite(sum)?format(sum):'\u2014'));foot.append(sumRow);table.append(foot);}tip.append(table,text('footer',pinned?'Pinned. Click the chart again to move the tooltip.':'Click the chart to pin the tooltip.'));
   }
   const hover=e=>{if(pinned&&start===null)return;const p=pos(e);if(start===null&&!p.inside){tip.hidden=true;cursorTime=null;drawCursor();publishCursor(null);return;}cursorTime=p.time;drawCursor();publishCursor(p.time);if(start!==null){selection.style.left=Math.min(start.px,p.px)+'px';selection.style.width=Math.abs(start.px-p.px)+'px';return;}
    const rows=active.map(series=>({series,point:at(series,p.time)})),py=p.py;let nearest=null,distance=Infinity;for(const row of rows)if(row.point&&row.point.value!==null){let delta=Math.abs(y(row.point.value)-py);if(row.series.type==='area'){const value=sampleAt(row.series,p.time);if(value===null)continue;const base=stackBase(areas,areas.findIndex(s=>s.key===row.series.key),p.time,value),a=y(base),b=y(base+value);delta=Math.max(Math.min(a,b)-py,py-Math.max(a,b),0);}if(delta<distance){distance=delta;nearest=row.series.key;}}tooltipData={time:p.time,rows,nearest};renderTooltip();tip.hidden=false;

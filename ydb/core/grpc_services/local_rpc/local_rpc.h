@@ -13,12 +13,13 @@ namespace NKikimr::NRpcService {
 
 Ydb::StatusIds::StatusCode GrpcStatusToYdbStatus(grpc::StatusCode status);
 
-template<typename TResponse>
+template <typename TResponse>
 class TPromiseWrapper {
 public:
     explicit TPromiseWrapper(NThreading::TPromise<TResponse> promise)
         : Promise(std::move(promise))
-    {}
+    {
+    }
 
     void operator()(const TResponse& resp) {
         Promise.SetValue(resp);
@@ -28,46 +29,49 @@ private:
     NThreading::TPromise<TResponse> Promise;
 };
 
-template<typename TRpc, typename TCbWrapper>
+template <typename TRpc, typename TCbWrapper>
 class TLocalRpcCtxImplData {
 protected:
     TCbWrapper CbWrapper;
     NYql::TIssueManager IssueManager;
     std::unique_ptr<Ydb::CostInfo> CostInfo;
 
-    template<typename TCb>
+    template <typename TCb>
     TLocalRpcCtxImplData(TCb&& cb)
         : CbWrapper(std::forward<TCb>(cb))
-    {}
+    {
+    }
 };
 
-template<typename TRpc, typename TCbWrapper, bool IsOperation>
+template <typename TRpc, typename TCbWrapper, bool IsOperation>
 class TLocalRpcCtxImpl;
 
-template<typename TRpc, typename TCbWrapper>
-class TLocalRpcCtxImpl<TRpc, TCbWrapper, false> : public NGRpcService::IRequestNoOpCtx, public TLocalRpcCtxImplData<TRpc, TCbWrapper> {
+template <typename TRpc, typename TCbWrapper>
+class TLocalRpcCtxImpl<TRpc, TCbWrapper, false>: public NGRpcService::IRequestNoOpCtx, public TLocalRpcCtxImplData<TRpc, TCbWrapper> {
 protected:
     using TBase = TLocalRpcCtxImplData<TRpc, TCbWrapper>;
 
-    template<typename TCb>
+    template <typename TCb>
     TLocalRpcCtxImpl(TCb&& cb, NWilson::TTraceId = {})
         : TBase(std::forward<TCb>(cb))
-    {}
+    {
+    }
 
 protected:
     NWilson::TSpan Span;
 };
 
-template<typename TRpc, typename TCbWrapper>
-class TLocalRpcCtxImpl<TRpc, TCbWrapper, true> : public NGRpcService::IRequestOpCtx, public TLocalRpcCtxImplData<TRpc, TCbWrapper> {
+template <typename TRpc, typename TCbWrapper>
+class TLocalRpcCtxImpl<TRpc, TCbWrapper, true>: public NGRpcService::IRequestOpCtx, public TLocalRpcCtxImplData<TRpc, TCbWrapper> {
 protected:
     using TBase = TLocalRpcCtxImplData<TRpc, TCbWrapper>;
 
-    template<typename TCb>
+    template <typename TCb>
     explicit TLocalRpcCtxImpl(TCb&& cb, NWilson::TTraceId wilsonTraceId = {})
         : TBase(std::forward<TCb>(cb))
         , Span(TWilsonGrpc::RequestProxy, std::move(wilsonTraceId), "LocalRpc")
-    {}
+    {
+    }
 
 public:
     using TResp = typename TRpc::TResponse;
@@ -87,8 +91,7 @@ public:
         TBase::CbWrapper(resp);
     }
 
-    void SendResult(const google::protobuf::Message& result,
-        Ydb::StatusIds::StatusCode status,
+    void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status,
         const google::protobuf::RepeatedPtrField<NGRpcService::TYdbIssueMessageType>& message) override {
         TResp resp;
         auto deferred = resp.mutable_operation();
@@ -121,8 +124,8 @@ protected:
     NWilson::TSpan Span;
 };
 
-template<typename TRpc, typename TCbWrapper, bool IsOperation = TRpc::IsOp>
-class TLocalRpcCtx : public TLocalRpcCtxImpl<TRpc, TCbWrapper, IsOperation> {
+template <typename TRpc, typename TCbWrapper, bool IsOperation = TRpc::IsOp>
+class TLocalRpcCtx: public TLocalRpcCtxImpl<TRpc, TCbWrapper, IsOperation> {
 public:
     static constexpr bool IsOp = IsOperation;
     using TBase = TLocalRpcCtxImpl<TRpc, TCbWrapper, IsOperation>;
@@ -141,7 +144,7 @@ public:
         std::shared_ptr<std::atomic_bool> ClientLostStatus;
     };
 
-    template<typename TProto, typename TCb>
+    template <typename TProto, typename TCb>
     TLocalRpcCtx(TProto&& req, TCb&& cb, TSettings settings)
         : TBase(std::forward<TCb>(cb), std::move(settings.WilsonTraceId))
         , Request(std::forward<TProto>(req))
@@ -156,7 +159,7 @@ public:
         SetupTokenAndSpan(settings.Token);
     }
 
-    template<typename TProto, typename TCb>
+    template <typename TProto, typename TCb>
     TLocalRpcCtx(TProto&& req, TCb&& cb, const TString& databaseName, const TMaybe<TString>& token, const TMaybe<TString>& requestType,
         bool internalCall, NWilson::TTraceId wilsonTraceId = {})
         : TBase(std::forward<TCb>(cb), std::move(wilsonTraceId))
@@ -345,7 +348,7 @@ public:
     }
 
 private:
-    void Reply(NProtoBuf::Message *r, ui32) override {
+    void Reply(NProtoBuf::Message* r, ui32) override {
         TResp* resp = dynamic_cast<TResp*>(r);
         Y_ABORT_UNLESS(resp);
         TBase::CbWrapper(*resp);
@@ -377,54 +380,24 @@ private:
     google::protobuf::Arena Arena;
 };
 
-template<class TRequest>
+template <class TRequest>
 concept TRequestWithOperationParams = requires(TRequest& request) {
     { request.mutable_operation_params() } -> std::convertible_to<Ydb::Operations::OperationParams*>;
 };
 
-template<TRequestWithOperationParams TRequest>
+template <TRequestWithOperationParams TRequest>
 void SetRequestSyncOperationMode(TRequest& request) {
     request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
 }
 
-template<class TRequest>
+template <class TRequest>
 void SetRequestSyncOperationMode(TRequest&) {
     // nothing
 }
 
-template<typename TRpc>
-NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database,
-        const TMaybe<TString>& token, const TMaybe<TString>& requestType,
-        TActorSystem* actorSystem, bool internalCall = false, NWilson::TTraceId traceId = {})
-{
-    auto promise = NThreading::NewPromise<typename TRpc::TResponse>();
-
-    SetRequestSyncOperationMode(proto);
-
-    using TCbWrapper = TPromiseWrapper<typename TRpc::TResponse>;
-    auto req = new TLocalRpcCtx<TRpc, TCbWrapper>(std::move(proto), TCbWrapper(promise), database, token, requestType, internalCall, std::move(traceId));
-    auto actor = TRpc::CreateRpcActor(req);
-    actorSystem->Register(actor, TMailboxType::HTSwap, actorSystem->AppData<TAppData>()->UserPoolId);
-
-    return promise.GetFuture();
-}
-
-template<typename TRpc>
-NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, TActorSystem* actorSystem, bool internalCall = false) {
-    return DoLocalRpc<TRpc>(std::move(proto), database, token, Nothing(), actorSystem, internalCall);
-}
-
-template<typename TRpc>
-NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(
-        typename TRpc::TRequest&& proto,
-        const TString& database,
-        const TMaybe<TString>& token,
-        const TMaybe<TString>& requestType,
-        TActorSystem* actorSystem,
-        const TMap<TString, TString>& peerMeta,
-        bool internalCall = false,
-        NWilson::TTraceId traceId = {}
-)
+template <typename TRpc>
+NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token,
+    const TMaybe<TString>& requestType, TActorSystem* actorSystem, bool internalCall = false, NWilson::TTraceId traceId = {})
 {
     auto promise = NThreading::NewPromise<typename TRpc::TResponse>();
 
@@ -432,14 +405,31 @@ NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(
 
     using TCbWrapper = TPromiseWrapper<typename TRpc::TResponse>;
     auto req = new TLocalRpcCtx<TRpc, TCbWrapper>(
-        std::move(proto),
-        TCbWrapper(promise),
-        database,
-        token,
-        requestType,
-        internalCall,
-        std::move(traceId)
-    );
+        std::move(proto), TCbWrapper(promise), database, token, requestType, internalCall, std::move(traceId));
+    auto actor = TRpc::CreateRpcActor(req);
+    actorSystem->Register(actor, TMailboxType::HTSwap, actorSystem->AppData<TAppData>()->UserPoolId);
+
+    return promise.GetFuture();
+}
+
+template <typename TRpc>
+NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token,
+    TActorSystem* actorSystem, bool internalCall = false) {
+    return DoLocalRpc<TRpc>(std::move(proto), database, token, Nothing(), actorSystem, internalCall);
+}
+
+template <typename TRpc>
+NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token,
+    const TMaybe<TString>& requestType, TActorSystem* actorSystem, const TMap<TString, TString>& peerMeta, bool internalCall = false,
+    NWilson::TTraceId traceId = {})
+{
+    auto promise = NThreading::NewPromise<typename TRpc::TResponse>();
+
+    SetRequestSyncOperationMode(proto);
+
+    using TCbWrapper = TPromiseWrapper<typename TRpc::TResponse>;
+    auto req = new TLocalRpcCtx<TRpc, TCbWrapper>(
+        std::move(proto), TCbWrapper(promise), database, token, requestType, internalCall, std::move(traceId));
 
     for (const auto& [key, value] : peerMeta) {
         req->PutPeerMeta(key, value);
@@ -451,34 +441,37 @@ NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(
     return promise.GetFuture();
 }
 
-template<typename TRpc>
-TActorId DoLocalRpcSameMailbox(typename TRpc::TRequest&& proto, std::function<void(typename TRpc::TResponse)>&& cb,
-        const TString& database, const TMaybe<TString>& token, const TMaybe<TString>& requestType,
-        const TActorContext& ctx, bool internalCall = false, NWilson::TTraceId traceId = {})
+template <typename TRpc>
+TActorId DoLocalRpcSameMailbox(typename TRpc::TRequest&& proto, std::function<void(typename TRpc::TResponse)>&& cb, const TString& database,
+    const TMaybe<TString>& token, const TMaybe<TString>& requestType, const TActorContext& ctx, bool internalCall = false,
+    NWilson::TTraceId traceId = {})
 {
     SetRequestSyncOperationMode(proto);
 
-    auto req = new TLocalRpcCtx<TRpc, std::function<void(typename TRpc::TResponse)>>(std::move(proto), std::move(cb), database, token, requestType, internalCall, std::move(traceId));
+    auto req = new TLocalRpcCtx<TRpc, std::function<void(typename TRpc::TResponse)>>(
+        std::move(proto), std::move(cb), database, token, requestType, internalCall, std::move(traceId));
     auto actor = TRpc::CreateRpcActor(req);
     return ctx.RegisterWithSameMailbox(actor);
 }
 
-template<typename TRpc>
-TActorId DoLocalRpcSameMailbox(typename TRpc::TRequest&& proto, std::function<void(typename TRpc::TResponse)>&& cb, const TString& database, const TMaybe<TString>& token, const TActorContext& ctx, bool internalCall = false, NWilson::TTraceId traceId = {}) {
+template <typename TRpc>
+TActorId DoLocalRpcSameMailbox(typename TRpc::TRequest&& proto, std::function<void(typename TRpc::TResponse)>&& cb, const TString& database,
+    const TMaybe<TString>& token, const TActorContext& ctx, bool internalCall = false, NWilson::TTraceId traceId = {}) {
     return DoLocalRpcSameMailbox<TRpc>(std::move(proto), std::move(cb), database, token, Nothing(), ctx, internalCall, std::move(traceId));
 }
 
 //// Streaming part
 
 template <typename TResponsePart>
-class TStreamReadProcessor : public NGRpcService::NLocalGrpc::TContextBase {
+class TStreamReadProcessor: public NGRpcService::NLocalGrpc::TContextBase {
     using TBase = NGRpcService::NLocalGrpc::TContextBase;
     using TOnResponseCallback = std::function<void(TResponsePart&&)>;
 
 public:
     TStreamReadProcessor(std::shared_ptr<NGRpcService::IRequestCtx> baseRequest)
         : TBase(std::move(baseRequest))
-    {}
+    {
+    }
 
     void Read(TOnResponseCallback callback) {
         if (!ResponseQueue.empty()) {
@@ -494,6 +487,11 @@ public:
     void Cancel() {
         FinishPromise.SetValue(EFinishStatus::CANCEL);
         Finished = true;
+        // with Finished stream queue is never populated and callback won't be called
+        NextReplyCallback = nullptr;
+        if (ResponseQueue.empty()) {
+            OnResponseCallback = nullptr;
+        }
     }
 
     bool IsFinished() const {
@@ -522,6 +520,9 @@ protected:
     }
 
     void SetNextReplyCallback(TOnNextReply&& callback) override {
+        if (Finished) {
+            return;
+        }
         NextReplyCallback = callback;
     }
 
@@ -595,6 +596,9 @@ private:
             OnResponseCallback(DoPopResponse());
             OnResponseCallback = nullptr;
         }
+        if (Finished) {
+            NextReplyCallback = nullptr;
+        }
     }
 
 private:
@@ -610,21 +614,23 @@ template <typename TResponsePart>
 using TStreamReadProcessorPtr = TIntrusivePtr<TStreamReadProcessor<TResponsePart>>;
 
 template <typename TRpc, typename... TRpcActorArgs>
-TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto,
-    const TString& database, const TMaybe<TString>& token, const TMaybe<TString>& requestType,
-    const TActorContext& ctx, bool internalCall, TRpcActorArgs... args)
+TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto, const TString& database,
+    const TMaybe<TString>& token, const TMaybe<TString>& requestType, const TActorContext& ctx, bool internalCall, TRpcActorArgs... args)
 {
     using TCbWrapper = std::function<void(const typename TRpc::TResponse&)>;
     using TLocalRpcStreamCtx = TStreamReadProcessor<typename TRpc::TResponse>;
 
     // The grpc stream context does not expose the base request's internal-call
     // flag. Preserve it on the request consumed by the RPC actor.
-    class TLocalRpcStreamRequest final : public TRpc {
+    class TLocalRpcStreamRequest final: public TRpc {
     public:
         TLocalRpcStreamRequest(TLocalRpcStreamCtx* ctx, bool internalCall)
-            : TRpc(ctx, [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {})
+            : TRpc(ctx,
+                  [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {
+                  })
             , InternalCall(internalCall)
-        {}
+        {
+        }
 
         bool IsInternalCall() const override {
             return InternalCall;
@@ -634,7 +640,8 @@ TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(ty
         const bool InternalCall;
     };
 
-    auto localRpcCtx = std::make_shared<TLocalRpcCtx<TRpc, TCbWrapper>>(std::move(proto), [](const typename TRpc::TResponse&) {}, database, token, requestType, internalCall);
+    auto localRpcCtx = std::make_shared<TLocalRpcCtx<TRpc, TCbWrapper>>(std::move(proto), [](const typename TRpc::TResponse&) {
+    }, database, token, requestType, internalCall);
     auto localRpcStreamCtx = MakeIntrusive<TLocalRpcStreamCtx>(std::move(localRpcCtx));
     auto localRpcRequest = std::make_unique<TLocalRpcStreamRequest>(localRpcStreamCtx.Get(), internalCall);
     // The stream wrapper drops the base request's token (unlike DoLocalRpc), so set it here — system-user stream calls like the warmup sysview fetch must pass the KqpProxy warmup gate.
@@ -648,11 +655,10 @@ TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(ty
 }
 
 template <typename TRpc, typename... TRpcActorArgs>
-TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto,
-    const TString& database, const TMaybe<TString>& token, const TActorContext& ctx, bool internalCall,
-    TRpcActorArgs... args)
+TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto, const TString& database,
+    const TMaybe<TString>& token, const TActorContext& ctx, bool internalCall, TRpcActorArgs... args)
 {
     return DoLocalRpcStreamSameMailbox<TRpc>(std::move(proto), database, token, Nothing(), ctx, internalCall, args...);
 }
 
-} // namespace NKikimr::NRpcService
+}   // namespace NKikimr::NRpcService

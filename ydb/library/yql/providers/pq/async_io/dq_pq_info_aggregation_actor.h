@@ -11,4 +11,4 @@ NActors::IActor* CreateDqPqInfoAggregationActor(const TTxId& txId);
 
 void RegisterDqPqInfoAggregationActorFactory(TDqAsyncIoFactory& factory);
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

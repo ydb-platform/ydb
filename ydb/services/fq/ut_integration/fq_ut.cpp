@@ -1,129 +1,105 @@
-#include <ydb/services/ydb/ydb_common_ut.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include "ut_utils.h"
 
-#include <ydb/public/lib/fq/fq.h>
-#include <ydb/public/lib/fq/helpers.h>
+#include <ydb/core/fq/libs/control_plane_storage/message_builders.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 #include <ydb/core/fq/libs/mock/yql_mock.h>
 #include <ydb/core/fq/libs/private_client/private_client.h>
 
-#include <ydb/core/fq/libs/control_plane_storage/message_builders.h>
-#include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
+#include <ydb/public/lib/fq/fq.h>
+#include <ydb/public/lib/fq/helpers.h>
+#include <ydb/public/lib/fq/scope.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/services/ydb/ydb_common_ut.h>
 
-#include <yql/essentials/public/issue/yql_issue_message.h>
-
+#include <google/protobuf/util/time_util.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 #include <library/cpp/retry/retry.h>
-#include <util/system/mutex.h>
-#include "ut_utils.h"
-#include <google/protobuf/util/time_util.h>
-
-#include <ydb/public/lib/fq/scope.h>
-#include <util/system/hostname.h>
-
 #include <util/string/split.h>
+#include <util/system/hostname.h>
+#include <util/system/mutex.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 using namespace NYdb;
 using namespace FederatedQuery;
 using namespace NYdb::NFq;
 
 namespace {
-    const ui32 Retries = 20;
+const ui32 Retries = 20;
 
-    void PrintProtoIssues(const NProtoBuf::RepeatedPtrField<::Ydb::Issue::IssueMessage>& protoIssues) {
-        if (protoIssues.empty()) {
-            Cerr << "No Issues" << Endl;
-            return;
-        }
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(protoIssues, issues);
-        Cerr << ">>> Issues: " << issues.ToString() << Endl;
+void PrintProtoIssues(const NProtoBuf::RepeatedPtrField<::Ydb::Issue::IssueMessage>& protoIssues) {
+    if (protoIssues.empty()) {
+        Cerr << "No Issues" << Endl;
+        return;
     }
+    NYql::TIssues issues;
+    NYql::IssuesFromMessage(protoIssues, issues);
+    Cerr << ">>> Issues: " << issues.ToString() << Endl;
+}
 
-    TString CreateNewHistoryAndWaitFinish(const TString& folderId,
-        NYdb::NFq::TClient& client, const TString& yqlText,
-        const FederatedQuery::QueryMeta::ComputeStatus& expectedStatusResult)
+TString CreateNewHistoryAndWaitFinish(const TString& folderId, NYdb::NFq::TClient& client, const TString& yqlText,
+    const FederatedQuery::QueryMeta::ComputeStatus& expectedStatusResult)
+{
+    //CreateQuery
+    TString queryId;
     {
-        //CreateQuery
-        TString queryId;
-        {
-            const auto result = DoWithRetryOnRetCode([&]() {
-                auto request = ::NFq::TCreateQueryBuilder{}
-                                    .SetText(yqlText)
-                                    .Build();
-                auto result = client.CreateQuery(
-                    request, CreateFqSettings<TCreateQuerySettings>(folderId))
-                    .ExtractValueSync();
-
-                    if (result.GetStatus() != EStatus::SUCCESS) {
-                        return false;
-                    }
-
-                    queryId = result.GetResult().query_id();
-                    return true;
-            }, TRetryOptions(Retries));
-            UNIT_ASSERT_C(result, "failed to create the query");
-        }
-        // GetQueryStatus
-        const auto request = ::NFq::TGetQueryStatusBuilder{}
-            .SetQueryId(queryId)
-            .Build();
         const auto result = DoWithRetryOnRetCode([&]() {
-            auto result = client.GetQueryStatus(
-                request, CreateFqSettings<TGetQueryStatusSettings>(folderId))
-                .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            return result.GetResult().status() == expectedStatusResult;
+            auto request = ::NFq::TCreateQueryBuilder{}.SetText(yqlText).Build();
+            auto result = client.CreateQuery(request, CreateFqSettings<TCreateQuerySettings>(folderId)).ExtractValueSync();
+
+            if (result.GetStatus() != EStatus::SUCCESS) {
+                return false;
+            }
+
+            queryId = result.GetResult().query_id();
+            return true;
         }, TRetryOptions(Retries));
-        UNIT_ASSERT_C(result, "the execution of the query did not end within the time limit");
-
-        return queryId;
+        UNIT_ASSERT_C(result, "failed to create the query");
     }
-
-    void Warmup(const TString& folderId, NYdb::NFq::TClient& client) {
-        // wait for backend up
-        CreateNewHistoryAndWaitFinish(folderId, client, "select 1", FederatedQuery::QueryMeta::COMPLETED);
-    }
-
-    void CheckGetResultData(
-        NYdb::NFq::TClient& client,
-        const TString& queryId,
-        const TString& folderId,
-        const ui64 rowsCount,
-        const int colsSize,
-        const int answer)
-    {
-        const auto request = ::NFq::TGetResultDataBuilder{}
-            .SetQueryId(queryId)
-            .Build();
-        const auto result = client.GetResultData(
-                request, CreateFqSettings<TGetResultDataSettings>(folderId))
-                .ExtractValueSync();
+    // GetQueryStatus
+    const auto request = ::NFq::TGetQueryStatusBuilder{}.SetQueryId(queryId).Build();
+    const auto result = DoWithRetryOnRetCode([&]() {
+        auto result = client.GetQueryStatus(request, CreateFqSettings<TGetQueryStatusSettings>(folderId)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        return result.GetResult().status() == expectedStatusResult;
+    }, TRetryOptions(Retries));
+    UNIT_ASSERT_C(result, "the execution of the query did not end within the time limit");
 
-        const auto& resultSet = result.GetResult().result_set();
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.rows().size(), rowsCount);
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.columns().size(), colsSize);
-        if (!resultSet.rows().empty()) {
-            const auto& item = resultSet.rows(0).items(0);
-            TString str = item.DebugString();
-            TVector<TString> arr;
-            StringSplitter(str).Split(' ').SkipEmpty().AddTo(&arr);
-            Y_ABORT_UNLESS(arr.size() == 2, "Incorrect numeric result");
-            UNIT_ASSERT_VALUES_EQUAL(std::stoi(arr.back()), answer);
-        }
+    return queryId;
+}
+
+void Warmup(const TString& folderId, NYdb::NFq::TClient& client) {
+    // wait for backend up
+    CreateNewHistoryAndWaitFinish(folderId, client, "select 1", FederatedQuery::QueryMeta::COMPLETED);
+}
+
+void CheckGetResultData(
+    NYdb::NFq::TClient& client, const TString& queryId, const TString& folderId, const ui64 rowsCount, const int colsSize, const int answer)
+{
+    const auto request = ::NFq::TGetResultDataBuilder{}.SetQueryId(queryId).Build();
+    const auto result = client.GetResultData(request, CreateFqSettings<TGetResultDataSettings>(folderId)).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    const auto& resultSet = result.GetResult().result_set();
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.rows().size(), rowsCount);
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.columns().size(), colsSize);
+    if (!resultSet.rows().empty()) {
+        const auto& item = resultSet.rows(0).items(0);
+        TString str = item.DebugString();
+        TVector<TString> arr;
+        StringSplitter(str).Split(' ').SkipEmpty().AddTo(&arr);
+        Y_ABORT_UNLESS(arr.size() == 2, "Incorrect numeric result");
+        UNIT_ASSERT_VALUES_EQUAL(std::stoi(arr.back()), answer);
     }
 }
+}   // namespace
 
 Y_UNIT_TEST_SUITE(Yq_1) {
     Y_UNIT_TEST(Basic) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken("root@builtin");
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken("root@builtin");
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const auto folderId = "some_folder_id";
@@ -131,54 +107,35 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         CheckGetResultData(client, queryId, folderId, 1, 1, 1);
 
         {
-            const auto request = ::NFq::TDescribeQueryBuilder()
-                .SetQueryId("foo")
-                .Build();
-            auto result = client.DescribeQuery(
-                request, CreateFqSettings<TDescribeQuerySettings>("WTF"))
-                .ExtractValueSync();
+            const auto request = ::NFq::TDescribeQueryBuilder().SetQueryId("foo").Build();
+            auto result = client.DescribeQuery(request, CreateFqSettings<TDescribeQuerySettings>("WTF")).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         }
 
         {
             auto request = ::NFq::TListQueriesBuilder{}.Build();
-            auto result = client.ListQueries(
-                    request, CreateFqSettings<TListQueriesSettings>("WTF"))
-                    .ExtractValueSync();
+            auto result = client.ListQueries(request, CreateFqSettings<TListQueriesSettings>("WTF")).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().query().size(), 0);
         }
 
         {
-            const auto request = ::NFq::TDescribeQueryBuilder()
-                .SetQueryId(queryId)
-                .Build();
-            auto result = client.DescribeQuery(
-                request, CreateFqSettings<TDescribeQuerySettings>(folderId))
-                .ExtractValueSync();
+            const auto request = ::NFq::TDescribeQueryBuilder().SetQueryId(queryId).Build();
+            auto result = client.DescribeQuery(request, CreateFqSettings<TDescribeQuerySettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto status = result.GetResult().query().meta().status();
             UNIT_ASSERT(status == FederatedQuery::QueryMeta::COMPLETED);
         }
 
         {
-            const auto request = ::NFq::TModifyQueryBuilder()
-                .SetQueryId(queryId)
-                .SetName("MODIFIED_NAME")
-                .Build();
-            const auto result = client.ModifyQuery(
-                request, CreateFqSettings<TModifyQuerySettings>(folderId))
-                .ExtractValueSync();
+            const auto request = ::NFq::TModifyQueryBuilder().SetQueryId(queryId).SetName("MODIFIED_NAME").Build();
+            const auto result = client.ModifyQuery(request, CreateFqSettings<TModifyQuerySettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
-            const auto request = ::NFq::TDescribeQueryBuilder()
-                .SetQueryId(queryId)
-                .Build();
-            const auto result = client.DescribeQuery(
-                request, CreateFqSettings<TDescribeQuerySettings>(folderId))
-                .ExtractValueSync();
+            const auto request = ::NFq::TDescribeQueryBuilder().SetQueryId(queryId).Build();
+            const auto result = client.DescribeQuery(request, CreateFqSettings<TDescribeQuerySettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto& res = result.GetResult();
             UNIT_ASSERT_VALUES_EQUAL(res.query().content().name(), "MODIFIED_NAME");
@@ -186,22 +143,14 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         }
 
         {
-            const auto request = ::NFq::TDescribeQueryBuilder()
-                .SetQueryId("")
-                .Build();
-            const auto result = client.DescribeQuery(
-                request, CreateFqSettings<TDescribeQuerySettings>(""))
-                .ExtractValueSync();
+            const auto request = ::NFq::TDescribeQueryBuilder().SetQueryId("").Build();
+            const auto result = client.DescribeQuery(request, CreateFqSettings<TDescribeQuerySettings>("")).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         }
 
         {
-            const auto request = ::NFq::TGetResultDataBuilder()
-                .SetQueryId("")
-                .Build();
-            const auto result = client.GetResultData(
-                    request, CreateFqSettings<TGetResultDataSettings>(""))
-                    .ExtractValueSync();
+            const auto request = ::NFq::TGetResultDataBuilder().SetQueryId("").Build();
+            const auto result = client.GetResultData(request, CreateFqSettings<TGetResultDataSettings>("")).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         }
     }
@@ -210,10 +159,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken("root@builtin");
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken("root@builtin");
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const TString folderId = "some_folder_id";
@@ -225,10 +171,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken("root@builtin");
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken("root@builtin");
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const TString folderId = "some_folder_id";
@@ -240,10 +183,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken("root@builtin");
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken("root@builtin");
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const TString folderId = "some_folder_id";
@@ -255,10 +195,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken("root@builtin");
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken("root@builtin");
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const TString folderId = "some_folder_id";
@@ -272,33 +209,21 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken("root@builtin");
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken("root@builtin");
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const TString folderId = "some_folder_id";
         Warmup(folderId, client);
         TString conId;
         {
-            const auto request = ::NFq::TCreateConnectionBuilder()
-                .SetName("created_conn")
-                .CreateYdb("created_db", "")
-                .Build();
-            const auto result = client
-                .CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId))
-                .ExtractValueSync();
+            const auto request = ::NFq::TCreateConnectionBuilder().SetName("created_conn").CreateYdb("created_db", "").Build();
+            const auto result = client.CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
             conId = result.GetResult().connection_id();
         }
         {
-            auto request = ::NFq::TDescribeConnectionBuilder()
-                .SetConnectionId(conId)
-                .Build();
-            auto result = client
-                .DescribeConnection(request, CreateFqSettings<TDescribeConnectionSettings>(folderId))
-                .ExtractValueSync();
+            auto request = ::NFq::TDescribeConnectionBuilder().SetConnectionId(conId).Build();
+            auto result = client.DescribeConnection(request, CreateFqSettings<TDescribeConnectionSettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             const auto& res = result.GetResult().connection();
             UNIT_ASSERT_VALUES_EQUAL(res.meta().id(), conId);
@@ -312,10 +237,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken("root@builtin");
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken("root@builtin");
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const size_t conns = 3;
@@ -324,32 +246,23 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         {
             //CreateConnections
             for (size_t i = 0; i < conns - 1; ++i) {
-                const auto request = ::NFq::TCreateConnectionBuilder()
-                    .SetName("testdb" + ToString(i))
-                    .CreateYdb("FakeDatabaseId", "")
-                    .Build();
-                const auto result = client
-                    .CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId))
-                    .ExtractValueSync();
+                const auto request = ::NFq::TCreateConnectionBuilder().SetName("testdb" + ToString(i)).CreateYdb("FakeDatabaseId", "").Build();
+                const auto result = client.CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId)).ExtractValueSync();
                 UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
             }
 
             // yds
             const auto request = ::NFq::TCreateConnectionBuilder()
-                .SetName("testdb2")
-                .CreateDataStreams("FakeDatabaseId", "") // We can use the same db in yds and ydb
-                .Build();
-            const auto result = client
-                .CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId))
-                .ExtractValueSync();
+                                     .SetName("testdb2")
+                                     .CreateDataStreams("FakeDatabaseId", "")   // We can use the same db in yds and ydb
+                                     .Build();
+            const auto result = client.CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
             const auto request = ::NFq::TListConnectionsBuilder().Build();
-            auto result = client
-                .ListConnections(request, CreateFqSettings<TListConnectionsSettings>(folderId))
-                .ExtractValueSync();
+            auto result = client.ListConnections(request, CreateFqSettings<TListConnectionsSettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().connection().size(), conns);
             size_t i = 0;
@@ -378,10 +291,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken("root@builtin");
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken("root@builtin");
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const TString folderId = "some_folder_id";
@@ -389,9 +299,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
 
         {
             const auto request = ::NFq::TListConnectionsBuilder().Build();
-            auto result = client
-                .ListConnections(request, CreateFqSettings<TListConnectionsSettings>("WTF"))
-                .ExtractValueSync();
+            auto result = client.ListConnections(request, CreateFqSettings<TListConnectionsSettings>("WTF")).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT(result.GetResult().connection().empty());
         }
@@ -403,23 +311,15 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TString location = TStringBuilder() << "localhost:" << grpc;
         TString userToken = "root@builtin";
         TString userId = "root";
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken(userToken);
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken(userToken);
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const auto folderId = TString(__func__) + "folder_id";
         Warmup(folderId, client);
         TString conId;
         {
-            const auto request = ::NFq::TCreateConnectionBuilder()
-                .SetName("created_conn")
-                .CreateYdb("created_db", "")
-                .Build();
-            const auto result = client
-                .CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId))
-                .ExtractValueSync();
+            const auto request = ::NFq::TCreateConnectionBuilder().SetName("created_conn").CreateYdb("created_db", "").Build();
+            const auto result = client.CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
             conId = result.GetResult().connection_id();
         }
@@ -427,24 +327,18 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         {
             //Modify
             const auto request = ::NFq::TModifyConnectionBuilder()
-                .SetName("modified_name")
-                .SetConnectionId(conId)
-                .CreateYdb("new ydb", "")
-                .SetDescription("Modified")
-                .Build();
-            const auto result = client
-                .ModifyConnection(request, CreateFqSettings<TModifyConnectionSettings>(folderId))
-                .ExtractValueSync();
+                                     .SetName("modified_name")
+                                     .SetConnectionId(conId)
+                                     .CreateYdb("new ydb", "")
+                                     .SetDescription("Modified")
+                                     .Build();
+            const auto result = client.ModifyConnection(request, CreateFqSettings<TModifyConnectionSettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
-            auto request = ::NFq::TDescribeConnectionBuilder()
-                .SetConnectionId(conId)
-                .Build();
-            auto result = client
-                .DescribeConnection(request, CreateFqSettings<TDescribeConnectionSettings>(folderId))
-                .ExtractValueSync();
+            auto request = ::NFq::TDescribeConnectionBuilder().SetConnectionId(conId).Build();
+            auto result = client.DescribeConnection(request, CreateFqSettings<TDescribeConnectionSettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto& res = result.GetResult().connection();
             UNIT_ASSERT_VALUES_EQUAL(res.meta().id(), conId);
@@ -459,35 +353,23 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken("root@builtin");
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken("root@builtin");
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const auto folderId = TString(__func__) + "folder_id";
         Warmup(folderId, client);
         TString conId;
         {
-            const auto request = ::NFq::TCreateConnectionBuilder()
-                .SetName("created_conn")
-                .CreateYdb("created_db", "")
-                .Build();
-            const auto result = client
-                .CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId))
-                .ExtractValueSync();
+            const auto request = ::NFq::TCreateConnectionBuilder().SetName("created_conn").CreateYdb("created_db", "").Build();
+            const auto result = client.CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
             conId = result.GetResult().connection_id();
         }
 
         {
-            const auto request = ::NFq::TDeleteConnectionBuilder()
-                .SetConnectionId(conId)
-                .Build();
+            const auto request = ::NFq::TDeleteConnectionBuilder().SetConnectionId(conId).Build();
 
-            const auto result = client
-                .DeleteConnection(request, CreateFqSettings<TDeleteConnectionSettings>(folderId))
-                .ExtractValueSync();
+            const auto result = client.DeleteConnection(request, CreateFqSettings<TDeleteConnectionSettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
@@ -497,10 +379,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         TString userToken = "root@builtin";
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken(userToken);
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken(userToken);
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
 
@@ -508,25 +387,18 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         Warmup(folderId, client);
         TString conId;
         {
-            const auto request = ::NFq::TCreateConnectionBuilder()
-                .SetName("created_conn")
-                .CreateYdb("created_db", "")
-                .Build();
-            const auto result = client
-                .CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId))
-                .ExtractValueSync();
+            const auto request = ::NFq::TCreateConnectionBuilder().SetName("created_conn").CreateYdb("created_db", "").Build();
+            const auto result = client.CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
             conId = result.GetResult().connection_id();
         }
 
         {
             const auto request = ::NFq::TModifyConnectionBuilder()
-                .SetConnectionId(conId)
-                .CreateYdb("modified_db", "")//TODO remove
-                .Build();
-            const auto result = client
-                .ModifyConnection(request, CreateFqSettings<TModifyConnectionSettings>(folderId))
-                .ExtractValueSync();
+                                     .SetConnectionId(conId)
+                                     .CreateYdb("modified_db", "")   //TODO remove
+                                     .Build();
+            const auto result = client.ModifyConnection(request, CreateFqSettings<TModifyConnectionSettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
@@ -536,10 +408,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         TString userToken = "root@builtin";
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken(userToken);
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken(userToken);
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
 
@@ -548,25 +417,15 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         auto name = TString(__func__) + "_name";
         name.to_lower();
         {
-            const auto request = ::NFq::TCreateConnectionBuilder()
-                .SetName(name)
-                .CreateYdb("created_db", "")
-                .Build();
-            const auto result = client
-                .CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId))
-                .ExtractValueSync();
+            const auto request = ::NFq::TCreateConnectionBuilder().SetName(name).CreateYdb("created_db", "").Build();
+            const auto result = client.CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
-            const auto request = ::NFq::TCreateConnectionBuilder()
-                .SetName(name)
-                .CreateYdb("created_db", "")
-                .Build();
-            const auto result = client
-                .CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId))
-                .ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::BAD_REQUEST, result.GetIssues().ToString()); //TODO status should be ALREADY_EXISTS
+            const auto request = ::NFq::TCreateConnectionBuilder().SetName(name).CreateYdb("created_db", "").Build();
+            const auto result = client.CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId)).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::BAD_REQUEST, result.GetIssues().ToString());   //TODO status should be ALREADY_EXISTS
         }
     }
 
@@ -575,10 +434,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         TString userToken = "root@builtin";
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken(userToken);
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken(userToken);
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const auto folderId = TString(__func__) + "folder_id";
@@ -587,41 +443,28 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         const TString idempotencyKey = "idempotency_key";
         TString conId;
         {
-            const auto request = ::NFq::TCreateConnectionBuilder()
-                .SetName(name)
-                .SetIdempotencyKey(idempotencyKey)
-                .CreateYdb("created_db", "")
-                .Build();
-            const auto result = client
-                .CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId))
-                .ExtractValueSync();
+            const auto request =
+                ::NFq::TCreateConnectionBuilder().SetName(name).SetIdempotencyKey(idempotencyKey).CreateYdb("created_db", "").Build();
+            const auto result = client.CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
             conId = result.GetResult().connection_id();
         }
 
         {
-            const auto request = ::NFq::TCreateConnectionBuilder()
-                .SetName(name)
-                .SetIdempotencyKey(idempotencyKey)
-                .CreateYdb("created_db", "")
-                .Build();
-            const auto result = client
-                .CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId))
-                .ExtractValueSync();
+            const auto request =
+                ::NFq::TCreateConnectionBuilder().SetName(name).SetIdempotencyKey(idempotencyKey).CreateYdb("created_db", "").Build();
+            const auto result = client.CreateConnection(request, CreateFqSettings<TCreateConnectionSettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(conId, result.GetResult().connection_id());
         }
     }
 
-    Y_UNIT_TEST(CreateQuery_With_Idempotency) {//TODO Fix
+    Y_UNIT_TEST(CreateQuery_With_Idempotency) {   //TODO Fix
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         TString userToken = "root@builtin";
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken(userToken);
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken(userToken);
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
 
@@ -629,29 +472,20 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         Warmup(folderId, client);
 
         const TString idempotencyKey = "idempotency_key";
-        const TString yqlText  = "select 1";
+        const TString yqlText = "select 1";
         TString queryId;
-        const auto request = ::NFq::TCreateQueryBuilder{}
-            .SetText(yqlText)
-            .SetIdempotencyKey(idempotencyKey)
-            .Build();
+        const auto request = ::NFq::TCreateQueryBuilder{}.SetText(yqlText).SetIdempotencyKey(idempotencyKey).Build();
 
         {
-            auto result = client.CreateQuery(
-                request, CreateFqSettings<TCreateQuerySettings>(folderId))
-                .ExtractValueSync();
+            auto result = client.CreateQuery(request, CreateFqSettings<TCreateQuerySettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             queryId = result.GetResult().query_id();
         }
 
         {
-            const auto req = ::NFq::TDescribeQueryBuilder{}
-                .SetQueryId(queryId)
-                .Build();
+            const auto req = ::NFq::TDescribeQueryBuilder{}.SetQueryId(queryId).Build();
             const auto result = DoWithRetryOnRetCode([&]() {
-                auto result = client.DescribeQuery(
-                    req, CreateFqSettings<TDescribeQuerySettings>(folderId))
-                    .ExtractValueSync();
+                auto result = client.DescribeQuery(req, CreateFqSettings<TDescribeQuerySettings>(folderId)).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 const auto status = result.GetResult().query().meta().status();
                 PrintProtoIssues(result.GetResult().query().issue());
@@ -660,9 +494,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
             UNIT_ASSERT_C(result, "the execution of the query did not end within the time limit");
         }
         {
-            auto result = client.CreateQuery(
-                request, CreateFqSettings<TCreateQuerySettings>(folderId))
-                .ExtractValueSync();
+            auto result = client.CreateQuery(request, CreateFqSettings<TCreateQuerySettings>(folderId)).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(queryId, result.GetResult().query_id());
@@ -676,16 +508,12 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         TString userToken = "root@builtin";
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken(userToken);
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken(userToken);
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
 
-        const TString yqlText  = "select count(*) from testdbWTF.connections";
-        CreateNewHistoryAndWaitFinish("folder_id_WTF", client,
-            yqlText, FederatedQuery::QueryMeta::FAILED);
+        const TString yqlText = "select count(*) from testdbWTF.connections";
+        CreateNewHistoryAndWaitFinish("folder_id_WTF", client, yqlText, FederatedQuery::QueryMeta::FAILED);
     }
 
     Y_UNIT_TEST(DeleteQuery) {
@@ -693,37 +521,25 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         TString userToken = "root@builtin";
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken(userToken);
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken(userToken);
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
 
         const auto folderId = TString(__func__) + "folder_id";
         const TString yqlText = "select 1";
-        const TString queryId = CreateNewHistoryAndWaitFinish(folderId, client,
-            yqlText, FederatedQuery::QueryMeta::COMPLETED);
+        const TString queryId = CreateNewHistoryAndWaitFinish(folderId, client, yqlText, FederatedQuery::QueryMeta::COMPLETED);
         CheckGetResultData(client, queryId, folderId, 1, 1, 1);
 
         {
-            const auto request = ::NFq::TDeleteQueryBuilder()
-                .SetQueryId(queryId)
-                .Build();
-            auto result = client
-                .DeleteQuery(request, CreateFqSettings<TDeleteQuerySettings>(folderId))
-                .ExtractValueSync();
+            const auto request = ::NFq::TDeleteQueryBuilder().SetQueryId(queryId).Build();
+            auto result = client.DeleteQuery(request, CreateFqSettings<TDeleteQuerySettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
-            auto request = ::NFq::TDescribeQueryBuilder()
-                .SetQueryId(queryId)
-                .Build();
-            auto result = client
-                .DescribeQuery(request, CreateFqSettings<TDescribeQuerySettings>(folderId))
-                .ExtractValueSync();
+            auto request = ::NFq::TDescribeQueryBuilder().SetQueryId(queryId).Build();
+            auto result = client.DescribeQuery(request, CreateFqSettings<TDescribeQuerySettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         }
     }
@@ -733,39 +549,25 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         TString userToken = "root@builtin";
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken(userToken);
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken(userToken);
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
 
         const auto folderId = TString(__func__) + "folder_id";
         const TString yqlText = "select 1";
-        const TString queryId = CreateNewHistoryAndWaitFinish(folderId, client,
-            yqlText, FederatedQuery::QueryMeta::COMPLETED);
+        const TString queryId = CreateNewHistoryAndWaitFinish(folderId, client, yqlText, FederatedQuery::QueryMeta::COMPLETED);
         CheckGetResultData(client, queryId, folderId, 1, 1, 1);
 
         {
-            const auto request = ::NFq::TModifyQueryBuilder()
-                .SetQueryId(queryId)
-                .SetName("ModifiedName")
-                .SetDescription("OK")
-                .Build();
-            auto result = client
-                .ModifyQuery(request, CreateFqSettings<TModifyQuerySettings>(folderId))
-                .ExtractValueSync();
+            const auto request = ::NFq::TModifyQueryBuilder().SetQueryId(queryId).SetName("ModifiedName").SetDescription("OK").Build();
+            auto result = client.ModifyQuery(request, CreateFqSettings<TModifyQuerySettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
-            auto request = ::NFq::TDescribeQueryBuilder()
-                .SetQueryId(queryId)
-                .Build();
-            auto result = client
-                .DescribeQuery(request, CreateFqSettings<TDescribeQuerySettings>(folderId))
-                .ExtractValueSync();
+            auto request = ::NFq::TDescribeQueryBuilder().SetQueryId(queryId).Build();
+            auto result = client.DescribeQuery(request, CreateFqSettings<TDescribeQuerySettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto& query = result.GetResult().query();
             UNIT_ASSERT_VALUES_EQUAL(query.content().name(), "ModifiedName");
@@ -777,10 +579,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken("root@builtin");
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken("root@builtin");
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const auto folderId = "some_folder_id";
@@ -791,9 +590,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         {
             auto request = ::NFq::TListJobsBuilder{}.SetQueryId(queryId).Build();
             auto result = DoWithRetryOnRetCode([&]() {
-                auto result = client.ListJobs(
-                    request, CreateFqSettings<TListJobsSettings>(folderId))
-                    .ExtractValueSync();
+                auto result = client.ListJobs(request, CreateFqSettings<TListJobsSettings>(folderId)).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL(result.GetResult().job_size(), 1);
                 jobId = result.GetResult().job(0).meta().id();
@@ -803,12 +600,8 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         }
 
         {
-            const auto request = ::NFq::TDescribeJobBuilder()
-                .SetJobId(jobId)
-                .Build();
-            auto result = client.DescribeJob(
-                request, CreateFqSettings<TDescribeJobSettings>(folderId))
-                .ExtractValueSync();
+            const auto request = ::NFq::TDescribeJobBuilder().SetJobId(jobId).Build();
+            auto result = client.DescribeJob(request, CreateFqSettings<TDescribeJobSettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().job().query_meta().common().id(), queryId);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().job().meta().id(), jobId);
@@ -820,10 +613,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken("root@builtin");
+        auto driverConfig = TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken("root@builtin");
         auto driver = TDriver(driverConfig);
         NYdb::NFq::TClient client(driver);
         const auto folderId = "some_folder_id";
@@ -832,15 +622,12 @@ Y_UNIT_TEST_SUITE(Yq_1) {
         TString jobId;
 
         {
-            const auto request = ::NFq::TDescribeQueryBuilder()
-                .SetQueryId(queryId)
-                .Build();
-            auto result = client.DescribeQuery(
-                request, CreateFqSettings<TDescribeQuerySettings>(folderId))
-                .ExtractValueSync();
+            const auto request = ::NFq::TDescribeQueryBuilder().SetQueryId(queryId).Build();
+            auto result = client.DescribeQuery(request, CreateFqSettings<TDescribeQuerySettings>(folderId)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto query = result.GetResult().query();
-            UNIT_ASSERT_VALUES_EQUAL(FederatedQuery::QueryMeta::ComputeStatus_Name(query.meta().status()), FederatedQuery::QueryMeta::ComputeStatus_Name(FederatedQuery::QueryMeta::COMPLETED));
+            UNIT_ASSERT_VALUES_EQUAL(FederatedQuery::QueryMeta::ComputeStatus_Name(query.meta().status()),
+                FederatedQuery::QueryMeta::ComputeStatus_Name(FederatedQuery::QueryMeta::COMPLETED));
             UNIT_ASSERT_VALUES_EQUAL(query.content().text(), "select 1");
             UNIT_ASSERT_VALUES_EQUAL(query.content().name(), "test_query_name_1");
         }
@@ -852,11 +639,7 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken("root@builtin")
-        );
+        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken("root@builtin"));
         ::NFq::TPrivateClient client(driver);
         const TString historyId = "id";
         const TString folderId = "folder_id";
@@ -881,15 +664,11 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
         }
     }
 
-    Y_UNIT_TEST(GetTask) {//PendingFetcher can take task first
+    Y_UNIT_TEST(GetTask) {   //PendingFetcher can take task first
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken("root@builtin")
-        );
+        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken("root@builtin"));
         ::NFq::TPrivateClient client(driver);
         {
             Fq::Private::GetTaskRequest req;
@@ -913,11 +692,7 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig()
-            .SetEndpoint(location)
-            .SetDatabase("/Root")
-            .SetAuthToken("root@builtin")
-        );
+        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken("root@builtin"));
         ::NFq::TPrivateClient client(driver);
         const auto instanceId = CreateGuidAsString();
         {

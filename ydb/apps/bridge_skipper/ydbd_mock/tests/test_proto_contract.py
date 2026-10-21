@@ -34,11 +34,8 @@ class PileStateContractTest(unittest.TestCase):
             "NOT_SYNCHRONIZED": 4,
             "SUSPENDED": 5,
             "DISCONNECTED": 6,
+            "INACTIVE": 7,
         }
-        # Newer schemas include INACTIVE. The mock rejects it rather than modeling
-        # inactive piles; accept both schema versions while guarding future additions.
-        if "INACTIVE" in actual:
-            expected["INACTIVE"] = 7
         self.assertEqual(actual, expected)
 
     def test_pile_state_fields(self):
@@ -51,7 +48,7 @@ class StatusContractTest(unittest.TestCase):
     def test_status_names_used_by_the_mock(self):
         for name in (
             "SUCCESS", "BAD_REQUEST", "UNAUTHORIZED", "INTERNAL_ERROR", "UNAVAILABLE",
-            "TIMEOUT", "PRECONDITION_FAILED", "NOT_FOUND", "UNSUPPORTED",
+            "TIMEOUT", "PRECONDITION_FAILED", "NOT_FOUND", "UNSUPPORTED", "GENERIC_ERROR",
         ):
             self.assertIn(name, StatusIds.StatusCode.keys(), name)
 
@@ -132,7 +129,8 @@ class ServiceContractTest(unittest.TestCase):
             (ydb_discovery_v1_pb2_grpc.DiscoveryServiceServicer, ["ListEndpoints"]),
             (ydb_config_v1_pb2_grpc.ConfigServiceServicer, ["FetchConfig"]),
             (ydb_monitoring_v1_pb2_grpc.MonitoringServiceServicer, ["SelfCheck"]),
-            (ydb_bridge_v1_pb2_grpc.BridgeServiceServicer, ["GetClusterState", "UpdateClusterState"]),
+            (ydb_bridge_v1_pb2_grpc.BridgeServiceServicer,
+             ["GetClusterState", "UpdateClusterState", "ConvertToBridge", "AddPile", "RemovePile"]),
         ):
             for name in names:
                 self.assertTrue(callable(getattr(cls, name, None)), "%s.%s" % (cls.__name__, name))

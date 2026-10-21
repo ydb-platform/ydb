@@ -10,9 +10,12 @@ import yaml
 INTERCONNECT_PORT = 19001  # what real configs carry; nothing listens on it
 
 
-def render(topology, version: int = 1) -> str:
+def render(topology, version: int = 1, state=None) -> str:
+    names = topology.pile_names if state is None or state.configured_piles is None else state.configured_piles
     hosts = []
     for node in topology.all_nodes():
+        if node.pile_name not in names:
+            continue
         hosts.append({
             "host": node.label,
             "host_config_id": 1,
@@ -26,7 +29,7 @@ def render(topology, version: int = 1) -> str:
     doc = {
         "metadata": {"kind": "MainConfig", "cluster": topology.cluster_name, "version": version},
         "config": {
-            "bridge_config": {"piles": [{"name": name} for name in topology.pile_names]},
+            "bridge_config": {"piles": [{"name": name} for name in names]},
             "hosts": hosts,
         },
     }

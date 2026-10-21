@@ -4,6 +4,7 @@ The public enum and status codes come from the generated protos. The stored enum
 and the sync stage mirror ydb/core/protos/bridge.proto (the mock must not depend
 on it), and they are never on the gRPC wire.
 """
+import copy
 import dataclasses
 import enum
 import typing
@@ -31,6 +32,7 @@ TIMEOUT = StatusIds.TIMEOUT
 PRECONDITION_FAILED = StatusIds.PRECONDITION_FAILED
 NOT_FOUND = StatusIds.NOT_FOUND
 UNSUPPORTED = StatusIds.UNSUPPORTED
+GENERIC_ERROR = StatusIds.GENERIC_ERROR
 
 
 def public_name(value: int) -> str:
@@ -52,6 +54,7 @@ class Stored(enum.IntEnum):
     NOT_SYNCHRONIZED_2 = 2
     SYNCHRONIZED = 3
     SUSPENDED = 4
+    INACTIVE = 5
 
 
 class Stage(enum.IntEnum):
@@ -70,6 +73,7 @@ TRAITS = {
     Stored.NOT_SYNCHRONIZED_2: (True, True, True),
     Stored.DISCONNECTED: (False, False, False),
     Stored.SUSPENDED: (False, True, True),
+    Stored.INACTIVE: (False, False, False),
 }
 
 
@@ -95,6 +99,15 @@ class ClusterState:
     quorum_piles_last: typing.List[str] = dataclasses.field(default_factory=list)
     # Unsynced piles only: the generation at which the pile became unsynced.
     sync: typing.Dict[int, int] = dataclasses.field(default_factory=dict)
+    # Storage-config revision is separate from the public bridge generation. BSC
+    # completion/error notifications change details without changing that generation.
+    revision: int = 0
+    bridged: bool = True
+    self_management: bool = True
+    configured_piles: typing.Optional[typing.List[str]] = None
+    registry: typing.Optional[typing.List[typing.Optional[str]]] = None
+    conversion_in_progress: bool = False
+    pending_pile_operation: typing.Optional[dict] = None
 
     def copy(self) -> "ClusterState":
         return ClusterState(
@@ -104,6 +117,13 @@ class ClusterState:
             generation=self.generation,
             quorum_piles_last=list(self.quorum_piles_last),
             sync=dict(self.sync),
+            revision=self.revision,
+            bridged=self.bridged,
+            self_management=self.self_management,
+            configured_piles=copy.deepcopy(self.configured_piles),
+            registry=copy.deepcopy(self.registry),
+            conversion_in_progress=self.conversion_in_progress,
+            pending_pile_operation=copy.deepcopy(self.pending_pile_operation),
         )
 
     def to_json(self) -> dict:
@@ -114,6 +134,13 @@ class ClusterState:
             "generation": self.generation,
             "quorum_piles_last": list(self.quorum_piles_last),
             "sync": {str(k): v for k, v in sorted(self.sync.items())},
+            "revision": self.revision,
+            "bridged": self.bridged,
+            "self_management": self.self_management,
+            "configured_piles": self.configured_piles,
+            "registry": self.registry,
+            "conversion_in_progress": self.conversion_in_progress,
+            "pending_pile_operation": copy.deepcopy(self.pending_pile_operation),
         }
 
     @staticmethod
@@ -125,6 +152,13 @@ class ClusterState:
             generation=int(data["generation"]),
             quorum_piles_last=list(data.get("quorum_piles_last", [])),
             sync={int(k): int(v) for k, v in data.get("sync", {}).items()},
+            revision=int(data.get("revision", data["generation"])),
+            bridged=bool(data.get("bridged", True)),
+            self_management=bool(data.get("self_management", True)),
+            configured_piles=copy.deepcopy(data.get("configured_piles")),
+            registry=copy.deepcopy(data.get("registry")),
+            conversion_in_progress=bool(data.get("conversion_in_progress", False)),
+            pending_pile_operation=copy.deepcopy(data.get("pending_pile_operation")),
         )
 
     def num_piles(self) -> int:
@@ -141,12 +175,31 @@ class ClusterState:
             raise ValueError("promoted pile %d is out of range" % self.promoted)
         if self.generation < 1:
             raise ValueError("generation %d is not positive" % self.generation)
+        if self.revision < 0:
+            raise ValueError("negative storage revision")
+        if self.registry is not None:
+            names = [name for name in self.registry if name is not None]
+            if len(names) != len(set(names)) or not all(isinstance(name, str) for name in names):
+                raise ValueError("invalid pile registry")
+            if self.configured_piles is None or set(names) != set(self.configured_piles):
+                raise ValueError("registry does not match configured piles")
+        if self.pending_pile_operation is not None:
+            op = self.pending_pile_operation
+            if op.get("kind") not in ("ADD", "REMOVE") or not isinstance(op.get("pile_name"), str):
+                raise ValueError("invalid pending pile operation")
         for index in self.sync:
             if not 0 <= index < n:
                 raise ValueError("sync record for pile %d is out of range" % index)
 
     def stored(self, index: int) -> Stored:
         return Stored(self.per_pile[index])
+
+    @property
+    def version(self) -> typing.Tuple[int, int]:
+        return self.generation, self.revision
+
+    def registered_names(self, inventory: typing.Sequence[str]) -> typing.List[str]:
+        return list(inventory) if self.registry is None else [n for n in self.registry if n is not None]
 
     def describe(self, names: typing.Optional[typing.Sequence[str]] = None) -> str:
         parts = []
@@ -179,6 +232,8 @@ def public_state(state: ClusterState, index: int) -> int:
         return PUB_NOT_SYNCHRONIZED
     if stored == Stored.SYNCHRONIZED:
         return PUB_SYNCHRONIZED
+    if stored == Stored.INACTIVE:
+        return PUB_INACTIVE
     return PUB_SUSPENDED
 
 
@@ -220,6 +275,7 @@ def derive(
     if quorum_piles is not None:
         new.quorum_piles_last = list(quorum_piles)
     new.generation = old.generation + 1
+    new.revision = old.revision + 1
     for i in changed_piles(old, new):
         now = new.stored(i)
         if now == Stored.DISCONNECTED and old.stored(i) == Stored.SUSPENDED and i in new.sync:
@@ -228,6 +284,12 @@ def derive(
             new.sync[i] = new.generation
         elif now == Stored.SYNCHRONIZED:
             new.sync.pop(i, None)
+    return new
+
+
+def derive_metadata(old: ClusterState) -> ClusterState:
+    new = old.copy()
+    new.revision += 1
     return new
 
 

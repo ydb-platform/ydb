@@ -69,7 +69,7 @@ class CliSmokeTest(E2ECase):
         c.ctl("fault", "mock-pile1-1", "--op", "storage", "--piles", "pile2")
         data = c.cli("-d", "", "monitoring", "healthcheck", "-v", "--format=json", "--no-merge", "--no-cache",
                      "--timeout", "9000").json()
-        self.assertEqual(data["self_check_result"], "EMERGENCY")
+        self.assertEqual(data["self_check_result"], "MAINTENANCE_REQUIRED")
         issues = [i for i in data["issue_log"]
                   if "GROUP" in i["type"] and i["status"] == "RED"
                   and i["location"]["storage"]["pool"]["group"]["pile"]["name"]]
@@ -225,7 +225,7 @@ class CliStateMachineTest(E2ECase):
 
 @NEEDS_CLI
 class ThreePilesCliTest(unittest.TestCase):
-    """Scenario S3: the real server's 'Too many state changes' trap."""
+    """Scenario S3: omitted synchronization state survives unrelated admin changes."""
 
     @classmethod
     def setUpClass(cls):
@@ -247,22 +247,22 @@ class ThreePilesCliTest(unittest.TestCase):
         c.wait(lambda: self.stored() == "NOT_SYNCHRONIZED_2", 10, step=0.05, message="pile3 stored _2")
         g = c.generation("pile1")
         result = c.bridge("failover", "--pile", "pile2")
-        self.assertNotEqual(result.code, 0)
-        self.assertIn("Too many state changes in new configuration", result.out + result.err)
-        self.assertEqual(c.generation("pile1"), g)
+        self.assertEqual(result.code, 0, result.out + result.err)
+        self.assertEqual(self.stored(), "NOT_SYNCHRONIZED_2")
+        self.assertEqual(c.generation("pile1"), g + 1)
         c.wait(lambda: self.stored() == "SYNCHRONIZED", 30, message="pile3 synchronized")
         self.assertEqual(c.bridge("failover", "--pile", "pile2").code, 0)
         self.assertEqual(vector(c.bridge_list()),
                          [("pile1", "PRIMARY"), ("pile2", "DISCONNECTED"), ("pile3", "SYNCHRONIZED")])
 
-    def test_switchover_while_resyncing_knocks_the_pile_back_to_stage_one(self):
+    def test_switchover_preserves_an_omitted_resyncing_pile(self):
         c = self.cluster
         self.assertEqual(c.ctl("reset").code, 0)
         c.bridge("failover", "--pile", "pile3")
         c.bridge("rejoin", "--pile", "pile3")
         c.wait(lambda: self.stored() == "NOT_SYNCHRONIZED_2", 10, step=0.05, message="pile3 stored _2")
         self.assertEqual(c.bridge("switchover", "--new-primary", "pile2").code, 0)
-        self.assertEqual(self.stored(), "NOT_SYNCHRONIZED_1")
+        self.assertEqual(self.stored(), "NOT_SYNCHRONIZED_2")
         c.wait(lambda: self.stored() == "SYNCHRONIZED", 40, message="pile3 synchronized again")
         c.wait(lambda: c.vector("pile1") == ["SYNCHRONIZED", "PRIMARY", "SYNCHRONIZED"], 10, message="promoted")
 

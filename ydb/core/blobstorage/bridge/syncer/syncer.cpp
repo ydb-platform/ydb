@@ -221,6 +221,9 @@ namespace NKikimr::NBridge {
                         break;
                     }
                     RestoreQueue.push_back(blobId);
+                    if (sourceItem->Keep) {
+                        SourceKeepFlags.insert(blobId);
+                    }
                     SyncerDataStats->BytesTotal += blobId.BlobSize();
                     ++SyncerDataStats->BlobsTotal;
                     break;
@@ -460,6 +463,7 @@ namespace NKikimr::NBridge {
                 << " ErrorReason# " << msg.ErrorReason;
         } else if (msg.GroupId == SourceGroupId.GetRawId()) { // it was a data query for copying
             for (size_t i = 0; i < msg.ResponseSz; ++i) {
+                const bool sourceKeep = SourceKeepFlags.erase(msg.Responses[i].Id);
                 if (auto& r = msg.Responses[i]; r.Status == NKikimrProto::OK) {
                     // rewrite this blob with keep flag, if set
                     IssueQuery(true, std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
@@ -469,7 +473,7 @@ namespace NKikimr::NBridge {
                         .HandleClass = NKikimrBlobStorage::TabletLog,
                         .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
                         .WriteSource = TWriteSource::SyncerMergePut,
-                        .IssueKeepFlag = r.Keep,
+                        .IssueKeepFlag = r.Keep || sourceKeep,
                         .IgnoreBlock = true,
                     }));
                 } else if (r.Status == NKikimrProto::NODATA) {
@@ -489,7 +493,8 @@ namespace NKikimr::NBridge {
         } else if (msg.GroupId == TargetGroupId.GetRawId()) { // it was an index query for checking target blob
             for (size_t i = 0; i < msg.ResponseSz; ++i) {
                 if (auto& r = msg.Responses[i]; r.Status == NKikimrProto::OK) {
-                    // blob exists and okay; its redundancy has been restored
+                    // blob exists and okay; its redundancy has been restored; its keep flag was synced earlier
+                    SourceKeepFlags.erase(r.Id);
                     SyncerDataStats->BytesDone += r.Id.BlobSize();
                     ++SyncerDataStats->BlobsDone;
                 } else if (r.Status == NKikimrProto::NODATA) {
@@ -498,6 +503,7 @@ namespace NKikimr::NBridge {
                     IssueQuery(false, std::make_unique<TEvBlobStorage::TEvGet>(r.Id, 0, 0, TInstant::Max(),
                         NKikimrBlobStorage::FastRead), {}, quoterBytes);
                 } else if (r.Status == NKikimrProto::ERROR) {
+                    SourceKeepFlags.erase(r.Id);
                     SyncerDataStats->BytesError += r.Id.BlobSize();
                     ++SyncerDataStats->BlobsError;
                     errorReason = "TEvGet from target group failed with ERROR";

@@ -37,6 +37,14 @@ namespace NKikimr::NBlobDepot {
                 break;
         }
 
+        // the request with forced generation is addressed to the physical group at that very generation (subrequests of
+        // the bridge proxy, its syncers, interpile puts, phantom checks); only the DS proxy of that group may serve it, so
+        // it goes there, through the bridge proxy if the group is an inline pile
+        if (const auto *common = dynamic_cast<const TEvBlobStorage::TEvRequestCommon*>(ev->GetBase());
+                common && common->ForceGroupGeneration) {
+            doForward = true;
+        }
+
         if (doForward) {
             if (ProxyId) {
                 TActivationContext::Forward(ev, ProxyId);

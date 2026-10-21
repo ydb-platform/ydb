@@ -2167,6 +2167,9 @@ private:
     // pile with pending operation, which BSC has not finished yet; such pile is not synced in any case
     TBridgePileId GetPendingOperationPileId() const;
 
+    // sync state of the unsynced pile from the cluster state details, nullptr if the pile is not unsynced
+    const NKikimrBridge::TClusterStateDetails::TPileSyncState *FindPileSyncState(TBridgePileId pileId) const;
+
     // the pile is being removed, so new groups get no parts there
     bool IsBridgePileBeingRemoved(TBridgePileId pileId) const;
 

@@ -620,6 +620,7 @@ namespace NKikimr::NStorage {
         static std::optional<TString> CheckSynchronizedPiles(NKikimrBlobStorage::TStorageConfig *config);
         static std::optional<TString> UpdateClusterStateGeneration(NKikimrBlobStorage::TStorageConfig *config);
         static std::optional<TString> TrimHistoryEntries(NKikimrBlobStorage::TStorageConfig *config);
+        static std::optional<TString> UpdateBridgeGroupStateGenerations(NKikimrBlobStorage::TStorageConfig *config);
         static std::optional<TString> ExtractStateStorageConfig(NKikimrBlobStorage::TStorageConfig *config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -953,6 +954,17 @@ namespace NKikimr::NStorage {
     // and make every static group an inline pile of itself.
     std::optional<TString> ConvertStorageConfigToBridge(NKikimrBlobStorage::TStorageConfig *config,
         const NKikimrConfig::TBridgeConfig& bridgeConfig);
+
+    // Make VDisks of the static groups follow their new generations (each one is bumped by one); donors and VDisks being
+    // destroyed have older generations and keep them.
+    void UpdateStaticVDiskGenerations(NKikimrBlobStorage::TNodeWardenServiceSet *ss,
+        const THashMap<TGroupId, ui32>& newGenerations);
+
+    // Make parts of bridged static groups in the piles unsynced as of the cluster state generation provided: they are
+    // synced from the very beginning, and generations of all the parts and of their bridge proxy groups are bumped, so
+    // that requests routed by older group state are refused by VDisks.
+    void ResetStaticGroupPileParts(NKikimrBlobStorage::TStorageConfig *config, const std::vector<TBridgePileId>& pileIds,
+        ui64 becameUnsyncedGeneration);
 
 } // NKikimr::NStorage
 

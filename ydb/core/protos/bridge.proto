@@ -105,4 +105,9 @@ message TGroupState {
     // for every pile, synced or unsynced, indexed by pile id; the group has no parts in the piles beyond the end of the
     // list, which is the case for INACTIVE piles at the end of pile registry
     repeated TPile Pile = 1;
+
+    // generation of the cluster state this group state was made for; pile states the cluster state implies are the ones
+    // stages of piles are valid with, so the group can't be served with the cluster state older than that (requests are
+    // routed by both); 0 when not known
+    uint64 ClusterStateGeneration = 2;
 }

@@ -1,5 +1,18 @@
 # Changelog
 
+## [18.1.0-hotfix.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v18.1.0...v18.1.0-hotfix.1) (2026-10-21)
+
+
+### Features
+
+* **bridge:** backport pile healthcheck from [#4279](https://github.com/ydb-platform/ydb-embedded-ui/issues/4279) ([490ae61](https://github.com/ydb-platform/ydb-embedded-ui/commit/490ae618314db192bdae80ea8d22214eaec0b5b4))
+
+
+### Bug Fixes
+
+* backport ci compatibility fixes to hotfix 18.1.0 ([#4507](https://github.com/ydb-platform/ydb-embedded-ui/issues/4507)) ([81e22c3](https://github.com/ydb-platform/ydb-embedded-ui/commit/81e22c30c0dd37dd91ce75c8b126b4d4839c8ff2))
+* **healthcheck:** prepare compatibility for bridge piles ([a27db6a](https://github.com/ydb-platform/ydb-embedded-ui/commit/a27db6aea1753bfc081462c8d0e786795a4d90af))
+
 ## [18.1.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v18.0.1...v18.1.0) (2026-07-10)
 
 

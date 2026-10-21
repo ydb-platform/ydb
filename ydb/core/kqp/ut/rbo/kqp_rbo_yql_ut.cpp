@@ -1800,6 +1800,9 @@ FROM (
         auto plan = ExecuteExplainAnalyze(session, R"(
             SELECT * from `/Root/t1`; SELECT * from `/Root/t1`;
         )");
+        plan = ExecuteExplainAnalyze(session, R"(
+            SELECT 1; SELECT 1;
+        )");
     }
 
     Y_UNIT_TEST(Explain) {
@@ -7974,6 +7977,50 @@ FROM (
                         // Still explain these queries, but do not require the CBO stats invariant when CBO is explicitly disabled
                         // in the query or until the known gaps are fixed.
                         /*queriesWithoutCboCheck=*/{});
+    }
+
+    class TExplainPlanTestContextTPCDS {
+    public:
+        explicit TExplainPlanTestContextTPCDS(bool inlineJoinFiltersAfterCBO = false)
+            : AppConfig(CreateExplainPlanTestAppConfig(inlineJoinFiltersAfterCBO))
+            , Kikimr(NKqp::TKikimrSettings(AppConfig).SetWithSampleTables(false))
+            , Session(CreateSession())
+        {
+        }
+
+        NYdb::NQuery::TSession& GetSession() {
+            return Session;
+        }
+
+        TKikimrRunner& GetKikimr() {
+            return Kikimr;
+        }
+
+    private:
+        NYdb::NQuery::TSession CreateSession() {
+            auto db = Kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[EBenchType::TPCDS], BenchmarkSchemaPath[EBenchType::TPCDS], true);
+            return CreateQuerySession(Kikimr);
+        }
+
+    private:
+        NKikimrConfig::TAppConfig AppConfig;
+        TKikimrRunner Kikimr;
+        NYdb::NQuery::TSession Session;
+    };
+
+    Y_UNIT_TEST(ExplainMultipleSelectTPCDS) {
+        TExplainPlanTestContextTPCDS testContext;
+        auto& session = testContext.GetSession();
+
+        TString q = GetFullPath(BenchmarkQueryPath[EBenchType::TPCDS], ToString(23) + ".yql");
+        const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+        const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+        const TString round = R"($round = ($x,$y) -> {return $x;};)";
+
+        q = round + "\n" + toDecimal + "\n" + toDecimalMax + "\n" + q;
+        auto plan = ExecuteExplainAnalyze(session, q);
     }
 
     Y_UNIT_TEST(ClickBench_YQL) {

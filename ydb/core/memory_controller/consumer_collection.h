@@ -40,11 +40,21 @@ struct TConsumerCollectionSnapshot {
         ui64 PlannedLimit = 0; // explicit target admitted by MC, or the retained grant while waiting
     };
 
+    // Reports and membership stay fixed; only PlannedLimit changes during the round.
     TVector<TEntry> Entries;
 
-    TConsumerReport GetTotal() const;
+    TConsumerReport GetTotal() const {
+        return Total;
+    }
+
+    // Explicit Desired replaces the default share based on reported demand.
+    ui64 ComputeLimitShare(const TEntry& entry, ui64 limitBytes) const;
     TVector<TConsumerShare> ComputeLimitShares(ui64 limitBytes) const;
     ui64 GetDesiredLimit(ui64 defaultLimitBytes) const;
+
+private:
+    friend class TConsumerCollection;
+    TConsumerReport Total;
 };
 
 // Per-kind set of registrants owned by the memory controller; every method runs on its thread.
@@ -67,13 +77,7 @@ public:
         return Registrants.size();
     }
 
-    // Sum of the clamped reports over live entries.
-    TConsumerReport GetTotal() const;
     TConsumerCollectionSnapshot GetSnapshot() const;
-
-    // Default shares use reported demand; an explicit Desired replaces only its
-    // registrant's share. Their sum may exceed the default kind limit.
-    TVector<TConsumerShare> ComputeLimitShares(ui64 limitBytes) const;
 
     // Release request: bytes each registrant is asked to free, proportional to and capped by its Reclaimable; zero requests are omitted.
     TVector<TConsumerShare> ComputeReleaseRequests(ui64 limitBytes) const;

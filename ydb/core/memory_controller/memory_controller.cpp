@@ -1,7 +1,7 @@
-#include "limit_budget.h"
 #include "memory_controller.h"
 #include "memory_controller_config.h"
 #include "consumer_collection.h"
+#include "limit_budget.h"
 #include "memtable_collection.h"
 
 #include <ydb/core/base/counters.h>
@@ -601,12 +601,9 @@ private:
                 limitBytes = SafeDiff(limitBytes, cacheLimitReduction);
             }
             if (const auto* snapshot = snapshots.FindPtr(consumer.Kind)) {
-                const auto shares = snapshot->ComputeLimitShares(limitBytes);
-                Y_ABORT_UNLESS(shares.size() == snapshot->Entries.size());
-                for (const auto& [index, share] : Enumerate(shares)) {
-                    const auto& entry = snapshot->Entries[index];
-                    requests.push_back({{consumer.Kind, share.Registrant}, entry.Report.Used,
-                        share.Bytes, GetLimitMultiplier(consumer.Kind), entry.Desired.has_value()});
+                for (const auto& entry : snapshot->Entries) {
+                    requests.push_back({{consumer.Kind, entry.Registrant}, entry.Report.Used,
+                        snapshot->ComputeLimitShare(entry, limitBytes), GetLimitMultiplier(consumer.Kind), entry.Desired.has_value()});
                 }
             } else {
                 requests.push_back({{consumer.Kind, {}}, consumer.Consumption, limitBytes, GetLimitMultiplier(consumer.Kind)});
@@ -814,9 +811,8 @@ private:
         }
 
         ui64 total = 0;
-        const auto shares = snapshot->ComputeLimitShares(defaultLimit);
-        for (const auto& [index, entry] : Enumerate(snapshot->Entries)) {
-            const ui64 bytes = entry.Desired ? entry.PlannedLimit : shares[index].Bytes;
+        for (const auto& entry : snapshot->Entries) {
+            const ui64 bytes = entry.Desired ? entry.PlannedLimit : snapshot->ComputeLimitShare(entry, defaultLimit);
             // A sibling's unused grant must not hide this registrant's unreleased usage.
             total = SafeSum(total, Max(entry.Report.Used, GetLimitReservation(consumer.Kind, bytes)));
         }

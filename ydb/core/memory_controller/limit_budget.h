@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/memory_controller_iface.h>
 
-#include <util/generic/map.h>
+#include <util/generic/hash.h>
 #include <util/generic/vector.h>
 
 namespace NKikimr::NMemory {
@@ -48,7 +48,7 @@ private:
 
     static ui64 GetCharge(const TState& state);
 
-    TMap<TKey, TState> States;
+    THashMap<TKey, TState> States;
 };
 
 } // namespace NKikimr::NMemory

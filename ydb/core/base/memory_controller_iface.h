@@ -52,9 +52,7 @@ static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_MEMORY), "expected EvEnd <
 
 struct TEvConsumerRegister : public TEventLocal<TEvConsumerRegister, EvConsumerRegister> {
     const EMemoryConsumerKind Kind;
-    // Capacity the consumer may use before it receives its first MC limit.
-    // MC must reserve it even when current usage is zero. Zero means the
-    // consumer cannot grow until MC grants a limit; it does not mean unknown.
+    // Reserved capacity before the first grant; zero forbids growth until granted.
     const ui64 InitialLimitBytes;
 
     TEvConsumerRegister(EMemoryConsumerKind kind, ui64 initialLimitBytes = 0)
@@ -89,11 +87,8 @@ struct TEvConsumerLimit : public TEventLocal<TEvConsumerLimit, EvConsumerLimit> 
     }
 };
 
-// A registered consumer replaces its target for subsequent allocation rounds.
-// Desired is a total limit, in the same units as TEvConsumerLimit::LimitBytes.
-// The configured share is used until the first request; zero is an explicit
-// release. An increase waits for the complete target to fit, then MC sends
-// TEvConsumerLimit. The consumer must keep using its previous grant meanwhile.
+// Replaces the configured share with a total limit in TEvConsumerLimit units; zero releases it.
+// Increases wait until the full target fits. Keep using the previous grant until TEvConsumerLimit.
 struct TEvConsumerDemand : public TEventLocal<TEvConsumerDemand, EvConsumerDemand> {
     const EMemoryConsumerKind Kind;
     const ui64 Desired;

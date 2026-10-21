@@ -30,7 +30,7 @@ TConsumerReport TRegistrantConsumer::GetReport() const {
 TIntrusivePtr<TRegistrantConsumer> TConsumerCollection::Register(TActorId registrant) {
     // A fresh object even for the same actor: a pointer handed out earlier may outlive the registration that got it
     auto& slot = Registrants[registrant];
-    slot = {MakeIntrusive<TRegistrantConsumer>(), std::nullopt};
+    slot = {.Consumer = MakeIntrusive<TRegistrantConsumer>()};
     return slot.Consumer;
 }
 
@@ -50,49 +50,34 @@ TConsumerCollectionSnapshot TConsumerCollection::GetSnapshot() const {
     TConsumerCollectionSnapshot result;
     result.Entries.reserve(Registrants.size());
     for (const auto& [registrant, entry] : Registrants) {
-        result.Entries.push_back({registrant, entry.Consumer->GetReport(), entry.Desired, entry.Desired.value_or(0)});
+        const auto report = entry.Consumer->GetReport();
+        result.Entries.push_back({registrant, report, entry.Desired, entry.Desired.value_or(0)});
+        result.Total.Used += report.Used;
+        result.Total.Demand += report.Demand;
+        result.Total.Reclaimable += report.Reclaimable;
     }
     return result;
 }
 
-TConsumerReport TConsumerCollection::GetTotal() const {
-    return GetSnapshot().GetTotal();
-}
-
-TConsumerReport TConsumerCollectionSnapshot::GetTotal() const {
-    TConsumerReport total;
-    for (const auto& entry : Entries) {
-        total.Used += entry.Report.Used;
-        total.Demand += entry.Report.Demand;
-        total.Reclaimable += entry.Report.Reclaimable;
-    }
-    return total;
-}
-
-TVector<TConsumerShare> TConsumerCollection::ComputeLimitShares(ui64 limitBytes) const {
-    return GetSnapshot().ComputeLimitShares(limitBytes);
-}
-
-TVector<TConsumerShare> TConsumerCollectionSnapshot::ComputeLimitShares(ui64 limitBytes) const {
-    TVector<TConsumerShare> result(::Reserve(Entries.size()));
-    if (Entries.empty()) {
-        return result;
-    }
-    ui64 totalDemand = 0;
-    for (const auto& entry : Entries) {
-        totalDemand += entry.Report.Demand;
+ui64 TConsumerCollectionSnapshot::ComputeLimitShare(const TEntry& entry, ui64 limitBytes) const {
+    if (entry.Desired) {
+        return *entry.Desired;
     }
     // A slice ignores demand so a usage-only cache can grow out of zero.
     const ui64 bootstrapShare = limitBytes / BootstrapLimitDivisor / Entries.size();
     const ui64 rest = limitBytes - bootstrapShare * Entries.size();
-    const ui64 covered = Min(totalDemand, rest);
+    const ui64 covered = Min(Total.Demand, rest);
     const ui64 surplusShare = (rest - covered) / Entries.size();
+    const ui64 demandShare = Total.Demand
+        ? static_cast<ui64>(static_cast<unsigned __int128>(covered) * entry.Report.Demand / Total.Demand)
+        : 0;
+    return bootstrapShare + demandShare + surplusShare;
+}
+
+TVector<TConsumerShare> TConsumerCollectionSnapshot::ComputeLimitShares(ui64 limitBytes) const {
+    TVector<TConsumerShare> result(::Reserve(Entries.size()));
     for (const auto& entry : Entries) {
-        const ui64 demandShare = totalDemand
-            ? static_cast<ui64>(static_cast<unsigned __int128>(covered) * entry.Report.Demand / totalDemand)
-            : 0;
-        result.push_back({.Registrant = entry.Registrant,
-            .Bytes = entry.Desired.value_or(bootstrapShare + demandShare + surplusShare)});
+        result.push_back({.Registrant = entry.Registrant, .Bytes = ComputeLimitShare(entry, limitBytes)});
     }
     return result;
 }
@@ -106,10 +91,8 @@ ui64 TConsumerCollectionSnapshot::GetDesiredLimit(ui64 defaultLimitBytes) const 
         return defaultLimitBytes;
     }
     ui64 total = 0;
-    const auto shares = ComputeLimitShares(defaultLimitBytes);
-    for (size_t i = 0; i < shares.size(); ++i) {
-        const auto& entry = Entries[i];
-        const ui64 bytes = entry.Desired ? entry.PlannedLimit : shares[i].Bytes;
+    for (const auto& entry : Entries) {
+        const ui64 bytes = entry.Desired ? entry.PlannedLimit : ComputeLimitShare(entry, defaultLimitBytes);
         total += Min(bytes, std::numeric_limits<ui64>::max() - total);
     }
     return total;

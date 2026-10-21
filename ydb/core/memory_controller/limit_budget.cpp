@@ -141,8 +141,8 @@ void TMemoryLimitBudget::Forget(const TKey& key) {
 }
 
 ui64 TMemoryLimitBudget::GetLimit(const TKey& key) const {
-    auto it = States.find(key);
-    return it == States.end() ? 0 : it->second.Limit;
+    const auto* state = States.FindPtr(key);
+    return state ? state->Limit : 0;
 }
 
 ui64 TMemoryLimitBudget::GetCommitted() const {

@@ -38,26 +38,26 @@ Y_UNIT_TEST(SumsRegistrants) {
     auto c3 = collection.Register(Registrant(3));
     UNIT_ASSERT_VALUES_EQUAL(collection.GetRegistrantsCount(), 3);
     UNIT_ASSERT(c1.Get() != c2.Get() && c2.Get() != c3.Get() && c1.Get() != c3.Get());
-    AssertReport(collection.GetTotal(), 0, 0, 0);
+    AssertReport(collection.GetSnapshot().GetTotal(), 0, 0, 0);
 
     c1->SetReport({.Used = 100, .Demand = 150, .Reclaimable = 40});
     c2->SetReport({.Used = 200, .Demand = 200, .Reclaimable = 0});
     c3->SetReport({.Used = 300, .Demand = 350, .Reclaimable = 300});
-    AssertReport(collection.GetTotal(), 600, 700, 340);
+    AssertReport(collection.GetSnapshot().GetTotal(), 600, 700, 340);
 
     c1->SetReport({.Used = 50, .Demand = 60, .Reclaimable = 10});
-    AssertReport(collection.GetTotal(), 550, 610, 310);
+    AssertReport(collection.GetSnapshot().GetTotal(), 550, 610, 310);
 
     UNIT_ASSERT(collection.Unregister(Registrant(2)));
     UNIT_ASSERT_VALUES_EQUAL(collection.GetRegistrantsCount(), 2);
-    AssertReport(collection.GetTotal(), 350, 410, 310);
+    AssertReport(collection.GetSnapshot().GetTotal(), 350, 410, 310);
 
     UNIT_ASSERT(!collection.Unregister(Registrant(2)));
-    AssertReport(collection.GetTotal(), 350, 410, 310);
+    AssertReport(collection.GetSnapshot().GetTotal(), 350, 410, 310);
 
     // A detached registrant's later reports change nothing
     c2->SetReport({.Used = 999, .Demand = 999, .Reclaimable = 999});
-    AssertReport(collection.GetTotal(), 350, 410, 310);
+    AssertReport(collection.GetSnapshot().GetTotal(), 350, 410, 310);
 }
 
 Y_UNIT_TEST(SnapshotKeepsReportsAndMembershipFromOneRead) {
@@ -77,7 +77,7 @@ Y_UNIT_TEST(SnapshotKeepsReportsAndMembershipFromOneRead) {
     UNIT_ASSERT_VALUES_EQUAL(shares.size(), 2);
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 235);
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 165);
-    AssertReport(collection.GetTotal(), 3000, 3000, 0);
+    AssertReport(collection.GetSnapshot().GetTotal(), 3000, 3000, 0);
 }
 
 Y_UNIT_TEST(ReRegisterHandsOutFreshObject) {
@@ -85,17 +85,17 @@ Y_UNIT_TEST(ReRegisterHandsOutFreshObject) {
 
     auto stale = collection.Register(Registrant(7));
     stale->SetConsumption(1000);
-    AssertReport(collection.GetTotal(), 1000, 1000, 0);
+    AssertReport(collection.GetSnapshot().GetTotal(), 1000, 1000, 0);
 
     // The comeback gets a new object, so the old pointer no longer reaches the sum
     auto fresh = collection.Register(Registrant(7));
     UNIT_ASSERT(stale.Get() != fresh.Get());
     UNIT_ASSERT_VALUES_EQUAL(collection.GetRegistrantsCount(), 1);
-    AssertReport(collection.GetTotal(), 0, 0, 0);
+    AssertReport(collection.GetSnapshot().GetTotal(), 0, 0, 0);
 
     fresh->SetConsumption(500);
     stale->SetConsumption(2000);
-    AssertReport(collection.GetTotal(), 500, 500, 0);
+    AssertReport(collection.GetSnapshot().GetTotal(), 500, 500, 0);
 }
 
 Y_UNIT_TEST(DesiredLimitBelongsToRegistrationAndSnapshot) {
@@ -112,14 +112,14 @@ Y_UNIT_TEST(DesiredLimitBelongsToRegistrationAndSnapshot) {
 
     // A usage report neither supplies nor replaces a requested limit.
     first->SetReport({.Used = 10, .Demand = 1000, .Reclaimable = 0});
-    UNIT_ASSERT_VALUES_EQUAL(AsMap(collection.ComputeLimitShares(100)).at(Registrant(1)), 90);
+    UNIT_ASSERT_VALUES_EQUAL(AsMap(collection.GetSnapshot().ComputeLimitShares(100)).at(Registrant(1)), 90);
     UNIT_ASSERT(collection.SetDesired(Registrant(1), 0));
     UNIT_ASSERT(collection.SetDesired(Registrant(2), 30));
     UNIT_ASSERT_VALUES_EQUAL(collection.GetSnapshot().GetDesiredLimit(100), 30);
     UNIT_ASSERT_VALUES_EQUAL(snapshot.GetDesiredLimit(100), 140);
 
     collection.Register(Registrant(1)); // fresh registration restores its default
-    shares = AsMap(collection.ComputeLimitShares(100));
+    shares = AsMap(collection.GetSnapshot().ComputeLimitShares(100));
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 50);
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 30);
     UNIT_ASSERT(collection.Unregister(Registrant(2)));
@@ -153,7 +153,7 @@ Y_UNIT_TEST(ClampsEachEntry) {
 
     invalid->SetReport({.Used = 100, .Demand = 50, .Reclaimable = 200});
     AssertReport(invalid->GetReport(), 100, 100, 100);
-    AssertReport(collection.GetTotal(), 600, 600, 100);
+    AssertReport(collection.GetSnapshot().GetTotal(), 600, 600, 100);
 }
 
 Y_UNIT_TEST(LimitShareSingleRegistrantGetsWholeLimit) {
@@ -161,17 +161,17 @@ Y_UNIT_TEST(LimitShareSingleRegistrantGetsWholeLimit) {
     auto only = collection.Register(Registrant(1));
 
     // A cold single registrant with zero demand still gets the whole limit
-    auto shares = AsMap(collection.ComputeLimitShares(1000));
+    auto shares = AsMap(collection.GetSnapshot().ComputeLimitShares(1000));
     UNIT_ASSERT_VALUES_EQUAL(shares.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 1000);
 
     only->SetReport({.Used = 300, .Demand = 700, .Reclaimable = 0});
-    shares = AsMap(collection.ComputeLimitShares(1000));
+    shares = AsMap(collection.GetSnapshot().ComputeLimitShares(1000));
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 1000);
 
     // Demand above the limit still yields exactly the limit
     only->SetReport({.Used = 300, .Demand = 5000, .Reclaimable = 0});
-    shares = AsMap(collection.ComputeLimitShares(1000));
+    shares = AsMap(collection.GetSnapshot().ComputeLimitShares(1000));
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 1000);
 }
 
@@ -184,25 +184,25 @@ Y_UNIT_TEST(LimitShareSplitsByDemandPlusSurplus) {
     c2->SetReport({.Used = 200, .Demand = 200, .Reclaimable = 0});
 
     // Demands 300 + 200 fit into 600: proportional cut plus half of the 100 surplus each
-    auto shares = AsMap(collection.ComputeLimitShares(600));
+    auto shares = AsMap(collection.GetSnapshot().ComputeLimitShares(600));
     UNIT_ASSERT_VALUES_EQUAL(shares.size(), 2);
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 350);
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 250);
 
     // Demands exceed 400: the 25-byte bootstrap slices plus the proportional cut of the remaining 350
-    shares = AsMap(collection.ComputeLimitShares(400));
+    shares = AsMap(collection.GetSnapshot().ComputeLimitShares(400));
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 235);
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 165);
 
     // An idle registrant still receives its surplus split so it can start growing
     c1->SetReport({});
-    shares = AsMap(collection.ComputeLimitShares(600));
+    shares = AsMap(collection.GetSnapshot().ComputeLimitShares(600));
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 200);
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 400);
 
     // With no demand at all the whole limit splits equally
     c2->SetReport({});
-    shares = AsMap(collection.ComputeLimitShares(600));
+    shares = AsMap(collection.GetSnapshot().ComputeLimitShares(600));
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 300);
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 300);
 }
@@ -217,7 +217,7 @@ Y_UNIT_TEST(LimitShareColdRegistrantGrowsOutOfZero) {
     // Both obey their limits and report only Used, the way the existing caches do
     ui64 previous = 0;
     for (int tick = 0; tick < 60; ++tick) {
-        auto shares = AsMap(collection.ComputeLimitShares(Limit));
+        auto shares = AsMap(collection.GetSnapshot().ComputeLimitShares(Limit));
         UNIT_ASSERT_LE(shares.at(Registrant(1)) + shares.at(Registrant(2)), Limit);
         if (tick < 10) {
             UNIT_ASSERT_GT(shares.at(Registrant(2)), previous);
@@ -307,11 +307,12 @@ Y_UNIT_TEST(ConcurrentReports) {
     }
     // The writers run for the whole loop; each replacement is written to before the next round
     for (size_t round = 0; round < Rounds; ++round) {
-        auto total = collection.GetTotal();
+        const auto snapshot = collection.GetSnapshot();
+        const auto total = snapshot.GetTotal();
         UNIT_ASSERT_C(total.Used <= (ReporterCount + 1) * FinalUsed, "sum overflow, total.Used = " << total.Used);
         UNIT_ASSERT_C(total.Reclaimable <= total.Used, "clamp broken, total.Reclaimable = " << total.Reclaimable);
         UNIT_ASSERT_C(total.Demand >= total.Used, "clamp broken, total.Demand = " << total.Demand);
-        collection.ComputeLimitShares(total.Used / 2);
+        snapshot.ComputeLimitShares(total.Used / 2);
         collection.ComputeReleaseRequests(total.Used / 2);
         UNIT_ASSERT(collection.Unregister(Registrant(100)));
         victims.push_back(collection.Register(Registrant(100)));
@@ -327,7 +328,7 @@ Y_UNIT_TEST(ConcurrentReports) {
     }
 
     // Every writer ends on a known report into its current object, so the sum is exact
-    AssertReport(collection.GetTotal(), (ReporterCount + 1) * FinalUsed, ReporterCount * (FinalUsed + 2) + FinalUsed, 0);
+    AssertReport(collection.GetSnapshot().GetTotal(), (ReporterCount + 1) * FinalUsed, ReporterCount * (FinalUsed + 2) + FinalUsed, 0);
 }
 
 }

@@ -2,11 +2,13 @@ LIBRARY()
 
 SRCS(
     consumer_collection.cpp
+    limit_budget.cpp
     memory_controller.cpp
     memtable_collection.cpp
 )
 
 PEERDIR(
+    library/cpp/iterator
     ydb/core/base
     ydb/core/cms/console
     ydb/core/mon_alloc

@@ -23,6 +23,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     consumer_collection_ut.cpp
+    limit_budget_ut.cpp
     memory_controller_ut.cpp
     memtable_collection_ut.cpp
 )

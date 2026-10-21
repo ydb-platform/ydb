@@ -43,6 +43,7 @@ enum EEvMemory {
     EvMemTableUnregister,
 
     EvConsumerUnregister,
+    EvConsumerDemand,
 
     EvEnd
 };
@@ -51,13 +52,18 @@ static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_MEMORY), "expected EvEnd <
 
 struct TEvConsumerRegister : public TEventLocal<TEvConsumerRegister, EvConsumerRegister> {
     const EMemoryConsumerKind Kind;
+    // Capacity the consumer may use before it receives its first MC limit.
+    // MC must reserve it even when current usage is zero. Zero means the
+    // consumer cannot grow until MC grants a limit; it does not mean unknown.
+    const ui64 InitialLimitBytes;
 
-    TEvConsumerRegister(EMemoryConsumerKind kind)
+    TEvConsumerRegister(EMemoryConsumerKind kind, ui64 initialLimitBytes = 0)
         : Kind(kind)
+        , InitialLimitBytes(initialLimitBytes)
     {}
 };
 
-// Sent by the registrant itself: a consumer that stops serving its kind takes its bytes out of the accounting
+// Sent after the registrant has stopped using its grant and serving this kind.
 struct TEvConsumerUnregister : public TEventLocal<TEvConsumerUnregister, EvConsumerUnregister> {
     const EMemoryConsumerKind Kind;
 
@@ -78,8 +84,24 @@ struct TEvConsumerLimit : public TEventLocal<TEvConsumerLimit, EvConsumerLimit> 
     ui64 LimitBytes;
 
     TEvConsumerLimit(ui64 limitBytes)
-        : LimitBytes(limitBytes) {
+        : LimitBytes(limitBytes)
+    {
     }
+};
+
+// A registered consumer replaces its target for subsequent allocation rounds.
+// Desired is a total limit, in the same units as TEvConsumerLimit::LimitBytes.
+// The configured share is used until the first request; zero is an explicit
+// release. An increase waits for the complete target to fit, then MC sends
+// TEvConsumerLimit. The consumer must keep using its previous grant meanwhile.
+struct TEvConsumerDemand : public TEventLocal<TEvConsumerDemand, EvConsumerDemand> {
+    const EMemoryConsumerKind Kind;
+    const ui64 Desired;
+
+    TEvConsumerDemand(EMemoryConsumerKind kind, ui64 desired)
+        : Kind(kind)
+        , Desired(desired)
+    {}
 };
 
 struct TEvMemTableRegister : public TEventLocal<TEvMemTableRegister, EvMemTableRegister> {

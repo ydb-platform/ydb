@@ -60,6 +60,26 @@ Y_UNIT_TEST(SumsRegistrants) {
     AssertReport(collection.GetTotal(), 350, 410, 310);
 }
 
+Y_UNIT_TEST(SnapshotKeepsReportsAndMembershipFromOneRead) {
+    TConsumerCollection collection;
+    auto first = collection.Register(Registrant(1));
+    auto second = collection.Register(Registrant(2));
+    first->SetReport({.Used = 100, .Demand = 300, .Reclaimable = 40});
+    second->SetReport({.Used = 200, .Demand = 200, .Reclaimable = 20});
+    const auto snapshot = collection.GetSnapshot();
+
+    first->SetConsumption(1000);
+    UNIT_ASSERT(collection.Unregister(Registrant(2)));
+    collection.Register(Registrant(3))->SetConsumption(2000);
+
+    AssertReport(snapshot.GetTotal(), 300, 500, 60);
+    const auto shares = AsMap(snapshot.ComputeLimitShares(400));
+    UNIT_ASSERT_VALUES_EQUAL(shares.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 235);
+    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 165);
+    AssertReport(collection.GetTotal(), 3000, 3000, 0);
+}
+
 Y_UNIT_TEST(ReRegisterHandsOutFreshObject) {
     TConsumerCollection collection;
 
@@ -76,6 +96,50 @@ Y_UNIT_TEST(ReRegisterHandsOutFreshObject) {
     fresh->SetConsumption(500);
     stale->SetConsumption(2000);
     AssertReport(collection.GetTotal(), 500, 500, 0);
+}
+
+Y_UNIT_TEST(DesiredLimitBelongsToRegistrationAndSnapshot) {
+    TConsumerCollection collection;
+    auto first = collection.Register(Registrant(1));
+    collection.Register(Registrant(2));
+    UNIT_ASSERT(!collection.SetDesired(Registrant(3), 999));
+    UNIT_ASSERT(collection.SetDesired(Registrant(1), 90));
+    const auto snapshot = collection.GetSnapshot();
+    UNIT_ASSERT_VALUES_EQUAL(snapshot.GetDesiredLimit(100), 140);
+    auto shares = AsMap(snapshot.ComputeLimitShares(100));
+    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 90);
+    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 50);
+
+    // A usage report neither supplies nor replaces a requested limit.
+    first->SetReport({.Used = 10, .Demand = 1000, .Reclaimable = 0});
+    UNIT_ASSERT_VALUES_EQUAL(AsMap(collection.ComputeLimitShares(100)).at(Registrant(1)), 90);
+    UNIT_ASSERT(collection.SetDesired(Registrant(1), 0));
+    UNIT_ASSERT(collection.SetDesired(Registrant(2), 30));
+    UNIT_ASSERT_VALUES_EQUAL(collection.GetSnapshot().GetDesiredLimit(100), 30);
+    UNIT_ASSERT_VALUES_EQUAL(snapshot.GetDesiredLimit(100), 140);
+
+    collection.Register(Registrant(1)); // fresh registration restores its default
+    shares = AsMap(collection.ComputeLimitShares(100));
+    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 50);
+    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 30);
+    UNIT_ASSERT(collection.Unregister(Registrant(2)));
+    UNIT_ASSERT(!collection.SetDesired(Registrant(2), 999));
+}
+
+Y_UNIT_TEST(PlanningUsesRetainedLimitWithoutChangingTheRequest) {
+    TConsumerCollection collection;
+    collection.Register(Registrant(1));
+    collection.Register(Registrant(2));
+    collection.SetDesired(Registrant(1), 101);
+    auto snapshot = collection.GetSnapshot();
+    for (auto& entry : snapshot.Entries) {
+        if (entry.Registrant == Registrant(1)) {
+            entry.PlannedLimit = 17;
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(snapshot.GetDesiredLimit(100), 67);
+    // Planning cannot erase or clip the target passed to the grant allocator.
+    UNIT_ASSERT_VALUES_EQUAL(AsMap(snapshot.ComputeLimitShares(100)).at(Registrant(1)), 101);
 }
 
 Y_UNIT_TEST(ClampsEachEntry) {

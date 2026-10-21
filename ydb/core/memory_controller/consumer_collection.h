@@ -6,6 +6,8 @@
 #include <util/generic/vector.h>
 
 #include <atomic>
+#include <limits>
+#include <optional>
 
 namespace NKikimr::NMemory {
 
@@ -29,6 +31,22 @@ struct TConsumerShare {
     ui64 Bytes = 0;
 };
 
+// One read of every live report, reused for totals and per-registrant allocation.
+struct TConsumerCollectionSnapshot {
+    struct TEntry {
+        TActorId Registrant;
+        TConsumerReport Report;
+        std::optional<ui64> Desired;
+        ui64 PlannedLimit = 0; // explicit target admitted by MC, or the retained grant while waiting
+    };
+
+    TVector<TEntry> Entries;
+
+    TConsumerReport GetTotal() const;
+    TVector<TConsumerShare> ComputeLimitShares(ui64 limitBytes) const;
+    ui64 GetDesiredLimit(ui64 defaultLimitBytes) const;
+};
+
 // Per-kind set of registrants owned by the memory controller; every method runs on its thread.
 class TConsumerCollection {
 public:
@@ -37,6 +55,9 @@ public:
 
     // Drops the registrant's entry; false for an actor that holds none.
     bool Unregister(TActorId registrant);
+
+    // A request belongs to this registration, independently of its usage report.
+    bool SetDesired(TActorId registrant, ui64 desired);
 
     bool IsEmpty() const {
         return Registrants.empty();
@@ -48,15 +69,21 @@ public:
 
     // Sum of the clamped reports over live entries.
     TConsumerReport GetTotal() const;
+    TConsumerCollectionSnapshot GetSnapshot() const;
 
-    // Limit share: an equal bootstrap slice, a demand-proportional cut of the rest and an equal split of what demand leaves over.
+    // Default shares use reported demand; an explicit Desired replaces only its
+    // registrant's share. Their sum may exceed the default kind limit.
     TVector<TConsumerShare> ComputeLimitShares(ui64 limitBytes) const;
 
     // Release request: bytes each registrant is asked to free, proportional to and capped by its Reclaimable; zero requests are omitted.
     TVector<TConsumerShare> ComputeReleaseRequests(ui64 limitBytes) const;
 
 private:
-    TMap<TActorId, TIntrusivePtr<TRegistrantConsumer>> Registrants;
+    struct TRegistrant {
+        TIntrusivePtr<TRegistrantConsumer> Consumer;
+        std::optional<ui64> Desired;
+    };
+    TMap<TActorId, TRegistrant> Registrants;
 };
 
 }

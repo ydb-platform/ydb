@@ -4,6 +4,7 @@
 #include "events.h"
 
 #include <ydb/core/base/memory_controller_iface.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/limiter/grouped_memory/service/actor.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -103,7 +104,7 @@ class TCompMemoryLimiterPolicy {
 public:
     static const inline TString Name = "Comp";
     static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::ColumnTablesCompGroupedMemory;
-    static constexpr ui64 HardLimitMultiplier = 4;
+    static constexpr ui64 HardLimitMultiplier = TGlobalLimits::CompGroupedMemoryHardLimitMultiplier;
 };
 
 using TCompMemoryLimiterOperator = TServiceOperatorImpl<TCompMemoryLimiterPolicy>;

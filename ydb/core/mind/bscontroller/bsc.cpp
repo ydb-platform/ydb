@@ -315,6 +315,7 @@ void TBlobStorageController::OnActivateExecutor(const TActorContext& ctx) {
 
     // create storage pool stats monitor
     StoragePoolStat = std::make_unique<TStoragePoolStat>(GetServiceCounters(AppData()->Counters, "storage_pool_stat"));
+    BridgeSyncCounters = std::make_unique<TBridgeSyncCounters>(GetServiceCounters(AppData()->Counters, "bridge"));
 
     // initiate timer
     ScrubState.HandleTimer();

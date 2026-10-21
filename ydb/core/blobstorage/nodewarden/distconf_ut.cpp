@@ -3799,7 +3799,7 @@ selector_config: []
         ui32 disableRequests = 0;
         runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType
-                    && ev->GetRecipientRewrite() == MakeBlobStorageNodeWardenID(1)) {
+                    && ev->Recipient == MakeBlobStorageNodeWardenID(1)) {
                 const auto& msg = *ev->Get<TEvNodeWardenStorageConfig>();
                 if (!msg.SelfManagementEnabled) {
                     UNIT_ASSERT_VALUES_EQUAL(msg.Config->GetFingerprint(), fixture.Config.GetFingerprint());

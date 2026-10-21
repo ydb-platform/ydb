@@ -1,6 +1,6 @@
 # Table data compression
 
-{{ ydb-short-name }} lets you compress table data on disk to reduce storage usage. Compression settings differ for [row-oriented](datamodel/table.md#row-oriented-tables) and [column-oriented](datamodel/table.md#column-oriented-tables) tables. YQL syntax is documented in [column families](../yql/reference/syntax/create_table/family.md) and the `COMPRESSION` option in [CREATE TABLE](../yql/reference/syntax/create_table/index.md).
+{{ ydb-short-name }} lets you compress table data on disk to reduce storage usage. Compression settings differ for [row-oriented](datamodel/table.md#row-oriented-tables) and [column-oriented](datamodel/table.md#column-oriented-tables) tables. YQL syntax is documented in [column families](../yql/reference/syntax/create_table/family.md) for row-oriented tables and the `COMPRESSION` column option in [CREATE TABLE](../yql/reference/syntax/create_table/index.md).
 
 ## Row-oriented tables {#row-oriented-tables}
 
@@ -8,14 +8,17 @@ In row-oriented tables, compression is configured at the [column group](datamode
 
 Each column group has a `COMPRESSION` codec. Allowed values:
 
-* `off` — no compression;
-* `lz4` — [LZ4](https://en.wikipedia.org/wiki/LZ4_(compression_algorithm)).
+- `off` — no compression;
+- `lz4` — [LZ4](https://en.wikipedia.org/wiki/LZ4_(compression_algorithm)).
 
 Column groups in row-oriented tables do **not** support other algorithms, including `zstd`. Primary key columns always belong to the `default` group and cannot be moved to another group.
 
-Changes to compression codecs and storage types are not applied immediately to data already on disk: new settings take effect during subsequent background [LSM compaction](glossary.md#compaction). After `ALTER TABLE`, disk space savings appear gradually.
+Changes to compression codecs and storage types are not applied immediately to data already on disk: new parameters take effect during subsequent background [LSM compaction](glossary.md#compaction). If you change these parameters in an existing table with `ALTER TABLE`, disk space savings also appear gradually.
 
-Creating and changing groups: [CREATE TABLE — column families](../yql/reference/syntax/create_table/family.md), [ALTER TABLE — column families](../yql/reference/syntax/alter_table/family.md).
+Creating and changing column groups:
+
+- [CREATE TABLE](../yql/reference/syntax/create_table/family.md)
+- [ALTER TABLE](../yql/reference/syntax/alter_table/family.md)
 
 ## Column-oriented tables {#column-oriented-tables}
 
@@ -23,8 +26,8 @@ In column-oriented tables, compression is set **per column** with `COMPRESSION(a
 
 Parameters:
 
-* `algorithm` — `off`, `lz4`, or `zstd`;
-* `level` — compression level for the `zstd` algorithm; allowed values are `0` to `22`. This parameter is not used for other algorithms.
+- `algorithm` — `off`, `lz4`, or `zstd`;
+- `level` — compression level for the `zstd` algorithm; allowed values are `0` to `22`. This parameter is not used for other algorithms.
 
 If the `COMPRESSION()` option is specified without parameters, the column uses the default compression. Currently, the default is `lz4`.
 
@@ -72,7 +75,7 @@ CREATE TABLE analytics_events (
 WITH (STORE = COLUMN);
 ```
 
-Enable compression for the `default` group, for example if you later need to compress frequently read columns too:
+Enable compression for the `default` group, for example, if you later need to compress frequently read columns too:
 
 ```yql
 ALTER TABLE user_profiles ALTER FAMILY default SET COMPRESSION "lz4";
@@ -88,16 +91,18 @@ ALTER TABLE user_profiles
 
 ## Checking settings {#checking-settings}
 
-Compression and column group settings are part of the table DDL. They are returned by the YQL command [{#T}](../yql/reference/syntax/show_create.md):
+Compression parameters are part of the table DDL. The YQL command [{#T}](../yql/reference/syntax/show_create.md) returns them — for row-oriented tables in column group definitions (`FAMILY … COMPRESSION`), for column-oriented tables per column (`COMPRESSION(...)`):
 
 ```yql
 SHOW CREATE TABLE user_profiles;
 ```
 
-In [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md), for a row-oriented table use [`scheme describe`](../reference/ydb-cli/commands/scheme-describe.md): the output includes a `Column families` section with a `Compression` field. You can also view the table schema in [{{ ydb-ui-name }}](../reference/ydb-ui/index.md).
+In [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md), for a row-oriented table use [`scheme describe`](../reference/ydb-cli/commands/scheme-describe.md): the output includes a `Column families` section with a `Compression` field.
+
+You can also view the table schema in [{{ ydb-ui-name }}](../reference/ydb-ui/index.md).
 
 ## See also {#see-also}
 
-* [Tables](datamodel/table.md) — column groups, columnar storage.
-* [{#T}](datamodel/topic.md#message-codec) — message compression in topics.
-* [{#T}](query_execution/federated_query/s3/formats.md#compression) — file compression in S3 for federated queries.
+- [Tables](datamodel/table.md) — column groups, columnar storage.
+- [{#T}](datamodel/topic.md#message-codec) — message compression in topics.
+- [{#T}](query_execution/federated_query/s3/formats.md#compression) — file compression in S3 for federated queries.

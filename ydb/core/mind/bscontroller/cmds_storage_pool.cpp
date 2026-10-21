@@ -127,7 +127,7 @@ namespace NKikimr::NBsController {
                     PROPERTY(SharedWithOs, nullptr)
                     PROPERTY(ReadCentric, nullptr)
                     PROPERTY(Kind, nullptr)
-
+                    PROPERTY(KindName, nullptr)
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
                         throw TExError() << "TPDiskFilter.TRequiredProperty.Property not set";
                 }
@@ -137,6 +137,14 @@ namespace NKikimr::NBsController {
 
             if (!hasTypeProperty) {
                 throw TExError() << "TPDiskFilter did not specify Type property";
+            }
+
+            if (filter.KindName) {
+                const TString& kindName = *filter.KindName;
+                if (kindName.empty()) {
+                    throw TExError() << "PDisk kind name is empty";
+                }
+                filter.Kind = ResolvePDiskKind(kindName, filter.Kind);
             }
 
             storagePool.PDiskFilters.insert(std::move(filter));
@@ -231,7 +239,7 @@ namespace NKikimr::NBsController {
                 continue; // skip DDisk pool
             }
             if ((!storagePoolIds || storagePoolIds.contains(it->first)) && (!nameSet || nameSet.contains(it->second.Name))) {
-                Serialize(status.AddStoragePool(), it->first, it->second);
+                Serialize(status.AddStoragePool(), it->first, it->second, !cmd.GetReturnMaterialized());
             }
         }
     }
@@ -593,6 +601,17 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& cmd, TStatus& status) {
         NKikimrBlobStorage::TBaseConfig *pb = status.MutableBaseConfig();
+        const auto& kindNames = PDiskKindNames.Get();
+        for (const auto& [name, kind] : PDiskKinds.Get()) {
+            auto* info = pb->AddPDiskKind();
+            info->SetKind(kind.KindId);
+            auto* config = info->MutableConfig();
+            config->SetName(name);
+            config->SetItemConfigGeneration(kind.Generation.GetOrElse(1));
+            if (kind.PDiskConfig && !config->MutablePDiskConfig()->ParseFromString(*kind.PDiskConfig)) {
+                throw TExError() << "PDisk kind Name# " << name << " undeserializable PDiskConfig string";
+            }
+        }
 
         if (cmd.GetRetrieveDevices()) {
             DrivesSerials.ForEach([&](const auto& serial, const auto& driveInfo) {
@@ -613,6 +632,10 @@ namespace NKikimr::NBsController {
                 }
                 device->SetLifeStage(driveInfo.LifeStage);
                 device->SetType(driveInfo.PDiskType);
+                device->SetKind(driveInfo.Kind);
+                if (driveInfo.KindName) {
+                    device->SetKindName(*driveInfo.KindName);
+                }
             });
         }
 
@@ -639,7 +662,19 @@ namespace NKikimr::NBsController {
         if (!cmd.GetSuppressPDisks()) {
             PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
                 if (!virtualGroupsOnly || pdiskFilter.contains(pdiskId)) {
-                    Serialize(pb->AddPDisk(), pdiskId, pdiskInfo);
+                    auto* disk = pb->AddPDisk();
+                    Serialize(disk, pdiskId, pdiskInfo);
+                    // Only named kinds have overrides distinct from the effective PDiskConfig; legacy PDisks skip
+                    // the box/host/drive lookups and the extra proto parse on this hot query.
+                    if (const auto it = kindNames.find(disk->GetKind()); it != kindNames.end()) {
+                        disk->SetKindName(it->second);
+                        if (auto source = GetSourcePDiskConfig(pdiskInfo, HostConfigs.Get(), Boxes.Get(),
+                                DrivesSerials.Find(pdiskInfo.ExpectedSerial));
+                                source && !disk->MutableSourcePDiskConfig()->ParseFromString(*source)) {
+                            throw TExError() << "undeserializable source PDiskConfig string"
+                                << TErrorParams::NodeId(pdiskId.NodeId) << TErrorParams::PDiskId(pdiskId.PDiskId);
+                        }
+                    }
                 }
             });
         }

@@ -11,6 +11,7 @@ ENDIF()
 
 SRCS(
     main.cpp
+    pdisk_kinds.cpp
 )
 
 PEERDIR(

@@ -433,7 +433,39 @@ namespace NKikimr::NStorage {
         return {};
     }
 
+    bool UsesPDiskKinds(const NKikimrBlobStorage::TStorageConfig& config) {
+        return UsesNamedPDiskKinds(config.GetBlobStorageConfig(), config.GetSelfManagementConfig());
+    }
+
+    std::optional<TString> ValidateStaticPDiskKinds(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (!UsesPDiskKinds(config)) {
+            return std::nullopt; // the common case: no hash set and no drive enumeration below
+        }
+        for (const auto& filter : config.GetSelfManagementConfig().GetPDiskFilter()) {
+            for (const auto& property : filter.GetProperty()) {
+                if (property.HasKindName()) {
+                    return "named PDisk kinds are not supported for static group allocation";
+                }
+            }
+        }
+        THashSet<std::tuple<ui32, TString>> staticDisks;
+        for (const auto& pdisk : config.GetBlobStorageConfig().GetServiceSet().GetPDisks()) {
+            staticDisks.emplace(pdisk.GetNodeID(), pdisk.GetPath());
+        }
+        std::optional<TString> error;
+        EnumerateConfigDrives(config, 0, [&](const auto& node, const auto& drive) {
+            if (drive.GetKindName() && staticDisks.contains(std::make_tuple(node.GetNodeId(), drive.GetPath()))) {
+                error = TStringBuilder() << "named PDisk kinds are not supported for static PDisks NodeId# "
+                    << node.GetNodeId() << " Path# " << drive.GetPath() << " KindName# " << drive.GetKindName();
+            }
+        });
+        return error;
+    }
+
     std::optional<TString> ValidateConfig(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (auto error = ValidateStaticPDiskKinds(config)) {
+            return error;
+        }
         // validate node list
         THashSet<ui32> nodeIds;
         THashSet<std::tuple<TString, ui16>> fqdns;

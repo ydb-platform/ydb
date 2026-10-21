@@ -130,7 +130,11 @@ namespace NKikimr::NBsController {
             }
 
             void ApplyPDiskDiff(const TPDiskId &pdiskId, const TPDiskInfo &prev, const TPDiskInfo &cur) {
+                const bool configChanged = (prev.Kind != cur.Kind || prev.PDiskConfig != cur.PDiskConfig) &&
+                    (Self->PDiskKindNames.contains(prev.Kind.Kind()) || State.PDiskKindNames.Get().contains(cur.Kind.Kind()) ||
+                     State.PDisksToValidatePoolFilters.contains(pdiskId)); // explicit AddDriveSerial.UpdateExisting
                 if (prev.Mood != cur.Mood ||
+                        configChanged ||
                         prev.ExpectedSlotCount != cur.ExpectedSlotCount ||
                         prev.SlotSizeInUnits != cur.SlotSizeInUnits ||
                         prev.ExpectedSlotSize != cur.ExpectedSlotSize ||
@@ -393,6 +397,34 @@ namespace NKikimr::NBsController {
         bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
+            for (const auto& [base, overlay] : state.PDisks.Diff()) {
+                if (!base || !overlay->second) {
+                    continue;
+                }
+                const auto& previous = *base->second;
+                const auto& pdisk = *overlay->second;
+                const bool filterPropertiesChanged = previous.Kind != pdisk.Kind ||
+                    previous.SharedWithOs != pdisk.SharedWithOs || previous.ReadCentric != pdisk.ReadCentric;
+                if (!filterPropertiesChanged || (!state.PDisksToValidatePoolFilters.contains(overlay->first) &&
+                        !PDiskKindNames.contains(previous.Kind.Kind()) &&
+                        !state.PDiskKindNames.Get().contains(pdisk.Kind.Kind()))) {
+                    continue;
+                }
+                for (const auto& [slotId, slot] : pdisk.VSlotsOnPDisk) {
+                    if (!slot->Group) {
+                        continue;
+                    }
+                    const auto& pool = state.StoragePools.Get().at(slot->Group->StoragePoolId);
+                    if (!std::any_of(pool.PDiskFilters.begin(), pool.PDiskFilters.end(),
+                            [&](const auto& filter) { return filter.MatchPDisk(pdisk); })) {
+                        *errorDescription = TStringBuilder() << "PDisk category change violates the storage pool filter"
+                            << " NodeId# " << overlay->first.NodeId
+                            << " PDiskId# " << overlay->first.PDiskId;
+                        return false;
+                    }
+                }
+            }
+
             // virtual group state reported to node wardens may change without explicit group content change (for
             // instance, when decommission starts or BlobDepot creation fails), deliver it with new generation
             for (const auto& [base, overlay] : state.Groups.Diff()) {
@@ -639,6 +671,9 @@ namespace NKikimr::NBsController {
 
             if (state.HostConfigs.Changed()) {
                 MakeTableMerger<Schema::HostConfig>(&HostConfigs, &state.HostConfigs.Get(), this)(txc);
+            }
+            if (state.PDiskKinds.Changed()) {
+                MakeTableMerger<Schema::PDiskKind>(&PDiskKinds, &state.PDiskKinds.Get(), this)(txc);
             }
             if (state.Boxes.Changed()) {
                 MakeTableMerger<Schema::Box>(&Boxes, &state.Boxes.Get(), this)(txc);
@@ -1184,6 +1219,9 @@ namespace NKikimr::NBsController {
                 drive.SetSharedWithOs(value.SharedWithOs);
                 drive.SetReadCentric(value.ReadCentric);
                 drive.SetKind(value.Kind);
+                if (value.KindName) {
+                    drive.SetKindName(*value.KindName);
+                }
                 if (value.DiskScope) {
                     drive.SetDiskScope(*value.DiskScope);
                 }
@@ -1215,7 +1253,8 @@ namespace NKikimr::NBsController {
             }
         }
 
-        void TBlobStorageController::Serialize(NKikimrBlobStorage::TDefineStoragePool *pb, const TBoxStoragePoolId &id, const TStoragePoolInfo &pool) {
+        void TBlobStorageController::Serialize(NKikimrBlobStorage::TDefineStoragePool *pb, const TBoxStoragePoolId &id,
+                const TStoragePoolInfo &pool, bool returnSource) {
             pb->SetBoxId(std::get<0>(id));
             pb->SetStoragePoolId(std::get<1>(id));
             pb->SetName(pool.Name);
@@ -1282,7 +1321,7 @@ namespace NKikimr::NBsController {
             }
 
             for (const TStoragePoolInfo::TPDiskFilter &filter : pool.PDiskFilters) {
-                Serialize(pb->AddPDiskFilter(), filter);
+                Serialize(pb->AddPDiskFilter(), filter, returnSource);
             }
 
             NKikimrBlobStorage::TStoragePoolSettings settings;
@@ -1298,12 +1337,16 @@ namespace NKikimr::NBsController {
             }
         }
 
-        void TBlobStorageController::Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter) {
+        void TBlobStorageController::Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter,
+                bool returnSource) {
 #define SERIALIZE_VARIABLE(NAME) (filter.NAME && (pb->AddProperty()->Set##NAME(*filter.NAME), true))
             SERIALIZE_VARIABLE(Type);
             SERIALIZE_VARIABLE(SharedWithOs);
             SERIALIZE_VARIABLE(ReadCentric);
             SERIALIZE_VARIABLE(Kind);
+            if (returnSource && filter.KindName) {
+                SERIALIZE_VARIABLE(KindName);
+            }
 #undef SERIALIZE_VARIABLE
         }
 

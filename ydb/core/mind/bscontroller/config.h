@@ -74,6 +74,8 @@ namespace NKikimr {
             TCowHolder<TMap<TBoxStoragePoolId, TStoragePoolInfo>> StoragePools;
             TCowHolder<std::set<std::pair<TBoxStoragePoolId, TGroupId>>> StoragePoolGroups;
             TCowHolder<TMap<TGroupId, TBlobDepotDeleteQueueInfo>> BlobDepotDeleteQueue;
+            TCowHolder<TMap<TString, TPDiskKindInfo>> PDiskKinds;
+            TCowHolder<THashMap<TPDiskKindId, TString>> PDiskKindNames;
 
             // system-level configuration
             TOverlayMap<TPDiskId, TPDiskInfo> PDisks;
@@ -101,6 +103,7 @@ namespace NKikimr {
 
             // PDisks we are going to delete
             THashSet<TPDiskId> PDisksToRemove;
+            THashSet<TPDiskId> PDisksToValidatePoolFilters;
 
             // outgoing messages
             struct TOutgoingMessage {
@@ -151,6 +154,35 @@ namespace NKikimr {
             TStoragePoolStat& StoragePoolStat;
 
             TConfigFitAction Fit;
+            THashSet<TString> ChangedPDiskKinds;
+            THashSet<TPDiskKindId> ReservedPDiskKindIds;
+            std::optional<THashSet<TPDiskKindId>> UsedPDiskKindIds;
+
+            // Derived cache updates stay outside the persistent row overlays until commit.
+            THashMap<THostConfigId, THashMap<TString, TMaybe<TString>>> HostPDiskConfigUpdates;
+            THashMap<TString, TMaybe<TString>> SerialPDiskConfigUpdates;
+
+            const TMaybe<TString>& GetMaterializedPDiskConfig(const THostConfigInfo::TDriveKey& key,
+                    const THostConfigInfo::TDriveInfo& drive) const {
+                if (const auto host = HostPDiskConfigUpdates.find(key.HostConfigId); host != HostPDiskConfigUpdates.end()) {
+                    if (const auto it = host->second.find(key.Path); it != host->second.end()) {
+                        return it->second;
+                    }
+                }
+                return drive.MaterializedPDiskConfig;
+            }
+
+            const TMaybe<TString>& GetMaterializedPDiskConfig(const TSerial& serial, const TDriveSerialInfo& drive) const {
+                const auto it = SerialPDiskConfigUpdates.find(serial.Serial);
+                return it != SerialPDiskConfigUpdates.end() ? it->second : drive.MaterializedPDiskConfig;
+            }
+
+            ui64 ResolvePDiskKind(const TString& name, ui64 explicitKind) const;
+            ui64 ResolvePDiskKind(const TString& name, TMaybe<ui64> explicitKind) const;
+            TMaybe<TString> MaterializePDiskConfig(const TString& name,
+                const TMaybe<TString>& overrides, TStringBuf context) const;
+            void PreparePDiskKindUpdates();
+            void ValidatePDiskKindReferences() const;
 
             THashSet<TGroupId> GroupContentChanged;
             THashSet<TGroupId> GroupFailureModelChanged;
@@ -173,6 +205,8 @@ namespace NKikimr {
                 , StoragePools(&controller.StoragePools)
                 , StoragePoolGroups(&controller.StoragePoolGroups)
                 , BlobDepotDeleteQueue(&controller.BlobDepotDeleteQueue)
+                , PDiskKinds(&controller.PDiskKinds)
+                , PDiskKindNames(&controller.PDiskKindNames)
                 , PDisks(controller.PDisks)
                 , DrivesSerials(controller.DrivesSerials)
                 , Nodes(&controller.Nodes)
@@ -224,6 +258,8 @@ namespace NKikimr {
                 StoragePools.Commit();
                 StoragePoolGroups.Commit();
                 BlobDepotDeleteQueue.Commit();
+                PDiskKinds.Commit();
+                PDiskKindNames.Commit();
                 PDisks.Commit();
                 DrivesSerials.Commit();
                 Nodes.Commit();
@@ -234,6 +270,16 @@ namespace NKikimr {
                 NextVirtualGroupId.Commit();
                 NextStoragePoolId.Commit();
                 SerialManagementStage.Commit();
+
+                for (auto& [hostId, updates] : HostPDiskConfigUpdates) {
+                    auto& drives = Self.HostConfigs.at(hostId).Drives;
+                    for (auto& [path, config] : updates) {
+                        drives.at(THostConfigInfo::TDriveKey{{hostId, path}}).MaterializedPDiskConfig = std::move(config);
+                    }
+                }
+                for (auto& [serial, config] : SerialPDiskConfigUpdates) {
+                    Self.DrivesSerials.at(serial)->MaterializedPDiskConfig = std::move(config);
+                }
             }
 
             void Rollback() {
@@ -244,7 +290,7 @@ namespace NKikimr {
 
             bool Changed() const {
                 return HostConfigs.Changed() || Boxes.Changed() || StoragePools.Changed() ||
-                    StoragePoolGroups.Changed() || BlobDepotDeleteQueue.Changed() || PDisks.Changed() ||
+                    StoragePoolGroups.Changed() || BlobDepotDeleteQueue.Changed() || PDiskKinds.Changed() || PDisks.Changed() ||
                     DrivesSerials.Changed() || Nodes.Changed() || VSlots.Changed() || Groups.Changed() ||
                     IndexGroupSpeciesToGroup.Changed() || NextGroupId.Changed() || NextStoragePoolId.Changed() ||
                     SerialManagementStage.Changed() || NextVirtualGroupId.Changed();
@@ -390,6 +436,8 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TDefineHostConfig& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReadHostConfig& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteHostConfig& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TDefinePDiskKind& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TDeletePDiskKind& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDefineStoragePool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReadStoragePool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteStoragePool& cmd, TStatus& status);

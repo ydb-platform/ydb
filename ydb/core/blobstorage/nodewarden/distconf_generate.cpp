@@ -287,6 +287,13 @@ namespace NKikimr::NStorage {
             }
         };
 
+        THashSet<std::tuple<ui32, TString>> namedDrives;
+        EnumerateConfigDrives(config, 0, [&](const auto& node, const auto& drive) {
+            if (drive.GetKindName()) {
+                namedDrives.emplace(node.GetNodeId(), drive.GetPath());
+            }
+        });
+
         auto checkMatch = [&](NKikimrBlobStorage::EPDiskType type, bool sharedWithOs, bool readCentric, ui64 kind) {
             if (selfManagementConfig.HasPDiskType() && type == selfManagementConfig.GetPDiskType()) {
                 return true;
@@ -308,6 +315,8 @@ namespace NKikimr::NStorage {
                         case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKind:
                             pMatch = p.GetKind() == kind;
                             break;
+                        case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKindName:
+                            throw TExConfigError() << "named PDisk kinds are not supported for static group allocation";
                         case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
                             throw TExConfigError() << "invalid TPDiskFilter record";
                     }
@@ -353,7 +362,8 @@ namespace NKikimr::NStorage {
                 auto& maxId = maxPDiskId[pdiskId.NodeId];
                 maxId = Max(maxId, pdiskId.PDiskId);
 
-                if (!checkMatch(pdisk.GetType(), pdisk.GetSharedWithOs(), pdisk.GetReadCentric(), pdisk.GetKind())) {
+                if (pdisk.GetKindName() || namedDrives.contains(std::make_tuple(pdisk.GetNodeId(), pdisk.GetPath())) ||
+                        !checkMatch(pdisk.GetType(), pdisk.GetSharedWithOs(), pdisk.GetReadCentric(), pdisk.GetKind())) {
                     continue;
                 }
 
@@ -550,7 +560,7 @@ namespace NKikimr::NStorage {
         // build host config map
         auto processDrive = [&](const auto& node, const auto& drive) {
             const ui32 nodeId = node.GetNodeId();
-            if (pdiskLocations.contains(std::make_tuple(nodeId, drive.GetPath()))) {
+            if (drive.GetKindName() || pdiskLocations.contains(std::make_tuple(nodeId, drive.GetPath()))) {
                 return;
             }
             if (checkMatch(drive.GetType(), drive.GetSharedWithOs(), drive.GetReadCentric(), drive.GetKind())) {

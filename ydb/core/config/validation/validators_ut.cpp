@@ -5,6 +5,7 @@
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/core/protos/blobstorage_pdisk_config.pb.h>
+#include <ydb/core/protos/blobstorage_pdisk_kind.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/testlib/helpers.h>
@@ -610,6 +611,60 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         res = ValidateConfig(proposed, err);
         UNIT_ASSERT_VALUES_EQUAL(err.size(), 0);
         UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+    }
+
+    Y_UNIT_TEST(ValidateConfigNamedPDiskKindMergesPartialOverrides) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* bs = proposed.MutableBlobStorageConfig();
+        auto* kind = bs->AddPDiskKinds();
+        kind->SetName("qlc");
+        kind->MutablePDiskConfig()->SetExpectedSlotSize(600ull << 30);
+        auto* host = bs->AddDefineHostConfig();
+        host->MutableDefaultHostPDiskConfig()->SetExpectedSlotCount(10);
+        auto* drive = host->AddDrive();
+        drive->SetKindName("qlc");
+        drive->MutablePDiskConfig()->SetMaxSlots(4);
+        const auto source = proposed.SerializeAsString();
+        std::vector<TString> err;
+        UNIT_ASSERT_EQUAL(ValidateConfig(proposed, err), EValidationResult::Ok);
+        UNIT_ASSERT(err.empty());
+        UNIT_ASSERT_VALUES_EQUAL(proposed.SerializeAsString(), source);
+
+        drive->MutablePDiskConfig()->SetExpectedSlotCount(4);
+        UNIT_ASSERT_EQUAL(ValidateConfig(proposed, err), EValidationResult::Error);
+        UNIT_ASSERT_C(err.back().Contains("mutually exclusive"), err.back());
+    }
+
+    Y_UNIT_TEST(ValidateConfigNamedPDiskKindWithoutOverridesIsValidated) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* bs = proposed.MutableBlobStorageConfig();
+        auto* kind = bs->AddPDiskKinds();
+        kind->SetName("qlc");
+        kind->MutablePDiskConfig()->SetExpectedSlotSize(600ull << 30);
+        auto* drive = bs->AddDefineHostConfig()->AddDrive();
+        drive->SetKindName("qlc");
+        std::vector<TString> err;
+        UNIT_ASSERT_EQUAL(ValidateConfig(proposed, err), EValidationResult::Error);
+        UNIT_ASSERT_C(err.back().Contains("ExpectedSlotSize requires MaxSlots"), err.back());
+        kind->MutablePDiskConfig()->SetMaxSlots(8);
+        err.clear();
+        UNIT_ASSERT_EQUAL(ValidateConfig(proposed, err), EValidationResult::Ok);
+    }
+
+    Y_UNIT_TEST(ValidateConfigNamedPDiskKindReferences) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* bs = proposed.MutableBlobStorageConfig();
+        bs->AddDefineHostConfig()->AddDrive()->SetKindName("missing");
+        std::vector<TString> err;
+        UNIT_ASSERT_EQUAL(ValidateConfig(proposed, err), EValidationResult::Error);
+        UNIT_ASSERT_C(err.back().Contains("Unknown PDisk kind"), err.back());
+        bs->AddPDiskKinds()->SetName("missing");
+        err.clear();
+        UNIT_ASSERT_EQUAL(ValidateConfig(proposed, err), EValidationResult::Ok);
+        bs->AddPDiskKinds()->SetName("missing");
+        err.clear();
+        UNIT_ASSERT_EQUAL(ValidateConfig(proposed, err), EValidationResult::Error);
+        UNIT_ASSERT_C(err.back().Contains("Duplicate PDisk kind"), err.back());
     }
 
     Y_UNIT_TEST(ValidateConfigDomainEmpty) {

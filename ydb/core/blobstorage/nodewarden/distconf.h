@@ -889,7 +889,7 @@ namespace NKikimr::NStorage {
                 if (const auto it = defineHostConfigMap.find(host.GetHostConfigId()); it != defineHostConfigMap.end()) {
                     const auto& hostConfig = *it->second;
                     auto processDrive = [&](const auto& drive) {
-                        if (fillInPDiskConfig && !drive.HasPDiskConfig() && hostConfig.HasDefaultHostPDiskConfig()) {
+                        if (fillInPDiskConfig && drive.GetKindName().empty() && !drive.HasPDiskConfig() && hostConfig.HasDefaultHostPDiskConfig()) {
                             NKikimrBlobStorage::THostConfigDrive temp;
                             temp.CopyFrom(drive);
                             temp.MutablePDiskConfig()->CopyFrom(hostConfig.GetDefaultHostPDiskConfig());
@@ -921,6 +921,9 @@ namespace NKikimr::NStorage {
             const NKikimrBlobStorage::TStorageConfig& proposed);
 
     std::optional<TString> ValidateConfig(const NKikimrBlobStorage::TStorageConfig& config);
+    std::optional<TString> ValidateStaticPDiskKinds(const NKikimrBlobStorage::TStorageConfig& config);
+    // True when the config defines PDisk kinds or references one by name anywhere; no allocations.
+    bool UsesPDiskKinds(const NKikimrBlobStorage::TStorageConfig& config);
 
     std::optional<TString> DecomposeConfig(const TString& configComposite, TString *mainConfigYaml,
         ui64 *mainConfigVersion, TString *mainConfigFetchYaml);

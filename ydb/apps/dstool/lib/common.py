@@ -1062,6 +1062,9 @@ def pdisk_matches_storage_pool(pdisk, sp):
             elif prop.HasField('Kind'):
                 if prop.Kind != pdisk.Kind:
                     break
+            elif prop.HasField('KindName'):
+                # ReadStoragePool also returns Kind, which is used for matching.
+                continue
             else:
                 print('ERROR: unknown property in StoragePool filter', file=sys.stderr)
                 sys.exit(1)

@@ -1,4 +1,5 @@
 #include "impl.h"
+#include "error.h"
 #include "console_interaction.h"
 #include "group_geometry_info.h"
 
@@ -36,6 +37,7 @@ public:
             auto vdiskMetrics = db.Table<Schema::VDiskMetrics>().Range().Select();
             auto hostConfig = db.Table<Schema::HostConfig>().Range().Select();
             auto hostConfigDrive = db.Table<Schema::HostConfigDrive>().Range().Select();
+            auto pdiskKind = db.Table<Schema::PDiskKind>().Range().Select();
             auto box = db.Table<Schema::Box>().Range().Select();
             auto boxUser = db.Table<Schema::BoxUser>().Range().Select();
             auto boxHost = db.Table<Schema::BoxHostV2>().Range().Select();
@@ -58,6 +60,7 @@ public:
                     || !vdiskMetrics.IsReady()
                     || !hostConfig.IsReady()
                     || !hostConfigDrive.IsReady()
+                    || !pdiskKind.IsReady()
                     || !box.IsReady()
                     || !boxUser.IsReady()
                     || !boxHost.IsReady()
@@ -282,11 +285,55 @@ public:
 
         // HostConfig, Box, BoxStoragePool
         if (!NTableAdapter::FetchTable<Schema::HostConfig>(db, Self, Self->HostConfigs)
+                || !NTableAdapter::FetchTable<Schema::PDiskKind>(db, Self, Self->PDiskKinds)
                 || !NTableAdapter::FetchTable<Schema::Box>(db, Self, Self->Boxes)
                 || !NTableAdapter::FetchTable<Schema::BoxStoragePool>(db, Self, Self->StoragePools)
                 || !NTableAdapter::FetchTable<Schema::DriveSerial>(db, Self, Self->DrivesSerials)
                 || !NTableAdapter::FetchTable<Schema::BlobDepotDeleteQueue>(db, Self, Self->BlobDepotDeleteQueue)) {
             return false;
+        }
+        Self->PDiskKindNames.clear();
+        for (const auto& [name, kind] : Self->PDiskKinds) {
+            Self->PDiskKindNames.emplace(kind.KindId, name);
+        }
+        // Rebuild derived settings once. Already accepted configs are not revalidated on restart.
+        // Unknown kinds and undeserializable strings are both reported by MaterializePDiskConfig as TExError.
+        auto materialize = [&](const TString& name, const TMaybe<TString>& overrides, const TString& context) {
+            try {
+                return MaterializePDiskConfig(Self->PDiskKinds, name, overrides);
+            } catch (const TExError& ex) {
+                YDB_LOG_ERROR("Cannot materialize PDisk config; keeping persisted PDisk settings",
+                    {"marker", "BSCTXLE09"}, {"kindName", name}, {"context", context}, {"error", ex.what()});
+                return TMaybe<TString>();
+            }
+        };
+        const auto normalize = [](TMaybe<TString>& kindName) {
+            if (kindName && kindName->empty()) {
+                kindName.Clear(); // an empty cell means a legacy drive
+            }
+        };
+        for (auto& [id, host] : Self->HostConfigs) {
+            for (auto& [key, drive] : host.Drives) {
+                normalize(drive.KindName);
+                if (!drive.KindName) {
+                    drive.MaterializedPDiskConfig = drive.PDiskConfig; // legacy drive: nothing to merge
+                    continue;
+                }
+                drive.MaterializedPDiskConfig = materialize(*drive.KindName, drive.PDiskConfig,
+                    TStringBuilder() << "HostConfigId# " << id << " Path# " << key.Path);
+            }
+        }
+        for (auto& [serial, drive] : Self->DrivesSerials) {
+            normalize(drive->KindName);
+            if (drive->LifeStage != NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL) {
+                continue;
+            }
+            if (!drive->KindName) {
+                drive->MaterializedPDiskConfig = drive->PDiskConfig;
+                continue;
+            }
+            drive->MaterializedPDiskConfig = materialize(*drive->KindName, drive->PDiskConfig,
+                TStringBuilder() << "DriveSerial# " << serial.Serial);
         }
         for (const auto& [storagePoolId, storagePool] : Self->StoragePools) {
             Self->SysViewChangedStoragePools.insert(storagePoolId);

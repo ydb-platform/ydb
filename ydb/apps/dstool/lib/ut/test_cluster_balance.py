@@ -5,6 +5,19 @@ import pytest
 from ydb.apps.dstool.lib import dstool_cmd_cluster_balance as balance
 
 
+@pytest.mark.parametrize('disk_kind, disk_name, matches', [
+    (17, 'qlc', True), (17, '', True), (18, 'qlc', False), (18, 'tlc', False),
+])
+def test_named_pdisk_filter_uses_resolved_kind(disk_kind, disk_name, matches):
+    common = balance.common
+    pdisk = common.kikimr_bsconfig.TBaseConfig().PDisk.add(BoxId=1, Kind=disk_kind, KindName=disk_name)
+    pool = common.kikimr_bsconfig.TDefineStoragePool(BoxId=1)
+    props = pool.PDiskFilter.add().Property
+    props.add(KindName='qlc')
+    props.add(Kind=17)
+    assert common.pdisk_matches_storage_pool(pdisk, pool) is matches
+
+
 @pytest.fixture
 def strategy():
     args = SimpleNamespace(

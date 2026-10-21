@@ -73,12 +73,15 @@ namespace NKikimr {
         static void UpdatePDiskIfNeeded(const TPDiskId& pdiskId, const TDiskInfo& disk, ui32 defaultMaxSlots, TBlobStorageController::TConfigState& state) {
             auto pdiskInfo = state.PDisks.Find(pdiskId);
             Y_ABORT_UNLESS(pdiskInfo != nullptr);
+
+            bool configChanged = pdiskInfo->PDiskConfig != disk.PDiskConfig;
+
             if (pdiskInfo->Kind != disk.PDiskCategory ||
                 pdiskInfo->SharedWithOs != disk.SharedWithOs ||
                 pdiskInfo->ReadCentric != disk.ReadCentric ||
                 pdiskInfo->DiskScope != disk.DiskScope ||
                 pdiskInfo->BoxId != disk.BoxId ||
-                pdiskInfo->PDiskConfig != disk.PDiskConfig)
+                configChanged)
             {
                 // update PDisk configuration
                 auto pdiskInfo = state.PDisks.FindForUpdate(pdiskId);
@@ -88,7 +91,7 @@ namespace NKikimr {
                 pdiskInfo->ReadCentric = disk.ReadCentric;
                 pdiskInfo->DiskScope = disk.DiskScope;
                 pdiskInfo->BoxId = disk.BoxId;
-                if (pdiskInfo->PDiskConfig != disk.PDiskConfig) {
+                if (configChanged) {
                     const std::optional<TBlobStorageController::TStaticPDiskInfo> staticPDisk = FindStaticPDisk(disk, state).transform(
                         [&](TPDiskId id) {return state.StaticPDisks.at(id);});
                     if (staticPDisk && staticPDisk->PDiskConfig != disk.PDiskConfig) {
@@ -188,6 +191,11 @@ namespace NKikimr {
                     }
 
                     for (const auto& [drive, driveInfo] : hostConfig.Drives) {
+                        const auto& config = state.GetMaterializedPDiskConfig(drive, driveInfo);
+                        if (driveInfo.KindName && !config) {
+                            throw TExError() << "Unresolved PDisk kind Name# " << *driveInfo.KindName
+                                << TErrorParams::HostConfigId(hostConfigId) << TErrorParams::Path(drive.Path);
+                        }
                         auto serial = GetDiskSerialNumberFromNode(*nodeId, drive.Path, state, /* throwOnError */ false);
 
                         TDiskInfo disk;
@@ -198,7 +206,7 @@ namespace NKikimr {
                         disk.NodeId = *nodeId;
                         disk.Path = drive.Path;
                         disk.PDiskCategory = TPDiskCategory(PDiskTypeToPDiskType(driveInfo.Type), driveInfo.Kind);
-                        disk.PDiskConfig = driveInfo.PDiskConfig.GetOrElse(TString());
+                        disk.PDiskConfig = config.GetOrElse(TString());
                         disk.ReadCentric = driveInfo.ReadCentric;
                         disk.Serial = serial;
                         disk.SharedWithOs = driveInfo.SharedWithOs;
@@ -206,6 +214,10 @@ namespace NKikimr {
                             disk.DiskScope = *driveInfo.DiskScope;
                         }
 
+                        if (driveInfo.KindName && FindStaticPDisk(disk, state)) {
+                            throw TExError() << "named PDisk kinds are not supported for static PDisks"
+                                << TErrorParams::NodeId(disk.NodeId) << TErrorParams::Path(disk.Path);
+                        }
                         auto diskId = disk.GetId();
                         auto [_, inserted] = disks.try_emplace(diskId, std::move(disk));
                         if (!inserted) {
@@ -228,6 +240,11 @@ namespace NKikimr {
 
                 if (driveInfo.LifeStage != NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL) {
                     return true;
+                }
+                const auto& config = state.GetMaterializedPDiskConfig(serial, driveInfo);
+                if (driveInfo.KindName && !config) {
+                    throw TExError() << "Unresolved PDisk kind Name# " << *driveInfo.KindName
+                        << TErrorParams::DiskSerialNumber(serial.Serial);
                 }
 
                 if (serial.Serial.empty()) {
@@ -255,11 +272,15 @@ namespace NKikimr {
                 disk.NodeId = *nodeId;
                 disk.Path = *path;
                 disk.PDiskCategory = TPDiskCategory(PDiskTypeToPDiskType(driveInfo.PDiskType), driveInfo.Kind);
-                disk.PDiskConfig = driveInfo.PDiskConfig.GetOrElse(TString());
+                disk.PDiskConfig = config.GetOrElse(TString());
                 disk.ReadCentric = false;
                 disk.Serial = serial;
                 disk.SharedWithOs = false;
 
+                if (driveInfo.KindName && FindStaticPDisk(disk, state)) {
+                    throw TExError() << "named PDisk kinds are not supported for static PDisks"
+                        << TErrorParams::NodeId(disk.NodeId) << TErrorParams::Path(disk.Path);
+                }
                 auto diskId = disk.GetId();
                 auto [_, inserted] = disks.try_emplace(diskId, std::move(disk));
                 if (!inserted) {

@@ -86,7 +86,7 @@ namespace NKikimr::NBsController {
                     PROPERTY(SharedWithOs, nullptr)
                     PROPERTY(ReadCentric, nullptr)
                     PROPERTY(Kind, nullptr)
-
+                    PROPERTY(KindName, nullptr)
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
                         throw TExError() << "TPDiskFilter.TRequiredProperty.Property not set";
                 }
@@ -96,6 +96,13 @@ namespace NKikimr::NBsController {
 
             if (!hasTypeProperty) {
                 throw TExError() << "TPDiskFilter did not specify Type property";
+            }
+
+            if (filter.KindName) {
+                if (filter.KindName->empty()) {
+                    throw TExError() << "PDisk kind name is empty";
+                }
+                filter.Kind = ResolvePDiskKind(*filter.KindName, filter.Kind);
             }
 
             storagePool.PDiskFilters.insert(std::move(filter));

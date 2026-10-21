@@ -24,6 +24,7 @@
 #include <ydb/core/mind/bscontroller/yaml_config_helpers.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/protos/key.pb.h>
+#include <ydb/core/protos/blobstorage_pdisk_kind.pb.h>
 #include <util/folder/dirut.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
@@ -1935,6 +1936,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         bsTo->ClearDefineBox();
     }
     bsTo->MutableDefineHostConfig()->CopyFrom(bsFrom.GetDefineHostConfig());
+    bsTo->MutablePDiskKinds()->CopyFrom(bsFrom.GetPDiskKinds());
 
     if (bsFrom.HasBscSettings()) {
         bsTo->MutableBscSettings()->CopyFrom(bsFrom.GetBscSettings());
@@ -2079,6 +2081,10 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         UPDATE_EXPLICIT_CONFIG(SchemeBoard)
     }
 
+    if (auto error = ValidateStaticPDiskKinds(*config)) {
+        *errorReason = *error;
+        return false;
+    }
     return true;
 }
 

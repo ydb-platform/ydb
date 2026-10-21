@@ -24,21 +24,26 @@ namespace NKikimr::NBsController {
             driveInfo.Type = drive.GetType();
             driveInfo.SharedWithOs = drive.GetSharedWithOs();
             driveInfo.ReadCentric = drive.GetReadCentric();
-            driveInfo.Kind = drive.GetKind();
+            if (!drive.GetKindName().empty()) {
+                driveInfo.KindName = drive.GetKindName();
+            }
+            driveInfo.Kind = ResolvePDiskKind(drive.GetKindName(), drive.GetKind());
             if (drive.HasDiskScope()) {
                 driveInfo.DiskScope = drive.GetDiskScope();
             }
 
             if (drive.HasPDiskConfig()) {
-                const TString context = TStringBuilder() << "HostConfigId# " << id
-                    << " Path# " << drive.GetPath();
-                ValidatePDiskConfig(drive.GetPDiskConfig(), context);
-                TString config;
-                const bool success = drive.GetPDiskConfig().SerializeToString(&config);
-                Y_ABORT_UNLESS(success);
-                driveInfo.PDiskConfig = config;
-            } else {
+                driveInfo.PDiskConfig = drive.GetPDiskConfig().SerializeAsString();
+            } else if (!driveInfo.KindName) {
                 driveInfo.PDiskConfig = defaultPDiskConfig;
+            }
+            if (!driveInfo.KindName && !drive.HasPDiskConfig()) {
+                // Inherits DefaultHostPDiskConfig, which was validated once above: no per-drive parse.
+                driveInfo.MaterializedPDiskConfig = driveInfo.PDiskConfig;
+            } else {
+                // Validate the effective settings even when this host config is not used by a box yet.
+                driveInfo.MaterializedPDiskConfig = MaterializePDiskConfig(drive.GetKindName(), driveInfo.PDiskConfig,
+                    TStringBuilder() << "HostConfigId# " << id << " Path# " << drive.GetPath());
             }
 
             Schema::HostConfigDrive::TKey::Type key(id, drive.GetPath());
@@ -55,6 +60,7 @@ namespace NKikimr::NBsController {
             driveInfo.ReadCentric = false;
             driveInfo.Kind = 0;
             driveInfo.PDiskConfig = defaultPDiskConfig;
+            driveInfo.MaterializedPDiskConfig = defaultPDiskConfig;
 
             for (const auto& path : field) {
                 const auto [it, inserted] = config.Drives.emplace(Schema::HostConfigDrive::TKey::Type(id, path), driveInfo);
@@ -69,6 +75,7 @@ namespace NKikimr::NBsController {
 
         auto &hostConfigs = HostConfigs.Unshare();
         hostConfigs[id] = std::move(config);
+        HostPDiskConfigUpdates.erase(id);
 
         for (const auto& [boxId, box] : Boxes.Get()) {
             for (const auto& [hostKey, host] : box.Hosts) {
@@ -97,7 +104,21 @@ namespace NKikimr::NBsController {
             if (it == hostConfigs.end()) {
                 throw TExHostConfigNotFound(id);
             }
-            Serialize(status.AddHostConfig(), it->first, it->second);
+            auto* host = status.AddHostConfig();
+            Serialize(host, it->first, it->second);
+            if (cmd.GetReturnMaterialized()) {
+                for (auto& drive : *host->MutableDrive()) {
+                    const THostConfigInfo::TDriveKey key{{id, drive.GetPath()}};
+                    const auto& config = GetMaterializedPDiskConfig(key, it->second.Drives.at(key));
+                    if (!drive.GetKindName().empty() && !config) {
+                        throw TExError() << "Unresolved PDisk kind Name# " << drive.GetKindName();
+                    }
+                    if (config && !drive.MutablePDiskConfig()->ParseFromString(*config)) {
+                        throw TExError() << "HostConfigId# " << id << " undeserializable materialized PDiskConfig string"
+                            << " Path# " << drive.GetPath();
+                    }
+                }
+            }
         }
     }
 
@@ -123,6 +144,7 @@ namespace NKikimr::NBsController {
 
         // remove entry from the table
         hostConfigs.erase(it);
+        HostPDiskConfigUpdates.erase(id);
     }
 
 } // NKikimr::NBsController

@@ -686,11 +686,11 @@ namespace NKikimr::NYaml {
                             << " and slot_size_in_units"
                             << " for drive with path '" << drive.GetPath() << "'";
                     }
-                    if (hasExpectedSlotSize && !hasMaxSlots) {
+                    if (hasExpectedSlotSize && !hasMaxSlots && drive.GetKindName().empty()) {
                         ythrow yexception() << "expected_slot_size requires max_slots"
                             << " for drive with path '" << drive.GetPath() << "'";
                     }
-                    if (hasMaxSlots && !hasExpectedSlotSize) {
+                    if (hasMaxSlots && !hasExpectedSlotSize && drive.GetKindName().empty()) {
                         ythrow yexception() << "max_slots requires expected_slot_size"
                             << " for drive with path '" << drive.GetPath() << "'";
                     }
@@ -1265,8 +1265,23 @@ endDiskTypeCheck:   ;
         }
     }
 
+    static void MergePDiskKinds(NKikimrConfig::TBlobStorageConfig* bsConfig,
+            const NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        if (ephemeralConfig.PDiskKindsSize()) {
+            Y_ENSURE_BT(!bsConfig->PDiskKindsSize(), "pdisk_kinds must be specified in only one location");
+            bsConfig->MutablePDiskKinds()->CopyFrom(ephemeralConfig.GetPDiskKinds());
+        }
+        // Init bypasses generation checks, so a duplicate would silently let the last definition win.
+        THashSet<TString> names;
+        for (const auto& kind : bsConfig->GetPDiskKinds()) {
+            Y_ENSURE_BT(!kind.GetName().empty(), "PDisk kind name must not be empty");
+            Y_ENSURE_BT(names.insert(kind.GetName()).second, "Duplicate PDisk kind Name# " << kind.GetName());
+        }
+    }
+
     void PrepareBlobStorageConfig(NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
         auto* bsConfig = config.MutableBlobStorageConfig();
+        MergePDiskKinds(bsConfig, ephemeralConfig);
 
         if (!bsConfig->HasServiceSet()) {
             bsConfig->MutableServiceSet()->AddAvailabilityDomains(1);
@@ -1675,6 +1690,19 @@ endDiskTypeCheck:   ;
         const auto itemConfigGeneration = ephemeralConfig.HasStorageConfigGeneration() ?
             ephemeralConfig.GetStorageConfigGeneration() : 0;
 
+        auto* bsConfig = config.MutableBlobStorageConfig();
+        if (const auto& bsJson = json["blob_storage_config"]; bsJson.Has("pdisk_kinds")) {
+            NJson::TJsonValue catalog;
+            catalog["pdisk_kinds"] = bsJson["pdisk_kinds"];
+            NProtobufJson::MergeJson2Proto(catalog, *bsConfig, GetJsonToProtoConfig());
+        }
+        MergePDiskKinds(bsConfig, ephemeralConfig);
+        for (const auto& kind : bsConfig->GetPDiskKinds()) {
+            auto* cmd = result.AddCommand()->MutableDefinePDiskKind();
+            cmd->CopyFrom(kind);
+            cmd->SetItemConfigGeneration(Max<ui64>());
+        }
+
         for(const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
             auto *hostConfigProto = result.AddCommand()->MutableDefineHostConfig();
             hostConfig.CopyToTDefineHostConfig(*hostConfigProto);
@@ -1737,6 +1765,34 @@ endDiskTypeCheck:   ;
         }
     }
 
+    // The public YAML spelling distinguishes a disk class from the pool's own `kind`.
+    void NormalizePDiskFilterNames(NJson::TJsonValue& json) {
+        if (json.IsArray()) {
+            for (auto& value : json.GetArraySafe()) {
+                NormalizePDiskFilterNames(value);
+            }
+        } else if (json.IsMap()) {
+            for (auto& [key, value] : json.GetMapSafe()) {
+                if (key == "pdisk_filter" && value.IsArray()) {
+                    for (auto& filter : value.GetArraySafe()) {
+                        if (filter.Has("property") && filter["property"].IsArray()) {
+                            for (auto& property : filter["property"].GetArraySafe()) {
+                                if (property.Has("pdisk_kind")) {
+                                    Y_ENSURE_BT(!property.Has("kind_name"),
+                                        "pdisk_kind and kind_name cannot appear in the same filter property");
+                                    property["kind_name"] = property["pdisk_kind"];
+                                    property.EraseValue("pdisk_kind");
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    NormalizePDiskFilterNames(value);
+                }
+            }
+        }
+    }
+
     void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config,
                bool transform, EParsePhase* phase, bool relaxed) {
         auto runPhase = [phase](EParsePhase value, auto&& func) {
@@ -1766,6 +1822,7 @@ endDiskTypeCheck:   ;
                 jsonNode = json["config"];
             }
 
+            NormalizePDiskFilterNames(jsonNode);
             if (transform) {
                 ExtractExtraFields(jsonNode, ctx);
             }

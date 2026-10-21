@@ -301,12 +301,13 @@ namespace NKikimr::NStorage {
             throw TExError() << "Cluster is already bridged one";
         }
 
-        // nodes running without BridgeConfig won't be able to work in bridged cluster
+        // nodes running without BridgeConfig won't be able to work in bridged cluster, as well as the ones of versions
+        // not supporting the features the converted cluster requires
         THashSet<ui32> requiredNodeIds;
         for (const auto& node : Self->StorageConfig->GetAllNodes()) {
             requiredNodeIds.insert(node.GetNodeId());
         }
-        RequireBridgeCapability(0, std::move(requiredNodeIds), {}, [this] {
+        RequireBridgeCapability(BridgeFeatureLevel, std::move(requiredNodeIds), {}, [this] {
             NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
             if (auto error = ConvertStorageConfigToBridge(&config, *Self->Cfg->BridgeConfig)) {
                 throw TExError() << *error;
@@ -364,9 +365,8 @@ namespace NKikimr::NStorage {
                 TStringBuilder err;
                 if (!notCapable.empty()) {
                     err << (minFeatureLevel
-                        ? "Some connected nodes are running without BridgeConfig or with version not supporting changes"
-                            " of the list of piles, addition and removal of piles, they have to be upgraded or stopped"
-                            " first NodeIds#"
+                        ? "Some connected nodes are running without BridgeConfig or with version not supporting the"
+                            " bridge features the operation requires, they have to be upgraded or stopped first NodeIds#"
                         : "Some nodes are running without BridgeConfig NodeIds#");
                     for (const ui32 nodeId : notCapable) {
                         err << ' ' << nodeId;

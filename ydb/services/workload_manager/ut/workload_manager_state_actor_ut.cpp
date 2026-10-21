@@ -259,7 +259,6 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
         auto next = fx.Runtime.GrabEdgeEvent<TEvSubscribeOnPoolChanges>(fx.ServicesEdge, WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(next->Get()->PoolId, "poolB", "Repeated deletion signals must not fire duplicate resubscribes");
     }
-
 }
 
 }   // namespace NKikimr::NWorkloadManager

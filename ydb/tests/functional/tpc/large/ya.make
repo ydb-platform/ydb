@@ -31,11 +31,6 @@ DEPENDS(
     ydb/apps/ydb
 )
 
-# ASAN whitelist run 39512661565: test_tpcds.py is one chunk and spends the
-# whole SIZE(LARGE) hour (~33 min on query 1, then ~50 more S1 queries).
-# The other ~246 tests are not launched. 8-way split keeps a chunk that
-# contains that query inside 3600s. With FORK_TEST_FILES this is 8 chunks
-# per file.
 FORK_TEST_FILES()
 SPLIT_FACTOR(8)
 

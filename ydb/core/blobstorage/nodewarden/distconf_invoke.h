@@ -157,6 +157,8 @@ namespace NKikimr::NStorage {
         void ReplyToFetchStorageConfig(const std::optional<TString>& mainConfigYaml,
             const std::optional<TString>& storageConfigYaml, bool transient);
         void ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request);
+        void ValidateReplaceStorageConfig(const std::optional<TString>& storageConfigYaml, ui64 expectedMainYamlVersion,
+                ui64 expectedStorageYamlVersion);
         void ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml, ui64 expectedMainYamlVersion,
                 ui64 expectedStorageYamlVersion, bool enablingDistconf);
         void ReplaceStorageConfigExecute();

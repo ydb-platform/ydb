@@ -1903,7 +1903,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
 
             auto updateConfig = [&](bool needMerge, auto *to, const auto& from, const char *entity) {
                 if (needMerge) {
-                    *errorReason = NKikimr::NConfig::ValidateStateStorageConfig(entity, from, *to);
+                    *errorReason = NKikimr::NConfig::ValidateStateStorageConfig(entity, *to, from);
                     if (!errorReason->empty()) {
                         return false;
                     }

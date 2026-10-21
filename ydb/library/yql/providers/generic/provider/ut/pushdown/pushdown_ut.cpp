@@ -516,13 +516,13 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
         AssertPushdownPreservesMatch(R"ast(
             (Not (Apply
                 (AssumeStrict (Udf '"Re2.Match" '(
-                    (Apply (Udf '"Re2.PatternFromLike") (SafeCast (String '"abc") (DataType '"String")))
+                    (Apply (Udf '"Re2.PatternFromLike") (SafeCast (String '"abc%x%") (DataType '"String")))
                     (NamedApply (Udf '"Re2.Options") '()
                         (AsStruct '('"CaseSensitive" (Bool '"true"))))
                 )))
                 (Member $row '"col_optional_string")
             ))
-        )ast", R"sql(col_optional_string NOT LIKE CAST("abc" AS String))sql", "col_optional_string", std::nullopt);
+        )ast", R"sql(col_optional_string NOT LIKE CAST("abc%x%" AS String))sql", "col_optional_string", std::nullopt);
     }
 
     Y_UNIT_TEST(LikePushdownPreservesPositionalRegexpOptions) {

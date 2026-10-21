@@ -403,8 +403,8 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         for (ui32 i = 0; i < 2; ++i) {
             const auto response = Runtime.GrabEdgeEvent<TEvResult>(Request(MakeRequest()));
             UNIT_ASSERT(response);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(),
-                TransportError ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::UNAUTHORIZED);
+            UNIT_ASSERT_VALUES_EQUAL(
+                response->Get()->Record.GetStatus(), TransportError ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::UNAUTHORIZED);
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetIssues(0).message(), "describe details");
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.PartitionsSize(), 0);
         }

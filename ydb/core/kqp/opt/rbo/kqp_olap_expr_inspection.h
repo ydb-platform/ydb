@@ -40,6 +40,5 @@ TOlapFilterInspection InspectOlapProcessLambda(const NYql::TExprNode::TPtr& lamb
 
 TString GetOlapColumnName(TStringBuf columnName, bool stripAliasPrefix);
 TString FormatOlapFilter(const NYql::NNodes::TKqpOlapFilter& filter);
-TVector<TString> BuildReadRangeDescriptions(const NYql::TExprNode::TPtr& ranges, const TVector<TString>& keyColumns, size_t usedPrefixLen);
 
 } // namespace NKikimr::NKqp::NOpt

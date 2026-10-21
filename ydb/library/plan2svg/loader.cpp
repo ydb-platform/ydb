@@ -9,6 +9,7 @@
 #include <util/generic/yexception.h>
 #include <util/stream/output.h>
 #include <util/string/cast.h>
+#include <util/string/join.h>
 
 namespace NPlan2Svg {
 
@@ -390,24 +391,28 @@ static TOperatorDescription DescribeOperator(const NJson::TJsonValue& subNode, c
         builder << ParseColumns(subNode.GetValueByPath("ReadColumns"));
 
         if (name == "TablePointLookup" || name == "TableRangeScan") {
-            builder << ": ";
+            // Ranges unknown at compile time are omitted from the plan, and so from the label.
             auto* readRangesNode = subNode.GetValueByPath("ReadRanges");
+            const bool tupleRanges = readRangesNode != nullptr;
             if (!readRangesNode) {
                 readRangesNode = subNode.GetValueByPath("ReadRange");
             }
             if (readRangesNode) {
-                bool firstRange = true;
-                for (const auto& subNode : readRangesNode->GetArray()) {
-                    if (firstRange) {
-                        firstRange = false;
-                    } else {
-                        builder << ", ";
-                    }
-                    builder << subNode.GetStringSafe();
+                TVector<TString> ranges;
+                for (const auto& range : readRangesNode->GetArray()) {
+                    ranges.push_back(range.GetStringSafe());
+                }
+                if (tupleRanges && ranges.empty()) {
+                    builder << ": empty";
+                } else if (!ranges.empty()) {
+                    builder << ": " << JoinSeq(tupleRanges ? " OR " : ", ", ranges);
                 }
             }
         }
 
+        if (const auto* filter = subNode.GetValueByPath("Filter")) {
+            builder << "; Filter: " << filter->GetStringSafe();
+        }
         description.Info = builder;
         description.External = true;
     } else if (name == "TopSort" || name == "Top") {

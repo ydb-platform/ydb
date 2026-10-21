@@ -23,6 +23,7 @@ namespace NKikimr::NStorage {
         bool SelfManagementEnabled = false;
         bool IsSelfStatic = false;
         ui32 MaxStaticNodeId = Max<ui32>();
+        std::optional<ui32> PendingFeatureRequirement;
 
         std::deque<std::unique_ptr<IEventHandle>> PendingEvents;
 
@@ -87,15 +88,7 @@ namespace NKikimr::NStorage {
                 Receive(temp);
             }
 
-            // peers of older versions can't work with the configuration requiring the features they don't support
-            const ui32 required = GetRequiredBridgeFeatureLevel(*StorageConfig);
-            for (auto it = PeerFeatureLevels.begin(); it != PeerFeatureLevels.end(); ) {
-                const auto [peerNodeId, level] = *it++;
-                if (level < required) {
-                    DisconnectIncapablePeer(peerNodeId, level);
-                    PeerFeatureLevels.erase(peerNodeId);
-                }
-            }
+            DisconnectIncapablePeers();
 
             // disconnect peers if needed
             TActorSystem* const as = TActivationContext::ActorSystem();
@@ -151,7 +144,7 @@ namespace NKikimr::NStorage {
         THashMap<TString, TString> CreateParams(const NKikimrBlobStorage::TConnectivityPayload& outgoing) {
             THashMap<TString, TString> res;
             if (outgoing.ByteSizeLong()) {
-                const ui32 required = StorageConfig ? GetRequiredBridgeFeatureLevel(*StorageConfig) : 0;
+                const ui32 required = GetRequiredFeatureLevel();
                 const TStringBuf key = DistconfKeys[Min<ui32>(required, BridgeFeatureLevel)];
                 const bool success = outgoing.SerializeToString(&res[key]);
                 Y_ABORT_UNLESS(success);
@@ -176,7 +169,28 @@ namespace NKikimr::NStorage {
 
         // peer of older version can't work with the configuration requiring the features it doesn't support
         bool IsPeerIncompatible(const NKikimrBlobStorage::TConnectivityPayload& incoming) const {
-            return StorageConfig && GetPeerFeatureLevel(incoming) < GetRequiredBridgeFeatureLevel(*StorageConfig);
+            return GetPeerFeatureLevel(incoming) < GetRequiredFeatureLevel();
+        }
+
+        ui32 GetRequiredFeatureLevel() const {
+            return Max(StorageConfig ? GetRequiredBridgeFeatureLevel(*StorageConfig) : 0,
+                PendingFeatureRequirement.value_or(0));
+        }
+
+        void DisconnectIncapablePeers() {
+            const ui32 required = GetRequiredFeatureLevel();
+            for (auto it = PeerFeatureLevels.begin(); it != PeerFeatureLevels.end(); ) {
+                const auto [peerNodeId, level] = *it++;
+                if (level < required) {
+                    DisconnectIncapablePeer(peerNodeId, level);
+                    PeerFeatureLevels.erase(peerNodeId);
+                }
+            }
+        }
+
+        void Handle(TEvPrivate::TEvUpdateBridgeFeatureRequirement::TPtr ev) {
+            PendingFeatureRequirement = ev->Get()->RequiredLevel;
+            DisconnectIncapablePeers();
         }
 
         // remember bridge feature level of the peer of just established session
@@ -323,7 +337,7 @@ namespace NKikimr::NStorage {
             if (error) {
                 // we already have an error
             } else if (hasPeerConfig && hasSelfConfig) {
-                error = CheckPeerConfig(peerBridgePileId, incoming, &outgoing);
+                error = CheckPeerConfig(peerNodeId, peerBridgePileId, incoming, &outgoing);
                 configChecked = true;
             } else if (hasSelfConfig < hasPeerConfig) {
                 UpdateLocalConfig(incoming);
@@ -397,6 +411,12 @@ namespace NKikimr::NStorage {
         }
 
         void UpdateLocalConfig(const NKikimrBlobStorage::TConnectivityPayload& incoming) {
+            if (IsSelfStatic && StorageConfig && !StorageConfig->GetGeneration() &&
+                    std::ranges::none_of(incoming.GetStorageConfig().GetAllNodes(), [this](const auto& node) {
+                        return node.GetNodeId() == SelfId().NodeId();
+                    })) {
+                return;
+            }
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenUpdateConfigFromPeer(
                 incoming.GetStorageConfig(),
                 incoming.HasCommittedStorageConfig()
@@ -405,7 +425,7 @@ namespace NKikimr::NStorage {
             ));
         }
 
-        std::optional<TString> CheckPeerConfig(TBridgePileId peerBridgePileId,
+        std::optional<TString> CheckPeerConfig(ui32 peerNodeId, TBridgePileId peerBridgePileId,
                 const NKikimrBlobStorage::TConnectivityPayload& incoming,
                 NKikimrBlobStorage::TConnectivityPayload *outgoing) {
             const NKikimrBlobStorage::TStorageConfig& config = incoming.GetStorageConfig();
@@ -446,9 +466,29 @@ namespace NKikimr::NStorage {
                     : *StorageConfig;
             const auto& cs = newerConfig.GetClusterState();
 
+            const auto isJoiningNode = [this](ui32 nodeId, const auto& own, const auto& other) {
+                return nodeId <= MaxStaticNodeId && !own.GetGeneration() && !own.GetClusterState().GetGeneration()
+                    && std::ranges::none_of(other.GetAllNodes(), [nodeId](const auto& node) {
+                        return node.GetNodeId() == nodeId;
+                    });
+            };
+            const bool joining = isJoiningNode(SelfId().NodeId(), *StorageConfig, config)
+                || isJoiningNode(peerNodeId, config, *StorageConfig);
+
+            auto selfPolicyPileId = SelfBridgePileId;
+            auto peerPolicyPileId = peerBridgePileId;
+            if (joining) {
+                const auto registry = GetPileRegistry(newerConfig, &AppData()->BridgeConfig);
+                Y_ABORT_UNLESS(registry);
+                selfPolicyPileId = NBridge::ResolvePileId(*registry, SelfBridgePileName);
+                if (incoming.HasBridgePileName()) {
+                    peerPolicyPileId = NBridge::ResolvePileId(*registry, incoming.GetBridgePileName());
+                }
+            }
+
             const auto *peerPile = BridgeInfo->GetPile(peerBridgePileId);
             if (peerPile == BridgeInfo->SelfNodePile) {
-                if (!NBridge::PileStateTraits(NBridge::GetPileState(cs, SelfBridgePileId)).AllowsConnectionWithinPile) {
+                if (!selfPolicyPileId || !NBridge::PileStateTraits(NBridge::GetPileState(cs, selfPolicyPileId)).AllowsConnectionWithinPile) {
                     error = "nodes of the pile not added to the cluster can't connect to each other";
                 }
             } else { // extra checks when connecting between different piles
@@ -461,13 +501,13 @@ namespace NKikimr::NStorage {
                     return "config fingerprint mismatch";
                 }
 
-                if (!NBridge::PileStateTraits(NBridge::GetPileState(cs, peerBridgePileId)).AllowsConnection) {
+                if (!peerPolicyPileId || !NBridge::PileStateTraits(NBridge::GetPileState(cs, peerPolicyPileId)).AllowsConnection) {
                     error = "peer is not allowed to connect";
-                } else if (!NBridge::PileStateTraits(NBridge::GetPileState(cs, SelfBridgePileId)).AllowsConnection) {
+                } else if (!selfPolicyPileId || !NBridge::PileStateTraits(NBridge::GetPileState(cs, selfPolicyPileId)).AllowsConnection) {
                     error = "local node is not allowed to accept peer";
                 }
 
-                if (!error) {
+                if (!error && !joining) {
                     const auto& myClusterState = StorageConfig->GetClusterState();
                     const auto& peerClusterState = config.GetClusterState();
                     if (myClusterState.GetGeneration() < peerClusterState.GetGeneration()) {
@@ -580,6 +620,7 @@ namespace NKikimr::NStorage {
 
         STRICT_STFUNC(StateFunc,
             hFunc(TEvNodeWardenStorageConfig, Handle)
+            hFunc(TEvPrivate::TEvUpdateBridgeFeatureRequirement, Handle)
             hFunc(TEvInterconnect::TEvNodesInfo, Handle)
             hFunc(TEvInterconnect::TEvPrepareOutgoingConnection, Handle)
             hFunc(TEvInterconnect::TEvCheckIncomingConnection, Handle)

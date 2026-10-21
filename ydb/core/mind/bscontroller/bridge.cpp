@@ -900,12 +900,19 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
 
 void TBlobStorageController::UpdateStaticGroupBridgeGroupInfo(TGroupId groupId, ui32 generation,
         NKikimrBlobStorage::TGroupInfo bridgeGroupInfo, TGroupId targetGroupId) {
+    auto& syncerState = TargetGroupToSyncerState.at(targetGroupId);
+    Y_ABORT_UNLESS(syncerState.InCommit);
+    const ui64 commitCookie = syncerState.StaticCommitCookie = ++NextStaticSyncerCommitCookie;
     NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot request;
     auto *cmd = request.MutableUpdateBridgeGroupInfo();
     groupId.CopyToProto(cmd, &std::decay_t<decltype(*cmd)>::SetGroupId);
     cmd->SetGroupGeneration(generation);
     cmd->MutableBridgeGroupInfo()->CopyFrom(bridgeGroupInfo);
-    InvokeOnRoot(std::move(request), [this, targetGroupId](NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& result) {
+    InvokeOnRoot(std::move(request), [this, targetGroupId, commitCookie](NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& result) {
+        const auto it = TargetGroupToSyncerState.find(targetGroupId);
+        if (it == TargetGroupToSyncerState.end() || it->second.StaticCommitCookie != commitCookie) {
+            return;
+        }
         if (result.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
             YDB_LOG_ERROR("UpdateBridgeGroupInfo has unexpectedly failed",
                 {"marker", "BSCBR08"},
@@ -913,13 +920,11 @@ void TBlobStorageController::UpdateStaticGroupBridgeGroupInfo(TGroupId groupId, 
             // Another pile may have advanced the group generation. Release this commit and let
             // the syncer retry using the current group configuration instead of resending stale state.
         }
-        if (const auto it = TargetGroupToSyncerState.find(targetGroupId); it != TargetGroupToSyncerState.end()) {
-            TSyncerState& syncerState = it->second;
-            Y_ABORT_UNLESS(syncerState.InCommit);
-            syncerState.InCommit = false;
-            if (!syncerState.NodeIds) {
-                SyncersRequiringAction.PushBack(&syncerState);
-            }
+        TSyncerState& syncerState = it->second;
+        Y_ABORT_UNLESS(syncerState.InCommit);
+        syncerState.InCommit = false;
+        if (!syncerState.NodeIds) {
+            SyncersRequiringAction.PushBack(&syncerState);
         }
         if (result.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
             ProcessSyncers();

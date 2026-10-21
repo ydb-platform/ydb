@@ -180,11 +180,15 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::UndoCurrentPropositionNodeChange(TProposition& proposition) {
         if (!proposition.AddedOrChangedNodeIdentifiers.empty()) {
-            for (TActorId actorId : {MakeDistconfBridgeConnectionCheckerActorId(), GetNameserviceActorId()}) {
-                Send(actorId, new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo));
+            Send(GetNameserviceActorId(), new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo));
+            if (Cfg->BridgeConfig) {
+                Send(MakeDistconfBridgeConnectionCheckerActorId(), new TEvNodeWardenStorageConfig(
+                    StorageConfig, SelfManagementEnabled, BridgeInfo, CommittedStorageConfig));
+                Send(MakeDistconfBridgeConnectionCheckerActorId(),
+                    new TEvPrivate::TEvUpdateBridgeFeatureRequirement(std::nullopt));
             }
             for (const auto& node : proposition.AddedOrChangedNodeIdentifiers) {
-                UnsubscribeInterconnect(node.NodeId());
+                UnsubscribeQueue.insert(node.NodeId());
             }
         }
     }
@@ -1461,14 +1465,13 @@ namespace NKikimr::NStorage {
         std::ranges::sort(addedOrChangedNodeIdentifiers, {}, &TNodeIdentifier::NodeId);
 
         if (!addedOrChangedNodeIdentifiers.empty()) {
-            for (TActorId actorId : {MakeDistconfBridgeConnectionCheckerActorId(), GetNameserviceActorId()}) {
-                Send(actorId, new TEvNodeWardenStorageConfig(
-                    std::make_shared<NKikimrBlobStorage::TStorageConfig>(CurrentProposition->StorageConfig),
-                    SelfManagementEnabled,
-                    Cfg->BridgeConfig
-                        ? GenerateBridgeInfo(CurrentProposition->StorageConfig)
-                        : nullptr
-                ));
+            Send(GetNameserviceActorId(), new TEvNodeWardenStorageConfig(
+                std::make_shared<NKikimrBlobStorage::TStorageConfig>(CurrentProposition->StorageConfig),
+                SelfManagementEnabled,
+                Cfg->BridgeConfig ? GenerateBridgeInfo(CurrentProposition->StorageConfig) : nullptr));
+            if (Cfg->BridgeConfig) {
+                Send(MakeDistconfBridgeConnectionCheckerActorId(), new TEvPrivate::TEvUpdateBridgeFeatureRequirement(
+                    GetRequiredBridgeFeatureLevel(CurrentProposition->StorageConfig)));
             }
         }
 

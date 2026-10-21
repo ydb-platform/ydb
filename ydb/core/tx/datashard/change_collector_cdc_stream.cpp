@@ -124,9 +124,16 @@ bool TCdcStreamChangeCollector::NeedToReadKeys() const {
 
     bool value = false;
     for (const auto& [_, tableInfo] : Self->GetUserTables()) {
-        for (const auto& [_, streamInfo] : tableInfo->CdcStreams) {
+        for (const auto& [pathId, streamInfo] : tableInfo->CdcStreams) {
             if (streamInfo.State == NKikimrSchemeOp::ECdcStreamStateDisabled) {
                 continue;
+            }
+
+            // Initial scans read the snapshot regardless of the stream mode.
+            if (streamInfo.State == NKikimrSchemeOp::ECdcStreamStateScan &&
+                Self->GetCdcStreamScanManager().Has(pathId))
+            {
+                value = true;
             }
 
             switch (streamInfo.Mode) {

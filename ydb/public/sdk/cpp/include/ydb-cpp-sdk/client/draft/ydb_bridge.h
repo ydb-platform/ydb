@@ -19,6 +19,8 @@ struct TConvertToBridgeSettings : public TOperationRequestSettings<TConvertToBri
 
 struct TAddPileSettings : public TOperationRequestSettings<TAddPileSettings> {};
 
+struct TRemovePileSettings : public TOperationRequestSettings<TRemovePileSettings> {};
+
 enum class EPileState {
     UNSPECIFIED = 0,
     PRIMARY = 1,
@@ -41,6 +43,7 @@ struct TPendingPileOperation {
     enum class EKind {
         UNSPECIFIED = 0,
         ADD = 1, // the pile is being added to the cluster: its storage groups are being created
+        REMOVE = 2, // the pile is being removed from the cluster: its storage groups are being deleted
     };
 
     std::string PileName;
@@ -103,6 +106,11 @@ public:
     // Add an INACTIVE pile, listed in the bridge config with its hosts, to the cluster. Completes when every storage
     // group has got its part in the pile; the pile is DISCONNECTED then and may be rejoined.
     TAsyncStatus AddPile(const std::string& pileName, const TAddPileSettings& settings = {});
+
+    // Remove a DISCONNECTED pile from the cluster, deleting its parts of every storage group with all their data.
+    // Completes when every storage group has lost its part in the pile; the pile is INACTIVE then and may be dropped
+    // from the bridge config along with its hosts.
+    TAsyncStatus RemovePile(const std::string& pileName, const TRemovePileSettings& settings = {});
 
 private:
     class TImpl;

@@ -1018,11 +1018,6 @@ private:
                 FillTableId(readTable.Table(), *tableOp.MutableTable());
                 FillColumns(readTable.Columns(), *tableMeta, tableOp, true);
                 FillReadRange(readTable, *tableMeta, *tableOp.MutableReadRange());
-                if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
-                    tableOp.SetEstimatedRows(stats->Nrows);
-                } else if (tableMeta->RecordsCount) {
-                    tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
-                }
             } else if (auto maybeWideReadTableRanges = node.Maybe<TKqpWideReadTableRanges>()) {
                 auto readTableRanges = maybeWideReadTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1033,11 +1028,6 @@ private:
                 FillTableId(readTableRanges.Table(), *tableOp.MutableTable());
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadRanges());
-                if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
-                    tableOp.SetEstimatedRows(stats->Nrows);
-                } else if (tableMeta->RecordsCount) {
-                    tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
-                }
             } else if (auto maybeReadWideTableRanges = node.Maybe<TKqpWideReadOlapTableRanges>()) {
                 auto readTableRanges = maybeReadWideTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1051,11 +1041,6 @@ private:
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
                 FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
-                if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
-                    tableOp.SetEstimatedRows(stats->Nrows);
-                } else if (tableMeta->RecordsCount) {
-                    tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
-                }
             } else if (auto maybeReadBlockTableRanges = node.Maybe<TKqpBlockReadOlapTableRanges>()) {
                 auto readTableRanges = maybeReadBlockTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1070,11 +1055,6 @@ private:
                 FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
-                if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
-                    tableOp.SetEstimatedRows(stats->Nrows);
-                } else if (tableMeta->RecordsCount) {
-                    tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
-                }
             } else if (auto maybeDqSourceWrapBase = node.Maybe<TDqSourceWrapBase>()) {
                 stageCost += GetDqSourceWrapBaseCost(maybeDqSourceWrapBase.Cast(), TypesCtx);
             } else if (auto maybeDqReadWrapBase = node.Maybe<TDqReadWrapBase>()) {
@@ -1087,9 +1067,10 @@ private:
         });
 
         stageProto.SetStageCost(stageCost);
-        if (auto stats = OptimizeCtx.KqpStats.GetStats(stage.Program().Body().Raw())) {
-            stageProto.SetEstimatedRows(stats->Nrows);
-        }
+        // TODO: fill TKqpPhyStage::EstimatedRows and TKqpPhyTableOperation::EstimatedRows when:
+        //  - read estimates take key ranges into account: now a read by ranges, e.g. `key IN $param`,
+        //    is estimated as the whole table;
+        //  - TShardInfo::EstimatedRows gets a consumer, e.g. task placement in TMaxTasksGraph.
         const auto& secureParams = FindSecureParams(stage.Program().Ptr(), TypesCtx, SecretNames);
         stageProto.MutableSecureParams()->insert(secureParams.begin(), secureParams.end());
 

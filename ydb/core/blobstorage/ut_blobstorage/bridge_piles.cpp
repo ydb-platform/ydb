@@ -18,25 +18,6 @@ namespace {
     }
 
     // remove the pile along with its nodes from the main config of the cluster
-    NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult RemovePileFromConfig(TEnvironmentSetup& env, TString name) {
-        return ReplaceMainConfig(env, [&](YAML::Node& config) {
-            YAML::Node piles(YAML::NodeType::Sequence);
-            for (const YAML::Node& pile : config["bridge_config"]["piles"]) {
-                if (pile["name"].as<TString>() != name) {
-                    piles.push_back(pile);
-                }
-            }
-            config["bridge_config"]["piles"] = piles;
-            YAML::Node hosts(YAML::NodeType::Sequence);
-            for (const YAML::Node& host : config["hosts"]) {
-                if (host["location"]["bridge_pile_name"].as<TString>() != name) {
-                    hosts.push_back(host);
-                }
-            }
-            config["hosts"] = hosts;
-        });
-    }
-
     NKikimrBlobStorage::TConfigResponse UpdateBridgeGroupInfo(TEnvironmentSetup& env,
             const NKikimrBlobStorage::TGroupInfo& group, const NKikimrBridge::TGroupState& state) {
         NKikimrBlobStorage::TConfigRequest request;
@@ -211,13 +192,13 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
             checker.CheckAll();
 
             // INACTIVE pile is removed from the config along with its nodes; active piles can't be removed
-            res = RemovePileFromConfig(env, "pile_2");
+            res = DropPileFromConfig(env, "pile_2");
             UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
             UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "pile 'pile_2' in state SYNCHRONIZED can't be removed");
             for (ui32 nodeId = FirstThirdPileNodeId; nodeId <= LastThirdPileNodeId; ++nodeId) {
                 env.StopNode(nodeId);
             }
-            res = RemovePileFromConfig(env, "pile_3");
+            res = DropPileFromConfig(env, "pile_3");
             UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
             env.Sim(TDuration::Seconds(10));
             UNIT_ASSERT_VALUES_EQUAL(GetPileStates(QueryStorageConfig(env)), "pile_1:SYNCHRONIZED pile_2:SYNCHRONIZED");
@@ -269,7 +250,7 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
         env.Sim(TDuration::Seconds(10));
         res = ReplaceMainConfig(env, [](YAML::Node& /*config*/) {});
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
-        res = RemovePileFromConfig(env, "pile_3");
+        res = DropPileFromConfig(env, "pile_3");
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
         UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "NodeIds# 16");
     }

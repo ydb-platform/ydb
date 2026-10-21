@@ -1,5 +1,8 @@
 LIBRARY()
 
+# Work around LLVM 20 ThinLTO codegen crashes in transaction coroutines.
+NO_LTO()
+
 # Avoid llvm-symbolizer cache thrashing for large line-table-only ASan binaries.
 IF (SANITIZER_TYPE == "address" AND DEBUGINFO_LINES_ONLY == "yes")
     NO_DEBUG_INFO()

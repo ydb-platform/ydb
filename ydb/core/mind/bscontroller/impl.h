@@ -1102,6 +1102,7 @@ public:
             Table::Kind::Type Kind;
             TMaybe<Table::PDiskConfig::Type> PDiskConfig;
             std::optional<Table::DiskScope::Type> DiskScope;
+            Table::KindName::Type KindName;
 
             template<typename T>
             static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -1111,14 +1112,16 @@ public:
                         Table::ReadCentric,
                         Table::Kind,
                         Table::PDiskConfig,
-                        Table::DiskScope
+                        Table::DiskScope,
+                        Table::KindName
                     > adapter(
                         &TDriveInfo::Type,
                         &TDriveInfo::SharedWithOs,
                         &TDriveInfo::ReadCentric,
                         &TDriveInfo::Kind,
                         &TDriveInfo::PDiskConfig,
-                        &TDriveInfo::DiskScope
+                        &TDriveInfo::DiskScope,
+                        &TDriveInfo::KindName
                     );
                 callback(&adapter);
             }
@@ -1142,6 +1145,29 @@ public:
                     &THostConfigInfo::Name,
                     &THostConfigInfo::Generation,
                     &THostConfigInfo::Drives
+                );
+            callback(&adapter);
+        }
+    };
+
+
+    struct TPDiskKindInfo {
+        using Table = Schema::PDiskKind;
+
+        Table::KindId::Type KindId;
+        TMaybe<Table::PDiskConfig::Type> PDiskConfig;
+        TMaybe<Table::Generation::Type> Generation;
+
+        template<typename T>
+        static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
+            static TTableAdapter<Table, TPDiskKindInfo,
+                    Table::KindId,
+                    Table::PDiskConfig,
+                    Table::Generation
+                > adapter(
+                    &TPDiskKindInfo::KindId,
+                    &TPDiskKindInfo::PDiskConfig,
+                    &TPDiskKindInfo::Generation
                 );
             callback(&adapter);
         }
@@ -1234,6 +1260,7 @@ public:
             TMaybe<Schema::BoxStoragePoolPDiskFilter::SharedWithOs::Type> SharedWithOs;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::ReadCentric::Type> ReadCentric;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::Kind::Type> Kind;
+            TMaybe<Schema::BoxStoragePoolPDiskFilter::KindName::Type> KindName;
 
             template<typename TRowset>
             static TPDiskFilter CreateFromRowset(const TRowset &rowset) {
@@ -1252,6 +1279,9 @@ public:
                 }
                 if (rowset.template HaveValue<T::Kind>()) {
                     result.Kind = rowset.template GetValue<T::Kind>();
+                }
+                if (rowset.template HaveValue<T::KindName>()) {
+                    result.KindName = rowset.template GetValue<T::KindName>();
                 }
                 return result;
             }
@@ -1290,6 +1320,9 @@ public:
                 if (const auto& x = Kind) {
                     s << comma() << "Kind:" << *x;
                 }
+                if (const auto& x = KindName) {
+                    s << comma() << "KindName:" << *x;
+                }
             }
 
             static TString ToString(const TSet<TPDiskFilter>& filters) {
@@ -1304,14 +1337,14 @@ public:
             }
 
             auto GetKey() const {
-                return std::tie(BoxId, StoragePoolId, Type, SharedWithOs, ReadCentric, Kind);
+                return std::tie(BoxId, StoragePoolId, Type, SharedWithOs, ReadCentric, Kind, KindName);
             }
 
             friend bool operator <(const TPDiskFilter &x, const TPDiskFilter &y) {
                 return x.GetKey() < y.GetKey();
             }
 
-            Y_SAVELOAD_DEFINE(Type, SharedWithOs, ReadCentric, Kind);
+            Y_SAVELOAD_DEFINE(Type, SharedWithOs, ReadCentric, Kind, KindName);
         };
 
         Table::Name::Type Name;
@@ -1342,6 +1375,7 @@ public:
         Table::DDisk::Type DDisk = false;
         Table::PersistentBufferAllocationMode::Type PersistentBufferAllocationMode = NKikimrBlobStorage::BALANCED;
         TMaybe<Table::VDiskHeapAllocatorNumLeadingDisks::Type> VDiskHeapAllocatorNumLeadingDisks;
+        TMaybe<Table::KindName::Type> KindName;
 
         bool IsSameGeometry(const TStoragePoolInfo& other) const {
             return ErasureSpecies == other.ErasureSpecies
@@ -1449,6 +1483,7 @@ public:
                     Table::DDisk,
                     Table::VDiskHeapAllocatorNumLeadingDisks,
                     Table::PersistentBufferAllocationMode,
+                    Table::KindName,
                     TInlineTable<TUserIds, Schema::BoxStoragePoolUser>,
                     TInlineTable<TPDiskFilters, Schema::BoxStoragePoolPDiskFilter>
                 > adapter(
@@ -1480,6 +1515,7 @@ public:
                     &TStoragePoolInfo::DDisk,
                     &TStoragePoolInfo::VDiskHeapAllocatorNumLeadingDisks,
                     &TStoragePoolInfo::PersistentBufferAllocationMode,
+                    &TStoragePoolInfo::KindName,
                     &TStoragePoolInfo::UserIds,
                     &TStoragePoolInfo::PDiskFilters
                 );
@@ -1527,6 +1563,7 @@ public:
         Table::PDiskType::Type PDiskType = PDiskTypeToPDiskType(NPDisk::DEVICE_TYPE_UNKNOWN);
         TMaybe<Table::PDiskConfig::Type> PDiskConfig;
         TMaybe<Table::Path::Type> Path;
+        Table::KindName::Type KindName;
 
         TDriveSerialInfo() = default;
         TDriveSerialInfo(const TDriveSerialInfo&) = default;
@@ -1546,7 +1583,8 @@ public:
                     Table::Kind,
                     Table::PDiskType,
                     Table::PDiskConfig,
-                    Table::Path
+                    Table::Path,
+                    Table::KindName
                 > adapter(
                     &TDriveSerialInfo::BoxId,
                     &TDriveSerialInfo::NodeId,
@@ -1556,7 +1594,8 @@ public:
                     &TDriveSerialInfo::Kind,
                     &TDriveSerialInfo::PDiskType,
                     &TDriveSerialInfo::PDiskConfig,
-                    &TDriveSerialInfo::Path
+                    &TDriveSerialInfo::Path,
+                    &TDriveSerialInfo::KindName
                 );
             callback(&adapter);
         }
@@ -1634,6 +1673,7 @@ private:
     TMap<TBoxStoragePoolId, TStoragePoolInfo> StoragePools;
     std::set<std::pair<TBoxStoragePoolId, TGroupId>> StoragePoolGroups;
     TMap<TGroupId, TBlobDepotDeleteQueueInfo> BlobDepotDeleteQueue;
+    TMap<TString, TPDiskKindInfo> PDiskKinds;
     ui64 NextOperationLogIndex = 1;
     TActorId StatProcessorActorId;
     bool SelfHealEnable = false;

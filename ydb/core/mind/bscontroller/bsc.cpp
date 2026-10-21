@@ -12,6 +12,7 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/protos/blobstorage_pdisk_kind.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 
 #include <ydb/library/yaml_config/public/yaml_config.h>
@@ -490,7 +491,19 @@ bool TBlobStorageController::HostConfigEquals(const THostConfigInfo& left, const
         if (drive.GetType() != it->second->Type ||
                 drive.GetSharedWithOs() != it->second->SharedWithOs ||
                 drive.GetReadCentric() != it->second->ReadCentric ||
-                drive.GetKind() != it->second->Kind) {
+                drive.GetKindName() != it->second->KindName) {
+            return false;
+        }
+
+        ui64 kind = drive.GetKind();
+        if (const auto& kindName = drive.GetKindName(); kindName) {
+            const auto kindIt = PDiskKinds.find(kindName);
+            if (kindIt == PDiskKinds.end() || (kind && kind != kindIt->second.KindId)) {
+                return false;
+            }
+            kind = kindIt->second.KindId;
+        }
+        if (kind != it->second->Kind) {
             return false;
         }
 
@@ -610,6 +623,15 @@ std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageControll
         ev->EnforceHostRecords.emplace(hostRecords);
     }
 
+    for (const auto& pdiskKind : bsConfig.GetPDiskKinds()) {
+        auto* definePDiskKind = request->AddCommand()->MutableDefinePDiskKind();
+        definePDiskKind->CopyFrom(pdiskKind);
+        const auto it = PDiskKinds.find(pdiskKind.GetName());
+        if (it != PDiskKinds.end()) {
+            definePDiskKind->SetItemConfigGeneration(it->second.Generation.GetOrElse(1));
+        }
+    }
+
     for (const auto& hostConfig : bsConfig.GetDefineHostConfig()) {
         const auto it = HostConfigs.find(hostConfig.GetHostConfigId());
         if (it != HostConfigs.end() && HostConfigEquals(it->second, hostConfig)) {
@@ -655,6 +677,19 @@ std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageControll
         auto *cmd = request->AddCommand();
         auto *del = cmd->MutableDeleteHostConfig();
         del->SetHostConfigId(hostConfigId);
+        del->SetItemConfigGeneration(generation);
+    }
+
+    THashMap<TString, ui64> unusedPDiskKinds;
+    for (const auto& [name, kind] : PDiskKinds) {
+        unusedPDiskKinds.emplace(name, kind.Generation.GetOrElse(1));
+    }
+    for (const auto& kind : bsConfig.GetPDiskKinds()) {
+        unusedPDiskKinds.erase(kind.GetName());
+    }
+    for (const auto& [name, generation] : unusedPDiskKinds) {
+        auto* del = request->AddCommand()->MutableDeletePDiskKind();
+        del->SetName(name);
         del->SetItemConfigGeneration(generation);
     }
 
@@ -1263,6 +1298,8 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                 switch (cmd.GetCommandCase()) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineHostConfig:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteHostConfig:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDefinePDiskKind:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDeletePDiskKind:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineBox:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteBox:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineStoragePool:

@@ -6,6 +6,7 @@ import "ydb/core/protos/blobstorage_ddisk.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
+import "ydb/core/protos/blobstorage_pdisk_kind.proto";
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 import "google/protobuf/any.proto";
@@ -25,11 +26,13 @@ message THostConfigDrive {
     uint64 Kind = 5; // nontransparent user-defined kind used for filtering when picking up groups
 
     // optional PDisk config for these drives; if not set, default configuration is applied; overrides host-wide default
-    NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6;
+    TPDiskConfig PDiskConfig = 6;
     reserved 7; // uint64 InferPDiskSlotCountFromUnitSize, deprecated in favor of BlobStorageConfig.InferPDiskSlotCount
     reserved 8; // uint32 InferPDiskSlotCountMax, deprecated in favor of BlobStorageConfig.InferPDiskSlotCount
 
     optional string DiskScope = 9; // when set allows for finer domain mapping
+
+    string KindName = 10;
 }
 
 // Command used to define typical host configuration. It it used while defining new typical host configurations and as
@@ -40,7 +43,7 @@ message TDefineHostConfig {
     repeated THostConfigDrive Drive = 3; // a full set of drives on every host
 
     // host-wide default configuration for every PDisk
-    NKikimrBlobStorage.TPDiskConfig DefaultHostPDiskConfig = 4;
+    TPDiskConfig DefaultHostPDiskConfig = 4;
 
     // some syntactic sugar -- one drive type per path
     repeated string Rot = 5;
@@ -139,6 +142,7 @@ message TPDiskFilter {
             bool SharedWithOs = 2; // require certain SharedWithOs property
             bool ReadCentric = 3; // require certain ReadCentric property
             uint64 Kind = 4; // require certain kind
+            string KindName = 5; // require certain kind name
         }
     }
     repeated TRequiredProperty Property = 1; // conjunction of required properties; the same properties must not repeat
@@ -510,7 +514,8 @@ message TAddDriveSerial {
     uint64 BoxId = 2;
     uint64 Kind = 3;
     NKikimrBlobStorage.EPDiskType PDiskType = 4; // default UNKNOWN type implies auto-detection of drive type
-    NKikimrBlobStorage.TPDiskConfig PDiskConfig = 5;
+    TPDiskConfig PDiskConfig = 5;
+    string KindName = 6;
 }
 
 // Remove drive if empty and delete PDisk, but leave row in table with LifeStage == REMOVED
@@ -736,6 +741,8 @@ message TConfigRequest {
             TPopulatePDisk PopulatePDisk = 61;
             TDeleteSpecificGroups DeleteSpecificGroups = 62;
             TUpdateStoragePoolSettings UpdateStoragePoolSettings = 63;
+            TDefinePDiskKind DefinePDiskKind = 64;
+            TDeletePDiskKind DeletePDiskKind = 65;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -828,6 +835,7 @@ message TBaseConfig {
         reserved 22; // uint32 InferPDiskSlotCountMax = 22
         optional string DiskScope = 23; // when set allows for finer domain mapping
         uint64 ExpectedSlotSize = 24;
+        string KindName = 25;
     }
     message TVSlot {
         message TDonorDisk {

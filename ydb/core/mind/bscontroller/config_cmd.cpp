@@ -404,6 +404,8 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(DefineHostConfig)
                     HANDLE_COMMAND(ReadHostConfig)
                     HANDLE_COMMAND(DeleteHostConfig)
+                    HANDLE_COMMAND(DefinePDiskKind)
+                    HANDLE_COMMAND(DeletePDiskKind)
                     HANDLE_COMMAND(DefineBox)
                     HANDLE_COMMAND(ReadBox)
                     HANDLE_COMMAND(DeleteBox)

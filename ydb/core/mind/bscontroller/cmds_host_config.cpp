@@ -25,6 +25,20 @@ namespace NKikimr::NBsController {
             driveInfo.SharedWithOs = drive.GetSharedWithOs();
             driveInfo.ReadCentric = drive.GetReadCentric();
             driveInfo.Kind = drive.GetKind();
+            if (TString kindName = drive.GetKindName()) {
+                const auto it = PDiskKinds.Get().find(kindName);
+                if (it == PDiskKinds.Get().end()) {
+                    throw TExError() << "Unknown PDisk kind Name# " << kindName;
+                }
+                if (driveInfo.Kind != 0) {
+                    if (driveInfo.Kind != it->second.KindId) {
+                        throw TExError() << "Explicit TDriveSerial.Kind " << driveInfo.Kind << " does not match resolved KindName " << kindName;
+                    }
+                } else {
+                    driveInfo.Kind = it->second.KindId;
+                }
+                driveInfo.KindName = kindName;
+            }
             if (drive.HasDiskScope()) {
                 driveInfo.DiskScope = drive.GetDiskScope();
             }

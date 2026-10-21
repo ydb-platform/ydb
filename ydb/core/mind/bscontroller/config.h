@@ -74,6 +74,7 @@ namespace NKikimr {
             TCowHolder<TMap<TBoxStoragePoolId, TStoragePoolInfo>> StoragePools;
             TCowHolder<std::set<std::pair<TBoxStoragePoolId, TGroupId>>> StoragePoolGroups;
             TCowHolder<TMap<TGroupId, TBlobDepotDeleteQueueInfo>> BlobDepotDeleteQueue;
+            TCowHolder<TMap<TString, TPDiskKindInfo>> PDiskKinds;
 
             // system-level configuration
             TOverlayMap<TPDiskId, TPDiskInfo> PDisks;
@@ -173,6 +174,7 @@ namespace NKikimr {
                 , StoragePools(&controller.StoragePools)
                 , StoragePoolGroups(&controller.StoragePoolGroups)
                 , BlobDepotDeleteQueue(&controller.BlobDepotDeleteQueue)
+                , PDiskKinds(&controller.PDiskKinds)
                 , PDisks(controller.PDisks)
                 , DrivesSerials(controller.DrivesSerials)
                 , Nodes(&controller.Nodes)
@@ -224,6 +226,7 @@ namespace NKikimr {
                 StoragePools.Commit();
                 StoragePoolGroups.Commit();
                 BlobDepotDeleteQueue.Commit();
+                PDiskKinds.Commit();
                 PDisks.Commit();
                 DrivesSerials.Commit();
                 Nodes.Commit();
@@ -244,7 +247,7 @@ namespace NKikimr {
 
             bool Changed() const {
                 return HostConfigs.Changed() || Boxes.Changed() || StoragePools.Changed() ||
-                    StoragePoolGroups.Changed() || BlobDepotDeleteQueue.Changed() || PDisks.Changed() ||
+                    StoragePoolGroups.Changed() || BlobDepotDeleteQueue.Changed() || PDiskKinds.Changed() || PDisks.Changed() ||
                     DrivesSerials.Changed() || Nodes.Changed() || VSlots.Changed() || Groups.Changed() ||
                     IndexGroupSpeciesToGroup.Changed() || NextGroupId.Changed() || NextStoragePoolId.Changed() ||
                     SerialManagementStage.Changed() || NextVirtualGroupId.Changed();
@@ -390,6 +393,8 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TDefineHostConfig& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReadHostConfig& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteHostConfig& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TDefinePDiskKind& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TDeletePDiskKind& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDefineStoragePool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReadStoragePool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteStoragePool& cmd, TStatus& status);

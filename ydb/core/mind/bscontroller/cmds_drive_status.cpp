@@ -130,6 +130,20 @@ namespace NKikimr::NBsController {
         auto driveInfoMutable = DrivesSerials.FindForUpdate(serial);
         driveInfoMutable->BoxId = cmd.GetBoxId();
         driveInfoMutable->Kind = cmd.GetKind();
+        driveInfoMutable->KindName = cmd.GetKindName();
+        if (TString kindName = driveInfoMutable->KindName) {
+            const auto it = PDiskKinds.Get().find(kindName);
+            if (it == PDiskKinds.Get().end()) {
+                throw TExError() << "Unknown PDisk kind Name# " << kindName;
+            }
+            if (driveInfoMutable->Kind != 0) {
+                if (driveInfoMutable->Kind != it->second.KindId) {
+                    throw TExError() << "Explicit TDriveSerial.Kind " << driveInfoMutable->Kind << " does not match resolved KindName " << kindName;
+                }
+            } else {
+                driveInfoMutable->Kind = it->second.KindId;
+            }
+        }
         if (cmd.GetPDiskType() != NKikimrBlobStorage::UNKNOWN_TYPE) {
             driveInfoMutable->PDiskType = cmd.GetPDiskType();
         }

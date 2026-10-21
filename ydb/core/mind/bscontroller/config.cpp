@@ -640,6 +640,9 @@ namespace NKikimr::NBsController {
             if (state.HostConfigs.Changed()) {
                 MakeTableMerger<Schema::HostConfig>(&HostConfigs, &state.HostConfigs.Get(), this)(txc);
             }
+            if (state.PDiskKinds.Changed()) {
+                MakeTableMerger<Schema::PDiskKind>(&PDiskKinds, &state.PDiskKinds.Get(), this)(txc);
+            }
             if (state.Boxes.Changed()) {
                 MakeTableMerger<Schema::Box>(&Boxes, &state.Boxes.Get(), this)(txc);
             }
@@ -1184,6 +1187,7 @@ namespace NKikimr::NBsController {
                 drive.SetSharedWithOs(value.SharedWithOs);
                 drive.SetReadCentric(value.ReadCentric);
                 drive.SetKind(value.Kind);
+                drive.SetKindName(value.KindName);
                 if (value.DiskScope) {
                     drive.SetDiskScope(*value.DiskScope);
                 }

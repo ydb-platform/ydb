@@ -1204,6 +1204,9 @@ namespace {
                 }
 
                 dstSettings.EnsureGlobalConsistency().CommitInterval = TDuration::FromValue(value);
+            } else if (name == "initial_scan") {
+                YQL_ENSURE(setting.Value().Maybe<TCoBool>());
+                dstSettings.InitialScan = FromString<bool>(setting.Value().Cast<TCoBool>().Literal().Value());
             }
         }
 

@@ -15,8 +15,10 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/executor_pool_base.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
+#include <ydb/library/testlib/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/scope.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
@@ -494,20 +496,25 @@ TReplicationTestInfo StartReplication(
         int targetCount = 1,
         const TString& token = "root@builtin",
         bool globalConsistency = false, bool withIndex = false,
-        NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool mockService = true)
+        NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool mockService = true,
+        TMaybe<bool> initialScan = Nothing())
 {
     NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
         .DiscoveryEndpoint(env.GetEndpoint())
         .Database(env.GetDatabase()));
-    auto session = client.CreateSession().GetValueSync().GetSession();
+    auto session = env.RunCall([&] {
+        return client.CreateSession().GetValueSync().GetSession();
+    });
     for (int i = 1; i <= targetCount; ++i) {
         if (withIndex) {
-            const auto status = session.ExecuteSchemeQuery(Sprintf(R"(
-                CREATE TABLE `/Root/table%i` (
-                    key Uint32, value Utf8, PRIMARY KEY (key),
-                    INDEX by_value GLOBAL %s ON (value)
-                );
-            )", i, indexType == NKikimrSchemeOp::EIndexTypeGlobalAsync ? "ASYNC" : "SYNC")).GetValueSync();
+            const auto status = env.RunCall([&] {
+                return session.ExecuteSchemeQuery(Sprintf(R"(
+                    CREATE TABLE `/Root/table%i` (
+                        key Uint32, value Utf8, PRIMARY KEY (key),
+                        INDEX by_value GLOBAL %s ON (value)
+                    );
+                )", i, indexType == NKikimrSchemeOp::EIndexTypeGlobalAsync ? "ASYNC" : "SYNC")).GetValueSync();
+            });
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         } else {
             CreateSourceTable(env, Sprintf("table%i", i));
@@ -532,10 +539,15 @@ TReplicationTestInfo StartReplication(
         params.push_back(R"(CONSISTENCY_LEVEL = "GLOBAL")");
         params.push_back(R"(COMMIT_INTERVAL = Interval("PT10S"))");
     }
+    if (initialScan) {
+        params.push_back(TStringBuilder() << "INITIAL_SCAN = " << (*initialScan ? "TRUE" : "FALSE"));
+    }
 
-    const auto status = session.ExecuteSchemeQuery(Sprintf(R"(
-        CREATE ASYNC REPLICATION `replication` FOR %s WITH (%s);
-    )", JoinSeq(", ", targets).c_str(), JoinSeq(", ", params).c_str())).GetValueSync();
+    const auto status = env.RunCall([&] {
+        return session.ExecuteSchemeQuery(Sprintf(R"(
+            CREATE ASYNC REPLICATION `replication` FOR %s WITH (%s);
+        )", JoinSeq(", ", targets).c_str(), JoinSeq(", ", params).c_str())).GetValueSync();
+    });
     UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), NYdb::EStatus::SUCCESS, status.GetIssues().ToString());
 
     const auto desc = env.GetDescription("/Root/replication").GetPathDescription().GetReplicationDescription();
@@ -893,10 +905,10 @@ struct TPendingAttachment {
 };
 
 TPendingAttachment StartPendingAttachment(TTestEnv& env) {
-    env.GetRuntime().GetAppData().ReplicationConfig.SetSkipInitialScan(true);
+    env.GetRuntime().GetAppData().ReplicationConfig.SetInitialScan(false);
     CreateSourceTable(env, "replica1");
     const auto info = StartReplication(env);
-    UNIT_ASSERT(info.Config.GetSkipInitialScan());
+    UNIT_ASSERT(!info.Config.GetInitialScan());
 
     ui64 targetId = 0;
     bool foundTarget = false;
@@ -921,7 +933,7 @@ TPendingAttachment StartPendingAttachment(TTestEnv& env) {
         env.GetSender(), env.GetSchemeshardId("/Root/table1"), env.GetYdbProxy(),
         "/Root", info.PathId, 1, targetId, TReplication::ETargetKind::Table,
         "/Root/table1", "/Root/replica1", EReplicationMode::ReadOnly,
-        EConsistencyLevel::Row, true));
+        EConsistencyLevel::Row, false));
 
     auto prepare = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDst>(env.GetSender());
     const auto dstPathId = prepare->Get()->DstPathId;
@@ -963,6 +975,87 @@ void AssertIndexCancellationCleanedUp(TIndexBuildTestEnv& env) {
 }
 
 } // anonymous namespace
+
+Y_UNIT_TEST_SUITE(ReplicationCreation) {
+    Y_UNIT_TEST(InitialScanDisabledDoesNotTouchMissingDestination) {
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        const TString destination = "/Root/replica1";
+        const auto missingDestinationStatus = static_cast<int>(NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetSchemeStatus(), missingDestinationStatus);
+
+        ui32 destinationCreators = 0;
+        TTestActorRuntimeBase::TRegistrationObserver previousRegistrationObserver;
+        previousRegistrationObserver = runtime.SetRegistrationObserverFunc(
+            [&](TTestActorRuntimeBase& actorRuntime, const TActorId& parent, const TActorId& actorId) {
+                previousRegistrationObserver(actorRuntime, parent, actorId);
+                if (actorRuntime.FindActor(actorId)->GetActivityType()
+                    == NKikimrServices::TActivity::REPLICATION_CONTROLLER_DST_CREATOR)
+                {
+                    ++destinationCreators;
+                }
+            });
+        Y_DEFER {
+            runtime.SetRegistrationObserverFunc(std::move(previousRegistrationObserver));
+        };
+
+        bool streamCreated = false;
+        auto streamObserver = runtime.AddObserver(
+            [&](IEventHandle::TPtr& ev) {
+                if (ev->GetTypeRewrite() != TEvPrivate::EvCreateStreamResult || !ev->HasEvent()) {
+                    return;
+                }
+                // Private event numbers are shared by unrelated actors.
+                if (const auto* result = dynamic_cast<TEvPrivate::TEvCreateStreamResult*>(ev->GetBase())) {
+                    UNIT_ASSERT_C(result->IsSuccess(), result->Status.GetIssues().ToString());
+                    streamCreated = true;
+                }
+            });
+
+        const auto info = StartReplication(env, 1, "root@builtin", false, false,
+            NKikimrSchemeOp::EIndexTypeGlobal, true, false);
+        UNIT_ASSERT(!info.Config.GetInitialScan());
+        runtime.WaitFor("source stream creation", [&] { return streamCreated; }, TDuration::Seconds(60));
+
+        const auto state = DescribeReplication(env, info);
+        UNIT_ASSERT_C(state->Get()->Record.GetStatus() == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS,
+            state->Get()->Record.DebugString());
+        UNIT_ASSERT_C(state->Get()->Record.GetState().HasPaused(), state->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(state->Get()->Record.TargetsSize(), 1);
+        const auto targetId = state->Get()->Record.GetTargets(0).GetId();
+        // The committed stream capability proves source setup has completed.
+        UNIT_ASSERT(ReadStreamSchemaChanges(env, info.ControllerId, TWorkerId(1, targetId, 0)).has_value());
+        UNIT_ASSERT_VALUES_EQUAL(destinationCreators, 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetSchemeStatus(), missingDestinationStatus);
+
+        // Reloading the ready source stream also exercises target progress during startup.
+        RestartController(env, info.ControllerId);
+        const auto restarted = DescribeReplication(env, info);
+        UNIT_ASSERT_C(restarted->Get()->Record.GetState().HasPaused(), restarted->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(restarted->Get()->Record.TargetsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(destinationCreators, 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetSchemeStatus(), missingDestinationStatus);
+    }
+
+    Y_UNIT_TEST_TWIN(InitialScan, ConfigInitialScan) {
+        for (const auto initialScan : TVector<TMaybe<bool>>{Nothing(), false, true}) {
+            TTestEnv env;
+            env.GetRuntime().GetAppData().ReplicationConfig.SetInitialScan(ConfigInitialScan);
+            const bool expectedInitialScan = initialScan.GetOrElse(ConfigInitialScan);
+            if (!expectedInitialScan) {
+                CreateSourceTable(env, "replica1");
+            }
+
+            const auto info = StartReplication(env, 1, "root@builtin", false, false,
+                NKikimrSchemeOp::EIndexTypeGlobal, true, initialScan);
+            UNIT_ASSERT_VALUES_EQUAL(info.Config.GetInitialScan(), expectedInitialScan);
+
+            const auto desc = env.GetDescription("/Root/replication").GetPathDescription().GetReplicationDescription();
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetState().HasPaused(), !expectedInitialScan);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetState().HasStandBy(), expectedInitialScan);
+        }
+    }
+}
 
 Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
     Y_UNIT_TEST(DoneAfterAttachAlterBeforeResult) {
@@ -1044,7 +1137,7 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
     Y_UNIT_TEST(DropWaitsForDelayedAttachAllocation) {
         TTestEnv env;
         auto& runtime = env.GetRuntime();
-        runtime.GetAppData().ReplicationConfig.SetSkipInitialScan(true);
+        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
         CreateSourceTable(env, "replica1");
         const auto info = StartReplication(env);
 

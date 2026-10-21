@@ -378,9 +378,9 @@ namespace NKikimr {
                 if (invalidPolicy) {
                     invalid.MutableWritePolicy();
                 } else {
-                    auto* diskState = invalid.MutableVDiskStates()->AddVDisk();
-                    diskState->SetOrderNumber(1);
-                    diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
+                    auto* realmState = invalid.MutableFailRealmStates()->AddFailRealm();
+                    realmState->SetFailRealmIdx(1);
+                    realmState->SetState(NKikimrBlobStorage::TFailRealmStates::Excluded);
                 }
                 UNIT_ASSERT_VALUES_EQUAL(checkReadiness(newVDiskId, &invalid), NKikimrProto::ERROR);
                 UNIT_ASSERT_VALUES_EQUAL(checkReadiness(oldVDiskId, nullptr), NKikimrProto::OK);

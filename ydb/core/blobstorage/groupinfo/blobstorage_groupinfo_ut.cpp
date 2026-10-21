@@ -27,94 +27,176 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         UNIT_ASSERT(!error.Str().empty());
     }
 
-    Y_UNIT_TEST(VDiskStates) {
+    Y_UNIT_TEST(Mirror3dcStateContract) {
+        using T = NKikimrBlobStorage::TMirror3dcGroupState;
+        using TInfo = TBlobStorageGroupInfo;
+        using TState = TInfo::TMirror3dcState;
+        const TInfo::TTopology topology(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1, true);
+        const TInfo::TTopology other(TBlobStorageGroupType::ErasureNone, 1, 1, 1, true);
+        const TInfo::TTopology empty(TBlobStorageGroupType::ErasureMirror3dc, 0, 0, 0);
+        T proto;
+        UNIT_ASSERT(!TState::Parse(proto, topology));
+        proto.SetMode(T::NORMAL);
+        UNIT_ASSERT(TState::Parse(proto, topology));
+        UNIT_ASSERT(!TState::Parse(proto, other));
+        UNIT_ASSERT(!TState::Parse(proto, empty));
+        proto.SetFailedFailRealmIdx(0);
+        UNIT_ASSERT(!TState::Parse(proto, topology));
+        proto.SetMode(T::DC_FAILURE);
+        UNIT_ASSERT(TState::Parse(proto, topology));
+        proto.SetFailedFailRealmIdx(3);
+        UNIT_ASSERT(!TState::Parse(proto, topology));
+        proto.SetFailedFailRealmIdx(0);
+        proto.SetMode(T::SOLO_DC_INV_1);
+        UNIT_ASSERT(!TState::Parse(proto, topology));
+        proto.SetSurvivingFailRealmIdx(0);
+        UNIT_ASSERT(!TState::Parse(proto, topology));
+        proto.SetSurvivingFailRealmIdx(2);
+        UNIT_ASSERT(TState::Parse(proto, topology));
+
+        TState normal;
+        TState failed{T::DC_FAILURE, 0, {}};
+        TState inv1{T::DC_FAILURE_INV_1, 0, {}};
+        TState inv2{T::DC_FAILURE_INV_2, 0, {}};
+        TState solo1{T::SOLO_DC_INV_1, 0, 2};
+        TState solo2{T::SOLO_DC_INV_2, 0, 2};
+        UNIT_ASSERT(!normal.CanTransitionTo(failed));
+        UNIT_ASSERT(failed.CanTransitionTo(inv1));
+        UNIT_ASSERT(!inv1.CanTransitionTo(inv2));
+        TState strengthening{T::DC_FAILURE_INV_2_PENDING, 0, {}};
+        UNIT_ASSERT(inv1.CanTransitionTo(strengthening));
+        UNIT_ASSERT(strengthening.CanTransitionTo(inv2));
+        UNIT_ASSERT(!strengthening.GetWritePolicy().CheckWriteOk({1, 1}));
+        UNIT_ASSERT(strengthening.GetWritePolicy().CheckWriteOk({2, 2}));
+        UNIT_ASSERT(!inv2.CanTransitionTo(inv1));
+        UNIT_ASSERT(!inv1.CanTransitionTo(solo1));
+        UNIT_ASSERT(!inv2.CanTransitionTo(solo2));
+        UNIT_ASSERT(!solo1.CanTransitionTo(normal));
+        UNIT_ASSERT(!solo2.CanTransitionTo(inv2));
+        UNIT_ASSERT(solo1.CanTransitionTo(solo2));
+        UNIT_ASSERT(!solo2.CanTransitionTo({T::SOLO_DC_INV_2, 0, 1}));
+        UNIT_ASSERT(!inv1.CanTransitionTo({T::DC_FAILURE_INV_2, 1, {}}));
+        UNIT_ASSERT(failed.GetWritePolicy().CheckWriteOk({1, 1}));
+        UNIT_ASSERT(!inv2.GetWritePolicy().CheckWriteOk({1, 2}));
+        UNIT_ASSERT(inv2.GetWritePolicy().CheckWriteOk({2, 2}));
+        UNIT_ASSERT(!inv2.GetWritePolicy().CheckWriteDurability({1, 2}));
+        UNIT_ASSERT(solo1.GetWritePolicy().CheckWriteOk({2}));
+        UNIT_ASSERT(!solo2.GetWritePolicy().CheckWriteOk({1}));
+
+        const TVector<TState> path = {
+            normal, {T::DC_FAILURE_PENDING, 0, {}}, failed, inv1,
+            {T::SOLO_DC_INV_1_PENDING, 0, 2}, solo1, solo2,
+            {T::SOLO_DC_RECOVERY_PENDING, 0, 2}, {T::SOLO_DC_RECOVERY, 0, 2}, inv2,
+            {T::DC_SYNC_PENDING, 0, {}}, {T::DC_SYNC, 0, {}}, {T::NORMAL_PENDING, 0, {}}, normal,
+        };
+        for (size_t i = 1; i < path.size(); ++i) {
+            UNIT_ASSERT_C(path[i - 1].CanTransitionTo(path[i]), i);
+        }
+        for (int mode = T::NORMAL; mode <= T::DC_FAILURE_INV_2_PENDING; ++mode) {
+            TState state;
+            state.Mode = static_cast<T::EMode>(mode);
+            if (mode != T::NORMAL) {
+                state.FailedFailRealmIdx = 0;
+            }
+            if (state.RequiresSurvivingRealm()) {
+                state.SurvivingFailRealmIdx = 2;
+            }
+            UNIT_ASSERT(TState::Parse(state.ToProto(), topology) == state);
+            UNIT_ASSERT(TInfo::TWritePolicy::Parse(state.GetWritePolicy().ToProto(), topology) == state.GetWritePolicy());
+            NKikimrBlobStorage::TGroupInfo group;
+            group.SetGroupID(0);
+            group.SetGroupGeneration(1);
+            group.SetErasureSpecies(TBlobStorageGroupType::ErasureMirror3dc);
+            for (ui32 r = 0; r < 3; ++r) {
+                auto* ring = group.AddRings();
+                for (ui32 d = 0; d < 3; ++d) {
+                    ring->AddFailDomains()->AddVDiskLocations();
+                }
+            }
+            group.MutableMirror3dcState()->CopyFrom(state.ToProto());
+            group.MutableWritePolicy()->CopyFrom(state.GetWritePolicy().ToProto());
+            for (const auto& realm : state.GetFailRealmStates()) {
+                auto* item = group.MutableFailRealmStates()->AddFailRealm();
+                item->SetFailRealmIdx(realm.FailRealmIdx);
+                item->SetState(static_cast<NKikimrBlobStorage::TFailRealmStates::EState>(realm.State));
+            }
+            const auto info = TInfo::Parse(group, nullptr, nullptr);
+            UNIT_ASSERT_C(info, mode);
+            UNIT_ASSERT(info->Mirror3dcState == state);
+            TInfo copy(info, TVDiskID(0, 2, 0, 0, 0), TActorId());
+            UNIT_ASSERT(copy.Mirror3dcState == state);
+            UNIT_ASSERT(!copy.HasStoragePolicyChanged(*info));
+            group.ClearWritePolicy();
+            UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr));
+        }
+        UNIT_ASSERT(!TInfo::TWritePolicy::Parse(normal.GetWritePolicy().ToProto(), empty));
+    }
+
+    Y_UNIT_TEST(FailRealmStates) {
+        using TInfo = TBlobStorageGroupInfo;
+        using TProto = NKikimrBlobStorage::TFailRealmStates;
         NKikimrBlobStorage::TGroupInfo group;
         group.SetGroupID(0);
         group.SetGroupGeneration(1);
         group.SetErasureSpecies(TBlobStorageGroupType::ErasureMirror3dc);
         for (ui32 realm = 0; realm < 3; ++realm) {
-            auto *ring = group.AddRings();
+            auto* ring = group.AddRings();
             for (ui32 domain = 0; domain < 3; ++domain) {
-                auto *location = ring->AddFailDomains()->AddVDiskLocations();
-                location->SetNodeID(1 + realm * 3 + domain);
-                location->SetPDiskID(1);
-                location->SetVDiskSlotID(1);
+                ring->AddFailDomains()->AddVDiskLocations();
             }
         }
-        const auto original = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+        const auto original = TInfo::Parse(group, nullptr, nullptr);
         UNIT_ASSERT(original);
-        UNIT_ASSERT(original->VDiskStates.empty());
-        for (ui32 order : {2u, 0u, 1u, 2u}) {
-            auto* diskState = group.MutableVDiskStates()->AddVDisk();
-            diskState->SetOrderNumber(order);
-            diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
-        }
-        const auto info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+        auto add = [&](ui32 realm, TProto::EState state) {
+            auto* item = group.MutableFailRealmStates()->AddFailRealm();
+            item->SetFailRealmIdx(realm);
+            item->SetState(state);
+        };
+        add(1, TProto::Joining);
+        add(0, TProto::Excluded);
+        add(1, TProto::Joining);
+        add(2, TProto::Included);
+        const auto info = TInfo::Parse(group, nullptr, nullptr);
         UNIT_ASSERT(info);
-        UNIT_ASSERT_VALUES_EQUAL(info->VDiskStates.size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(info->VDiskStates[0].OrderNumber, 0);
-        UNIT_ASSERT_VALUES_EQUAL(info->VDiskStates[1].OrderNumber, 1);
-        UNIT_ASSERT(info->HasVDiskPolicyChanged(*original));
-        for (ui32 orderNumber = 0; orderNumber < 9; ++orderNumber) {
-            UNIT_ASSERT_VALUES_EQUAL(info->GetVDiskState(info->GetVDiskId(orderNumber)) == TBlobStorageGroupInfo::EVDiskState::Excluded,
-                orderNumber < 3);
-        }
-        TBlobStorageGroupInfo copy(info, TVDiskID(0, 2, 0, 0, 0), TActorId());
-        UNIT_ASSERT(copy.VDiskStates == info->VDiskStates);
-        UNIT_ASSERT(!copy.HasVDiskPolicyChanged(*info));
-        group.ClearVDiskStates();
-        {
-            auto* diskState = group.MutableVDiskStates()->AddVDisk();
-            diskState->SetOrderNumber(1);
-            diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
-        }
-        UNIT_ASSERT(!TBlobStorageGroupInfo::Parse(group, nullptr, nullptr));
-        group.ClearVDiskStates();
-        const auto cleared = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
-        UNIT_ASSERT(cleared);
-        UNIT_ASSERT(cleared->VDiskStates.empty());
-        UNIT_ASSERT(cleared->HasVDiskPolicyChanged(*info));
-        auto* writePolicy = group.MutableWritePolicy();
-        writePolicy->AddWriteOk()->AddPartsPerFailRealm(2);
-        auto* durability = writePolicy->AddWriteDurability();
-        durability->AddPartsPerFailRealm(2);
-        durability->AddPartsPerFailRealm(2);
-        const auto withPolicy = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
-        UNIT_ASSERT(withPolicy);
-        UNIT_ASSERT(withPolicy->WritePolicy);
-        UNIT_ASSERT(withPolicy->HasVDiskPolicyChanged(*cleared));
-        TBlobStorageGroupInfo policyCopy(withPolicy, TVDiskID(0, 3, 0, 0, 0), TActorId());
-        UNIT_ASSERT(policyCopy.WritePolicy == withPolicy->WritePolicy);
-        UNIT_ASSERT(!policyCopy.HasVDiskPolicyChanged(*withPolicy));
-        for (ui32 i = 0; i < 3; ++i) {
-            auto* diskState = group.MutableVDiskStates()->AddVDisk();
-            diskState->SetOrderNumber(i);
-            diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
-        }
+        UNIT_ASSERT_VALUES_EQUAL(info->FailRealmStates.size(), 2);
+        UNIT_ASSERT(info->GetFailRealmState(0) == TInfo::EFailRealmState::Excluded);
+        UNIT_ASSERT(info->GetFailRealmState(1) == TInfo::EFailRealmState::Joining);
+        UNIT_ASSERT(info->GetFailRealmState(2) == TInfo::EFailRealmState::Included);
+        UNIT_ASSERT(info->HasStoragePolicyChanged(*original));
+        TInfo copy(info, TVDiskID(0, 2, 0, 0, 0), TActorId());
+        UNIT_ASSERT(copy.FailRealmStates == info->FailRealmStates);
+        UNIT_ASSERT(!copy.HasStoragePolicyChanged(*info));
+        auto* policy = group.MutableWritePolicy();
+        policy->AddWriteOk()->AddPartsPerFailRealm(2);
+        policy->AddWriteDurability()->AddPartsPerFailRealm(2);
         group.SetBridgeProxyGroupId(0);
         group.MutableBridgeGroupState()->AddPile()->SetGroupId(0);
-        const auto inlineInfo = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+        const auto inlineInfo = TInfo::Parse(group, nullptr, nullptr);
         UNIT_ASSERT(inlineInfo);
-        UNIT_ASSERT(inlineInfo->IsInlinePile());
         const auto view = inlineInfo->MakeInlinePileView();
+        UNIT_ASSERT(view->FailRealmStates == inlineInfo->FailRealmStates);
         UNIT_ASSERT(view->WritePolicy == inlineInfo->WritePolicy);
-        UNIT_ASSERT(view->VDiskStates == inlineInfo->VDiskStates);
-        group.ClearVDiskStates();
-        group.ClearBridgeProxyGroupId();
-        group.ClearBridgeGroupState();
-        group.ClearWritePolicy();
-        UNIT_ASSERT(TBlobStorageGroupInfo::Parse(group, nullptr, nullptr)->HasVDiskPolicyChanged(*withPolicy));
-        group.MutableWritePolicy();
-        UNIT_ASSERT(!TBlobStorageGroupInfo::Parse(group, nullptr, nullptr));
-        group.ClearWritePolicy();
-        {
-            auto* diskState = group.MutableVDiskStates()->AddVDisk();
-            diskState->SetOrderNumber(9);
-            diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
-        }
-        TStringStream error;
-        UNIT_ASSERT(!TBlobStorageGroupInfo::Parse(group, nullptr, &error));
-        UNIT_ASSERT(!error.Str().empty());
+        add(1, TProto::Excluded);
+        UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr));
+        group.ClearFailRealmStates();
+        add(3, TProto::Excluded);
+        UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr));
+        group.ClearFailRealmStates();
+        group.MutableFailRealmStates()->AddFailRealm()->SetFailRealmIdx(0);
+        UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr));
+        group.ClearFailRealmStates();
+        group.MutableFailRealmStates()->AddFailRealm()->SetState(TProto::Included);
+        UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr));
+        group.ClearFailRealmStates();
+        auto* invalid = group.MutableFailRealmStates()->AddFailRealm();
+        invalid->SetFailRealmIdx(0);
+        invalid->GetReflection()->MutableUnknownFields(invalid)->AddVarint(2, 99);
+        UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr));
+        group.ClearFailRealmStates();
+        add(2, TProto::Leaving);
+        UNIT_ASSERT(TInfo::Parse(group, nullptr, nullptr));
+        group.ClearFailRealmStates();
+        UNIT_ASSERT(TInfo::Parse(group, nullptr, nullptr)->FailRealmStates.empty());
     }
 
     Y_UNIT_TEST(WritePolicyLayouts) {
@@ -206,76 +288,13 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         auto invalid = proto;
         invalid.MutableWriteOk(0)->AddPartsPerFailRealm(4);
         UNIT_ASSERT(!TBlobStorageGroupInfo::TWritePolicy::Parse(invalid, topology));
-        NKikimrBlobStorage::TVDiskStates excluded;
-        {
-            auto* diskState = excluded.AddVDisk();
-            diskState->SetOrderNumber(0);
-            diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
-        }
-        UNIT_ASSERT(!TBlobStorageGroupInfo::ParseVDiskStates(excluded, topology));
-        for (ui32 i = 1; i < 8; ++i) {
-            auto* diskState = excluded.AddVDisk();
-            diskState->SetOrderNumber(i);
-            diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
-        }
-        UNIT_ASSERT(TBlobStorageGroupInfo::ParseVDiskStates(excluded, topology));
-    }
-
-    Y_UNIT_TEST(VDiskStatesReplicating) {
-        using TInfo = TBlobStorageGroupInfo;
-        using TProto = NKikimrBlobStorage::TVDiskStates;
-        NKikimrBlobStorage::TGroupInfo group;
-        group.SetGroupID(0);
-        group.SetGroupGeneration(1);
-        group.SetErasureSpecies(TBlobStorageGroupType::ErasureMirror3dc);
-        for (ui32 realm = 0; realm < 3; ++realm) {
-            auto* ring = group.AddRings();
-            for (ui32 domain = 0; domain < 3; ++domain) {
-                ring->AddFailDomains()->AddVDiskLocations();
-            }
-        }
-        auto add = [&](ui32 order, TProto::EState state) {
-            auto* disk = group.MutableVDiskStates()->AddVDisk();
-            disk->SetOrderNumber(order);
-            disk->SetState(state);
-        };
-        for (ui32 order = 0; order < 3; ++order) {
-            add(order, TProto::Excluded);
-            add(order + 3, TProto::Replicating);
-        }
-        add(3, TProto::Replicating); // Identical duplicates are normalized.
-        add(8, TProto::Included); // Explicit default is normalized away.
-        const auto info = TInfo::Parse(group, nullptr, nullptr);
-        UNIT_ASSERT(info);
-        UNIT_ASSERT_VALUES_EQUAL(info->VDiskStates.size(), 6);
-        for (ui32 order = 0; order < 9; ++order) {
-            const auto expected = order < 3 ? TInfo::EVDiskState::Excluded
-                : order < 6 ? TInfo::EVDiskState::Replicating : TInfo::EVDiskState::Included;
-            UNIT_ASSERT(info->GetVDiskState(info->GetVDiskId(order)) == expected);
-        }
-        TInfo copy(info, TVDiskID(0, 2, 0, 0, 0), TActorId());
-        UNIT_ASSERT(copy.VDiskStates == info->VDiskStates);
-        UNIT_ASSERT(!copy.HasVDiskPolicyChanged(*info));
-        add(3, TProto::Excluded);
-        UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr)); // Conflicting duplicate.
-        group.MutableVDiskStates()->MutableVDisk()->RemoveLast();
-        group.MutableVDiskStates()->MutableVDisk(3)->SetState(TProto::Included);
-        UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr)); // Mixed states in a realm.
-        group.ClearVDiskStates();
-        group.MutableVDiskStates()->AddVDisk()->SetOrderNumber(0);
-        UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr)); // Missing state.
-        group.ClearVDiskStates();
-        group.MutableVDiskStates()->AddVDisk()->SetState(TProto::Included);
-        UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr)); // Missing position.
-        group.ClearVDiskStates();
-        auto* invalid = group.MutableVDiskStates()->AddVDisk();
-        invalid->SetOrderNumber(0);
-        invalid->GetReflection()->MutableUnknownFields(invalid)->AddVarint(2, 99);
-        UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr)); // Unknown enum on the wire.
-        group.ClearVDiskStates();
-        const auto cleared = TInfo::Parse(group, nullptr, nullptr);
-        UNIT_ASSERT(cleared);
-        UNIT_ASSERT(cleared->HasVDiskPolicyChanged(*info));
+        NKikimrBlobStorage::TFailRealmStates excluded;
+        auto* realm = excluded.AddFailRealm();
+        realm->SetFailRealmIdx(0);
+        realm->SetState(NKikimrBlobStorage::TFailRealmStates::Excluded);
+        UNIT_ASSERT(TBlobStorageGroupInfo::ParseFailRealmStates(excluded, topology));
+        realm->SetFailRealmIdx(1);
+        UNIT_ASSERT(!TBlobStorageGroupInfo::ParseFailRealmStates(excluded, topology));
     }
 
     Y_UNIT_TEST(TestBelongsToSubgroup) {

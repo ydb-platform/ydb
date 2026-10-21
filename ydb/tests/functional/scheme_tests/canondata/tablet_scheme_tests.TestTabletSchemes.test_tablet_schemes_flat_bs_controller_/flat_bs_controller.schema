@@ -416,6 +416,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 106,
+                "ColumnName": "BlobDepotConfig",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "ID",
                 "ColumnType": "Uint32"
@@ -426,14 +431,19 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 109,
+                "ColumnName": "BlobDepotId",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 3,
                 "ColumnName": "ErasureSpecies",
                 "ColumnType": "Uint32"
             },
             {
-                "ColumnId": 120,
-                "ColumnName": "Database",
-                "ColumnType": "String"
+                "ColumnId": 110,
+                "ColumnName": "ErrorReason",
+                "ColumnType": "Utf8"
             },
             {
                 "ColumnId": 4,
@@ -441,9 +451,9 @@
                 "ColumnType": "Uint64"
             },
             {
-                "ColumnId": 121,
-                "ColumnName": "BridgeGroupInfo",
-                "ColumnType": "String"
+                "ColumnId": 111,
+                "ColumnName": "NeedAlter",
+                "ColumnType": "Bool"
             },
             {
                 "ColumnId": 5,
@@ -451,14 +461,29 @@
                 "ColumnType": "Uint64"
             },
             {
+                "ColumnId": 112,
+                "ColumnName": "VirtualGroupName",
+                "ColumnType": "Utf8"
+            },
+            {
                 "ColumnId": 6,
                 "ColumnName": "DesiredVDiskCategory",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 113,
+                "ColumnName": "HiveId",
                 "ColumnType": "Uint64"
             },
             {
                 "ColumnId": 7,
                 "ColumnName": "EncryptionMode",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 114,
+                "ColumnName": "Metrics",
+                "ColumnType": "String"
             },
             {
                 "ColumnId": 8,
@@ -496,9 +521,14 @@
                 "ColumnType": "Bool"
             },
             {
-                "ColumnId": 102,
-                "ColumnName": "VirtualGroupState",
-                "ColumnType": "Uint32"
+                "ColumnId": 120,
+                "ColumnName": "Database",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 121,
+                "ColumnName": "BridgeGroupInfo",
+                "ColumnType": "String"
             },
             {
                 "ColumnId": 15,
@@ -516,64 +546,44 @@
                 "ColumnType": "Uint32"
             },
             {
-                "ColumnId": 106,
-                "ColumnName": "BlobDepotConfig",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 20,
-                "ColumnName": "VDiskStates",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 21,
                 "ColumnName": "WritePolicy",
                 "ColumnType": "String"
             },
             {
-                "ColumnId": 109,
-                "ColumnName": "BlobDepotId",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 110,
-                "ColumnName": "ErrorReason",
-                "ColumnType": "Utf8"
-            },
-            {
-                "ColumnId": 111,
-                "ColumnName": "NeedAlter",
-                "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 112,
-                "ColumnName": "VirtualGroupName",
-                "ColumnType": "Utf8"
-            },
-            {
-                "ColumnId": 113,
-                "ColumnName": "HiveId",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 114,
-                "ColumnName": "Metrics",
+                "ColumnId": 22,
+                "ColumnName": "FailRealmStates",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 23,
+                "ColumnName": "Mirror3dcState",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 102,
+                "ColumnName": "VirtualGroupState",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    106,
                     1,
                     2,
+                    109,
                     3,
-                    120,
+                    110,
                     4,
-                    121,
+                    111,
                     5,
+                    112,
                     6,
+                    113,
                     7,
+                    114,
                     8,
                     9,
                     10,
@@ -581,19 +591,15 @@
                     12,
                     13,
                     14,
-                    102,
+                    120,
+                    121,
                     15,
                     16,
                     17,
-                    106,
-                    20,
                     21,
-                    109,
-                    110,
-                    111,
-                    112,
-                    113,
-                    114
+                    22,
+                    23,
+                    102
                 ],
                 "RoomID": 0,
                 "Codec": 0,

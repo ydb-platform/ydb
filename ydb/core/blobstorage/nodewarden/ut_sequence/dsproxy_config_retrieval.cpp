@@ -280,9 +280,9 @@ Y_UNIT_TEST_SUITE(NodeWardenDsProxyConfigRetrieval) {
             auto* group = reply->Record.MutableGroup();
             group->CopyFrom(valid);
             if (attempt == 0) {
-                auto* diskState = group->MutableVDiskStates()->AddVDisk();
-                diskState->SetOrderNumber(1);
-                diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
+                auto* realmState = group->MutableFailRealmStates()->AddFailRealm();
+                realmState->SetFailRealmIdx(1);
+                realmState->SetState(NKikimrBlobStorage::TFailRealmStates::Excluded);
             } else if (attempt == 1) {
                 group->SetGroupGeneration(1); // Do not roll back below the rejected generation.
             } else if (attempt == 2) {

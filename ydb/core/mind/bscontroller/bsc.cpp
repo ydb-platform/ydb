@@ -1281,8 +1281,9 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMergeBoxes:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMoveGroups:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kChangeGroupSizeInUnits:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetGroupVDiskStates:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetGroupFailRealmStates:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetGroupWritePolicy:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetMirror3DcGroupState:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableSelfHeal:

@@ -96,21 +96,47 @@ message TVDiskLocation {
     optional uint64 PDiskGuid = 4;
 }
 
-// Logical VDisk positions, independent of group generation and physical placement.
-message TVDiskStates {
+// Participation of a whole logical failrealm, independent of physical placement.
+message TFailRealmStates {
     enum EState {
-        Included = 0;
-        Excluded = 1;
-        // Contents may be incomplete for reads. Successful writes may count
-        // towards the configured write policy.
-        Replicating = 2;
+        Included = 0; // Reads and acknowledged writes.
+        Excluded = 1; // No client operations or quorum participation.
+        Joining = 2; // Writes count toward WriteOk; reads cannot establish absence.
+        Leaving = 3; // Existing data can be read; no new client writes.
     }
-    message TVDisk {
-        optional uint32 OrderNumber = 1;
+    message TFailRealm {
+        optional uint32 FailRealmIdx = 1;
         optional EState State = 2 [default = Included];
     }
-    // Omitted positions are Included. All positions in a failrealm must agree.
-    repeated TVDisk VDisk = 1;
+    // Omitted failrealms are Included.
+    repeated TFailRealm FailRealm = 1;
+}
+
+// Administrative mirror-3-dc state machine (RFC 179/180).
+// Entering INV states asserts that existing blobs satisfy the invariant; BSC does not verify replicas.
+message TMirror3dcGroupState {
+    enum EMode {
+        NORMAL = 0;
+        DC_FAILURE_PENDING = 1;
+        DC_FAILURE = 2;
+        DC_FAILURE_INV_1 = 3;
+        DC_FAILURE_INV_2 = 4;
+        DC_SYNC_PENDING = 5;
+        DC_SYNC = 6;
+        NORMAL_PENDING = 7;
+        SOLO_DC_INV_1 = 8;
+        SOLO_DC_INV_2 = 9;
+        SOLO_DC_RECOVERY_PENDING = 10;
+        SOLO_DC_RECOVERY = 11;
+        SOLO_DC_INV_1_PENDING = 12;
+        SOLO_DC_INV_2_PENDING = 13;
+        DC_FAILURE_INV_2_PENDING = 14; // Write 2+2 while bringing existing blobs to invariant II.
+    }
+    optional EMode Mode = 1;
+    // Excluded/returning realm for the three-to-two-DC transition.
+    optional uint32 FailedFailRealmIdx = 2;
+    // Required in SOLO states; the other non-failed realm is the recovery target.
+    optional uint32 SurvivingFailRealmIdx = 3;
 }
 
 // Each entry is a minimum number of written parts in a distinct failrealm.
@@ -155,8 +181,10 @@ message TGroupInfo {
     optional uint32 BridgeProxyGroupId = 19; // proxy group when running in Bridge mode
     optional uint32 BridgePileId = 20;
     optional bool DDisk = 21; // is this a Direct Block Group?
-    optional TVDiskStates VDiskStates = 24;
+    reserved 24; // Former VDiskStates experimental contract.
+    optional TFailRealmStates FailRealmStates = 26;
     optional TGroupWritePolicy WritePolicy = 25;
+    optional TMirror3dcGroupState Mirror3dcState = 27;
 }
 
 // VDiskStatus ordering is assumed to be lower for bad statuses and higher for good ones

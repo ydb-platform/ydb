@@ -398,8 +398,9 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TReassignGroupDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMoveGroups& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TChangeGroupSizeInUnits& cmd, TStatus& status);
-            void ExecuteStep(const NKikimrBlobStorage::TSetGroupVDiskStates& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TSetGroupFailRealmStates& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TSetGroupWritePolicy& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TSetMirror3DcGroupState& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReadSettings& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDropDonorDisk& cmd, TStatus& status);

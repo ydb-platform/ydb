@@ -532,34 +532,51 @@ public:
     };
 
     std::optional<TWritePolicy> WritePolicy;
-    enum class EVDiskState : ui32 {
+    enum class EFailRealmState : ui32 {
         Included = 0,
         Excluded = 1,
-        Replicating = 2,
+        Joining = 2,
+        Leaving = 3,
     };
-    struct TVDiskState {
-        ui32 OrderNumber;
-        EVDiskState State;
-        bool operator==(const TVDiskState&) const = default;
+    struct TFailRealmState {
+        ui32 FailRealmIdx;
+        EFailRealmState State;
+        bool operator==(const TFailRealmState&) const = default;
     };
-    // Non-default logical positions; every failrealm has a uniform state.
-    TVector<TVDiskState> VDiskStates;
+    TVector<TFailRealmState> FailRealmStates;
 
-    static std::optional<TVector<TVDiskState>> ParseVDiskStates(const NKikimrBlobStorage::TVDiskStates& states,
+    static std::optional<TVector<TFailRealmState>> ParseFailRealmStates(const NKikimrBlobStorage::TFailRealmStates& states,
         const TTopology& topology, IOutputStream* err = nullptr);
 
-    EVDiskState GetVDiskState(const TVDiskIdShort& vdisk) const {
-        const ui32 orderNumber = GetOrderNumber(vdisk);
-        for (const auto& item : VDiskStates) {
-            if (item.OrderNumber == orderNumber) {
+    EFailRealmState GetFailRealmState(ui32 failRealmIdx) const {
+        for (const auto& item : FailRealmStates) {
+            if (item.FailRealmIdx == failRealmIdx) {
                 return item.State;
             }
         }
-        return EVDiskState::Included;
+        return EFailRealmState::Included;
     }
 
-    bool HasVDiskPolicyChanged(const TBlobStorageGroupInfo& previous) const {
-        return VDiskStates != previous.VDiskStates || WritePolicy != previous.WritePolicy;
+    struct TMirror3dcState {
+        using EMode = NKikimrBlobStorage::TMirror3dcGroupState::EMode;
+        EMode Mode = NKikimrBlobStorage::TMirror3dcGroupState::NORMAL;
+        std::optional<ui32> FailedFailRealmIdx;
+        std::optional<ui32> SurvivingFailRealmIdx;
+
+        bool operator==(const TMirror3dcState&) const = default;
+        static std::optional<TMirror3dcState> Parse(const NKikimrBlobStorage::TMirror3dcGroupState& state,
+            const TTopology& topology, IOutputStream* err = nullptr);
+        NKikimrBlobStorage::TMirror3dcGroupState ToProto() const;
+        bool CanTransitionTo(const TMirror3dcState& next) const;
+        bool RequiresSurvivingRealm() const;
+        TVector<TFailRealmState> GetFailRealmStates() const;
+        TWritePolicy GetWritePolicy() const;
+    };
+    std::optional<TMirror3dcState> Mirror3dcState;
+
+    bool HasStoragePolicyChanged(const TBlobStorageGroupInfo& previous) const {
+        return FailRealmStates != previous.FailRealmStates || WritePolicy != previous.WritePolicy
+            || Mirror3dcState != previous.Mirror3dcState;
     }
 
     // virtual group BlobDepot tablet id

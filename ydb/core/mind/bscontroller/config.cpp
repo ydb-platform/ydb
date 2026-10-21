@@ -1388,8 +1388,8 @@ namespace NKikimr::NBsController {
             pb->SetReadOnly(vslot.Mood == TMood::ReadOnly);
         }
 
-        void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSetGroupVDiskStates& cmd, TStatus&) {
-            auto* group = Groups.FindForUpdate(TGroupId::FromProto(&cmd, &NKikimrBlobStorage::TSetGroupVDiskStates::GetGroupId));
+        void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSetGroupFailRealmStates& cmd, TStatus&) {
+            auto* group = Groups.FindForUpdate(TGroupId::FromProto(&cmd, &NKikimrBlobStorage::TSetGroupFailRealmStates::GetGroupId));
             if (!group) {
                 throw TExGroupNotFound(cmd.GetGroupId());
             }
@@ -1397,21 +1397,24 @@ namespace NKikimr::NBsController {
                 throw TExGroupGenerationMismatch(cmd.GetGroupId(), cmd.GetGroupGeneration(), group->Generation);
             }
             if (group->DDisk || group->VirtualGroupState || group->BridgeGroupInfo) {
-                throw TExError() << "VDisk states require a physical erasure group";
+                throw TExError() << "Failrealm states require a physical erasure group";
+            }
+            if (group->Mirror3dcState) {
+                throw TExError() << "Storage policy is derived from the mirror-3-dc group state";
             }
             TStringStream error;
-            const auto states = TBlobStorageGroupInfo::ParseVDiskStates(cmd.GetVDiskStates(), *group->Topology, &error);
+            const auto states = TBlobStorageGroupInfo::ParseFailRealmStates(cmd.GetFailRealmStates(), *group->Topology, &error);
             if (!states) {
                 throw TExError() << error.Str();
             }
-            NKikimrBlobStorage::TVDiskStates normalized;
+            NKikimrBlobStorage::TFailRealmStates normalized;
             for (const auto& disk : *states) {
-                auto* item = normalized.AddVDisk();
-                item->SetOrderNumber(disk.OrderNumber);
-                item->SetState(static_cast<NKikimrBlobStorage::TVDiskStates::EState>(disk.State));
+                auto* item = normalized.AddFailRealm();
+                item->SetFailRealmIdx(disk.FailRealmIdx);
+                item->SetState(static_cast<NKikimrBlobStorage::TFailRealmStates::EState>(disk.State));
             }
-            if (group->VDiskStates.SerializeAsString() != normalized.SerializeAsString()) {
-                group->VDiskStates = std::move(normalized);
+            if (group->FailRealmStates.SerializeAsString() != normalized.SerializeAsString()) {
+                group->FailRealmStates = std::move(normalized);
                 GroupContentChanged.insert(group->ID);
             }
         }
@@ -1426,6 +1429,9 @@ namespace NKikimr::NBsController {
             }
             if (group->DDisk || group->VirtualGroupState || group->BridgeGroupInfo) {
                 throw TExError() << "Write policy requires a physical erasure group";
+            }
+            if (group->Mirror3dcState) {
+                throw TExError() << "Storage policy is derived from the mirror-3-dc group state";
             }
             std::optional<NKikimrBlobStorage::TGroupWritePolicy> policy;
             if (cmd.HasWritePolicy()) {
@@ -1444,6 +1450,54 @@ namespace NKikimr::NBsController {
             }
         }
 
+        void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSetMirror3DcGroupState& cmd, TStatus&) {
+            auto* group = Groups.FindForUpdate(TGroupId::FromProto(&cmd, &NKikimrBlobStorage::TSetMirror3DcGroupState::GetGroupId));
+            if (!group) {
+                throw TExGroupNotFound(cmd.GetGroupId());
+            }
+            if (group->Generation != cmd.GetGroupGeneration()) {
+                throw TExGroupGenerationMismatch(cmd.GetGroupId(), cmd.GetGroupGeneration(), group->Generation);
+            }
+            if (group->DDisk || group->VirtualGroupState || group->BridgeGroupInfo
+                    || group->DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE) {
+                throw TExError() << "Mirror-3-dc mode requires a physical group without decommissioning";
+            }
+            TStringStream error;
+            const auto next = TBlobStorageGroupInfo::TMirror3dcState::Parse(cmd.GetState(), *group->Topology, &error);
+            if (!next) {
+                throw TExError() << error.Str();
+            }
+            TBlobStorageGroupInfo::TMirror3dcState previous;
+            if (group->Mirror3dcState) {
+                const auto parsed = TBlobStorageGroupInfo::TMirror3dcState::Parse(*group->Mirror3dcState, *group->Topology, &error);
+                if (!parsed) {
+                    throw TExError() << "Invalid persisted mirror-3-dc state: " << error.Str();
+                }
+                previous = *parsed;
+            } else if (group->FailRealmStates.FailRealmSize() || group->WritePolicy) {
+                throw TExError() << "Clear custom storage policies before enabling mirror-3-dc mode";
+            }
+            if (!previous.CanTransitionTo(*next)) {
+                throw TExError() << "Invalid mirror-3-dc state transition";
+            }
+            if (group->Mirror3dcState && previous == *next) {
+                return;
+            }
+            // Two transition steps must not collapse into a single group generation.
+            if (GroupContentChanged.contains(group->ID)) {
+                throw TExError() << "Mirror-3-dc transition requires a separate group configuration transaction";
+            }
+            group->Mirror3dcState = next->ToProto();
+            group->FailRealmStates.Clear();
+            for (const auto& realm : next->GetFailRealmStates()) {
+                auto* item = group->FailRealmStates.AddFailRealm();
+                item->SetFailRealmIdx(realm.FailRealmIdx);
+                item->SetState(static_cast<NKikimrBlobStorage::TFailRealmStates::EState>(realm.State));
+            }
+            group->WritePolicy = next->GetWritePolicy().ToProto();
+            GroupContentChanged.insert(group->ID);
+        }
+
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group,
                 const TGroupInfo::TGroupFinder& finder, const TBridgeInfo *bridgeInfo) {
             pb->SetGroupId(group.ID.GetRawId());
@@ -1455,7 +1509,10 @@ namespace NKikimr::NBsController {
             pb->SetBoxId(std::get<0>(group.StoragePoolId));
             pb->SetStoragePoolId(std::get<1>(group.StoragePoolId));
             pb->SetSeenOperational(group.SeenOperational);
-            pb->MutableVDiskStates()->CopyFrom(group.VDiskStates);
+            pb->MutableFailRealmStates()->CopyFrom(group.FailRealmStates);
+            if (group.Mirror3dcState) {
+                pb->MutableMirror3dcState()->CopyFrom(*group.Mirror3dcState);
+            }
             if (group.WritePolicy) {
                 pb->MutableWritePolicy()->CopyFrom(*group.WritePolicy);
             }
@@ -1602,7 +1659,10 @@ namespace NKikimr::NBsController {
                 groupInfo.BridgeProxyGroupId->CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
             }
             groupInfo.BridgePileId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
-            group->MutableVDiskStates()->CopyFrom(groupInfo.VDiskStates);
+            group->MutableFailRealmStates()->CopyFrom(groupInfo.FailRealmStates);
+            if (groupInfo.Mirror3dcState) {
+                group->MutableMirror3dcState()->CopyFrom(*groupInfo.Mirror3dcState);
+            }
             if (groupInfo.WritePolicy) {
                 group->MutableWritePolicy()->CopyFrom(*groupInfo.WritePolicy);
             }

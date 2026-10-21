@@ -643,11 +643,11 @@ message TUpdateBridgeGroupInfo {
     NKikimrBlobStorage.TGroupInfo BridgeGroupInfo = 3; // new value for bridge group info
 }
 
-// Replaces all VDisk states. An empty list restores Included for every VDisk.
-message TSetGroupVDiskStates {
+// Replaces all failrealm states. An empty list restores Included for every failrealm.
+message TSetGroupFailRealmStates {
     uint32 GroupId = 1;
     uint32 GroupGeneration = 2; // expected generation
-    NKikimrBlobStorage.TVDiskStates VDiskStates = 3;
+    NKikimrBlobStorage.TFailRealmStates FailRealmStates = 3;
 }
 
 // Replaces both write layout lists. Omit WritePolicy to restore the default policy.
@@ -655,6 +655,13 @@ message TSetGroupWritePolicy {
     uint32 GroupId = 1;
     uint32 GroupGeneration = 2;
     NKikimrBlobStorage.TGroupWritePolicy WritePolicy = 3;
+}
+
+// One manual state-machine step; successful changes increment the group generation.
+message TSetMirror3DcGroupState {
+    uint32 GroupId = 1;
+    uint32 GroupGeneration = 2;
+    NKikimrBlobStorage.TMirror3dcGroupState State = 3;
 }
 
 message TReconfigureVirtualGroup {
@@ -697,6 +704,7 @@ message TDeleteSpecificGroups {
 
 message TConfigRequest {
     message TCommand {
+        reserved 65; // Former SetGroupVDiskStates experimental command.
         oneof Command {
             TDefineHostConfig DefineHostConfig = 1;
             TReadHostConfig ReadHostConfig = 2;
@@ -750,8 +758,9 @@ message TConfigRequest {
             TPopulatePDisk PopulatePDisk = 61;
             TDeleteSpecificGroups DeleteSpecificGroups = 62;
             TUpdateStoragePoolSettings UpdateStoragePoolSettings = 63;
-            TSetGroupVDiskStates SetGroupVDiskStates = 65;
+            TSetGroupFailRealmStates SetGroupFailRealmStates = 67;
             TSetGroupWritePolicy SetGroupWritePolicy = 66;
+            TSetMirror3DcGroupState SetMirror3DcGroupState = 68;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -874,6 +883,7 @@ message TBaseConfig {
         NKikimrBlobStorage.TGroupDecommitStatus.E DecommitStatus = 5;
     }
     message TGroup {
+        reserved 16; // Former VDiskStates experimental contract.
         uint32 GroupId = 1;
         uint32 GroupGeneration = 2;
         string ErasureSpecies = 3;
@@ -887,8 +897,9 @@ message TBaseConfig {
         uint32 GroupSizeInUnits = 11;
         bool IsProxyGroup = 12;
         string StoragePoolName = 13;
-        NKikimrBlobStorage.TVDiskStates VDiskStates = 16;
+        NKikimrBlobStorage.TFailRealmStates FailRealmStates = 18;
         NKikimrBlobStorage.TGroupWritePolicy WritePolicy = 17;
+        NKikimrBlobStorage.TMirror3dcGroupState Mirror3dcState = 19;
     }
     message TNode {
         uint32 NodeId = 1;

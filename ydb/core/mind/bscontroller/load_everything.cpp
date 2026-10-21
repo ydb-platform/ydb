@@ -244,7 +244,10 @@ public:
                                                    std::get<2>(geom),
                                                    false /* ddisk, will fill in later */);
 
-                group.VDiskStates = groups.GetValueOrDefault<T::VDiskStates>();
+                group.FailRealmStates = groups.GetValueOrDefault<T::FailRealmStates>();
+                if (groups.HaveValue<T::Mirror3dcState>()) {
+                    group.Mirror3dcState = groups.GetValue<T::Mirror3dcState>();
+                }
                 if (groups.HaveValue<T::WritePolicy>()) {
                     group.WritePolicy = groups.GetValue<T::WritePolicy>();
                 }

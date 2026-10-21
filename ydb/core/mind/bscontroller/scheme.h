@@ -85,8 +85,9 @@ struct Schema : NIceDb::Schema {
         struct GroupSizeInUnits : Column<16, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         struct BridgePileId : Column<17, NScheme::NTypeIds::Uint32> { using Type = TBridgePileId; static constexpr Type Default = TBridgePileId(); };
 
-        struct VDiskStates : Column<20, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TVDiskStates; };
+        struct FailRealmStates : Column<22, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TFailRealmStates; };
         struct WritePolicy : Column<21, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TGroupWritePolicy; };
+        struct Mirror3dcState : Column<23, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TMirror3dcGroupState; };
 
         // VirtualGroup management code
         struct VirtualGroupName  : Column<112, NScheme::NTypeIds::Utf8>   {}; // unique name of the virtual group
@@ -103,7 +104,7 @@ struct Schema : NIceDb::Schema {
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
-              SeenOperational, DecommitStatus, GroupSizeInUnits, BridgePileId, VDiskStates, WritePolicy, VirtualGroupName, VirtualGroupState,
+              SeenOperational, DecommitStatus, GroupSizeInUnits, BridgePileId, FailRealmStates, WritePolicy, Mirror3dcState, VirtualGroupName, VirtualGroupState,
               HiveId, Database, BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics, BridgeGroupInfo>;
     };
 

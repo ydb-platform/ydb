@@ -634,6 +634,37 @@ Y_UNIT_TEST_SUITE(StreamLogic) {
         UNIT_ASSERT(exit.IsSuccess());
         UNIT_ASSERT(*exit == NGraph::NExecution::TCompiledGraph::IVisitor::EVisitStatus::Skipped);
     }
+
+    void AssertFinishesOnPlainAbsorbingInputAfterNeutralAccumulator(const NKernels::EOperation operation) {
+        const bool absorbingValue = operation == NKernels::EOperation::Or;
+        const std::vector<std::optional<ui8>> expected(2, absorbingValue);
+        auto neutral = absorbingValue ? NAccessor::TSparsedArray::BuildFalseArrayUI8(expected.size())
+                                      : NAccessor::TSparsedArray::BuildTrueArrayUI8(expected.size());
+
+        TStreamLogicTest test(expected.size(), { 1, 2 }, 3, operation);
+        test.AddAccessor(1, neutral);
+        test.AddAccessor(2, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray(expected)));
+        UNIT_ASSERT(!test.ProcessInput(1));
+        UNIT_ASSERT(test.ProcessInput(2));
+        test.AssertResult(expected);
+    }
+
+    Y_UNIT_TEST(AndFinishesOnPlainAbsorbingInputAfterNeutralAccumulator) {
+        AssertFinishesOnPlainAbsorbingInputAfterNeutralAccumulator(NKernels::EOperation::And);
+    }
+
+    Y_UNIT_TEST(OrFinishesOnPlainAbsorbingInputAfterNeutralAccumulator) {
+        AssertFinishesOnPlainAbsorbingInputAfterNeutralAccumulator(NKernels::EOperation::Or);
+    }
+
+    Y_UNIT_TEST(AndDoesNotFinishForNullableInput) {
+        TStreamLogicTest test(2, { 1, 2 }, 3, NKernels::EOperation::And);
+        test.AddScalar(1, std::make_shared<arrow::UInt8Scalar>(1));
+        test.AddArray(2, NKikimr::NKernels::UInt8VecToArray({ 0, std::nullopt }));
+        UNIT_ASSERT(!test.ProcessInput(1));
+        UNIT_ASSERT(!test.ProcessInput(2));
+        test.AssertResult({ 0, std::nullopt });
+    }
 };
 
 } // namespace NKikimr::NArrow::NSSA

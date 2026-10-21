@@ -53,7 +53,6 @@ TConclusion<bool> TStreamLogicProcessor::CombineInput(const ui32 inputId, const 
     const auto accessor = result.DetachResult().GetAccessorVerified();
     context.MutableResources().Remove(GetOutputColumnIdOnce());
     context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accessor, false);
-    // VisitValues can expand encoded inputs, so scan only the kernel result and not inputs.
     return IsFinishAccessor(accessor);
 }
 
@@ -88,6 +87,7 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
         } else if (monoResult) {
             AFL_VERIFY(accessorInput->GetDataType()->id() == arrow::uint8()->id())("type", accessorInput->GetDataType()->ToString());
             context.MutableResources().Upsert(GetOutputColumnIdOnce(), accessorInput, false);
+            return IsFinishAccessor(accessorInput);
         } else {
             return CombineInput(inputId, context);
         }
@@ -212,7 +212,7 @@ bool TStreamLogicProcessor::IsFinishAccessor(const std::shared_ptr<IChunkedArray
         return true;
     };
     bool result = true;
-    accessor->VisitValues([&](const std::shared_ptr<arrow::Array>& array) {
+    accessor->VisitDistinctValues([&](const std::shared_ptr<arrow::Array>& array) {
         if (!arrChecker(*array)) {
             result = false;
         }

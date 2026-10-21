@@ -2968,7 +2968,10 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         size_t typeIndex = static_cast<size_t>(settings->Type);
         if (LastBalancerTrigger == settings->Type
             && BalancerStats[typeIndex].LastRunMovements == 0) {
-            LogBalancerNotStarted(EBalancerTypeName(settings->Type), EBalancerSuppressReason::PreviousRunNoMovements);
+            YDB_LOG_DEBUG("Balancer candidate deferred while considering alternatives",
+                {"logPrefix", GetLogPrefix()},
+                {"balancerType", EBalancerTypeName(settings->Type)},
+                {"reason", EBalancerSuppressReasonName(EBalancerSuppressReason::PreviousRunNoMovements)});
             return false;
         }
         if (balancersStarted.test(typeIndex) && settings->Type != EBalancerType::Emergency) {

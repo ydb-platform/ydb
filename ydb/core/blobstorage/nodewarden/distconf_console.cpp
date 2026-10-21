@@ -26,7 +26,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::DisconnectFromConsole() {
         NTabletPipe::CloseAndForgetClient(SelfId(), ConsolePipeId);
-        ConsoleConnected = false;
+        ResetConsoleSession();
     }
 
     void TDistributedConfigKeeper::SendConfigProposeRequest() {
@@ -209,6 +209,13 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::OnConsolePipeError() {
         ConsolePipeId = {};
+        ResetConsoleSession();
+        ConnectToConsole();
+    }
+
+    void TDistributedConfigKeeper::ResetConsoleSession() {
+        // the next pipe has to start the session anew with the propose request, as Console accepts requests only through
+        // the pipe of the session; the request in flight through the previous pipe gets no answer that would be processed
         ConsoleConnected = false;
         ProposedConfigHashVersion.reset();
         ProposeRequestInFlight = false;
@@ -221,8 +228,6 @@ namespace NKikimr::NStorage {
             Send(actorId, ev.release());
         }
         ConsoleConfigValidationQ.clear();
-
-        ConnectToConsole();
     }
 
     std::optional<TString> TDistributedConfigKeeper::UpdateConfigComposite(NKikimrBlobStorage::TStorageConfig& config,

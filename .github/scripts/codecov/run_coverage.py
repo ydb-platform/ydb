@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Run ya coverage with bounded failure diagnostics and one targeted retry.
+"""Run complete coverage attempts and keep test verdicts separate from measurement.
 
-Only a corrupt raw LLVM profile in one identified failed coverage node after a
-complete, successful test run permits retrying. Ambiguous failures stay failed.
+Ordinary assertion failures may supply coverage, but only after checking the raw
+test trace: YA's JSON report calls both assertions and crashes REGULAR failures.
+Known test failures get up to three complete attempts; corrupt profiles retain
+the narrower, one-retry policy. Ambiguous or incomplete measurements stay failed.
 --retest gives test nodes new UIDs (and thus new coverage nodes), while
 --build-root isolates temporary files without changing ya's compilation cache.
 Never merge around, delete, or silently exclude a damaged profile.
 
-Artifacts contain at most 50 MiB per attempt (two attempts maximum). Logs are
+Artifacts contain at most 50 MiB per attempt (three attempts maximum). Logs are
 redacted and may be truncated; raw profiles are either complete or omitted.
 Only selected logs and the named damaged profiles are collected, not credentials,
 environment dumps, binaries, or entire test-output/coverage archives.
@@ -34,6 +36,7 @@ MIB = 1024 * 1024
 LOG_LIMIT = 8 * MIB
 PROFILE_LIMIT = 16 * MIB
 ATTEMPT_LIMIT = 50 * MIB
+MAX_ATTEMPTS = 3
 BAD_PROFILE = re.compile(
     r"(?:warning|error): ([^\s:]+\.profraw): "
     r"invalid instrumentation profile data \(file header is corrupt\)"
@@ -43,6 +46,18 @@ FAILED_COMMAND = re.compile(
 )
 WORK_DIR = re.compile(r"Tests run working directory: (\S+)")
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+# pytest can turn a failed child process into a normal test assertion. Preserve
+# explicit evidence of interruption instead of accepting the generic 'fail'.
+INTERRUPTED_PROCESS = re.compile(
+    r"ExecutionTimeoutError|SignalInterruptionError|subprocess\.TimeoutExpired|"
+    r"yatest\.common\.process\.TimeoutError|"
+    r"\bhas failed with code (?:-\d+|134|137|139|143)\b|"
+    r"\b(?:exit[ _]code|returncode)\s*[:=]?\s*-\d+\b|"
+    r"(?<!\w)-\d+\s*=\s*[^\n]{0,200}\.(?:returncode|exit_code)\b|"
+    r"\b(?:killed|terminated) by signal\b|\bSegmentation fault\b|\bcore dumped\b|"
+    r"\b(?:AddressSanitizer|UndefinedBehaviorSanitizer|ThreadSanitizer):",
+    re.IGNORECASE,
+)
 LOG_NAMES = {
     "run_test.log", "ytest.report.trace", "results_accumulator.log",
     "results_merge.log", "build_clang_coverage_report.log",
@@ -129,6 +144,152 @@ def tests_passed(report: dict) -> bool:
     ):
         return False
     return any(item.get("type") == "test" and item["total"] > 0 for item in entries)
+
+
+def test_failure_report(report: dict) -> bool:
+    """Recognize test-only failures without normalizing incomplete raw statuses.
+
+    This permits a retry, not publication. In particular REGULAR includes CRASHED
+    in YA's report_prototype.py, and NOT_LAUNCHED must never become SKIPPED here.
+    """
+    results = report.get("results", [])
+    if not isinstance(results, list) or not results:
+        return False
+    failed = False
+    normalized = []
+    for row in results:
+        if not isinstance(row, dict):
+            return False
+        row = dict(row)
+        if row.get("type") == "test" and row.get("status") in {"FAILED", "NOT_LAUNCHED"}:
+            failed = True
+            row["status"] = "OK"
+        normalized.append(row)
+    return failed and tests_passed({**report, "results": normalized})
+
+
+def read_mutes(path: Path | None) -> list[tuple[re.Pattern, re.Pattern]]:
+    """Use the common CI mute syntax: only '*' is a wildcard; other chars literal.
+
+    Mute changes diagnostics/retry policy, never execution, raw test status or the
+    coverage completeness requirements. No imports from measured PR helper code.
+    """
+    if path is None:
+        return []
+    patterns = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        parts = line.strip().split(" ", 1)
+        if len(parts) != 2 or not all(parts):
+            raise ValueError(f"Invalid mute entry in {path}")
+        patterns.append(tuple(re.compile("^" + re.escape(part).replace(r"\*", ".*") + "$")
+                              for part in parts))
+    return patterns
+
+
+def failed_test_rows(report: dict, mutes: list) -> list[dict]:
+    failures = []
+    for row in report.get("results", []):
+        if (not isinstance(row, dict) or row.get("type") != "test" or row.get("suite")
+                or row.get("chunk") or row.get("status") != "FAILED"):
+            continue
+        name = ".".join(part for part in (row.get("name", "").replace(".py::", ".py."),
+                                         row.get("subtest_name", "")) if part)
+        failures.append({"path": row.get("path", ""), "name": name,
+                         "muted": any(p.fullmatch(row.get("path", "")) and t.fullmatch(name)
+                                      for p, t in mutes)})
+    return failures
+
+
+def assertion_only_failure(report: dict, output: Path, build_root: Path) -> tuple[bool, str]:
+    """Check evidence of ordinary failures in the authoritative merged trace.
+
+    The suite's relaxed status must be OK (no suite-level infrastructure failure).
+    Trace container errors, unfinished tests, crashes, timeouts and unknown statuses
+    are rejected even when the JSON report presents them as regular failures.
+    This cannot prove that every hidden child process flushed every counter;
+    downstream LLVM export must still validate the collected profile.
+    """
+    if not test_failure_report(report):
+        return False, "not a complete test-only failure report"
+    results = report["results"]
+    if any(row.get("status") not in {"OK", "SKIPPED", "FAILED"} for row in results):
+        return False, "a test was not launched or has an unknown status"
+    failing = [row for row in results if row.get("type") == "test" and row.get("status") == "FAILED"]
+    if any(row.get("error_type") != "REGULAR" for row in failing):
+        return False, "test report contains non-regular failures"
+    if any(INTERRUPTED_PROCESS.search(row.get("rich-snippet", "")) for row in failing):
+        return False, "test failure reports an interrupted child process or sanitizer error"
+    suites = [row for row in results if row.get("type") == "test" and row.get("suite")]
+    leaves = [row for row in failing if not row.get("suite") and not row.get("chunk")]
+    if not leaves:
+        return False, "failed container without a completed failed test"
+    checked = set()
+    for failed in failing:
+        matches = [suite for suite in suites if suite.get("path") == failed.get("path")
+                   and (not failed.get("suite_hid") or suite.get("hid") == failed["suite_hid"])]
+        if len(matches) != 1:
+            return False, "failed test cannot be attributed to exactly one suite"
+        suite = matches[0]
+        if suite.get("suite_status") != "OK":
+            return False, "failed suite has an infrastructure/container error"
+        path, name = suite.get("path", ""), suite.get("name", "")
+        trace = output / path / "test-results" / name / "ytest.report.trace"
+        if not path or not name or not inside(trace, [output, build_root]):
+            return False, "invalid trace location"
+        if trace in checked:
+            continue
+        checked.add(trace)
+        try:
+            if trace.stat().st_size > 64 * MIB:
+                raise ValueError("trace exceeds 64 MiB")
+            states = {}
+            with trace.open(encoding="utf-8") as stream:
+                for line in stream:
+                    if not line.strip():
+                        continue
+                    event = json.loads(line)
+                    value = event["value"]
+                    event_name = event["name"]
+                    if event_name in {"suite-event", "chunk-event"} and value.get("errors"):
+                        raise ValueError("trace contains container errors")
+                    if event_name not in {"subtest-started", "subtest-finished"}:
+                        continue
+                    key = (value["class"], value["subtest"], value.get("chunk_index", 0),
+                           value.get("chunk_filename", ""))
+                    status = value.get("status") if event_name == "subtest-finished" else "started"
+                    if status not in {"started", "good", "fail", "diff", "skipped", "deselected", "xfail", "xpass"}:
+                        raise ValueError(f"unsafe test trace status: {status}")
+                    if status in {"fail", "diff"} and INTERRUPTED_PROCESS.search(value.get("comment", "")):
+                        raise ValueError("failed test reports an interrupted child process or sanitizer error")
+                    states[key] = status
+            if not states or "started" in states.values():
+                raise ValueError("empty trace or unfinished test")
+            for row in leaves:
+                if row.get("path") != path or (row.get("suite_hid") and row["suite_hid"] != suite.get("hid")):
+                    continue
+                matching = [status for key, status in states.items()
+                            if key[:2] == (row.get("name"), row.get("subtest_name"))]
+                if not matching or any(status not in {"fail", "diff"} for status in matching):
+                    raise ValueError("failed test has no unambiguous assertion-failure trace")
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            return False, f"cannot establish complete assertion-only execution: {exc}"
+    return True, "all failed tests finished normally; no trace infrastructure errors"
+
+
+def coverage_artifacts_present(output: Path) -> bool:
+    """The downstream llvm-cov export must still parse/validate the merged profile.
+
+    Do not reject 'No valid coverage profiles' messages globally: unused DEPENDS
+    binaries legitimately produce none in individual FORK_SUBTESTS chunks.
+    """
+    try:
+        return all(path.is_file() and path.stat().st_size > 0 for path in (
+            output / "coverage.report/coverage.profdata", output / "build_clang_coverage_report.log",
+        ))
+    except OSError:
+        return False
 
 
 def evidence(log: str) -> dict:
@@ -298,6 +459,12 @@ def collect_diagnostics(directory: Path, build_root: Path, output: Path, log: Pa
     roots = [build_root, output]
     bundle.copy(log, [log.parent])
     suites = set()
+    for row in report.get("results", []):
+        if (isinstance(row, dict) and row.get("type") == "test" and row.get("suite")
+                and row.get("status") != "OK" and row.get("path") and row.get("name")):
+            suite = Path(row["path"]) / "test-results" / row["name"]
+            if not suite.is_absolute() and ".." not in suite.parts:
+                suites.add(suite)
     tools = set()
     profile_paths = details["profile_paths"] if len(details["nodes"]) == 1 else []
     if len(details["nodes"]) > 1:
@@ -380,7 +547,8 @@ def collect_diagnostics(directory: Path, build_root: Path, output: Path, log: Pa
                     seen.add(resolved)
                     bundle.copy(path, roots)
     # Own reduced report: never include arbitrary report fields/environment dumps.
-    results = [{key: item[key] for key in ("type", "path", "name", "subtest_name", "status", "suite", "chunk")
+    results = [{key: item[key] for key in ("type", "path", "name", "subtest_name", "status", "suite", "chunk",
+                                         "error_type", "suite_status")
                 if key in item} for item in report.get("results", []) if isinstance(item, dict)]
     data = json.dumps(results, indent=2).encode()
     if len(data) <= LOG_LIMIT:
@@ -442,6 +610,8 @@ def main() -> int:
     parser.add_argument("--suite", required=True, choices=("cli", "cpp_sdk", "cli_workload"))
     parser.add_argument("--work-dir", required=True, type=Path)
     parser.add_argument("--secret-file", action="append", default=[], type=Path)
+    parser.add_argument("--mute-file", type=Path,
+                        help="Trusted common CI mute list; labels failures, never excludes tests")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
@@ -454,10 +624,12 @@ def main() -> int:
     if credential:
         secret_files.append(Path(credential))
     redactor = Redactor(dict(os.environ), secret_files)
+    mutes = read_mutes(args.mute_file)
     diagnostics = root / "diagnostics"
     github_output("diagnostics_dir", str(diagnostics))
 
-    for number in (1, 2):
+    corruption_retries = 0
+    for number in range(1, MAX_ATTEMPTS + 1):
         attempt = root / f"attempt-{number}"
         attempt.mkdir()
         output = attempt / "output"
@@ -469,26 +641,45 @@ def main() -> int:
         report_path = attempt / "report.json"
         invocation = command + ["--output", str(output), "--build-root", str(build_root),
                                 "--build-results-report", str(report_path)]
-        if number == 2:
+        if number > 1:
             invocation.append("--retest")
-        print(f"Coverage {args.suite}: attempt {number}/2", flush=True)
+        print(f"Coverage {args.suite}: attempt {number}/{MAX_ATTEMPTS}", flush=True)
         rc, cancelled, details = run_attempt(invocation, log, redactor)
-        if rc == 0 and not cancelled:
-            github_output("out_dir", str(output))
-            if number == 2:
-                print("::warning::Coverage succeeded on a fresh retry; first-attempt diagnostics are retained.")
-            return 0
-
-        github_output("had_failure", "true")
         report = {}
         report_error = None
         try:
             report = read_report(report_path)
         except (OSError, ValueError) as exc:
             report_error = str(exc)
-        retry = number == 1 and not cancelled and should_retry(rc, report, details)
+        artifacts_present = coverage_artifacts_present(output)
+        if (rc == 0 and not cancelled and tests_passed(report) and artifacts_present
+                and not details["unknown_failure"] and not details["nodes"] and not details["bad_profiles"]):
+            github_output("out_dir", str(output))
+            if number > 1:
+                print("::warning::Coverage succeeded on a fresh retry; earlier diagnostics are retained.")
+            return 0
+
+        github_output("had_failure", "true")
+        failures = failed_test_rows(report, mutes)
+        assertion_only, reason = assertion_only_failure(report, output, build_root)
+        # Exit 10 is YA's test-verdict code. Never reinterpret build failures,
+        # cancellations, failed coverage commands or partial reports as tests.
+        test_failure = (rc == 10 and test_failure_report(report) and not cancelled
+                        and not details["unknown_failure"] and not details["nodes"]
+                        and not details["bad_profiles"])
+        usable_assertions = test_failure and assertion_only and artifacts_present
+        muted_only = bool(failures) and all(row["muted"] for row in failures)
+        corrupt_retry = (corruption_retries == 0 and should_retry(rc, report, details))
+        retry = (number < MAX_ATTEMPTS and not cancelled
+                 and (corrupt_retry or (test_failure and not (usable_assertions and muted_only))))
+        accepted_assertions = usable_assertions and not retry
+        print(redactor(f"Coverage assessment: exit={rc}; {reason}; "
+                       f"merged artifacts present={artifacts_present}; retry={retry}"), flush=True)
         metadata = {"suite": args.suite, "attempt": number, "exit_code": rc,
                     "cancelled": cancelled, "retry": retry, "report_error": report_error,
+                    "assertion_only": assertion_only, "assessment": reason,
+                    "coverage_artifacts_present": artifacts_present,
+                    "accepted_assertions": accepted_assertions, "failed_tests": failures,
                     "run_id": os.environ.get("GITHUB_RUN_ID"),
                     "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT")}
         try:
@@ -497,9 +688,23 @@ def main() -> int:
         except Exception as exc:
             # Collection must not hide the original failure or consume the retry.
             print(redactor(f"::warning::Could not collect coverage diagnostics: {exc}"), flush=True)
+        if accepted_assertions:
+            github_output("out_dir", str(output))
+            github_output("test_failures", str(len(failures)))
+            print("::warning::Tests contain completed assertion failures; retaining their coverage. "
+                  "The normal test workflow owns their verdict. LLVM export must still validate the report.", flush=True)
+            for failure in failures[:20]:
+                label = "muted" if failure["muted"] else "unmuted"
+                print(redactor(f"  [{label}] {failure['path']}: {failure['name']}"), flush=True)
+            return 0
         if not retry:
             return rc or 1
-        print("::warning::All tests passed, but LLVM rejected a corrupt raw profile. Retrying once with fresh test/coverage nodes.", flush=True)
+        if corrupt_retry:
+            corruption_retries += 1
+            print("::warning::All tests passed, but LLVM rejected a corrupt raw profile. Retrying once with fresh test/coverage nodes.", flush=True)
+        else:
+            print("::warning::Retrying the entire component after test failures with fresh test/coverage nodes; "
+                  "no subset report or cross-attempt coverage merge is used.", flush=True)
     return 1
 
 

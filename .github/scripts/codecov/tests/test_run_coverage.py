@@ -135,6 +135,120 @@ class RetryDecisionTest(unittest.TestCase):
                     coverage.read_report(path)
 
 
+class TestOutcomeTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.output = self.root / "output"
+        self.build = self.root / "build"
+        self.trace = self.output / "tests/example/test-results/gtest/ytest.report.trace"
+        self.trace.parent.mkdir(parents=True)
+        self.report = successful_report()
+        self.report["results"] = [
+            {"type": "test", "suite": True, "status": "FAILED", "suite_status": "OK",
+             "error_type": "REGULAR", "path": "tests/example", "name": "gtest", "hid": 42},
+            {"type": "test", "chunk": True, "status": "FAILED", "error_type": "REGULAR",
+             "path": "tests/example", "name": "gtest", "suite_hid": 42},
+            {"type": "test", "status": "FAILED", "error_type": "REGULAR", "path": "tests/example",
+             "name": "Example", "subtest_name": "assertion", "suite_hid": 42},
+        ]
+        self.write_trace()
+
+    def write_trace(self, status="fail", extra=()) -> None:
+        events = [{"name": "subtest-finished", "value": {
+            "class": "Example", "subtest": "assertion", "status": status,
+        }}, *extra]
+        self.trace.write_text("".join(json.dumps(event) + "\n" for event in events))
+
+    def assess(self) -> bool:
+        return coverage.assertion_only_failure(self.report, self.output, self.build)[0]
+
+    def test_completed_assertions_are_usable_but_not_successful_tests(self) -> None:
+        self.assertTrue(coverage.test_failure_report(self.report))
+        self.assertFalse(coverage.tests_passed(self.report))
+        self.assertTrue(self.assess())
+
+    def test_regular_report_does_not_disguise_crash_or_missing_completion(self) -> None:
+        for status in ("crashed", "timeout", "missing", "internal", "not_launched", "unknown", None):
+            with self.subTest(status=status):
+                self.write_trace(status)
+                self.assertFalse(self.assess())
+        self.write_trace(extra=[{"name": "subtest-started", "value": {"class": "Other", "subtest": "unfinished"}}])
+        self.assertFalse(self.assess())
+
+    def test_container_errors_and_non_regular_report_failures_are_not_accepted(self) -> None:
+        for event in ("chunk-event", "suite-event"):
+            self.write_trace(extra=[{"name": event, "value": {"errors": [["fail", "recipe failed"]]}}])
+            self.assertFalse(self.assess())
+        self.write_trace()
+        for error in ("TIMEOUT", "INTERNAL", "BROKEN_DEPS", None):
+            self.report["results"][2]["error_type"] = error
+            self.assertFalse(self.assess())
+
+    def test_normal_failure_trace_cannot_hide_explicit_child_interruption(self) -> None:
+        for message in (
+            "yatest.common.process.ExecutionTimeoutError: execution timed out",
+            "Command '/path/ydb' has failed with code -11.",
+            "Command '/path/ydb' has failed with code 137.",
+            "AssertionError: Local command failed with exit code -9:",
+            "Process exit_code = -9",
+            "assert -9 == 0\n + where -9 = <Result>.returncode",
+            "subprocess.TimeoutExpired: command timed out",
+            "ERROR: AddressSanitizer: heap-use-after-free",
+        ):
+            with self.subTest(message=message):
+                self.write_trace()
+                event = json.loads(self.trace.read_text())
+                event["value"]["comment"] = message
+                self.trace.write_text(json.dumps(event))
+                self.assertFalse(self.assess())
+                self.write_trace()
+                self.report["results"][2]["rich-snippet"] = message
+                self.assertFalse(self.assess())
+                self.report["results"][2].pop("rich-snippet")
+        self.write_trace()
+        self.report["results"][2]["rich-snippet"] = "Command 'ydb' has failed with code 1."
+        self.assertTrue(self.assess())
+
+    def test_build_failure_incomplete_progress_and_not_launched_are_not_accepted(self) -> None:
+        for row in ({"type": "build", "status": "FAILED"},
+                    {"type": "test", "status": "NOT_LAUNCHED"}):
+            self.report["results"].append(row)
+            self.assertFalse(self.assess())
+            self.report["results"].pop()
+        self.report["progress"]["linux"][0]["done"] = 0
+        self.assertFalse(self.assess())
+
+    def test_missing_corrupt_or_misattributed_trace_is_not_accepted(self) -> None:
+        for text in ("", "invalid json", '{}', '{"name": "subtest-finished", "value": {}}'):
+            self.trace.write_text(text)
+            self.assertFalse(self.assess())
+        self.write_trace()
+        self.report["results"][2]["subtest_name"] = "different"
+        self.assertFalse(self.assess())
+        self.trace.unlink()
+        self.assertFalse(self.assess())
+
+    def test_trace_outside_attempt_roots_is_refused(self) -> None:
+        outside = self.root / "outside.trace"
+        self.trace.rename(outside)
+        self.trace.symlink_to(outside)
+        self.assertFalse(self.assess())
+
+    def test_mutes_are_labels_not_skips_and_brackets_are_literal(self) -> None:
+        mute = self.root / "muted_ya.txt"
+        mute.write_text("tests/* Example.assertion\ntests/example Example.param[abc]\n")
+        rules = coverage.read_mutes(mute)
+        original = copy.deepcopy(self.report)
+        self.assertTrue(coverage.failed_test_rows(self.report, rules)[0]["muted"])
+        self.assertEqual(self.report, original)
+        self.report["results"][2]["subtest_name"] = "parama"
+        self.assertFalse(coverage.failed_test_rows(self.report, rules)[0]["muted"])
+        self.report["results"][2]["subtest_name"] = "param[abc]"
+        self.assertTrue(coverage.failed_test_rows(self.report, rules)[0]["muted"])
+
+
 class DiagnosticBundleTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -406,17 +520,46 @@ retest = "--retest" in args
 with open(os.environ["COVERAGE_TEST_CALLS"], "a") as stream:
     stream.write(json.dumps({"args": args, "output": str(output), "build_root": str(build_root)}) + "\n")
 scenario = os.environ["COVERAGE_TEST_SCENARIO"]
-if scenario == "success_first" or (retest and scenario == "retry_success"):
-    (output / "successful-output").write_text("success")
-    sys.exit(0)
-
 report = {
     "results": [
-        {"type": "test", "suite": True, "status": "OK", "path": "tests/example"},
-        {"type": "test", "status": "OK", "name": "example"},
+        {"type": "test", "suite": True, "status": "OK", "suite_status": "OK", "path": "tests/example", "name": "gtest"},
+        {"type": "test", "status": "OK", "path": "tests/example", "name": "Example", "subtest_name": "assertion"},
     ],
     "progress": {"linux": [{"type": "test", "done": 1, "total": 1, "size": "small"}]},
 }
+def write_artifacts():
+    (output / "coverage.report").mkdir(exist_ok=True)
+    (output / "coverage.report/coverage.profdata").write_bytes(b"merged-profile")
+    (output / "build_clang_coverage_report.log").write_text("successful profile merge")
+
+if scenario in ("success_first", "success_without_report", "success_without_artifacts") or (retest and scenario in ("retry_success", "assertion_retry_success")):
+    if scenario != "success_without_report":
+        report_path.write_text(json.dumps(report))
+    if scenario != "success_without_artifacts":
+        write_artifacts()
+    sys.exit(0)
+if scenario.startswith("assertion") or scenario in ("crash", "timeout", "not_launched", "container_failure", "missing_trace", "build_failure"):
+    for row in report["results"]:
+        row.update(status="FAILED", error_type="REGULAR")
+    if scenario == "not_launched":
+        report["results"][1]["status"] = "NOT_LAUNCHED"
+    if scenario == "timeout":
+        report["results"][1]["error_type"] = "TIMEOUT"
+    if scenario == "container_failure":
+        report["results"][0]["suite_status"] = "FAILED"
+    if scenario == "build_failure":
+        report["results"].append({"type": "build", "status": "FAILED"})
+    report_path.write_text(json.dumps(report))
+    if scenario != "assertion_missing_artifacts":
+        write_artifacts()
+    trace_dir = output / "tests/example/test-results/gtest"
+    trace_dir.mkdir(parents=True)
+    if scenario != "missing_trace":
+        trace = {"name": "subtest-finished", "value": {"class": "Example", "subtest": "assertion", "status": "crashed" if scenario == "crash" else "fail"}}
+        (trace_dir / "ytest.report.trace").write_text(json.dumps(trace) + "\n")
+    if scenario == "assertion_unknown_command":
+        print(f"command (pid: 124) /tools/compiler input.cpp failed with exit code 1 in {build_root}")
+    sys.exit(10)
 if scenario == "failed_tests":
     report["results"][1]["status"] = "FAIL"
 if scenario == "incomplete_report":
@@ -458,7 +601,7 @@ class CoverageSubprocessTest(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
 
-    def run_scenario(self, scenario: str) -> tuple[subprocess.CompletedProcess, list[dict], dict[str, str]]:
+    def run_scenario(self, scenario: str, *, muted=False) -> tuple[subprocess.CompletedProcess, list[dict], dict[str, str]]:
         calls = self.root / "calls.jsonl"
         github_output = self.root / "github-output"
         env = dict(os.environ)
@@ -469,9 +612,14 @@ class CoverageSubprocessTest(unittest.TestCase):
             "COVERAGE_TEST_TOKEN": "secret-sentinel-value",
             "GITHUB_OUTPUT": str(github_output),
         })
+        mute_args = []
+        if muted:
+            mute_file = self.root / "muted_ya.txt"
+            mute_file.write_text("tests/example Example.assertion\n")
+            mute_args = ["--mute-file", str(mute_file)]
         completed = subprocess.run(
             [sys.executable, str(CODECOV_DIR / "run_coverage.py"), "--suite", "cli",
-             "--work-dir", str(self.root / "work"), "--", sys.executable, "-c", FAKE_YA],
+             "--work-dir", str(self.root / "work"), *mute_args, "--", sys.executable, "-c", FAKE_YA],
             capture_output=True, text=True, env=env, timeout=30,
         )
         invocations = [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
@@ -550,6 +698,60 @@ class CoverageSubprocessTest(unittest.TestCase):
         manifest = json.loads(first.read_text())
         self.assertTrue(any("not recovered" in item.get("note", "") for item in manifest["files"]))
         self.assertNotIn("out_dir", outputs)
+
+    def test_assertion_retry_can_recover_and_does_not_filter_the_component(self) -> None:
+        result, calls, outputs = self.run_scenario("assertion_retry_success")
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(outputs["out_dir"], calls[-1]["output"])
+        self.assertIn("--retest", calls[-1]["args"])
+        self.assertFalse(any("--test-filter" in call["args"] or "-X" in call["args"] for call in calls))
+
+    def test_persistent_assertions_keep_only_final_full_attempt_coverage(self) -> None:
+        result, calls, outputs = self.run_scenario("assertion_persistent")
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(outputs["out_dir"], calls[-1]["output"])
+        self.assertEqual(outputs["test_failures"], "1")
+        self.assertEqual(len({call["build_root"] for call in calls}), 3)
+        manifests = sorted(Path(outputs["diagnostics_dir"]).glob("*/manifest.json"))
+        self.assertEqual(len(manifests), 3)
+        self.assertTrue(json.loads(manifests[-1].read_text())["accepted_assertions"])
+        self.assertTrue(list(manifests[-1].parent.glob("*-ytest.report.trace")))
+
+    def test_muted_assertions_are_measured_without_unnecessary_retries(self) -> None:
+        result, calls, outputs = self.run_scenario("assertion_persistent", muted=True)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(outputs["test_failures"], "1")
+        self.assertIn("[muted] tests/example: Example.assertion", result.stdout)
+
+    def test_muting_never_accepts_crashes_or_timeouts(self) -> None:
+        for scenario in ("crash", "timeout", "not_launched", "container_failure", "missing_trace", "assertion_missing_artifacts"):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
+                self.root = Path(temporary)
+                result, calls, outputs = self.run_scenario(scenario, muted=True)
+                self.assertEqual(result.returncode, 10, result.stderr + result.stdout)
+                self.assertEqual(len(calls), 3)
+                self.assertNotIn("out_dir", outputs)
+
+    def test_test_exit_code_cannot_hide_build_or_unknown_command_failure(self) -> None:
+        for scenario in ("build_failure", "assertion_unknown_command"):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
+                self.root = Path(temporary)
+                result, calls, outputs = self.run_scenario(scenario)
+                self.assertEqual(result.returncode, 10, result.stderr + result.stdout)
+                self.assertEqual(len(calls), 1)
+                self.assertNotIn("out_dir", outputs)
+
+    def test_zero_exit_code_without_report_or_artifacts_does_not_publish(self) -> None:
+        for scenario in ("success_without_report", "success_without_artifacts"):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
+                self.root = Path(temporary)
+                result, calls, outputs = self.run_scenario(scenario)
+                self.assertNotEqual(result.returncode, 0, result.stderr + result.stdout)
+                self.assertEqual(len(calls), 1)
+                self.assertNotIn("out_dir", outputs)
 
 
 class CoverageWorkflowContractTest(unittest.TestCase):

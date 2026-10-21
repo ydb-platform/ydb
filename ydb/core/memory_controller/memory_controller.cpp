@@ -340,6 +340,7 @@ ui64 GetLimitReservation(EMemoryConsumerKind kind, ui64 limitBytes) {
 }
 
 class TMemoryController : public TActorBootstrapped<TMemoryController> {
+    using ETargetSource = TMemoryLimitBudget::ETargetSource;
     using TConsumerSnapshots = THashMap<EMemoryConsumerKind, TConsumerCollectionSnapshot>;
 
 public:
@@ -578,7 +579,7 @@ private:
                 for (auto& entry : snapshot->Entries) {
                     if (entry.Desired) {
                         requests.push_back({{consumer.Kind, entry.Registrant}, entry.Report.Used,
-                            *entry.Desired, GetLimitMultiplier(consumer.Kind), true});
+                            *entry.Desired, GetLimitMultiplier(consumer.Kind), ETargetSource::ConsumerRequest});
                         entries.push_back(&entry);
                     }
                 }
@@ -602,8 +603,9 @@ private:
             }
             if (const auto* snapshot = snapshots.FindPtr(consumer.Kind)) {
                 for (const auto& entry : snapshot->Entries) {
+                    const auto source = entry.Desired ? ETargetSource::ConsumerRequest : ETargetSource::MemoryController;
                     requests.push_back({{consumer.Kind, entry.Registrant}, entry.Report.Used,
-                        snapshot->ComputeLimitShare(entry, limitBytes), GetLimitMultiplier(consumer.Kind), entry.Desired.has_value()});
+                        snapshot->ComputeLimitShare(entry, limitBytes), GetLimitMultiplier(consumer.Kind), source});
                 }
             } else {
                 requests.push_back({{consumer.Kind, {}}, consumer.Consumption, limitBytes, GetLimitMultiplier(consumer.Kind)});

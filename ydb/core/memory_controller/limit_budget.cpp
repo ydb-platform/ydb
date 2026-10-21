@@ -27,9 +27,10 @@ TVector<ui64> TMemoryLimitBudget::PlanExplicitLimits(const TVector<TRequest>& re
     bool overBudget = false;
     for (const auto& request : requests) {
         Y_ABORT_UNLESS(request.Multiplier > 0);
-        const ui64 retained = request.ExplicitDemand ? Min(GetLimit(request.Key), request.Desired) : request.Desired;
+        const ui64 retained = request.Source == ETargetSource::ConsumerRequest
+            ? Min(GetLimit(request.Key), request.TargetLimit) : request.TargetLimit;
         planned.push_back(retained);
-        if (request.ExplicitDemand) {
+        if (request.Source == ETargetSource::ConsumerRequest) {
             if (retained > headroom / request.Multiplier) {
                 overBudget = true;
                 headroom = 0;
@@ -40,11 +41,11 @@ TVector<ui64> TMemoryLimitBudget::PlanExplicitLimits(const TVector<TRequest>& re
     }
     for (size_t i = 0; i < requests.size() && !overBudget; ++i) {
         const auto& request = requests[i];
-        if (request.ExplicitDemand) {
-            const ui64 increase = request.Desired - planned[i];
+        if (request.Source == ETargetSource::ConsumerRequest) {
+            const ui64 increase = request.TargetLimit - planned[i];
             if (increase <= headroom / request.Multiplier) {
                 headroom -= increase * request.Multiplier;
-                planned[i] = request.Desired;
+                planned[i] = request.TargetLimit;
             }
         }
     }
@@ -55,21 +56,21 @@ TVector<TMemoryLimitBudget::TGrant> TMemoryLimitBudget::Allocate(TVector<TReques
     // Waiting requests reserve their retained grant, not mutually exclusive targets.
     // Widen products before proportional division to avoid overflow.
     const auto planned = PlanExplicitLimits(requests, available);
-    unsigned __int128 desired = 0;
-    unsigned __int128 explicitDesired = 0;
+    unsigned __int128 controllerBudget = 0;
+    unsigned __int128 consumerBudget = 0;
     for (size_t i = 0; i < requests.size(); ++i) {
         const auto& request = requests[i];
-        if (request.ExplicitDemand) {
-            explicitDesired += static_cast<unsigned __int128>(planned[i]) * request.Multiplier;
+        if (request.Source == ETargetSource::ConsumerRequest) {
+            consumerBudget += static_cast<unsigned __int128>(planned[i]) * request.Multiplier;
         } else {
-            desired += static_cast<unsigned __int128>(request.Desired) * request.Multiplier;
+            controllerBudget += static_cast<unsigned __int128>(request.TargetLimit) * request.Multiplier;
         }
     }
-    const ui64 defaultAvailable = explicitDesired >= available ? 0 : available - static_cast<ui64>(explicitDesired);
-    if (desired > defaultAvailable) {
+    const ui64 defaultAvailable = consumerBudget >= available ? 0 : available - static_cast<ui64>(consumerBudget);
+    if (controllerBudget > defaultAvailable) {
         for (auto& request : requests) {
-            if (!request.ExplicitDemand) {
-                request.Desired = static_cast<unsigned __int128>(request.Desired) * defaultAvailable / desired;
+            if (request.Source == ETargetSource::MemoryController) {
+                request.TargetLimit = static_cast<unsigned __int128>(request.TargetLimit) * defaultAvailable / controllerBudget;
             }
         }
     }
@@ -82,8 +83,8 @@ TVector<TMemoryLimitBudget::TGrant> TMemoryLimitBudget::Allocate(TVector<TReques
         previousLimits.push_back(state.Limit);
         state.Used = request.Used;
         state.Multiplier = request.Multiplier;
-        if (request.Desired < state.Limit) {
-            state.Limit = request.Desired;
+        if (request.TargetLimit < state.Limit) {
+            state.Limit = request.TargetLimit;
         }
     }
     // Hard can fall below already issued limits. Reduce those permissions even
@@ -116,15 +117,15 @@ TVector<TMemoryLimitBudget::TGrant> TMemoryLimitBudget::Allocate(TVector<TReques
         const auto& request = requests[i];
         auto& state = States.at(request.Key);
         bool shouldSend = true;
-        if (request.Desired > state.Limit) {
+        if (request.TargetLimit > state.Limit) {
             // Do not send partial increases. Keep the previous limit until
             // reported consumption leaves room for the complete new grant.
-            const bool targetFits = request.Desired <= available / state.Multiplier
-                && (!request.ExplicitDemand || planned[i] == request.Desired);
-            const ui64 proposed = targetFits ? request.Desired * state.Multiplier : 0;
+            const bool targetFits = request.TargetLimit <= available / state.Multiplier
+                && (request.Source == ETargetSource::MemoryController || planned[i] == request.TargetLimit);
+            const ui64 proposed = targetFits ? request.TargetLimit * state.Multiplier : 0;
             const ui64 increase = proposed - Min(proposed, GetCharge(state));
             if (!overBudget && targetFits && increase <= headroom) {
-                state.Limit = request.Desired;
+                state.Limit = request.TargetLimit;
                 headroom -= increase;
             } else {
                 // A necessary reduction is not an answer to the pending request.

@@ -13,13 +13,18 @@ class TMemoryLimitBudget {
 public:
     using TKey = std::pair<EMemoryConsumerKind, TActorId>;
 
+    enum class ETargetSource {
+        MemoryController,
+        ConsumerRequest,
+    };
+
     struct TRequest {
         TKey Key;
         ui64 Used = 0;
-        ui64 Desired = 0;
+        ui64 TargetLimit = 0;
         ui64 Multiplier = 1;
         // Client requests must be granted in full. Only default targets scale.
-        bool ExplicitDemand = false;
+        ETargetSource Source = ETargetSource::MemoryController;
     };
 
     struct TGrant {

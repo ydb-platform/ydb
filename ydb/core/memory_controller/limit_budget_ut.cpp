@@ -9,6 +9,7 @@ namespace NKikimr::NMemory {
 namespace {
 
 using TBudget = TMemoryLimitBudget;
+constexpr auto ConsumerRequest = TBudget::ETargetSource::ConsumerRequest;
 const TBudget::TKey Cache{EMemoryConsumerKind::SharedCache, TActorId(1, 1)};
 const TBudget::TKey Scan{EMemoryConsumerKind::ColumnTablesScanGroupedMemory, TActorId(1, 2)};
 const TBudget::TKey Comp{EMemoryConsumerKind::ColumnTablesCompGroupedMemory, TActorId(1, 3)};
@@ -68,13 +69,13 @@ Y_UNIT_TEST_SUITE(TMemoryLimitBudgetTest) {
     Y_UNIT_TEST(ExplicitDemandWaitsWithoutBeingScaled) {
         TBudget budget;
         budget.Allocate({{Cache, 80, 80}, {Scan, 0, 20}}, 100);
-        auto grants = budget.Allocate({{Cache, 80, 80}, {Scan, 0, 80, 1, true}}, 100);
+        auto grants = budget.Allocate({{Cache, 80, 80}, {Scan, 0, 80, 1, ConsumerRequest}}, 100);
         UNIT_ASSERT_VALUES_EQUAL(grants[0].Bytes, 20);
         AssertGrant(grants[1], 20, false);
-        grants = budget.Allocate({{Cache, 50, 80}, {Scan, 0, 80, 1, true}}, 100);
+        grants = budget.Allocate({{Cache, 50, 80}, {Scan, 0, 80, 1, ConsumerRequest}}, 100);
         AssertGrant(grants[1], 20, false);
         // Replace the waiting request. The old target must never be granted.
-        grants = budget.Allocate({{Cache, 50, 80}, {Scan, 0, 50, 1, true}}, 100);
+        grants = budget.Allocate({{Cache, 50, 80}, {Scan, 0, 50, 1, ConsumerRequest}}, 100);
         UNIT_ASSERT_VALUES_EQUAL(grants[0].Bytes, 50);
         AssertGrant(grants[1], 50, true);
         UNIT_ASSERT_VALUES_EQUAL(budget.GetCommitted(), 100);
@@ -84,28 +85,28 @@ Y_UNIT_TEST_SUITE(TMemoryLimitBudgetTest) {
         TBudget budget;
         budget.Allocate({{Cache, 0, 60}, {Comp, 0, 10, 4}}, 100);
         // An impossible effective cap retains its old grant while default targets grow.
-        auto grants = budget.Allocate({{Cache, 0, 100}, {Comp, 0, 30, 4, true}}, 100);
+        auto grants = budget.Allocate({{Cache, 0, 100}, {Comp, 0, 30, 4, ConsumerRequest}}, 100);
         AssertGrant(grants[0], 60, true);
         AssertGrant(grants[1], 10, false);
         UNIT_ASSERT_VALUES_EQUAL(budget.GetCommitted(), 100);
-        grants = budget.Allocate({{Cache, 0, 60}, {Comp, 0, 30, 4, true}}, 200);
+        grants = budget.Allocate({{Cache, 0, 60}, {Comp, 0, 30, 4, ConsumerRequest}}, 200);
         AssertGrant(grants[1], 30, true);
 
         const ui64 max = std::numeric_limits<ui64>::max();
-        grants = budget.Allocate({{Cache, 0, 60}, {Comp, 0, max, 4, true}}, max);
+        grants = budget.Allocate({{Cache, 0, 60}, {Comp, 0, max, 4, ConsumerRequest}}, max);
         AssertGrant(grants[1], 30, false); // multiplication cannot wrap into a grant
     }
 
     Y_UNIT_TEST(HardDecreaseReducesGrantsButKeepsExplicitDemandPending) {
         TBudget budget;
-        budget.Allocate({{Cache, 0, 50, 1, true}, {Scan, 0, 50, 1, true}}, 100);
-        auto grants = budget.Allocate({{Cache, 0, 50, 1, true}, {Scan, 0, 50, 1, true}}, 70);
+        budget.Allocate({{Cache, 0, 50, 1, ConsumerRequest}, {Scan, 0, 50, 1, ConsumerRequest}}, 100);
+        auto grants = budget.Allocate({{Cache, 0, 50, 1, ConsumerRequest}, {Scan, 0, 50, 1, ConsumerRequest}}, 70);
         UNIT_ASSERT_VALUES_EQUAL(grants[0].Bytes, 35);
         UNIT_ASSERT_VALUES_EQUAL(grants[1].Bytes, 35);
         UNIT_ASSERT(grants[0].ShouldSend && grants[1].ShouldSend);
-        grants = budget.Allocate({{Cache, 0, 50, 1, true}, {Scan, 0, 50, 1, true}}, 70);
+        grants = budget.Allocate({{Cache, 0, 50, 1, ConsumerRequest}, {Scan, 0, 50, 1, ConsumerRequest}}, 70);
         UNIT_ASSERT(!grants[0].ShouldSend && !grants[1].ShouldSend);
-        grants = budget.Allocate({{Cache, 0, 0, 1, true}, {Scan, 0, 50, 1, true}}, 70);
+        grants = budget.Allocate({{Cache, 0, 0, 1, ConsumerRequest}, {Scan, 0, 50, 1, ConsumerRequest}}, 70);
         UNIT_ASSERT_VALUES_EQUAL(grants[0].Bytes, 0);
         AssertGrant(grants[1], 50, true);
     }
@@ -114,19 +115,19 @@ Y_UNIT_TEST_SUITE(TMemoryLimitBudgetTest) {
         const TBudget::TKey second{EMemoryConsumerKind::ColumnTablesScanGroupedMemory, TActorId(1, 4)};
         TBudget budget;
         budget.Allocate({{Cache, 40, 40}, {Scan, 0, 20}, {second, 0, 20}}, 100);
-        auto grants = budget.Allocate({{Cache, 40, 40}, {Scan, 0, 60, 1, true}, {second, 0, 60, 1, true}}, 100);
+        auto grants = budget.Allocate({{Cache, 40, 40}, {Scan, 0, 60, 1, ConsumerRequest}, {second, 0, 60, 1, ConsumerRequest}}, 100);
         AssertGrant(grants[0], 20, true);
         AssertGrant(grants[1], 20, false);
         AssertGrant(grants[2], 20, false);
         for (size_t round = 0; round < 3; ++round) {
-            grants = budget.Allocate({{Cache, 20, 40}, {Scan, 0, 60, 1, true}, {second, 0, 60, 1, true}}, 100);
+            grants = budget.Allocate({{Cache, 20, 40}, {Scan, 0, 60, 1, ConsumerRequest}, {second, 0, 60, 1, ConsumerRequest}}, 100);
             AssertGrant(grants[0], 20, true);
             AssertGrant(grants[1], 60, true);
             AssertGrant(grants[2], 20, false);
             UNIT_ASSERT_VALUES_EQUAL(budget.GetCommitted(), 100);
         }
         // Releasing the first grant lets the second complete without starving the cache.
-        grants = budget.Allocate({{Cache, 20, 40}, {Scan, 0, 0, 1, true}, {second, 0, 60, 1, true}}, 100);
+        grants = budget.Allocate({{Cache, 20, 40}, {Scan, 0, 0, 1, ConsumerRequest}, {second, 0, 60, 1, ConsumerRequest}}, 100);
         AssertGrant(grants[0], 40, true);
         AssertGrant(grants[1], 0, true);
         AssertGrant(grants[2], 60, true);
@@ -136,7 +137,7 @@ Y_UNIT_TEST_SUITE(TMemoryLimitBudgetTest) {
         TBudget budget;
         budget.Allocate({{Cache, 0, 40}, {Comp, 0, 10, 4}, {Scan, 0, 20}}, 100);
         const TVector<TBudget::TRequest> requests{
-            {Cache, 0, 40}, {Comp, 0, 15, 4, true}, {Scan, 0, 60, 1, true}};
+            {Cache, 0, 40}, {Comp, 0, 15, 4, ConsumerRequest}, {Scan, 0, 60, 1, ConsumerRequest}};
         const auto planned = budget.PlanExplicitLimits(requests, 100);
         UNIT_ASSERT_VALUES_EQUAL(planned[1], 15);
         UNIT_ASSERT_VALUES_EQUAL(planned[2], 20);

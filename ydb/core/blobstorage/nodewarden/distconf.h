@@ -397,6 +397,7 @@ namespace NKikimr::NStorage {
             bool MindPrev; // mind previous configuration quorum
             ui64 ConfigRecoveryGeneration;
             bool AdvancesConflictingGeneration = false;
+            bool RecoveryProposition = false;
             std::vector<TNodeIdentifier> AddedOrChangedNodeIdentifiers; // identifiers of added nodes or changed endpoints
         };
         std::optional<TProposition> CurrentProposition;
@@ -571,12 +572,14 @@ namespace NKikimr::NStorage {
             bool IsDistconfDisabledQuorum = false;
             std::optional<NKikimrBlobStorage::TStorageConfig> RecoveredConfig;
             bool RequiresGenerationAdvance = false;
+            bool RequiresRecoveryProposition = false;
             std::optional<NKikimrBlobStorage::TStorageConfig> PropositionBase;
             std::optional<NKikimrBlobStorage::TStorageConfig> ConfigToPropose;
             bool AutomaticBootstrap = false;
         };
         TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
-            std::optional<TString> selfAssemblyUUID, bool dryRun = false, bool allowConflictingGenerationAdvance = false);
+            std::optional<TString> selfAssemblyUUID, bool dryRun = false, bool allowConflictingGenerationAdvance = false,
+            const NKikimrBlobStorage::TStorageConfig *collectionQuorumConfig = nullptr);
 
         void ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
         bool IsBelowKnownAppliedConfig(const NKikimrBlobStorage::TStorageConfig& config) const;
@@ -647,7 +650,7 @@ namespace NKikimr::NStorage {
 
         std::optional<TString> StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool mindPrev,
-            bool advancesConflictingGeneration = false);
+            bool advancesConflictingGeneration = false, bool recoveryProposition = false);
 
         void CheckForConfigUpdate();
 

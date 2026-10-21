@@ -18,6 +18,9 @@
 #ifndef SCENARIO
 #define SCENARIO 1
 #endif
+#ifndef VARIANT
+#define VARIANT 0
+#endif
 #ifndef CHECK_SAFETY
 #define CHECK_SAFETY 1
 #endif
@@ -33,6 +36,24 @@
 #ifndef LEGACY_REACH
 #define LEGACY_REACH 0
 #endif
+#ifndef CONSERVATIVE_RECOVERY
+#define CONSERVATIVE_RECOVERY 1
+#endif
+#ifndef RECOVERY_REPROPOSE
+#define RECOVERY_REPROPOSE 1
+#endif
+#ifndef RECOVERY_FRESH_GENERATION
+#define RECOVERY_FRESH_GENERATION 0
+#endif
+#ifndef PARENT_WITNESS
+#define PARENT_WITNESS 1
+#endif
+#ifndef REQUIRE_NONZERO_RECOVERY_BASE
+#define REQUIRE_NONZERO_RECOVERY_BASE 1
+#endif
+#if (SCENARIO == 37 && VARIANT > 2) || (SCENARIO == 40 && VARIANT > 5)
+#error Unknown VARIANT
+#endif
 #define LEGACY_CASE (SCENARIO >= 30 && SCENARIO <= 36)
 #define N 3
 #define Q 2
@@ -44,15 +65,20 @@
 #define X 2
 #define Y 3
 #define Z 4
-#define MAX_GEN 5
+#define RECOVERY_ONE 5
+#define RECOVERY_TWO 6
+#define VALUES 7
+#define MAX_GEN 7
 #define GEN(v) generation[v]
+#define POSSIBLE_RECOVERY_CANDIDATE(v) (copies[v] != 0 && copies[v] < Q && committed_copies[v] == 0 && (v) != applied_floor && (copies[v] + unknown_count >= Q || mandatory_parent[v]) && GEN(v) >= GEN(recovery_base))
 #if ALL_OLD
 #define REFILL_TRIGGER(node) true
 #else
 #define REFILL_TRIGGER(node) (ordinary_body[node] != NONE && GEN(ordinary_body[node]) != 0)
 #endif
 
-byte generation[5];
+byte generation[VALUES];
+byte previous[VALUES];
 byte disk_c[N];
 byte disk_p[N];
 byte memory_c[N];
@@ -90,6 +116,7 @@ bool scratch_fresh;
 
 byte root;
 bool root_new = true;
+bool replace_request = true;
 byte root_epoch = 1;
 byte operation;
 byte op_cookie = 1;
@@ -105,6 +132,11 @@ byte applied_floor;
 bool applied_conflict;
 bool repair_pending;
 bool repair_restart;
+bool recovery_pending;
+byte recovery_operation;
+bool recovery_requested[N];
+bool chosen_once[VALUES];
+bool mandatory_parent[VALUES];
 
 bool read_requested[N];
 bool read_pending[N];
@@ -125,6 +157,11 @@ byte violation;
 byte max_bad;
 byte observer_node;
 byte observer_copies;
+byte history_generation;
+byte history_cursor;
+byte history_steps;
+byte history_value;
+bool history_proved;
 bool suffix;
 bool done;
 byte recovered;
@@ -164,10 +201,14 @@ byte j;
 byte n;
 byte count;
 byte stateful_count;
+byte unknown_count;
 byte max_committed;
 byte chosen;
-byte copies[5];
-byte committed_copies[5];
+byte recovery_base;
+byte lineage_cursor;
+bool lineage_proved;
+byte copies[VALUES];
+byte committed_copies[VALUES];
 byte scratch_c;
 byte scratch_p;
 byte scratch_v;
@@ -188,6 +229,37 @@ inline require(condition, code) {
     fi
 }
 
+inline history_extends(value, ancestor) {
+    history_cursor = value; history_steps = 0;
+    do
+    :: (history_cursor != ancestor && history_cursor != NONE && history_steps < VALUES
+        && GEN(previous[history_cursor]) < GEN(history_cursor)) ->
+        history_cursor = previous[history_cursor]; history_steps++
+    :: else -> break
+    od;
+    history_proved = history_cursor == ancestor;
+    history_cursor = NONE; history_steps = 0
+}
+
+inline observe_choice_history(value) {
+    history_generation = 1;
+    do
+    :: history_generation <= MAX_GEN ->
+        if
+        :: ok_value[history_generation] != NONE && history_generation < GEN(value) ->
+            history_extends(value, ok_value[history_generation]);
+            if
+            :: !history_proved -> violation = 10; assert(history_proved)
+            :: else -> skip
+            fi
+        :: else -> skip
+        fi;
+        history_generation++
+    :: else -> break
+    od;
+    history_generation = 0; history_proved = false
+}
+
 inline check_budget() {
     count = 0; j = 0;
     do
@@ -202,17 +274,23 @@ inline check_budget() {
 
 inline observe_committed_quorum(value) {
     if
-    :: value != NONE && value == last_admin ->
-        observer_copies = 0; observer_node = 0;
-        do
-        :: observer_node < N ->
-            if :: disk_c[observer_node] == value -> observer_copies++ :: else -> skip fi;
-            observer_node++
-        :: else -> break
-        od;
-        if :: observer_copies >= Q -> expected = value :: else -> skip fi
+    :: value != NONE && last_admin != NONE ->
+        history_extends(value, last_admin);
+        if
+        :: history_proved ->
+            observer_copies = 0; observer_node = 0;
+            do
+            :: observer_node < N ->
+                if :: disk_c[observer_node] == value -> observer_copies++ :: else -> skip fi;
+                observer_node++
+            :: else -> break
+            od;
+            if :: observer_copies >= Q -> expected = value :: else -> skip fi
+        :: else -> skip
+        fi
     :: else -> skip
-    fi
+    fi;
+    history_proved = false
 }
 
 inline observe_committed_fork() {
@@ -275,7 +353,7 @@ inline collect_mask(mask) {
 
 inline count_reads() {
     i = 0;
-    do :: i < 5 -> copies[i] = 0; committed_copies[i] = 0; i++ :: else -> break od;
+    do :: i < VALUES -> copies[i] = 0; committed_copies[i] = 0; i++ :: else -> break od;
     count = 0; stateful_count = 0; max_committed = 0; observed_max = 0; i = 0;
     do
     :: i < N ->
@@ -298,6 +376,23 @@ inline count_reads() {
     od
 }
 
+inline count_unknown() {
+    unknown_count = N - stateful_count
+}
+
+inline prove_lineage(value, base) {
+    lineage_cursor = value; lineage_proved = false;
+    do
+    :: previous[lineage_cursor] == base -> lineage_proved = true; break
+    :: (previous[lineage_cursor] != base
+        && GEN(previous[lineage_cursor]) > GEN(base)
+        && GEN(previous[lineage_cursor]) < GEN(lineage_cursor)
+        && copies[previous[lineage_cursor]] != 0) ->
+        lineage_cursor = previous[lineage_cursor]
+    :: else -> break
+    od
+}
+
 inline remember_applied(value) {
 #if LEGACY_CASE
     if
@@ -315,7 +410,7 @@ inline remember_applied(value) {
 #else
     if
     :: root_new && GEN(value) > GEN(applied_floor) -> applied_floor = value
-    :: root_new && value != NONE && GEN(value) == GEN(applied_floor) && value != applied_floor ->
+    :: root_new && GEN(value) != 0 && GEN(value) == GEN(applied_floor) && value != applied_floor ->
         applied_conflict = true
     :: else -> skip
     fi
@@ -329,6 +424,8 @@ inline offer_commit(node, value) {
 inline install(node, value) {
     if
     :: GEN(value) > GEN(applied[node]) ->
+        require(chosen_once[value], 14);
+        observe_choice_history(value);
         applied[node] = value; memory_c[node] = value;
         assert(len(writes[node]) < 3);
         writes[node]!memory_c[node],memory_p[node],NONE,0;
@@ -427,12 +524,18 @@ inline propose(node) {
         :: else -> accepted = true
         fi
 #endif
+#if !ALL_OLD
+    :: (!proposal_busy[node] && upgraded[node] && operation != NONE
+        && operation == applied[node] && memory_c[node] == operation && len(writes[node]) == 0) ->
+        accepted = true
+#endif
     :: else -> skip
     fi;
     if
     :: accepted ->
         /* Current replica acceptance ignores an existing uncommitted proposed. */
-        memory_p[node] = operation; proposal_busy[node] = true;
+        if :: operation != applied[node] -> memory_p[node] = operation :: else -> skip fi;
+        proposal_busy[node] = true;
         assert(len(writes[node]) < 3);
         writes[node]!memory_c[node],memory_p[node],operation,op_cookie
     :: else -> skip
@@ -444,8 +547,9 @@ inline complete_vote(node) {
     if :: accepted -> drain_disk(node); deliver_ack() :: else -> skip fi
 }
 
-inline start_write(value) {
-    assert(value > BASE); last_admin = value; expected = NONE;
+inline prepare_proposal(value) {
+    assert(value > BASE && GEN(value) == 0);
+    previous[value] = memory_c[root];
     operation = value; op_cookie++; votes = 0; learned = false; replied = false;
     i = 0;
     do :: i < N -> voted[i] = false; i++ :: else -> break od;
@@ -463,6 +567,33 @@ inline start_write(value) {
     assert(generation[value] <= MAX_GEN)
 }
 
+inline start_write(value) {
+    assert(!recovery_pending);
+    last_admin = value; expected = NONE;
+    prepare_proposal(value)
+}
+
+inline start_recovery_proposal(candidate) {
+    assert(!recovery_pending);
+#if RECOVERY_FRESH_GENERATION
+    if
+    :: GEN(RECOVERY_ONE) == 0 -> recovery_operation = RECOVERY_ONE
+    :: GEN(RECOVERY_ONE) != 0 && GEN(RECOVERY_TWO) == 0 -> recovery_operation = RECOVERY_TWO
+    :: else -> assert(false)
+    fi;
+    prepare_proposal(recovery_operation);
+    previous[recovery_operation] = candidate;
+#else
+    recovery_operation = candidate; operation = candidate;
+    op_cookie++; votes = 0; learned = false; replied = false;
+    i = 0;
+    do :: i < N -> voted[i] = false; i++ :: else -> break od;
+#endif
+    recovery_pending = true;
+    i = 0;
+    do :: i < N -> recovery_requested[i] = online[i]; i++ :: else -> break od
+}
+
 inline learn() {
 #if LEGACY_CASE
     assert(votes >= Q && legacy_granted);
@@ -471,20 +602,48 @@ inline learn() {
     legacy_granted = false;
     recovery_needed = false; applied_conflict = false; applied_floor = operation;
 #endif
-    assert(votes >= Q); learned = true; apply_publication(operation)
+    assert(votes >= Q); observe_choice_history(operation); chosen_once[operation] = true;
+    learned = true; apply_publication(operation)
+}
+
+inline complete_recovery_vote(node) {
+    assert(recovery_pending);
+    if
+    :: online[node] && !voted[node] ->
+        recovery_requested[node] = false;
+        drain_disk(node); drain_acks(); complete_vote(node)
+    :: else -> skip
+    fi
 }
 
 inline reply_ok() {
     assert(operation != NONE && learned && !replied);
-    if :: root_new -> count_reads(); assert(committed_copies[operation] >= Q) :: else -> assert(votes >= Q) fi;
+    if
+    :: root_new && replace_request -> count_reads(); assert(committed_copies[operation] >= Q)
+    :: else -> assert(votes >= Q)
+    fi;
     require(ok_value[GEN(operation)] == NONE || ok_value[GEN(operation)] == operation, 1);
     ok_value[GEN(operation)] = operation; ok_count++;
+    history_value = BASE;
+    do
+    :: history_value < VALUES ->
+        if
+        :: chosen_once[history_value] && GEN(history_value) > GEN(operation) ->
+            observe_choice_history(history_value)
+        :: else -> skip
+        fi;
+        history_value++
+    :: else -> break
+    od;
+    history_value = NONE;
     if :: last_admin == operation -> expected = operation :: else -> skip fi;
     replied = true
 }
 
 inline abandon_request() {
-    operation = NONE; op_cookie++; collecting = false
+    operation = NONE; op_cookie++; collecting = false; recovery_pending = false;
+    i = 0;
+    do :: i < N -> recovery_requested[i] = false; i++ :: else -> break od
 }
 
 inline change_root(node, is_new) {
@@ -598,11 +757,33 @@ inline answer_refill_queries(value) {
 #endif
 }
 
+inline finish_recovery_proposal() {
+    assert(recovery_pending && operation == recovery_operation && votes >= Q);
+    learn(); recovered = recovery_operation; recovery_pending = false;
+    recovery_needed = false; repair_pending = false;
+    answer_refill_queries(recovered)
+}
+
+inline retry_recovery_proposal() {
+    abandon_request(); recovered = NONE; recovery_needed = true; begin_collect()
+}
+
+inline complete_recovery_proposal() {
+    if
+    :: recovery_pending ->
+        complete_recovery_vote(A); complete_recovery_vote(B); complete_recovery_vote(C);
+        if :: votes >= Q -> finish_recovery_proposal() :: else -> retry_recovery_proposal() fi
+    :: else -> skip
+    fi
+}
+
 inline select_recovery() {
     count_reads(); chosen = NONE; blocked = count < Q;
+    i = 0;
+    do :: i < VALUES -> mandatory_parent[i] = false; i++ :: else -> break od;
     i = 1;
     do
-    :: i < 5 -> if :: copies[i] >= Q && GEN(i) > GEN(chosen) -> chosen = i :: else -> skip fi; i++
+    :: i < VALUES -> if :: copies[i] >= Q && (chosen == NONE || GEN(i) > GEN(chosen)) -> chosen = i :: else -> skip fi; i++
     :: else -> break
     od;
 #if !ALL_OLD
@@ -612,7 +793,7 @@ inline select_recovery() {
         /* Retain quorum-backed proposed recovery; add minority committed. */
         i = 1;
         do
-        :: i < 5 ->
+        :: i < VALUES ->
             if :: committed_copies[i] != 0 && GEN(i) > GEN(chosen) -> chosen = i :: else -> skip fi;
             i++
         :: else -> break
@@ -630,18 +811,87 @@ inline select_recovery() {
     :: else -> skip
     fi;
 #endif
+    recovery_base = chosen;
+#if !ALL_OLD && CONSERVATIVE_RECOVERY && REQUIRE_NONZERO_RECOVERY_BASE
+    if
+    :: root_new && GEN(recovery_base) == 0 ->
+        i = 1;
+        do
+        :: i < VALUES ->
+            if :: copies[i] != 0 && GEN(previous[i]) != 0 -> blocked = true :: else -> skip fi;
+            i++
+        :: else -> break
+        od
+    :: else -> skip
+    fi;
+#endif
+#if !ALL_OLD && CONSERVATIVE_RECOVERY
+    if
+    :: root_new && GEN(recovery_base) != 0 ->
+        count_unknown();
+#if PARENT_WITNESS
+        i = 1;
+        do
+        :: i < VALUES ->
+            if
+            :: (copies[i] != 0 && GEN(i) > GEN(recovery_base)
+                && GEN(previous[i]) >= GEN(recovery_base) && previous[i] != recovery_base) ->
+                if
+                :: GEN(previous[i]) >= GEN(i) || copies[previous[i]] == 0 -> blocked = true
+                :: else -> mandatory_parent[previous[i]] = true
+                fi
+            :: else -> skip
+            fi;
+            i++
+        :: else -> break
+        od;
+#endif
+        i = 1;
+        do
+        :: i < VALUES ->
+            if
+            :: POSSIBLE_RECOVERY_CANDIDATE(i) ->
+                prove_lineage(i, recovery_base);
+                if
+                :: !lineage_proved -> blocked = true
+                :: lineage_proved ->
+                    if :: GEN(i) > GEN(chosen) -> chosen = i :: else -> skip fi
+                fi
+            :: else -> skip
+            fi;
+            i++
+        :: else -> break
+        od;
+        i = 1;
+        do
+        :: i < VALUES ->
+            if
+            :: POSSIBLE_RECOVERY_CANDIDATE(i) && i != chosen ->
+                prove_lineage(chosen, i);
+                if :: !lineage_proved -> blocked = true :: else -> skip fi
+            :: else -> skip
+            fi;
+            i++
+        :: else -> break
+        od
+    :: else -> skip
+    fi;
+#endif
     if :: chosen == NONE || GEN(chosen) < max_committed -> blocked = true :: else -> skip fi;
     /* The current patch rejects two quorum-backed fingerprints at the maximum.
      * Candidates also reject conflicting committed copies at that generation. */
     i = 1;
     do
-    :: i < 5 ->
+    :: i < VALUES ->
         if
         :: chosen != NONE && i != chosen && GEN(i) == GEN(chosen) ->
             if
             :: root_new && copies[i] >= Q -> blocked = true
 #if !ALL_OLD
             :: root_new && committed_copies[i] != 0 -> blocked = true
+#if CONSERVATIVE_RECOVERY
+            :: root_new && copies[i] != 0 && copies[i] + unknown_count >= Q -> blocked = true
+#endif
 #endif
             :: else -> skip
             fi
@@ -651,8 +901,20 @@ inline select_recovery() {
     :: else -> break
     od;
     if
-    :: !blocked -> recovered = chosen; recovery_needed = false; repair_pending = false;
-        apply_publication(chosen); answer_refill_queries(chosen)
+    :: !blocked ->
+        if
+        :: committed_copies[chosen] != 0 || copies[chosen] >= Q || chosen == applied_floor ->
+            observe_choice_history(chosen); chosen_once[chosen] = true;
+            recovered = chosen; recovery_needed = false; repair_pending = false;
+            apply_publication(chosen); answer_refill_queries(chosen)
+        :: else ->
+#if RECOVERY_REPROPOSE
+            recovered = NONE; start_recovery_proposal(chosen)
+#else
+            recovered = chosen; recovery_needed = false; repair_pending = false;
+            apply_publication(chosen); answer_refill_queries(chosen)
+#endif
+        fi
     :: else -> recovered = NONE
     fi
 }
@@ -782,7 +1044,7 @@ inline candidate_race_prefix() {
 
     /* Each snapshot may precede or follow a queued metadata write. */
     begin_collect(); read_with_disk_cut(A); read_with_disk_cut(B); read_with_disk_cut(C);
-    collecting = false; select_recovery(); require(!blocked, 5);
+    collecting = false; select_recovery(); complete_recovery_proposal(); require(!blocked, 5);
     start_write(Y); same_generation_attempts = GEN(X) == GEN(Y);
     if :: !online[B] -> restart_node(B) :: else -> skip fi;
     vote_after_disk_cut(A); vote_after_disk_cut(B); vote_after_disk_cut(C); drain_acks();
@@ -810,9 +1072,10 @@ inline clear_legacy_scratch() {
 #if LEGACY_CASE
     scratch_c = NONE; scratch_p = NONE; scratch_v = NONE; scratch_cookie = 0;
     n = 0; observer_node = 0; observer_copies = 0;
-    i = 0; count = 0; stateful_count = 0; max_committed = 0; chosen = NONE;
+    i = 0; count = 0; stateful_count = 0; unknown_count = 0; max_committed = 0; chosen = NONE;
+    recovery_base = NONE; lineage_cursor = NONE; lineage_proved = false;
     j = 0;
-    do :: j < 5 -> copies[j] = 0; committed_copies[j] = 0; j++ :: else -> break od;
+    do :: j < VALUES -> copies[j] = 0; committed_copies[j] = 0; j++ :: else -> break od;
     j = 0; all_read = false; agreement = false; common = NONE; accepted = false
 #else
     skip
@@ -829,7 +1092,7 @@ inline prepare_legacy_replace() {
     if :: GEN(applied_floor) > legacy_max -> legacy_max = GEN(applied_floor) :: else -> skip fi;
     i = 1;
     do
-    :: i < 5 ->
+    :: i < VALUES ->
         if
         :: (committed_copies[i] != 0 || copies[i] >= Q) && GEN(i) > GEN(legacy_top) -> legacy_top = i
         :: else -> skip
@@ -912,6 +1175,8 @@ proctype Disk(byte node) {
 proctype Network(byte node) {
     do
     :: atomic { online[node] && !fatal[node] && len(commits[node]) != 0 && len(writes[node]) < 3 -> deliver_commit(node); clear_legacy_scratch() }
+    :: atomic { online[node] && !fatal[node] && recovery_pending && recovery_requested[node] && len(writes[node]) < 3 ->
+        recovery_requested[node] = false; propose(node); clear_legacy_scratch() }
     od
 }
 
@@ -967,8 +1232,16 @@ inline coordinator_turn() {
     check_done();
     retry_committed();
     if
-    :: !collecting && recovery_needed -> begin_collect()
-    :: collecting ->
+    :: recovery_pending ->
+        if
+        :: votes >= Q -> finish_recovery_proposal()
+        :: (votes < Q && !recovery_requested[A] && !recovery_requested[B] && !recovery_requested[C]
+            && !proposal_busy[A] && !proposal_busy[B] && !proposal_busy[C] && len(acks) == 0) ->
+            retry_recovery_proposal()
+        :: else -> skip
+        fi
+    :: !recovery_pending && !collecting && recovery_needed -> begin_collect()
+    :: !recovery_pending && collecting ->
         all_read = true; i = 0;
         do
         :: i < N -> if :: online[i] && !received[i] -> all_read = false :: else -> skip fi; i++
@@ -1000,7 +1273,7 @@ inline complete_refill(node) {
         :: ordinary_body[node] == NONE && root_new ->
             /* The root's normal blank-metadata recovery publishes first;
              * receiving that body starts the extra causal confirmation. */
-            coordinator_turn(); collect_mask(7); select_recovery(); assert(!blocked);
+            coordinator_turn(); collect_mask(7); select_recovery(); complete_recovery_proposal(); assert(!blocked);
             complete_commit(node)
         :: else -> skip
         fi;
@@ -1008,7 +1281,7 @@ inline complete_refill(node) {
         :: REFILL_TRIGGER(node) ->
             start_refill_query(node); forward_refill_query(node); forward_refill_query(node);
             coordinator_turn();
-            if :: root_new -> collect_mask(7); select_recovery(); assert(!blocked) :: else -> skip fi;
+            if :: root_new -> collect_mask(7); select_recovery(); complete_recovery_proposal(); assert(!blocked) :: else -> skip fi;
             forward_refill_reply(node); deliver_refill_reply(node); complete_commit(node)
         :: else -> skip
         fi
@@ -1017,8 +1290,23 @@ inline complete_refill(node) {
 #endif
 }
 
+inline acknowledge_on_AB() {
+    replace_request = false;
+    stop_node(C); start_write(X);
+    complete_vote(A); complete_vote(B); learn(); reply_ok()
+}
+
+inline advance_on_BC(value) {
+    complete_commit(B); complete_commit(C); start_write(value);
+    if :: GEN(value) <= GEN(X) -> violation = 12 :: else -> skip fi;
+    assert(GEN(value) > GEN(X));
+    complete_vote(B); complete_vote(C); learn(); reply_ok();
+    complete_commit(B); complete_commit(C)
+}
+
 init {
     atomic {
+        chosen_once[BASE] = true;
         generation[BASE] = 1; i = 0;
         do
         :: i < N -> disk_c[i] = BASE; memory_c[i] = BASE; applied[i] = BASE;
@@ -1061,7 +1349,7 @@ init {
 #endif
         /* Normal recovery cannot publish an old disputed generation. */
 #if SCENARIO != 35
-        select_recovery(); assert(blocked && recovered == NONE);
+        select_recovery(); complete_recovery_proposal(); assert(blocked && recovered == NONE);
 #endif
         prepare_legacy_replace();
 #if SCENARIO >= 34 || !LEGACY_REPAIR
@@ -1089,13 +1377,13 @@ init {
         /* Quorum proposal, one durable committed copy, no OK, failover. */
         start_write(X); complete_vote(A); complete_vote(B); learn(); complete_commit(A);
         stop_node(A); lose_commits(B); lose_commits(C);
-        change_root(B, true); collect_mask(6); select_recovery();
+        change_root(B, true); collect_mask(6); select_recovery(); complete_recovery_proposal();
         restart_node(A); assert(ok_count == 0);
 #elif SCENARIO == 4
         /* A newer successful write must supersede an incomplete rollout. */
         start_write(X); complete_vote(A); complete_vote(B); learn();
         complete_commit(A); complete_commit(B); collect_mask(3); reply_ok();
-        change_root(B, true); collect_mask(3); select_recovery();
+        change_root(B, true); collect_mask(3); select_recovery(); complete_recovery_proposal();
         /* Retain X in C's queue, deliver it before the newer publication. */
         complete_commit(C); collect_mask(7);
         start_write(Y); complete_vote(B); complete_vote(C); learn();
@@ -1104,7 +1392,7 @@ init {
         /* Two split proposals without decisions; a third request wins. */
         start_write(X); complete_vote(A); change_root(B, true);
         collect_mask(7); start_write(Y); complete_vote(B); change_root(C, true);
-        collect_mask(7); select_recovery(); collect_mask(7);
+        collect_mask(7); select_recovery(); complete_recovery_proposal(); collect_mask(7);
         start_write(Z); complete_vote(A); complete_vote(B); learn();
         complete_commit(C); complete_commit(A); complete_commit(B); collect_mask(3); reply_ok(); abandon_request();
 #elif SCENARIO == 6 || SCENARIO == 7
@@ -1117,7 +1405,7 @@ init {
         reply_ok();
 #endif
         complete_commit(A); stop_node(A); lose_commits(B); lose_commits(C); change_root(B, true);
-        collect_mask(6); select_recovery(); collect_mask(6);
+        collect_mask(6); select_recovery(); complete_recovery_proposal(); collect_mask(6);
         start_write(Y); complete_vote(B); complete_vote(C); learn();
         complete_commit(B); complete_commit(C); collect_mask(6); reply_ok();
         restart_node(A); abandon_request();
@@ -1136,7 +1424,7 @@ init {
         start_write(X); propose(A); propose(B); change_root(C, true);
         drain_disk(A); drain_disk(B); deliver_ack(); deliver_ack();
         assert(stale_acks == 2 && ok_count == 0);
-        collect_mask(7); select_recovery();
+        collect_mask(7); select_recovery(); complete_recovery_proposal();
 #elif SCENARIO == 11
         /* Bounded nondeterministic commit cut: all 3^2 disk/delivery choices. */
         start_write(X); complete_vote(A); complete_vote(B); learn();
@@ -1156,7 +1444,7 @@ init {
         /* Two publications at reused g2, neither requester got OK. */
         start_write(X); complete_vote(A); complete_vote(B); learn(); complete_commit(A);
         stop_node(A); lose_commits(B); lose_commits(C); change_root(C, true);
-        collect_mask(6); select_recovery(); collect_mask(6);
+        collect_mask(6); select_recovery(); complete_recovery_proposal(); collect_mask(6);
         start_write(Y); complete_vote(B); complete_vote(C); learn(); complete_commit(C);
         restart_node(A); abandon_request(); assert(ok_count == 0);
 #elif SCENARIO == 14
@@ -1172,9 +1460,9 @@ init {
         start_write(X); complete_vote(A); complete_vote(B); learn();
         complete_commit(A); complete_commit(B); complete_commit(C); collect_mask(7); reply_ok();
         stop_node(B); restart_node(B); upgraded[B] = !ALL_OLD; change_root(B, true);
-        collect_mask(7); select_recovery();
+        collect_mask(7); select_recovery(); complete_recovery_proposal();
         stop_node(A); restart_node(A); upgraded[A] = false; change_root(A, false);
-        collect_mask(7); select_recovery(); collect_mask(7);
+        collect_mask(7); select_recovery(); complete_recovery_proposal(); collect_mask(7);
         complete_commit(A); complete_commit(B); complete_commit(C);
         start_write(Y); complete_vote(A); complete_vote(B); learn();
         complete_commit(A); complete_commit(B); complete_commit(C); reply_ok(); abandon_request();
@@ -1201,7 +1489,7 @@ init {
 #if SCENARIO == 20
         /* The third request follows an actual race produced by this candidate. */
         drain_disk(A); drain_disk(B); drain_disk(C); drain_acks();
-        change_root(A, true); collect_mask(7); select_recovery(); require(!blocked, 5);
+        change_root(A, true); collect_mask(7); select_recovery(); complete_recovery_proposal(); require(!blocked, 5);
         collect_mask(7); start_write(Z);
         require(GEN(Z) > GEN(X) && GEN(Z) > GEN(Y), 6);
         vote_after_disk_cut(A); vote_after_disk_cut(B); vote_after_disk_cut(C); drain_acks();
@@ -1218,7 +1506,7 @@ init {
         start_write(X); complete_vote(A); complete_vote(B); learn();
         complete_commit(A); deliver_commit(B); lose_commits(C);
         assert(disk_c[A] == X && disk_c[B] == BASE && applied[B] == X);
-        stop_node(A); change_root(C, true); collect_mask(6); select_recovery();
+        stop_node(A); change_root(C, true); collect_mask(6); select_recovery(); complete_recovery_proposal();
         assert(!blocked && memory_c[root] == X && copies[X] != 0 && applied_floor == X);
         drain_disk(B); assert(expected == X && ok_count == 0);
         restart_node(A); format_node(B);
@@ -1226,7 +1514,7 @@ init {
         assert(known[A] == X && memory_c[root] == X && applied_floor == X);
         /* The blank notification invalidates the previous recovery snapshot. */
         assert(repair_pending && collecting && len(commits[B]) == 0);
-        collect_mask(5); select_recovery();
+        collect_mask(5); select_recovery(); complete_recovery_proposal();
         deliver_commit(B); drain_disk(B); complete_refill(B);
         assert(disk_c[A] == X && disk_c[B] == X);
         format_node(A);
@@ -1243,14 +1531,14 @@ init {
         assert(collecting && applied_floor == X && known[B] == NONE && memory_c[root] == BASE);
         assert(len(commits[B]) == 0);
         assert(disk_p[A] == X && disk_p[B] == NONE && disk_c[A] == BASE && disk_c[C] == BASE);
-        collect_mask(5); select_recovery();
+        collect_mask(5); select_recovery(); complete_recovery_proposal();
         require(!blocked && recovered == X && copies[X] == 1, 7);
 #elif SCENARIO == 23
         /* An unpublished minority proposal is not an applied watermark and
          * must not permanently prevent recovery of BASE. */
         assert(!ALL_OLD && root_new);
         start_write(X); complete_vote(A); change_root(C, true);
-        collect_mask(7); select_recovery();
+        collect_mask(7); select_recovery(); complete_recovery_proposal();
         require(!blocked && recovered == BASE && applied_floor == BASE, 7);
 #elif SCENARIO == 24
         /* Older metadata is delivered first; current applied reports are
@@ -1261,13 +1549,18 @@ init {
         stop_node(A); change_root(C, true);
         known[A] = NONE; known[B] = BASE; applied_floor = BASE;
         feedback[B] = true; defer_feedback[B] = true;
-        collect_mask(6); select_recovery(); assert(!blocked && memory_c[root] == BASE);
+        collect_mask(6); select_recovery(); complete_recovery_proposal();
+        if
+        :: collecting -> collect_mask(6); select_recovery(); complete_recovery_proposal()
+        :: else -> skip
+        fi;
+        assert(!blocked && memory_c[root] == X);
         drain_disk(B); assert(expected == X && ok_count == 0);
         restart_node(A); defer_feedback[A] = true;
         format_node(B); defer_feedback[B] = false;
         coordinator_turn();
         assert(repair_pending && collecting && len(commits[B]) == 0);
-        collect_mask(5); select_recovery();
+        collect_mask(5); select_recovery(); complete_recovery_proposal();
         assert(!blocked && recovered == X && memory_c[root] == X);
         complete_commit(B); complete_refill(B); assert(disk_c[B] != NONE);
         format_node(A); defer_feedback[A] = false;
@@ -1289,9 +1582,9 @@ init {
          * write; restarting the blank recipient changes its binding cookie. */
         assert(!ALL_OLD && root_new);
         format_node(B); query_via[B] = C;
-        collect_mask(5); select_recovery(); deliver_commit(B);
+        collect_mask(5); select_recovery(); complete_recovery_proposal(); deliver_commit(B);
         start_refill_query(B); forward_refill_query(B); forward_refill_query(B);
-        coordinator_turn(); collect_mask(5); select_recovery();
+        coordinator_turn(); collect_mask(5); select_recovery(); complete_recovery_proposal();
         assert(len(query_reply_hops[B]) == 1 && refill_needed[B]);
         complete_commit(C);
         start_write(X); complete_vote(A); complete_vote(C); learn();
@@ -1344,7 +1637,7 @@ init {
         start_write(X); complete_vote(A); complete_vote(B); learn();
         complete_commit(A); complete_commit(B); lose_commits(C);
         format_node(B); upgraded[C] = false; change_root(C, false);
-        collect_mask(7); select_recovery(); assert(blocked && memory_c[root] == BASE);
+        collect_mask(7); select_recovery(); complete_recovery_proposal(); assert(blocked && memory_c[root] == BASE);
 #if !ALL_OLD
         complete_refill(B);
 #endif
@@ -1355,6 +1648,123 @@ init {
         :: else -> assert(disk_c[A] == X && disk_c[B] == NONE && disk_c[C] == BASE)
         fi;
         assert(max_bad == 1);
+#elif SCENARIO == 49
+        generation[BASE] = 0; replace_request = false; change_root(C, true);
+        start_write(X); complete_vote(A); complete_vote(B); learn();
+        assert(disk_c[A] == BASE && disk_c[B] == BASE && applied[C] == X);
+        do :: len(writes[C]) != 0 -> writes[C]?scratch_c,scratch_p,scratch_v,scratch_cookie :: else -> break od;
+        lose_commits(A); lose_commits(B);
+        start_write(Y);
+        complete_vote(A); complete_vote(B); learn(); reply_ok();
+        do :: len(writes[C]) != 0 -> writes[C]?scratch_c,scratch_p,scratch_v,scratch_cookie :: else -> break od;
+        lose_commits(A); lose_commits(B);
+        start_write(Z); complete_vote(B);
+        assert(votes == 1 && disk_p[A] == Y && disk_p[B] == Z);
+        stop_node(A); restart_node(A);
+        stop_node(B); restart_node(B);
+        stop_node(C); restart_node(C);
+        change_root(C, true); collect_mask(7); select_recovery();
+        require(blocked && recovered == NONE, 16);
+#elif SCENARIO == 47
+        acknowledge_on_AB();
+        lose_commits(B);
+        collect_mask(3); select_recovery(); complete_recovery_proposal();
+        assert(!blocked && memory_c[root] == X && previous[X] == BASE);
+        start_write(Y);
+        assert(previous[Y] == X && GEN(Y) > GEN(X));
+        complete_vote(B);
+        assert(votes == 1 && disk_c[A] == BASE && disk_p[A] == X && disk_c[B] == BASE && disk_p[B] == Y);
+        restart_node(C); stop_node(A); restart_node(A);
+        stop_node(B); restart_node(B);
+        stop_node(C); restart_node(C);
+        change_root(C, true); collect_mask(7); select_recovery(); complete_recovery_proposal();
+        assert(!blocked && !recovery_pending);
+        advance_on_BC(Z); abandon_request();
+#elif SCENARIO == 46
+        acknowledge_on_AB();
+        lose_commits(B); restart_node(C); stop_node(A);
+        change_root(C, true); collect_mask(6); select_recovery();
+        require(recovery_pending && applied[B] == BASE && applied[C] == BASE, 14);
+        recovery_requested[B] = false; propose(B); persist_one(B); deliver_ack();
+        recovery_requested[C] = false; propose(C);
+        require(votes == 1 && !learned, 14);
+        restart_node(A);
+        stop_node(C); restart_node(C);
+        stop_node(B); restart_node(B);
+        stop_node(A); restart_node(A);
+        change_root(C, true); collect_mask(7); select_recovery();
+        require(!blocked && !recovery_pending, 11);
+        advance_on_BC(Y); abandon_request();
+#elif SCENARIO == 44
+        replace_request = false;
+        start_write(X); complete_vote(B); stop_node(A); change_root(C, true);
+        collect_mask(6); select_recovery();
+        require(recovery_pending && applied[B] == BASE && applied[C] == BASE, 14);
+        recovery_requested[B] = false; propose(B);
+        recovery_requested[C] = false; propose(C);
+        if :: persist_one(B); deliver_ack() :: persist_one(C); deliver_ack() :: skip fi;
+        require(votes < Q && applied[B] == BASE && applied[C] == BASE, 14);
+        restart_node(A); stop_node(B); change_root(A, true);
+        if :: drain_disk(C) :: skip fi;
+        collect_mask(5); select_recovery();
+        require(applied[A] == BASE && applied[C] == BASE, 14);
+        restart_node(B);
+#elif SCENARIO == 40
+        generation[X] = 2; generation[Y] = 3;
+        previous[X] = BASE; previous[Y] = X;
+#if VARIANT == 0
+        previous[Y] = BASE; disk_c[B] = X; disk_c[C] = X; disk_p[B] = Y;
+#elif VARIANT == 1 || VARIANT == 5
+        disk_p[B] = Y;
+#elif VARIANT == 2
+        disk_p[B] = Y; disk_p[C] = X;
+#elif VARIANT == 3
+        generation[Y] = 2; previous[Y] = BASE; disk_p[B] = X; disk_p[C] = Y;
+#elif VARIANT == 4
+        previous[Y] = BASE; disk_p[B] = X; disk_p[C] = Y;
+#else
+#error Unknown VARIANT
+#endif
+        i = 0;
+        do
+        :: i < N -> memory_c[i] = disk_c[i]; memory_p[i] = disk_p[i]; applied[i] = disk_c[i]; i++
+        :: else -> break
+        od;
+        change_root(C, true);
+#if VARIANT == 5
+        collect_mask(7); select_recovery();
+        require(blocked && recovered == NONE && memory_c[root] == BASE, 13);
+#else
+        collect_mask(6); select_recovery(); complete_recovery_proposal();
+#if VARIANT == 2
+        require(!blocked && recovered == Y, 13);
+#else
+        require(blocked && recovered == NONE, 13);
+#endif
+#endif
+#elif SCENARIO == 37
+        assert(!ALL_OLD && root_new); acknowledge_on_AB();
+        if :: drain_disk(A) :: skip fi;
+        lose_commits(B); restart_node(C); stop_node(A);
+#if VARIANT == 1
+        restart_node(A);
+#elif VARIANT == 2
+        format_node(A);
+#endif
+        change_root(C, true);
+#if VARIANT == 1
+        if :: collect_mask(3) :: collect_mask(5) :: collect_mask(6) :: collect_mask(7) fi;
+#elif VARIANT == 2
+        collect_mask(7);
+#else
+        collect_mask(6);
+#endif
+        select_recovery(); complete_recovery_proposal(); require(!blocked, 11);
+        advance_on_BC(Y);
+#if VARIANT == 0
+        restart_node(A);
+#endif
+        abandon_request();
 #else
 #error Unknown SCENARIO
 #endif
@@ -1363,7 +1773,7 @@ init {
         /* No outstanding client request is retried implicitly. Recovery and
          * dissemination must converge using persisted/queued protocol state. */
 #if !LEGACY_CASE
-        operation = NONE;
+        if :: !recovery_pending -> operation = NONE :: else -> skip fi;
 #endif
         run Disk(A); run Disk(B); run Disk(C);
         run Network(A); run Network(B); run Network(C);

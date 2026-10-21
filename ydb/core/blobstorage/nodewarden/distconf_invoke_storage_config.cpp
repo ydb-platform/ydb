@@ -275,6 +275,9 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::HandleWakeup() {
+        if (RecoveryProposition) {
+            return;
+        }
         if (ConfigAwaitingCommit) {
             if (TActivationContext::Monotonic() >= CommitConfirmationDeadline) {
                 throw TExNoQuorum() << "Committed configuration quorum was not confirmed; replace may already be applied";
@@ -684,6 +687,9 @@ namespace NKikimr::NStorage {
                 if (result.ErrorReason || !result.RecoveredConfig) {
                     return;
                 }
+                if (result.RequiresRecoveryProposition) {
+                    return StartRecoveryProposition(result);
+                }
                 Self->ConfigRecoveryRequired = false;
                 InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);
                 if (TStorageConfigMeta(*result.RecoveredConfig) != TStorageConfigMeta(*ConfigAwaitingCommit)) {
@@ -979,6 +985,8 @@ namespace NKikimr::NStorage {
                 throw TExRace() << "Storage config generation regenerated while collecting configs";
             } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID); r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
+            } else if (r.RequiresRecoveryProposition) {
+                return StartRecoveryProposition(r);
             } else if (r.ConfigToPropose) {
                 // config validation, which is basically done in Console
                 TString mainYaml;

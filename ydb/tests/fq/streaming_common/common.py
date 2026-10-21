@@ -57,7 +57,6 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_watermarks = param.get("enable_watermarks", True)
     enable_watermarks_advanced = param.get("enable_watermarks_advanced", True)
     enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", True)
-    enable_shared_reading_structured_json_parsing = param.get("enable_shared_reading_structured_json_parsing", True)
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
@@ -753,7 +752,7 @@ class Kikimr:
         rolling_node.set_log_file_prefix("logfile_stable_")
         rolling_node.start()
         self.wait_for_node_readiness(rolling_slot_id)
-        logger.info(f"rolling update: step 1 complete")
+        logger.info("rolling update: step 1 complete")
         yield
 
         rolling_slot_id = 2
@@ -764,10 +763,10 @@ class Kikimr:
         rolling_node.set_log_file_prefix("logfile_stable_")
         rolling_node.start()
         self.wait_for_node_readiness(rolling_slot_id)
-        logger.info(f"rolling update: step 2 complete")
+        logger.info("rolling update: step 2 complete")
         yield
 
-        logger.info(f"rolling update: step 3 — switching slots back to main version")
+        logger.info("rolling update: step 3 — switching slots back to main version")
         for rolling_node in self.cluster.slots.values():
             rolling_node.stop()
 
@@ -1010,9 +1009,7 @@ class StreamingTestBase(TestYdsBase):
         return endpoint, refs[0], paths[0]
 
     def roll(self, kikimr):
-        all_nodes = [
-            (id, n, "slot") for id, n in kikimr.cluster.slots.items()
-        ]
+        all_nodes = [(id, n, "slot") for id, n in kikimr.cluster.slots.items()]
 
         # from old to new
         yield

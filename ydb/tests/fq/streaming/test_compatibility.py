@@ -22,16 +22,19 @@ class SimpleTest:
 
     def get_query_text(self, inp, out):
         name = self.get_name()
-        sql = R'''
+        sql = (
+            R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
-                ''' + R'''$in = SELECT time FROM {inp}
+                '''
+            + R'''$in = SELECT time FROM {inp}
                 WITH (
                     FORMAT="json_each_row",
                     SCHEMA=(time String NOT NULL))
                 WHERE time like "%{filter}%";
                 INSERT INTO {out} SELECT time FROM $in;
             END DO;'''
+        )
         return sql.format(query_name=name, inp=inp, out=out, filter=self.filter)
 
     def get_test_data(self):
@@ -56,7 +59,10 @@ class TestStreamingCompatibility(StreamingTestBase):
         logger.debug(f"Write test data for query {self.current_query_name}")
         data, expected_data = query.get_test_data()
         self.write_stream(data, endpoint=self.topic_endpoint)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=self.topic_endpoint, timeout=60) == expected_data
+        assert (
+            self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=self.topic_endpoint, timeout=60)
+            == expected_data
+        )
         self.wait_completed_checkpoints(kikimr, self.current_query_name)
 
     def stop_query(self, kikimr, query):
@@ -73,7 +79,9 @@ class TestStreamingCompatibility(StreamingTestBase):
     )
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_compatibility(self: StreamingTestBase, kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
-        self.inp, self.out, self.topic_endpoint = self.get_io_names(kikimr, "test_compatibility", local_topics, entity_name, partitions_count=10)
+        self.inp, self.out, self.topic_endpoint = self.get_io_names(
+            kikimr, "test_compatibility", local_topics, entity_name, partitions_count=10
+        )
 
         try:
             for query in Queries:

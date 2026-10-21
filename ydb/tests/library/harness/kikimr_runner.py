@@ -2,6 +2,7 @@
 import logging
 import os
 import shutil
+import socket
 import tempfile
 import time
 import itertools
@@ -9,7 +10,6 @@ import threading
 from importlib_resources import read_binary
 from google.protobuf import text_format
 import yaml
-import subprocess
 import requests
 
 from six.moves.queue import Queue
@@ -161,20 +161,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def is_port_listening(self, port):
         """Check if the port is listening after node startup"""
         try:
-            cmd = ["netstat", "-tuln"]
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            output = result.stdout.decode()
-            port_lines = [line for line in output.split('\n') if str(port) in line]
-            if port_lines:
-                for line in port_lines:
-                    logger.info("Port %s status: %s" % (str(port), line.strip()))
-                is_listening = True
-            else:
-                logger.info("Port %s is not found in netstat output" % str(port))
-                is_listening = False
-            return is_listening
-        except Exception as e:
-            logger.error("Error checking port %s: %s" % (str(port), str(e)))
+            with socket.create_connection((self.host, port), timeout=1):
+                logger.info("Port %s is accepting TCP connections", port)
+                return True
+        except OSError as e:
+            logger.info("Port %s is not accepting TCP connections: %s", port, e)
             return False
 
     def check_ports(self):

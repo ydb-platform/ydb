@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/vdisk/scrub/blob_recovery.h>
 #include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -138,6 +139,44 @@ void Test() {
 }
 
 Y_UNIT_TEST_SUITE(ScrubFast) {
+    Y_UNIT_TEST(RecoverBlobInExtendedGroup) {
+        TEnvironmentSetup env{{
+            .NodeCount = 12,
+            .VDiskReplPausedAtStart = true,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+        }};
+        NKikimrBlobStorage::TGroupGeometry geometry;
+        geometry.SetNumFailRealms(3);
+        geometry.SetNumFailDomainsPerFailRealm(4);
+        geometry.SetNumVDisksPerFailDomain(1);
+        env.CreateBoxAndPool(1, 1, 0, NKikimrBlobStorage::EPDiskType::ROT, geometry);
+        env.Sim(TDuration::Minutes(1));
+        const auto info = env.GetGroupInfo(env.GetGroups().front());
+        const TString data = "surviving replica";
+        const TLogoBlobID id(1, 1, 1, 0, data.size(), 0);
+        TBlobStorageGroupInfo::TOrderNums nums;
+        info->GetTopology().PickSubgroup(id.Hash(), nums);
+        for (ui32 i = 0; i < nums.size(); ++i) {
+            if (nums[i] >= nums.size()) {
+                env.PutBlob(info->GetVDiskId(nums[i]), TLogoBlobID(id, i % 3 + 1), data);
+            }
+        }
+
+        const auto vdisk = info->GetActorId(nums[0]);
+        const auto edge = env.Runtime->AllocateEdgeActor(vdisk.NodeId());
+        auto request = std::make_unique<TEvRecoverBlob>();
+        request->Deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+        request->Items.emplace_back(id, NMatrix::TVectorType::MakeOneHot(0, 3), info->Type, TDiskPart());
+        auto event = std::make_unique<IEventHandle>(vdisk, edge, request.release());
+        event->Rewrite(TEvBlobStorage::EvForwardToSkeleton, vdisk);
+        env.Runtime->Send(event.release(), edge.NodeId());
+        const auto result = env.WaitForEdgeActorEvent<TEvRecoverBlobResult>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Items.size(), 1);
+        const auto& item = result->Get()->Items.front();
+        UNIT_ASSERT_VALUES_EQUAL(item.Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetPartData(TLogoBlobID(id, 1)).ConvertToString(), data);
+    }
+
     Y_UNIT_TEST(SingleBlob) {
         Test();
     }

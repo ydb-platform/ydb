@@ -529,6 +529,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         auto config = checkPlacement();
         const auto source = FindVSlot(config, config.GetGroup(0).GetVSlotId(0));
         request = MakeReassignRequest(source, config.GetGroup(0).GetGroupGeneration());
+        request.SetIgnoreGroupFailModelChecks(true); // This fixture does not run VDisks.
         response = env.Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
         checkPlacement();
@@ -537,6 +538,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         config = FetchBaseConfig(&env);
         const auto current = FindActiveVSlot(config, source);
         request = MakeReassignRequest(current, config.GetGroup(0).GetGroupGeneration());
+        request.SetIgnoreGroupFailModelChecks(true);
         auto* target = request.MutableCommand(0)->MutableReassignGroupDisk()->MutableTargetPDiskId();
         for (const auto& node : config.GetNode()) {
             if (node.GetLocation().GetDataCenter() == "2") {
@@ -589,7 +591,6 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             }
         }
     }
-
 
     Y_UNIT_TEST(Basic) {
         TEnvironmentSetup env(10, 1);

@@ -272,10 +272,29 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
         for (ui32 node = 10; node <= 27; ++node) {
             env.StartNode(node);
         }
+        TString lastConfigError;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
+                const auto& record = event->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record;
+                if (record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+                    lastConfigError = record.ShortDebugString();
+                }
+            }
+            return true;
+        };
         SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
         SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
-        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
-        WaitForPileState(env, 2, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        WaitUntil(env, [&] {
+            const auto state = QueryStorageConfig(env).GetClusterState();
+            return state.GetPerPileState(1) == NKikimrBridge::TClusterState::SYNCHRONIZED
+                && state.GetPerPileState(2) == NKikimrBridge::TClusterState::SYNCHRONIZED;
+        }, "rejoined piles synchronized", [&] {
+            const auto config = QueryStorageConfig(env);
+            return TStringBuilder() << config.GetClusterState().ShortDebugString()
+                << " details# " << config.GetClusterStateDetails().ShortDebugString()
+                << " lastError# " << lastConfigError;
+        });
+        env.Runtime->FilterFunction = {};
         WaitForOrdinaryGroupReady(env, ordinary);
         checker.CheckAll();
         checker.Write(ordinary);

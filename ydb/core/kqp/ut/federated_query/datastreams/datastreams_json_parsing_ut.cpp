@@ -37,7 +37,8 @@ public:
                 SCHEMA = (value String NOT NULL)
             ) LIMIT {rows};
         )", "topic"_a = Topic, "skip_errors"_a = skipJsonErrors ? "true" : "false", "rows"_a = rows), NYdb::NQuery::TTxControl::NoTx(),
-            NYdb::NQuery::TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(30))
+            NYdb::NQuery::TExecuteQuerySettings()
+                .ClientTimeout(TDuration::Seconds(30))
                 .RetrySettings(NYdb::NRetry::TRetryOperationSettings().MaxRetries(0)));
     }
 

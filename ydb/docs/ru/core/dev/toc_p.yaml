@@ -18,6 +18,11 @@ items:
   include:
     mode: link
     path: yql-tutorial/toc_p.yaml
+- name: Работа с данными
+  href: working-with-data/index.md
+  include:
+    mode: link
+    path: working-with-data/toc_p.yaml
 - name: Первичный ключ
   href: primary-key/index.md
   include:

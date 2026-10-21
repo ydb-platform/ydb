@@ -78,7 +78,9 @@ class TestStreamingCompatibility(StreamingTestBase):
         indirect=["kikimr"],
     )
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_compatibility(self: StreamingTestBase, kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+    def test_compatibility(
+        self: StreamingTestBase, kikimr, entity_name: Callable[[str], str], local_topics: bool
+    ) -> None:
         self.inp, self.out, self.topic_endpoint = self.get_io_names(
             kikimr, "test_compatibility", local_topics, entity_name, partitions_count=10
         )

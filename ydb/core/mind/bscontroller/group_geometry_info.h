@@ -78,7 +78,8 @@ namespace NKikimr::NBsController {
             }
         }
 
-        static TGroupGeometryInfo FromStoragePool(TBlobStorageGroupType type, const TStoragePoolInfo& pool) {
+        static TGroupGeometryInfo FromStoragePool(TBlobStorageGroupType type,
+                const TBlobStorageController::TStoragePoolInfo& pool) {
             TGroupGeometryInfo geometry(type, pool.GetGroupGeometry());
             geometry.IgnoreBridgePile = pool.BridgeModeOverride && !*pool.BridgeModeOverride;
             return geometry;

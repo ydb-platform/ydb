@@ -626,7 +626,7 @@ static TNodeLocation MakeTestLocation(ui32 nodeId, ui32 rackId = 0) {
 Y_UNIT_TEST_SUITE(TGroupMapperTest) {
 
     Y_UNIT_TEST(AcrossPilesPreservesDatacenterGeometry) {
-        TStoragePoolInfo pool;
+        TBlobStorageController::TStoragePoolInfo pool;
         pool.BridgeModeOverride = false;
         const auto geometry = TGroupGeometryInfo::FromStoragePool(TBlobStorageGroupType::ErasureMirror3dc, pool);
         TTestContext context(3, 1, 4, 1, 1);

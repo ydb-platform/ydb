@@ -601,6 +601,65 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
 }}
 
 Y_UNIT_TEST_SUITE(TOlap) {
+    Y_UNIT_TEST_FLAG(PgTypesRejected, EnableTablePgTypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(EnableTablePgTypes));
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
+        env.TestWaitNotification(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        for (const TString type : {"pgint2", "pgint4", "pgint8", "pgfloat4", "pgfloat8", "pgtext", "pgbool"}) {
+            const TString column = TStringBuilder() << "{ Name: \"value\" Type: \"" << type << "\" }";
+            const TString schema = TStringBuilder() << R"(
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                KeyColumnNames: "timestamp"
+                Columns )" << column;
+            const TExpectedResult rejected(NKikimrScheme::StatusSchemeError,
+                TStringBuilder() << "Type '" << type << "' specified for column 'value' is not supported for column tables");
+
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"PgTable\" ColumnShardCount: 1 Schema { " << schema << " }", {rejected});
+            TestCreateOlapStore(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"PgStore\" ColumnShardCount: 1 SchemaPresets { Name: \"default\" Schema { "
+                    << schema << " } }", {rejected});
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore",
+                TStringBuilder() << R"(Name: "PgTable" ColumnShardCount: 1 Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    KeyColumnNames: "timestamp"
+                    Columns { Name: "data" Type: ")" << type << "\" } }",
+                {{NKikimrScheme::StatusSchemeError, TStringBuilder() << "Type '" << type
+                    << "' specified for column 'data' is not supported for column tables"}});
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"ColumnTable\" AlterSchema { AddColumns " << column << " }", {rejected});
+            TestAlterOlapStore(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"OlapStore\" AlterSchemaPresets { Name: \"default\" AlterSchema { AddColumns "
+                    << column << " } }", {rejected});
+        }
+
+        TestLs(runtime, "/MyRoot/PgTable", false, NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/PgStore", false, NLs::PathNotExist);
+
+        // Rejected additions must not prevent subsequent valid schema changes.
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "value" Type: "Int32" } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema { AddColumns { Name: "value" Type: "Int32" } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(CreateStore) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -1362,6 +1421,57 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
         TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
+    }
+
+    Y_UNIT_TEST(ExtendedTtlTypesFeatureFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        for (const TString type : {"DyNumber", "Date32", "Datetime64", "Timestamp64"}) {
+            const TString ttl = TStringBuilder() << "Enabled { ColumnName: \"ts\" ExpireAfterSeconds: 300 ColumnUnit: "
+                << (type == "DyNumber" ? "UNIT_SECONDS" : "UNIT_AUTO") << " }";
+            const TString schema = TStringBuilder() << R"(
+                Name: ")" << type << R"("
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Id: 1 Name: "id" Type: "Uint64" NotNull: true }
+                    Columns { Id: 2 Name: "ts" Type: ")" << type << R"(" }
+                    KeyColumnNames: "id"
+                    Indexes {
+                        Id: 3 Name: "ttl_max" ClassName: "MIN_MAX"
+                        StorageId: "__LOCAL_METADATA" InheritPortionStorage: false
+                        MinMaxIndex { ColumnId: 2 }
+                    }
+                }
+            )";
+            const TString alter = TStringBuilder() << "Name: \"" << type << "\" AlterTtlSettings { " << ttl << " }";
+            runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(false);
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot", schema + " TtlSettings { " + ttl + " }",
+                {NKikimrScheme::StatusSchemeError});
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot", schema);
+            env.TestWaitNotification(runtime, txId);
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot", alter, {NKikimrScheme::StatusSchemeError});
+
+            runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(true);
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot", alter);
+            env.TestWaitNotification(runtime, txId);
+            TestLs(runtime, "/MyRoot/" + type, false, NLs::HasColumnTableTtlSettingsEnabled("ts", TDuration::Seconds(300)));
+
+            runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(false);
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"" << type << "\" AlterTtlSettings { Disabled {} }");
+            env.TestWaitNotification(runtime, txId);
+            TestLs(runtime, "/MyRoot/" + type, false, NLs::HasColumnTableTtlSettingsDisabled());
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot", alter, {NKikimrScheme::StatusSchemeError});
+
+            runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(true);
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot", alter);
+            env.TestWaitNotification(runtime, txId);
+            TestDropColumnTable(runtime, ++txId, "/MyRoot", type);
+            env.TestWaitNotification(runtime, txId);
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot", schema + " TtlSettings { " + ttl + " }");
+            env.TestWaitNotification(runtime, txId);
+        }
     }
 
     Y_UNIT_TEST(CreateTableTtl) {

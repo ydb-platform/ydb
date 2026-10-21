@@ -1,5 +1,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
+#include <yt/yt/core/ypath/stack.h>
+
 #include <yt/yt/core/yson/string.h>
 #include <yt/yt/core/yson/writer.h>
 #include <yt/yt/core/yson/string_filter.h>
@@ -55,6 +57,27 @@ void CheckNull(const std::string& yson, const std::vector<TYPath>& paths)
 
 const std::vector<std::string> ScalarYsons = {"#", "%true", "-42", "23u", "42.5", "xyz"};
 const std::vector<std::string> CompositeYsons = {"{foo=bar}", "[foo;bar]"};
+
+TEST(TStringFilterTest, EscapedMapKeysArePreserved)
+{
+    Check("{\"a/b\"={\"c@d\"=42}; other=0}", {"/a\\/b/c\\@d"}, "{\"a/b\"={\"c@d\"=42}}");
+}
+
+TEST(TYPathStackTest, RawKeysSurvivePathMaterialization)
+{
+    TYPathStack stack;
+    stack.Push("a/b");
+    EXPECT_EQ("a/b", std::get<std::string>(stack.Items().back()));
+    EXPECT_EQ("a/b", stack.TryGetStringifiedLastPathToken());
+    EXPECT_EQ("/a\\/b", stack.GetPath());
+
+    stack.Push("c@d");
+    EXPECT_EQ("c@d", std::get<std::string>(stack.Items().back()));
+    EXPECT_EQ("c@d", stack.TryGetStringifiedLastPathToken());
+    EXPECT_EQ("/a\\/b/c\\@d", stack.GetPath());
+    stack.Pop();
+    EXPECT_EQ("/a\\/b", stack.GetPath());
+}
 
 TEST(TStringFilterTest, TestNoMatchFallback)
 {

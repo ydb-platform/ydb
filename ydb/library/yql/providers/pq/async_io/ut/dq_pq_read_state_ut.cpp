@@ -1,20 +1,22 @@
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.h>
 #include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NYql::NDq::NInternal {
 namespace {
 
-class TReadState final : public TPqReadState {
+class TReadState final: public TPqReadState {
 public:
     TReadState(ui64 group, ui64 tasks, const TString& cluster, ui64 partitions = 4)
         : TPqReadState(0, group, {}, TString("rescaling"), MakeSource(cluster, partitions), MakeReadParams(group, tasks, partitions), {}, {})
-    {}
+    {
+    }
 
     TReadState(NPq::NProto::TDqPqTopicSource source, TVector<NPq::NProto::TDqReadTaskParams> readParams)
         : TPqReadState(0, 0, {}, TString("rescaling"), std::move(source), std::move(readParams), {}, {})
-    {}
+    {
+    }
 
 private:
     static NPq::NProto::TDqPqTopicSource MakeSource(const TString& cluster, ui64 partitions) {
@@ -36,7 +38,8 @@ private:
         return params;
     }
 
-    void OnConsumerOffsetsInitialized() override {}
+    void OnConsumerOffsetsInitialized() override {
+    }
 };
 
 void CheckRepeatedRescaling(const TString& cluster) {
@@ -45,7 +48,7 @@ void CheckRepeatedRescaling(const TString& cluster) {
     setup.Execute([&](TFakeActor&) {
         TReadState initial(0, 1, cluster);
         for (ui64 partition = 0; partition < 4; ++partition) {
-            initial.Partitions[TPartitionKey{cluster, partition}].Offset = 0;
+            initial.Partitions[TPartitionKey{ cluster, partition }].Offset = 0;
         }
         TSourceState firstCheckpoint;
         initial.SaveState(CreateCheckpoint(), firstCheckpoint);
@@ -57,7 +60,7 @@ void CheckRepeatedRescaling(const TString& cluster) {
             TReadState reader(group, 2, cluster);
             reader.LoadState(firstCheckpoint);
             for (ui64 partition = group; partition < 4; partition += 2) {
-                reader.Partitions[TPartitionKey{cluster, partition}].Offset = 2;
+                reader.Partitions[TPartitionKey{ cluster, partition }].Offset = 2;
             }
             reader.SaveState(CreateCheckpoint(1), secondCheckpoint);
         }
@@ -65,7 +68,7 @@ void CheckRepeatedRescaling(const TString& cluster) {
         for (ui64 partition = 0; partition < 4; ++partition) {
             TReadState reader(partition, 4, cluster);
             reader.LoadState(secondCheckpoint);
-            restored.emplace_back(*reader.Partitions.at(TPartitionKey{cluster, partition}).Offset, reader.Partitions.size());
+            restored.emplace_back(*reader.Partitions.at(TPartitionKey{ cluster, partition }).Offset, reader.Partitions.size());
         }
     });
     for (const auto& [offset, partitionCount] : restored) {
@@ -74,7 +77,7 @@ void CheckRepeatedRescaling(const TString& cluster) {
     }
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TPqReadStateTest) {
     Y_UNIT_TEST(RepeatedRescaling) {
@@ -92,8 +95,8 @@ Y_UNIT_TEST_SUITE(TPqReadStateTest) {
         ui64 ingressBytes = 0;
         setup.Execute([&](TFakeActor&) {
             TReadState source(0, 1, "", 100);
-            for (ui64 partition : {0, 7, 42, 99}) {
-                source.Partitions[TPartitionKey{"", partition}].Offset = partition * 10;
+            for (ui64 partition : { 0, 7, 42, 99 }) {
+                source.Partitions[TPartitionKey{ "", partition }].Offset = partition * 10;
             }
             source.StartingMessageTimestamp = TInstant::MilliSeconds(12345);
             source.IngressStats.Bytes = 6789;
@@ -116,8 +119,8 @@ Y_UNIT_TEST_SUITE(TPqReadStateTest) {
             ingressBytes = reader.IngressStats.Bytes;
         });
         UNIT_ASSERT_VALUES_EQUAL(offsets.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(offsets.at(TPartitionKey{"", 0}), 0);
-        UNIT_ASSERT_VALUES_EQUAL(offsets.at(TPartitionKey{"", 42}), 420);
+        UNIT_ASSERT_VALUES_EQUAL(offsets.at(TPartitionKey{ "", 0 }), 0);
+        UNIT_ASSERT_VALUES_EQUAL(offsets.at(TPartitionKey{ "", 42 }), 420);
         // Filtering partition offsets must not change the other fields.
         UNIT_ASSERT_VALUES_EQUAL(startingMessageTimestamp, TInstant::MilliSeconds(12345));
         UNIT_ASSERT_VALUES_EQUAL(ingressBytes, 6789);
@@ -129,14 +132,14 @@ Y_UNIT_TEST_SUITE(TPqReadStateTest) {
         setup.Execute([&](TFakeActor&) {
             NPq::NProto::TDqPqTopicSource sourceParams;
             TReadState source(0, 1, "");
-            const TVector<TString> clusters = {"small", "large", "fallback"};
-            const TVector<ui64> counts = {2, 6, 0};
+            const TVector<TString> clusters = { "small", "large", "fallback" };
+            const TVector<ui64> counts = { 2, 6, 0 };
             for (size_t i = 0; i < clusters.size(); ++i) {
                 auto* cluster = sourceParams.AddFederatedClusters();
                 cluster->SetName(clusters[i]);
                 cluster->SetPartitionsCount(counts[i]);
                 for (ui64 partition = 0; partition < (counts[i] ? counts[i] : 4); ++partition) {
-                    source.Partitions[TPartitionKey{clusters[i], partition}].Offset = 100 * i + partition;
+                    source.Partitions[TPartitionKey{ clusters[i], partition }].Offset = 100 * i + partition;
                 }
             }
             TSourceState checkpoint;
@@ -153,12 +156,12 @@ Y_UNIT_TEST_SUITE(TPqReadStateTest) {
             }
         });
         UNIT_ASSERT_VALUES_EQUAL(offsets.size(), 6);
-        UNIT_ASSERT_VALUES_EQUAL(offsets.at(TPartitionKey{"small", 0}), 0);
-        UNIT_ASSERT_VALUES_EQUAL(offsets.at(TPartitionKey{"large", 0}), 100);
-        UNIT_ASSERT_VALUES_EQUAL(offsets.at(TPartitionKey{"large", 2}), 102);
-        UNIT_ASSERT_VALUES_EQUAL(offsets.at(TPartitionKey{"large", 4}), 104);
-        UNIT_ASSERT_VALUES_EQUAL(offsets.at(TPartitionKey{"fallback", 0}), 200);
-        UNIT_ASSERT_VALUES_EQUAL(offsets.at(TPartitionKey{"fallback", 2}), 202);
+        UNIT_ASSERT_VALUES_EQUAL(offsets.at(TPartitionKey{ "small", 0 }), 0);
+        UNIT_ASSERT_VALUES_EQUAL(offsets.at(TPartitionKey{ "large", 0 }), 100);
+        UNIT_ASSERT_VALUES_EQUAL(offsets.at(TPartitionKey{ "large", 2 }), 102);
+        UNIT_ASSERT_VALUES_EQUAL(offsets.at(TPartitionKey{ "large", 4 }), 104);
+        UNIT_ASSERT_VALUES_EQUAL(offsets.at(TPartitionKey{ "fallback", 0 }), 200);
+        UNIT_ASSERT_VALUES_EQUAL(offsets.at(TPartitionKey{ "fallback", 2 }), 202);
     }
 
     Y_UNIT_TEST(OverlappingStatesKeepMinimumOffset) {
@@ -167,16 +170,16 @@ Y_UNIT_TEST_SUITE(TPqReadStateTest) {
         setup.Execute([&](TFakeActor&) {
             TReadState source(0, 4, "");
             TSourceState checkpoint;
-            for (ui64 savedOffset : {9, 5}) {
-                source.Partitions[TPartitionKey{"", 0}].Offset = savedOffset;
+            for (ui64 savedOffset : { 9, 5 }) {
+                source.Partitions[TPartitionKey{ "", 0 }].Offset = savedOffset;
                 source.SaveState(CreateCheckpoint(), checkpoint);
             }
             TReadState reader(0, 4, "");
             reader.LoadState(checkpoint);
-            offset = *reader.Partitions.at(TPartitionKey{"", 0}).Offset;
+            offset = *reader.Partitions.at(TPartitionKey{ "", 0 }).Offset;
         });
         UNIT_ASSERT_VALUES_EQUAL(offset, 5);
     }
 }
 
-} // namespace NYql::NDq::NInternal
+}   // namespace NYql::NDq::NInternal

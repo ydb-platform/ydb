@@ -2,10 +2,12 @@
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
-#include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/fake_storage.h>
+#include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/av_bootstrapped.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/initializer/initializer.h>
@@ -13,15 +15,13 @@
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/services/metadata/manager/table_record.h>
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
-#include <ydb/services/metadata/secret/manager.h>
 #include <ydb/services/metadata/secret/fetcher.h>
+#include <ydb/services/metadata/secret/manager.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
 
-#include <ydb/library/actors/core/av_bootstrapped.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/testing/unittest/registar.h>
-
 #include <util/system/hostname.h>
 #include <util/system/type_name.h>
 
@@ -29,7 +29,7 @@ namespace NKikimr {
 
 namespace {
 
-class TTestInitializer : public NMetadata::NInitializer::IInitializationBehaviour {
+class TTestInitializer: public NMetadata::NInitializer::IInitializationBehaviour {
 public:
     bool IsObjectLeaked() const {
         return !LifetimeTracker.expired();
@@ -75,11 +75,12 @@ private:
  * 3. Leak Verification: Used by the test to check if capturing shared_ptr in 
  *    retry lambdas leads to memory leaks after the final execution.
  */
-class TMockModifier : public NMetadata::NInitializer::ITableModifier {
+class TMockModifier: public NMetadata::NInitializer::ITableModifier {
 public:
     explicit TMockModifier(const TString& id)
         : ITableModifier(id)
-    {}
+    {
+    }
 
 protected:
     bool DoExecute(NMetadata::NInitializer::IModifierExternalController::TPtr controller, const NMetadata::NRequest::TConfig&) const override {
@@ -109,7 +110,7 @@ private:
  *    initialization chain completes, ensuring no circular dependencies (leaks) 
  *    exist due to SelfPtr or lambda captures.
  */
-class TMockInitializer : public NMetadata::NInitializer::IInitializationBehaviour {
+class TMockInitializer: public NMetadata::NInitializer::IInitializationBehaviour {
 public:
     bool IsObjectLeaked() const {
         return !LifetimeTracker.expired();
@@ -118,7 +119,7 @@ public:
 protected:
     virtual void DoPrepare(NMetadata::NInitializer::IInitializerInput::TPtr controller) const override {
         LifetimeTracker = controller;
-        
+
         if (!FailedOnce) {
             FailedOnce = true;
             controller->OnPreparationProblem("Simulated preparation failure");
@@ -137,22 +138,23 @@ private:
     mutable bool FailedOnce = false;
 };
 
-template<typename TInitializer>
-class TInitBehaviourTest : public NMetadata::IClassBehaviour {
+template <typename TInitializer>
+class TInitBehaviourTest: public NMetadata::IClassBehaviour {
 public:
     explicit TInitBehaviourTest(std::shared_ptr<TInitializer> init)
         : Initializer(std::move(init))
-    {}
+    {
+    }
 
 protected:
     TString GetInternalStorageTablePath() const override {
         return "test";
     }
-    
+
     std::shared_ptr<NMetadata::NInitializer::IInitializationBehaviour> ConstructInitializer() const override {
         return Initializer;
     }
-    
+
     std::shared_ptr<NMetadata::NModifications::IOperationsManager> GetOperationsManager() const override {
         return nullptr;
     }
@@ -166,26 +168,23 @@ private:
     std::shared_ptr<TInitializer> Initializer;
 };
 
-class TInitUserEmulator : public NActors::TActorBootstrapped<TInitUserEmulator> {
+class TInitUserEmulator: public NActors::TActorBootstrapped<TInitUserEmulator> {
 private:
     using TBase = NActors::TActorBootstrapped<TInitUserEmulator>;
     using TThis = TInitUserEmulator;
 
     YDB_READONLY_FLAG(Initialized, false);
-    NMetadata::IClassBehaviour::TPtr ClassBehavior; 
+    NMetadata::IClassBehaviour::TPtr ClassBehavior;
 
 public:
     explicit TInitUserEmulator(NMetadata::IClassBehaviour::TPtr cb)
         : ClassBehavior(std::move(cb))
-    {}
-
-    STATEFN(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NMetadata::NProvider::TEvManagerPrepared, Handle);
-            default:
-                Y_ABORT_UNLESS(false);
-        }
+    {
     }
+
+    STRICT_STFUNC(StateWork,
+            hFunc(NMetadata::NProvider::TEvManagerPrepared, Handle);
+    );
 
     void Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr& /*ev*/) {
         InitializedFlag = true;
@@ -198,13 +197,14 @@ public:
     }
 };
 
-class TMetaServiceFixture : public NUnitTest::TBaseFixture {
+class TMetaServiceFixture: public NUnitTest::TBaseFixture {
 public:
     TMetaServiceFixture()
         : Server(GetServer(PortManager))
         , Runtime(*Server->GetRuntime())
         , Helper(*Server)
-    {}
+    {
+    }
 
     static Tests::TServer::TPtr GetServer(TPortManager& pm) {
         ui32 grpcPort = pm.GetPort();
@@ -215,14 +215,11 @@ public:
         Tests::TServerSettings serverSettings(msgbPort, authConfig);
         serverSettings.Port = msgbPort;
         serverSettings.GrpcPort = grpcPort;
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetEnableMetadataProvider(true)
-            .SetEnableOlapSchemaOperations(true);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetEnableMetadataProvider(true).SetEnableOlapSchemaOperations(true);
 
         auto server = MakeIntrusive<Tests::TServer>(serverSettings);
         server->EnableGRpc(grpcPort);
-        
+
         auto sender = server->GetRuntime()->AllocateEdgeActor();
         server->SetupRootStoragePools(sender);
         return server;
@@ -236,12 +233,12 @@ protected:
     Tests::NCS::THelper Helper;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(Initializer) {
     Y_UNIT_TEST_F(TestRunWithoutErrors, TMetaServiceFixture) {
         Helper.StartDataRequest("SELECT * FROM `/Root/.metadata/test`", false);
-        
+
         auto tracker = std::make_shared<TTestInitializer>();
         auto classBehavior = std::make_shared<TInitBehaviourTest<TTestInitializer>>(tracker);
 
@@ -249,7 +246,9 @@ Y_UNIT_TEST_SUITE(Initializer) {
         Runtime.Register(emulator);
 
         TDispatchOptions options;
-        options.CustomFinalCondition = [&] { return emulator->IsInitialized(); };
+        options.CustomFinalCondition = [&] {
+            return emulator->IsInitialized();
+        };
         Runtime.DispatchEvents(options);
 
         UNIT_ASSERT(emulator->IsInitialized());
@@ -261,27 +260,27 @@ Y_UNIT_TEST_SUITE(Initializer) {
         Helper.StartSchemaRequest("DELETE FROM `/Root/.metadata/initialization/migrations`", false);
         Helper.StartSchemaRequest("DROP TABLE `/Root/.metadata/initialization/migrations`", false);
 
-        UNIT_ASSERT_C(!tracker->IsObjectLeaked(), 
-            "Memory Leak detected: TDSAccessorInitialized instance is still alive!");
+        UNIT_ASSERT_C(!tracker->IsObjectLeaked(), "Memory Leak detected: TDSAccessorInitialized instance is still alive!");
     }
 
     Y_UNIT_TEST_F(TestRunWithErrors, TMetaServiceFixture) {
         auto tracker = std::make_shared<TMockInitializer>();
         auto classBehavior = std::make_shared<TInitBehaviourTest<TMockInitializer>>(tracker);
-        auto emulator = new TInitUserEmulator(classBehavior); 
+        auto emulator = new TInitUserEmulator(classBehavior);
 
         Runtime.Register(emulator);
-        
+
         TDispatchOptions options;
-        options.CustomFinalCondition = [&] { return emulator->IsInitialized(); };
+        options.CustomFinalCondition = [&] {
+            return emulator->IsInitialized();
+        };
         Runtime.DispatchEvents(options);
 
         UNIT_ASSERT(emulator->IsInitialized());
         Cerr << "Initialization finished" << Endl;
 
-        UNIT_ASSERT_C(!tracker->IsObjectLeaked(), 
-            "Memory Leak detected: TDSAccessorInitialized instance is still alive!");
+        UNIT_ASSERT_C(!tracker->IsObjectLeaked(), "Memory Leak detected: TDSAccessorInitialized instance is still alive!");
     }
 }
 
-} // NKikimr
+}   // namespace NKikimr

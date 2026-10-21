@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(KqpRboCopy) {
             TIdTestContext f;
             auto read = f.Read({f.Id()});
             read->RangeInfo.emplace();
-            auto& expression = points ? read->RangeInfo->Points : read->RangeInfo->ComputeNode;
+            auto& expression = points ? read->RangeInfo->PointPrefixes.emplace_back().Points : read->RangeInfo->ComputeNode;
             expression = f.Constant().Node;
             UNIT_ASSERT(CanDuplicateOperator(*read));
             expression = f.ExprCtx.NewCallable(f.Pos, "RandomNumber", {});

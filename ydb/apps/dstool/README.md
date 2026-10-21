@@ -84,6 +84,47 @@ To run command without side effect add ```--dry-run``` to global options:
 user@host:~$ ydb-dstool --dry-run -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id}
 ```
 
+### Reanimate a storage pool
+
+`cluster reanimate` relocates current ERROR VDisks of an exact storage pool in
+the specified DC. Groups are scheduled in ascending ID order, with up to
+`--inflight` groups relocating concurrently (default 1). Within each group,
+matching disks are sorted by `(FailRealmIdx, FailDomainIdx, VDiskIdx)`.
+The first three disks are evicted as one batch, then all three are evicted
+again as a second batch. Each remaining matching disk is then evicted once in order, starting with
+the fourth.
+Groups with fewer than three matching disks are skipped.
+Donors are excluded from selection and remain available after relocation.
+
+```bash
+ydb-dstool --endpoint grpc://ydbd.endpoint:2135 --token-file token \
+    cluster reanimate --pool /global/database:ssdencrypted --dc sas \
+    --ignore-failure-model-group-check
+```
+
+Each group starts with a fresh snapshot. Each batch sends one controller request
+containing all its VDisks, using the snapshot's generation. The controller updates
+the generation when the batch commits; transport retries keep the same generation.
+The command waits for every slot in the batch to change before proceeding, reusing
+the final polling snapshot for the next batch. It does not wait for READY.
+The first three disks are evicted again even if their
+status or DC has changed. `--timeout` (default 300 seconds) limits placement
+waiting, and `--poll-interval` (default 5 seconds) sets the polling interval.
+Network calls use the standard dstool connection settings; the standalone
+script's `--dstool` and subprocess `--request-timeout` options are not used.
+
+`--dry-run` (or `-n`) can be passed before or after `cluster reanimate`. It prints
+the plan without eviction requests, waiting, or file writes.
+`--state-dir` creates a new directory containing each group's `plan.json`
+and per-batch `N-before.json` / `N-after.json` arrays of disk evidence. An existing directory is
+an error. `--ignore-degraded-group-check` and
+`--ignore-failure-model-group-check` are passed to the controller.
+
+Any failed batch stops scheduling new groups and further batches in active groups.
+Previously accepted evictions may still be
+in progress. The old reporting options `--from` and `--storage-pools-file` have
+been removed.
+
 ### Handle errors
 
 By convention ```ydb-dstool``` returns 0 on success, and non-zero on failure. You can check exit status

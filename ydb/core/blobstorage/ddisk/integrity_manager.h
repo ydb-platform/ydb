@@ -3,17 +3,23 @@
 #include "defs.h"
 
 #include "ddisk_checksums.h"
+#include "read_result.h"
 
 #include <ydb/library/actors/util/rc_buf.h>
+#include <ydb/library/actors/async/event.h>
+#include <optional>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+#include <contrib/restricted/abseil-cpp/absl/container/node_hash_map.h>
+#include <contrib/restricted/abseil-cpp/absl/container/inlined_vector.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/intrlist.h>
+#include <util/generic/array_ref.h>
 
 #include <deque>
 #include <memory>
-#include <variant>
 #include <vector>
 
 namespace NKikimr::NDDisk {
@@ -21,13 +27,9 @@ namespace NKikimr::NDDisk {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TIntegrityManager
 //
-// Pure-logic (no I/O) owner of IntegrityChunk / IntegrityExtent allocation and of the in-memory
-// per-data-chunk integrity state: used-block bitmaps, data block checksums and per-TIntegrityBlock
-// digests. It performs no I/O itself: every disk operation it needs is queued as a TAction
-// (allocate an integrity chunk / read or write a buffer); TDDiskActor drains the queue with
-// TakeActions(), executes the async I/O and feeds completions back via
-// OnIntegrityChunkAllocated / OnIoCompleted / OnReadIoCompleted.
-// This makes the whole state machine unit-testable without a DDisk.
+// Owns integrity allocation, shared pair loads and exclusive metadata writer ownership.
+// Pair preparation and completion are ordinary actor-local operations; DDisk submits
+// their descriptors without launching read coroutines. Handles retain completed results.
 //
 // PDisk never restarts separately from DDisk, so a reserved chunk may be formatted immediately
 // (as if committed). Formatting writes (chunk headers, extent image) run in parallel; the actor
@@ -46,7 +48,7 @@ namespace NKikimr::NDDisk {
 // Memory: used-block bitmaps are small (1 bit per 4 KiB data block) and are kept per extent,
 // never evicted - reads depend on them. The expected digest and current slot are also pinned per
 // pair so an acknowledged lost metadata write remains detectable after cache eviction. Checksum
-// arrays are kept sparsely, one TIntegrityBlockState (~4 KiB) per resident TIntegrityBlock,
+// images are kept sparsely, one immutable 4 KiB image per resident metadata pair,
 // bounded by a manager-wide LRU budget and loaded again from the slot pair after eviction.
 //
 // On-disk layout of an integrity chunk (same size as a data chunk):
@@ -57,6 +59,9 @@ namespace NKikimr::NDDisk {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class TIntegrityManager {
+    struct TCacheEntry;
+    struct TWriterState;
+
 public:
     struct TDataChunkKey {
         ui64 TabletId = 0;
@@ -76,56 +81,41 @@ public:
         ui64 VChunkGeneration = 0;
     };
 
-    // ---- actions (outputs): drained by the actor after any mutating call ----
+    enum class EOperationStatus { Ok, Corrupted, Failed };
 
-    // Actor must obtain a chunk (e.g. from its reserve) and call OnIntegrityChunkAllocated().
-    struct TAllocateIntegrityChunk {};
-
-    // Actor must write Data at the given chunk offset and call OnIoCompleted(IoId) on success.
-    enum class EWriteIoKind {
-        Pair,
-        ChunkHeader,
-        ExtentFormat,
+    struct TIoResult {
+        bool Ok = false;
+        TReadPayload Data;
     };
 
-    struct TWriteIo {
-        ui64 IoId = 0;
-        TChunkIdx ChunkIdx = 0;
-        ui32 OffsetInBytes = 0;
-        TRcBuf Data; // page-aligned, ready for direct I/O
-        EWriteIoKind Kind = EWriteIoKind::Pair;
-    };
-
-    // Actor must read Size bytes and call OnReadIoCompleted(IoId, Data) on success. Integrity pair
-    // reads are always one adjacent A/B pair (8 KiB).
-    struct TReadIo {
-        ui64 IoId = 0;
+    // One contiguous metadata I/O. The descriptor ID is opaque to the submitter;
+    // only the manager interprets the returned image and its integrity slots.
+    struct TMetadataRead {
+        ui64 Id = 0;
         TChunkIdx ChunkIdx = 0;
         ui32 OffsetInBytes = 0;
         ui32 Size = 0;
     };
 
-    using TAction = std::variant<TAllocateIntegrityChunk, TWriteIo, TReadIo>;
-
-    enum class EOperationKind {
-        Write,
-        Read,
+    struct TMetadataReadResult {
+        ui64 Id = 0;
+        TIoResult Result;
     };
 
-    enum class EOperationStatus {
-        Ok,
-        Corrupted,
+    // One preparation claims at most one read. A crossing range is still one I/O.
+    using TMetadataReads = absl::InlinedVector<TMetadataRead, 1>;
+
+    struct TWriteSubmission {
+        ui64 Id;
+        TChunkIdx ChunkIdx;
+        ui32 OffsetInBytes;
+        TRcBuf Data;
     };
 
-    struct TOperationResult {
-        ui64 OperationId = 0;
-        EOperationKind Kind = EOperationKind::Write;
-        EOperationStatus Status = EOperationStatus::Ok;
-        TString ErrorReason;
-        bool LostWriteDetected = false;
-
-        // Read only. One pure checksum per requested 4 KiB block.
-        std::vector<ui64> Checksums;
+    struct TWork {
+        std::vector<ui64> Allocations;
+        std::vector<TChunkIdx> ReturnedChunks;
+        std::vector<TWriteSubmission> Writes;
     };
 
     // ---- read plans ----
@@ -141,6 +131,146 @@ public:
         // Mixed only: bit i corresponds to the i-th IntegrityUnitSize block of the requested range;
         // set = keep disk data, unset = zero-fill.
         TDynBitMap UsedBlocks;
+    };
+
+    struct TOperationResult {
+        EOperationStatus Status = EOperationStatus::Ok;
+        TString ErrorReason;
+        bool LostWriteDetected = false;
+        TReadChecksums Checksums;
+        TReadPlan ReadPlan;
+    };
+
+    struct TDependency;
+    struct TExtentState;
+    struct TDependency {
+        NActors::TAsyncEvent Changed;
+        bool NotificationQueued = false;
+    };
+
+    struct TOperationState : TDependency {
+        // Notified only after Result is set; completion is retained for every waiter.
+        std::optional<TOperationResult> Result;
+    };
+
+    class TOperation {
+    public:
+        TOperation() = default;
+
+        explicit TOperation(std::shared_ptr<TOperationState> state) : State(std::move(state)) {
+        }
+
+        const TOperationResult* GetResult() const {
+            return State && State->Result ? &*State->Result : nullptr;
+        }
+
+        // A terminal result owns its snapshot and has retired every accepted dependency.
+        bool IsDone() const {
+            return GetResult();
+        }
+
+        NActors::NDetail::TAsyncEventAwaiter WaitChanged() const {
+            Y_ABORT_UNLESS(State);
+            return State->Changed.Wait();
+        }
+
+    private:
+        std::shared_ptr<TOperationState> State;
+    };
+
+    struct TReadPreparation {
+        // Immediate snapshot, including a failure that needs no metadata wait.
+        // Empty while metadata is still outstanding on Pending.
+        std::optional<TOperationResult> Warm;
+        TOperation Pending;
+        // Only newly claimed loads. Existing loads are joined through Pending.
+        TMetadataReads MetadataReads;
+    };
+
+    // Exclusive pair ownership. Waiting ownership and a selected resuming writer retain
+    // stable entries; destruction cancels an unsubmitted operation and releases its claims.
+    class TWriteOperation {
+    public:
+        TWriteOperation() = default;
+        TWriteOperation(TWriteOperation&&) noexcept;
+        TWriteOperation& operator=(TWriteOperation&&) noexcept;
+        TWriteOperation(const TWriteOperation&) = delete;
+        TWriteOperation& operator=(const TWriteOperation&) = delete;
+        ~TWriteOperation();
+
+        bool IsReady();
+        const TOperationResult* GetResult() const;
+        NActors::NDetail::TAsyncEventAwaiter WaitChanged() const;
+
+        void Cancel();
+
+    private:
+        friend class TIntegrityManager;
+        TIntegrityManager* Manager = nullptr;
+        std::shared_ptr<TWriterState> State;
+    };
+
+    // All fields used by I/O callbacks are owned here. Transform is independent of
+    // manager/cache/actor state and can run on the native router's completion thread.
+    struct TMetadataWrite {
+        struct TPair {
+            TIntegrityBlockIdentity Identity;
+            bool DigestKnown = false;
+            ui64 ExpectedDigest = 0;
+            ui32 CurrentSlot = 0;
+            TRcBuf CurrentImage;
+            TRcBuf UpdatedImage;
+        };
+
+        TChunkIdx ChunkIdx = 0;
+        ui32 ReadOffset = 0;
+        ui32 ReadSize = 0;
+        ui32 WriteOffset = 0;
+        TRcBuf WriteImage;
+        ui64 DDiskId = 0;
+        ui64 PDiskGuid = 0;
+        ui32 Offset = 0;
+        TReadChecksums Checksums;
+        absl::InlinedVector<TPair, 2> Pairs;
+        TOperationResult Result;
+
+        bool Transform(const TReadPayload& data = {});
+
+    private:
+        friend class TIntegrityManager;
+        std::shared_ptr<TWriterState> Owner;
+    };
+
+    struct TExtentState : TDependency {
+        bool Placed = false;
+        bool Ready = false;
+        bool Failed = false;
+    };
+    class TExtent {
+    public:
+        explicit TExtent(std::shared_ptr<TExtentState> state) : State(std::move(state)) {
+        }
+
+        std::optional<bool> GetPlacedResult() const {
+            if (State->Placed || State->Failed) {
+                return State->Placed;
+            }
+            return std::nullopt;
+        }
+
+        std::optional<bool> GetReadyResult() const {
+            if (State->Ready || State->Failed) {
+                return State->Ready;
+            }
+            return std::nullopt;
+        }
+
+        auto WaitChanged() const {
+            return State->Changed.Wait();
+        }
+
+    private:
+        std::shared_ptr<TExtentState> State;
     };
 
     // ---- persistence hooks ----
@@ -165,7 +295,7 @@ public:
     };
 
 public:
-    // Approximate memory cost of one cached TIntegrityBlockState; the ctor's checksumCacheBytes
+    // Approximate memory cost of one cached metadata image; the ctor's checksumCacheBytes
     // budget is converted to a state count with it (tests pass N * BlockStateApproxBytes).
     static constexpr size_t BlockStateApproxBytes =
         128 /* struct + hash map overhead */ + ChecksumsPerIntegrityBlock * sizeof(ui64)
@@ -180,20 +310,24 @@ public:
     TIntegrityManager(ui64 dataChunkSizeBytes, ui64 ddiskId, ui64 pdiskGuid,
         ui64 checksumCacheBytes = DefaultChecksumCacheBytes);
 
-    [[nodiscard]] std::vector<TAction> TakeActions();
-    bool HasActions() const { return !Actions.empty(); }
-
-    // Keys whose extents were assigned a slot (IntegrityChunk found) since the last take.
-    // The actor uses this to open the data-write path in parallel with formatting.
-    [[nodiscard]] std::vector<TDataChunkKey> TakePlacedKeys();
-
-    // ---- data chunk lifecycle ----
-
-    // A new data chunk was allocated: starts extent assignment (may queue TAllocateIntegrityChunk
-    // and/or extent-format TWriteIo actions). The chunk is *placed* once it has an IntegrityChunk
-    // (slot assigned) and *Ready* once its extent format I/O and the owning chunk's header writes
-    // have both completed.
-    void OnDataChunkAllocated(TDataChunkKey key, TChunkIdx dataChunkIdx);
+    [[nodiscard]] std::pair<TExtent, TWork> StartExtent(TDataChunkKey key, TChunkIdx dataChunkIdx);
+    // Preparation claims and pins metadata but does not submit I/O. A cold range claims
+    // one contiguous metadata read: one ping-pong pair, or the span from the first claimed
+    // pair through the last when the range crosses a boundary. The caller batches that
+    // read with its data read. Every claimed descriptor requires completion.
+    // Warm carries the snapshot when it is already known.
+    TReadPreparation PrepareRead(TDataChunkKey key, ui32 offsetInBytes, ui32 size);
+    void CompleteMetadataReads(TConstArrayRef<TMetadataReadResult> results);
+    [[nodiscard]] TWork CompleteAllocation(ui64 token, TChunkIdx chunkIdx);
+    [[nodiscard]] TWork CompleteWrite(ui64 id, bool ok);
+    TWriteOperation PrepareWrite(TDataChunkKey key, ui32 offsetInBytes, ui32 size);
+    std::shared_ptr<TMetadataWrite> PrepareMetadataWrite(TWriteOperation& operation,
+        TConstArrayRef<ui64> checksums);
+    void CompleteMetadataWrite(const std::shared_ptr<TMetadataWrite>& context, bool ok);
+    // State and immutable results are complete before targeted observers run.
+    void NotifyCompleted();
+    // Close admission. Operations retain their pins until accepted dependencies retire.
+    void Stop();
 
     // Starts a durable tablet deletion. Matching extents stop participating in snapshots and
     // pending assignment, but their slots remain withheld until CommitTabletChunksDeletion():
@@ -209,47 +343,13 @@ public:
 
     ui64 GetGenerationCounter() const { return GenerationCounter; }
 
-    // Fulfills one previously queued TAllocateIntegrityChunk. Draws the next IntegrityChunkGeneration
-    // and queues all header replica writes in parallel. Extents may be assigned immediately
-    // (placed) into this still-formatting chunk.
-    void OnIntegrityChunkAllocated(TChunkIdx chunkIdx);
-
-    // Cancels one queued-but-unfulfilled TAllocateIntegrityChunk when the remaining supply still
-    // covers all pending extents (demand may vanish when a tablet deletion frees slots). Returns
-    // false when the allocation is still needed and must proceed.
-    bool CancelChunkAllocationIfExcess();
-
     // Removes and returns the integrity chunks that can be released back to PDisk: header writes
     // settled (Ready), every slot free (slots withheld by in-flight orphaned format writes do not
     // count as free, so no extent I/O targets these chunks) and no pending extent demand - pending
     // extents are assigned into free slots first, which may queue their format writes.
-    std::vector<TChunkIdx> TakeReleasableIntegrityChunks();
+    [[nodiscard]] TWork TakeReleasableIntegrityChunks();
 
-    // Reports successful completion of a TWriteIo. Returns the data chunk keys whose extents
-    // became Ready as a result (empty for chunk header writes that do not finish an extent).
-    std::vector<TDataChunkKey> OnIoCompleted(ui64 ioId);
-    void OnReadIoCompleted(ui64 ioId, TRope data);
-
-    // True when the key needs no further integrity work before its mapping may be logged: its
-    // extent is formatted and the owning chunk's headers are written.
     bool IsExtentReady(TDataChunkKey key) const;
-
-    // ---- write path (called at data-write submission) ----
-
-    // Starts persistence of the supplied pure data checksums. The range must be 4 KiB aligned and
-    // carry exactly one checksum per block. Completion is reported by TakeCompletedOperations only
-    // after every affected pair image is durable.
-    ui64 BeginBlocksWrite(TDataChunkKey key, ui32 offsetInBytes, ui32 size,
-        const std::vector<ui64>& checksums);
-
-    // ---- read path ----
-
-    TReadPlan MakeReadPlan(TDataChunkKey key, ui32 offsetInBytes, ui32 size) const;
-
-    // Starts a metadata read and returns an operation id. The result is always delivered through
-    // TakeCompletedOperations (possibly immediately, without queued I/O).
-    ui64 BeginChecksumRead(TDataChunkKey key, ui32 offsetInBytes, ui32 size);
-    [[nodiscard]] std::vector<TOperationResult> TakeCompletedOperations();
 
     // ---- persistence hooks ----
 
@@ -258,8 +358,8 @@ public:
     TMappingSnapshot SnapshotMapping() const;
 
     // Rebuilds the mapping from a snapshot; the manager must be freshly constructed. Bitmaps and
-    // checksums are not part of the snapshot, so restored extents are marked BitmapUnknown: reads
-    // of them pass through unchanged (a later phase restores bitmaps from the extents on disk).
+    // checksums are not part of the snapshot, so restored extents are marked with unknown bitmaps and load the
+    // required pairs before returning checksums and a matching read plan.
     // Every restored chunk is Ready: a durable increment is only logged after formatting.
     void ApplyMappingSnapshot(const TMappingSnapshot& snapshot);
 
@@ -284,13 +384,16 @@ public:
     // True once all header replicas of the chunk were written (State == Ready). False for chunks
     // the manager does not know yet.
     bool IsIntegrityChunkFormatted(TChunkIdx chunkIdx) const;
-    // Digest of the given TIntegrityBlock (pair) of the key's extent; 0 when nothing was recorded
-    // (or the state was evicted).
+    // Digest of the given metadata pair; retained independently of cache eviction.
     ui64 GetIntegrityBlockDigest(TDataChunkKey key, ui32 integrityBlockIdx) const;
     // Recorded checksum of the given data block; returns false when the block has no known checksum.
     bool GetBlockChecksum(TDataChunkKey key, ui32 blockIdx, ui64* checksum) const;
-    // Currently cached TIntegrityBlockState count and the cache capacity (for unit tests).
+    // Currently cached metadata image count and the cache capacity (for unit tests).
     size_t CachedBlockStates() const { return BlockStateCount; }
+
+    // Logical reads still owed a checksum result, including those joined to loads started
+    // by another reader.
+    size_t PendingReadCount() const { return PendingReads.size(); }
     size_t MaxCachedBlockStates() const { return MaxBlockStates; }
     bool HasInFlightOperationsForTablet(ui64 tabletId) const;
 
@@ -305,66 +408,74 @@ private:
         ui64 Generation = 0;
         std::vector<ui32> FreeSlots; // kept descending, so the smallest slot is assigned first
         ui32 HeaderWritesRemaining = 0;
-        // Extents whose format write has completed while this chunk is still Formatting.
-        std::vector<TDataChunkKey> WaitingForChunkReady;
+        bool HeaderWriteFailed = false;
     };
 
-    enum class EExtentState {
-        Pending,    // waiting for an integrity chunk with a free slot
-        Formatting, // extent-format write is in flight, or done and waiting for chunk headers
-        Ready,
-    };
-
-    // Checksums of one TIntegrityBlock (ChecksumsPerIntegrityBlock data blocks), allocated lazily
-    // on the first checksummed write to its range and evictable via the manager-wide LRU.
-    struct TIntegrityBlockState : TIntrusiveListItem<TIntegrityBlockState> {
-        TDataChunkKey Key;   // owning extent, for eviction
-        ui32 PairIdx = 0;    // TIntegrityBlock pair index within the extent
-        ui64 PairSequenceNumber = 0;
-        TDynBitMap Known;              // per checksum slot: Checksums[slot] is recorded
-        std::vector<ui64> Checksums;   // ChecksumsPerIntegrityBlock entries
-    };
-
-    enum class EPairSlot : ui8 {
-        Unknown,
-        A,
-        B,
-    };
-
-    // Small, pinned state used for lost-write detection. Checksum arrays remain evictable, but the
-    // expected digest must survive their eviction.
+    // Digest, current slot and bitmap knowledge survive eviction of checksum images.
     struct TPairMeta {
         ui64 Digest = 0;
-        ui32 OperationPins = 0;
-        EPairSlot CurrentSlot = EPairSlot::Unknown;
-        bool DigestKnown : 1 = false;
-        bool BitmapKnown : 1 = false;
-        bool Resident : 1 = false;
-        bool Corrupted : 1 = false;
+        ui8 CurrentSlot = 0;
+        bool Known = false;
     };
 
-    static_assert(sizeof(TPairMeta) <= 16);
+    struct TPendingRead;
 
-    // Sparse state only for pairs with queued/in-flight work (or a remembered corruption). It is
-    // removed when a pair becomes idle, keeping the per-disk pinned footprint at TPairMeta size.
-    struct TPairRuntime {
-        ui64 MutationVersion = 0;
-        ui64 DurableVersion = 0;
-        ui64 ReadIoId = 0;
-        ui64 WriteIoId = 0;
-        ui64 WriteVersion = 0;
-        bool Dirty = false;
-        bool LostWriteCorruption = false;
-        TString CorruptionReason;
-        std::vector<ui64> LoadWaiters;
-        std::vector<std::pair<ui64, ui64>> DurabilityWaiters; // operation id, required version
+    enum class ECacheState : ui8 {
+        Missing,
+        WaitingRead,
+        Data,
+        WaitingWrite,
+    };
+
+    struct TCacheEntry : TIntrusiveListItem<TCacheEntry> {
+        TDataChunkKey Key;
+        ui32 PairIdx = 0;
+        ui64 VChunkGeneration = 0;
+        ECacheState State = ECacheState::Missing;
+        TRcBuf Image;
+        std::optional<TOperationResult> Failure;
+        std::weak_ptr<TWriterState> Writer;
+        std::deque<std::weak_ptr<TWriterState>> Writers;
+        std::vector<std::weak_ptr<TPendingRead>> Readers;
+    };
+
+    struct TPendingRead {
+        ui64 Id = 0;
+        ui32 Offset = 0;
+        ui32 Size = 0;
+        ui32 Remaining = 0;
+        TOperationResult Result;
+        std::shared_ptr<TOperationState> Completion;
+    };
+
+    struct TWriterState : TDependency {
+        TDataChunkKey Key;
+        ui32 Offset = 0;
+        ui32 Size = 0;
+        size_t Acquired = 0;
+        bool Submitted = false;
+        bool Queued = false;
+        std::optional<TOperationResult> Result;
+        std::shared_ptr<TExtentState> Extent;
+        absl::InlinedVector<std::shared_ptr<TCacheEntry>, 2> Pairs;
+    };
+
+    struct TFormatWrite {
+        enum class EKind { ChunkHeader, ExtentFormat };
+
+        EKind Kind;
+        TChunkIdx ChunkIdx;
+        ui64 ChunkGeneration;
+        TDataChunkKey Key;
+        TExtentRef Ref;
+        std::shared_ptr<TExtentState> Completion;
     };
 
     struct TExtentInfo {
-        TExtentRef Ref; // valid once State >= Formatting
-        EExtentState State = EExtentState::Pending;
+        TExtentRef Ref; // valid once Completion->Placed
         TChunkIdx DataChunkIdx = 0;
-        ui64 FormatIoId = 0; // the in-flight extent-format write; valid while the write is in flight
+        bool Formatting = false;
+        std::shared_ptr<TExtentState> Completion = std::make_shared<TExtentState>();
         bool FormatComplete = false;
         // Set while the actor's tablet-removal snapshot is in flight. The extent is absent from
         // logical snapshots, but its physical slot is quarantined until that record is durable.
@@ -374,95 +485,49 @@ private:
         TDynBitMap UsedBlocks; // per data block of the chunk
         // One pinned entry per on-disk A/B pair.
         std::vector<TPairMeta> Pairs;
-        absl::flat_hash_map<ui32, TPairRuntime> PairRuntime;
-        // Sparse per-TIntegrityBlock checksum states, keyed by TIntegrityBlock index.
-        absl::flat_hash_map<ui32, std::unique_ptr<TIntegrityBlockState>> BlockStates;
-    };
+        // Node-based storage plus retained handles keep every active lookup stable.
+        absl::node_hash_map<ui32, std::shared_ptr<TCacheEntry>> Cache;
 
-    struct THeaderWriteRef {
-        TChunkIdx ChunkIdx = 0;
-        ui32 Replica = 0;
-    };
-
-    // Format write of a live extent. FreeExtent rewrites the ref of a freed extent to
-    // TOrphanedExtentFormatRef, so on completion this ref always identifies the extent whose
-    // FormatIoId issued it - a stale completion can never complete a reused key.
-    struct TExtentFormatRef {
-        TDataChunkKey Key;
-    };
-
-    // Format write whose extent was freed while the write was in flight. The slot is withheld
-    // from the free list until this completion: reusing it earlier could let the old write land
-    // after the new one, leaving a stale-generation image on disk.
-    struct TOrphanedExtentFormatRef {
-        TChunkIdx ChunkIdx = 0;
-        ui32 ExtentSlot = 0;
-    };
-
-    struct TPairReadRef {
-        TDataChunkKey Key;
-        ui32 PairIdx = 0;
-    };
-
-    struct TPairWriteRef {
-        TDataChunkKey Key;
-        ui32 PairIdx = 0;
-        ui64 Version = 0;
-        EPairSlot Slot = EPairSlot::Unknown;
-    };
-
-    using TIoRef = std::variant<THeaderWriteRef, TExtentFormatRef, TOrphanedExtentFormatRef,
-        TPairReadRef, TPairWriteRef>;
-
-    struct TPendingOperation {
-        EOperationKind Kind = EOperationKind::Write;
-        TDataChunkKey Key;
-        ui32 OffsetInBytes = 0;
-        ui32 Size = 0;
-        std::vector<ui64> Checksums;
-        ui32 PendingLoads = 0;
-        ui32 PendingDurability = 0;
-        bool Applied = false;
-        bool PairsPinned = false;
     };
 
 private:
+    TWork TakeWork();
     ui64 AllocateGeneration() { return ++GenerationCounter; }
     void EnsureChunkCapacity();
     void TryAssignExtents();
-    void QueueChunkHeaderWrite(TChunkIdx chunkIdx, ui32 replica);
-    void QueueExtentFormatWrite(TDataChunkKey key, TExtentInfo& extent);
     void FreeExtent(TDataChunkKey key, TExtentInfo& extent);
     void ReleaseSlot(TChunkIdx chunkIdx, ui32 extentSlot);
-    void MaybeCompleteExtent(TDataChunkKey key, TExtentInfo& extent, std::vector<TDataChunkKey>& readyKeys);
+    bool CancelChunkAllocationIfExcess();
+    void OnIntegrityChunkAllocated(TChunkIdx chunkIdx);
+    void CompleteFormatWrite(TFormatWrite write, bool ok);
+    void MaybeCompleteExtent(TDataChunkKey key, TExtentRef ref,
+        const std::shared_ptr<TExtentState>& completion);
+    TRcBuf MakeHeaderImage(TChunkIdx chunkIdx, ui64 generation) const;
+    TRcBuf MakeExtentImage(TDataChunkKey key, TExtentRef ref, ui64 generation) const;
     ui32 FirstPair(ui32 offsetInBytes) const;
     ui32 EndPair(ui32 offsetInBytes, ui32 size) const;
-    void QueuePairRead(TDataChunkKey key, TExtentInfo& extent, ui32 pairIdx);
-    void QueuePairWrite(TDataChunkKey key, TExtentInfo& extent, ui32 pairIdx);
-    void ApplyWriteOperation(ui64 operationId, TPendingOperation& operation);
-    void CompleteReadOperation(ui64 operationId, TPendingOperation& operation);
-    void CompleteOperation(ui64 operationId, EOperationStatus status = EOperationStatus::Ok,
-        TString errorReason = {}, bool lostWriteDetected = false);
-    void NotifyPairLoaded(TDataChunkKey key, TExtentInfo& extent, ui32 pairIdx);
-    void NotifyPairDurable(TDataChunkKey key, TExtentInfo& extent, ui32 pairIdx);
-    bool LoadPairImage(TDataChunkKey key, TExtentInfo& extent, ui32 pairIdx, const TRope& data,
-        TString* errorReason, bool* lostWriteDetected);
+    TMetadataRead ClaimMetadataRead(TExtentInfo& extent,
+        TArrayRef<const std::shared_ptr<TCacheEntry>> entries);
+    void CompleteLoadedPair(const std::shared_ptr<TCacheEntry>& entry,
+        const TOperationResult* ioFailure, const void* pairImage);
+    void QueueDependency(const std::shared_ptr<TDependency>& dependency);
+    void ValidateOperationRange(ui32 offset, ui32 size) const;
     TIntegrityBlockIdentity MakeBlockIdentity(TDataChunkKey key, const TExtentInfo& extent,
         ui32 pairIdx) const;
-    bool PairHasAllUsedChecksums(const TExtentInfo& extent, ui32 pairIdx,
-        const TIntegrityBlockState& state) const;
-    TPairRuntime& GetPairRuntime(TExtentInfo& extent, ui32 pairIdx);
-    void MaybeDropPairRuntime(TExtentInfo& extent, ui32 pairIdx);
-
-    // Get-or-create the state of the given TIntegrityBlock, touching the LRU; creation may evict
-    // the least recently used state (of any extent) when over budget.
-    TIntegrityBlockState& GetOrCreateBlockState(TDataChunkKey key, TExtentInfo& extent, ui32 pairIdx);
-    // Lookup without creation (still touches the LRU); nullptr when absent (never written/evicted).
-    TIntegrityBlockState* FindBlockState(TExtentInfo& extent, ui32 pairIdx);
+    std::shared_ptr<TCacheEntry> GetEntry(TDataChunkKey key, TExtentInfo& extent, ui32 pairIdx);
+    void PublishImage(TExtentInfo& extent, TCacheEntry& entry, TRcBuf image, ui32 currentSlot);
+    void CapturePair(TExtentInfo& extent, const TCacheEntry& entry, TPendingRead& read);
+    void CompleteReaders(TExtentInfo& extent, TCacheEntry& entry);
+    void FinishPendingRead(const std::shared_ptr<TPendingRead>& read, bool notify = true);
+    bool AdvanceWriter(const std::shared_ptr<TWriterState>& writer);
+    void ReleaseWriter(const std::shared_ptr<TWriterState>& writer);
+    void WakeWriter(TCacheEntry& entry);
+    void FailEntry(TExtentInfo& extent, TCacheEntry& entry, TOperationResult result, bool resolveReaders = true);
     void EvictBlockStatesOverBudget();
     void DropBlockStates(TExtentInfo& extent);
 
 private:
+    bool Stopped = false;
     // Geometry, computed once in the ctor.
     const ui64 DataChunkSize;
     const ui32 DataBlocksPerChunkCount;
@@ -475,6 +540,23 @@ private:
 
     absl::flat_hash_map<TChunkIdx, TIntegrityChunkInfo> IntegrityChunks;
     absl::flat_hash_map<TDataChunkKey, TExtentInfo> Extents;
+    // One accepted metadata read. Entries are the claimed pairs inside
+    // [FirstPairIdx, FirstPairIdx + PairCount). Unclaimed pairs in that span
+    // are read with them and ignored.
+    struct TMetadataLoad {
+        ui32 FirstPairIdx = 0;
+        ui32 PairCount = 0;
+        absl::InlinedVector<std::shared_ptr<TCacheEntry>, 2> Entries;
+    };
+
+    absl::flat_hash_map<ui64, TMetadataLoad> PairLoads;
+    absl::flat_hash_map<ui64, std::shared_ptr<TPendingRead>> PendingReads;
+    ui64 NextPairWriteId = 1;
+    absl::flat_hash_map<ui64, TFormatWrite> FormatWrites;
+    std::deque<std::shared_ptr<TDependency>> CompletedDependencies;
+    TWork Work;
+    ui64 NextPairReadId = 1;
+    ui64 NextPendingReadId = 1;
 
     // Monotonic source of every VChunkGeneration / IntegrityChunkGeneration; persisted as a
     // snapshot watermark, so reuse after free keeps bumping generations even across restarts
@@ -482,20 +564,15 @@ private:
     ui64 GenerationCounter = 0;
 
     std::deque<TDataChunkKey> PendingExtents;
-    ui32 PendingChunkAllocations = 0; // TAllocateIntegrityChunk actions not yet fulfilled
-    std::vector<TDataChunkKey> PlacedKeys;
+    absl::flat_hash_set<ui64> PendingChunkAllocations;
+    ui64 NextAllocationToken = 1;
 
-    // LRU over all cached TIntegrityBlockStates: front is the eviction victim.
-    TIntrusiveList<TIntegrityBlockState> BlockStateLru;
+    // LRU over resident immutable metadata images: front is the eviction victim.
+    TIntrusiveList<TCacheEntry> BlockStateLru;
     size_t BlockStateCount = 0;
     const size_t MaxBlockStates;
 
-    std::vector<TAction> Actions;
-    absl::flat_hash_map<ui64, TIoRef> IosInFlight;
-    ui64 NextIoId = 1;
-    absl::flat_hash_map<ui64, TPendingOperation> PendingOperations;
-    std::vector<TOperationResult> CompletedOperations;
-    ui64 NextOperationId = 1;
+
 };
 
 } // namespace NKikimr::NDDisk

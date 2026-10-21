@@ -2,10 +2,10 @@
 #include "initializer.h"
 #include "manager.h"
 
-
 namespace NKikimr::NWorkloadManager {
 
-TResourcePoolClassifierBehaviour::TFactory::TRegistrator<TResourcePoolClassifierBehaviour> TResourcePoolClassifierBehaviour::Registrator(TResourcePoolClassifierConfig::GetTypeId());
+TResourcePoolClassifierBehaviour::TFactory::TRegistrator<TResourcePoolClassifierBehaviour> TResourcePoolClassifierBehaviour::Registrator(
+    TResourcePoolClassifierConfig::GetTypeId());
 
 NMetadata::NInitializer::IInitializationBehaviour::TPtr TResourcePoolClassifierBehaviour::ConstructInitializer() const {
     return std::make_shared<TResourcePoolClassifierInitializer>();
@@ -28,4 +28,4 @@ NMetadata::IClassBehaviour::TPtr TResourcePoolClassifierBehaviour::GetInstance()
     return result;
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

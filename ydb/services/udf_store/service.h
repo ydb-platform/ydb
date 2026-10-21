@@ -1,23 +1,24 @@
 #pragma once
-#include "metadata_subscription/snapshot.h"
+#include "artifact_table_initializer.h"
 #include "kv_body_store.h"
-#include "wasm/module_catalog.h"
+#include "store_initializer.h"
+#include "wasm_artifact_load_actor.h"
 #include "wasm_compile_actor.h"
 #include "wasm_library_compile_actor.h"
-#include "wasm_artifact_load_actor.h"
-#include "artifact_table_initializer.h"
-#include "store_initializer.h"
+
 #include "compile_controller/events.h"
+#include "metadata_subscription/snapshot.h"
+#include "wasm/module_catalog.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/services/metadata/abstract/common.h>
+
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/accessor/accessor.h>
+#include <ydb/services/metadata/abstract/common.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
 namespace NKikimr::NUdfStore {
@@ -123,9 +124,7 @@ private:
     void EnqueueWasmLoadIfNeeded(const TUdfModule& udf, const TSnapshot* snapshot = nullptr);
     void EnqueueLibraryCompileIfNeeded(const TUdfModule& library);
     bool AreLibraryDependenciesReady(TStringBuf manifest, const TSnapshot* snapshot = nullptr) const;
-    THashMap<TString, TString> CollectLibraryUids(
-        TStringBuf manifest,
-        const TSnapshot* snapshot = nullptr) const;
+    THashMap<TString, TString> CollectLibraryUids(TStringBuf manifest, const TSnapshot* snapshot = nullptr) const;
     void ReportGapsUnblockedByLibrary(const TString& libraryName);
     void UnloadWasmUdfsDependingOnLibrary(const TString& libraryName);
     void FetchNextNativeBody();
@@ -144,11 +143,7 @@ private:
     //! Tells the controller about a gap this node noticed. Only a hint: the
     //! controller reconciles on its own, so losing it only costs latency.
     void RequestArtifact(const TString& name, const TString& uid, bool isLibrary);
-    void ReportCompileResult(
-        const TActiveAssignment& assignment,
-        bool success,
-        bool stale,
-        const TString& error);
+    void ReportCompileResult(const TActiveAssignment& assignment, bool success, bool stale, const TString& error);
     //! Tells the controller this node will not run an assignment it was given.
     //! Without it the exclusive slot stays taken until the assignment expires.
     void RejectAssignment(const NKikimrUdfStore::TEvAssignCompile& record, const TString& reason);
@@ -196,7 +191,8 @@ public:
     }
 };
 
-NActors::IActor* CreateService(const NKikimrConfig::TUdfStoreConfig& serviceConfig, TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry);
+NActors::IActor* CreateService(
+    const NKikimrConfig::TUdfStoreConfig& serviceConfig, TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry);
 NActors::TActorId MakeServiceId(ui32 nodeId);
 
-}
+}   // namespace NKikimr::NUdfStore

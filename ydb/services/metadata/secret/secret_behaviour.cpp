@@ -1,6 +1,6 @@
-#include "secret_behaviour.h"
 #include "checker_secret.h"
 #include "manager.h"
+#include "secret_behaviour.h"
 
 namespace NKikimr::NMetadata::NSecret {
 
@@ -27,4 +27,4 @@ IClassBehaviour::TPtr TSecretBehaviour::GetInstance() {
     return result;
 }
 
-}
+}   // namespace NKikimr::NMetadata::NSecret

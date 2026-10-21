@@ -1049,15 +1049,18 @@ TExprBase DqPeepholeRewriteScalarHashJoin(const TExprBase& node, TExprContext& c
 
     auto inputs = PrepareHashJoinCoreInputs(join, ctx);
 
-    auto joinCore = Build<TDqScalarHashJoinCore>(ctx, pos)
+    auto joinCoreBuilder = Build<TDqScalarHashJoinCore>(ctx, pos)
         .LeftInput(inputs.LeftWideFlow)
         .RightInput(inputs.RightWideFlow)
         .JoinKind(join.JoinType())
         .LeftKeyColumns(ctx.NewList(pos, std::move(inputs.LeftKeyColumns)))
         .RightKeyColumns(ctx.NewList(pos, std::move(inputs.RightKeyColumns)))
         .LeftKeysColumnNames(join.LeftJoinKeyNames())
-        .RightKeysColumnNames(join.RightJoinKeyNames())
-        .Done();
+        .RightKeysColumnNames(join.RightJoinKeyNames());
+    if (const auto settings = join.Settings()) {
+        joinCoreBuilder.Settings(settings.Cast());
+    }
+    auto joinCore = joinCoreBuilder.Done();
 
     return TExprBase(NarrowHashJoinCoreOutput(joinCore.Ptr(), inputs, pos, ctx));
 }

@@ -531,20 +531,22 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
     }
 
-    void Update(const TPathId pathId, const bool isDeletion, const ui64 cookie) {
-        auto it = Descriptions.find(pathId);
-        Y_ABORT_UNLESS(it != Descriptions.end());
+    void Update(const TPathId pathId, const bool isDeletion, const ui64 cookie, TStringBuf path) {
+        const auto* desc = Descriptions.FindPtr(pathId);
+        Y_ABORT_UNLESS(desc || isDeletion);
 
-        const TOpaquePathDescription& desc = it->second;
-
-        TConstArrayRef<TActorId> replicas = SelectReplicas(pathId, desc.Path);
+        // Replay sends the latest description, so use its current path too.
+        // The saved publication path is needed only after deletion.
+        TConstArrayRef<TActorId> replicas = SelectReplicas(pathId, desc ? TStringBuf(desc->Path) : path);
         for (const auto& replica : replicas) {
             const TActorId* replicaPopulator = ReplicaToReplicaPopulator.FindPtr(replica);
             Y_ABORT_UNLESS(replicaPopulator != nullptr);
 
-            auto update = MakeHolder<NInternalEvents::TEvUpdateBuilder>(Owner, Generation, desc, isDeletion);
+            auto update = desc
+                ? MakeHolder<NInternalEvents::TEvUpdateBuilder>(Owner, Generation, *desc, isDeletion)
+                : MakeHolder<NInternalEvents::TEvUpdateBuilder>(Owner, Generation, pathId);
             if (!isDeletion) {
-                update->SetDescribeSchemeResultSerialized(desc.DescribeSchemeResultSerialized);
+                update->SetDescribeSchemeResultSerialized(desc->DescribeSchemeResultSerialized);
             }
             update->Record.SetNeedAck(true);
 
@@ -734,13 +736,15 @@ class TPopulator: public TMonitorableActor<TPopulator> {
 
         auto it = UpdateAcks.find(ev->Cookie);
         if (it == UpdateAcks.end()) {
-            it = UpdateAcks.emplace(ev->Cookie, TUpdateAckInfo{ev->Sender, {}}).first;
+            it = UpdateAcks.emplace(ev->Cookie, TUpdateAckInfo{ev->Sender, {}, {}}).first;
         }
 
         it->second.AckTo = ev->Sender;
         it->second.PathAcks.emplace(std::make_pair(pathId, version), THashSet<TActorId>{});
 
-        Update(pathId, isDeletion, ev->Cookie);
+        auto& path = it->second.Paths[pathId];
+        path = Descriptions.at(pathId).Path;
+        Update(pathId, isDeletion, ev->Cookie, path);
 
         if (isDeletion) {
             Descriptions.erase(pathId);
@@ -873,6 +877,23 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
 
         Become(&TThis::StateWork);
+
+        // Full synchronization does not acknowledge publication cookies.
+        // Replay unfinished publications to the current selection, including
+        // deletions whose descriptions have already been removed.
+        // Include existing children: a ring change can select a child that did
+        // not receive the original publication. Repeated updates and ACKs are
+        // idempotent, so resending to the whole current selection is safe.
+        for (const auto& [cookie, info] : UpdateAcks) {
+            TPathId previousPath;
+            for (const auto& [pathVersion, _] : info.PathAcks) {
+                const auto& pathId = pathVersion.first;
+                if (pathId != previousPath) {
+                    Update(pathId, !Descriptions.contains(pathId), cookie, info.Paths.at(pathId));
+                    previousPath = pathId;
+                }
+            }
+        }
         ReplayUpdates(DelayedUpdates);
     }
 
@@ -1051,6 +1072,8 @@ private:
         TActorId AckTo;
         // ReplicaPopulator actor IDs identify the replica incarnations that acknowledged each publication.
         TMap<std::pair<TPathId, ui64>, THashSet<TActorId>> PathAcks;
+        // Keep routing information until completion, even for deleted paths.
+        THashMap<TPathId, TString> Paths;
     };
 
     THashMap<ui64, TUpdateAckInfo> UpdateAcks; // ui64 is a cookie

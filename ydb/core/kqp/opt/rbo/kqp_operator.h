@@ -597,20 +597,42 @@ public:
     // truth for the ranges themselves; the other fields are range extractor outputs that cannot
     // be recovered from the expression later (explain has no access to table metadata or the
     // extractor settings).
+    // Leading key columns of a table pinned by the read predicate to a set of points. A lookup join
+    // uses the points as a constant prefix of its lookup keys.
+    struct TPointPrefix {
+        TString Table;                // path of the main table or of an index implementation table
+        TExprNode::TPtr Points;
+        const TStructExprType* PointsItemType = nullptr;
+        TVector<TString> Columns;     // physical key columns pinned by the points
+        TMaybe<size_t> ExpectedMaxPoints;
+    };
+
     struct TRangeInfo {
         TExprNode::TPtr ComputeNode;  // ranges expression pushed into the read
         TVector<TString> KeyColumns;  // all table key columns (with or without alias prefix)
         size_t UsedPrefixLen = 0;     // how many leading key columns are range-constrained
         size_t PointPrefixLen = 0;    // how many are pinned to a single value
         TMaybe<size_t> ExpectedMaxRanges;
-        TExprNode::TPtr Points;
-        const TStructExprType* PointsItemType = nullptr;
-        TVector<TString> PointColumns;
-        TMaybe<size_t> ExpectedMaxPoints;
+        // The read's own table first, then the tables it can be redirected to: the main table and
+        // its indexes. A lookup join picks the one whose key fits its join keys best.
+        TVector<TPointPrefix> PointPrefixes;
+        // Path of the main table, which differs from the read's own table once the read is redirected
+        // to an index. Empty means the read is on the main table.
+        TString MainTable;
         // The ranges as a single KqlKeyRange with literal or parameter bounds, when they are known at compile
         // time. A row storage read passes it to the source as is, so the ranges are not computed in a separate
         // transaction. ComputeNode describes the same ranges.
         TExprNode::TPtr LiteralRange;
+
+        // The prefix computed for a particular table, by its path.
+        const TPointPrefix* FindPointPrefix(const TString& table) const {
+            for (const auto& prefix : PointPrefixes) {
+                if (prefix.Table == table) {
+                    return &prefix;
+                }
+            }
+            return nullptr;
+        }
     };
 
     // Fresh definitions, allocated together in source-schema order. Conversion
@@ -1263,6 +1285,26 @@ public:
     std::optional<TLookupKeyPrefix> Prefix;
     ELookupStrategy Strategy{ELookupStrategy::LookupRows};
     TJoinIUs ResidualJoinKeys;
+    // Lookup keys can be null: they are key columns of rows found in another table, e.g. the primary key
+    // of rows found in an index, and the primary key can have nulls.
+    bool AllowNullKeys = false;
+    // The input is a lookup in join mode too, and the rows it fetches are the lookup keys of this one:
+    // e.g. this lookup fetches main table rows by the primary key found in an index. Both lookups share
+    // the left rows, so a single lookup join consumes the result of the chain.
+    bool KeysFromInputLookup = false;
+
+    // Returns the operator which produces the left rows of the lookup join, walking past a chain of
+    // lookups which take their keys from the lookup below.
+    TIntrusivePtr<IOperator> GetLeftInput();
+
+    // Describes the read which this lookup replaced after the read was redirected to a non-covering index:
+    // the whole read predicate over the lookup output and point prefixes of the tables the read can be
+    // redirected to. A lookup join can probe one of these tables instead of the whole subtree.
+    struct TSourceRead {
+        TExpression Predicate;
+        TVector<TOpRead::TPointPrefix> PointPrefixes;
+    };
+    std::optional<TSourceRead> SourceRead;
 
 protected:
     void ComputeOutputIUs() override;

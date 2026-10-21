@@ -2,12 +2,8 @@
 
 #include <ydb/library/yql/providers/abstract/message_stream/message_stream_session.h>
 
-#include <util/datetime/base.h>
-
 #include <library/cpp/testing/unittest/registar.h>
-
-#include <yt/yt/client/table_client/name_table.h>
-#include <yt/yt/client/table_client/unversioned_row.h>
+#include <util/datetime/base.h>
 
 namespace NYql {
 
@@ -16,7 +12,6 @@ namespace NYql {
 ////////////////////////////////////////////////////////////////////////////
 
 Y_UNIT_TEST_SUITE(TQytTopicSessionTest) {
-
     Y_UNIT_TEST(TryPush) {
         TBlockingEQueue<TString> queue(20);
         queue.Push(TString("aaaaa"), 5);
@@ -52,9 +47,9 @@ Y_UNIT_TEST_SUITE(TQytTopicSessionTest) {
         UNIT_ASSERT(!result);
     }
 
-////////////////////////////////////////////////////////////////////////////
-// Test: CanPushPredicate
-////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    // Test: CanPushPredicate
+    ////////////////////////////////////////////////////////////////////////////
 
     Y_UNIT_TEST(CanPushPredicate) {
         TBlockingEQueue<TString> queue(10);
@@ -67,14 +62,14 @@ Y_UNIT_TEST_SUITE(TQytTopicSessionTest) {
         UNIT_ASSERT(!queue.CanPushPredicate());
     }
 
-////////////////////////////////////////////////////////////////////////////
-// Test: Read session close event resolution
-////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    // Test: Read session close event resolution
+    ////////////////////////////////////////////////////////////////////////////
 
     Y_UNIT_TEST(ReadSessionCloseEventResolution) {
         TBlockingEQueue<NFq::TMessageStreamReadEvent> eventsQ(16 << 20);
 
-        eventsQ.TryPush(NFq::TMessageStreamSessionClosedEvent{NFq::EMessageStreamStatus::Success, {}}, 0);
+        eventsQ.TryPush(NFq::TMessageStreamSessionClosedEvent{ NFq::EMessageStreamStatus::Success, {} }, 0);
         eventsQ.Stop();
 
         auto event = eventsQ.Pop(false);
@@ -84,38 +79,9 @@ Y_UNIT_TEST_SUITE(TQytTopicSessionTest) {
         UNIT_ASSERT_EQUAL(closeEvent.Status, NFq::EMessageStreamStatus::Success);
     }
 
-////////////////////////////////////////////////////////////////////////////
-// Test: Row data extraction logic
-////////////////////////////////////////////////////////////////////////////
-
-    Y_UNIT_TEST(ExtractRowDataLogic) {
-        auto nameTable = NYT::New<NYT::NTableClient::TNameTable>();
-        const int dataColumnId = nameTable->GetIdOrRegisterName("data");
-
-        NYT::NTableClient::TUnversionedRowBuilder builder;
-        const TString payload("hello world");
-        builder.AddValue(NYT::NTableClient::MakeUnversionedStringValue(
-            TStringBuf(payload.data(), payload.size()), dataColumnId));
-        auto row = builder.GetRow();
-
-        std::optional<int> dataId = nameTable->FindId("data");
-        TStringBuf extractedData;
-        for (const auto& value : row) {
-            if (dataId && value.Id != static_cast<ui16>(*dataId)) {
-                continue;
-            }
-            if (value.Type == NYT::NTableClient::EValueType::String) {
-                extractedData = TStringBuf(value.Data.String, value.Length);
-                break;
-            }
-        }
-
-        UNIT_ASSERT_EQUAL(TString(extractedData), payload);
-    }
-
-////////////////////////////////////////////////////////////////////////////
-// Test: Retry backoff pattern
-////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    // Test: Retry backoff pattern
+    ////////////////////////////////////////////////////////////////////////////
 
     Y_UNIT_TEST(RetryBackoffPattern) {
         const TDuration MinBackoff = TDuration::MilliSeconds(100);
@@ -135,16 +101,16 @@ Y_UNIT_TEST_SUITE(TQytTopicSessionTest) {
         UNIT_ASSERT_EQUAL(backoffs.back(), TDuration::Seconds(30));
     }
 
-////////////////////////////////////////////////////////////////////////////
-// Test: Multiple close events don't corrupt queue
-////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    // Test: Multiple close events don't corrupt queue
+    ////////////////////////////////////////////////////////////////////////////
 
     Y_UNIT_TEST(MultipleCloseEvents) {
         TBlockingEQueue<NFq::TMessageStreamReadEvent> eventsQ(16 << 20);
 
         // Push multiple close events (simulates race between TryPush and Stop).
-        eventsQ.TryPush(NFq::TMessageStreamSessionClosedEvent{NFq::EMessageStreamStatus::Success, {}}, 0);
-        eventsQ.TryPush(NFq::TMessageStreamSessionClosedEvent{NFq::EMessageStreamStatus::Success, {}}, 0);
+        eventsQ.TryPush(NFq::TMessageStreamSessionClosedEvent{ NFq::EMessageStreamStatus::Success, {} }, 0);
+        eventsQ.TryPush(NFq::TMessageStreamSessionClosedEvent{ NFq::EMessageStreamStatus::Success, {} }, 0);
         eventsQ.Stop();
 
         int closeCount = 0;
@@ -156,6 +122,6 @@ Y_UNIT_TEST_SUITE(TQytTopicSessionTest) {
         UNIT_ASSERT_EQUAL(closeCount, 2);
     }
 
-} // Y_UNIT_TEST_SUITE(TQytTopicSessionTest)
+}   // Y_UNIT_TEST_SUITE(TQytTopicSessionTest)
 
-} // namespace NYql
+}   // namespace NYql

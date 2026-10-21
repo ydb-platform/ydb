@@ -164,7 +164,6 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
     }
     YDB_LOG_TRACE("",
         {"graphConstructed", DebugDOT()});
-//    Cerr << DebugDOT() << Endl;
 }
 
 TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(

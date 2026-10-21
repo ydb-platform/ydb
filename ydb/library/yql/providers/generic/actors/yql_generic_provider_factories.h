@@ -6,7 +6,6 @@
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 
 namespace NYql::NDq {
-    void RegisterGenericProviderFactories(TDqAsyncIoFactory& factory,
-                                          IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-                                          NYql::NConnector::IClient::TPtr genericClient);
-} // namespace NYql::NDq
+void RegisterGenericProviderFactories(
+    TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, NYql::NConnector::IClient::TPtr genericClient);
+}   // namespace NYql::NDq

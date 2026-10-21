@@ -643,10 +643,10 @@ class NbsDbgLikeLoadTest(unittest.TestCase):
     def test_transport_uses_legacy_grpc_with_deadline_and_redacts_failure(self):
         import grpc
         from types import SimpleNamespace
-        from ydb.core.protos import grpc_pb2_grpc
+        from ydb.core.protos import grpc_pb2_grpc, msgbus_pb2
         endpoint = SimpleNamespace(host_with_grpc_port='example:2135', protocol='grpc')
         params = SimpleNamespace(grpc_endpoints={'a': endpoint}, token='secret')
-        response = __import__('ydb.core.protos.msgbus_pb2', fromlist=['TResponse']).TResponse(Status=1)
+        response = msgbus_pb2.TResponse(Status=1)
         response.NbsDbgLikeLoadControl.Status = 1
         captured = []
 

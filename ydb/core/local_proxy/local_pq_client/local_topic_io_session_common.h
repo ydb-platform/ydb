@@ -3,7 +3,8 @@
 #include "local_topic_client_helpers.h"
 
 #include <ydb/core/grpc_services/local_rpc/local_rpc_bi_streaming.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -13,16 +14,15 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <contrib/libs/grpc/include/grpcpp/support/status.h>
-
-#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <queue>
 
 namespace NKikimr::NKqp {
 
 template <typename TDerived, typename TRpcProtoIn, typename TRpcProtoOut, typename TEventVariant, typename TCounters>
-class TLocalTopicIoSessionActor : public NActors::TActorBootstrapped<TDerived>, public NActors::IActorExceptionHandler {
+class TLocalTopicIoSessionActor: public NActors::TActorBootstrapped<TDerived>, public NActors::IActorExceptionHandler {
     static constexpr TDuration COUNTERS_REFRESH_INTERVAL = TDuration::Seconds(1);
 
     using TBase = NActors::TActorBootstrapped<TDerived>;
@@ -45,35 +45,39 @@ protected:
     };
 
 public:
-    struct TSessionEvents : private TEvPrivate {
+    struct TSessionEvents: private TEvPrivate {
         // Events from local sdk topic session
 
-        struct TEvExtractReadyEvents : public TEventLocal<TEvExtractReadyEvents, TEvPrivate::EvExtractReadyEvents> {
+        struct TEvExtractReadyEvents: public TEventLocal<TEvExtractReadyEvents, TEvPrivate::EvExtractReadyEvents> {
             explicit TEvExtractReadyEvents(NThreading::TPromise<std::vector<TEvent>> eventsPromise)
                 : EventsPromise(std::move(eventsPromise))
-            {}
+            {
+            }
 
             NThreading::TPromise<std::vector<TEvent>> EventsPromise;
         };
 
-        struct TEvEventsConsumed : public TEventLocal<TEvEventsConsumed, TEvPrivate::EvEventsConsumed> {
+        struct TEvEventsConsumed: public TEventLocal<TEvEventsConsumed, TEvPrivate::EvEventsConsumed> {
             explicit TEvEventsConsumed(ui64 eventsCount)
                 : EventsCount(eventsCount)
-            {}
+            {
+            }
 
             TEvEventsConsumed(i64 size, ui64 eventsCount)
                 : Size(size)
                 , EventsCount(eventsCount)
-            {}
+            {
+            }
 
-            const i64 Size = 0; // Return this size to free memory
+            const i64 Size = 0;   // Return this size to free memory
             const ui64 EventsCount = 0;
         };
 
-        struct TEvSessionFinished : public TEventLocal<TEvSessionFinished, TEvPrivate::EvSessionFinished> {
+        struct TEvSessionFinished: public TEventLocal<TEvSessionFinished, TEvPrivate::EvSessionFinished> {
             explicit TEvSessionFinished(bool force)
                 : Force(force)
-            {}
+            {
+            }
 
             const bool Force = false;
         };
@@ -124,27 +128,30 @@ protected:
     virtual void HandleRpcMessage(TRpcOut& message) = 0;
 
     TString LogPrefix() const {
-        return TStringBuilder() << "[" << LogPrefixStr << "] Database: " << Database << ", Topic: " << Topic << ", SelfId: " << TBase::SelfId() << ". ";
+        return TStringBuilder() << "[" << LogPrefixStr << "] Database: " << Database << ", Topic: " << Topic << ", SelfId: " << TBase::SelfId()
+                                << ". ";
     }
 
     template <typename TRpcEvent, typename TSettings>
-    std::unique_ptr<TRpcEvent> CreateRpcBiStreamingEvent(const NYdb::TRequestSettings<TSettings>& settings, const TString& methodName, NJaegerTracing::ERequestType requestType) const {
+    std::unique_ptr<TRpcEvent> CreateRpcBiStreamingEvent(
+        const NYdb::TRequestSettings<TSettings>& settings, const TString& methodName, NJaegerTracing::ERequestType requestType) const {
         const auto& token = CredentialsProvider ? std::optional<TString>(CredentialsProvider->GetAuthInfo()) : std::nullopt;
-        auto ctx = MakeIntrusive<TLocalRpcCtx>(TBase::ActorContext().ActorSystem(), TBase::SelfId(), typename TLocalRpcCtx::TSettings{
-            .Database = Database,
-            .Token = token,
-            .PeerName = TStringBuilder() << "localhost/LocalTopicRpc" << methodName,
-            .RequestType = settings.RequestType_.empty() ? std::nullopt : std::optional<TString>(settings.RequestType_),
-            .ParentTraceId = TString(settings.TraceParent_),
-            .TraceId = TString(settings.TraceId_),
-            .RpcMethodName = TStringBuilder() << "TopicService." << methodName,
-        });
+        auto ctx = MakeIntrusive<TLocalRpcCtx>(TBase::ActorContext().ActorSystem(), TBase::SelfId(),
+            typename TLocalRpcCtx::TSettings{
+                .Database = Database,
+                .Token = token,
+                .PeerName = TStringBuilder() << "localhost/LocalTopicRpc" << methodName,
+                .RequestType = settings.RequestType_.empty() ? std::nullopt : std::optional<TString>(settings.RequestType_),
+                .ParentTraceId = TString(settings.TraceParent_),
+                .TraceId = TString(settings.TraceId_),
+                .RpcMethodName = TStringBuilder() << "TopicService." << methodName,
+            });
 
         for (const auto& [key, value] : settings.Header_) {
             ctx->PutPeerMeta(TString(key), TString(value));
         }
 
-        auto ev = std::make_unique<TRpcEvent>(std::move(ctx), NGRpcService::TRequestAuxSettings{.RequestType = requestType});
+        auto ev = std::make_unique<TRpcEvent>(std::move(ctx), NGRpcService::TRequestAuxSettings{ .RequestType = requestType });
         // Query compilation has already resolved these local topic operands.
         ev->DisablePathNormalization();
 
@@ -194,7 +201,7 @@ protected:
     }
 
     void CloseSession(NYdb::EStatus status, const TString& message) {
-        CloseSession(status, {NYql::TIssue(message)});
+        CloseSession(status, { NYql::TIssue(message) });
     }
 
     void CloseSession(const grpc::Status& status, const TString& message = "") {
@@ -354,7 +361,7 @@ protected:
             {"event", static_cast<i64>(RpcResponses.back().client_message_case())});
 
         if (RpcActor) {
-            SendSessionEvents();            
+            SendSessionEvents();
         }
     }
 
@@ -459,4 +466,4 @@ private:
     std::optional<NThreading::TPromise<std::vector<TEvent>>> EventsPromise;
 };
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

@@ -4,7 +4,7 @@
 
 namespace NKikimr::NKqp {
 
-class IStreamingQueryOperationController : public NMetadata::NModifications::IAlterController {
+class IStreamingQueryOperationController: public NMetadata::NModifications::IAlterController {
 public:
     using TPtr = std::shared_ptr<IStreamingQueryOperationController>;
 
@@ -22,7 +22,8 @@ public:
 // - After the restart, the previous query execution may still commit task states into
 //   the `.metadata/streaming/checkpoints/states` table for checkpoints in the `Pending` status
 // - The previous execution may continue working and read from / write into external systems
-void DoCreateStreamingQuery(const NKikimrSchemeOp::TModifyScheme& schemeTx, IStreamingQueryOperationController::TPtr controller, const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context);
+void DoCreateStreamingQuery(const NKikimrSchemeOp::TModifyScheme& schemeTx, IStreamingQueryOperationController::TPtr controller,
+    const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context);
 
 // Current assumptions after a successful alter that stops a previously running streaming query:
 // - The previous query execution may perform all checkpoint actions:
@@ -31,14 +32,17 @@ void DoCreateStreamingQuery(const NKikimrSchemeOp::TModifyScheme& schemeTx, IStr
 //   - Save new graph descriptions in the `.metadata/streaming/checkpoints_graphs_description` table
 //   - Save task states into the `.metadata/streaming/checkpoints/states` table
 // - The previous execution may continue working and read from / write into external systems
-void DoAlterStreamingQuery(const NKikimrSchemeOp::TModifyScheme& schemeTx, IStreamingQueryOperationController::TPtr controller, const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context);
+void DoAlterStreamingQuery(const NKikimrSchemeOp::TModifyScheme& schemeTx, IStreamingQueryOperationController::TPtr controller,
+    const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context);
 
 // Current assumptions after a successful drop of a streaming query:
 // - The previous query execution may perform all checkpoint actions, and all query checkpoint data
 //   is not cleaned during the drop operation (all tables in `.metadata/streaming/checkpoints/` stay the same)
 // - The previous execution may continue working and read from / write into external systems
-void DoDropStreamingQuery(const NKikimrSchemeOp::TModifyScheme& schemeTx, IStreamingQueryOperationController::TPtr controller, const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context);
+void DoDropStreamingQuery(const NKikimrSchemeOp::TModifyScheme& schemeTx, IStreamingQueryOperationController::TPtr controller,
+    const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context);
 
-void DoTrackStreamingQueryOperation(const TString& queryName, IStreamingQueryOperationController::TPtr controller, const NMetadata::NModifications::IOperationsManager::TOperationTrackContext& context);
+void DoTrackStreamingQueryOperation(const TString& queryName, IStreamingQueryOperationController::TPtr controller,
+    const NMetadata::NModifications::IOperationsManager::TOperationTrackContext& context);
 
-}  // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

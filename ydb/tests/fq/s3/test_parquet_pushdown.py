@@ -45,11 +45,14 @@ class TestS3ParquetPushdown(TestYdsBase):
         for small test files. Unit tests verify the pushdown logic.
         """
         sql_with_pushdown = 'pragma s3.UsePredicatePushdown = "true";\n' + sql
-        query_id = client.create_query("simple", sql_with_pushdown, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        query_id = client.create_query(
+            "simple", sql_with_pushdown, type=fq.QueryContent.QueryType.ANALYTICS
+        ).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
         data = client.get_result_data(query_id, limit=1000)
-        rows_with = [tuple(row.items[i].text_value for i in range(len(row.items)))
-                     for row in data.result.result_set.rows]
+        rows_with = [
+            tuple(row.items[i].text_value for i in range(len(row.items))) for row in data.result.result_set.rows
+        ]
         assert sorted(rows_with) == sorted(expected_rows), f"With pushdown: {rows_with}"
 
     # =========================================================================
@@ -141,9 +144,7 @@ class TestS3ParquetPushdown(TestYdsBase):
 
         # With pushdown - should also return 0 rows
         query_id = client.create_query(
-            "simple",
-            'pragma s3.UsePredicatePushdown = "true";\n' + sql,
-            type=fq.QueryContent.QueryType.ANALYTICS
+            "simple", 'pragma s3.UsePredicatePushdown = "true";\n' + sql, type=fq.QueryContent.QueryType.ANALYTICS
         ).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
         data = client.get_result_data(query_id, limit=1000)

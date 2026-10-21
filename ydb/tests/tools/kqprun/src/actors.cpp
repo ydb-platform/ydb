@@ -1,10 +1,11 @@
 #include "actors.h"
 
-#include <library/cpp/colorizer/colors.h>
-
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+
 #include <ydb/services/workload_manager/actors/actors.h>
+
+#include <library/cpp/colorizer/colors.h>
 
 using namespace NKikimrRun;
 
@@ -12,7 +13,7 @@ namespace NKqpRun {
 
 namespace {
 
-class TRunScriptActorMock : public NActors::TActorBootstrapped<TRunScriptActorMock> {
+class TRunScriptActorMock: public NActors::TActorBootstrapped<TRunScriptActorMock> {
 public:
     TRunScriptActorMock(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise, TProgressCallback progressCallback)
         : TargetNode_(request.TargetNode)
@@ -43,9 +44,10 @@ public:
         hFunc(NKikimr::NKqp::TEvKqp::TEvQueryResponse, Handle);
         hFunc(NKikimr::NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
     )
-    
+
     void Handle(NKikimr::NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
-        auto response = MakeHolder<NKikimr::NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+        auto response =
+            MakeHolder<NKikimr::NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         response->Record.SetFreeSpace(ResultSizeLimit_);
 
         auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();
@@ -80,7 +82,7 @@ public:
     }
 
     void Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        Promise_.SetValue(TQueryResponse{.Response = std::move(ev), .ResultSets = std::move(ResultSets_)});
+        Promise_.SetValue(TQueryResponse{ .Response = std::move(ev), .ResultSets = std::move(ResultSets_) });
         PassAway();
     }
 
@@ -90,7 +92,8 @@ public:
                 ProgressCallback_(QueryId_, ev->Get()->Record);
             }
         } catch (...) {
-            Cerr << CerrColors_.Red() << "Got unexpected exception during progress callback: " << CurrentExceptionMessage() << CerrColors_.Default() << Endl;
+            Cerr << CerrColors_.Red() << "Got unexpected exception during progress callback: " << CurrentExceptionMessage()
+                 << CerrColors_.Default() << Endl;
         }
     }
 
@@ -108,13 +111,14 @@ private:
     std::vector<ui64> ResultSetSizes_;
 };
 
-class TAsyncQueryRunnerActor : public TAsyncQueryRunnerActorBase<TQueryRequest, TQueryResponse> {
+class TAsyncQueryRunnerActor: public TAsyncQueryRunnerActorBase<TQueryRequest, TQueryResponse> {
     using TBase = TAsyncQueryRunnerActorBase<TQueryRequest, TQueryResponse>;
 
 public:
     TAsyncQueryRunnerActor(const TAsyncQueriesSettings& settings)
         : TBase(settings)
-    {}
+    {
+    }
 
 protected:
     void RunQuery(TQueryRequest&& request, NThreading::TPromise<TQueryResponse> promise) override {
@@ -122,7 +126,7 @@ protected:
     }
 };
 
-class TResourcesWaiterActor : public NActors::TActorBootstrapped<TResourcesWaiterActor> {
+class TResourcesWaiterActor: public NActors::TActorBootstrapped<TResourcesWaiterActor> {
     using IRetryPolicy = IRetryPolicy<bool>;
     using EVerbosity = TYdbSetupSettings::EVerbosity;
     using EHealthCheck = TYdbSetupSettings::EHealthCheck;
@@ -132,13 +136,11 @@ class TResourcesWaiterActor : public NActors::TActorBootstrapped<TResourcesWaite
 public:
     TResourcesWaiterActor(NThreading::TPromise<void> promise, const TWaitResourcesSettings& settings)
         : Settings_(settings)
-        , RetryPolicy_(IRetryPolicy::GetExponentialBackoffPolicy(
-            &TResourcesWaiterActor::Retryable, REFRESH_PERIOD, 
-            TDuration::MilliSeconds(100), TDuration::Seconds(1),
-            std::numeric_limits<size_t>::max(), std::max(2 * REFRESH_PERIOD, Settings_.HealthCheckTimeout)
-        ))
+        , RetryPolicy_(IRetryPolicy::GetExponentialBackoffPolicy(&TResourcesWaiterActor::Retryable, REFRESH_PERIOD, TDuration::MilliSeconds(100),
+              TDuration::Seconds(1), std::numeric_limits<size_t>::max(), std::max(2 * REFRESH_PERIOD, Settings_.HealthCheckTimeout)))
         , Promise_(promise)
-    {}
+    {
+    }
 
     void Bootstrap() {
         Become(&TResourcesWaiterActor::StateFunc);
@@ -188,7 +190,8 @@ public:
             return;
         }
 
-        Retry(TStringBuilder() << "failed to fetch database with status " << status << ", reason:\n" << CoutColors_.Default() << ev->Get()->Issues.ToString(), true);
+        Retry(TStringBuilder() << "failed to fetch database with status " << status << ", reason:\n"
+                               << CoutColors_.Default() << ev->Get()->Issues.ToString(), true);
     }
 
     void Handle(NKikimr::NKqp::TEvKqp::TEvScriptResponse::TPtr& ev) {
@@ -198,7 +201,8 @@ public:
             return;
         }
 
-        Retry(TStringBuilder() << "script creation fail with status " << status << ", reason:\n" << CoutColors_.Default() << ev->Get()->Issues.ToString(), true);
+        Retry(TStringBuilder() << "script creation fail with status " << status << ", reason:\n"
+                               << CoutColors_.Default() << ev->Get()->Issues.ToString(), true);
     }
 
     STRICT_STFUNC(StateFunc,
@@ -252,7 +256,8 @@ private:
 
         if (auto delay = RetryState_->GetNextRetryDelay(shortRetry)) {
             if (Settings_.VerbosityLevel >= EVerbosity::InitLogs) {
-                const TString str = TStringBuilder() << CoutColors_.Cyan() << "Retry for database '" << Settings_.Database << "' in " << *delay << " " << message << CoutColors_.Default();
+                const TString str = TStringBuilder() << CoutColors_.Cyan() << "Retry for database '" << Settings_.Database << "' in " << *delay
+                                                     << " " << message << CoutColors_.Default();
                 Cout << str << Endl;
             }
             Schedule(*delay, new NActors::TEvents::TEvWakeup());
@@ -267,7 +272,9 @@ private:
     }
 
     void FailTimeout() {
-        Fail(TStringBuilder() << "Health check timeout " << Settings_.HealthCheckTimeout << " exceeded for database '" << Settings_.Database << "', use --health-check-timeout for increasing it or check out health check logs by using --verbosity " << static_cast<ui32>(EVerbosity::InitLogs));
+        Fail(TStringBuilder() << "Health check timeout " << Settings_.HealthCheckTimeout << " exceeded for database '" << Settings_.Database
+                              << "', use --health-check-timeout for increasing it or check out health check logs by using --verbosity "
+                              << static_cast<ui32>(EVerbosity::InitLogs));
     }
 
     void Fail(const TString& error) {
@@ -291,7 +298,7 @@ private:
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
 };
 
-class TSessionHolderActor : public NActors::TActorBootstrapped<TSessionHolderActor> {
+class TSessionHolderActor: public NActors::TActorBootstrapped<TSessionHolderActor> {
     using EVerbosity = TYdbSetupSettings::EVerbosity;
 
 public:
@@ -302,7 +309,8 @@ public:
         , Request_(std::move(request.Event))
         , OpenPromise_(openPromise)
         , ClosePromise_(closePromise)
-    {}
+    {
+    }
 
     void Bootstrap() {
         Become(&TSessionHolderActor::StateFunc);
@@ -312,7 +320,8 @@ public:
     void Handle(NKikimr::NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
         const auto& response = ev->Get()->Record;
         if (response.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-            FailAndPassAway(TStringBuilder() << "Failed to create session, " << response.GetYdbStatus() << ", reason: " << response.GetError() << "\n");
+            FailAndPassAway(
+                TStringBuilder() << "Failed to create session, " << response.GetYdbStatus() << ", reason: " << response.GetError() << "\n");
             return;
         }
 
@@ -338,7 +347,8 @@ public:
         if (response.GetStatus() != Ydb::StatusIds::SUCCESS) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(response.GetIssues(), issues);
-            FailAndPassAway(TStringBuilder() << "Failed to ping session, " << response.GetStatus() << ", reason:\n" << issues.ToString() << "\n");
+            FailAndPassAway(TStringBuilder() << "Failed to ping session, " << response.GetStatus() << ", reason:\n"
+                                             << issues.ToString() << "\n");
             return;
         }
 
@@ -367,7 +377,8 @@ public:
         if (response.GetStatus() != Ydb::StatusIds::SUCCESS) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(response.GetIssues(), issues);
-            FailAndPassAway(TStringBuilder() << "Failed to close session, " << response.GetStatus() << ", reason:\n" << issues.ToString() << "\n");
+            FailAndPassAway(TStringBuilder() << "Failed to close session, " << response.GetStatus() << ", reason:\n"
+                                             << issues.ToString() << "\n");
             return;
         }
 
@@ -385,7 +396,7 @@ public:
 
 private:
     void FailAndPassAway(const TString& error) {
-        if (!OpenPromise_.HasValue()) {  
+        if (!OpenPromise_.HasValue()) {
             OpenPromise_.SetException(error);
         }
         ClosePromise_.SetException(error);
@@ -404,7 +415,7 @@ private:
     TString SessionId_;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 bool TQueryResponse::IsSuccess() const {
     return GetStatus() == Ydb::StatusIds::SUCCESS;
@@ -420,7 +431,8 @@ TString TQueryResponse::GetError() const {
     return issues.ToString();
 }
 
-NActors::IActor* CreateRunScriptActorMock(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise, TProgressCallback progressCallback) {
+NActors::IActor* CreateRunScriptActorMock(
+    TQueryRequest request, NThreading::TPromise<TQueryResponse> promise, TProgressCallback progressCallback) {
     return new TRunScriptActorMock(std::move(request), promise, progressCallback);
 }
 
@@ -432,8 +444,9 @@ NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, 
     return new TResourcesWaiterActor(promise, settings);
 }
 
-NActors::IActor* CreateSessionHolderActor(TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise) {
+NActors::IActor* CreateSessionHolderActor(
+    TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise) {
     return new TSessionHolderActor(std::move(request), openPromise, closePromise);
 }
 
-}  // namespace NKqpRun
+}   // namespace NKqpRun

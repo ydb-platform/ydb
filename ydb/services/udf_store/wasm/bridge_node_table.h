@@ -3,14 +3,13 @@
 #include "bridge_resident.h"
 #include "bridge_types.h"
 
-#include <yql/essentials/public/udf/udf_value.h>
-#include <yql/essentials/public/udf/udf_value_builder.h>
-#include <yql/essentials/public/udf/udf_type_builder.h>
-
 #include <util/generic/hash.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/vector.h>
 #include <util/system/types.h>
+#include <yql/essentials/public/udf/udf_type_builder.h>
+#include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/public/udf/udf_value_builder.h>
 
 #include <optional>
 
@@ -30,9 +29,7 @@ struct TBridgeKinds {
 //! What the guest should see for a value of this MiniKQL type. Optional and
 //! Tagged wrappers around data are transparent: MiniKQL represents them like
 //! the payload, and so does the bridge.
-TBridgeKinds BridgeKindsFromType(
-    const NYql::NUdf::TType* type,
-    const NYql::NUdf::ITypeInfoHelper* helper);
+TBridgeKinds BridgeKindsFromType(const NYql::NUdf::TType* type, const NYql::NUdf::ITypeInfoHelper* helper);
 
 //! Last-resort kinds for values registered without a type: all we can tell is
 //! the runtime representation.
@@ -47,9 +44,7 @@ constexpr ui32 MaxBridgeOptionalDepth = 32;
 //! over a container or a string is represented as the payload itself, so the
 //! wrappers say nothing about what the value is; only Optional<Data> gets its
 //! own representation, and BridgeKindsFromType already looks through that one.
-const NYql::NUdf::TType* BridgePeelOptional(
-    const NYql::NUdf::TType* type,
-    const NYql::NUdf::ITypeInfoHelper* helper);
+const NYql::NUdf::TType* BridgePeelOptional(const NYql::NUdf::TType* type, const NYql::NUdf::ITypeInfoHelper* helper);
 
 //! Per-query-compartment table of host TUnboxedValue nodes exposed to WASM
 //! as ui64 bridge handles. Lifetime equals the query compartment generation.
@@ -88,21 +83,13 @@ public:
     //! for a value with a BridgeIdentityKey owns its Identity_ entry, so a
     //! later TryReuse returns that handle. Inside a Run scope the returned
     //! handle is tracked and released when the scope closes.
-    ui64 Register(
-        EBridgeNodeKind kind,
-        EBridgeValueKind valueKind,
-        const NYql::NUdf::TType* type,
-        NYql::NUdf::TUnboxedValue&& value,
+    ui64 Register(EBridgeNodeKind kind, EBridgeValueKind valueKind, const NYql::NUdf::TType* type, NYql::NUdf::TUnboxedValue&& value,
         const NYql::NUdf::TType* auxType = nullptr);
 
     //! Reuse the node registered for this value's identity when its kinds and
     //! type metadata match (bumping its ref count), or register a fresh view.
-    ui64 RegisterOrReuse(
-        EBridgeNodeKind kind,
-        EBridgeValueKind valueKind,
-        const NYql::NUdf::TType* type,
-        const NYql::NUdf::TUnboxedValuePod& value,
-        const NYql::NUdf::TType* auxType = nullptr);
+    ui64 RegisterOrReuse(EBridgeNodeKind kind, EBridgeValueKind valueKind, const NYql::NUdf::TType* type,
+        const NYql::NUdf::TUnboxedValuePod& value, const NYql::NUdf::TType* auxType = nullptr);
 
     //! If `value` is a boxed object or refcounted string already registered
     //! in this table, return its existing handle; otherwise NullBridgeHandle.
@@ -154,11 +141,7 @@ private:
     const TNode& ResolveIndex(ui64 index) const;
     void EnsureHandle(ui64 handle) const;
 
-    ui64 RegisterUntracked(
-        EBridgeNodeKind kind,
-        EBridgeValueKind valueKind,
-        const NYql::NUdf::TType* type,
-        NYql::NUdf::TUnboxedValue&& value,
+    ui64 RegisterUntracked(EBridgeNodeKind kind, EBridgeValueKind valueKind, const NYql::NUdf::TType* type, NYql::NUdf::TUnboxedValue&& value,
         const NYql::NUdf::TType* auxType);
 
     //! Remember that the innermost Run scope owes an Unref on this handle.
@@ -168,7 +151,7 @@ private:
     void ReleaseTracked(ui64 handle) noexcept;
 
     const ui64 Generation_;
-    ui64 NextIndex_ = 1; // 0 reserved (would collide with null when generation packs)
+    ui64 NextIndex_ = 1;   // 0 reserved (would collide with null when generation packs)
     THashMap<ui64, TNode> Nodes_;
     //! Identity for IsBoxed() objects and for single views over IsString()
     //! buffers, so two substrings of one buffer never share a node.
@@ -185,23 +168,17 @@ private:
 //! of the node itself: an Optional node is a wrapper, and MiniKQL reads what
 //! the guest put inside it. Nothing when the payload has no name here -- an
 //! Optional built over a handle whose kind was never recorded.
-std::optional<EBridgeValueKind> BridgeNodeValueKind(
-    const TWasmBridgeNodeTable::TNode& node,
-    const NYql::NUdf::ITypeInfoHelper* helper);
+std::optional<EBridgeValueKind> BridgeNodeValueKind(const TWasmBridgeNodeTable::TNode& node, const NYql::NUdf::ITypeInfoHelper* helper);
 
 //! Family of BridgeNodeValueKind: what a declared slot is compared against,
 //! since MiniKQL stores the kinds inside one family alike.
-std::optional<EBridgeKindFamily> BridgeNodeValueFamily(
-    const TWasmBridgeNodeTable::TNode& node,
-    const NYql::NUdf::ITypeInfoHelper* helper);
+std::optional<EBridgeKindFamily> BridgeNodeValueFamily(const TWasmBridgeNodeTable::TNode& node, const NYql::NUdf::ITypeInfoHelper* helper);
 
 //! Offset of the node's String bytes in compartment linear memory, copying
 //! them there on first use. Values with identity (refcounted strings) are
 //! pinned and reused across rows; the rest go to per-Run scratch.
 //! The offset is valid until the end of the current Run.
-ui64 EnsureBridgeStringResident(
-    const TWasmBridgeNodeTable::TNode& node,
-    TCompartmentResidentCache& cache);
+ui64 EnsureBridgeStringResident(const TWasmBridgeNodeTable::TNode& node, TCompartmentResidentCache& cache);
 
 //! RAII: install ValueBuilder on the table for the duration of a bridge Run.
 class TBridgeValueBuilderGuard: public TNonCopyable {
@@ -240,4 +217,4 @@ private:
     TWasmBridgeNodeTable& Table_;
 };
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

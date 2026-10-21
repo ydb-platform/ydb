@@ -8,6 +8,48 @@ The utility is designed for testing and evaluating the performance of storage de
 
 The series of experiments can be described in a configuration file (default cfg.txt for the legacy invocation). DDisk tests also support a config-free `ddisk` command. The tool supports rotary hard drives (ROT), solid-state drives (SSD), and NVMe. Test results can be output in wiki markup format, human-readable format, or as a JSON document.
 
+## macOS: PDisk on a sector map
+
+On macOS, the tool supports local `PDiskReadLoad`, `PDiskWriteLoad`, and
+`PDiskLogLoad` workloads backed by an in-memory sector map. PDisk uses its sector
+map I/O backend, without AIO or io_uring. Real device and file paths, other
+workload types, the `ddisk` command, and DDisk/client/server options are rejected.
+A configuration must contain a nonempty `PDiskTestList` with only supported
+PDisk loads.
+
+From this directory, run the short examples with the built executable:
+
+```bash
+./ydb_stress_tool --cfg examples/pdisk-sector-map-read.pbtxt --path SectorMap:mac:64 --type SSD --output-format human
+./ydb_stress_tool --cfg examples/pdisk-sector-map-write.pbtxt --path SectorMap:mac:64 --type SSD --output-format human
+./ydb_stress_tool --cfg examples/pdisk-sector-map-log.pbtxt --path SectorMap:mac:64 --type SSD --output-format human
+```
+
+Each example runs for two seconds after initialization and sets
+`DelayBeforeMeasurementsSeconds: 0` so read/write measurement starts immediately.
+Read and write examples use one chunk; the log example uses one worker. The
+current log report confirms completion but does not expose throughput or IOPS.
+
+The path syntax is `SectorMap:<name>[:<GiB>[:<mode>]]`, with a nonempty name.
+Omitted size and mode default to 100 GiB and `NONE`. An explicit size must be a
+positive decimal integer within the unsigned 32-bit range; mode must be exactly
+`NONE`, `HDD`, `SSD`, or `NVME`. Invalid values and extra components are rejected.
+`NONE` adds no device timing emulation; the other modes emulate device timing.
+PDisk maps must hold at least 201 full chunks: with the tool's 128-MiB chunks,
+specify at least 26 GiB.
+The name labels the virtual device. Capacity is logical: a 64-GiB sector map
+does not allocate 64 GiB at startup. Memory use grows with the sectors written,
+including PDisk metadata and log data, so keep the workload's chunk count and
+retained log data small. Results measure in-memory PDisk execution and any
+selected timing emulation, rather than physical storage performance.
+
+Repeat `--path` for multiple sector maps and use `--run-count N` to repeat runs.
+Read and write loads support `--inflight N` or the pair `--inflight-from N
+--inflight-to N`; these overrides are rejected for log loads, whose queue depth
+is configured by each worker's `MaxInFlight`. Values must be positive integers,
+and ranges must include both bounds with `from <= to`. Output, monitoring,
+logging, and PDisk encryption options are also available.
+
 ## DDisk command
 
 Run a random write workload, or select measured reads with `--read-only`:
@@ -39,7 +81,8 @@ Area size and measurement delay have no CLI options.
 
 Use common `--inflight N` for one queue depth, or both `--inflight-from N` and
 `--inflight-to N` for a doubling sweep. These forms are mutually exclusive.
-The `ddisk` command requires positive values and an ordered, complete range.
+Both the `ddisk` command and legacy invocation require positive integer values
+and an ordered, complete range.
 
 ```bash
 ydb_stress_tool ddisk --path /dev/nvme0n1 --read-only --areas 16 --duration 20 \
@@ -69,15 +112,15 @@ runtime/network options remain available. Config values, including measurement
 delay, are preserved unless overridden by the common inflight controls.
 
 The legacy invocation, `ydb_stress_tool --cfg FILE <options>`, remains supported,
-including implicit `cfg.txt` loading, its existing inflight-range parsing, and its
-disk formatting behavior. The new `ddisk` command never implicitly reads `cfg.txt`.
+including implicit `cfg.txt` loading and its disk formatting behavior. The new
+`ddisk` command never implicitly reads `cfg.txt`.
 
 ## Configuration File
 
 The following types of test loads are supported:
 - `AioTestList` - submitting read/write requests using libaio.
 - `TrimTestList` - submitting trim (blkdiscard) requests in specified block sizes, preceded by data writing.
-- `PDiksTestList` - applying load through YDB storage layer code (PDisk).
+- `PDiskTestList` - applying load through YDB storage layer code (PDisk).
 
 ### Parameters for `AioTestList`
 These describe read/write requests using libaio.
@@ -93,12 +136,14 @@ These describe trim (blkdiscard) requests in specified block sizes, preceded by 
 - `DurationSeconds` - the duration of the load application in seconds.
 - `RequestSize` - the size of the requests in bytes.
 
-### Parameters for `PDiksTestList`
+### Parameters for `PDiskTestList`
 These describe the load applied through the YDB storage layer code (PDisk).
 
 Multiple load sources can be running simultaneously.
 - `PDiskReadLoad` - description of the read load source.
 - `PDiskWriteLoad` - description of the write load source.
+- `PDiskLogLoad` - description of the log write load source; see the
+  [sector-map log example](examples/pdisk-sector-map-log.pbtxt).
 
 During normal operation, PDisk sends Trim requests to SSDs. This behavior can be enabled/disabled in the test using the EnableTrim parameter.
 

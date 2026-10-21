@@ -184,6 +184,15 @@ TEST_F(TComparatorTest, KeyBoundComparisonWellFormedness)
                 // Reflexivity.
                 EXPECT_EQ(0, comparator.CompareKeyBounds(keyBoundA, keyBoundA, lowerVsUpperResult));
                 for (const auto& keyBoundB : keyBounds) {
+                    auto legacyRowA = KeyBoundToLegacyRow(keyBoundA);
+                    auto legacyRowB = KeyBoundToLegacyRow(keyBoundB);
+                    EXPECT_EQ(
+                        comparator.CompareKeyBounds(keyBoundA, keyBoundB, lowerVsUpperResult),
+                        comparator.CompareKeyBounds(
+                            ToKeyBoundRef(legacyRowA, keyBoundA.IsUpper, comparator.GetLength()),
+                            ToKeyBoundRef(legacyRowB, keyBoundB.IsUpper, comparator.GetLength()),
+                            lowerVsUpperResult));
+
                     // Antisymmetry.
                     EXPECT_EQ(
                         comparator.CompareKeyBounds(keyBoundA, keyBoundB, lowerVsUpperResult),
@@ -286,6 +295,35 @@ TEST_F(TComparatorTest, SortOrder)
     EXPECT_FALSE(comparatorAscending.TestKey(key3, keyBoundLe2));
     EXPECT_FALSE(comparatorDescending.TestKey(key1, keyBoundLe2));
     EXPECT_TRUE(comparatorDescending.TestKey(key3, keyBoundLe2));
+
+    auto longRow = MakeRow({IntValue1, IntValue2});
+    auto longBound = ToKeyBoundRef(longRow, /*upper*/ false, /*keyLength*/ 2);
+    auto shortBound = ToKeyBoundRef(keyBoundLe2);
+    EXPECT_THROW(comparatorAscending.CompareKeyBounds(longBound, shortBound), TErrorException);
+    EXPECT_THROW(comparatorAscending.CompareKeyBounds(shortBound, longBound), TErrorException);
+}
+
+TEST_F(TComparatorTest, RejectSentinelsInKeyBoundRefs)
+{
+    constexpr int KeyLength = 2;
+    auto validRow = MakeRow({IntValue1, NullValue});
+    auto validBound = ToKeyBoundRef(validRow, /*upper*/ false, KeyLength);
+
+    for (const auto& comparator : GenerateComparators(KeyLength, KeyLength)) {
+        EXPECT_EQ(comparator.CompareKeyBounds(validBound, validBound), 0);
+        for (auto type : {EValueType::Min, EValueType::Max, EValueType::TheBottom}) {
+            for (int index = 0; index < KeyLength; ++index) {
+                auto values = std::vector{IntValue3, IntValue2};
+                values[index] = MakeUnversionedSentinelValue(type);
+                auto row = MakeRow(values);
+                auto invalidBound = TKeyBoundRef(ToKeyRef(row), /*inclusive*/ true, /*upper*/ false);
+
+                EXPECT_THROW(comparator.CompareKeyBounds(invalidBound, validBound), TErrorException);
+                EXPECT_THROW(comparator.CompareKeyBounds(validBound, invalidBound), TErrorException);
+                EXPECT_THROW(comparator.CompareKeyBounds(invalidBound, invalidBound), TErrorException);
+            }
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

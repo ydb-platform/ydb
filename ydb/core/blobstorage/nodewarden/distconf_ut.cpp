@@ -3781,6 +3781,84 @@ selector_config: []
             || (edge && CaptureInvokeResult(ev, edge, response));
     }
 
+    void CheckDisableDistconfVersion(ui64 version) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.State.RequiredRootNodeId = 1;
+        const auto currentYaml = fixture.MakeReplacementYaml(4);
+        const auto error = NStorage::TDistributedConfigKeeper::UpdateConfigComposite(fixture.Config, currentYaml, currentYaml);
+        UNIT_ASSERT_C(!error, error.value_or(""));
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        fixture.Start();
+        auto& runtime = fixture.Runtime;
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        std::optional<NKikimrBlobStorage::TStorageConfig> disabledCommittedConfig;
+        ui32 disableRequests = 0;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType
+                    && ev->Recipient == MakeBlobStorageNodeWardenID(1)) {
+                const auto& msg = *ev->Get<TEvNodeWardenStorageConfig>();
+                if (!msg.SelfManagementEnabled) {
+                    UNIT_ASSERT_VALUES_EQUAL(msg.Config->GetFingerprint(), fixture.Config.GetFingerprint());
+                    if (msg.CommittedConfig) {
+                        disabledCommittedConfig = *msg.CommittedConfig;
+                    }
+                }
+            }
+            if (ev->GetTypeRewrite() == TEvTabletPipe::EvSend
+                    && ev->Type == TEvBlobStorage::TEvControllerDistconfRequest::EventType) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvControllerDistconfRequest>()->Record;
+                UNIT_ASSERT_C(record.GetOperation() ==
+                    NKikimrBlobStorage::TEvControllerDistconfRequest::DisableDistconf, record.DebugString());
+                UNIT_ASSERT(record.HasCompressedMainConfig());
+                UNIT_ASSERT(!record.GetDedicatedConfigMode());
+                UNIT_ASSERT(!record.GetDryRun());
+                ++disableRequests;
+            }
+            return !HandleReplaceEvent(runtime, nodeId, *ev, edge, response);
+        };
+        auto request = fixture.MakeReplaceRequest(version);
+        TString yaml = request->Record.GetReplaceStorageConfig().GetYAML();
+        const TStringBuf enabled = "enabled: true";
+        const size_t pos = yaml.find(enabled);
+        UNIT_ASSERT(pos != TString::npos);
+        yaml.replace(pos, enabled.size(), "enabled: false");
+        request->Record.MutableReplaceStorageConfig()->SetYAML(yaml);
+        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return response.has_value(); }));
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        if (version != 5) {
+            UNIT_ASSERT_C(response->GetStatus() == TResult::ERROR, response->DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(response->GetErrorReason(), "Main config version must be increasing by one");
+            UNIT_ASSERT_VALUES_EQUAL(disableRequests, 0);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(1).GetCommittedStorageConfig().GetFingerprint(),
+                fixture.Config.GetFingerprint());
+        } else {
+            UNIT_ASSERT_C(response->GetStatus() == TResult::OK, response->DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(disableRequests, 1);
+            UNIT_ASSERT_C(SimUntil(runtime, [&] {
+                return disabledCommittedConfig
+                    && disabledCommittedConfig->GetGeneration() == fixture.Config.GetGeneration() + 1
+                    && !disabledCommittedConfig->GetSelfManagementConfig().GetEnabled();
+            }), (disabledCommittedConfig ? disabledCommittedConfig->DebugString() : "missing disabled notification"));
+            const auto applied = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
+            UNIT_ASSERT_VALUES_EQUAL(applied.GetGeneration(), fixture.Config.GetGeneration() + 1);
+            UNIT_ASSERT(!applied.GetSelfManagementConfig().GetEnabled());
+            UNIT_ASSERT_VALUES_EQUAL(applied.GetFingerprint(), disabledCommittedConfig->GetFingerprint());
+        }
+    }
+
+    Y_UNIT_TEST(DisableDistconfRejectsFutureYamlVersionBeforeBscMutation) {
+        CheckDisableDistconfVersion(14);
+    }
+
+    Y_UNIT_TEST(DisableDistconfAcceptsNextYamlVersion) {
+        CheckDisableDistconfVersion(5);
+    }
+
     bool HasTestConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config,
                             const std::vector<ui32>& nodeIds, const NKikimrConfig::TBridgeConfig *bridge = nullptr) {
         std::vector<NStorage::TSuccessfulDisk> disks;
@@ -9391,6 +9469,70 @@ Y_UNIT_TEST_SUITE(TDeriveStorageConfigCleanupTest) {
         UNIT_ASSERT(s.HasVDiskOnNode(1));
         UNIT_ASSERT(s.HasPDiskOnNode(1));
         UNIT_ASSERT(s.HasDefineBoxHostForNode(1));
+    }
+
+    void CheckStateStorageUpdate(bool explicitConfig, bool writeOnly) {
+        const std::array<const char*, 3> names = {"StateStorage", "StateStorageBoard", "SchemeBoard"};
+        for (ui32 ringGroups : {1, 2}) {
+            for (ui32 entity = 0; entity < names.size(); ++entity) {
+                TTestSetup s;
+                s.EnableSelfManagement();
+                s.SyncAppConfigBlobStorage();
+                s.AddNode(1, "host-1");
+                s.AddNode(2, "host-2");
+                auto *current = entity == 0 ? s.StorageConfig.MutableStateStorageConfig()
+                    : entity == 1 ? s.StorageConfig.MutableStateStorageBoardConfig()
+                    : s.StorageConfig.MutableSchemeBoardConfig();
+                current->SetSSId(1);
+                for (ui32 i = 0; i < ringGroups; ++i) {
+                    auto *ring = current->AddRingGroups();
+                    ring->SetNToSelect(1);
+                    ring->AddNode(i + 1);
+                }
+                auto proposed = *current;
+                proposed.SetStateStorageVersion(1);
+                for (auto& ring : *proposed.MutableRingGroups()) {
+                    ring.SetWriteOnly(writeOnly);
+                }
+                auto *domains = s.AppConfig.MutableDomainsConfig();
+                domains->AddDomain()->AddSSId(1);
+                if (explicitConfig) {
+                    auto *target = entity == 0 ? domains->MutableExplicitStateStorageConfig()
+                        : entity == 1 ? domains->MutableExplicitStateStorageBoardConfig()
+                        : domains->MutableExplicitSchemeBoardConfig();
+                    target->CopyFrom(proposed);
+                } else {
+                    domains->AddStateStorage()->CopyFrom(proposed);
+                }
+                TString error;
+                const bool accepted = s.Derive(&error);
+                if (writeOnly) {
+                    UNIT_ASSERT_C(!accepted, names[entity] << " accepted all-WriteOnly ring groups");
+                    UNIT_ASSERT_STRING_CONTAINS(error, names[entity]);
+                    UNIT_ASSERT_VALUES_EQUAL(current->GetStateStorageVersion(), 0);
+                    UNIT_ASSERT(!current->GetRingGroups(0).GetWriteOnly());
+                } else {
+                    UNIT_ASSERT_C(accepted, error);
+                    UNIT_ASSERT_VALUES_EQUAL(current->SerializeAsString(), proposed.SerializeAsString());
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(LegacyStateStorageRejectsAllWriteOnlyGroups) {
+        CheckStateStorageUpdate(false, true);
+    }
+
+    Y_UNIT_TEST(LegacyStateStorageAcceptsValidUpdate) {
+        CheckStateStorageUpdate(false, false);
+    }
+
+    Y_UNIT_TEST(ExplicitStateStorageRejectsAllWriteOnlyGroups) {
+        CheckStateStorageUpdate(true, true);
+    }
+
+    Y_UNIT_TEST(ExplicitStateStorageAcceptsValidUpdate) {
+        CheckStateStorageUpdate(true, false);
     }
 }
 

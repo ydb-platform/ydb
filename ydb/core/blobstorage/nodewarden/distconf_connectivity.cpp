@@ -452,7 +452,12 @@ namespace NKikimr::NStorage {
                     error = "nodes of the pile not added to the cluster can't connect to each other";
                 }
             } else { // extra checks when connecting between different piles
-                if (auto error = CheckHistoryCompatibility(*StorageConfig, config)) {
+                const std::optional<TString> peerPileName = incoming.HasBridgePileName()
+                    ? std::make_optional(incoming.GetBridgePileName())
+                    : std::nullopt;
+                if (IsOlderPartyOfReaddedPile(config, peerPileName)) {
+                    // its history doesn't matter, it just gets the current config
+                } else if (auto error = CheckHistoryCompatibility(*StorageConfig, config)) {
                     // histories are incompatible, connection won't ever be possible
                     return error;
                 }
@@ -531,6 +536,34 @@ namespace NKikimr::NStorage {
                 return "ClusterStateDetails section is missing in StorageConfig";
             }
             return std::nullopt;
+        }
+
+        // The party having older cluster state is the node of the pile that has been removed from the cluster and added
+        // again since then (e.g. on the same hosts, not formatted): the history of its cluster state is not in the one of
+        // the cluster, as the history is trimmed once the pile is removed, but it doesn't matter, as the data of the pile
+        // was dropped along with it. Both parties decide so by the config of the newer one; the older one must have older
+        // config too, so that the config of the pile running on its own (diverged) never replaces the cluster's one.
+        bool IsOlderPartyOfReaddedPile(const NKikimrBlobStorage::TStorageConfig& peerConfig,
+                const std::optional<TString>& peerPileName) {
+            const auto& myConfig = *StorageConfig;
+            const ui64 myStateGeneration = myConfig.GetClusterState().GetGeneration();
+            const ui64 peerStateGeneration = peerConfig.GetClusterState().GetGeneration();
+            if (myStateGeneration == peerStateGeneration) {
+                return false;
+            }
+            const bool selfOlder = myStateGeneration < peerStateGeneration;
+            const auto& older = selfOlder ? myConfig : peerConfig;
+            const auto& newer = selfOlder ? peerConfig : myConfig;
+            const std::optional<TString>& olderPileName = selfOlder ? SelfBridgePileName : peerPileName;
+            if (!olderPileName || newer.GetGeneration() <= older.GetGeneration()) {
+                return false;
+            }
+            for (const auto& pile : newer.GetClusterStateDetails().GetPileRegistry().GetPiles()) {
+                if (pile.HasName() && pile.GetName() == *olderPileName) {
+                    return older.GetClusterState().GetGeneration() < pile.GetAddedGeneration();
+                }
+            }
+            return false;
         }
 
         std::optional<TString> CheckHistoryCompatibility(const NKikimrBlobStorage::TStorageConfig& myConfig,

@@ -1295,6 +1295,95 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT_STRING_CONTAINS(*incoming, "can't connect to each other");
     }
 
+    // the pile removed from the cluster and added again on the same (not formatted) hosts: its nodes have cluster state
+    // older than the pile's addition, and the history of the cluster is trimmed since then, but they get the config of
+    // the cluster, as the data of the previous incarnation of the pile was dropped; the node of the pile that went its
+    // own way meanwhile (its config is newer) is refused, as well as the node of the pile never removed
+    Y_UNIT_TEST(ReaddedPileOlderNodeGetsConfig) {
+        const auto old = MakeTwoPileBridgedConfig("pile0", "pile1"); // nodes 1 and 4 are in pile0, 2 and 3 in pile1
+        auto readded = old;
+        const ui64 addedGeneration = old.GetClusterState().GetGeneration() + 5;
+        readded.MutableClusterState()->SetGeneration(addedGeneration);
+        readded.MutableClusterState()->SetPerPileState(1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        auto *details = readded.MutableClusterStateDetails();
+        details->ClearUnsyncedHistory(); // trimmed when the pile was removed
+        auto *pss = details->AddPileSyncState();
+        TBridgePileId::FromPileIndex(1).CopyToProto(pss, &NKikimrBridge::TClusterStateDetails::TPileSyncState::SetBridgePileId);
+        pss->SetBecameUnsyncedGeneration(addedGeneration);
+        pss->SetUnsyncedBSC(true);
+        auto *registry = details->MutablePileRegistry();
+        registry->SetPileListChanged(true);
+        registry->SetRequiredFeatureLevel(NStorage::BridgeFeatureLevel);
+        readded.SetGeneration(old.GetGeneration() + 5);
+        auto neverRemoved = readded;
+        registry->MutablePiles(1)->SetAddedGeneration(addedGeneration);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&readded);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&neverRemoved);
+        auto island = old; // the pile went on its own, its config got newer than the cluster's one
+        island.SetGeneration(readded.GetGeneration() + 1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&island);
+
+        TTestActorSystem runtime(4);
+        auto& bridge = runtime.GetAppDataBridgeConfig();
+        bridge.AddPiles()->SetName("pile0");
+        bridge.AddPiles()->SetName("pile1");
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+
+        auto startChecker = [&](ui32 nodeId, ui32 pileIndex, const NKikimrBlobStorage::TStorageConfig& config) {
+            const auto bridgeInfo = NStorage::TDistributedConfigKeeper::GenerateBridgeInfo(config,
+                *MakeNodeWardenConfig(config, &bridge), nodeId);
+            runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), runtime.Register(new TStorageConfigProvider(
+                std::make_shared<const NKikimrBlobStorage::TStorageConfig>(config), bridgeInfo), nodeId));
+            runtime.RegisterService(GetNameserviceActorId(), runtime.Register(new TIgnoreActor, nodeId));
+            return runtime.Register(CreateDistconfBridgeConnectionCheckerActor(TBridgePileId::FromPileIndex(pileIndex),
+                bridge.GetPiles(pileIndex).GetName()), nodeId);
+        };
+        // returns the error and the config the peer gets, if any
+        auto check = [&](TActorId checkerId, ui32 peerNodeId, ui32 peerPileIndex,
+                const NKikimrBlobStorage::TStorageConfig& peerConfig) {
+            NKikimrBlobStorage::TConnectivityPayload payload;
+            TBridgePileId::FromPileIndex(peerPileIndex).CopyToProto(&payload,
+                &NKikimrBlobStorage::TConnectivityPayload::SetBridgePileId);
+            payload.SetBridgePileName(bridge.GetPiles(peerPileIndex).GetName());
+            payload.SetPileListChangeCapable(true);
+            payload.SetBridgeFeatureLevel(NStorage::BridgeFeatureLevel);
+            payload.MutableStorageConfig()->CopyFrom(peerConfig);
+            THashMap<TString, TString> params;
+            UNIT_ASSERT(payload.SerializeToString(&params["distconf"]));
+            const TActorId edge = runtime.AllocateEdgeActor(checkerId.NodeId());
+            runtime.Send(new IEventHandle(checkerId, edge, new TEvInterconnect::TEvCheckIncomingConnection(peerNodeId,
+                std::move(params))), checkerId.NodeId());
+            auto ev = runtime.WaitForEdgeActorEvent<TEvInterconnect::TEvCheckIncomingConnectionResult>(edge);
+            std::optional<ui64> sentGeneration;
+            for (const auto& [key, value] : ev->Get()->ParamsToSend) {
+                NKikimrBlobStorage::TConnectivityPayload reply;
+                UNIT_ASSERT(reply.ParseFromString(value));
+                if (reply.HasStorageConfig()) {
+                    sentGeneration = reply.GetStorageConfig().GetGeneration();
+                }
+            }
+            return std::make_pair(ev->Get()->ErrorReason.value_or(""), sentGeneration);
+        };
+
+        // the node of the cluster gives its config to the node of the previous incarnation of the pile
+        const TActorId cluster = startChecker(1, 0, readded);
+        const auto [error, sentGeneration] = check(cluster, 2, 1, old);
+        UNIT_ASSERT_C(!error.Contains("diverged"), error);
+        UNIT_ASSERT(sentGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(*sentGeneration, readded.GetGeneration());
+
+        // the node of the previous incarnation accepts the cluster's node too, it takes the config then
+        const TActorId stale = startChecker(2, 1, old);
+        const TString staleError = check(stale, 1, 0, readded).first;
+        UNIT_ASSERT_C(!staleError.Contains("diverged"), staleError);
+
+        // the island and the pile never removed are refused
+        UNIT_ASSERT_STRING_CONTAINS(check(cluster, 3, 1, island).first, "diverged");
+        const TActorId notReadded = startChecker(4, 0, neverRemoved);
+        UNIT_ASSERT_STRING_CONTAINS(check(notReadded, 3, 1, old).first, "diverged");
+    }
+
     // sessions with the peers of older versions established before the config has started requiring the bridge features
     // they don't support (changed list of piles, removed pile) are not checked again, so they get disconnected then
     Y_UNIT_TEST(OlderPeerSessionsDisconnected) {

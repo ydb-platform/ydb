@@ -4267,6 +4267,58 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), 0u);
     }
 
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlCleanupPreservesPreviousExportAtDifferentDestination, Checksum) {
+        ui64 txId = 100;
+        CreateTableForSqlBackup(txId, false, true, 1);
+        Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
+        const TString destPath1 = "backup/table";
+        const TString destPath2 = "backup/table2";
+        const auto expectedSql = DescribeTableAsSql();
+
+        WaitTableSqlExport(StartTableSqlExport(txId, destPath1));
+        CheckSqlBackup("/" + destPath1, expectedSql);
+        const auto oldSql = GetS3FileContent("/" + destPath1 + "/create_table.sql");
+        const auto oldChecksum = GetS3FileContent("/" + destPath1 + "/create_table.sql.sha256");
+        const auto oldScheme = GetS3FileContent("/" + destPath1 + "/scheme.pb");
+        const auto oldData = GetS3FileContent("/" + destPath1 + "/data_00.csv");
+        CheckSqlArtifactsAbsent("/" + destPath2);
+
+        UpdateRow(Runtime(), "Table", 2, "newValue");
+        const TString failedKey = destPath2 + "/create_table.sql" + (Checksum ? ".sha256" : "");
+        ui32 failures = 0;
+        auto uploads = Runtime().template AddObserver<NWrappers::NExternalStorage::TEvPutObjectRequest>([&](auto& ev) {
+            if (ev->Get()->Request.GetKey() == failedKey) {
+                if (Checksum) {
+                    UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/" + destPath2 + "/create_table.sql"), expectedSql);
+                }
+                ++failures;
+                FailS3Upload(ev);
+                ev.Reset();
+            }
+        });
+        THashSet<TString> deletedKeys;
+        auto deletes = Runtime().template AddObserver<NWrappers::NExternalStorage::TEvDeleteObjectRequest>([&](const auto& ev) {
+            deletedKeys.insert(TString(ev->Get()->Request.GetKey().c_str()));
+        });
+
+        WaitTableSqlExport(StartTableSqlExport(txId, destPath2, "number_of_retries: 0"));
+        UNIT_ASSERT_VALUES_EQUAL(failures, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(deletedKeys.size(), 3u);
+        for (const TString suffix : {"", ".sha256", ".enc"}) {
+            UNIT_ASSERT(deletedKeys.contains(destPath2 + "/create_table.sql" + suffix));
+        }
+        CheckSqlArtifactsAbsent("/" + destPath2);
+        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/" + destPath2 + "/scheme.pb"), oldScheme);
+        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/" + destPath2 + "/data_00.csv"), "1,\"valueA\"\n2,\"newValue\"\n");
+        UNIT_ASSERT(HasS3File("/" + destPath2 + "/data_complete.json"));
+
+        CheckSqlBackup("/" + destPath1, expectedSql);
+        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/" + destPath1 + "/create_table.sql"), oldSql);
+        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/" + destPath1 + "/create_table.sql.sha256"), oldChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/" + destPath1 + "/scheme.pb"), oldScheme);
+        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/" + destPath1 + "/data_00.csv"), oldData);
+    }
+
     Y_UNIT_TEST(TableBackupAsSqlCleanupDoesNotTouchHealthyItemOrSimilarPrefix) {
         ui64 txId = 100;
         CreateTableForSqlBackup(txId, false, true, 1);

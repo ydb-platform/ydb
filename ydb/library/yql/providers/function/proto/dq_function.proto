@@ -7,4 +7,6 @@ message TFunctionTransform {
   string InvokeUrl = 1;
   // Absent in legacy plans: use the executor's configured default.
   optional uint32 BatchSize = 2;
+  // Preserve an opaque host-only row payload alongside each service result.
+  bool EnrichRows = 3;
 }

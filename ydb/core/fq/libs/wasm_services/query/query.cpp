@@ -118,6 +118,7 @@ struct TPreparedConfig {
     ui64 MaxBufferedBytes = 64 << 20;
     ui32 MaxTraceSpans = 4096;
     ui32 BatchRows = 1;
+    bool EnrichRows = false;
     ui32 BatchBytes = MaxServiceBatchBytes;
     TDuration Timeout = TDuration::Seconds(30);
 };
@@ -141,10 +142,10 @@ ui32 Scheme(EValueType type) {
     return 0;
 }
 
-TVector<ui32> BindFields(TType* type, const TVector<TServiceField>& fields) {
+TVector<ui32> BindFields(TType* type, const TVector<TServiceField>& fields, bool enrich = false) {
     Y_ENSURE(type->GetKind() == TType::EKind::Struct, "WASM service row must be a struct");
     const auto* row = AS_TYPE(TStructType, type);
-    Y_ENSURE(row->GetMembersCount() == fields.size(), "Invalid WASM service row shape");
+    Y_ENSURE(row->GetMembersCount() == fields.size() + (enrich ? 1 : 0), "Invalid WASM service row shape");
     TVector<ui32> positions;
     for (const auto& field : fields) {
         const auto index = row->FindMemberIndex(field.Name);
@@ -244,10 +245,24 @@ public:
         Stats.Level = args.StatsLevel;
         ValidateMethod(Method, Config->BatchBytes, Config->BatchRows, Config->MaxBufferedBytes);
         const auto& desc = args.OutputDesc.GetTransform();
-        InputPositions = BindFields(static_cast<TType*>(DeserializeNode(desc.GetInputType(), args.TypeEnv)), Method.Input);
-        OutputPositions = BindFields(static_cast<TType*>(DeserializeNode(desc.GetOutputType(), args.TypeEnv)), Method.Output);
-        const auto reservation = std::max(Method.MaxInputRowBytes, Method.MaxOutputRowBytes);
-        MaxRows = std::min<ui64>(Config->MaxRows, Config->MaxBufferedBytes / reservation);
+        auto* inputType = static_cast<TType*>(DeserializeNode(desc.GetInputType(), args.TypeEnv));
+        auto* outputType = static_cast<TType*>(DeserializeNode(desc.GetOutputType(), args.TypeEnv));
+        InputPositions = BindFields(inputType, Method.Input, Config->EnrichRows);
+        OutputPositions = BindFields(outputType, Method.Output, Config->EnrichRows);
+        if (Config->EnrichRows) {
+            const auto payloadIndex = [](TType* type) {
+                const auto* row = AS_TYPE(TStructType, type);
+                const auto index = row->FindMemberIndex("_yql_service_payload");
+                Y_ENSURE(index && row->GetMemberType(*index)->GetKind() == TType::EKind::Data &&
+                             AS_TYPE(TDataType, row->GetMemberType(*index))->GetSchemeType() == NUdf::TDataType<char*>::Id,
+                    "Service enrichment requires a String payload");
+                return *index;
+            };
+            InputPayloadIndex = payloadIndex(inputType);
+            OutputPayloadIndex = payloadIndex(outputType);
+        }
+        RowReservation = std::max(Method.MaxInputRowBytes, Method.MaxOutputRowBytes);
+        MaxRows = std::min<ui64>(Config->MaxRows, Config->MaxBufferedBytes / RowReservation);
         DispatchRows =
             std::min({ Config->BatchRows, Method.MaxBatchRows, (Config->BatchBytes - ui32(sizeof(TServiceRequest))) / Method.MaxInputRowBytes,
                 (Config->BatchBytes - ui32(sizeof(TServiceResult))) / Method.MaxOutputRowBytes });
@@ -300,7 +315,12 @@ public:
         // byte per reserved row also bounds the final whole row returned by Pop.
         // Continue accepting control records after Finish, as DQ checkpoints
         // also traverse finished branches. No rows may follow Finish.
-        return Failed || PendingCheckpoint || PendingWatermark ? 0 : static_cast<i64>(MaxRows - BufferedRows());
+        if (Failed || PendingCheckpoint || PendingWatermark) {
+            return 0;
+        }
+        const ui64 used = PayloadBytes + BufferedRows() * RowReservation;
+        const ui64 available = used < Config->MaxBufferedBytes ? (Config->MaxBufferedBytes - used) / RowReservation : 0;
+        return static_cast<i64>(std::min<ui64>(MaxRows - BufferedRows(), available));
     }
 
     bool AllowFreeSpaceOvercommit() const override {
@@ -352,6 +372,16 @@ public:
                     Y_ENSURE(valid, "Invalid WASM service input field or byte limit");
                 }
                 bytes.resize(writer.Size());
+                if (Config->EnrichRows) {
+                    const auto payloadValue = row.GetElement(InputPayloadIndex);
+                    const auto payload = payloadValue.AsStringRef();
+                    const ui64 reserved = (BufferedRows() + 1) * RowReservation;
+                    Y_ENSURE(
+                        reserved <= Config->MaxBufferedBytes && PayloadBytes <= Config->MaxBufferedBytes - reserved &&
+                            payload.Size() <= Config->MaxBufferedBytes - reserved - PayloadBytes, "WASM service saved row byte quota exceeded");
+                    Payloads.emplace_back(payload.Data(), payload.Size());
+                    PayloadBytes += payload.Size();
+                }
                 Pending.push_back(std::move(bytes));
             });
             PendingWatermark = watermark;
@@ -482,9 +512,15 @@ private:
                     return;
                 }
                 NUdf::TUnboxedValue* members;
-                auto row = HolderFactory.CreateDirectArrayHolder(Method.Output.size(), members);
+                auto row = HolderFactory.CreateDirectArrayHolder(Method.Output.size() + (Config->EnrichRows ? 1 : 0), members);
                 TRowReader reader({ Results.front().data(), Results.front().size() });
                 Y_ENSURE(ReadRow(reader, Method.Output, members, &OutputPositions), "Invalid WASM service output row");
+                if (Config->EnrichRows) {
+                    Y_ENSURE(!Payloads.empty(), "Missing saved service row");
+                    members[OutputPayloadIndex] = MakeString(Payloads.front());
+                    PayloadBytes -= Payloads.front().size();
+                    Payloads.pop_front();
+                }
                 Output->Consume(std::move(row));
                 Output->Flush();
                 Stats.Bytes += Results.front().size();
@@ -573,6 +609,8 @@ private:
         Runtime.reset();
         Pending.clear();
         Results.clear();
+        Payloads.clear();
+        PayloadBytes = 0;
         ActiveCount = 0;
         Call = 0;
         auto guard = Guard(*Alloc);
@@ -592,6 +630,10 @@ private:
         }
         Runtime.reset();
         Transport.reset();
+        Pending.clear();
+        Results.clear();
+        Payloads.clear();
+        PayloadBytes = 0;
         auto guard = Guard(*Alloc);
         Output.Reset();
     }
@@ -610,7 +652,10 @@ private:
     TVector<ui32> InputPositions, OutputPositions;
     ui32 MaxRows, DispatchRows, ActiveCount = 0;
     TDqAsyncStats Stats;
-    TDeque<TString> Pending, Results;
+    TDeque<TString> Pending, Results, Payloads;
+    ui64 PayloadBytes = 0;
+    ui32 RowReservation = 0;
+    ui32 InputPayloadIndex = 0, OutputPayloadIndex = 0;
     TMaybe<NYql::NDqProto::TWatermark> PendingWatermark;
     TMaybe<NYql::NDqProto::TCheckpoint> PendingCheckpoint;
     TTraceContext TraceContext;
@@ -730,6 +775,7 @@ void RegisterServiceTransformsWithResolver(TDqAsyncIoFactory& factory, const NCo
             if (config.GetMaxTraceSpansPerTransform()) {
                 prepared->MaxTraceSpans = config.GetMaxTraceSpansPerTransform();
             }
+            prepared->EnrichRows = settings.GetEnrichRows();
             prepared->Module = module->ModuleBytecode;
             prepared->Libraries = module->Libraries;
             prepared->Manifest = *module->Manifest.Services;

@@ -15,12 +15,14 @@
 #include <ydb/services/udf_store/wasm/single_module_loader.h>
 
 #include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 namespace NFq::NWasmServices::NTestHelpers {
 struct TQueryOutput {
     std::mutex Mutex;
     TVector<TProfile> Rows;
     TVector<TString> Events;
+    TVector<TString> Payloads;
     std::atomic<bool> Blocked = false;
     std::atomic<bool> Finished = false;
     std::atomic<ui32> BlockAfterRows = 0;
@@ -28,8 +30,9 @@ struct TQueryOutput {
 
 class TProfileConsumer final: public NYql::NDq::IDqOutputConsumer {
 public:
-    explicit TProfileConsumer(std::shared_ptr<TQueryOutput> output)
+    explicit TProfileConsumer(std::shared_ptr<TQueryOutput> output, bool enriched = false)
         : Output(std::move(output))
+        , Enriched(enriched)
     {
     }
 
@@ -39,13 +42,17 @@ public:
 
     void Consume(NYql::NUdf::TUnboxedValue&& row) override {
         TProfile profile;
-        profile.Id = row.GetElement(0).Get<ui64>();
-        const auto nameValue = row.GetElement(1);
+        profile.Id = row.GetElement(Enriched ? 1 : 0).Get<ui64>();
+        const auto nameValue = row.GetElement(Enriched ? 2 : 1);
         const auto name = nameValue.AsStringRef();
         profile.NameBytes = name.Size();
         std::memcpy(profile.Name, name.Data(), name.Size());
-        profile.Score = row.GetElement(2).Get<ui32>();
+        profile.Score = row.GetElement(Enriched ? 3 : 2).Get<ui32>();
         std::lock_guard lock(Output->Mutex);
+        if (Enriched) {
+            const auto payload = row.GetElement(0);
+            Output->Payloads.emplace_back(payload.AsStringRef());
+        }
         Output->Rows.push_back(profile);
         Output->Events.push_back(TStringBuilder() << "row:" << profile.Id);
         if (Output->BlockAfterRows && Output->Rows.size() >= Output->BlockAfterRows) {
@@ -86,6 +93,7 @@ public:
 
 private:
     std::shared_ptr<TQueryOutput> Output;
+    bool Enriched;
 };
 
 inline FederatedQuery::Connection TestServiceConnection(const TString& name = "service") {
@@ -108,6 +116,7 @@ struct TQueryTransformEnv {
     TTempFile Module;
     TTempFile Manifest;
     bool UsesStore = false;
+    bool Enriched = false;
     NYql::NDq::TDqAsyncIoFactory Factory;
     std::shared_ptr<TQueryOutput> Output = std::make_shared<TQueryOutput>();
     NYql::NDq::TFakeCASetup Setup;
@@ -115,7 +124,7 @@ struct TQueryTransformEnv {
 
     TQueryTransformEnv(const TBinding& binding, ui32 timeoutMs = 5000, ui32 batchRows = 1, ui32 batchBytes = 0, ui32 maxBufferedRows = 65536,
         ui64 maxBufferedBytes = 0, bool grpcInsecure = true, bool useStore = false, bool realChannel = false,
-        std::function<void(NFq::NConfig::TWasmServicesConfig&)> configure = {}, std::optional<ui32> batchSize = {})
+        std::function<void(NFq::NConfig::TWasmServicesConfig&)> configure = {}, std::optional<ui32> batchSize = {}, bool enriched = false)
         : Module(MakeTempName())
         , Manifest(MakeTempName())
     {
@@ -159,6 +168,7 @@ struct TQueryTransformEnv {
             entry->set_protocol(FederatedQuery::ExternalService::GRPC);
         }
         UsesStore = useStore;
+        Enriched = enriched;
         if (useStore) {
             config.SetModuleSource(NFq::NConfig::TWasmServicesConfig::UDF_STORE);
             config.ClearModules();
@@ -189,25 +199,34 @@ struct TQueryTransformEnv {
         }
         Setup.Execute([&](NYql::NDq::TFakeActor& actor) {
             using namespace NKikimr::NMiniKQL;
-            auto* input = TStructTypeBuilder(actor.TypeEnv).Add("id", TDataType::Create(NYql::NUdf::TDataType<ui64>::Id, actor.TypeEnv)).Build();
-            auto* output = TStructTypeBuilder(actor.TypeEnv)
-                               .Add("id", TDataType::Create(NYql::NUdf::TDataType<ui64>::Id, actor.TypeEnv))
-                               .Add("name", TDataType::Create(NYql::NUdf::TDataType<NYql::NUdf::TUtf8>::Id, actor.TypeEnv))
-                               .Add("score", TDataType::Create(NYql::NUdf::TDataType<ui32>::Id, actor.TypeEnv))
-                               .Build();
+            TStructTypeBuilder inputBuilder(actor.TypeEnv);
+            inputBuilder.Add("id", TDataType::Create(NYql::NUdf::TDataType<ui64>::Id, actor.TypeEnv));
+            if (Enriched) {
+                inputBuilder.Add("_yql_service_payload", TDataType::Create(NYql::NUdf::TDataType<char*>::Id, actor.TypeEnv));
+            }
+            auto* input = inputBuilder.Build();
+            auto outputBuilder = TStructTypeBuilder(actor.TypeEnv)
+                                     .Add("id", TDataType::Create(NYql::NUdf::TDataType<ui64>::Id, actor.TypeEnv))
+                                     .Add("name", TDataType::Create(NYql::NUdf::TDataType<NYql::NUdf::TUtf8>::Id, actor.TypeEnv))
+                                     .Add("score", TDataType::Create(NYql::NUdf::TDataType<ui32>::Id, actor.TypeEnv));
+            if (Enriched) {
+                outputBuilder.Add("_yql_service_payload", TDataType::Create(NYql::NUdf::TDataType<char*>::Id, actor.TypeEnv));
+            }
+            auto* output = outputBuilder.Build();
             NYql::NDqProto::TTaskOutput desc;
             desc.MutableTransform()->SetType(TString(ServiceTransformType));
             desc.MutableTransform()->SetInputType(SerializeNode(input, actor.TypeEnv));
             desc.MutableTransform()->SetOutputType(SerializeNode(output, actor.TypeEnv));
             NYql::NProto::TFunctionTransform settings;
             settings.SetInvokeUrl(description.InvokeUrl);
+            settings.SetEnrichRows(Enriched);
             if (batchSize) {
                 settings.SetBatchSize(*batchSize);
             }
             desc.MutableTransform()->MutableSettings()->PackFrom(settings);
             THashMap<TString, TString> params;
             params[ServiceConnectionKey("profiles")] = PrepareServiceConnection(connection, {});
-            NYql::NDq::IDqOutputConsumer::TPtr consumer = new TProfileConsumer(Output);
+            NYql::NDq::IDqOutputConsumer::TPtr consumer = new TProfileConsumer(Output, Enriched);
             if (realChannel) {
                 RealChannel = NYql::NDq::CreateDqOutputChannel({ .RowType = output, .HolderFactory = &actor.HolderFactory, .ChannelId = 1 });
                 consumer = NYql::NDq::CreateOutputMapConsumer(RealChannel);
@@ -238,13 +257,18 @@ struct TQueryTransformEnv {
         }
     }
 
-    void Start(TVector<ui64> ids = { 42 }, bool finished = true) {
+    void Start(TVector<ui64> ids = { 42 }, bool finished = true, TVector<TString> payloads = {}) {
         Setup.AsyncOutputWrite([&](NKikimr::NMiniKQL::THolderFactory& holders) {
             NKikimr::NMiniKQL::TUnboxedValueBatch batch;
+            size_t index = 0;
             for (const auto id : ids) {
                 NYql::NUdf::TUnboxedValue* members;
-                auto row = holders.CreateDirectArrayHolder(1, members);
-                members[0] = NYql::NUdf::TUnboxedValuePod(id);
+                auto row = holders.CreateDirectArrayHolder(Enriched ? 2 : 1, members);
+                if (Enriched) {
+                    members[0] = NKikimr::NMiniKQL::MakeString(payloads.empty() ? ToString(index) : payloads.at(index));
+                }
+                ++index;
+                members[Enriched ? 1 : 0] = NYql::NUdf::TUnboxedValuePod(id);
                 batch.emplace_back(std::move(row));
             }
             return batch;

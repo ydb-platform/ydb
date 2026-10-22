@@ -1168,6 +1168,11 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         StartUpdater<TStateUpdater>(StateUpdater);
     }
 
+    bool IsPileCutOff(ui32 nodeId) const {
+        const auto *pile = CmsState->BridgeInfo ? CmsState->BridgeInfo->GetPileForNode(nodeId) : nullptr;
+        return pile && !NBridge::PileStateTraits(pile->State).AllowsConnection;
+    }
+
     void OnStateUpdated() {
         YDB_LOG_DEBUG("State was updated",
             {"name", Name()},
@@ -1200,6 +1205,16 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                     {"PDiskId", id});
                 info.IgnoreReason = NKikimrCms::TPDiskInfo::MISSING_NODE;
                 continue;
+            }
+
+            if (IsPileCutOff(id.NodeId)) {
+                // nodes of the pile that is disconnected or is not in the cluster can't be reached on purpose, which says
+                // nothing about their drives; the drives are judged anew once the pile connects back
+                info.Reset();
+                info.IgnoreReason = NKikimrCms::TPDiskInfo::PILE_CUT_OFF;
+                continue;
+            } else if (info.IgnoreReason == NKikimrCms::TPDiskInfo::PILE_CUT_OFF) {
+                info.IgnoreReason = NKikimrCms::TPDiskInfo::NOT_IGNORED; // the pile has connected back
             }
 
             bool hasGoodState = NKikimrBlobStorage::TPDiskState::Normal == info.GetState();
@@ -1375,7 +1390,20 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     }
 
     void SendBSCRequests() {
+        // the change judged while the pile was connected is not to be made (or retried) once the pile is cut off; BSC
+        // also skips such changes for it, as this node may learn of the cut off later than BSC does
+        EraseNodesIf(SentinelState->ChangeRequests, [&](const auto& item) {
+            if (IsPileCutOff(item.first.NodeId)) {
+                YDB_LOG_NOTICE("PDisk status change dropped, its pile is cut off from the cluster",
+                    {"name", Name()},
+                    {"PDiskId", item.first});
+                return true;
+            }
+            return false;
+        });
+
         if (SentinelState->ChangeRequests.empty()) {
+            SentinelState->StatusChangeAttempt = 0;
             return;
         }
 
@@ -1393,6 +1421,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             command.MutableHostKey()->SetNodeId(id.NodeId);
             command.SetPDiskId(id.DiskId);
             command.SetStatus(info->GetStatus());
+            command.SetSkipIfPileCutOff(true);
             if (info->GetMaintenanceStatus() != info->ActualMaintenanceStatus) {
                 command.SetMaintenanceStatus(info->GetMaintenanceStatus());
             }

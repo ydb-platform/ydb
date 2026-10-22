@@ -152,6 +152,14 @@ namespace NKikimr {
             TStoragePoolStat& StoragePoolStat;
 
             TConfigFitAction Fit;
+            THashSet<TString> ChangedPDiskKinds;
+            THashSet<TPDiskKindId> ReservedPDiskKindIds;
+
+            ui64 ResolvePDiskKind(const TString& name, ui64 explicitKind) const;
+            TMaybe<TString> MaterializePDiskConfig(const TString& name,
+                const TMaybe<TString>& overrides, TStringBuf context) const;
+            void PreparePDiskKindUpdates();
+            void ValidatePDiskKindReferences() const;
 
             THashSet<TGroupId> GroupContentChanged;
             THashSet<TGroupId> GroupFailureModelChanged;

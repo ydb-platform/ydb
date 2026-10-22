@@ -85,6 +85,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/html/escape
     ydb/library/actors/core
     ydb/library/yaml_config
     ydb/core/base

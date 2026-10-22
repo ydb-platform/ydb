@@ -115,6 +115,11 @@ namespace NKikimr::NBsController {
         case NKikimrBlobStorage::TDriveLifeStage::FREE:
         case NKikimrBlobStorage::TDriveLifeStage::REMOVED_BY_DSTOOL:
             break;
+        case NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL:
+            if (cmd.GetUpdateExisting() && cmd.GetBoxId() == driveInfo->BoxId) {
+                break;
+            }
+            [[fallthrough]];
         default:
             throw TExAlready() << "Device with such serial already exists in BSC database in lifeStage " << driveInfo->LifeStage;
         }
@@ -129,31 +134,17 @@ namespace NKikimr::NBsController {
 
         auto driveInfoMutable = DrivesSerials.FindForUpdate(serial);
         driveInfoMutable->BoxId = cmd.GetBoxId();
-        driveInfoMutable->Kind = cmd.GetKind();
         driveInfoMutable->KindName = cmd.GetKindName();
-        if (TString kindName = driveInfoMutable->KindName) {
-            const auto it = PDiskKinds.Get().find(kindName);
-            if (it == PDiskKinds.Get().end()) {
-                throw TExError() << "Unknown PDisk kind Name# " << kindName;
-            }
-            if (driveInfoMutable->Kind != 0) {
-                if (driveInfoMutable->Kind != it->second.KindId) {
-                    throw TExError() << "Explicit TDriveSerial.Kind " << driveInfoMutable->Kind << " does not match resolved KindName " << kindName;
-                }
-            } else {
-                driveInfoMutable->Kind = it->second.KindId;
-            }
-        }
+        driveInfoMutable->Kind = ResolvePDiskKind(cmd.GetKindName(), cmd.GetKind());
         if (cmd.GetPDiskType() != NKikimrBlobStorage::UNKNOWN_TYPE) {
             driveInfoMutable->PDiskType = cmd.GetPDiskType();
         }
         const TString context = TStringBuilder() << "DriveSerial# " << serial;
-        ValidatePDiskConfig(cmd.GetPDiskConfig(), context);
-        TString config;
-        if (!cmd.GetPDiskConfig().SerializeToString(&config)) {
-            throw TExError() << "Couldn't serialize PDiskConfig for disk with serial number" << TErrorParams::DiskSerialNumber(serial);
+        driveInfoMutable->PDiskConfig.Clear();
+        if (cmd.HasPDiskConfig()) {
+            driveInfoMutable->PDiskConfig = cmd.GetPDiskConfig().SerializeAsString();
         }
-        driveInfoMutable->PDiskConfig = config;
+        MaterializePDiskConfig(cmd.GetKindName(), driveInfoMutable->PDiskConfig, context);
         driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL;
 
         Fit.Boxes.insert(cmd.GetBoxId());

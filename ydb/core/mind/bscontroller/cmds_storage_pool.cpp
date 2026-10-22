@@ -148,14 +148,11 @@ namespace NKikimr::NBsController {
                 if (it == PDiskKinds.Get().end()) {
                     throw TExError() << "Unknown PDisk kind Name# " << kindName;
                 }
-                ui64 kind = filter.Kind.GetOrElse(0);
-                if (kind != 0) {
-                    if (kind != it->second.KindId) {
-                        throw TExError() << "Explicit TPDiskFilter.Kind " << kind << " does not match resolved KindName " << kindName;
-                    }
-                } else {
-                    filter.Kind = it->second.KindId;
+                if (filter.Kind && *filter.Kind != it->second.KindId) {
+                    throw TExError() << "Explicit TPDiskFilter.Kind " << *filter.Kind
+                        << " does not match resolved KindName " << kindName;
                 }
+                filter.Kind = it->second.KindId;
             }
 
             storagePool.PDiskFilters.insert(std::move(filter));
@@ -250,7 +247,7 @@ namespace NKikimr::NBsController {
                 continue; // skip DDisk pool
             }
             if ((!storagePoolIds || storagePoolIds.contains(it->first)) && (!nameSet || nameSet.contains(it->second.Name))) {
-                Serialize(status.AddStoragePool(), it->first, it->second);
+                Serialize(status.AddStoragePool(), it->first, it->second, cmd.GetReturnSource());
             }
         }
     }
@@ -612,6 +609,16 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& cmd, TStatus& status) {
         NKikimrBlobStorage::TBaseConfig *pb = status.MutableBaseConfig();
+        for (const auto& [name, kind] : PDiskKinds.Get()) {
+            auto* info = pb->AddPDiskKind();
+            info->SetKind(kind.KindId);
+            auto* config = info->MutableConfig();
+            config->SetName(name);
+            config->SetItemConfigGeneration(kind.Generation.GetOrElse(1));
+            if (kind.PDiskConfig) {
+                Y_ABORT_UNLESS(config->MutablePDiskConfig()->ParseFromString(*kind.PDiskConfig));
+            }
+        }
 
         if (cmd.GetRetrieveDevices()) {
             DrivesSerials.ForEach([&](const auto& serial, const auto& driveInfo) {
@@ -632,6 +639,8 @@ namespace NKikimr::NBsController {
                 }
                 device->SetLifeStage(driveInfo.LifeStage);
                 device->SetType(driveInfo.PDiskType);
+                device->SetKind(driveInfo.Kind);
+                device->SetKindName(driveInfo.KindName);
             });
         }
 
@@ -658,7 +667,13 @@ namespace NKikimr::NBsController {
         if (!cmd.GetSuppressPDisks()) {
             PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
                 if (!virtualGroupsOnly || pdiskFilter.contains(pdiskId)) {
-                    Serialize(pb->AddPDisk(), pdiskId, pdiskInfo);
+                    auto* disk = pb->AddPDisk();
+                    Serialize(disk, pdiskId, pdiskInfo);
+                    disk->SetKindName(GetPDiskKindName(disk->GetKind(), PDiskKinds.Get()));
+                    if (auto source = GetSourcePDiskConfig(pdiskInfo, HostConfigs.Get(), Boxes.Get(),
+                            DrivesSerials.Find(pdiskInfo.ExpectedSerial))) {
+                        Y_ABORT_UNLESS(disk->MutableSourcePDiskConfig()->ParseFromString(*source));
+                    }
                 }
             });
         }

@@ -57,6 +57,7 @@ message TDefineHostConfig {
 // Command issued to read specific (or all) host configurations associated with the BS_CONTROLLER tablet.
 message TReadHostConfig {
     repeated uint64 HostConfigId = 1; // if empty, then all host configuration entries are returned
+    bool ReturnSource = 2; // return original overrides for editing; default returns effective settings
 }
 
 // Command used to delete typical host configuration identified by its key.
@@ -205,6 +206,7 @@ message TReadStoragePool {
     // calculates intersection of names and ids
     repeated uint64 StoragePoolId = 2; // when empty, then query all the boxes
     repeated string Name = 3; // when empty, then query all the boxes
+    bool ReturnSource = 4; // preserve named filter references for editing
 }
 
 message TDeleteStoragePool {
@@ -516,6 +518,7 @@ message TAddDriveSerial {
     NKikimrBlobStorage.EPDiskType PDiskType = 4; // default UNKNOWN type implies auto-detection of drive type
     TPDiskConfig PDiskConfig = 5;
     string KindName = 6;
+    bool UpdateExisting = 7; // replace settings of an already added drive in the same box
 }
 
 // Remove drive if empty and delete PDisk, but leave row in table with LifeStage == REMOVED
@@ -836,6 +839,7 @@ message TBaseConfig {
         optional string DiskScope = 23; // when set allows for finer domain mapping
         uint64 ExpectedSlotSize = 24;
         string KindName = 25;
+        TPDiskConfig SourcePDiskConfig = 26; // individual overrides, before applying the class
     }
     message TVSlot {
         message TDonorDisk {
@@ -900,6 +904,8 @@ message TBaseConfig {
         NKikimrBlobStorage.EPDiskType Type = 6;
         uint64 Guid = 7;
         TDriveLifeStage.E LifeStage = 8;
+        uint64 Kind = 9;
+        string KindName = 10;
     }
 
     repeated TPDisk PDisk = 1;
@@ -909,6 +915,7 @@ message TBaseConfig {
     repeated TDevice Device = 5;
     TUpdateSettings Settings = 6;
     TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 7;
+    repeated TPDiskKind PDiskKind = 8;
 }
 
 message TMoveCommand {

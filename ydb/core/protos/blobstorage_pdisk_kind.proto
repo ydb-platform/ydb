@@ -7,6 +7,7 @@ package NKikimrBlobStorage;
 message TDefinePDiskKind {
     string Name = 1;
     TPDiskConfig PDiskConfig = 2;
+    string PreviousName = 3; // explicit rename; all references must be updated in the same request
 
     // item's generation to prevent concurrent modification
     uint64 ItemConfigGeneration = 100;
@@ -17,4 +18,9 @@ message TDeletePDiskKind {
 
     // item's generation to prevent concurrent modification
     uint64 ItemConfigGeneration = 100;
+}
+
+message TPDiskKind {
+    TDefinePDiskKind Config = 1;
+    uint64 Kind = 2; // controller-assigned ID, for diagnostics and materialized exports
 }

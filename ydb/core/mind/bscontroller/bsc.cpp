@@ -519,10 +519,9 @@ bool TBlobStorageController::HostConfigEquals(const THostConfigInfo& left, const
         if (drive.HasPDiskConfig()) {
             const bool success = drive.GetPDiskConfig().SerializeToString(&pdiskConfig.ConstructInPlace());
             Y_ABORT_UNLESS(success);
-        } else {
+        } else if (!drive.GetKindName()) {
             pdiskConfig = defaultPDiskConfig;
         }
-
         if (pdiskConfig != it->second->PDiskConfig) {
             return false;
         }
@@ -623,12 +622,20 @@ std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageControll
         ev->EnforceHostRecords.emplace(hostRecords);
     }
 
+    THashSet<TString> renamedKinds;
     for (const auto& pdiskKind : bsConfig.GetPDiskKinds()) {
         auto* definePDiskKind = request->AddCommand()->MutableDefinePDiskKind();
         definePDiskKind->CopyFrom(pdiskKind);
         const auto it = PDiskKinds.find(pdiskKind.GetName());
         if (it != PDiskKinds.end()) {
+            definePDiskKind->ClearPreviousName();
             definePDiskKind->SetItemConfigGeneration(it->second.Generation.GetOrElse(1));
+        } else {
+            const auto previous = PDiskKinds.find(definePDiskKind->GetPreviousName());
+            if (previous != PDiskKinds.end()) {
+                definePDiskKind->SetItemConfigGeneration(previous->second.Generation.GetOrElse(1));
+                renamedKinds.insert(previous->first);
+            }
         }
     }
 
@@ -686,6 +693,9 @@ std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageControll
     }
     for (const auto& kind : bsConfig.GetPDiskKinds()) {
         unusedPDiskKinds.erase(kind.GetName());
+    }
+    for (const auto& name : renamedKinds) {
+        unusedPDiskKinds.erase(name);
     }
     for (const auto& [name, generation] : unusedPDiskKinds) {
         auto* del = request->AddCommand()->MutableDeletePDiskKind();

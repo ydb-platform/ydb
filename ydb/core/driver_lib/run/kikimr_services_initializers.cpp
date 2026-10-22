@@ -248,6 +248,7 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
+#include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
 #include <ydb/library/actors/interconnect/handshake_broker.h>
 #include <ydb/library/actors/interconnect/load.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
@@ -537,6 +538,28 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.RdmaChecksum = config.GetRdmaChecksum();
     }
 
+    if (config.HasV2Config()) {
+        const auto& v2 = config.GetV2Config();
+        result.V2.Enable = v2.GetEnable();
+        result.V2.ChecksumEvents = v2.GetChecksumEvents();
+        result.V2.EnableSQPOLL = v2.GetEnableSQPOLL();
+        result.V2.EnablePreserializeEvents = v2.GetEnablePreserializeEvents();
+        result.V2.Threads = v2.GetThreads();
+        result.V2.RingsPerShard = v2.GetRingsPerShard();
+        result.V2.SqThreadIdleMs = v2.GetSqThreadIdleMs();
+        result.V2.ShareRingsAmongThreads = v2.GetShareRingsAmongThreads();
+        result.V2.EnableFixedFiles = v2.GetEnableFixedFiles();
+        result.V2.FixedFilesPerRing = v2.GetFixedFilesPerRing();
+        result.V2.EnableProvidedBuffers = v2.GetEnableProvidedBuffers();
+        result.V2.PoolBufCount = v2.GetPoolBufCount();
+        result.V2.MinWriteBufferSize = v2.GetMinWriteBufferSizeKB() << 10;
+        result.V2.MaxWriteBufferSize = v2.GetMaxWriteBufferSizeKB() << 10;
+        result.V2.MinReadBufferSize = v2.GetMinReadBufferSizeKB() << 10;
+        result.V2.MaxReadBufferSize = v2.GetMaxReadBufferSizeKB() << 10;
+        result.V2.MinSerializeWindowSize = v2.GetMinSerializeWindowSizeKB() << 10;
+        result.V2.MaxSerializeWindowSize = v2.GetMaxSerializeWindowSizeKB() << 10;
+    }
+
     return result;
 }
 
@@ -687,6 +710,21 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             icCommon->ChannelsConfig = channels;
             icCommon->Settings = settings;
             icCommon->DestructorId = GetDestructActorID();
+
+            if (settings.V2.Enable) {
+                // Create the shared v2 io_uring data-plane engine once, at startup, and publish it in Common.
+                // The actor system does not exist yet, so the engine is bound to it later (once it is up,
+                // TInterconnectProxyTCP::Registered calls SetActorSystem). CreateUringEngine returns null when
+                // io_uring is unavailable, in which case v2 is simply never negotiated during the handshake.
+                // The engine takes its parameters from Common, so Settings/MonCounters/DestructorId must
+                // already be filled in by this point.
+                icCommon->UringEngineV2 = CreateUringEngine(icCommon);
+                setup->OnActorSystemCreated.push_back([engine = icCommon->UringEngineV2](TActorSystem *actorSystem) {
+                    if (engine) {
+                        engine->SetActorSystem(actorSystem);
+                    }
+                });
+            }
             icCommon->DestructorQueueSize = destructorQueueSize;
             icCommon->HandshakeBallastSize = icConfig.GetHandshakeBallastSize();
             icCommon->LocalScopeId = ScopeId.GetInterconnectScopeId();

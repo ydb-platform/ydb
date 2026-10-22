@@ -1,6 +1,7 @@
 #include "interconnect_handshake.h"
 #include "handshake_broker.h"
 #include "interconnect_tcp_proxy.h"
+#include "uring_context.h" // TUringContext::IsSupported() gates v2 (io_uring data plane)
 
 #include "rdma/link_manager.h"
 #include "rdma/events.h"
@@ -840,6 +841,13 @@ namespace NActors {
                 request.SetRequestExternalDataChannel(Common->Settings.EnableExternalDataChannel);
                 request.SetRequestXxhash(true);
                 request.SetRequestXdcShuffle(true);
+                // v2 session is incompatible with encryption and needs the io_uring data plane; only
+                // request it when encryption is disabled locally and io_uring is available (buffer rings
+                // are used when present, with a fallback to ordinary buffers on older kernels)
+                const bool requestSessionV2 = Common->Settings.V2.Enable &&
+                    Common->Settings.EncryptionMode == EEncryptionMode::DISABLED &&
+                    TUringContext::IsAvailable();
+                request.SetRequestSessionV2(requestSessionV2);
                 request.SetHandshakeId(*HandshakeId);
 
                 ui32 pending = 0;
@@ -933,6 +941,7 @@ namespace NActors {
                 Params.UseExternalDataChannel = success.GetUseExternalDataChannel();
                 Params.UseXxhash = success.GetUseXxhash();
                 Params.UseXdcShuffle = success.GetUseXdcShuffle();
+                Params.UseSessionV2 = success.GetUseSessionV2();
                 if (success.HasServerScopeId()) {
                     ParsePeerScopeId(success.GetServerScopeId());
                 }
@@ -1227,6 +1236,11 @@ namespace NActors {
                 Params.UseExternalDataChannel = request.GetRequestExternalDataChannel() && Common->Settings.EnableExternalDataChannel;
                 Params.UseXxhash = request.GetRequestXxhash();
                 Params.UseXdcShuffle = request.GetRequestXdcShuffle();
+                // v2 session is used only when both peers enabled it, encryption is not in effect, and
+                // this side has the io_uring data plane available
+                Params.UseSessionV2 = request.GetRequestSessionV2() &&
+                    Common->Settings.V2.Enable && !Params.Encryption &&
+                    TUringContext::IsAvailable();
 
                 if (Params.UseExternalDataChannel) {
                     if (request.HasHandshakeId()) {
@@ -1299,6 +1313,7 @@ namespace NActors {
                     success.SetUseExternalDataChannel(Params.UseExternalDataChannel);
                     success.SetUseXxhash(Params.UseXxhash);
                     success.SetUseXdcShuffle(Params.UseXdcShuffle);
+                    success.SetUseSessionV2(Params.UseSessionV2);
 
                     ui32 pending = 0;
                     auto& actors = Common->ConnectionCheckerActorIds;

@@ -128,6 +128,7 @@ Y_UNIT_TEST_SUITE(BinaryCdcCompression) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(reader.Header().Kind), static_cast<int>(NChangeExchange::EBinaryCdcKind::Data));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(reader.Header().Op), static_cast<int>(NChangeExchange::EBinaryCdcOp::Upsert));
         UNIT_ASSERT(reader.Header().Has(NChangeExchange::EBinaryCdcFlag::HasTs));
+        UNIT_ASSERT(!reader.Header().Has(NChangeExchange::EBinaryCdcFlag::NullKeys));
         UNIT_ASSERT_VALUES_EQUAL(reader.Header().Step, 10);
         UNIT_ASSERT_VALUES_EQUAL(reader.Header().TxId, 20);
 
@@ -203,6 +204,67 @@ Y_UNIT_TEST_SUITE(BinaryCdcCompression) {
         const auto stored = ReadPayload(cmd);
         UNIT_ASSERT_VALUES_EQUAL(stored.Codec, static_cast<i64>(NPersQueueCommon::RAW));
         UNIT_ASSERT(stored.Payload.Contains("aaaa"));
+    }
+
+    Y_UNIT_TEST(WritesNullPrimaryKey) {
+        auto table = MakeIntrusive<TUserTable>();
+        table->KeyColumnIds = {1, 3};
+        table->KeyColumnTypes.push_back(NScheme::TTypeInfo(NScheme::NTypeIds::Uint64));
+        table->KeyColumnTypes.push_back(NScheme::TTypeInfo(NScheme::NTypeIds::Utf8));
+        table->Columns.emplace(1, TUserTable::TUserColumn(
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uint64), {}, "k", true));
+        table->Columns.emplace(3, TUserTable::TUserColumn(
+            NScheme::TTypeInfo(NScheme::NTypeIds::Utf8), {}, "s", true));
+        table->Columns.emplace(2, TUserTable::TUserColumn(
+            NScheme::TTypeInfo(NScheme::NTypeIds::Utf8), {}, "value", false));
+        NKikimrSchemeOp::TTableDescription description;
+        table->SetSchema(description);
+
+        const ui64 key = 7;
+        const TString value = "x";
+        NKikimrChangeExchange::TDataChange change;
+        auto& keyCells = *change.MutableKey();
+        keyCells.AddTags(1);
+        keyCells.AddTags(3);
+        keyCells.SetData(TSerializedCellVec::Serialize({TCell::Make(key), TCell()}));
+        auto& upsert = *change.MutableUpsert();
+        upsert.AddTags(2);
+        upsert.SetData(TSerializedCellVec::Serialize({TCell(value.data(), value.size())}));
+
+        auto record = TChangeRecordBuilder(TChangeRecord::EKind::CdcDataChange)
+            .WithOrder(1)
+            .WithSchema(table)
+            .WithBody(change.SerializeAsString())
+            .Build();
+
+        NKikimrClient::TPersQueuePartitionRequest::TCmdWrite cmd;
+        MakeSerializer(NKikimrSchemeOp::ECdcStreamFormatBinary, false)->Serialize(cmd, *record);
+        const auto stored = ReadPayload(cmd);
+
+        NChangeExchange::TBinaryCdcReader reader;
+        TString error;
+        UNIT_ASSERT_C(reader.Parse(stored.Payload, error), error);
+        UNIT_ASSERT(reader.Header().Has(NChangeExchange::EBinaryCdcFlag::NullKeys));
+        UNIT_ASSERT(!reader.Header().Has(NChangeExchange::EBinaryCdcFlag::HasTs));
+
+        const TVector<NScheme::TTypeInfo> keyTypes{
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uint64),
+            NScheme::TTypeInfo(NScheme::NTypeIds::Utf8),
+        };
+        TVector<TCell> keys;
+        UNIT_ASSERT_C(reader.ReadKeys(keyTypes, keys, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 2);
+        ui64 keyValue = 0;
+        UNIT_ASSERT(keys[0].ToValue(keyValue, error));
+        UNIT_ASSERT_VALUES_EQUAL(keyValue, key);
+        UNIT_ASSERT(keys[1].IsNull());
+
+        const TVector<NScheme::TTypeInfo> valueTypes{NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)};
+        TVector<ui16> indexes;
+        TVector<TCell> cells;
+        UNIT_ASSERT_C(reader.ReadIndexed(1, valueTypes, indexes, cells, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(TString(cells[0].AsBuf()), value);
+        UNIT_ASSERT(reader.Rest().empty());
     }
 }
 

@@ -81,6 +81,7 @@ message TEvNodeConfigReversePush {
     reserved 4;
     TCacheUpdate CacheUpdate = 5;
     reserved 6;
+    optional bool SupportsDirectRootQueries = 7; // QueryWorkingRoot bypasses the root operation queue
 }
 
 // Remove node from bound list.

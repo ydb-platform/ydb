@@ -3100,6 +3100,7 @@ message TColumnShardConfig {
     }
 
     optional TCutHistoryConfig CutHistory = 78;
+    optional bool EnableDecimalKeyComparison = 79 [default = false];
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

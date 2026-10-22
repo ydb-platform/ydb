@@ -73,7 +73,11 @@ public:
 
     ui64 GetNecessaryDataMemory(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds,
         const std::vector<std::shared_ptr<TPortionDataAccessor>>& acc) const {
-        return Callback->GetNecessaryDataMemory(columnIds, acc);
+        return Callback->GetNecessaryDataMemory(columnIds, acc, CurrentContext);
+    }
+
+    ui64 GetMemoryForConstructionPreparation(const std::vector<std::shared_ptr<TPortionDataAccessor>>& acc) const {
+        return Callback->GetMemoryForConstructionPreparation(acc);
     }
 
     TPortionsDataFetcher(TRequestInput&& input, std::shared_ptr<IFetchCallback>&& callback, const std::shared_ptr<TEnvironment>& environment,

@@ -59,6 +59,7 @@ void TPortionsDataFetcher::StartFullPortionsFetching(TRequestInput&& input, std:
         steps.emplace_back(std::make_shared<TAskAccessorsStep>());
         steps.emplace_back(std::make_shared<TAskBlobDataResourceStep>(nullptr));
         steps.emplace_back(std::make_shared<TAskDataStep>(nullptr));
+        steps.emplace_back(std::make_shared<TAskConstructionPreparationResourceStep>(nullptr));
         steps.emplace_back(std::make_shared<TAskUsageResourceStep>(nullptr));
         return std::make_shared<TScript>(std::move(steps), "FULL_PORTIONS_FETCHING::" + ::ToString(input.GetConsumer()));
     }();

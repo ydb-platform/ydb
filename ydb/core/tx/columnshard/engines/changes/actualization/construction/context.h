@@ -12,7 +12,7 @@ namespace NKikimr::NOlap::NActualizer {
 
 class TTaskConstructor {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>, MemoryPredictor);
+    YDB_READONLY_DEF(std::shared_ptr<TTTLColumnEngineChanges::TMemoryPredictor>, MemoryPredictor);
     YDB_READONLY_DEF(std::shared_ptr<TTTLColumnEngineChanges>, Task);
     YDB_ACCESSOR(ui64, MemoryUsage, 0);
     YDB_READONLY(ui64, PortionsCount, 0);
@@ -20,7 +20,7 @@ private:
 
 public:
     TTaskConstructor(
-        const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& predictor, const std::shared_ptr<TTTLColumnEngineChanges>& task)
+        const std::shared_ptr<TTTLColumnEngineChanges::TMemoryPredictor>& predictor, const std::shared_ptr<TTTLColumnEngineChanges>& task)
         : MemoryPredictor(predictor)
         , Task(task)
     {

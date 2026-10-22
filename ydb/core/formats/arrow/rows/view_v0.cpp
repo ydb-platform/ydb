@@ -1,4 +1,5 @@
 #include "view.h"
+#include <ydb/core/formats/arrow/key_comparator.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
@@ -113,6 +114,7 @@ TConclusionStatus TSimpleRowViewV0::AddToBuilders(
 class TCompareActor {
 private:
     const std::optional<std::string_view> ItemView;
+    const TKeyColumnComparator Comparator;
     YDB_READONLY(std::partial_ordering, Result, std::partial_ordering::equivalent);
 
 public:
@@ -131,12 +133,7 @@ public:
             Result = std::partial_ordering::greater;
             return false;
         }
-        const int cmp = std::string_view(data, size).compare(*ItemView);
-        if (cmp < 0) {
-            Result = std::partial_ordering::less;
-        } else if (cmp > 0) {
-            Result = std::partial_ordering::greater;
-        }
+        Result = Comparator.Compare({data, size}, *ItemView);
         return false;
     }
 
@@ -156,8 +153,9 @@ public:
         return false;
     }
 
-    TCompareActor(const std::optional<std::string_view>& itemView)
-        : ItemView(itemView) {
+    TCompareActor(const std::optional<std::string_view>& itemView, const TKeyColumnComparator& comparator)
+        : ItemView(itemView)
+        , Comparator(comparator) {
     }
 };
 
@@ -179,11 +177,12 @@ TConclusion<std::partial_ordering> TSimpleRowViewV0::Compare(
         }
     }
 
+    ui32 fieldIndex = 0;
     ui32 idx = columnsCount.value_or((ui32)schema->num_fields());
     while (!itSelf.IsFinished()) {
         AFL_VERIFY(!itItem.IsFinished());
 
-        TCompareActor customActor(itItem.GetCurrentValue());
+        TCompareActor customActor(itItem.GetCurrentValue(), TKeyColumnComparator(*schema->field(fieldIndex++)));
         TGeneralActor<TCompareActor> actor(std::move(customActor));
         Y_UNUSED(itSelf.ApplyActor(actor));
         if (actor.GetCustomActor().GetResult() != std::partial_ordering::equivalent) {

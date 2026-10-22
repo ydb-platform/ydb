@@ -39,8 +39,15 @@ private:
 
     std::vector<TPortionForEviction> PortionsToEvict;
     const NActualizer::TRWAddress RWAddress;
+    bool HasKeyRebuild = false;
+    std::vector<std::pair<TPortionInfo::TConstPtr, TWritePortionInfoWithBlobsResult>> RewrittenPortions;
 
 protected:
+    void DoCompile(TFinalizationContext& context) override;
+    void DoOnAfterCompile(const TFinalizationContext& context) override;
+    void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
+    void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
+
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
     virtual void DoDebugString(TStringOutput& out) const override;
@@ -51,13 +58,13 @@ protected:
         auto predictor = BuildMemoryPredictor();
         ui64 result = 0;
         for (auto& p : PortionsToEvict) {
-            result = predictor->AddPortion(p.GetPortionInfo());
+            result = predictor->AddPortion(p.GetPortionInfo(), p.GetFeatures());
         }
         return result;
     }
 
     virtual NDataLocks::ELockCategory GetLockCategory() const override {
-        return NDataLocks::ELockCategory::Actualization;
+        return HasKeyRebuild ? NDataLocks::ELockCategory::Any : NDataLocks::ELockCategory::Actualization;
     }
 
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
@@ -83,27 +90,50 @@ protected:
     }
 
 public:
-    class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
+    ui64 CalcMemoryForConstruction(const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors,
+        const NBlobOperations::NRead::TCompositeReadBlobs* blobs = nullptr) const override;
+
+    ui64 GetMemoryForConstructionPreparation(const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors) const override;
+
+    ui32 GetWritePortionsCount() const override {
+        return TBase::GetWritePortionsCount() + RewrittenPortions.size();
+    }
+
+    TWritePortionInfoWithBlobsResult* GetWritePortionInfo(const ui32 index) override {
+        const auto appended = TBase::GetWritePortionsCount();
+        return index < appended ? TBase::GetWritePortionInfo(index) : &RewrittenPortions.at(index - appended).second;
+    }
+
+    class TMemoryPredictor {
     private:
         ui64 SumBlobsMemory = 0;
-        ui64 MaxRawMemory = 0;
+        ui64 SumOutputMemory = 0;
+        ui64 MaxWorkingMemory = 0;
 
     public:
-        virtual ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo) override {
-            if (MaxRawMemory < portionInfo->GetTotalRawBytes()) {
-                MaxRawMemory = portionInfo->GetTotalRawBytes();
-            }
-            SumBlobsMemory += portionInfo->GetTotalBlobBytes();
-            return SumBlobsMemory + MaxRawMemory;
+        ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo, const TPortionEvictionFeatures& features,
+            const TPortionDataAccessor* accessor = nullptr, const NBlobOperations::NRead::TCompositeReadBlobs* blobs = nullptr);
+
+        ui64 GetConstructionMemory() const {
+            return SumOutputMemory + MaxWorkingMemory;
+        }
+
+        ui64 PredictMemory(const TPortionInfo::TConstPtr& portionInfo, const TPortionEvictionFeatures& features) const {
+            auto copy = *this;
+            return copy.AddPortion(portionInfo, features);
         }
     };
+
+    bool IsKeyRebuild() const {
+        return HasKeyRebuild;
+    }
 
     const NActualizer::TRWAddress& GetRWAddress() const {
         return RWAddress;
     }
 
-    static std::shared_ptr<IMemoryPredictor> BuildMemoryPredictor() {
-        return std::make_shared<TMemoryPredictorSimplePolicy>();
+    static std::shared_ptr<TMemoryPredictor> BuildMemoryPredictor() {
+        return std::make_shared<TMemoryPredictor>();
     }
 
     virtual bool NeedConstruction() const override {
@@ -115,7 +145,9 @@ public:
     }
 
     void AddPortionToEvict(const TPortionInfo::TConstPtr& info, TPortionEvictionFeatures&& features) {
-        AFL_VERIFY(!info->HasRemoveSnapshot());
+        AFL_VERIFY(!info->HasRemoveSnapshot() || features.GetRebuildDecimalPrimaryKey());
+        AFL_VERIFY(PortionsToEvict.empty() || HasKeyRebuild == features.GetRebuildDecimalPrimaryKey());
+        HasKeyRebuild = features.GetRebuildDecimalPrimaryKey();
         PortionsToEvict.emplace_back(info, std::move(features));
         PortionsToAccess.emplace_back(info);
     }

@@ -8,6 +8,10 @@ namespace NKikimr::NOlap::NActualizer {
 
 class IActualizer {
 protected:
+    virtual bool CanActualizeRemovedPortion(const TPortionInfo&) const {
+        return false;
+    }
+
     virtual void DoAddPortion(const TPortionInfo& info, const TAddExternalContext& context) = 0;
     virtual void DoRemovePortion(const ui64 portionId) = 0;
     virtual void DoExtractTasks(
@@ -23,7 +27,7 @@ public:
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& info, const TAddExternalContext& context) {
         AFL_VERIFY(info);
-        if (info->HasRemoveSnapshot()) {
+        if (info->HasRemoveSnapshot() && !CanActualizeRemovedPortion(*info)) {
             return;
         }
         return DoAddPortion(*info, context);

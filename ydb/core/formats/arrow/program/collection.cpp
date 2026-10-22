@@ -234,6 +234,16 @@ std::shared_ptr<NArrow::TGeneralContainer> TAccessorsCollection::ToGeneralContai
         }
         return colName;
     };
+    const auto makeField = [&](const ui32 columnId, const std::shared_ptr<arrow::DataType>& type) {
+        auto field = std::make_shared<arrow::Field>(predColumnName(columnId), type);
+        if (resolver) {
+            const auto original = resolver->GetColumnFieldOptional(columnId);
+            if (original && original->type()->Equals(type)) {
+                field = field->WithMetadata(original->metadata());
+            }
+        }
+        return field;
+    };
     std::vector<std::shared_ptr<arrow::Field>> fields;
     std::vector<std::shared_ptr<IChunkedArray>> arrays;
     if (ColumnIdsSequence.size()) {
@@ -242,11 +252,11 @@ std::shared_ptr<NArrow::TGeneralContainer> TAccessorsCollection::ToGeneralContai
                 continue;
             }
             if (auto accessor = GetAccessorOptional(i)) {
-                fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i), accessor->GetDataType()));
+                fields.emplace_back(makeField(i, accessor->GetDataType()));
                 arrays.emplace_back(accessor);
             } else {
                 const auto& scalar = GetConstantScalarVerified(i);
-                fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i), scalar->type));
+                fields.emplace_back(makeField(i, scalar->type));
                 arrays.emplace_back(std::make_shared<NAccessor::TTrivialArray>(scalar));
             }
         }
@@ -255,7 +265,7 @@ std::shared_ptr<NArrow::TGeneralContainer> TAccessorsCollection::ToGeneralContai
             if (columnIds && !columnIds->contains(i.first)) {
                 continue;
             }
-            fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i.first), i.second->GetDataType()));
+            fields.emplace_back(makeField(i.first, i.second->GetDataType()));
             arrays.emplace_back(i.second.GetData());
         }
     }

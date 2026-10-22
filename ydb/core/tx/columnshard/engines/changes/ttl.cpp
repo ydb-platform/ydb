@@ -8,6 +8,8 @@
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION
+
 namespace NKikimr::NOlap {
 
 void TTTLColumnEngineChanges::DoDebugString(TStringOutput& out) const {
@@ -31,6 +33,10 @@ void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChan
         for (auto&& i : GetPortionsToRemove().GetPortions()) {
             AFL_VERIFY(restoreIndexAddresses[i.first.GetPathId()].emplace(i.first.GetPortionId()).second);
         }
+        for (const auto& [original, replacement] : RewrittenPortions) {
+            Y_UNUSED(replacement);
+            restoreIndexAddresses[original->GetPathId()].emplace(original->GetPortionId());
+        }
         engine.ReturnToIndexes(restoreIndexAddresses);
     }
 }
@@ -41,7 +47,8 @@ std::optional<TWritePortionInfoWithBlobsResult> TTTLColumnEngineChanges::UpdateE
     auto& evictFeatures = info.GetFeatures();
     auto blobSchema = portionInfo.GetSchema(context.SchemaVersions);
     Y_ABORT_UNLESS(portionInfo.GetMeta().GetTierName() != evictFeatures.GetTargetTierName() ||
-                   blobSchema->GetVersion() < evictFeatures.GetTargetScheme()->GetVersion());
+                   blobSchema->GetVersion() < evictFeatures.GetTargetScheme()->GetVersion() ||
+                   portionInfo.GetMeta().GetRebuildDecimalPrimaryKey());
 
     auto portionWithBlobs = TReadPortionInfoWithBlobs::RestorePortion(
         GetPortionDataAccessor(info.GetPortionInfo()->GetPortionId()), srcBlobs, blobSchema->GetIndexInfo());
@@ -57,16 +64,64 @@ NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructi
 
     for (auto&& info : PortionsToEvict) {
         if (auto pwb = UpdateEvictedPortion(info, Blobs, context)) {
-            AddPortionToRemove(info.GetPortionInfo(), false);
             for (const auto& x : pwb->MutableBlobs()) {
                 AFL_VERIFY(x.GetOperator()->GetStorageId() != IStoragesManager::LocalMetadataStorageId);
             }
-            AppendedPortions.emplace_back(std::move(*pwb));
+            if (info.GetFeatures().GetRebuildDecimalPrimaryKey()) {
+                RewrittenPortions.emplace_back(info.GetPortionInfo(), std::move(*pwb));
+            } else {
+                AddPortionToRemove(info.GetPortionInfo(), false);
+                AppendedPortions.emplace_back(std::move(*pwb));
+            }
         }
     }
 
     PortionsToEvict.clear();
     return TConclusionStatus::Success();
+}
+
+void TTTLColumnEngineChanges::DoCompile(TFinalizationContext& context) {
+    NoAppendIsCorrect = !RewrittenPortions.empty();
+    TBase::DoCompile(context);
+}
+
+void TTTLColumnEngineChanges::DoOnAfterCompile(const TFinalizationContext& context) {
+    TBase::DoOnAfterCompile(context);
+    for (auto& [original, replacement] : RewrittenPortions) {
+        replacement.FinalizePortionConstructor(context.GetSnapshot());
+        AFL_VERIFY(original->GetAddress() == replacement.GetPortionResult().GetPortionInfo().GetAddress());
+    }
+}
+
+void TTTLColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
+    TBase::DoWriteIndexOnExecute(self, context);
+    for (auto& [original, replacement] : RewrittenPortions) {
+        AFL_VERIFY(original->GetMeta().HasIncompatibleDecimalKeyOrder());
+        const auto& old = GetPortionDataAccessor(original->GetPortionId());
+        old.RemoveFromDatabase(context.DBWrapper);
+        const auto schema = original->GetSchema(context.EngineLogs.GetVersionedIndex());
+        replacement.GetPortionResult().SaveToDatabase(context.DBWrapper, schema->GetIndexInfo().GetPKFirstColumnId(), false);
+        if (self) {
+            THashMap<TString, THashSet<TUnifiedBlobId>> blobs;
+            old.FillBlobIdsByStorage(blobs, context.EngineLogs.GetVersionedIndex());
+            for (const auto& [storage, ids] : blobs) {
+                auto action = BlobsAction.GetRemoving(storage);
+                for (const auto& id : ids) {
+                    action->DeclareRemove((TTabletId)self->TabletID(), id);
+                }
+            }
+        }
+    }
+}
+
+void TTTLColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+    TBase::DoWriteIndexOnComplete(self, context);
+    for (auto& [original, replacement] : RewrittenPortions) {
+        context.EngineLogs.ReplacePortion(original, replacement.GetPortionResultPtr());
+    }
+    if (!RewrittenPortions.empty()) {
+        YDB_LOG_NOTICE("Decimal primary key repair applied", {"portions", RewrittenPortions.size()});
+    }
 }
 
 NColumnShard::ECumulativeCounters TTTLColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {

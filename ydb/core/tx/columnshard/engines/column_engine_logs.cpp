@@ -764,6 +764,24 @@ void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionDataAcces
     SignalCounters.OnPortionAdded((TAppData::TimeProvider->Now() - appendPortionStart));
 }
 
+void TColumnEngineForLogs::ReplacePortion(const TPortionInfo::TConstPtr& original, const std::shared_ptr<TPortionDataAccessor>& replacement) {
+    AFL_VERIFY(original->GetAddress() == replacement->GetPortionInfo().GetAddress());
+    AFL_VERIFY(original->GetRemoveSnapshotOptional() == replacement->GetPortionInfo().GetRemoveSnapshotOptional());
+    if (original->HasRemoveSnapshot()) {
+        auto it = CleanupPortions.find(original->GetRemoveSnapshotVerified().GetPlanInstant());
+        AFL_VERIFY(it != CleanupPortions.end());
+        const auto removed = std::erase_if(it->second, [&](const auto& p) {
+            return p->GetAddress() == original->GetAddress();
+        });
+        AFL_VERIFY(removed == 1);
+        if (it->second.empty()) {
+            CleanupPortions.erase(it);
+        }
+    }
+    AFL_VERIFY(ErasePortion(*original));
+    AppendPortion(replacement);
+}
+
 bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool updateStats) {
     const ui64 portion = portionInfo.GetPortionId();
     auto& spg = MutableGranuleVerified(portionInfo.GetPathId());
@@ -842,7 +860,6 @@ void TColumnEngineForLogs::DoRegisterTable(const TInternalPathId pathId) {
     std::shared_ptr<TGranuleMeta> g = GranulesStorage->RegisterTable(pathId, SignalCounters.RegisterGranuleDataCounters(), GetVersionedIndex());
     if (ActualizationStarted) {
         g->StartActualizationIndex();
-        g->RefreshScheme();
     }
 }
 

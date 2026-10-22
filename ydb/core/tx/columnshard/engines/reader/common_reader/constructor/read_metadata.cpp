@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/iterator/constructors.h>
@@ -48,6 +49,15 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
         }
         SourcesConstructor->InitCursor(nullptr);
         return TConclusionStatus::Success();
+    }
+
+    if (const auto* table = dynamic_cast<const TUserTableAccessor*>(read.GetTableMetadataAccessor().get())) {
+        const auto pathId = table->GetPathIdVerified().GetInternalPathId();
+        const auto granule = owner->GetIndexAs<TColumnEngineForLogs>().GetGranuleOptional(pathId);
+        if (granule && granule->HasIncompatibleDecimalKeyPortions(read.GetSnapshot())) {
+            return TConclusionStatus::Fail(
+                "Decimal primary key order changed: run the RebuildDecimalPrimaryKey repair and wait for actualization");
+        }
     }
 
     ITableMetadataAccessor::TSelectMetadataContext context(

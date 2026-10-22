@@ -102,11 +102,14 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto(
             break;
     }
 
-    portionMeta.MutablePrimaryKeyBordersV1()->SetFirst(FirstPKRow.GetData());
-    portionMeta.MutablePrimaryKeyBordersV1()->SetLast(LastPKRow.GetData());
+    portionMeta.SetRebuildDecimalPrimaryKey(RebuildDecimalPrimaryKey);
+    portionMeta.SetDecimalKeyOrder(DecimalKeyOrder);
+    portionMeta.MutablePrimaryKeyBordersV1()->SetFirst(StoredPrimaryKeys ? StoredPrimaryKeys->GetFirst().GetData() : FirstPKRow.GetData());
+    portionMeta.MutablePrimaryKeyBordersV1()->SetLast(StoredPrimaryKeys ? StoredPrimaryKeys->GetLast().GetData() : LastPKRow.GetData());
     if (!HasAppData() || AppDataVerified().ColumnShardConfig.GetPortionMetaV0Usage()) {
         portionMeta.SetPrimaryKeyBorders(
-            NArrow::TFirstLastSpecialKeys(FirstPKRow.GetData(), LastPKRow.GetData(), PKSchema).SerializePayloadToString());
+            StoredPrimaryKeys ? StoredPrimaryKeys->SerializePayloadToString()
+                              : NArrow::TFirstLastSpecialKeys(FirstPKRow.GetData(), LastPKRow.GetData(), PKSchema).SerializePayloadToString());
     }
 
     RecordSnapshotMin.SerializeToProto(*portionMeta.MutableRecordSnapshotMin());
@@ -259,7 +262,8 @@ ui64 TPortionMeta::GetMetadataMemorySize() const {
 }
 
 ui64 TPortionMeta::GetMemorySize() const {
-    return sizeof(TPortionMeta) + FirstPKRow.GetMemorySize() + LastPKRow.GetMemorySize();
+    return sizeof(TPortionMeta) + FirstPKRow.GetMemorySize() + LastPKRow.GetMemorySize() +
+           (StoredPrimaryKeys ? StoredPrimaryKeys->GetMemorySize() : 0);
 }
 
 ui64 TPortionMeta::GetDataSize() const {

@@ -65,6 +65,10 @@ public:
         return *Blobs;
     }
 
+    const NBlobOperations::NRead::TCompositeReadBlobs* GetBlobsOptional() const {
+        return Blobs ? &*Blobs : nullptr;
+    }
+
     NBlobOperations::NRead::TCompositeReadBlobs ExtractBlobs() {
         AFL_VERIFY(!!Blobs);
         auto result = std::move(*Blobs);
@@ -129,7 +133,11 @@ public:
     virtual ~IFetchCallback() = default;
 
     virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& /*columnIds*/,
-        const std::vector<std::shared_ptr<TPortionDataAccessor>>& /*acc*/) const {
+        const std::vector<std::shared_ptr<TPortionDataAccessor>>& /*acc*/, const TCurrentContext& /*context*/) const {
+        return 0;
+    }
+
+    virtual ui64 GetMemoryForConstructionPreparation(const std::vector<std::shared_ptr<TPortionDataAccessor>>& /*acc*/) const {
         return 0;
     }
 

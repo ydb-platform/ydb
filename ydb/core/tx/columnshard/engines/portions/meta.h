@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/formats/arrow/key_comparator.h>
 #include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
@@ -59,6 +60,8 @@ private:
     std::shared_ptr<arrow::Schema> PKSchema;
     NArrow::TSimpleRowContent FirstPKRow;
     NArrow::TSimpleRowContent LastPKRow;
+    // Persist original bounds until the rows have been reordered.
+    std::shared_ptr<const NArrow::TFirstLastSpecialKeys> StoredPrimaryKeys;
     YDB_READONLY_DEF(TString, TierName);
     YDB_READONLY(ui32, DeletionsCount, 0);
     YDB_READONLY(ui32, CompactionLevel, 0);
@@ -69,6 +72,8 @@ private:
     YDB_READONLY(ui32, IndexBlobBytes, 0);
     YDB_READONLY(ui32, NumSlices, 1);
     YDB_READONLY_DEF(std::optional<ui32>, BsIndexBlobBytes);
+    YDB_READONLY(bool, RebuildDecimalPrimaryKey, false);
+    YDB_READONLY(bool, DecimalKeyOrder, false);
 
     friend class TPortionMetaConstructor;
     friend class TPortionInfo;
@@ -78,6 +83,10 @@ private:
     TSnapshot RecordSnapshotMax;
 
 public:
+    bool HasIncompatibleDecimalKeyOrder() const {
+        return NArrow::TKeyComparator::HasDecimalComparison(*PKSchema) != DecimalKeyOrder;
+    }
+
     void FullValidation() const;
 
     NArrow::TSimpleRow IndexKeyStart() const;

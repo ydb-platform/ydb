@@ -2,6 +2,7 @@
 #include "common.h"
 #include "meta.h"
 
+#include <ydb/core/formats/arrow/key_comparator.h>
 #include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
@@ -13,6 +14,7 @@ struct TIndexInfo;
 class TPortionMetaConstructor {
 private:
     std::optional<NArrow::TFirstLastSpecialKeys> FirstAndLastPK;
+    std::shared_ptr<const NArrow::TFirstLastSpecialKeys> StoredPrimaryKeys;
     std::optional<TString> TierName;
     std::optional<TSnapshot> RecordSnapshotMin;
     std::optional<TSnapshot> RecordSnapshotMax;
@@ -27,6 +29,8 @@ private:
     std::optional<ui32> NumSlices;
 
     std::optional<ui32> DeletionsCount;
+    bool RebuildDecimalPrimaryKey = false;
+    bool DecimalKeyOrder = false;
 
     friend class TPortionInfoConstructor;
     friend class TPortionAccessorConstructor;
@@ -36,6 +40,13 @@ private:
 public:
     TPortionMetaConstructor() = default;
     TPortionMetaConstructor(const TPortionMeta& meta);
+
+    void ResetPrimaryKeys(const NArrow::TFirstLastSpecialKeys& keys) {
+        FirstAndLastPK = keys;
+        StoredPrimaryKeys.reset();
+        RebuildDecimalPrimaryKey = false;
+        DecimalKeyOrder = NArrow::TKeyComparator::HasDecimalComparison(*keys.GetSchema());
+    }
 
     const NArrow::TFirstLastSpecialKeys& GetFirstAndLastPK() const {
         AFL_VERIFY(FirstAndLastPK);

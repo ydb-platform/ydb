@@ -393,6 +393,9 @@ namespace NKikimr::NStorage {
         auto *details = config->MutableClusterStateDetails();
         details->SetBscConversionPending(true);
         *details->MutablePileRegistry() = NBridge::MakeImpliedPileRegistry(bridgeConfig);
+        // nodes of older versions don't handle inline piles (their VDisks abort, their bridge proxies loop), so they
+        // must neither get the converted config nor connect to the ones having it
+        details->MutablePileRegistry()->SetRequiredFeatureLevel(BridgeFeatureLevel);
 
         // make every static group an inline pile of itself; this requires generation change to make proxies and VDisks
         // pick up new group info

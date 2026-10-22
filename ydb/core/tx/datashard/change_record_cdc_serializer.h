@@ -1,6 +1,7 @@
 #pragma once
 
 #include "datashard_user_table.h"
+#include "cdc_payload_compression.h"
 
 namespace NKikimrClient {
     class TPersQueuePartitionRequest_TCmdWrite;
@@ -29,6 +30,7 @@ struct TChangeRecordSerializerOpts {
     bool Debug = false;
     bool UserSIDs = false;
     bool TraceIds = false;
+    ECdcPayloadCompression PayloadCompression = ECdcPayloadCompression::Raw;
 
     static TChangeRecordSerializerOpts DebugOpts();
 };

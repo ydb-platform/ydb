@@ -35,6 +35,12 @@ class TBaseSerializer: public IChangeRecordSerializer {
     void SerializeDataChange(TCmdWrite& cmd, const TChangeRecord& record) {
         auto data = MakeDataChunk();
         FillDataChunk(data, record);
+        const auto originalSize = data.GetData().size();
+        if (auto compressed = CompressCdcPayload(data.GetData(), Opts.PayloadCompression)) {
+            data.SetData(std::move(*compressed));
+            data.SetCodec(Ydb::Topic::CODEC_GZIP - 1);
+            cmd.SetUncompressedSize(static_cast<i32>(originalSize));
+        }
         cmd.SetData(data.SerializeAsString());
     }
 

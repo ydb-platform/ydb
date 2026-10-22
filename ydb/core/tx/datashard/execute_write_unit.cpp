@@ -508,20 +508,29 @@ public:
                     (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
                         && userDb.GetCollectAffectedRows());
 
-                // We may need to read from a CDC scan snapshot, in this case we include historical
-                // pages in prefetch.
-                bool needsMvccRead = false;
-                for (const auto& [pathId, stream] : userTable.CdcStreams) {
-                    if (stream.State == NKikimrSchemeOp::ECdcStreamStateScan
-                        && DataShard.GetCdcStreamScanManager().Has(pathId)) {
-                        needsMvccRead = true;
-                        break;
-                    }
-                }
-
-                if (operationNeedsRead || needsMvccRead || userDb.NeedToReadBeforeWrite(fullTableId)) {
+                if (operationNeedsRead || userDb.NeedToReadBeforeWrite(fullTableId)) {
                     for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx) {
                         FillKey(scheme, userTable, tableInfo, validatedOperation, rowIdx, key);
+
+                        // Precharge history only for initial CDC snapshot reads
+                        // beyond the persisted scan progress.
+                        bool needsMvccRead = false;
+                        const auto keyCells = matrix.GetRow(rowIdx).Slice(0, userTable.KeyColumnTypes.size());
+                        for (const auto& [pathId, stream] : userTable.CdcStreams) {
+                            if (stream.State != NKikimrSchemeOp::ECdcStreamStateScan) {
+                                continue;
+                            }
+                            if (const auto* info = DataShard.GetCdcStreamScanManager().Get(pathId)) {
+                                Y_ENSURE(!info->LastKey || info->LastKey->GetCells().size() == keyCells.size());
+                                if (!info->LastKey ||
+                                    CompareTypedCellVectors(keyCells.data(), info->LastKey->GetCells().data(),
+                                        userTable.KeyColumnTypes.data(), keyCells.size()) > 0)
+                                {
+                                    needsMvccRead = true;
+                                    break;
+                                }
+                            }
+                        }
                         userDb.PrechargeRow(fullTableId, key, needsMvccRead);
                     }
                 }

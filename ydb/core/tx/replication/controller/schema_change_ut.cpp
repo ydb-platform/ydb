@@ -2,6 +2,10 @@
 #include "dst_alterer.h"
 #include "dst_creator.h"
 #include "dst_schema_changer.h"
+#include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/core/tx/replication/service/worker.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -504,7 +508,9 @@ TReplicationTestInfo StartReplication(
         .DiscoveryEndpoint(env.GetEndpoint())
         .Database(env.GetDatabase()));
     auto session = env.RunCall([&] {
-        return client.CreateSession().GetValueSync().GetSession();
+        const auto created = client.CreateSession().GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        return created.GetSession();
     });
     for (int i = 1; i <= targetCount; ++i) {
         if (withIndex) {
@@ -3796,4 +3802,227 @@ Y_UNIT_TEST_SUITE(IndexBuild) {
     }
 
 }
+
+Y_UNIT_TEST_SUITE(PayloadCompressionReplication) {
+    Y_UNIT_TEST(SchemaBarrierAndHeartbeat) {
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        Y_DEFER {
+            try {
+                env.ShutdownGrpc();
+            } catch (const std::exception& error) {
+                Cerr << "Compression recovery cleanup failed: " << error.what() << Endl;
+            } catch (...) {
+                Cerr << "Compression recovery cleanup failed with an unknown exception" << Endl;
+            }
+        };
+        auto& runtime = env.GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_TRACE);
+        auto runTelemetry = runtime.AddObserver<TEvService::TEvRunWorker>([&](auto& ev) {
+            Cerr << "Compression worker run: " << ev->Get()->Record.GetWorker().ShortDebugString() << Endl;
+        });
+        auto readerTelemetry = runtime.AddObserver<NService::TEvWorker::TEvReaderStarted>([&](auto& ev) {
+            Cerr << "Compression reader started: worker=" << ev->GetRecipientRewrite()
+                << " offset=" << ev->Get()->CommittedOffset << Endl;
+        });
+        auto applyTelemetry = runtime.AddObserver<TEvDataShard::TEvApplyReplicationChangesResult>([&](auto& ev) {
+            Cerr << "Compression actual apply: " << ev->Get()->Record.ShortDebugString() << Endl;
+        });
+        auto commitTelemetry = runtime.AddObserver<TEvYdbProxy::TEvCommitOffsetRequest>([&](auto& ev) {
+            Cerr << "Compression actual source checkpoint: " << std::get<0>(ev->Get()->GetArgs())
+                << " offset=" << std::get<3>(ev->Get()->GetArgs()) << Endl;
+        });
+        // Blocking SDK/native calls must run outside DispatchEvents predicates.
+        const auto pollCompressionState = [&](const TString& description, auto&& condition, TDuration timeout) {
+            const auto deadline = runtime.GetCurrentTime() + timeout;
+            while (!condition()) {
+                UNIT_ASSERT_C(runtime.GetCurrentTime() < deadline, description);
+                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            }
+        };
+        runtime.GetAppData().FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
+        runtime.GetAppData().DataShardConfig.SetCdcPayloadCompression(
+            NKikimrConfig::TDataShardConfig::CDC_PAYLOAD_COMPRESSION_GZIP);
+        // INITIAL_SCAN=false attaches to an existing destination.
+        CreateSourceTable(env, "replica1");
+        const auto info = StartReplication(env, 1, "root@builtin", true, false,
+            NKikimrSchemeOp::EIndexTypeGlobal, false, false);
+        NYdb::NTable::TTableClient client(env.GetDriver());
+        auto session = env.RunCall([&] {
+            const auto created = client.CreateSession().GetValueSync();
+            UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+            return created.GetSession();
+        });
+        const auto execute = [&](const TString& query) {
+            return env.RunCall([&] {
+                auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                return result;
+            });
+        };
+        pollCompressionState("schema-aware replication stream", [&] {
+            const auto desc = env.GetDescription("/Root/table1");
+            return desc.GetPathDescription().GetTable().GetCdcStreams().size() == 1;
+        }, TDuration::Seconds(60));
+        // Native path visibility precedes consumer setup and the controller's
+        // durable source-ready result. Resume only after that result commits.
+        pollCompressionState("durable source stream readiness before resume", [&] {
+            const auto state = DescribeReplication(env, info);
+            UNIT_ASSERT_C(!state->Get()->Record.GetState().HasError(), state->Get()->Record.DebugString());
+            if (state->Get()->Record.TargetsSize() != 1) {
+                return false;
+            }
+            const auto target = state->Get()->Record.GetTargets(0).GetId();
+            const auto capability = ReadStreamSchemaChanges(env, info.ControllerId, TWorkerId(1, target, 0));
+            if (!capability) {
+                return false;
+            }
+            UNIT_ASSERT(*capability);
+            return true;
+        }, TDuration::Seconds(60));
+        pollCompressionState("actual paused replication before resume", [&] {
+            const auto paused = DescribeReplication(env, info);
+            UNIT_ASSERT_C(!paused->Get()->Record.GetState().HasError(), paused->Get()->Record.DebugString());
+            return paused->Get()->Record.GetState().HasPaused();
+        }, TDuration::Seconds(60));
+        auto resume = MakeAlterReplicationRequest(info, 2742901);
+        resume->Record.MutableSwitchState()->MutableStandBy();
+        const auto resumed = env.Send<TEvController::TEvAlterReplicationResult>(info.ControllerId, std::move(resume));
+        UNIT_ASSERT(resumed->Get()->Record.GetStatus() == NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+        const TString large(16384, 'Q');
+        TVector<ui32> dataCodecs;
+        auto writes = runtime.AddObserver<NPQ::TEvPartitionWriter::TEvWriteRequest>([&](auto& ev) {
+            for (const auto& cmd : ev->Get()->Record.GetPartitionRequest().GetCmdWrite()) {
+                NKikimrPQClient::TDataChunk chunk;
+                if (cmd.HasData()) {
+                    UNIT_ASSERT(chunk.ParseFromString(cmd.GetData()));
+                    dataCodecs.push_back(chunk.GetCodec());
+                } else if (cmd.HasSchemaChange()) {
+                    UNIT_ASSERT(chunk.ParseFromString(cmd.GetSchemaChange().GetData()));
+                    UNIT_ASSERT_VALUES_EQUAL(chunk.GetCodec(), 0);
+                } else if (cmd.HasHeartbeat()) {
+                    UNIT_ASSERT(chunk.ParseFromString(cmd.GetHeartbeat().GetData()));
+                    UNIT_ASSERT_VALUES_EQUAL(chunk.GetCodec(), 0);
+                }
+            }
+        });
+        execute(TStringBuilder() << "UPSERT INTO `/Root/table1` (key,value) VALUES (1,'" << large << "');");
+        execute("UPSERT INTO `/Root/table1` (key,value) VALUES (2,'small');");
+        pollCompressionState("old-schema rows globally committed", [&] {
+            const auto state = DescribeReplication(env, info);
+            UNIT_ASSERT_C(!state->Get()->Record.GetState().HasError(), state->Get()->Record.DebugString());
+            const auto rows = execute("SELECT key FROM `/Root/replica1` ORDER BY key;").GetResultSet(0).RowsCount();
+            const auto destination = env.GetDescription("/Root/replica1");
+            Cerr << "Compression initial-row snapshot: time=" << runtime.GetCurrentTime()
+                << " rows=" << rows << " data_writes=" << dataCodecs.size()
+                << " replication=" << destination.GetPathDescription().GetTable().GetReplicationConfig().ShortDebugString()
+                << " controller=" << state->Get()->Record.ShortDebugString() << Endl;
+            return rows == 2;
+        }, TDuration::Seconds(120));
+        THolder<IEventHandle> heldBarrier;
+        TActorId worker;
+        TActorId recreatedWorker;
+        TRowVersion barrierVersion;
+        ui64 barrierOffset = 0;
+        bool committedBeyondBarrier = false;
+        TVector<std::pair<TActorId, ui64>> readerStarts;
+        bool schemaApplied = false;
+        bool resolvedAfterSchema = false;
+        auto barrier = runtime.AddObserver<NService::TEvWorker::TEvSchemaChange>([&](auto& ev) {
+            if (!heldBarrier && !worker) {
+                worker = ev->GetRecipientRewrite();
+                const auto& version = ev->Get()->Schema.GetVersion();
+                barrierVersion = TRowVersion(version.GetStep(), version.GetTxId());
+                barrierOffset = ev->Get()->Offset;
+                heldBarrier.Reset(ev.Release());
+            } else if (worker && ev->GetRecipientRewrite() != worker) {
+                recreatedWorker = ev->GetRecipientRewrite();
+            }
+        });
+        auto applied = runtime.AddObserver<NService::TEvWorker::TEvSchemaChangeApplied>([&](auto&) {
+            schemaApplied = true;
+        });
+        auto started = runtime.AddObserver<NService::TEvWorker::TEvReaderStarted>([&](auto& ev) {
+            readerStarts.emplace_back(ev->GetRecipientRewrite(), ev->Get()->CommittedOffset);
+        });
+        auto commits = runtime.AddObserver<TEvYdbProxy::TEvCommitOffsetRequest>([&](auto& ev) {
+            const auto& args = ev->Get()->GetArgs();
+            if (std::get<0>(args).starts_with("/Root/table1/") && worker) {
+                const auto offset = std::get<3>(args);
+                if (!schemaApplied) {
+                    UNIT_ASSERT(offset <= barrierOffset);
+                }
+                committedBeyondBarrier |= schemaApplied && offset > barrierOffset;
+            }
+        });
+        auto heartbeats = runtime.AddObserver<TEvService::TEvHeartbeat>([&](auto& ev) {
+            const auto& version = ev->Get()->Record.GetVersion();
+            const TRowVersion resolved(version.GetStep(), version.GetTxId());
+            if (worker && !schemaApplied) {
+                UNIT_ASSERT(resolved < barrierVersion);
+            }
+            resolvedAfterSchema |= schemaApplied && resolved >= barrierVersion;
+        });
+        const auto altered = env.RunCall([&] {
+            return session.ExecuteSchemeQuery("ALTER TABLE `/Root/table1` ADD COLUMN extra Uint64;").GetValueSync();
+        });
+        UNIT_ASSERT_C(altered.IsSuccess(), altered.GetIssues().ToString());
+        execute(TStringBuilder() << "UPSERT INTO `/Root/table1` (key,value,extra) VALUES (3,'" << large << "',17);");
+        runtime.WaitFor("worker stopped at real source schema barrier", [&] { return bool(heldBarrier); }, TDuration::Seconds(60));
+        UNIT_ASSERT(!schemaApplied);
+        const auto oldRows = execute("SELECT key FROM `/Root/replica1` ORDER BY key;");
+        UNIT_ASSERT_VALUES_EQUAL(oldRows.GetResultSet(0).RowsCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable().ColumnsSize(), 2);
+        // Crash the worker and report its transient disappearance to the real
+        // service, which asks the real controller to recreate it. No progress
+        // acknowledgement or successful apply is synthesized.
+        env.SendAsync(worker, new TEvents::TEvPoison());
+        runtime.WaitFor("old compression worker retired", [&] { return !runtime.FindActor(worker); }, TDuration::Seconds(30));
+        const auto service = runtime.GetLocalServiceId(MakeReplicationServiceId(runtime.GetNodeId(0)));
+        runtime.Send(new IEventHandle(service, worker,
+            new NService::TEvWorker::TEvGone(NService::TEvWorker::TEvGone::UNAVAILABLE, "injected worker restart at schema barrier")));
+        heldBarrier.Reset();
+        runtime.WaitFor("schema barrier applied after worker recreation", [&] { return schemaApplied; }, TDuration::Seconds(120));
+        runtime.WaitFor("resolved heartbeat after applied schema", [&] { return resolvedAfterSchema; }, TDuration::Seconds(120));
+        UNIT_ASSERT(recreatedWorker);
+        UNIT_ASSERT_VALUES_UNEQUAL(recreatedWorker, worker);
+        bool resumedBeforeBarrier = false;
+        for (const auto& [actor, offset] : readerStarts) {
+            if (actor == recreatedWorker) {
+                UNIT_ASSERT(offset <= barrierOffset);
+                resumedBeforeBarrier = true;
+            }
+        }
+        UNIT_ASSERT(resumedBeforeBarrier);
+        runtime.WaitFor("source checkpoint passed applied schema", [&] { return committedBeyondBarrier; }, TDuration::Seconds(120));
+        std::optional<NYdb::TResultSet> rows;
+        pollCompressionState("all rows applied with new schema", [&] {
+            rows.emplace(execute("SELECT key,value,extra FROM `/Root/replica1` ORDER BY key;").GetResultSet(0));
+            return rows->RowsCount() == 3;
+        }, TDuration::Seconds(120));
+        NYdb::TResultSetParser parser(*rows);
+        for (ui32 key = 1; key <= 3; ++key) {
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetOptionalUint32().value(), key);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetOptionalUtf8().value(), key == 2 ? TString("small") : large);
+            const auto extra = parser.ColumnParser("extra").GetOptionalUint64();
+            if (key == 3) {
+                UNIT_ASSERT(extra);
+                UNIT_ASSERT_VALUES_EQUAL(*extra, 17);
+            } else {
+                UNIT_ASSERT(!extra);
+            }
+        }
+        UNIT_ASSERT(!parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(dataCodecs.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(dataCodecs[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(dataCodecs[1], 0);
+        UNIT_ASSERT_VALUES_EQUAL(dataCodecs[2], 1);
+        const auto replication = DescribeReplication(env, info);
+        UNIT_ASSERT_C(!replication->Get()->Record.GetState().HasError(), replication->Get()->Record.DebugString());
+        Cerr << "Compression recovery final checks passed: exact3 rows, codecs1/0/1, schema, heartbeat, restart and commits" << Endl;
+        env.ShutdownGrpc();
+    }
+}
+
 } // NKikimr::NReplication::NController

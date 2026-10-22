@@ -125,6 +125,25 @@ public:
         return GetRuntime().WaitFuture(std::move(future), TDuration::Seconds(60));
     }
 
+    // A simulated runtime must keep dispatching cancellation callbacks while
+    // the server waits for active streaming RPCs at its real shutdown deadline.
+    void ShutdownGrpc() {
+        const auto shutdown = [&] {
+            if (Driver) {
+                Driver->Stop(false);
+            }
+            Server.ShutdownGRpc();
+        };
+        if (GetRuntime().IsRealThreads()) {
+            shutdown();
+            return;
+        }
+        TAdaptiveThreadPool threadPool;
+        threadPool.Start();
+        auto future = NThreading::Async(shutdown, threadPool);
+        GetRuntime().WaitFuture(std::move(future), TDuration::Max());
+    }
+
     TEnv(bool init = true, ERuntimeMode runtimeMode = ERuntimeMode::RealThreads)
         : Settings(Tests::TServerSettings(PortManager.GetPort(), {}, MakePqConfig())
             .SetDomainName(DomainName)

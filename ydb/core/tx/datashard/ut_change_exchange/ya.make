@@ -31,6 +31,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    cdc_payload_compression_integration_ut.cpp
     cdc_payload_compression_ut.cpp
     datashard_ut_change_exchange.cpp
 )

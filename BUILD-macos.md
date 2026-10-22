@@ -46,7 +46,7 @@ export YA_CACHE_DIR="$HOME/ydbwork/.ya"
 
 This base is a `main` revision from October 22, 2026. Pinning it avoids applying an already-merged fix again when `main` advances.
 
-## 3. Apply the build and runtime fixes
+## 3. Apply the fixes
 
 Before cherry-picking, check your Git identity:
 
@@ -66,6 +66,8 @@ All PRs in this table were open when the recipe was checked. Fetch their public 
 | [#55768](https://github.com/ydb-platform/ydb/pull/55768) | Fix native MiniKQL JIT code generation on AArch64; includes two commits. |
 | [#55893](https://github.com/ydb-platform/ydb/pull/55893) | Fix PostgreSQL thread cleanup on macOS. |
 | [#56501](https://github.com/ydb-platform/ydb/pull/56501) | Exclude Darwin from the GNU Bison linker workaround; draft pending upstream integration. |
+| [#56502](https://github.com/ydb-platform/ydb/pull/56502) | Work around the missing Darwin ARM64 cryptography Rust archive using the existing 3.3.2 fallback instead of 41.0.6; draft temporary workaround with different APIs and dependencies. |
+| [#56503](https://github.com/ydb-platform/ydb/pull/56503) | Use loopback hostnames for dynamic nodes in local macOS test clusters. |
 
 ```bash
 git fetch official \
@@ -73,7 +75,9 @@ git fetch official \
   pull/55847/head:refs/remotes/official/pr-55847 \
   pull/55768/head:refs/remotes/official/pr-55768 \
   pull/55893/head:refs/remotes/official/pr-55893 \
-  pull/56501/head:refs/remotes/official/pr-56501
+  pull/56501/head:refs/remotes/official/pr-56501 \
+  pull/56502/head:refs/remotes/official/pr-56502 \
+  pull/56503/head:refs/remotes/official/pr-56503
 
 git cherry-pick \
   f9b173456a22932c2da98a96f71d6805a9b52af4 \
@@ -81,7 +85,9 @@ git cherry-pick \
   67619c2e6b6951a965bbcf25b681c9608df36e30 \
   f52f2555703eb120a551d6e9055b6f39072f7290 \
   7596224d366a404202582a89fb46bcaa4dc80375 \
-  230b67f0c63a0d1d77e64804adcaad06bbf1710d
+  230b67f0c63a0d1d77e64804adcaad06bbf1710d \
+  8f5b996561cfc1823b4df4978d9f16f002c1d59e \
+  0d4e6a046221a5b8797b2f458d26b41f90dac47c
 ```
 
 If a PR has been rewritten and an exact commit is unavailable, recheck this recipe against that PR. Do not silently substitute its new head. On a conflict, stop and inspect the base and existing changes; `git cherry-pick --abort` cancels the current sequence.
@@ -147,24 +153,6 @@ file -L ydb/apps/ydbd/ydbd
 ```
 
 The server should be an ARM64 Mach-O executable. The corresponding CLI output path is `ydb/apps/ydb/ydb`.
-
-## 6. Optional: local Python functional tests
-
-These two additional fixes concern the test environment. They are not part of the server build instructions above.
-
-- [#56502](https://github.com/ydb-platform/ydb/pull/56502) is a **draft temporary workaround** for the missing Darwin ARM64 Rust archive used by Python `cryptography`. It selects the existing 3.3.2 fallback instead of 41.0.6, with different APIs and dependencies. Use it only for the local test environment described here; the preferred long-term fix is supplying the missing archive.
-- [#56503](https://github.com/ydb-platform/ydb/pull/56503) uses loopback hostnames for dynamic nodes in local macOS test clusters. It addresses machines whose hostname cannot be resolved by the test clients.
-
-If you need those test workarounds, apply them after step 3, before starting a test build:
-
-```bash
-git fetch official \
-  pull/56502/head:refs/remotes/official/pr-56502 \
-  pull/56503/head:refs/remotes/official/pr-56503
-git cherry-pick \
-  8f5b996561cfc1823b4df4978d9f16f002c1d59e \
-  0d4e6a046221a5b8797b2f458d26b41f90dac47c
-```
 
 Keep the same SDK flags when building test targets. See [Build and test YDB using Ya Make](ydb/docs/en/core/contributor/build-ya.md) for selecting a test target and filter; this recipe does not establish that the entire test suite passes on macOS.
 

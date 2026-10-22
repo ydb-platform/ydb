@@ -1108,9 +1108,10 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }
     }
 
-    void RemoveUntouched() {
-        EraseNodesIf(SentinelState->PDisks, [](const auto& kv) {
-            return !kv.second->IsTouched();
+    void RemoveObsoletePDisks() {
+        // Reconcile the CMS and BSC snapshots only after both replies have arrived.
+        EraseNodesIf(SentinelState->PDisks, [this](const auto& kv) {
+            return !kv.second->IsTouched() || !SentinelState->Nodes.contains(kv.first.NodeId);
         });
     }
 
@@ -1154,7 +1155,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             {"name", Name()},
             {"timeDelta", (Now() - ConfigUpdater.StartedAt)});
 
-        RemoveUntouched();
+        RemoveObsoletePDisks();
         *Counters->PDisksTotal = SentinelState->PDisks.size();
 
         ScheduleUpdate<TEvSentinel::TEvUpdateConfig, TStateUpdater>(

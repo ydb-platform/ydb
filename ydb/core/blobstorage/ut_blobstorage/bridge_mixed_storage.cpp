@@ -86,6 +86,51 @@ namespace {
             return ready == 9;
         }, "ordinary VDisks ready");
     }
+
+    void TestOrdinarySingleDatacenterErasure(bool erasureNone) {
+        TEnvironmentSetup env(MixedSettings(true, 2));
+        env.CreatePool();
+        auto pool = NewPool(env, 2, false);
+        const TString erasure = erasureNone ? "none" : "block-4-2";
+        pool.SetErasureSpecies(erasure);
+        auto response = DefinePool(env, pool);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+        TDataChecker checker(env);
+        auto checkGroups = [&](ui32 expectedCount) {
+            const auto config = env.FetchBaseConfig();
+            const auto groups = GetPoolGroups(config, 2);
+            UNIT_ASSERT_VALUES_EQUAL(groups.size(), expectedCount);
+            for (const auto* group : groups) {
+                const auto info = GetGroupInfo(env, group->GetGroupId());
+                UNIT_ASSERT(!info.HasBridgeGroupState());
+                UNIT_ASSERT(!info.HasBridgePileId());
+                UNIT_ASSERT(!info.HasBridgeProxyGroupId());
+                UNIT_ASSERT_VALUES_EQUAL(group->GetErasureSpecies(), erasure);
+                UNIT_ASSERT_VALUES_EQUAL(group->VSlotIdSize(), erasureNone ? 1 : 8);
+                std::set<ui32> datacenters;
+                for (const auto& slot : group->GetVSlotId()) {
+                    datacenters.insert((slot.GetNodeId() - 1) / 9);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(datacenters.size(), 1);
+                checker.Write(group->GetGroupId());
+            }
+            checker.CheckAll();
+        };
+        checkGroups(1);
+        env.RestartNode(1);
+        checker.CheckAll();
+        pool = ReadPool(env, 2);
+        UNIT_ASSERT(pool.HasBridgeMode() && !pool.GetBridgeMode());
+        pool.ClearBridgeMode();
+        pool.SetNumGroups(2);
+        response = DefinePool(env, pool);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        pool = ReadPool(env, 2);
+        UNIT_ASSERT(pool.HasBridgeMode() && !pool.GetBridgeMode());
+        checkGroups(2);
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
@@ -196,48 +241,12 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
         UNIT_ASSERT(pool.HasBridgeMode() && !pool.GetBridgeMode());
     }
 
-    Y_UNIT_TEST_TWIN(OrdinarySingleDatacenterErasure, erasureNone) {
-        TEnvironmentSetup env(MixedSettings(true, 2));
-        env.CreatePool();
-        auto pool = NewPool(env, 2, false);
-        const TString erasure = erasureNone ? "none" : "block-4-2";
-        pool.SetErasureSpecies(erasure);
-        auto response = DefinePool(env, pool);
-        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    Y_UNIT_TEST(OrdinaryBlock42PoolInTwoDatacenters) {
+        TestOrdinarySingleDatacenterErasure(false);
+    }
 
-        TDataChecker checker(env);
-        auto checkGroups = [&](ui32 expectedCount) {
-            const auto config = env.FetchBaseConfig();
-            const auto groups = GetPoolGroups(config, 2);
-            UNIT_ASSERT_VALUES_EQUAL(groups.size(), expectedCount);
-            for (const auto* group : groups) {
-                const auto info = GetGroupInfo(env, group->GetGroupId());
-                UNIT_ASSERT(!info.HasBridgeGroupState());
-                UNIT_ASSERT(!info.HasBridgePileId());
-                UNIT_ASSERT(!info.HasBridgeProxyGroupId());
-                UNIT_ASSERT_VALUES_EQUAL(group->GetErasureSpecies(), erasure);
-                UNIT_ASSERT_VALUES_EQUAL(group->VSlotIdSize(), erasureNone ? 1 : 8);
-                std::set<ui32> datacenters;
-                for (const auto& slot : group->GetVSlotId()) {
-                    datacenters.insert((slot.GetNodeId() - 1) / 9);
-                }
-                UNIT_ASSERT_VALUES_EQUAL(datacenters.size(), 1);
-                checker.Write(group->GetGroupId());
-            }
-            checker.CheckAll();
-        };
-        checkGroups(1);
-        env.RestartNode(1);
-        checker.CheckAll();
-        pool = ReadPool(env, 2);
-        UNIT_ASSERT(pool.HasBridgeMode() && !pool.GetBridgeMode());
-        pool.ClearBridgeMode();
-        pool.SetNumGroups(2);
-        response = DefinePool(env, pool);
-        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-        pool = ReadPool(env, 2);
-        UNIT_ASSERT(pool.HasBridgeMode() && !pool.GetBridgeMode());
-        checkGroups(2);
+    Y_UNIT_TEST(OrdinaryNonePoolInTwoDatacenters) {
+        TestOrdinarySingleDatacenterErasure(true);
     }
 
     Y_UNIT_TEST(ActivationAndValidation) {

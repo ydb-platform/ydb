@@ -568,3 +568,64 @@ def test_service_expression_payload_quota_applies_backpressure(service, tmp_path
     rows = runner.rows()
     assert len(rows) == 20
     assert all(int(row['id']) == int(row['result']) and row['payload'] == 'x' * 400 for row in rows)
+
+
+@pytest.mark.parametrize('batch_size', [1, 8])
+def test_service_expression_sibling_occurrences(service, tmp_path, batch_size):
+    runner = Runner(tmp_path, service)
+    source = ','.join('AsStruct(%dul AS id)' % i for i in range(1000, 1020))
+    sql = ("$options=AsStruct('/Root/profiles' AS connection, %d AS batch_size);" % batch_size +
+           "$input=SELECT * FROM AS_TABLE(AsList(" + source + "));"
+           "$a=SELECT WASM_PROFILE::Profile(id,$options).id AS id FROM $input;"
+           "$b=SELECT WASM_PROFILE::Profile(id,$options).id AS id FROM $input;"
+           "SELECT * FROM $a UNION ALL SELECT * FROM $b;")
+    assert runner.wait(runner.start(sql=sql)) == 0, runner.output()
+    expected = sorted(list(range(1000, 1020)) * 2)
+    assert sorted(int(row['id']) for row in runner.rows()) == expected
+    received = [value for _, request, _ in service.requests
+                for value in (request if isinstance(request, tuple) else (request,))]
+    assert sorted(received) == expected
+
+
+def test_service_expression_preserves_shared_argument_value(service, tmp_path):
+    runner = Runner(tmp_path, service)
+    source = ','.join('AsStruct(%dul AS id)' % i for i in range(1000, 1200))
+    value = '1000ul + Unwrap(RandomNumber(id) % 1000000ul)'
+    sql = ("$options=AsStruct('/Root/profiles' AS connection, 8 AS batch_size);"
+           "$input=SELECT * FROM AS_TABLE(AsList(" + source + "));"
+           "SELECT " + value + " AS sent, WASM_PROFILE::Profile(" + value + ",$options).id AS received FROM $input;")
+    assert runner.wait(runner.start(sql=sql)) == 0, runner.output()
+    rows = runner.rows()
+    assert len(rows) == 200
+    assert all(int(row['sent']) == int(row['received']) for row in rows)
+    received = [value for _, request, _ in service.requests
+                for value in (request if isinstance(request, tuple) else (request,))]
+    assert sorted(received) == sorted(int(row['sent']) for row in rows)
+
+
+@pytest.mark.parametrize('inactive_error', [False, True])
+def test_service_expression_guarded_shared_arguments(service, tmp_path, inactive_error):
+    runner = Runner(tmp_path, service)
+    source = ','.join('AsStruct(%dul AS id)' % i for i in range(1000, 1200))
+    if inactive_error:
+        body = ("$x=Unwrap(CAST(CAST($id AS String)||'bad' AS Uint64));"
+                "$p=WASM_PROFILE::Profile($x,$options).id;"
+                "RETURN AsStruct($id AS sent,IF($id<0ul,$p+$x,$id) AS received);")
+    else:
+        body = ("$x=1000ul+Unwrap(RandomNumber($id)%1000000ul);"
+                "RETURN AsStruct($x AS sent,IF($x%2ul==0ul,WASM_PROFILE::Profile($x,$options).id,0ul) AS received);")
+    sql = ("$options=AsStruct('/Root/profiles' AS connection,8 AS batch_size);"
+           "$f=($id)->{" + body + "};"
+           "$input=SELECT * FROM AS_TABLE(AsList(" + source + "));"
+           "$r=SELECT $f(id) AS x FROM $input;SELECT x.sent AS sent,x.received AS received FROM $r;")
+    assert runner.wait(runner.start(sql=sql)) == 0, runner.output()
+    rows = runner.rows()
+    assert len(rows) == 200
+    if inactive_error:
+        assert all(int(row['sent']) == int(row['received']) for row in rows)
+        assert not service.requests
+    else:
+        assert all(int(row['received']) == (int(row['sent']) if int(row['sent']) % 2 == 0 else 0) for row in rows)
+        received = [value for _, request, _ in service.requests
+                    for value in (request if isinstance(request, tuple) else (request,))]
+        assert sorted(received) == sorted(int(row['sent']) for row in rows if int(row['sent']) % 2 == 0)

@@ -78,7 +78,8 @@ public:
         pq.MutableQuotingConfig()->SetEnableQuoting(false);
         auto settings = TServerSettings(Ports.GetPort(), {}, pq).SetUseRealThreads(false)
             .SetDomainName("Root").SetEnableChangefeedInitialScan(true);
-        UNIT_ASSERT(settings.AppConfig->MutableDataShardConfig()->ParseFromString(TString("\x90\x02\x01", 3)));
+        settings.AppConfig->MutableDataShardConfig()->SetCdcPayloadCompression(
+            NKikimrConfig::TDataShardConfig::CDC_PAYLOAD_COMPRESSION_GZIP);
         Server = new TServer(settings);
         const auto grpc = Ports.GetPort();
         Server->EnableGRpc(grpc);

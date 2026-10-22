@@ -67,7 +67,7 @@ jobs:
         chmod 600 ~/.ssh/config
     - name: Check fleet
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ secrets.GH_YDB_RUNNERS_PAT }}
         GH_RUNNER_RECONCILE_SSH_PUB: ${{ secrets.GH_RUNNER_RECONCILE_SSH_PUB }}
         RECONCILE_APPLY: ${{ github.event_name == 'workflow_dispatch' && inputs.apply && 'true' || 'false' }}
       run: |

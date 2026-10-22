@@ -83,7 +83,8 @@ public:
         // Account for both graph storage and the scan/build input buffer.
         const auto required = THnswIndex::EstimateMemoryBytes(Rows.size() + 1,
             Settings.vector_dimension(), Settings.has_m() ? Settings.m() : 16,
-            2 * KeyBytes) + (Rows.size() + 1) * cells[0].Size();
+            2 * KeyBytes, Settings.metric() == Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN)
+            + (Rows.size() + 1) * cells[0].Size();
         if (required > Reservation->Bytes) {
             const ui64 additional = required - Reservation->Bytes;
             if (!Reservation->Tracker->TryAcquire(additional)) {

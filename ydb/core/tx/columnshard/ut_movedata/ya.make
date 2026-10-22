@@ -7,9 +7,7 @@ SIZE(MEDIUM)
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/base
-    ydb/core/tablet_flat/test/libs/table
     ydb/core/testlib/default
-    ydb/core/tx/columnshard/blobs_action/bs
     ydb/core/tx/columnshard/data_sharing/manager
     ydb/core/tx/columnshard/engines/scheme/versions
     ydb/core/tx/columnshard/engines/storage/actualizer/move

@@ -2,8 +2,9 @@
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/common/queue_sizes.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/counters/counters.h>
-#include <ydb/core/tx/columnshard/engines/storage/actualizer/move/queue_sizes.h>
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/move/metadata.h>
 
 #include <util/generic/hash_set.h>
 
@@ -33,8 +34,9 @@ private:
 
 public:
     std::vector<TCSMetadataRequest> CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions);
-    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(
-        const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);
+    // The MoveData driver also classifies restored uncommitted writes, outside the tiering metadata cycle.
+    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions,
+        const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted, TMoveDataMetadataBudget& budget);
 
     bool IsStarted() const {
         return Actualizers.size();
@@ -45,12 +47,12 @@ public:
         const TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager);
 
     void ExtractActualizationTasks(
-        TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext, const EActualizationScope scope) const;
+        TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext, EActualizationScope scope) const;
 
     void RefreshTiering(const std::optional<TTiering>& info, const TAddExternalContext& context);
     void RefreshScheme(const TAddExternalContext& context);
 
-    void StartMoveData(const THashSet<ui32>& targetGroups, const TAddExternalContext& context,
+    void StartMoveData(THashSet<ui32> targetGroups, const TAddExternalContext& context,
         const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);
     void StopMoveData();
     TMoveDataQueueSizes UpdateMoveDataQueueSizes(

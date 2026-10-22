@@ -66,10 +66,6 @@ public:
     [[nodiscard]] bool LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTabletsByBlob& blobsToDelete,
         const IBlobGroupSelector* dsGroupSelector, const TTabletId selfTabletId) override;
 
-    // Returns false on a page fault; hasBlobs is reset on every attempt.
-    [[nodiscard]] bool HasGCBlobsForGroups(const THashSet<ui32>& groups, const IBlobGroupSelector* selector,
-        TTabletId selfTabletId, bool& hasBlobs);
-
     void AddBlobToKeep(const TUnifiedBlobId& blobId) override;
     void EraseBlobToKeep(const TUnifiedBlobId& blobId) override;
     void AddBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) override;

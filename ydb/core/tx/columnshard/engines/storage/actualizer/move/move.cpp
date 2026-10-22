@@ -28,12 +28,12 @@ private:
         }
         if (result.GetValue().HasErrors()) {
             // Affected portions stay pending and are re-requested next cycle.
-            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-                {"error", "move data accessor result with errors " + result.GetValue().GetErrorMessage()});
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "MoveData accessor request failed",
+                {"error", result.GetValue().GetErrorMessage()});
         }
         if (result.GetValue().HasRemovedData()) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-                {"event", TStringBuilder{} << "move data accessor result with removed data, " << result.GetValue().GetRemovedData().size()});
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "MoveData accessor result contains removed portions",
+                {"removedCount", result.GetValue().GetRemovedData().size()});
         }
         for (auto&& [_, accessor] : result.GetValue().GetPortions()) {
             locked->ActualizePortionInfo(*accessor);
@@ -48,39 +48,18 @@ public:
     }
 };
 
-// True when at least one entity (column or index) of this portion lives in default storage for the given tier.
-bool HasEntityInDefaultStorage(const TPortionInfo& info, const TVersionedIndex& versionedIndex) {
-    const TString tier = info.GetTierNameDef(IStoragesManager::DefaultStorageId);
-    if (tier == IStoragesManager::DefaultStorageId) {
-        return true;
-    }
-    const auto schema = info.GetSchema(versionedIndex);
-    for (const auto entityId : schema->GetIndexInfo().GetEntityIds()) {
-        if (schema->GetIndexInfo().GetEntityStorageId(entityId, tier) == IStoragesManager::DefaultStorageId) {
-            return true;
-        }
-    }
-    return false;
-}
-
 TTieringProcessContext::EAddPortionResult AddPortionToMove(
     TTieringProcessContext& tasks, const TPortionInfo::TConstPtr& portion, const TVersionedIndex& index) {
-    const auto schema = portion->GetSchema(index);
-    const auto tier = portion->GetTierNameDef(IStoragesManager::DefaultStorageId);
-    TPortionEvictionFeatures features(schema, schema, tier);
-    features.SetTargetTierName(tier);
+    auto currentSchema = portion->GetSchema(index);
+    auto targetSchema = currentSchema;
+    auto tier = portion->GetTierNameDef(IStoragesManager::DefaultStorageId);
+    TPortionEvictionFeatures features(std::move(currentSchema), std::move(targetSchema), tier);
+    features.SetTargetTierName(std::move(tier));
     features.SetForcedMove();
     return tasks.AddPortion(portion, std::move(features), TDuration::Zero());
 }
 
 }   // anonymous namespace
-
-TMoveDataActualizer::TPortions::iterator TMoveDataActualizer::NextPortion(TPortions::iterator& position) {
-    if (position == Portions.end()) {
-        position = Portions.begin();
-    }
-    return position++;
-}
 
 void TMoveDataActualizer::SetState(EPortionState& state, EPortionState next) {
     AFL_VERIFY(StateCounts[static_cast<size_t>(state)]);
@@ -89,16 +68,17 @@ void TMoveDataActualizer::SetState(EPortionState& state, EPortionState next) {
     state = next;
 }
 
-void TMoveDataActualizer::ErasePortion(TPortions::iterator it) {
-    if (RefreshPosition == it) {
-        ++RefreshPosition;
+void TMoveDataActualizer::ErasePortion(TPortions::iterator portion) {
+    AFL_VERIFY(portion->second == EPortionState::Finished || portion->second == EPortionState::Rejected);
+    const auto next = std::next(portion);
+    for (auto* cursor : { &StateScanPosition, &RewriteScanPosition, &MetadataScanPosition }) {
+        if (*cursor == portion) {
+            *cursor = next;
+        }
     }
-    if (RewritePosition == it) {
-        ++RewritePosition;
-    }
-    AFL_VERIFY(StateCounts[static_cast<size_t>(it->second)]);
-    --StateCounts[static_cast<size_t>(it->second)];
-    Portions.erase(it);
+    PortionsById.erase(portion->first);
+    Portions.erase(portion);
+    // Terminal counters are cumulative; only active states count towards the completion gate.
 }
 
 void TMoveDataActualizer::DoExtractTasks(
@@ -106,28 +86,27 @@ void TMoveDataActualizer::DoExtractTasks(
     if (!NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::MoveData)) {
         return;
     }
-    const size_t count = Min(PortionsPerPass, Portions.size());
-    for (size_t i = 0; i < count; ++i) {
-        auto it = NextPortion(RewritePosition);
-        if (it->second != EPortionState::Ready && it->second != EPortionState::InFlight) {
-            continue;
+    ScanPortions(RewriteScanPosition, PortionsPerPass, [&](ui64 portionId, EPortionState& state) {
+        if (state != EPortionState::Ready && state != EPortionState::RewriteStarted) {
+            return true;
         }
-        const auto* portion = MapFindPtr(externalContext.GetPortions(), it->first);
+        const auto* portion = MapFindPtr(externalContext.GetPortions(), portionId);
         // A commit may still be completing, or another background task may have retired the portion since the last pass.
         if (!portion || (*portion)->HasRemoveSnapshot() || !(*portion)->IsCommitted()) {
-            continue;
+            return true;
         }
         switch (AddPortionToMove(tasksContext, *portion, VersionedIndex)) {
             case TTieringProcessContext::EAddPortionResult::TASK_LIMIT_EXCEEDED:
-                return;
+                return false;
             case TTieringProcessContext::EAddPortionResult::PORTION_LOCKED:
                 break;
             case TTieringProcessContext::EAddPortionResult::SUCCESS:
                 // Retain the candidate. Its task lock prevents duplicates; an abort releases the lock for the next pass.
-                SetState(it->second, EPortionState::InFlight);
+                SetState(state, EPortionState::RewriteStarted);
                 break;
         }
-    }
+        return true;
+    });
 }
 
 namespace {
@@ -151,14 +130,18 @@ bool TMoveDataActualizer::HasBlobInGroups(const std::vector<TUnifiedBlobId>& blo
 void TMoveDataActualizer::ActualizePortionInfo(const TPortionDataAccessor& accessor) {
     const auto& info = accessor.GetPortionInfo();
     const ui64 portionId = info.GetPortionId();
-    auto it = Portions.find(portionId);
-    if (it == Portions.end() || it->second != EPortionState::Pending) {
+    const auto found = PortionsById.find(portionId);
+    if (found == PortionsById.end()) {
+        return;
+    }
+    const auto it = found->second;
+    if (it->second != EPortionState::Pending) {
         return;
     }
     if (!HasBlobInGroups(accessor.GetBlobIds(), TargetGroups)) {
+        SetState(it->second, EPortionState::Rejected);
         ErasePortion(it);
-        ++RejectedPortions;
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "MoveData portion has no blobs in target groups",
             {"event", "move_data_portion_rejected"},
             {"portionId", portionId},
             {"blobs", JoinSeq(",", GetBlobGroupsForLog(accessor.GetBlobIds()))},
@@ -170,73 +153,67 @@ void TMoveDataActualizer::ActualizePortionInfo(const TPortionDataAccessor& acces
 }
 
 std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions,
-    const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted, const std::shared_ptr<TMoveDataActualizer>& self) {
-    if (!StateCounts[static_cast<size_t>(EPortionState::Pending)]) {
+    const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted, const std::shared_ptr<TMoveDataActualizer>& self,
+    TMoveDataMetadataBudget& budget) {
+    if (!StateCounts[static_cast<size_t>(EPortionState::Pending)] || budget.IsExhausted()) {
         return {};
     }
-    const ui64 batchMemorySoftLimit = NYDBTest::TControllers::GetColumnShardController()->GetMetadataRequestSoftMemoryLimit();
     std::vector<TCSMetadataRequest> requests;
     std::shared_ptr<TDataAccessorsRequest> currentRequest;
-    ui64 currentRequestMemory = 0;
-
-    for (const auto& [portionId, state] : Portions) {
-        if (state != EPortionState::Pending) {
-            continue;
+    ScanPortions(MetadataScanPosition, budget.PortionsLeft, [&](ui64 portionId, EPortionState state) {
+        --budget.PortionsLeft;
+        if (state == EPortionState::Pending) {
+            TPortionInfo::TPtr portion;
+            if (const auto* found = MapFindPtr(portions, portionId)) {
+                portion = *found;
+            } else if (const auto* found = MapFindPtr(uncommitted, portionId)) {
+                portion = *found;
+            }
+            if (portion) {
+                if (!currentRequest) {
+                    currentRequest = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::MOVE_DATA);
+                }
+                currentRequest->AddPortion(portion);
+                budget.Memory += portion->PredictAccessorsMemory(portion->GetSchema(VersionedIndex));
+                ++budget.RequestedPortions;
+            }
         }
-        TPortionInfo::TPtr portion;
-        if (const auto* found = MapFindPtr(portions, portionId)) {
-            portion = *found;
-        } else if (const auto* found = MapFindPtr(uncommitted, portionId)) {
-            portion = *found;
-        } else {
-            continue;
-        }
-        if (!currentRequest) {
-            currentRequest = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::MOVE_DATA);
-        }
-        currentRequest->AddPortion(portion);
-        currentRequestMemory += portion->PredictAccessorsMemory(portion->GetSchema(VersionedIndex));
-        if (currentRequestMemory >= batchMemorySoftLimit) {
-            requests.emplace_back(currentRequest, std::make_shared<TMoveDataActualizationReply>(self));
-            currentRequest.reset();
-            currentRequestMemory = 0;
-        }
-    }
+        return !budget.IsExhausted();
+    });
     if (currentRequest) {
         requests.emplace_back(std::move(currentRequest), std::make_shared<TMoveDataActualizationReply>(self));
     }
     return requests;
 }
 
-void TMoveDataActualizer::RefreshPortions(
+void TMoveDataActualizer::UpdatePortionStates(
     const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) {
-    const size_t count = Min(PortionsPerPass, Portions.size());
-    for (size_t i = 0; i < count; ++i) {
-        auto it = NextPortion(RefreshPosition);
+    ScanPortions(StateScanPosition, PortionsPerPass, [&](ui64 portionId, EPortionState& state) {
         TPortionInfo::TPtr portion;
         bool committed = false;
-        if (const auto* found = MapFindPtr(portions, it->first)) {
+        if (const auto* found = MapFindPtr(portions, portionId)) {
             portion = *found;
             committed = true;
-        } else if (const auto* found = MapFindPtr(uncommitted, it->first)) {
+        } else if (const auto* found = MapFindPtr(uncommitted, portionId)) {
             portion = *found;
         } else {
-            // Cleanup has removed the portion; durable keep/delete checks now cover its blobs.
-            ErasePortion(it);
-            continue;
+            // Cleanup has committed removal of the portion.
+            SetState(state, EPortionState::Finished);
+            return true;
         }
-        if (it->second == EPortionState::Pending) {
+        if (state == EPortionState::Pending) {
             // Retired candidates still need classification: unrelated groups must not hold the gate.
-            continue;
+            return true;
         }
         if (portion->HasRemoveSnapshot()) {
-            SetState(it->second, EPortionState::Retired);
+            SetState(state, EPortionState::Retired);
         } else if (!committed) {
-            SetState(it->second, EPortionState::Uncommitted);
-        } else if (it->second != EPortionState::InFlight) {
-            SetState(it->second, EPortionState::Ready);
+            SetState(state, EPortionState::Uncommitted);
+        } else if (state != EPortionState::RewriteStarted) {
+            SetState(state, EPortionState::Ready);
         }
-    }
+        return true;
+    });
 }
 
 TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes() const {
@@ -244,19 +221,21 @@ TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes() const {
         return StateCounts[static_cast<size_t>(state)];
     };
     return TMoveDataQueueSizes{ .Pending = count(EPortionState::Pending), .ConfirmedToMove = count(EPortionState::Ready),
-        .InFlight = count(EPortionState::InFlight),
+        .RewriteStarted = count(EPortionState::RewriteStarted),
         .Uncommitted = count(EPortionState::Uncommitted),
         .Retired = count(EPortionState::Retired),
-        .Rejected = RejectedPortions };
+        .Rejected = count(EPortionState::Rejected) };
 }
 
 void TMoveDataActualizer::Seed(
     const TAddExternalContext& externalContext, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) {
-    AFL_VERIFY(Portions.empty());
+    AFL_VERIFY(!Seeded);
+    Seeded = true;
     const auto add = [this](const auto& source) {
         for (const auto& [portionId, portion] : source) {
-            if (HasEntityInDefaultStorage(*portion, VersionedIndex)) {
-                AFL_VERIFY(Portions.emplace(portionId, EPortionState::Pending).second);
+            if (portion->HasBlobsInBlobStorage(portion->GetSchema(VersionedIndex)->GetIndexInfo())) {
+                const auto entry = Portions.emplace(Portions.end(), portionId, EPortionState::Pending);
+                AFL_VERIFY(PortionsById.emplace(portionId, entry).second);
                 ++StateCounts[static_cast<size_t>(EPortionState::Pending)];
             }
         }
@@ -264,7 +243,9 @@ void TMoveDataActualizer::Seed(
     add(externalContext.GetPortions());
     // A persisted uncommitted portion can survive both restart and acknowledgement of its Keep flag.
     add(uncommitted);
-    RefreshPosition = RewritePosition = Portions.begin();
+    StateScanPosition = Portions.begin();
+    RewriteScanPosition = Portions.begin();
+    MetadataScanPosition = Portions.begin();
 }
 
 }   // namespace NKikimr::NOlap::NActualizer

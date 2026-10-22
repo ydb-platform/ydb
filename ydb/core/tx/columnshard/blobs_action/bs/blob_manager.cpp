@@ -391,9 +391,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         PopGCBarriers(*CollectGenStepInFlight);
         if (FirstGC) {
             gcContext.InitializeFirst(TabletInfo);
-            // Repeat the broadcast to collect orphan blobs left by earlier generations.
-            const bool moveDataEnabled = HasAppData() && AppData()->FeatureFlags.GetEnableColumnshardMoveData();
-            FirstGC = moveDataEnabled && CollectGenStepInFlight->Generation() < CurrentGen;
+            FirstGC = false;
         }
         if (!BlobsToKeep.IsEmpty()) {
             AFL_VERIFY(*CollectGenStepInFlight < BlobsToKeep.GetMinGenStepVerified())("gs", *CollectGenStepInFlight)(

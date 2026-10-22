@@ -1,7 +1,6 @@
 #include "columnshard_impl.h"
 #include "columnshard_move_data.h"
 
-#include "blobs_action/blob_manager_db.h"
 #include "engines/column_engine_logs.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
@@ -15,12 +14,12 @@ namespace NKikimr::NColumnShard {
 
 namespace {
 
-THashSet<ui32> RequestedGroups(const NKikimrTabletBase::TEvMoveData& record) {
+THashSet<ui32> GetRequestedGroups(const NKikimrTabletBase::TEvMoveData& record) {
     return { record.GetGroups().begin(), record.GetGroups().end() };
 }
 
 // Same contract as keyvalue and blob_depot: a group that is still the latest entry keeps taking writes, so the move could never converge.
-std::optional<ui32> FindLiveGroup(const TTabletStorageInfo& info, const THashSet<ui32>& groups) {
+std::optional<ui32> FindActiveGroup(const TTabletStorageInfo& info, const THashSet<ui32>& groups) {
     if (groups.empty()) {
         return std::nullopt;
     }
@@ -34,73 +33,13 @@ std::optional<ui32> FindLiveGroup(const TTabletStorageInfo& info, const THashSet
     return channel->LatestEntry()->GroupID;
 }
 
-void RefuseMoveData(const TActorId& sender, const ui64 tabletId, const ui32 liveGroup, const TActorContext& ctx) {
-    const TString reason = TStringBuilder() << "group " << liveGroup << " is still the latest history entry at tablet " << tabletId;
+void RefuseMoveData(const TActorId& sender, const ui64 tabletId, const ui32 activeGroup, const TActorContext& ctx) {
+    const TString reason = TStringBuilder() << "group " << activeGroup << " is still the latest history entry at tablet " << tabletId;
     YDB_LOG_WARN("MoveData refused", {"tabletId", tabletId}, {"reason", reason});
     ctx.Send(sender, new TEvTablet::TEvMoveDataResponse(tabletId, NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch, reason));
 }
 
 }   // namespace
-
-class TMoveDataDriver::TTxCheckGC: public TTransactionBase<TColumnShard> {
-    const TActorId DriverId;
-    const ui64 Revision;
-    bool Ready = false;
-
-    TMoveDataDriver* GetDriver() const {
-        return Self->MoveDataDriverId == DriverId ? Self->MoveDataDriver : nullptr;
-    }
-
-public:
-    TTxCheckGC(TColumnShard* self, const TActorId driverId, const ui64 revision)
-        : TBase(self)
-        , DriverId(driverId)
-        , Revision(revision)
-    {}
-
-    TTxType GetTxType() const override {
-        return TXTYPE_MOVE_DATA_CHECK_GC;
-    }
-
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        Ready = false;
-        auto* driver = GetDriver();
-        if (driver == nullptr || driver->State.Revision != Revision) {
-            return true;
-        }
-        NOlap::TBlobManagerDb db(txc.DB);
-        NOlap::TGenStep lastCollectedGenStep;
-        if (!db.LoadLastGcBarrier(lastCollectedGenStep)) {
-            return false;
-        }
-        if (lastCollectedGenStep < NOlap::TGenStep(Self->Generation(), 0)) {
-            Self->Counters.GetCSCounters().OnMoveDataGateBlockedByFirstGCRound();
-            YDB_LOG_INFO("MoveData gate waits for the first GC round", {"tabletId", Self->TabletID()});
-            return true;
-        }
-        TBlobGroupSelector selector(Self->Info());
-        bool hasBlobs = false;
-        if (!db.HasGCBlobsForGroups(driver->State.TargetGroups, &selector, static_cast<NOlap::TTabletId>(Self->TabletID()), hasBlobs)) {
-            return false;
-        }
-        Ready = !hasBlobs;
-        if (hasBlobs) {
-            Self->Counters.GetCSCounters().OnMoveDataGateBlockedByGC();
-        }
-        return true;
-    }
-
-    void Complete(const TActorContext& ctx) override {
-        auto* driver = GetDriver();
-        if (driver == nullptr) {
-            return;
-        }
-        driver->State.GCCheckInFlight = false;
-        if (Ready && driver->State.Revision == Revision && driver->CanCompleteMigration(driver->UpdateQueueSizes())) {
-            driver->CompleteMigration(ctx);
-        }
-    }
-};
 
 TMoveDataDriver::TMoveDataDriver(TColumnShard* self)
     : Self(self)
@@ -113,45 +52,36 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
         TTabletExecutedFlat::Handle(ev);
         return;
     }
-    TMoveDataDriver::Request(*this, ev->Get()->Record, ev->Sender, ctx);
+    TMoveDataDriver::StartOrUpdateMigration(*this, ev->Get()->Record, ev->Sender, ctx);
 }
 
-void TMoveDataDriver::Request(
+void TMoveDataDriver::StartOrUpdateMigration(
     TColumnShard& owner, const NKikimrTabletBase::TEvMoveData& request, const TActorId& sender, const TActorContext& ctx) {
-    const THashSet<ui32> requested = RequestedGroups(request);
-    if (const auto liveGroup = FindLiveGroup(*owner.Info(), requested)) {
-        RefuseMoveData(sender, owner.TabletID(), *liveGroup, ctx);
+    const THashSet<ui32> requested = GetRequestedGroups(request);
+    if (const auto activeGroup = FindActiveGroup(*owner.Info(), requested)) {
+        RefuseMoveData(sender, owner.TabletID(), *activeGroup, ctx);
         return;
     }
     if (owner.MoveDataDriver == nullptr) {
         owner.MoveDataDriver = new TMoveDataDriver(&owner);
-        owner.MoveDataDriverId = ctx.RegisterWithSameMailbox(owner.MoveDataDriver);
+        ctx.RegisterWithSameMailbox(owner.MoveDataDriver);
+        owner.Counters.GetCSCounters().OnMoveDataStarted();
+        owner.Executor()->StartMoveDataVacuumFromOwner();
     }
     owner.MoveDataDriver->AcceptRequest(sender, requested, ctx);
 }
 
 void TMoveDataDriver::AcceptRequest(const TActorId& sender, const THashSet<ui32>& requested, const TActorContext& ctx) {
     State.HiveSender = sender;
-    const bool firstRequest = State.Revision == 0;
-    bool changed = firstRequest;
-    for (const auto groupId : requested) {
-        changed |= State.TargetGroups.emplace(groupId).second;
-    }
-    if (firstRequest) {
-        Self->Counters.GetCSCounters().OnMoveDataStarted();
-        Self->Executor()->StartMoveDataVacuumFromOwner();
-    }
-    YDB_LOG_INFO("MoveData requested", {"tabletId", Self->TabletID()}, {"groups", State.TargetGroups.size()}, {"changed", changed});
     // Admission is synchronous even though the gate runs on the driver's cadence.
-    State.TargetsChanged |= changed;
-    if (changed) {
-        ++State.Revision;
+    for (const auto groupId : requested) {
+        State.TargetsChanged |= State.TargetGroups.emplace(groupId).second;
     }
+    YDB_LOG_INFO("MoveData requested", {"tabletId", Self->TabletID()}, {"groups", State.TargetGroups.size()}, {"changed", State.TargetsChanged});
     ctx.Send(SelfId(), new TEvPrivate::TEvMoveDataPoke());
 }
 
 void TMoveDataDriver::RestartActualizer() {
-    AFL_VERIFY(State.Revision != 0);
     State.TargetsChanged = false;
     // A fresh actualizer counts rejections from zero again.
     State.ReportedRejections = 0;
@@ -167,15 +97,13 @@ void TMoveDataDriver::RestartActualizer() {
 }
 
 void TMoveDataDriver::Stop(TColumnShard& owner, const TActorContext& ctx) {
-    if (!owner.MoveDataDriverId) {
+    if (owner.MoveDataDriver == nullptr) {
         return;
     }
-    AFL_VERIFY(owner.MoveDataDriver != nullptr);
     // Same-mailbox callbacks cannot run between invalidation and tablet cleanup.
     owner.MoveDataDriver->Self = nullptr;
-    ctx.Send(owner.MoveDataDriverId, new TEvents::TEvPoison());
+    ctx.Send(owner.MoveDataDriver->SelfId(), new TEvents::TEvPoison());
     owner.MoveDataDriver = nullptr;
-    owner.MoveDataDriverId = {};
 }
 
 void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
@@ -198,7 +126,7 @@ NOlap::NActualizer::TMoveDataQueueSizes TMoveDataDriver::UpdateQueueSizes() {
 
 bool TMoveDataDriver::CanCompleteMigration(const NOlap::NActualizer::TMoveDataQueueSizes& queues) {
     Self->Counters.GetCSCounters().OnMoveDataGateChecked();
-    Self->Counters.GetCSCounters().OnMoveDataQueues(queues.Pending, queues.ConfirmedToMove, queues.InFlight, queues.Uncommitted, queues.Retired);
+    Self->Counters.GetCSCounters().OnMoveDataQueues(queues);
     if (queues.Rejected > State.ReportedRejections) {
         Self->Counters.GetCSCounters().OnMoveDataPortionsRejected(queues.Rejected - State.ReportedRejections);
         State.ReportedRejections = queues.Rejected;
@@ -231,32 +159,25 @@ bool TMoveDataDriver::CanCompleteMigration(const NOlap::NActualizer::TMoveDataQu
     return true;
 }
 
-void TMoveDataDriver::TryCompleteMigration(const TActorContext& ctx, const NOlap::NActualizer::TMoveDataQueueSizes& queues) {
-    if (!State.GCCheckInFlight && CanCompleteMigration(queues)) {
-        State.GCCheckInFlight = true;
-        // Execute can complete synchronously and invalidate Self through Stop.
-        Self->Execute(new TTxCheckGC(Self, SelfId(), State.Revision), ctx);
-    }
-}
-
-void TMoveDataDriver::CompleteMigration(const TActorContext& ctx) {
+void TMoveDataDriver::FinishMigration(const TActorContext& ctx) {
     YDB_LOG_INFO("MoveData gate passed", {"tabletId", Self->TabletID()});
 
     if (Self->HasIndex()) {
         Self->MutableIndexAs<NOlap::TColumnEngineForLogs>().StopMoveData();
     }
-    // The boot-time CutHistory scan finds drained intervals by itself, so nothing needs persisting before Success.
+    // Rewrites and cleanup are committed. GC acknowledgements and CutHistory may follow after Hive restarts us.
     ctx.Send(State.HiveSender, new TEvTablet::TEvMoveDataResponse(Self->TabletID(), NKikimrTabletBase::TEvMoveDataResponse::Success));
     Self->Counters.GetCSCounters().OnMoveDataFinished();
     Stop(*Self, ctx);
 }
 
 void TMoveDataDriver::SetupMetadata() {
-    if (!Self->HasIndex() || MetadataRequestsInFlight->Val()) {
+    if (!Self->HasIndex() || MetadataSubscribersInFlight->Val()) {
         return;
     }
-    Self->StartMetadataRequests(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().CollectMoveDataMetadataRequests(), MetadataTaskSubscription,
-        MetadataRequestsInFlight, SelfId());
+    NOlap::NActualizer::TMoveDataMetadataBudget budget(NYDBTest::TControllers::GetColumnShardController()->GetMetadataRequestSoftMemoryLimit());
+    Self->StartMetadataRequests(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().CollectMoveDataMetadataRequests(budget),
+        MetadataTaskSubscription, MetadataSubscribersInFlight, SelfId());
 }
 
 void TMoveDataDriver::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx) {
@@ -265,8 +186,7 @@ void TMoveDataDriver::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, con
         return;
     }
     AFL_VERIFY(ev->Get()->GetGeneration() == Self->Generation())("ev", ev->Get()->GetGeneration())("tablet", Self->Generation());
-    ev->Get()->GetProcessor()->ApplyResult(
-        ev->Get()->ExtractResult(), Self->MutableIndexAs<NOlap::TColumnEngineForLogs>());
+    ev->Get()->GetProcessor()->ApplyResult(ev->Get()->ExtractResult(), Self->MutableIndexAs<NOlap::TColumnEngineForLogs>());
     RunMigrationStep(ctx);
 }
 
@@ -292,10 +212,12 @@ void TMoveDataDriver::RunMigrationStep(const TActorContext& ctx) {
     if (queues.Pending) {
         SetupMetadata();
     }
-    if (queues.ConfirmedToMove || queues.InFlight) {
+    if (queues.ConfirmedToMove || queues.RewriteStarted) {
         StartPortionRewrites();
     }
-    TryCompleteMigration(ctx, queues);
+    if (CanCompleteMigration(queues)) {
+        FinishMigration(ctx);
+    }
 }
 
 void TMoveDataDriver::Handle(TEvPrivate::TEvMoveDataWakeup::TPtr&, const TActorContext& ctx) {

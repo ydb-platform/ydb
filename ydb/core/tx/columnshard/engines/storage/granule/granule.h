@@ -177,8 +177,8 @@ public:
         return ActualizationIndex->CollectMetadataRequests(Portions);
     }
 
-    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests() {
-        return ActualizationIndex->CollectMoveDataMetadataRequests(Portions, InsertedPortionsById);
+    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(NActualizer::TMoveDataMetadataBudget& budget) {
+        return ActualizationIndex->CollectMoveDataMetadataRequests(Portions, InsertedPortionsById, budget);
     }
 
     TInsertWriteId BuildNextInsertWriteId() {
@@ -272,9 +272,9 @@ public:
         ActualizationIndex->RefreshScheme(context);
     }
 
-    void StartMoveData(const THashSet<ui32>& targetGroups) {
+    void StartMoveData(THashSet<ui32> targetGroups) {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
-        ActualizationIndex->StartMoveData(targetGroups, context, InsertedPortionsById);
+        ActualizationIndex->StartMoveData(std::move(targetGroups), context, InsertedPortionsById);
     }
 
     void StopMoveData() {
@@ -308,7 +308,7 @@ public:
     }
 
     void BuildActualizationTasks(
-        NActualizer::TTieringProcessContext& context, const TDuration actualizationLag, const NActualizer::EActualizationScope scope) const;
+        NActualizer::TTieringProcessContext& context, const TDuration tieringDelay, NActualizer::EActualizationScope scope) const;
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {

@@ -2,6 +2,7 @@
 #include "initialization.h"
 #include "tx_progress.h"
 
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/common/queue_sizes.h>
 #include <ydb/core/tx/data_events/common/signals_flow.h>
 
 #include <ydb/library/signals/owner.h>
@@ -114,7 +115,7 @@ private:
     std::shared_ptr<TValueAggregationClient> MoveDataActive;
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsPending;
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsConfirmedToMove;
-    std::shared_ptr<TValueAggregationClient> MoveDataPortionsInFlight;
+    std::shared_ptr<TValueAggregationClient> MoveDataPortionsRewriteStarted;
     // Either can hold the completion gate while every other queue gauge is zero.
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsUncommitted;
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsRetired;
@@ -124,9 +125,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByVacuumCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByPortionsCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByCleanupCount;
-    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByGCCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedBySharedCount;
-    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByFirstGCRoundCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataPortionsRejectedCount;
 
     NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataBytes;
@@ -238,14 +237,12 @@ public:
         MoveDataActive->SetValue(1);
     }
 
-    // Scalars, not TMoveDataQueueSizes: keeps this library off the actualizer headers.
-    void OnMoveDataQueues(
-        const ui64 pending, const ui64 confirmedToMove, const ui64 inFlight, const ui64 uncommitted, const ui64 retired) const {
-        MoveDataPortionsPending->SetValue(pending);
-        MoveDataPortionsConfirmedToMove->SetValue(confirmedToMove);
-        MoveDataPortionsInFlight->SetValue(inFlight);
-        MoveDataPortionsUncommitted->SetValue(uncommitted);
-        MoveDataPortionsRetired->SetValue(retired);
+    void OnMoveDataQueues(const NOlap::NActualizer::TMoveDataQueueSizes& queues) const {
+        MoveDataPortionsPending->SetValue(queues.Pending);
+        MoveDataPortionsConfirmedToMove->SetValue(queues.ConfirmedToMove);
+        MoveDataPortionsRewriteStarted->SetValue(queues.RewriteStarted);
+        MoveDataPortionsUncommitted->SetValue(queues.Uncommitted);
+        MoveDataPortionsRetired->SetValue(queues.Retired);
     }
 
     void OnMoveDataGateChecked() const {
@@ -269,17 +266,9 @@ public:
         MoveDataGateBlockedByCleanupCount->Add(1);
     }
 
-    void OnMoveDataGateBlockedByGC() const {
-        MoveDataGateBlockedByGCCount->Add(1);
-    }
-
     // Shared and borrowed links are not ours to collect, so they are not a GC wait.
     void OnMoveDataGateBlockedByShared() const {
         MoveDataGateBlockedBySharedCount->Add(1);
-    }
-
-    void OnMoveDataGateBlockedByFirstGCRound() const {
-        MoveDataGateBlockedByFirstGCRoundCount->Add(1);
     }
 
     void OnMoveDataFinished() const {
@@ -287,7 +276,7 @@ public:
         MoveDataActive->SetValue(0);
         MoveDataPortionsPending->SetValue(0);
         MoveDataPortionsConfirmedToMove->SetValue(0);
-        MoveDataPortionsInFlight->SetValue(0);
+        MoveDataPortionsRewriteStarted->SetValue(0);
         MoveDataPortionsUncommitted->SetValue(0);
         MoveDataPortionsRetired->SetValue(0);
     }

@@ -1,9 +1,9 @@
 #include "tablet_info_helper.h"
 
 #include <ydb/core/base/blobstorage.h>
-#include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/gc.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -57,13 +57,6 @@ std::vector<TLogoBlobID> LivePortionBlobs(const NFake::TProxyDS& proxy, const ui
     return result;
 }
 
-// TCSCounters registers under module_id=CS, and GetDeriviative prefixes the name with "Deriviative/".
-i64 GateBlockedByFirstGCRound(TTestBasicRuntime& runtime) {
-    const auto subgroup =
-        GetServiceCounters(runtime.GetDynamicCounters(0), "tablets")->GetSubgroup("subsystem", "columnshard")->GetSubgroup("module_id", "CS");
-    return subgroup->GetCounter("Deriviative/MoveData/GateBlocked/FirstGCRound/Count", true)->Val();
-}
-
 // Private event ids repeat across components, so the type id alone does not identify TEvWriteIndex.
 const TEvPrivate::TEvWriteIndex* AsWriteIndex(IEventHandle::TPtr& ev) {
     if (ev->GetTypeRewrite() != TEvPrivate::TEvWriteIndex::EventType || !ev->HasEvent()) {
@@ -81,6 +74,19 @@ static void DeliverMoveDataWakeups(TTestBasicRuntime& runtime) {
         return TTestActorRuntime::DefaultScheduledFilterFunc(r, event, delay, deadline);
     });
 }
+
+class TGCTrackingController: public NYDBTest::NColumnShard::TController {
+public:
+    ui64 CompletedGCCount = 0;
+
+protected:
+    void DoOnAfterGCAction(const TColumnShard& shard, const NOlap::IBlobsGCAction& action) override {
+        TController::DoOnAfterGCAction(shard, action);
+        if (action.GetStorageId() == NOlap::IStoragesManager::DefaultStorageId) {
+            ++CompletedGCCount;
+        }
+    }
+};
 
 class TMoveDataFixture {
 public:
@@ -169,13 +175,24 @@ public:
     }
 
     void WaitForFirstGC() {
-        // An empty request waits for the persisted current-generation barrier without rewriting portions.
-        // This also confirms that earlier-generation Keep flags were acknowledged.
-        StartMove({});
-        const auto response = DriveGate(150);
-        UNIT_ASSERT_C(response, "the first GC barrier was not committed");
-        UNIT_ASSERT_VALUES_EQUAL(
-            static_cast<int>(response->Get()->Record.GetStatus()), static_cast<int>(NKikimrTabletBase::TEvMoveDataResponse::Success));
+        // GC is paused before restart so the observer sees the current-generation barrier.
+        auto* controller = NYDBTest::TControllers::GetControllerAs<TGCTrackingController>();
+        UNIT_ASSERT(controller);
+        UNIT_ASSERT(!NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(EBackground::GC));
+        ui64 completedAfterBarrier = 0;
+        auto observer = Runtime.AddObserver<TEvBlobStorage::TEvCollectGarbage>([&](TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
+            const auto& request = *ev->Get();
+            if (request.TabletId == TabletId && request.Channel >= 2 && request.Collect &&
+                request.CollectGeneration >= controller->GetTheOnlyShard()->Generation()) {
+                completedAfterBarrier = controller->CompletedGCCount + 1;
+            }
+        });
+        controller->EnableBackground(EBackground::GC);
+        DriveGate(150, {}, [&] {
+            return completedAfterBarrier && controller->CompletedGCCount >= completedAfterBarrier;
+        });
+        UNIT_ASSERT_C(completedAfterBarrier && controller->CompletedGCCount >= completedAfterBarrier,
+            "the current-generation GC barrier was not committed");
     }
 
     // Each step is a wakeup, which reruns the background work and the MoveData gate.
@@ -205,12 +222,10 @@ public:
         }, stopWhen);
     }
 
-    // Success promises the old group holds no portion data, not merely that the queues drained.
-    void AssertDrainedSuccess(const TEvTablet::TEvMoveDataResponse::TPtr& response) const {
+    void AssertSuccess(const TEvTablet::TEvMoveDataResponse::TPtr& response) const {
+        UNIT_ASSERT(response);
         UNIT_ASSERT_VALUES_EQUAL(
             static_cast<int>(response->Get()->Record.GetStatus()), static_cast<int>(NKikimrTabletBase::TEvMoveDataResponse::Success));
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            LivePortionBlobs(*OldGroupProxy, TabletId).size(), 0u, "answered Success with portion data still live in the old group");
     }
 
     // Reads at (ReadStep, 1), which skips a write committed in the latest plan step.
@@ -278,11 +293,42 @@ void RunMoveDataToCompletion(const bool moveDataEnabled) {
     const size_t movedBlobs = LivePortionBlobs(*f.NewGroupProxy, TabletId).size();
     if (moveDataEnabled) {
         UNIT_ASSERT_C(movedBlobs, "answered Success without rewriting any of the " << oldBlobs << " portion blobs out of the old group");
-        f.AssertDrainedSuccess(response);
+        f.AssertSuccess(response);
     } else {
         UNIT_ASSERT_VALUES_EQUAL_C(movedBlobs, 0u, "the disabled feature flag still rewrote portions");
     }
     UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000);
+    f.Restart();
+    UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000);
+}
+
+// A prepared write survives restart; its blobs must keep the move pending after the first GC.
+ui64 RunMoveWithPreparedWrite(const bool commit) {
+    auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<TGCTrackingController>();
+    TMoveDataFixture f;
+    f.Write(1, 0, 1000);
+    const auto writeIds = f.WriteUncommitted(100, 5000, 5010, 7);
+    f.Controller->WaitCompactions(TDuration::Seconds(10));
+    // Leave the proposal unplanned so recovery preserves the uncommitted write.
+    f.ProposeLockCommit(3, writeIds, 7);
+    f.Controller->DisableBackground(EBackground::GC);
+    f.ReassignPastWrittenData();
+    // Keep acknowledgements are durable; the prepared portion must still be tracked.
+    f.WaitForFirstGC();
+
+    f.StartMove();
+    UNIT_ASSERT_C(!f.DriveGateWithWrite(150, 2, 1000, 1001), "answered Success while an uncommitted write held blobs in the old group");
+
+    if (commit) {
+        f.PlanProposedCommit(3);
+    } else {
+        f.CancelProposedCommit(3);
+    }
+    const auto response = f.DriveGateWithWrite(150, 4, 1001, 1002);
+    UNIT_ASSERT_C(response, "no TEvMoveDataResponse after the write " << (commit ? "committed" : "aborted"));
+    f.AssertSuccess(response);
+    // Write 4 lands in the plan step ReadRows skips; only a committed prepared write adds its ten rows.
+    return f.ReadRows();
 }
 
 }   // namespace
@@ -306,14 +352,14 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.StartMove();
         const auto first = f.DriveGateWithWrite(150, 2, 1000, 1001);
         UNIT_ASSERT_C(first, "the first evacuation must complete");
-        f.AssertDrainedSuccess(first);
+        f.AssertSuccess(first);
 
         // No new plan step: retired new-group portions cannot be cleaned up yet.
         // The old group is already drained, so these unrelated retirees must not delay another request.
         f.StartMove();
         const auto next = f.DriveGate(150);
         UNIT_ASSERT_C(next, "unrelated new-group retirees blocked an already-drained group");
-        f.AssertDrainedSuccess(next);
+        f.AssertSuccess(next);
         UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000u);
     }
 
@@ -324,10 +370,16 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.Controller->WaitCompactions(TDuration::Seconds(10));
         f.ReassignPastWrittenData();
 
+        // An empty first request still runs vacuum and leaves a clean session boundary.
+        f.StartMove({});
+        const auto empty = f.DriveGate(150);
+        f.AssertSuccess(empty);
+        UNIT_ASSERT(LivePortionBlobs(*f.NewGroupProxy, TabletId).empty());
+
         f.StartMove();
         const auto first = f.DriveGateWithWrite(150, 2, 1000, 1001);
         UNIT_ASSERT_C(first, "the first session must complete");
-        f.AssertDrainedSuccess(first);
+        f.AssertSuccess(first);
 
         f.StartMove({ NewGroup });
         const auto refused = f.DriveGate(20);
@@ -338,7 +390,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.StartMove();
         const auto next = f.DriveGate(150);
         UNIT_ASSERT_C(next, "a completed or refused request must not prevent another session in the same incarnation");
-        f.AssertDrainedSuccess(next);
+        f.AssertSuccess(next);
         UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000u);
     }
 
@@ -393,7 +445,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.StartMove();
         const auto response = f.DriveGateWithWrite(150, 2, 1000, 1001);
         UNIT_ASSERT_C(response, "no TEvMoveDataResponse from the incarnation after the shutdown race");
-        f.AssertDrainedSuccess(response);
+        f.AssertSuccess(response);
     }
 
     Y_UNIT_TEST(MetadataResultQueuedDuringTabletShutdownDoesNotTouchTheDeadTablet) {
@@ -440,11 +492,11 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.StartMove();
         const auto response = f.DriveGateWithWrite(150, 2, 1000, 1001);
         UNIT_ASSERT_C(response, "the replacement incarnation must drain independently of the old metadata result");
-        f.AssertDrainedSuccess(response);
+        f.AssertSuccess(response);
     }
 
     // A second request naming a further historical group is merged on receipt, so the answer covers both groups.
-    Y_UNIT_TEST(ExpandedRequestIsAnsweredOnlyAfterEveryNamedGroupIsDrained) {
+    Y_UNIT_TEST(ExpandedRequestIsAnsweredOnlyAfterEveryNamedGroupIsRewritten) {
         TMoveDataFixture f;
         f.Controller->DisableBackground(EBackground::TTL);
         f.Write(1, 0, 1000);
@@ -456,66 +508,36 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.ReassignPastWrittenData(*f.MidGroupProxy, *f.NewGroupProxy);
         UNIT_ASSERT_C(LivePortionBlobs(*f.MidGroupProxy, TabletId).size(), "the second batch must have landed in MidGroup");
 
-        // GC off: the first session drains OldGroup but its last gate clause cannot pass, so it stays active.
-        f.Controller->DisableBackground(EBackground::GC);
+        // Hold the rewrites so the expanded request joins the same session.
+        f.Controller->DisableBackground(EBackground::MoveData);
         f.StartMove({ OldGroup });
-        UNIT_ASSERT_C(
-            !f.DriveGateWithWrite(60, 3, 2000, 2001), "answered with GC disabled: the gate did not wait for the old blobs to be collected");
+        UNIT_ASSERT_C(!f.DriveGateWithWrite(60, 3, 2000, 2001), "answered while the requested rewrites were disabled");
 
         f.StartMove({ OldGroup, MidGroup });
-        f.Controller->EnableBackground(EBackground::GC);
+        f.Controller->EnableBackground(EBackground::MoveData);
         const auto response = f.DriveGateWithWrite(200, 4, 3000, 3001);
         UNIT_ASSERT_C(response, "no TEvMoveDataResponse after the expanded request");
-        f.AssertDrainedSuccess(response);
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            LivePortionBlobs(*f.MidGroupProxy, TabletId).size(), 0u, "answered Success with portion data still live in MidGroup");
+        f.AssertSuccess(response);
+        // Both groups must eventually drain, although Success no longer waits for GC.
+        f.DriveGate(150, {}, [&] {
+            return LivePortionBlobs(*f.OldGroupProxy, TabletId).empty() && LivePortionBlobs(*f.MidGroupProxy, TabletId).empty();
+        });
+        UNIT_ASSERT(LivePortionBlobs(*f.OldGroupProxy, TabletId).empty());
+        UNIT_ASSERT(LivePortionBlobs(*f.MidGroupProxy, TabletId).empty());
         // Writes 1-3 are visible at ReadStep; write 4 sits in the latest plan step and is skipped.
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 2001);
+        f.Restart();
         UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 2001);
     }
 
-    // An uncommitted write cannot be rewritten, yet its blobs sit in the old group until it commits and moves.
+    // A committed prepared write must be rewritten out of the old group.
     Y_UNIT_TEST(UncommittedWriteCommitsAfterFirstGCDrainedKeepQueue) {
-        TMoveDataFixture f;
-        f.Write(1, 0, 1000);
-        const auto writeIds = f.WriteUncommitted(100, 5000, 5010, 7);
-        f.Controller->WaitCompactions(TDuration::Seconds(10));
-        // Proposed but left unplanned, so the write survives the restart below and still holds no commit snapshot.
-        f.ProposeLockCommit(3, writeIds, 7);
-        f.ReassignPastWrittenData();
-        // Keep acknowledgements are already durable; the prepared portion must still be tracked.
-        f.WaitForFirstGC();
-
-        f.StartMove();
-        UNIT_ASSERT_C(!f.DriveGateWithWrite(150, 2, 1000, 1001), "answered Success while an uncommitted write held blobs in the old group");
-
-        f.PlanProposedCommit(3);
-        const auto response = f.DriveGateWithWrite(150, 4, 1001, 1002);
-        UNIT_ASSERT_C(response, "no TEvMoveDataResponse after the write committed");
-        f.AssertDrainedSuccess(response);
-        // Write 4 lands in the plan step ReadRows skips.
-        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1011);
+        UNIT_ASSERT_VALUES_EQUAL(RunMoveWithPreparedWrite(/*commit=*/true), 1011);
     }
 
-    // An aborted write leaves its blobs in the old group until cleanup deletes them.
+    // An aborted prepared write must reach cleanup before the move completes.
     Y_UNIT_TEST(SuccessWaitsForAbortedWriteToBeCleanedUp) {
-        TMoveDataFixture f;
-        f.Write(1, 0, 1000);
-        const auto writeIds = f.WriteUncommitted(100, 5000, 5010, 7);
-        f.Controller->WaitCompactions(TDuration::Seconds(10));
-        // Proposed but left unplanned, so the write survives the restart below and can be aborted on demand afterwards.
-        f.ProposeLockCommit(3, writeIds, 7);
-        f.ReassignPastWrittenData();
-        // Keep acknowledgements are already durable; the prepared portion must still be tracked.
-        f.WaitForFirstGC();
-
-        f.StartMove();
-        UNIT_ASSERT_C(!f.DriveGateWithWrite(150, 2, 1000, 1001), "answered Success while an uncommitted write held blobs in the old group");
-
-        f.CancelProposedCommit(3);
-        const auto response = f.DriveGateWithWrite(150, 4, 1001, 1002);
-        UNIT_ASSERT_C(response, "no TEvMoveDataResponse after the write aborted");
-        f.AssertDrainedSuccess(response);
-        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1001);
+        UNIT_ASSERT_VALUES_EQUAL(RunMoveWithPreparedWrite(/*commit=*/false), 1001);
     }
 
     // An uncommitted write whose blobs are already in the new group must not hold the move back.
@@ -529,7 +551,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.StartMove();
         const auto response = f.DriveGateWithWrite(150, 2, 1000, 1001);
         UNIT_ASSERT_C(response, "an uncommitted write outside the moved group held the answer back");
-        f.AssertDrainedSuccess(response);
+        f.AssertSuccess(response);
     }
 
     // A running cleanup has taken its portions out of CleanupPortions but not yet queued their blobs for GC.
@@ -577,7 +599,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         }
         response = f.DriveGate(150);
         UNIT_ASSERT_C(response, "no TEvMoveDataResponse after the cleanup finished");
-        f.AssertDrainedSuccess(response);
+        f.AssertSuccess(response);
         UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000);
     }
 
@@ -608,7 +630,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.Write(3, 1000, 1001);
         const auto response = f.DriveGate(150);
         UNIT_ASSERT_C(response, "no TEvMoveDataResponse after cleanup was re-enabled");
-        f.AssertDrainedSuccess(response);
+        f.AssertSuccess(response);
         UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000);
     }
 
@@ -626,7 +648,15 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         bool drained = false;
         bool targetCleanupSeen = false;
         std::vector<TAutoPtr<IEventHandle>> heldCleanups;
+        std::vector<TAutoPtr<IEventHandle>> heldGateEvents;
+        bool holdGate = false;
         auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
+            if (holdGate && ev->HasEvent() &&
+                (dynamic_cast<const TEvPrivate::TEvMoveDataWakeup*>(ev->GetBase()) ||
+                    dynamic_cast<const TEvPrivate::TEvMoveDataPoke*>(ev->GetBase()))) {
+                heldGateEvents.emplace_back(ev.Release());
+                return;
+            }
             const auto* writeIndex = AsWriteIndex(ev);
             if (!writeIndex) {
                 return;
@@ -653,10 +683,9 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
             }
         });
 
-        // Cleanup and GC stay off so the answer waits for the later retirements; compaction off keeps earlier ones out.
+        // Cleanup stays off while later portions retire; compaction off keeps earlier retirements out.
         f.Controller->DisableBackground(EBackground::Compaction);
         f.Controller->DisableBackground(EBackground::Cleanup);
-        f.Controller->DisableBackground(EBackground::GC);
         f.StartMove();
         UNIT_ASSERT_C(!f.DriveGate(150, {}, [&] {
             return !rewritten.empty();
@@ -676,6 +705,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         }));
         UNIT_ASSERT_C(!laterRetired.empty(), "compaction never retired a portion after the drain");
 
+        holdGate = true;
         f.Controller->EnableBackground(EBackground::Cleanup);
         UNIT_ASSERT(!f.DriveGate(150, {}, [&] {
             return targetCleanupSeen;
@@ -689,85 +719,63 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         }));
         UNIT_ASSERT_C(!heldCleanups.empty(), "no cleanup of the later retirements started");
 
-        f.Controller->EnableBackground(EBackground::GC);
+        holdGate = false;
+        UNIT_ASSERT_C(!heldGateEvents.empty(), "no driver turn was held while arranging the unrelated cleanup");
+        for (auto& ev : heldGateEvents) {
+            f.Runtime.Send(ev.Release());
+        }
         const auto response = f.DriveGate(150);
         UNIT_ASSERT_C(response, "a cleanup of portions retired after the drain held the answer back");
-        f.AssertDrainedSuccess(response);
+        f.AssertSuccess(response);
         for (auto& ev : heldCleanups) {
             f.Runtime.Send(ev.Release());
         }
         UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1101);
     }
 
-    Y_UNIT_TEST(SuccessWaitsForDurableGCCleanupAfterBlobStorageAcknowledges) {
+    Y_UNIT_TEST(SuccessBeforeGCIsDurableAcrossRestart) {
+        auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<TGCTrackingController>();
         TMoveDataFixture f;
         f.Controller->DisableBackground(EBackground::TTL);
         f.Write(1, 0, 1000);
         f.Controller->WaitCompactions(TDuration::Seconds(10));
+        f.Controller->DisableBackground(EBackground::Compaction);
+        f.Controller->DisableBackground(EBackground::GC);
         f.ReassignPastWrittenData();
 
-        f.WaitForFirstGC();
-
-        std::vector<TAutoPtr<IEventHandle>> held;
-        f.Runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->HasEvent()) {
-                if (const auto* finished = dynamic_cast<const TEvPrivate::TEvGarbageCollectionFinished*>(ev->GetBase())) {
-                    for (auto blobs = finished->Action->GetBlobsToRemove().GetIterator(); blobs.IsValid(); ++blobs) {
-                        if (blobs.GetBlobId().GetDsGroup() == OldGroup) {
-                            held.emplace_back(ev.Release());
-                            return TTestActorRuntime::EEventAction::DROP;
-                        }
-                    }
-                }
+        // Blob PUTs have finished, but the replacement metadata and Keep intents are not committed yet.
+        bool holdRewrite = true;
+        std::vector<TAutoPtr<IEventHandle>> heldRewrites;
+        auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
+            const auto* writeIndex = AsWriteIndex(ev);
+            if (holdRewrite && writeIndex && std::dynamic_pointer_cast<NOlap::TTTLColumnEngineChanges>(writeIndex->IndexChanges)) {
+                heldRewrites.emplace_back(ev.Release());
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
         });
-        const auto counters =
-            GetServiceCounters(f.Runtime.GetDynamicCounters(0), "tablets")->GetSubgroup("subsystem", "columnshard")->GetSubgroup("module_id",
-                "CS");
-        const auto blocked = counters->GetCounter("Deriviative/MoveData/GateBlocked/GC/Count", true);
-        const auto before = blocked->Val();
         f.StartMove();
-        UNIT_ASSERT_C(!f.DriveGateWithWrite(150, 2, 1000, 1001), "Success before durable GC cleanup");
-        UNIT_ASSERT_C(!held.empty(), "no GC completion containing the target group was held");
-        UNIT_ASSERT_C(blocked->Val() > before, "the durable GC gate was not exercised");
+        UNIT_ASSERT_C(!f.DriveGate(150, {}, [&] {
+            return !heldRewrites.empty();
+        }), "Success before the rewrite committed");
+        UNIT_ASSERT_C(!heldRewrites.empty(), "no rewrite was intercepted before its local DB transaction");
+        UNIT_ASSERT_C(!f.DriveGate(120), "Success while the rewrite transaction was still held");
 
-        f.Runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
-        for (auto& ev : held) {
+        holdRewrite = false;
+        for (auto& ev : heldRewrites) {
             f.Runtime.Send(ev.Release());
         }
-        const auto response = f.DriveGate(150);
-        UNIT_ASSERT_C(response, "no Success after GC cleanup committed");
-        f.AssertDrainedSuccess(response);
+        const auto response = f.DriveGateWithWrite(150, 2, 1000, 1001);
+        UNIT_ASSERT_C(response, "MoveData waited for GC after rewrite and cleanup committed");
+        f.AssertSuccess(response);
+        UNIT_ASSERT_C(!LivePortionBlobs(*f.OldGroupProxy, TabletId).empty(), "GC must still be pending at Success");
+        UNIT_ASSERT_C(!LivePortionBlobs(*f.NewGroupProxy, TabletId).empty(), "no replacement blobs were written");
         UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000);
-    }
 
-    // Drained queues are not barrier coverage: a fresh incarnation has collected nothing yet, and its empty queues say nothing about the old generations.
-    Y_UNIT_TEST(SuccessWaitsForTheFirstGCRoundOfTheIncarnation) {
-        TMoveDataFixture f;
-        f.Controller->DisableBackground(EBackground::TTL);
-        f.Write(1, 0, 1000);
-        f.Controller->WaitCompactions(TDuration::Seconds(10));
-        f.ReassignPastWrittenData();
-
-        f.StartMove();
-        auto response = f.DriveGateWithWrite(150, 2, 1000, 1001);
-        UNIT_ASSERT_C(response, "the first move never drained OldGroup");
-        f.AssertDrainedSuccess(response);
-
-        // The queues come back empty from local DB, but LastCollectedGenStep predates this generation.
-        f.Controller->DisableBackground(EBackground::GC);
+        // Hive can restart us immediately. Recover the Keep intents, finish GC, then read the rewritten data again.
         f.Restart();
-        const i64 blockedBefore = GateBlockedByFirstGCRound(f.Runtime);
-        f.StartMove();
-        // The writes let cleanup drain, so nothing but the missing barrier can hold the gate.
-        UNIT_ASSERT_C(!f.DriveGateWithWrite(150, 3, 2000, 2001), "answered Success before this incarnation committed a GC barrier");
-        UNIT_ASSERT_C(GateBlockedByFirstGCRound(f.Runtime) > blockedBefore, "the gate was held by something other than the missing GC round");
-
-        f.Controller->EnableBackground(EBackground::GC);
-        response = f.DriveGateWithWrite(200, 4, 3000, 3001);
-        UNIT_ASSERT_C(response, "no Success after the first GC round of the incarnation committed");
-        f.AssertDrainedSuccess(response);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000);
+        f.WaitForFirstGC();
+        UNIT_ASSERT_C(LivePortionBlobs(*f.OldGroupProxy, TabletId).empty(), "old blobs were not collected after restart");
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000);
     }
 
     // MoveData must rewrite index blobs (InheritPortionStorage=false) left in BlobStorage by a tiered portion.
@@ -821,7 +829,12 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.StartMove();
         const auto response = f.DriveGateWithWrite(200, 2, 1000, 1001);
         UNIT_ASSERT_C(response, "no TEvMoveDataResponse: MoveData never completed");
-        f.AssertDrainedSuccess(response);
+        f.AssertSuccess(response);
+        // Success may precede GC, but the old index blobs must eventually be collected.
+        f.DriveGate(150, {}, [&] {
+            return LivePortionBlobs(*f.OldGroupProxy, TabletId).empty();
+        });
+        UNIT_ASSERT_C(LivePortionBlobs(*f.OldGroupProxy, TabletId).empty(), "tiered index blobs remained in the old group");
         UNIT_ASSERT_VALUES_EQUAL_C(f.ReadRows(), 1000, "the table must still be readable after the move");
     }
 }

@@ -546,12 +546,11 @@ private:
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
 
-    // Non-owning handle: the shared mailbox permits synchronous request admission.
+    // Owned by the actor runtime; cleared before shutdown. The shared mailbox permits synchronous admission.
     TMoveDataDriver* MoveDataDriver = nullptr;
-    TActorId MoveDataDriverId;
 
-    // Number of metadata-accessor requests this tablet has in flight; gates SetupMetadata.
-    std::shared_ptr<TAtomicCounter> MetadataRequestsInFlight = std::make_shared<TAtomicCounter>();
+    // Outstanding metadata subscribers for this tablet; gates SetupMetadata.
+    std::shared_ptr<TAtomicCounter> MetadataSubscribersInFlight = std::make_shared<TAtomicCounter>();
 
     // In-flight forced-compaction requests (ALTER TABLE ... COMPACT). Kept in memory only, mirroring
     // DataShard's CompactionWaiters: on restart/move the SchemeShard's persisted queue re-sends
@@ -626,7 +625,7 @@ private:
     void SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request);
     void SetupMetadata();
     void StartMetadataRequests(std::vector<NOlap::TCSMetadataRequest>&& requests,
-        const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext, const std::shared_ptr<TAtomicCounter>& inFlight,
+        const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext, const std::shared_ptr<TAtomicCounter>& subscribersInFlight,
         const TActorId& recipient);
     bool SetupTtl();
     void StartTtlChanges(std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>>&& indexChanges);

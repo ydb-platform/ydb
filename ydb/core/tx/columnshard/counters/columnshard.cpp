@@ -44,7 +44,7 @@ TCSCounters::TCSCounters()
     MoveDataActive = TBase::GetValueAutoAggregationsClient("MoveData/Active");
     MoveDataPortionsPending = TBase::GetValueAutoAggregationsClient("MoveData/Portions/Pending");
     MoveDataPortionsConfirmedToMove = TBase::GetValueAutoAggregationsClient("MoveData/Portions/ConfirmedToMove");
-    MoveDataPortionsInFlight = TBase::GetValueAutoAggregationsClient("MoveData/Portions/InFlight");
+    MoveDataPortionsRewriteStarted = TBase::GetValueAutoAggregationsClient("MoveData/Portions/RewriteStarted");
     MoveDataPortionsUncommitted = TBase::GetValueAutoAggregationsClient("MoveData/Portions/Uncommitted");
     MoveDataPortionsRetired = TBase::GetValueAutoAggregationsClient("MoveData/Portions/Retired");
     MoveDataFinishedCount = TBase::GetDeriviative("MoveData/Finished/Count");
@@ -53,9 +53,7 @@ TCSCounters::TCSCounters()
     MoveDataGateBlockedByPortionsCount = TBase::GetDeriviative("MoveData/GateBlocked/Portions/Count");
     MoveDataPortionsRejectedCount = TBase::GetDeriviative("MoveData/Portions/Rejected/Count");
     MoveDataGateBlockedByCleanupCount = TBase::GetDeriviative("MoveData/GateBlocked/Cleanup/Count");
-    MoveDataGateBlockedByGCCount = TBase::GetDeriviative("MoveData/GateBlocked/GC/Count");
     MoveDataGateBlockedBySharedCount = TBase::GetDeriviative("MoveData/GateBlocked/Shared/Count");
-    MoveDataGateBlockedByFirstGCRoundCount = TBase::GetDeriviative("MoveData/GateBlocked/FirstGCRound/Count");
 
     OverloadMetadataBytes = TBase::GetDeriviative("Overload/Metadata/Bytes");
     OverloadMetadataCount = TBase::GetDeriviative("Overload/Metadata/Count");

@@ -1,11 +1,3 @@
-#include "tablet_info_helper.h"
-
-#include <ydb/core/tablet_flat/test/libs/table/test_dbase.h>
-#include <ydb/core/testlib/actor_helpers.h>
-#include <ydb/core/tx/columnshard/blobs_action/bs/blob_manager.h>
-#include <ydb/core/tx/columnshard/blobs_action/bs/gc.h>
-#include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
@@ -19,19 +11,15 @@
 #include <ydb/core/tx/columnshard/hooks/testing/ro_controller.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/size_literals.h>
 #include <util/string/builder.h>
 
 namespace NKikimr {
 
-using NTestMoveData::MakeTabletInfo;
-
 static constexpr ui32 BlobSize = 1_KB;
 static constexpr ui32 OldGroup = 100;
 static constexpr ui32 NewGroup = 200;
-static constexpr ui32 ReassignGen = 5;
 
 static NOlap::TUnifiedBlobId MakeDsBlobId(ui32 dsGroup, ui64 tabletId, ui32 gen, ui32 step, ui32 channel) {
     TLogoBlobID logo(tabletId, gen, step, channel, BlobSize, 0);
@@ -117,219 +105,7 @@ struct TActualizerSchema {
     }
 };
 
-class TSoftMemoryLimitController: public NYDBTest::ICSController {
-private:
-    const ui64 SoftMemoryLimit;
-
-public:
-    TSoftMemoryLimitController(const ui64 softMemoryLimit)
-        : SoftMemoryLimit(softMemoryLimit)
-    {
-    }
-
-    ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 /*defaultValue*/) const override {
-        return SoftMemoryLimit;
-    }
-};
-
-// A blob manager of one generation over the OldGroup -> NewGroup history, with everything BuildGCTask needs.
-struct TBlobManagerFixture {
-    TActorSystemStub ActorSystemStub;
-    TIntrusivePtr<TTabletStorageInfo> TabletInfo;
-    std::shared_ptr<NOlap::TBlobManager> Manager;
-    std::shared_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager> Shared;
-    std::shared_ptr<NOlap::NBlobOperations::TStorageCounters> StorageCounters;
-    std::shared_ptr<NOlap::NBlobOperations::TRemoveGCCounters> Counters;
-
-    TBlobManagerFixture(const ui64 tabletId, const ui32 tabletGen) {
-        ActorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        TabletInfo = MakeTabletInfo(tabletId, { { 0, OldGroup }, { ReassignGen, NewGroup } }, TBlobStorageGroupType::ErasureNone);
-        Manager = std::make_shared<NOlap::TBlobManager>(TabletInfo, tabletGen, NOlap::TTabletId(tabletId));
-        Shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
-            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(tabletId));
-        StorageCounters = std::make_shared<NOlap::NBlobOperations::TStorageCounters>(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
-        Counters = StorageCounters->GetConsumerCounter(NOlap::NBlobOperations::EConsumer::GC)->GetRemoveGCCounters();
-    }
-
-    std::shared_ptr<NOlap::NBlobOperations::NBlobStorage::TGCTask> BuildGCTask() {
-        return Manager->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, Manager, Shared, Counters);
-    }
-};
-
-struct TGCDbSchema: NIceDb::Schema {
-    using TTables = SchemaTables<NColumnShard::Schema::BlobsToKeep, NColumnShard::Schema::BlobsToDelete, NColumnShard::Schema::BlobsToDeleteWT>;
-};
-
-class TGCDbFixture {
-    class TGroupSelector: public NOlap::IBlobGroupSelector {
-        const TIntrusivePtr<TTabletStorageInfo> Info;
-
-    public:
-        explicit TGroupSelector(const ui64 tabletId)
-            : Info(MakeTabletInfo(tabletId, { { 0, OldGroup }, { ReassignGen, NewGroup } }))
-        {
-        }
-
-        ui32 GetGroup(const TLogoBlobID& blob) const override {
-            return Info->GroupFor(blob.Channel(), blob.Generation());
-        }
-    };
-
-    TActorSystemStub ActorSystemStub;
-    NTable::NTest::TDbExec Database;
-    const ui64 TabletId;
-    const TGroupSelector Selector;
-
-public:
-    explicit TGCDbFixture(const ui64 tabletId)
-        : TabletId(tabletId)
-        , Selector(tabletId)
-    {
-        Database.Begin();
-        NIceDb::TNiceDb db(*Database.operator->());
-        db.Materialize<TGCDbSchema>();
-        Database.Commit();
-    }
-
-    template <class TAction>
-    void Transaction(TAction&& action, const bool commit = true) {
-        Database.Begin();
-        NOlap::TBlobManagerDb db(*Database.operator->());
-        action(db);
-        if (commit) {
-            Database.Commit();
-        } else {
-            Database.Reject();
-        }
-    }
-
-    template <class TTable>
-    void Insert(const NOlap::TUnifiedBlobId& blob, const bool newEncoding, const ui64 rowTabletId) {
-        Transaction([&](NOlap::TBlobManagerDb& blobs) {
-            NIceDb::TNiceDb db(blobs.GetDatabase());
-            const TString encoded = newEncoding ? blob.ToStringNew() : blob.ToStringLegacy();
-            if constexpr (std::is_same_v<TTable, NColumnShard::Schema::BlobsToDeleteWT>) {
-                db.Table<TTable>().Key(encoded, rowTabletId).Update();
-            } else {
-                db.Table<TTable>().Key(encoded).Update();
-            }
-        });
-    }
-
-    bool HasBlobs(const THashSet<ui32>& groups) {
-        bool found = true;
-        Transaction([&](NOlap::TBlobManagerDb& db) {
-            UNIT_ASSERT(db.HasGCBlobsForGroups(groups, &Selector, NOlap::TTabletId(TabletId), found));
-        });
-        return found;
-    }
-
-    void Restart() {
-        Database.Replay(NTable::NTest::EPlay::Boot);
-    }
-};
-
 Y_UNIT_TEST_SUITE(TMoveDataTest) {
-    Y_UNIT_TEST(DurableGCCheckReadsEveryTableAndEncoding) {
-        static constexpr ui64 TabletId = 42;
-        const auto checkTable = []<class TTable>() {
-            for (const bool newEncoding : { false, true }) {
-                TGCDbFixture db(TabletId);
-                UNIT_ASSERT(!db.HasBlobs({ OldGroup }));
-                const auto oldBlob = MakeDsBlobId(OldGroup, TabletId, 1, 1, 2);
-                db.Insert<TTable>(oldBlob, newEncoding, TabletId);
-                UNIT_ASSERT(db.HasBlobs({ OldGroup }));
-                UNIT_ASSERT(!db.HasBlobs({ NewGroup }));
-                UNIT_ASSERT(!db.HasBlobs({}));
-                db.Restart();
-                UNIT_ASSERT(db.HasBlobs({ OldGroup }));
-                db.Transaction([&](NOlap::TBlobManagerDb& blobs) {
-                    if constexpr (std::is_same_v<TTable, NColumnShard::Schema::BlobsToKeep>) {
-                        blobs.EraseBlobToKeep(oldBlob);
-                    } else {
-                        blobs.EraseBlobToDelete(oldBlob, NOlap::TTabletId(TabletId));
-                    }
-                });
-                UNIT_ASSERT(!db.HasBlobs({ OldGroup }));
-                db.Insert<TTable>(MakeDsBlobId(NewGroup, TabletId, ReassignGen + 1, 2, 2), newEncoding, TabletId);
-                UNIT_ASSERT(!db.HasBlobs({ OldGroup }));
-                UNIT_ASSERT(db.HasBlobs({ NewGroup }));
-            }
-        };
-        checkTable.template operator()<NColumnShard::Schema::BlobsToKeep>();
-        checkTable.template operator()<NColumnShard::Schema::BlobsToDelete>();
-        checkTable.template operator()<NColumnShard::Schema::BlobsToDeleteWT>();
-    }
-
-    Y_UNIT_TEST(DurableGCCheckUsesExplicitGroupForNewEncoding) {
-        static constexpr ui64 TabletId = 42;
-        TGCDbFixture db(TabletId);
-        // The encoded group wins even when our channel history resolves the generation elsewhere.
-        db.Insert<NColumnShard::Schema::BlobsToKeep>(MakeDsBlobId(OldGroup, TabletId, ReassignGen + 1, 1, 2), true, TabletId);
-        UNIT_ASSERT(db.HasBlobs({ OldGroup }));
-        UNIT_ASSERT(!db.HasBlobs({ NewGroup }));
-    }
-
-    Y_UNIT_TEST(DurableGCCheckIgnoresBorrowedBlobsAndForeignUnlinks) {
-        static constexpr ui64 TabletId = 42;
-        static constexpr ui64 ForeignTabletId = 99;
-        const auto checkTable = []<class TTable>() {
-            for (const bool newEncoding : { false, true }) {
-                TGCDbFixture db(TabletId);
-                const auto borrowed = MakeDsBlobId(OldGroup, ForeignTabletId, 1, 1, 2);
-                db.Insert<TTable>(borrowed, newEncoding, TabletId);
-                UNIT_ASSERT(!db.HasBlobs({ OldGroup }));
-                db.Restart();
-                UNIT_ASSERT(!db.HasBlobs({ OldGroup }));
-            }
-        };
-        checkTable.template operator()<NColumnShard::Schema::BlobsToKeep>();
-        checkTable.template operator()<NColumnShard::Schema::BlobsToDelete>();
-        checkTable.template operator()<NColumnShard::Schema::BlobsToDeleteWT>();
-        for (const bool newEncoding : { false, true }) {
-            TGCDbFixture db(TabletId);
-            const auto owned = MakeDsBlobId(OldGroup, TabletId, 1, 1, 2);
-            db.Insert<NColumnShard::Schema::BlobsToDeleteWT>(owned, newEncoding, ForeignTabletId);
-            UNIT_ASSERT(!db.HasBlobs({ OldGroup }));
-            db.Insert<NColumnShard::Schema::BlobsToDeleteWT>(owned, newEncoding, TabletId);
-            UNIT_ASSERT(db.HasBlobs({ OldGroup }));
-        }
-    }
-
-    Y_UNIT_TEST(DurableGCCheckSurvivesTaskExtractionUntilCleanupCommits) {
-        auto controllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TReadOnlyController>();
-        static constexpr ui64 TabletId = 44;
-        static constexpr ui32 TabletGen = 3;
-        TBlobManagerFixture f(TabletId, TabletGen);
-        TGCDbFixture db(TabletId);
-        const NOlap::TGenStep barrier(TabletGen, 0);
-        UNIT_ASSERT(f.BuildGCTask());
-        f.Manager->OnGCStartOnComplete(barrier);
-        f.Manager->OnGCFinishedOnComplete(barrier);
-
-        const auto blob = MakeDsBlobId(OldGroup, TabletId, 1, 1, 2);
-        db.Transaction([&](NOlap::TBlobManagerDb& blobs) {
-            f.Manager->DeleteBlobOnExecute(NOlap::TTabletId(TabletId), blob, blobs);
-        });
-        f.Manager->DeleteBlobOnComplete(NOlap::TTabletId(TabletId), blob);
-        UNIT_ASSERT(f.BuildGCTask());
-        UNIT_ASSERT(db.HasBlobs({ OldGroup }));
-        UNIT_ASSERT(!db.HasBlobs({ NewGroup }));
-        db.Restart();
-        UNIT_ASSERT(db.HasBlobs({ OldGroup }));
-
-        const auto cleanup = [&](NOlap::TBlobManagerDb& blobs) {
-            blobs.EraseBlobToDelete(blob, NOlap::TTabletId(TabletId));
-        };
-        db.Transaction(cleanup, false);
-        UNIT_ASSERT(db.HasBlobs({ OldGroup }));
-        db.Transaction(cleanup);
-        f.Manager->OnGCFinishedOnComplete(std::nullopt);
-        UNIT_ASSERT(!db.HasBlobs({ OldGroup }));
-        db.Restart();
-        UNIT_ASSERT(!db.HasBlobs({ OldGroup }));
-    }
-
     // Borrowed leg: the group comes from the persisted DS:<group>:<id> form, not our history.
     Y_UNIT_TEST(TestMoveDataBorrowedBlobs) {
         static constexpr ui64 TabletId = 46;
@@ -413,7 +189,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         // No actualizer notification: retirement is discovered from the catalogue.
         const auto retiredPortion = portions.at(1);
         retiredPortion->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
-        actualizer.RefreshPortions(portions, noUncommitted);
+        actualizer.UpdatePortionStates(portions, noUncommitted);
         const auto retired = actualizer.GetMoveDataQueueSizes();
         UNIT_ASSERT_VALUES_EQUAL_C(retired.GetTotal(), 0, "a retired portion is no longer waiting for a rewrite");
         UNIT_ASSERT_VALUES_EQUAL_C(retired.Retired, 1, "a retired portion that cleanup has not erased must hold the gate");
@@ -421,13 +197,13 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         // A portion the session did not seed is not ours, so its retirement holds nothing.
         portions.emplace(2, MakeDefaultTierPortion(2));
         portions.at(2)->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
-        actualizer.RefreshPortions(portions, noUncommitted);
+        actualizer.UpdatePortionStates(portions, noUncommitted);
         UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().Retired, 1, "an unseeded portion must not count");
 
         portions.erase(1);
         const auto& actualizerView = actualizer;
         UNIT_ASSERT_VALUES_EQUAL(actualizerView.GetMoveDataQueueSizes().Retired, 1);
-        actualizer.RefreshPortions(portions, noUncommitted);
+        actualizer.UpdatePortionStates(portions, noUncommitted);
         UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().Retired, 0, "the gate must open once cleanup erased the portion");
 
         // A late accessor response cannot resurrect a cleaned-up candidate.
@@ -456,7 +232,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         portions.erase(1);
         const auto& actualizerView = actualizer;
         UNIT_ASSERT_VALUES_EQUAL(actualizerView.GetMoveDataQueueSizes().Retired, 1);
-        actualizer.RefreshPortions(portions, noUncommitted);
+        actualizer.UpdatePortionStates(portions, noUncommitted);
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
     }
 
@@ -468,10 +244,10 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
         actualizer.Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
 
-        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TSoftMemoryLimitController>(0);
+        NOlap::NActualizer::TMoveDataMetadataBudget budget(0);
         auto sharedActualizer = std::make_shared<NOlap::NActualizer::TMoveDataActualizer>(THashSet<ui32>{ OldGroup }, schema.Index);
         sharedActualizer->Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
-        UNIT_ASSERT_VALUES_EQUAL(sharedActualizer->BuildMoveDataMetadataRequests(portions, {}, sharedActualizer).size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedActualizer->BuildMoveDataMetadataRequests(portions, {}, sharedActualizer, budget).size(), 1);
 
         ClassifyPortion(actualizer, portion, NewGroup);
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
@@ -493,7 +269,9 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         actualizer.AddPortion(portion, context);
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Pending, 0);
         portion->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
-        actualizer.RefreshPortions(portions, {});
+        actualizer.UpdatePortionStates(portions, {});
+        ClassifyPortion(actualizer, portion, OldGroup);   // A late reply must not readopt the erased rejected entry.
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Rejected, 1);
     }
@@ -506,7 +284,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
             actualizer.Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
             portion->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
-            actualizer.RefreshPortions(portions, {});
+            actualizer.UpdatePortionStates(portions, {});
             UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Pending, 1);
             UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
 
@@ -525,7 +303,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
         actualizer.Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
         portions.erase(1);
-        actualizer.RefreshPortions(portions, {});
+        actualizer.UpdatePortionStates(portions, {});
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
 
@@ -535,7 +313,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
     }
 
-    Y_UNIT_TEST(CandidateReconciliationIsBoundedAndErasurePreservesProgress) {
+    Y_UNIT_TEST(CandidateReconciliationIsBoundedWhileErasingTerminalEntries) {
         TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
         NOlap::NActualizer::TMoveDataActualizer actualizer({ OldGroup }, schema.Index);
         THashMap<ui64, NOlap::TPortionInfo::TPtr> portions;
@@ -544,21 +322,25 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             portions.emplace(id, MakeDefaultTierPortion(id));
         }
         actualizer.Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
-        // Erase entries at and between the cursors through classification before any reconciliation.
+        // Reject interleaved candidates while all three cursors still point into the seeded list.
         for (ui64 id = 1; id <= PortionCount; ++id) {
             ClassifyPortion(actualizer, portions.at(id), id % 2 ? NewGroup : OldGroup);
         }
         const auto selected = actualizer.GetMoveDataQueueSizes().ConfirmedToMove;
         UNIT_ASSERT_VALUES_EQUAL(selected, PortionCount / 2);
         portions.clear();
-        actualizer.RefreshPortions(portions, {});
+        actualizer.UpdatePortionStates(portions, {});
         UNIT_ASSERT_GT(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
         UNIT_ASSERT_LT(actualizer.GetMoveDataQueueSizes().GetTotal(), selected);
-        for (ui32 pass = 0; pass < 10 && actualizer.GetMoveDataQueueSizes().GetTotal(); ++pass) {
-            actualizer.RefreshPortions(portions, {});
+        UNIT_ASSERT_VALUES_EQUAL_C(selected - actualizer.GetMoveDataQueueSizes().GetTotal(), 1024,
+            "one pass must erase exactly its candidate budget without revisiting entries");
+        for (ui32 pass = 1; pass < 5; ++pass) {
+            actualizer.UpdatePortionStates(portions, {});
         }
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Rejected, (PortionCount + 1) / 2);
+        actualizer.UpdatePortionStates(portions, {});   // Re-enter after erasing the last candidate.
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
     }
 
     Y_UNIT_TEST(RewriteRetriesAfterLockReleaseWithoutAddPortion) {
@@ -583,7 +365,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             return result;
         };
         UNIT_ASSERT_VALUES_EQUAL(extract(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().InFlight, 1);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().RewriteStarted, 1);
         auto lock = locks->RegisterLock<NOlap::NDataLocks::TListPortionsLock>(
             "move", std::vector<NOlap::TPortionInfo::TConstPtr>{ portion }, NOlap::NDataLocks::ELockCategory::Actualization);
         UNIT_ASSERT_VALUES_EQUAL(extract(), 0);
@@ -593,9 +375,12 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         portion->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
         // Even before reconciliation, retirement must prevent another rewrite.
         UNIT_ASSERT_VALUES_EQUAL(extract(), 0);
-        actualizer.RefreshPortions(portions, {});
-        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().InFlight, 0);
+        actualizer.UpdatePortionStates(portions, {});
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().RewriteStarted, 0);
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 1);
+        portions.clear();
+        actualizer.UpdatePortionStates(portions, {});
+        UNIT_ASSERT_VALUES_EQUAL(extract(), 0);   // The rewrite cursor survives erasure of its last candidate.
     }
 
     Y_UNIT_TEST(MoveDataMetadataRequestsUsePortionSchema) {
@@ -633,10 +418,10 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
                 portions.emplace(portionId, std::move(portion));
             }
             UNIT_ASSERT_GT(wideMemory, (PortionsCount - 1) * narrowMemory);
-            auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TSoftMemoryLimitController>(totalMemory + 1);
+            NOlap::NActualizer::TMoveDataMetadataBudget budget(totalMemory + 1);
             auto actualizer = std::make_shared<NOlap::NActualizer::TMoveDataActualizer>(THashSet<ui32>{ 100 }, schema.Index);
             actualizer->Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
-            const auto requests = actualizer->BuildMoveDataMetadataRequests(portions, {}, actualizer);
+            const auto requests = actualizer->BuildMoveDataMetadataRequests(portions, {}, actualizer, budget);
             UNIT_ASSERT_VALUES_EQUAL_C(requests.size(), 1, "the sum of per-portion estimates fits in one batch");
             UNIT_ASSERT_VALUES_EQUAL(requests.front().GetRequest()->GetSize(), PortionsCount);
         }
@@ -655,10 +440,20 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_GT(portionMemory, 0);
 
         auto buildWithLimit = [&](const ui64 softLimit, const THashMap<ui64, NOlap::TPortionInfo::TPtr>& knownPortions) {
-            auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TSoftMemoryLimitController>(softLimit);
             auto actualizer = std::make_shared<NOlap::NActualizer::TMoveDataActualizer>(targetGroups, schema.Index);
             actualizer->Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
-            return actualizer->BuildMoveDataMetadataRequests(knownPortions, {}, actualizer);
+            actualizer->UpdatePortionStates(knownPortions, {});
+            std::vector<NOlap::TCSMetadataRequest> requests;
+            while (actualizer->GetMoveDataQueueSizes().Pending) {
+                NOlap::NActualizer::TMoveDataMetadataBudget budget(softLimit);
+                auto batch = actualizer->BuildMoveDataMetadataRequests(knownPortions, {}, actualizer, budget);
+                UNIT_ASSERT_VALUES_EQUAL(batch.size(), 1);
+                for (ui64 id : batch.front().GetRequest()->GetPortionIds()) {
+                    ClassifyPortion(*actualizer, knownPortions.at(id), OldGroup);
+                }
+                requests.emplace_back(std::move(batch.front()));
+            }
+            return requests;
         };
 
         auto batchSizes = [](const std::vector<NOlap::TCSMetadataRequest>& requests) {
@@ -705,6 +500,79 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             UNIT_ASSERT_VALUES_EQUAL(ids.size(), PortionsCount - 1);
             UNIT_ASSERT_C(!ids.contains(PortionsCount), "a portion the engine no longer knows must not be requested");
         }
+    }
+
+    Y_UNIT_TEST(MetadataBudgetIsSharedAcrossActualizers) {
+        TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
+        THashMap<ui64, NOlap::TPortionInfo::TPtr> firstPortions{ { 1, MakeDefaultTierPortion(1) } };
+        THashMap<ui64, NOlap::TPortionInfo::TPtr> secondPortions{ { 2, MakeDefaultTierPortion(2) }, { 3, MakeDefaultTierPortion(3) } };
+        auto first = std::make_shared<NOlap::NActualizer::TMoveDataActualizer>(THashSet<ui32>{ OldGroup }, schema.Index);
+        auto second = std::make_shared<NOlap::NActualizer::TMoveDataActualizer>(THashSet<ui32>{ OldGroup }, schema.Index);
+        first->Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), firstPortions), {});
+        second->Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), secondPortions), {});
+        const ui64 memory = firstPortions.at(1)->PredictAccessorsMemory(firstPortions.at(1)->GetSchema(schema.Index));
+        for (const bool limitByMemory : { false, true }) {
+            NOlap::NActualizer::TMoveDataMetadataBudget budget(limitByMemory ? memory + 1 : 100 * memory);
+            budget.PortionsLeft = limitByMemory ? 1024 : 2;
+            const auto firstRequests = first->BuildMoveDataMetadataRequests(firstPortions, {}, first, budget);
+            UNIT_ASSERT_VALUES_EQUAL(firstRequests.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(firstRequests.front().GetRequest()->GetSize(), 1);
+            const auto requests = second->BuildMoveDataMetadataRequests(secondPortions, {}, second, budget);
+            UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(requests.front().GetRequest()->GetSize(), 1);
+            UNIT_ASSERT(budget.IsExhausted());
+            UNIT_ASSERT(second->BuildMoveDataMetadataRequests(secondPortions, {}, second, budget).empty());
+        }
+    }
+
+    Y_UNIT_TEST(MetadataScanResumesAndRetriesWithoutResults) {
+        TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
+        auto actualizer = std::make_shared<NOlap::NActualizer::TMoveDataActualizer>(THashSet<ui32>{ OldGroup }, schema.Index);
+        THashMap<ui64, NOlap::TPortionInfo::TPtr> portions;
+        constexpr ui64 PortionCount = 2051;
+        for (ui64 id = 1; id <= PortionCount; ++id) {
+            portions.emplace(id, MakeDefaultTierPortion(id));
+        }
+        actualizer->Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
+        THashSet<ui64> requested;
+        for (ui32 pass = 0; pass < 3; ++pass) {
+            NOlap::NActualizer::TMoveDataMetadataBudget budget(Max<ui64>());
+            const auto batch = actualizer->BuildMoveDataMetadataRequests(portions, {}, actualizer, budget);
+            UNIT_ASSERT_VALUES_EQUAL(batch.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch.front().GetRequest()->GetSize(), 1024);
+            UNIT_ASSERT_VALUES_EQUAL(budget.PortionsLeft, 0);
+            for (ui64 id : batch.front().GetRequest()->GetPortionIds()) {
+                const bool fresh = requested.emplace(id).second;
+                UNIT_ASSERT_C(pass == 2 || fresh, "pending portions must progress before retrying earlier failures");
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(requested.size(), PortionCount);
+        // No callback succeeded, so all portions remain pending for a later retry.
+        UNIT_ASSERT_VALUES_EQUAL(actualizer->GetMoveDataQueueSizes().Pending, PortionCount);
+
+        // Replies can finish almost every candidate between batches without invalidating the scan position.
+        for (ui64 id = 2; id <= PortionCount; ++id) {
+            ClassifyPortion(*actualizer, portions.at(id), NewGroup);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(actualizer->GetMoveDataQueueSizes().Pending, 1);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer->GetMoveDataQueueSizes().Rejected, PortionCount - 1);
+        for (ui32 pass = 0; pass < 2; ++pass) {
+            NOlap::NActualizer::TMoveDataMetadataBudget budget(Max<ui64>());
+            const auto batch = actualizer->BuildMoveDataMetadataRequests(portions, {}, actualizer, budget);
+            UNIT_ASSERT_VALUES_EQUAL_C(budget.PortionsLeft, 1023, "erased entries must consume neither memory nor scan budget");
+            UNIT_ASSERT_VALUES_EQUAL(batch.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch.front().GetRequest()->GetSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch.front().GetRequest()->GetPortionIds().front(), 1);
+        }
+
+        portions.clear();
+        for (ui32 pass = 0; pass < 3; ++pass) {
+            actualizer->UpdatePortionStates(portions, {});
+        }
+        UNIT_ASSERT_VALUES_EQUAL(actualizer->GetMoveDataQueueSizes().GetTotal(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer->GetMoveDataQueueSizes().Rejected, PortionCount - 1);
+        NOlap::NActualizer::TMoveDataMetadataBudget budget(Max<ui64>());
+        UNIT_ASSERT(actualizer->BuildMoveDataMetadataRequests(portions, {}, actualizer, budget).empty());
     }
 
     // Tiered portions are admitted iff at least one entity resolves to DefaultStorageId.
@@ -759,111 +627,6 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             auto guard = manager.RegisterLock<TListPortionsLock>("movedata::other", other, ELockCategory::Actualization);
             UNIT_ASSERT_C(!manager.IsLocked(*portion, ELockCategory::Compaction), "a lock on another portion must not block this one");
         }
-    }
-
-    // Recovered barriers and queues only; the keep list is sized to hit the per-task GC limit.
-    class TRecoveredGcDb: public NOlap::IBlobManagerDb {
-    public:
-        TGenStep Last;
-        TGenStep Prepared;
-        std::vector<NOlap::TUnifiedBlobId> Keeps;
-
-        bool LoadGCBarrierPreparation(TGenStep& genStep) override {
-            genStep = Prepared;
-            return true;
-        }
-
-        void SaveGCBarrierPreparation(const TGenStep&) override {
-        }
-
-        bool LoadLastGcBarrier(TGenStep& genStep) override {
-            genStep = Last;
-            return true;
-        }
-
-        void SaveLastGcBarrier(const TGenStep&) override {
-        }
-
-        bool LoadLists(std::vector<NOlap::TUnifiedBlobId>& blobsToKeep, NOlap::TTabletsByBlob&, const NOlap::IBlobGroupSelector*,
-            const NOlap::TTabletId) override {
-            blobsToKeep = Keeps;
-            return true;
-        }
-
-        void AddBlobToKeep(const NOlap::TUnifiedBlobId&) override {
-        }
-
-        void EraseBlobToKeep(const NOlap::TUnifiedBlobId&) override {
-        }
-
-        void AddBlobToDelete(const NOlap::TUnifiedBlobId&, const NOlap::TTabletId) override {
-        }
-
-        void EraseBlobToDelete(const NOlap::TUnifiedBlobId&, const NOlap::TTabletId) override {
-        }
-
-        bool LoadTierLists(const TString&, NOlap::TTabletsByBlob&, std::deque<NOlap::TUnifiedBlobId>&, const NOlap::TTabletId) override {
-            return true;
-        }
-
-        void AddTierBlobToDelete(const TString&, const NOlap::TUnifiedBlobId&, const NOlap::TTabletId) override {
-        }
-
-        void RemoveTierBlobToDelete(const TString&, const NOlap::TUnifiedBlobId&, const NOlap::TTabletId) override {
-        }
-
-        void AddTierDraftBlobId(const TString&, const NOlap::TUnifiedBlobId&) override {
-        }
-
-        void RemoveTierDraftBlobId(const TString&, const NOlap::TUnifiedBlobId&) override {
-        }
-
-        void AddBlobSharing(const TString&, const NOlap::TUnifiedBlobId&, const NOlap::TTabletId) override {
-        }
-
-        void RemoveBlobSharing(const TString&, const NOlap::TUnifiedBlobId&, const NOlap::TTabletId) override {
-        }
-
-        void AddBorrowedBlob(const TString&, const NOlap::TUnifiedBlobId&, const NOlap::TTabletId) override {
-        }
-
-        void RemoveBorrowedBlob(const TString&, const NOlap::TUnifiedBlobId&) override {
-        }
-    };
-
-    // A barrier recovered from an older generation proves nothing about this one: the all-history broadcast must repeat until one of this generation went out.
-    Y_UNIT_TEST(FirstGCBroadcastRepeatsUntilABarrierOfThisGenerationGoesOut) {
-        auto controllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TReadOnlyController>();
-        static constexpr ui64 TabletId = 47;
-        static constexpr ui32 TabletGen = 7;
-        static constexpr ui32 DataChannel = 2;
-        // One more than the per-task keep limit, so the first task cannot advance past the recovered barrier.
-        static constexpr ui32 KeepCount = 500001;
-
-        TBlobManagerFixture f(TabletId, TabletGen);
-        // The repeated broadcast is part of the MoveData contract and stays behind its flag.
-        f.ActorSystemStub.AppData.FeatureFlags.SetEnableColumnshardMoveData(true);
-        TRecoveredGcDb db;
-        db.Last = TGenStep(4, 0);
-        db.Prepared = TGenStep(4, 1);
-        for (ui32 i = 0; i < KeepCount; ++i) {
-            db.Keeps.emplace_back(NewGroup, TLogoBlobID(TabletId, ReassignGen, 1 + i / 1000, DataChannel, BlobSize, i % 1000));
-        }
-        UNIT_ASSERT(f.Manager->LoadState(db, NOlap::TTabletId(TabletId)));
-        const NOlap::NBlobOperations::NBlobStorage::TBlobAddress oldGroupAddress(OldGroup, DataChannel);
-
-        auto first = f.BuildGCTask();
-        UNIT_ASSERT_C(first, "the recovered barrier must produce a task");
-        UNIT_ASSERT_C(first->GetListsByGroupId().contains(oldGroupAddress), "the first task broadcasts to every historical group");
-        f.Manager->OnGCStartOnComplete(TGenStep(4, 1));
-        f.Manager->OnGCFinishedOnComplete(TGenStep(4, 1));
-
-        auto second = f.BuildGCTask();
-        UNIT_ASSERT_C(second, "the remaining keep entry must produce a task");
-        UNIT_ASSERT_C(second->GetListsByGroupId().contains(oldGroupAddress),
-            "the barrier of this generation must reach the historical group, or an orphan written before the crash stays behind the gate");
-        f.Manager->OnGCStartOnComplete(TGenStep(TabletGen, 0));
-        f.Manager->OnGCFinishedOnComplete(TGenStep(TabletGen, 0));
     }
 
 }   // Y_UNIT_TEST_SUITE

@@ -123,56 +123,6 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
     return true;
 }
 
-namespace {
-
-template <class TTable>
-bool HasOwnedGCBlobs(NIceDb::TNiceDb& db, const THashSet<ui32>& groups, const IBlobGroupSelector* selector,
-    const TTabletId selfTabletId, bool& hasBlobs) {
-    auto rows = db.Table<TTable>().Select();
-    if (!rows.IsReady()) {
-        return false;
-    }
-    while (!rows.EndOfSet()) {
-        bool owned = true;
-        if constexpr (std::is_same_v<TTable, Schema::BlobsToDeleteWT>) {
-            owned = rows.template GetValue<typename TTable::TabletId>() == static_cast<ui64>(selfTabletId);
-        }
-        if (owned) {
-            const auto value = rows.template GetValue<typename TTable::BlobId>();
-            TString error;
-            const auto blob = TUnifiedBlobId::ParseFromString(value, selector, error);
-            AFL_VERIFY(blob.IsValid())("error", error)("blob", value);
-            // The legacy delete table also mirrors borrowed-blob unlink requests.
-            if (blob.GetLogoBlobId().TabletID() == static_cast<ui64>(selfTabletId) && groups.contains(blob.GetDsGroup())) {
-                hasBlobs = true;
-                return true;
-            }
-        }
-        if (!rows.Next()) {
-            return false;
-        }
-    }
-    return true;
-}
-
-} // namespace
-
-bool TBlobManagerDb::HasGCBlobsForGroups(const THashSet<ui32>& groups, const IBlobGroupSelector* selector,
-    const TTabletId selfTabletId, bool& hasBlobs) {
-    hasBlobs = false;
-    if (groups.empty()) {
-        return true;
-    }
-    NIceDb::TNiceDb db(Database);
-    if (!HasOwnedGCBlobs<Schema::BlobsToKeep>(db, groups, selector, selfTabletId, hasBlobs) || hasBlobs) {
-        return hasBlobs;
-    }
-    if (!HasOwnedGCBlobs<Schema::BlobsToDelete>(db, groups, selector, selfTabletId, hasBlobs) || hasBlobs) {
-        return hasBlobs;
-    }
-    return HasOwnedGCBlobs<Schema::BlobsToDeleteWT>(db, groups, selector, selfTabletId, hasBlobs);
-}
-
 void TBlobManagerDb::AddBlobToKeep(const TUnifiedBlobId& blobId) {
     NIceDb::TNiceDb db(Database);
     db.Table<Schema::BlobsToKeep>().Key(blobId.ToStringLegacy()).Update();

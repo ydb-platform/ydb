@@ -6,7 +6,7 @@
 #include "changes/actualization/controller/controller.h"
 #include "scheme/tier_info.h"
 #include "scheme/versions/preset_schemas.h"
-#include "storage/actualizer/move/queue_sizes.h"
+#include "storage/actualizer/common/queue_sizes.h"
 #include "storage/granule/granule.h"
 #include "storage/granule/storage.h"
 
@@ -155,8 +155,8 @@ public:
         return GranulesStorage->CollectMetadataRequests();
     }
 
-    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests() const {
-        return GranulesStorage->CollectMoveDataMetadataRequests();
+    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(NActualizer::TMoveDataMetadataBudget& budget) const {
+        return GranulesStorage->CollectMoveDataMetadataRequests(budget);
     }
 
     ui64 GetCompactionPriority(const std::set<TInternalPathId>& pathIds, const std::optional<ui64> waitingPriority) const noexcept override;
@@ -172,27 +172,27 @@ public:
         const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
         const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit,
-        const NActualizer::EActualizationScope scope) noexcept override;
+        NActualizer::EActualizationScope scope) noexcept override;
 
     void ReturnToIndexes(const THashMap<TInternalPathId, THashSet<ui64>>& portions) const {
         return GranulesStorage->ReturnToIndexes(portions);
     }
 
     void StartMoveData(const THashSet<ui32>& targetGroups) {
-        for (auto& [pathId, granule] : GranulesStorage->GetTables()) {
+        for (auto& [_, granule] : GranulesStorage->GetTables()) {
             granule->StartMoveData(targetGroups);
         }
     }
 
     void StopMoveData() {
-        for (auto& [pathId, granule] : GranulesStorage->GetTables()) {
+        for (auto& [_, granule] : GranulesStorage->GetTables()) {
             granule->StopMoveData();
         }
     }
 
     NActualizer::TMoveDataQueueSizes UpdateMoveDataQueueSizes() {
         NActualizer::TMoveDataQueueSizes result;
-        for (auto& [pathId, granule] : GranulesStorage->GetTables()) {
+        for (auto& [_, granule] : GranulesStorage->GetTables()) {
             result += granule->UpdateMoveDataQueueSizes();
         }
         return result;

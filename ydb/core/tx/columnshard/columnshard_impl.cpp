@@ -851,7 +851,7 @@ private:
     const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
     const ui64 Generation;
     // Per-tablet: TObjectCounter is process-wide, so one tablet's request closed every other's gate.
-    const std::shared_ptr<TAtomicCounter> InFlight;
+    const std::shared_ptr<TAtomicCounter> SubscribersInFlight;
 
     virtual void DoOnRequestsFinished(
         NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) override {
@@ -862,17 +862,17 @@ private:
 
 public:
     TCSMetadataSubscriber(const NActors::TActorId& tabletActorId, const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor,
-        const ui64 gen, const std::shared_ptr<TAtomicCounter>& inFlight)
+        const ui64 gen, const std::shared_ptr<TAtomicCounter>& subscribersInFlight)
         : TabletActorId(tabletActorId)
         , Processor(processor)
         , Generation(gen)
-        , InFlight(inFlight)
+        , SubscribersInFlight(subscribersInFlight)
     {
-        InFlight->Inc();
+        SubscribersInFlight->Inc();
     }
 
     ~TCSMetadataSubscriber() {
-        InFlight->Dec();
+        SubscribersInFlight->Dec();
     }
 };
 
@@ -908,28 +908,29 @@ public:
 };
 
 void TColumnShard::StartMetadataRequests(std::vector<NOlap::TCSMetadataRequest>&& requests,
-    const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext, const std::shared_ptr<TAtomicCounter>& inFlight,
+    const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext, const std::shared_ptr<TAtomicCounter>& subscribersInFlight,
     const TActorId& recipient) {
-    for (auto&& i : requests) {
+    for (auto&& request : requests) {
         const ui64 accessorsMemory =
-            i.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
-        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
-            ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, i.GetRequest()->GetTaskId(), taskContext,
-                                        std::shared_ptr<NOlap::TDataAccessorsRequest>(i.GetRequest()),
-                                        std::make_shared<TCSMetadataSubscriber>(recipient, i.GetProcessor(), Generation(), inFlight),
-                                        DataAccessorsManager.GetObjectPtrVerified(), nullptr));
+            request.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
+        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor,
+            std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, request.GetRequest()->GetTaskId(), taskContext,
+                std::shared_ptr<NOlap::TDataAccessorsRequest>(request.GetRequest()),
+                std::make_shared<TCSMetadataSubscriber>(recipient, request.GetProcessor(), Generation(), subscribersInFlight),
+                DataAccessorsManager.GetObjectPtrVerified(), nullptr));
     }
 }
 
 void TColumnShard::SetupMetadata() {
-    if (MetadataRequestsInFlight->Val()) {
+    if (MetadataSubscribersInFlight->Val()) {
         return;
     }
-    StartMetadataRequests(TablesManager.MutablePrimaryIndex().CollectMetadataRequests(), TTLTaskSubscription, MetadataRequestsInFlight, SelfId());
+    StartMetadataRequests(
+        TablesManager.MutablePrimaryIndex().CollectMetadataRequests(), TTLTaskSubscription, MetadataSubscribersInFlight, SelfId());
 }
 
 void TColumnShard::SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request) {
-    StartMetadataRequests({ request }, TTLTaskSubscription, MetadataRequestsInFlight, SelfId());
+    StartMetadataRequests({ request }, TTLTaskSubscription, MetadataSubscribersInFlight, SelfId());
 }
 
 bool TColumnShard::SetupTtl() {
@@ -1718,7 +1719,7 @@ public:
                         if (!rowset.IsReady()) {
                             reask = true;
                         } else if (rowset.EndOfSet()) {
-                            // Cleanup erased the rows while the object lingers: only remove-marked portions may lack them.
+                            // Metadata scans can see retired portions between cleanup Execute (DB erase) and Complete (PortionInfo erase).
                             AFL_VERIFY(itPortionConstructor->second.GetPortionInfo()->HasRemoveSnapshot())("path_id", i.first)("portion_id", p)(
                                 "debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true));
                             Constructors.erase(itPortionConstructor);
@@ -1759,7 +1760,7 @@ public:
         }
 
         for (auto&& i : Constructors) {
-            // A portion erased between restarts of this transaction is never revisited and would reach parsing without its records.
+            // On retry, GetPortions omits portions removed by cleanup, leaving their unfinished constructors.
             if (!i.second.IsReady()) {
                 continue;
             }

@@ -18,12 +18,14 @@ environment dumps, binaries, or entire test-output/coverage archives.
 from __future__ import annotations
 
 import argparse
+import ast
 from collections import deque
 import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import selectors
 import shlex
 import signal
 import stat
@@ -31,12 +33,15 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 
 MIB = 1024 * 1024
 LOG_LIMIT = 8 * MIB
 PROFILE_LIMIT = 16 * MIB
 ATTEMPT_LIMIT = 50 * MIB
 MAX_ATTEMPTS = 3
+PROFILE_PROBE_TIMEOUT = 60
+PROFILE_PROBE_OUTPUT_LIMIT = 64 * 1024
 BAD_PROFILE = re.compile(
     r"(?:warning|error): ([^\s:]+\.profraw): "
     r"invalid instrumentation profile data \(file header is corrupt\)"
@@ -227,8 +232,12 @@ def assertion_only_failure(report: dict, output: Path, build_root: Path) -> tupl
         return False, "failed container without a completed failed test"
     checked = set()
     for failed in failing:
-        matches = [suite for suite in suites if suite.get("path") == failed.get("path")
-                   and (not failed.get("suite_hid") or suite.get("hid") == failed["suite_hid"])]
+        # A suite row is already its own container; it has hid, not suite_hid.
+        # Several suites (e.g. py3test and import_test) can share one path.
+        matches = [failed] if failed.get("suite") else [
+            suite for suite in suites if suite.get("path") == failed.get("path")
+            and (not failed.get("suite_hid") or suite.get("hid") == failed["suite_hid"])
+        ]
         if len(matches) != 1:
             return False, "failed test cannot be attributed to exactly one suite"
         suite = matches[0]
@@ -357,6 +366,144 @@ def inside(path: Path, roots: list[Path]) -> bool:
         return False
 
 
+def probe_profile_merge(command: list[str], cwd: Path) -> tuple[int, str, bool, str]:
+    """Read profiles with LLVM, discarding merged output; bound stderr and time."""
+    data = bytearray()
+    cancelled = False
+    problem = ""
+    proc = subprocess.Popen(command, cwd=cwd, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.PIPE, start_new_session=True)
+
+    def stop():
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+    def cancel(_signum, _frame):
+        nonlocal cancelled
+        cancelled = True
+        stop()
+
+    previous = {sig: signal.signal(sig, cancel) for sig in (signal.SIGINT, signal.SIGTERM)}
+    deadline = time.monotonic() + PROFILE_PROBE_TIMEOUT
+    try:
+        with selectors.DefaultSelector() as selector:
+            selector.register(proc.stderr, selectors.EVENT_READ)
+            while selector.get_map():
+                remaining = deadline - time.monotonic()
+                if cancelled or remaining <= 0:
+                    problem = "cancelled" if cancelled else "deadline exceeded"
+                    break
+                if not selector.select(min(remaining, 0.1)):
+                    continue
+                chunk = os.read(proc.stderr.fileno(), min(4096, PROFILE_PROBE_OUTPUT_LIMIT + 1 - len(data)))
+                if not chunk:
+                    selector.unregister(proc.stderr)
+                    break
+                data.extend(chunk)
+                if len(data) > PROFILE_PROBE_OUTPUT_LIMIT:
+                    problem = "stderr size limit exceeded"
+                    break
+        if problem:
+            stop()
+        try:
+            rc = proc.wait(timeout=max(0.01, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            problem = "deadline exceeded"
+            stop()
+            rc = proc.wait()
+    finally:
+        if proc.poll() is None:
+            stop()
+        proc.wait()
+        proc.stderr.close()
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+    return rc, bytes(data[:PROFILE_PROBE_OUTPUT_LIMIT]).decode("utf-8", errors="replace"), cancelled, problem
+
+
+def recover_profile_evidence(returncode: int, report: dict, details: dict,
+                             build_root: Path, log: Path, redactor: Redactor,
+                             cancelled: bool = False) -> bool:
+    """Recover the first LLVM warning swallowed by YA's progress-status renderer.
+
+    This is not another coverage attempt or a repaired report. Only the known
+    failed report node is diagnosed, and its merged output goes to /dev/null.
+    Never execute a command copied from a log: validate the expected tool and
+    input layout, construct a new argv, and preserve failure on any ambiguity.
+    """
+    if (cancelled or returncode != 255 or not tests_passed(report)
+            or details["unknown_failure"] or details["bad_profiles"]
+            or len(details["nodes"]) != 1
+            or details["nodes"][0]["kind"] != "build_clang_coverage_report"):
+        return cancelled
+    diagnostic = ""
+    try:
+        node = details["nodes"][0]
+        cwd = Path(node["cwd"])
+        source_log = Path(node["--log-path"])
+        tool = Path(node["--llvm-profdata-tool"])
+        tool_root = Path(os.environ.get("YA_CACHE_DIR") or Path.home() / ".ya") / "tools"
+        if (not cwd.is_absolute() or not cwd.is_dir() or not inside(cwd, [build_root])
+                or source_log != cwd / "build_clang_coverage_report.log"
+                or source_log.is_symlink() or not inside(source_log, [cwd])
+                or not stat.S_ISREG(source_log.stat().st_mode)
+                or not tool.is_absolute() or tool.name != "llvm-profdata"
+                or not tool_root.is_absolute() or not inside(tool, [tool_root])
+                or not stat.S_ISREG(tool.stat().st_mode)):
+            raise ValueError("unexpected report node, log or LLVM tool path")
+        with source_log.open("rb") as stream:
+            contents = stream.read(LOG_LIMIT + 1)
+        if len(contents) > LOG_LIMIT:
+            raise ValueError("node log exceeds size limit")
+        commands = re.findall(r"^.*\bExecuting (\[.*\])$", contents.decode("utf-8"), re.MULTILINE)
+        if len(commands) != 1:
+            raise ValueError("expected exactly one logged profile merge")
+        original = ast.literal_eval(commands[0])
+        prefix = [str(tool), "merge", "-sparse", "-o", str(cwd / "coverage/coverage.profdata")]
+        if (not isinstance(original, list) or original[:5] != prefix
+                or not 6 <= len(original) <= 16389 or not all(isinstance(arg, str) for arg in original)):
+            raise ValueError("unexpected profile merge arguments")
+        inputs = {}
+        for name in original[5:]:
+            relative = Path(name)
+            path = cwd / relative
+            if (len(relative.parts) != 3 or relative.parts[0] != "tmp"
+                    or not relative.parts[1].isdigit() or relative.suffix != ".profraw"
+                    or path.is_symlink() or not inside(path, [cwd])
+                    or not stat.S_ISREG(path.stat().st_mode)):
+                raise ValueError("unexpected raw profile path")
+            inputs[str(path.resolve())] = name
+        if len(inputs) != len(original) - 5:
+            raise ValueError("duplicate raw profile inputs")
+        # No options, response files, alternate output or executable from the log.
+        command = [str(tool.resolve()), "merge", "-sparse", "-o", os.devnull, *inputs]
+        rc, diagnostic, cancelled, problem = probe_profile_merge(command, cwd)
+        if cancelled or problem:
+            raise ValueError(problem or "cancelled")
+        recovered = evidence("")
+        for line in diagnostic.splitlines():
+            line = line.strip()
+            if not line or line == "error: no profile can be merged":
+                continue
+            match = BAD_PROFILE.fullmatch(line)
+            if match is None or match[1] not in inputs:
+                raise ValueError("LLVM reported an unrelated or unattributed error")
+            merge_evidence(recovered, evidence(line.replace(match[1], inputs[match[1]], 1)))
+        if rc != 1 or not recovered["bad_profiles"] or recovered["unknown_failure"]:
+            raise ValueError("LLVM did not confirm the known corrupt-header failure")
+        merge_evidence(details, recovered)
+        diagnostic += "Confirmed corrupt raw profile; normal guarded retry policy applies.\n"
+    except (OSError, ValueError, KeyError, SyntaxError, TypeError, RecursionError) as exc:
+        diagnostic += f"Raw-profile diagnostic not used: {exc}\n"
+    try:
+        log.write_text(redactor(diagnostic), encoding="utf-8")
+    except OSError as exc:
+        print(redactor(f"::warning::Could not save raw-profile diagnostic: {exc}"), flush=True)
+    return cancelled
+
+
 class Bundle:
     def __init__(self, directory: Path, redactor: Redactor, limit: int = ATTEMPT_LIMIT):
         directory.mkdir(parents=True, exist_ok=False)
@@ -458,6 +605,9 @@ def collect_diagnostics(directory: Path, build_root: Path, output: Path, log: Pa
     bundle = Bundle(directory, redactor)
     roots = [build_root, output]
     bundle.copy(log, [log.parent])
+    profile_diagnostic = log.parent / "profile-diagnostic.log"
+    if profile_diagnostic.exists():
+        bundle.copy(profile_diagnostic, [log.parent])
     suites = set()
     for row in report.get("results", []):
         if (isinstance(row, dict) and row.get("type") == "test" and row.get("suite")
@@ -651,6 +801,10 @@ def main() -> int:
             report = read_report(report_path)
         except (OSError, ValueError) as exc:
             report_error = str(exc)
+        if corruption_retries == 0 and number < MAX_ATTEMPTS:
+            cancelled = recover_profile_evidence(
+                rc, report, details, build_root, attempt / "profile-diagnostic.log", redactor, cancelled,
+            )
         artifacts_present = coverage_artifacts_present(output)
         if (rc == 0 and not cancelled and tests_passed(report) and artifacts_present
                 and not details["unknown_failure"] and not details["nodes"] and not details["bad_profiles"]):

@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 import tarfile
@@ -135,6 +136,166 @@ class RetryDecisionTest(unittest.TestCase):
                     coverage.read_report(path)
 
 
+class ProfileProbeTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        self.build = self.root / "attempt/build"
+        self.node = self.build / "node"
+        self.profile = self.node / "tmp/0/broken.profraw"
+        self.profile.parent.mkdir(parents=True)
+        self.profile.write_bytes(b"unchanged-corrupt-profile")
+        self.cache = self.root / "ya-cache"
+        self.tool = self.cache / "tools/v4/llvm/bin/llvm-profdata"
+        self.tool.parent.mkdir(parents=True)
+        self.tool.write_text("unused stand-in")
+        self.node_log = self.node / "build_clang_coverage_report.log"
+        self.log = self.root / "attempt/profile-diagnostic.log"
+        self.command = [str(self.tool), "merge", "-sparse", "-o",
+                        str(self.node / "coverage/coverage.profdata"), "tmp/0/broken.profraw"]
+        self.write_command()
+        self.details = coverage.evidence("")
+        self.details["nodes"] = [{"cwd": str(self.node), "kind": "build_clang_coverage_report",
+                                  "--log-path": str(self.node_log), "--llvm-profdata-tool": str(self.tool),
+                                  "coverage_paths": []}]
+        self.warning = (f"warning: {self.profile}: invalid instrumentation profile data "
+                        "(file header is corrupt)\nerror: no profile can be merged\n")
+        self.redactor = coverage.Redactor({"TEST_TOKEN": "secret-sentinel"}, [])
+
+    def write_command(self, command=None) -> None:
+        self.node_log.write_text("2026-10-21 - DEBUG - main: Executing " + repr(command or self.command) + "\n")
+
+    def recover(self, **kwargs) -> bool:
+        with mock.patch.dict(os.environ, {"YA_CACHE_DIR": str(self.cache)}):
+            return coverage.recover_profile_evidence(
+                kwargs.pop("returncode", 255), kwargs.pop("report", successful_report()),
+                kwargs.pop("details", self.details), self.build, self.log, self.redactor, **kwargs,
+            )
+
+    def test_confirmed_warning_uses_new_safe_command_and_preserves_profile_attribution(self) -> None:
+        with mock.patch.object(coverage, "probe_profile_merge", return_value=(1, self.warning, False, "")) as probe:
+            self.assertFalse(self.recover())
+        probe.assert_called_once_with(
+            [str(self.tool), "merge", "-sparse", "-o", os.devnull, str(self.profile)], self.node,
+        )
+        self.assertEqual(self.details["profile_paths"], ["tmp/0/broken.profraw"])
+        self.assertTrue(coverage.should_retry(255, successful_report(), self.details))
+        self.assertIn("Confirmed corrupt raw profile", self.log.read_text())
+        self.assertEqual(self.profile.read_bytes(), b"unchanged-corrupt-profile")
+        output = self.root / "attempt/output"
+        output.mkdir()
+        ya_log = self.root / "attempt/ya.log"
+        ya_log.write_text("truncated progress message")
+        with mock.patch.object(coverage.subprocess, "run") as version:
+            version.return_value.stdout = b"LLVM test"
+            coverage.collect_diagnostics(self.root / "bundle", self.build, output, ya_log,
+                                         successful_report(), self.details, self.redactor, {})
+        self.assertEqual(next((self.root / "bundle").glob("*.profraw")).read_bytes(), self.profile.read_bytes())
+        self.assertTrue(list((self.root / "bundle").glob("*-profile-diagnostic.log")))
+
+    def test_nonmatching_attempts_never_execute_the_probe(self) -> None:
+        cases = [{"returncode": 0}, {"returncode": 10}, {"cancelled": True}, {"report": {}}]
+        for mutation in ({"unknown_failure": True}, {"bad_profiles": ["existing.profraw"]}, {"nodes": []},
+                         {"nodes": self.details["nodes"] * 2},
+                         {"nodes": [{**self.details["nodes"][0], "kind": "resolve_clang_coverage"}]}):
+            cases.append({"details": {**self.details, **mutation}})
+        for case in cases:
+            with self.subTest(case=case), mock.patch.object(coverage, "probe_profile_merge") as probe:
+                self.assertEqual(self.recover(**case), case.get("cancelled", False))
+                probe.assert_not_called()
+
+    def test_foreign_or_unexpected_node_log_and_tool_paths_are_refused(self) -> None:
+        cases = [
+            {"cwd": str(self.root)}, {"--log-path": str(self.root / "outside.log")},
+            {"--llvm-profdata-tool": str(self.root / "llvm-profdata")},
+            {"--llvm-profdata-tool": str(self.tool.with_name("other-program"))},
+        ]
+        for changes in cases:
+            details = {**self.details, "nodes": [{**self.details["nodes"][0], **changes}]}
+            with self.subTest(changes=changes), mock.patch.object(coverage, "probe_profile_merge") as probe:
+                self.recover(details=details)
+                probe.assert_not_called()
+        self.node_log.unlink()
+        outside = self.root / "outside.log"
+        outside.write_text("not trusted")
+        self.node_log.symlink_to(outside)
+        with mock.patch.object(coverage, "probe_profile_merge") as probe:
+            self.recover()
+            probe.assert_not_called()
+
+    def test_altered_options_outputs_response_files_and_foreign_profiles_are_refused(self) -> None:
+        variants = [self.command[:2] + ["--sparse"] + self.command[3:],
+                    self.command[:4] + ["/dev/null"] + self.command[5:],
+                    self.command + ["--failure-mode=all"], self.command[:5] + ["@inputs.profraw"],
+                    self.command[:5] + [str(self.profile)], self.command[:5] + ["tmp/0/missing.profraw"],
+                    self.command[:5] + ["tmp/../outside.profraw"], self.command[:5]]
+        for command in variants:
+            self.write_command(command)
+            with self.subTest(command=command), mock.patch.object(coverage, "probe_profile_merge") as probe:
+                self.recover()
+                probe.assert_not_called()
+        self.write_command()
+        self.profile.unlink()
+        outside = self.root / "outside.profraw"
+        outside.write_bytes(b"outside data")
+        self.profile.symlink_to(outside)
+        with mock.patch.object(coverage, "probe_profile_merge") as probe:
+            self.recover()
+            probe.assert_not_called()
+
+    def test_ambiguous_malformed_and_oversized_logs_are_refused(self) -> None:
+        original = self.node_log.read_text()
+        for text in (original + original, "Executing [broken syntax]\n", original * 10):
+            self.node_log.write_text(text)
+            with mock.patch.object(coverage, "LOG_LIMIT", len(original) * 2), \
+                    mock.patch.object(coverage, "probe_profile_merge") as probe:
+                self.recover()
+                probe.assert_not_called()
+
+    def test_unrelated_errors_timeout_and_cancel_do_not_authorize_a_retry(self) -> None:
+        cases = [(1, self.warning + "error: unsupported version secret-sentinel\n", False, ""),
+                 (1, self.warning.replace(str(self.profile), str(self.root / "foreign.profraw")), False, ""),
+                 (1, "error: cannot read profile\n", False, ""), (0, self.warning, False, ""),
+                 (1, self.warning, False, "deadline exceeded"),
+                 (1, self.warning, False, "stderr size limit exceeded"),
+                 (-9, self.warning, True, "cancelled")]
+        for result in cases:
+            with self.subTest(result=result), mock.patch.object(coverage, "probe_profile_merge", return_value=result):
+                self.assertEqual(self.recover(), result[2])
+                self.assertFalse(self.details["bad_profiles"])
+                self.assertNotIn("secret-sentinel", self.log.read_text())
+
+    def executable(self, code: str) -> list[str]:
+        return [sys.executable, "-c", code]
+
+    def test_real_child_output_is_bounded_and_overflow_is_rejected(self) -> None:
+        with mock.patch.object(coverage, "PROFILE_PROBE_OUTPUT_LIMIT", 128):
+            rc, output, cancelled, problem = coverage.probe_profile_merge(
+                self.executable("import sys; sys.stderr.write('x' * 10000); sys.stderr.flush()"), self.node,
+            )
+        self.assertEqual(len(output), 128)
+        self.assertFalse(cancelled)
+        self.assertEqual(problem, "stderr size limit exceeded")
+
+    def test_real_child_deadline_including_closed_stderr_is_bounded(self) -> None:
+        for code in ("import time; time.sleep(10)", "import os,time; os.close(2); time.sleep(10)"):
+            with self.subTest(code=code), mock.patch.object(coverage, "PROFILE_PROBE_TIMEOUT", 0.05):
+                rc, output, cancelled, problem = coverage.probe_profile_merge(self.executable(code), self.node)
+            self.assertNotEqual(rc, 0)
+            self.assertFalse(cancelled)
+            self.assertEqual(problem, "deadline exceeded")
+
+    def test_real_child_cancellation_restores_signal_handler_and_never_recovers(self) -> None:
+        previous = signal.getsignal(signal.SIGTERM)
+        rc, output, cancelled, problem = coverage.probe_profile_merge(
+            self.executable("import os,signal,time; os.kill(os.getppid(), signal.SIGTERM); time.sleep(10)"), self.node,
+        )
+        self.assertNotEqual(rc, 0)
+        self.assertTrue(cancelled)
+        self.assertIs(signal.getsignal(signal.SIGTERM), previous)
+
+
 class TestOutcomeTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -168,6 +329,17 @@ class TestOutcomeTest(unittest.TestCase):
         self.assertTrue(coverage.test_failure_report(self.report))
         self.assertFalse(coverage.tests_passed(self.report))
         self.assertTrue(self.assess())
+
+    def test_distinct_suites_can_share_a_directory(self) -> None:
+        self.report["results"].append({
+            "type": "test", "suite": True, "status": "OK", "suite_status": "OK",
+            "path": "tests/example", "name": "import_test", "hid": 43,
+        })
+        self.assertTrue(self.assess())
+        self.report["results"][2]["suite_hid"] = 99
+        self.assertFalse(self.assess())
+        self.report["results"][2].pop("suite_hid")
+        self.assertFalse(self.assess())
 
     def test_regular_report_does_not_disguise_crash_or_missing_completion(self) -> None:
         for status in ("crashed", "timeout", "missing", "internal", "not_launched", "unknown", None):
@@ -532,7 +704,7 @@ def write_artifacts():
     (output / "coverage.report/coverage.profdata").write_bytes(b"merged-profile")
     (output / "build_clang_coverage_report.log").write_text("successful profile merge")
 
-if scenario in ("success_first", "success_without_report", "success_without_artifacts") or (retest and scenario in ("retry_success", "assertion_retry_success")):
+if scenario in ("success_first", "success_without_report", "success_without_artifacts") or (retest and scenario in ("retry_success", "assertion_retry_success", "hidden_header_retry_success")):
     if scenario != "success_without_report":
         report_path.write_text(json.dumps(report))
     if scenario != "success_without_artifacts":
@@ -578,6 +750,23 @@ if scenario != "missing_artifacts":
 (output / suite).mkdir(parents=True)
 (output / suite / "run_test.log").write_text("suite-log " + os.environ.get("COVERAGE_TEST_TOKEN", ""))
 (output / suite / "credentials.json").write_text("must-not-be-uploaded")
+if scenario.startswith("hidden_header"):
+    raw = node / "tmp/0/example.123.0clang.profraw"
+    raw.parent.mkdir()
+    raw.write_bytes(b"complete-broken-profile")
+    tool = Path(os.environ["YA_CACHE_DIR"]) / "tools/v4/test/bin/llvm-profdata"
+    tool.parent.mkdir(parents=True, exist_ok=True)
+    tool.write_text("#!" + sys.executable + "\nimport sys\n"
+                    "sys.stderr.write('warning: ' + sys.argv[-1] + ': invalid instrumentation profile data (file header is corrupt)\\nerror: no profile can be merged\\n')\n"
+                    "sys.exit(1)\n")
+    tool.chmod(0o755)
+    report_log = node / "build_clang_coverage_report.log"
+    command = [str(tool), "merge", "-sparse", "-o", str(node / "coverage/coverage.profdata"),
+               "tmp/0/example.123.0clang.profraw"]
+    report_log.write_text("DEBUG - main: Executing " + repr(command) + "\n")
+    print(f"command (pid: 123) /tools/test_tool build_clang_coverage_report --llvm-profdata-tool {tool} --log-path {report_log} failed with exit code 1 in {node}")
+    print("FAILED Indexing profiles: warning truncated by YA progress")
+    sys.exit(255)
 if scenario in ("unknown_failure", "unknown_before_tail"):
     print(f"command (pid: 124) /tools/compiler input.cpp failed with exit code 1 in {node}")
 if scenario == "unknown_before_tail":
@@ -611,6 +800,7 @@ class CoverageSubprocessTest(unittest.TestCase):
             "COVERAGE_TEST_CALLS": str(calls),
             "COVERAGE_TEST_TOKEN": "secret-sentinel-value",
             "GITHUB_OUTPUT": str(github_output),
+            "YA_CACHE_DIR": str(self.root / "ya-cache"),
         })
         mute_args = []
         if muted:
@@ -666,6 +856,27 @@ class CoverageSubprocessTest(unittest.TestCase):
         self.assertNotIn("out_dir", outputs)
         second = Path(outputs["diagnostics_dir"]) / "attempt-2/manifest.json"
         self.assertFalse(json.loads(second.read_text())["retry"])
+
+    def test_hidden_header_warning_is_recovered_and_retried_once(self) -> None:
+        result, calls, outputs = self.run_scenario("hidden_header_retry_success")
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(outputs["out_dir"], calls[1]["output"])
+        first = Path(outputs["diagnostics_dir"]) / "attempt-1"
+        manifest = json.loads((first / "manifest.json").read_text())
+        self.assertTrue(manifest["retry"])
+        self.assertEqual(manifest["evidence"]["profile_paths"], ["tmp/0/example.123.0clang.profraw"])
+        self.assertEqual(next(first.glob("*.profraw")).read_bytes(), b"complete-broken-profile")
+        self.assertIn("Confirmed corrupt raw profile", next(first.glob("*-profile-diagnostic.log")).read_text())
+
+    def test_hidden_header_does_not_run_another_probe_after_the_single_retry(self) -> None:
+        result, calls, outputs = self.run_scenario("hidden_header_persistent")
+        self.assertEqual(result.returncode, 255, result.stderr + result.stdout)
+        self.assertEqual(len(calls), 2)
+        self.assertNotIn("out_dir", outputs)
+        second = Path(outputs["diagnostics_dir"]) / "attempt-2"
+        self.assertFalse(json.loads((second / "manifest.json").read_text())["retry"])
+        self.assertFalse(list(second.glob("*-profile-diagnostic.log")))
 
     def test_failed_tests_missing_report_or_incomplete_progress_prevent_retry(self) -> None:
         for scenario in ("failed_tests", "missing_report", "incomplete_report", "unknown_failure"):

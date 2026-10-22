@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(ScrubFast) {
 
         const auto vdisk = info->GetActorId(nums[0]);
         const auto edge = env.Runtime->AllocateEdgeActor(vdisk.NodeId());
-        const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+        const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(1);
         auto request = std::make_unique<TEvRecoverBlob>();
         request->Deadline = deadline;
         request->Items.emplace_back(id, NMatrix::TVectorType::MakeOneHot(0, 3), info->Type, TDiskPart());

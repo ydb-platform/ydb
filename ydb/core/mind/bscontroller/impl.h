@@ -2261,6 +2261,10 @@ private:
 
     // the pile is being removed, so new groups get no parts there
     bool IsBridgePileBeingRemoved(TBridgePileId pileId) const;
+    // the pile is being added, while this BSC hasn't added parts in it to its groups yet; the groups created meanwhile get
+    // no part in the pile, the addition gives it to them
+    bool IsBridgePileAwaitingParts(TBridgePileId pileId) const;
+    ui64 BridgePileAddedOperationId = 0; // ADD operation BSC has done its part of (in memory, it is repeated on restart)
 
     void UpdateBridgeSyncCounters();
 

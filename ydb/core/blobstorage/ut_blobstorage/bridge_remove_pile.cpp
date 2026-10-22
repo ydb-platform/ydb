@@ -350,7 +350,8 @@ Y_UNIT_TEST_SUITE(BridgeRemovePile) {
             " SYNCHRONIZED");
         ExpectError(RemovePile(env, "pile_3"), "its state is INACTIVE");
 
-        // the pile being added can't be removed until BSC finishes
+        // other piles can't be removed until BSC finishes adding the pile (its own removal cancels the addition, see
+        // BridgeAddPile::StuckAdditionCancelled)
         bool hold = true;
         env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
             return !hold || !GetBridgePileOperationNotification(*ev);
@@ -358,7 +359,6 @@ Y_UNIT_TEST_SUITE(BridgeRemovePile) {
         res = AddPile(env, "pile_3");
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
         env.Sim(TDuration::Seconds(10));
-        ExpectError(RemovePile(env, "pile_3"), "Operation on pile 'pile_3' is in progress");
         SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
         ExpectError(RemovePile(env, "pile_2"), "Operation on pile 'pile_3' is in progress");
         // the notification has been dropped, BSC (residing on node 1) performs its part again after restart
@@ -445,5 +445,96 @@ Y_UNIT_TEST_SUITE(BridgeRemovePile) {
         CheckPileGone(env, 2, FirstThirdPileNodeId, LastThirdPileNodeId);
         checker.Write(groupId);
         checker.CheckAll();
+    }
+
+    // drives of the removed pile get ACTIVE status back, as nobody can tell how they are until the pile is added again;
+    // INACTIVE ones (CMS sentinel makes them so when their nodes go away) would keep the pile from being added
+    Y_UNIT_TEST(RemovedPileDrivesActiveAgain) {
+        TEnvironmentSetup env(MakeExpandableSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        auto res = AddThirdPileToConfig(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        StartPileNodes(env, "pile_3", FirstThirdPileNodeId, LastThirdPileNodeId);
+        AddPileAndWait(env, "pile_3");
+        RejoinPile(env, 2);
+
+        auto forEachPileDrive = [&](const std::function<void(const NKikimrBlobStorage::TBaseConfig::TPDisk&)>& callback) {
+            size_t numDrives = 0;
+            const auto baseConfig = env.FetchBaseConfig();
+            for (const auto& pdisk : baseConfig.GetPDisk()) {
+                if (FirstThirdPileNodeId <= pdisk.GetNodeId() && pdisk.GetNodeId() <= LastThirdPileNodeId) {
+                    callback(pdisk);
+                    ++numDrives;
+                }
+            }
+            UNIT_ASSERT(numDrives);
+        };
+
+        SwitchPileState(env, 2, NKikimrBridge::TClusterState::DISCONNECTED);
+        forEachPileDrive([&](const auto& pdisk) {
+            env.UpdateDriveStatus(pdisk.GetNodeId(), pdisk.GetPDiskId(), NKikimrBlobStorage::EDriveStatus::INACTIVE, {},
+                true);
+        });
+        RemovePileAndWait(env, "pile_3");
+        CheckPileGone(env, 2, FirstThirdPileNodeId, LastThirdPileNodeId);
+        forEachPileDrive([&](const auto& pdisk) {
+            UNIT_ASSERT_EQUAL_C(pdisk.GetDriveStatus(), NKikimrBlobStorage::EDriveStatus::ACTIVE, pdisk.DebugString());
+        });
+
+        // status change as CMS sentinel makes it, judging the drive by what it sees of it
+        auto updateObservedStatus = [&](ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::EDriveStatus status) {
+            NKikimrBlobStorage::TConfigRequest request;
+            request.SetIgnoreGroupFailModelChecks(true);
+            request.SetIgnoreDegradedGroupsChecks(true);
+            request.SetIgnoreDisintegratedGroupsChecks(true);
+            auto *cmd = request.AddCommand()->MutableUpdateDriveStatus();
+            cmd->MutableHostKey()->SetNodeId(nodeId);
+            cmd->SetPDiskId(pdiskId);
+            cmd->SetStatus(status);
+            cmd->SetSkipIfPileCutOff(true);
+            const auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        };
+
+        // the stale change comes after the removal (e.g. the sentinel retries the one judged before the pile went
+        // away): the drives of the pile cut off from the cluster keep their status
+        forEachPileDrive([&](const auto& pdisk) {
+            updateObservedStatus(pdisk.GetNodeId(), pdisk.GetPDiskId(), NKikimrBlobStorage::EDriveStatus::INACTIVE);
+        });
+        forEachPileDrive([&](const auto& pdisk) {
+            UNIT_ASSERT_EQUAL_C(pdisk.GetDriveStatus(), NKikimrBlobStorage::EDriveStatus::ACTIVE, pdisk.DebugString());
+        });
+
+        // while the drives of connected piles get it
+        std::optional<std::tuple<ui32, ui32>> connectedDrive;
+        const auto baseConfig = env.FetchBaseConfig();
+        for (const auto& pdisk : baseConfig.GetPDisk()) {
+            if (pdisk.GetNodeId() == 1) {
+                connectedDrive.emplace(pdisk.GetNodeId(), pdisk.GetPDiskId());
+            }
+        }
+        UNIT_ASSERT(connectedDrive);
+        const auto& [connectedNodeId, connectedPDiskId] = *connectedDrive;
+        updateObservedStatus(connectedNodeId, connectedPDiskId, NKikimrBlobStorage::EDriveStatus::INACTIVE);
+        bool found = false;
+        const auto updatedBaseConfig = env.FetchBaseConfig();
+        for (const auto& pdisk : updatedBaseConfig.GetPDisk()) {
+            if (pdisk.GetNodeId() == connectedNodeId && pdisk.GetPDiskId() == connectedPDiskId) {
+                UNIT_ASSERT_EQUAL_C(pdisk.GetDriveStatus(), NKikimrBlobStorage::EDriveStatus::INACTIVE, pdisk.DebugString());
+                found = true;
+            }
+        }
+        UNIT_ASSERT(found);
+        env.UpdateDriveStatus(connectedNodeId, connectedPDiskId, NKikimrBlobStorage::EDriveStatus::ACTIVE, {}, true);
+
+        AddPileAndWait(env, "pile_3");
+        UNIT_ASSERT_VALUES_EQUAL(CheckPileParts(env, 2, FirstThirdPileNodeId, LastThirdPileNodeId), 1);
+        RejoinPile(env, 2);
+        checker.Write(groupId);
+        checker.CheckAll();
+        CheckPileData(env, checker, 2, FirstThirdPileNodeId);
     }
 }

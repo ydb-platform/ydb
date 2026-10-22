@@ -986,7 +986,7 @@ public:
         }
 
         // Also add __ydb_-prefixed system columns
-        for (const auto& ydbColumn : GetAllowedYdbSysColumns(State_->EnableUserAttributesInTopicQuery)) {
+        for (const auto& ydbColumn : GetAllowedYdbSysColumns(State_->EnableUserAttributesInTopicQuery, State_->AllowYdbSysColumns())) {
             metadataFieldsList.push_back(ctx.NewAtom(pos, ydbColumn));
         }
 

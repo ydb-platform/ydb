@@ -495,6 +495,9 @@ private:
     }
 
     void OnCommitted() override {
+        // groups created from now on get their parts in the pile right away
+        Self->BridgePileAddedOperationId = OperationId;
+
         // new parts are unsynced from the very beginning, they get synced when the pile rejoins
         for (const auto& [bridgeProxyGroupId, targetGroupId] : Added) {
             const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, bridgeProxyGroupId,
@@ -580,6 +583,25 @@ size_t TBlobStorageController::RemoveBridgePileGroups(TConfigState& state, TBrid
         state.GroupContentChanged.insert(proxyGroupId);
     }
 
+    // nodes of the pile can't connect until it is added again, so nobody can tell how their drives are; INACTIVE set by
+    // CMS sentinel when they went away would keep the static groups from getting their parts in the pile being added
+    std::vector<TPDiskId> inactivePDiskIds;
+    state.PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdisk) {
+        const auto *pile = bridgeInfo->GetPileForNode(pdiskId.NodeId);
+        if (pile && pile->BridgePileId == pileId && pdisk.Status == NKikimrBlobStorage::EDriveStatus::INACTIVE) {
+            inactivePDiskIds.push_back(pdiskId);
+        }
+    });
+    for (const TPDiskId& pdiskId : inactivePDiskIds) {
+        TPDiskInfo *pdisk = state.PDisks.FindForUpdate(pdiskId);
+        pdisk->Status = NKikimrBlobStorage::EDriveStatus::ACTIVE;
+        pdisk->StatusTimestamp = state.Timestamp;
+        YDB_LOG_INFO("Drive of the removed pile gets ACTIVE status back",
+            {"marker", "BSCBR19"},
+            {"pileId", pileId},
+            {"PDiskId", pdiskId});
+    }
+
     state.CheckConsistency();
     return proxyGroupIds.size();
 }
@@ -604,6 +626,15 @@ TBridgePileId TBlobStorageController::GetPendingOperationPileId() const {
 bool TBlobStorageController::IsBridgePileBeingRemoved(TBridgePileId pileId) const {
     return pileId && GetPendingOperationPileId() == pileId && StorageConfig->GetClusterStateDetails()
         .GetPendingPileOperation().GetKind() == NKikimrBridge::TClusterStateDetails::TPendingPileOperation::REMOVE;
+}
+
+bool TBlobStorageController::IsBridgePileAwaitingParts(TBridgePileId pileId) const {
+    if (!pileId || GetPendingOperationPileId() != pileId) {
+        return false;
+    }
+    const auto& op = StorageConfig->GetClusterStateDetails().GetPendingPileOperation();
+    return op.GetKind() == NKikimrBridge::TClusterStateDetails::TPendingPileOperation::ADD &&
+        op.GetOperationId() != BridgePileAddedOperationId;
 }
 
 void TBlobStorageController::CheckBridgePileOperation() {

@@ -151,6 +151,11 @@ namespace NKikimr {
                                 State.Self.IsBridgePileBeingRemoved(bridgePileId)) {
                             pile->SetAbsent(true); // there are no resources in this pile (or they are going away)
                             return;
+                        } else if (State.Self.IsBridgePileAwaitingParts(bridgePileId)) {
+                            // the addition of the pile places parts of every group lacking them, so this group doesn't
+                            // take the resources the dry run of the addition has counted on
+                            pile->SetAbsent(true);
+                            return;
                         }
                         const TGroupId groupId = CreateGroup(bridgePileId, mainGroupId);
                         groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);

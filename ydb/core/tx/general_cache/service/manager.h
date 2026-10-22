@@ -305,7 +305,6 @@ private:
     const std::shared_ptr<TManagerCounters> Counters;
     std::shared_ptr<NSource::IObjectsProcessor<TPolicy>> ObjectsProcessor;
     TLRUCache<TAddress, TObject, TNoopDelete, typename TPolicy::TSizeCalcer> Cache;
-    const bool UseCacheSizeFromConfig;
     static constexpr ui64 DEFAULT_CACHE_SIZE = (ui64)1 << 30;
 
     THashMap<TSourceId, TSourceInfo> SourcesInfo;
@@ -378,8 +377,7 @@ public:
     TManager(const NActors::TActorId& ownerActorId, const std::shared_ptr<TManagerCounters>& counters)
         : Counters(counters)
         , ObjectsProcessor(TPolicy::BuildObjectsProcessor(ownerActorId))
-        , Cache(Counters->GetConfig().GetMemoryLimit().value_or(DEFAULT_CACHE_SIZE))
-        , UseCacheSizeFromConfig(Counters->GetConfig().GetMemoryLimit().has_value()) {
+        , Cache(Counters->GetConfig().GetMemoryLimit().value_or(DEFAULT_CACHE_SIZE)) {
         YDB_LOG_NOTICE_COMP(NKikimrServices::GENERAL_CACHE, "",
             {"event", "general_cache_manager"},
             {"ownerActorId", ownerActorId},
@@ -491,9 +489,9 @@ public:
         return Cache.GetMaxSize();
     }
 
-    void UpdateMaxCacheSize(const size_t maxCacheSize) {
-        if (UseCacheSizeFromConfig) {
-            return;
+    void UpdateMaxCacheSize(size_t maxCacheSize) {
+        if (const auto configuredLimit = Counters->GetConfig().GetMemoryLimit()) {
+            maxCacheSize = Min<ui64>(maxCacheSize, *configuredLimit);
         }
 
         if (Cache.GetMaxSize() == maxCacheSize) {

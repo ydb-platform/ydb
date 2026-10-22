@@ -3,6 +3,7 @@
 #include <memory_controller.h>
 #include <memory_controller_config.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -234,52 +235,75 @@ private:
 Y_UNIT_TEST_SUITE(TMemoryController) {
 
 Y_UNIT_TEST(GeneralCacheReceivesFirstReductionWhileOverBudget) {
-    TControllerFixture fixture(MakeCacheAndQueryConfig(0, 400_MB, 40_MB));
-    fixture.Runtime.RegisterService(MakeMemoryControllerId(), fixture.MemoryController);
-    const auto waiter = fixture.Runtime.AllocateEdgeActor();
-    fixture.Register(waiter, EMemoryConsumerKind::ColumnTablesScanGroupedMemory);
+    for (bool configured : {false, true}) {
+        TControllerFixture fixture(MakeCacheAndQueryConfig(0, 400_MB, 40_MB));
+        fixture.Runtime.RegisterService(MakeMemoryControllerId(), fixture.MemoryController);
+        const auto waiter = fixture.Runtime.AllocateEdgeActor();
+        fixture.Register(waiter, EMemoryConsumerKind::ColumnTablesScanGroupedMemory);
 
-    ui64 initialLimit = 0;
-    bool registered = false;
-    THashMap<TActorId, ui64> limits;
-    auto registrations = fixture.Runtime.AddObserver<TEvConsumerRegister>([&](TEvConsumerRegister::TPtr& ev) {
-        initialLimit = ev->Get()->InitialLimitBytes;
-    });
-    auto acknowledgements = fixture.Runtime.AddObserver<TEvConsumerRegistered>([&](TEvConsumerRegistered::TPtr&) {
-        registered = true;
-    });
-    auto grants = fixture.Runtime.AddObserver<TEvConsumerLimit>([&](TEvConsumerLimit::TPtr& ev) {
-        limits[ev->Recipient] = ev->Get()->LimitBytes;
-    });
-    const auto config = NGeneralCache::NPublic::TConfig::BuildDefault();
-    NGeneralCache::NPrivate::TActorCounters counters(TStartupCachePolicy::GetCacheName(), fixture.CountersRoot, config);
-    const auto cache = fixture.Runtime.Register(NGeneralCache::CreateService<TStartupCachePolicy>(config, fixture.CountersRoot));
-    fixture.Runtime.WaitFor("cache registration", [&] { return registered; });
-    UNIT_ASSERT_VALUES_EQUAL(initialLimit, 1_GB);
+        ui64 initialLimit = 0;
+        bool registered = false;
+        THashMap<TActorId, ui64> limits;
+        auto registrations = fixture.Runtime.AddObserver<TEvConsumerRegister>([&](TEvConsumerRegister::TPtr& ev) {
+            initialLimit = ev->Get()->InitialLimitBytes;
+        });
+        auto acknowledgements = fixture.Runtime.AddObserver<TEvConsumerRegistered>([&](TEvConsumerRegistered::TPtr&) {
+            registered = true;
+        });
+        auto grants = fixture.Runtime.AddObserver<TEvConsumerLimit>([&](TEvConsumerLimit::TPtr& ev) {
+            limits[ev->Recipient] = ev->Get()->LimitBytes;
+        });
+        NKikimrConfig::TGeneralCacheConfig proto;
+        if (configured) {
+            proto.SetMemoryLimit(120_MB);
+        }
+        const auto config = NGeneralCache::NPublic::TConfig::BuildFromProto(proto).GetResult();
+        NGeneralCache::NPrivate::TActorCounters counters(TStartupCachePolicy::GetCacheName(), fixture.CountersRoot, config);
+        const auto cache = fixture.Runtime.Register(NGeneralCache::CreateService<TStartupCachePolicy>(config, fixture.CountersRoot));
+        fixture.Runtime.WaitFor("cache registration", [&] { return registered; });
+        UNIT_ASSERT_VALUES_EQUAL(initialLimit, configured ? 120_MB : 1_GB);
 
-    THashMap<ui64, ui64> objects;
-    for (ui64 i = 0; i < 24; ++i) {
-        objects.emplace(i, 5_MB);
+        THashMap<ui64, ui64> objects;
+        for (ui64 i = 0; i < 24; ++i) {
+            objects.emplace(i, 5_MB);
+        }
+        using TSourceEvents = NGeneralCache::NSource::TEvents<TStartupCachePolicy>;
+        fixture.Runtime.Send(new IEventHandle(cache, waiter,
+            new TSourceEvents::TEvObjectsInfo(0, std::move(objects), {}, {})));
+        fixture.Runtime.WaitFor("cache filled before first grant", [&] {
+            return counters.GetManager()->CacheSizeBytes->Val() == 120_MB;
+        });
+        UNIT_ASSERT(!limits.contains(cache));
+
+        fixture.Runtime.WaitFor("startup reduction", [&] { return limits.contains(cache); });
+        UNIT_ASSERT_VALUES_EQUAL(limits.at(cache), 10_MB);
+        UNIT_ASSERT(!limits.contains(waiter));
+        fixture.Runtime.WaitFor("grant after eviction report", [&] { return limits.contains(waiter); });
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetManager()->CacheSizeBytes->Val(), 10_MB);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesDataAccessorCache/Consumption"), 10_MB);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersBudgetDeficit"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(limits.at(waiter), 20_MB);
+
+        for (ui64 grant : {20_MB, 60_MB, 2_GB}) {
+            fixture.Runtime.Send(new IEventHandle(cache, fixture.MemoryController, new TEvConsumerLimit(grant)));
+            const ui64 expectedLimit = configured ? Min(grant, 120_MB) : grant;
+            fixture.Runtime.WaitFor("cache applies controller ceiling", [&] {
+                return counters.GetManager()->CacheSizeLimitBytes->Val() == i64(expectedLimit);
+            });
+            THashMap<ui64, ui64> refill;
+            for (ui64 i = 0; i < 24; ++i) {
+                refill.emplace(i, 5_MB);
+            }
+            fixture.Runtime.Send(new IEventHandle(cache, waiter,
+                new TSourceEvents::TEvObjectsInfo(0, std::move(refill), {}, {})));
+            fixture.Runtime.WaitFor("cache respects ceiling after refill", [&] {
+                return counters.GetManager()->CacheSizeBytes->Val() == i64(Min(expectedLimit, 120_MB));
+            });
+        }
     }
-    using TSourceEvents = NGeneralCache::NSource::TEvents<TStartupCachePolicy>;
-    fixture.Runtime.Send(new IEventHandle(cache, waiter,
-        new TSourceEvents::TEvObjectsInfo(0, std::move(objects), {}, {})));
-    fixture.Runtime.WaitFor("cache filled before first grant", [&] {
-        return counters.GetManager()->CacheSizeBytes->Val() == 120_MB;
-    });
-    UNIT_ASSERT(!limits.contains(cache));
-
-    fixture.Runtime.WaitFor("startup reduction", [&] { return limits.contains(cache); });
-    UNIT_ASSERT_VALUES_EQUAL(limits.at(cache), 10_MB);
-    UNIT_ASSERT(!limits.contains(waiter));
-    fixture.Runtime.WaitFor("grant after eviction report", [&] { return limits.contains(waiter); });
-    UNIT_ASSERT_VALUES_EQUAL(counters.GetManager()->CacheSizeBytes->Val(), 10_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesDataAccessorCache/Consumption"), 10_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersBudgetDeficit"), 0);
-    UNIT_ASSERT_VALUES_EQUAL(limits.at(waiter), 20_MB);
 }
 
-Y_UNIT_TEST(GroupedMemoryRegistersItsStartupHardLimit) {
+Y_UNIT_TEST(GroupedMemoryRegistersAndAppliesHardLimits) {
     using namespace NOlap::NGroupedMemoryManager;
     struct TCase {
         std::optional<ui64> HardLimit;
@@ -298,6 +322,7 @@ Y_UNIT_TEST(GroupedMemoryRegistersItsStartupHardLimit) {
         runtime.RegisterService(MakeMemoryControllerId(), controller);
         NKikimrConfig::TGroupedMemoryLimiterConfig proto;
         proto.SetCountBuckets(test.Buckets);
+        proto.SetMemoryLimit(100);
         if (test.HardLimit) {
             proto.SetHardMemoryLimit(*test.HardLimit);
         }
@@ -305,21 +330,60 @@ Y_UNIT_TEST(GroupedMemoryRegistersItsStartupHardLimit) {
         UNIT_ASSERT(config.DeserializeFromProto(proto));
         const auto kind = test.Multiplier == compMultiplier
             ? EMemoryConsumerKind::ColumnTablesCompGroupedMemory : EMemoryConsumerKind::ColumnTablesScanGroupedMemory;
-        runtime.Register(new TMemoryLimiterActor(config, "Test", runtime.GetDynamicCounters(), kind, test.Multiplier));
+        const auto actor = runtime.Register(new TMemoryLimiterActor(config, "Test", runtime.GetDynamicCounters(), kind, test.Multiplier));
         const auto registration = runtime.GrabEdgeEvent<TEvConsumerRegister>(controller);
         UNIT_ASSERT_VALUES_EQUAL(registration->Get()->InitialLimitBytes, test.Expected);
+        for (ui64 grant : {20, 60, 1000, 0}) {
+            runtime.Send(new IEventHandle(actor, controller, new TEvConsumerLimit(grant)));
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            const ui64 expectedHard = Min(grant * test.Multiplier / test.Buckets,
+                config.GetHardMemoryLimit().value_or(max));
+            for (ui64 i = 0; i < test.Buckets; ++i) {
+                TCounters counters(runtime.GetDynamicCounters(), "Test_" + ToString(i));
+                const auto stageCounters = counters.BuildStageCounters("general");
+                UNIT_ASSERT_VALUES_EQUAL(stageCounters->ValueHardLimit->Val(), expectedHard);
+                UNIT_ASSERT_VALUES_EQUAL(stageCounters->ValueSoftLimit->Val(), Min(*config.GetMemoryLimit(), expectedHard));
+            }
+        }
     }
 }
 
-Y_UNIT_TEST(BlobCacheRegistersItsStartupLimit) {
-    TTestBasicRuntime runtime;
-    runtime.Initialize(TAppPrepare().Unwrap());
-    const auto controller = runtime.AllocateEdgeActor();
-    runtime.RegisterService(MakeMemoryControllerId(), controller);
-    const auto settings = NBlobCache::TBlobCacheSettings::FromProto(NKikimrConfig::TBlobCacheConfig{});
-    runtime.Register(NBlobCache::CreateBlobCache(settings, runtime.GetDynamicCounters()));
-    const auto registration = runtime.GrabEdgeEvent<TEvConsumerRegister>(controller);
-    UNIT_ASSERT_VALUES_EQUAL(registration->Get()->InitialLimitBytes, settings.MaxCacheDataSize);
+Y_UNIT_TEST(BlobCacheRegistersAndAppliesLimits) {
+    for (bool configured : {false, true}) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        const auto controller = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeMemoryControllerId(), controller);
+        NKikimrConfig::TBlobCacheConfig proto;
+        if (configured) {
+            proto.SetMaxSizeBytes(80);
+        }
+        const auto settings = NBlobCache::TBlobCacheSettings::FromProto(proto);
+        auto counters = runtime.GetDynamicCounters();
+        const auto cache = runtime.Register(NBlobCache::CreateBlobCache(settings, counters));
+        runtime.EnableScheduleForActor(cache);
+        const auto registration = runtime.GrabEdgeEvent<TEvConsumerRegister>(controller);
+        UNIT_ASSERT_VALUES_EQUAL(registration->Get()->InitialLimitBytes, settings.MaxCacheDataSize);
+        for (ui64 grant : TVector<ui64>{20, 60, 2_GB, 0, 60}) {
+            runtime.Send(new IEventHandle(cache, controller, new TEvConsumerLimit(grant)));
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            const ui64 expectedLimit = configured ? Min<ui64>(grant, 80) : grant;
+            UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("MaxSizeBytes")->Val(), expectedLimit);
+            for (ui32 i = 0; i < 16; ++i) {
+                NOlap::TBlobRange range(NOlap::TUnifiedBlobId(0, TLogoBlobID(1, 1, 1, 1, 5, i)), 0, 5);
+                runtime.Send(new IEventHandle(cache, controller,
+                    new NBlobCache::TEvBlobCache::TEvCacheBlobRange(range, TString(5, 'a'), true)));
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("SizeBytes")->Val(), Min<ui64>(expectedLimit, 80));
+        }
+        auto& control = runtime.GetAppData(0).Icb->BlobCache.MaxCacheDataSize;
+        for (ui64 limit : TVector<ui64>{100, 10, settings.MaxCacheDataSize}) {
+            TControlBoard::SetValue(limit, control);
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("MaxSizeBytes")->Val(), Min<ui64>(limit, 60));
+        }
+    }
 }
 
 Y_UNIT_TEST(Counters) {

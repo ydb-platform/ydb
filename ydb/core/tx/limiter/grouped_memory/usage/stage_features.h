@@ -19,8 +19,9 @@ private:
     std::shared_ptr<TStageFeatures> Owner;
     std::shared_ptr<TStageCounters> Counters;
     std::function<void(ui64)> MemoryConsumptionUpdate;
-    const bool UseLimitFromConfig;
-    const bool UseHardLimitFromConfig;
+    const std::optional<ui64> ConfiguredLimit;
+    const std::optional<ui64> ConfiguredHardLimit;
+    const std::optional<ui64> ConfiguredUnrestrictedSoft;
     static constexpr ui64 DEFAULT_LIMIT = ui64(3) << 30;
 
     void UpdateConsumption(const TStageFeatures* current) const;

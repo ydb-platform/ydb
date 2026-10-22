@@ -111,6 +111,7 @@ private:
 
     TControlWrapper MaxCacheDataSize;
     const bool UseMaxCacheDataSizeFromConfig;
+    std::optional<ui64> MemoryControllerLimit;
     TControlWrapper MaxInFlightDataSize;
     ui64 WriteProtectDurationMs;
     ui64 MaxRequestBytes;
@@ -265,7 +266,7 @@ private:
 
     void Handle(TEvBlobCache::TEvReadBlobRange::TPtr& ev, const TActorContext& ctx) {
         const TBlobRange& blobRange = ev->Get()->BlobRange;
-        const bool promote = (i64)MaxCacheDataSize && ev->Get()->ReadOptions.CacheAfterRead;
+        const bool promote = GetMaxCacheDataSize() && ev->Get()->ReadOptions.CacheAfterRead;
 
         YDB_LOG_DEBUG("Read",
             {"request", blobRange},
@@ -369,7 +370,7 @@ private:
             {"request", JoinStrings(ranges.begin(), ranges.end(), " ")});
 
         auto& readOptions = ev->Get()->ReadOptions;
-        readOptions.CacheAfterRead = (i64)MaxCacheDataSize && readOptions.CacheAfterRead;
+        readOptions.CacheAfterRead = GetMaxCacheDataSize() && readOptions.CacheAfterRead;
 
         for (const auto& blobRange : ranges) {
             HandleSingleRangeRead(TReadItem(readOptions, blobRange), ev->Sender, ctx);
@@ -438,22 +439,21 @@ private:
         UpdateConsumption();
     }
 
-    void Handle(NMemory::TEvConsumerLimit::TPtr& ev, const TActorContext&) {
-        if (UseMaxCacheDataSizeFromConfig) {
-            return;
+    ui64 GetMaxCacheDataSize() const {
+        if (!MemoryControllerLimit) {
+            return MaxCacheDataSize;
         }
-
-        const i64 newMaxCacheDataSize = ev->Get()->LimitBytes;
-        if (newMaxCacheDataSize == (i64)MaxCacheDataSize) {
-            return;
+        if (UseMaxCacheDataSizeFromConfig || !MaxCacheDataSize.IsDefault()) {
+            return Min<ui64>(MaxCacheDataSize, *MemoryControllerLimit);
         }
+        return *MemoryControllerLimit;
+    }
 
+    void Handle(NMemory::TEvConsumerLimit::TPtr& ev, const TActorContext& ctx) {
+        MemoryControllerLimit = ev->Get()->LimitBytes;
         YDB_LOG_DEBUG("Updating max cache data",
-            {"size", newMaxCacheDataSize});
-
-        MaxCacheDataSize = newMaxCacheDataSize;
-
-        MaxSizeBytes->Set((i64)MaxCacheDataSize);
+            {"size", GetMaxCacheDataSize()});
+        Evict(ctx);
     }
 
     void UpdateConsumption() {
@@ -821,7 +821,9 @@ private:
 
     void Evict(const TActorContext&) {
         GraduateExpired();
-        while (CacheDataSize + InFlightDataSize > MaxCacheDataSize) {
+        const ui64 maxCacheDataSize = GetMaxCacheDataSize();
+        MaxSizeBytes->Set(maxCacheDataSize);
+        while (static_cast<ui64>(CacheDataSize + InFlightDataSize) > maxCacheDataSize) {
             TBlobRange victim;
             bool stickyVictim = false;
             auto eit = Evictable.FindOldest();
@@ -841,7 +843,7 @@ private:
                 {"evict", victim},
                 {"cacheDataSize", CacheDataSize},
                 {"inFlightDataSize", (i64)InFlightDataSize},
-                {"maxCacheDataSize", (i64)MaxCacheDataSize},
+                {"maxCacheDataSize", maxCacheDataSize},
                 {"sicky", (i64)stickyVictim});
 
             Evictions->Inc();

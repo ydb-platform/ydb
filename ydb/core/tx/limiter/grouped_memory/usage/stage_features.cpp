@@ -28,8 +28,9 @@ TStageFeatures::TStageFeatures(const TString& name, const std::optional<ui64>& l
     , UnrestrictedSoft(unrestrictedSoft)
     , Owner(owner)
     , Counters(counters)
-    , UseLimitFromConfig(limit.has_value())
-    , UseHardLimitFromConfig(hardLimit.has_value()) {
+    , ConfiguredLimit(limit)
+    , ConfiguredHardLimit(hardLimit)
+    , ConfiguredUnrestrictedSoft(unrestrictedSoft) {
     if (Counters) {
         Counters->ValueSoftLimit->Set(Limit);
         if (HardLimit) {
@@ -222,37 +223,28 @@ void TStageFeatures::AttachCounters(const std::shared_ptr<TStageCounters>& count
 
 void TStageFeatures::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, bool& isLimitIncreased,
     const std::optional<ui64>& unrestrictedSoft) {
-    // A configured hard limit keeps its band from construction; a configured soft limit alone still takes the band.
-    if (UseLimitFromConfig && (!unrestrictedSoft || UseHardLimitFromConfig)) {
-        isLimitIncreased = false;
-        return;
+    auto effectiveHard = hardLimit;
+    if (ConfiguredHardLimit) {
+        effectiveHard = Min(*ConfiguredHardLimit, hardLimit.value_or(Max<ui64>()));
     }
-    if (UseLimitFromConfig) {
-        const ui64 oldBand = UnrestrictedSoft.value_or(0);
-        const ui64 oldHard = HardLimit.value_or(0);
-        HardLimit = hardLimit;
-        UnrestrictedSoft = unrestrictedSoft;
-        isLimitIncreased = *unrestrictedSoft > oldBand || hardLimit.value_or(0) > oldHard;
-        if (Counters) {
-            if (HardLimit) {
-                Counters->ValueHardLimit->Set(*HardLimit);
-            }
-            Counters->ValueUnrestrictedSoftLimit->Set(UnrestrictedSoft.value_or(0));
-        }
-        return;
+    const ui64 effectiveLimit = Min(ConfiguredLimit.value_or(limit), effectiveHard.value_or(Max<ui64>()));
+    auto effectiveBand = unrestrictedSoft;
+    if (ConfiguredUnrestrictedSoft) {
+        effectiveBand = Min(*ConfiguredUnrestrictedSoft, unrestrictedSoft.value_or(Max<ui64>()));
+    }
+    if (effectiveBand && effectiveHard) {
+        effectiveBand = Min(*effectiveBand, *effectiveHard);
     }
 
-    isLimitIncreased = limit > Limit || unrestrictedSoft.value_or(0) > UnrestrictedSoft.value_or(0) || hardLimit.value_or(0) > HardLimit.value_or(0);
-
-    Limit = limit;
-    HardLimit = hardLimit;
-    UnrestrictedSoft = unrestrictedSoft;
+    isLimitIncreased = effectiveLimit > Limit || effectiveBand.value_or(effectiveLimit) > UnrestrictedSoft.value_or(Limit)
+        || effectiveHard.value_or(Max<ui64>()) > HardLimit.value_or(Max<ui64>());
+    Limit = effectiveLimit;
+    HardLimit = effectiveHard;
+    UnrestrictedSoft = effectiveBand;
 
     if (Counters) {
         Counters->ValueSoftLimit->Set(Limit);
-        if (HardLimit) {
-            Counters->ValueHardLimit->Set(*HardLimit);
-        }
+        Counters->ValueHardLimit->Set(HardLimit.value_or(0));
         Counters->ValueUnrestrictedSoftLimit->Set(UnrestrictedSoft.value_or(0));
     }
 }

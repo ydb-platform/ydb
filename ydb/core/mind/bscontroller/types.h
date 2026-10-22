@@ -40,6 +40,7 @@ namespace NKikimr {
 
         using TBoxId = ui64;
         using TBoxStoragePoolId = std::tuple<ui64, ui64>;
+        using TPDiskKindId = Schema::PDiskKind::KindId::Type;
 
         class TBlobStorageController;
 

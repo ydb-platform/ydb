@@ -269,9 +269,10 @@ struct Schema : NIceDb::Schema {
         // struct InferPDiskSlotCountFromUnitSize : Column<8, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
         // struct InferPDiskSlotCountMax : Column<9, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         struct DiskScope : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct KindName : Column<11, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<HostConfigId, Path>;
-        using TColumns = TableColumns<HostConfigId, Path, TypeCol, SharedWithOs, ReadCentric, Kind, PDiskConfig, DiskScope>;
+        using TColumns = TableColumns<HostConfigId, Path, TypeCol, SharedWithOs, ReadCentric, Kind, PDiskConfig, DiskScope, KindName>;
     };
 
     struct BoxHostV2 : Table<105> {
@@ -346,13 +347,16 @@ struct Schema : NIceDb::Schema {
 
         struct PersistentBufferAllocationMode : Column<30, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
 
+        struct KindName : Column<31, NScheme::NTypeIds::String> {};
+
         using TKey = TableKey<BoxId, StoragePoolId>;
 
         using TColumns = TableColumns<BoxId, StoragePoolId, Name, ErasureSpecies, RealmLevelBegin, RealmLevelEnd,
             DomainLevelBegin, DomainLevelEnd, NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain,
             VDiskKind, SpaceBytes, WriteIOPS, WriteBytesPerSecond, ReadIOPS, ReadBytesPerSecond, InMemCacheBytes,
             Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping,
-            DefaultGroupSizeInUnits, BridgeMode, DDisk, VDiskHeapAllocatorNumLeadingDisks, PersistentBufferAllocationMode>;
+            DefaultGroupSizeInUnits, BridgeMode, DDisk, VDiskHeapAllocatorNumLeadingDisks, PersistentBufferAllocationMode,
+            KindName>;
     };
 
     struct BoxStoragePoolUser : Table<121> {
@@ -371,9 +375,10 @@ struct Schema : NIceDb::Schema {
         struct SharedWithOs : Column<4, HostConfigDrive::SharedWithOs::ColumnType> {};
         struct ReadCentric : Column<5, HostConfigDrive::ReadCentric::ColumnType> {};
         struct Kind : Column<6, HostConfigDrive::Kind::ColumnType> {};
+        struct KindName : Column<7, HostConfigDrive::KindName::ColumnType> {};
 
-        using TKey = TableKey<BoxId, StoragePoolId, TypeCol, SharedWithOs, ReadCentric, Kind>;
-        using TColumns = TableColumns<BoxId, StoragePoolId, TypeCol, SharedWithOs, ReadCentric, Kind>;
+        using TKey = TableKey<BoxId, StoragePoolId, TypeCol, SharedWithOs, ReadCentric, Kind, KindName>;
+        using TColumns = TableColumns<BoxId, StoragePoolId, TypeCol, SharedWithOs, ReadCentric, Kind, KindName>;
     };
 
     struct GroupStoragePool : Table<123> {
@@ -455,9 +460,10 @@ struct Schema : NIceDb::Schema {
         struct PDiskType : Column<8, HostConfigDrive::TypeCol::ColumnType> { using Type = NKikimrBlobStorage::EPDiskType; };
         struct PDiskConfig : Column<9, NScheme::NTypeIds::String> {};
         struct Path : Column<10, NScheme::NTypeIds::String> {};
+        struct KindName : Column<11, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Serial>;
-        using TColumns = TableColumns<Serial, BoxId, NodeId, PDiskId, Guid, LifeStage, Kind, PDiskType, PDiskConfig, Path>;
+        using TColumns = TableColumns<Serial, BoxId, NodeId, PDiskId, Guid, LifeStage, Kind, KindName, PDiskType, PDiskConfig, Path>;
     };
 
     // struct VirtualGroupPool : Table<130> {};
@@ -512,6 +518,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<BoxId, StoragePoolId>;
     };
 
+    struct PDiskKind : Table<136> {
+        struct KindId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct KindName : Column<2, NScheme::NTypeIds::String> {};
+        struct PDiskConfig : Column<3, NScheme::NTypeIds::String> {};
+        struct Generation : Column<4, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<KindName>;
+        using TColumns = TableColumns<KindId, KindName, PDiskConfig, Generation>;
+    };
 
     using TTables = SchemaTables<
         Node,
@@ -540,7 +555,8 @@ struct Schema : NIceDb::Schema {
         BridgeSyncState,
         DirectBlockGroupTabletState,
         DirectBlockGroupClaims,
-        DatabaseSpaceExhaustedPool
+        DatabaseSpaceExhaustedPool,
+        PDiskKind
     >;
 
     using TSettings = SchemaSettings<

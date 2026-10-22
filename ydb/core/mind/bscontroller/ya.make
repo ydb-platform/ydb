@@ -18,6 +18,7 @@ SRCS(
     cmds_ddisk.cpp
     cmds_drive_status.cpp
     cmds_host_config.cpp
+    cmds_pdisk_kind.cpp
     cmds_storage_pool.cpp
     commit_config.cpp
     config_cmd.cpp
@@ -85,6 +86,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/html/escape
     ydb/library/actors/core
     ydb/library/yaml_config
     ydb/core/base

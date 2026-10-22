@@ -24,22 +24,20 @@ namespace NKikimr::NBsController {
             driveInfo.Type = drive.GetType();
             driveInfo.SharedWithOs = drive.GetSharedWithOs();
             driveInfo.ReadCentric = drive.GetReadCentric();
-            driveInfo.Kind = drive.GetKind();
+            driveInfo.KindName = drive.GetKindName();
+            driveInfo.Kind = ResolvePDiskKind(driveInfo.KindName, drive.GetKind());
             if (drive.HasDiskScope()) {
                 driveInfo.DiskScope = drive.GetDiskScope();
             }
 
             if (drive.HasPDiskConfig()) {
-                const TString context = TStringBuilder() << "HostConfigId# " << id
-                    << " Path# " << drive.GetPath();
-                ValidatePDiskConfig(drive.GetPDiskConfig(), context);
-                TString config;
-                const bool success = drive.GetPDiskConfig().SerializeToString(&config);
-                Y_ABORT_UNLESS(success);
-                driveInfo.PDiskConfig = config;
-            } else {
+                driveInfo.PDiskConfig = drive.GetPDiskConfig().SerializeAsString();
+            } else if (!driveInfo.KindName) {
                 driveInfo.PDiskConfig = defaultPDiskConfig;
             }
+            const TString context = TStringBuilder() << "HostConfigId# " << id << " Path# " << drive.GetPath();
+            // Validate the effective settings even when this host config is not used by a box yet.
+            MaterializePDiskConfig(driveInfo.KindName, driveInfo.PDiskConfig, context);
 
             Schema::HostConfigDrive::TKey::Type key(id, drive.GetPath());
             const auto [it, inserted] = config.Drives.emplace(std::move(key), std::move(driveInfo));
@@ -97,7 +95,20 @@ namespace NKikimr::NBsController {
             if (it == hostConfigs.end()) {
                 throw TExHostConfigNotFound(id);
             }
-            Serialize(status.AddHostConfig(), it->first, it->second);
+            auto* host = status.AddHostConfig();
+            Serialize(host, it->first, it->second);
+            if (!cmd.GetReturnSource()) {
+                for (auto& drive : *host->MutableDrive()) {
+                    TMaybe<TString> overrides;
+                    if (drive.HasPDiskConfig()) {
+                        overrides = drive.GetPDiskConfig().SerializeAsString();
+                    }
+                    const auto config = MaterializePDiskConfig(drive.GetKindName(), overrides, drive.GetPath());
+                    if (config) {
+                        Y_ABORT_UNLESS(drive.MutablePDiskConfig()->ParseFromString(*config));
+                    }
+                }
+            }
         }
     }
 

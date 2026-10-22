@@ -236,6 +236,30 @@ namespace NKikimr::NBsController {
                 }
                 State.emplace(*Self, hostRecords, TActivationContext::Now(), TActivationContext::Monotonic(),
                     storageConfig ? &storageConfig.value() : nullptr);
+                // Reserve legacy IDs from the entire request before allocating IDs for new named classes.
+                for (const auto& command : Cmd.GetCommand()) {
+                    for (const auto& drive : command.GetDefineHostConfig().GetDrive()) {
+                        if (drive.GetKindName().empty()) {
+                            State->ReservedPDiskKindIds.insert(drive.GetKind());
+                        }
+                    }
+                    if (command.HasAddDriveSerial() && command.GetAddDriveSerial().GetKindName().empty()) {
+                        State->ReservedPDiskKindIds.insert(command.GetAddDriveSerial().GetKind());
+                    }
+                    for (const auto& filter : command.GetDefineStoragePool().GetPDiskFilter()) {
+                        bool named = false;
+                        for (const auto& property : filter.GetProperty()) {
+                            named |= property.HasKindName();
+                        }
+                        if (!named) {
+                            for (const auto& property : filter.GetProperty()) {
+                                if (property.HasKind()) {
+                                    State->ReservedPDiskKindIds.insert(property.GetKind());
+                                }
+                            }
+                        }
+                    }
+                }
                 State->CheckConsistency();
 
                 TString m;
@@ -252,8 +276,24 @@ namespace NKikimr::NBsController {
                     WrapCommand([&] {
                         THPTimer timer;
                         auto& status = *Response->MutableStatus()->rbegin();
+                        const bool definition = step.HasDefinePDiskKind() || step.HasDefineHostConfig() ||
+                            step.HasDeleteHostConfig() || step.HasDefineBox() || step.HasDeleteBox() ||
+                            step.HasAddDriveSerial();
+                        if (!definition && !State->ChangedPDiskKinds.empty()) {
+                            // Complete a class/drive definition batch before a command reads or uses its PDisks.
+                            State->PreparePDiskKindUpdates();
+                            Self->FitPDisksForUserConfig(*State);
+                        }
                         ExecuteStep(*State, step, status);
+                        if (&step == &Cmd.GetCommand(Cmd.CommandSize() - 1) && State->PDiskKinds.Changed()) {
+                            State->PreparePDiskKindUpdates();
+                            State->ValidatePDiskKindReferences();
+                        }
                         State->CheckConsistency();
+                        if (!State->ChangedPDiskKinds.empty()) {
+                            // A later definition may replace overrides or finish renaming references in this box.
+                            return;
+                        }
                         Self->FitPDisksForUserConfig(*State);
 
                         std::deque<ui64> expectedSlotSize;
@@ -404,6 +444,8 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(DefineHostConfig)
                     HANDLE_COMMAND(ReadHostConfig)
                     HANDLE_COMMAND(DeleteHostConfig)
+                    HANDLE_COMMAND(DefinePDiskKind)
+                    HANDLE_COMMAND(DeletePDiskKind)
                     HANDLE_COMMAND(DefineBox)
                     HANDLE_COMMAND(ReadBox)
                     HANDLE_COMMAND(DeleteBox)

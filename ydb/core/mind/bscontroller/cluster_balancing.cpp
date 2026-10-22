@@ -138,6 +138,7 @@ namespace NKikimr::NBsController {
                             return false;
                         }
                         break;
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKindName:
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
                         return false;
                 }

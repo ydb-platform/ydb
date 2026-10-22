@@ -36,6 +36,7 @@ public:
             auto vdiskMetrics = db.Table<Schema::VDiskMetrics>().Range().Select();
             auto hostConfig = db.Table<Schema::HostConfig>().Range().Select();
             auto hostConfigDrive = db.Table<Schema::HostConfigDrive>().Range().Select();
+            auto pdiskKind = db.Table<Schema::PDiskKind>().Range().Select();
             auto box = db.Table<Schema::Box>().Range().Select();
             auto boxUser = db.Table<Schema::BoxUser>().Range().Select();
             auto boxHost = db.Table<Schema::BoxHostV2>().Range().Select();
@@ -58,6 +59,7 @@ public:
                     || !vdiskMetrics.IsReady()
                     || !hostConfig.IsReady()
                     || !hostConfigDrive.IsReady()
+                    || !pdiskKind.IsReady()
                     || !box.IsReady()
                     || !boxUser.IsReady()
                     || !boxHost.IsReady()
@@ -282,6 +284,7 @@ public:
 
         // HostConfig, Box, BoxStoragePool
         if (!NTableAdapter::FetchTable<Schema::HostConfig>(db, Self, Self->HostConfigs)
+                || !NTableAdapter::FetchTable<Schema::PDiskKind>(db, Self, Self->PDiskKinds)
                 || !NTableAdapter::FetchTable<Schema::Box>(db, Self, Self->Boxes)
                 || !NTableAdapter::FetchTable<Schema::BoxStoragePool>(db, Self, Self->StoragePools)
                 || !NTableAdapter::FetchTable<Schema::DriveSerial>(db, Self, Self->DrivesSerials)

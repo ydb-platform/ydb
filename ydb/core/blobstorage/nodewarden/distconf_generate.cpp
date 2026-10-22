@@ -308,6 +308,8 @@ namespace NKikimr::NStorage {
                         case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKind:
                             pMatch = p.GetKind() == kind;
                             break;
+                        case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKindName:
+                            throw TExConfigError() << "named PDisk kinds are not supported for static group allocation";
                         case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
                             throw TExConfigError() << "invalid TPDiskFilter record";
                     }

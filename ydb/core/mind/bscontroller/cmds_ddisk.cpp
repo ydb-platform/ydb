@@ -87,6 +87,8 @@ namespace NKikimr::NBsController {
                     PROPERTY(ReadCentric, nullptr)
                     PROPERTY(Kind, nullptr)
 
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKindName:
+                        throw TExError() << "TPDiskFilter.KindName must be resolved to a numeric Kind";
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
                         throw TExError() << "TPDiskFilter.TRequiredProperty.Property not set";
                 }

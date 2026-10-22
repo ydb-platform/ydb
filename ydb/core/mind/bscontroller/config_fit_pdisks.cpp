@@ -198,7 +198,8 @@ namespace NKikimr {
                         disk.NodeId = *nodeId;
                         disk.Path = drive.Path;
                         disk.PDiskCategory = TPDiskCategory(PDiskTypeToPDiskType(driveInfo.Type), driveInfo.Kind);
-                        disk.PDiskConfig = driveInfo.PDiskConfig.GetOrElse(TString());
+                        disk.PDiskConfig = state.MaterializePDiskConfig(driveInfo.KindName, driveInfo.PDiskConfig,
+                            drive.Path).GetOrElse(TString());
                         disk.ReadCentric = driveInfo.ReadCentric;
                         disk.Serial = serial;
                         disk.SharedWithOs = driveInfo.SharedWithOs;
@@ -255,7 +256,8 @@ namespace NKikimr {
                 disk.NodeId = *nodeId;
                 disk.Path = *path;
                 disk.PDiskCategory = TPDiskCategory(PDiskTypeToPDiskType(driveInfo.PDiskType), driveInfo.Kind);
-                disk.PDiskConfig = driveInfo.PDiskConfig.GetOrElse(TString());
+                disk.PDiskConfig = state.MaterializePDiskConfig(driveInfo.KindName, driveInfo.PDiskConfig,
+                    serial.Serial).GetOrElse(TString());
                 disk.ReadCentric = false;
                 disk.Serial = serial;
                 disk.SharedWithOs = false;

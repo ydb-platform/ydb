@@ -907,6 +907,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
         const auto json = NJson::ReadJsonTree(&response, true);
         UNIT_ASSERT_VALUES_EQUAL(json["TenantInfo"][0]["Name"].GetString(), "/Root");
+
+        for (const auto* cache : {"never", "only"}) {
+            TStringStream describeResponse;
+            const auto describeStatus = httpClient.DoGet(TStringBuilder() << "/viewer/describe?database=/alias&path=/alias&direct=true&ask_scheme_cache=" << cache, &describeResponse, headers);
+            UNIT_ASSERT_VALUES_EQUAL(describeStatus, HTTP_OK);
+            const auto describeJson = NJson::ReadJsonTree(&describeResponse, true);
+            UNIT_ASSERT_VALUES_EQUAL(describeJson["Path"].GetString(), "/Root");
+        }
     }
 
     NJson::TJsonValue SendQuery(const TString& query, const TString& schema, const bool base64) {

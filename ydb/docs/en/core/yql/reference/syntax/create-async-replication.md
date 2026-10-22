@@ -41,6 +41,9 @@ WITH (option = value [, ...])
   * `ROW` — [row-level data consistency](../../../concepts/async-replication.md#consistency-level-row). Default mode.
   * `GLOBAL` — [global data consistency](../../../concepts/async-replication.md#consistency-level-global). Additionally can be specified:
     * `COMMIT_INTERVAL` — [change commit interval](../../../concepts/async-replication.md#commit-interval) in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. The default value is 10 seconds.
+* `FORMAT` — format of the changefeed records created on the source:
+  * `JSON` — JSON records. This is the default.
+  * `BINARY` — [binary records](../../../concepts/cdc.md#binary-record-structure). Binary changefeeds must be enabled on this cluster and on the source cluster.
 
 ## Examples {#examples}
 

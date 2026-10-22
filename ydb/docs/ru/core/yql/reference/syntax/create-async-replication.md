@@ -29,6 +29,9 @@ WITH (option = value [, ...])
   * `ROW` — [согласованность данных уровня строки](../../../concepts/async-replication.md#consistency-level-row). Режим по умолчанию.
   * `GLOBAL` — [глобальная согласованность данных](../../../concepts/async-replication.md#consistency-level-global). Дополнительно можно указать:
     * `COMMIT_INTERVAL` — [периодичность фиксации изменений](../../../concepts/async-replication.md#commit-interval) в формате [ISO 8601](https://ru.wikipedia.org/wiki/ISO_8601). Значение по умолчанию — 10 секунд.
+* `FORMAT` — формат записей потока изменений, который репликация создаёт на источнике:
+  * `JSON` — записи JSON. Это значение по умолчанию.
+  * `BINARY` — [двоичные записи](../../../concepts/cdc.md#binary-record-structure). Двоичные потоки должны быть включены и в этом кластере, и в кластере-источнике.
 
 ## Примеры {#examples}
 

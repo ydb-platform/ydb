@@ -19,7 +19,7 @@
    * `NEW_AND_OLD_IMAGES`: A combination of `NEW_IMAGE` and `OLD_IMAGE` modes. Any column values _prior to_ and _resulting from_ updates are written.
 * `FORMAT`: Data write format.
    * `JSON`: Write data in [JSON](../../../../concepts/cdc.md#json-record-structure) format.
-   * `BINARY`: Write data in the [binary format](../../../../concepts/cdc.md#binary-record-structure). New asynchronous replication changefeeds are created in this format when the cluster enables binary changefeeds for asynchronous replication. Otherwise they are created in JSON.
+   * `BINARY`: Write data in the [binary format](../../../../concepts/cdc.md#binary-record-structure). The cluster must have binary changefeeds enabled. An asynchronous replication uses this format when it is created with `FORMAT = 'BINARY'` and binary changefeeds are enabled on both the destination and the source. Otherwise its changefeeds are created in JSON.
    * `DEBEZIUM_JSON`: Write data in the [Debezium-like JSON format](../../../../concepts/cdc.md#debezium-json-record-structure).
 {% if audience == "tech" %}
    * `DYNAMODB_STREAMS_JSON`: Write data in the [JSON format compatible with Amazon DynamoDB Streams](../../../../concepts/cdc.md#dynamodb-streams-json-record-structure).

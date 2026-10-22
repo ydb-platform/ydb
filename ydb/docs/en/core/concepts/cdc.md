@@ -209,7 +209,7 @@ When `USER_SIDS` or `TRACE_IDS` is enabled and the value is not empty, the value
 
 The topic compresses this binary record with zstd when the compressed bytes are shorter than the record, and stores the record without zstd otherwise. The topic client removes that zstd compression before it returns the message body. The body is still this binary record. The application parses the record from that body; removing zstd does not parse it.
 
-New asynchronous replication changefeeds are created in this format when the cluster enables binary changefeeds for asynchronous replication. Otherwise they are created in JSON.
+A changefeed in this format can be created only when binary changefeeds are enabled on the cluster that owns the table. An asynchronous replication uses this format when it is created with [`FORMAT = 'BINARY'`](../yql/reference/syntax/create-async-replication.md#params) and binary changefeeds are enabled on both the destination cluster and the source cluster. Otherwise its changefeeds are created in JSON.
 
 {% if audience == "tech" %}
 

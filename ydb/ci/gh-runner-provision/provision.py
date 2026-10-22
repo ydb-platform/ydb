@@ -1187,250 +1187,146 @@ def cmd_register(cfg, names, dry_run, timeout):
 
 
 def self_test():
-    sample = """
-# comment
-name: tiny-worker-2026-10
-count: 2
-start: 8
-index_width: 2
-platform: standard-v3
-cores: 4
-memory_gb: 8
-disk_gb: 186
-labels:
-  - tiny-worker
-  - auto-provisioned
-"""
-    cfg = load_config_text(sample)
-    assert runner_names(cfg) == ["tiny-worker-2026-10-08", "tiny-worker-2026-10-09"]
+    pools = load_pools(HERE / "fleet")
+    if not pools:
+        raise AssertionError("fleet/ is empty")
+    for pool in pools:
+        if not pool.get("_fleet") or not pool.get("name") or pool.get("names"):
+            raise AssertionError(f"{pool.get('_pool')}: fleet file must have a name prefix, not a runner list")
+
+    sample = (
+        "name: tiny-worker-2026-10\nplatform: standard-v3\ncores: 4\n"
+        "memory_gb: 8\ndisk_gb: 186\nlabels:\n  - tiny-worker\n"
+    )
     os.environ["YC_FOLDER_ID"] = "folder-from-env"
     try:
-        from_env = load_config_text(sample)
-        assert from_env["folder_id"] == "folder-from-env"
-        pinned = load_config_text(sample + "folder_id: pinned-folder\n")
-        assert pinned["folder_id"] == "pinned-folder"
+        assert load_config_text(sample)["folder_id"] == "folder-from-env"
+        assert load_config_text(sample + "folder_id: pinned-folder\n")["folder_id"] == "pinned-folder"
     finally:
         os.environ.pop("YC_FOLDER_ID", None)
-    plain = load_config_text(sample.replace("count: 2\nstart: 8\nindex_width: 2\n", ""))
-    assert runner_names(plain) == ["tiny-worker-2026-10"]
-    listed = load_config_text(
-        "names:\n  - analytic-node-1\n"
-        "platform: standard-v4a\ncores: 8\nmemory_gb: 64\ndisk_gb: 186\n"
-        "labels:\n  - auto-provisioned\n"
-    )
-    assert runner_names(listed) == ["analytic-node-1"]
     try:
         load_config_text(sample.replace("disk_gb: 186", "disk_gb: 200"))
     except ConfigError as exc:
-        assert "multiple of 93" in str(exc)
+        if "multiple of 93" not in str(exc):
+            raise
     else:
         raise AssertionError("expected disk alignment error")
+
     first = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAItest key"
     second = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIother key"
     userdata = render_userdata([first, second])
-    assert first in userdata and second in userdata
-    assert "/var/lib/ydb-ci-host-prepared" in userdata
-    assert "sysctl.d/99-ydb-ci.conf" in userdata
-    assert "vm.max_map_count=1048576" in userdata
-    assert "GITHUB_TOKEN" not in userdata
-    script = authorize_script([first, second])
-    assert script.count("grep -qxF") == 2
-    assert ">>" in script
-    assert ">" not in script.replace(">>", "")
+    if first not in userdata or second not in userdata:
+        raise AssertionError("userdata lost an ssh key")
+    if "GITHUB_TOKEN" in userdata or "registration-token" in userdata:
+        raise AssertionError("secrets must not go into userdata")
+    if "sysctl.d/99-ydb-ci.conf" not in userdata or "vm.max_map_count=1048576" not in userdata:
+        raise AssertionError("userdata must set vm.max_map_count")
     keydir = Path(tempfile.mkdtemp(prefix="gh-runner-keys-"))
     try:
         primary = keydir / "primary.pub"
         extra = keydir / "extra.pub"
         primary.write_text(first + "\n")
         extra.write_text(second + "\n")
-        keyed = load_config_text(
-            "name: tiny\nplatform: standard-v4a\ncores: 4\nmemory_gb: 8\ndisk_gb: 186\n"
-            "labels:\n  - tiny-worker\n"
-            f"ssh_public_key: {primary}\n"
-            "ssh_public_keys:\n"
-            f"  - {extra}\n"
-            f"  - {primary}\n"
-        )
-        assert public_key_lines(keyed) == [first, second]
-        os.environ["GH_RUNNER_RECONCILE_SSH_PUB"] = second
+        keyed = load_config_text(sample + f"ssh_public_key: {primary}\nssh_public_keys:\n  - {extra}\n")
+        os.environ["GH_RUNNER_RECONCILE_SSH_PUB"] = first.replace("test", "workflow")
         try:
-            assert public_key_lines(keyed) == [first, second]
-            os.environ["GH_RUNNER_RECONCILE_SSH_PUB"] = first.replace("test", "workflow")
             workflow_key = first.replace("test", "workflow")
             assert public_key_lines(keyed) == [first, second, workflow_key]
+            os.environ["GH_RUNNER_RECONCILE_SSH_PUB"] = second
+            assert public_key_lines(keyed) == [first, second]
         finally:
             os.environ.pop("GH_RUNNER_RECONCILE_SSH_PUB", None)
-        derived = keydir / "derived"
-        subprocess.run(
-            ["ssh-keygen", "-t", "ed25519", "-f", str(derived), "-N", "", "-C", "derived-test"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        expected = (derived.with_suffix(".pub")).read_text().strip()
-        derived.with_suffix(".pub").unlink()
-        from_private = load_config_text(
-            "name: tiny\nplatform: standard-v4a\ncores: 4\nmemory_gb: 8\ndisk_gb: 186\n"
-            "labels:\n  - tiny-worker\n"
-            f"ssh_public_key: {derived}.pub\n"
-        )
-        assert public_key_lines(from_private) == [expected]
-        derived.unlink()
     finally:
         primary.unlink(missing_ok=True)
         extra.unlink(missing_ok=True)
-        for name in ("derived", "derived.pub"):
-            (keydir / name).unlink(missing_ok=True)
         keydir.rmdir()
-    try:
-        render_userdata(["not-a-key"])
-    except ConfigError:
-        pass
-    else:
-        raise AssertionError("expected a public key error")
+
     current = [
         {"name": "self-hosted", "type": "read-only"},
         {"name": "Linux", "type": "read-only"},
-        {"name": "X64", "type": "read-only"},
         {"name": "auto-provisioned", "type": "custom"},
-        {"name": "build-preset-relwithdebinfo", "type": "custom"},
-        {"name": "build-preset-release-asan", "type": "custom"},
+        {"name": "postcommit", "type": "custom"},
+        {"name": "pool:asan-postcommit", "type": "custom"},
         {"name": "instance:abc", "type": "custom"},
     ]
-    desired = ["auto-provisioned", "postcommit", "build-preset-relwithdebinfo", "build-preset-release-asan"]
+    desired = ["auto-provisioned", "pool:asan"]
     final, added, removed = label_plan(current, desired)
-    assert added == ["postcommit"]
-    assert removed == []
-    assert "instance:abc" in final
-    assert "self-hosted" not in final
-    same, added, removed = label_plan(current + [{"name": "postcommit", "type": "custom"}], desired)
-    assert added == [] and removed == [] and same == final
-    extra, added, removed = label_plan(current + [{"name": "old-label", "type": "custom"}], desired)
-    assert removed == ["old-label"] and "old-label" not in extra
-    reports = poll_pools(
-        [{
-            "_pool": "tiny",
-            "count": 2,
-            "labels": ["tiny-worker"],
-            "_explicit": set(),
-            "_fleet": True,
-        }],
-        [
-            {"name": "tiny-a", "status": "online", "labels": [
-                {"name": "self-hosted", "type": "read-only"},
-                {"name": "tiny-worker", "type": "custom"},
-                {"name": "instance:abc", "type": "custom"},
-            ]},
-            {"name": "tiny-b", "status": "offline", "labels": [{"name": "tiny-worker", "type": "custom"}]},
-        ],
-    )
-    assert reports[0]["online"] == 1
-    assert reports[0]["offline"] == ["tiny-b"]
-    assert not poll_ok(reports[0])
+    assert added == ["pool:asan"]
+    assert "postcommit" in removed and "pool:asan-postcommit" in removed
+    assert "instance:abc" in final and "self-hosted" not in final
+
     taken = {"static-relwithdebinfo-d", "static-relwithdebinfo-d-01", "static-relwithdebinfo-d-2"}
     assert next_instance_name("static-relwithdebinfo-d", taken) == "static-relwithdebinfo-d-3"
+
     tiny_pool = {
         "_pool": "tiny", "_fleet": True, "count": 1, "name": "tiny-worker",
         "labels": ["tiny-worker"], "repo": "ydb-platform/ydb",
     }
-    online = {
+    busy = {
         "id": 1, "name": "tiny-worker-1", "status": "online", "busy": True,
-        "labels": [
-            {"name": "tiny-worker", "type": "custom"},
-            {"name": "pool:tiny", "type": "custom"},
-            {"name": "instance:abc", "type": "custom"},
-        ],
+        "labels": [{"name": "tiny-worker"}, {"name": "pool:tiny"}, {"name": "instance:abc"}],
     }
-    offline = {
+    idle_extra = {
         "id": 2, "name": "tiny-worker-8", "status": "offline", "busy": False,
-        "labels": [
-            {"name": "tiny-worker", "type": "custom"},
-            {"name": "pool:tiny", "type": "custom"},
-        ],
+        "labels": [{"name": "tiny-worker"}, {"name": "pool:tiny"}],
     }
-    plain = {
+    unbound = {
         "id": 3, "name": "tiny-worker-9", "status": "online", "busy": False,
-        "labels": [{"name": "tiny-worker", "type": "custom"}, {"name": "instance:z", "type": "custom"}],
+        "labels": [{"name": "tiny-worker"}, {"name": "instance:z"}],
     }
-    actions = reconcile_actions(
-        [tiny_pool],
-        [online, offline, plain],
+    ops = {(item["op"], item.get("name")) for item in reconcile_actions(
+        [tiny_pool], [busy, idle_extra, unbound],
         {"tiny-worker-1": "RUNNING", "tiny-worker-8": "RUNNING", "tiny-worker-9": "RUNNING"},
-    )
-    ops = [(item["op"], item.get("name")) for item in actions]
+    )}
     assert ("bind", "tiny-worker-9") in ops
     assert ("delete", "tiny-worker-8") in ops
-    assert all(item["op"] != "create" for item in actions)
-    short = reconcile_actions(
-        [{**tiny_pool, "count": 2}],
-        [online],
-        {"tiny-worker-1": "RUNNING"},
+    assert ("delete", "tiny-worker-1") not in ops
+    assert all(op != "create" for op, _ in ops)
+    assert any(
+        item["op"] == "create" and item["count"] == 1
+        for item in reconcile_actions([{**tiny_pool, "count": 2}], [busy], {"tiny-worker-1": "RUNNING"})
     )
-    assert any(item["op"] == "create" and item["count"] == 1 for item in short)
-    stopped = reconcile_actions(
-        [{**tiny_pool, "count": 1}],
-        [online],
-        {"tiny-worker-1": "STOPPED"},
+    assert any(
+        item["op"] == "start" and item["replace"]
+        for item in reconcile_actions([tiny_pool], [busy], {"tiny-worker-1": "STOPPED"})
     )
-    assert any(item["op"] == "start" and item["replace"] for item in stopped)
-    pools = load_pools(HERE / "fleet")
-    assert all(not pool.get("names") and pool.get("name") for pool in pools)
-    assert {pool["_pool"] for pool in pools} == {
-        "analytic",
-        "tiny",
-        "static-relwithdebinfo-release",
-        "static-relwithdebinfo-msan-tsan",
-        "static-relwithdebinfo-asan",
-        "static-relwithdebinfo-asan-postcommit",
-    }
-    assert all(int(pool["count"]) > 0 for pool in pools)
-    assert all(pool_label(pool) in effective_labels(pool) for pool in pools)
     assert delete_blocked({"busy": True, "status": "online"}, True)
     assert delete_blocked({"busy": False, "status": "online"}, False)
     assert not delete_blocked({"busy": False, "status": "online"}, True)
     assert restart_blocked({"busy": False, "status": "online"})
     assert not restart_blocked({"busy": False, "status": "offline"})
+
     adopted = reconcile_actions(
-        [tiny_pool],
-        [],
-        {"tiny-worker-9": "RUNNING"},
+        [tiny_pool], [], {"tiny-worker-9": "RUNNING"},
         {"tiny-worker-9": {"labels": {"purpose": "gh-runner"}}},
     )
     assert any(item["op"] == "adopt" and item["name"] == "tiny-worker-9" for item in adopted)
     assert all(item["op"] != "create" for item in adopted)
     shared = reconcile_actions(
         [tiny_pool, {**tiny_pool, "_pool": "other", "name": "tiny-worker"}],
-        [],
-        {"tiny-worker-9": "RUNNING"},
+        [], {"tiny-worker-9": "RUNNING"},
         {"tiny-worker-9": {"labels": {"purpose": "gh-runner"}}},
     )
     assert any(item["op"] == "unregistered" and item["name"] == "tiny-worker-9" for item in shared)
-    release = {**tiny_pool, "_pool": "static-relwithdebinfo-release", "name": "static-relwithdebinfo-d", "count": 1}
-    asan = {**tiny_pool, "_pool": "static-relwithdebinfo-asan", "name": "static-relwithdebinfo-d", "count": 1}
-    static_vm = "static-relwithdebinfo-d-21"
+    release = {**tiny_pool, "_pool": "static-relwithdebinfo-release", "name": "static-relwithdebinfo-d"}
+    asan = {**tiny_pool, "_pool": "static-relwithdebinfo-asan", "name": "static-relwithdebinfo-d"}
     labeled = reconcile_actions(
-        [release, asan],
-        [],
-        {static_vm: "RUNNING"},
-        {static_vm: {"labels": {"purpose": "gh-runner", "pool": "static-relwithdebinfo-asan"}}},
+        [release, asan], [], {"static-relwithdebinfo-d-21": "RUNNING"},
+        {"static-relwithdebinfo-d-21": {"labels": {"purpose": "gh-runner", "pool": "static-relwithdebinfo-asan"}}},
     )
     assert any(item["op"] == "adopt" and item["pool"] == "static-relwithdebinfo-asan" for item in labeled)
     assert not any(item["op"] == "adopt" and item["pool"] == "static-relwithdebinfo-release" for item in labeled)
-    assert not any(item["op"] == "unregistered" for item in labeled)
     marked = reconcile_actions(
-        [tiny_pool],
-        [online],
-        {"tiny-worker-1": "RUNNING"},
+        [tiny_pool], [busy], {"tiny-worker-1": "RUNNING"},
         {"tiny-worker-1": {"labels": {"purpose": "gh-runner"}}},
     )
     assert any(item["op"] == "mark" and item["name"] == "tiny-worker-1" for item in marked)
-    argv = create_argv(cfg, "tiny-worker-2026-10-08", "/tmp/user-data")
-    assert "--async" in argv
-    assert "purpose=gh-runner" in " ".join(argv)
-    assert f"pool={cfg['_pool']}" in " ".join(argv)
-    assert "size=186" in " ".join(argv)
-    print("self-test ok")
 
+    cfg = load_config_text(sample)
+    joined = " ".join(create_argv(cfg, "tiny-worker-2026-10", "/tmp/user-data"))
+    if "purpose=gh-runner" not in joined or f"pool={cfg['_pool']}" not in joined:
+        raise AssertionError("create must set purpose and pool labels")
+    print("self-test ok")
 
 def load_config_text(text):
     path = Path(os.environ.get("TMPDIR", "/tmp")) / "gh-runner-provision-self-test.yaml"

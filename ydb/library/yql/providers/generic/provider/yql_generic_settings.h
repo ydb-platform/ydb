@@ -24,7 +24,7 @@ public:
     };
 };
 
-struct TGenericConfiguration: public TGenericSettings, public NCommon::TSettingDispatcher {
+struct TGenericConfiguration: public NCommon::TDispatcherAndSettings<TGenericSettings> {
     using TPtr = TIntrusivePtr<TGenericConfiguration>;
 
     explicit TGenericConfiguration(bool strictConfigValidation = false);

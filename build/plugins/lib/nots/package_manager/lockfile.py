@@ -5,6 +5,7 @@ import re
 
 from urllib import parse as urlparse
 
+from .common_config import load_tier0_settings
 from .package_json import PackageJson
 
 try:
@@ -15,6 +16,7 @@ except Exception:
 LOCKFILE_VERSION = "lockfileVersion"
 IMPORTER_KEYS = PackageJson.DEP_KEYS + ("specifiers",)
 WS_PREFIX = "workspace:"
+TIER0_REGISTRY = load_tier0_settings()["pnpm"]["defaults"]["registry"]
 
 
 class LockfilePackageMetaInvalidError(RuntimeError):
@@ -472,8 +474,10 @@ def _parse_package_meta(key, meta, allow_file_protocol=False):
         if meta["resolution"].get("type") == "directory":
             return None
 
-        tarball_url = _parse_tarball_url(meta["resolution"]["tarball"], allow_file_protocol)
-        sky_id = _parse_sky_id_from_tarball_url(meta["resolution"]["tarball"])
+        resolution = meta["resolution"]
+        tarball = resolution["tarball"] if "tarball" in resolution else _tarball_url_from_package_key(key)
+        tarball_url = _parse_tarball_url(tarball, allow_file_protocol)
+        sky_id = _parse_sky_id_from_tarball_url(tarball)
         integrity_algorithm, integrity = _parse_package_integrity(meta["resolution"]["integrity"])
     except KeyError as e:
         raise TypeError(f"Invalid package meta for '{key}', missing {e} key")
@@ -481,6 +485,29 @@ def _parse_package_meta(key, meta, allow_file_protocol=False):
         raise TypeError(f"Invalid package meta for '{key}', parse error: {e}")
 
     return LockfilePackageMeta(key, tarball_url, sky_id, integrity, integrity_algorithm)
+
+
+def _tarball_url_from_package_key(key):
+    # v6 keys have a leading slash and may include peer contexts.
+    package_id = PnpmLockfileHelper.package_id_from_snapshot_id(key.lstrip("/"))
+    name, separator, version = package_id.rpartition("@")
+    if (
+        not separator
+        # Only URL-safe npm characters; keep support for legacy uppercase/special names.
+        or not re.fullmatch(r"(?:@[0-9A-Za-z._~!'()*-]+/)?[0-9A-Za-z_~!'()*-][0-9A-Za-z._~!'()*-]*", name)
+        or not re.fullmatch(
+            r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+            r"(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
+            r"(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?"
+            r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?",
+            version,
+        )
+    ):
+        raise LockfilePackageMetaInvalidError(f"cannot infer tarball URL from package key '{key}'")
+
+    package_path = name.replace("/", "%2f")
+    filename = f"{name.rsplit('/', 1)[-1]}-{version}.tgz"
+    return f"{TIER0_REGISTRY.rstrip('/')}/{package_path}/-/{filename}"
 
 
 def _parse_tarball_url(tarball_url, allow_file_protocol):

@@ -19,7 +19,7 @@ namespace NKikimr {
         Info->GetTopology().PickSubgroup(id.Hash(), nums);
         ui32 blobReplyCounter = 0;
         for (ui32 i = 0; i < nums.size(); ++i) {
-            const TVDiskID& vdiskId = Info->GetVDiskId(i); // obtain VDisk
+            const TVDiskID& vdiskId = Info->GetVDiskId(nums[i]); // obtain VDisk
             if (TVDiskIdShort(vdiskId) != VCtx->ShortSelfVDisk) {
                 AddExtremeQuery(vdiskId, id, deadline, i);
                 ++blobReplyCounter;

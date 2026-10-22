@@ -264,6 +264,12 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::HandleWakeup(STFUNC_SIG) {
+        if (ev->Cookie == VStatusTimeoutCookie) {
+            if (!PendingVDiskIds.empty()) {
+                throw TExError() << "Timed out waiting for VDisk status before group reassignment";
+            }
+            return;
+        }
         if (ev->Cookie == ConfigValidationTimeoutCookie) {
             if (WaitingForConfigValidation) {
                 throw TExError() << "Timed out waiting for BSC or Console before config proposition"
@@ -275,6 +281,9 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::HandleWakeup() {
+        if (RecoveryProposition) {
+            return;
+        }
         if (ConfigAwaitingCommit) {
             if (TActivationContext::Monotonic() >= CommitConfirmationDeadline) {
                 throw TExNoQuorum() << "Committed configuration quorum was not confirmed; replace may already be applied";
@@ -517,8 +526,8 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TInvokeRequestHandlerActor::ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml,
-            ui64 expectedMainYamlVersion, ui64 expectedStorageYamlVersion, bool enablingDistconf) {
+    void TInvokeRequestHandlerActor::ValidateReplaceStorageConfig(const std::optional<TString>& storageConfigYaml,
+            ui64 expectedMainYamlVersion, ui64 expectedStorageYamlVersion) {
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         Y_ABORT_UNLESS(op);
         const auto& request = op->Command.GetReplaceStorageConfig();
@@ -565,6 +574,18 @@ namespace NKikimr::NStorage {
         } else if (auto error = ValidateConfigUpdate(*Self->StorageConfig, ProposedStorageConfig)) {
             throw TExError() << "ReplaceStorageConfig config validation failed: " << *error;
         }
+    }
+
+    void TInvokeRequestHandlerActor::ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml,
+            ui64 expectedMainYamlVersion, ui64 expectedStorageYamlVersion, bool enablingDistconf) {
+        ValidateReplaceStorageConfig(storageConfigYaml, expectedMainYamlVersion, expectedStorageYamlVersion);
+
+        auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        Y_ABORT_UNLESS(op);
+        const auto& request = op->Command.GetReplaceStorageConfig();
+        const bool targetDedicatedStorageSection = request.HasSwitchDedicatedStorageSection()
+            ? request.GetSwitchDedicatedStorageSection()
+            : storageConfigYaml.has_value();
 
         // update main config yaml in the StorageConfig
         if (NewYaml) {
@@ -683,6 +704,9 @@ namespace NKikimr::NStorage {
                 auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true);
                 if (result.ErrorReason || !result.RecoveredConfig) {
                     return;
+                }
+                if (result.RequiresRecoveryProposition) {
+                    return StartRecoveryProposition(result);
                 }
                 Self->ConfigRecoveryRequired = false;
                 InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);
@@ -823,6 +847,9 @@ namespace NKikimr::NStorage {
                 break;
 
             case EControllerOp::DISABLE_DISTCONF:
+                ValidateReplaceStorageConfig(Self->StorageConfigYaml,
+                    Self->MainConfigYamlVersion ? *Self->MainConfigYamlVersion + 1 : 0,
+                    Self->StorageConfig->GetExpectedStorageYamlVersion());
                 record.SetOperation(NKikimrBlobStorage::TEvControllerDistconfRequest::DisableDistconf);
                 record.SetDryRun(IsDryRun);
                 if (ProposedStorageConfig.HasExpectedStorageYamlVersion()) {
@@ -979,6 +1006,8 @@ namespace NKikimr::NStorage {
                 throw TExRace() << "Storage config generation regenerated while collecting configs";
             } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID); r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
+            } else if (r.RequiresRecoveryProposition) {
+                return StartRecoveryProposition(r);
             } else if (r.ConfigToPropose) {
                 // config validation, which is basically done in Console
                 TString mainYaml;

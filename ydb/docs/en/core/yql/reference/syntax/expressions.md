@@ -266,8 +266,6 @@ Can be used in the following scenarios:
 
 ### Examples
 
-{% if select_command != "SELECT STREAM" %}
-
 ```yql
 SELECT key AS k FROM my_table;
 ```
@@ -281,26 +279,6 @@ SELECT
     MyFunction(key, 123 AS my_optional_arg)
 FROM my_table;
 ```
-
-{% else %}
-
-```yql
-SELECT STREAM key AS k FROM my_stream;
-```
-
-```yql
-SELECT STREAM s.key FROM my_stream AS s;
-```
-
-```yql
-SELECT STREAM
-    MyFunction(key, 123 AS my_optional_arg)
-FROM my_stream;
-```
-
-{% endif %}
-
-
 
 ## CAST {#cast}
 

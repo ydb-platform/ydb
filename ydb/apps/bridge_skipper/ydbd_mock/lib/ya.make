@@ -11,6 +11,7 @@ PY_SRCS(
     followups.py
     health.py
     instance.py
+    lifecycle.py
     model.py
     operations.py
     peers.py

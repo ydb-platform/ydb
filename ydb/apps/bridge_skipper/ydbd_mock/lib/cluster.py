@@ -12,7 +12,7 @@ import random
 import time
 import typing
 
-from ydb.apps.bridge_skipper.ydbd_mock.lib import followups, model, validator
+from ydb.apps.bridge_skipper.ydbd_mock.lib import followups, lifecycle, model, validator
 from ydb.apps.bridge_skipper.ydbd_mock.lib.connectivity import Reachability
 from ydb.apps.bridge_skipper.ydbd_mock.lib.events import EventLog
 from ydb.apps.bridge_skipper.ydbd_mock.lib.faults import NodeFaults
@@ -75,6 +75,8 @@ class PileInstance:
         if state_dir:
             path = "%s/replica.json" % state_dir
         self.replica = Replica(len(self.names), path)
+        if topology.initial:
+            self.replica.state = lifecycle.configure(self.replica.state, topology.initial, self.names, initial=True)
         self.tracker = SyncTracker()
         self.reach = Reachability(
             self.index, len(self.names), lambda: self.timings.heartbeat_timeout, own_ready=self.ready)
@@ -84,7 +86,7 @@ class PileInstance:
         self._reset_pending = False
         self._timers: typing.Dict[typing.Tuple[str, int], _Timer] = {}
         self._retry_not_before: typing.Dict[typing.Tuple[str, int], float] = {}
-        self._refused_pull: typing.Dict[int, int] = {}
+        self._refused_pull: typing.Dict[int, typing.Tuple[int, int]] = {}
         self._bg: typing.Set["asyncio.Task"] = set()
         self._aborts: typing.Set["asyncio.Task"] = set()   # aborts in flight: stop() lets them finish
         # called (synchronously) when the own stored state or a node fault changed: the process re-evaluates
@@ -93,6 +95,10 @@ class PileInstance:
         self._heartbeat_task: typing.Optional["asyncio.Task"] = None
         self._pid = itertools.count(1)
         self._last_ready = True
+        self._peer_versions = {}
+        self._held_followups = set()
+        self._lifecycle_error = None
+        self._state_changed = asyncio.Event()
 
     # ----- lifecycle -----
 
@@ -113,7 +119,7 @@ class PileInstance:
 
     def serves(self) -> bool:
         """run.cpp: a node serves gRPC only while its own pile has the config-quorum trait."""
-        if not self.policies.close_grpc_when_disconnected:
+        if not self.policies.close_grpc_when_disconnected or not self.state.bridged:
             return True
         return model.requires_config_quorum(self.replica.state.stored(self.index))
 
@@ -185,6 +191,9 @@ class PileInstance:
             piles.append({
                 "name": name,
                 "index": i,
+                "registry_slot": ((s.registry or self.names).index(name)
+                                  if name in (self.names if s.registry is None else s.registry) else None),
+                "configured": name in lifecycle.configured(s, self.names),
                 "public": model.public_name(model.public_state(s, i)),
                 "stored": s.stored(i).name,
                 "connected": self.connected(i),
@@ -194,6 +203,15 @@ class PileInstance:
             "cluster_name": self.topo.cluster_name,
             "pile": self.name,
             "generation": s.generation,
+            "storage_revision": s.revision,
+            "bridged": s.bridged,
+            "self_management": s.self_management,
+            "configured_piles": lifecycle.configured(s, self.names),
+            "registry": list(self.names) if s.registry is None else list(s.registry),
+            "conversion_in_progress": s.conversion_in_progress,
+            "pending_pile_operation": s.pending_pile_operation,
+            "held_followups": sorted(self._held_followups),
+            "lifecycle_error": self._lifecycle_error,
             "max_generation": self.replica.max_generation,
             "reset_pending": self._reset_pending,
             "primary": self.names[s.primary],
@@ -215,7 +233,7 @@ class PileInstance:
                 for n in self.pile_info.nodes
             ],
             "timings": self.timings.to_dict(),
-            "policies": {k: v for k, v in self.policies.to_dict().items() if k != "admin_token"},
+            "policies": {k: v for k, v in self.policies.to_dict().items() if k not in ("admin_token", "read_token")},
         }
 
     # ----- admin API -----
@@ -224,6 +242,7 @@ class PileInstance:
         self,
         updates: typing.Sequence[validator.Update],
         quorum_piles: typing.Sequence[str] = (),
+        accepted: typing.Optional[typing.Callable] = None,
     ) -> Outcome:
         if self._reset_pending:
             error = MockError(model.INTERNAL_ERROR, "mock: reset is in progress")
@@ -232,12 +251,15 @@ class PileInstance:
         reset_epoch = self._reset_epoch
 
         def make_new(cur: ClusterState):
+            if not cur.bridged:
+                return MockError(model.PRECONDITION_FAILED,
+                                 "Bridge cluster state is not configured or not available")
             result = validator.validate_update(cur, updates, quorum_piles, self.names)
             return result.state if result.ok else result.error
 
         async def run() -> Outcome:
             outcome = await self._commit_loop(
-                make_new, "admin", self.timings.quorum_fail_delay, reset_epoch=reset_epoch)
+                make_new, "admin", self.timings.quorum_fail_delay, reset_epoch=reset_epoch, accepted=accepted)
             if outcome.error is not None:
                 self.events.append("reject", status=outcome.error.status, message=outcome.error.message)
             return outcome
@@ -245,6 +267,73 @@ class PileInstance:
         # The distconf actor finishes a proposal whether or not the client is still waiting. A client deadline
         # or cancel must not abandon the pipeline halfway, with prepared slots on the peers.
         return await asyncio.shield(self._spawn(run()))
+
+    async def admin_lifecycle(self, kind: str, name: str = "", accepted=None, committed=None) -> Outcome:
+        epoch = self._reset_epoch
+
+        async def run():
+            outcome = await self._commit_loop(
+                lambda cur: lifecycle.start(cur, kind, name, self.names), kind,
+                self.timings.quorum_fail_delay, reset_epoch=epoch, accepted=accepted)
+            if not outcome.ok:
+                return outcome
+            if committed is not None:
+                await committed()
+            if kind == "convert":
+                return outcome
+            while True:
+                if epoch != self._reset_epoch:
+                    return Outcome(error=MockError(model.INTERNAL_ERROR, "mock: operation interrupted by reset"))
+                state = self.state
+                pending = state.pending_pile_operation
+                same_pile_pending = pending and pending["pile_name"] == name
+                registered = name in state.registered_names(self.names)
+                stored = state.stored(self.names.index(name))
+                finished = (registered and stored != Stored.INACTIVE if kind == "add"
+                            else not registered or stored == Stored.INACTIVE)
+                if state.bridged and not same_pile_pending and finished:
+                    return Outcome(state=state.copy())
+                if same_pile_pending and pending.get("error_reason"):
+                    what = ("Pile is added to the cluster, but its parts of storage groups can't be created"
+                            if kind == "add" else "Pile is being removed from the cluster, but its parts of storage groups can't be deleted")
+                    return Outcome(error=MockError(
+                        model.GENERIC_ERROR, "%s (this is retried until it succeeds): %s" % (
+                            what, pending["error_reason"])))
+                changed = self._state_changed
+                await changed.wait()
+
+        return await asyncio.shield(self._spawn(run()))
+
+    async def configure_topology(self, values: dict) -> Outcome:
+        # Validate before enqueueing the proposal and repeat against the eventual snapshot.
+        lifecycle.configure(self.state, values, self.names)
+        return await self._commit_loop(lambda cur: lifecycle.configure(cur, values, self.names),
+                                       "configure", self.timings.quorum_fail_delay)
+
+    def control_followups(self, values: dict) -> None:
+        unknown = set(values) - {"hold", "release", "error_reason"}
+        if unknown:
+            raise ValueError("unknown followup options: %s" % sorted(unknown))
+        for action in ("hold", "release"):
+            entries = values.get(action, [])
+            if not isinstance(entries, list) or not all(isinstance(x, str) for x in entries):
+                raise ValueError("%s must be a list" % action)
+            for entry in entries:
+                kind, separator, pile = entry.partition(":")
+                if kind not in followups.KINDS or (separator and pile not in self.names):
+                    raise ValueError("unknown followup gate %r" % entry)
+        reason = values.get("error_reason", self._lifecycle_error)
+        if reason is not None and not isinstance(reason, str):
+            raise ValueError("error_reason must be a string or null")
+        self._held_followups.update(values.get("hold", []))
+        self._held_followups.difference_update(values.get("release", []))
+        self._lifecycle_error = reason or None
+        self.events.append("followup.controls", values=values)
+        self._rearm()
+
+    def _signal_state(self) -> None:
+        self._state_changed.set()
+        self._state_changed = asyncio.Event()
 
     def _spawn(self, coro: typing.Awaitable) -> "asyncio.Task":
         task = asyncio.get_running_loop().create_task(coro)
@@ -270,6 +359,7 @@ class PileInstance:
 
     def _local_prepare(self, proposal_id: str, new: ClusterState, sender: int) -> dict:
         generation = self.replica.state.generation
+        revision = self.replica.state.revision
         if self._reset_pending:
             return {"ok": False, "reason": "reset", "generation": generation}
         if self.replica.detached:
@@ -278,8 +368,8 @@ class PileInstance:
             return {"ok": False, "reason": "not_ready", "generation": generation}
         ok, reason = self.replica.try_prepare(proposal_id, new, sender, self.timings.prepare_ttl)
         if ok:
-            return {"ok": True, "generation": generation}
-        return {"ok": False, "reason": reason, "generation": generation}
+            return {"ok": True, "generation": generation, "revision": revision}
+        return {"ok": False, "reason": reason, "generation": generation, "revision": revision}
 
     def _participants(self, old: ClusterState, new: ClusterState) -> typing.Tuple[typing.List[int], typing.List[int]]:
         """(required, observers). Required piles must accept. Observers are every other pile that may be
@@ -360,7 +450,8 @@ class PileInstance:
         if reason == "busy":
             return True
         # the peer is at or past the generation we propose; a peer that is behind will be pushed to later
-        return reason == "generation" and int(reply.get("generation", 0)) >= new.generation
+        peer_version = (int(reply.get("generation", 0)), int(reply.get("revision", 0)))
+        return reason == "generation" and peer_version >= new.version
 
     async def _deliver(self, old: ClusterState, new: ClusterState, proposal_id: str, snapshot: dict, cause: str,
                        recipients: typing.List[int]) -> None:
@@ -395,7 +486,9 @@ class PileInstance:
             self.events.append("commit.send_failed", peer=self.names[peer], reason=e.reason)
 
     def _schedule_push(self, old: ClusterState, new: ClusterState, skip: typing.Sequence[int] = ()) -> None:
-        targets = [p for p in model.push_targets(old, new) if p != self.index and p not in skip]
+        candidates = (range(len(self.names)) if old.registry != new.registry or old.configured_piles != new.configured_piles
+                      or old.bridged != new.bridged else model.push_targets(old, new))
+        targets = [p for p in candidates if p != self.index and p not in skip]
         if not targets:
             return
         task = asyncio.get_running_loop().create_task(self._push_all(new, targets))
@@ -426,11 +519,12 @@ class PileInstance:
             return False
         if reset_epoch != self._reset_epoch:
             return False
-        if snap.generation <= self.replica.state.generation:
+        if snap.version <= self.replica.state.version:
             return False
-        if not model.allows_connection(snap.per_pile[self.index]):
-            if self._refused_pull.get(peer) != snap.generation:
-                self._refused_pull[peer] = snap.generation
+        if not model.allows_connection(snap.per_pile[self.index]) and not (
+                snap.registry != self.state.registry or snap.configured_piles != self.state.configured_piles):
+            if self._refused_pull.get(peer) != snap.version:
+                self._refused_pull[peer] = snap.version
                 self.events.append(
                     "pull.refused", peer=self.names[peer], generation=snap.generation,
                     reason="peer state does not allow this pile to connect", why=why)
@@ -449,6 +543,7 @@ class PileInstance:
             stored=[model.Stored(x).name for x in new.per_pile])
         self._rearm()
         self._notify_listeners()
+        self._signal_state()
         return True
 
     async def _commit_loop(
@@ -457,6 +552,7 @@ class PileInstance:
         cause: str,
         deadline_seconds: float,
         reset_epoch: typing.Optional[int] = None,
+        accepted: typing.Optional[typing.Callable] = None,
     ) -> Outcome:
         if reset_epoch is None:
             reset_epoch = self._reset_epoch
@@ -473,6 +569,11 @@ class PileInstance:
                 return Outcome(error=new)
             if new is None:
                 return Outcome(skipped=True)
+            if accepted is not None:
+                hook, accepted = accepted, None
+                await hook()
+                # A held acceptance can outlive its original snapshot.
+                continue
             result = await self._two_phase(new, cause)
             if result.committed:
                 return Outcome(state=new)
@@ -491,23 +592,25 @@ class PileInstance:
                                generation=new.generation)
 
             # A peer ahead of us: catch up if it lets us, otherwise this is distconf's generation error.
-            ahead = [(r.get("generation", 0), p) for p, r in refusals.items()
-                     if r.get("reason") == "generation" and r.get("generation", 0) > current.generation]
+            ahead = [((r.get("generation", 0), r.get("revision", 0)), p) for p, r in refusals.items()
+                     if r.get("reason") == "generation" and
+                     (r.get("generation", 0), r.get("revision", 0)) > current.version]
             if ahead:
-                if self.replica.state.generation > current.generation:
+                if self.replica.state.version > current.version:
                     continue  # the replica moved on its own (a commit or push arrived): re-validate
                 peer_generation, peer = max(ahead)
                 pulled = await self._pull(peer, why=cause)
                 if reset_epoch != self._reset_epoch:
                     return Outcome(error=reset_error)
-                if not pulled and self.replica.state.generation <= current.generation:
+                if not pulled and self.replica.state.version <= current.version:
                     return Outcome(error=MockError(
                         model.INTERNAL_ERROR,
-                        "New cluster state generation# %d expected# %d" % (new.generation, peer_generation + 1)))
+                        "New cluster state generation# %d expected# %d" % (new.generation, peer_generation[0] + 1)))
                 continue
             # Peers behind us: tell them what they missed.
             behind = [p for p, r in refusals.items()
-                      if r.get("reason") == "generation" and r.get("generation", 0) < current.generation]
+                      if r.get("reason") == "generation" and
+                      (r.get("generation", 0), r.get("revision", 0)) < current.version]
             for p in behind:
                 if reset_epoch != self._reset_epoch:
                     return Outcome(error=reset_error)
@@ -528,7 +631,8 @@ class PileInstance:
             raise PeerBlocked()
         state = self.replica.state
         if op == "ping":
-            return {"pile": self.name, "generation": state.generation, "ready": self.ready()}
+            return {"pile": self.name, "generation": state.generation, "revision": state.revision,
+                    "ready": self.ready()}
         if op == "state":
             return state.to_json()
         if op == "prepare":
@@ -576,6 +680,7 @@ class PileInstance:
             except PeerError:
                 return
             self.reach.record_ok(peer, reply.get("ready", True), int(reply.get("generation", 0)))
+            self._peer_versions[peer] = (int(reply.get("generation", 0)), int(reply.get("revision", 0)))
 
         await asyncio.gather(*(ping(p) for p in peers))
         self._connectivity_changed()
@@ -595,9 +700,9 @@ class PileInstance:
     async def _anti_entropy(self) -> None:
         if not self.policies.anti_entropy or self.replica.detached or not self._running:
             return
-        local = self.replica.state.generation
+        local = self.replica.state.version
         candidates = sorted(
-            ((gen, p) for p, gen in self.reach.last_generation.items()
+            ((gen, p) for p, gen in self._peer_versions.items()
              if gen > local and self.reach.reachable(p)),
             reverse=True)
         for gen, peer in candidates:
@@ -627,14 +732,16 @@ class PileInstance:
     def _followups_enabled(self) -> bool:
         if not self._running or self.replica.detached or self._reset_pending:
             return False
-        if self.replica.state.stored(self.index) == Stored.DISCONNECTED:
+        if self.replica.state.stored(self.index) in (Stored.DISCONNECTED, Stored.INACTIVE):
             return False
         return self.ready()
 
     def _current_due(self) -> typing.Dict[typing.Tuple[str, int], followups.Due]:
         if not self._followups_enabled():
             return {}
-        return {d.key: d for d in followups.due_followups(self.replica.state, self.tracker, self.connected)}
+        return {d.key: d for d in followups.due_followups(self.replica.state, self.tracker, self.connected)
+                if d.kind not in self._held_followups and
+                "%s:%s" % (d.kind, self.names[d.pile]) not in self._held_followups}
 
     def _rearm(self) -> None:
         if not self._running:
@@ -682,6 +789,12 @@ class PileInstance:
                 def make_new(cur: ClusterState):
                     if key not in self._current_due():
                         return None
+                    if due.kind in (followups.ADD, followups.REMOVE) and self._lifecycle_error:
+                        if cur.pending_pile_operation.get("error_reason") == self._lifecycle_error:
+                            return None
+                        new = model.derive_metadata(cur)
+                        new.pending_pile_operation["error_reason"] = self._lifecycle_error
+                        return new
                     return followups.build_commit(cur, due)
 
                 outcome = await self._commit_loop(make_new, due.kind, self.timings.quorum_fail_delay)
@@ -690,6 +803,8 @@ class PileInstance:
                     self.events.append(
                         "followup.failed", followup=due.kind, pile=self.names[due.pile],
                         message=outcome.error.message if outcome.error else "")
+                elif due.kind in (followups.ADD, followups.REMOVE) and self._lifecycle_error:
+                    self._retry_not_before[key] = asyncio.get_running_loop().time() + self.timings.followup_retry
             finished = True
         finally:
             if self._timers.get(key) is timer:
@@ -711,6 +826,7 @@ class PileInstance:
             return
         self._reset_pending = True
         self._reset_epoch += 1
+        self._signal_state()
         for timer in self._timers.values():
             timer.task.cancel()
         self._timers.clear()
@@ -727,12 +843,17 @@ class PileInstance:
     def reset_local(self, generation: int) -> None:
         # Do not clear faults or invalidate work unless the new baseline was persisted successfully.
         self.replica.reset(generation)
+        if self.topo.initial:
+            self.replica.force(lifecycle.configure(self.state, self.topo.initial, self.names, initial=True), False)
         self._reset_epoch += 1
         for timer in self._timers.values():
             timer.task.cancel()
         self._timers.clear()
         self._retry_not_before.clear()
         self._refused_pull.clear()
+        self._peer_versions.clear()
+        self._held_followups.clear()
+        self._lifecycle_error = None
         for faults in self.node_faults:
             faults.clear()
         self.reach.blocked = set()
@@ -742,6 +863,7 @@ class PileInstance:
         self.events.append("reset", generation=generation)
         self._rearm()
         self._notify_listeners()
+        self._signal_state()
 
     def override_replica(
         self,
@@ -763,7 +885,8 @@ class PileInstance:
         primary = promoted = None
         for i in range(len(self.names)):
             value = publics[i]
-            stored = validator._to_stored(value)
+            stored = (cur.stored(i) if self.names[i] not in public else
+                      Stored.INACTIVE if value == model.PUB_INACTIVE else validator._to_stored(value))
             if stored is None:
                 raise ValueError("unsupported pile state %r" % (value,))
             per_pile.append(stored)
@@ -777,19 +900,19 @@ class PileInstance:
                 promoted = i
         if primary is None:
             raise ValueError("one primary pile is required")
-        new = ClusterState(
-            per_pile=per_pile,
-            primary=primary,
-            promoted=primary if promoted is None else promoted,
-            generation=cur.generation if generation is None else generation,
-            quorum_piles_last=list(cur.quorum_piles_last),
-            sync={i: cur.sync.get(i, 1) for i, s in enumerate(per_pile) if s != Stored.SYNCHRONIZED},
-        )
+        new = cur.copy()
+        new.per_pile = per_pile
+        new.primary = primary
+        new.promoted = primary if promoted is None else promoted
+        new.generation = cur.generation if generation is None else generation
+        new.sync = {i: cur.sync.get(i, 1) for i, s in enumerate(per_pile)
+                    if s not in (Stored.SYNCHRONIZED, Stored.INACTIVE)}
         self.replica.force(new, detach)
         self.tracker.reset_from(new)
         self.events.append("replica.override", generation=new.generation, detached=detach, state=new.describe(self.names))
         self._rearm()
         self._notify_listeners()
+        self._signal_state()
         return new
 
     def clear_replica_override(self) -> None:

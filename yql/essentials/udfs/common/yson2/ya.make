@@ -1,24 +1,12 @@
 YQL_UDF_CONTRIB(yson2_udf)
 
-    YQL_ABI_VERSION(
-        2
-        46
-        0
-    )
+IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
+ENDIF()
 
-    SRCS(
-        yson2_udf.cpp
-    )
+INCLUDE(ya.make.inc)
 
-    PEERDIR(
-        library/cpp/containers/stack_vector
-        library/cpp/yson_pull
-        yql/essentials/minikql/dom
-        yql/essentials/public/langver
-        yql/essentials/core/langver
-    )
-
-    END()
+END()
 
 RECURSE_FOR_TESTS(
     test

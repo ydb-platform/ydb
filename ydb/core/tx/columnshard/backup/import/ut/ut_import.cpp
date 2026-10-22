@@ -1,15 +1,19 @@
+#include <ydb/core/base/counters.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/protos/data_format_settings.pb.h>
 #include <ydb/core/tx/columnshard/backup/import/session.h>
 #include <ydb/core/tx/columnshard/backup/import/task.h>
+#include <ydb/core/tx/columnshard/bg_tasks/events/local.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
+#include <ydb/core/tx/columnshard/test_helper/inflight_test_enums.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
+#include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/datashard/backup_restore_traits.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/wrappers/fake_storage.h>
@@ -22,6 +26,7 @@
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
+#include <library/cpp/monlib/metrics/histogram_snapshot.h>
 #include <library/cpp/testing/hook/hook.h>
 
 namespace NKikimr {
@@ -352,6 +357,95 @@ Y_UNIT_TEST_SUITE(Restore) {
                 "\"4\",\n    \"15\",\n    \"16\",\n    \"17\",\n    \"18\",\n    \"19\",\n    \"20\",\n    \"21\",\n    \"22\",\n    "
                 "\"23\",\n    \"24\"\n  ]\n");
         }
+    }
+
+    Y_UNIT_TEST(StopImportClearsInflight, EImportInflightTestCase) {
+        const auto operation = Arg<0>();
+        const bool writing = operation == EImportInflightTestCase::Write;
+        const TString bucket = writing ? "stop-import-writing" : "stop-import-reading";
+        NTestUtils::CreateBucketWithObject(bucket, "data_00.csv", "1,2,\"value\"\n");
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        Y_UNUSED(PrepareTablet(runtime, 1, MakeRestoreSchema(), 2));
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto counters =
+            GetServiceCounters(runtime.GetDynamicCounters(0), "tablets")->GetSubgroup("subsystem", "columnshard")->GetSubgroup("module_id",
+                "ImportActor");
+        const auto alive = counters->GetCounter("Value/Import/Actors/Alive", false);
+        const auto reading = counters->GetCounter("Value/Import/Read/Inflight", false);
+        const auto writingCounter = counters->GetCounter("Value/Import/Write/Inflight", false);
+        const auto saving = counters->GetCounter("Value/Import/SaveProgress/Inflight", false);
+        const auto downloaderCounters =
+            GetServiceCounters(runtime.GetDynamicCounters(0), "tablets")->GetSubgroup("subsystem", "columnshard")->GetSubgroup("module_id",
+                "ImportDownloader");
+        const auto downloaderAlive = downloaderCounters->GetCounter("Value/ImportDownloader/Actors/Alive", false);
+        const auto processing = downloaderCounters->GetCounter("Value/ImportDownloader/Process/Inflight", false);
+        const auto histogramSamples = [&](const TString& name) {
+            const auto snapshot = counters->FindHistogram(name)->Snapshot();
+            ui64 count = 0;
+            for (ui32 i = 0; i < snapshot->Count(); ++i) {
+                count += snapshot->Value(i);
+            }
+            return count;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(alive->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(reading->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(writingCounter->Val(), 0);
+
+        TActorId importActorId;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (operation == EImportInflightTestCase::Read && ev->GetTypeRewrite() == TEvPrivate::TEvBackupImportRecordBatch::EventType) {
+                const auto* batch = ev->Get<TEvPrivate::TEvBackupImportRecordBatch>();
+                UNIT_ASSERT_C(batch->Data && !batch->Error && !batch->IsLast, "expected a data batch before stopping the import");
+                importActorId = ev->GetRecipientRewrite();
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (writing && ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWrite::EventType) {
+                importActorId = ev->Sender;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (operation == EImportInflightTestCase::SaveProgress && saving->Val() == 1 &&
+                ev->GetTypeRewrite() == NOlap::NBackground::TEvExecuteGeneralLocalTransaction::EventType) {
+                importActorId = ev->Sender;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto propose = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+            NKikimrTxColumnShard::TX_KIND_RESTORE, sender, 112, MakeRestoreTxBody(1, bucket).SerializeAsString());
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, propose.release());
+        TestWaitCondition(runtime, "import operation in flight", [&]() {
+            return !!importActorId;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(alive->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(downloaderAlive->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reading->Val(), operation == EImportInflightTestCase::Read ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(writingCounter->Val(), writing ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(saving->Val(), operation == EImportInflightTestCase::SaveProgress ? 1 : 0);
+        const auto readSamples = histogramSamples("Histogram/Import/Read/DurationMs/Histogram");
+        const auto writeSamples = histogramSamples("Histogram/Import/Write/DurationMs/Histogram");
+        const auto saveSamples = histogramSamples("Histogram/Import/SaveProgress/DurationMs/Histogram");
+        const auto received = counters->GetCounter("Deriviative/Import/Batches/Received", true)->Val();
+        const auto written = counters->GetCounter("Deriviative/Import/Batches/Written", true)->Val();
+
+        // Tablet shutdown stops session actors with PoisonPill. The outstanding reply
+        // is dropped above so it cannot finish the operation before the actor stops.
+        runtime.Send(new IEventHandle(importActorId, sender, new TEvents::TEvPoisonPill()));
+        TestWaitCondition(runtime, "import actor stopped", [&]() {
+            return alive->Val() == 0 && downloaderAlive->Val() == 0;
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(reading->Val(), 0, "stopped import actor leaked Read/Inflight");
+        UNIT_ASSERT_VALUES_EQUAL_C(writingCounter->Val(), 0, "stopped import actor leaked Write/Inflight");
+        UNIT_ASSERT_VALUES_EQUAL(saving->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(processing->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(histogramSamples("Histogram/Import/Read/DurationMs/Histogram"), readSamples);
+        UNIT_ASSERT_VALUES_EQUAL(histogramSamples("Histogram/Import/Write/DurationMs/Histogram"), writeSamples);
+        UNIT_ASSERT_VALUES_EQUAL(histogramSamples("Histogram/Import/SaveProgress/DurationMs/Histogram"), saveSamples);
+        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Deriviative/Import/Batches/Received", true)->Val(), received);
+        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("Deriviative/Import/Batches/Written", true)->Val(), written);
     }
 
     Y_UNIT_TEST(RestoreOversizedBatch) {

@@ -84,9 +84,41 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             return SubscribeTx(record.GetTxId());
         case NKikimrScheme::StatusMultipleModifications:
             return Retry();
+        case NKikimrScheme::StatusPathDoesNotExist:
+            // A deleted destination has nothing left to detach.
+            return Success();
+        case NKikimrScheme::StatusNameConflict:
+            // An already collected path id resolves to an empty path, which
+            // ALTER reports as a name conflict. Confirm that it is absent.
+            AlterError = record.GetReason();
+            Send(PipeCache, new TEvPipeCache::TEvForward(
+                new TEvSchemeShard::TEvDescribeScheme(DstPathId), SchemeShardId));
+            return Become(&TThis::StateCheckDst);
         default:
             return Error(record.GetStatus(), record.GetReason());
         }
+    }
+
+    STATEFN(StateCheckDst) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateCheckDst"});
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            sFunc(TEvents::TEvWakeup, AllocateTxId);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
+
+        if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusPathDoesNotExist) {
+            return Success();
+        }
+
+        return Error(NKikimrScheme::StatusNameConflict, AlterError);
     }
 
     void SubscribeTx(ui64 txId) {
@@ -105,7 +137,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
 
-        if (SchemeShardId == ev->Get()->TabletId) {
+        if (SchemeShardId != ev->Get()->TabletId) {
             return;
         }
 
@@ -208,6 +240,7 @@ private:
 
     ui64 TxId = 0;
     TActorId PipeCache;
+    TString AlterError;
     static constexpr auto RetryInterval = TDuration::Seconds(10);
 
 }; // TDstAlterer
@@ -215,8 +248,13 @@ private:
 IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
+    // Attachment validation can fail after the table has become read-only.
+    // DONE must detach that persisted path even without a confirmed destination.
+    const auto& dstPathId = target->GetDstPathId()
+        ? target->GetDstPathId()
+        : target->GetPendingDstPathId();
     return CreateDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(), replication->GetDesiredState());
+        replication->GetId(), target->GetId(), target->GetKind(), dstPathId, replication->GetDesiredState());
 }
 
 IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,

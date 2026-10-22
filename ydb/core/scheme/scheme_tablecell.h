@@ -740,6 +740,9 @@ public:
 
     static TCell ExtractCell(std::string_view data, size_t pos);
 
+    // Parses cells pointing directly into `data`, which must outlive the cells
+    static bool TryParseCells(std::string_view data, TVector<TCell>& cells);
+
     const TString& GetBuffer() const { return Buf; }
 
     TString ReleaseBuffer() {

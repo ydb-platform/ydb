@@ -4,12 +4,17 @@
 
 #include <ydb/library/actors/core/actor.h>
 
+namespace NLWTrace {
+class TOrbit;
+}
+
 namespace NKikimr {
 
 class ITxReader {
 private:
     YDB_READONLY_DEF(TString, StageName);
     TString NamePrefix;
+    NLWTrace::TOrbit* Orbit = nullptr;
     bool IsReady = false;
     bool IsStarted = false;
     TMonotonic FirstAttemptInstant;
@@ -30,6 +35,9 @@ private:
     virtual void DoAddNamePrefix(const TString& /*prefix*/) {
     }
 
+    virtual void DoSetOrbit(NLWTrace::TOrbit& /*orbit*/) {
+    }
+
 public:
     virtual ~ITxReader() = default;
 
@@ -37,6 +45,11 @@ public:
         NamePrefix = prefix + NamePrefix;
         StageName = prefix + StageName;
         DoAddNamePrefix(prefix);
+    }
+
+    void SetOrbit(NLWTrace::TOrbit& orbit) {
+        Orbit = &orbit;
+        DoSetOrbit(orbit);
     }
 
     // the name in the counters stays as constructed, so a suffix never multiplies them

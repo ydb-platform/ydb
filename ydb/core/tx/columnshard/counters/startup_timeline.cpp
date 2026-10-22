@@ -7,8 +7,15 @@
 
 namespace NKikimr::NColumnShard {
 
-void TStartupTimeline::TraceStageFinished(const TString& stage, const TDuration duration) const {
-    TraceStartupStageFinished(TabletId, "startup/" + stage, duration);
+TStartupTimeline::TStartupTimeline(const ui64 tabletId, const TCSInitialization& counters)
+    : TabletId(tabletId)
+    , Counters(counters)
+{
+    TraceStartupStarted(Orbit, TabletId);
+}
+
+void TStartupTimeline::TraceStageFinished(const TString& stage, const TDuration duration) {
+    TraceStartupStageFinished(Orbit, TabletId, "startup/" + stage, duration);
 }
 
 void TStartupTimeline::OnExecutorActivated() {
@@ -46,7 +53,9 @@ void TStartupTimeline::OnSwitchedToWork(const ui64 portionsCount) {
     Counters.OnSwitchToWork(now - *ExecutorActivatedInstant, now - CreateInstant);
     const TDuration switchToWork = now - TxInitFinishInstant;
     TraceStageFinished("switch_to_work", switchToWork);
-    TraceStartupStageFinished(TabletId, "startup", now - CreateInstant);
+    TraceStartupStageFinished(Orbit, TabletId, "startup", now - CreateInstant);
+    // lwtrace publishes a track only when it ends
+    Orbit.Reset();
     YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"event", "startup_stage_finished"},
         {"stage", "startup"},

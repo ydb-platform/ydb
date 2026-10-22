@@ -71,6 +71,7 @@ std::shared_ptr<ITxReader> TTxInit::BuildReader() {
     result->AddChildren(std::make_shared<NLoading::TSharingSessionsInitializer>("sharing_sessions", Self));
     result->AddChildren(std::make_shared<NLoading::TInFlightReadsInitializer>("in_flight_reads", Self));
     result->AddChildren(std::make_shared<NLoading::TTiersManagerInitializer>("tiers_manager", Self));
+    result->SetOrbit(Self->StartupTimeline.MutableOrbit());
     return result;
 }
 

@@ -215,7 +215,7 @@ bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
         { "schema_preset_versions", LoadDurations.SchemaPresetVersions },
     };
     for (const auto& [step, duration] : steps) {
-        TraceStartupStageFinished(Self->TabletID(), GetStageName() + "/" + step, duration);
+        TraceStartupStageFinished(Self->StartupTimeline.MutableOrbit(), Self->TabletID(), GetStageName() + "/" + step, duration);
     }
     Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, tablesManagerLocal.GetTables().size());
     Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, tablesManagerLocal.GetSchemaPresets().size());

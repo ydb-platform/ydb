@@ -6,13 +6,17 @@ LWTRACE_DEFINE_PROVIDER(YDB_CS_STARTUP);
 
 LWTRACE_USING(YDB_CS_STARTUP);
 
-void TraceStartupStageFinished(const ui64 tabletId, const TString& stage, const TDuration duration) {
-    LWPROBE(StartupStageFinished, tabletId, stage, duration);
+void TraceStartupStarted(NLWTrace::TOrbit& orbit, const ui64 tabletId) {
+    LWTRACK(StartupStarted, orbit, tabletId);
 }
 
-void TraceStartupTxStageFinished(
-    const ui64 tabletId, const TString& stage, const TDuration duration, const TDuration execution, const ui32 attempts) {
-    LWPROBE(StartupTxStageFinished, tabletId, stage, duration, execution, duration - execution, attempts);
+void TraceStartupStageFinished(NLWTrace::TOrbit& orbit, const ui64 tabletId, const TString& stage, const TDuration duration) {
+    LWTRACK(StartupStageFinished, orbit, tabletId, stage, duration);
+}
+
+void TraceStartupTxStageFinished(NLWTrace::TOrbit& orbit, const ui64 tabletId, const TString& stage, const TDuration duration,
+    const TDuration execution, const ui32 attempts) {
+    LWTRACK(StartupTxStageFinished, orbit, tabletId, stage, duration, execution, duration - execution, attempts);
 }
 
 }   // namespace NKikimr::NColumnShard

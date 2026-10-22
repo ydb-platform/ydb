@@ -3,6 +3,8 @@
 
 #include <ydb/library/actors/core/monotonic.h>
 
+#include <library/cpp/lwtrace/shuttle.h>
+
 #include <optional>
 
 namespace NKikimr::NColumnShard {
@@ -16,14 +18,15 @@ private:
     TMonotonic TxInitSchemaFinishInstant;
     TMonotonic TxInitCreateInstant;
     TMonotonic TxInitFinishInstant;
+    NLWTrace::TOrbit Orbit;
 
-    void TraceStageFinished(const TString& stage, const TDuration duration) const;
+    void TraceStageFinished(const TString& stage, const TDuration duration);
 
 public:
-    TStartupTimeline(const ui64 tabletId, const TCSInitialization& counters)
-        : TabletId(tabletId)
-        , Counters(counters)
-    {
+    TStartupTimeline(const ui64 tabletId, const TCSInitialization& counters);
+
+    NLWTrace::TOrbit& MutableOrbit() {
+        return Orbit;
     }
 
     void OnExecutorActivated();

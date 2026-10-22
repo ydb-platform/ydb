@@ -16,6 +16,7 @@ bool ITxReader::Execute(NTabletFlatExecutor::TTransactionContext& txc, const TAc
     }
     const TMonotonic attemptStart = TMonotonic::Now();
     if (!IsStarted) {
+        AFL_VERIFY(Orbit)("stage", StageName);
         IsStarted = true;
         FirstAttemptInstant = attemptStart;
     }
@@ -28,13 +29,14 @@ bool ITxReader::Execute(NTabletFlatExecutor::TTransactionContext& txc, const TAc
     }
     IsReady = true;
     const TDuration duration = attemptFinish - FirstAttemptInstant;
-    NColumnShard::TraceStartupTxStageFinished(txc.Tablet, StageName, duration, ExecutionDuration, Attempts);
+    NColumnShard::TraceStartupTxStageFinished(*Orbit, txc.Tablet, StageName, duration, ExecutionDuration, Attempts);
     NextReaderAfterLoad = BuildNextReaderAfterLoad();
     if (!NextReaderAfterLoad) {
         return true;
     }
     // the next reader runs after this stage has finished, so it is named as its sibling
     NextReaderAfterLoad->AddNamePrefix(NamePrefix);
+    NextReaderAfterLoad->SetOrbit(*Orbit);
     return NextReaderAfterLoad->Execute(txc, ctx);
 }
 

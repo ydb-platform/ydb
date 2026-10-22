@@ -10,6 +10,8 @@
 
 #include <library/cpp/threading/future/future.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
+
 #include <algorithm>
 
 namespace NYdb::inline Dev::NFederatedTopic {
@@ -104,6 +106,7 @@ void TFederatedWriteSessionImpl::Start() {
             with_lock(self->Lock) {
                 self->UpdateFederationStateImpl();
             }
+            self->DispatchPendingInitSeqNoArm();
         }
     });
 }
@@ -195,6 +198,7 @@ std::shared_ptr<NTopic::IWriteSession> TFederatedWriteSessionImpl::OpenSubsessio
 
     Subsession = subclient->CreateWriteSession(wsSettings);
     CurrentDatabase = db;
+    MaybePrepareInitSeqNoArm();
 
     return oldSubsession;
 }
@@ -333,6 +337,7 @@ void TFederatedWriteSessionImpl::ScheduleFederationStateUpdateImpl(TDuration del
                 with_lock(self->Lock) {
                     old = self->UpdateFederationStateImpl();
                 }
+                self->DispatchPendingInitSeqNoArm();
                 if (old) {
                     old->Close(TDuration::Zero());
                 }
@@ -364,8 +369,128 @@ std::optional<NTopic::TWriteSessionEvent::TEvent> TFederatedWriteSessionImpl::Ge
     return events.empty() ? std::nullopt : std::optional<NTopic::TWriteSessionEvent::TEvent>{std::move(events.front())};
 }
 
+void TFederatedWriteSessionImpl::MaybePrepareInitSeqNoArm() {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    if (!InitSeqNoPromise.Initialized() || !Subsession) {
+        return;
+    }
+    const auto current = InitSeqNoPromise.GetFuture();
+    if (current.HasValue() || current.HasException()) {
+        return;
+    }
+    if (InitSeqNoArmedGeneration == SubsessionGeneration) {
+        return;
+    }
+
+    InitSeqNoArmedGeneration = SubsessionGeneration;
+    PendingInitSeqNoGeneration = SubsessionGeneration;
+    PendingInitSeqNoError = nullptr;
+    try {
+        // Called before this subsession accepts writes, so ValidateSeqNo still
+        // sees an unset mode and locks manual SeqNo the same way a direct topic
+        // session does. Must not subscribe here: a ready future would re-enter Lock.
+        PendingInitSeqNoFuture = Subsession->GetInitSeqNo();
+    } catch (...) {
+        PendingInitSeqNoFuture = {};
+        PendingInitSeqNoError = std::current_exception();
+    }
+    HasPendingInitSeqNoArm = true;
+}
+
+void TFederatedWriteSessionImpl::DispatchPendingInitSeqNoArm() {
+    bool hasArm = false;
+    size_t generation = 0;
+    NThreading::TFuture<uint64_t> future;
+    std::exception_ptr error;
+    with_lock(Lock) {
+        if (!HasPendingInitSeqNoArm) {
+            return;
+        }
+        hasArm = true;
+        generation = PendingInitSeqNoGeneration;
+        future = std::move(PendingInitSeqNoFuture);
+        error = std::move(PendingInitSeqNoError);
+        HasPendingInitSeqNoArm = false;
+        PendingInitSeqNoError = nullptr;
+    }
+    if (!hasArm) {
+        return;
+    }
+    if (error) {
+        with_lock(Lock) {
+            if (generation != SubsessionGeneration || !InitSeqNoPromise.Initialized()) {
+                return;
+            }
+            const auto current = InitSeqNoPromise.GetFuture();
+            if (current.HasValue() || current.HasException()) {
+                return;
+            }
+        }
+        InitSeqNoPromise.TrySetException(error);
+        return;
+    }
+
+    future.Subscribe([selfCtx = SelfContext, generation](const NThreading::TFuture<uint64_t>& ready) {
+        if (auto self = selfCtx->LockShared()) {
+            self->CompleteInitSeqNoFromSubsession(generation, ready);
+        }
+    });
+}
+
+void TFederatedWriteSessionImpl::CompleteInitSeqNoFromSubsession(size_t generation, const NThreading::TFuture<uint64_t>& future) {
+    NThreading::TPromise<uint64_t> promise;
+    std::exception_ptr error;
+    uint64_t value = 0;
+    bool hasValue = false;
+    with_lock(Lock) {
+        if (generation != SubsessionGeneration || !InitSeqNoPromise.Initialized()) {
+            return;
+        }
+        const auto current = InitSeqNoPromise.GetFuture();
+        if (current.HasValue() || current.HasException()) {
+            return;
+        }
+        if (!future.Initialized()) {
+            return;
+        }
+        try {
+            value = future.GetValue();
+            hasValue = true;
+        } catch (...) {
+            error = std::current_exception();
+        }
+        promise = InitSeqNoPromise;
+    }
+    if (!promise.Initialized()) {
+        return;
+    }
+    if (hasValue) {
+        promise.TrySetValue(value);
+    } else if (error) {
+        promise.TrySetException(std::move(error));
+    }
+}
+
 NThreading::TFuture<uint64_t> TFederatedWriteSessionImpl::GetInitSeqNo() {
-    return NThreading::MakeFuture<uint64_t>(0u);
+    if (!Settings.DeduplicationEnabled_.value_or(true)) {
+        NYdb::ThrowFatalError("Cannot call GetInitSeqNo when deduplication is disabled");
+    }
+
+    NThreading::TFuture<uint64_t> result;
+    with_lock(Lock) {
+        if (!InitSeqNoPromise.Initialized()) {
+            InitSeqNoPromise = NThreading::NewPromise<uint64_t>();
+            if (SessionState == State::CLOSED) {
+                InitSeqNoPromise.SetException("session closed");
+            }
+        }
+        result = InitSeqNoPromise.GetFuture();
+        if (!result.HasValue() && !result.HasException()) {
+            MaybePrepareInitSeqNoArm();
+        }
+    }
+    DispatchPendingInitSeqNoArm();
+    return result;
 }
 
 NThreading::TFuture<bool> TFederatedWriteSessionImpl::Flush() {
@@ -469,9 +594,19 @@ void TFederatedWriteSessionImpl::CloseImpl(NTopic::TSessionClosedEvent const& ev
     if (!HasBeenClosed.HasValue()) {
         HasBeenClosed.SetValue();
     }
+    NThreading::TPromise<uint64_t> initSeqNoToFail;
+    if (InitSeqNoPromise.Initialized()) {
+        const auto current = InitSeqNoPromise.GetFuture();
+        if (!current.HasValue() && !current.HasException()) {
+            initSeqNoToFail = InitSeqNoPromise;
+        }
+    }
     {
         auto unguard = Unguard(Lock);
         ClientEventsQueue->Close(ev);
+        if (initSeqNoToFail.Initialized()) {
+            initSeqNoToFail.TrySetException(std::make_exception_ptr(yexception() << "session closed"));
+        }
     }
 }
 

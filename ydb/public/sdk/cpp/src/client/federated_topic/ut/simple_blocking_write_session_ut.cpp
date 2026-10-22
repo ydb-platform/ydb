@@ -6,6 +6,8 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 #include <ydb/public/sdk/cpp/src/client/federated_topic/ut/fds_mock/fds_mock.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
@@ -123,6 +125,16 @@ public:
 
     std::shared_ptr<NTopic::ISimpleBlockingWriteSession> CreateWriteSessionWithSingleDatabaseFdsResponse() {
         return CreateWriteSessionWithSingleDatabaseFdsResponse(DefaultWriteSettings());
+    }
+
+    std::shared_ptr<NTopic::IWriteSession> CreateAsyncWriteSession(TFederatedWriteSessionSettings settings) {
+        settings.DirectWriteToPartition(false);
+        return TopicClient->CreateWriteSession(settings);
+    }
+
+    void RespondSingleDatabase() {
+        auto fdsRequest = FdsMock.WaitNextPendingRequest();
+        fdsRequest.Result.SetValue(FdsMock.ComposeOkResultSingleDatabase());
     }
 
     // Creates a read session with single-database FDS response (avoids partition competition)
@@ -523,6 +535,93 @@ Y_UNIT_TEST_SUITE(SimpleBlockingFederatedWriteSession) {
 
             UNIT_ASSERT(readSession->Close(TDuration::Seconds(5)));
         }
+    }
+
+    Y_UNIT_TEST(GetInitSeqNoWaitsForSubsessionInit) {
+        TSimpleBlockingWriteSessionTestFixture fixture(TEST_CASE_NAME);
+        auto session = fixture.CreateAsyncWriteSession(fixture.DefaultWriteSettings());
+
+        const auto first = session->GetInitSeqNo();
+        const auto second = session->GetInitSeqNo();
+        UNIT_ASSERT(!first.HasValue());
+        UNIT_ASSERT(!first.HasException());
+        Sleep(TDuration::MilliSeconds(200));
+        UNIT_ASSERT_C(!first.HasValue() && !first.HasException(), "GetInitSeqNo completed before federation discovery");
+
+        fixture.RespondSingleDatabase();
+
+        UNIT_ASSERT_C(first.Wait(TDuration::Seconds(30)), "GetInitSeqNo was not set from InitResponse");
+        UNIT_ASSERT_VALUES_EQUAL(first.GetValue(), 0u);
+        UNIT_ASSERT_C(second.Wait(TDuration::Seconds(1)), "repeated GetInitSeqNo did not observe the same result");
+        UNIT_ASSERT_VALUES_EQUAL(second.GetValue(), 0u);
+        session->Close(TDuration::Seconds(10));
+    }
+
+    Y_UNIT_TEST(GetInitSeqNoReturnsLastWrittenSeqNo) {
+        TSimpleBlockingWriteSessionTestFixture fixture(TEST_CASE_NAME);
+        const auto settings = fixture.DefaultWriteSettings();
+        auto session = fixture.CreateAsyncWriteSession(settings);
+
+        const auto initSeqNo = session->GetInitSeqNo();
+        fixture.RespondSingleDatabase();
+        UNIT_ASSERT_C(initSeqNo.Wait(TDuration::Seconds(30)), "initial GetInitSeqNo was not set");
+        UNIT_ASSERT_VALUES_EQUAL(initSeqNo.GetValue(), 0u);
+
+        std::optional<NTopic::TContinuationToken> token;
+        const TInstant tokenDeadline = TInstant::Now() + TDuration::Seconds(10);
+        while (!token && TInstant::Now() < tokenDeadline) {
+            session->WaitEvent().Wait(TDuration::Seconds(1));
+            while (auto event = session->GetEvent(false)) {
+                if (auto* ready = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+                    token = std::move(ready->ContinuationToken);
+                }
+            }
+        }
+        UNIT_ASSERT_C(token, "write session did not become ready");
+        auto message = NTopic::TWriteMessage("seq-1").SeqNo(1);
+        session->Write(std::move(*token), std::move(message));
+
+        bool gotAck = false;
+        const TInstant ackDeadline = TInstant::Now() + TDuration::Seconds(30);
+        while (!gotAck && TInstant::Now() < ackDeadline) {
+            session->WaitEvent().Wait(TDuration::Seconds(1));
+            while (auto event = session->GetEvent(false)) {
+                if (auto* acks = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&*event)) {
+                    UNIT_ASSERT(!acks->Acks.empty());
+                    UNIT_ASSERT_VALUES_EQUAL(acks->Acks.front().SeqNo, 1u);
+                    gotAck = true;
+                }
+            }
+        }
+        UNIT_ASSERT_C(gotAck, "explicit seq no write was not acknowledged");
+        UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
+
+        auto next = fixture.CreateAsyncWriteSession(settings);
+        const auto nextInitSeqNo = next->GetInitSeqNo();
+        fixture.RespondSingleDatabase();
+        UNIT_ASSERT_C(nextInitSeqNo.Wait(TDuration::Seconds(30)), "GetInitSeqNo after a write was not set");
+        UNIT_ASSERT_VALUES_EQUAL(nextInitSeqNo.GetValue(), 1u);
+        next->Close(TDuration::Seconds(10));
+    }
+
+    Y_UNIT_TEST(GetInitSeqNoFailsIfClosedBeforeInit) {
+        TSimpleBlockingWriteSessionTestFixture fixture(TEST_CASE_NAME);
+        auto session = fixture.CreateAsyncWriteSession(fixture.DefaultWriteSettings());
+        const auto initSeqNo = session->GetInitSeqNo();
+        UNIT_ASSERT(!initSeqNo.HasValue());
+        UNIT_ASSERT(!initSeqNo.HasException());
+
+        UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
+        UNIT_ASSERT_C(initSeqNo.HasException(), "closing before init left GetInitSeqNo pending");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(initSeqNo.GetValue(), yexception, "session closed");
+    }
+
+    Y_UNIT_TEST(GetInitSeqNoRejectsDisabledDeduplication) {
+        TSimpleBlockingWriteSessionTestFixture fixture(TEST_CASE_NAME);
+        auto settings = fixture.DefaultWriteSettings();
+        settings.DeduplicationEnabled(false);
+        auto session = fixture.CreateAsyncWriteSession(std::move(settings));
+        UNIT_ASSERT_EXCEPTION(session->GetInitSeqNo(), NYdb::TContractViolation);
     }
 
 }

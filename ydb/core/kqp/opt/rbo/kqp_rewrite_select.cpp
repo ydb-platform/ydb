@@ -60,9 +60,10 @@ TExprNode::TPtr GetCallable(TExprNode::TPtr input, const TString& callableName) 
 }
 
 TCoLambda ReplaceGroupRefs(TCoLambda lambda, const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap,
-                           TExprContext& ctx) {
-    const auto groupRefs = FindNodes(lambda.Body().Ptr(), [](const TExprNode::TPtr& node) {
-        return node->IsCallable("YqlGroupRef");
+                           TExprContext& ctx, bool currentRowOnly = false) {
+    const auto groupRefs = FindNodes(lambda.Body().Ptr(), [&](const TExprNode::TPtr& node) {
+        return node->IsCallable("YqlGroupRef") &&
+            (!currentRowOnly || node->HeadPtr().Get() == lambda.Args().Arg(0).Raw());
     });
     if (groupRefs.empty()) {
         return lambda;
@@ -1102,6 +1103,13 @@ void ProcessAggregations(TExprNode::TPtr lambdaToProcess, TString&& resultColNam
             .Body(newBody)
         .Done().Ptr();
         // clang-format on
+
+        if (!distinctAll && !hasWindowCalls) {
+            // Aggregate inputs have been extracted; remaining current-row
+            // group references read the materialized aggregate's keys.
+            // References to nested query rows keep their own key namespace.
+            exprLambda = ReplaceGroupRefs(TCoLambda(exprLambda), groupByKeysExpressionsMap, ctx, /*currentRowOnly=*/true).Ptr();
+        }
 
         auto colName = TInfoUnit(resultColName);
         expressionsMapPostAgg.push_back({colName, exprLambda, false});
@@ -2182,6 +2190,14 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             }
         }
 
+        // A grouped SELECT must evaluate its complete result tuple before DISTINCT.
+        // The earlier distinct traits would retain hidden group keys and can replace
+        // an expression containing a group reference with just that reference.
+        const bool distinctAfterProjection = distinctAll && !aggregationTraits.KeyColumns.empty();
+        Y_ENSURE(!distinctAfterProjection || !hasRollup, "Unsupported grouping sets with distinct all.");
+        // An unused WINDOW declaration does not affect the result. Actual
+        // current-query window calls are checked below after reading result.
+
         TGroupingIndicators groupingIndicators;
         if (const auto groupingCalls = CollectGroupingCalls(setItem); !groupingCalls.empty()) {
             THashMap<ui32, TInfoUnit> indicatorByKeyIndex;
@@ -2216,10 +2232,13 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
 
         auto result = GetSetting(setItem->Tail(), "result");
         Y_ENSURE(result || values, "New RBO expects either 'values' or 'result' at a set item");
+        Y_ENSURE(!distinctAfterProjection || CollectWindowCalls(result).empty(),
+                 "Grouped DISTINCT with windows is not supported");
 
         // Process all aggregations in result item.
         ProcessAggregationsInResultItems(result, aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap, aggregationTraits,
-                                         distinctAggregationTraitsPostAggregate, expressionsMapPostAgg, uniqueAggColumnId, distinctAll, ctx, node->Pos());
+                                         distinctAggregationTraitsPostAggregate, expressionsMapPostAgg, uniqueAggColumnId,
+                                         distinctAll && !distinctAfterProjection, ctx, node->Pos());
 
         // A windowed query without an aggregate has no projection to pass columns through, so
         // its post-aggregate map keeps the input columns instead of listing them.
@@ -2273,14 +2292,23 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             auto lambda = TCoLambda(ctx.DeepCopyLambda(*(itemLambda)));
 
             auto body = lambda.Body().Ptr();
-            auto aggregation = GetCallable(body, "YqlAgg");
-            auto groupRef = GetCallable(body, "YqlGroupRef");
+            // Use the same query scope as ProcessAggregations: aggregates in
+            // subqueries do not materialize this outer SELECT expression.
+            const bool currentAggregate = !CollectAggregations(body).empty();
+            auto groupRef = FindNode(body, [&](const TExprNode::TPtr& candidate) {
+                return candidate->IsCallable("YqlGroupRef") &&
+                    candidate->HeadPtr().Get() == lambda.Args().Arg(0).Raw();
+            });
             const bool isDirectGroupRef = groupRef && groupRef.Get() == body.Get();
             const bool hasWindowCall = !CollectWindowCalls(body).empty();
-            // Aggregations are materialized earlier. Keep any expression around a nested group reference.
+            const bool earlyDistinct = distinctAll && !distinctAfterProjection;
+            const bool materializedCurrentAggregate = currentAggregate && !earlyDistinct && !hasWindowCall;
             auto aggColName = columnName;
-            if (aggregation || distinctAll || hasWindowCall || isDirectGroupRef) {
-                if (groupRef) {
+            if (currentAggregate || earlyDistinct || hasWindowCall || isDirectGroupRef) {
+                // Ordinary and deferred-DISTINCT aggregates already materialize
+                // the complete expression under its result alias. A group key
+                // used inside that expression must not replace the whole value.
+                if (groupRef && !materializedCurrentAggregate) {
                     aggColName = GetColumnNameFromGroupRef(groupRef, groupByKeysExpressionsMap);
                 }
 
@@ -2296,7 +2324,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                 .Done();
                 // clang-format on
             } else if (groupRef) {
-                lambda = ReplaceGroupRefs(lambda, groupByKeysExpressionsMap, ctx);
+                lambda = ReplaceGroupRefs(lambda, groupByKeysExpressionsMap, ctx, /*currentRowOnly=*/true);
             }
 
             if (resultElementCounters.contains(columnName)) {
@@ -2389,9 +2417,19 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         // Sort clause may contain extra columns that we need to keep in the projection in order for sort to work
         auto sort = GetSetting(setItem->Tail(), "sort");
         if (sort) {
+            if (distinctAfterProjection) {
+                // Sorting can use the selected tuple after DISTINCT. References to
+                // pre-projection group/aggregate values need a separate rewrite;
+                // retaining those values as DISTINCT keys changes the result bag.
+                Y_ENSURE(!GetCallable(sort, "YqlGroupRef") && !GetCallable(sort, "YqlAgg") &&
+                             CollectWindowCalls(sort).empty(),
+                         "Grouped DISTINCT ORDER BY must use selected result columns");
+            }
             auto sortDependencies = GetSortDependencies(sort, groupByKeysExpressionsMap);
             for (const auto& iu : sortDependencies) {
                 if (std::find(finalProjection.begin(), finalProjection.end(), iu.GetFullName()) == finalProjection.end()) {
+                    Y_ENSURE(!distinctAfterProjection,
+                             "Grouped DISTINCT ORDER BY cannot use an unselected column " << iu.GetFullName());
                     // clang-format off
                     resultElements.push_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
                         .Input(resultExpr)
@@ -2414,6 +2452,17 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             .Build()
         .Done().Ptr();
         // clang-format on
+
+        if (distinctAfterProjection) {
+            TVector<TExprNode::TPtr> distinctTraits;
+            TVector<TInfoUnit> distinctKeys;
+            for (const auto& column : finalProjection) {
+                distinctTraits.push_back(BuildAggregationTraits(column, "distinct", column, ctx, node->Pos()));
+                distinctKeys.emplace_back(column);
+            }
+            Y_ENSURE(!distinctKeys.empty(), "Grouped DISTINCT requires a nonempty result tuple");
+            setItemPtr = BuildAggregate(setItemPtr, distinctTraits, distinctKeys, /*distinctAll=*/true, ctx, node->Pos());
+        }
 
         if (sort) {
             setItemPtr = BuildSort(setItemPtr, sort, groupByKeysExpressionsMap, ctx);

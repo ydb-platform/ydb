@@ -347,6 +347,10 @@ private:
     }
 
     void UpdateConsumption() {
+        // TLRUCache retains its last item even when it exceeds the size limit.
+        if (!Cache.GetMaxSize() || Cache.TotalSize() > Cache.GetMaxSize()) {
+            Cache.Clear();
+        }
         Counters->CacheSizeCount->Set(Cache.Size());
 
         const auto cacheTotalSize = Cache.TotalSize();

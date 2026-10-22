@@ -284,21 +284,31 @@ Y_UNIT_TEST(GeneralCacheReceivesFirstReductionWhileOverBudget) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersBudgetDeficit"), 0);
         UNIT_ASSERT_VALUES_EQUAL(limits.at(waiter), 20_MB);
 
-        for (ui64 grant : {20_MB, 60_MB, 2_GB}) {
+        fixture.RequestLimit(cache, EMemoryConsumerKind::ColumnTablesDataAccessorCache, 0);
+        fixture.RequestLimit(waiter, EMemoryConsumerKind::ColumnTablesScanGroupedMemory, 100_MB);
+        fixture.Tick();
+        fixture.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(limits.at(cache), 0);
+        UNIT_ASSERT_VALUES_EQUAL_C(limits.at(waiter), 100_MB,
+            "cache usage after zero grant: " << counters.GetManager()->CacheSizeBytes->Val());
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetManager()->CacheSizeBytes->Val(), 0);
+
+        for (ui64 grant : {20_MB, 1_MB, 5_MB, 0_MB, 60_MB, 2_GB}) {
             fixture.Runtime.Send(new IEventHandle(cache, fixture.MemoryController, new TEvConsumerLimit(grant)));
             const ui64 expectedLimit = configured ? Min(grant, 120_MB) : grant;
             fixture.Runtime.WaitFor("cache applies controller ceiling", [&] {
                 return counters.GetManager()->CacheSizeLimitBytes->Val() == i64(expectedLimit);
             });
+            UNIT_ASSERT(counters.GetManager()->CacheSizeBytes->Val() <= i64(expectedLimit));
             THashMap<ui64, ui64> refill;
             for (ui64 i = 0; i < 24; ++i) {
                 refill.emplace(i, 5_MB);
             }
             fixture.Runtime.Send(new IEventHandle(cache, waiter,
                 new TSourceEvents::TEvObjectsInfo(0, std::move(refill), {}, {})));
-            fixture.Runtime.WaitFor("cache respects ceiling after refill", [&] {
-                return counters.GetManager()->CacheSizeBytes->Val() == i64(Min(expectedLimit, 120_MB));
-            });
+            const ui64 expectedCount = Min(expectedLimit, 120_MB) / 5_MB;
+            UNIT_ASSERT_VALUES_EQUAL(counters.GetManager()->CacheSizeCount->Val(), expectedCount);
+            UNIT_ASSERT_VALUES_EQUAL(counters.GetManager()->CacheSizeBytes->Val(), expectedCount * 5_MB);
         }
     }
 }

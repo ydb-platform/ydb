@@ -657,6 +657,35 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         AcknowledgedRetentionAtomicCreation(EAcknowledgedRetentionActivation::Disabled);
     }
 
+    Y_UNIT_TEST(AcknowledgedRetentionRequiresFirstClassTopics) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(true);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        NJson::TJsonValue attrs;
+        attrs["id"] = "1";
+        attrs["path"] = "/Root/replication";
+        attrs["retention_policy"] = "acknowledged";
+        attrs["retention_consumer"] = "/shared/account/replicationConsumer/";
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "Table"
+            StreamDescription {
+                Name: "Stream"
+                Mode: ECdcStreamModeUpdate
+                Format: ECdcStreamFormatJson
+                UserAttributes { Key: "__async_replication" Value: "%s" }
+            }
+        )", EscapeC(NJson::WriteJson(attrs, false)).c_str()), {NKikimrScheme::StatusPreconditionFailed});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
+    }
+
     Y_UNIT_TEST(AcknowledgedRetentionInternalAlterPreservesIdentity) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

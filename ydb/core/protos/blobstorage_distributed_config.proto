@@ -496,3 +496,8 @@ message TConnectivityPayload {
     bool PileListChangeCapable = 5; // sender takes pile ids from pile registry, not from positions in BridgeConfig
     uint32 BridgeFeatureLevel = 6; // bridge features supported by the sender (absent for older versions)
 }
+
+// Ask CMS/Sentinel for a fresh SelfHealNodesStateUpdate. Sentinel replies only
+// after collecting enough observations to classify every configured node.
+message TEvNodeConfigGetSelfHealState {
+}

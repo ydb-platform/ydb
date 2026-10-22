@@ -1209,6 +1209,10 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
                                                   const NKikimr::TAppData* appData) {
     setup->RegisterSubSystem<IPDiskSubsystem>(CreatePDiskSubsystem());
     TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig());
+    const auto& selfHealConfig = Config.GetCmsConfig().GetSentinelConfig().GetStateStorageSelfHealConfig();
+    if (const ui32 timeout = selfHealConfig.GetSelfHealStateRequestTimeout()) {
+        nodeWardenConfig->SelfHealStateRequestTimeout = TDuration::MicroSeconds(timeout);
+    }
     nodeWardenConfig->BlobStorageExecutorPoolIds =
         NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(Config.GetActorSystemConfig());
     if (Config.HasBlobStorageConfig()) {

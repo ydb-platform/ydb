@@ -8,6 +8,7 @@ TEST_SRCS(
     test_http.py
 )
 
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:16 cpu:2)
 ENDIF()

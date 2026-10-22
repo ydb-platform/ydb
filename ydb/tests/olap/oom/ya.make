@@ -8,7 +8,11 @@ TEST_SRCS(
 )
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ELSE()
+    REQUIREMENTS(cpu:1)
+ENDIF()
 
 PEERDIR(
     ydb/tests/library

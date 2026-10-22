@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
     FORK_SUBTESTS()
 
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2 ram:16)
+    REQUIREMENTS(cpu:1 ram:16)
 
     SRCS(
         out_of_space.cpp

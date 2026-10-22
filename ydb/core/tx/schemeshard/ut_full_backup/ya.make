@@ -2,11 +2,15 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(1)
+SPLIT_FACTOR(12)
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    REQUIREMENTS(cpu:2)
+ELSEIF (SANITIZER_TYPE)
+    SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

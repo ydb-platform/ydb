@@ -1,10 +1,14 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(16)
+SPLIT_FACTOR(40)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4)
+ELSE()
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 SRCS(
     kqp_rbo_compatibility_ut.cpp

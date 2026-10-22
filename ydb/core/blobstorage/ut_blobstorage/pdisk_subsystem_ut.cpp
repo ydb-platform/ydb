@@ -287,6 +287,7 @@ namespace {
         static constexpr ui32 PDiskId = 1;
         static constexpr ui64 Guid = 12345;
         const TString Path = "SectorMap:temporary-pdisk-promotion:32";
+        std::shared_ptr<NPDisk::IIoContextFactory> IoFactory = std::make_shared<NPDisk::TIoContextFactoryOSS>();
         TIntrusivePtr<NPDisk::TSectorMap> SectorMap = MakeIntrusive<NPDisk::TSectorMap>(32ull << 30);
         TTestActorSystem Runtime{1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>()};
         TActorId Warden;
@@ -303,6 +304,7 @@ namespace {
 
             Runtime.Start();
             auto& appData = *Runtime.GetNode(NodeId)->AppData;
+            appData.IoContextFactory = IoFactory.get();
             appData.DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dom", 1).Release());
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
 

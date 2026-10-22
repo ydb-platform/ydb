@@ -1123,8 +1123,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         };
         enum class EPhase { Write, Read, Format };
         for (const auto phase : {EPhase::Write, EPhase::Read, EPhase::Format}) {
+            auto ioContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
             TTestActorRuntime runtime(1, 1, true);
             auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
+            appData->IoContextFactory = ioContext.get();
             runtime.SetLogBackend(CreateNullBackend());
             runtime.Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}, {}, {}});
             const auto sender = runtime.AllocateEdgeActor();

@@ -13,7 +13,8 @@ namespace NKikimr::NStorage {
         TEvNodeConfigPush() = default;
 
         bool IsUseful() const {
-            return Record.BoundNodesSize() || Record.DeletedBoundNodeIdsSize() || Record.HasCacheUpdate();
+            return Record.BoundNodesSize() || Record.DeletedBoundNodeIdsSize() || Record.HasCacheUpdate()
+                || Record.HasSubtreeHeight() || Record.HasRequestedCommittedConfigGeneration();
         }
     };
 

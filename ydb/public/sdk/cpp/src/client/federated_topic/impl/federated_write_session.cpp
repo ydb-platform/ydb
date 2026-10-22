@@ -10,11 +10,30 @@
 
 #include <library/cpp/threading/future/future.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
 
 #include <algorithm>
+#include <exception>
 
 namespace NYdb::inline Dev::NFederatedTopic {
+
+namespace {
+
+bool IsContractViolation(const std::exception_ptr& error) {
+    if (!error) {
+        return false;
+    }
+    try {
+        std::rethrow_exception(error);
+    } catch (const TContractViolation&) {
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+}  // namespace
 
 constexpr TDuration UPDATE_FEDERATION_STATE_DELAY = TDuration::Seconds(10);
 
@@ -535,6 +554,7 @@ NThreading::TFuture<uint64_t> TFederatedWriteSessionImpl::GetInitSeqNo() {
     }
 
     NThreading::TFuture<uint64_t> result;
+    std::exception_ptr contractError;
     with_lock(Lock) {
         if (!InitSeqNoPromise.Initialized()) {
             InitSeqNoPromise = NThreading::NewPromise<uint64_t>();
@@ -545,7 +565,19 @@ NThreading::TFuture<uint64_t> TFederatedWriteSessionImpl::GetInitSeqNo() {
         result = InitSeqNoPromise.GetFuture();
         if (!result.HasValue() && !result.HasException()) {
             MaybePrepareInitSeqNoArm();
+            if (IsContractViolation(PendingInitSeqNoError)) {
+                // TWriteSessionImpl::GetInitSeqNo throws before handing out a future.
+                // Drop the arm so the next call throws again instead of hanging.
+                contractError = PendingInitSeqNoError;
+                HasPendingInitSeqNoArm = false;
+                PendingInitSeqNoError = nullptr;
+                PendingInitSeqNoFuture = {};
+                InitSeqNoArmedGeneration = 0;
+            }
         }
+    }
+    if (contractError) {
+        std::rethrow_exception(contractError);
     }
     DispatchPendingInitSeqNoArm();
     return result;

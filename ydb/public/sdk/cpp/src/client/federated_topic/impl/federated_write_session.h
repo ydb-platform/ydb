@@ -18,10 +18,13 @@ std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseImpl(
     NTopic::TFederatedWriteSessionSettings const& settings,
     std::vector<std::shared_ptr<TDbInfo>> const& dbInfos, std::string const& selfLocation);
 
+class TFederatedWriteSessionTestAccess;
+
 class TFederatedWriteSessionImpl : public NTopic::TContinuationTokenIssuer,
                                    public NTopic::TEnableSelfContext<TFederatedWriteSessionImpl> {
     friend class TFederatedWriteSession;
     friend class TFederatedTopicClient::TImpl;
+    friend class TFederatedWriteSessionTestAccess;
 
 public:
     TFederatedWriteSessionImpl(const TFederatedWriteSessionSettings& settings,
@@ -219,6 +222,7 @@ class TFederatedWriteSession : public NTopic::IWriteSession,
                                public NTopic::TContextOwner<TFederatedWriteSessionImpl> {
     friend class TFederatedTopicClient::TImpl;
     friend class TSimpleBlockingFederatedWriteSession;
+    friend class TFederatedWriteSessionTestAccess;
 
 public:
 

@@ -125,16 +125,21 @@ message TMirror3dcGroupState {
     // Matching (P), (A), and (C) markers connect distant arrows.
     // Identical-state requests are idempotent; self-loops are omitted.
     //
-    //                                                                                                                 (RECOVERY)
-    //                                                                                                                     |
-    //                                                                                                                     v
-    // +-------------+-------------+     +---------------------------+     +---------------------------+     +-------------+-------------+
-    // | NORMAL                    |<----| NORMAL_PENDING            |<----| DC_RECOVERY               |<----| DC_RECOVERY_PENDING       |
-    // | I/I/I                     |     | I/I/J                     |     | I/I/J                     |     | I/I/J                     |
-    // +-------------+-------------+     +-------------+-------------+     +-------------+-------------+     +-------------+-------------+
-    //               |                                 |                                 |                                 |
-    //               |                                 |                                 |                                 |
-    //               +<--------------------------------+<--------------------------------+<--------------------------------+
+    
+    
+    //                                                                     +---------------------------+ 
+    //                                                 +-------------------| DC_RECOVERY_PENDING_INV1  |<----(RECOVERY INV1)
+    //                                                 |                   |  I/I/J                    |--------------------+                                                                         
+    //                                                 |                   +-------------+-------------+                    |
+    //                                                 |                                 |                                  |
+    //                                                 v                                 v                                  |
+    // +-------------+-------------+     +-------------+-------------+     +-------------+-------------+                    |
+    // | NORMAL                    |<----| DC_RECOVERY               |<----| DC_RECOVERY_PENDING       |<----(RECOVERY)     |
+    // | I/I/I                     |     | I/I/J                     |     | I/I/J                     |                    |
+    // +-------------+-------------+     +-------------+-------------+     +-------------+-------------+                    |
+    //               |                                 |                                 |                                  |
+    //               |                                 |                                 |                                  |
+    //               +<--------------------------------+<--------------------------------+<---------------------------------+
     //               |
     //               v
     // +-------------+-------------+     +---------------------------+     +---------------------------+
@@ -146,41 +151,48 @@ message TMirror3dcGroupState {
     //               |                                 |                                 |
     //               |                                 |                                 |
     //               v                                 v                                 v
-    // +-------------+-------------+     +-------------+-------------+     +-------------+-------------+
+    // +---------------------------+     +---------------------------+     +---------------------------+
     // | DC_FAILURE                |---->| DC_FAILURE_INV_1          |---->| DC_FAILURE_INV_2          |
     // | I/I/E                     |     | I/I/E                     |     | I/I/E                     |
-    // +-------------+-------------+     +----+--------+-------------+     +-------------+-------------+
-    //               |                        ^        |                                 |
-    //               +--> ((RECOVERY)         |        +--> (RECOVERY)                   +--> (RECOVERY)
-    //                                        |        |                                 |
-    //                                        |        |                                 |
-    //                       +-----------------        |                                 |
+    // +---------------------------+     +-----+---------------------+     +---------------------------+
+    //               |                         ^       |                                 |
+    //               +--> (RECOVERY)           |       +--> (RECOVERY INV1)              +--> (RECOVERY INV1)
+    //                                         |       |                                 |
+    //                       +-----------------+       |                                 |
     //                       |                         |                                 |
     //                       |                         v                                 v
-    //                       |           +-------------+-------------+     +-------------+-------------+
+    //                       |           +---------------------------+     +---------------------------+
     //                       |       +---| SOLO_DC_INV_1_PENDING     |---->| SOLO_DC_INV_2_PENDING     |------+
     //                       |       |   | I/L/E                     |     | I/L/E                     |      |
-    //                       |       |   +-------------+-------------+     +-------------+-------------+      |
+    //                       |       |   +---------------------------+     +---------------------------+      |
     //                       |       |                 |                                 |                    |
     //                       |       |                 |                                 |                    |
     //                       |       |                 |                                 |                    |
     //                       |       |                 |                                 |                    |
     //                       |       |                 v                                 v                    |
-    //                       |       |   +-------------+-------------+     +-------------+-------------+      |
+    //                       |       |   +---------------------------+     +---------------------------+      |
     //                       |       |   | SOLO_DC_INV_1             |---->| SOLO_DC_INV_2             |      |
     //                       |       |   | I/E/E                     |     | I/E/E                     |      |
-    //                       |       |   +-------------+-------------+     +-------------+-------------+      |
+    //                       |       |   +---------------------------+     +---------------------------+      |
     //                       |       |                 |                                 |                    |
     //                       |       |                 |                                 |                    |
-    //                       |       |---------------->+-------------------------------->+<-------------------|
-    //                       |                                                           |
-    //                       |                                                           |
-    //                       |                                                           |
-    //                       |                                                           v
-    //                       |           +-------------+-------------+     +-------------+-------------+
-    //                       +-----------| SOLO_DC_RECOVERY          |<----| SOLO_DC_RECOVERY_PENDING  |
-    //                                   | I/J/E                     |     | I/J/E                     |
-    //                                   +-------------+-------------+     +-------------+-------------+
+    //                       |       +---------------->+                                 +<-------------------+
+    //                       |                         |                                 |
+    //                       |                         |                                 |
+    //                       |                         |                                 |
+    //                       |                         v                                 v
+    //                       |     +---------------------------------+     +---------------------------------+
+    //                       |     | SOLO_DC_RECOVERY_PENDING_INV_1  |     | SOLO_DC_RECOVERY_PENDING_INV_2  |
+    //                       |     | I/J/E                           |     | I/J/E                           |
+    //                       |     +---------------------------------+     +---------------------------------+
+    //                       |                      |                                       |
+    //                       |                      +<--------------------------------------+
+    //                       |                      |
+    //                       |                      v
+    //                       |     +---------------------------------+
+    //                       +-----| SOLO_DC_RECOVERY_INV_1          |
+    //                             | I/J/E                           |
+    //                             +---------------------------------+
     enum EMode {
         // Realms I/I/I; WriteOk = 1+1+1 OR 2+2; WriteDurability = 1+1+1; CW = 1+1+1 OR 2+2.
         NORMAL = 0;
@@ -202,18 +214,20 @@ message TMirror3dcGroupState {
         DC_RECOVERY = 8;
         // Realms I/I/J; WriteOk 1+1+1 OR 2+2; WriteDurability 1+1+1; CW = 1+1+1 OR 2+2.
         NORMAL_PENDING = 9;
-        // Realms I/E/E; WriteOk = WriteDurability = 2; CW = 1 (invariant I).
-        SOLO_DC_INV_1 = 10;
-        // Realms I/E/E; WriteOk = WriteDurability = 2; CW = 2 (invariant II).
-        SOLO_DC_INV_2 = 11;
-        // Realms I/J/E; WriteOk = WriteDurability = 2+2; CW = 1+1 OR 2, or 2 after SOLO_DC_INV_2.
-        SOLO_DC_RECOVERY_PENDING = 12;
-        // Realms I/J/E; WriteOk = WriteDurability = 2+2; CW = 1+1 OR 2, or 2 after SOLO_DC_INV_2.
-        SOLO_DC_RECOVERY = 13;
         // Realms I/L/E; WriteOk = WriteDurability = 2; CW = 1+1 OR 2; prepare to exclude B.
-        SOLO_DC_INV_1_PENDING = 14;
+        SOLO_DC_INV_1_PENDING = 10;
         // Realms I/L/E; WriteOk = WriteDurability = 2; CW = 2; prepare to exclude B.
-        SOLO_DC_INV_2_PENDING = 15;
+        SOLO_DC_INV_2_PENDING = 11;
+        // Realms I/E/E; WriteOk = WriteDurability = 2; CW = 1 (invariant I).
+        SOLO_DC_INV_1 = 12;
+        // Realms I/E/E; WriteOk = WriteDurability = 2; CW = 2 (invariant II).
+        SOLO_DC_INV_2 = 13;
+        // Realms I/J/E; WriteOk = 2+2; WriteDurability = 1+1; CW = 1.
+        SOLO_DC_RECOVERY_PENDING_INV_1 = 14;
+        // Realms I/J/E; WriteOk = 2+2; WriteDurability = 1+1; CW = 2.
+        SOLO_DC_RECOVERY_PENDING_INV_2 = 15;
+        // Realms I/J/E; WriteOk = 2+2; WriteDurability = 1+1; CW = 1+1.
+        SOLO_DC_RECOVERY_INV_1 = 16;
     }
     optional EMode Mode = 1;
     // Excluded/returning realm for the three-to-two-DC transition.

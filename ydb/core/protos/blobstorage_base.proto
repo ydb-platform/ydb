@@ -121,28 +121,88 @@ message TMirror3dcGroupState {
     // I = Included, E = Excluded, J = Joining, L = Leaving. Layouts use interchangeable realms.
     // WriteOk alternatives are OR-ed; WriteDurability is the background replication target.
     // CW describes old-blob guarantees; stronger WriteOk alone affects only new blobs.
+    // Mode transitions; realm-index checks in CanTransitionTo still apply.
+    // Matching (P), (A), and (C) markers connect distant arrows.
+    // Identical-state requests are idempotent; self-loops are omitted.
+    //
+    //                                                                                                                 (RECOVERY)
+    //                                                                                                                     |
+    //                                                                                                                     v
+    // +-------------+-------------+     +---------------------------+     +---------------------------+     +-------------+-------------+
+    // | NORMAL                    |<----| NORMAL_PENDING            |<----| DC_RECOVERY               |<----| DC_RECOVERY_PENDING       |
+    // | I/I/I                     |     | I/I/J                     |     | I/I/J                     |     | I/I/J                     |
+    // +-------------+-------------+     +-------------+-------------+     +-------------+-------------+     +-------------+-------------+
+    //               |                                 |                                 |                                 |
+    //               |                                 |                                 |                                 |
+    //               +<--------------------------------+<--------------------------------+<--------------------------------+
+    //               |
+    //               v
+    // +-------------+-------------+     +---------------------------+     +---------------------------+
+    // | DC_FAILURE_PENDING        |---->| DC_FAILURE_PENDING_INV_1  |---->| DC_FAILURE_PENDING_INV_2  |
+    // | I/I/L                     |     | I/I/L                     |     | I/I/L                     |
+    // +-------------+-------------+     +-------------+-------------+     +-------------+-------------+
+    //               |                                 |                                 |
+    //               |                                 |                                 |
+    //               |                                 |                                 |
+    //               |                                 |                                 |
+    //               v                                 v                                 v
+    // +-------------+-------------+     +-------------+-------------+     +-------------+-------------+
+    // | DC_FAILURE                |---->| DC_FAILURE_INV_1          |---->| DC_FAILURE_INV_2          |
+    // | I/I/E                     |     | I/I/E                     |     | I/I/E                     |
+    // +-------------+-------------+     +----+--------+-------------+     +-------------+-------------+
+    //               |                        ^        |                                 |
+    //               +--> ((RECOVERY)         |        +--> (RECOVERY)                   +--> (RECOVERY)
+    //                                        |        |                                 |
+    //                                        |        |                                 |
+    //                       +-----------------        |                                 |
+    //                       |                         |                                 |
+    //                       |                         v                                 v
+    //                       |           +-------------+-------------+     +-------------+-------------+
+    //                       |       +---| SOLO_DC_INV_1_PENDING     |---->| SOLO_DC_INV_2_PENDING     |------+
+    //                       |       |   | I/L/E                     |     | I/L/E                     |      |
+    //                       |       |   +-------------+-------------+     +-------------+-------------+      |
+    //                       |       |                 |                                 |                    |
+    //                       |       |                 |                                 |                    |
+    //                       |       |                 |                                 |                    |
+    //                       |       |                 |                                 |                    |
+    //                       |       |                 v                                 v                    |
+    //                       |       |   +-------------+-------------+     +-------------+-------------+      |
+    //                       |       |   | SOLO_DC_INV_1             |---->| SOLO_DC_INV_2             |      |
+    //                       |       |   | I/E/E                     |     | I/E/E                     |      |
+    //                       |       |   +-------------+-------------+     +-------------+-------------+      |
+    //                       |       |                 |                                 |                    |
+    //                       |       |                 |                                 |                    |
+    //                       |       |---------------->+-------------------------------->+<-------------------|
+    //                       |                                                           |
+    //                       |                                                           |
+    //                       |                                                           |
+    //                       |                                                           v
+    //                       |           +-------------+-------------+     +-------------+-------------+
+    //                       +-----------| SOLO_DC_RECOVERY          |<----| SOLO_DC_RECOVERY_PENDING  |
+    //                                   | I/J/E                     |     | I/J/E                     |
+    //                                   +-------------+-------------+     +-------------+-------------+
     enum EMode {
-        // Realms I/I/I; WriteOk = WriteDurability = 1+1+1 OR 2+2; CW = 1+1+1 OR 2+2.
+        // Realms I/I/I; WriteOk = 1+1+1 OR 2+2; WriteDurability = 1+1+1; CW = 1+1+1 OR 2+2.
         NORMAL = 0;
-        // Realms I/I/L; WriteOk 2+2; WriteDurability 1+1; CW = 1+1 OR 2.
+        // Realms I/I/L; WriteOk = 2+2; WriteDurability = 1+1; CW = 1+1 OR 2.
         DC_FAILURE_PENDING = 1;
-        // Realms I/I/L; WriteOk = WriteDurability = 2+2; CW = 1+1.
+        // Realms I/I/L; WriteOk = WriteDurability = 2+2; CW = 1+1 (invariant I).
         DC_FAILURE_PENDING_INV_1 = 2;
-        // Realms I/I/L; WriteOk = WriteDurability = 2+2; CW = 2+2.
+        // Realms I/I/L; WriteOk = WriteDurability = CW = 2+2 (invariant II).
         DC_FAILURE_PENDING_INV_2 = 3;
         // Realms I/I/E; WriteOk = WriteDurability = 2+2; CW = 1+1 OR 2.
         DC_FAILURE = 4;
         // Realms I/I/E; WriteOk = WriteDurability = 2+2; CW = 1+1 (invariant I).
         DC_FAILURE_INV_1 = 5;
-        // Realms I/I/E; WriteOk = WriteDurability = 2+2; CW = 2+2 (invariant II).
+        // Realms I/I/E; WriteOk = WriteDurability = CW = 2+2 (invariant II).
         DC_FAILURE_INV_2 = 6;
-        // Realms I/I/J; WriteOk = WriteDurability = 1+1+1 OR 2+2; CW = 1+1 OR 2.
+        // Realms I/I/J; WriteOk = 2+2; WriteDurability = 1+1+1; CW = 1+1 OR 2.
         DC_RECOVERY_PENDING = 7;
-        // Realms I/I/J; WriteOk 1+1+1 OR 2+2; WriteDurability 1+1+1; CW = 1+1.
+        // Realms I/I/J; WriteOk = 1+1+1 OR 2+2; WriteDurability 1+1+1; CW = 1+1.
         DC_RECOVERY = 8;
         // Realms I/I/J; WriteOk 1+1+1 OR 2+2; WriteDurability 1+1+1; CW = 1+1+1 OR 2+2.
         NORMAL_PENDING = 9;
-        // Realms I/E/E; WriteOk = WriteDurability = 2; CW = 1+1 OR 2.
+        // Realms I/E/E; WriteOk = WriteDurability = 2; CW = 1 (invariant I).
         SOLO_DC_INV_1 = 10;
         // Realms I/E/E; WriteOk = WriteDurability = 2; CW = 2 (invariant II).
         SOLO_DC_INV_2 = 11;
@@ -150,14 +210,10 @@ message TMirror3dcGroupState {
         SOLO_DC_RECOVERY_PENDING = 12;
         // Realms I/J/E; WriteOk = WriteDurability = 2+2; CW = 1+1 OR 2, or 2 after SOLO_DC_INV_2.
         SOLO_DC_RECOVERY = 13;
-        // Realms I/J/E; WriteOk = WriteDurability = 2+2; CW = 1+1; prepare to exclude B.
+        // Realms I/L/E; WriteOk = WriteDurability = 2; CW = 1+1 OR 2; prepare to exclude B.
         SOLO_DC_INV_1_PENDING = 14;
-        // Realms I/E/E; WriteOk = WriteDurability = 2; CW = 1+1 OR 2, or 2 after DC_FAILURE_INV_2.
+        // Realms I/L/E; WriteOk = WriteDurability = 2; CW = 2; prepare to exclude B.
         SOLO_DC_INV_2_PENDING = 15;
-        // Realms I/I/E; WriteOk = WriteDurability = 2+2; CW = 1+1.
-        DC_FAILURE_INV_2_PENDING = 16;
-        // Realms I/I/E; WriteOk = WriteDurability = 2+2; CW = 1+1 OR 2, or 2 after SOLO recovery.
-        DC_FAILURE_INV_1_PENDING = 17;
     }
     optional EMode Mode = 1;
     // Excluded/returning realm for the three-to-two-DC transition.

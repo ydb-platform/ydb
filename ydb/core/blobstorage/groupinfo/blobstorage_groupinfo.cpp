@@ -974,24 +974,18 @@ bool TBlobStorageGroupInfo::TMirror3dcState::CanTransitionTo(const TMirror3dcSta
     }
     switch (Mode) {
         case T::NORMAL:
-            return next.Mode == T::DC_FAILURE_PENDING || next.Mode == T::DC_FAILURE_PENDING_INV_1
-                || next.Mode == T::DC_FAILURE_PENDING_INV_2;
+            return next.Mode == T::DC_FAILURE_PENDING;
         case T::DC_FAILURE_PENDING:
-            return next.Mode == T::DC_FAILURE;
+            return next.Mode == T::DC_FAILURE || next.Mode == T::DC_FAILURE_PENDING_INV_1;
         case T::DC_FAILURE_PENDING_INV_1:
-            return next.Mode == T::DC_FAILURE_INV_1;
+            return next.Mode == T::DC_FAILURE_INV_1 || next.Mode == T::DC_FAILURE_PENDING_INV_2;
         case T::DC_FAILURE_PENDING_INV_2:
             return next.Mode == T::DC_FAILURE_INV_2;
         case T::DC_FAILURE:
-            return next.Mode == T::DC_FAILURE_INV_1_PENDING || next.Mode == T::DC_RECOVERY_PENDING;
-        case T::DC_FAILURE_INV_1_PENDING:
-            return next.Mode == T::DC_FAILURE_INV_1;
+            return next.Mode == T::DC_FAILURE_INV_1 || next.Mode == T::DC_RECOVERY_PENDING;
         case T::DC_FAILURE_INV_1:
-            return next.Mode == T::DC_FAILURE_INV_2_PENDING || next.Mode == T::SOLO_DC_INV_1_PENDING
+            return next.Mode == T::DC_FAILURE_INV_2 || next.Mode == T::SOLO_DC_INV_1_PENDING
                 || next.Mode == T::DC_RECOVERY_PENDING;
-        case T::DC_FAILURE_INV_2_PENDING:
-            return next.Mode == T::DC_FAILURE_INV_2 || next.Mode == T::DC_FAILURE_INV_1
-                || next.Mode == T::SOLO_DC_INV_1_PENDING;
         case T::DC_FAILURE_INV_2:
             return next.Mode == T::SOLO_DC_INV_2_PENDING || next.Mode == T::DC_RECOVERY_PENDING;
         case T::DC_RECOVERY_PENDING:
@@ -1001,17 +995,17 @@ bool TBlobStorageGroupInfo::TMirror3dcState::CanTransitionTo(const TMirror3dcSta
         case T::NORMAL_PENDING:
             return next.Mode == T::DC_FAILURE_PENDING;
         case T::SOLO_DC_INV_1_PENDING:
-            return next.Mode == T::SOLO_DC_INV_1;
+            return next.Mode == T::SOLO_DC_INV_1 || next.Mode == T::SOLO_DC_RECOVERY_PENDING;
         case T::SOLO_DC_INV_2_PENDING:
             return next.Mode == T::SOLO_DC_INV_2 || next.Mode == T::SOLO_DC_RECOVERY_PENDING;
         case T::SOLO_DC_INV_1:
-            return next.Mode == T::SOLO_DC_INV_2_PENDING || next.Mode == T::SOLO_DC_RECOVERY_PENDING;
+            return next.Mode == T::SOLO_DC_INV_2 || next.Mode == T::SOLO_DC_RECOVERY_PENDING;
         case T::SOLO_DC_INV_2:
             return next.Mode == T::SOLO_DC_RECOVERY_PENDING;
         case T::SOLO_DC_RECOVERY_PENDING:
             return next.Mode == T::SOLO_DC_RECOVERY;
         case T::SOLO_DC_RECOVERY:
-            return next.Mode == T::DC_FAILURE_INV_1_PENDING;
+            return next.Mode == T::DC_FAILURE_INV_1;
         default:
             return false;
     }
@@ -1033,10 +1027,8 @@ TVector<TBlobStorageGroupInfo::TFailRealmState> TBlobStorageGroupInfo::TMirror3d
             // Writes are allowed; read completeness must not depend on this realm.
             return {{*FailedFailRealmIdx, S::Joining}};
         case T::DC_FAILURE:
-        case T::DC_FAILURE_INV_1_PENDING:
         case T::DC_FAILURE_INV_1:
         case T::DC_FAILURE_INV_2:
-        case T::DC_FAILURE_INV_2_PENDING:
             return {{*FailedFailRealmIdx, S::Excluded}};
         case T::SOLO_DC_INV_1:
         case T::SOLO_DC_INV_2:
@@ -1047,9 +1039,11 @@ TVector<TBlobStorageGroupInfo::TFailRealmState> TBlobStorageGroupInfo::TMirror3d
             TVector<TFailRealmState> result;
             for (ui32 realm = 0; realm < 3; ++realm) {
                 if (realm != *SurvivingFailRealmIdx) {
-                    const bool recovering = Mode == T::SOLO_DC_RECOVERY_PENDING || Mode == T::SOLO_DC_RECOVERY
-                        || Mode == T::SOLO_DC_INV_1_PENDING;
-                    result.push_back({realm, recovering && realm != *FailedFailRealmIdx ? S::Joining : S::Excluded});
+                    const auto state = realm == *FailedFailRealmIdx ? S::Excluded
+                        : Mode == T::SOLO_DC_RECOVERY_PENDING || Mode == T::SOLO_DC_RECOVERY ? S::Joining
+                        : Mode == T::SOLO_DC_INV_1_PENDING || Mode == T::SOLO_DC_INV_2_PENDING ? S::Leaving
+                        : S::Excluded;
+                    result.push_back({realm, state});
                 }
             }
             return result;
@@ -1074,16 +1068,14 @@ TBlobStorageGroupInfo::TWritePolicy TBlobStorageGroupInfo::TMirror3dcState::GetW
         case T::DC_FAILURE_PENDING_INV_2:
             return {{{2, 2}}, {{2, 2}}};
         case T::DC_FAILURE:
-        case T::DC_FAILURE_INV_1_PENDING:
         case T::DC_FAILURE_INV_1:
         case T::DC_FAILURE_INV_2:
-        case T::DC_FAILURE_INV_2_PENDING:
-        case T::SOLO_DC_INV_1_PENDING:
         case T::SOLO_DC_RECOVERY_PENDING:
         case T::SOLO_DC_RECOVERY:
             // Preserve invariant II for new writes in both participating realms.
             return {{{2, 2}}, {{2, 2}}};
         case T::SOLO_DC_INV_1:
+        case T::SOLO_DC_INV_1_PENDING:
         case T::SOLO_DC_INV_2_PENDING:
         case T::SOLO_DC_INV_2:
             return {{{2}}, {{2}}};

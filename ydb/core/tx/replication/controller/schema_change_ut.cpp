@@ -4,6 +4,11 @@
 #include "dst_schema_changer.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -504,7 +509,9 @@ TReplicationTestInfo StartReplication(
         .DiscoveryEndpoint(env.GetEndpoint())
         .Database(env.GetDatabase()));
     auto session = env.RunCall([&] {
-        return client.CreateSession().GetValueSync().GetSession();
+        auto result = client.CreateSession().GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        return result.GetSession();
     });
     for (int i = 1; i <= targetCount; ++i) {
         if (withIndex) {
@@ -1366,6 +1373,752 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
 
 Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
     using namespace NTestHelpers;
+
+    enum class EAcknowledgedRecoveryConsistency { Row, Global };
+
+    void AcknowledgedRetentionRecovery(EAcknowledgedRecoveryConsistency consistency) {
+        const bool global = consistency == EAcknowledgedRecoveryConsistency::Global;
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        Y_DEFER {
+            try {
+                env.ShutdownGrpc();
+            } catch (...) {
+                Cerr << "Acknowledged-retention fixture cleanup: " << CurrentExceptionMessage() << Endl;
+            }
+        };
+        auto& runtime = env.GetRuntime();
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(true);
+            runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(false);
+            runtime.GetAppData(node).ReplicationConfig.SetSourceTopicRetentionPolicy(
+                NKikimrReplication::TReplicationDefaults::SOURCE_TOPIC_RETENTION_ACKNOWLEDGED);
+            runtime.GetAppData(node).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+        }
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto txProxy = runtime.GetLocalServiceId(MakeTxProxyID());
+        const auto gate = runtime.Register(new TCommitWritesRequestGate(txProxy, edge, "/Root/replica1"));
+        runtime.RegisterService(MakeTxProxyID(), gate);
+        const auto ready = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(ready);
+        UNIT_ASSERT_VALUES_EQUAL(ready->Get()->Tag, TCommitWritesRequestGate::ReadyTag());
+        Y_DEFER { runtime.RegisterService(MakeTxProxyID(), txProxy); };
+
+        TString topicPath;
+        TString consumerName;
+        ui32 partitionId = 0;
+        ui64 runCount = 0;
+        ui64 controllerGeneration = 0;
+        ui64 appliedReplies = 0;
+        ui64 recoveredHeartbeats = 0;
+        TActorId recoveredService;
+        ui64 scanRequests = 0;
+        ui64 reclaimedStart = 0;
+        bool afterRestart = false;
+        bool holdSourceCommits = true;
+        bool holdHeartbeat = false;
+        TVector<THolder<IEventHandle>> commits;
+        THolder<IEventHandle> lostHeartbeat;
+        TSet<ui64> appliedOffsets;
+        THashSet<ui64> writeTxIds;
+        auto observeRun = runtime.AddObserver<TEvService::TEvRunWorker>([&](auto& ev) {
+            const auto& reader = ev->Get()->Record.GetCommand().GetRemoteTopicReader();
+            topicPath = reader.GetTopicPath();
+            consumerName = reader.GetConsumerName();
+            partitionId = reader.GetTopicPartitionId();
+            ++runCount;
+        });
+        auto observeHandshake = runtime.AddObserver<TEvService::TEvHandshake>([&](auto& ev) {
+            controllerGeneration = Max(controllerGeneration, ev->Get()->Record.GetController().GetGeneration());
+        });
+        auto observeScan = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanRequest>([&](auto&) { ++scanRequests; });
+        auto observeApply = runtime.AddObserver<TEvDataShard::TEvApplyReplicationChanges>([&](auto& ev) {
+            for (const auto& change : ev->Get()->Record.GetChanges()) {
+                UNIT_ASSERT_C(!afterRestart || change.GetSourceOffset() >= static_cast<i64>(reclaimedStart),
+                    "Recovery replayed a physically deleted source offset " << change.GetSourceOffset());
+                appliedOffsets.insert(change.GetSourceOffset());
+                writeTxIds.insert(change.GetWriteTxId());
+            }
+        });
+        auto observeApplied = runtime.AddObserver<TEvDataShard::TEvApplyReplicationChangesResult>([&](auto& ev) {
+            if (ev->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK) {
+                ++appliedReplies;
+            }
+        });
+        auto observeCommit = runtime.AddObserver<TEvPQ::TEvSetClientInfo>([&](auto& ev) {
+            const auto* message = ev->Get();
+            if (holdSourceCommits && message->ClientId == consumerName && message->Offset > 0
+                && message->Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET) {
+                commits.emplace_back(ev.Release());
+            }
+        });
+        auto observeHeartbeat = runtime.AddObserver<TEvService::TEvHeartbeat>([&](auto& ev) {
+            if (afterRestart && ev->Sender == recoveredService && ev->Get()->Record.HasWorker()) {
+                ++recoveredHeartbeats;
+            }
+            if (holdHeartbeat && !lostHeartbeat) {
+                lostHeartbeat.Reset(ev.Release());
+            }
+        });
+        const auto info = StartReplication(env, 1, "root@builtin", global, false,
+            NKikimrSchemeOp::EIndexTypeGlobal, false);
+        runtime.WaitFor("real replication worker", [&] { return runCount > 0; }, TDuration::Seconds(60));
+        bool scanReady = false;
+        const auto scanDeadline = runtime.GetCurrentTime() + TDuration::Seconds(60);
+        while (runtime.GetCurrentTime() < scanDeadline) {
+            const auto table = env.GetDescription("/Root/table1").GetPathDescription().GetTable();
+            scanReady = table.CdcStreamsSize() == 1
+                && table.GetCdcStreams(0).GetState() == NKikimrSchemeOp::ECdcStreamStateReady;
+            if (scanReady) {
+                break;
+            }
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(scanReady, "Source initial scan did not finish before recovery experiment");
+        const auto source = env.GetDescription(topicPath + "/streamImpl").GetPathDescription().GetPersQueueGroup();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(source.GetPQTabletConfig().GetPartitionConfig().GetRetentionPolicy()), static_cast<i32>(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED));
+        UNIT_ASSERT_VALUES_EQUAL(source.PartitionsSize(), 1);
+        const ui64 pqTablet = source.GetPartitions(0).GetTabletId();
+        UNIT_ASSERT(pqTablet);
+        UNIT_ASSERT_VALUES_EQUAL(source.GetPartitions(0).GetPartitionId(), partitionId);
+        const auto destination = env.GetDescription("/Root/replica1").GetPathDescription();
+        UNIT_ASSERT_VALUES_EQUAL(destination.TablePartitionsSize(), 1);
+        const ui64 destinationShard = destination.GetTablePartitions(0).GetDatashardId();
+
+        const auto dataKeys = [&] {
+            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+            auto* range = request->Record.AddCmdReadRange()->MutableRange();
+            range->SetFrom(TString(1, '\0'));
+            range->SetTo(TString(1, '\xff'));
+            runtime.SendToPipe(pqTablet, edge, request.Release());
+            const auto response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>(edge, TDuration::Seconds(30));
+            UNIT_ASSERT_C(response, "Source key query timed out");
+            THashSet<TString> keys;
+            for (const auto& result : response->Get()->Record.GetReadRangeResult()) {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), static_cast<ui32>(NKikimrProto::OK));
+                for (const auto& pair : result.GetPair()) {
+                    const auto& key = pair.GetKey();
+                    if (!key.empty() && key.front() == NPQ::TKeyPrefix::TypeData) {
+                        keys.insert(key);
+                    }
+                }
+            }
+            return keys;
+        };
+        const auto committedOffset = [&] {
+            auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+            auto* partition = request->Record.MutablePartitionRequest();
+            partition->SetPartition(partitionId);
+            partition->MutableCmdGetClientOffset()->SetClientId(consumerName);
+            runtime.SendToPipe(pqTablet, edge, request.Release());
+            const auto response = runtime.GrabEdgeEvent<TEvPersQueue::TEvResponse>(edge, TDuration::Seconds(30));
+            UNIT_ASSERT_C(response, "Source durable offset query timed out");
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(response->Get()->Record.GetErrorCode()), static_cast<i32>(NPersQueue::NErrorCode::OK));
+            return response->Get()->Record.GetPartitionResponse().GetCmdGetClientOffsetResult().GetOffset();
+        };
+        const auto sourceStart = [&] {
+            runtime.SendToPipe(pqTablet, edge, new TEvPersQueue::TEvOffsets());
+            const auto response = runtime.GrabEdgeEvent<TEvPersQueue::TEvOffsetsResponse>(edge, TDuration::Seconds(30));
+            UNIT_ASSERT_C(response, "Source start offset query timed out");
+            for (const auto& partition : response->Get()->Record.GetPartResult()) {
+                if (partition.GetPartition() == static_cast<i64>(partitionId)) {
+                    return ui64(partition.GetStartOffset());
+                }
+            }
+            UNIT_FAIL("Missing source partition in offsets response");
+            return ui64(0);
+        };
+        const auto assertDeletedOffsetsUnavailable = [&] {
+            auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+            auto* partition = request->Record.MutablePartitionRequest();
+            partition->SetPartition(partitionId);
+            auto* read = partition->MutableCmdRead();
+            read->SetClientId(consumerName);
+            read->SetOffset(0);
+            read->SetCount(1);
+            read->SetBytes(1024 * 1024);
+            read->SetTimeoutMs(0);
+            runtime.SendToPipe(pqTablet, edge, request.Release());
+            const auto response = runtime.GrabEdgeEvent<TEvPersQueue::TEvResponse>(edge, TDuration::Seconds(30));
+            UNIT_ASSERT_C(response, "Source replay query timed out");
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(response->Get()->Record.GetErrorCode()), static_cast<i32>(NPersQueue::NErrorCode::OK));
+            const auto& readResult = response->Get()->Record.GetPartitionResponse().GetCmdReadResult();
+            UNIT_ASSERT(readResult.ResultSize() > 0);
+            UNIT_ASSERT(readResult.GetResult(0).GetOffset() >= reclaimedStart);
+        };
+
+        NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
+            .DiscoveryEndpoint(env.GetEndpoint()).Database(env.GetDatabase()));
+        auto session = env.RunCall([&] {
+            auto result = client.CreateSession().GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result.GetSession();
+        });
+        const auto execute = [&](const TString& query) {
+            return env.RunCall([&] {
+                auto result = session.ExecuteDataQuery(query,
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                return result;
+            });
+        };
+        TMap<ui32, TString> expected;
+        // Prepare and initiate bounded requests before advancing virtual time.
+        // Serializing one 48 MiB request on a background thread can exhaust the
+        // simulated deadline before the SDK has submitted its real RPC.
+        for (ui32 first = 0; first < 96; first += 8) {
+            NYdb::TValueBuilder values;
+            values.BeginList();
+            for (ui32 key = first; key < first + 8; ++key) {
+                TString value(512 * 1024, 'a' + key % 26);
+                expected.emplace(key, value);
+                values.AddListItem().BeginStruct()
+                    .AddMember("key").Uint32(key)
+                    .AddMember("value").Utf8(value)
+                    .EndStruct();
+            }
+            values.EndList();
+            auto insert = client.BulkUpsert("/Root/table1", values.Build());
+            const auto inserted = runtime.WaitFuture(std::move(insert), TDuration::Seconds(60));
+            UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+        }
+        execute("UPSERT INTO `/Root/table1` (key,value) VALUES (0u,'updated'),(1000u,'sentinel'); DELETE FROM `/Root/table1` WHERE key=1u;");
+        expected[0] = "updated";
+        expected.erase(1);
+        expected[1000] = "sentinel";
+        runtime.WaitFor("durable destination apply and held source commit", [&] {
+            return appliedReplies > 0 && !commits.empty();
+        }, TDuration::Seconds(60));
+        THashSet<TString> before;
+        const auto blobsDeadline = runtime.GetCurrentTime() + TDuration::Seconds(60);
+        while (runtime.GetCurrentTime() < blobsDeadline) {
+            before = dataKeys();
+            if (before.size() >= 3) {
+                break;
+            }
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(before.size() >= 3, "Need at least three complete physical source blobs");
+        holdSourceCommits = false;
+        for (auto& commit : commits) {
+            runtime.Send(commit.Release());
+        }
+        commits.clear();
+        if (global) {
+            const auto blocked = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(edge, TDuration::Seconds(60));
+            UNIT_ASSERT_C(blocked, "GLOBAL CommitWrites was not intercepted");
+            UNIT_ASSERT_VALUES_EQUAL(blocked->Get()->Tag, TCommitWritesRequestGate::RequestBlockedTag());
+            UNIT_ASSERT(blocked->Cookie != 0);
+            UNIT_ASSERT(writeTxIds.contains(blocked->Cookie));
+        }
+        const auto assertInvisible = [&] {
+            if (!global) {
+                return;
+            }
+            const auto result = execute("SELECT key FROM `/Root/replica1`;");
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 0);
+        };
+        assertInvisible();
+        const auto cleanupDeadline = runtime.GetCurrentTime() + TDuration::Seconds(60);
+        while (runtime.GetCurrentTime() < cleanupDeadline && !(reclaimedStart = sourceStart())) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(reclaimedStart > 0, "No acknowledged source row was reclaimed");
+        const ui64 durableCommit = committedOffset();
+        UNIT_ASSERT(reclaimedStart <= durableCommit);
+        UNIT_ASSERT_C(!appliedOffsets.empty() && *appliedOffsets.begin() < reclaimedStart,
+            "Only a heartbeat was reclaimed, not an applied row");
+        const auto after = dataKeys();
+        THashSet<TString> deleted;
+        for (const auto& key : before) {
+            if (!after.contains(key)) {
+                deleted.insert(key);
+            }
+        }
+        UNIT_ASSERT_C(!deleted.empty(), "No physical source key disappeared");
+        assertDeletedOffsetsUnavailable();
+        assertInvisible();
+        if (global) {
+            holdHeartbeat = true;
+            runtime.WaitFor("real heartbeat in flight at recovery cut", [&] { return bool(lostHeartbeat); }, TDuration::Seconds(60));
+            Cerr << "Dropped heartbeat: " << lostHeartbeat->Get<TEvService::TEvHeartbeat>()->Record.ShortDebugString() << Endl;
+            lostHeartbeat.Reset();
+            holdHeartbeat = false;
+        }
+        const auto oldGeneration = controllerGeneration;
+        const auto oldRuns = runCount;
+        const auto completedScanRequests = scanRequests;
+        afterRestart = true;
+        const auto serviceId = MakeReplicationServiceId(runtime.GetNodeId(0));
+        const auto oldService = runtime.GetLocalServiceId(serviceId);
+        runtime.Send(new IEventHandle(oldService, edge, new TEvents::TEvPoison()));
+        runtime.WaitFor("old real replication service termination", [&] { return runtime.FindActor(oldService) == nullptr; }, TDuration::Seconds(30));
+        recoveredService = runtime.Register(CreateReplicationService());
+        runtime.RegisterService(serviceId, recoveredService);
+        env.SendAsync(destinationShard, new TEvents::TEvPoisonPill());
+        env.SendAsync(info.ControllerId, new TEvents::TEvPoisonPill());
+        env.SendAsync(pqTablet, new TEvents::TEvPoisonPill());
+        runtime.WaitFor("real controller and worker recovery", [&] {
+            return controllerGeneration > oldGeneration && runCount > oldRuns;
+        }, TDuration::Seconds(60));
+        UNIT_ASSERT(committedOffset() >= durableCommit);
+        UNIT_ASSERT(sourceStart() >= reclaimedStart);
+        const auto recoveredKeys = dataKeys();
+        for (const auto& key : deleted) {
+            UNIT_ASSERT(!recoveredKeys.contains(key));
+        }
+        assertDeletedOffsetsUnavailable();
+        assertInvisible();
+        runtime.RegisterService(MakeTxProxyID(), txProxy);
+        if (global) {
+            runtime.Send(new IEventHandle(gate, edge, new TEvents::TEvWakeup(TCommitWritesRequestGate::ReleaseRequestsTag())));
+        }
+        const auto exactRows = [&] {
+            return env.RunCall([&] {
+                auto stream = session.ReadTable("/Root/replica1", NYdb::NTable::TReadTableSettings().Ordered()).GetValueSync();
+                UNIT_ASSERT_C(stream.IsSuccess(), stream.GetIssues().ToString());
+                TMap<ui32, TString> actual;
+                for (;;) {
+                    auto part = stream.ReadNext().GetValueSync();
+                    if (!part.IsSuccess()) {
+                        UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                        break;
+                    }
+                    NYdb::TResultSetParser parser(part.ExtractPart());
+                    while (parser.TryNextRow()) {
+                        actual.emplace(parser.ColumnParser("key").GetOptionalUint32().value(),
+                            parser.ColumnParser("value").GetOptionalUtf8().value());
+                    }
+                }
+                return actual == expected;
+            });
+        };
+        const auto visibilityDeadline = runtime.GetCurrentTime() + TDuration::Seconds(60);
+        bool visible = false;
+        while (runtime.GetCurrentTime() < visibilityDeadline && !(visible = exactRows())) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(visible, "Exact rows did not become visible after joint recovery");
+        UNIT_ASSERT_VALUES_EQUAL(scanRequests, completedScanRequests);
+        if (global) {
+            UNIT_ASSERT_C(recoveredHeartbeats > 0, "No real heartbeat progressed after recovery");
+        }
+        env.SendAsync(destinationShard, new TEvents::TEvPoisonPill());
+        env.SendAsync(info.ControllerId, new TEvents::TEvPoisonPill());
+        UNIT_ASSERT_C(exactRows(), "Visible rows were not durable across second restart");
+        const auto finalKeys = dataKeys();
+        for (const auto& key : deleted) {
+            UNIT_ASSERT(!finalKeys.contains(key));
+        }
+        Cerr << "ACK physical-deletion recovery assertions complete global=" << global << Endl;
+        env.ShutdownGrpc();
+    }
+
+    Y_UNIT_TEST(AcknowledgedRetentionGlobalRecovery) {
+        AcknowledgedRetentionRecovery(EAcknowledgedRecoveryConsistency::Global);
+    }
+
+    Y_UNIT_TEST(AcknowledgedRetentionRowRecovery) {
+        AcknowledgedRetentionRecovery(EAcknowledgedRecoveryConsistency::Row);
+    }
+
+    Y_UNIT_TEST(AcknowledgedRetentionSplitOffsetsAreIndependent) {
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        Y_DEFER {
+            try {
+                env.ShutdownGrpc();
+            } catch (...) {
+                Cerr << "Acknowledged-retention fixture cleanup: " << CurrentExceptionMessage() << Endl;
+            }
+        };
+        auto& runtime = env.GetRuntime();
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(true);
+            runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(false);
+            runtime.GetAppData(node).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+        }
+        CreateSourceTable(env, "split_source");
+        NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
+            .DiscoveryEndpoint(env.GetEndpoint()).Database(env.GetDatabase()));
+        auto session = env.RunCall([&] {
+            auto result = client.CreateSession().GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result.GetSession();
+        });
+        const auto created = env.RunCall([&] {
+            return session.AlterTable("/Root/split_source", NYdb::NTable::TAlterTableSettings()
+                .AppendAddChangefeeds(NYdb::NTable::TChangefeedDescription("feed",
+                    NYdb::NTable::EChangefeedMode::Updates, NYdb::NTable::EChangefeedFormat::Json)
+                    .AddAttribute("__async_replication", R"({"id":"1","path":"/Root/replica","supports_topic_autopartitioning":true,"retention_policy":"acknowledged","retention_consumer":"replication"})")))
+                .GetValueSync();
+        });
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        const auto describe = [&] {
+            return env.GetDescription("/Root/split_source/feed/streamImpl").GetPathDescription().GetPersQueueGroup();
+        };
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto schemeShard = env.GetSchemeshardId("/Root/split_source");
+        ui64 txId = 700000;
+        const auto alter = [&](const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
+            auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(++txId, schemeShard);
+            auto* transaction = request->Record.AddTransaction();
+            transaction->SetInternal(true);
+            transaction->SetWorkingDir("/Root/split_source/feed");
+            transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup);
+            transaction->MutableAlterPersQueueGroup()->CopyFrom(config);
+            runtime.SendToPipe(schemeShard, edge, request.Release());
+            const auto result = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(edge, TDuration::Seconds(30));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted,
+                result->Get()->Record.GetReason());
+            runtime.SendToPipe(schemeShard, edge, new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(txId));
+            UNIT_ASSERT(runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(edge, TDuration::Seconds(30)));
+        };
+        const auto write = [&](ui32 first, ui32 count) {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (ui32 key = first; key < first + count; ++key) {
+                rows.AddListItem().BeginStruct().AddMember("key").Uint32(key)
+                    .AddMember("value").Utf8(TString(256 * 1024, 'a' + key % 26)).EndStruct();
+            }
+            rows.EndList();
+            const auto status = env.RunCall([&] { return client.BulkUpsert("/Root/split_source", rows.Build()).GetValueSync(); });
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        };
+        const auto tabletFor = [&](ui32 id) {
+            const auto description = describe();
+            for (const auto& partition : description.GetPartitions()) {
+                if (partition.GetPartitionId() == id) {
+                    return ui64(partition.GetTabletId());
+                }
+            }
+            UNIT_FAIL("Missing split partition " << id);
+            return ui64(0);
+        };
+        const auto offsets = [&](ui32 id) {
+            runtime.SendToPipe(tabletFor(id), edge, new TEvPersQueue::TEvOffsets());
+            const auto result = runtime.GrabEdgeEvent<TEvPersQueue::TEvOffsetsResponse>(edge, TDuration::Seconds(30));
+            UNIT_ASSERT(result);
+            for (const auto& partition : result->Get()->Record.GetPartResult()) {
+                if (partition.GetPartition() == static_cast<i64>(id)) {
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(partition.GetErrorCode()), static_cast<i32>(NPersQueue::NErrorCode::OK));
+                    return std::pair<ui64, ui64>(partition.GetStartOffset(), partition.GetEndOffset());
+                }
+            }
+            UNIT_FAIL("Missing partition offsets " << id);
+            return std::pair<ui64, ui64>();
+        };
+        const auto committed = [&](ui32 id) {
+            auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+            auto* part = request->Record.MutablePartitionRequest();
+            part->SetPartition(id);
+            part->MutableCmdGetClientOffset()->SetClientId("replication");
+            runtime.SendToPipe(tabletFor(id), edge, request.Release());
+            const auto result = runtime.GrabEdgeEvent<TEvPersQueue::TEvResponse>(edge, TDuration::Seconds(30));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(result->Get()->Record.GetErrorCode()), static_cast<i32>(NPersQueue::NErrorCode::OK));
+            return result->Get()->Record.GetPartitionResponse().GetCmdGetClientOffsetResult().GetOffset();
+        };
+        const auto firstPayload = [&](ui32 id) {
+            auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+            auto* part = request->Record.MutablePartitionRequest();
+            part->SetPartition(id);
+            auto* read = part->MutableCmdRead();
+            read->SetClientId("replication");
+            read->SetOffset(0);
+            read->SetCount(1);
+            read->SetBytes(1024 * 1024);
+            read->SetTimeoutMs(0);
+            runtime.SendToPipe(tabletFor(id), edge, request.Release());
+            const auto result = runtime.GrabEdgeEvent<TEvPersQueue::TEvResponse>(edge, TDuration::Seconds(30));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(result->Get()->Record.GetErrorCode()), static_cast<i32>(NPersQueue::NErrorCode::OK));
+            const auto& readResult = result->Get()->Record.GetPartitionResponse().GetCmdReadResult();
+            UNIT_ASSERT_VALUES_EQUAL(readResult.ResultSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(readResult.GetResult(0).GetOffset(), 0);
+            return readResult.GetResult(0).GetData();
+        };
+        write(0, 96);
+        const auto parentDeadline = runtime.GetCurrentTime() + TDuration::Seconds(60);
+        while (runtime.GetCurrentTime() < parentDeadline && offsets(0).second < 96) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(offsets(0).second, 96);
+        NKikimrSchemeOp::TPersQueueGroupDescription split;
+        split.SetName("streamImpl");
+        split.AddSplit()->SetPartition(0);
+        split.MutableSplit(0)->SetSplitBoundary(TString(1, '\x80'));
+        alter(split);
+        auto config = describe();
+        UNIT_ASSERT_VALUES_EQUAL(config.PartitionsSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(config.GetPQTabletConfig().GetPartitionConfig().GetRetentionPolicy()), static_cast<i32>(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED));
+        UNIT_ASSERT_VALUES_EQUAL(config.GetPQTabletConfig().GetPartitionConfig().GetRetentionConsumer(), "replication");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetPQTabletConfig().ConsumersSize(), 1);
+        UNIT_ASSERT(config.GetPQTabletConfig().GetConsumers(0).GetImportant());
+        write(96, 160);
+        const auto childDeadline = runtime.GetCurrentTime() + TDuration::Seconds(60);
+        while (runtime.GetCurrentTime() < childDeadline && offsets(1).second + offsets(2).second < 160) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(offsets(1).second + offsets(2).second, 160);
+        UNIT_ASSERT(offsets(1).second > 32);
+        UNIT_ASSERT(offsets(2).second > 32);
+        const auto childOne = firstPayload(1);
+        const auto childTwo = firstPayload(2);
+        auto commit = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto* part = commit->Record.MutablePartitionRequest();
+        part->SetPartition(0);
+        part->MutableCmdSetClientOffset()->SetClientId("replication");
+        part->MutableCmdSetClientOffset()->SetOffset(96);
+        runtime.SendToPipe(tabletFor(0), edge, commit.Release());
+        const auto committedResult = runtime.GrabEdgeEvent<TEvPersQueue::TEvResponse>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(committedResult);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(committedResult->Get()->Record.GetErrorCode()), static_cast<i32>(NPersQueue::NErrorCode::OK));
+        config.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(1);
+        config.MutablePQTabletConfig()->MutablePartitionConfig()->SetStorageLimitBytes(1);
+        config.MutablePQTabletConfig()->ClearPartitionKeySchema();
+        alter(config);
+        runtime.SimulateSleep(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(committed(0), 96);
+        UNIT_ASSERT_VALUES_EQUAL(committed(1), 0);
+        UNIT_ASSERT_VALUES_EQUAL(committed(2), 0);
+        UNIT_ASSERT_VALUES_EQUAL(offsets(1).first, 0);
+        UNIT_ASSERT_VALUES_EQUAL(offsets(2).first, 0);
+        THashSet<ui64> tablets;
+        const auto splitDescription = describe();
+        for (const auto& partition : splitDescription.GetPartitions()) {
+            tablets.insert(partition.GetTabletId());
+        }
+        for (const auto tablet : tablets) {
+            env.SendAsync(tablet, new TEvents::TEvPoisonPill());
+        }
+        runtime.SimulateSleep(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(committed(0), 96);
+        UNIT_ASSERT_VALUES_EQUAL(committed(1), 0);
+        UNIT_ASSERT_VALUES_EQUAL(committed(2), 0);
+        UNIT_ASSERT_VALUES_EQUAL(firstPayload(1), childOne);
+        UNIT_ASSERT_VALUES_EQUAL(firstPayload(2), childTwo);
+    }
+
+    enum class EAcknowledgedSchemaCut { BeforeReport, AfterApply, AfterCommit };
+
+    void AcknowledgedRetentionSchemaBarrierRecovery(EAcknowledgedSchemaCut cut) {
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        Y_DEFER {
+            try {
+                env.ShutdownGrpc();
+            } catch (...) {
+                Cerr << "Acknowledged-retention fixture cleanup: " << CurrentExceptionMessage() << Endl;
+            }
+        };
+        auto& runtime = env.GetRuntime();
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(true);
+            runtime.GetAppData(node).FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
+            runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(false);
+            runtime.GetAppData(node).ReplicationConfig.SetSourceTopicRetentionPolicy(
+                NKikimrReplication::TReplicationDefaults::SOURCE_TOPIC_RETENTION_ACKNOWLEDGED);
+        }
+        TString topic;
+        TString consumer;
+        ui32 partitionId = 0;
+        ui64 runs = 0;
+        ui64 generation = 0;
+        auto observeRun = runtime.AddObserver<TEvService::TEvRunWorker>([&](auto& ev) {
+            const auto& reader = ev->Get()->Record.GetCommand().GetRemoteTopicReader();
+            topic = reader.GetTopicPath();
+            consumer = reader.GetConsumerName();
+            partitionId = reader.GetTopicPartitionId();
+            ++runs;
+        });
+        auto observeHandshake = runtime.AddObserver<TEvService::TEvHandshake>([&](auto& ev) {
+            generation = Max(generation, ev->Get()->Record.GetController().GetGeneration());
+        });
+        const auto info = StartReplication(env, 1, "root@builtin", false, false,
+            NKikimrSchemeOp::EIndexTypeGlobal, false);
+        runtime.WaitFor("real schema-aware worker", [&] { return runs > 0; }, TDuration::Seconds(60));
+        NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
+            .DiscoveryEndpoint(env.GetEndpoint()).Database(env.GetDatabase()));
+        auto session = env.RunCall([&] {
+            auto result = client.CreateSession().GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result.GetSession();
+        });
+        const auto query = [&](const TString& text) {
+            return env.RunCall([&] {
+                auto result = session.ExecuteDataQuery(text, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                return result;
+            });
+        };
+        query("UPSERT INTO `/Root/table1` (key,value) VALUES (1u,'before');");
+        bool initialApplied = false;
+        const auto initialDeadline = runtime.GetCurrentTime() + TDuration::Seconds(60);
+        while (runtime.GetCurrentTime() < initialDeadline) {
+            initialApplied = query("SELECT key FROM `/Root/replica1` WHERE key=1u;").GetResultSet(0).RowsCount() == 1;
+            if (initialApplied) {
+                break;
+            }
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(initialApplied, "Initial row did not pass the real initial schema barrier");
+        const auto source = env.GetDescription(topic + "/streamImpl").GetPathDescription().GetPersQueueGroup();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(source.GetPQTabletConfig().GetPartitionConfig().GetRetentionPolicy()), static_cast<i32>(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED));
+        const auto pqTablet = source.GetPartitions(0).GetTabletId();
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto committed = [&] {
+            auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+            auto* partition = request->Record.MutablePartitionRequest();
+            partition->SetPartition(partitionId);
+            partition->MutableCmdGetClientOffset()->SetClientId(consumer);
+            runtime.SendToPipe(pqTablet, edge, request.Release());
+            const auto response = runtime.GrabEdgeEvent<TEvPersQueue::TEvResponse>(edge, TDuration::Seconds(30));
+            UNIT_ASSERT(response);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(response->Get()->Record.GetErrorCode()), static_cast<i32>(NPersQueue::NErrorCode::OK));
+            return response->Get()->Record.GetPartitionResponse().GetCmdGetClientOffsetResult().GetOffset();
+        };
+        const auto destination = env.GetDescription("/Root/replica1").GetPathDescription();
+        const auto destinationShard = destination.GetTablePartitions(0).GetDatashardId();
+        auto observeDestinationAlter = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "replica1") {
+                    Cerr << "ACK destination alter body: " << tx.GetAlterTable().ShortDebugString() << Endl;
+                }
+            }
+        });
+        const auto assertDestinationReplication = [&](TStringBuf phase) {
+            const auto schema = env.GetDescription("/Root/replica1").GetPathDescription().GetTable();
+            Cerr << "ACK schema recovery " << phase << " SchemeShard replication: "
+                << schema.GetReplicationConfig().ShortDebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(schema.GetReplicationConfig().GetMode()),
+                static_cast<i32>(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY));
+            runtime.SendToPipe(destinationShard, edge, new TEvDataShard::TEvGetInfoRequest());
+            const auto response = runtime.GrabEdgeEvent<TEvDataShard::TEvGetInfoResponse>(edge, TDuration::Seconds(30));
+            UNIT_ASSERT_C(response, "Destination durable schema query timed out at " << phase);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.UserTablesSize(), 1);
+            const auto& table = response->Get()->Record.GetUserTables(0);
+            const auto& stored = table.GetDescription();
+            Cerr << "ACK destination info tablet=" << destinationShard << " path=" << table.GetPath()
+                << " pathId=" << table.GetPathId() << " version=" << table.GetSchemaVersion() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(table.GetPath(), "/Root/replica1");
+            UNIT_ASSERT_VALUES_EQUAL(table.GetPathId(), destination.GetSelf().GetPathId());
+            Cerr << "ACK schema recovery " << phase << " DataShard persisted replication: "
+                << stored.GetReplicationConfig().ShortDebugString() << Endl;
+            if (stored.GetReplicationConfig().GetMode() != NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY) {
+                Cerr << "ACK destination stored schema: " << stored.ShortDebugString() << Endl;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(static_cast<i32>(stored.GetReplicationConfig().GetMode()),
+                static_cast<i32>(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY), phase);
+        };
+        assertDestinationReplication("before source alter");
+        bool capture = true;
+        ui64 barrierOffset = 0;
+        TVector<THolder<IEventHandle>> reports;
+        auto observeReport = runtime.AddObserver<TEvService::TEvSchemaChangeReport>([&](auto& ev) {
+            const auto& report = ev->Get()->Record;
+            bool hasExtra = false;
+            for (const auto& column : report.GetSchema().GetColumns()) {
+                hasExtra |= column.GetName() == "extra";
+            }
+            if (!capture || !hasExtra) {
+                return;
+            }
+            barrierOffset = report.GetOffset();
+            const bool hold = cut == EAcknowledgedSchemaCut::BeforeReport
+                || (cut == EAcknowledgedSchemaCut::AfterApply && report.GetApplied())
+                || (cut == EAcknowledgedSchemaCut::AfterCommit && report.GetCompleted());
+            if (hold) {
+                reports.emplace_back(ev.Release());
+            }
+        });
+        const auto altered = env.RunCall([&] {
+            return session.ExecuteSchemeQuery("ALTER TABLE `/Root/table1` ADD COLUMN extra Uint64;").GetValueSync();
+        });
+        UNIT_ASSERT_C(altered.IsSuccess(), altered.GetIssues().ToString());
+        query("UPSERT INTO `/Root/table1` (key,value,extra) VALUES (1u,'updated',101ul),(2u,'trailing',202ul);");
+        runtime.WaitFor("real schema report at selected recovery cut", [&] { return !reports.empty(); }, TDuration::Seconds(60));
+        const auto durable = committed();
+        UNIT_ASSERT_VALUES_EQUAL(durable, barrierOffset + (cut == EAcknowledgedSchemaCut::AfterCommit ? 1 : 0));
+        if (cut != EAcknowledgedSchemaCut::AfterCommit) {
+            auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+            auto* partition = request->Record.MutablePartitionRequest();
+            partition->SetPartition(partitionId);
+            auto* read = partition->MutableCmdRead();
+            read->SetClientId(consumer);
+            read->SetOffset(barrierOffset);
+            read->SetCount(1);
+            read->SetBytes(1024 * 1024);
+            read->SetTimeoutMs(0);
+            runtime.SendToPipe(pqTablet, edge, request.Release());
+            const auto response = runtime.GrabEdgeEvent<TEvPersQueue::TEvResponse>(edge, TDuration::Seconds(30));
+            UNIT_ASSERT(response);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(response->Get()->Record.GetErrorCode()), static_cast<i32>(NPersQueue::NErrorCode::OK));
+            const auto& result = response->Get()->Record.GetPartitionResponse().GetCmdReadResult();
+            UNIT_ASSERT_VALUES_EQUAL(result.ResultSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult(0).GetOffset(), barrierOffset);
+        }
+        assertDestinationReplication("at barrier cut");
+        const auto oldRuns = runs;
+        const auto oldGeneration = generation;
+        const auto serviceId = MakeReplicationServiceId(runtime.GetNodeId(0));
+        const auto oldService = runtime.GetLocalServiceId(serviceId);
+        runtime.Send(new IEventHandle(oldService, edge, new TEvents::TEvPoison()));
+        runtime.WaitFor("old schema worker termination", [&] { return runtime.FindActor(oldService) == nullptr; }, TDuration::Seconds(30));
+        reports.clear();
+        capture = false;
+        runtime.RegisterService(serviceId, runtime.Register(CreateReplicationService()));
+        env.SendAsync(destination.GetTablePartitions(0).GetDatashardId(), new TEvents::TEvPoisonPill());
+        env.SendAsync(pqTablet, new TEvents::TEvPoisonPill());
+        env.SendAsync(info.ControllerId, new TEvents::TEvPoisonPill());
+        runtime.WaitFor("real schema worker recovery", [&] { return runs > oldRuns && generation > oldGeneration; }, TDuration::Seconds(60));
+        UNIT_ASSERT(committed() >= durable);
+        assertDestinationReplication("after joint restart");
+        bool recovered = false;
+        const auto deadline = runtime.GetCurrentTime() + TDuration::Seconds(60);
+        while (runtime.GetCurrentTime() < deadline) {
+            const auto result = env.RunCall([&] {
+                auto result = session.ExecuteDataQuery("SELECT * FROM `/Root/replica1` ORDER BY key;",
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                return result;
+            });
+            const auto& rows = result.GetResultSet(0);
+            const bool hasExtra = AnyOf(rows.GetColumnsMeta(), [](const auto& column) { return column.Name == "extra"; });
+            Cerr << "ACK schema recovery rows=" << rows.RowsCount() << " extra=" << hasExtra << Endl;
+            if (hasExtra && rows.RowsCount() == 2) {
+                NYdb::TResultSetParser parser(result.GetResultSet(0));
+                UNIT_ASSERT(parser.TryNextRow());
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetOptionalUint32().value(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetOptionalUtf8().value(), "updated");
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("extra").GetOptionalUint64().value(), 101);
+                UNIT_ASSERT(parser.TryNextRow());
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetOptionalUint32().value(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetOptionalUtf8().value(), "trailing");
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("extra").GetOptionalUint64().value(), 202);
+                recovered = true;
+                break;
+            }
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(recovered, "Schema barrier or trailing rows were lost across real recovery");
+        UNIT_ASSERT(committed() > barrierOffset);
+        Cerr << "ACK schema recovery assertions complete cut=" << static_cast<ui32>(cut) << Endl;
+        env.ShutdownGrpc();
+    }
+
+    Y_UNIT_TEST(AcknowledgedRetentionSchemaBarrierRecoveryBeforeReport) {
+        AcknowledgedRetentionSchemaBarrierRecovery(EAcknowledgedSchemaCut::BeforeReport);
+    }
+
+    Y_UNIT_TEST(AcknowledgedRetentionSchemaBarrierRecoveryAfterApply) {
+        AcknowledgedRetentionSchemaBarrierRecovery(EAcknowledgedSchemaCut::AfterApply);
+    }
+
+    Y_UNIT_TEST(AcknowledgedRetentionSchemaBarrierRecoveryAfterCommit) {
+        AcknowledgedRetentionSchemaBarrierRecovery(EAcknowledgedSchemaCut::AfterCommit);
+    }
 
     Y_UNIT_TEST(AddSyncIndexCreatesWriteOnlyReplicaAndReconcilesAfterCompletion) {
         const auto schema = MakeSyncIndexSchemaChange();

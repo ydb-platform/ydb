@@ -1403,6 +1403,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         });
 
         if (SentinelState->ChangeRequests.empty()) {
+            SentinelState->StatusChangeAttempt = 0;
             return;
         }
 

@@ -249,7 +249,8 @@ namespace NKikimr::NStorage {
                         Self->ConfigRecoveryRequired = false;
                         Finish(TResult::OK, std::nullopt);
                     } else if (r.ConfigToPropose) {
-                        StartProposition(&r.ConfigToPropose.value(), /*mindPrev=*/ true,
+                        RecoveryProposition = r.RequiresRecoveryProposition;
+                        StartProposition(&r.ConfigToPropose.value(), !r.RequiresRecoveryProposition,
                             r.PropositionBase ? &r.PropositionBase.value() : nullptr, r.AutomaticBootstrap);
                     } else {
                         Finish(TResult::OK, std::nullopt);
@@ -368,12 +369,21 @@ namespace NKikimr::NStorage {
             if (result.ErrorReason || result.IsDistconfDisabledQuorum || !result.RecoveredConfig) {
                 throw TExNoQuorum() << result.ErrorReason.value_or("No recoverable configuration");
             }
+            if (result.RequiresRecoveryProposition) {
+                return StartRecoveryProposition(result);
+            }
             if (!result.RequiresGenerationAdvance) {
                 Self->ConfigRecoveryRequired = false;
                 InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);
             }
             callback(std::move(result));
         });
+    }
+
+    void TInvokeRequestHandlerActor::StartRecoveryProposition(TProcessCollectConfigsResult& result) {
+        Y_ABORT_UNLESS(result.RequiresRecoveryProposition && result.ConfigToPropose && result.PropositionBase);
+        RecoveryProposition = true;
+        StartPropositionImpl(&*result.ConfigToPropose, false, &*result.PropositionBase, false);
     }
 
     void TInvokeRequestHandlerActor::CollectBridgeConfig(const NKikimrBlobStorage::TStorageConfig& config,
@@ -438,6 +448,21 @@ namespace NKikimr::NStorage {
             if (!HasConfigQuorum(quorumConfig, successfulDisks, TBridgePileId(), *Self->Cfg, false, &err)) {
                 throw TExNoQuorum() << "No quorum for bridge configuration collection:" << err.Str();
             }
+            auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true, false,
+                                                     &quorumConfig);
+            if (result.ErrorReason || !result.RecoveredConfig) {
+                throw TExNoQuorum() << result.ErrorReason.value_or("No recoverable bridge configuration");
+            }
+            if (result.RequiresRecoveryProposition) {
+                return StartRecoveryProposition(result);
+            }
+            if (TStorageConfigMeta(*result.RecoveredConfig) != TStorageConfigMeta(*Self->StorageConfig)) {
+                if (result.RecoveredConfig->GetGeneration() <= Self->StorageConfig->GetGeneration()) {
+                    throw TExNoQuorum() << "The current bridge configuration has not been recovered";
+                }
+                InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);
+                throw TExRace() << "Configuration was recovered; retry the configuration update";
+            }
             callback();
         });
     }
@@ -477,7 +502,7 @@ namespace NKikimr::NStorage {
             throw TExNoQuorum() << "No quorum to start propose/commit configuration";
         }
 
-        if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query)) {
+        if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query); op && !RecoveryProposition) {
             if (const auto& record = op->Command; record.HasReplaceStorageConfig()) {
                 AUDIT_LOG(
                     const auto& replaceConfig = record.GetReplaceStorageConfig();
@@ -527,7 +552,7 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
-                                      SelfId(), mindPrev, AdvancesConflictingGeneration);
+                                      SelfId(), mindPrev, AdvancesConflictingGeneration, RecoveryProposition);
         if (error) {
             YDB_LOG_DEBUG("Config update validation failed",
                 {"marker", "NWDC78"},
@@ -549,6 +574,8 @@ namespace NKikimr::NStorage {
 
         if (msg.ErrorReason) {
             throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
+        } else if (RecoveryProposition && !std::holds_alternative<TCollectConfigsAndPropose>(Query)) {
+            Finish(TResult::RACE, "Configuration was recovered; retry the original operation");
         } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
                    op && op->Command.HasReplaceStorageConfig() && ControllerOp == EControllerOp::OTHER
                    && Self->SelfManagementEnabled) {

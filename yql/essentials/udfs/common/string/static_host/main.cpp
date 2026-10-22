@@ -11,9 +11,10 @@
 #include <util/stream/output.h>
 #include <util/system/compiler.h>
 
-// UBSan requires sources; other builds must exercise the cached archive.
-#ifndef _ubsan_enabled_
-extern "C" const NYql::NUdf::TYqlUdfStaticLibrary* GetStaticUdfLibrary_string_udf();
+#include <array>
+
+#ifdef YQL_UDF_STATIC_ENTRY_POINT
+extern "C" const NYql::NUdf::TYqlUdfStaticLibrary* YQL_UDF_STATIC_ENTRY_POINT();
 #endif
 
 namespace {
@@ -27,7 +28,8 @@ NMiniKQL::TFunctionTypeInfo ResolveFunction(const NMiniKQL::IFunctionRegistry& r
     const NYql::TRuntimeSettings runtimeSettings;
     const auto status = registry.FindFunctionTypeInfo(
         NYql::UnknownLangVersion, runtimeSettings, environment, new NMiniKQL::TTypeInfoHelper,
-        nullptr, name, nullptr, {}, 0, NUdf::TSourcePosition{}, nullptr, nullptr, &function);
+        /*countersProvider=*/nullptr, name, /*userType=*/nullptr, {}, 0, NUdf::TSourcePosition{},
+        /*secureParamsProvider=*/nullptr, /*logProvider=*/nullptr, &function);
     Y_ENSURE(status.IsOk(), status.GetError());
     Y_ENSURE(function.Implementation, "Missing implementation of " << name);
     return function;
@@ -43,7 +45,7 @@ void CheckUdfTerminate(const NMiniKQL::IFunctionRegistry& registry) {
     NMiniKQL::TDefaultValueBuilder valueBuilder(holderFactory, NUdf::EValidatePolicy::Exception);
     valueBuilder.SetCalleePositionHolder(calleePosition);
     const auto function = ResolveFunction(registry, environment, "String.LeftPad");
-    const NUdf::TUnboxedValuePod arguments[] = {
+    const std::array arguments = {
         NUdf::TUnboxedValuePod::Embedded(NUdf::TStringRef::Of("a")),
         NUdf::TUnboxedValuePod(ui64{3}),
         NUdf::TUnboxedValuePod::Embedded(NUdf::TStringRef::Of("xx")),
@@ -51,7 +53,7 @@ void CheckUdfTerminate(const NMiniKQL::IFunctionRegistry& registry) {
     NMiniKQL::TThrowingBindTerminator terminator;
     bool caught = false;
     try {
-        NUdf::TBoxedValueAccessor::Run(*function.Implementation, &valueBuilder, arguments);
+        NUdf::TBoxedValueAccessor::Run(*function.Implementation, &valueBuilder, arguments.data());
     } catch (const NMiniKQL::TTerminateException& exception) {
         Y_ENSURE(TStringBuf(exception.what()).Contains("Not 1 symbol in paddingSymbol"), exception.what());
         caught = true;
@@ -63,8 +65,8 @@ void CheckUdfTerminate(const NMiniKQL::IFunctionRegistry& registry) {
 
 int main() {
     try {
-#ifndef _ubsan_enabled_
-        Y_ENSURE(GetStaticUdfLibrary_string_udf(), "Missing cached String UDF descriptor");
+#ifdef YQL_UDF_STATIC_ENTRY_POINT
+        Y_ENSURE(YQL_UDF_STATIC_ENTRY_POINT(), "Missing cached String UDF descriptor");
 #endif
         auto registry = NKikimr::NMiniKQL::CreateFunctionRegistry({})->Clone();
         NKikimr::NMiniKQL::FillStaticModules(*registry);

@@ -190,7 +190,7 @@ void AddToStaticUdfRegistry(const TYqlUdfStaticLibrary* library);
 
 template <typename... TModules>
 static inline void AddToStaticUdfRegistry() {
-    static constexpr TYqlUdfStaticLibrary library{
+    static constexpr TYqlUdfStaticLibrary Library{
         .StructSize = sizeof(TYqlUdfStaticLibrary),
         .AbiVersion = CurrentAbiVersion(),
         .Register = [](IRegistrator& registrator, ui32 flags) {
@@ -198,7 +198,7 @@ static inline void AddToStaticUdfRegistry() {
             RegisterHelper<TModules...>(registrator);
         },
     };
-    AddToStaticUdfRegistry(&library);
+    AddToStaticUdfRegistry(&Library);
 }
 
 } // namespace NYql::NUdf

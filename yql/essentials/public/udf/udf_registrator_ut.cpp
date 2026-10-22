@@ -69,15 +69,15 @@ Y_UNIT_TEST(StaticDescriptorRetainsLazyModuleFactories) {
 }
 
 Y_UNIT_TEST(RejectInvalidStaticDescriptors) {
-    static constexpr TYqlUdfStaticLibrary tooSmall{};
-    static constexpr TYqlUdfStaticLibrary missingRegister{
+    static constexpr TYqlUdfStaticLibrary TooSmall{};
+    static constexpr TYqlUdfStaticLibrary MissingRegister{
         .StructSize = sizeof(TYqlUdfStaticLibrary),
         .AbiVersion = CurrentAbiVersion(),
     };
     const auto size = GetStaticUdfLibraryList().size();
     UNIT_ASSERT_EXCEPTION(AddToStaticUdfRegistry(nullptr), yexception);
-    UNIT_ASSERT_EXCEPTION(AddToStaticUdfRegistry(&tooSmall), yexception);
-    UNIT_ASSERT_EXCEPTION(AddToStaticUdfRegistry(&missingRegister), yexception);
+    UNIT_ASSERT_EXCEPTION(AddToStaticUdfRegistry(&TooSmall), yexception);
+    UNIT_ASSERT_EXCEPTION(AddToStaticUdfRegistry(&MissingRegister), yexception);
     UNIT_ASSERT_VALUES_EQUAL(GetStaticUdfLibraryList().size(), size);
 }
 

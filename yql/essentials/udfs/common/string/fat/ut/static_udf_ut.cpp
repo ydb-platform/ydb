@@ -4,11 +4,11 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-extern "C" const NYql::NUdf::TYqlUdfStaticLibrary* GetStaticUdfLibrary_string_udf();
+extern "C" const NYql::NUdf::TYqlUdfStaticLibrary* YQL_UDF_STATIC_ENTRY_POINT();
 
 Y_UNIT_TEST_SUITE(TInternalizedStringUdf) {
 Y_UNIT_TEST(StableDescriptor) {
-    const auto* library = GetStaticUdfLibrary_string_udf();
+    const auto* library = YQL_UDF_STATIC_ENTRY_POINT();
     UNIT_ASSERT(library);
     UNIT_ASSERT_VALUES_EQUAL(library->StructSize, sizeof(*library));
     UNIT_ASSERT_VALUES_EQUAL(library->AbiVersion, NYql::NUdf::MakeAbiVersion(
@@ -27,7 +27,7 @@ Y_UNIT_TEST(CachedAndSourceModulesRegisterInCurrentHost) {
 }
 
 Y_UNIT_TEST(CachedAndSourceDescriptorsShareRegistry) {
-    const auto* cached = GetStaticUdfLibrary_string_udf();
+    const auto* cached = YQL_UDF_STATIC_ENTRY_POINT();
     bool foundCached = false;
     bool foundSource = false;
     for (const auto* library : NYql::NUdf::GetStaticUdfLibraryList()) {
@@ -42,7 +42,7 @@ Y_UNIT_TEST(SkipAlreadyLoadedModules) {
     auto registry = NKikimr::NMiniKQL::CreateFunctionRegistry({})->Clone();
     NKikimr::NMiniKQL::FillStaticModules(*registry);
     const auto modules = registry->GetAllModuleNames();
-    NKikimr::NMiniKQL::FillStaticModules(*registry, true);
+    NKikimr::NMiniKQL::FillStaticModules(*registry, /*skipLoaded=*/true);
     UNIT_ASSERT(registry->GetAllModuleNames() == modules);
     UNIT_ASSERT(registry->GetModuleFunctions("String").contains("HexEncode"));
     UNIT_ASSERT(registry->GetModuleFunctions("Math").contains("Pi"));

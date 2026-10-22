@@ -35,4 +35,9 @@ message TDataShardConfig {
     optional uint32 KeyAccessSampleCollectionMinIntervalSeconds = 27 [default = 5];
     optional uint32 KeyAccessSampleCollectionMaxIntervalSeconds = 28 [default = 60];
     optional uint32 KeyAccessSampleValidityIntervalSeconds = 29 [default = 30];
+    enum ECdcPayloadCompression {
+        CDC_PAYLOAD_COMPRESSION_DISABLED = 0;
+        CDC_PAYLOAD_COMPRESSION_GZIP = 1;
+    }
+    optional ECdcPayloadCompression CdcPayloadCompression = 34 [default = CDC_PAYLOAD_COMPRESSION_DISABLED];
 }

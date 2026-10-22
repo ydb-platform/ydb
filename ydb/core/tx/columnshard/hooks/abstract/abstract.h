@@ -73,7 +73,8 @@ public:
         TTL,
         Cleanup,
         GC,
-        CleanupSchemas
+        CleanupSchemas,
+        MoveData
     };
     YDB_ACCESSOR(bool, InterruptionOnLockedTransactions, false);
 

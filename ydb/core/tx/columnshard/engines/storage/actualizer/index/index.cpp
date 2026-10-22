@@ -1,16 +1,21 @@
 #include "index.h"
 
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/move/move.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/scheme/scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/tiering/tiering.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr::NOlap::NActualizer {
 
 void TGranuleActualizationIndex::ExtractActualizationTasks(
-    TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext) const {
+    TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext, EActualizationScope scope) const {
     TInternalTasksContext internalContext;
-    for (auto&& i : Actualizers) {
-        i->ExtractTasks(tasksContext, externalContext, internalContext);
+    for (const auto& actualizer : Actualizers) {
+        if ((scope == EActualizationScope::MoveDataOnly) == (actualizer == MoveDataActualizer)) {
+            actualizer->ExtractTasks(tasksContext, externalContext, internalContext);
+        }
     }
 }
 
@@ -55,11 +60,41 @@ void TGranuleActualizationIndex::Start() {
     Actualizers.emplace_back(SchemeActualizer);
 }
 
+void TGranuleActualizationIndex::StartMoveData(
+    THashSet<ui32> targetGroups, const TAddExternalContext& context, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) {
+    AFL_VERIFY(!MoveDataActualizer);
+    MoveDataActualizer = std::make_shared<TMoveDataActualizer>(std::move(targetGroups), VersionedIndex);
+    MoveDataActualizer->Seed(context, uncommitted);
+    Actualizers.emplace_back(MoveDataActualizer);
+}
+
+void TGranuleActualizationIndex::StopMoveData() {
+    Erase(Actualizers, MoveDataActualizer);
+    MoveDataActualizer.reset();
+}
+
+TMoveDataQueueSizes TGranuleActualizationIndex::UpdateMoveDataQueueSizes(
+    const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) {
+    if (!MoveDataActualizer) {
+        return TMoveDataQueueSizes();
+    }
+    MoveDataActualizer->UpdatePortionStates(portions, uncommitted);
+    return MoveDataActualizer->GetMoveDataQueueSizes();
+}
+
 std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions) {
     if (!TieringActualizer) {
         return {};
     }
     return TieringActualizer->BuildMetadataRequests(PathId, portions, TieringActualizer);
+}
+
+std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions,
+    const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted, TMoveDataMetadataBudget& budget) {
+    if (!MoveDataActualizer) {
+        return {};
+    }
+    return MoveDataActualizer->BuildMoveDataMetadataRequests(portions, uncommitted, MoveDataActualizer, budget);
 }
 
 }   // namespace NKikimr::NOlap::NActualizer

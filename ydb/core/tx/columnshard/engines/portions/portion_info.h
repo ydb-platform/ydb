@@ -448,6 +448,8 @@ public:
     ui64 GetColumnRawBytes() const;
     ui64 GetColumnBlobBytes() const;
 
+    bool HasBlobsInBlobStorage(const TIndexInfo& indexInfo) const;
+
     ui64 GetTotalBlobBytes() const noexcept {
         return GetIndexBlobBytes() + GetColumnBlobBytes();
     }

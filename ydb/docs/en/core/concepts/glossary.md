@@ -830,9 +830,9 @@ Distributed storage stores immutable data, with each immutable data block identi
 
 **PDisk** or **physical disk** is a component that controls a physical disk drive (block device). In other words, PDisk is a subsystem that implements an abstraction similar to a specialized file system on top of block devices (or files that emulate a block device for testing purposes).
 
-PDisk ensures data integrity control (including [erasure coding](#erasure-coding) of sector groups to recover data on individual damaged sectors and integrity control using checksums), transparent encryption of all data on the disk, and transactional guarantees for disk operations (write acknowledgment strictly after `fsync`).
+PDisk protects data integrity with checksums and with [erasure coding](#erasure-coding) of sector groups, so data on individual damaged sectors can be recovered. It also provides the durability guarantees for disk operations (write acknowledgment strictly after `fsync`). In addition, PDisk supports transparent encryption of all data on the disk.
 
-PDisk contains a scheduler that ensures shared use of the device's bandwidth among multiple clients ([VDisk](#vdisk)). PDisk divides the block device into blocks called [slots](#slot). At any given time, no more than one VDisk can own each slot. PDisk also maintains a recovery log shared by PDisk service records and all VDisks.
+PDisk contains a scheduler that ensures shared use of the device's bandwidth among multiple clients ([VDisk](#vdisk)). PDisk divides the block device into [slots](#slot). At any given time, no more than one VDisk can own each slot. PDisk maintains a recovery log shared by PDisk service records and all VDisks.
 
 #### VDisk {#vdisk}
 

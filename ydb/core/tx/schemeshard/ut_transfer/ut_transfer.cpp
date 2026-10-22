@@ -1,4 +1,5 @@
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NSchemeShardUT_Private;
@@ -47,6 +48,76 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
         }
       )");
       env.TestWaitNotification(runtime, txId);
+    }
+
+
+    Y_UNIT_TEST(RepeatedStandbyIsForwarded) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        CreateTable(runtime, env, txId);
+        TestCreateTransfer(runtime, ++txId, "/MyRoot", DefaultScheme("Transfer"));
+        env.TestWaitNotification(runtime, txId);
+        THashMap<ui64, NKikimrReplication::TEvAlterReplication> forwarded;
+        auto observer = runtime.AddObserver<NReplication::TEvController::TEvAlterReplication>(
+            [&](auto& ev) { forwarded[ev->Get()->Record.GetOperationId().GetTxId()] = ev->Get()->Record; });
+        for (ui32 i = 0; i < 2; ++i) {
+            TestAlterTransfer(runtime, ++txId, "/MyRoot", R"(Name: "Transfer" State { StandBy {} })");
+            env.TestWaitNotification(runtime, txId);
+            UNIT_ASSERT(forwarded.contains(txId));
+            UNIT_ASSERT_C(forwarded.at(txId).GetSwitchState().HasStandBy(), forwarded.at(txId).DebugString());
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Transfer"), {
+                NLs::ReplicationState(NKikimrReplication::TReplicationState::kStandBy)});
+        }
+        UNIT_ASSERT_VALUES_EQUAL(forwarded.size(), 2);
+    }
+
+    Y_UNIT_TEST(AlterSettingsInStandbyCarriesStateAndConfig) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        CreateTable(runtime, env, txId);
+        TestMkDir(runtime, ++txId, "/MyRoot", "transfer-dir");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateTransfer(runtime, ++txId, "/MyRoot", DefaultScheme("Transfer"));
+        env.TestWaitNotification(runtime, txId);
+        THashMap<ui64, NKikimrReplication::TEvAlterReplication> forwarded;
+        auto observer = runtime.AddObserver<NReplication::TEvController::TEvAlterReplication>(
+            [&](auto& ev) { forwarded[ev->Get()->Record.GetOperationId().GetTxId()] = ev->Get()->Record; });
+        enum class ESetting { Lambda, Directory, Batch, Flush, Unchanged };
+        for (const auto setting : {ESetting::Lambda, ESetting::Directory, ESetting::Batch, ESetting::Flush, ESetting::Unchanged}) {
+            auto expected = DescribePath(runtime, "/MyRoot/Transfer").GetPathDescription().GetReplicationDescription().GetConfig();
+            TString field;
+            auto* specific = expected.MutableTransferSpecific();
+            switch (setting) {
+                case ESetting::Lambda:
+                    field = R"(TransformLambda: "($row) -> { RETURN AsList($row); }")";
+                    specific->MutableTarget()->SetTransformLambda("($row) -> { RETURN AsList($row); }");
+                    break;
+                case ESetting::Directory:
+                    field = R"(DirectoryPath: "/MyRoot/transfer-dir")";
+                    specific->MutableTarget()->SetDirectoryPath("/MyRoot/transfer-dir");
+                    break;
+                case ESetting::Batch:
+                    field = "BatchSizeBytes: 4096";
+                    specific->MutableBatching()->SetBatchSizeBytes(4096);
+                    break;
+                case ESetting::Flush:
+                case ESetting::Unchanged:
+                    field = "FlushIntervalMilliSeconds: 2000";
+                    specific->MutableBatching()->SetFlushIntervalMilliSeconds(2000);
+                    break;
+            }
+            TestAlterTransfer(runtime, ++txId, "/MyRoot", TStringBuilder() << "Name: \"Transfer\" AlterTransfer { " << field << " }");
+            env.TestWaitNotification(runtime, txId);
+            UNIT_ASSERT(forwarded.contains(txId));
+            const auto& event = forwarded.at(txId);
+            UNIT_ASSERT_C(event.GetSwitchState().HasStandBy(), event.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(event.GetConfig().GetTransferSpecific().SerializeAsString(), expected.GetTransferSpecific().SerializeAsString());
+            const auto stored = DescribePath(runtime, "/MyRoot/Transfer").GetPathDescription().GetReplicationDescription();
+            UNIT_ASSERT(stored.GetState().HasStandBy());
+            UNIT_ASSERT_VALUES_EQUAL(stored.GetConfig().GetTransferSpecific().SerializeAsString(), expected.GetTransferSpecific().SerializeAsString());
+        }
     }
 
     Y_UNIT_TEST(Create) {

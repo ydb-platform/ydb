@@ -202,6 +202,34 @@ public:
             return true;
         }
 
+        const bool reassertStandby = record.GetSwitchState().HasStandBy()
+            && Replication->GetDesiredState() == TReplication::EState::Ready
+            && (Replication->GetState() == TReplication::EState::Ready
+                || Replication->GetState() == TReplication::EState::Paused)
+            && !HasRelevantTransferConfigChanges(Replication->GetConfig(), record.GetConfig());
+        if (reassertStandby) {
+            // Keep resolved credentials and in-flight work. Complete invokes
+            // guarded Progress to continue any unfinished Ready intent.
+            if (record.HasLocation()) {
+                NIceDb::TNiceDb db(txc.DB);
+                auto row = db.Table<Schema::Replications>().Key(Replication->GetId()).Select<Schema::Replications::Config>();
+                if (!row.IsReady()) {
+                    return false;
+                }
+                Y_ABORT_UNLESS(!row.EndOfSet());
+                NKikimrReplication::TReplicationConfig config;
+                Y_ABORT_UNLESS(config.ParseFromString(row.GetValue<Schema::Replications::Config>()));
+                // Runtime credentials may contain resolved secrets. Keep their
+                // durable references so a reboot resolves the current secret.
+                config.MutableLocation()->CopyFrom(record.GetLocation());
+                db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
+                    NIceDb::TUpdate<Schema::Replications::Config>(config.SerializeAsString()));
+                Replication->SetLocation(record.GetLocation());
+            }
+            Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+            return true;
+        }
+
         const auto& oldConfig = Replication->GetConfig();
         auto newConfig = std::move(*record.MutableConfig());
         bool alter = HasRelevantTransferConfigChanges(oldConfig, newConfig);

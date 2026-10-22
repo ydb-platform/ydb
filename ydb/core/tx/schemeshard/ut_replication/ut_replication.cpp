@@ -1,4 +1,5 @@
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NSchemeShardUT_Private;
@@ -34,6 +35,104 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         const auto& r = desc.GetReplicationDescription();
         UNIT_ASSERT(r.HasControllerId());
         return r.GetControllerId();
+    }
+
+
+    Y_UNIT_TEST(RepeatedStandbyIsForwarded) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));
+        env.TestWaitNotification(runtime, txId);
+        const auto before = DescribePath(runtime, "/MyRoot/Replication").GetPathDescription().GetSelf();
+        THashMap<ui64, NKikimrReplication::TEvAlterReplication> forwarded;
+        auto observer = runtime.AddObserver<NReplication::TEvController::TEvAlterReplication>(
+            [&](auto& ev) { forwarded[ev->Get()->Record.GetOperationId().GetTxId()] = ev->Get()->Record; });
+        for (ui32 i = 0; i < 2; ++i) {
+            TestAlterReplication(runtime, ++txId, "/MyRoot", R"(Name: "Replication" State { StandBy {} })");
+            env.TestWaitNotification(runtime, txId);
+            UNIT_ASSERT_C(forwarded.contains(txId), "Accepted repeat must reach controller");
+            UNIT_ASSERT_C(forwarded.at(txId).GetSwitchState().HasStandBy(), forwarded.at(txId).DebugString());
+            const auto desc = DescribePath(runtime, "/MyRoot/Replication");
+            TestDescribeResult(desc, {NLs::ReplicationState(NKikimrReplication::TReplicationState::kStandBy)});
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetSelf().GetPathId(), before.GetPathId());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(forwarded.size(), 2);
+    }
+
+    Y_UNIT_TEST(RepeatedStandbyIsForwardedAfterSchemeShardRestart) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));
+        env.TestWaitNotification(runtime, txId);
+        const auto before = DescribePath(runtime, "/MyRoot/Replication").GetPathDescription();
+        TAutoPtr<IEventHandle> held;
+        ui32 attempts = 0;
+        auto observer = runtime.AddObserver<NReplication::TEvController::TEvAlterReplication>([&](auto& ev) {
+            if (ev->Get()->Record.GetOperationId().GetTxId() == txId) {
+                ++attempts;
+                held.Reset(ev.Release());
+            }
+        });
+        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(Name: "Replication" State { StandBy {} })");
+        runtime.WaitFor("ConfigureParts forwarding before reboot", [&] { return bool(held); }, TDuration::Seconds(60));
+        const auto saved = static_cast<NReplication::TEvController::TEvAlterReplication*>(held->GetBase())->Record;
+        held.Reset();
+        const auto firstAttempts = attempts;
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        runtime.WaitFor("ConfigureParts reconstructed forwarding", [&] { return attempts > firstAttempts && bool(held); }, TDuration::Seconds(60));
+        const auto reconstructed = static_cast<NReplication::TEvController::TEvAlterReplication*>(held->GetBase())->Record;
+        UNIT_ASSERT_VALUES_EQUAL(reconstructed.GetOperationId().SerializeAsString(), saved.GetOperationId().SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(reconstructed.GetConfig().SerializeAsString(), saved.GetConfig().SerializeAsString());
+        UNIT_ASSERT_C(reconstructed.GetSwitchState().HasStandBy(), reconstructed.DebugString());
+        observer.Remove();
+        runtime.Send(held.Release(), 0, true);
+        env.TestWaitNotification(runtime, txId);
+        const auto after = DescribePath(runtime, "/MyRoot/Replication");
+        TestDescribeResult(after, {NLs::ReplicationState(NKikimrReplication::TReplicationState::kStandBy)});
+        UNIT_ASSERT_VALUES_EQUAL(after.GetPathDescription().GetSelf().GetPathId(), before.GetSelf().GetPathId());
+        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(Name: "Replication" State { StandBy {} })");
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(RepeatedStandbyKeepsValidationRestrictions) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));
+        env.TestWaitNotification(runtime, txId);
+        THashSet<ui64> forwarded;
+        auto observer = runtime.AddObserver<NReplication::TEvController::TEvAlterReplication>(
+            [&](auto& ev) { forwarded.insert(ev->Get()->Record.GetOperationId().GetTxId()); });
+        auto reject = [&](const TString& alter) {
+            TestAlterReplication(runtime, ++txId, "/MyRoot", alter, {NKikimrScheme::StatusInvalidParameter});
+            env.TestWaitNotification(runtime, txId);
+            UNIT_ASSERT(!forwarded.contains(txId));
+        };
+        TAutoPtr<IEventHandle> held;
+        auto holdObserver = runtime.AddObserver<NReplication::TEvController::TEvAlterReplication>([&](auto& ev) {
+            held.Reset(ev.Release());
+        });
+        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(Name: "Replication" State { StandBy {} })");
+        const auto acceptedTxId = txId;
+        runtime.WaitFor("accepted repeat owns schema lock", [&] { return bool(held); }, TDuration::Seconds(60));
+        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(Name: "Replication" State { StandBy {} })",
+            {NKikimrScheme::StatusMultipleModifications});
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT(!forwarded.contains(txId));
+        holdObserver.Remove();
+        runtime.Send(held.Release(), 0, true);
+        env.TestWaitNotification(runtime, acceptedTxId);
+        reject(R"(Name: "Replication" Config {} State { StandBy {} })");
+        reject(R"(Name: "Replication" Config {})");
+        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(Name: "Replication" State { Paused {} })");
+        env.TestWaitNotification(runtime, txId);
+        reject(R"(Name: "Replication" State { Paused {} })");
+        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(Name: "Replication" State { Done { FailoverMode: FAILOVER_MODE_FORCE } })");
+        env.TestWaitNotification(runtime, txId);
+        reject(R"(Name: "Replication" State { Done { FailoverMode: FAILOVER_MODE_FORCE } })");
+        reject(R"(Name: "Replication" State { StandBy {} })");
     }
 
     Y_UNIT_TEST(Create) {

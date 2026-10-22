@@ -12,6 +12,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
+#include <util/generic/scope.h>
 
 namespace NKikimr::NReplication::NTestHelpers {
 
@@ -82,7 +83,9 @@ class TEnv {
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(Endpoint)
             .SetDatabase(Database);
-        Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+        // The default SDK discovery mode is synchronous. Its constructor must
+        // run while the simulated runtime dispatches the ListEndpoints RPC.
+        Driver = RunCall([&] { return MakeHolder<NYdb::TDriver>(driverConfig); });
 
         YdbProxy = Server.GetRuntime()->Register(CreateYdbProxy(
             Endpoint, UseDatabase ? Database : "", false /* ssl */, "" /* cert */, std::forward<Args>(args)...));
@@ -116,6 +119,10 @@ public:
             return func();
         }
 
+        // SDK and message-bus calls complete on real threads. Do not exhaust
+        // the simulated deadline before those threads can deliver a response.
+        const bool wasFast = GetRuntime().SetFastSimulatedTime(false);
+        Y_DEFER { GetRuntime().SetFastSimulatedTime(wasFast); };
         TAdaptiveThreadPool threadPool;
         threadPool.Start();
         auto future = NThreading::Async(std::forward<TFunc>(func), threadPool);
@@ -300,6 +307,14 @@ public:
 
     const NYdb::TDriver& GetDriver() const {
         return *Driver;
+    }
+
+    size_t GetGrpcRequestsInProgress() const {
+        size_t requests = 0;
+        for (const auto& service : Server.GetGRpcServer().GetServices()) {
+            requests += service->RequestsInProgress();
+        }
+        return requests;
     }
 
     const TString& GetEndpoint() const {

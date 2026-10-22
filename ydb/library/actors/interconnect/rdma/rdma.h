@@ -113,6 +113,7 @@ public:
     virtual TGetQpResult GetQp(const NActors::TActorContext& actorCtx) noexcept = 0;
 private:
     virtual void NotifyErr() noexcept = 0;
+    virtual void StopQpCache() noexcept = 0;
 };
 
 class IQpCache;

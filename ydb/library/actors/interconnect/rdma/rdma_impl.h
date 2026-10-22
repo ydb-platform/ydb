@@ -464,6 +464,10 @@ public:
         return QpCache->GetQp(actorCtx, shared_from_this());
     }
 
+    void StopQpCache() noexcept {
+        DrainQpCache();
+    }
+
 protected:
     void DrainQpCache() {
         IQpCache::TPtr cache;

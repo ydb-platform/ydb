@@ -50,7 +50,7 @@ struct TQpCacheCounters {
         , Misses(Counters->GetCounter("RdmaQpCacheMisses", true))
         , QpsCreated(Counters->GetCounter("RdmaQpCacheQpsCreated", true))
         , FillTimeUs(Counters->GetHistogram(
-            "RdmaQpCacheFillTimeUs", NMonitoring::ExponentialHistogram(24, 2, 1)))
+            "RdmaQpCacheFillTimeUs", NMonitoring::ExponentialHistogram(13, 2, 1024)))
     {}
 
     NMonitoring::TDynamicCounterPtr Counters;
@@ -441,6 +441,15 @@ public:
         , RdmaActorParams(params)
         , QpCacheCounters(std::make_shared<TQpCacheCounters>(counters))
     {}
+
+    ~TCqActor() {
+        for (auto& [ctx, state] : CqMap) {
+            Y_UNUSED(ctx);
+            if (auto* data = std::get_if<TCtxData>(&state)) {
+                data->Cq->StopQpCache();
+            }
+        }
+    }
 
     static constexpr IActor::EActivityType ActorActivityType() {
         return IActor::EActivityType::INTERCONNECT_RDMA_CQ;

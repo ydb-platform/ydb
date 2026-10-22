@@ -373,10 +373,14 @@ std::shared_ptr<THnswIndex> TDataShard::GetHnswIndex(ui32 localTid, ui32 vectorC
         return {};
     }
     if (entry.Index && entry.Index->CanRead(readVersion)) {
+        entry.Index->SetSearchWorkspaceRetentionLimit(
+            AppData()->Icb->DataShardControls.HnswMaxIdleSearchWorkspaces.AtomicLoad()->Get());
         return entry.Index;
     }
     for (auto generation = entry.Retained.rbegin(); generation != entry.Retained.rend(); ++generation) {
         if ((*generation)->CanRead(readVersion)) {
+            (*generation)->SetSearchWorkspaceRetentionLimit(
+                AppData()->Icb->DataShardControls.HnswMaxIdleSearchWorkspaces.AtomicLoad()->Get());
             return *generation;
         }
     }
@@ -550,7 +554,8 @@ void TDataShard::SetHnswIndex(ui32 localTid, std::shared_ptr<THnswIndex> index,
         IsFollower() ? Max(baseVersion, entry.FollowerReadVersion) : TRowVersion::Max());
     Y_ENSURE(memoryReservation || index->HasGraphReservation(), "HNSW index installed without a memory reservation");
     if (memoryReservation)
-        index->SetGraphReservation(std::move(memoryReservation), HnswCacheMemoryTracker);
+        index->SetGraphReservation(std::move(memoryReservation), HnswCacheMemoryTracker,
+            AppData()->Icb->DataShardControls.HnswMaxIdleSearchWorkspaces.AtomicLoad()->Get());
     entry.Generations.push_back(index);
     const auto* previousIndex = entry.Index.get();
     if (entry.Index && entry.Index->GetBaseVersion() > baseVersion) {

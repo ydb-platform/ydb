@@ -951,6 +951,12 @@ namespace similarity {
     }
 
     template <typename dist_t>
+    void Hnsw<dist_t>::SetSearchWorkspaceRetentionLimit(size_t limit) const {
+        if (visitedlistpool)
+            visitedlistpool->SetMaxIdleLists(limit);
+    }
+
+    template <typename dist_t>
     void Hnsw<dist_t>::TrimSearchWorkspaces() const {
         visitedlistpool->TrimIdle();
     }

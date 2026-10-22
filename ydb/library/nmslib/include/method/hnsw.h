@@ -471,6 +471,7 @@ namespace similarity {
         // Query-local search breadth for concurrent readers of the same graph.
         void SearchWithEf(KNNQuery<dist_t> *query, size_t efSearch) const;
         void ConfigureSearchWorkspaces(VisitedListPoolPolicy policy);
+        void SetSearchWorkspaceRetentionLimit(size_t limit) const;
         void TrimSearchWorkspaces() const;
         VisitedListPoolStats GetSearchWorkspaceStats() const;
 

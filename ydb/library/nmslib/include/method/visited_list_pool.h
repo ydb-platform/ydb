@@ -14,6 +14,7 @@
  */
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -92,6 +93,7 @@ public:
 
     VisitedListPool(size_t initialLists, size_t elements, size_t maxIdleLists = 4)
         : Elements(elements)
+        , MaxIdleLists(maxIdleLists)
         , Policy(std::make_shared<VisitedListPoolPolicy>())
     {
         Policy->MaxIdleLists = maxIdleLists;
@@ -118,7 +120,29 @@ public:
             Stats.Frees += old.size();
             oldPolicy = std::move(Policy);
             Policy = std::move(nextPolicy);
+            MaxIdleLists.store(Policy->MaxIdleLists, std::memory_order_relaxed);
         }
+    }
+
+    // Change retention without replacing admission callbacks or disturbing
+    // borrowed buffers. Returning leases must still have preallocated space.
+    void SetMaxIdleLists(size_t limit) {
+        if (MaxIdleLists.load(std::memory_order_relaxed) == limit)
+            return;
+        std::vector<std::unique_ptr<VisitedList>> next;
+        next.reserve(limit);
+        {
+            std::lock_guard guard(Mutex);
+            for (auto& list : Idle) {
+                if (next.size() < limit)
+                    next.push_back(std::move(list));
+                else
+                    ++Stats.Frees;
+            }
+            Idle.swap(next);
+            MaxIdleLists.store(limit, std::memory_order_relaxed);
+        }
+        // Excess allocations and their reservations are released outside Mutex.
     }
 
     size_t BufferMemoryBytes() const noexcept {
@@ -175,7 +199,7 @@ public:
         {
             std::lock_guard guard(Mutex);
             --Stats.ActiveBuffers;
-            if (retain && Idle.size() < Policy->MaxIdleLists) {
+            if (retain && Idle.size() < MaxIdleLists.load(std::memory_order_relaxed)) {
                 // Capacity is reserved by Configure; returning a lease cannot allocate.
                 Idle.push_back(std::move(list));
             } else {
@@ -187,17 +211,22 @@ public:
 
     void TrimIdle() {
         std::vector<std::unique_ptr<VisitedList>> old;
-        // Keep the bounded bookkeeping capacity available to returning leases.
-        size_t capacity;
-        {
-            std::lock_guard guard(Mutex);
-            capacity = Policy->MaxIdleLists;
-        }
-        old.reserve(capacity);
-        {
-            std::lock_guard guard(Mutex);
-            old.swap(Idle);
+        old.reserve(MaxIdleLists.load(std::memory_order_relaxed));
+        for (;;) {
+            std::unique_lock guard(Mutex);
+            if (old.capacity() < Idle.size()) {
+                const size_t capacity = Idle.size();
+                guard.unlock();
+                old.reserve(capacity);
+                continue;
+            }
+            // Preserve Idle's capacity if the retention limit changed while
+            // allocating the temporary vector outside Mutex.
+            for (auto& list : Idle)
+                old.push_back(std::move(list));
+            Idle.clear();
             Stats.Frees += old.size();
+            break;
         }
     }
 
@@ -211,6 +240,7 @@ public:
 
 private:
     const size_t Elements;
+    std::atomic<size_t> MaxIdleLists;
     mutable std::mutex Mutex;
     std::vector<std::unique_ptr<VisitedList>> Idle;
     std::shared_ptr<VisitedListPoolPolicy> Policy;

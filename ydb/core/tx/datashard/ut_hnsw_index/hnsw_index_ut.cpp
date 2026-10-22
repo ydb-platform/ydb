@@ -542,6 +542,84 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         }
     }
 
+    Y_UNIT_TEST(SearchWorkspaceRetentionChangesPreserveBorrowersAndReservations) {
+        similarity::VisitedListPool pool(0, 128);
+        const auto bytes = pool.BufferMemoryBytes();
+        auto tracker = std::make_shared<THnswCacheMemoryTracker>();
+        tracker->SetLimit(bytes * 8);
+        similarity::VisitedListPoolPolicy policy;
+        policy.MaxIdleLists = 2;
+        policy.Reserve = [tracker](size_t size) -> std::shared_ptr<void> {
+            if (!tracker->TryAcquire(size))
+                return {};
+            return std::shared_ptr<void>(new int(0), [tracker, size](void* ptr) {
+                delete static_cast<int*>(ptr);
+                tracker->Release(size);
+            });
+        };
+        policy.CanRetain = [tracker] { return tracker->GetUsed() <= tracker->GetLimit(); };
+        pool.Configure(std::move(policy));
+        std::vector<similarity::VisitedListPool::Lease> readers;
+        for (size_t i = 0; i < 8; ++i) {
+            readers.push_back(pool.acquire());
+            readers.back()->mass[0] = readers.back()->curV;
+        }
+        pool.SetMaxIdleLists(8);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().ActiveBuffers, 8);
+        for (auto& reader : readers)
+            UNIT_ASSERT_VALUES_EQUAL(reader->mass[0], reader->curV);
+        readers.clear();
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().IdleBuffers, 8);
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), bytes * 8);
+        const auto allocations = pool.GetStats().Allocations;
+        for (size_t round = 0; round < 300; ++round) {
+            for (size_t i = 0; i < 8; ++i)
+                readers.push_back(pool.acquire());
+            readers.clear();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().Allocations, allocations);
+        pool.SetMaxIdleLists(2);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().IdleBuffers, 2);
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), bytes * 2);
+        readers.push_back(pool.acquire());
+        readers.push_back(pool.acquire());
+        pool.SetMaxIdleLists(0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), bytes * 2);
+        readers.clear();
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().IdleBuffers, 0);
+        tracker->SetLimit(bytes - 1);
+        pool.SetMaxIdleLists(8);
+        UNIT_ASSERT_EXCEPTION(pool.acquire(), similarity::VisitedListMemoryLimitExceeded);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().ActiveBuffers, 0);
+    }
+
+    Y_UNIT_TEST(SearchWorkspaceRetentionCanChangeWhileReadersAndTrimmerRun) {
+        similarity::VisitedListPool pool(0, 4096);
+        std::barrier gate(5);
+        std::vector<std::thread> readers;
+        for (size_t i = 0; i < 4; ++i) {
+            readers.emplace_back([&] {
+                gate.arrive_and_wait();
+                for (size_t round = 0; round < 1000; ++round) {
+                    auto lease = pool.acquire();
+                    lease->mass[round % 4096] = lease->curV;
+                    pool.SetMaxIdleLists(round % 2 ? 32 : 0);
+                }
+            });
+        }
+        gate.arrive_and_wait();
+        for (size_t round = 0; round < 1000; ++round)
+            pool.TrimIdle();
+        for (auto& reader : readers)
+            reader.join();
+        pool.SetMaxIdleLists(0);
+        const auto stats = pool.GetStats();
+        UNIT_ASSERT_VALUES_EQUAL(stats.ActiveBuffers, 0);
+        UNIT_ASSERT_VALUES_EQUAL(stats.IdleBuffers, 0);
+        UNIT_ASSERT_VALUES_EQUAL(stats.Allocations, stats.Frees);
+    }
+
     Y_UNIT_TEST(SearchWorkspacePoolAdmissionExceptionsAndPressure) {
         similarity::VisitedListPool pool(0, 128);
         const auto bytes = pool.BufferMemoryBytes();
@@ -642,6 +720,42 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
             UNIT_ASSERT(!graph->Search(target, 1).Covered);
             tracker->SetLimit(1_MB);
             UNIT_ASSERT(graph->Search(target, 1).Covered);
+        }
+    }
+
+    Y_UNIT_TEST(SearchWorkspaceRetentionUpdatesAreSharedAfterBuildAndImport) {
+        const auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+        const auto target = SerializeFloatVector({1, 0});
+        TString error;
+        auto built = THnswIndex::Build(settings, {{"a", target}}, 1_MB, error);
+        UNIT_ASSERT_C(built, error);
+        std::stringstream snapshot;
+        built->SaveGraph(snapshot);
+        auto imported = THnswIndex::LoadGraph(snapshot, settings, 1_MB, error);
+        UNIT_ASSERT_C(imported, error);
+        for (auto* graph : {built.get(), imported.get()}) {
+            auto tracker = std::make_shared<THnswCacheMemoryTracker>();
+            tracker->SetLimit(1_MB);
+            graph->SetGraphReservation(std::make_shared<int>(0), tracker, 0);
+            auto view = graph->CreateView(TRowVersion::Min(), std::make_shared<THnswIndexChanges>());
+            const auto before = graph->GetSearchWorkspaceStats();
+            UNIT_ASSERT(graph->Search(target, 1).Covered);
+            UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), 0);
+            view->SetSearchWorkspaceRetentionLimit(32);
+            UNIT_ASSERT(graph->Search(target, 1).Covered);
+            UNIT_ASSERT(view->Search(target, 1).Covered);
+            const auto retained = graph->GetSearchWorkspaceStats();
+            UNIT_ASSERT_VALUES_EQUAL(retained.Allocations - before.Allocations, 2);
+            UNIT_ASSERT_VALUES_EQUAL(retained.Reuses - before.Reuses, 1);
+            UNIT_ASSERT_VALUES_EQUAL(retained.IdleBuffers, 1);
+            UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), retained.RetainedBytes);
+            graph->SetSearchWorkspaceRetentionLimit(0);
+            UNIT_ASSERT_VALUES_EQUAL(view->GetSearchWorkspaceStats().IdleBuffers, 0);
+            UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), 0);
+            tracker->SetLimit(0);
+            view->SetSearchWorkspaceRetentionLimit(32);
+            UNIT_ASSERT(!view->Search(target, 1).Covered);
         }
     }
 

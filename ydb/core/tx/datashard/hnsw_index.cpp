@@ -566,6 +566,11 @@ THnswSearchWorkspaceStats THnswIndex::GetSearchWorkspaceStats() const {
         stats.ActiveBuffers, stats.IdleBuffers, stats.RetainedBytes, stats.AllocatedBytes};
 }
 
+void THnswIndex::SetSearchWorkspaceRetentionLimit(size_t limit) const {
+    if (Impl->Graph->Index)
+        Impl->Graph->Index->SetSearchWorkspaceRetentionLimit(limit);
+}
+
 void THnswIndex::TrimSearchWorkspaces() const {
     if (Impl->Graph->Index)
         Impl->Graph->Index->TrimSearchWorkspaces();

@@ -35,9 +35,6 @@ class PrimaryKeyOrdering:
                 "enable_columnshard_interval": True,
                 "enable_columnshard_uuid": True,
                 "enable_columnshard_dy_number": True,
-                "enable_table_datetime64": True,
-                "enable_uuid_as_primary_key": True,
-                "enable_parameterized_decimal": True,
             },
             column_shard_config={
                 "compaction_enabled": True,

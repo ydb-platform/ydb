@@ -426,7 +426,9 @@ namespace NKikimr::NStorage {
         ui64 ProposeRequestCookie = 0;
         ui64 CommitRequestCookie = 0;
         bool ProposeRequestInFlight = false;
+        bool CommitRequestInFlight = false;
         std::optional<std::tuple<ui64, ui32>> ProposedConfigHashVersion;
+        TString ProposedConfigYaml;
         std::vector<std::tuple<TActorId, TString, bool, ui64>> ConsoleConfigValidationQ;
 
         // retro trace root-side batching

@@ -184,7 +184,7 @@ namespace NKikimr::NStorage {
                 Send(actorId, new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo));
             }
             for (const auto& node : proposition.AddedOrChangedNodeIdentifiers) {
-                UnsubscribeInterconnect(node.NodeId());
+                UnsubscribeQueue.insert(node.NodeId());
             }
         }
     }

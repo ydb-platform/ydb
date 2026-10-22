@@ -1423,18 +1423,16 @@ namespace NKikimr::NBsController {
             if (GroupContentChanged.contains(group->ID)) {
                 throw TExError() << "Mirror-3-dc transition requires a separate group configuration transaction";
             }
-            auto confirmed = previous.GetConfirmedWrites({});
             if (group->ConfirmedWrites) {
                 const auto parsed = TBlobStorageGroupInfo::TConfirmedWrites::Parse(
                     *group->ConfirmedWrites, *group->Topology, &error);
                 if (!parsed) {
                     throw TExError() << "Invalid persisted ConfirmedWrites: " << error.Str();
                 }
-                confirmed = *parsed;
             } else if (group->Mirror3dcState) {
                 throw TExError() << "Managed mirror-3-dc group is missing ConfirmedWrites";
             }
-            group->ConfirmedWrites = next->GetConfirmedWrites(confirmed).ToProto();
+            group->ConfirmedWrites = next->GetConfirmedWrites().ToProto();
             group->Mirror3dcState = next->ToProto();
             group->FailRealmStates.Clear();
             for (const auto& realm : next->GetFailRealmStates()) {

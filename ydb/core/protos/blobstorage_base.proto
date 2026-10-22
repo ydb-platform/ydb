@@ -101,8 +101,8 @@ message TFailRealmStates {
     enum EState {
         Included = 0; // Reads and acknowledged writes.
         Excluded = 1; // No client operations or quorum participation.
-        Joining = 2; // Writes count toward WriteOk; reads cannot establish absence.
-        Leaving = 3; // Existing data can be read; no new client writes.
+        Joining = 2; // WriteOk may use this realm only together with all Included realms; no reliable absence.
+        Leaving = 3; // Read/replication source only; no client or replication writes; excluded from CW.
     }
     message TFailRealm {
         optional uint32 FailRealmIdx = 1;
@@ -113,7 +113,7 @@ message TFailRealmStates {
 }
 
 // Administrative mirror-3-dc state machine (RFC 179/180).
-// Entering INV, DC_FAILURE_PENDING_INV, DC_RECOVERY, or NORMAL_PENDING states
+// Entering NORMAL, INV, DC_FAILURE_PENDING_INV, or DC_RECOVERY states
 // asserts the stated old-blob guarantee; BSC does not verify replicas.
 message TMirror3dcGroupState {
     // Realm order below is A/B/C, not numeric indices: C is FailedFailRealmIdx;
@@ -125,13 +125,22 @@ message TMirror3dcGroupState {
     // that layout is guaranteed within Included realms alone, without relying on Joining.
     // Additional copies may exist in Joining realms. For example, with I/I/J, CW 1+1
     // guarantees a copy in each Included realm; with I/J/E, CW 2 guarantees two copies in I.
+    // Leaving copies never count toward CW. E -> L preserves physical data; J -> L preserves
+    // surviving data. E -> J and L -> J may lose old data and must not establish new guarantees.
+    // A WriteOk layout using Joining must also use every Included realm. In I/I/J, 2+2 uses
+    // the two Included realms; 1+1+1 uses all three. CW and new-write ACK rules are distinct.
+    // Ordinary S -> T transitions recover using WriteDurability(S) while still in S, then
+    // assert CW(T) with T's realm roles. BSC accepts the administrator's confirmation;
+    // it does not perform replication or verify completion.
+    // DISASTER -> RESURECTION_PENDING returns E as L with CW 0; recover from I/L into I
+    // using durability 2 before asserting CW 1 in RESURECTION. A readable source is required.
     // Mode transitions; realm-index checks in CanTransitionTo still apply.
     // Matching RECOVERY, RECOVERY INV1, and RECOVERY INV2 labels connect distant arrows.
     // Identical-state requests are idempotent; self-loops are omitted.
     //
     // +---------------------------+     +---------------------------+                           +---------------------------+
     // | NORMAL                    |<----| DC_RECOVERY        (INV 1)|<----(RECOVERY INV2)       | DC_RECOVERY_PENDING_INV_1 |<--->(RECOVERY INV1)
-    // | I/I/I    CW: 1+1+1 OR 2+2 |     | I/I/J    CW: 1+1+1 OR 2+2 |<--------+-----------------| I/I/J             CW: 1+1 |---->(DISASTER INV1 J)
+    // | I/I/I    CW: 1+1+1 OR 2+2 |     | I/I/J    CW: 1+1+1 OR 2+2 |<--------+-----------------| I/I/J             CW: 1+1 |---->(DISASTER JOIN)
     // +-------------+-------------+     +-----+----------------+----+         |                 +---------------------------+
     //               |                         |                |              |
     //               |                         v                v              |                 +---------------------------+
@@ -160,22 +169,22 @@ message TMirror3dcGroupState {
     // +--------v---------v--------+           |                         v       |                         v
     // | SOLO_DC_DISASTER          |           |           +---------------------v-----+     +---------------------------+
     // | I/E/E               CW: 0 |           |  +------->| SOLO_DC_INV_1_PENDING     |---->| SOLO_DC_INV_2_PENDING     |<--------+
-    // +---------------------------+           |  |    +---| I/L/E        CW: 1+1 OR 2 |     | I/L/E               CW: 2 |---+     |
+    // +---------------------------+           |  |    +---| I/L/E               CW: 1 |     | I/L/E               CW: 2 |---+     |
     //          |                              |  |    |   +-------------+-------------+     +-------------+-------------+   |     |
     //          v                              |  |    |                 |                                 |                 |     |
-    // +---------------------------+           ^  ^    v                 |                                 |                 v     ^
-    // | SOLO_DC_RESURECTION       |           |  |    | (DISASTER INV1) |                 (DISASTER INV2) |                 |     |
-    // | I/L/E               CW: 1 |           |  |    |        |        v                        |        v                 |     |
-    // +-------------+-------------+           |  |    |   +----v----------------------+     +----v----------------------+   |     |
-    //               |                         |  |    |   | SOLO_DC_INV_1             |---->| SOLO_DC_INV_2             |   |     |
-    //               +--> (RES L)              |  |    |   | I/E/E               CW: 1 |     | I/E/E               CW: 2 |   |     |
-    //               +--> (RES J)              |  |    |   +---------------^-----------+     +-------------^-------------+   |     |
-    //                                         |  |    |                   |                               |                 |     |
-    //                                         |  |    |                   |                               |                 |     |
-    //                                         |  |    |  (DISASTER JOIN)  |    (RES J)                    |                 |     |
-    //                                         |  |    |        |          |       |                       |                 |     |
-    //                                         |  |  +-v--------v----------v-------v---+     +-------------v-----------------v-+   |
-    //                                         |  +--| SOLO_DC_RECOVERY_PENDING_INV_1  |     | SOLO_DC_RECOVERY_PENDING_INV_2  |---+
+    // +---------------------------------+     ^  ^    v                 |                                 |                 v     ^
+    // | SOLO_DC_RESURECTION_PENDING     |     |  |    | (DISASTER INV1) |                 (DISASTER INV2) |                 |     |
+    // | I/L/E                     CW: 0 |     |  |    |        |        v                        |        v                 |     |
+    // +----------------+----------------+     |  |    |   +----v----------------------+     +----v----------------------+   |     |
+    //                  |                      |  |    |   | SOLO_DC_INV_1             |---->| SOLO_DC_INV_2             |   |     |
+    //                  v                      |  |    |   | I/E/E               CW: 1 |     | I/E/E               CW: 2 |   |     |
+    // +---------------------------------+     |  |    |   +---------------^-----------+     +-------------^-------------+   |     |
+    // | SOLO_DC_RESURECTION             |     |  |    |                   |                               |                 |     |
+    // | I/L/E                     CW: 1 |     |  |    |                   |                               |                 |     |
+    // +----------------+----------------+     |  |    |  (DISASTER JOIN)  |    (RES J)                    |                 |     |
+    //                  |                      |  |    |        |          |       |                       |                 |     |
+    //                  +--> (RES L)           |  |  +-v--------v----------v-------v---+     +-------------v-----------------v-+   |
+    //                  +--> (RES J)           |  +--| SOLO_DC_RECOVERY_PENDING_INV_1  |     | SOLO_DC_RECOVERY_PENDING_INV_2  |---+
     //                                         |     | I/J/E                     CW: 1 |     | I/J/E                     CW: 2 |
     //                                         |     +----------------+----------------+     +----------------+----------------+
     //                                         |                      |                                       |
@@ -204,11 +213,11 @@ message TMirror3dcGroupState {
         DC_FAILURE_INV_2 = 6;
         // Realms I/I/J; WriteOk = 2+2; WriteDurability = 1+1+1; CW = 1+1 OR 2.
         DC_RECOVERY_PENDING = 7;
-        // Realms I/I/J; WriteOk = 1+1+1 OR 2+2; WriteDurability 1+1+1; CW = 1+1.
-        DC_RECOVERY = 8;
-        // Realms I/I/J; WriteOk 1+1+1 OR 2+2; WriteDurability 1+1+1; CW = 1+1+1 OR 2+2.
-        NORMAL_PENDING = 9;
-        // Realms I/L/E; WriteOk = WriteDurability = 2; CW = 1+1 OR 2; prepare to exclude B.
+        // Realms I/I/J; WriteOk = 1+1+1 OR 2+2; WriteDurability = 1+1+1; CW = 1+1.
+        DC_RECOVERY_PENDING_INV_1 = 8;
+        // Realms I/I/J; WriteOk = 1+1+1 OR 2+2; WriteDurability = 1+1+1; CW = 1+1+1 OR 2+2.
+        DC_RECOVERY = 9;
+        // Realms I/L/E; WriteOk = WriteDurability = 2; CW = 1.
         SOLO_DC_INV_1_PENDING = 10;
         // Realms I/L/E; WriteOk = WriteDurability = 2; CW = 2; prepare to exclude B.
         SOLO_DC_INV_2_PENDING = 11;
@@ -222,6 +231,13 @@ message TMirror3dcGroupState {
         SOLO_DC_RECOVERY_PENDING_INV_2 = 15;
         // Realms I/J/E; WriteOk = 2+2; WriteDurability = 1+1; CW = 1+1.
         SOLO_DC_RECOVERY_INV_1 = 16;
+        // Realms I/E/E; WriteOk = WriteDurability = 2; CW = 0: no surviving copy is guaranteed.
+        SOLO_DC_DISASTER = 17;
+        // Realms I/L/E; WriteOk = WriteDurability = 2; CW = 1.
+        // The administrator confirms that a surviving copy has been recovered.
+        SOLO_DC_RESURECTION = 18;
+        // Realms I/L/E; WriteOk = WriteDurability = 2; CW = 0: no surviving-copy guarantee yet.
+        SOLO_DC_RESURECTION_PENDING = 19;
     }
     optional EMode Mode = 1;
     // Excluded/returning realm for the three-to-two-DC transition.
@@ -238,6 +254,7 @@ message TGroupWriteLayout {
 }
 
 // Minimal guaranteed layouts for all confirmed blobs, including old data.
+// One empty Layout represents CW 0 (no surviving-copy guarantee); an absent Layout list is invalid.
 message TConfirmedWrites {
     repeated TGroupWriteLayout Layout = 1;
 }

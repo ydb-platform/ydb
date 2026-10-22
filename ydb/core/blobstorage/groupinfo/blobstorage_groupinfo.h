@@ -18,6 +18,7 @@
 #include <util/generic/vector.h>
 
 #include <algorithm>
+#include <array>
 
 namespace NKikimrBlobStorage {
     class TGroupInfo;
@@ -523,7 +524,8 @@ public:
         static std::optional<TWritePolicy> Parse(const NKikimrBlobStorage::TGroupWritePolicy& policy,
             const TTopology& topology, IOutputStream* err = nullptr);
         NKikimrBlobStorage::TGroupWritePolicy ToProto() const;
-        // Successful part counts per failrealm; callers retain erasure-specific part layout checks.
+        // Geometry-only checks: counts have no realm identities or roles here. Managed mirror-3-dc
+        // callers use TMirror3dcState::CheckWriteOk/CheckWriteDurability for participation rules.
         bool CheckWriteOk(TVector<ui32> partsPerFailRealm) const;
         bool CheckWriteDurability(TVector<ui32> partsPerFailRealm) const;
 
@@ -532,6 +534,7 @@ public:
     };
 
     struct TConfirmedWrites {
+        // One empty layout means CW 0; an empty list is not a valid guarantee.
         TWritePolicy::TLayouts Layouts;
         bool operator==(const TConfirmedWrites&) const = default;
         static std::optional<TConfirmedWrites> Parse(const NKikimrBlobStorage::TConfirmedWrites& proto,
@@ -583,8 +586,12 @@ public:
         bool RequiresSurvivingRealm() const;
         TVector<TFailRealmState> GetFailRealmStates() const;
         TWritePolicy GetWritePolicy() const;
+        // Indexed by FailRealmIdx. Joining can participate only together with all Included realms.
+        TVector<std::array<ui32, 3>> GetWriteOkLayouts() const;
+        bool CheckWriteOk(const std::array<ui32, 3>& partsPerFailRealm) const;
+        bool CheckWriteDurability(const std::array<ui32, 3>& partsPerFailRealm) const;
         // Invariant and recovery milestones may assert stronger guarantees for existing blobs.
-        TConfirmedWrites GetConfirmedWrites(const TConfirmedWrites& previous) const;
+        TConfirmedWrites GetConfirmedWrites() const;
     };
     std::optional<TMirror3dcState> Mirror3dcState;
 

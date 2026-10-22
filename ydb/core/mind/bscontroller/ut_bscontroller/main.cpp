@@ -452,11 +452,18 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             {T::DC_FAILURE_INV_1, 0, {}}, {T::DC_FAILURE_INV_2, 0, {}},
             {T::SOLO_DC_INV_2_PENDING, 0, 2}, {T::SOLO_DC_INV_2, 0, 2},
             {T::SOLO_DC_RECOVERY_PENDING_INV_2, 0, 2}, {T::SOLO_DC_RECOVERY_INV_1, 0, 2},
-            {T::DC_FAILURE_INV_1, 0, {}}, {T::DC_RECOVERY_PENDING, 0, {}},
-            {T::DC_RECOVERY, 0, {}}, {T::NORMAL_PENDING, 0, {}}, {},
-            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE_PENDING_INV_1, 0, {}}, {T::DC_FAILURE_PENDING_INV_2, 0, {}},
-            {T::DC_FAILURE_INV_2, 0, {}}, {T::DC_RECOVERY_PENDING, 0, {}},
-            {T::DC_RECOVERY, 0, {}}, {T::NORMAL_PENDING, 0, {}}, {},
+            {T::DC_FAILURE_INV_1, 0, {}}, {T::DC_RECOVERY_PENDING_INV_1, 0, {}}, {T::DC_RECOVERY, 0, {}}, {},
+            // Return while C is still Leaving, for each invariant level.
+            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_RECOVERY_PENDING, 0, {}}, {T::DC_RECOVERY, 0, {}}, {},
+            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE_PENDING_INV_1, 0, {}},
+            {T::DC_RECOVERY_PENDING_INV_1, 0, {}}, {T::DC_RECOVERY, 0, {}}, {},
+            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE_PENDING_INV_1, 0, {}},
+            {T::DC_FAILURE_PENDING_INV_2, 0, {}}, {T::DC_RECOVERY, 0, {}}, {},
+            // Emergency recovery: persist CW 0 before reading from the returning Leaving realm.
+            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE, 0, {}}, {T::SOLO_DC_DISASTER, 0, 2},
+            {T::SOLO_DC_RESURECTION_PENDING, 0, 2}, {T::SOLO_DC_RESURECTION, 0, 2},
+            {T::SOLO_DC_INV_1_PENDING, 0, 2}, {T::SOLO_DC_RECOVERY_PENDING_INV_1, 0, 2},
+            {T::SOLO_DC_INV_1_PENDING, 0, 2}, {T::SOLO_DC_INV_1, 0, 2},
         };
         auto combined = request(path[0]);
         auto second = combined.GetCommand(0);
@@ -467,15 +474,18 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         using TConfirmed = TBlobStorageGroupInfo::TConfirmedWrites;
         const TVector<TConfirmed> expectedConfirmed = {
             {{{1, 1}, {2}}}, {{{1, 1}, {2}}}, {{{1, 1}}}, // pending, failure, INV_1
-            {{{1, 1}, {2}}}, {{{1}}}, // SOLO_INV_1_PENDING, SOLO_INV_1
-            {{{1}}}, {{{1}}}, // recovery pending INV_1, recovery INV_1
+            {{{1}}}, {{{1}}}, // SOLO_INV_1_PENDING, SOLO_INV_1
+            {{{1}}}, {{{1, 1}}}, // SOLO recovery pending, confirmed invariant I
             {{{1, 1}}}, {{{2, 2}}}, // INV_1, INV_2
             {{{2}}}, {{{2}}}, // SOLO_INV_2_PENDING, SOLO_INV_2
-            {{{2}}}, {{{1}}}, // fast recovery: pending INV_2 -> recovery INV_1
-            {{{1, 1}}}, // INV_1 confirms invariant I in both realms
-            {{{1, 1}, {2}}}, {{{1, 1}}}, {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}}, // return to NORMAL
-            {{{1, 1}, {2}}}, {{{1, 1}}}, {{{2, 2}}}, {{{2, 2}}}, // strengthen while C is Leaving
-            {{{1, 1}, {2}}}, {{{1, 1}}}, {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}}, // return to NORMAL
+            {{{2}}}, {{{1, 1}}}, // SOLO recovery pending INV_2, confirmed invariant I
+            {{{1, 1}}}, {{{1, 1}}}, {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}}, // return to NORMAL
+            {{{1, 1}, {2}}}, {{{1, 1}, {2}}}, {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}}, // pending -> recovery
+            {{{1, 1}, {2}}}, {{{1, 1}}}, {{{1, 1}}}, {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}}, // pending INV_1 -> recovery
+            {{{1, 1}, {2}}}, {{{1, 1}}}, {{{2, 2}}}, {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}}, // pending INV_2 -> recovery
+            {{{1, 1}, {2}}}, {{{1, 1}, {2}}}, {{TVector<ui32>{}}}, // failure -> disaster
+            {{TVector<ui32>{}}}, {{{1}}}, // RESURECTION_PENDING -> RESURECTION
+            {{{1}}}, {{{1}}}, {{{1}}}, {{{1}}}, // Joining -> Leaving preserves the Included copy
         };
         UNIT_ASSERT_VALUES_EQUAL(path.size(), expectedConfirmed.size());
         size_t step = 0;
@@ -505,7 +515,8 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_VALUES_EQUAL(restored.GetWritePolicy().SerializeAsString(), group.GetWritePolicy().SerializeAsString());
             UNIT_ASSERT_VALUES_EQUAL(restored.GetConfirmedWrites().SerializeAsString(), group.GetConfirmedWrites().SerializeAsString());
             group = restored;
-            if (state.Mode == T::DC_FAILURE_INV_2) {
+            if (state.Mode == T::DC_FAILURE_INV_2 || state.Mode == T::SOLO_DC_DISASTER
+                    || state.Mode == T::SOLO_DC_RESURECTION_PENDING) {
                 const auto sender = env.Runtime->AllocateEdgeActor(0);
                 const auto pipe = env.Runtime->ConnectToPipe(env.TabletId, sender, 0, GetPipeConfigWithRetries());
                 const ui32 nodeId = env.Runtime->GetNodeId(0);

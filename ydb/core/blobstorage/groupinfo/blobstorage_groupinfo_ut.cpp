@@ -53,6 +53,13 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         UNIT_ASSERT(!TState::Parse(proto, topology));
         proto.SetSurvivingFailRealmIdx(2);
         UNIT_ASSERT(TState::Parse(proto, topology));
+        for (auto mode : {T::SOLO_DC_DISASTER, T::SOLO_DC_RESURECTION_PENDING}) {
+            proto.SetMode(mode);
+            UNIT_ASSERT(TState::Parse(proto, topology));
+            proto.ClearSurvivingFailRealmIdx();
+            UNIT_ASSERT(!TState::Parse(proto, topology));
+            proto.SetSurvivingFailRealmIdx(2);
+        }
 
         TState normal;
         TState pending{T::DC_FAILURE_PENDING, 0, {}};
@@ -90,8 +97,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         UNIT_ASSERT(!failed.CanTransitionTo(inv2));
         UNIT_ASSERT(inv1.CanTransitionTo(inv2));
         UNIT_ASSERT(!inv2.CanTransitionTo(inv1));
-        UNIT_ASSERT(!inv1.CanTransitionTo(solo1));
-        UNIT_ASSERT(!inv2.CanTransitionTo(solo2));
+        UNIT_ASSERT(inv1.CanTransitionTo(solo1));
+        UNIT_ASSERT(inv2.CanTransitionTo(solo2));
         UNIT_ASSERT(!solo1.CanTransitionTo(normal));
         UNIT_ASSERT(!solo2.CanTransitionTo(inv2));
         TState leavingForSolo1{T::SOLO_DC_INV_1_PENDING, 0, 2};
@@ -99,6 +106,25 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         TState preparingRecovery1{T::SOLO_DC_RECOVERY_PENDING_INV_1, 0, 2};
         TState preparingRecovery2{T::SOLO_DC_RECOVERY_PENDING_INV_2, 0, 2};
         TState soloRecovery1{T::SOLO_DC_RECOVERY_INV_1, 0, 2};
+        TState disaster{T::SOLO_DC_DISASTER, 0, 2};
+        TState resurection{T::SOLO_DC_RESURECTION, 0, 2};
+        TState resurectionPending{T::SOLO_DC_RESURECTION_PENDING, 0, 2};
+        UNIT_ASSERT(disaster.CanTransitionTo(resurectionPending));
+        UNIT_ASSERT(!disaster.CanTransitionTo(resurection));
+        UNIT_ASSERT(resurectionPending.CanTransitionTo(resurection));
+        UNIT_ASSERT(!resurectionPending.CanTransitionTo(preparingRecovery1));
+        UNIT_ASSERT(resurectionPending.GetFailRealmStates() == resurection.GetFailRealmStates());
+        UNIT_ASSERT(resurectionPending.GetWritePolicy() == solo1.GetWritePolicy());
+        UNIT_ASSERT(disaster.GetFailRealmStates() == solo1.GetFailRealmStates());
+        UNIT_ASSERT(disaster.GetWritePolicy() == solo1.GetWritePolicy());
+        UNIT_ASSERT(!disaster.CanTransitionTo(leavingForSolo1));
+        UNIT_ASSERT(resurection.CanTransitionTo(leavingForSolo1));
+        UNIT_ASSERT(resurection.CanTransitionTo(preparingRecovery1));
+        UNIT_ASSERT(!resurection.CanTransitionTo(preparingRecovery2));
+        UNIT_ASSERT(!resurection.CanTransitionTo(solo1));
+        UNIT_ASSERT(!resurection.CanTransitionTo({T::SOLO_DC_INV_1_PENDING, 0, 1}));
+        UNIT_ASSERT(resurection.GetFailRealmStates() == leavingForSolo1.GetFailRealmStates());
+        UNIT_ASSERT(resurection.GetWritePolicy() == solo1.GetWritePolicy());
         UNIT_ASSERT(solo1.CanTransitionTo(solo2));
         UNIT_ASSERT(!solo2.CanTransitionTo(solo1));
         UNIT_ASSERT(inv1.CanTransitionTo(leavingForSolo1));
@@ -147,9 +173,54 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         UNIT_ASSERT(failed.GetWritePolicy().CheckWriteOk({2, 2}));
         UNIT_ASSERT(!inv1.GetWritePolicy().CheckWriteOk({1, 1}));
         UNIT_ASSERT(inv1.GetWritePolicy().CheckWriteOk({2, 2}));
-        UNIT_ASSERT(normal.GetWritePolicy().WriteOk == normal.GetWritePolicy().WriteDurability);
+        UNIT_ASSERT(normal.GetWritePolicy().CheckWriteOk({2, 2}));
+        UNIT_ASSERT(!normal.GetWritePolicy().CheckWriteDurability({2, 2}));
         TState recoveryPending{T::DC_RECOVERY_PENDING, 0, {}};
+        TState recoveryPendingInv1{T::DC_RECOVERY_PENDING_INV_1, 0, {}};
         TState recovery{T::DC_RECOVERY, 0, {}};
+        for (const auto& state : {pending, failed}) {
+            UNIT_ASSERT(state.CanTransitionTo(recoveryPending));
+            UNIT_ASSERT(!state.CanTransitionTo(recoveryPendingInv1));
+            UNIT_ASSERT(!state.CanTransitionTo(recovery));
+        }
+        for (const auto& state : {pendingInv1, inv1}) {
+            UNIT_ASSERT(state.CanTransitionTo(recoveryPendingInv1));
+            UNIT_ASSERT(!state.CanTransitionTo(recoveryPending));
+            UNIT_ASSERT(!state.CanTransitionTo(recovery));
+        }
+        for (const auto& state : {pendingInv2, inv2}) {
+            UNIT_ASSERT(state.CanTransitionTo(recovery));
+            UNIT_ASSERT(!state.CanTransitionTo(recoveryPending));
+            UNIT_ASSERT(!state.CanTransitionTo(recoveryPendingInv1));
+        }
+        for (const auto& state : {recoveryPending, recoveryPendingInv1}) {
+            UNIT_ASSERT(state.CanTransitionTo(recovery));
+            UNIT_ASSERT(state.CanTransitionTo(state.Mode == T::DC_RECOVERY_PENDING ? pending : pendingInv1));
+            UNIT_ASSERT(!state.CanTransitionTo(normal));
+            UNIT_ASSERT(state.GetFailRealmStates()[0].State == TInfo::EFailRealmState::Joining);
+            UNIT_ASSERT(state.GetWritePolicy().CheckWriteOk({2, 2}));
+            UNIT_ASSERT_VALUES_EQUAL(state.GetWritePolicy().CheckWriteOk({1, 1, 1}),
+                state.Mode == T::DC_RECOVERY_PENDING_INV_1);
+            UNIT_ASSERT(state.GetWritePolicy().CheckWriteDurability({1, 1, 1}));
+        }
+        UNIT_ASSERT(!recoveryPendingInv1.CanTransitionTo(recoveryPending));
+        UNIT_ASSERT(!recoveryPending.CanTransitionTo(recoveryPendingInv1));
+        UNIT_ASSERT(recovery.CanTransitionTo(normal));
+        UNIT_ASSERT(!recovery.CanTransitionTo(pending));
+        UNIT_ASSERT(recovery.CanTransitionTo(recoveryPendingInv1));
+        UNIT_ASSERT(!recovery.CanTransitionTo(pendingInv2));
+        UNIT_ASSERT(!recovery.CanTransitionTo(inv2));
+        UNIT_ASSERT(recovery.CanTransitionTo(preparingRecovery1));
+        UNIT_ASSERT(recoveryPendingInv1.CanTransitionTo(preparingRecovery1));
+        UNIT_ASSERT(recoveryPending.CanTransitionTo(disaster));
+        UNIT_ASSERT(failed.CanTransitionTo(disaster));
+        UNIT_ASSERT(preparingRecovery1.CanTransitionTo(leavingForSolo1));
+        UNIT_ASSERT(preparingRecovery1.CanTransitionTo(solo1));
+        UNIT_ASSERT(preparingRecovery2.CanTransitionTo(leavingForSolo2));
+        UNIT_ASSERT(preparingRecovery2.CanTransitionTo(solo2));
+        UNIT_ASSERT(!failed.CanTransitionTo(normal));
+        UNIT_ASSERT(leavingForSolo1.CanTransitionTo(leavingForSolo2));
+        UNIT_ASSERT(!leavingForSolo2.CanTransitionTo(leavingForSolo1));
         UNIT_ASSERT(recoveryPending.GetWritePolicy().WriteDurability == normal.GetWritePolicy().WriteDurability);
         const TInfo::TWritePolicy::TLayouts recoveryDurability = {{1, 1, 1}};
         UNIT_ASSERT(recovery.GetWritePolicy().WriteDurability == recoveryDurability);
@@ -163,12 +234,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
             normal, pending, failed, inv1,
             leavingForSolo1, solo1, solo2,
             preparingRecovery2, soloRecovery1, inv1, inv2,
-            {T::DC_RECOVERY_PENDING, 0, {}}, {T::DC_RECOVERY, 0, {}}, {T::NORMAL_PENDING, 0, {}}, normal,
+            recovery, normal,
         };
         for (size_t i = 1; i < path.size(); ++i) {
             UNIT_ASSERT_C(path[i - 1].CanTransitionTo(path[i]), i);
         }
-        for (int mode = T::NORMAL; mode <= T::SOLO_DC_INV_2_PENDING; ++mode) {
+        for (int mode = T::NORMAL; mode <= T::SOLO_DC_RESURECTION_PENDING; ++mode) {
             if (!T::EMode_IsValid(mode)) {
                 continue;
             }
@@ -193,7 +264,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                 }
             }
             group.MutableMirror3dcState()->CopyFrom(state.ToProto());
-            group.MutableConfirmedWrites()->CopyFrom(state.GetConfirmedWrites(normal.GetConfirmedWrites({})).ToProto());
+            group.MutableConfirmedWrites()->CopyFrom(state.GetConfirmedWrites().ToProto());
             group.MutableWritePolicy()->CopyFrom(state.GetWritePolicy().ToProto());
             for (const auto& realm : state.GetFailRealmStates()) {
                 auto* item = group.MutableFailRealmStates()->AddFailRealm();
@@ -203,6 +274,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
             const auto info = TInfo::Parse(group, nullptr, nullptr);
             UNIT_ASSERT_C(info, mode);
             UNIT_ASSERT(info->Mirror3dcState == state);
+            auto wrongConfirmed = group;
+            const TInfo::TConfirmedWrites zero{{TVector<ui32>{}}};
+            const TInfo::TConfirmedWrites one{{{1}}};
+            wrongConfirmed.MutableConfirmedWrites()->CopyFrom(
+                (state.GetConfirmedWrites() == zero ? one : zero).ToProto());
+            UNIT_ASSERT(!TInfo::Parse(wrongConfirmed, nullptr, nullptr));
             TInfo copy(info, TVDiskID(0, 2, 0, 0, 0), TActorId());
             UNIT_ASSERT(copy.Mirror3dcState == state);
             UNIT_ASSERT(copy.ConfirmedWrites == info->ConfirmedWrites);
@@ -241,35 +318,93 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         const auto failure = minimize({{1, 1}});
         const auto inv2 = minimize({{2, 2}});
         const auto solo = minimize({{2}});
-        auto check = [&](T::EMode mode, const TConfirmed& before, const TConfirmed& expected) {
+        const auto one = minimize({{1}});
+        const auto zero = minimize({TVector<ui32>{}});
+        UNIT_ASSERT(zero.Layouts.size() == 1 && zero.Layouts[0].empty());
+        UNIT_ASSERT(TConfirmed::Parse(zero.ToProto(), topology) == zero);
+        UNIT_ASSERT(minimize({{}, {1}, {2, 2}}) == zero);
+        UNIT_ASSERT(zero.Covers({{}, {1}, {2, 2}}));
+        UNIT_ASSERT(!one.Covers({{}}));
+        UNIT_ASSERT(!TInfo::TWritePolicy::Parse(TInfo::TWritePolicy{{{}}, {{2}}}.ToProto(), topology));
+        auto check = [&](T::EMode mode, const TConfirmed& expected) {
             TState state;
             state.Mode = mode;
-            UNIT_ASSERT_C(state.GetConfirmedWrites(before) == expected, T::EMode_Name(mode));
+            UNIT_ASSERT_C(state.GetConfirmedWrites() == expected, T::EMode_Name(mode));
+            UNIT_ASSERT_C(expected.Covers(state.GetWritePolicy().WriteOk), T::EMode_Name(mode));
         };
-        check(T::NORMAL, {}, normal);
+        check(T::NORMAL, normal);
+        check(T::DC_RECOVERY, normal);
         const auto projected = minimize({{1, 1}, {2}});
-        check(T::DC_FAILURE_PENDING, normal, projected);
-        check(T::DC_FAILURE_PENDING_INV_1, normal, failure);
-        check(T::DC_FAILURE_PENDING_INV_2, normal, inv2);
-        check(T::DC_FAILURE, projected, projected);
-        check(T::DC_FAILURE_INV_1, solo, failure);
-        check(T::DC_FAILURE_INV_1, minimize({{1, 1}, {2}}), failure);
-        check(T::DC_FAILURE_INV_1, failure, failure);
-        check(T::DC_FAILURE_INV_2, failure, inv2);
-        check(T::SOLO_DC_INV_2_PENDING, inv2, solo);
-        check(T::SOLO_DC_INV_1_PENDING, failure, minimize({{1, 1}, {2}}));
-        check(T::SOLO_DC_INV_2, minimize({{1, 1}, {2}}), solo);
-        check(T::SOLO_DC_INV_2, inv2, solo);
-        check(T::SOLO_DC_INV_1, failure, minimize({{1}}));
-        check(T::SOLO_DC_RECOVERY_PENDING_INV_1, projected, minimize({{1}}));
-        check(T::SOLO_DC_RECOVERY_PENDING_INV_2, solo, solo);
-        check(T::SOLO_DC_RECOVERY_INV_1, minimize({{1}}), minimize({{1}}));
-        check(T::SOLO_DC_RECOVERY_INV_1, solo, minimize({{1}}));
-        check(T::DC_FAILURE_INV_2, solo, inv2);
-        check(T::DC_RECOVERY_PENDING, inv2, minimize({{1, 1}, {2}}));
-        check(T::DC_RECOVERY, minimize({{1, 1}, {2}}), failure);
-        check(T::NORMAL_PENDING, failure, normal);
-        check(T::NORMAL, failure, normal);
+        for (auto mode : {T::DC_FAILURE_PENDING, T::DC_FAILURE, T::DC_RECOVERY_PENDING}) {
+            check(mode, projected);
+        }
+        for (auto mode : {T::DC_FAILURE_PENDING_INV_1, T::DC_FAILURE_INV_1,
+                T::DC_RECOVERY_PENDING_INV_1, T::SOLO_DC_RECOVERY_INV_1}) {
+            check(mode, failure);
+        }
+        for (auto mode : {T::DC_FAILURE_PENDING_INV_2, T::DC_FAILURE_INV_2}) {
+            check(mode, inv2);
+        }
+        for (auto mode : {T::SOLO_DC_INV_1_PENDING, T::SOLO_DC_INV_1,
+                T::SOLO_DC_RECOVERY_PENDING_INV_1, T::SOLO_DC_RESURECTION}) {
+            check(mode, one);
+        }
+        for (auto mode : {T::SOLO_DC_INV_2_PENDING, T::SOLO_DC_INV_2, T::SOLO_DC_RECOVERY_PENDING_INV_2}) {
+            check(mode, solo);
+        }
+        check(T::SOLO_DC_DISASTER, zero);
+        check(T::SOLO_DC_RESURECTION_PENDING, zero);
+    }
+
+    Y_UNIT_TEST(Mirror3dcWriteParticipation) {
+        using T = NKikimrBlobStorage::TMirror3dcGroupState;
+        using TState = TBlobStorageGroupInfo::TMirror3dcState;
+        // Check all realm identities; counts remain indexed, rather than sorted across roles.
+        for (ui32 c = 0; c < 3; ++c) {
+            const ui32 a = (c + 1) % 3;
+            const ui32 b = (c + 2) % 3;
+            auto counts = [&](ui32 inA, ui32 inB, ui32 inC) {
+                std::array<ui32, 3> result{};
+                result[a] = inA;
+                result[b] = inB;
+                result[c] = inC;
+                return result;
+            };
+            for (auto mode : {T::DC_RECOVERY_PENDING_INV_1, T::DC_RECOVERY}) {
+                TState state{mode, c, {}};
+                UNIT_ASSERT_VALUES_EQUAL(state.GetWriteOkLayouts().size(), 2);
+                UNIT_ASSERT(state.CheckWriteOk(counts(2, 2, 0)));
+                UNIT_ASSERT(state.CheckWriteOk(counts(1, 1, 1)));
+                UNIT_ASSERT(!state.CheckWriteOk(counts(2, 0, 2)));
+                UNIT_ASSERT(!state.CheckWriteOk(counts(0, 2, 2)));
+                UNIT_ASSERT(!state.CheckWriteOk(counts(3, 0, 3)));
+                UNIT_ASSERT(state.CheckWriteDurability(counts(1, 1, 1)));
+                UNIT_ASSERT(!state.CheckWriteDurability(counts(2, 2, 0)));
+            }
+            TState failurePending{T::DC_FAILURE_PENDING, c, {}};
+            UNIT_ASSERT(failurePending.CheckWriteOk(counts(2, 2, 0)));
+            UNIT_ASSERT(!failurePending.CheckWriteOk(counts(2, 0, 3)));
+            UNIT_ASSERT(!failurePending.CheckWriteDurability(counts(1, 0, 3)));
+            UNIT_ASSERT(failurePending.CheckWriteDurability(counts(1, 1, 0)));
+            TState recoveryPending{T::DC_RECOVERY_PENDING, c, {}};
+            UNIT_ASSERT(recoveryPending.CheckWriteOk(counts(2, 2, 0)));
+            UNIT_ASSERT(!recoveryPending.CheckWriteOk(counts(1, 2, 2)));
+            UNIT_ASSERT(!recoveryPending.CheckWriteOk(counts(2, 1, 2)));
+            for (auto mode : {T::SOLO_DC_DISASTER, T::SOLO_DC_RESURECTION_PENDING,
+                    T::SOLO_DC_RESURECTION, T::SOLO_DC_INV_1_PENDING, T::SOLO_DC_INV_1}) {
+                TState state{mode, c, a};
+                UNIT_ASSERT_VALUES_EQUAL(state.GetWriteOkLayouts().size(), 1);
+                UNIT_ASSERT(state.CheckWriteOk(counts(2, 0, 0)));
+                UNIT_ASSERT(!state.CheckWriteOk(counts(1, 3, 3)));
+                UNIT_ASSERT(!state.CheckWriteDurability(counts(1, 3, 3)));
+                UNIT_ASSERT(state.CheckWriteDurability(counts(2, 0, 0)));
+            }
+            TState soloRecovery{T::SOLO_DC_RECOVERY_PENDING_INV_1, c, a};
+            UNIT_ASSERT(soloRecovery.CheckWriteOk(counts(2, 2, 0)));
+            UNIT_ASSERT(!soloRecovery.CheckWriteOk(counts(0, 2, 3)));
+            UNIT_ASSERT(!soloRecovery.CheckWriteOk(counts(2, 0, 3)));
+            UNIT_ASSERT(soloRecovery.CheckWriteDurability(counts(1, 1, 0)));
+        }
     }
 
     Y_UNIT_TEST(FailRealmStates) {

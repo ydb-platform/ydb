@@ -784,14 +784,25 @@ NKikimrBlobStorage::TGroupWritePolicy TBlobStorageGroupInfo::TWritePolicy::ToPro
 
 std::optional<TBlobStorageGroupInfo::TConfirmedWrites> TBlobStorageGroupInfo::TConfirmedWrites::Parse(
         const NKikimrBlobStorage::TConfirmedWrites& proto, const TTopology& topology, IOutputStream* err) {
-    NKikimrBlobStorage::TGroupWritePolicy policy;
-    policy.MutableWriteOk()->CopyFrom(proto.GetLayout());
-    policy.MutableWriteDurability()->CopyFrom(proto.GetLayout());
-    const auto parsed = TWritePolicy::Parse(policy, topology, err);
-    if (!parsed) {
+    if (!topology.GetTotalFailRealmsNum() || proto.GetLayout().empty()) {
+        if (err) {
+            *err << "ConfirmedWrites requires a physical topology and at least one layout";
+        }
         return std::nullopt;
     }
-    return Minimize(parsed->WriteOk);
+    TWritePolicy::TLayouts layouts;
+    for (const auto& item : proto.GetLayout()) {
+        TVector<ui32> layout(item.GetPartsPerFailRealm().begin(), item.GetPartsPerFailRealm().end());
+        if (layout.size() > topology.GetTotalFailRealmsNum()
+                || AnyOf(layout, [&](ui32 count) { return !count || count > topology.GetNumFailDomainsPerFailRealm(); })) {
+            if (err) {
+                *err << "ConfirmedWrites layout exceeds group geometry or contains a zero part count";
+            }
+            return std::nullopt;
+        }
+        layouts.push_back(std::move(layout));
+    }
+    return Minimize(std::move(layouts));
 }
 
 NKikimrBlobStorage::TConfirmedWrites TBlobStorageGroupInfo::TConfirmedWrites::ToProto() const {
@@ -932,6 +943,9 @@ std::optional<TBlobStorageGroupInfo::TMirror3dcState> TBlobStorageGroupInfo::TMi
 bool TBlobStorageGroupInfo::TMirror3dcState::RequiresSurvivingRealm() const {
     using T = NKikimrBlobStorage::TMirror3dcGroupState;
     switch (Mode) {
+        case T::SOLO_DC_DISASTER:
+        case T::SOLO_DC_RESURECTION_PENDING:
+        case T::SOLO_DC_RESURECTION:
         case T::SOLO_DC_INV_1:
         case T::SOLO_DC_INV_2:
         case T::SOLO_DC_INV_1_PENDING:
@@ -963,7 +977,7 @@ bool TBlobStorageGroupInfo::TMirror3dcState::CanTransitionTo(const TMirror3dcSta
         return true;
     }
     if (next.Mode == T::NORMAL) {
-        return Mode == T::NORMAL_PENDING;
+        return Mode == T::DC_RECOVERY;
     }
     // Changing the identity of an excluded DC requires completing the recovery first.
     if (Mode != T::NORMAL && FailedFailRealmIdx != next.FailedFailRealmIdx) {
@@ -977,26 +991,34 @@ bool TBlobStorageGroupInfo::TMirror3dcState::CanTransitionTo(const TMirror3dcSta
         case T::NORMAL:
             return next.Mode == T::DC_FAILURE_PENDING;
         case T::DC_FAILURE_PENDING:
-            return next.Mode == T::DC_FAILURE || next.Mode == T::DC_FAILURE_PENDING_INV_1;
+            return next.Mode == T::DC_FAILURE || next.Mode == T::DC_FAILURE_PENDING_INV_1
+                || next.Mode == T::DC_RECOVERY_PENDING;
         case T::DC_FAILURE_PENDING_INV_1:
-            return next.Mode == T::DC_FAILURE_INV_1 || next.Mode == T::DC_FAILURE_PENDING_INV_2;
+            return next.Mode == T::DC_FAILURE_INV_1 || next.Mode == T::DC_FAILURE_PENDING_INV_2
+                || next.Mode == T::DC_RECOVERY_PENDING_INV_1;
         case T::DC_FAILURE_PENDING_INV_2:
-            return next.Mode == T::DC_FAILURE_INV_2;
+            return next.Mode == T::DC_FAILURE_INV_2 || next.Mode == T::DC_RECOVERY;
         case T::DC_FAILURE:
-            return next.Mode == T::DC_FAILURE_INV_1 || next.Mode == T::DC_RECOVERY_PENDING;
+            return next.Mode == T::DC_FAILURE_INV_1 || next.Mode == T::DC_RECOVERY_PENDING
+                || next.Mode == T::SOLO_DC_DISASTER;
         case T::DC_FAILURE_INV_1:
             return next.Mode == T::DC_FAILURE_INV_2 || next.Mode == T::SOLO_DC_INV_1_PENDING
-                || next.Mode == T::DC_RECOVERY_PENDING;
+                || next.Mode == T::SOLO_DC_INV_1
+                || next.Mode == T::DC_RECOVERY_PENDING_INV_1;
         case T::DC_FAILURE_INV_2:
-            return next.Mode == T::SOLO_DC_INV_2_PENDING || next.Mode == T::DC_RECOVERY_PENDING;
+            return next.Mode == T::SOLO_DC_INV_2_PENDING || next.Mode == T::SOLO_DC_INV_2
+                || next.Mode == T::DC_RECOVERY;
         case T::DC_RECOVERY_PENDING:
-            return next.Mode == T::DC_RECOVERY || next.Mode == T::DC_FAILURE_PENDING;
+            return next.Mode == T::DC_RECOVERY || next.Mode == T::DC_FAILURE_PENDING
+                || next.Mode == T::DC_FAILURE || next.Mode == T::SOLO_DC_DISASTER;
+        case T::DC_RECOVERY_PENDING_INV_1:
+            return next.Mode == T::DC_RECOVERY || next.Mode == T::DC_FAILURE_PENDING_INV_1
+                || next.Mode == T::DC_FAILURE_INV_1 || next.Mode == T::SOLO_DC_RECOVERY_PENDING_INV_1;
         case T::DC_RECOVERY:
-            return next.Mode == T::NORMAL_PENDING || next.Mode == T::DC_FAILURE_PENDING;
-        case T::NORMAL_PENDING:
-            return next.Mode == T::DC_FAILURE_PENDING;
+            return next.Mode == T::DC_RECOVERY_PENDING_INV_1 || next.Mode == T::SOLO_DC_RECOVERY_PENDING_INV_1;
         case T::SOLO_DC_INV_1_PENDING:
-            return next.Mode == T::SOLO_DC_INV_1 || next.Mode == T::SOLO_DC_RECOVERY_PENDING_INV_1;
+            return next.Mode == T::SOLO_DC_INV_1 || next.Mode == T::SOLO_DC_INV_2_PENDING
+                || next.Mode == T::SOLO_DC_RECOVERY_PENDING_INV_1;
         case T::SOLO_DC_INV_2_PENDING:
             return next.Mode == T::SOLO_DC_INV_2 || next.Mode == T::SOLO_DC_RECOVERY_PENDING_INV_2;
         case T::SOLO_DC_INV_1:
@@ -1004,10 +1026,19 @@ bool TBlobStorageGroupInfo::TMirror3dcState::CanTransitionTo(const TMirror3dcSta
         case T::SOLO_DC_INV_2:
             return next.Mode == T::SOLO_DC_RECOVERY_PENDING_INV_2;
         case T::SOLO_DC_RECOVERY_PENDING_INV_1:
+            return next.Mode == T::SOLO_DC_RECOVERY_INV_1 || next.Mode == T::SOLO_DC_INV_1_PENDING
+                || next.Mode == T::SOLO_DC_INV_1;
         case T::SOLO_DC_RECOVERY_PENDING_INV_2:
-            return next.Mode == T::SOLO_DC_RECOVERY_INV_1;
+            return next.Mode == T::SOLO_DC_RECOVERY_INV_1 || next.Mode == T::SOLO_DC_INV_2_PENDING
+                || next.Mode == T::SOLO_DC_INV_2;
         case T::SOLO_DC_RECOVERY_INV_1:
             return next.Mode == T::DC_FAILURE_INV_1;
+        case T::SOLO_DC_DISASTER:
+            return next.Mode == T::SOLO_DC_RESURECTION_PENDING;
+        case T::SOLO_DC_RESURECTION_PENDING:
+            return next.Mode == T::SOLO_DC_RESURECTION;
+        case T::SOLO_DC_RESURECTION:
+            return next.Mode == T::SOLO_DC_INV_1_PENDING || next.Mode == T::SOLO_DC_RECOVERY_PENDING_INV_1;
         default:
             return false;
     }
@@ -1025,13 +1056,16 @@ TVector<TBlobStorageGroupInfo::TFailRealmState> TBlobStorageGroupInfo::TMirror3d
             return {{*FailedFailRealmIdx, S::Leaving}};
         case T::DC_RECOVERY_PENDING:
         case T::DC_RECOVERY:
-        case T::NORMAL_PENDING:
+        case T::DC_RECOVERY_PENDING_INV_1:
             // Writes are allowed; read completeness must not depend on this realm.
             return {{*FailedFailRealmIdx, S::Joining}};
         case T::DC_FAILURE:
         case T::DC_FAILURE_INV_1:
         case T::DC_FAILURE_INV_2:
             return {{*FailedFailRealmIdx, S::Excluded}};
+        case T::SOLO_DC_DISASTER:
+        case T::SOLO_DC_RESURECTION_PENDING:
+        case T::SOLO_DC_RESURECTION:
         case T::SOLO_DC_INV_1:
         case T::SOLO_DC_INV_2:
         case T::SOLO_DC_INV_1_PENDING:
@@ -1045,7 +1079,8 @@ TVector<TBlobStorageGroupInfo::TFailRealmState> TBlobStorageGroupInfo::TMirror3d
                     const auto state = realm == *FailedFailRealmIdx ? S::Excluded
                         : Mode == T::SOLO_DC_RECOVERY_PENDING_INV_1 || Mode == T::SOLO_DC_RECOVERY_PENDING_INV_2
                             || Mode == T::SOLO_DC_RECOVERY_INV_1 ? S::Joining
-                        : Mode == T::SOLO_DC_INV_1_PENDING || Mode == T::SOLO_DC_INV_2_PENDING ? S::Leaving
+                        : Mode == T::SOLO_DC_INV_1_PENDING || Mode == T::SOLO_DC_INV_2_PENDING
+                            || Mode == T::SOLO_DC_RESURECTION_PENDING || Mode == T::SOLO_DC_RESURECTION ? S::Leaving
                         : S::Excluded;
                     result.push_back({realm, state});
                 }
@@ -1061,11 +1096,11 @@ TBlobStorageGroupInfo::TWritePolicy TBlobStorageGroupInfo::TMirror3dcState::GetW
     using T = NKikimrBlobStorage::TMirror3dcGroupState;
     switch (Mode) {
         case T::NORMAL:
-        case T::DC_RECOVERY_PENDING:
-            return {{{1, 1, 1}, {2, 2}}, {{1, 1, 1}, {2, 2}}};
         case T::DC_RECOVERY:
-        case T::NORMAL_PENDING:
+        case T::DC_RECOVERY_PENDING_INV_1:
             return {{{1, 1, 1}, {2, 2}}, {{1, 1, 1}}};
+        case T::DC_RECOVERY_PENDING:
+            return {{{2, 2}}, {{1, 1, 1}}};
         case T::DC_FAILURE_PENDING:
         case T::SOLO_DC_RECOVERY_PENDING_INV_1:
         case T::SOLO_DC_RECOVERY_PENDING_INV_2:
@@ -1079,6 +1114,9 @@ TBlobStorageGroupInfo::TWritePolicy TBlobStorageGroupInfo::TMirror3dcState::GetW
         case T::DC_FAILURE_INV_2:
             // Preserve invariant II for new writes in both participating realms.
             return {{{2, 2}}, {{2, 2}}};
+        case T::SOLO_DC_DISASTER:
+        case T::SOLO_DC_RESURECTION_PENDING:
+        case T::SOLO_DC_RESURECTION:
         case T::SOLO_DC_INV_1:
         case T::SOLO_DC_INV_1_PENDING:
         case T::SOLO_DC_INV_2_PENDING:
@@ -1089,56 +1127,93 @@ TBlobStorageGroupInfo::TWritePolicy TBlobStorageGroupInfo::TMirror3dcState::GetW
     }
 }
 
-TBlobStorageGroupInfo::TConfirmedWrites TBlobStorageGroupInfo::TMirror3dcState::GetConfirmedWrites(
-        const TConfirmedWrites& previous) const {
+TVector<std::array<ui32, 3>> TBlobStorageGroupInfo::TMirror3dcState::GetWriteOkLayouts() const {
+    std::array<EFailRealmState, 3> states{}; // Included by default.
+    for (const auto& realm : GetFailRealmStates()) {
+        states[realm.FailRealmIdx] = realm.State;
+    }
+    TVector<std::array<ui32, 3>> result;
+    for (const auto& layout : GetWritePolicy().WriteOk) {
+        std::array<ui32, 3> placement{};
+        std::copy(layout.begin(), layout.end(), placement.begin());
+        Sort(placement);
+        do {
+            bool valid = true;
+            bool usesJoining = false;
+            bool usesAllIncluded = true;
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                switch (states[realm]) {
+                    case EFailRealmState::Included:
+                        usesAllIncluded &= placement[realm] != 0;
+                        break;
+                    case EFailRealmState::Joining:
+                        usesJoining |= placement[realm] != 0;
+                        break;
+                    case EFailRealmState::Excluded:
+                    case EFailRealmState::Leaving:
+                        valid &= placement[realm] == 0;
+                        break;
+                }
+            }
+            if (valid && (!usesJoining || usesAllIncluded)) {
+                result.push_back(placement);
+            }
+        } while (std::next_permutation(placement.begin(), placement.end()));
+    }
+    return result;
+}
+
+bool TBlobStorageGroupInfo::TMirror3dcState::CheckWriteOk(const std::array<ui32, 3>& partsPerFailRealm) const {
+    return AnyOf(GetWriteOkLayouts(), [&](const auto& layout) {
+        return partsPerFailRealm[0] >= layout[0] && partsPerFailRealm[1] >= layout[1]
+            && partsPerFailRealm[2] >= layout[2];
+    });
+}
+
+bool TBlobStorageGroupInfo::TMirror3dcState::CheckWriteDurability(
+        const std::array<ui32, 3>& partsPerFailRealm) const {
+    TVector<ui32> writableParts(partsPerFailRealm.begin(), partsPerFailRealm.end());
+    for (const auto& realm : GetFailRealmStates()) {
+        if (realm.State == EFailRealmState::Leaving || realm.State == EFailRealmState::Excluded) {
+            writableParts[realm.FailRealmIdx] = 0;
+        }
+    }
+    return GetWritePolicy().CheckWriteDurability(std::move(writableParts));
+}
+
+TBlobStorageGroupInfo::TConfirmedWrites TBlobStorageGroupInfo::TMirror3dcState::GetConfirmedWrites() const {
     using T = NKikimrBlobStorage::TMirror3dcGroupState;
-    const auto policy = GetWritePolicy();
-    auto layouts = previous.Layouts;
     switch (Mode) {
         case T::NORMAL:
+        case T::DC_RECOVERY:
+            return {{{1, 1, 1}, {2, 2}}};
+        case T::DC_FAILURE_PENDING:
+        case T::DC_FAILURE:
+        case T::DC_RECOVERY_PENDING:
+            return {{{1, 1}, {2}}};
+        case T::DC_FAILURE_PENDING_INV_1:
+        case T::DC_FAILURE_INV_1:
+        case T::DC_RECOVERY_PENDING_INV_1:
+        case T::SOLO_DC_RECOVERY_INV_1:
+            return {{{1, 1}}};
+        case T::DC_FAILURE_PENDING_INV_2:
         case T::DC_FAILURE_INV_2:
-        case T::SOLO_DC_INV_2:
-            // The administrator asserts completion for old data. New writes only promise WriteOk.
-            layouts = policy.WriteDurability;
-            break;
+            return {{{2, 2}}};
+        case T::SOLO_DC_INV_1_PENDING:
         case T::SOLO_DC_INV_1:
         case T::SOLO_DC_RECOVERY_PENDING_INV_1:
-        case T::SOLO_DC_RECOVERY_INV_1:
-            // Only one surviving copy is guaranteed until recovery completes.
-            layouts = {{1}};
-            break;
+        case T::SOLO_DC_RESURECTION:
+            return {{{1}}};
+        case T::SOLO_DC_INV_2_PENDING:
+        case T::SOLO_DC_INV_2:
         case T::SOLO_DC_RECOVERY_PENDING_INV_2:
-            layouts = {{2}};
-            break;
-        case T::DC_FAILURE_INV_1:
-            // Invariant I is confirmed for old blobs; 2+2 is only the new-write policy.
-            layouts = {{1, 1}};
-            break;
-        case T::DC_FAILURE_PENDING:
-            // Project the normal 1+1+1 OR 2+2 guarantee onto the two continuing realms.
-            layouts = {{1, 1}, {2}};
-            break;
-        case T::DC_FAILURE_PENDING_INV_1:
-            layouts = {{1, 1}};
-            break;
-        case T::DC_FAILURE_PENDING_INV_2:
-            layouts = {{2, 2}};
-            break;
-        case T::DC_RECOVERY_PENDING:
-            layouts = {{1, 1}, {2}};
-            break;
-        case T::DC_RECOVERY:
-            layouts = {{1, 1}};
-            break;
-        case T::NORMAL_PENDING:
-            layouts = {{1, 1, 1}, {2, 2}};
-            break;
+            return {{{2}}};
+        case T::SOLO_DC_DISASTER:
+        case T::SOLO_DC_RESURECTION_PENDING:
+            return {{TVector<ui32>{}}};
         default:
-            // Other pending states retain old-data guarantees.
-            break;
+            Y_ABORT("Invalid mirror-3-dc mode");
     }
-    layouts.insert(layouts.end(), policy.WriteOk.begin(), policy.WriteOk.end());
-    return TConfirmedWrites::Minimize(std::move(layouts));
 }
 
 TBlobStorageGroupInfo::~TBlobStorageGroupInfo()
@@ -1217,7 +1292,7 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
         }
         if (res->FailRealmStates != res->Mirror3dcState->GetFailRealmStates()
                 || !res->WritePolicy || *res->WritePolicy != res->Mirror3dcState->GetWritePolicy()
-                || !res->ConfirmedWrites) {
+                || !res->ConfirmedWrites || *res->ConfirmedWrites != res->Mirror3dcState->GetConfirmedWrites()) {
             if (err) {
                 *err << "Internal policies do not match the administrative mirror3dc state";
             }

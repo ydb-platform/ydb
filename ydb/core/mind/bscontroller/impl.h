@@ -925,6 +925,8 @@ public:
             }
         }
 
+        ui64 ScaleGroupResource(ui64 value) const;
+
         bool FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,
             TBlobStorageController *self) const;
         bool FillInOwnGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params) const;

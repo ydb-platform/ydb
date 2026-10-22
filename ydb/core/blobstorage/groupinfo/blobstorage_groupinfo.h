@@ -583,7 +583,7 @@ public:
         bool RequiresSurvivingRealm() const;
         TVector<TFailRealmState> GetFailRealmStates() const;
         TWritePolicy GetWritePolicy() const;
-        // Only manual completion of recovery may strengthen existing guarantees.
+        // Invariant and recovery milestones may assert stronger guarantees for existing blobs.
         TConfirmedWrites GetConfirmedWrites(const TConfirmedWrites& previous) const;
     };
     std::optional<TMirror3dcState> Mirror3dcState;

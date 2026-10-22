@@ -1063,8 +1063,8 @@ TBlobStorageGroupInfo::TWritePolicy TBlobStorageGroupInfo::TMirror3dcState::GetW
     using T = NKikimrBlobStorage::TMirror3dcGroupState;
     switch (Mode) {
         case T::NORMAL:
-            return {{{1, 1, 1}, {2, 2}}, {{1, 1, 1}, {2, 2}}};
         case T::DC_RECOVERY_PENDING:
+            return {{{1, 1, 1}, {2, 2}}, {{1, 1, 1}, {2, 2}}};
         case T::DC_RECOVERY:
         case T::NORMAL_PENDING:
             return {{{1, 1, 1}, {2, 2}}, {{1, 1, 1}}};
@@ -1117,6 +1117,15 @@ TBlobStorageGroupInfo::TConfirmedWrites TBlobStorageGroupInfo::TMirror3dcState::
             break;
         case T::DC_FAILURE_PENDING_INV_2:
             layouts = {{2, 2}};
+            break;
+        case T::DC_RECOVERY_PENDING:
+            layouts = {{1, 1}, {2}};
+            break;
+        case T::DC_RECOVERY:
+            layouts = {{1, 1}};
+            break;
+        case T::NORMAL_PENDING:
+            layouts = {{1, 1, 1}, {2, 2}};
             break;
         default:
             // Other pending/recovery states and SOLO_DC_INV_1 retain old-data guarantees.

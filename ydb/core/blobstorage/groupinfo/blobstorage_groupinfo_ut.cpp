@@ -123,6 +123,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         UNIT_ASSERT(!preparingInv1.GetWritePolicy().CheckWriteOk({1, 1}));
         UNIT_ASSERT(preparingInv1.GetWritePolicy().CheckWriteOk({2, 2}));
         UNIT_ASSERT(normal.GetWritePolicy().WriteOk == normal.GetWritePolicy().WriteDurability);
+        TState recoveryPending{T::DC_RECOVERY_PENDING, 0, {}};
+        TState recovery{T::DC_RECOVERY, 0, {}};
+        UNIT_ASSERT(recoveryPending.GetWritePolicy().WriteDurability == normal.GetWritePolicy().WriteDurability);
+        const TInfo::TWritePolicy::TLayouts recoveryDurability = {{1, 1, 1}};
+        UNIT_ASSERT(recovery.GetWritePolicy().WriteDurability == recoveryDurability);
         UNIT_ASSERT(!inv2.GetWritePolicy().CheckWriteOk({1, 2}));
         UNIT_ASSERT(inv2.GetWritePolicy().CheckWriteOk({2, 2}));
         UNIT_ASSERT(!inv2.GetWritePolicy().CheckWriteDurability({1, 2}));
@@ -138,7 +143,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         for (size_t i = 1; i < path.size(); ++i) {
             UNIT_ASSERT_C(path[i - 1].CanTransitionTo(path[i]), i);
         }
-        for (int mode = T::NORMAL; mode <= T::DC_FAILURE_PENDING_INV_2; ++mode) {
+        for (int mode = T::NORMAL; mode <= T::DC_FAILURE_INV_1_PENDING; ++mode) {
             if (!T::EMode_IsValid(mode)) {
                 continue;
             }
@@ -234,9 +239,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         check(T::SOLO_DC_RECOVERY_PENDING, solo, solo);
         check(T::SOLO_DC_RECOVERY, solo, solo);
         check(T::DC_FAILURE_INV_2, solo, inv2);
-        check(T::DC_RECOVERY_PENDING, inv2, normal);
-        check(T::DC_RECOVERY, failure, failure);
-        check(T::NORMAL_PENDING, failure, failure);
+        check(T::DC_RECOVERY_PENDING, inv2, minimize({{1, 1}, {2}}));
+        check(T::DC_RECOVERY, minimize({{1, 1}, {2}}), failure);
+        check(T::NORMAL_PENDING, failure, normal);
         check(T::NORMAL, failure, normal);
     }
 

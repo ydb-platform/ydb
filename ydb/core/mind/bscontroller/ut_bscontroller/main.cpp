@@ -471,7 +471,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             {{{1, 1}}}, {{{1, 1}, {2}}}, // SOLO_INV_1_PENDING and SOLO_INV_1
             {{{1, 1}, {2}}}, {{{2}}}, // SOLO_INV_2_PENDING does not strengthen old data
             {{{2}}}, {{{2}}}, {{{2}}}, {{{1, 1}}}, // recovery pending, recovery, INV_1_PENDING, INV_1
-            {{{1, 1}}}, {{{1, 1}}}, {{{1, 1}}}, {{{1, 1, 1}, {2, 2}}}, // return to NORMAL
+            {{{1, 1}, {2}}}, {{{1, 1}}}, {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}}, // return to NORMAL
         };
         UNIT_ASSERT_VALUES_EQUAL(path.size(), expectedConfirmed.size());
         size_t step = 0;

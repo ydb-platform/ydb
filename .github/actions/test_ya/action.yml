@@ -18,7 +18,7 @@ inputs:
     description: "small or small-medium or all"
   test_threads:
     required: false
-    default: "56"
+    default: "64"
     description: "Test threads count"
   link_threads:
     required: false

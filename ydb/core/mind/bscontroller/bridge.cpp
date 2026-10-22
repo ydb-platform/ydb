@@ -495,6 +495,9 @@ private:
     }
 
     void OnCommitted() override {
+        // groups created from now on get their parts in the pile right away
+        Self->BridgePileAddedOperationId = OperationId;
+
         // new parts are unsynced from the very beginning, they get synced when the pile rejoins
         for (const auto& [bridgeProxyGroupId, targetGroupId] : Added) {
             const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, bridgeProxyGroupId,
@@ -623,6 +626,15 @@ TBridgePileId TBlobStorageController::GetPendingOperationPileId() const {
 bool TBlobStorageController::IsBridgePileBeingRemoved(TBridgePileId pileId) const {
     return pileId && GetPendingOperationPileId() == pileId && StorageConfig->GetClusterStateDetails()
         .GetPendingPileOperation().GetKind() == NKikimrBridge::TClusterStateDetails::TPendingPileOperation::REMOVE;
+}
+
+bool TBlobStorageController::IsBridgePileAwaitingParts(TBridgePileId pileId) const {
+    if (!pileId || GetPendingOperationPileId() != pileId) {
+        return false;
+    }
+    const auto& op = StorageConfig->GetClusterStateDetails().GetPendingPileOperation();
+    return op.GetKind() == NKikimrBridge::TClusterStateDetails::TPendingPileOperation::ADD &&
+        op.GetOperationId() != BridgePileAddedOperationId;
 }
 
 void TBlobStorageController::CheckBridgePileOperation() {

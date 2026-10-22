@@ -79,6 +79,7 @@ ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[1-no_sha
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[2-no_shared]
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[no_shared]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
+ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_basic
 ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles
 ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[pk_predicate/pk_predicate_ranges_rp.sql-result_sets]
 ydb/tests/functional/config py3test.[test_distconf.py */*] chunk

@@ -31,6 +31,23 @@ jobs:
         yc config set service-account-key "$CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
         yc config set cloud-id b1ggceeul2pkher8vhb6
         yc config set folder-id b1grf3mpoatgflnlavjd
+    - name: Install SSH key
+      env:
+        RECONCILE_SSH_KEY: ${{ secrets.GH_RUNNER_RECONCILE_SSH_KEY }}
+      run: |
+        test -n "$RECONCILE_SSH_KEY"
+        install -d -m 700 ~/.ssh
+        printf '%s\n' "$RECONCILE_SSH_KEY" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        cat > ~/.ssh/config << 'EOF'
+        Host gh-runners-gw
+          HostName 158.160.148.210
+          User kirrysin
+          IdentityFile ~/.ssh/id_ed25519
+          IdentitiesOnly yes
+          StrictHostKeyChecking accept-new
+        EOF
+        chmod 600 ~/.ssh/config
     - name: Check fleet
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

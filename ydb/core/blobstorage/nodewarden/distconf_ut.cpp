@@ -5161,11 +5161,12 @@ selector_config: []
                 &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
         }
         auto *cluster = config.MutableClusterState();
-        cluster->CopyFrom(NBridge::MakeInitialClusterState(2));
         cluster->SetGeneration(1);
-        auto *registry = config.MutableClusterStateDetails()->MutablePileRegistry();
-        registry->AddPiles()->SetName("pile0");
-        registry->AddPiles()->SetName("pile1");
+        cluster->AddPerPileState(NKikimrBridge::TClusterState::SYNCHRONIZED);
+        cluster->AddPerPileState(NKikimrBridge::TClusterState::SYNCHRONIZED);
+        TBridgePileId::FromPileIndex(0).CopyToProto(cluster, &NKikimrBridge::TClusterState::SetPrimaryPile);
+        TBridgePileId::FromPileIndex(0).CopyToProto(cluster, &NKikimrBridge::TClusterState::SetPromotedPile);
+        config.MutableClusterStateDetails();
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
         return config;
     }

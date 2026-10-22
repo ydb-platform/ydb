@@ -8,7 +8,9 @@
 #include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
+#include <util/generic/algorithm.h>
 #include <util/random/random.h>
+#include <util/string/join.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/utils/log/log.h>
@@ -52,6 +54,7 @@ struct TEvPrivate {
         EvCheckPartitionCountResult,
         EvRequestPartitionStatus,
         EvResumeCallbacks,
+        EvReconnectCluster,
 
         EvEnd
     };
@@ -85,6 +88,15 @@ struct TEvPrivate {
     struct TEvCheckPartitionTimer: public TEventLocal<TEvCheckPartitionTimer, EvCheckPartitionTimer> {};
 
     struct TEvRequestPartitionStatus: public TEventLocal<TEvRequestPartitionStatus, EvRequestPartitionStatus> {};
+
+    struct TEvReconnectCluster: public TEventLocal<TEvReconnectCluster, EvReconnectCluster> {
+        explicit TEvReconnectCluster(ui32 clusterIndex)
+            : ClusterIndex(clusterIndex)
+        {
+        }
+
+        const ui32 ClusterIndex;
+    };
 
     struct TEvCheckPartitionCount: public TEventLocal<TEvCheckPartitionCount, EvCheckPartitionCount> {
         explicit TEvCheckPartitionCount(ui32 clusterIndex)
@@ -154,6 +166,7 @@ class TMessageStreamReadActor: public TActor<TMessageStreamReadActor>, public ID
             AsyncInputDataRate = Task->GetCounter("AsyncInputDataRate", true);
             ReconnectRate = Task->GetCounter("ReconnectRate", true);
             DataRate = Task->GetCounter("DataRate", true);
+            AvailableClusters = Source->GetCounter("AvailableClusters");
             WaitEventTimeMs = Source->GetHistogram("WaitEventTimeMs", NMonitoring::ExplicitHistogram({ 5, 20, 100, 500, 2000 }));
         }
 
@@ -173,6 +186,7 @@ class TMessageStreamReadActor: public TActor<TMessageStreamReadActor>, public ID
         ::NMonitoring::TDynamicCounters::TCounterPtr AsyncInputDataRate;
         ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
         ::NMonitoring::TDynamicCounters::TCounterPtr DataRate;
+        ::NMonitoring::TDynamicCounters::TCounterPtr AvailableClusters;
         NMonitoring::THistogramPtr WaitEventTimeMs;
     };
 
@@ -185,6 +199,8 @@ class TMessageStreamReadActor: public TActor<TMessageStreamReadActor>, public ID
         NThreading::TFuture<void> EventFuture;
         bool SubscribedOnEvent = false;
         TMaybe<TInstant> WaitEventStartedAt;
+        bool Available = true;
+        bool ReconnectScheduled = false;
     };
 
 public:
@@ -263,6 +279,7 @@ public:
         State->LoadState(state);
         InitWatermarkTracker();
         Clusters.clear();
+        UpdateAvailableClustersMetric();
     }
 
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
@@ -356,19 +373,19 @@ public:
 
 private:
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvSourceDataReady, Handle);
-        hFunc(TEvPrivate::TEvPartitionIdleness, Handle);
-        hFunc(TEvPrivate::TEvReconnectSession, Handle);
-        hFunc(TEvExecuteMessageStreamCallback, HandleCallback);
-        hFunc(TEvPrivate::TEvResumeCallbacks, Handle);
-        hFunc(TEvPrivate::TEvCheckPartitionTimer, Handle);
-        hFunc(TEvPrivate::TEvCheckPartitionCount, Handle);
-        hFunc(TEvPrivate::TEvCheckPartitionCountResult, Handle);
-        hFunc(TEvPrivate::TEvRequestPartitionStatus, Handle);
-        hFunc(TEvents::TEvWakeup, Handle);
-        hFunc(TEvents::TEvInvokeResult, HandleConsumerOffsets);
-        cFunc(TEvents::TEvPoison::EventType, PassAway);
-    )
+                      hFunc(TEvPrivate::TEvSourceDataReady, Handle);
+                      hFunc(TEvPrivate::TEvPartitionIdleness, Handle);
+                      hFunc(TEvPrivate::TEvReconnectSession, Handle);
+                      hFunc(TEvExecuteMessageStreamCallback, HandleCallback);
+                      hFunc(TEvPrivate::TEvResumeCallbacks, Handle);
+                      hFunc(TEvPrivate::TEvCheckPartitionTimer, Handle);
+                      hFunc(TEvPrivate::TEvCheckPartitionCount, Handle);
+                      hFunc(TEvPrivate::TEvCheckPartitionCountResult, Handle);
+                      hFunc(TEvPrivate::TEvRequestPartitionStatus, Handle);
+                      hFunc(TEvPrivate::TEvReconnectCluster, Handle);
+                      hFunc(TEvents::TEvWakeup, Handle);
+                      hFunc(TEvents::TEvInvokeResult, HandleConsumerOffsets);
+                      cFunc(TEvents::TEvPoison::EventType, PassAway);)
 
     void HandleCallback(TEvExecuteMessageStreamCallback::TPtr& ev) {
         if (!CpuQuotaRegistered) {
@@ -497,6 +514,7 @@ private:
 
         Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
         SchedulePartitionCountTimer();
+        UpdateAvailableClustersMetric();
     }
 
     void Handle(TEvPrivate::TEvRequestPartitionStatus::TPtr&) {
@@ -584,7 +602,7 @@ private:
             }
             const bool consumerOffsetsInitialized = ConsumerOffsetsInitialized();
             for (auto& clusterState : Clusters) {
-                if (clusterState.Config.PartitionsCount == 0 || !consumerOffsetsInitialized) {
+                if (clusterState.Config.PartitionsCount == 0 || !consumerOffsetsInitialized || clusterState.ReconnectScheduled) {
                     continue;
                 }
                 auto* session = GetReadSession(clusterState);
@@ -724,7 +742,7 @@ private:
     }
 
     void SubscribeOnNextEvent(TClusterState& clusterState) {
-        if (!clusterState.Config.PartitionsCount) {
+        if (!clusterState.Config.PartitionsCount || clusterState.ReconnectScheduled) {
             return;
         }
         auto* session = GetReadSession(clusterState);
@@ -928,9 +946,35 @@ private:
         }
     }
 
+    void UpdateAvailableClustersMetric() {
+        Metrics.AvailableClusters->Set(CountIf(Clusters, [](const TClusterState& cluster) {
+            return cluster.Available;
+        }));
+    }
+
+    void Handle(TEvPrivate::TEvReconnectCluster::TPtr& ev) {
+        const auto clusterIndex = ev->Get()->ClusterIndex;
+        if (clusterIndex >= Clusters.size()) {
+            return;
+        }
+
+        auto& cluster = Clusters[clusterIndex];
+        cluster.ReconnectScheduled = false;
+        if (cluster.ReadSession) {
+            cluster.ReadSession->Close();
+            cluster.ReadSession.reset();
+        }
+
+        NotifyCA();
+    }
+
     // must be called (visited) with bound allocator
     struct TTopicEventProcessor {
         void operator()(NFq::TMessageStreamDataEvent& event) {
+            if (!ClusterState.Available) {
+                ClusterState.Available = true;
+                Self.UpdateAvailableClustersMetric();
+            }
             const auto partitionKey = MakePartitionKey(Cluster, event.PartitionControl);
             auto& partitionInfo = Self.Partitions[partitionKey];
 
@@ -1012,17 +1056,52 @@ private:
         }
 
         void operator()(NFq::TMessageStreamSessionClosedEvent& ev) {
-            const auto& LogPrefix = Self.LogPrefix;
-            TString message = (TStringBuilder() << "Read session to topic \"" << Self.Settings.Stream << "\" was closed");
-            SRC_LOG_E("SessionId: " << Self.GetSessionId(Index) << " " << message << ": " << ev.Issues.ToOneLineString());
-            TIssue issue(message);
-            for (const auto& subIssue : ev.Issues) {
-                issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));
+            TString message = (TStringBuilder() << "Read session to topic \"" << Self.Settings.Stream << "\""
+                                                << (Cluster ? (" [" + Cluster + ']') : "") << " was closed");
+            SRC_LOG_W("SessionId: " << Self.GetSessionId(Index) << " " << message << ": " << ev.Issues.ToOneLineString());
+
+            ClusterState.Available = false;
+            Self.UpdateAvailableClustersMetric();
+
+            const bool isLogbroker = Self.Clusters.size() > 2;
+            const bool canReconnect = ev.Status == NFq::EMessageStreamStatus::Unavailable || ev.Status == NFq::EMessageStreamStatus::Timeout ||
+                                      ev.Status == NFq::EMessageStreamStatus::NotFound;
+            if (!isLogbroker || !canReconnect) {
+                TIssue issue(message);
+                for (const auto& subIssue : ev.Issues) {
+                    issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));
+                }
+                Self.Send(
+                    Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({ issue }), NYql::NDqProto::StatusIds::BAD_REQUEST));
+                return;
             }
-            Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({ issue }), NYql::NDqProto::StatusIds::BAD_REQUEST));
+
+            std::vector<TString> unavailableClusters;
+            for (const auto& state : Self.Clusters) {
+                if (!state.Available) {
+                    unavailableClusters.push_back(state.Config.Name);
+                }
+            }
+            if (unavailableClusters.size() == Self.Clusters.size()) {
+                TStringBuilder message;
+                message << "Failed to read topic \"" << Self.Settings.Stream << "\": " << unavailableClusters.size()
+                        << " clusters are unavailable simultaneously: " << JoinSeq(", ", unavailableClusters);
+                SRC_LOG_E(message);
+                Self.Send(Self.ComputeActorId,
+                    new TEvAsyncInputError(Self.InputIndex, TIssues({ TIssue(message) }), NYql::NDqProto::StatusIds::UNAVAILABLE));
+            }
+
+            if (!ClusterState.ReconnectScheduled) {
+                ClusterState.ReconnectScheduled = true;
+                Self.Schedule(TDuration::Seconds(10), new TEvPrivate::TEvReconnectCluster(Index));
+            }
         }
 
         void operator()(NFq::TMessageStreamPartitionStartRequestedEvent& event) {
+            if (!ClusterState.Available) {
+                ClusterState.Available = true;
+                Self.UpdateAvailableClustersMetric();
+            }
             if (Self.Settings.StopAtCurrentEndOffsets && !event.EndOffset) {
                 ythrow NFq::TMessageStreamException(NFq::EMessageStreamStatus::Unsupported)
                     << "MessageStream reader requires a partition end offset";

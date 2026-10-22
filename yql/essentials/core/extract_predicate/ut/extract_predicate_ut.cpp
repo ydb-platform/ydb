@@ -828,7 +828,7 @@ Y_UNIT_TEST(NaNCapableComparisonKeysDoNotProduceLiteralHints) {
             for (const bool parameter : {false, true}) {
                 const TString prog = TStringBuilder()
                     << "declare $bound as " << type << ";\n"
-                    << "$src = [<|x:" << zero << ", y:1|>];\n"
+                    << "declare $src as List<Struct<x:" << type << ",y:Int32>>;\n"
                     << "select * from as_table($src) where x " << op << " "
                     << (parameter ? TString("$bound") : zero) << ";";
                 TExprContext exprCtx;
@@ -841,6 +841,7 @@ Y_UNIT_TEST(NaNCapableComparisonKeysDoNotProduceLiteralHints) {
                 auto extractor = MakePredicateRangeExtractor(settings);
                 UNIT_ASSERT(extractor->Prepare(filter, *filter->Head().Head().GetTypeAnn(),
                     usedColumns, exprCtx, *typesCtx));
+                UNIT_ASSERT_C(usedColumns.contains("x"), prog);
                 const auto built = extractor->BuildComputeNode({"x"}, exprCtx, *typesCtx);
                 UNIT_ASSERT_C(built.ComputeNode, prog);
                 UNIT_ASSERT_C(!built.LiteralRange, prog);

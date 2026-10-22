@@ -134,6 +134,65 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         UNIT_ASSERT_VALUES_EQUAL(p->GetTransformLambda(), "lambda body");
     }
 
+    Y_UNIT_TEST(MissingTransferSourceDnsNameRecoversAfterRetryBudget) {
+        TEnv env(true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        const auto created = env.RunCall([&] {
+            return env.CreateTopic("/Root", *MakeTopicDescription(DummyTopic()));
+        });
+        UNIT_ASSERT_VALUES_EQUAL(created, NMsgBusProxy::MSTATUS_OK);
+
+        TActorId discoverer;
+        TVector<TInstant> attempts;
+        auto observer = runtime.AddObserver<TEvYdbProxy::TEvDescribePathRequest>(
+            [&](TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
+                if (ev->Sender != discoverer || ev->GetRecipientRewrite() != env.GetYdbProxy()
+                    || std::get<0>(ev->Get()->GetArgs()) != "/Root/Topic")
+                {
+                    return;
+                }
+
+                attempts.push_back(runtime.GetCurrentTime());
+                if (attempts.size() > 8) {
+                    return;
+                }
+
+                NYdb::NIssue::TIssues issues;
+                issues.AddIssue("GRpc error: (14): DNS resolution failed: Domain name not found");
+                runtime.Send(new IEventHandle(ev->Sender, env.GetYdbProxy(),
+                    new TEvYdbProxy::TEvDescribePathResponse(
+                        NYdb::TStatus(NYdb::EStatus::TRANSPORT_UNAVAILABLE, std::move(issues)),
+                        NYdb::NScheme::TSchemeEntry()),
+                    0, ev->Cookie));
+                ev.Reset();
+            });
+
+        discoverer = runtime.Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
+            CreateTransferConfig(std::tuple<TString, TString, TString>{
+                "/Root/Topic", "/Root/Replicated/Table", "lambda body"
+            })));
+        runtime.EnableScheduleForActor(discoverer);
+
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(
+            env.GetSender(), TDuration::Minutes(3));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_C(result->Get()->IsSuccess(),
+            "Recoverable transfer source DNS failure must not exhaust the discovery retry budget");
+        UNIT_ASSERT_VALUES_EQUAL(attempts.size(), 9);
+        for (size_t i = 1; i < attempts.size(); ++i) {
+            UNIT_ASSERT(attempts[i] > attempts[i - 1]);
+        }
+
+        const auto& targets = result->Get()->ToAdd;
+        UNIT_ASSERT_VALUES_EQUAL(targets.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(targets.at(0).Kind, TReplication::ETargetKind::Transfer);
+        UNIT_ASSERT_VALUES_EQUAL(targets.at(0).Config->GetSrcPath(), "/Root/Topic");
+        UNIT_ASSERT_VALUES_EQUAL(targets.at(0).Config->GetDstPath(), "/Root/Replicated/Table");
+        const auto config = std::dynamic_pointer_cast<const TTargetTransfer::TTransferConfig>(targets.at(0).Config);
+        UNIT_ASSERT(config);
+        UNIT_ASSERT_VALUES_EQUAL(config->GetTransformLambda(), "lambda body");
+    }
+
     Y_UNIT_TEST(Negative) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);

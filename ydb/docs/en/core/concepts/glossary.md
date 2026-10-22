@@ -56,9 +56,7 @@ Many terms related to the [implementation of distributed storage](#distributed-s
 
 **Storage group**, **distributed storage group**, or **Blob storage group** is a place for reliable data storage, similar to [RAID](https://en.wikipedia.org/wiki/RAID), but using disks from multiple servers. Depending on the selected [cluster topology](#topology), storage groups use different algorithms to ensure high availability, similar to [standard RAID levels](https://en.wikipedia.org/wiki/Standard_RAID_levels).
 
-[Distributed storage](#distributed-storage) typically manages a large number of relatively small storage groups. Each group can be assigned to a specific [database](#database) to increase the disk space capacity and I/O throughput available to that database.
-
-[Static](#static-group) and [dynamic](#dynamic-group) storage groups are physical, meaning their data is placed directly on [VDisk](#vdisk)s.
+[Distributed storage](#distributed-storage) typically manages a large number of relatively small storage groups. Each group is assigned to a specific [database](#database) and provides the disk space capacity and I/O throughput to that database.
 
 #### Static group {#static-group}
 
@@ -66,21 +64,25 @@ Many terms related to the [implementation of distributed storage](#distributed-s
 
 A static group may require special attention during major cluster maintenance, such as decommissioning an [availability zone](#regions-az).
 
+Static group is always physical, meaning its data is placed directly on the set of [VDisk](#vdisk)s.
+
 #### Dynamic group {#dynamic-group}
 
 Ordinary storage groups that are not [static](#static-group) are called **dynamic groups**. They are called dynamic because they can be created and deleted on the fly while the [cluster](#cluster) is running.
 
+Similar to the [static group](#static-group), dynamic groups are also physical, meaning their data is placed directly on [VDisk](#vdisk)s. In contrast, [virtual storage groups](#virtual-storage-groups) decouple the physical data placement from (tablet)[#tablet] storage assignment and allocation.
+
 #### Virtual storage group {#virtual-storage-groups}
 
-**Virtual storage group** is an entity that is not actually a [storage group](#storage-group), but looks like one from the outside (provides a similar external interface). It can store its data in other storage groups or in S3.
+**Virtual storage group** is an entity that is not actually a [storage group](#storage-group), but looks like one from the outside (provides a similar external interface). It can store its data in other storage groups or in the S3-compatible storage.
 
 #### BlobDepot {#blob-depot}
 
-**BlobDepot** is a system [tablet](#tablet) in [distributed storage](#distributed-storage) that serves [virtual storage groups](#virtual-storage-groups). It stores a virtual group's data in other storage groups and is also used when decommissioning physical groups.
+**BlobDepot** is a system [tablet](#tablet) in [distributed storage](#distributed-storage) that serves [virtual storage groups](#virtual-storage-groups). It stores a virtual group's data in other storage groups and is also used for decommissioning physical groups.
 
 ### Storage pool {#storage-pool}
 
-**Storage pool** is a set of data storage devices with similar characteristics. Each storage pool is assigned a unique name within the cluster {{ ydb-short-name }}. Technically, each storage pool consists of many physical disks ([PDisk](#pdisk)). Each [storage group](#storage-group) is created in a specific storage pool, which determines the performance characteristics of the storage group by selecting appropriate storage devices. Typically, separate storage pools are created for devices of different types (for example, NVMe, SSD, and HDD) or for specific models of these devices that have different capacity and access speed.
+**Storage pool** is a set of data storage devices with similar characteristics. Each storage pool is assigned a unique name within the {{ ydb-short-name }} cluster. Technically, each storage pool consists of many physical disks ([PDisk](#pdisk)). Each [storage group](#storage-group) is created in a specific storage pool, which determines the performance characteristics of the storage group by selecting appropriate storage devices. Typically, separate storage pools are created for devices of different types (for example, NVMe, SSD, and HDD) or for specific models of these devices that have different capacity and access speed.
 
 ### Actor {#actor}
 
@@ -826,9 +828,11 @@ Distributed storage stores immutable data, with each immutable data block identi
 
 #### PDisk {#pdisk}
 
-**PDisk** or **physical disk** is a component that controls a physical disk drive (block device). In other words, PDisk is a subsystem that implements an abstraction similar to a specialized file system on top of block devices (or files that emulate a block device for testing purposes). PDisk ensures data integrity control (including [erasure coding](#erasure-coding) of sector groups to recover data on individual damaged sectors, integrity control using checksums), transparent encryption of all data on the disk, and transactional guarantees for disk operations (write acknowledgment strictly after `fsync`).
+**PDisk** or **physical disk** is a component that controls a physical disk drive (block device). In other words, PDisk is a subsystem that implements an abstraction similar to a specialized file system on top of block devices (or files that emulate a block device for testing purposes).
 
-PDisk contains a scheduler that ensures shared use of the device's bandwidth among multiple clients ([VDisk](#vdisk)). PDisk divides the block device into blocks called [slots](#slot) (about 128 megabytes in size; smaller blocks are also allowed). At any given time, no more than one VDisk can own each slot. PDisk also maintains a recovery log shared by PDisk service records and all VDisks.
+PDisk ensures data integrity control (including [erasure coding](#erasure-coding) of sector groups to recover data on individual damaged sectors and integrity control using checksums), transparent encryption of all data on the disk, and transactional guarantees for disk operations (write acknowledgment strictly after `fsync`).
+
+PDisk contains a scheduler that ensures shared use of the device's bandwidth among multiple clients ([VDisk](#vdisk)). PDisk divides the block device into blocks called [slots](#slot). At any given time, no more than one VDisk can own each slot. PDisk also maintains a recovery log shared by PDisk service records and all VDisks.
 
 #### VDisk {#vdisk}
 

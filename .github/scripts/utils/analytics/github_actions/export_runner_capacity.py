@@ -761,11 +761,10 @@ def enrich_run_pull(
     org: str,
     repo: str,
     run: Dict[str, Any],
-    cache: Optional[Dict[str, list]] = None,
     open_pulls: Optional[list] = None,
 ) -> Dict[str, Any]:
     if run.get("event") in PR_EVENTS:
-        return attach_pull_requests(org, repo, run, cache=cache, open_pulls=open_pulls)
+        return attach_pull_requests(org, repo, run, open_pulls=open_pulls)
     if run.get("pull_requests"):
         cleaned = dict(run)
         cleaned["pull_requests"] = []
@@ -775,13 +774,12 @@ def enrich_run_pull(
 
 def collect_open_jobs(org: str, repo: str) -> List[tuple]:
     pairs = []
-    cache: Dict[str, list] = {}
     open_pulls = list_open_pulls(org, repo)
     for status in ("in_progress", "queued"):
         for run in list_workflow_runs(org, repo, status):
             if run.get("id") is None:
                 continue
-            run = enrich_run_pull(org, repo, run, cache=cache, open_pulls=open_pulls)
+            run = enrich_run_pull(org, repo, run, open_pulls=open_pulls)
             pairs.extend((run, job) for job in list_run_jobs(org, repo, int(run["id"])))
     return pairs
 

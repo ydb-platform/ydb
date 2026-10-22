@@ -444,7 +444,7 @@ class SnapshotRowsTest(unittest.TestCase):
                 "repo": {"owner": {"login": "zinal"}},
             },
         }]
-        out = enrich_run_pull("ydb-platform", "ydb", run, cache={}, open_pulls=open_pulls)
+        out = enrich_run_pull("ydb-platform", "ydb", run, open_pulls=open_pulls)
         self.assertEqual(pull_info(out), ("56374", "Document the BINARY changefeed format"))
         self.assertEqual(target_branch(out), "main")
 

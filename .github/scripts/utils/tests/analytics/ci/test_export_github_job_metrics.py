@@ -101,7 +101,7 @@ class PullRefsTest(unittest.TestCase):
                 "base": {"ref": "main"},
             }]
 
-        out = attach_pull_requests("ydb-platform", "ydb", run, cache={}, fetcher=fetcher)
+        out = attach_pull_requests("ydb-platform", "ydb", run, fetcher=fetcher)
         self.assertEqual(out["pull_requests"][0]["number"], 53649)
         self.assertEqual(out["pull_requests"][0]["base"]["ref"], "main")
         self.assertEqual(out["pull_requests"][0]["title"], "Cut history")
@@ -119,7 +119,7 @@ class PullRefsTest(unittest.TestCase):
             self.assertIn("/commits/abc123/pulls", url)
             return [{"number": 10, "title": "fix it", "state": "open", "base": {"ref": "stable-26"}}]
 
-        out = attach_pull_requests("ydb-platform", "ydb", run, cache={}, fetcher=fetcher)
+        out = attach_pull_requests("ydb-platform", "ydb", run, fetcher=fetcher)
         self.assertEqual(out["pull_requests"][0]["base"]["ref"], "stable-26")
 
     def test_open_pulls_recover_fork_without_commit_lookup(self):
@@ -147,7 +147,7 @@ class PullRefsTest(unittest.TestCase):
             raise AssertionError("should use open_pulls, not %s" % url)
 
         out = attach_pull_requests(
-            "ydb-platform", "ydb", run, cache={}, fetcher=fetcher, open_pulls=open_pulls,
+            "ydb-platform", "ydb", run, fetcher=fetcher, open_pulls=open_pulls,
         )
         self.assertEqual(out["pull_requests"][0]["number"], 56374)
         self.assertEqual(out["pull_requests"][0]["base"]["ref"], "main")

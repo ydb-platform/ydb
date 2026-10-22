@@ -280,6 +280,14 @@ def read_public_key(path):
     return check_public_key(line.strip())
 
 
+def instance_labels(cfg):
+    labels = ["purpose=gh-runner"]
+    pool = str(cfg.get("_pool") or "")
+    if pool:
+        labels.append(f"pool={pool}")
+    return labels
+
+
 def create_argv(cfg, name, userdata_path):
     disk = ",".join([
         f"image-family={cfg['image_family']}",
@@ -306,7 +314,7 @@ def create_argv(cfg, name, userdata_path):
         "--network-interface", nic,
         "--metadata", "serial-port-enable=1",
         "--metadata-from-file", f"user-data={userdata_path}",
-        "--labels", "purpose=gh-runner",
+        "--labels", ",".join(instance_labels(cfg)),
         "--async",
         "--format", "json",
     ]
@@ -573,6 +581,15 @@ def matching_pools(pools, vm_name):
     return found
 
 
+def vm_owners(pools, vm_name, info):
+    """Prefer the pool label written at create time. A shared name prefix is only a fallback."""
+    labels = info.get("labels") or {}
+    marked = str(labels.get("pool") or "") if isinstance(labels, dict) else ""
+    if marked:
+        return [pool for pool in pools if pool["_pool"] == marked]
+    return matching_pools(pools, vm_name)
+
+
 def reconcile_actions(pools, runners, instance_status, instances=None):
     """Actions that bring runners in line with fleet. instance_status maps VM name to yc status."""
     members = {pool["_pool"]: [] for pool in pools}
@@ -648,6 +665,10 @@ def reconcile_actions(pools, runners, instance_status, instances=None):
                 })
                 continue
             future += 1
+            info = (instances or {}).get(member["name"]) or {}
+            vm_labels = info.get("labels") or {}
+            if not isinstance(vm_labels, dict) or vm_labels.get("pool") != pool["_pool"]:
+                actions.append({"op": "mark", "pool": pool["_pool"], "name": member["name"]})
             if status != "RUNNING" or member.get("status") != "online":
                 actions.append({
                     "op": "start" if status != "RUNNING" else "restart",
@@ -664,7 +685,7 @@ def reconcile_actions(pools, runners, instance_status, instances=None):
             labels = info.get("labels") or {}
             if not isinstance(labels, dict) or labels.get("purpose") != "gh-runner":
                 continue
-            owners = matching_pools(pools, vm_name)
+            owners = vm_owners(pools, vm_name, info)
             if len(owners) == 1 and owners[0]["_pool"] == pool["_pool"]:
                 adopted.append(vm_name)
         for vm_name in adopted:
@@ -681,7 +702,7 @@ def reconcile_actions(pools, runners, instance_status, instances=None):
             continue
         if vm_name in seen_unregistered:
             continue
-        owners = matching_pools(pools, vm_name)
+        owners = vm_owners(pools, vm_name, info)
         if len(owners) == 1:
             continue
         seen_unregistered.add(vm_name)
@@ -713,6 +734,8 @@ def format_action(action):
         return f"{pool}: create {action['count']}"
     elif op == "adopt":
         return f"{pool}: register existing VM {action['name']}"
+    elif op == "mark":
+        return f"{pool}: set VM label pool={pool} on {action['name']}"
     elif op == "unregistered":
         return f"unregistered VM {action['name']} matches several configurations and was left running"
     else:
@@ -738,6 +761,20 @@ def list_instances(cfg):
     if isinstance(payload, dict):
         payload = payload.get("instances") or []
     return {item["name"]: item for item in payload if isinstance(item, dict) and item.get("name")}
+
+
+def set_vm_pool_label(cfg, name):
+    proc = run(
+        [
+            "yc", "--folder-id", cfg["folder_id"], "compute", "instance", "update",
+            "--name", name,
+            "--update-labels", f"pool={cfg['_pool']}",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if proc.returncode != 0:
+        raise SystemExit(proc.stderr.strip() or f"failed to label VM {name}")
 
 
 def delete_github_runner(repo, runner_id):
@@ -895,6 +932,9 @@ def cmd_reconcile(target, apply, timeout):
             )
             if outcome == "replaced":
                 replaced.add(action["pool"])
+        elif op == "mark":
+            set_vm_pool_label(pool, action["name"])
+            print(f"{action['name']}: VM label pool={pool['_pool']}", flush=True)
         elif op == "adopt":
             info = yc_instance(pool, action["name"])
             if not info:
@@ -1363,9 +1403,29 @@ labels:
         {"tiny-worker-9": {"labels": {"purpose": "gh-runner"}}},
     )
     assert any(item["op"] == "unregistered" and item["name"] == "tiny-worker-9" for item in shared)
+    release = {**tiny_pool, "_pool": "static-relwithdebinfo-release", "name": "static-relwithdebinfo-d", "count": 1}
+    asan = {**tiny_pool, "_pool": "static-relwithdebinfo-asan", "name": "static-relwithdebinfo-d", "count": 1}
+    static_vm = "static-relwithdebinfo-d-21"
+    labeled = reconcile_actions(
+        [release, asan],
+        [],
+        {static_vm: "RUNNING"},
+        {static_vm: {"labels": {"purpose": "gh-runner", "pool": "static-relwithdebinfo-asan"}}},
+    )
+    assert any(item["op"] == "adopt" and item["pool"] == "static-relwithdebinfo-asan" for item in labeled)
+    assert not any(item["op"] == "adopt" and item["pool"] == "static-relwithdebinfo-release" for item in labeled)
+    assert not any(item["op"] == "unregistered" for item in labeled)
+    marked = reconcile_actions(
+        [tiny_pool],
+        [online],
+        {"tiny-worker-1": "RUNNING"},
+        {"tiny-worker-1": {"labels": {"purpose": "gh-runner"}}},
+    )
+    assert any(item["op"] == "mark" and item["name"] == "tiny-worker-1" for item in marked)
     argv = create_argv(cfg, "tiny-worker-2026-10-08", "/tmp/user-data")
     assert "--async" in argv
-    assert "purpose=gh-runner" in argv
+    assert "purpose=gh-runner" in " ".join(argv)
+    assert f"pool={cfg['_pool']}" in " ".join(argv)
     assert "size=186" in " ".join(argv)
     print("self-test ok")
 

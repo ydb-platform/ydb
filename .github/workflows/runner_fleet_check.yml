@@ -3,13 +3,18 @@ on:
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch:
+    inputs:
+      apply:
+        description: Apply the reconcile plan
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: runner-fleet-check
-  cancel-in-progress: true
+  group: runner-fleet-${{ github.event_name == 'workflow_dispatch' && inputs.apply && 'apply' || 'check' }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || !inputs.apply }}
 
 jobs:
   check:
@@ -58,6 +63,11 @@ jobs:
     - name: Check fleet
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RECONCILE_APPLY: ${{ github.event_name == 'workflow_dispatch' && inputs.apply && 'true' || 'false' }}
       run: |
-        python3 ydb/ci/gh-runner-provision/provision.py reconcile
+        if [ "$RECONCILE_APPLY" = "true" ]; then
+          python3 ydb/ci/gh-runner-provision/provision.py reconcile --apply
+        else
+          python3 ydb/ci/gh-runner-provision/provision.py reconcile
+        fi
         python3 ydb/ci/gh-runner-provision/provision.py poll

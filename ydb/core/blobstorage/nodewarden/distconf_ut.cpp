@@ -270,8 +270,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         auto nodeWardenConfig = MakeNodeWardenConfig(config, bridgeConfig);
         nodeWardenConfig->StartupConfigYaml = startupConfigYaml;
         if (selfManagementConfig) {
-            nodeWardenConfig->SelfManagementConfig =
-                std::make_unique<NKikimrConfig::TSelfManagementConfig>(*selfManagementConfig);
+            nodeWardenConfig->SelfManagementConfig = *selfManagementConfig;
         }
         auto storageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
         const TActorId keeperId = runtime.Register(

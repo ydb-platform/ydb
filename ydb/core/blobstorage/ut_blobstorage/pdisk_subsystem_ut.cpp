@@ -184,13 +184,13 @@ namespace {
                 auto& sm = *config.SelfManagementConfig;
                 sm.SetErasureSpecies("none");
                 sm.SetPDiskType(NKikimrBlobStorage::EPDiskType::NVME);
-                auto* hostConfig = config.BlobStorageConfig->AddDefineHostConfig();
+                auto* hostConfig = config.BlobStorageConfig.AddDefineHostConfig();
                 hostConfig->SetHostConfigId(1);
                 auto* drive = hostConfig->AddDrive();
                 drive->SetPath("/mock/slow-bootstrap-pdisk");
                 drive->SetType(NKikimrBlobStorage::EPDiskType::NVME);
                 for (ui32 nodeId = 1; nodeId <= nodeCount; ++nodeId) {
-                    auto* node = config.NameserviceConfig->AddNode();
+                    auto* node = config.NameserviceConfig.AddNode();
                     node->SetNodeId(nodeId);
                     node->SetHost(TStringBuilder() << "host_" << nodeId);
                     node->SetInterconnectHost(node->GetHost());
@@ -201,7 +201,7 @@ namespace {
                     if (bridge) {
                         location->SetBridgePileName(TStringBuilder() << "pile_" << nodeId);
                     }
-                    auto* host = config.BlobStorageConfig->MutableDefineBox()->AddHost();
+                    auto* host = config.BlobStorageConfig.MutableDefineBox()->AddHost();
                     host->SetEnforcedNodeId(nodeId);
                     host->SetHostConfigId(1);
                 }
@@ -317,7 +317,7 @@ namespace {
                     }
                 }));
             config->PDiskKey = {.Keys = {NPDisk::YdbDefaultPDiskSequence}, .IsInitialized = true};
-            config->FeatureFlags->SetEnableSmallDiskOptimization(true);
+            config->FeatureFlags.SetEnableSmallDiskOptimization(true);
             config->SectorMaps[Path] = SectorMap;
             Warden = Runtime.Register(CreateBSNodeWarden(config), NodeId);
             Runtime.RegisterService(MakeBlobStorageNodeWardenID(NodeId), Warden);

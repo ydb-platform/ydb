@@ -124,6 +124,8 @@ namespace NKikimr::NStorage {
     };
 
     class TNodeWarden : public TActorBootstrapped<TNodeWarden> {
+        friend class TNodeWardenTestPeer;
+
         TIntrusivePtr<TNodeWardenConfig> Cfg;
         TIntrusivePtr<TDsProxyNodeMon> DsProxyNodeMon;
         TActorId DsProxyNodeMonActor;

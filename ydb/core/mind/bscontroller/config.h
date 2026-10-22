@@ -100,13 +100,15 @@ namespace NKikimr {
                 std::unique_ptr<IEventBase> Event;
                 ui64 Cookie;
                 bool ToLocalWarden;
+                TActorId ConnectedServerId;
 
                 TOutgoingMessage(TNodeId nodeId, std::unique_ptr<IEventBase>&& event,
-                        ui64 cookie, bool toLocalWarden = false)
+                        ui64 cookie, bool toLocalWarden = false, TActorId connectedServerId = {})
                     : NodeId(nodeId)
                     , Event(std::forward<std::unique_ptr<IEventBase>>(event))
                     , Cookie(cookie)
                     , ToLocalWarden(toLocalWarden)
+                    , ConnectedServerId(connectedServerId)
                 {}
             };
 

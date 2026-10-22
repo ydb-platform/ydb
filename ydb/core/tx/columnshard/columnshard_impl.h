@@ -244,6 +244,9 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
 
     friend class NOlap::TStoragesManager;
 
+    friend class TTxBuildIndexCreate;
+    friend class TTxBuildIndexProgress;
+
     friend class NOlap::NReader::TTxScan;
     friend class NOlap::NReader::TTxInternalScan;
     friend class NOlap::NReader::NPlain::TIndexScannerConstructor;
@@ -294,6 +297,11 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx);
+    bool LoadBuildIndexScans(NIceDb::TNiceDb& db);
+    void SendPendingBuildIndexFinalResponses(const TActorContext& ctx);
+    void ReportBuildIndexScansAfterRestart(const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvInternalScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
@@ -529,6 +537,18 @@ private:
     bool ProgressTxScheduled = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
     TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr> WaitingScans;
+
+    struct TBuildIndexScanState {
+        ui64 SeqNoGeneration = 0;
+        ui64 SeqNoRound = 0;
+        TString FinalResponse;
+        TActorId ActorId;
+    };
+    THashMap<ui64, TBuildIndexScanState> BuildIndexScans;
+    THashMap<ui64, THolder<TEvDataShard::TEvBuildIndexProgressResponse>> PendingBuildIndexFinalResponses;
+    TActorId BuildIndexPipe;
+    bool BuildIndexRestartReported = false;
+    TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvBuildIndexCreateRequest::TPtr> WaitingBuildIndexRequests;
     TBackgroundController BackgroundController;
     TSettings Settings;
     TLimits Limits;

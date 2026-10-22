@@ -11,6 +11,33 @@ namespace NKikimr::NSchemeShard {
 
 using namespace NTableIndex;
 
+namespace {
+
+NKikimrSchemeOp::TTableDescription ColumnSchemaAsRowTable(const NKikimrSchemeOp::TColumnTableDescription& columnTable) {
+    NKikimrSchemeOp::TTableDescription base;
+    base.SetName(columnTable.GetName());
+    for (const auto& column : columnTable.GetSchema().GetColumns()) {
+        auto* dst = base.AddColumns();
+        dst->SetName(column.GetName());
+        if (column.HasType()) {
+            dst->SetType(column.GetType());
+        }
+        if (column.HasTypeId()) {
+            dst->SetTypeId(column.GetTypeId());
+        }
+        if (column.HasTypeInfo()) {
+            *dst->MutableTypeInfo() = column.GetTypeInfo();
+        }
+        dst->SetNotNull(column.GetNotNull());
+    }
+    for (const auto& key : columnTable.GetSchema().GetKeyColumnNames()) {
+        base.AddKeyColumnNames(key);
+    }
+    return base;
+}
+
+} // namespace
+
 ISubOperation::TPtr CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild);
 
@@ -100,11 +127,29 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     auto counts = GetIndexObjectCounts(indexDesc);
 
     const auto table = TPath::Resolve(op.GetTable(), context.SS);
-    if (!table.IsResolved() || !table->IsTable()) {
+    const bool columnTable = table.IsResolved() && table->IsColumnTable();
+    if (!table.IsResolved() || (!table->IsTable() && !columnTable)) {
         return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Index parent must be a table")};
     }
+    if (columnTable && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobal) {
+        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Only global synchronous indexes are supported for column tables")};
+    }
+    if (columnTable && (isRebuild || isOnlineRebuild || op.GetForReplication())) {
+        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "This index build is not supported for column tables")};
+    }
 
-    auto tableInfo = context.SS->Tables.at(table.Base()->PathId);
+    TTableInfo::TPtr tableInfo;
+    NKikimrSchemeOp::TTableDescription columnAsRow;
+    if (columnTable) {
+        const auto columnInfo = context.SS->ColumnTables.GetVerified(table.Base()->PathId);
+        if (!columnInfo->IsStandalone()) {
+            return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter,
+                "Building a synchronous index is supported for standalone column tables")};
+        }
+        columnAsRow = ColumnSchemaAsRowTable(columnInfo->Description);
+    } else {
+        tableInfo = context.SS->Tables.at(table.Base()->PathId);
+    }
     const bool forReplication = op.GetForReplication();
     if (forReplication && (!tx.GetInternal() || !table.IsAsyncReplicaTable()
         || GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobal || op.GetIsRebuild()))
@@ -194,7 +239,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     TString errStr;
-    if (!isRebuild) {
+    if (!isRebuild && !columnTable) {
         if (!NTableIndex::MaybeEnableFulltextRowIdMode(tableInfo, table.Base()->GetChildren(), context.SS->Indexes.AsMap(), indexDesc, errStr)) {
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusInvalidParameter, errStr)};
         }
@@ -202,7 +247,10 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     NTableIndex::TTableColumns implTableColumns;
     NKikimrScheme::EStatus status;
-    if (!NTableIndex::CommonCheck(tableInfo, indexDesc, domainInfo->GetSchemeLimits(), false, implTableColumns, status, errStr)) {
+    const bool columnsOk = columnTable
+        ? NTableIndex::CommonCheck(columnAsRow, indexDesc, domainInfo->GetSchemeLimits(), false, implTableColumns, status, errStr)
+        : NTableIndex::CommonCheck(tableInfo, indexDesc, domainInfo->GetSchemeLimits(), false, implTableColumns, status, errStr);
+    if (!columnsOk) {
         return {CreateReject(opId, status, errStr)};
     }
 
@@ -257,7 +305,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         // Index impl tables inherit their base table's detailed metrics level. Gated on the
         // feature flag: the base table's setting may have been persisted while the flag was on,
         // and an unguarded copy would make the impl table's TCreateTable reject the whole build.
-        if (AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics() && tableInfo->HasDetailedMetricsSettings()) {
+        if (tableInfo && AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics() && tableInfo->HasDetailedMetricsSettings()) {
             *implTableDesc.MutableDetailedMetricsSettings()->MutableConfigured() = tableInfo->GetDetailedMetricsSettings();
         }
 
@@ -292,7 +340,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             }
             const auto uniqueKeySize = indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique
                 ? indexDesc.GetKeyColumnNames().size() : 0;
-            auto implTableDesc = CalcImplTableDesc(tableInfo, implTableColumns, indexTableDesc, uniqueKeySize);
+            auto implTableDesc = columnTable
+                ? CalcImplTableDesc(columnAsRow, implTableColumns, indexTableDesc, uniqueKeySize)
+                : CalcImplTableDesc(tableInfo, implTableColumns, indexTableDesc, uniqueKeySize);
             // Replica indexes receive scan rows through CDC without shadow data,
             // so they do not need the temporary tombstone-retention build policy.
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(!forReplication);

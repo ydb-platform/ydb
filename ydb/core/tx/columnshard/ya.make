@@ -15,6 +15,8 @@ SRCS(
     columnshard__propose_cancel.cpp
     columnshard__propose_transaction.cpp
     columnshard__scan.cpp
+    columnshard__build_index.cpp
+    build_index/column_index_scan.cpp
     columnshard__tx_abort.cpp
     columnshard__write.cpp
     columnshard__write_index.cpp
@@ -82,6 +84,7 @@ PEERDIR(
     ydb/core/tx/tiering
     ydb/core/tx/time_cast
     ydb/core/tx/tracing
+    ydb/core/tx/tx_proxy
     ydb/core/util
     ydb/library/actors/core
     ydb/library/chunks_limiter

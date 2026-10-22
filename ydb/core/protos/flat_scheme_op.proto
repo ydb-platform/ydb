@@ -784,6 +784,10 @@ message TColumnTableSchema {
     repeated TFamilyDescription ColumnFamilies = 13;
     // Internal fields
     optional uint32 NextColumnFamilyId = 14;
+
+    // Writes compiled against an older schema are rejected. Set when a global
+    // synchronous index build publishes the schema version that must maintain the index.
+    optional uint64 MinWriteSchemaVersion = 15;
 }
 
 message TColumnTableSchemaDiff {
@@ -1064,6 +1068,10 @@ message TColumnTableDescription {
     optional bool IsBackup = 17;
 
     repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 18;
+
+    // Global synchronous indexes whose data lives in a row impl table.
+    // Filled on create from the request and on describe from table-index children.
+    repeated TIndexDescription TableIndexes = 19;
 }
 
 message TAlterColumnTable {

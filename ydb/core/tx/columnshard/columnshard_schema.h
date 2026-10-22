@@ -119,7 +119,8 @@ struct Schema: NIceDb::Schema {
         TxStates = 17,
         TxEvents = 18,
         TableInfoV1 = 19,
-        CutHistoryRequests = 20
+        CutHistoryRequests = 20,
+        IndexBuildScans = 21
     };
 
     struct CutHistoryRequests: Table<(ui32)ECommonTables::CutHistoryRequests> {
@@ -129,6 +130,21 @@ struct Schema: NIceDb::Schema {
 
         using TKey = TableKey<Sequence>;
         using TColumns = TableColumns<Sequence, RequestProto>;
+    };
+
+    // One synchronous index build scan per build id. An empty FinalResponse means the scan
+    // was still running when the tablet stopped; a non-empty value is the final progress record.
+    struct IndexBuildScans: Table<(ui32)ECommonTables::IndexBuildScans> {
+        struct BuildId: Column<1, NScheme::NTypeIds::Uint64> {};
+
+        struct SeqNoGeneration: Column<2, NScheme::NTypeIds::Uint64> {};
+
+        struct SeqNoRound: Column<3, NScheme::NTypeIds::Uint64> {};
+
+        struct FinalResponse: Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<BuildId>;
+        using TColumns = TableColumns<BuildId, SeqNoGeneration, SeqNoRound, FinalResponse>;
     };
 
     // Tablet tables
@@ -790,7 +806,7 @@ struct Schema: NIceDb::Schema {
         IndexCounters, SmallBlobs, OneToOneEvictedBlobs, Operations, TierBlobsDraft, TierBlobsToDelete, TierBlobsToDeleteWT, IndexIndexes,
         SharedBlobIds, BorrowedBlobIds, SourceSessions, DestinationSessions, OperationTxIds, IndexPortions, BackgroundSessions, ShardingInfo,
         Normalizers, NormalizerEvents, InFlightSnapshots, TxDependencies, TxStates, TxEvents, IndexColumnsV1, IndexColumnsV2, TableInfoV1,
-        CutHistoryRequests>;
+        CutHistoryRequests, IndexBuildScans>;
 
     //
 

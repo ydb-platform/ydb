@@ -921,6 +921,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 MultiColumnStatistics.push_back(statistics);
             }
 
+            Indexes.reserve(desc.TableIndexesSize());
+            for (const auto& index : desc.GetTableIndexes()) {
+                Indexes.push_back(index);
+            }
+
             if (pathDesc.HasDomainDescription()) {
                 DomainInfo = new NSchemeCache::TDomainInfo(pathDesc.GetDomainDescription());
             }

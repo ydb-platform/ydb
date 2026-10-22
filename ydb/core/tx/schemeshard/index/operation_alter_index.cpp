@@ -135,8 +135,12 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsCommonSensePath()
-                .IsTable();
+                .IsCommonSensePath();
+            if (parentPath.IsResolved() && parentPath->IsColumnTable()) {
+                checks.IsColumnTable();
+            } else {
+                checks.IsTable();
+            }
 
             if (!Transaction.GetInternal()) {
                 checks.NotAsyncReplicaTable();

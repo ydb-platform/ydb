@@ -115,6 +115,10 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
     ScheduleBaseStatistics();
 
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
+    if (!BuildIndexRestartReported) {
+        BuildIndexRestartReported = true;
+        ReportBuildIndexScansAfterRestart(ctx);
+    }
     AFL_VERIFY(!!StartInstant);
     Counters.GetCSCounters().Initialization.OnSwitchToWork(TMonotonic::Now() - *StartInstant, TMonotonic::Now() - CreateInstant);
     NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*this);
@@ -252,6 +256,14 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TAc
         return;
     }
 
+    if (clientId == BuildIndexPipe) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            BuildIndexPipe = {};
+            SendPendingBuildIndexFinalResponses(ActorContext());
+        }
+        return;
+    }
+
     if (PipeClientCache->OnConnect(ev)) {
         YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Connected to tablet",
             {"toTabletId", tabletId},
@@ -275,6 +287,11 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TAc
     if (clientId == StatsReportPipe) {
         StatsReportPipe = {};
         LastStats = {};
+        return;
+    }
+
+    if (clientId == BuildIndexPipe) {
+        BuildIndexPipe = {};
         return;
     }
 

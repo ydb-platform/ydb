@@ -4154,4 +4154,129 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
     }
 }
 
+Y_UNIT_TEST_SUITE(KqpOlapSyncIndex) {
+    Y_UNIT_TEST(CreateUpsertViewUpdateDelete) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableDataColumnForIndexTable(true);
+        TKikimrRunner kikimr(settings);
+
+        auto schemeSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        {
+            const auto result = schemeSession.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/ColumnSyncIdx` (
+                    pk Int64 NOT NULL,
+                    value String NOT NULL,
+                    payload Int32,
+                    PRIMARY KEY (pk),
+                    INDEX idx GLOBAL ON (value) COVER (payload)
+                ) WITH (STORE = COLUMN);
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto exec = [&](const TString& query) {
+            auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString() << " query: " << query);
+            return result;
+        };
+        auto selectView = [&]() {
+            auto result = exec(R"(
+                SELECT value, payload, pk
+                FROM `/Root/ColumnSyncIdx` VIEW idx
+                ORDER BY value, pk
+            )");
+            return NYdb::FormatResultSetYson(result.GetResultSet(0));
+        };
+
+        exec(R"(
+            INSERT INTO `/Root/ColumnSyncIdx` (pk, value, payload) VALUES
+                (1, "a", 10),
+                (2, "b", 20)
+        )");
+        CompareYson(selectView(), R"([["a";10;1];["b";20;2]])");
+
+        exec(R"(UPDATE `/Root/ColumnSyncIdx` SET value = "c", payload = 11 WHERE pk = 1)");
+        CompareYson(selectView(), R"([["b";20;2];["c";11;1]])");
+
+        exec(R"(DELETE FROM `/Root/ColumnSyncIdx` WHERE pk = 2)");
+        CompareYson(selectView(), R"([["c";11;1]])");
+
+        {
+            const auto result = schemeSession.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/ColumnSyncIdx` DROP INDEX idx
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = querySession.ExecuteQuery(R"(
+                SELECT value FROM `/Root/ColumnSyncIdx` VIEW idx
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto result = schemeSession.ExecuteSchemeQuery(R"(
+                DROP TABLE `/Root/ColumnSyncIdx`
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(AlterAddIndexBackfillsExistingRows) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
+        TKikimrRunner kikimr(settings);
+
+        auto schemeSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        {
+            const auto result = schemeSession.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/ColumnSyncIdxAlter` (
+                    pk Int64 NOT NULL,
+                    value String NOT NULL,
+                    PRIMARY KEY (pk)
+                ) WITH (STORE = COLUMN);
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        {
+            auto result = querySession.ExecuteQuery(R"(
+                INSERT INTO `/Root/ColumnSyncIdxAlter` (pk, value) VALUES (1, "a")
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto result = schemeSession.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/ColumnSyncIdxAlter` ADD INDEX idx GLOBAL ON (value)
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = querySession.ExecuteQuery(R"(
+                SELECT value, pk FROM `/Root/ColumnSyncIdxAlter` VIEW idx ORDER BY value, pk
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(FormatResultSetYson(result.GetResultSet(0)), R"([["a";1]])");
+        }
+        {
+            auto result = querySession.ExecuteQuery(R"(
+                INSERT INTO `/Root/ColumnSyncIdxAlter` (pk, value) VALUES (2, "b")
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = querySession.ExecuteQuery(R"(
+                SELECT value, pk FROM `/Root/ColumnSyncIdxAlter` VIEW idx ORDER BY value, pk
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(FormatResultSetYson(result.GetResultSet(0)), R"([["a";1];["b";2]])");
+        }
+    }
+}
+
 }   // namespace NKikimr::NKqp

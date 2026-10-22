@@ -188,6 +188,35 @@ private:
 
         ui32 nextIndexId = 1;
         for (const auto& index : req.indexes()) {
+            if (index.type_case() == Ydb::Table::TableIndex::kGlobalIndex) {
+                if (index.index_columns().empty()) {
+                    issues.AddIssue(NYql::TIssue("No key columns in index creation config"));
+                    code = StatusIds::BAD_REQUEST;
+                    return false;
+                }
+                auto* desc = tableDesc->AddTableIndexes();
+                desc->SetName(index.name());
+                desc->SetType(NKikimrSchemeOp::EIndexTypeGlobal);
+                desc->SetState(NKikimrSchemeOp::EIndexStateReady);
+                for (const auto& column : index.index_columns()) {
+                    if (!colNameToId.contains(column)) {
+                        issues.AddIssue(NYql::TIssue(TStringBuilder() << "Unknown column '" << column << "' in index '" << index.name() << "'"));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    }
+                    desc->AddKeyColumnNames(column);
+                }
+                for (const auto& column : index.data_columns()) {
+                    if (!colNameToId.contains(column)) {
+                        issues.AddIssue(NYql::TIssue(TStringBuilder() << "Unknown column '" << column << "' in index '" << index.name() << "'"));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    }
+                    desc->AddDataColumnNames(column);
+                }
+                continue;
+            }
+
             auto* olapIndex = schema->AddIndexes();
             olapIndex->SetId(nextIndexId++);
             olapIndex->SetName(index.name());
@@ -325,8 +354,9 @@ private:
                     NKikimr::NOlap::NIndexes::NMinMax::SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(*olapIndex, columnDesc->GetType());
                     break;
                 }
-                case Ydb::Table::TableIndex::TYPE_NOT_SET:
                 case Ydb::Table::TableIndex::kGlobalIndex:
+                    Y_ABORT("global index is handled before the column schema index switch");
+                case Ydb::Table::TableIndex::TYPE_NOT_SET:
                 case Ydb::Table::TableIndex::kGlobalAsyncIndex:
                 case Ydb::Table::TableIndex::kGlobalUniqueIndex:
                 case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:

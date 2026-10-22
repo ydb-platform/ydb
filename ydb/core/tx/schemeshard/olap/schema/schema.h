@@ -21,6 +21,7 @@ namespace NKikimr::NSchemeShard {
 
         YDB_READONLY(ui32, NextColumnId, 1);
         YDB_READONLY(ui32, Version, 0);
+        YDB_READONLY(ui64, MinWriteSchemaVersion, 0);
 
     public:
         bool Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors);

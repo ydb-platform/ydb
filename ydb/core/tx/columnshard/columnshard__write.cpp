@@ -524,6 +524,14 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
+    const auto lastSchema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema();
+    const ui64 minWriteSchemaVersion = lastSchema->GetIndexInfo().GetMinWriteSchemaVersion();
+    if (minWriteSchemaVersion != 0 && operation.GetTableId().GetSchemaVersion() < minWriteSchemaVersion) {
+        sendError("schema version is older than the synchronous index build", NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, 0, 0, "",
+            operation.GetIsBulk());
+        return;
+    }
+
     const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(operation.GetTableId());
     const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
     if (!internalPathId) {

@@ -2581,6 +2581,11 @@ public:
                             if (type == "syncGlobal") {
                                 add_index->mutable_global_index();
                             } else if (type == "syncGlobalUnique") {
+                                if (table.Metadata->StoreType == EStoreType::Column) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        "Unique indexes are not supported for column tables"));
+                                    return SyncError();
+                                }
                                 add_index->mutable_global_unique_index();
                             } else if (type == "asyncGlobal") {
                                 add_index->mutable_global_async_index();

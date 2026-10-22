@@ -104,9 +104,13 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
             .NotEmpty()
             .IsResolved()
             .NotDeleted()
-            .IsTable()
             .NotUnderDeleting()
             .NotUnderOperation();
+        if (table.IsResolved() && table->IsColumnTable()) {
+            checks.IsColumnTable();
+        } else {
+            checks.IsTable();
+        }
 
         if (!checks) {
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
@@ -203,9 +207,13 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
             .NotEmpty()
             .IsResolved()
             .NotDeleted()
-            .IsTable()
             .NotUnderDeleting()
             .NotUnderOperation();
+        if (table.IsResolved() && table->IsColumnTable()) {
+            checks.IsColumnTable();
+        } else {
+            checks.IsTable();
+        }
 
         if (!checks) {
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};

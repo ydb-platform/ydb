@@ -34,6 +34,12 @@ TVector<ISubOperation::TPtr> DropColumnTableWithLocalIndexes(TOperationId nextId
 
         auto indexInfo = context.SS->Indexes.at(childPathId);
         if (!TTableIndexInfo::IsLocalIndex(indexInfo->Type)) {
+            if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
+                return {CreateReject(nextId, NKikimrScheme::StatusInvalidParameter,
+                    TStringBuilder() << "Cannot drop column table '" << tableName
+                        << "': index '" << childName << "' is not a global synchronous index")};
+            }
+            AppendDropGlobalSyncIndex(result, nextId, childPath);
             continue;
         }
 

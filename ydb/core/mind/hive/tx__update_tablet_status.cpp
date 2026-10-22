@@ -95,6 +95,9 @@ public:
                     return true;
                 }
                 if (tablet->IsLeader() && Generation < tablet->GetLeader().KnownGeneration) {
+                    if (tablet->AsLeader().IsLockedToActor()) {
+                        tablet->SendStopTablet(Local, SideEffects);
+                    }
                     return true;
                 }
                 tablet->NotifyOnRestart("OK", SideEffects);
@@ -111,6 +114,9 @@ public:
                     // Tablet is locked and shouldn't be running, but we just found out it's running on this node
                     // Ask it to stop using InitiateStop (which uses data saved by BecomeRunning call above)
                     tablet->InitiateStop(SideEffects);
+                    if (tablet->IsLeader()) {
+                        tablet->AsLeader().RestoreLockedTabletMetrics();
+                    }
                 }
                 tablet->BootState = Self->BootStateRunning;
                 tablet->Statistics.SetLastAliveTimestamp(now.MilliSeconds());

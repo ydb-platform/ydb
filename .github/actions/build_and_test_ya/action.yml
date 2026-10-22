@@ -113,10 +113,13 @@ runs:
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}
         run_tests: ${{ inputs.run_tests }}
-        increment: ${{ inputs.increment }}
+        # Temporary comparison PR: run every small/medium suite selected by PR-check.
+        increment: false
         link_threads: ${{ inputs.link_threads }}
         additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
-        test_threads: ${{ inputs.test_threads }}
+        # pull_request_target evaluates pr_check.yml from the base branch, so
+        # force the experiment value here for this PR's own check.
+        test_threads: 64
         bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
         bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
         bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}

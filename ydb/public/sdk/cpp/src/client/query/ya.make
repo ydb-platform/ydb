@@ -1,8 +1,5 @@
 LIBRARY()
 
-# Work around LLVM 20 ThinLTO codegen crashes in transaction precommit.
-NO_LTO()
-
 SRCS(
     client.cpp
     query.cpp

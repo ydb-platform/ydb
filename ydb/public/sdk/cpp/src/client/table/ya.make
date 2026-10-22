@@ -1,8 +1,5 @@
 LIBRARY()
 
-# Work around LLVM 20 ThinLTO codegen crashes in table coroutine templates.
-NO_LTO()
-
 SRCS(
     out.cpp
     proto_accessor.cpp

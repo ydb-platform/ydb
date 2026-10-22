@@ -30,6 +30,13 @@ public:
         security["UseLoginProvider"] = AppData()->AuthConfig.GetUseLoginProvider();
         security["DomainLoginOnly"] = AppData()->AuthConfig.GetDomainLoginOnly();
 
+        if (Database) {
+            json["Database"]["Name"] = Database;
+        }
+        if (Params.Has("path")) {
+            json["Path"] = Params.Get("path");
+        }
+
         if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
             if (DatabaseNavigateResponse->Get()->Request && !DatabaseNavigateResponse->Get()->Request->ResultSet.empty()) {
                 NJson::TJsonValue& database(json["Database"]);

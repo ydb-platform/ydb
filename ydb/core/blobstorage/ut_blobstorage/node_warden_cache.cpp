@@ -36,6 +36,11 @@ Y_UNIT_TEST_SUITE(NodeWardenCache) {
         ui32 registrationStep = 0;
         std::vector<std::unique_ptr<IEventHandle>> commits;
         runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& event) {
+            // The response is captured after the commit barriers; pipe notifications may arrive earlier.
+            if (event->Recipient == sender && (event->GetTypeRewrite() == TEvTabletPipe::EvClientConnected ||
+                    event->GetTypeRewrite() == TEvTabletPipe::EvClientDestroyed)) {
+                return false;
+            }
             if (event->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType &&
                     event->Sender == sender) {
                 requestSeen = true;

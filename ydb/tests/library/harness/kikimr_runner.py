@@ -2,6 +2,7 @@
 import logging
 import os
 import shutil
+import sys
 import tempfile
 import time
 import itertools
@@ -245,6 +246,8 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "grpcs://" if self.__configurator.grpc_ssl_enable else "",
                 self.host,
                 self.__node_broker_port))
+            if sys.platform == "darwin":
+                command.extend(["--node-host=localhost", "--node-resolve-host=localhost"])
         else:
             command.append("--node=%s" % ("static" if self.__use_node_id_auto_detection else self.node_id))
 

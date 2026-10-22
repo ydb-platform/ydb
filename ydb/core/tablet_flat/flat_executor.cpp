@@ -771,11 +771,17 @@ TVector<NSharedCache::TEvAttach::TBtreeSeed> MakeBtreeSeeds(const NTable::TPartS
         return {};
     }
 
-    const NTable::NPage::TGroupId mainGroupId(groupIndex);
+    // Historic pages of a group share the page collections of its current pages
+    const NTable::NPage::TGroupId groupId(groupIndex);
+    const ui32 indexSlot = partStore.IndexSlot(groupId);
+    const ui32 dataSlot = partStore.DataSlot(groupId);
+    Y_DEBUG_ABORT_UNLESS(indexSlot == partStore.IndexSlot(NTable::NPage::TGroupId(groupIndex, true)));
+    Y_DEBUG_ABORT_UNLESS(dataSlot == partStore.DataSlot(NTable::NPage::TGroupId(groupIndex, true)));
+
     const bool sticky = stickyGroups[groupIndex];
-    const bool indexSticky = IsStickySlot(partStore, partStore.IndexSlot(mainGroupId), stickyGroups);
-    const bool keepIndexPages = partStore.PageCollections[partStore.IndexSlot(mainGroupId)]->GetCacheMode() == ECacheMode::TryKeepInMemory;
-    const bool keepDataPages = partStore.PageCollections[partStore.DataSlot(mainGroupId)]->GetCacheMode() == ECacheMode::TryKeepInMemory;
+    const bool indexSticky = IsStickySlot(partStore, indexSlot, stickyGroups);
+    const bool keepIndexPages = partStore.PageCollections[indexSlot]->GetCacheMode() == ECacheMode::TryKeepInMemory;
+    const bool keepDataPages = partStore.PageCollections[dataSlot]->GetCacheMode() == ECacheMode::TryKeepInMemory;
     if (!keepIndexPages && !keepDataPages && !sticky && !indexSticky) {
         return {};
     }
@@ -791,10 +797,9 @@ TVector<NSharedCache::TEvAttach::TBtreeSeed> MakeBtreeSeeds(const NTable::TPartS
         if (!meta.HasRootV2()) {
             continue;
         }
-        const NTable::NPage::TGroupId groupId(groupIndex, historic);
         seeds.push_back({
-            .IndexCollectionId = partStore.PageCollections[partStore.IndexSlot(groupId)]->Id,
-            .DataCollectionId = partStore.PageCollections[partStore.DataSlot(groupId)]->Id,
+            .IndexCollectionId = partStore.PageCollections[indexSlot]->Id,
+            .DataCollectionId = partStore.PageCollections[dataSlot]->Id,
             .Root = meta.RootV2,
             .LevelCount = meta.LevelCount(),
             .QueueDataPages = keepDataPages || sticky,
@@ -847,7 +852,10 @@ void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, c
     // B-tree seeds of a group are attached with the page collection of its data pages
     TVector<TVector<NSharedCache::TEvAttach::TBtreeSeed>> slotSeeds(partStore->PageCollections.size());
     for (size_t groupIndex : xrange(partView->GroupsCount)) {
-        slotSeeds.at(partStore->DataSlot(NTable::NPage::TGroupId(groupIndex))) = MakeBtreeSeeds(*partStore, groupIndex, stickyGroups);
+        auto& seeds = slotSeeds.at(partStore->DataSlot(NTable::NPage::TGroupId(groupIndex)));
+        for (auto& seed : MakeBtreeSeeds(*partStore, groupIndex, stickyGroups)) {
+            seeds.push_back(std::move(seed));
+        }
     }
 
     for (size_t slot = 0; slot < partStore->PageCollections.size(); ++slot) {

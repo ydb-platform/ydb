@@ -188,6 +188,7 @@ public:
     }
 
     const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
+        Y_ENSURE(NPage::IsIndexPage(location.Type), "key-block iterator requested a non-index page");
         const TSharedData* page = Inner->TryGetIndexPage(part, location, groupId);
         if (page) {
             Seen.insert({ part->Label, part->IndexSlot(groupId), location.Offset });

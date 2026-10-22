@@ -308,11 +308,6 @@ namespace NTable {
         /**
          * Index pages (flat or b-tree) of the column group
          */
-        ui64 GetIndexPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const
-        {
-            return GetSlotPageSize(IndexSlot(groupId), pageId);
-        }
-
         NPage::EPage GetIndexPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const
         {
             return GetSlotPageType(IndexSlot(groupId), pageId);
@@ -326,11 +321,6 @@ namespace NTable {
         const NPageCollection::IPageCollection* GetIndexPageCollection(NPage::TGroupId groupId) const
         {
             return GetPageCollection(IndexSlot(groupId));
-        }
-
-        ui8 GetIndexChannel(NPage::TGroupId groupId) const
-        {
-            return GetSlotChannel(IndexSlot(groupId));
         }
 
     protected:

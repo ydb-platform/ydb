@@ -129,11 +129,13 @@ namespace NFwd {
 
         const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
+            Y_DEBUG_ABORT_UNLESS(!IsIndexPage(location.Type), "Index page is requested as a data page");
             return Get(GetQueue(part, groupId), location.Offset, location.Type).Page;
         }
 
         const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
+            Y_DEBUG_ABORT_UNLESS(location.Type == EPage::Undef || IsIndexPage(location.Type), "Data page is requested as an index page");
             // the group queue loads both index and data pages of the group
             return Get(GetQueue(part, groupId), location.Offset, location.Type).Page;
         }

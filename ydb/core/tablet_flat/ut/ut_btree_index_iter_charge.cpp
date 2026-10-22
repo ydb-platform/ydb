@@ -342,8 +342,15 @@ namespace {
 
         const TSharedData* TryGetPage(const TPart* part, const NPage::TPageLocation& location,
                 NPage::TGroupId groupId) override {
-            Y_UNUSED(part);
-            const ui32 room = groupId.Index;
+            return TryGetRoomPage(location, part->DataSlot(groupId));
+        }
+
+        const TSharedData* TryGetIndexPage(const TPart* part, const NPage::TPageLocation& location,
+                NPage::TGroupId groupId) override {
+            return TryGetRoomPage(location, part->IndexSlot(groupId));
+        }
+
+        const TSharedData* TryGetRoomPage(const NPage::TPageLocation& location, ui32 room) {
             // Type-aware on every access, cache hits included: the store knows the
             // true page type for this offset/room. Validate the charger's requested
             // Type before serving from cache, so a same-offset request that later
@@ -352,7 +359,7 @@ namespace {
             // asks for the deepest index page as EPage::DataPage; the store says it
             // is EPage::BTreeIndexV2 -> this assert catches the type mismatch.
             auto pageId = Part->Store->ResolveByteOffset(room, location.Offset.AsByteOffset());
-            auto trueType = Part->GetPageType(pageId, groupId);
+            auto trueType = Part->GetSlotPageType(room, pageId);
             UNIT_ASSERT_VALUES_EQUAL_C(
                 static_cast<ui16>(location.Type), static_cast<ui16>(trueType),
                 "Wrong Type for offset " << location.Offset.AsByteOffset()

@@ -753,7 +753,7 @@ private:
 
 private:
     ui64 GetPrevBytes(const TBtreeIndexMeta& meta, TGroupId groupId, TRowId rowId) const {
-        auto location = GetBTreeRootLocation(meta, Part->GetIndexPageCollection(groupId), Part->GetDataPageCollection(groupId));
+        auto location = Part->IndexPages.GetRootLocation(Part, groupId);
         ui64 result = 0;
 
         for (ui32 height = 0; height < meta.LevelCount(); height++) {
@@ -764,9 +764,7 @@ private:
             }
             auto node = TBtreeIndexNode(*page, meta.HasRootV2());
             auto pos = node.Seek(rowId);
-            location = isDataPage
-                ? ResolvePageLocation(Part, node.GetChild(pos, isDataPage), groupId)
-                : ResolveIndexPageLocation(Part, node.GetChild(pos, isDataPage), groupId);
+            location = node.GetChildLocation(pos, isDataPage, Part, groupId);
             if (pos) {
                 result = node.GetChildDataSize(pos - 1);
             }
@@ -776,7 +774,7 @@ private:
     }
 
     ui64 GetBytes(TBtreeIndexMeta meta, TGroupId groupId, TRowId rowId) const {
-        auto location = GetBTreeRootLocation(meta, Part->GetIndexPageCollection(groupId), Part->GetDataPageCollection(groupId));
+        auto location = Part->IndexPages.GetRootLocation(Part, groupId);
         ui64 result = meta.GetDataSize();
 
         for (ui32 height = 0; height < meta.LevelCount(); height++) {
@@ -787,9 +785,7 @@ private:
             }
             auto node = TBtreeIndexNode(*page, meta.HasRootV2());
             auto pos = node.Seek(rowId);
-            location = isDataPage
-                ? ResolvePageLocation(Part, node.GetChild(pos, isDataPage), groupId)
-                : ResolveIndexPageLocation(Part, node.GetChild(pos, isDataPage), groupId);
+            location = node.GetChildLocation(pos, isDataPage, Part, groupId);
             result = node.GetChildDataSize(pos);
         }
 

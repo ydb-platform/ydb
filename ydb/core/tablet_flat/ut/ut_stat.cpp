@@ -52,7 +52,7 @@ namespace {
                         TouchedRows += dataPage->Count;
                     }
                 }
-                if (type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2) {
+                if (NPage::IsIndexPage(type)) {
                     TouchedIndexPages++;
                     TouchedIndexBytes += page->size();
                 }

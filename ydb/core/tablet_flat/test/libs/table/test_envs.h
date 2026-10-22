@@ -300,11 +300,14 @@ namespace NTest {
 
         const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
+            Y_ENSURE(!IsIndexPage(location.Type), "Index page " << location << " is requested as a data page");
             return Get(part, location, groupId);
         }
 
         const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
+            Y_ENSURE(location.Type == EPage::Undef || IsIndexPage(location.Type),
+                "Page " << location << " is requested as an index page");
             // the group queue loads both index and data pages of the group
             return Get(part, location, groupId);
         }

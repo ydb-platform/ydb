@@ -151,8 +151,8 @@ public:
         Y_ENSURE(slot < PageCollections.size());
 
         auto& pageCollection = *PageCollections[slot]->PageCollection;
-        auto meta =
-            groupId.Index < IndexPages.BTreeGroups.size() ? &IndexPages.GetBTree(groupId) : nullptr;
+        const auto& metas = groupId.IsHistoric() ? IndexPages.BTreeHistoric : IndexPages.BTreeGroups;
+        auto meta = groupId.Index < metas.size() ? &IndexPages.GetBTree(groupId) : nullptr;
         bool supersededByV2Tree = meta && meta->HasRootV2();
         auto total = pageCollection.MetaPages();
         TVector<TPageLocation> pages(Reserve(supersededByV2Tree ? 8 : total));

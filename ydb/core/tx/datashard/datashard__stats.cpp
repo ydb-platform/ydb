@@ -90,8 +90,7 @@ public:
     const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
         auto partStore = CheckedCast<const TPartStore*>(part);
         auto info = partStore->PageCollections.at(part->IndexSlot(groupId)).Get();
-        auto type = location.Type;
-        Y_ENSURE(type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2);
+        Y_ENSURE(NPage::IsIndexPage(location.Type));
 
         auto& partPages = Pages[info];
         auto page = partPages.FindPtr(location.Offset);

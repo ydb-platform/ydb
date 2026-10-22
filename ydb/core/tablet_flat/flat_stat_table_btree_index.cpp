@@ -17,13 +17,6 @@ using TChild = TBtreeIndexNode::TChild;
 using TColumns = TBtreeIndexNode::TColumns;
 using TCells = NPage::TCells;
 
-// Resolve root page location from meta, supporting both V1 and V2 formats.
-NPage::TPageLocation RootLocation(const TPart* part, const TBtreeIndexMeta& meta, TGroupId groupId) {
-    return GetBTreeRootLocation(meta,
-        part->GetIndexPageCollection(groupId),
-        part->GetDataPageCollection(groupId));
-}
-
 ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, bool& ready) {
     auto& meta = part->IndexPages.GetBTree(groupId);
 
@@ -34,7 +27,7 @@ ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* 
         return meta.GetDataSize();
     }
 
-    auto location = RootLocation(part, meta, groupId);
+    auto location = part->IndexPages.GetRootLocation(part, groupId);
     ui64 prevDataSize = 0;
 
     for (ui32 height = 0; height < meta.LevelCount(); height++) {
@@ -70,7 +63,7 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
         return meta.GetDataSize();
     }
 
-    auto location = RootLocation(part, meta, groupId);
+    auto location = part->IndexPages.GetRootLocation(part, groupId);
     ui64 prevDataSize = 0;
     historicRowId = 0;
 

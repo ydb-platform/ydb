@@ -113,9 +113,7 @@ struct TIndexOnlyEnv : TTestEnv {
     }
 
     const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
-        const auto type = location.Type;
-        UNIT_ASSERT_C(type == NPage::EPage::FlatIndex || type == NPage::EPage::BTreeIndex ||
-                          type == NPage::EPage::BTreeIndexV2, "key-block iterator fetched a data page");
+        UNIT_ASSERT_C(NPage::IsIndexPage(location.Type), "key-block iterator fetched a data page");
         return TTestEnv::TryGetIndexPage(part, location, groupId);
     }
 };

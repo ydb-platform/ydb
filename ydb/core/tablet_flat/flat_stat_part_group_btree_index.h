@@ -58,9 +58,7 @@ public:
 
         bool ready = true;
         TVector<TNodeState> nextNodes;
-        auto rootLoc = GetBTreeRootLocation(Meta,
-            Part->GetIndexPageCollection(GroupId),
-            Part->GetDataPageCollection(GroupId));
+        auto rootLoc = Part->IndexPages.GetRootLocation(Part, GroupId);
         Nodes.emplace_back(TPageRef(rootLoc), 0, GetEndRowId(), EmptyKey, 0, Meta.GetDataSize());
 
         for (ui32 height = 0; height < Meta.LevelCount(); height++) {

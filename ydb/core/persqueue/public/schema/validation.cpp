@@ -110,11 +110,35 @@ TResult ValidateConfig(
     return ValidateConsumersConfig(config, operation);
 }
 
+namespace {
+
+TResult ValidateAcknowledgedRetention(const NKikimrPQ::TPQTabletConfig& config) {
+    const auto& partition = config.GetPartitionConfig();
+    if (partition.GetRetentionPolicy() != NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED) {
+        return {};
+    }
+    const auto& name = partition.GetRetentionConsumer();
+    const auto* consumer = NPQ::GetConsumer(config, name);
+    if (name.empty() || !consumer || !consumer->GetImportant()
+        || consumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING
+        || consumer->GetReadFromTimestampsMs() != 0 || consumer->HasAvailabilityPeriodMs())
+    {
+        return {Ydb::StatusIds::BAD_REQUEST,
+            "Acknowledged replication retention requires its original important streaming consumer with zero read-from and unlimited availability"};
+    }
+    return {};
+}
+
+} // namespace
+
 TResult ValidateConsumersConfig(
     const NKikimrPQ::TPQTabletConfig& config,
     const EOperation operation
 ) {
     const auto& pqConfig = AppData()->PQConfig;
+    if (auto result = ValidateAcknowledgedRetention(config); !result) {
+        return result;
+    }
 
     size_t consumerCount = NPQ::ConsumerCount(config);
     if (consumerCount > MAX_READ_RULES_COUNT) {

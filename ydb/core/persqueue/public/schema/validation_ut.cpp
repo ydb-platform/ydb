@@ -687,6 +687,80 @@ Y_UNIT_TEST(ProcessTopicAttributesAdvancedMonitoringAndId) {
     });
 }
 
+Y_UNIT_TEST(AcknowledgedRetentionRequiredConsumerInvariants) {
+    NActors::TTestBasicRuntime runtime(1, false);
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+    RunInActor(runtime, [&] {
+        NKikimrPQ::TPQTabletConfig config;
+        config.MutablePartitionConfig()->SetRetentionPolicy(
+            NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED);
+        config.MutablePartitionConfig()->SetRetentionConsumer("replication");
+        auto* consumer = config.AddConsumers();
+        consumer->SetName("replication");
+        consumer->SetImportant(true);
+        consumer->SetReadFromTimestampsMs(0);
+        UNIT_ASSERT(ValidateConsumersConfig(config, EOperation::Alter));
+        const TVector<std::function<void(NKikimrPQ::TPQTabletConfig&)>> mutations = {
+            [](auto& c) { c.ClearConsumers(); },
+            [](auto& c) { c.MutableConsumers(0)->SetName("other"); },
+            [](auto& c) { c.MutableConsumers(0)->SetImportant(false); },
+            [](auto& c) { c.MutableConsumers(0)->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP); },
+            [](auto& c) { c.MutableConsumers(0)->SetReadFromTimestampsMs(1); },
+            [](auto& c) { c.MutableConsumers(0)->SetAvailabilityPeriodMs(1000); },
+            [](auto& c) { c.MutablePartitionConfig()->ClearRetentionConsumer(); },
+        };
+        for (size_t i = 0; i < mutations.size(); ++i) {
+            auto invalid = config;
+            mutations[i](invalid);
+            UNIT_ASSERT_C(!ValidateConsumersConfig(invalid, EOperation::Alter),
+                "Required consumer mutation must fail: " << i);
+        }
+    });
+}
+
+Y_UNIT_TEST(AcknowledgedRetentionPreservesRequiredImportantWithoutQuota) {
+    NActors::TTestBasicRuntime runtime(1, false);
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+    runtime.GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(false);
+    auto& pq = runtime.GetAppData().PQConfig;
+    pq.SetTopicsAreFirstClassCitizen(true);
+    pq.MutableDefaultClientServiceType()->SetName("data-streams");
+    pq.MutableDefaultClientServiceType()->SetMaxReadRulesCountPerTopic(10);
+    pq.ClearClientServiceType();
+
+    RunInActor(runtime, [&] {
+        const auto types = GetSupportedClientServiceTypes();
+        NKikimrPQ::TPQTabletConfig storedPolicy;
+        storedPolicy.MutablePartitionConfig()->SetRetentionPolicy(
+            NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED);
+        storedPolicy.MutablePartitionConfig()->SetRetentionConsumer("replication");
+        Ydb::Topic::Consumer required;
+        required.set_name("replication");
+        required.set_important(true);
+        required.mutable_streaming_consumer_type();
+
+        // AlterTopic clears Consumers before rebuilding existing entries with
+        // checkServiceType=false; reproduce that actual caller contract here.
+        auto reconstructed = storedPolicy;
+        auto preserved = AddConsumer(&reconstructed, required, types, false, nullptr);
+        UNIT_ASSERT_C(preserved, preserved.GetErrorMessage());
+        UNIT_ASSERT_VALUES_EQUAL(reconstructed.ConsumersSize(), 1);
+        UNIT_ASSERT(reconstructed.GetConsumers(0).GetImportant());
+
+        auto newRequired = storedPolicy;
+        UNIT_ASSERT_C(!AddConsumer(&newRequired, required, types, true, nullptr),
+            "The preserved-consumer exception must not authorize a new Important consumer");
+        auto wrongIdentity = storedPolicy;
+        required.set_name("other");
+        UNIT_ASSERT_C(!AddConsumer(&wrongIdentity, required, types, false, nullptr),
+            "Only the exact persisted required identity may bypass the Important restriction");
+        NKikimrPQ::TPQTabletConfig standard;
+        required.set_name("replication");
+        UNIT_ASSERT_C(!AddConsumer(&standard, required, types, false, nullptr),
+            "Standard topics must retain their Important restriction");
+    });
+}
+
 Y_UNIT_TEST(AddConsumerServiceTypeAndCodecs) {
     NActors::TTestBasicRuntime runtime(1, false);
     runtime.Initialize(NKikimr::TAppPrepare().Unwrap());

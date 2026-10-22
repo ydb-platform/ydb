@@ -464,7 +464,11 @@ TResult AddConsumer(
     }
 
     if (consumerConfig.important()) {
-        if (pqConfig.GetTopicsAreFirstClassCitizen() && !enableTopicDiskSubDomainQuota) {
+        const auto& partition = config->GetPartitionConfig();
+        const bool preserveRequiredConsumer = !checkServiceType
+            && partition.GetRetentionPolicy() == NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED
+            && partition.GetRetentionConsumer() == consumerName;
+        if (pqConfig.GetTopicsAreFirstClassCitizen() && !enableTopicDiskSubDomainQuota && !preserveRequiredConsumer) {
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "important flag is forbidden for consumer " << consumerConfig.name()};
         }
         consumer->SetImportant(true);

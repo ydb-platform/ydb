@@ -93,7 +93,6 @@ class PrimaryKeyOrdering:
         self.fail(f"Compaction did not finish for {table}: {stats}")
 
     def assert_query(self, tables, suffix, parameters, pushdown, context):
-        # Project identities, not formatted keys: UUID text order is not its YDB order.
         statements = [f"SELECT id, revision FROM `{table}` {suffix};" for table in tables]
         result_sets = self.query(
             f'PRAGMA Kikimr.OptEnableOlapPushdown = "{str(pushdown).lower()}";\n'
@@ -161,7 +160,6 @@ class PrimaryKeyOrdering:
             expected = {row["id"]: row["revision"] for row in rows}
             self.check_reads(tables, sdk_type, values, composite, expected, "bulk_upsert")
 
-            # Separate writes leave overlapping versions for the scan merger and compaction.
             for revision in (1, 2):
                 updated = [dict(row, revision=revision) for row in rows if row["id"] % 2 == revision % 2]
                 for table in tables:
@@ -235,7 +233,6 @@ class PrimaryKeyOrdering:
         self.check_type("Utf8", ["", "\0", "a", "a\0", "aa", "e\u0301", "é", "я", "中", "\uffff", "\U00010000", "😀"])
 
     def test_uuid(self):
-        # The first UUID fields are little-endian: textual UUID order is a different oracle.
         values = [uuid.UUID(int=0), uuid.UUID(int=(1 << 128) - 1)]
         values += [uuid.UUID(bytes_le=bytes(1 if index == byte else 0 for index in range(16))) for byte in range(16)]
         self.check_type("Uuid", values)

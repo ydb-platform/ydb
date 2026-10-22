@@ -67,7 +67,6 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
     Y_UNIT_TEST(PrimitiveValues) {
         CheckOrderedValues(MakeArray<arrow::Int64Builder, i64>({std::numeric_limits<i64>::min(), -1, 0, std::numeric_limits<i64>::max()}));
         CheckOrderedValues(MakeArray<arrow::UInt64Builder, ui64>({0, 1, std::numeric_limits<ui64>::max()}));
-        // YDB Bool is represented by UInt8, unlike Arrow's bit-packed BooleanArray.
         CheckOrderedValues(MakeArray<arrow::UInt8Builder, ui8>({0, 1, 127, 128, 255}));
         CheckOrderedValues(MakeArray<arrow::DoubleBuilder, double>({-std::numeric_limits<double>::infinity(), -1.0, 0.0, 1.0,
             std::numeric_limits<double>::infinity()}));
@@ -95,8 +94,6 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
     }
 
     Y_UNIT_TEST(FixedSizeBinaryKeepsPhysicalOrder) {
-        // Little-endian integer encodings: 256 sorts before 1 and -1 sorts last.
-        // Decimal and UUID both use this physical type; this refactor must not reinterpret it.
         std::string zero(16, '\0');
         std::string one = zero;
         one[0] = 1;
@@ -126,7 +123,6 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
         UNIT_ASSERT_VALUES_EQUAL(ScalarCompareNullable(value, missing), 1);
         UNIT_ASSERT_VALUES_EQUAL(ScalarCompareNullable(value, value), 0);
 
-        // ScalarCompareNullable tests pointer presence, not Arrow's validity bit.
         const auto invalid = std::make_shared<arrow::Int64Scalar>(2);
         invalid->is_valid = false;
         UNIT_ASSERT_VALUES_EQUAL(ScalarCompareNullable(invalid, value), 1);
@@ -139,7 +135,6 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
         const auto batch = MakeBatch(values);
         UNIT_ASSERT((TSimpleRow(batch, 0) <=> TSimpleRow(batch, 1)) == std::partial_ordering::less);
         UNIT_ASSERT_VALUES_EQUAL(ScalarCompare(GetScalar(values, 0), GetScalar(values, 1)), -1);
-        // Existing array dispatch treats Arrow BOOL as equivalent, unlike YDB's UInt8 Bool.
         UNIT_ASSERT(TComparator::TypedCompare<true>(*values, 0, *values, 1) == std::partial_ordering::equivalent);
     }
 
@@ -176,7 +171,6 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
         const auto floats = MakeArray<arrow::DoubleBuilder, double>({std::numeric_limits<double>::quiet_NaN(), 1.0, 0.0});
         const auto floatSchema = arrow::schema({arrow::field("first", floats->type()), schema->field(1)});
         const auto floatBatch = arrow::RecordBatch::Make(floatSchema, 3, {floats, second});
-        // Packed comparison continues to the second key after an unordered floating comparison.
         UNIT_ASSERT((TSimpleRow(floatBatch, 0) <=> TSimpleRow(floatBatch, 1)) == std::partial_ordering::greater);
         const NMerger::TSortableScanData floatPositions(0, floatBatch);
         UNIT_ASSERT(floatPositions.Compare(0, floatPositions, 1) == std::partial_ordering::unordered);

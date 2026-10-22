@@ -904,6 +904,43 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
             .HasPendingPileOperation());
     }
 
+    // the cluster can't be converted into bridged one unless every node supports the bridge features the converted
+    // cluster requires, dynamic nodes too, as nodes of older versions abort or hang on inline piles
+    Y_UNIT_TEST(ConversionRequiresFeatureLevel) {
+        auto config = MakeStorageConfig(4);
+        config.MutableSelfManagementConfig()->SetEnabled(true);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+
+        TNodeWardenTestState state;
+        state.RequiredRootNodeId = 1;
+        TTestActorSystem runtime(6); // nodes 5 and 6 are dynamic ones
+        auto& bridge = runtime.GetAppDataBridgeConfig();
+        bridge.AddPiles()->SetName("pile0");
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        std::vector<TActorId> keepers;
+        for (ui32 nodeId = 1; nodeId <= 4; ++nodeId) {
+            keepers.push_back(RegisterKeeper(runtime, config, nodeId, state, {}, &bridge));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }));
+
+        std::vector<NKikimrBlobStorage::TEvNodeWardenDynamicConfigPush> olderPushes, pushes;
+        SubscribeDynamicNode(runtime, keepers.front(), 5, NStorage::BridgeFeatureLevelPileList, olderPushes);
+        SubscribeDynamicNode(runtime, keepers.front(), 6, NStorage::BridgeFeatureLevel, pushes);
+
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableConvertToBridge();
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        runtime.Send(new IEventHandle(keepers.front(), edge, request.release()), 1);
+        auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        const auto& record = response->Get()->Record;
+        UNIT_ASSERT_EQUAL_C(record.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR,
+            record.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(record.GetErrorReason(), "they have to be upgraded or stopped first NodeIds# 5");
+        UNIT_ASSERT_C(!record.GetErrorReason().Contains("5 6"), record.GetErrorReason()); // the node of this version
+        UNIT_ASSERT(!QueryKeeper(runtime, keepers.front()).GetQueryConfig().GetConfig().HasClusterState());
+    }
+
     // replaced config gets pile registry stored; new piles are INACTIVE, only INACTIVE piles can be dropped; change of
     // the list of piles or their order is reported, as it requires every node to support it
     Y_UNIT_TEST(UpdatePileRegistry) {
@@ -1772,6 +1809,8 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT_VALUES_EQUAL(registry.GetPiles(0).GetName(), "pile0");
         UNIT_ASSERT_EQUAL(TBridgePileId::FromProto(&registry, &NKikimrBridge::TPileRegistry::GetImplicitPileId),
             TBridgePileId::FromPileIndex(0));
+        // nodes of older versions, which don't handle inline piles, neither get the config nor connect
+        UNIT_ASSERT_VALUES_EQUAL(NStorage::GetRequiredBridgeFeatureLevel(config), NStorage::BridgeFeatureLevel);
 
         // static group becomes an inline pile with bumped generation
         const auto& ss = config.GetBlobStorageConfig().GetServiceSet();

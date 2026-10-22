@@ -650,6 +650,11 @@ public:
         LocalSessions->ForEachNode([this](TNodeId node) {
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
         });
+        for (const auto& [node, _] : RemoteRequests) {
+            if (LocalSessions->FindSessions(node).empty()) {
+                Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
+            }
+        }
 
         ResourcePoolsCache.UnsubscribeFromResourcePoolClassifiers(ActorContext());
         DatabasesCache.StopSubscriberActor(ActorContext());
@@ -858,6 +863,12 @@ public:
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
         auto* proxyRequest = PendingRequests.FindPtr(requestId);
         AFL_ENSURE(proxyRequest);
+        if (ev->InterconnectSession) {
+            // The request came from another node. The response and the result parts go back only through this
+            // session: if it breaks, they are lost as a whole and none of them comes later through a new session.
+            proxyRequest->ReplySession = ev->InterconnectSession;
+            ev->Get()->SetReplySession(ev->InterconnectSession);
+        }
         auto& span = proxyRequest->Span;
         span = NWilson::TSpan(TComponentTracingLevels::TQueryProcessor::TopLevel,
             std::move(ev->TraceId), "Query Proxy", NWilson::EFlags::AUTO_END);
@@ -1001,7 +1012,16 @@ public:
                 span, SelfId().NodeId(), targetId.NodeId());
         }
         proxyRequest->QueryDispatched = true;
-        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
+        ui32 flags = IEventHandle::FlagTrackDelivery;
+        if (targetId.NodeId() != SelfId().NodeId()) {
+            // The remote node sends the result parts and the response only through the interconnect session the
+            // request came through, so after that session breaks nothing more comes for this query. Fail it at once
+            // instead of waiting for the query timeout.
+            flags |= IEventHandle::FlagSubscribeOnSession;
+            proxyRequest->RemoteNodeId = targetId.NodeId();
+            RemoteRequests[targetId.NodeId()].insert(requestId);
+        }
+        Send(targetId, ev->Release().Release(), flags, requestId, std::move(ev->TraceId));
     }
 
     void Handle(TEvKqp::TEvScriptRequest::TPtr& ev) {
@@ -1300,6 +1320,19 @@ public:
             return;
         }
 
+        if (proxyRequest->RemoteNodeId) {
+            if (auto it = RemoteRequests.find(proxyRequest->RemoteNodeId); it != RemoteRequests.end()) {
+                it->second.erase(requestId);
+                if (it->second.empty()) {
+                    RemoteRequests.erase(it);
+                    // no query waits for that node, and no session is attached from it
+                    if (LocalSessions->FindSessions(proxyRequest->RemoteNodeId).empty()) {
+                        Send(TActivationContext::InterconnectProxy(proxyRequest->RemoteNodeId), new TEvents::TEvUnsubscribe);
+                    }
+                }
+            }
+        }
+
         const TKqpSessionInfo* info = LocalSessions->FindPtr(proxyRequest->SessionId);
         if (info && !info->AttachedRpcId
             && (info->State != TKqpSessionInfo::EXECUTING || info->QueryRequestId == requestId)) {
@@ -1310,7 +1343,14 @@ public:
             EndProxyQueryTraceSpan(proxyRequest->Span, ev->Get()->Record);
             EndQueryTraceSpan(proxyRequest->RedirectSpan, ev->Get()->Record.GetYdbStatus());
         }
-        Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
+        if (proxyRequest->ReplySession) {
+            auto handle = std::make_unique<IEventHandle>(proxyRequest->Sender, SelfId(), ev->Release().Release(), 0,
+                proxyRequest->SenderCookie);
+            handle->Rewrite(TEvInterconnect::EvForward, proxyRequest->ReplySession);
+            TActivationContext::Send(handle.release());
+        } else {
+            Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
+        }
 
         if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest && info->QueryRequestId == requestId) {
             LocalSessions->EndQuery(info);
@@ -1992,8 +2032,8 @@ private:
             ShutdownState->Update(LocalSessions->size());
         }
 
-        // No remaining sessions are attached to an RPC actor on this node.
-        if (nodeId) {
+        // No remaining sessions are attached to an RPC actor on this node, and no query waits for that node.
+        if (nodeId && !RemoteRequests.contains(nodeId)) {
             Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
         }
 
@@ -2203,12 +2243,18 @@ private:
 
     void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
         TNodeId nodeId = ev->Get()->NodeId;
+        // the session that took a query forwarded to that node subscribes us with the cookie of the query
+        if (auto* request = PendingRequests.FindPtr(ev->Cookie);
+            request && request->RemoteNodeId == nodeId && !request->RemoteSession)
+        {
+            request->RemoteSession = ev->Sender;
+        }
         auto sessions = LocalSessions->FindSessions(nodeId);
         if (sessions) {
             YDB_LOG_TRACE("Received node connected event with local sessions",
                 {"node", nodeId},
                 {"sessionsCount", sessions.size()});
-        } else {
+        } else if (!RemoteRequests.contains(nodeId)) {
             YDB_LOG_ERROR("Got TEvNodeConnected event from node without",
                 {"sessions", nodeId});
         }
@@ -2225,6 +2271,25 @@ private:
         // It allows to use common code to close and delete expired session
         for (const auto sessionInfo : sessions) {
             LocalSessions->StartIdleCheck(sessionInfo, IdleDurationAfterDisconnect);
+        }
+
+        if (auto it = RemoteRequests.find(nodeId); it != RemoteRequests.end()) {
+            const TString message = TStringBuilder() << "Connection with node " << nodeId << " lost.";
+            for (ui64 requestId : it->second) {
+                auto* request = PendingRequests.FindPtr(requestId);
+                if (!request || request->RemoteNodeDisconnected) {
+                    continue;
+                }
+                // A broken session notifies us itself; an older one must not fail a query that went through a newer
+                // one. If no session could be set up for the query, the interconnect proxy notifies us with its cookie.
+                const bool lost = request->RemoteSession
+                    ? request->RemoteSession == ev->Sender
+                    : requestId == ev->Cookie;
+                if (lost) {
+                    request->RemoteNodeDisconnected = true;
+                    ReplyProcessError(Ydb::StatusIds::UNAVAILABLE, message, requestId);
+                }
+            }
         }
     }
 
@@ -2435,6 +2500,8 @@ private:
 
     std::optional<TPeerStats> PeerStats;
     TKqpProxyRequestTracker PendingRequests;
+    // queries forwarded to the proxy of another node, by that node
+    THashMap<ui32, THashSet<ui64>> RemoteRequests;
     bool ShutdownRequested = false;
     THashMap<ui64, NKikimrConsole::TConfigItem::EKind> ConfigSubscriptions;
     THashMap<ui64, TActorId> TimeoutTimers;

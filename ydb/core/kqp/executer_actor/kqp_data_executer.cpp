@@ -334,6 +334,10 @@ public:
     }
 
     void HandleFinalize(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == TEvKqpExecuter::TEvStreamData::EventType) {
+            // a result part lost with the interconnect session to the request actor; the response goes the same way
+            return;
+        }
         AFL_ENSURE(ev->Sender == BufferActorId);
         YDB_LOG_WARN("Got Undelivered from BufferActor",
             {"marker", "KQPDATA"},

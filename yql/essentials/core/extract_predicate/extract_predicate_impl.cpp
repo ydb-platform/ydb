@@ -1760,6 +1760,23 @@ void TryBuildSingleRangeHint(TExprNode::TPtr range, const TStructExprType& rowTy
     YQL_ENSURE(idx);
     const TTypeAnnotationNode* firstKeyType = rowType.GetItems()[*idx]->GetItemType();
 
+    if (!op->IsCallable("Exists")) {
+        for (size_t i = indexRange.Begin; i < indexRange.End; ++i) {
+            const auto* keyType = rowType.FindItemType(indexKeys[i]);
+            YQL_ENSURE(keyType);
+            keyType = RemoveAllOptionals(keyType);
+            if (keyType->GetKind() == ETypeAnnotationKind::Data &&
+                (NUdf::GetDataTypeInfo(keyType->Cast<TDataExprType>()->GetSlot()).Features &
+                 (NUdf::EDataTypeFeatures::FloatType | NUdf::EDataTypeFeatures::DecimalType)))
+            {
+                // A literal interval uses storage ordering, where NaN is a
+                // value. Keep the computed RangeFor checks for SQL comparisons,
+                // including parameter bounds that may be NaN at execution.
+                return;
+            }
+        }
+    }
+
     auto isOptional = [&](const TExprNode::TPtr& node) {
         YQL_ENSURE(node->GetTypeAnn());
         return node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional || node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null;

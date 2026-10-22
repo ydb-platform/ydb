@@ -798,6 +798,80 @@ Y_UNIT_TEST(NaNNotEquals) {
     ExtractAndExecuteRanges(prog, expectedExecuteResult);
 }
 
+Y_UNIT_TEST(NaNUpperBoundsProduceEmptyComputedRanges) {
+    const TVector<std::pair<TString, TString>> values = {
+        {"Decimal('nan', 10, 0)", "Decimal('inf', 10, 0)"},
+        {"Float('nan')", "Float('inf')"},
+        {"Double('nan')", "Double('inf')"},
+    };
+    const TString empty = R"__({"Write"=[{"Data"=[]}]})__";
+    for (const auto& [nan, infinity] : values) {
+        for (const TString op : {"<", "<="}) {
+            const TString prog = TStringBuilder()
+                << "$src = [<|x:" << nan << ", y:1|>, <|x:" << infinity << ", y:2|>];\n"
+                << "select * from as_table($src) where x " << op << " " << nan << ";";
+            // Execute the computed range itself: an upper NaN bound must not
+            // depend on a residual predicate to remove comparable values.
+            ExtractAndExecuteRanges(prog, empty, {}, {"x"});
+        }
+    }
+}
+
+Y_UNIT_TEST(NaNCapableComparisonKeysDoNotProduceLiteralHints) {
+    const TVector<std::pair<TString, TString>> types = {
+        {"Decimal(10,0)", "Decimal('0', 10, 0)"},
+        {"Float", "Float('0')"},
+        {"Double", "Double('0')"},
+    };
+    for (const auto& [type, zero] : types) {
+        for (const TString op : {"=", ">", ">=", "<", "<="}) {
+            for (const bool parameter : {false, true}) {
+                const TString prog = TStringBuilder()
+                    << "declare $bound as " << type << ";\n"
+                    << "$src = [<|x:" << zero << ", y:1|>];\n"
+                    << "select * from as_table($src) where x " << op << " "
+                    << (parameter ? TString("$bound") : zero) << ";";
+                TExprContext exprCtx;
+                TTypeAnnotationContextPtr typesCtx;
+                const auto root = ParseAndOptimize(prog, exprCtx, typesCtx);
+                const auto filter = LocateFilterLambda(root);
+                THashSet<TString> usedColumns;
+                TPredicateExtractorSettings settings;
+                settings.BuildLiteralRange = true;
+                auto extractor = MakePredicateRangeExtractor(settings);
+                UNIT_ASSERT(extractor->Prepare(filter, *filter->Head().Head().GetTypeAnn(),
+                    usedColumns, exprCtx, *typesCtx));
+                const auto built = extractor->BuildComputeNode({"x"}, exprCtx, *typesCtx);
+                UNIT_ASSERT_C(built.ComputeNode, prog);
+                UNIT_ASSERT_C(!built.LiteralRange, prog);
+            }
+        }
+    }
+}
+
+Y_UNIT_TEST(DecimalExistsKeepsLiteralHint) {
+    const TString prog =
+        "$src = [<|x:Just(Decimal('nan', 10, 0)), y:1|>, "
+        "<|x:CAST(NULL AS Decimal(10,0)), y:2|>];\n"
+        "select * from as_table($src) where x is not null;";
+    TExprContext exprCtx;
+    TTypeAnnotationContextPtr typesCtx;
+    const auto root = ParseAndOptimize(prog, exprCtx, typesCtx);
+    const auto filter = LocateFilterLambda(root);
+    THashSet<TString> usedColumns;
+    TPredicateExtractorSettings settings;
+    settings.BuildLiteralRange = true;
+    auto extractor = MakePredicateRangeExtractor(settings);
+    UNIT_ASSERT(extractor->Prepare(filter, *filter->Head().Head().GetTypeAnn(),
+        usedColumns, exprCtx, *typesCtx));
+    const auto built = extractor->BuildComputeNode({"x"}, exprCtx, *typesCtx);
+    UNIT_ASSERT(built.ComputeNode);
+    UNIT_ASSERT(built.LiteralRange);
+    UNIT_ASSERT(!built.LiteralRange->Left.Inclusive);
+    UNIT_ASSERT_VALUES_EQUAL(built.LiteralRange->Left.Columns.size(), 1);
+    UNIT_ASSERT(built.LiteralRange->Right.Columns.empty());
+}
+
 Y_UNIT_TEST(PointPrefixLen) {
     TString prog =
         "$src = [<|x:1, y:1, z:1|>, <|x:2, y:2, z:2|>];\n"

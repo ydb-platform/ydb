@@ -396,6 +396,17 @@ TExprNode::TPtr BuildNormalRangeLambdaRaw(TPositionHandle pos, const TTypeAnnota
                                                      BuildPlusInf(pos, keyType, ctx), ctx);
         body = ctx.NewCallable(pos, "RangeIntersect", {body, fullRangeWithoutNaNs});
     }
+    if ((op == "<" || op == "<=") && HasUncomparableNaNs(keyType)) {
+        // Storage puts NaN after every comparable value. Such an upper bound
+        // would admit ordinary values, while every SQL comparison to NaN is
+        // false. The self-comparison also handles a runtime parameter bound.
+        auto comparable = ctx.NewCallable(pos, "Coalesce", {
+            ctx.NewCallable(pos, "==", {key, key}),
+            ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, "false")})});
+        body = ctx.NewCallable(pos, "If", {
+            std::move(comparable), body,
+            ctx.NewCallable(pos, "RangeEmpty", {ExpandType(pos, *keyType, ctx)})});
+    }
 
     return ctx.NewLambda(pos, ctx.NewArguments(pos, {key}), std::move(body));
 }

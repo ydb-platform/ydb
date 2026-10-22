@@ -1013,6 +1013,145 @@ FROM (
             R"([[["TYPE"];["REF"];["aliased"]];[["TYPE"];["REF"];["limited"]];[["TYPE"];["REF"];["target"]];[["TYPE"];["REF"];["union"]]])");
     }
 
+    Y_UNIT_TEST(DecimalNullKeyBoundsPreserveTypeParameters) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto* tableService = appConfig.MutableTableServiceConfig();
+        tableService->SetEnableNewRBO(true);
+        tableService->SetEnableFallbackToYqlOptimizer(false);
+        tableService->SetEnableFallbackOnDML(false);
+        tableService->SetDefaultLangVer(202501);
+        tableService->SetDefaultCostBasedOptimizationLevel(0);
+        tableService->SetEnableAutoIndexSelectionForIndexLookupJoin(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+
+        struct TDecimalCase {
+            ui8 Precision;
+            ui8 Scale;
+            const char* Negative;
+            const char* Positive;
+            const char* Upper;
+        };
+        for (const auto& type : TVector<TDecimalCase>{
+                 {10, 0, "-1", "1", "2"},
+                 {22, 9, "-1.123456789", "1.123456789", "2.987654321"},
+                 {35, 2, "-123456789012345678901234567890123.45",
+                     "123456789012345678901234567890123.45", "223456789012345678901234567890123.45"}})
+        {
+            const TString suffix = TStringBuilder() << ui32(type.Precision) << "_" << ui32(type.Scale);
+            const TString decimal = TStringBuilder() << "Decimal(" << ui32(type.Precision) << "," << ui32(type.Scale) << ")";
+            const TString mainTable = TStringBuilder() << "/Root/DecimalNullMain" << suffix;
+            const TString indexTable = TStringBuilder() << "/Root/DecimalNullIndex" << suffix;
+            const TString schema = TStringBuilder()
+                << "CREATE TABLE `" << mainTable << "` (D " << decimal
+                << ", Id Int32 NOT NULL, PRIMARY KEY (D, Id));\n"
+                << "CREATE TABLE `" << indexTable << "` (Id Int32 NOT NULL, "
+                << "Prefix Decimal(7,0) NOT NULL, Tag String NOT NULL, D " << decimal
+                << ", PRIMARY KEY (Id));";
+            const auto created = tableSession.ExecuteSchemeQuery(schema).GetValueSync();
+            UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+
+            const std::vector<std::optional<std::string>> values{
+                std::nullopt, std::nullopt, type.Negative, "0", type.Positive, type.Upper};
+            // Seed both tables before adding the index, so index population
+            // uses its ordinary backfill path and needs no DML fallback.
+            for (const bool indexedTable : {false, true}) {
+                NYdb::TValueBuilder rows;
+                rows.BeginList();
+                for (size_t i = 0; i < values.size(); ++i) {
+                    rows.AddListItem().BeginStruct()
+                        .AddMember("Id").Int32(static_cast<i32>(i + 1))
+                        .AddMember("D");
+                    if (values[i]) {
+                        rows.BeginOptional().Decimal(NYdb::TDecimalValue(*values[i], type.Precision, type.Scale)).EndOptional();
+                    } else {
+                        rows.EmptyOptional(NYdb::TTypeBuilder()
+                            .Decimal(NYdb::TDecimalType(type.Precision, type.Scale)).Build());
+                    }
+                    if (indexedTable) {
+                        rows.AddMember("Prefix").Decimal(NYdb::TDecimalValue("7", 7, 0))
+                            .AddMember("Tag").String("scope");
+                    }
+                    rows.EndStruct();
+                }
+                rows.EndList();
+                const auto seeded = kikimr.GetTableClient().BulkUpsert(
+                    indexedTable ? indexTable : mainTable, rows.Build()).GetValueSync();
+                UNIT_ASSERT_C(seeded.IsSuccess(), seeded.GetIssues().ToString());
+            }
+            const TString addIndex = TStringBuilder() << "ALTER TABLE `" << indexTable
+                << "` ADD INDEX ByD GLOBAL SYNC ON (Prefix, Tag, D);";
+            const auto indexed = tableSession.ExecuteSchemeQuery(addIndex).GetValueSync();
+            UNIT_ASSERT_C(indexed.IsSuccess(), indexed.GetIssues().ToString());
+
+            const TVector<std::pair<TString, TVector<i32>>> cases{
+                {"D IS NULL", {1, 2}},
+                {"D IS NOT NULL", {3, 4, 5, 6}},
+                {TStringBuilder() << "D = CAST(\"" << type.Positive << "\" AS " << decimal << ")", {5}},
+                {TStringBuilder() << "D >= CAST(\"0\" AS " << decimal << ") AND D < CAST(\""
+                    << type.Positive << "\" AS " << decimal << ")", {4}},
+            };
+            for (const bool useIndex : {false, true}) {
+                for (const auto& [predicate, expectedIds] : cases) {
+                    const TString query = TStringBuilder()
+                        << "PRAGMA YqlSelect = 'force'; SELECT Id, D FROM `"
+                        << (useIndex ? indexTable : mainTable) << "`"
+                        << (useIndex ? " WHERE Prefix = CAST(\"7\" AS Decimal(7,0)) AND Tag = \"scope\" AND (" : " WHERE (")
+                        << predicate << ") ORDER BY Id;";
+                    auto settings = NYdb::NQuery::TExecuteQuerySettings();
+                    if (useIndex || predicate == "D IS NULL") {
+                        settings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+                    }
+                    const auto before = GetNewRBOCompileCounters(kikimr);
+                    const auto result = querySession.ExecuteQuery(
+                        query, NYdb::NQuery::TTxControl::NoTx(), settings).GetValueSync();
+                    UNIT_ASSERT_C(result.IsSuccess(), query << "\n" << result.GetIssues().ToString());
+                    const auto after = GetNewRBOCompileCounters(kikimr);
+                    UNIT_ASSERT_C(after.first > before.first, query);
+                    UNIT_ASSERT_VALUES_EQUAL_C(after.second, before.second, query);
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+                    const auto& resultSet = result.GetResultSet(0);
+                    UNIT_ASSERT_VALUES_EQUAL_C(resultSet.RowsCount(), expectedIds.size(), query);
+                    UNIT_ASSERT_VALUES_EQUAL(resultSet.GetColumnsMeta().size(), 2);
+                    UNIT_ASSERT_VALUES_EQUAL(resultSet.GetColumnsMeta()[0].Name, "Id");
+                    UNIT_ASSERT_VALUES_EQUAL(resultSet.GetColumnsMeta()[1].Name, "D");
+                    UNIT_ASSERT_VALUES_EQUAL_C(resultSet.GetColumnsMeta()[1].Type.ToString(), decimal + "?", query);
+                    TResultSetParser parser(resultSet);
+                    for (const auto id : expectedIds) {
+                        UNIT_ASSERT(parser.TryNextRow());
+                        UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(0).GetInt32(), id, query);
+                        const auto actual = parser.ColumnParser(1).GetOptionalDecimal();
+                        const auto& expectedValue = values[id - 1];
+                        UNIT_ASSERT_VALUES_EQUAL_C(actual.has_value(), expectedValue.has_value(), query);
+                        if (actual) {
+                            const NYdb::TDecimalValue expected(*expectedValue, type.Precision, type.Scale);
+                            UNIT_ASSERT_VALUES_EQUAL_C(actual->DecimalType_.Precision, type.Precision, query);
+                            UNIT_ASSERT_VALUES_EQUAL_C(actual->DecimalType_.Scale, type.Scale, query);
+                            UNIT_ASSERT_VALUES_EQUAL_C(actual->Low_, expected.Low_, query);
+                            UNIT_ASSERT_VALUES_EQUAL_C(actual->Hi_, expected.Hi_, query);
+                        }
+                    }
+                    UNIT_ASSERT(!parser.TryNextRow());
+                    if (useIndex || predicate == "D IS NULL") {
+                        UNIT_ASSERT_C(result.GetStats() && result.GetStats()->GetPlan(), query);
+                        const TString plan = *result.GetStats()->GetPlan();
+                        if (useIndex) {
+                            UNIT_ASSERT_C(plan.Contains("ByD/indexImplTable"), plan);
+                        }
+                        if (predicate == "D IS NULL") {
+                            const auto simplified = GetSimplifiedPlan(plan);
+                            const auto* range = FindOperatorByStringField(simplified, "Name", "TableRangeScan");
+                            UNIT_ASSERT_C(range, plan);
+                            UNIT_ASSERT_C(StringArrayFieldContains(*range, "ReadRangesKeys", "D"), plan);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
     Y_UNIT_TEST(InsertUpdate) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

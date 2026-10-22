@@ -366,16 +366,19 @@ void FillNothingData(const TDataExprType& dataType, Ydb::TypedValue& value) {
     auto slot = dataType.GetSlot();
     auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
 
-    YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId) &&
-        NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
+    YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId));
 
     if (slot == EDataSlot::Decimal) {
         const auto& paramsDataType = *dataType.Cast<TDataExprParamsType>();
-        auto precision = FromString<ui8>(paramsDataType.GetParamOne());
-        auto scale = FromString<ui8>(paramsDataType.GetParamTwo());
-        value.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type()->set_precision(precision);
-        value.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type()->set_scale(scale);
+        const NKikimr::NScheme::TDecimalType decimalType(
+            FromString<ui8>(paramsDataType.GetParamOne()),
+            FromString<ui8>(paramsDataType.GetParamTwo()));
+        YQL_ENSURE(NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(decimalType)));
+        auto* protoDecimal = value.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type();
+        protoDecimal->set_precision(decimalType.GetPrecision());
+        protoDecimal->set_scale(decimalType.GetScale());
     } else {
+        YQL_ENSURE(NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
         auto& protoType = *value.mutable_type();
         protoType.mutable_optional_type()->mutable_item()->set_type_id((Ydb::Type::PrimitiveTypeId)typeId);
     }

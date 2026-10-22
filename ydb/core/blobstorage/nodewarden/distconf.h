@@ -380,6 +380,11 @@ namespace NKikimr::NStorage {
         std::set<std::tuple<ui32, ui64>> AddedNodesScatterTasks;
 
         std::optional<TActorId> StateStorageSelfHealActor;
+        class TStateStorageSelfHealRefreshActor;
+        std::optional<TActorId> StateStorageSelfHealRefreshActor;
+        bool StateStorageSelfHealRefreshStarted = false;
+        void StartStateStorageSelfHealRefresh();
+        void CancelStateStorageSelfHealRefresh();
 
         // root node operation
         enum class ERootState {

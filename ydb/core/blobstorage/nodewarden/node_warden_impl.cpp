@@ -22,6 +22,7 @@
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/mind/bscontroller/yaml_config_helpers.h>
 #include <ydb/core/base/nameservice.h>
+#include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <util/folder/dirut.h>
 
@@ -31,6 +32,14 @@
 
 using namespace NKikimr;
 using namespace NStorage;
+
+TNodeWardenConfig::TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory>& pDiskServiceFactory)
+    : PDiskServiceFactory(pDiskServiceFactory)
+    , AllVDiskKinds(new TAllVDiskKinds)
+    , AllDriveModels(new NPDisk::TDriveModelDb)
+    , SelfHealStateRequestTimeout(TDuration::MicroSeconds(NKikimrCms::TCmsConfig::TSentinelConfig::
+        TStateStorageSelfHealConfig::default_instance().GetSelfHealStateRequestTimeout()))
+{}
 
 TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     : Cfg(cfg)

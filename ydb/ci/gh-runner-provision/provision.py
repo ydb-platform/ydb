@@ -768,7 +768,7 @@ def set_vm_pool_label(cfg, name):
         [
             "yc", "--folder-id", cfg["folder_id"], "compute", "instance", "update",
             "--name", name,
-            "--update-labels", f"pool={cfg['_pool']}",
+            "--labels", f"pool={cfg['_pool']}",
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

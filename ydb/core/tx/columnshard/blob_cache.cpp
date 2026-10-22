@@ -219,7 +219,7 @@ public:
 
         MaxSizeBytes->Set((i64)MaxCacheDataSize);
 
-        Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::ColumnTablesBlobCache));
+        Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::ColumnTablesBlobCache, static_cast<ui64>(MaxCacheDataSize)));
 
         Become(&TBlobCache::StateFunc);
         ScheduleWakeup();
@@ -435,6 +435,7 @@ private:
 
     void Handle(NMemory::TEvConsumerRegistered::TPtr& ev, const TActorContext&) {
         MemoryConsumer = std::move(ev->Get()->Consumer);
+        UpdateConsumption();
     }
 
     void Handle(NMemory::TEvConsumerLimit::TPtr& ev, const TActorContext&) {

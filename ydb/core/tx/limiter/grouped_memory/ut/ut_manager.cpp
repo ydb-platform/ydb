@@ -39,6 +39,17 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         }
     };
 
+    Y_UNIT_TEST(ReportsUsageWhenConsumptionCallbackIsAttached) {
+        auto stage = std::make_shared<NOlap::NGroupedMemoryManager::TStageFeatures>(
+            "GLOBAL", std::nullopt, std::nullopt, nullptr, nullptr);
+        stage->Add(120, true);
+        ui64 reported = 0;
+        stage->SetMemoryConsumptionUpdateFunction([&](ui64 used) { reported = used; });
+        UNIT_ASSERT_VALUES_EQUAL(reported, 120);
+        stage->Free(120, true);
+        UNIT_ASSERT_VALUES_EQUAL(reported, 0);
+    }
+
     Y_UNIT_TEST(Simplest) {
         auto counters = std::make_shared<NOlap::NGroupedMemoryManager::TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "test");
         NOlap::NGroupedMemoryManager::TConfig config;

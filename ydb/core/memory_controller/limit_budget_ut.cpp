@@ -33,6 +33,18 @@ Y_UNIT_TEST_SUITE(TMemoryLimitBudgetTest) {
         AssertGrant(grants[1], 80, true);
     }
 
+    Y_UNIT_TEST(UnboundedStartupLimitsAreReducedTogetherWhileOverBudget) {
+        TBudget budget;
+        budget.Register(Cache, 120, 1);
+        budget.Register(Scan, std::numeric_limits<ui64>::max(), 1);
+        budget.Register(Comp, std::numeric_limits<ui64>::max(), 4);
+        const auto grants = budget.Allocate({{Cache, 120, 20}, {Scan, 0, 20}, {Comp, 0, 10, 4}}, 100);
+        AssertGrant(grants[0], 20, true);
+        AssertGrant(grants[1], 20, true);
+        AssertGrant(grants[2], 10, true);
+        UNIT_ASSERT_VALUES_EQUAL(budget.GetCommitted(), 180);
+    }
+
     Y_UNIT_TEST(IdleGrantsAreReserved) {
         TBudget budget;
         const auto grants = budget.Allocate({{Cache, 0, 50}, {Scan, 0, 60}}, 100);

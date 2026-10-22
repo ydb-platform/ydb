@@ -196,6 +196,7 @@ void TStageFeatures::Add(const ui64 volume, const bool allocated) {
 
 void TStageFeatures::SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func) {
     MemoryConsumptionUpdate = std::move(func);
+    UpdateConsumption(this);
 }
 
 void TStageFeatures::AttachOwner(const std::shared_ptr<TStageFeatures>& owner) {

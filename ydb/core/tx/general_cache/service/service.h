@@ -84,7 +84,7 @@ public:
     void Bootstrap() {
         Manager = std::make_unique<TManager>(TBase::SelfId(), Counters.GetManager());
 
-        TBase::Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(TPolicy::GetConsumerKind()));
+        TBase::Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(TPolicy::GetConsumerKind(), Manager->GetMaxCacheSize()));
 
         TBase::Become(&TDistributor::StateMain);
     }

@@ -347,10 +347,7 @@ private:
         return it->second;
     }
 
-    void AddObjectsToCache(const THashMap<TAddress, TObject>& add) {
-        for (auto&& i : add) {
-            Cache.Insert(i.first, i.second);
-        }
+    void UpdateConsumption() {
         Counters->CacheSizeCount->Set(Cache.Size());
 
         const auto cacheTotalSize = Cache.TotalSize();
@@ -360,6 +357,13 @@ private:
         }
     }
 
+    void AddObjectsToCache(const THashMap<TAddress, TObject>& add) {
+        for (auto&& i : add) {
+            Cache.Insert(i.first, i.second);
+        }
+        UpdateConsumption();
+    }
+
     void RemoveObjectsFromCache(const THashSet<TAddress>& remove) {
         for (auto&& i : remove) {
             auto it = Cache.Find(i);
@@ -367,13 +371,7 @@ private:
                 Cache.Erase(it);
             }
         }
-        Counters->CacheSizeCount->Set(Cache.Size());
-
-        const auto cacheTotalSize = Cache.TotalSize();
-        Counters->CacheSizeBytes->Set(cacheTotalSize);
-        if (MemoryConsumer) {
-            MemoryConsumer->SetConsumption(cacheTotalSize);
-        }
+        UpdateConsumption();
     }
 
 public:
@@ -489,6 +487,10 @@ public:
         }
     }
 
+    ui64 GetMaxCacheSize() const {
+        return Cache.GetMaxSize();
+    }
+
     void UpdateMaxCacheSize(const size_t maxCacheSize) {
         if (UseCacheSizeFromConfig) {
             return;
@@ -505,10 +507,12 @@ public:
             {"oldValue", Cache.GetMaxSize()});
         Cache.SetMaxSize(maxCacheSize);
         Counters->CacheSizeLimitBytes->Set(Cache.GetMaxSize());
+        UpdateConsumption();
     }
 
     void SetMemoryConsumer(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) {
         MemoryConsumer = std::move(consumer);
+        UpdateConsumption();
     }
 };
 

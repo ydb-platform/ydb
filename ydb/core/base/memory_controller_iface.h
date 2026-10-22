@@ -52,7 +52,8 @@ static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_MEMORY), "expected EvEnd <
 
 struct TEvConsumerRegister : public TEventLocal<TEvConsumerRegister, EvConsumerRegister> {
     const EMemoryConsumerKind Kind;
-    // Reserved capacity before the first grant; zero forbids growth until granted.
+    // Startup cap in TEvConsumerLimit units; zero forbids growth until granted.
+    // An unbounded startup cap is represented by the maximum ui64 value.
     const ui64 InitialLimitBytes;
 
     TEvConsumerRegister(EMemoryConsumerKind kind, ui64 initialLimitBytes = 0)

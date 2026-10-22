@@ -14,6 +14,7 @@ ENDIF()
 PEERDIR(
     yql/essentials/sql/pg_dummy
     ydb/core/testlib
+    ydb/core/tx/general_cache/service
     ydb/core/tx/datashard/ut_common
     ydb/core/tablet_flat
     library/cpp/testing/unittest

@@ -7,6 +7,8 @@
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
+#include <limits>
+
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
@@ -26,7 +28,13 @@ void TMemoryLimiterActor::Bootstrap() {
         Managers.push_back(std::make_shared<TManager>(SelfId(), Config, Name, Counters.back(), DefaultStages.back()));
     }
 
-    Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(ConsumerKind));
+    ui64 initialLimitBytes = std::numeric_limits<ui64>::max();
+    if (const auto hardLimit = Config.GetHardMemoryLimit()) {
+        // Config divides the total hard limit into buckets on deserialization.
+        const ui64 totalHardLimit = *hardLimit * Config.GetCountBuckets();
+        initialLimitBytes = totalHardLimit / HardLimitMultiplier + (totalHardLimit % HardLimitMultiplier != 0);
+    }
+    Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(ConsumerKind, initialLimitBytes));
     Become(&TThis::StateWait);
 }
 

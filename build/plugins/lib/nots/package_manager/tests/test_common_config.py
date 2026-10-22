@@ -242,7 +242,7 @@ def test_invalid_pnpm_settings(tmp_path, settings):
         load_common_config(pj, str(tmp_path))
 
 
-def test_common_inputs_ignore_workspace_override_peer_configs(tmp_path):
+def test_common_inputs_ignore_file_override_peer_configs(tmp_path):
     from build.plugins.lib.nots.package_manager.common_config import common_config_inputs
 
     pj, _ = fixture(tmp_path, "catalogs: {project/common: {colors: 1.4.0}}\noverrides: {colors: 'file:./replacement'}")
@@ -498,16 +498,52 @@ def test_override_only_peers_are_available_without_dependencies(tmp_path, local)
 
 
 @pytest.mark.parametrize("common", [False, True])
-@pytest.mark.parametrize("value", ["workspace:../replacement", "workspace:*", "$colors"])
-def test_workspace_overrides_warn_without_rejection(tmp_path, caplog, common, value):
+@pytest.mark.parametrize("value", ["workspace:../replacement", "workspace:*", "workspace:^", "workspace:~", "$colors"])
+def test_workspace_overrides_are_rejected(tmp_path, common, value):
     pj, _ = fixture(tmp_path, "overrides: {colors: '" + value + "'}" if common else "catalogs: {}")
     pj.data["dependencies"] = {"colors": "workspace:../replacement"}
     if not common:
         pj.data["pnpm"] = {"overrides": {"colors": value}}
+    with pytest.raises(ValueError, match="overrides colors: workspace: протокол не поддерживается; перейдите на file:"):
+        load_common_config(pj, str(tmp_path))
+
+
+@pytest.mark.parametrize("common", [False, True])
+@pytest.mark.parametrize("section", ["dependencies", "devDependencies", "optionalDependencies"])
+@pytest.mark.parametrize("value", ["file:../replacement", "1.0.0"])
+def test_override_references_to_supported_dependencies_are_allowed(tmp_path, common, section, value):
+    pj, _ = fixture(tmp_path, "overrides: {colors: '$colors'}" if common else "catalogs: {}")
+    pj.data.pop("dependencies")
+    pj.data[section] = {"colors": value}
+    if not common:
+        pj.data["pnpm"] = {"overrides": {"colors": "$colors"}}
     load_common_config(pj, str(tmp_path))
+    assert pj.data[section]["colors"] == value
+
+
+@pytest.mark.parametrize("section", ["dependencies", "devDependencies", "optionalDependencies"])
+def test_workspace_dependencies_are_allowed_without_workspace_overrides(tmp_path, section):
+    pj, _ = fixture(tmp_path, "catalogs: {}")
+    pj.data.pop("dependencies")
+    pj.data[section] = {"colors": "workspace:../replacement"}
     load_common_config(pj, str(tmp_path))
-    warnings = [record for record in caplog.records if "перейдите на file: протокол" in record.message]
-    assert len(warnings) == 1
+
+
+@pytest.mark.parametrize("section", ["dependencies", "devDependencies", "optionalDependencies"])
+def test_workspace_override_references_are_rejected_in_each_dependency_section(tmp_path, section):
+    pj, _ = fixture(tmp_path, "catalogs: {}")
+    pj.data.pop("dependencies")
+    pj.data[section] = {"colors": "workspace:../replacement"}
+    pj.data["pnpm"] = {"overrides": {"host>colors": "$colors"}}
+    with pytest.raises(ValueError, match="overrides host>colors: workspace: протокол не поддерживается"):
+        load_common_config(pj, str(tmp_path))
+
+
+def test_local_override_replaces_common_workspace_override(tmp_path):
+    pj, _ = fixture(tmp_path, "overrides: {colors: 'workspace:./replacement'}")
+    pj.data["dependencies"] = {"colors": "workspace:../replacement"}
+    pj.data["pnpm"] = {"overrides": {"colors": "file:../replacement"}}
+    load_common_config(pj, str(tmp_path))
 
 
 @pytest.mark.parametrize("section", ["dependencies", "devDependencies", "optionalDependencies"])
@@ -542,41 +578,6 @@ def test_file_peer_dependencies_are_not_supported(tmp_path):
     pj.data["peerDependencies"] = {"peer": "file:../peer"}
     with pytest.raises(ValueError, match="peerDependencies peer: file: не поддерживается"):
         load_common_config(pj, str(tmp_path))
-
-
-@pytest.mark.parametrize(
-    "value", ["workspace:../replacement", "workspace:../pkg/../replacement", "workspace:../../project/replacement"]
-)
-def test_temporary_workspace_override_path_through_arcadia_root(value):
-    from build.plugins.lib.nots.package_manager.common_config import normalize_workspace_override_paths
-
-    settings = {"overrides": {"legacy": value, "file": "file:../file-peer"}}
-    result = normalize_workspace_override_paths(settings, "/build/project/pkg", "/build")
-    assert result == {"overrides": {"legacy": "workspace:../../project/replacement", "file": "file:../file-peer"}}
-    assert settings["overrides"]["legacy"] == value
-    assert normalize_workspace_override_paths(result, "/build/project/pkg", "/build") == result
-
-
-@pytest.mark.parametrize("value", ["workspace:../replacement", "workspace:../pkg/../replacement"])
-def test_preserve_unchanged_workspace_override_path(value):
-    from build.plugins.lib.nots.package_manager.common_config import normalize_workspace_override_paths
-
-    settings = {"overrides": {"legacy": value}}
-    assert (
-        normalize_workspace_override_paths(settings, "/build/project/pkg", "/build", settings["overrides"]) == settings
-    )
-
-
-def test_recompute_moved_workspace_override_path():
-    from build.plugins.lib.nots.package_manager.common_config import normalize_workspace_override_paths
-
-    settings = {"overrides": {"legacy": "workspace:../replacement"}}
-    assert (
-        normalize_workspace_override_paths(
-            settings, "/build/project/pkg", "/build", {"legacy": "workspace:./replacement"}
-        )["overrides"]["legacy"]
-        == "workspace:../../project/replacement"
-    )
 
 
 @pytest.mark.parametrize("section", ["dependencies", "devDependencies", "optionalDependencies", "overrides"])
@@ -624,3 +625,50 @@ def test_file_override_selector_is_not_a_peer_name(tmp_path, selector):
     )
     assert PackageManager.get_local_peers_from_package_json(pm) == ["project/replacement"]
     assert pj.data["pnpm"]["overrides"] == {selector: "file:../replacement"}
+
+
+def test_supported_architectures_and_deprecation_exceptions(tmp_path):
+    from build.plugins.lib.nots.package_manager.common_config import join_pnpm_settings, select_pnpm_settings
+
+    pj, _ = fixture(
+        tmp_path,
+        "catalogs: {project/common: {colors: 1.4.0}}\n"
+        "supportedArchitectures: {os: [current, linux], cpu: [x64]}\n"
+        "allowedDeprecatedVersions: {old: '1', common: '*'}",
+    )
+    common = load_common_config(pj, str(tmp_path), include_settings=True)[2]
+    target = {
+        "supportedArchitectures": {"os": ["linux", "darwin"], "cpu": ["arm64"], "libc": ["musl"]},
+        "allowedDeprecatedVersions": {"old": "2"},
+    }
+    merged = join_pnpm_settings(common, select_pnpm_settings(target))
+    assert merged == {
+        "supportedArchitectures": {
+            "os": ["current", "linux", "darwin"],
+            "cpu": ["x64", "arm64"],
+            "libc": ["musl"],
+        },
+        "allowedDeprecatedVersions": {"old": "2", "common": "*"},
+    }
+    merged["supportedArchitectures"]["os"].append("win32")
+    assert common["supportedArchitectures"]["os"] == ["current", "linux"]
+    assert target["supportedArchitectures"]["os"] == ["linux", "darwin"]
+    assert select_pnpm_settings({"supportedArchitectures": {}}) == {"supportedArchitectures": {}}
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [("supportedArchitectures", v) for v in (
+        None, [], "linux", {"os": "linux"}, {"cpu": [42]}, {"libc": None}, {"arch": ["x64"]}
+    )] + [("allowedDeprecatedVersions", []), ("allowedDeprecatedVersions", {"old": 42})],
+)
+def test_invalid_platform_and_deprecation_settings(tmp_path, key, value):
+    from build.plugins.lib.nots.package_manager.common_config import select_pnpm_settings
+
+    with pytest.raises(ValueError):
+        select_pnpm_settings({key: value})
+    pj, _ = fixture(
+        tmp_path, "catalogs: {project/common: {colors: 1.4.0}}\n" + key + ": " + json.dumps(value)
+    )
+    with pytest.raises(ValueError):
+        load_common_config(pj, str(tmp_path), include_settings=True)

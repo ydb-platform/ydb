@@ -228,6 +228,7 @@ namespace NKikimr::NStorage {
 
     STFUNC(TStateStorageReassignNodeSelfhealActor::StateFunc) {
         STRICT_STFUNC_BODY(
+            cFunc(TEvents::TSystem::Poison, PassAway);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, HandleResult);
         )

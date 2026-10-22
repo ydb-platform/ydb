@@ -5,7 +5,6 @@ INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 SRCS(
     at_fork.cpp
     count_down_latch.cpp
-    cpu_id.cpp
     env.cpp
     event_count.cpp
     exit.cpp
@@ -34,9 +33,11 @@ PEERDIR(
 )
 
 IF (OS_LINUX)
-    PEERDIR(
-        library/cpp/yt/rseq
-    )
+    IF (ARCH_X86_64 OR ARCH_AARCH64)
+        PEERDIR(
+            library/cpp/yt/rseq
+        )
+    ENDIF()
 ENDIF()
 
 END()

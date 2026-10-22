@@ -1,25 +1,13 @@
 YQL_UDF_CONTRIB(json2_udf)
-    
-    YQL_ABI_VERSION(
-        2
-        28
-        0
-    )
 
-    SRCS(
-        json2_udf.cpp
-    )
-    
-    PEERDIR(
-        yql/essentials/core/sql_types
-        yql/essentials/types/binary_json/dom
-        yql/essentials/minikql/dom
-        yql/essentials/minikql/jsonpath
-    )
-    
-    END()
+IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
+ENDIF()
+
+INCLUDE(ya.make.inc)
+
+END()
 
 RECURSE_FOR_TESTS(
     test
 )
-

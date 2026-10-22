@@ -5,8 +5,10 @@ TEST_SRCS(
     test_bridge.py
     test_conversion.py
     test_discovery.py
+    test_pile_ops.py
     test_three_piles.py
     test_sdk_cleanup.py
+    test_sdk_reconnect.py
 )
 
 SPLIT_FACTOR(24)
@@ -39,3 +41,7 @@ FORK_SUBTESTS()
 FORK_TEST_FILES()
 
 END()
+
+RECURSE_FOR_TESTS(
+    chaos
+)

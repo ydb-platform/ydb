@@ -3676,6 +3676,8 @@ message TReqStartQuery
     optional string access_control_object = 8; // COMPAT(mpereskokova)
     optional TAccessControlObjects access_control_objects = 9;
     repeated TSecret secrets = 10;
+
+    optional TMutatingOptions mutating_options = 103;
 }
 
 message TRspStartQuery

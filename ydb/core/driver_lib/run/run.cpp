@@ -195,6 +195,7 @@
 
 #include <util/charset/wide.h>
 #include <util/folder/dirut.h>
+#include <util/generic/hash_set.h>
 #include <util/system/file.h>
 #include <util/system/getpid.h>
 #include <util/system/hostname.h>
@@ -257,7 +258,7 @@ class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
     TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     bool Started = false;
     bool StopScheduled = false;
-    bool WaitingForDisconnectRequest = false;
+    THashSet<TActorId> DisconnectRequests;
     TDuration WarmupTimeout = TDuration::Zero();
     bool WarmupReceived = false;
 
@@ -308,12 +309,12 @@ public:
         }
     }
 
-    void HandleDisconnectRequestStarted() {
-        WaitingForDisconnectRequest = true;
+    void Handle(TEvGRpcServersManager::TEvDisconnectRequestStarted::TPtr& ev) {
+        DisconnectRequests.insert(ev->Sender);
     }
 
-    void HandleDisconnectRequestFinished() {
-        WaitingForDisconnectRequest = false;
+    void Handle(TEvGRpcServersManager::TEvDisconnectRequestFinished::TPtr& ev) {
+        DisconnectRequests.erase(ev->Sender);
         CheckAndExecuteStop();
     }
 
@@ -332,19 +333,18 @@ public:
     }
 
     void CheckAndExecuteStop() {
-        if (StopScheduled && !WaitingForDisconnectRequest) {
+        if (StopScheduled && DisconnectRequests.empty()) {
             StopScheduled = false;
             Stop();
         }
     }
 
     void Start() {
+        StopScheduled = false;
         if (Started) {
             return;
         }
         Started = true;
-        StopScheduled = false;
-        WaitingForDisconnectRequest = false;
         auto wrapper = GRpcServersWrapper.lock();
         if (!wrapper) {
             return;
@@ -402,8 +402,8 @@ public:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvNodeWardenStorageConfig, Handle)
         hFunc(TEvStop, HandleStop)
-        cFunc(TEvGRpcServersManager::EvDisconnectRequestStarted, HandleDisconnectRequestStarted)
-        cFunc(TEvGRpcServersManager::EvDisconnectRequestFinished, HandleDisconnectRequestFinished)
+        hFunc(TEvGRpcServersManager::TEvDisconnectRequestStarted, Handle)
+        hFunc(TEvGRpcServersManager::TEvDisconnectRequestFinished, Handle)
         hFunc(NKqp::TEvKqpWarmupComplete, HandleWarmupComplete)
         cFunc(EvWarmupTimeout, HandleWarmupTimeout)
         cFunc(TEvents::TSystem::PoisonPill, PassAway)

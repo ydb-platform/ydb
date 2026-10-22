@@ -372,6 +372,8 @@ namespace NKikimr::NBsController {
                 }
                 Y_ABORT_UNLESS(prev.VDisksInGroup.size() == cur.VDisksInGroup.size() ||
                     (cur.VDisksInGroup.empty() && cur.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) ||
+                    // inline pile has been removed along with its pile, the group serves as bridge proxy only now
+                    (cur.VDisksInGroup.empty() && prev.IsInlinePile() && !cur.BridgePileId && cur.BridgeGroupInfo) ||
                     (prev.VDisksInGroup.empty() && cur.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING));
                 for (size_t i = 0; i < Min(prev.VDisksInGroup.size(), cur.VDisksInGroup.size()); ++i) {
                     const TVSlotInfo& prevSlot = *prev.VDisksInGroup[i];
@@ -460,6 +462,13 @@ namespace NKikimr::NBsController {
                     Y_DEBUG_ABORT_UNLESS(pile.GetGroupGeneration() + 1 == referenced->Generation);
                     pile.SetGroupGeneration(referenced->Generation);
                 });
+
+                // the new group state is made for the cluster state we know; proxies won't serve the group with older one
+                auto *bridgeGroupState = group->BridgeGroupInfo->MutableBridgeGroupState();
+                if (StorageConfig) {
+                    bridgeGroupState->SetClusterStateGeneration(Max(bridgeGroupState->GetClusterStateGeneration(),
+                        StorageConfig->GetClusterState().GetGeneration()));
+                }
             }
 
             bool errors = false;
@@ -594,7 +603,7 @@ namespace NKikimr::NBsController {
 
         std::optional<TString> TBlobStorageController::ValidateAndCommitConfigUpdate(std::optional<TConfigState>& state,
                 TConfigTxFlags flags, TTransactionContext& txc,
-                NKikimrBlobStorage::TConfigResponse *response) {
+                NKikimrBlobStorage::TConfigResponse *response, bool dryRun) {
             if (!state || !state->Changed()) {
                 return std::nullopt;
             }
@@ -609,6 +618,9 @@ namespace NKikimr::NBsController {
             if (!ValidateConfigUpdates(*state, parameters, &error, response)) {
                 RollbackConfigUpdate(state);
                 return error;
+            } else if (dryRun) {
+                RollbackConfigUpdate(state);
+                return std::nullopt;
             }
 
             CommitConfigUpdates(*state, txc);

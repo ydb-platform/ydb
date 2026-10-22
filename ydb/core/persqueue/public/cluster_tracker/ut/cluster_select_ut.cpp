@@ -128,6 +128,13 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(fnx.DebugString().Contains("fnx"));
         UNIT_ASSERT(fnx.DebugString().Contains("disabled"));
         UNIT_ASSERT(fnx.DebugString().Contains("remote"));
+        UNIT_ASSERT(fnx.DebugString().Contains("available"));
+        fnx.IsAvailable = false;
+        UNIT_ASSERT(fnx.DebugString().Contains("unavailable"));
+
+        right.Clusters.front().IsAvailable = false;
+        UNIT_ASSERT(!(left == right));
+        right.Clusters.front().IsAvailable = true;
     }
 
     Y_UNIT_TEST(BalancerTablePathFromClusterTable) {
@@ -145,6 +152,7 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         const TString versions = "/Root/PQ/Config/V2/Versions";
 
         UNIT_ASSERT(MakeListClustersQuery(cluster, versions).Contains(cluster));
+        UNIT_ASSERT(MakeListClustersQuery(cluster, versions).Contains("C.*"));
         UNIT_ASSERT(!MakeListClustersQuery(cluster, versions).Contains("C.fnx"));
         UNIT_ASSERT(MakeListBalancersQuery(balancer, versions).Contains(balancer));
         UNIT_ASSERT(MakeListBalancersQuery(balancer, versions).Contains("B.clusters"));

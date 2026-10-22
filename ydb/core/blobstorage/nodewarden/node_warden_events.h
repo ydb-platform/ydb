@@ -13,7 +13,8 @@ namespace NKikimr::NStorage {
         TEvNodeConfigPush() = default;
 
         bool IsUseful() const {
-            return Record.BoundNodesSize() || Record.DeletedBoundNodeIdsSize() || Record.HasCacheUpdate();
+            return Record.BoundNodesSize() || Record.DeletedBoundNodeIdsSize() || Record.HasCacheUpdate()
+                || Record.HasSubtreeHeight() || Record.HasRequestedCommittedConfigGeneration();
         }
     };
 
@@ -76,6 +77,7 @@ namespace NKikimr::NStorage {
         : TEventLocal<TEvNodeWardenBaseConfig, TEvBlobStorage::EvNodeWardenBaseConfig>
     {
         NKikimrBlobStorage::TBaseConfig BaseConfig;
+        std::optional<TString> ErrorReason; // set when BSC hasn't provided base config, BaseConfig is empty then
     };
 
     struct TEvNodeWardenDynamicConfigSubscribe

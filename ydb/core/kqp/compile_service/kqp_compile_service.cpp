@@ -624,6 +624,13 @@ private:
             return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
         }
 
+        // COMPILE is the final lookup, so this is a definitive miss; PARSE and SPLIT may still hit
+        // on a later lookup. The miss is reported before the request is queued, so a request that
+        // is later rejected, times out or is cancelled still counts.
+        if (compileSettings.Action == ECompileActorAction::COMPILE) {
+            Counters->ReportQueryCacheHit(compileRequest.DbCounters, false);
+        }
+
         EnqueueCompileRequest(std::move(compileRequest), ctx);
     }
 
@@ -861,16 +868,15 @@ private:
             {"queryId", compileRequest.Query.SerializeToString()},
             {"ast", queryAst.Ast->Root->ToString()});
 
-        auto compileResult = QueryCache->FindByAst(
-            compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache,
-            compileRequest.CompileSettings.IsWarmupCompilation
-                ? EWarmupAttributionMode::Warmup
-                : EWarmupAttributionMode::Client,
-            Counters,
-            compileRequest.TempTablesState);
-
-        if (!compileRequest.FindInCache) {
-            compileResult = nullptr;
+        TKqpCompileResult::TConstPtr compileResult;
+        if (compileRequest.FindInCache) {
+            compileResult = QueryCache->FindByAst(
+                compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache,
+                compileRequest.CompileSettings.IsWarmupCompilation
+                    ? EWarmupAttributionMode::Warmup
+                    : EWarmupAttributionMode::Client,
+                Counters,
+                compileRequest.TempTablesState);
         }
 
         if (compileResult) {
@@ -886,13 +892,16 @@ private:
             return;
         }
 
-        Counters->ReportQueryCacheHit(compileRequest.DbCounters, false);
-
         LWTRACK(KqpCompileServiceEnqueued,
             compileRequest.Orbit,
             compileRequest.Query.UserSid);
 
         compileRequest.QueryAst = std::move(queryAst);
+
+        // A recompile did not look up the cache, and a SPLIT is followed by per-statement lookups.
+        if (compileRequest.FindInCache && compileRequest.CompileSettings.Action != ECompileActorAction::SPLIT) {
+            Counters->ReportQueryCacheHit(compileRequest.DbCounters, false);
+        }
 
         EnqueueCompileRequest(std::move(compileRequest), ctx);
     }

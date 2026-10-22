@@ -4723,6 +4723,102 @@ selector_config: []
         CheckDurableConfigConverges(fixture, advanced);
     }
 
+    void CheckBindingLivenessPeerCapability(bool selfManagement, bool legacyParent) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.UseMirror3dcGroup();
+        fixture.State.RequiredRootNodeId = 1;
+        if (!selfManagement) {
+            fixture.Config.SetGeneration(0);
+            fixture.Config.MutableSelfManagementConfig()->SetEnabled(false);
+            NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+            fixture.State.Metadata.clear();
+        }
+        auto& runtime = fixture.Runtime;
+        ui32 heartbeatRequests = 0;
+        ui32 sessionPoisons = 0;
+        ui32 disconnections = 0;
+        bool trackDisconnects = false;
+        TActorId parentSession;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            const ui32 type = ev->GetTypeRewrite();
+            if (ev->InterconnectSession && type == NStorage::TEvNodeConfigReversePush::EventType
+                && nodeId == 2 && ev->Sender.NodeId() == 1) {
+                auto& record = ev->Get<NStorage::TEvNodeConfigReversePush>()->Record;
+                if (!record.GetRejected()) {
+                    parentSession = ev->InterconnectSession;
+                    if (legacyParent) {
+                        // An old binary has neither this capability field nor QueryWorkingRoot.
+                        record.ClearSupportsDirectRootQueries();
+                    } else {
+                        UNIT_ASSERT(record.GetSupportsDirectRootQueries());
+                    }
+                }
+            }
+            if (ev->InterconnectSession && type == NStorage::TEvNodeConfigInvokeOnRoot::EventType
+                && ev->Sender.NodeId() == 2 && ev->Sender != fixture.Keepers[1]
+                && ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasQueryWorkingRoot()) {
+                ++heartbeatRequests;
+                if (legacyParent) {
+                    // Model the exact response produced by the pre-QueryWorkingRoot protocol.
+                    auto reply = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+                    reply->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+                    reply->Record.SetErrorReason("Request field not set");
+                    auto handle = std::make_unique<IEventHandle>(ev->Sender, fixture.Keepers.front(),
+                        reply.release(), 0, ev->Cookie);
+                    handle->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
+                    runtime.Send(handle.release(), nodeId);
+                    return false;
+                }
+            }
+            if (parentSession && type == TEvents::TSystem::Poison
+                && ev->GetRecipientRewrite() == parentSession) {
+                ++sessionPoisons;
+            }
+            if (trackDisconnects && type == TEvInterconnect::TEvNodeDisconnected::EventType
+                && ((nodeId == 1 && ev->Get<TEvInterconnect::TEvNodeDisconnected>()->NodeId == 2)
+                    || (nodeId == 2 && ev->Get<TEvInterconnect::TEvNodeDisconnected>()->NodeId == 1))) {
+                ++disconnections;
+            }
+            return true;
+        };
+        fixture.Start();
+        UNIT_ASSERT(parentSession);
+        UNIT_ASSERT(runtime.WrapInActorContext(fixture.Keepers[1], [&](IActor*) {
+            UNIT_ASSERT(!AppData()->FeatureFlags.GetSwitchToConfigV2());
+            UNIT_ASSERT(!AppData()->FeatureFlags.GetForceDistconfDisable());
+        }));
+        const auto scepter = QueryKeeper(runtime, fixture.Keepers.front(), true).GetScepter();
+        trackDisconnects = true;
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(180));
+        UNIT_ASSERT_VALUES_EQUAL(sessionPoisons, 0);
+        UNIT_ASSERT_VALUES_EQUAL(disconnections, 0);
+        if (legacyParent) {
+            UNIT_ASSERT_VALUES_EQUAL(heartbeatRequests, 0);
+        } else {
+            UNIT_ASSERT_C(heartbeatRequests >= 3, "capable parents must retain the liveness watchdog");
+        }
+        UNIT_ASSERT(FindConvergedRoot(runtime, fixture.Keepers) == 1);
+        const auto after = QueryKeeper(runtime, fixture.Keepers.front(), true);
+        UNIT_ASSERT(after.HasScepter());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetScepter().GetId(), scepter.GetId());
+    }
+
+    Y_UNIT_TEST(BindingToLegacyParentWithDistconfDisabled) {
+        CheckBindingLivenessPeerCapability(false, true);
+    }
+
+    Y_UNIT_TEST(BindingToLegacyParentWithDistconfEnabled) {
+        CheckBindingLivenessPeerCapability(true, true);
+    }
+
+    Y_UNIT_TEST(BindingToCapableParentWithDistconfDisabled) {
+        CheckBindingLivenessPeerCapability(false, false);
+    }
+
+    Y_UNIT_TEST(BindingToCapableParentWithDistconfEnabled) {
+        CheckBindingLivenessPeerCapability(true, false);
+    }
+
     void CheckBindingLivenessIgnoresRetiredEvents(bool rebind) {
         TCommitConfirmationFixture fixture(true);
         fixture.UseMirror3dcGroup();

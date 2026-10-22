@@ -26,7 +26,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <algorithm>
 #include <deque>
+#include <limits>
 #include <variant>
 
 namespace NKikimr::NKqp {
@@ -223,6 +225,28 @@ namespace NKikimr::NKqp {
 
             TSettingsBuilder& FullRangeHnsw() {
                 Settings.SetFullRangeHnsw(true);
+                return *this;
+            }
+
+            TSettingsBuilder& HnswShardRouting() {
+                Settings.SetHnswShardRouting(true);
+                return *this;
+            }
+
+            TSettingsBuilder& HnswPreciseShardRouting() {
+                Settings.SetHnswPreciseShardRouting(true);
+                return *this;
+            }
+
+            TSettingsBuilder& AdaptiveHnsw(double ratio, ui32 oneProbeEf = 100) {
+                Settings.SetHnswAdaptiveProbeRatio(ratio);
+                Settings.SetHnswAdaptiveOneProbeEfSearch(oneProbeEf);
+                return *this;
+            }
+
+            TSettingsBuilder& EuclideanMetric() {
+                Settings.MutableIndexSettings()->set_metric(
+                    Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN);
                 return *this;
             }
 
@@ -1056,6 +1080,39 @@ namespace NKikimr::NKqp {
             return parents;
         }
 
+        void CheckAdaptiveParents(NKikimrTxDataShard::TKqpVectorSearchSettings settings,
+                const TVector<std::pair<TClusterId, TString>>& children, TVector<ui64> expectedParents,
+                ui32 expectedEf, bool cached) {
+            TIntrusivePtr<TVectorIndexLevelsCache> cache;
+            if (cached) {
+                cache = MakeLevelsCache();
+                PutCachedChildren(*cache, 0, children);
+            }
+            TSearchEnv env(std::move(settings), {.LevelsCache = cache});
+            env.Poll();
+            if (!cached) {
+                const auto& levelSettings = env.ObservedRead(EReadKind::Level)->Settings;
+                UNIT_ASSERT_VALUES_EQUAL(levelSettings.GetVectorTopK().GetHnswEfSearch(), 70u);
+                TVector<TFakeRow> rows;
+                for (const auto& [id, centroid] : children) {
+                    rows.push_back(LevelRow(0, id, centroid));
+                }
+                auto& level = env.Read(EReadKind::Level);
+                level.Push(std::move(rows), true);
+                env.Wake(level);
+            }
+            auto parents = RangeParents(*env.ObservedRead(EReadKind::Posting));
+            std::sort(parents.begin(), parents.end());
+            std::sort(expectedParents.begin(), expectedParents.end());
+            UNIT_ASSERT_VALUES_EQUAL(parents, expectedParents);
+            UNIT_ASSERT_VALUES_EQUAL(env.ObservedRead(EReadKind::Posting)->Settings.GetVectorTopK().GetHnswEfSearch(), expectedEf);
+            auto& posting = env.Read(EReadKind::Posting);
+            posting.Push({{ui64(7), NearVec}, {ui64(8), FarVec}}, true);
+            env.Wake(posting);
+            UNIT_ASSERT(env.Finished());
+            UNIT_ASSERT_VALUES_EQUAL(env.RowKeys(), TVector<TString>{"7"});
+        }
+
     } // namespace
 
     Y_UNIT_TEST_SUITE(KqpVectorSearchActor) {
@@ -1149,6 +1206,157 @@ namespace NKikimr::NKqp {
                 UNIT_ASSERT(env.Finished());
                 UNIT_ASSERT_VALUES_EQUAL(env.CreatedReads(EReadKind::Main), 0u);
                 UNIT_ASSERT_VALUES_EQUAL(env.RowKeys(), (TVector<TString>{"8"}));
+            }
+        }
+
+        Y_UNIT_TEST(HnswShardRoutingPreservesConsistencyAndOverlap) {
+            for (const bool followers : {false, true}) {
+                for (const ui32 overlap : {1u, 3u}) {
+                    auto builder = TSettingsBuilder().HnswShardRouting().Covered().TopK(2).Overlap(overlap);
+                    builder.HnswPreciseShardRouting();
+                    if (followers) {
+                        builder.Followers();
+                    }
+                    TSearchEnv env(builder.Build());
+                    RunSingleLevel(env);
+                    const auto& settings = env.ObservedRead(EReadKind::Posting)->Settings;
+                    UNIT_ASSERT(settings.GetHnswShardRouting());
+                    UNIT_ASSERT(settings.GetHnswPreciseShardRouting());
+                    UNIT_ASSERT(settings.HasRanges());
+                    UNIT_ASSERT_VALUES_EQUAL(settings.GetVectorTopK().DistinctColumnsSize(), overlap > 1 ? 1u : 0u);
+                    UNIT_ASSERT_VALUES_EQUAL(settings.GetUseFollowers(), followers);
+                    UNIT_ASSERT_VALUES_EQUAL(settings.HasSnapshot(), !followers);
+                    UNIT_ASSERT_VALUES_EQUAL(settings.GetAllowInconsistentReads(), followers);
+                    auto& posting = env.Read(EReadKind::Posting);
+                    if (overlap > 1) {
+                        posting.Push({{ui64(7), NearVec}, {ui64(7), NearVec}, {ui64(8), FarVec}}, true);
+                    } else {
+                        // Without overlap, each main PK has a single posting.
+                        posting.Push({{ui64(7), NearVec}, {ui64(8), FarVec}}, true);
+                    }
+                    env.Wake(posting);
+                    UNIT_ASSERT(env.Finished());
+                    UNIT_ASSERT_VALUES_EQUAL(env.RowKeys(), (TVector<TString>{"7", "8"}));
+                }
+            }
+        }
+
+        Y_UNIT_TEST(HnswAdaptiveProbeRatioUsesSquaredL2) {
+            // Target is (103,113): these centroids have Euclidean distances
+            // exactly 2 and 4. The squared-distance ratio is 4, rather than 2.
+            const TVector<std::pair<TClusterId, TString>> children{
+                {10, Vec({105, 113})}, {11, Vec({107, 113})}};
+            for (const bool cached : {false, true}) {
+                for (const bool followers : {false, true}) {
+                    for (const double ratio : {3.9, 4.0, 4.1}) {
+                        auto builder = TSettingsBuilder().HnswShardRouting().HnswPreciseShardRouting()
+                            .Covered().TopK(1).EfSearch(70).EuclideanMetric().AdaptiveHnsw(ratio);
+                        if (followers) {
+                            builder.Followers();
+                        }
+                        const bool reduce = ratio < 4.0;
+                        CheckAdaptiveParents(builder.Build(), children,
+                            reduce ? TVector<ui64>{10} : TVector<ui64>{10, 11}, reduce ? 100 : 70, cached);
+                    }
+                }
+            }
+        }
+
+        Y_UNIT_TEST(HnswAdaptiveProbeRatioHandlesZeroAndTies) {
+            for (const bool cached : {false, true}) {
+                const auto settings = TSettingsBuilder().HnswShardRouting().HnswPreciseShardRouting()
+                    .Covered().TopK(1).EfSearch(70).EuclideanMetric().AdaptiveHnsw(1.15).Build();
+                CheckAdaptiveParents(settings, {{10, NearVec}, {11, FarVec}}, {10}, 100, cached);
+                CheckAdaptiveParents(settings, {{10, NearVec}, {11, NearVec}}, {10, 11}, 70, cached);
+                // No reduction occurred when the index supplied one centroid.
+                CheckAdaptiveParents(settings, {{10, NearVec}}, {10}, 70, cached);
+                const auto noEfOverride = TSettingsBuilder().HnswShardRouting().HnswPreciseShardRouting()
+                    .Covered().TopK(1).EfSearch(70).EuclideanMetric().AdaptiveHnsw(1.15, 0).Build();
+                CheckAdaptiveParents(noEfOverride, {{10, NearVec}, {11, FarVec}}, {10}, 70, cached);
+            }
+        }
+
+        Y_UNIT_TEST(HnswAdaptiveProbeRatioUnsupportedSettingsKeepProbes) {
+            for (const bool cached : {false, true}) {
+                for (const ui32 shape : {0u, 1u, 2u, 3u, 4u, 5u}) {
+                    auto settings = TSettingsBuilder().HnswShardRouting().HnswPreciseShardRouting()
+                        .Covered().TopK(1).EfSearch(70).EuclideanMetric().AdaptiveHnsw(1.15).Build();
+                    switch (shape) {
+                        case 0: settings.SetHnswAdaptiveProbeRatio(0); break;
+                        case 1: settings.SetHnswAdaptiveProbeRatio(std::numeric_limits<double>::quiet_NaN()); break;
+                        case 2: settings.SetHnswAdaptiveProbeRatio(std::numeric_limits<double>::infinity()); break;
+                        case 3: settings.MutableIndexSettings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE); break;
+                        case 4: settings.SetHnswShardRouting(false); break;
+                        case 5: settings.SetHnswPreciseShardRouting(false); break;
+                    }
+                    CheckAdaptiveParents(std::move(settings), {{10, NearVec}, {11, FarVec}}, {10, 11}, 70, cached);
+                }
+            }
+        }
+
+        Y_UNIT_TEST(HnswAdaptiveProbeRatioIgnoresMultilevelTrees) {
+            TSearchEnv env(TSettingsBuilder().HnswShardRouting().HnswPreciseShardRouting()
+                .Covered().TopK(1).EfSearch(70).EuclideanMetric().AdaptiveHnsw(1.15).Levels(2).Build());
+            RunSingleLevel(env);
+            UNIT_ASSERT_VALUES_EQUAL(env.CreatedReads(EReadKind::Posting), 0u);
+            auto& second = env.Read(EReadKind::Level);
+            second.Push({LevelRow(10, 20, NearVec), LevelRow(11, 21, FarVec)}, true);
+            env.Wake(second);
+            auto parents = RangeParents(*env.ObservedRead(EReadKind::Posting));
+            std::sort(parents.begin(), parents.end());
+            UNIT_ASSERT_VALUES_EQUAL(parents, (TVector<ui64>{20, 21}));
+            UNIT_ASSERT_VALUES_EQUAL(env.ObservedRead(EReadKind::Posting)->Settings.GetVectorTopK().GetHnswEfSearch(), 70u);
+            auto& posting = env.Read(EReadKind::Posting);
+            posting.Push({{ui64(7), NearVec}}, true);
+            env.Wake(posting);
+            UNIT_ASSERT(env.Finished());
+        }
+
+        Y_UNIT_TEST(HnswAdaptiveProbeRatioRestoresProbesForShortResults) {
+            for (const bool covered : {false, true}) {
+                for (const ui32 overlap : {1u, 3u}) {
+                    for (const ui32 topK : {2u, 3u}) {
+                        auto builder = TSettingsBuilder().HnswShardRouting().HnswPreciseShardRouting()
+                            .EfSearch(70).EuclideanMetric().AdaptiveHnsw(1.15).TopK(topK).Overlap(overlap);
+                        if (covered) {
+                            builder.Covered();
+                        } else {
+                            builder.PostingEmbedding();
+                        }
+                        TSearchEnv env(builder.Build());
+                        RunSingleLevel(env);
+                        UNIT_ASSERT_VALUES_EQUAL(RangeParents(*env.ObservedRead(EReadKind::Posting)), TVector<ui64>{10});
+                        UNIT_ASSERT_VALUES_EQUAL(env.ObservedRead(EReadKind::Posting)->Settings.GetVectorTopK().GetHnswEfSearch(), 100u);
+                        auto& first = env.Read(EReadKind::Posting);
+                        first.Push({{ui64(7), NearVec}}, true);
+                        env.Wake(first);
+                        if (!covered) {
+                            // A posting key alone cannot establish that enough
+                            // visible main rows exist. Wait for the main read.
+                            UNIT_ASSERT_VALUES_EQUAL(env.CreatedReads(EReadKind::Posting), 1u);
+                            auto& main = env.Read(EReadKind::Main);
+                            main.Push({{ui64(7), NearVec}}, true);
+                            env.Wake(main);
+                        }
+                        UNIT_ASSERT(!env.Finished());
+                        UNIT_ASSERT_VALUES_EQUAL(env.CreatedReads(EReadKind::Posting), 2u);
+                        UNIT_ASSERT_VALUES_EQUAL(RangeParents(*env.ObservedRead(EReadKind::Posting, 1)), (TVector<ui64>{10, 11}));
+                        UNIT_ASSERT_VALUES_EQUAL(env.ObservedRead(EReadKind::Posting, 1)->Settings.GetVectorTopK().GetHnswEfSearch(), 70u);
+                        auto& retry = env.Read(EReadKind::Posting);
+                        retry.Push({{ui64(7), NearVec}, {ui64(8), FarVec}}, true);
+                        env.Wake(retry);
+                        if (!covered) {
+                            auto& main = env.Read(EReadKind::Main);
+                            main.Push({{ui64(7), NearVec}, {ui64(8), FarVec}}, true);
+                            env.Wake(main);
+                        }
+                        UNIT_ASSERT(env.Finished());
+                        UNIT_ASSERT_VALUES_EQUAL(env.RowKeys(), (TVector<TString>{"7", "8"}));
+                        // Even when the original probes cannot fill K, retry
+                        // just once and return every available row distinctly.
+                        UNIT_ASSERT_VALUES_EQUAL(env.CreatedReads(EReadKind::Posting), 2u);
+                    }
+                }
             }
         }
 

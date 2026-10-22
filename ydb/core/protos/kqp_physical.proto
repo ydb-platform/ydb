@@ -368,6 +368,15 @@ message TKqpPhyCnVectorSearch {
     // Unprefixed hnsw searches every partition-local graph.
     bool FullRangeHnsw = 14;
     optional uint32 HnswEfSearch = 15;
+    // Unprefixed HNSW: use centroid ranges to select complete posting shards.
+    bool HnswShardRouting = 16;
+    // Avoid the empty keyspace gap before a selected cluster's minimum key.
+    bool HnswPreciseShardRouting = 17;
+    // One-level L2 routing may keep only the nearest centroid when the
+    // runner-up's squared distance exceeds this ratio times the nearest's.
+    // Zero disables the policy. It requires precise whole-shard routing.
+    double HnswAdaptiveProbeRatio = 18;
+    uint32 HnswAdaptiveOneProbeEfSearch = 19;
 }
 
 message TKqpPhyCnSequencer {

@@ -8,6 +8,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 
@@ -596,6 +597,57 @@ protected:
     TMaybeNode<TExprBase> BuildTopSortStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
+        if (KqpCtx.Config->HNSWFuseTopSort.Get().GetOrElse(false)) {
+            const auto top = node.Cast<TCoTopSort>();
+            if (const auto input = top.Input().Maybe<TDqCnUnionAll>()) {
+                const auto connection = input.Cast();
+                const auto stage = connection.Output().Stage().Cast<TDqStage>();
+                const auto isSingleHnswSearch = [&] {
+                    if (stage.Inputs().Size() != 1 || !stage.Inputs().Item(0).Maybe<TKqpCnVectorSearch>()) {
+                        return false;
+                    }
+                    const auto search = stage.Inputs().Item(0).Cast<TKqpCnVectorSearch>();
+                    if (!search.HasPrefix().IsValid() || search.HasPrefix().Cast().Value() != "false") {
+                        return false;
+                    }
+                    const auto& table = KqpCtx.Tables->ExistingTable(KqpCtx.Cluster, search.Table().Path());
+                    const auto index = table.Metadata->GetIndex(search.Index().Value());
+                    // Unprefixed HNSW connections are constructed with a
+                    // single-row target producer. Projection and precompute
+                    // normalization can rebuild its program and settings, so
+                    // use that connection contract rather than a syntax shape
+                    // or the earlier partition-mode marker.
+                    return index.second->Type == TIndexDescription::EType::GlobalSyncHnsw;
+                };
+                if (isSingleHnswSearch()
+                        && IsSingleConsumerConnection(connection, *getParents(), IsGlobal)
+                        && CanPushDqExpr(top.Count(), connection)
+                        && CanPushDqExpr(top.KeySelectorLambda(), connection)) {
+                    // This stage consumes the globally merged vector-search
+                    // stream in one task. Sort that stream here instead of
+                    // producing local Top rows and sorting again in a new task.
+                    const auto lambda = Build<TCoLambda>(ctx, node.Pos())
+                        .Args({"stream"})
+                        .Body<TCoTopSort>()
+                            .Input("stream")
+                            .KeySelectorLambda(ctx.DeepCopyLambda(top.KeySelectorLambda().Ref()))
+                            .SortDirections(top.SortDirections())
+                            .Count(top.Count())
+                            .Build()
+                        .Done();
+                    if (const auto fused = DqPushLambdaToStage(stage, connection.Output().Index(), lambda, {}, ctx, optCtx)) {
+                        TExprBase output = Build<TDqCnUnionAll>(ctx, node.Pos())
+                            .Output()
+                                .Stage(fused.Cast())
+                                .Index(connection.Output().Index())
+                                .Build()
+                            .Done();
+                        DumpAppliedRule("FuseVectorTopSortStage", node.Ptr(), output.Ptr(), ctx);
+                        return output;
+                    }
+                }
+            }
+        }
         TExprBase output = DqBuildTopSortStage(node, ctx, optCtx, *getParents(), IsGlobal);
         DumpAppliedRule("BuildTopSortStage", node.Ptr(), output.Ptr(), ctx);
         return output;

@@ -3137,12 +3137,24 @@ private:
             *proto.MutableIndexSettings() = kmeansDesc.GetSettings().Getsettings();
             proto.SetOverlapClusters(kmeansDesc.GetSettings().overlap_clusters());
             proto.SetFullRangeHnsw(indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw
-                && indexDesc->KeyColumns.size() == 1);
+                && indexDesc->KeyColumns.size() == 1
+                && !Config->HNSWUseClusterRouting.Get().GetOrElse(false));
+            proto.SetHnswShardRouting(indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw
+                && indexDesc->KeyColumns.size() == 1
+                && Config->HNSWUseClusterRouting.Get().GetOrElse(false));
+            proto.SetHnswPreciseShardRouting(proto.GetHnswShardRouting()
+                && Config->HNSWPreciseShardRouting.Get().GetOrElse(false));
             proto.SetLevels(std::max<ui32>(1, kmeansDesc.GetSettings().levels()));
 
             const bool withOverlap = kmeansDesc.GetSettings().overlap_clusters() > 1;
             proto.SetLevelTop(Config->KMeansTreeSearchTopSize.Get().GetOrElse(withOverlap ? 4 : 10));
             proto.SetHnswEfSearch(Config->HNSWEfSearch.Get().GetOrElse(15));
+            if (proto.GetHnswPreciseShardRouting() && proto.GetLevels() == 1
+                    && proto.GetIndexSettings().metric() == Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN) {
+                proto.SetHnswAdaptiveProbeRatio(Config->HNSWAdaptiveProbeRatio.Get().GetOrElse(0.0));
+                proto.SetHnswAdaptiveOneProbeEfSearch(
+                    Config->HNSWAdaptiveOneProbeEfSearch.Get().GetOrElse(proto.GetHnswEfSearch()));
+            }
 
             // Main table
             FillTablesMap(vectorSearch.Table(), tablesMap);

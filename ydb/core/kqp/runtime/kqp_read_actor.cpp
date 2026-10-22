@@ -463,7 +463,19 @@ public:
         PendingShards.PushBack(stateHolder.Get());
         auto& state = *stateHolder.Release();
 
-        if (!DirectKeyPoints.empty()) {
+        if (Settings->GetHnswShardRouting()) {
+            YQL_ENSURE(Settings->HasVectorTopK() && Settings->HasRanges()
+                && Settings->GetRanges().KeyRangesSize() > 0
+                && Settings->GetRanges().KeyPointsSize() == 0
+                && DirectKeyPoints.empty() && !Settings->HasShardIdHint()
+                && !Settings->HasSampling());
+            // Resolve the complete layout to obtain both borders of every
+            // selected shard. Keep the original cluster ranges for selection;
+            // retries retain the selected shard's complete range and use the
+            // ordinary split/re-resolution path below.
+            const TVector<TCell> from(KeyColumnTypes.size());
+            state.AddRange(TSerializedTableRange(from, true, {}, false));
+        } else if (!DirectKeyPoints.empty()) {
             // Points handed over pre-parsed by an in-process parent actor; consume
             // them as-is instead of copying and re-parsing the settings' KeyPoints.
             YQL_ENSURE(!Settings->HasFullRange() && !Settings->HasRanges());
@@ -693,6 +705,29 @@ public:
             state->FillUnprocessedPoints(points, Settings->GetReverse());
         }
 
+        TVector<TSerializedTableRange> hnswRoutingRanges;
+        if (state->IsFake && Settings->GetHnswShardRouting()) {
+            for (const auto& range : Settings->GetRanges().GetKeyRanges()) {
+                if (Settings->GetHnswPreciseShardRouting()) {
+                    const TSerializedTableRange clusterRange(range);
+                    const auto parent = clusterRange.To.GetCells();
+                    YQL_ENSURE(parent.size() == 1 && !parent.front().IsNull()
+                        && clusterRange.ToInclusive && KeyColumnTypes.size() > 1);
+                    // The scan's (parent-1, parent] prefix range is correct for
+                    // rows, but its empty gap before (parent, NULL, ...) also
+                    // intersects the preceding partition's conservative bounds.
+                    // Start at the selected parent's actual minimum key when
+                    // choosing complete graphs. NULL is the minimum of every
+                    // suffix key type, including nullable and composite keys.
+                    TVector<TCell> from(KeyColumnTypes.size());
+                    from.front() = parent.front();
+                    hnswRoutingRanges.emplace_back(from, true, parent, true);
+                } else {
+                    hnswRoutingRanges.emplace_back(range);
+                }
+            }
+        }
+
         for (ui64 idx = 0; idx < keyDesc->GetPartitions().size(); ++idx) {
             const auto& partition = keyDesc->GetPartitions()[idx];
 
@@ -712,6 +747,25 @@ public:
                 {"pointsCount", points.size()});
 
             auto newShard = MakeHolder<TShardState>(partition.ShardId);
+
+            if (state->IsFake && Settings->GetHnswShardRouting()) {
+                for (const auto& clusterRange : hnswRoutingRanges) {
+                    if (Settings->GetHnswPreciseShardRouting()
+                            && partitionRange.From.size() == 1
+                            && CompareTypedCells(partitionRange.From.front(), clusterRange.To.GetCells().front(),
+                                KeyColumnTypes.front()) == 0) {
+                        // A short lower prefix denotes the end of that entire
+                        // parent subtree; the next graph contains no such rows.
+                        continue;
+                    }
+                    if (CompareRanges(partitionRange, clusterRange.ToTableRange(), KeyColumnTypes) == 0) {
+                        newShard->AddRange(TSerializedTableRange(partitionRange));
+                        newShards.push_back(std::move(newShard));
+                        break;
+                    }
+                }
+                continue;
+            }
 
             if (state->HasRanges()) {
                 for (ui64 j = rangeIndex; j < ranges.size(); ++j) {

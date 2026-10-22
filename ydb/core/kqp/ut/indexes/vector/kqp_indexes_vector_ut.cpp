@@ -32,6 +32,7 @@
 #include <util/string/printf.h>
 
 #include <format>
+#include <cstring>
 
 namespace NKikimr {
 namespace NKqp {
@@ -2585,6 +2586,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
         if (Followers) {
             scheme("ALTER TABLE `" + posting + "` SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\");");
+            scheme("ALTER TABLE `/Root/HnswFullRange` SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\");");
         } else if (!Split) {
             for (const auto shard : shards) {
                 RebootTablet(*runtime, shard, sender);
@@ -2650,6 +2652,55 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
         UNIT_ASSERT_C(accelerated, "HNSW cache was not reconstructed with persisted min_rows=1");
 
+        // A single vector-search stream already merges every posting shard.
+        // Its final sort can run in that task, including after a split and for
+        // follower reads. Keep the ordinary plan available for comparison.
+        for (const bool lookup : {false, true}) {
+            for (const bool project : {false, true}) {
+                for (const bool fuse : {false, true, false}) {
+                    const TString sortedQuery = TStringBuilder()
+                        << "PRAGMA ydb.HNSWFuseTopSort = \"" << (fuse ? "true" : "false") << "\"; "
+                        << "DECLARE $limit AS Uint64; "
+                        << (lookup ? "DECLARE $lookup AS Int64; $target = (SELECT emb FROM `/Root/HnswFullRange` WHERE pk=$lookup); " : target)
+                        << "SELECT " << (project ? "UNWRAP(CAST(pk AS String)) AS pk" : "pk")
+                        << " FROM `/Root/HnswFullRange` VIEW index "
+                        << "ORDER BY Knn::InnerProductSimilarity(emb, $target) DESC LIMIT $limit;";
+                    const auto explained = kikimr.RunCall([&] {
+                        return session.ExplainDataQuery(sortedQuery).ExtractValueSync();
+                    });
+                    UNIT_ASSERT_C(explained.IsSuccess(), explained.GetIssues().ToString());
+                    NJson::TJsonValue plan;
+                    NJson::ReadJsonTree(explained.GetPlan(), &plan, true);
+                    UNIT_ASSERT_VALUES_EQUAL_C(CountPlanNodesByKv(plan, "Node Type", "VectorSearch"), 1u,
+                        explained.GetPlan());
+                    const auto localTop = CountPlanNodesByKv(plan, "Name", "Top");
+                    UNIT_ASSERT_VALUES_EQUAL_C(localTop > 0, !fuse, explained.GetPlan());
+                    for (const ui64 limit : {0ul, 2ul, 3ul}) {
+                        auto builder = db.GetParamsBuilder();
+                        if (lookup) {
+                            builder.AddParam("$lookup").Int64(1).Build();
+                        } else {
+                            builder.AddParam("$q").BeginList().AddListItem().Float(1.0f)
+                                .AddListItem().Float(0.0f).EndList().Build();
+                        }
+                        builder.AddParam("$limit").Uint64(limit).Build();
+                        const auto result = kikimr.RunCall([&] {
+                            return session.ExecuteDataQuery(sortedQuery,
+                                TTxControl::BeginTx(Followers ? TTxSettings::StaleRO() : TTxSettings::SnapshotRO()).CommitTx(),
+                                builder.Build()).ExtractValueSync();
+                        });
+                        UNIT_ASSERT_C(result.IsSuccess(), TStringBuilder() << "lookup=" << lookup
+                            << " project=" << project << " fuse=" << fuse << " limit=" << limit
+                            << ": " << result.GetIssues().ToString());
+                        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)),
+                            limit == 0 ? "[]" : project
+                                ? (limit == 2 ? "[[\"3\"];[\"2\"]]" : "[[\"3\"];[\"2\"];[\"1\"]]")
+                                : (limit == 2 ? "[[3];[2]]" : "[[3];[2];[1]]"));
+                    }
+                }
+            }
+        }
+
         if (Followers) {
             WaitForCompaction(&kikimr.GetTestServer(), posting);
             runtime->SimulateSleep(TDuration::Seconds(1));
@@ -2678,6 +2729,200 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             runtime->SimulateSleep(TDuration::MilliSeconds(100));
         }
         UNIT_ASSERT_C(updated, "HNSW cache concealed a replicated vector update");
+    }
+
+    Y_UNIT_TEST_QUAD(HnswPreciseShardRouting, Followers, Split) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true)
+            .SetNeedsStatsCollectors(true).SetEnableForceFollowers(Followers).SetUseRealThreads(false)};
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto scheme = [&](const TString& query) {
+            const auto result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(query).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme(Q_(R"(
+            CREATE TABLE `/Root/HnswPrecise` (
+                pk Uint64 NOT NULL, sub Uint64, emb String, PRIMARY KEY (pk, sub)
+            );
+        )"));
+        const auto write = kikimr.RunCall([&] { return ExecuteDataQuery(session, Q_(R"(
+            $rows = ListMap(ListFromRange(0ul, 128ul), ($key) -> {
+                RETURN AsStruct($key AS pk, IF($key % 2ul == 0ul, NULL, 1ul) AS sub,
+                    Untag(Knn::ToBinaryStringFloat([
+                        IF($key < 64ul, -1000.0f, 1000.0f), Unwrap(CAST($key % 64ul AS Float))
+                    ]), "FloatVector") AS emb);
+            });
+            UPSERT INTO `/Root/HnswPrecise` SELECT * FROM AS_TABLE($rows);
+        )")); });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswPrecise` ADD INDEX vidx GLOBAL USING hnsw ON (emb)
+            WITH (distance=euclidean, vector_type="float", vector_dimension=2,
+                  levels=1, clusters=2, min_rows=1);
+        )"));
+        const TString posting = "/Root/HnswPrecise/vidx/indexImplPostingTable";
+        const auto target = kikimr.RunCall([&] { return ExecuteDataQuery(session, TStringBuilder()
+            << "SELECT __ydb_parent, pk, UNWRAP(emb) AS emb FROM `" << posting
+            << "` ORDER BY __ydb_parent DESC, pk LIMIT 1;"); });
+        UNIT_ASSERT_C(target.IsSuccess(), target.GetIssues().ToString());
+        TResultSetParser parser(target.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        const ui64 parent = parser.ColumnParser(0).GetUint64();
+        // K-means can converge to centroids separated along either axis. A
+        // document from this cluster can still lie on their decision boundary.
+        // Choose a query near the actual centroid so adaptation has a clear
+        // nearest cluster; offset both coordinates to avoid document ties.
+        const auto centroid = kikimr.RunCall([&] { return ExecuteDataQuery(session, TStringBuilder()
+            << "SELECT UNWRAP(__ydb_centroid) FROM `/Root/HnswPrecise/vidx/indexImplLevelTable` "
+            << "WHERE __ydb_id = " << parent << ";"); });
+        UNIT_ASSERT_C(centroid.IsSuccess(), centroid.GetIssues().ToString());
+        TResultSetParser centroidParser(centroid.GetResultSet(0));
+        UNIT_ASSERT(centroidParser.TryNextRow());
+        TString embedding(centroidParser.ColumnParser(0).GetString());
+        UNIT_ASSERT_VALUES_EQUAL(embedding.size(), 2 * sizeof(float) + 1);
+        for (ui32 coordinate = 0; coordinate < 2; ++coordinate) {
+            float value;
+            std::memcpy(&value, embedding.data() + coordinate * sizeof(float), sizeof(float));
+            value += 0.25f;
+            std::memcpy(embedding.Detach() + coordinate * sizeof(float), &value, sizeof(float));
+        }
+        auto targetParamsBuilder = db.GetParamsBuilder();
+        targetParamsBuilder.AddParam("$q").String(embedding).Build();
+        const auto targetParams = targetParamsBuilder.Build();
+        const auto expected = kikimr.RunCall([&] { return session.ExecuteDataQuery(
+            "DECLARE $q AS String; SELECT pk FROM `/Root/HnswPrecise` "
+            "ORDER BY Knn::EuclideanDistance(emb, $q), pk LIMIT 1;",
+            TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(), targetParams).ExtractValueSync(); });
+        UNIT_ASSERT_C(expected.IsSuccess(), expected.GetIssues().ToString());
+        TResultSetParser expectedParser(expected.GetResultSet(0));
+        UNIT_ASSERT(expectedParser.TryNextRow());
+        const ui64 expectedPk = expectedParser.ColumnParser(0).GetUint64();
+        const auto sender = runtime->AllocateEdgeActor();
+        if (Split) {
+            const auto shards = GetTableShards(&kikimr.GetTestServer(), sender, posting);
+            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+            const auto status = kikimr.RunCall([&] {
+                return kikimr.GetTestClient().SplitTable(posting, shards.front(), parent);
+            });
+            UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
+            UNIT_ASSERT_VALUES_EQUAL(GetTableShards(&kikimr.GetTestServer(), sender, posting).size(), 2u);
+        }
+        if (Followers) {
+            for (const TString& path : {TString("/Root/HnswPrecise"),
+                    TString("/Root/HnswPrecise/vidx/indexImplLevelTable"), posting}) {
+                scheme("ALTER TABLE `" + path + "` SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\");");
+            }
+            runtime->SimulateSleep(TDuration::Seconds(5));
+        }
+        auto paramsBuilder = db.GetParamsBuilder();
+        paramsBuilder.AddParam("$q").String(embedding).Build();
+        const auto values = paramsBuilder.Build();
+        const auto statsSettings = TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic);
+        ui32 expectedPostingEf = 15;
+        ui64 adaptivePostingReads = 0;
+        bool allowPostingFallback = false;
+        ui64 fallbackPostingReads = 0;
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
+                const auto& read = ev->Get<TEvDataShard::TEvRead>()->Record;
+                // Posting ranks emb at column 0; level reads rank column 2.
+                if (read.HasVectorTopK() && read.GetVectorTopK().GetColumn() == 0) {
+                    const ui32 ef = read.GetVectorTopK().GetHnswEfSearch();
+                    if (allowPostingFallback && ef == 15) {
+                        ++fallbackPostingReads;
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(ef, expectedPostingEf);
+                    }
+                    adaptivePostingReads += ef == 100;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        const auto query = [&](bool precise, ui64 limit = 1, bool adaptive = false, ui32 probes = 1) -> TString {
+            return TStringBuilder() << "PRAGMA ydb.HNSWUseClusterRouting=\"true\"; "
+                << "PRAGMA ydb.HNSWPreciseShardRouting=\"" << (precise ? "true" : "false") << "\"; "
+                << "PRAGMA ydb.HNSWAdaptiveProbeRatio=\"" << (adaptive ? 1.15 : 0.0) << "\"; "
+                << "PRAGMA ydb.HNSWAdaptiveOneProbeEfSearch=\"" << (adaptive ? 100u : 0u) << "\"; "
+                << "PRAGMA ydb.KMeansTreeSearchTopSize=\"" << (adaptive ? 2u : probes) << "\"; DECLARE $q AS String; "
+                << "SELECT pk FROM `/Root/HnswPrecise` VIEW vidx "
+                << "ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT " << limit << ";";
+        };
+        const auto run = [&](bool precise, ui64 limit = 1, bool adaptive = false, ui32 probes = 1) {
+            expectedPostingEf = adaptive ? 100 : 15;
+            allowPostingFallback = adaptive && limit > 1;
+            return kikimr.RunCall([&] { return session.ExecuteDataQuery(query(precise, limit, adaptive, probes),
+                TTxControl::BeginTx(Followers ? TTxSettings::StaleRO() : TTxSettings::SnapshotRO()).CommitTx(),
+                values, statsSettings).ExtractValueSync(); });
+        };
+        bool ready = false;
+        for (ui32 attempt = 0; attempt < 30; ++attempt) {
+            const auto result = run(false);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            ui64 rows = 0;
+            for (const auto& phase : NYdb::TProtoAccessor::GetProto(*result.GetStats()).query_phases()) {
+                for (const auto& access : phase.table_access()) {
+                    if (access.name() == posting) {
+                        rows += access.reads().rows();
+                    }
+                }
+            }
+            if (rows == (Split ? 2u : 1u)) {
+                ready = true;
+                break;
+            }
+            runtime->SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(ready, "HNSW graphs did not become ready");
+        for (const bool precise : {false, true, false}) {
+            const auto result = run(precise);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)),
+                TStringBuilder() << "[[" << expectedPk << "u]]");
+            // A parent-only prefix range used to also select the graph just
+            // before (parent, NULL, NULL). Precise routing must skip that graph,
+            // including with composite nullable primary keys and followers.
+            AssertTableReads(result, posting, Split && !precise ? 2u : 1u);
+        }
+        for (const bool adaptive : {false, true, false}) {
+            const auto result = run(true, 1, adaptive, 2);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)),
+                TStringBuilder() << "[[" << expectedPk << "u]]");
+            // These centroids are far apart: the exact target confidently
+            // selects one cluster. Turning adaptation off restores two probes.
+            AssertTableReads(result, posting, Split && !adaptive ? 2u : 1u);
+        }
+        UNIT_ASSERT_GT(adaptivePostingReads, 0u);
+        if (!Followers && !Split) {
+            for (const TString ratio : {"-1", "0.5", "1000001", "nan", "inf"}) {
+                const auto invalid = kikimr.RunCall([&] {
+                    return session.ExplainDataQuery("PRAGMA ydb.HNSWAdaptiveProbeRatio=\"" + ratio
+                        + "\"; SELECT 1;").ExtractValueSync();
+                });
+                UNIT_ASSERT_C(!invalid.IsSuccess(), "Invalid adaptive ratio accepted: " + ratio);
+            }
+        }
+        for (const bool adaptive : {false, true}) {
+            const auto all = run(true, 128, adaptive, Split ? 2 : 1);
+            UNIT_ASSERT_C(all.IsSuccess(), all.GetIssues().ToString());
+            // Precision changes graph selection, not filtering inside a shared
+            // graph. If one split graph cannot fill K, adaptation restores the
+            // original probes, without repeating rows from the first attempt.
+            UNIT_ASSERT_VALUES_EQUAL(all.GetResultSet(0).RowsCount(), 128u);
+            TResultSetParser allParser(all.GetResultSet(0));
+            THashSet<ui64> keys;
+            while (allParser.TryNextRow()) {
+                keys.insert(allParser.ColumnParser(0).GetUint64());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(keys.size(), 128u);
+        }
+        if (Split) {
+            UNIT_ASSERT_GT(fallbackPostingReads, 0u);
+        }
     }
 
     Y_UNIT_TEST_QUAD(HnswIndexViewSkipsClusterTraversal, Followers, EnableVectorSearchActor) {
@@ -2749,12 +2994,27 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
         ui32 expectedEfSearch = 15;
         ui64 vectorReads = 0;
+        ui64 routedPostingReads = 0;
+        bool checkRoutedPosting = false;
         auto observer = runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
                 const auto& read = ev->Get<TEvDataShard::TEvRead>()->Record;
                 if (read.HasVectorTopK()) {
                     UNIT_ASSERT_VALUES_EQUAL(read.GetVectorTopK().GetHnswEfSearch(), expectedEfSearch);
                     ++vectorReads;
+                    // The level read ranks column 2; the covered posting read
+                    // ranks emb at column 0. Two semantic clusters share this shard.
+                    if (checkRoutedPosting && read.GetVectorTopK().GetColumn() == 0) {
+                        ++routedPostingReads;
+                        const auto* request = ev->Get<TEvDataShard::TEvRead>();
+                        UNIT_ASSERT_VALUES_EQUAL(request->Ranges.size(), 1u);
+                        // The read actor normalizes unbounded wire ranges to
+                        // empty prefix keys, rather than a NULL-padded lower key.
+                        const auto& range = request->Ranges.front();
+                        UNIT_ASSERT(range.From.GetCells().empty());
+                        UNIT_ASSERT(range.To.GetCells().empty());
+                        UNIT_ASSERT_VALUES_EQUAL(read.GetVectorTopK().DistinctColumnsSize(), 0u);
+                    }
                 }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -2799,6 +3059,58 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             UNIT_ASSERT_C(accelerated, "VIEW vidx did not use its partition-local HNSW graph");
             UNIT_ASSERT_GT(vectorReads, readsBefore);
         }
+        // Routing is an explicit quality/performance choice. It must traverse
+        // the centroids only for the requesting query, including when the
+        // general vector-search actor setting is disabled.
+        expectedEfSearch = 15;
+        for (const bool routing : {true, false}) {
+            for (const bool fuse : {false, true}) {
+                checkRoutedPosting = routing;
+                const TString query = TStringBuilder()
+                    << "PRAGMA ydb.HNSWFuseTopSort = \"" << (fuse ? "true" : "false") << "\"; "
+                    << "PRAGMA ydb.HNSWPreciseShardRouting = \"" << (fuse ? "true" : "false") << "\"; "
+                    << (routing ? "PRAGMA ydb.HNSWUseClusterRouting = \"true\"; " : "")
+                    << "PRAGMA ydb.KMeansTreeSearchTopSize = \"1\"; "
+                    << "$q = Knn::ToBinaryStringFloat([1000.0f, 32.0f]); "
+                    << "SELECT pk FROM `/Root/HnswView` VIEW vidx "
+                    << "ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 1;";
+                const auto result = kikimr.RunCall([&] {
+                    return session.ExecuteDataQuery(query,
+                        TTxControl::BeginTx(Followers ? TTxSettings::StaleRO()
+                            : TTxSettings::SnapshotRO()).CommitTx(),
+                        TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync();
+                });
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[96u]]");
+                ui64 centroidRows = 0;
+                for (const auto& phase : NYdb::TProtoAccessor::GetProto(*result.GetStats()).query_phases()) {
+                    for (const auto& access : phase.table_access()) {
+                        if (access.name().EndsWith("/indexImplLevelTable")) {
+                            centroidRows += access.reads().rows();
+                        }
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(centroidRows > 0, routing);
+            }
+        }
+        // Routing chooses graphs, rather than filtering the selected graph's
+        // rows to one cluster. K larger than that cluster must still return
+        // all rows in this single graph, including the other cluster.
+        checkRoutedPosting = true;
+        const auto routedAll = kikimr.RunCall([&] {
+            return session.ExecuteDataQuery(Q_(R"(
+                PRAGMA ydb.HNSWUseClusterRouting = "true";
+                PRAGMA ydb.KMeansTreeSearchTopSize = "1";
+                $q = Knn::ToBinaryStringFloat([1000.0f, 32.0f]);
+                SELECT pk FROM `/Root/HnswView` VIEW vidx
+                ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 128;
+            )"), TTxControl::BeginTx(Followers ? TTxSettings::StaleRO()
+                : TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(routedAll.IsSuccess(), routedAll.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(routedAll.GetResultSet(0).RowsCount(), 128u);
+        UNIT_ASSERT_GT(routedPostingReads, 0u);
+        checkRoutedPosting = false;
         expectedEfSearch = 75;
         const ui64 readsBefore = vectorReads;
         const auto direct = kikimr.RunCall([&] {
@@ -2857,6 +3169,14 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync(); });
         UNIT_ASSERT_C(query.IsSuccess(), query.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(query.GetResultSet(0)), "[[1]]");
+        const auto routedQuery = kikimr.RunCall([&] { return session.ExecuteDataQuery(TStringBuilder()
+            << "PRAGMA ydb.HNSWUseClusterRouting=\"true\"; "
+            << "$q = Knn::ToBinaryStringFloat([-1.0f, 0.0f]); SELECT pk FROM `/Root/HnswAutomatic` VIEW idx "
+            << (Prefixed ? "WHERE prefix=1u " : "")
+            << "ORDER BY Knn::CosineDistance(emb, $q) LIMIT 1;",
+            TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync(); });
+        UNIT_ASSERT_C(routedQuery.IsSuccess(), routedQuery.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(routedQuery.GetResultSet(0)), Prefixed ? "[[2]]" : "[[3]]");
         scheme("ALTER TABLE `/Root/HnswAutomatic` REBUILD INDEX idx WITH (clusters=1);");
         checkSettings("/Root/HnswAutomatic");
         scheme(R"(

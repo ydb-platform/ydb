@@ -17,6 +17,8 @@
 #include <util/string/vector.h>
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace NKikimr {
     namespace NKqp {
@@ -78,6 +80,7 @@ namespace NKikimr {
                 : Settings(std::move(settings))
                 , TopK(Settings.GetTopK())
                 , LevelTop(std::max<ui32>(1, Settings.GetLevelTop()))
+                , EffectiveHnswEfSearch(Settings.GetHnswEfSearch())
                 , OverlapClusters(Settings.GetOverlapClusters())
                 , PostingCovers(Settings.GetPostingCovers())
                 , HasPrefix(Settings.GetHasPrefix())
@@ -440,7 +443,57 @@ namespace NKikimr {
                 }
             }
 
+            void MaybeReduceHnswProbes() {
+                const double ratio = Settings.GetHnswAdaptiveProbeRatio();
+                CA_LOG_D("Adaptive probes: ratio=" << ratio
+                    << " oneProbeEf=" << Settings.GetHnswAdaptiveOneProbeEfSearch()
+                    << " routing=" << Settings.GetHnswShardRouting()
+                    << " precise=" << Settings.GetHnswPreciseShardRouting()
+                    << " metric=" << Settings.GetIndexSettings().metric()
+                    << " levels=" << Settings.GetIndexLevels()
+                    << " remaining=" << LevelsRemaining << " candidates=" << LevelCandidates.size());
+                if (!Settings.GetHnswShardRouting() || !Settings.GetHnswPreciseShardRouting()
+                        || HasPrefix || Settings.GetFullRangeHnsw() || Settings.GetIndexLevels() != 1
+                        || LevelsRemaining != 1 || LevelCandidates.size() < 2
+                        || Settings.GetIndexSettings().metric() != Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN
+                        || !std::isfinite(ratio) || ratio < 1.0 || ratio > 1000000.0) {
+                    return;
+                }
+                // Ranking uses Euclidean distance. The policy is expressed in
+                // squared L2, so compare squares in double precision. Preserve
+                // the original heap and probe count for ties or invalid scores.
+                for (const auto& candidate : LevelCandidates) {
+                    if (!std::isfinite(candidate.second) || candidate.second < 0) {
+                        return;
+                    }
+                }
+                const auto nearest = std::min_element(LevelCandidates.begin(), LevelCandidates.end(),
+                    [](const auto& a, const auto& b) { return a.second < b.second; });
+                double second = std::numeric_limits<double>::max();
+                for (const auto& candidate : LevelCandidates) {
+                    if (&candidate != &*nearest) {
+                        second = std::min(second, candidate.second);
+                    }
+                }
+                CA_LOG_D("Adaptive distances: nearest=" << nearest->second << " runnerUp=" << second);
+                if (second * second <= nearest->second * nearest->second * ratio) {
+                    return;
+                }
+                const auto selected = *nearest;
+                AdaptiveFallbackParents.reserve(LevelCandidates.size());
+                for (const auto& candidate : LevelCandidates) {
+                    AdaptiveFallbackParents.push_back(candidate.first);
+                }
+                LevelCandidates.clear();
+                LevelCandidates.push_back(selected);
+                const ui32 oneProbeEf = Settings.GetHnswAdaptiveOneProbeEfSearch();
+                if (oneProbeEf > 0 && oneProbeEf <= NKMeans::MaxHnswEfSearch) {
+                    EffectiveHnswEfSearch = oneProbeEf;
+                }
+            }
+
             void OnLevelRoundDone() {
+                MaybeReduceHnswProbes();
                 // Children were ranked incrementally as rows arrived: LevelCandidates already
                 // holds (at most) the LevelTop nearest as a bounded heap. Hand their ids to
                 // the next round -- parent order does not affect correctness, so no sort.
@@ -660,7 +713,7 @@ namespace NKikimr {
                 *topK->MutableSettings() = Settings.GetIndexSettings();
                 topK->SetTargetVector(TargetVector);
                 topK->SetLimit(limit);
-                topK->SetHnswEfSearch(Settings.GetHnswEfSearch());
+                topK->SetHnswEfSearch(EffectiveHnswEfSearch);
                 return topK;
             }
 
@@ -707,6 +760,15 @@ namespace NKikimr {
                 } else {
                     AddParentRanges(src, parents);
                 }
+                // Cluster boundaries need not coincide with graph partitions.
+                // Restricting a shared graph to a cluster can repeatedly widen
+                // traversal and eventually fall back to a table scan. Route to
+                // the intersecting graphs and search those graphs completely.
+                if (Settings.GetHnswShardRouting()) {
+                    YQL_ENSURE(!HasPrefix && !Settings.GetFullRangeHnsw());
+                    src->SetHnswShardRouting(true);
+                    src->SetHnswPreciseShardRouting(Settings.GetHnswPreciseShardRouting());
+                }
 
                 // Posting key is (__ydb_parent, <main PK columns>).
                 AddUint64KeyColumnType(src);
@@ -729,7 +791,7 @@ namespace NKikimr {
                     // clusters; dedup by PK inside the pushed-down top-K so duplicates don't
                     // crowd out distinct nearest rows (the actor still dedups across shards).
                     auto* topK = SetVectorTopK(src, Settings.GetVectorColumnIndex(), TopK);
-                    if (!Settings.GetFullRangeHnsw() || OverlapClusters > 1) {
+                    if ((!Settings.GetFullRangeHnsw() && !Settings.GetHnswShardRouting()) || OverlapClusters > 1) {
                         for (ui32 pos : CoveredPkPositions) {
                             topK->AddDistinctColumns(pos);
                         }
@@ -1008,6 +1070,22 @@ namespace NKikimr {
                 // came from the main reads (or there were none -> empty result).
                 if (CountActiveReads(EReadKind::Posting) == 0 && CountActiveReads(EReadKind::Main) == 0) {
                     CA_LOG_D("Posting/main done: candidateRows=" << Candidates.size() << " topK=" << TopK);
+                    if (Candidates.size() < TopK && !AdaptiveFallbackParents.empty()) {
+                        // A small graph, missing embedding or deleted main row
+                        // must not make adaptation lose rows that the original
+                        // probe count could return. Retry once under the same
+                        // read settings, discarding the partial attempt first.
+                        {
+                            auto guard = BindAllocator();
+                            Candidates.clear();
+                        }
+                        SeenKeys.clear();
+                        CurrentParents.swap(AdaptiveFallbackParents);
+                        AdaptiveFallbackParents.clear();
+                        EffectiveHnswEfSearch = Settings.GetHnswEfSearch();
+                        StartPosting();
+                        return;
+                    }
                     FinalizeResults();
                 }
             }
@@ -1242,6 +1320,7 @@ namespace NKikimr {
             const NKikimrTxDataShard::TKqpVectorSearchSettings Settings;
             const ui32 TopK;
             ui32 LevelTop;
+            ui32 EffectiveHnswEfSearch;
             const ui32 OverlapClusters;
             const bool PostingCovers;
             const bool HasPrefix;
@@ -1300,6 +1379,7 @@ namespace NKikimr {
             // Ranking reuses RankClusters' metric (CalcDistance is SetClusters-independent),
             // so no centroid bytes are copied into this accumulator. See PushLevelCandidate.
             TVector<std::pair<TClusterId, double>> LevelCandidates;
+            TVector<TClusterId> AdaptiveFallbackParents;
 
             // Shared, process-wide cache of immutable level-table rows.
             TIntrusivePtr<TVectorIndexLevelsCache> LevelsCache;

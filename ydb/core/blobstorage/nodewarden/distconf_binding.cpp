@@ -112,6 +112,14 @@ namespace NKikimr::NStorage {
     };
 
     void TDistributedConfigKeeper::CheckBindingLiveness() {
+        // Keep ordinary V1 clusters independent of keeper liveness. The startup flag applies only
+        // before bootstrap, so a committed disable also stops an already running watchdog.
+        const bool bootstrapping = BaseConfig->GetSelfManagementConfig().GetEnabled()
+            && (!StorageConfig || !StorageConfig->GetGeneration());
+        if (!SelfManagementEnabled && !bootstrapping) {
+            CancelBindingLiveness();
+            return;
+        }
         if (Binding && Binding->RootNodeId && Binding->SessionId && Binding->SupportsDirectRootQueries
             && !BindingLivenessActorId) {
             BindingLivenessActorId = RegisterWithSameMailbox(new TBindingLivenessActor(this, *Binding));

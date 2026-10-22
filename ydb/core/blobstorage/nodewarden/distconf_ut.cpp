@@ -4727,23 +4727,39 @@ selector_config: []
         CheckDurableConfigConverges(fixture, advanced);
     }
 
-    void CheckBindingLivenessPeerCapability(bool selfManagement, bool legacyParent) {
+    void CheckBindingLivenessPeerCapability(bool selfManagement, bool legacyParent, bool pauseParent = false,
+                                           bool disabledMetadata = false) {
         TCommitConfirmationFixture fixture(true);
         fixture.UseMirror3dcGroup();
         fixture.State.RequiredRootNodeId = 1;
         if (!selfManagement) {
-            fixture.Config.SetGeneration(0);
-            fixture.Config.MutableSelfManagementConfig()->SetEnabled(false);
-            NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
-            fixture.State.Metadata.clear();
+            if (disabledMetadata) {
+                auto disabled = MakeNextConfig(fixture.Config);
+                disabled.MutableSelfManagementConfig()->SetEnabled(false);
+                NStorage::TDistributedConfigKeeper::UpdateFingerprint(&disabled);
+                for (ui32 nodeId : {1, 2, 3}) {
+                    fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(disabled);
+                }
+            } else {
+                fixture.Config.SetGeneration(0);
+                fixture.Config.MutableSelfManagementConfig()->SetEnabled(false);
+                NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+                fixture.State.Metadata.clear();
+            }
         }
         auto& runtime = fixture.Runtime;
         ui32 heartbeatRequests = 0;
         ui32 sessionPoisons = 0;
         ui32 disconnections = 0;
         bool trackDisconnects = false;
+        bool pauseRoot = false;
         TActorId parentSession;
+        std::vector<std::unique_ptr<IEventHandle>> pausedEvents;
         runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (pauseRoot && ev->GetRecipientRewrite() == fixture.Keepers.front()) {
+                pausedEvents.push_back(std::move(ev));
+                return false;
+            }
             const ui32 type = ev->GetTypeRewrite();
             if (ev->InterconnectSession && type == NStorage::TEvNodeConfigReversePush::EventType
                 && nodeId == 2 && ev->Sender.NodeId() == 1) {
@@ -4792,16 +4808,34 @@ selector_config: []
             UNIT_ASSERT(!AppData()->FeatureFlags.GetForceDistconfDisable());
         }));
         const auto scepter = QueryKeeper(runtime, fixture.Keepers.front(), true).GetScepter();
+        const auto current = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(current.GetSelfManagementConfig().GetEnabled(), selfManagement);
+        if (disabledMetadata) {
+            UNIT_ASSERT(fixture.Config.GetSelfManagementConfig().GetEnabled());
+            UNIT_ASSERT(current.GetGeneration() > fixture.Config.GetGeneration());
+        }
         trackDisconnects = true;
+        if (pauseParent) {
+            pauseRoot = true;
+            const auto edge = runtime.AllocateEdgeActor(1);
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            request->Record.MutableQueryWorkingRoot();
+            runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        }
         SimUntil(runtime, [] { return false; }, TDuration::Seconds(180));
         UNIT_ASSERT_VALUES_EQUAL(sessionPoisons, 0);
         UNIT_ASSERT_VALUES_EQUAL(disconnections, 0);
-        if (legacyParent) {
+        if (legacyParent || !selfManagement) {
             UNIT_ASSERT_VALUES_EQUAL(heartbeatRequests, 0);
         } else {
             UNIT_ASSERT_C(heartbeatRequests >= 3, "capable parents must retain the liveness watchdog");
         }
         UNIT_ASSERT(FindConvergedRoot(runtime, fixture.Keepers) == 1);
+        if (pauseParent) {
+            UNIT_ASSERT(!pausedEvents.empty());
+            pauseRoot = false;
+            ReplayDelayedEvents(runtime, pausedEvents);
+        }
         const auto after = QueryKeeper(runtime, fixture.Keepers.front(), true);
         UNIT_ASSERT(after.HasScepter());
         UNIT_ASSERT_VALUES_EQUAL(after.GetScepter().GetId(), scepter.GetId());
@@ -4821,6 +4855,14 @@ selector_config: []
 
     Y_UNIT_TEST(BindingToCapableParentWithDistconfEnabled) {
         CheckBindingLivenessPeerCapability(true, false);
+    }
+
+    Y_UNIT_TEST(PausedCapableParentWithDistconfDisabledKeepsInterconnectSession) {
+        CheckBindingLivenessPeerCapability(false, false, true);
+    }
+
+    Y_UNIT_TEST(CommittedDisableWithEnabledBaseKeepsInterconnectSession) {
+        CheckBindingLivenessPeerCapability(false, false, true, true);
     }
 
     void CheckBindingLivenessIgnoresRetiredEvents(bool rebind) {

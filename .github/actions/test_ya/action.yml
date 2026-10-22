@@ -937,3 +937,14 @@ runs:
         BUILD_PRESET: ${{ inputs.build_preset }}
         GITHUB_TOKEN: ${{ github.token }}
       run:  echo "Check cancelled" | .github/scripts/tests/comment-pr.py --color black
+
+    - name: Clean runner disk
+      if: always()
+      shell: bash
+      run: |
+        set +e
+        if [ -n "${TMP_DIR:-}" ]; then
+          rm -rf "$TMP_DIR"
+        fi
+        rm -rf "${HOME}/.ya"
+        df -h / || true

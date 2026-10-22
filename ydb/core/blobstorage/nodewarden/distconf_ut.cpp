@@ -4817,10 +4817,10 @@ selector_config: []
         trackDisconnects = true;
         if (pauseParent) {
             pauseRoot = true;
-            const auto edge = runtime.AllocateEdgeActor(1);
+            const auto requester = runtime.Register(new TIgnoreActor, 1);
             auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
             request->Record.MutableQueryWorkingRoot();
-            runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+            runtime.Send(new IEventHandle(fixture.Keepers.front(), requester, request.release()), 1);
         }
         SimUntil(runtime, [] { return false; }, TDuration::Seconds(180));
         UNIT_ASSERT_VALUES_EQUAL(sessionPoisons, 0);

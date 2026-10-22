@@ -25,7 +25,7 @@ namespace NTable {
 
         Tail = 1,
         Head = 17,
-        Edge = 30,
+        Edge = 31,
     };
 
     /* The least evolution required to read redo log events with savepoint
@@ -103,6 +103,9 @@ namespace NTable {
        30   Uncommitted deltas with savepoint seq nums in redo log
             (ERedo::UpdateTxSavepointSeqNum). Only written when used,
             such redo chunks require at least this evolution to read.
+     ---------------------------------------------------------------------
+       31   Parts with a separate descriptor page collection, data pages
+            and indexes of each group in its own page collection
      */
 
 }

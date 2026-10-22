@@ -37,10 +37,13 @@ namespace NTable {
         };
 
         struct TLoaderEnv : public IPages {
-            TLoaderEnv(TIntrusivePtr<TPageCollection> pageCollection, TPartSlots slots)
-                : PageCollection(std::move(pageCollection))
+            TLoaderEnv(TVector<TIntrusivePtr<TPageCollection>> pageCollections, TPartSlots slots)
+                : PageCollections(std::move(pageCollections))
                 , Slots(slots)
+                , SavedPages(Slots.SlotsCount())
+                , NeedPages(Slots.SlotsCount())
             {
+                Y_ENSURE(PageCollections.size() >= Slots.SlotsCount());
             }
 
             TResult Locate(const TMemTable*, ui64, ui32) override
@@ -72,28 +75,29 @@ namespace NTable {
             }
 
             /**
-             * Loads a page of the page collection, only the descriptor page collection is supported
+             * Loads a page of the page collection, the outer page collection is not supported
              */
             const TSharedData* TryGetSlotPage(ui32 slot, const TPageLocation& location)
             {
-                Y_ENSURE(slot == Slots.DescriptorSlot(), "Unsupported page collection " << slot);
+                Y_ENSURE(slot < Slots.SlotsCount(), "Unsupported page collection " << slot);
 
-                auto savedPage = SavedPages.find(location.Offset);
+                auto& savedPages = SavedPages[slot];
+                auto savedPage = savedPages.find(location.Offset);
 
-                if (savedPage == SavedPages.end()) {
-                    if (auto cachedPage = PageCollection->FindPage(location.Offset); cachedPage) {
+                if (savedPage == savedPages.end()) {
+                    if (auto cachedPage = PageCollections[slot]->FindPage(location.Offset); cachedPage) {
                         if (auto sharedPageRef = cachedPage->SharedBody; sharedPageRef && sharedPageRef.Use()) {
                             // Save page in case it's evicted on the next iteration
-                            AddSavedPage(location.Offset, std::move(sharedPageRef));
-                            savedPage = SavedPages.find(location.Offset);
+                            AddSavedPage(slot, location.Offset, std::move(sharedPageRef));
+                            savedPage = savedPages.find(location.Offset);
                         }
                     }
                 }
 
-                if (savedPage != SavedPages.end()) {
+                if (savedPage != savedPages.end()) {
                     return &savedPage->second;
                 } else {
-                    auto [it, inserted] = NeedPages.emplace(location);
+                    auto [it, inserted] = NeedPages[slot].emplace(location);
                     Y_DEBUG_ABORT_UNLESS(inserted || *it == location);
                     return nullptr;
                 }
@@ -101,43 +105,51 @@ namespace NTable {
 
             void EnsureNoNeedPages() const
             {
-                Y_ENSURE(!NeedPages);
+                for (const auto& needPages : NeedPages) {
+                    Y_ENSURE(!needPages);
+                }
             }
 
+            /**
+             * Returns missing pages of a single page collection, they are expected to be saved before the next fetch
+             */
             TFetch GetFetch()
             {
-                if (NeedPages) {
-                    TVector<TPageLocation> pages(NeedPages.begin(), NeedPages.end());
-                    std::sort(pages.begin(), pages.end());
-                    return {
-                        .PageCollection = PageCollection->PageCollection,
-                        .Pages = std::move(pages)
-                    };
-                } else {
-                    return {};
+                for (ui32 slot : xrange(NeedPages.size())) {
+                    if (const auto& needPages = NeedPages[slot]) {
+                        TVector<TPageLocation> pages(needPages.begin(), needPages.end());
+                        std::sort(pages.begin(), pages.end());
+                        FetchSlot = slot;
+                        return {
+                            .PageCollection = PageCollections[slot]->PageCollection,
+                            .Pages = std::move(pages)
+                        };
+                    }
                 }
+                return {};
             }
 
             void Save(NSharedCache::TEvResult::TLoaded&& loaded)
             {
-                auto it = NeedPages.find(TPageLocation(loaded.Offset));
-                Y_ENSURE(it != NeedPages.end(), "Got unknown page at " << loaded.Offset);
+                auto& needPages = NeedPages.at(FetchSlot);
+                auto it = needPages.find(TPageLocation(loaded.Offset));
+                Y_ENSURE(it != needPages.end(), "Got unknown page at " << loaded.Offset << " of page collection " << FetchSlot);
                 EPage pageType = it->Type;
-                NeedPages.erase(it);
+                needPages.erase(it);
 
                 bool sticky = NeedIn(pageType) || pageType == EPage::FlatIndex;
-                AddSavedPage(loaded.Offset, loaded.Page);
+                AddSavedPage(FetchSlot, loaded.Offset, loaded.Page);
                 if (sticky) {
-                    PageCollection->AddStickyPage(loaded.Offset, loaded.Size, std::move(loaded.Page));
+                    PageCollections[FetchSlot]->AddStickyPage(loaded.Offset, loaded.Size, std::move(loaded.Page));
                 } else {
-                    PageCollection->AddPage(loaded.Offset, loaded.Size, std::move(loaded.Page));
+                    PageCollections[FetchSlot]->AddPage(loaded.Offset, loaded.Size, std::move(loaded.Page));
                 }
             }
 
         private:
-            void AddSavedPage(TPageOffset offset, NSharedCache::TSharedPageRef page)
+            void AddSavedPage(ui32 slot, TPageOffset offset, NSharedCache::TSharedPageRef page)
             {
-                SavedPages[offset] = NSharedCache::TPinnedPageRef(page).GetData();
+                SavedPages[slot][offset] = NSharedCache::TPinnedPageRef(page).GetData();
                 SavedPagesRefs.emplace_back(std::move(page));
             }
 
@@ -148,12 +160,13 @@ namespace NTable {
             };
 
             const TPart* Part = nullptr;
-            TIntrusivePtr<TPageCollection> PageCollection;
+            const TVector<TIntrusivePtr<TPageCollection>> PageCollections;
             const TPartSlots Slots;
-            THashMap<TPageOffset, TSharedData> SavedPages;
+            TVector<THashMap<TPageOffset, TSharedData>> SavedPages;
             TVector<NSharedCache::TSharedPageRef> SavedPagesRefs;
             // Dedup by offset — keep Size/Type for the fetch request
-            THashSet<TPageLocation, NPage::TPageLocationByOffsetHash, TPageLocationByOffsetEq> NeedPages;
+            TVector<THashSet<TPageLocation, NPage::TPageLocationByOffsetHash, TPageLocationByOffsetEq>> NeedPages;
+            ui32 FetchSlot = Max<ui32>(); // page collection of the last fetch
         };
 
         struct TRunOptions {
@@ -267,7 +280,7 @@ namespace NTable {
     private:
         TPartSlots GetSlots() const noexcept
         {
-            return TPartSlots(Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size()));
+            return TPartSlots(Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size()), PartLayout);
         }
 
         bool HasBasics() const noexcept
@@ -317,6 +330,8 @@ namespace NTable {
         TVector<NPage::TBtreeIndexMeta> BTreeHistoricIndexes;
         TRowVersion MinRowVersion;
         TRowVersion MaxRowVersion;
+        TPartLayout PartLayout;
+        TVector<NPage::TGroupId> StrippedV1Shadows; // groups with a stripped V1 shadow of the V2 b-tree index
         NProto::TRoot Root;
         TPartView PartView;
         THolder<TLoaderEnv> LoaderEnv;

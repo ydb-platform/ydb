@@ -137,6 +137,23 @@ struct TStats {
     }
 };
 
+// Adds index sizes of the part by channels of the page collections with its indexes
+inline void AddIndexSize(TChanneledDataSize& indexSize, const TPart& part) {
+    if (part.IndexPages.HasBTree()) {
+        // Raw size of b-tree indexes is the sum of their sizes
+        for (bool historic : {false, true}) {
+            const auto& metas = historic ? part.IndexPages.BTreeHistoric : part.IndexPages.BTreeGroups;
+            for (ui32 groupIndex : xrange(metas.size())) {
+                const NPage::TGroupId groupId(groupIndex, historic);
+                indexSize.Add(metas[groupIndex].IndexSize, part.GetIndexChannel(groupId));
+            }
+        }
+    } else {
+        // Flat indexes are written only to a single page collection
+        indexSize.Add(part.IndexesRawSize, part.GetIndexChannel({ }));
+    }
+}
+
 class TKeyAccessSample {
 public:
     enum class EAccessKind {

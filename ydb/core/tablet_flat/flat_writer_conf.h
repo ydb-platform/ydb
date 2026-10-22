@@ -34,7 +34,7 @@ namespace NWriter {
         ui8 OuterChannel = NTable::TScheme::DefaultChannel;   /* Channel for packed cell values */
         ui8 ExtraChannel = NTable::TScheme::DefaultChannel;   /* Channel for storing additional data */
         NUtil::TChannelsShares ChannelsShares; /* Channels shares for data distribution */
-        TVector<TGroup> Groups; /* Per-group page collection settings */
+        TVector<TGroup> Groups; /* Per page collection settings, by slot of the part (see TPartSlots), except outer */
         TVector<TSlot> Slots;   /* Storage slots, referred by rooms */
         bool StickyFlatIndex = true;
         bool WriteBTreeIndexV1 = true;

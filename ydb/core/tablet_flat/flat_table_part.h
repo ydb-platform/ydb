@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "flat_part_scheme.h"
+#include "flat_part_slots.h"
 #include "flat_page_btree_index.h"
 #include "flat_page_flat_index.h"
 #include "flat_page_data.h"
@@ -35,54 +36,6 @@ namespace NTable {
     }
 
     using TPageRef = NPage::TPageRef;
-
-    /**
-     * Maps kinds of part pages to page collections (slots) of the part
-     *
-     * Shared by the part and its loader, which needs it before the part is created
-     */
-    class TPartSlots {
-    public:
-        explicit TPartSlots(ui32 groupsCount) noexcept
-            : GroupsCount(groupsCount)
-        { }
-
-        /**
-         * Slot with the part root (Schem2), bloom filters, frames, globs and stats pages
-         */
-        ui32 DescriptorSlot() const noexcept
-        {
-            return 0;
-        }
-
-        /**
-         * Slot with data pages of the column group, historic data pages share the slot of their group
-         */
-        ui32 DataSlot(NPage::TGroupId groupId) const noexcept
-        {
-            return groupId.Index;
-        }
-
-        /**
-         * Slot with index pages (flat or b-tree) of the column group, historic ones included
-         */
-        ui32 IndexSlot(NPage::TGroupId groupId) const noexcept
-        {
-            Y_UNUSED(groupId);
-            return 0;
-        }
-
-        /**
-         * Slot with outer (packed) values
-         */
-        ui32 OuterSlot() const noexcept
-        {
-            return GroupsCount;
-        }
-
-    private:
-        ui32 GroupsCount;
-    };
 
     /**
      * Cold parts are parts that don't have any metadata loaded into memory,
@@ -177,6 +130,7 @@ namespace NTable {
             TRowVersion MaxRowVersion;
             TIntrusiveConstPtr<NPage::TGarbageStats> GarbageStats;
             TIntrusiveConstPtr<NPage::TTxIdStatsPage> TxIdStats;
+            TPartLayout Layout = { };
         };
 
         struct TStat {
@@ -202,7 +156,7 @@ namespace NTable {
             , Stat(stat)
             , GroupsCount(Max(IndexPages.FlatGroups.size(), IndexPages.BTreeGroups.size()))
             , HistoricGroupsCount(Max(IndexPages.FlatHistoric.size(), IndexPages.BTreeHistoric.size()))
-            , Slots(GroupsCount)
+            , Slots(GroupsCount, params.Layout)
             , IndexesRawSize(params.IndexesRawSize)
             , MinRowVersion(params.MinRowVersion)
             , MaxRowVersion(params.MaxRowVersion)
@@ -321,6 +275,11 @@ namespace NTable {
         const NPageCollection::IPageCollection* GetIndexPageCollection(NPage::TGroupId groupId) const
         {
             return GetPageCollection(IndexSlot(groupId));
+        }
+
+        ui8 GetIndexChannel(NPage::TGroupId groupId) const
+        {
+            return GetSlotChannel(IndexSlot(groupId));
         }
 
     protected:

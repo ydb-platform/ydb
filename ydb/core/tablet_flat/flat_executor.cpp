@@ -752,14 +752,41 @@ void TExecutor::LogWaitingTransaction(const TTransactionWaitPad& transaction) {
 
 namespace {
 
-// A page collection is sticky when it holds data pages of a sticky group.
-bool IsStickySlot(const NTable::TPartStore& partStore, ui32 slot, const TVector<bool>& stickyGroups) {
-    for (size_t groupIndex : xrange(stickyGroups.size())) {
-        if (stickyGroups[groupIndex] && partStore.DataSlot(NTable::NPage::TGroupId(groupIndex)) == slot) {
-            return true;
+// The group whose cache settings apply to a page collection of the part: the group of its data pages,
+// or the main group for a separate descriptor page collection (written to the leader family channel).
+size_t SlotLeaderGroup(const NTable::TPartStore& partStore, ui32 slot) {
+    for (size_t groupIndex : xrange(partStore.GroupsCount)) {
+        if (partStore.DataSlot(NTable::NPage::TGroupId(groupIndex)) == slot) {
+            return groupIndex;
         }
     }
-    return false;
+    Y_ENSURE(slot == partStore.DescriptorSlot(), "Page collection " << slot << " has no leader group");
+    return 0;
+}
+
+// A page collection is sticky when its leader group is sticky.
+bool IsStickySlot(const NTable::TPartStore& partStore, ui32 slot, const TVector<bool>& stickyGroups) {
+    return stickyGroups[SlotLeaderGroup(partStore, slot)];
+}
+
+// Descriptor pages of a part are written to the main channel of the leader family room. When data
+// of the main group goes to another channel, the part gets a separate descriptor page collection,
+// which needs b-tree index only. Returns true if it does.
+bool ApplyDescriptorChannel(NTable::NPage::TConf& layout, NWriter::TConf& writer, ui8 descriptorChannel) {
+    Y_ENSURE(!writer.Groups.empty());
+
+    const bool writeBTreeIndex = layout.WriteBTreeIndexV1 || layout.WriteBTreeIndexV2;
+    if (descriptorChannel == writer.Groups[0].Channel || !writeBTreeIndex) {
+        return false;
+    }
+
+    layout.Layout.SeparateDescriptorCollection = true;
+    layout.WriteFlatIndex = false;
+
+    auto descriptor = writer.Groups[0];
+    descriptor.Channel = descriptorChannel;
+    writer.Groups.insert(writer.Groups.begin(), descriptor);
+    return true;
 }
 
 // The shared cache walks a group's B-tree when one of its collections is in memory or it is sticky.
@@ -843,9 +870,9 @@ void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, c
             Stats->PacksMetaBytes += pack->Meta.Raw.size();
     }
 
-    for (size_t groupIndex : xrange(partView->GroupsCount)) {
-        partStore->PageCollections[partStore->DataSlot(NTable::NPage::TGroupId(groupIndex))]->SetCacheMode(
-            GetCacheMode(partView->Scheme->Groups[groupIndex].Columns, cacheModes)
+    for (ui32 slot : xrange(partStore->Slots.SlotsCount())) {
+        partStore->PageCollections[slot]->SetCacheMode(
+            GetCacheMode(partView->Scheme->Groups[SlotLeaderGroup(*partStore, slot)].Columns, cacheModes)
         );
     }
 
@@ -1638,14 +1665,18 @@ void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const 
     const auto stickyGroups = MakeStickyGroups(partView, stickyColumns);
     TVector<bool> modeChanged(partStore->PageCollections.size(), false);
 
-    for (size_t groupIndex : xrange(partView->GroupsCount)) {
+    for (ui32 slot : xrange(partStore->Slots.SlotsCount())) {
+        const size_t groupIndex = SlotLeaderGroup(*partStore, slot);
         ECacheMode cacheMode = GetCacheMode(partView->Scheme->Groups[groupIndex].Columns, cacheModes);
-        const ui32 slot = partStore->DataSlot(NTable::NPage::TGroupId(groupIndex));
         auto* pageCollection = partStore->PageCollections[slot].Get();
 
-        if (PrivatePageCache->UpdateCacheMode(cacheMode, pageCollection)) {
-            modeChanged[slot] = true;
-        }
+        modeChanged[slot] = PrivatePageCache->UpdateCacheMode(cacheMode, pageCollection);
+    }
+
+    // A separate descriptor page collection has no data pages to attach B-tree seeds with
+    if (const ui32 slot = partStore->DescriptorSlot(); slot != partStore->DataSlot({ }) && modeChanged[slot]) {
+        auto* pageCollection = partStore->PageCollections[slot].Get();
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode()));
     }
 
     // A group is re-seeded when the mode of the collection with its data or index pages changes.
@@ -5243,6 +5274,8 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
         }
     };
 
+    ui8 descriptorChannel = NTable::TScheme::DefaultChannel;
+
     for (size_t group : xrange(rowScheme->Families.size())) {
         auto familyId = rowScheme->Families[group];
         static const NTable::TScheme::TFamily defaultFamilySettings;
@@ -5275,7 +5308,13 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
             addChannel(room->Outer);
 
             cfg.Writer.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
+
+            descriptorChannel = room->Main;
         }
+    }
+
+    if (ApplyDescriptorChannel(cfg.Layout, cfg.Writer, descriptorChannel)) {
+        addChannel(descriptorChannel);
     }
 
     cfg.DataKind = DataKindByTabletType(Owner->TabletType());
@@ -5379,6 +5418,8 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         }
     };
 
+    ui8 descriptorChannel = NTable::TScheme::DefaultChannel;
+
     for (size_t group : xrange(rowScheme->Families.size())) {
         auto familyId = rowScheme->Families[group];
         static const NTable::TScheme::TFamily defaultFamilySettings;
@@ -5413,7 +5454,15 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
             addChannel(room->Outer);
 
             comp->Writer.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
+
+            descriptorChannel = room->Main;
         }
+    }
+
+    // Data of the main group is written to the leader family channel too until tier compaction,
+    // so parts keep descriptor pages and main group data in a single page collection
+    if (ApplyDescriptorChannel(comp->Layout, comp->Writer, descriptorChannel)) {
+        addChannel(descriptorChannel);
     }
 
     if (const auto& ranges = Database->GetRemovedRowVersions(table)) {

@@ -252,8 +252,7 @@ public:
             if (part.Slices && part.Slices->back().LastKey.GetCells()) {
                 endKey = MakeCellsIterableKey(part.Part.Get(), part.Slices->back().LastKey);
             }
-            auto* pageColl = part->GetPageCollection(0);
-            auto rootLoc = GetBTreeRootLocation(meta, pageColl, pageColl);
+            auto rootLoc = part->IndexPages.GetRootLocation(part.Part.Get(), {});
             LoadedStateNodes.emplace_back(part.Part.Get(), TPageRef(rootLoc), meta.LevelCount(), 0, meta.GetRowCount(), 0,
                                           meta.GetTotalDataSize(), beginKey, endKey);
             if (part.Slices) ready &= SlicePart(*part.Slices, LoadedStateNodes.back());
@@ -563,8 +562,8 @@ private:
     bool TryLoadNode(const TNodeState& parent, const auto& addNode) {
         Y_ENSURE(parent.Level);
 
-        auto location = ResolvePageLocation(parent.Part, parent.Ref, {});
-        auto page = Env->TryGetPage(parent.Part, location, {});
+        auto location = ResolveIndexPageLocation(parent.Part, parent.Ref, {});
+        auto page = Env->TryGetIndexPage(parent.Part, location, {});
         if (!page) {
             return false;
         }

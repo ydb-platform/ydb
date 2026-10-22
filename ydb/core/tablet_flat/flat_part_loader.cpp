@@ -247,11 +247,13 @@ void TLoader::StageParseMeta()
         PageCollections.back() = std::move(cache);
     }
 
-    LoaderEnv = MakeHolder<TLoaderEnv>(PageCollections[0]);
+    const auto slots = GetSlots();
+
+    LoaderEnv = MakeHolder<TLoaderEnv>(PageCollections[slots.DescriptorSlot()], slots);
 
     if (!HasBasics() || (Rooted && SchemeId != meta.TotalPages() - 1)
         || (LargeId == Max<TPageId>()) != (GlobsId == Max<TPageId>())
-        || (Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size()) + (SmallId == Max<TPageId>() ? 0 : 1)) != PageCollections.size())
+        || (slots.OuterSlot() + (SmallId == Max<TPageId>() ? 0 : 1)) != PageCollections.size())
     {
         Y_TABLET_ERROR("Part " << PageCollections[0]->PageCollection->Label() << " has"
             << " invalid layout : " << (Rooted ? "rooted" : "legacy")
@@ -271,37 +273,48 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
     Y_ENSURE(!PartView, "PartView already initialized in CreatePartView stage");
     Y_ENSURE(PageCollections && PageCollections.front());
 
+    const auto slots = GetSlots();
+
+    // Root, bloom, frames, globs and stats pages
     auto getPage = [&](TPageId pageId) {
+        const ui32 slot = slots.DescriptorSlot();
         return pageId == Max<TPageId>()
             ? nullptr
-            : LoaderEnv->TryGetPage(nullptr, PageCollections[0]->PageCollection->GetLocation(pageId), {});
+            : LoaderEnv->TryGetSlotPage(slot, PageCollections[slot]->PageCollection->GetLocation(pageId));
     };
-    auto getMetaPage = [&](const NPage::TBtreeIndexMeta& meta) {
-        return meta.HasRootV2() ? LoaderEnv->TryGetPage(nullptr, meta.RootV2, {})
-                                : getPage(meta.RootV1PageId());
+    auto getIndexPage = [&](TPageId pageId, NPage::TGroupId groupId) {
+        return pageId == Max<TPageId>()
+            ? nullptr
+            : LoaderEnv->TryGetIndexPage(nullptr, PageCollections[slots.IndexSlot(groupId)]->PageCollection->GetLocation(pageId), groupId);
+    };
+    auto getMetaPage = [&](const NPage::TBtreeIndexMeta& meta, NPage::TGroupId groupId) {
+        return meta.HasRootV2() ? LoaderEnv->TryGetIndexPage(nullptr, meta.RootV2, groupId)
+                                : getIndexPage(meta.RootV1PageId(), groupId);
     };
 
     if (BTreeGroupIndexes) {
         if (preloadIndex) {
             // Note: preload root nodes only because we don't want to have multiple restarts here
-            for (const auto& meta : BTreeGroupIndexes) {
-                if (meta.LevelCount()) getMetaPage(meta);
+            for (ui32 groupIndex : xrange(BTreeGroupIndexes.size())) {
+                const auto& meta = BTreeGroupIndexes[groupIndex];
+                if (meta.LevelCount()) getMetaPage(meta, NPage::TGroupId(groupIndex));
             }
-            for (const auto& meta : BTreeHistoricIndexes) {
-                if (meta.LevelCount()) getMetaPage(meta);
+            for (ui32 groupIndex : xrange(BTreeHistoricIndexes.size())) {
+                const auto& meta = BTreeHistoricIndexes[groupIndex];
+                if (meta.LevelCount()) getMetaPage(meta, NPage::TGroupId(groupIndex, true));
             }
         }
     } else if (FlatGroupIndexes) {
-        for (auto indexPageId : FlatGroupIndexes) {
-            getPage(indexPageId);
+        for (ui32 groupIndex : xrange(FlatGroupIndexes.size())) {
+            getIndexPage(FlatGroupIndexes[groupIndex], NPage::TGroupId(groupIndex));
         }
-        for (auto indexPageId : FlatHistoricIndexes) {
-            getPage(indexPageId);
+        for (ui32 groupIndex : xrange(FlatHistoricIndexes.size())) {
+            getIndexPage(FlatHistoricIndexes[groupIndex], NPage::TGroupId(groupIndex, true));
         }
     }
 
     for (auto pageId: { SchemeId, GlobsId, SmallId, LargeId, ByKeyId, GarbageStatsId, TxIdStatsId }) {
-        Y_DEBUG_ABORT_UNLESS(pageId == Max<TPageId>() || NeedIn(PageCollections[0]->GetPageType(pageId)));
+        Y_DEBUG_ABORT_UNLESS(pageId == Max<TPageId>() || NeedIn(PageCollections[slots.DescriptorSlot()]->GetPageType(pageId)));
         getPage(pageId);
     }
 
@@ -325,11 +338,11 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
         Y_TABLET_ERROR("Scheme page is not loaded");
     } else if (ByKeyId != Max<TPageId>() && !byKey) {
         Y_TABLET_ERROR("Filter page must be loaded if it exists");
-    } else if (small && PageCollections.size() != (1 + Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size()))) {
+    } else if (small && PageCollections.size() != slots.OuterSlot() + 1) {
         Y_TABLET_ERROR("TPart has small blobs, " << PageCollections.size() << " page collections");
     }
 
-    const auto extra = BlobsLabelFor(PageCollections[0]->PageCollection->Label());
+    const auto extra = BlobsLabelFor(PageCollections[slots.DescriptorSlot()]->PageCollection->Label());
 
     auto *stat = Root.HasStat() ? &Root.GetStat() : nullptr;
 
@@ -347,11 +360,11 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
         }
         // Note: although we also have flat index, it shouldn't be loaded; so let's not count it here
     } else {
-        for (auto indexPage : FlatGroupIndexes) {
-            indexesRawSize += PageCollections[0]->GetPageSize(indexPage);
+        for (ui32 groupIndex : xrange(FlatGroupIndexes.size())) {
+            indexesRawSize += PageCollections[slots.IndexSlot(NPage::TGroupId(groupIndex))]->GetPageSize(FlatGroupIndexes[groupIndex]);
         }
-        for (auto indexPage : FlatHistoricIndexes) {
-            indexesRawSize += PageCollections[0]->GetPageSize(indexPage);
+        for (ui32 groupIndex : xrange(FlatHistoricIndexes.size())) {
+            indexesRawSize += PageCollections[slots.IndexSlot(NPage::TGroupId(groupIndex, true))]->GetPageSize(FlatHistoricIndexes[groupIndex]);
         }
     }
 
@@ -512,16 +525,16 @@ TLoader::TFetch TLoader::StagePreloadData()
         return {};
     }
 
-    // V1 path
-    auto pageCollection = partStore->PageCollections[0]->PageCollection;
+    // V1 path: all pages of the page collection with data pages of the main group
+    const ui32 slot = partStore->DataSlot({});
+    auto pageCollection = partStore->PageCollections[slot]->PageCollection;
     auto total = pageCollection->MetaPages();
-    auto* part = PartView.Part.Get();
 
     for (TPageId pageId : xrange(total)) {
         if (NPageCollection::IsDeadPage(*pageCollection, pageId)) {
             continue;
         }
-        LoaderEnv->TryGetPage(part, pageCollection->GetLocation(pageId), {});
+        LoaderEnv->TryGetSlotPage(slot, pageCollection->GetLocation(pageId));
     }
 
     return LoaderEnv->GetFetch();

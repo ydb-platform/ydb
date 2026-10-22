@@ -22,6 +22,13 @@ namespace NTable {
 namespace {
     using namespace NTest;
 
+    // Loads a page of the main group requested by a forward cache, which queues both index and data pages
+    const TSharedData* LoadQueuedPage(TTestEnv& env, const TPart* part, const NPage::TPageLocation& location) {
+        return NPage::IsIndexPage(location.Type)
+            ? env.TryGetIndexPage(part, location, { })
+            : env.TryGetPage(part, location, { });
+    }
+
     // Minimal IPageCollection mock for blobs forward cache tests.
     // Uses TFrames::Relation to provide page size, returns CRC32=0.
     struct TBlobPageCollection : public NPageCollection::IPageCollection {
@@ -279,7 +286,7 @@ namespace {
             size_t i = 0;
             for (auto& loc : std::exchange(Queue, TDeque<TPageLocation>{})) {
                 UNIT_ASSERT_VALUES_EQUAL_C(loc.Offset, Part->GetPageLocation(pageIds[i++], { }).Offset, CurrentStepStr());
-                load.emplace_back(loc, *testEnv.TryGetPage(Part.Get(), loc, { }));
+                load.emplace_back(loc, *LoadQueuedPage(testEnv, Part.Get(), loc));
             }
 
             Shuffle(load.begin(), load.end(), Rnd);
@@ -327,7 +334,7 @@ namespace {
                     }
                 }
                 UNIT_ASSERT_C(found, CurrentStepStr());
-                load.emplace_back(location, *testEnv.TryGetPage(Part.Get(), location, { }));
+                load.emplace_back(location, *LoadQueuedPage(testEnv, Part.Get(), location));
             }
 
             Shuffle(load.begin(), load.end(), Rnd);
@@ -1710,7 +1717,7 @@ struct TCacheWrapV2 : public NTest::TSteps<TCacheWrapV2>, protected NFwd::IPageL
         size_t i = 0;
         for (auto& loc : std::exchange(Queue, TDeque<NPage::TPageLocation>{})) {
             UNIT_ASSERT_VALUES_EQUAL_C(loc.Offset, offsets[i++], CurrentStepStr());
-            load.emplace_back(loc, *testEnv.TryGetPage(Part.Get(), loc, { }));
+            load.emplace_back(loc, *LoadQueuedPage(testEnv, Part.Get(), loc));
         }
 
         Shuffle(load.begin(), load.end(), Rnd);
@@ -1752,7 +1759,7 @@ struct TCacheWrapV2 : public NTest::TSteps<TCacheWrapV2>, protected NFwd::IPageL
                 }
             }
             UNIT_ASSERT_C(found, CurrentStepStr());
-            load.emplace_back(location, *testEnv.TryGetPage(Part.Get(), location, { }));
+            load.emplace_back(location, *LoadQueuedPage(testEnv, Part.Get(), location));
         }
 
         Shuffle(load.begin(), load.end(), Rnd);

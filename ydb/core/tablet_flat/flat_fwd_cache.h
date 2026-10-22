@@ -88,12 +88,6 @@ namespace NFwd {
             return ptr->Level;
         }
 
-        TGroupId GetGroup(TPageOffset offset) {
-            auto ptr = Map.FindPtr(offset);
-            Y_ENSURE(ptr, "Unknown page");
-            return ptr->GroupId;
-        }
-
         const TMap<TPageOffset, TIndexPageLocation>& GetMap() {
             return Map;
         }

@@ -108,7 +108,7 @@ namespace {
         TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
         auto indexPageId = part.IndexPages.GetFlat({});
-        auto indexPage = Env->TryGetPage(&part, part.GetPageLocation(indexPageId, {}), {});
+        auto indexPage = Env->TryGetIndexPage(&part, part.GetIndexPageLocation(indexPageId, {}), {});
 
         if (!indexPage) {
             Out
@@ -311,7 +311,9 @@ namespace {
 
         auto dumpChild = [&](const NPage::TBtreeIndexNode &node, NPage::TRecIdx pos) {
             auto childRef = node.GetChild(pos, isLeafLevel);
-            auto childLoc = NTable::ResolvePageLocation(&part, childRef, {});
+            auto childLoc = isLeafLevel
+                ? NTable::ResolvePageLocation(&part, childRef, {})
+                : NTable::ResolveIndexPageLocation(&part, childRef, {});
             if (childLoc.Type == (v2Format ? NPage::EPage::BTreeIndexV2 : NPage::EPage::BTreeIndex)) {
                 BTreeIndexNode(part, childLoc, node.ChildToString(pos), level + 1, totalLevels - 1, v2Format);
             } else {
@@ -319,7 +321,7 @@ namespace {
             }
         };
 
-        auto page = Env->TryGetPage(&part, loc, {});
+        auto page = Env->TryGetIndexPage(&part, loc, {});
         if (!page) {
             Out << intend << " | -- the rest of the index pages aren't loaded" << Endl;
             return;

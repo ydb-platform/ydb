@@ -232,6 +232,7 @@ class TDryRunExecutor
         TResult Locate(const NTable::TMemTable*, ui64, ui32) override { Y_TABLET_ERROR("Not supported"); }
         TResult Locate(const NTable::TPart*, ui64, NTable::ELargeObj) override { Y_TABLET_ERROR("Not supported"); }
         const TSharedData* TryGetPage(const NTable::TPart*, const TPageLocation&, TGroupId) override { Y_TABLET_ERROR("Not supported"); }
+        const TSharedData* TryGetIndexPage(const NTable::TPart*, const TPageLocation&, TGroupId) override { Y_TABLET_ERROR("Not supported"); }
     };
 
     struct TDryRunStats : public TExecutorStats {};

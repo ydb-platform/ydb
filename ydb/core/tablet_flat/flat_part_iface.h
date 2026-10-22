@@ -73,7 +73,19 @@ namespace NTable {
 
         virtual TResult Locate(const TMemTable*, ui64 ref, ui32 tag) = 0;
         virtual TResult Locate(const TPart*, ui64 ref, ELargeObj lob) = 0;
+
+        /**
+         * Returns a data page of the column group, or nullptr if it is not loaded yet
+         */
         virtual const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) = 0;
+
+        /**
+         * Returns an index page (flat or b-tree) of the column group, or nullptr if it is not loaded yet
+         *
+         * Index pages may be stored in another page collection than data pages of the same group,
+         * so the page collection is chosen by the part (TPart::IndexSlot) rather than the caller
+         */
+        virtual const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) = 0;
 
         /**
          * Hook for cleaning up env on DB.RollbackChanges()

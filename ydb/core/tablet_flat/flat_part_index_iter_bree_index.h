@@ -359,7 +359,7 @@ private:
             return true;
         }
 
-        auto page = Env->TryGetPage(Part, state.Location, {});
+        auto page = Env->TryGetIndexPage(Part, state.Location, GroupId);
         if (page) {
             state.Node.emplace(*page, Meta.HasRootV2());
             return true;

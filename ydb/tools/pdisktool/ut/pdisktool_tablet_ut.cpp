@@ -212,6 +212,10 @@ struct TSourceDb {
         const TSharedData* TryGetPage(const NTable::TPart*, const TPageLocation&, TGroupId) override {
             return nullptr;
         }
+
+        const TSharedData* TryGetIndexPage(const NTable::TPart*, const TPageLocation&, TGroupId) override {
+            return nullptr;
+        }
     };
 
     TNoPages Env;

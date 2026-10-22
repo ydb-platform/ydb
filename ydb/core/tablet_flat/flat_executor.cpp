@@ -752,6 +752,16 @@ void TExecutor::LogWaitingTransaction(const TTransactionWaitPad& transaction) {
 
 namespace {
 
+// A page collection is sticky when it holds data pages of a sticky group.
+bool IsStickySlot(const NTable::TPartStore& partStore, ui32 slot, const TVector<bool>& stickyGroups) {
+    for (size_t groupIndex : xrange(stickyGroups.size())) {
+        if (stickyGroups[groupIndex] && partStore.DataSlot(NTable::NPage::TGroupId(groupIndex)) == slot) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // The shared cache walks a group's B-tree when one of its collections is in memory or it is sticky.
 TVector<NSharedCache::TEvAttach::TBtreeSeed> MakeBtreeSeeds(const NTable::TPartStore& partStore,
     size_t groupIndex, const TVector<bool>& stickyGroups)
@@ -761,10 +771,12 @@ TVector<NSharedCache::TEvAttach::TBtreeSeed> MakeBtreeSeeds(const NTable::TPartS
         return {};
     }
 
+    const NTable::NPage::TGroupId mainGroupId(groupIndex);
     const bool sticky = stickyGroups[groupIndex];
-    const bool keepIndexPages = partStore.PageCollections[0]->GetCacheMode() == ECacheMode::TryKeepInMemory;
-    const bool keepDataPages = partStore.PageCollections[groupIndex]->GetCacheMode() == ECacheMode::TryKeepInMemory;
-    if (!keepIndexPages && !keepDataPages && !sticky && !stickyGroups[0]) {
+    const bool indexSticky = IsStickySlot(partStore, partStore.IndexSlot(mainGroupId), stickyGroups);
+    const bool keepIndexPages = partStore.PageCollections[partStore.IndexSlot(mainGroupId)]->GetCacheMode() == ECacheMode::TryKeepInMemory;
+    const bool keepDataPages = partStore.PageCollections[partStore.DataSlot(mainGroupId)]->GetCacheMode() == ECacheMode::TryKeepInMemory;
+    if (!keepIndexPages && !keepDataPages && !sticky && !indexSticky) {
         return {};
     }
 
@@ -779,14 +791,15 @@ TVector<NSharedCache::TEvAttach::TBtreeSeed> MakeBtreeSeeds(const NTable::TPartS
         if (!meta.HasRootV2()) {
             continue;
         }
+        const NTable::NPage::TGroupId groupId(groupIndex, historic);
         seeds.push_back({
-            .IndexCollectionId = partStore.PageCollections[0]->Id,
-            .DataCollectionId = partStore.PageCollections[groupIndex]->Id,
+            .IndexCollectionId = partStore.PageCollections[partStore.IndexSlot(groupId)]->Id,
+            .DataCollectionId = partStore.PageCollections[partStore.DataSlot(groupId)]->Id,
             .Root = meta.RootV2,
             .LevelCount = meta.LevelCount(),
             .QueueDataPages = keepDataPages || sticky,
             .Sticky = sticky,
-            .IndexCollectionSticky = stickyGroups[0],
+            .IndexCollectionSticky = indexSticky,
         });
     }
     return seeds;
@@ -826,16 +839,20 @@ void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, c
     }
 
     for (size_t groupIndex : xrange(partView->GroupsCount)) {
-        partStore->PageCollections[groupIndex]->SetCacheMode(
+        partStore->PageCollections[partStore->DataSlot(NTable::NPage::TGroupId(groupIndex))]->SetCacheMode(
             GetCacheMode(partView->Scheme->Groups[groupIndex].Columns, cacheModes)
         );
     }
 
-    for (size_t groupIndex = 0; groupIndex < partStore->PageCollections.size(); ++groupIndex) {
-        auto& cache = partStore->PageCollections[groupIndex];
-        auto seeds = groupIndex < partView->GroupsCount
-            ? MakeBtreeSeeds(*partStore, groupIndex, stickyGroups)
-            : TVector<NSharedCache::TEvAttach::TBtreeSeed>{};
+    // B-tree seeds of a group are attached with the page collection of its data pages
+    TVector<TVector<NSharedCache::TEvAttach::TBtreeSeed>> slotSeeds(partStore->PageCollections.size());
+    for (size_t groupIndex : xrange(partView->GroupsCount)) {
+        slotSeeds.at(partStore->DataSlot(NTable::NPage::TGroupId(groupIndex))) = MakeBtreeSeeds(*partStore, groupIndex, stickyGroups);
+    }
+
+    for (size_t slot = 0; slot < partStore->PageCollections.size(); ++slot) {
+        auto& cache = partStore->PageCollections[slot];
+        auto seeds = std::move(slotSeeds[slot]);
         const bool replayStickyWalk = replayStickyWalks && std::any_of(seeds.begin(), seeds.end(), [](const auto& seed) {
             return seed.Sticky || seed.IndexCollectionSticky;
         });
@@ -1611,26 +1628,26 @@ void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const 
 
     auto* partStore = partView.As<NTable::TPartStore>();
     const auto stickyGroups = MakeStickyGroups(partView, stickyColumns);
-    TVector<bool> modeChanged(Reserve(partView->GroupsCount));
-    bool indexModeChanged = false;
+    TVector<bool> modeChanged(partStore->PageCollections.size(), false);
 
     for (size_t groupIndex : xrange(partView->GroupsCount)) {
         ECacheMode cacheMode = GetCacheMode(partView->Scheme->Groups[groupIndex].Columns, cacheModes);
-        auto* pageCollection = partStore->PageCollections[groupIndex].Get();
+        const ui32 slot = partStore->DataSlot(NTable::NPage::TGroupId(groupIndex));
+        auto* pageCollection = partStore->PageCollections[slot].Get();
 
-        modeChanged.push_back(PrivatePageCache->UpdateCacheMode(cacheMode, pageCollection));
-        if (groupIndex == 0) {
-            indexModeChanged = modeChanged.back();
+        if (PrivatePageCache->UpdateCacheMode(cacheMode, pageCollection)) {
+            modeChanged[slot] = true;
         }
     }
 
-    // The B-trees of all groups live in the main collection, so its mode change re-seeds them all.
+    // A group is re-seeded when the mode of the collection with its data or index pages changes.
     for (size_t groupIndex : xrange(partView->GroupsCount)) {
-        if (!modeChanged[groupIndex] && !indexModeChanged) {
+        const NTable::NPage::TGroupId groupId(groupIndex);
+        if (!modeChanged[partStore->DataSlot(groupId)] && !modeChanged[partStore->IndexSlot(groupId)]) {
             continue;
         }
 
-        auto* pageCollection = partStore->PageCollections[groupIndex].Get();
+        auto* pageCollection = partStore->PageCollections[partStore->DataSlot(groupId)].Get();
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode(),
             MakeBtreeSeeds(*partStore, groupIndex, stickyGroups)));
     }
@@ -1644,7 +1661,8 @@ void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView, cons
 
     // The V2 trees are not enumerable from the part, so the shared cache walks the sticky groups.
     for (size_t groupIndex : xrange(partView->GroupsCount)) {
-        auto* pageCollection = partStore->PageCollections[groupIndex].Get();
+        const NTable::NPage::TGroupId groupId(groupIndex);
+        auto* pageCollection = partStore->PageCollections[partStore->DataSlot(groupId)].Get();
         if (auto seeds = MakeBtreeSeeds(*partStore, groupIndex, stickyGroups); seeds) {
             Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection,
                 pageCollection->GetCacheMode(), std::move(seeds)));
@@ -1652,7 +1670,7 @@ void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView, cons
 
         if (stickyGroups[groupIndex]) {
             Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
-                NBlockIO::EPriority::Bkgr, pageCollection->PageCollection, partStore->GetPages(groupIndex)),
+                NBlockIO::EPriority::Bkgr, pageCollection->PageCollection, partStore->GetPages(groupId)),
                 0, ui64(ERequestTypeCookie::StickyPages));
         }
     }
@@ -5143,7 +5161,7 @@ bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable
             const auto* schemeGroupRoom = tableInfo.Rooms.FindPtr(family.Room);
             Y_ENSURE(schemeGroupRoom, "Cannot find room " << family.Room << " in table " << tableInfo.Id);
 
-            ui32 partGroupChannel = partView.Part->GetGroupChannel(NTable::NPage::TGroupId(index));
+            ui32 partGroupChannel = partView.Part->GetDataChannel(NTable::NPage::TGroupId(index));
             if (partGroupChannel != schemeGroupRoom->Main) {
                 return true;
             }

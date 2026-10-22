@@ -58,7 +58,14 @@ namespace NTabletFlatExecutor {
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            return TryGetPage(location, partStore->PageCollections.at(groupId.Index).Get());
+            return TryGetPage(location, partStore->PageCollections.at(part->DataSlot(groupId)).Get());
+        }
+
+        const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
+        {
+            auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
+
+            return TryGetPage(location, partStore->PageCollections.at(part->IndexSlot(groupId)).Get());
         }
 
         void EnableReadMissingReferences() {

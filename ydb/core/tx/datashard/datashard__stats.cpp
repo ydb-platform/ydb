@@ -83,15 +83,17 @@ public:
         Y_ENSURE(false, "IPages::Locate(TPart*, ...) shouldn't be used here");
     }
 
-    const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
-        Y_ENSURE(groupId.IsMain(), "Unsupported column group");
+    const TSharedData* TryGetPage(const TPart*, const TPageLocation&, TGroupId) override {
+        Y_ENSURE(false, "IPages::TryGetPage(...) shouldn't be used here");
+    }
 
+    const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
         auto partStore = CheckedCast<const TPartStore*>(part);
-        auto info = partStore->PageCollections.at(groupId.Index).Get();
+        auto info = partStore->PageCollections.at(part->IndexSlot(groupId)).Get();
         auto type = location.Type;
         Y_ENSURE(type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2);
 
-        auto& partPages = Pages[part];
+        auto& partPages = Pages[info];
         auto page = partPages.FindPtr(location.Offset);
         if (page != nullptr) {
             return page;
@@ -225,7 +227,7 @@ private:
         CoroutineDeadline = GetCycleCountFast() + DurationToCycles(MaxCoroutineExecutionTime);
     }
 
-    THashMap<const TPart*, THashMap<TPageOffset, TSharedData>> Pages;
+    THashMap<const NTabletFlatExecutor::TPrivatePageCache::TPageCollection*, THashMap<TPageOffset, TSharedData>> Pages;
     TVector<TSharedPageRef> PageRefs;
     ui64 PagesSize = 0;
     ui64 CoroutineDeadline;

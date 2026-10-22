@@ -188,6 +188,16 @@ def check_public_key(line):
     return line
 
 
+def reconcile_public_key():
+    raw = os.environ.get("GH_RUNNER_RECONCILE_SSH_PUB", "").strip()
+    if not raw:
+        return ""
+    line = next((item.strip() for item in raw.splitlines() if item.strip() and not item.startswith("#")), "")
+    if not line:
+        return ""
+    return check_public_key(line)
+
+
 def public_key_lines(cfg):
     lines = []
     seen = set()
@@ -196,6 +206,9 @@ def public_key_lines(cfg):
         if line not in seen:
             seen.add(line)
             lines.append(line)
+    extra = reconcile_public_key()
+    if extra and extra not in seen:
+        lines.append(extra)
     return lines
 
 
@@ -1093,6 +1106,14 @@ labels:
             f"  - {primary}\n"
         )
         assert public_key_lines(keyed) == [first, second]
+        os.environ["GH_RUNNER_RECONCILE_SSH_PUB"] = second
+        try:
+            assert public_key_lines(keyed) == [first, second]
+            os.environ["GH_RUNNER_RECONCILE_SSH_PUB"] = first.replace("test", "workflow")
+            workflow_key = first.replace("test", "workflow")
+            assert public_key_lines(keyed) == [first, second, workflow_key]
+        finally:
+            os.environ.pop("GH_RUNNER_RECONCILE_SSH_PUB", None)
         derived = keydir / "derived"
         subprocess.run(
             ["ssh-keygen", "-t", "ed25519", "-f", str(derived), "-N", "", "-C", "derived-test"],

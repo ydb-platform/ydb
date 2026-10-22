@@ -256,6 +256,7 @@ public:
     bool Build(const VectorIndexSettings& settings) {
         Settings = settings;
         Settings.set_vector_dimension(Dimension);
+        LosslessL2Budgeted = settings.metric() == VectorIndexSettings::DISTANCE_EUCLIDEAN && Dimension <= 256;
         Connectivity = settings.has_m() ? settings.m() : DefaultHnswM;
         if (Objects.empty()) {
             return true; // Empty rebuilt generations still have a searchable journal.
@@ -278,6 +279,9 @@ public:
             Y_DEFER { generator = previousGenerator; };
             generator.seed(similarity::defaultRandomSeed);
             Index->CreateIndex(buildParams);
+        }
+        if (LosslessL2Budgeted) {
+            Index->EnableLosslessL2Bytes();
         }
         ConfigureSearchWorkspaces();
         for (size_t i = 0; i < Objects.size(); ++i) {
@@ -318,6 +322,7 @@ public:
     std::unique_ptr<similarity::Space<float>> Space;
     size_t Dimension = 0;
     ui32 Connectivity = DefaultHnswM;
+    bool LosslessL2Budgeted = false;
     size_t KeyBytes = 0;
     std::vector<const similarity::Object*> Objects;
     std::vector<std::unique_ptr<similarity::Object>> OwnedObjects;
@@ -651,11 +656,20 @@ std::unique_ptr<THnswIndex> THnswIndex::LoadGraph(std::istream& input,
             graph->AddVector(std::move(key), data);
         }
         if (rows) {
+            // Older peers advertise a budget for float storage only. Their
+            // snapshots remain usable without the optional representation.
+            graph->LosslessL2Budgeted = settings.metric() == VectorIndexSettings::DISTANCE_EUCLIDEAN
+                && dimension <= 256
+                && EstimateMemoryBytes(rows, dimension, connectivity, graph->KeyBytes, true) <= maxMemoryBytes;
+            const ui64 losslessBytes = graph->LosslessL2Budgeted ? rows * dimension : 0;
             const ui64 inputs = rows * (ui64(dimension) * sizeof(float) + 128) + graph->KeyBytes;
-            if (inputs >= maxMemoryBytes)
+            if (inputs >= maxMemoryBytes || losslessBytes >= maxMemoryBytes - inputs)
                 ythrow yexception() << "HNSW snapshot exceeds memory budget";
             graph->Index = std::make_unique<similarity::Hnsw<float>>(false, *graph->Space, graph->Objects);
-            graph->Index->LoadTopology(in, connectivity, maxMemoryBytes - inputs);
+            graph->Index->LoadTopology(in, connectivity, maxMemoryBytes - inputs - losslessBytes);
+            if (graph->LosslessL2Budgeted) {
+                graph->Index->EnableLosslessL2Bytes();
+            }
             graph->ConfigureSearchWorkspaces();
         }
         if (ReadSnapshotWord<ui64>(input) != buffer.Hash)
@@ -668,7 +682,7 @@ std::unique_ptr<THnswIndex> THnswIndex::LoadGraph(std::istream& input,
 }
 
 size_t THnswIndex::EstimateMemoryBytes(size_t rowCount, size_t dimension, ui32 connectivity,
-        size_t serializedKeyBytes) {
+        size_t serializedKeyBytes, bool losslessL2) {
     // NMSLIB reserves up to 2*M friend ids on level zero. Higher levels and
     // container allocations are covered by the deliberately conservative
     // fixed overhead. Saturate on overflow so an attacker cannot wrap the
@@ -678,8 +692,11 @@ size_t THnswIndex::EstimateMemoryBytes(size_t rowCount, size_t dimension, ui32 c
     // NMSLIB retains the source Object and copies its raw vector into the
     // contiguous optimized-search index. We no longer retain a third copy in
     // YDB wire format; GetVector() reconstructs its trailing format byte.
+    // Reserve the optional lossless representation before allocating it,
+    // including while loading a snapshot or constructing a new generation.
+    const size_t losslessBytes = losslessL2 && dimension <= 256 ? dimension : 0;
     const size_t bytesPerRow = 2 * dimension * sizeof(float)
-        + EstimatedBytesPerNodeOverhead + friendBytes;
+        + EstimatedBytesPerNodeOverhead + friendBytes + losslessBytes;
     if (rowCount != 0 && bytesPerRow > (Max<size_t>() - serializedKeyBytes) / rowCount) {
         return Max<size_t>();
     }
@@ -736,7 +753,8 @@ std::unique_ptr<THnswIndex> THnswIndex::Build(
             keyBytes += key.size();
         }
         const size_t estimated = EstimateMemoryBytes(
-            keysAndVectors.size(), dimension, connectivity, keyBytes);
+            keysAndVectors.size(), dimension, connectivity, keyBytes,
+            settings.metric() == VectorIndexSettings::DISTANCE_EUCLIDEAN);
         if (estimated > maxMemoryBytes) {
             error = TStringBuilder() << "Estimated HNSW memory usage " << estimated
                 << " exceeds budget " << maxMemoryBytes;
@@ -838,7 +856,8 @@ size_t THnswIndex::Dimension() const {
 
 size_t THnswIndex::EstimatedMemoryBytes() const {
     return EstimateMemoryBytes(
-        Impl->Size(), Impl->Dim(), Impl->GetConnectivity(), Impl->GetKeyBytes());
+        Impl->Size(), Impl->Dim(), Impl->GetConnectivity(), Impl->GetKeyBytes(),
+        Impl->Graph->LosslessL2Budgeted);
 }
 
 } // namespace NKikimr::NDataShard

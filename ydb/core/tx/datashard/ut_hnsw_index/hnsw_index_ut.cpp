@@ -16,6 +16,13 @@
 #include <util/system/cpu_id.h>
 
 #include <method/visited_list_pool.h>
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wsign-compare"
+#pragma clang diagnostic ignored "-Wunused-parameter"
+#pragma clang diagnostic ignored "-Wunused-but-set-variable"
+#include <method/hnsw.h>
+#include <space/space_lp.h>
+#pragma clang diagnostic pop
 
 #include <atomic>
 #include <barrier>
@@ -179,6 +186,191 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
                 }
             }
         }
+    }
+
+    Y_UNIT_TEST(EuclideanSimdTailsSurviveSnapshotRoundTrip) {
+        for (const ui32 dimension : {1, 3, 4, 7, 8, 15, 16, 31, 32, 191, 192, 193, 257}) {
+            TFastRng<ui64> rng(42);
+            auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, dimension);
+            settings.set_m(4);
+            std::vector<std::pair<TString, TString>> rows;
+            for (ui32 i = 0; i < 16; ++i) {
+                rows.emplace_back(KeyFor(i), RandomFloatVector(rng, dimension));
+            }
+            const auto target = RandomFloatVector(rng, dimension);
+            THashMap<TString, double> expected;
+            for (const auto& [key, vector] : rows) {
+                double distance = 0;
+                for (ui32 d = 0; d < dimension; ++d) {
+                    float lhs, rhs;
+                    std::memcpy(&lhs, vector.data() + d * sizeof(float), sizeof(float));
+                    std::memcpy(&rhs, target.data() + d * sizeof(float), sizeof(float));
+                    const double delta = static_cast<double>(lhs) - rhs;
+                    distance += delta * delta;
+                }
+                expected.emplace(key, distance);
+            }
+            TString error;
+            auto original = THnswIndex::Build(settings, rows, 1_MB, error);
+            UNIT_ASSERT_C(original, error);
+            std::ostringstream out(std::ios::binary);
+            original->SaveGraph(out);
+            std::istringstream in(out.str(), std::ios::binary);
+            auto restored = THnswIndex::LoadGraph(in, settings, 1_MB, error);
+            UNIT_ASSERT_C(restored, error);
+            for (const auto* index : {original.get(), restored.get()}) {
+                const auto result = index->Search(target, rows.size(), TRowVersion::Max(), 32);
+                UNIT_ASSERT(result.Covered);
+                UNIT_ASSERT_VALUES_EQUAL(result.Results.size(), rows.size());
+                for (const auto& [key, distance] : result.Results) {
+                    UNIT_ASSERT_DOUBLES_EQUAL_C(distance, expected.at(key), 1e-3,
+                        "dimension=" << dimension << " key=" << key);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(LosslessByteL2Eligibility) {
+        for (const float special : {0.0f, 0.5f, -1.0f, 256.0f}) {
+            similarity::SpaceLp<float> space(2);
+            std::vector<std::unique_ptr<similarity::Object>> owners;
+            similarity::ObjectVector objects;
+            for (int i = 0; i < 8; ++i) {
+                const float values[] = {float(i), special};
+                owners.push_back(std::make_unique<similarity::Object>(i, -1, sizeof(values), values));
+                objects.push_back(owners.back().get());
+            }
+            similarity::Hnsw<float> index(false, space, objects);
+            index.CreateIndex(similarity::AnyParams(std::vector<std::string>{
+                "M=4", "efConstruction=16", "indexThreadQty=1"}));
+            UNIT_ASSERT_VALUES_EQUAL(index.EnableLosslessL2Bytes(), special == 0 && NX86::HaveAVX2());
+        }
+    }
+
+    Y_UNIT_TEST(LosslessByteL2TailsFallbackAndSnapshotRoundTrip) {
+        const auto serialize = [](const std::vector<float>& values) {
+            TString result;
+            TStringOutput output(result);
+            NKnnVectorSerialization::TSerializer<float> serializer(&output);
+            for (float value : values) {
+                serializer.HandleElement(value);
+            }
+            serializer.Finish();
+            return result;
+        };
+        for (const ui32 dimension : {1, 3, 7, 8, 15, 16, 31, 32, 63, 64, 65, 127, 128, 191, 192, 193, 255, 256, 257}) {
+            for (const bool fractionalGraph : {false, true}) {
+                auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+                    Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, dimension);
+                settings.set_m(4);
+                std::vector<std::vector<float>> vectors;
+                std::vector<std::pair<TString, TString>> rows;
+                for (ui32 i = 0; i < 16; ++i) {
+                    auto& values = vectors.emplace_back(dimension);
+                    for (ui32 d = 0; d < dimension; ++d) {
+                        values[d] = i == 0 ? 0 : i == 1 ? 255 : (i * 13 + d * 17) % 256;
+                    }
+                    if (fractionalGraph && i == 15) {
+                        values[dimension / 2] += 0.5f;
+                    }
+                    rows.emplace_back(KeyFor(i), serialize(values));
+                }
+                TString error;
+                auto original = THnswIndex::Build(settings, rows, 1_MB, error);
+                UNIT_ASSERT_C(original, error);
+                std::ostringstream out(std::ios::binary);
+                original->SaveGraph(out);
+                std::istringstream in(out.str(), std::ios::binary);
+                auto restored = THnswIndex::LoadGraph(in, settings, 1_MB, error);
+                UNIT_ASSERT_C(restored, error);
+                for (const float queryValue : {0.0f, 255.0f, 0.25f, -0.5f, 256.0f}) {
+                    const auto target = serialize(std::vector<float>(dimension, queryValue));
+                    THashMap<TString, double> expected;
+                    for (ui32 i = 0; i < vectors.size(); ++i) {
+                        double distance = 0;
+                        for (float value : vectors[i]) {
+                            const double delta = double(value) - queryValue;
+                            distance += delta * delta;
+                        }
+                        expected.emplace(KeyFor(i), distance);
+                    }
+                    for (const auto* index : {original.get(), restored.get()}) {
+                        for (const ui32 ef : {32, 1000}) {
+                            const auto result = index->Search(target, rows.size(), TRowVersion::Max(), ef);
+                            UNIT_ASSERT(result.Covered);
+                            UNIT_ASSERT_VALUES_EQUAL(result.Results.size(), rows.size());
+                            for (const auto& [key, distance] : result.Results) {
+                                if (!fractionalGraph && queryValue >= 0 && queryValue <= 255 && queryValue != 0.25f) {
+                                    UNIT_ASSERT_VALUES_EQUAL_C(distance, expected.at(key), "dimension=" << dimension);
+                                } else {
+                                    UNIT_ASSERT_DOUBLES_EQUAL_C(distance, expected.at(key),
+                                        expected.at(key) * 1e-6 + 1e-3, "dimension=" << dimension << " key=" << key);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(LosslessByteL2ConcurrentQueries) {
+        auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 4);
+        std::vector<std::pair<TString, TString>> rows;
+        for (ui32 i = 0; i < 32; ++i) {
+            rows.emplace_back(KeyFor(i), SerializeFloatVector({float(i), 255, 0, 17}));
+        }
+        TString error;
+        auto index = THnswIndex::Build(settings, rows, 1_MB, error);
+        UNIT_ASSERT_C(index, error);
+        std::atomic<bool> correct = true;
+        std::barrier start(8);
+        std::vector<std::thread> threads;
+        for (ui32 i = 0; i < 8; ++i) {
+            threads.emplace_back([&, i] {
+                start.arrive_and_wait();
+                for (ui32 j = 0; j < 32; ++j) {
+                    const auto& target = rows[(i + j) % rows.size()];
+                    const auto result = index->Search(target.second, 1, TRowVersion::Max(), 32 + i);
+                    if (!result.Covered || result.Results.size() != 1
+                            || result.Results.front().first != target.first || result.Results.front().second != 0) {
+                        correct = false;
+                    }
+                }
+            });
+        }
+        for (auto& thread : threads) {
+            thread.join();
+        }
+        UNIT_ASSERT(correct);
+    }
+
+    Y_UNIT_TEST(LosslessByteL2MemoryBudget) {
+        const size_t base = THnswIndex::EstimateMemoryBytes(2, 4, 16, 2);
+        const size_t withBytes = THnswIndex::EstimateMemoryBytes(2, 4, 16, 2, true);
+        UNIT_ASSERT_VALUES_EQUAL(withBytes, base + 2 * 4);
+        UNIT_ASSERT_VALUES_EQUAL(THnswIndex::EstimateMemoryBytes(2, 257, 16, 2, true),
+            THnswIndex::EstimateMemoryBytes(2, 257, 16, 2));
+        auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 4);
+        std::vector<std::pair<TString, TString>> rows{{"a", SerializeFloatVector({0, 0, 0, 0})},
+            {"b", SerializeFloatVector({255, 255, 255, 255})}};
+        TString error;
+        UNIT_ASSERT(!THnswIndex::Build(settings, rows, base, error));
+        auto index = THnswIndex::Build(settings, rows, withBytes, error);
+        UNIT_ASSERT_C(index, error);
+        UNIT_ASSERT_VALUES_EQUAL(index->EstimatedMemoryBytes(), withBytes);
+        std::ostringstream out(std::ios::binary);
+        index->SaveGraph(out);
+        std::istringstream insufficient(out.str(), std::ios::binary);
+        auto floatOnly = THnswIndex::LoadGraph(insufficient, settings, base, error);
+        UNIT_ASSERT_C(floatOnly, error);
+        UNIT_ASSERT_VALUES_EQUAL(floatOnly->EstimatedMemoryBytes(), base);
+        UNIT_ASSERT_VALUES_EQUAL(floatOnly->Search(rows.front().second, 1).Results.front().second, 0);
+        std::istringstream sufficient(out.str(), std::ios::binary);
+        UNIT_ASSERT_C(THnswIndex::LoadGraph(sufficient, settings, withBytes, error), error);
     }
 
     Y_UNIT_TEST(BootstrapRejectsLateCommitsBeforeAndAfterManifestDelivery) {

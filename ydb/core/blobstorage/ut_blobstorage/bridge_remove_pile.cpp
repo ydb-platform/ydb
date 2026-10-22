@@ -33,9 +33,15 @@ Y_UNIT_TEST_SUITE(BridgeRemovePile) {
 
         std::optional<size_t> numStaticVDisks;
         THashSet<ui32> staticPartIds; // nodes know the static groups removed with the pile, so their ids are not reused
+        ui64 prevAddedGeneration = 0;
         for (ui32 cycle = 0; cycle < 3; ++cycle) {
             AddPileAndWait(env, "pile_3");
             const auto config = QueryStorageConfig(env);
+            // the generation of the addition tells the nodes of the previous incarnation of the pile from the current ones
+            const ui64 addedGeneration = config.GetClusterStateDetails().GetPileRegistry().GetPiles(2).GetAddedGeneration();
+            UNIT_ASSERT_LT(prevAddedGeneration, addedGeneration);
+            UNIT_ASSERT_LE(addedGeneration, config.GetClusterState().GetGeneration());
+            prevAddedGeneration = addedGeneration;
             UNIT_ASSERT_VALUES_EQUAL(GetPileStates(config), "pile_1:SYNCHRONIZED pile_2:SYNCHRONIZED pile_3:DISCONNECTED");
             // nodes of older versions can't join the cluster after pile operations
             UNIT_ASSERT(NStorage::IsPileListChanged(config));

@@ -146,9 +146,12 @@ namespace NKikimr::NStorage {
         // with the list of piles changed or reordered; the change is the one of pile ids, or of positions of piles
         // (against the ones in the current config, or the ones matching pile ids when it is unknown)
         const auto implied = NBridge::MakeImpliedPileRegistry(bridgeConfig);
-        auto positions = next; // flags of the registry are not a matter of positions
+        auto positions = next; // flags of the registry and settings of piles are not a matter of positions
         positions.ClearPileListChanged();
         positions.ClearRequiredFeatureLevel();
+        for (auto& pile : *positions.MutablePiles()) {
+            pile.ClearAddedGeneration();
+        }
         *pileListChanged = !equals(next, *registry) || !equals(implied, currentBridgeConfig
             ? NBridge::MakeImpliedPileRegistry(*currentBridgeConfig)
             : positions);
@@ -453,6 +456,11 @@ namespace NKikimr::NStorage {
         pileRegistry->SetPileListChanged(true);
         pileRegistry->SetRequiredFeatureLevel(Max<ui32>(pileRegistry->GetRequiredFeatureLevel(),
             BridgeFeatureLevelPileOps));
+        // nodes of the pile having older cluster state are the ones of its previous incarnation, if it has been removed
+        if (pileRegistry->PilesSize() <= pileId.GetPileIndex()) {
+            return "pile registry doesn't list the pile";
+        }
+        pileRegistry->MutablePiles(pileId.GetPileIndex())->SetAddedGeneration(generation);
         op->SetOperationId(config->GetGeneration() + 1); // the generation of the config being proposed
 
         // allocate the part of every bridged static group in the pile; the part is unsynced, so it is synced from the

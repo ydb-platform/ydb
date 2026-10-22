@@ -4,8 +4,8 @@
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
-#include <yql/essentials/core/yql_expr_constraint_streaming.h>
 #include <yql/essentials/core/yql_expr_constraint.h>
+#include <yql/essentials/core/yql_expr_constraint_streaming.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 
 namespace NYql {
@@ -114,18 +114,13 @@ private:
         const auto eventTimeExpr = lambda.Body().Cast<TCoSub>().Left();
 
         TMaybe<TPartOfConstraintBase::TPathType> eventTime;
-        if (const auto status = NYql::TryExtractEventTime(
-                watermark,
-                eventTimeExpr.Ref(),
-                ctx,
-                eventTime
-            );
-            status != TStatus::Ok)
+        if (const auto status = NYql::TryExtractEventTime(watermark, eventTimeExpr.Ref(), ctx, eventTime); status != TStatus::Ok)
         {
             return status;
         }
         if (!eventTime) {
-            ctx.AddError(TIssue(ctx.GetPosition(lambda.Pos()), "Event time expression must be materialized into a Timestamp column before assigning a watermark"));
+            ctx.AddError(TIssue(ctx.GetPosition(lambda.Pos()),
+                "Event time expression must be materialized into a Timestamp column before assigning a watermark"));
             return TStatus::Error;
         }
         path = std::move(*eventTime);

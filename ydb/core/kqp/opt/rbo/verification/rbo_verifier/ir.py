@@ -143,6 +143,7 @@ class Expr:
     execution_order: int | None = None
     order_by: tuple[SortOrder, ...] | None = None
     window_frame: str | None = None
+    parameter: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -610,7 +611,7 @@ def _literal(value: Any, scalar_type: str, path: str) -> bool | int | str | deci
         or (
             scalar_family == "date"
             and type(value) is int
-            and 0 <= value < DATE_TIME_BOUNDS[scalar_type]
+            and DATE_TIME_BOUNDS[scalar_type][0] <= value < DATE_TIME_BOUNDS[scalar_type][1]
         )
         or (scalar_family == "string" and isinstance(value, str))
     )
@@ -673,6 +674,19 @@ def _parse_expr(
     if kind == "column":
         _keys(obj, {"kind", "column"}, path)
         return Expr(kind=kind, column=_string(obj["column"], f"{path}.column"))
+
+    if kind == "parameter":
+        _keys(obj, {"kind", "name", "type", "nullable"}, path)
+        name = _string(obj["name"], f"{path}.name")
+        if len(name) < 2 or not name.startswith("$"):
+            _fail(f"{path}.name", "only external SQL parameter names beginning with '$' are modeled")
+        result_type = _scalar_type(obj["type"], f"{path}.type")
+        if result_type == DOUBLE:
+            _fail(f"{path}.type", "Double query parameters require a separate input-domain audit")
+        return Expr(
+            kind=kind, parameter=name, result_type=result_type,
+            nullable=_bool(obj["nullable"], f"{path}.nullable"),
+        )
 
     if kind == "bound":
         _keys(obj, {"kind", "depth"}, path)
@@ -1868,7 +1882,7 @@ def _infer_expr(
             _fail(path, "StablePickle source_type disagrees with its argument")
         return ValueType("String", False)
 
-    if expr.kind in {"literal", "null", "opaque"}:
+    if expr.kind in {"literal", "null", "opaque", "parameter"}:
         assert expr.result_type is not None and expr.nullable is not None
         if expr.kind == "opaque":
             for index, arg in enumerate(expr.args):
@@ -2907,6 +2921,38 @@ def _node_expressions(node: PlanNode) -> tuple[Expr, ...]:
     return ()
 
 
+def query_parameters(snapshot: Snapshot) -> dict[str, ValueType]:
+    """All used query inputs, including parameters in pruned/unreachable nodes.
+
+    Omission on one side is allowed: optimization can remove an unused input.
+    A surviving name must always retain exactly the same declared scalar type.
+    """
+    result: dict[str, ValueType] = {}
+    pending = [expression for node in snapshot.plan.nodes for expression in _node_expressions(node)]
+    pending.extend(
+        subplan.predicate for subplan in snapshot.plan.subplans
+        if isinstance(subplan, ExistsSubplan) and subplan.predicate is not None
+    )
+    while pending:
+        expression = pending.pop()
+        pending.extend(expression.args)
+        if expression.kind != "parameter":
+            continue
+        name = expression.parameter
+        scalar_type = expression.result_type
+        if not isinstance(name, str) or len(name) < 2 or not name.startswith("$"):
+            _fail("snapshot.parameters", "only external SQL parameter names beginning with '$' are modeled")
+        if not isinstance(scalar_type, str) or not is_scalar_type(scalar_type) or scalar_type == DOUBLE:
+            _fail("snapshot.parameters", f"unsupported query parameter type {scalar_type!r}")
+        if type(expression.nullable) is not bool or expression.args:
+            _fail("snapshot.parameters", "parameter must be a typed leaf with exact nullability")
+        value_type = ValueType(scalar_type, expression.nullable)
+        previous = result.setdefault(name, value_type)
+        if previous != value_type:
+            _fail("snapshot.parameters", f"parameter {name!r} has inconsistent declared types")
+    return result
+
+
 def checked_concat_corridor(snapshot: Snapshot) -> CheckedConcatCorridor | None:
     """Validate and return the deliberately narrow eager checked-Concat path."""
 
@@ -3163,6 +3209,42 @@ def stage_input_slots(plan: Plan, stage: Stage) -> tuple[tuple[str, int, str], .
     )
 
 
+def _validate_row_read_range_predicate(snapshot: Snapshot, scan: Scan, path: str) -> None:
+    """Only the native exporter's total single-key interval corridor."""
+    table = snapshot.table_map()[scan.table]
+    if (len(table.unique_keys) != 1 or table.unique_keys[0].nulls_distinct
+            or len(table.unique_keys[0].columns) != 1):
+        _fail(path, "row read range requires one exact single-column primary key")
+    key_name = table.unique_keys[0].columns[0]
+    key = table.column_map()[key_name]
+    if key.type not in {"Int32", "Int64"} or key.nullable:
+        _fail(path, "row read range key must be required Int32 or Int64")
+    bindings = tuple(mapping.output for mapping in scan.columns + scan.predicate_columns
+                     if mapping.source == key_name)
+    if len(bindings) != 1:
+        _fail(path, "row read range key requires one exact scan binding")
+    predicate = scan.predicate
+    assert predicate is not None
+    if predicate.kind == "literal" and predicate.result_type == BOOL and predicate.value is True:
+        return
+    comparisons = predicate.args if predicate.kind == "and" else (predicate,)
+    if (len(comparisons) not in {1, 2}
+            or (len(comparisons) == 2 and (
+                comparisons[0].kind not in {"gt", "gte"}
+                or comparisons[1].kind not in {"lt", "lte"}))):
+        _fail(path, "row read range requires one interval with ordered lower/upper bounds")
+    for comparison in comparisons:
+        if comparison.kind not in {"gt", "gte", "lt", "lte"} or len(comparison.args) != 2:
+            _fail(path, "row read range requires exact key ordering comparisons")
+        source, bound = comparison.args
+        if source.kind != "column" or source.column != bindings[0]:
+            _fail(path, "row read range comparison must use its physical primary key")
+        if (bound.kind not in {"literal", "parameter"} or bound.result_type != key.type
+                or (bound.kind == "literal" and type(bound.value) is not int)
+                or (bound.kind == "parameter" and bound.nullable is not False)):
+            _fail(path, "row read range bound must be an exact required key literal or parameter")
+
+
 def _validate_stage_graph(
     snapshot: Snapshot,
     schemas: Mapping[str, Mapping[str, Column]],
@@ -3290,15 +3372,11 @@ def _validate_stage_graph(
                 if not passive_result and not passive_ports:
                     _fail(stage_path, "a row-storage source stage must contain only its scan "
                           "and passive result or shared-producer projections")
-        if (
-            scans
-            and (scans[0].predicate is not None or scans[0].pushed_limit is not None)
-            and stage.source_storage != "column"
-        ):
-            _fail(
-                f"{stage_path}.source_storage",
-                "a pushed scan predicate or limit requires column storage",
-            )
+        if scans and scans[0].pushed_limit is not None and stage.source_storage != "column":
+            _fail(f"{stage_path}.source_storage", "a pushed scan limit requires column storage")
+        if scans and scans[0].predicate is not None and stage.source_storage == "row":
+            _validate_row_read_range_predicate(
+                snapshot, scans[0], f"{stage_path}.source_storage")
 
     missing = plan_nodes.keys() - owner.keys()
     if missing:
@@ -3773,6 +3851,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
 
     if snapshot.semantic_mode not in {None, BINARY64_SEMANTIC_MODE}:
         _fail("snapshot.semantic_mode", "unsupported semantic mode")
+    query_parameters(snapshot)
     binary64_mode = snapshot.semantic_mode == BINARY64_SEMANTIC_MODE
     orders = [item for node in snapshot.plan.nodes if isinstance(node, Sort) for item in node.order]
     if snapshot.stage_graph is not None:
@@ -4383,9 +4462,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     _fail(key_path, "equal_nulls must be Boolean")
                 if key.equal_nulls and (
                     left_column.type != right_column.type
-                    or left_column.type not in (
-                        INTEGER_TYPES | frozenset(DATE_TIME_BOUNDS) | {BOOL, "String", "Utf8"}
-                    )
+                    or left_column.type not in STABLE_PICKLE_TYPES
                 ):
                     _fail(key_path, "null-equal join keys require identical reviewed scalar types")
                 if left_column.type == DOUBLE or right_column.type == DOUBLE:

@@ -1666,7 +1666,7 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "column 'private.k' is not available"):
             parse_snapshot(broken)
 
-    def test_pushed_scan_predicate_is_strict_typed_and_column_only(self):
+    def test_pushed_scan_predicate_is_strict_typed_and_source_checked(self):
         value = minimal_snapshot()
         value["plan"]["nodes"][0]["predicate"] = {
             "kind": "gte",
@@ -1703,7 +1703,14 @@ class SnapshotTest(unittest.TestCase):
         row_source["stage_graph"]["stages"][0]["nodes"] = ["scan"]
         row_source["stage_graph"]["stages"][0]["outputs"][0]["node"] = "scan"
         row_source["stage_graph"]["stages"][0]["source_storage"] = "row"
-        with self.assertRaisesRegex(SnapshotError, "pushed scan predicate or limit"):
+        with self.assertRaisesRegex(SnapshotError, "single-column primary key"):
+            parse_snapshot(row_source)
+        row_source["schema"]["tables"][0]["unique_keys"] = [
+            {"columns": ["k"], "nulls_distinct": False}]
+        self.assertEqual(parse_snapshot(row_source).plan.nodes[0].predicate.kind, "gte")
+        row_source["plan"]["nodes"][0]["pushed_limit"] = {
+            "kind": "literal", "type": "Uint64", "value": 1}
+        with self.assertRaisesRegex(SnapshotError, "pushed scan limit requires column storage"):
             parse_snapshot(row_source)
 
         unavailable = copy.deepcopy(value)
@@ -1718,6 +1725,66 @@ class SnapshotTest(unittest.TestCase):
         }
         with self.assertRaisesRegex(SnapshotError, "scan predicate must be Boolean"):
             parse_snapshot(non_boolean)
+
+    def test_row_range_scan_requires_a_closed_required_key_interval(self):
+        value = minimal_snapshot()
+        table = value["schema"]["tables"][0]
+        table["unique_keys"] = [{"columns": ["k"], "nulls_distinct": False}]
+        scan = value["plan"]["nodes"][0]
+        lower = {"kind": "gte", "left": {"kind": "column", "column": "a.k"},
+                 "right": {"kind": "literal", "type": "Int64", "value": -2}}
+        upper = {"kind": "lt", "left": {"kind": "column", "column": "a.k"},
+                 "right": {"kind": "literal", "type": "Int64", "value": 3}}
+        scan["predicate"] = {"kind": "and", "args": [lower, upper]}
+        value["plan"].update(nodes=[scan], root="scan")
+        value["stage_graph"] = {
+            "root_stage": "source", "edges": [], "assumptions": [],
+            "stages": [{"id": "source", "nodes": ["scan"], "inputs": [],
+                        "outputs": [{"index": 0, "node": "scan"}], "source_storage": "row"}],
+        }
+        for predicate in (lower, upper, scan["predicate"],
+                          {"kind": "literal", "type": "Bool", "value": True}):
+            accepted = copy.deepcopy(value)
+            accepted["plan"]["nodes"][0]["predicate"] = predicate
+            self.assertEqual(parse_snapshot(accepted).plan.nodes[0].predicate.kind, predicate["kind"])
+
+        private = copy.deepcopy(value)
+        private_scan = private["plan"]["nodes"][0]
+        private_scan["columns"] = [{"source": "flag", "output": "a.flag"}]
+        private_scan["predicate_columns"] = [{"source": "k", "output": "private.k"}]
+        for comparison in private_scan["predicate"]["args"]:
+            comparison["left"]["column"] = "private.k"
+        private["plan"]["output"] = ["a.flag"]
+        self.assertEqual(parse_snapshot(private).output_schema()[0].name, "a.flag")
+
+        mutations = []
+        no_pk = copy.deepcopy(value)
+        no_pk["schema"]["tables"][0]["unique_keys"] = []
+        mutations.append(no_pk)
+        nullable = copy.deepcopy(value)
+        nullable["schema"]["tables"][0]["columns"][0]["nullable"] = True
+        mutations.append(nullable)
+        composite = copy.deepcopy(value)
+        composite["schema"]["tables"][0]["unique_keys"][0]["columns"].append("flag")
+        mutations.append(composite)
+        null_distinct = copy.deepcopy(value)
+        null_distinct["schema"]["tables"][0]["unique_keys"][0]["nulls_distinct"] = True
+        mutations.append(null_distinct)
+        for predicate in (
+            {"kind": "literal", "type": "Bool", "value": False},
+            {"kind": "and", "args": [upper, lower]},
+            {"kind": "and", "args": [lower, lower]},
+            {"kind": "and", "args": [lower, upper, lower]},
+            {"kind": "or", "args": [lower, upper]},
+            {"kind": "gte", "left": lower["left"],
+             "right": {"kind": "literal", "type": "Int32", "value": -2}},
+        ):
+            candidate = copy.deepcopy(value)
+            candidate["plan"]["nodes"][0]["predicate"] = predicate
+            mutations.append(candidate)
+        for candidate in mutations:
+            with self.subTest(candidate=candidate), self.assertRaises(SnapshotError):
+                parse_snapshot(candidate)
 
     def test_ordered_comparison_requires_supported_scalar_families(self):
         value = minimal_snapshot()
@@ -1894,7 +1961,8 @@ class SnapshotTest(unittest.TestCase):
             value["plan"]["nodes"][-1]["keys"][0]["equal_nulls"] = True
             parse_snapshot(value)
         for left_type, right_type in (("Int64", "Int32"), ("String", "Utf8"),
-                                      ("Decimal(15,2)", "Decimal(15,2)")):
+                                      ("Decimal(15,2)", "Decimal(15,2)"),
+                                      ("Timestamp64", "Timestamp64")):
             value = shared_join_snapshot()
             for table, scalar_type in zip(value["schema"]["tables"], (left_type, right_type)):
                 table["columns"][0]["type"] = scalar_type

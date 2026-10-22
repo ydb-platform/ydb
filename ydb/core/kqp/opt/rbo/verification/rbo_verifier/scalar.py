@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from typing import Mapping, TypeAlias
 
 from . import decimal, floating, smt, stable_pickle
-from .ir import Expr
-from .types import BOOL, DATE, DATE_TIME_BOUNDS, DOUBLE, VOID, family, integer_bounds, integer_width
+from .ir import Expr, ValueType
+from .types import BOOL, DATE, DATE_TIME_BOUNDS, DOUBLE, VOID, family, integer_bounds, integer_width, is_scalar_type
 
 
 DecimalSumState = decimal.DecimalSumState
@@ -18,9 +18,10 @@ def smt_sort(scalar_type: str) -> str:
 
 
 def date_domain(value: smt.Term, scalar_type: str = DATE) -> smt.Term:
+    lower, upper = DATE_TIME_BOUNDS[scalar_type]
     return smt.and_(
-        smt.not_(smt.lt(value, smt.ZERO)),
-        smt.lt(value, smt.int_value(DATE_TIME_BOUNDS[scalar_type])),
+        smt.not_(smt.lt(value, smt.int_value(lower))),
+        smt.lt(value, smt.int_value(upper)),
     )
 
 
@@ -138,6 +139,40 @@ class Encoder:
         self._stable_pickle = stable_pickle.Kernel(script)
         self._checked_concat_failure: dict[tuple[object, ...], smt.Function] = {}
         self._integral_average: smt.Function | None = None
+        # Query inputs belong to the database valuation, never to an execution
+        # choice. One encoder is shared by both plans and all stage invocations.
+        self.parameters: dict[str, Value] = {}
+        self._parameter_types: dict[str, ValueType] = {}
+
+    def register_parameters(self, declarations: Mapping[str, ValueType]) -> None:
+        for name, declared in declarations.items():
+            if not isinstance(name, str) or len(name) < 2 or not name.startswith("$"):
+                raise smt.SmtError("only external SQL parameter names beginning with '$' are modeled")
+            if not is_scalar_type(declared.name) or type(declared.nullable) is not bool:
+                raise smt.SmtError("query parameter requires an exact scalar type and nullability")
+            previous = self._parameter_types.get(name)
+            if previous is not None:
+                if previous != declared:
+                    raise smt.SmtError(f"query parameter {name!r} has inconsistent declared types")
+                continue
+            if declared.name == DOUBLE:
+                raise smt.SmtError("Double query parameters require a separate input-domain audit")
+            is_null = (
+                self.script.fresh_constant(f"parameter:{name}:null", smt.BOOL)
+                if declared.nullable else smt.FALSE
+            )
+            value = self.script.fresh_constant(f"parameter:{name}:value", smt_sort(declared.name))
+            if family(declared.name) == "string":
+                self.script.register_string_term(value)
+            elif declared.name in DATE_TIME_BOUNDS:
+                self.script.assert_global(date_domain(value, declared.name))
+            elif family(declared.name) == "int":
+                self.script.assert_global(integer_domain(value, declared.name))
+            elif decimal.is_type(declared.name):
+                # All legal finite coefficients and +/-Inf/NaN remain possible.
+                self.script.assert_global(decimal.domain(value, declared.name))
+            self.parameters[name] = Value(declared.name, is_null, value)
+            self._parameter_types[name] = declared
 
     @property
     def uses_abstract_integral_average(self) -> bool:
@@ -186,6 +221,14 @@ class Encoder:
         if expression.kind == "column":
             assert expression.column is not None
             return row[expression.column]
+
+        if expression.kind == "parameter":
+            assert expression.parameter is not None
+            assert expression.result_type is not None and expression.nullable is not None
+            self.register_parameters({
+                expression.parameter: ValueType(expression.result_type, expression.nullable),
+            })
+            return self.parameters[expression.parameter]
 
         if expression.kind == "bound":
             assert expression.depth is not None and 0 <= expression.depth < len(bindings)

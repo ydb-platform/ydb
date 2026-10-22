@@ -1592,6 +1592,31 @@ class PreferredKeyedMismatchTest(unittest.TestCase):
             ScalarEncoder(script),
         ).mismatch
 
+    def _assert_keyed_rejected(
+        self, left, right, script=None, *, expect_singleton=False,
+    ):
+        script = smt.Script() if script is None else script
+        scalar = ScalarEncoder(script)
+        comparison = compare_families(left, right, scalar)
+        # Test the keyed gate independently of later exact portfolio choices.
+        self.assertIsNone(relation._preferred_keyed_mismatch_branches(
+            comparison.left, comparison.right, scalar, comparison.ordered,
+        ))
+        mismatch = comparison.mismatch
+        if expect_singleton:
+            self.assertEqual(len(mismatch.branches), 4)
+            self.assertEqual(mismatch.branches[0].predicate, smt.FALSE)
+            self.assertEqual(mismatch.branches[1].predicate, smt.FALSE)
+            self.assertEqual(
+                mismatch.branches[2].predicate, mismatch.branches[3].predicate,
+            )
+            self.assertIsNotNone(mismatch.preferred_branches)
+            self.assertEqual(len(mismatch.preferred_branches), 1)
+            self.assertIs(mismatch.preferred_branches[0], mismatch.branches[2])
+        else:
+            self.assertIsNone(mismatch.preferred_branches)
+        return mismatch
+
     @classmethod
     def _symbolic_family(
         cls,
@@ -1732,11 +1757,14 @@ class PreferredKeyedMismatchTest(unittest.TestCase):
             ),
         )
 
-        empty = self._mismatch(
+        empty = self._assert_keyed_rejected(
             self._family(self._relation("left", ())),
             self._family(self._relation("right", ())),
+            expect_singleton=True,
         )
-        self.assertIsNone(empty.preferred_branches)
+        # Each language contains one successful empty result; it is not empty.
+        self.assertEqual(empty.preferred_branches[0].predicate, smt.FALSE)
+        self.assertEqual(empty.counterexample, smt.FALSE)
 
     def test_exhaustive_sparse_nullable_composite_key_cover_is_exact(self):
         script = smt.Script()
@@ -2188,12 +2216,12 @@ class PreferredKeyedMismatchTest(unittest.TestCase):
         )
         for name, left_family, right_family, script in cases:
             with self.subTest(name=name):
-                mismatch = self._mismatch(
+                self._assert_keyed_rejected(
                     left_family,
                     right_family,
                     script,
+                    expect_singleton=name not in {"multi outcome", "choice"},
                 )
-                self.assertIsNone(mismatch.preferred_branches)
 
     def test_preferred_portfolio_caps_are_inclusive_and_fail_closed(self):
         script = smt.Script()

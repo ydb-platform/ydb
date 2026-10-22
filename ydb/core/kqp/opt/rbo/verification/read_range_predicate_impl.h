@@ -10,11 +10,12 @@ private:
 
 public:
     TExactReadRangePredicateExporter(
-        const TOpRead&,
+        const TOpRead& read,
         const TSemanticSnapshotCatalogTableV1& table,
         const TOpRead::TRangeInfo& range,
         const TOlapColumnMap& columns)
-        : Table(table)
+        : Read(read)
+        , Table(table)
         , Range(range)
         , Columns(columns)
     {
@@ -67,6 +68,10 @@ public:
         {
             Unsupported(
                 "Read range KeyColumns does not identify its emitted physical primary key");
+        }
+
+        if (Read.StorageType == NYql::EStorageType::RowStorage) {
+            return ExportLiteralRange();
         }
 
         const auto& finalize = Callable(
@@ -129,6 +134,147 @@ public:
     }
 
 private:
+    struct TLiteralBound {
+        bool Inclusive = false;
+        std::optional<NJson::TJsonValue> Value;
+        // FillKeyRange compares serialized literals/parameter names, not the
+        // optimizer's ComputeNode or the identity of the expression nodes.
+        TString Identity;
+    };
+
+    void LiteralBoundAnnotation(
+        const TTypeAnnotationNode* annotation,
+        size_t arity,
+        TStringBuf field)
+    {
+        if (!annotation) {
+            return; // These wrappers may precede physical type annotation.
+        }
+        if (annotation->GetKind() != ETypeAnnotationKind::Tuple ||
+            annotation->Cast<TTupleExprType>()->GetSize() != arity)
+        {
+            Unsupported(TStringBuilder()
+                << "Row read range " << field << " has a mismatched Tuple annotation");
+        }
+        for (const auto* item : annotation->Cast<TTupleExprType>()->GetItems()) {
+            bool nullable = false;
+            if (TypeName(item, &nullable) != KeyType || nullable) {
+                Unsupported(TStringBuilder()
+                    << "Row read range " << field << " has a mismatched key annotation");
+            }
+        }
+    }
+
+    TLiteralBound LiteralBound(const TExprNode& bound, TStringBuf field) {
+        Node(bound, 2);
+        if (!bound.IsCallable({"KqlKeyInc", "KqlKeyExc"}) || bound.ChildrenSize() > 1) {
+            Unsupported(TStringBuilder()
+                << "Row read range " << field << " must be one scalar KqlKeyInc/KqlKeyExc");
+        }
+        LiteralBoundAnnotation(bound.GetTypeAnn(), bound.ChildrenSize(), field);
+        TLiteralBound result;
+        result.Inclusive = bound.IsCallable("KqlKeyInc");
+        if (!bound.ChildrenSize()) {
+            // MakeKeyRange pads an inclusive lower bound with NULL, but an
+            // exclusive upper bound with NULL. Missing trailing cells instead
+            // denote +infinity. Admit only the conventional unbounded spelling.
+            if (!result.Inclusive) {
+                Unsupported("Row read range empty exclusive boundary is not audited");
+            }
+            return result;
+        }
+
+        const auto& value = Node(*bound.Child(0), 3);
+        if (!value.GetTypeAnn()) {
+            Unsupported("Row read range bound has no exact scalar annotation");
+        }
+        ExactScalarType(value, KeyType, false, field);
+        if (value.IsCallable(KeyType)) {
+            if (value.ChildrenSize() != 1 || !value.Child(0)->IsAtom()) {
+                Unsupported("Row read range bound must have one literal atom");
+            }
+            Node(*value.Child(0), 4);
+            result.Value = LiteralExpr(value);
+            result.Identity = TStringBuilder()
+                << "literal:" << (*result.Value)["value"].GetIntegerSafe();
+        } else if (value.IsCallable("Parameter")) {
+            // Reuse the reviewed scalar-parameter descriptor/name audit. On a
+            // build without parameter support this path remains unsupported.
+            result.Value = ExportExprNode(value, nullptr, {}, {}, SourceBudget, 1, 3, false);
+            if ((*result.Value)["kind"].GetStringSafe() != "parameter") {
+                Unsupported("Row read range parameter did not export as an exact input");
+            }
+            result.Identity = TStringBuilder()
+                << "parameter:" << (*result.Value)["name"].GetStringSafe();
+        } else {
+            Unsupported("Row read range bound must be an exact required key literal or parameter");
+        }
+        return result;
+    }
+
+    NJson::TJsonValue ExportLiteralRange() {
+        // TPhysicalSourceBuilder replaces ComputeNode with LiteralRange for
+        // row storage. Compare the expression actually passed to the source.
+        if (!TKqpTable(Read.TableCallable).SysView().StringValue().empty()) {
+            Unsupported("Row read range system-view reader is not audited");
+        }
+        if (!Range.LiteralRange) {
+            Unsupported("Row read range requires the physical LiteralRange representation");
+        }
+        const auto& range = Node(Range.LiteralRange, 1);
+        if (!range.IsList() || range.ChildrenSize() != 2) {
+            Unsupported("Row read range requires a two-boundary literal KqlKeyRange tuple");
+        }
+        const auto lower = LiteralBound(*range.Child(0), "lower boundary");
+        const auto upper = LiteralBound(*range.Child(1), "upper boundary");
+        if (range.GetTypeAnn()) {
+            if (range.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Tuple ||
+                range.GetTypeAnn()->Cast<TTupleExprType>()->GetSize() != 2)
+            {
+                Unsupported("Row read range has a mismatched outer Tuple annotation");
+            }
+            const auto& items = range.GetTypeAnn()->Cast<TTupleExprType>()->GetItems();
+            LiteralBoundAnnotation(items[0], range.Child(0)->ChildrenSize(), "outer lower boundary");
+            LiteralBoundAnnotation(items[1], range.Child(1)->ChildrenSize(), "outer upper boundary");
+        }
+        if (Range.ExpectedMaxRanges && *Range.ExpectedMaxRanges != 1) {
+            Unsupported("Row literal read range ExpectedMaxRanges must be absent or one");
+        }
+        if (lower.Value && upper.Value && !lower.Inclusive && !upper.Inclusive &&
+            lower.Identity == upper.Identity)
+        {
+            // FillKeyRange currently marks equal serialized exclusive bounds
+            // as a point; ExtractRanges then bypasses interval inclusivity.
+            // Do not certify the mathematically empty interval under that path.
+            Unsupported("Row read range identical exclusive bounds require a native point-path audit");
+        }
+
+        auto args = JsonArray();
+        if (lower.Value) {
+            args.AppendValue(BinaryExpr(lower.Inclusive ? "gte" : "gt",
+                ColumnExpr(KeyOutput), *lower.Value));
+        }
+        if (upper.Value) {
+            args.AppendValue(BinaryExpr(upper.Inclusive ? "lte" : "lt",
+                ColumnExpr(KeyOutput), *upper.Value));
+        }
+        NJson::TJsonValue result;
+        if (args.GetArraySafe().empty()) {
+            result = JsonMap();
+            result["kind"] = "literal";
+            result["type"] = "Bool";
+            result["value"] = true;
+        } else if (args.GetArraySafe().size() == 1) {
+            result = args.GetArraySafe().front();
+        } else {
+            result = JsonMap();
+            result["kind"] = "and";
+            result["args"] = std::move(args);
+        }
+        AuditExactScalarExpression(result);
+        return result;
+    }
+
     const TExprNode& Node(
         const TExprNode::TPtr& node,
         size_t depth,
@@ -916,6 +1062,7 @@ private:
     }
 
 private:
+    const TOpRead& Read;
     const TSemanticSnapshotCatalogTableV1& Table;
     const TOpRead::TRangeInfo& Range;
     const TOlapColumnMap& Columns;

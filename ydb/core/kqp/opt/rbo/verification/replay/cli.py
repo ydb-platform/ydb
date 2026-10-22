@@ -11,7 +11,7 @@ from typing import Sequence
 
 from ..rbo_verifier.ir import SnapshotError
 from .case import load_json, load_snapshot, prepare_case
-from .model import InconclusiveReplay, ReplayError
+from .model import InconclusiveReplay, ReplayError, UnsupportedParameterReplay
 from .runner import Target, run_replay
 
 
@@ -51,6 +51,9 @@ def main(arguments: Sequence[str] | None = None) -> int:
             options.ydb,
             options.timeout_seconds,
         )
+    except UnsupportedParameterReplay as error:
+        print(json.dumps({"status": "UNSUPPORTED_PARAMETER_REPLAY", "reason": str(error)}, sort_keys=True))
+        return 2
     except InconclusiveReplay as error:
         print(
             json.dumps(

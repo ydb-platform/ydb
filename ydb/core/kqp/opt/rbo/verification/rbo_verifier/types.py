@@ -10,10 +10,16 @@ VOID = "Void"
 # Mirrors NYql::NUdf::MAX_DATE.  Date is an unsigned day-since-epoch value and
 # this upper bound is non-inclusive.
 MAX_DATE = 49_673
-# Unsigned epoch counts in days, seconds and microseconds, respectively.
-# Mirrors udf_data_type.h; cross-unit conversions remain unsupported.
-DATE_TIME_BOUNDS = {DATE: MAX_DATE, "Datetime": MAX_DATE * 86_400,
-                    "Timestamp": MAX_DATE * 86_400_000_000}
+# Inclusive lower and exclusive upper bounds, mirroring udf_data_type.h.
+# Date/Datetime/Timestamp use unsigned epoch days/seconds/microseconds;
+# Timestamp64 uses signed microseconds and has a distinct, wider domain.
+# Cross-type temporal conversions remain unsupported.
+DATE_TIME_BOUNDS = {
+    DATE: (0, MAX_DATE),
+    "Datetime": (0, MAX_DATE * 86_400),
+    "Timestamp": (0, MAX_DATE * 86_400_000_000),
+    "Timestamp64": (-4_611_669_897_600_000_000, 4_611_669_811_200_000_000),
+}
 
 INTEGER_TYPES = frozenset(
     {
@@ -32,7 +38,8 @@ STRING_TYPES = frozenset({"String", "Utf8"})
 
 # StablePickle's reviewed injective, total scalar encodings. Floating point,
 # Decimal and nested optionals need separate runtime audits.
-STABLE_PICKLE_TYPES = INTEGER_TYPES | frozenset(DATE_TIME_BOUNDS) | STRING_TYPES | {BOOL}
+# Timestamp64 packing is deliberately excluded until independently audited.
+STABLE_PICKLE_TYPES = INTEGER_TYPES | STRING_TYPES | {BOOL, DATE, "Datetime", "Timestamp"}
 FIXED_SCALAR_TYPES = frozenset({BOOL, DOUBLE, *DATE_TIME_BOUNDS}) | INTEGER_TYPES | STRING_TYPES
 
 

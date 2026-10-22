@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import subprocess
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Mapping, TypeAlias
 
@@ -26,6 +26,7 @@ from .ir import (
     Sort,
     SortOrder,
     checked_concat_corridor,
+    query_parameters,
 )
 from .relation import (
     Database,
@@ -42,7 +43,7 @@ from .relation import (
     family_mismatch,
     successful_family_reachable,
 )
-from .scalar import Encoder as ScalarEncoder, IntegralAverageCertificate
+from .scalar import Encoder as ScalarEncoder, IntegralAverageCertificate, Value
 from .stages import (
     TASKS,
     EdgeObserver,
@@ -88,6 +89,7 @@ class Problem:
     semantic_mode: str | None = None
     abstract_integral_average: bool = False
     observation_kind: str | None = None
+    parameters: Mapping[str, Value] = field(default_factory=dict)
 
     def witness_values(self) -> tuple[smt.Term, ...]:
         values: list[smt.Term] = []
@@ -98,6 +100,10 @@ class Problem:
                     if cell.is_null.operation == "symbol":
                         values.append(cell.is_null)
                     values.append(cell.value)
+        for parameter in self.parameters.values():
+            if parameter.is_null.operation == "symbol":
+                values.append(parameter.is_null)
+            values.append(parameter.value)
         return tuple(values)
 
     def formula(
@@ -153,6 +159,7 @@ class Result:
     witness: Mapping[str, list[dict[str, Any]]] | None = None
     reason: str | None = None
     semantic_mode: str | None = None
+    parameters: Mapping[str, Any] | None = None
 
     def to_json(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -162,6 +169,8 @@ class Result:
         }
         if self.witness is not None:
             result["witness"] = self.witness
+        if self.parameters is not None:
+            result["parameters"] = self.parameters
         if self.reason is not None:
             result["reason"] = self.reason
         if self.semantic_mode is not None:
@@ -329,6 +338,14 @@ def build_transformation_pair_problem(
     if observation_snapshot.stage_graph is not None:
         raise VerificationError("transformation-pair observation requires a logical initial snapshot")
     before, after, observation_snapshot = _problem_snapshots((before, after, observation_snapshot))
+    # An input can disappear at the middle boundary and reappear later. Compare
+    # the anchor declaration with the after side without importing anchor axioms.
+    anchor_parameters = query_parameters(observation_snapshot)
+    for name, declaration in query_parameters(after).items():
+        if name in anchor_parameters and anchor_parameters[name] != declaration:
+            raise VerificationError(
+                f"query parameter {name!r} has inconsistent declared types across transformation snapshots"
+            )
     _validate_pair(before, after, row_bound)
     try:
         observation_validated, _ = _validate_pair(observation_snapshot, before, row_bound)
@@ -600,6 +617,10 @@ def _validate_pair(
     _check_checked_concat_eager_bound(before, row_bound)
     _check_checked_concat_eager_bound(after, row_bound)
     _check_catalogs(before, after)
+    left_parameters = query_parameters(before)
+    for name, declaration in query_parameters(after).items():
+        if name in left_parameters and left_parameters[name] != declaration:
+            raise VerificationError(f"query parameter {name!r} has inconsistent declared types across snapshots")
     if len(before.plan.output) != len(after.plan.output):
         raise SchemaMismatch("root output arity differs")
     if before.plan.output != after.plan.output:
@@ -676,6 +697,8 @@ def _build_problem(
         script = smt.Script(timeout_ms)
         database = Database(before, row_bound, script)
         scalar = ScalarEncoder(script, semantic_mode=before.semantic_mode)
+        scalar.register_parameters(query_parameters(before))
+        scalar.register_parameters(query_parameters(after))
         router = Router(script)
         soundness_exclusions: list[MismatchBranch] = []
         before_family = _evaluate_boundary(
@@ -702,6 +725,7 @@ def _build_problem(
     return _finish_problem(
         script, database, mismatch, soundness_exclusions, scalar.semantic_mode,
         abstract_integral_average=scalar.uses_abstract_integral_average,
+        parameters=scalar.parameters,
     )
 
 
@@ -713,6 +737,7 @@ def _finish_problem(
     semantic_mode: str | None = None,
     *,
     abstract_integral_average: bool = False,
+    parameters: Mapping[str, Value] | None = None,
 ) -> Problem:
     semantic_mismatch = MismatchBranch(
         "semantic_mismatch",
@@ -748,6 +773,7 @@ def _finish_problem(
         preferred_branches=mismatch.preferred_branches,
         semantic_mode=semantic_mode,
         abstract_integral_average=abstract_integral_average,
+        parameters={} if parameters is None else dict(parameters),
     )
 
 
@@ -1064,6 +1090,8 @@ def solve(
         "COUNTEREXAMPLE",
         row_bound,
         witness=decode_witness(problem.witness, query.values, problem.script.string_literals),
+        parameters=(decode_parameters(problem.parameters, query.values, problem.script.string_literals)
+                    if problem.parameters else None),
     )
 
 
@@ -1177,6 +1205,24 @@ def term_value(term: smt.Term, values: Mapping[str, bool | int | str]) -> bool |
         assert isinstance(term.atom, (bool, int, str))
         return term.atom
     raise SolverError(f"cannot decode non-constant witness term {term.render()}")
+
+
+def decode_parameters(
+    parameters: Mapping[str, Value],
+    values: Mapping[str, bool | int | str],
+    string_literals: Mapping[int, str],
+) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for name, parameter in parameters.items():
+        if term_value(parameter.is_null, values) is True:
+            result[name] = None
+        else:
+            raw_value = term_value(parameter.value, values)
+            result[name] = (
+                decode_string_atom(raw_value, string_literals)
+                if family(parameter.type) == "string" else raw_value
+            )
+    return result
 
 
 def decode_witness(

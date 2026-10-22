@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import smt
 from .analysis import AnalysisError
-from .ir import Column, Snapshot, Table, load_snapshot
+from .ir import Column, Snapshot, Table, load_snapshot, query_parameters
 from .relation import Database, RelationError, bundle_mismatch
 from .scalar import Encoder as ScalarEncoder
 from .stages import Router, StageError
@@ -119,6 +119,8 @@ def build_bundle_problem(
         # analysis separate: local node IDs are not global bundle identities.
         database = Database(replace(pairs[0][0], tables=_union_catalog(pairs)), row_bound, script)
         scalar = ScalarEncoder(script, semantic_mode=snapshots[0].semantic_mode)
+        for snapshot in snapshots:
+            scalar.register_parameters(query_parameters(snapshot))
         router = Router(script)
         exclusions = []
         families = []
@@ -138,6 +140,7 @@ def build_bundle_problem(
         return _finish_problem(
             script, database, mismatch, exclusions, scalar.semantic_mode,
             abstract_integral_average=scalar.uses_abstract_integral_average,
+            parameters=scalar.parameters,
         )
     except (AnalysisError, RelationError, StageError, smt.SmtError) as error:
         raise VerificationError(str(error)) from error

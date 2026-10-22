@@ -3723,6 +3723,126 @@ class SolverProtocolTest(unittest.TestCase):
         self.assertIn("(get-value (v_0))", formulas[2])
 
     @staticmethod
+    def _singleton_problem(*, changed=False, enabled=smt.TRUE):
+        script = smt.Script()
+        value = script.fresh_constant("singleton_value", smt.INT)
+        columns = (Column("x", "Int64", False),)
+
+        def family(payload):
+            return relation_model.RelationFamily((relation_model.Outcome(
+                enabled,
+                relation_model.Relation(columns, (relation_model.Row(
+                    smt.TRUE, {"x": Value("Int64", smt.FALSE, payload)},
+                ),)),
+                smt.FALSE,
+            ),))
+
+        mismatch = relation_model.family_mismatch(
+            family(value), family(smt.add(value, smt.ONE) if changed else value),
+            ScalarEncoder(script),
+        )
+        script.assert_obligation(mismatch.counterexample)
+        return Problem(
+            script, {}, mismatch_branches=mismatch.branches,
+            semantic_mismatch=relation_model.MismatchBranch("semantic_mismatch", mismatch.counterexample),
+            preferred_branches=mismatch.preferred_branches,
+        ), value
+
+    def test_singleton_duplicate_comparison_keeps_complete_predicates(self):
+        a, b = smt.symbol("selector_a", smt.BOOL), smt.symbol("selector_b", smt.BOOL)
+        x, y = smt.symbol("choice_x", smt.INT), smt.symbol("choice_y", smt.INT)
+
+        def mismatch(left, right, empty=smt.FALSE):
+            predicates = (empty, smt.FALSE, left, right)
+            branches = tuple(relation_model.MismatchBranch(str(i), p) for i, p in enumerate(predicates))
+            return relation_model.FamilyMismatch(smt.or_(*predicates), branches)
+
+        # Exact structural equality accepts separate nodes, not just identity.
+        original = smt.not_(a)
+        duplicate = smt.not_(smt.symbol("selector_a", smt.BOOL))
+        self.assertIsNot(original, duplicate)
+        exact = mismatch(original, duplicate)
+        self.assertEqual(relation_model._preferred_singleton_mismatch_branches(exact), (exact.branches[2],))
+        for left, right, empty in (
+            (a, b, smt.FALSE),
+            (a, a, b),
+            (a, a, smt.TRUE),
+            (smt.exists((x,), smt.eq(x, y)), smt.exists((y,), smt.eq(x, y)), smt.FALSE),
+            (smt.exists((x,), smt.eq(x, y)), smt.forall((x,), smt.eq(x, y)), smt.FALSE),
+        ):
+            with self.subTest(left=left, right=right, empty=empty):
+                self.assertIsNone(relation_model._preferred_singleton_mismatch_branches(mismatch(left, right, empty)))
+        exact = mismatch(a, a)
+        self.assertIsNone(relation_model._preferred_singleton_mismatch_branches(
+            replace(exact, branches=exact.branches + (relation_model.MismatchBranch("extra", b),)),
+        ))
+
+    def test_singleton_portfolio_uses_whole_budget_without_canonical_restart(self):
+        problem, _ = self._singleton_problem(changed=True)
+        self.assertEqual(len(problem.preferred_branches), 1)
+        self.assertEqual(problem.mismatch_branches[2].predicate, problem.mismatch_branches[3].predicate)
+        self.assertEqual(problem.formula(), replace(problem, preferred_branches=None).formula())
+        with (mock.patch.object(verifier.time, "monotonic", return_value=100.0),
+              mock.patch.object(verifier, "_run_solver", return_value=subprocess.CompletedProcess(
+                  ["solver"], 0, "unsat\n", "",
+              )) as run):
+            result = verifier.query_solver(problem, "solver", timeout_ms=10_000)
+        self.assertEqual(result.status, "unsat")
+        run.assert_called_once()
+        self.assertIn("(set-option :timeout 10000)", run.call_args.args[1])
+        self.assertEqual(run.call_args.args[2], 10.0)
+
+    def test_singleton_portfolio_preserves_model_domain_and_unknown(self):
+        problem, _ = self._singleton_problem(changed=True)
+        exclusion = relation_model.MismatchBranch("model_domain", smt.TRUE)
+        guarded = replace(problem, soundness_exclusion=exclusion, soundness_exclusions=(exclusion,))
+        for status in ("sat", "unknown"):
+            with self.subTest(status=status):
+                with mock.patch.object(verifier, "_run_solver", return_value=subprocess.CompletedProcess(
+                    ["solver"], 0, status + "\n", "",
+                )) as run:
+                    result = verifier.query_solver(guarded, "solver")
+                self.assertEqual(result.status, "unknown")
+                self.assertEqual(result.phase, "soundness")
+                run.assert_called_once()
+                self.assertIn("(assert true)", run.call_args.args[1])
+        with mock.patch.object(verifier, "_run_solver", return_value=subprocess.CompletedProcess(
+            ["solver"], 0, "unknown\n", "",
+        )) as run:
+            result = verifier.query_solver(problem, "solver")
+        self.assertEqual(result.status, "unknown")
+        run.assert_called_once()
+
+    def test_singleton_portfolio_reuses_branch_for_counterexample_model(self):
+        problem, value = self._singleton_problem(changed=True)
+        responses = (
+            subprocess.CompletedProcess(["solver"], 0, "sat\n", ""),
+            subprocess.CompletedProcess(["solver"], 0, f"sat\n(({value.atom} 7))\n", ""),
+        )
+        with mock.patch.object(verifier, "_run_solver", side_effect=responses) as run:
+            result = verifier.query_solver(problem, "solver", (value,))
+        self.assertEqual(result.status, "sat")
+        self.assertEqual(result.values, {value.atom: 7})
+        self.assertEqual(run.call_count, 2)
+        formulas = [call.args[1] for call in run.call_args_list]
+        self.assertNotIn("(get-value", formulas[0])
+        self.assertIn(f"(get-value ({value.atom}))", formulas[1])
+        self.assertEqual(formulas[0].split("(check-sat)")[0], formulas[1].split("(check-sat)")[0])
+
+    @unittest.skipUnless(SOLVER, "requires the pinned solver")
+    def test_singleton_portfolio_equivalence_mutation_and_language_totality(self):
+        for changed in (False, True):
+            with self.subTest(changed=changed):
+                problem, value = self._singleton_problem(changed=changed)
+                result = verifier.query_solver(problem, SOLVER, (value,), timeout_ms=10_000)
+                self.assertEqual(result.status, "sat" if changed else "unsat")
+                if changed:
+                    self.assertIn(value.atom, result.values)
+        empty, _ = self._singleton_problem(enabled=smt.FALSE)
+        self.assertIsNone(empty.preferred_branches)
+        self.assertEqual(verifier.query_solver(empty, SOLVER, timeout_ms=10_000).status, "sat")
+
+    @staticmethod
     def _many_outcome_problem(count=17, *, left_count=1, changed_last=False,
                               last_enabled=True, left_enabled=True):
         script = smt.Script()
@@ -9874,7 +9994,7 @@ class VerificationTest(unittest.TestCase):
         self.assertEqual(result.status, "VERIFIED_BOUNDED")
 
     def test_text_and_temporal_extrema_preserve_partition_reductions(self):
-        for input_type in ("String", "Utf8", "Date", "Datetime", "Timestamp"):
+        for input_type in ("String", "Utf8", "Date", "Datetime", "Timestamp", "Timestamp64"):
             for function, grouped, nullable in product(("min", "max"), (False, True), (False, True)):
                 with self.subTest(type=input_type, function=function, grouped=grouped, nullable=nullable):
                     initial = aggregate_stage_snapshot(
@@ -9885,7 +10005,7 @@ class VerificationTest(unittest.TestCase):
                     self.assertEqual(result.status, "VERIFIED_BOUNDED")
 
     def test_corrupt_min_final_function_has_a_solver_counterexample(self):
-        for input_type in ("Decimal(2,0)", "Int64", "String", "Utf8", "Date", "Datetime", "Timestamp"):
+        for input_type in ("Decimal(2,0)", "Int64", "String", "Utf8", "Date", "Datetime", "Timestamp", "Timestamp64"):
             with self.subTest(input_type=input_type):
                 logical = aggregate_stage_snapshot(
                     "min",

@@ -1,5 +1,10 @@
 UNITTEST_FOR(ydb/core/kqp/opt/rbo)
 
+# Avoid retaining debug sections in the native verifier's large test link.
+IF (OS_LINUX AND RBO_LOW_MEMORY_LINK)
+    LDFLAGS(-Wl,--no-gdb-index -Wl,--strip-debug)
+ENDIF()
+
 # Link the production helpers referenced by the provider directly. The enclosing
 # host and gateway utility libraries also pull in the server/console actors,
 # which are unnecessary for native operator fixtures.

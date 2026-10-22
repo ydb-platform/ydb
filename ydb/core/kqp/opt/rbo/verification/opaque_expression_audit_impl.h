@@ -111,6 +111,9 @@ class TAuditedOpaqueExpression {
         bool IsBound;
         TString Column;
         size_t Depth;
+        TString ParameterName = {};
+        TString ParameterType = {};
+        bool ParameterNullable = false;
     };
 
 public:
@@ -121,9 +124,9 @@ public:
         budget.Charge(argumentDepth, ExternalArguments.size());
         auto args = JsonArray();
         for (const auto& argument : ExternalArguments) {
-            args.AppendValue(argument.IsBound
-                ? BoundExpr(argument.Depth)
-                : ColumnExpr(argument.Column));
+            args.AppendValue(!argument.ParameterName.empty()
+                ? ParameterExpr(argument.ParameterName, argument.ParameterType, argument.ParameterNullable)
+                : argument.IsBound ? BoundExpr(argument.Depth) : ColumnExpr(argument.Column));
         }
 
         auto result = JsonMap();
@@ -319,6 +322,31 @@ private:
         CheckScalarSafetyMetadata(node);
     }
 
+    void AuditParameter(const TExprNode& node, TIdentitySink& out) {
+        const auto parameter = AuditScalarParameter(node);
+        // Parameters are external arguments of the pure opaque function; an
+        // uninterpreted constant here would lose its dependence on query input.
+        const size_t index = ExternalIndex(
+            TStringBuilder() << "parameter:" << parameter.Name.size() << ":" << parameter.Name
+                << ":" << parameter.Type << ":" << parameter.Nullable,
+            {false, {}, 0, parameter.Name, parameter.Type, parameter.Nullable});
+        out.Field("node", "parameter");
+        out.Field("type", TypeFingerprint(node));
+        out.Field("argument", ToString(index));
+        TVector<const TExprNode*> pending;
+        for (const auto& child : node.Children()) {
+            pending.push_back(child.Get());
+        }
+        while (!pending.empty()) {
+            const auto* child = pending.back();
+            pending.pop_back();
+            CheckSafeNode(*child);
+            for (const auto& nested : child->Children()) {
+                pending.push_back(nested.Get());
+            }
+        }
+    }
+
     void AuditMember(const TExprNode& node, TIdentitySink& out) {
         if (node.ChildrenSize() != 2 || !node.Child(1)->IsAtom()) {
             Unsupported("Malformed Member expression");
@@ -418,6 +446,10 @@ private:
         }
         CheckSafeNode(node);
 
+        if (node.IsCallable("Parameter")) {
+            AuditParameter(node, out);
+            return;
+        }
         if (node.IsCallable("Member")) {
             AuditMember(node, out);
             return;

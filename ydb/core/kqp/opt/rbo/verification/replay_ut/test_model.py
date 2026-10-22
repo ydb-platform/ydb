@@ -20,6 +20,7 @@ except ImportError:
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
+    Expr,
     UnionAll,
     UnionInput,
     parse_snapshot,
@@ -39,7 +40,9 @@ from ydb.core.kqp.opt.rbo.verification.replay.materialize import (
     rewrite_read_only_query,
     target_bundle,
 )
-from ydb.core.kqp.opt.rbo.verification.replay.model import InconclusiveReplay, ReplayError
+from ydb.core.kqp.opt.rbo.verification.replay.model import (
+    InconclusiveReplay, ReplayError, UnsupportedParameterReplay,
+)
 from ydb.core.kqp.opt.rbo.verification.replay.observation import (
     compare_results,
     optimizer_mode,
@@ -239,6 +242,32 @@ class IdentityTest(unittest.TestCase):
 
 
 class CaseTest(unittest.TestCase):
+    def test_parameter_replay_is_rejected_for_direct_api_and_cli(self):
+        before, after = snapshot(False), snapshot(True)
+        parameter = Expr(kind="parameter", parameter="$p", result_type="Bool", nullable=False)
+        changed_scan = replace(before.plan.nodes[0], predicate=parameter)
+        before = replace(before, plan=replace(before.plan, nodes=(changed_scan,)))
+        with self.assertRaisesRegex(UnsupportedParameterReplay, "UNSUPPORTED_PARAMETER_REPLAY"):
+            prepare_case(before, after, {}, "SELECT 1")
+        with self.assertRaisesRegex(UnsupportedParameterReplay, "UNSUPPORTED_PARAMETER_REPLAY"):
+            prepare_case(snapshot(False), after, {"parameters": {"$p": 1}}, "SELECT 1")
+        with tempfile.TemporaryDirectory() as directory:
+            query = Path(directory) / "query.yql"
+            query.write_text("SELECT 1", encoding="utf-8")
+            output = io.StringIO()
+            with (
+                mock.patch.object(replay_cli, "load_snapshot", side_effect=[before, after]),
+                mock.patch.object(replay_cli, "load_json", return_value={}),
+                mock.patch.object(replay_cli, "run_replay") as run,
+                redirect_stdout(output),
+            ):
+                code = replay_cli.main(["before", "after", "trace", str(query), "--ydb", "unused",
+                    "--baseline-endpoint", "grpc://a", "--baseline-database", "/Root/a",
+                    "--candidate-endpoint", "grpc://b", "--candidate-database", "/Root/b"])
+            self.assertEqual(code, 2)
+            self.assertEqual(json.loads(output.getvalue())["status"], "UNSUPPORTED_PARAMETER_REPLAY")
+            run.assert_not_called()
+
     def test_prepares_exact_path_rewrite_and_column_ddl(self):
         before = snapshot(False)
         after = snapshot(True)

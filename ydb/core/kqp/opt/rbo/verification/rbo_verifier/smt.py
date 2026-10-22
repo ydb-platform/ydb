@@ -361,7 +361,7 @@ def _render_scope(root: Term, context: _RenderContext) -> str:
             )
         bindings = " ".join(rendered_bindings)
         prefixes.append(f"(let ({bindings}) ")
-    return "".join(reversed(prefixes)) + body + ")" * len(prefixes)
+    return "".join([*reversed(prefixes), body, ")" * len(prefixes)])
 
 
 def _render_identity_scope(root: Term, context: _RenderContext) -> str:
@@ -447,7 +447,7 @@ def _render_identity_scope(root: Term, context: _RenderContext) -> str:
             )
         bindings = " ".join(rendered_bindings)
         prefixes.append(f"(let ({bindings}) ")
-    return "".join(reversed(prefixes)) + body + ")" * len(prefixes)
+    return "".join([*reversed(prefixes), body, ")" * len(prefixes)])
 
 
 def _render_unshared(term: Term, context: _RenderContext) -> str:
@@ -511,7 +511,8 @@ def _render_term(
             )
             rendered_body = (context.scope_cache.render(body) if context.scope_cache is not None
                              else _render_scope(body, context))
-            pieces.append(f"({item.operation} ({bindings}) {rendered_body})")
+            # Keep cached bodies as pieces until the final join; they may be large.
+            pieces.extend((f"({item.operation} ({bindings}) ", rendered_body, ")"))
             continue
         if not item.arguments:
             pieces.append(item.operation)
@@ -1537,7 +1538,7 @@ class Script:
                 if term.operation != "symbol":
                     raise SmtError("only named constants may be requested")
             suffix = f"(get-value ({' '.join(term.render() for term in requested)}))\n"
-        return "\n".join(lines) + "\n" + body + suffix
+        return "".join(("\n".join(lines), "\n", body, suffix))
 
     def _render_body(self, branch: Term | None) -> str:
         # Declarations/assertions are append-only and their terms are immutable.
@@ -1568,8 +1569,8 @@ class Script:
         lines = [declaration.render() for declaration in self._declarations]
         lines.extend(f"(assert {_render_scope(assertion, context)})"
                      for assertion in ordered_assertions)
-        lines.append("(check-sat)")
-        body = "\n".join(lines) + "\n"
+        lines.append("(check-sat)\n")
+        body = "\n".join(lines)
         if sys.getsizeof(body) <= _MAX_RENDERED_BODY_BYTES:
             self._rendered_body = (version, branch, body)
         return body

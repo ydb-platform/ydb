@@ -327,6 +327,15 @@ def _validate_verifier_verdict(candidate: Candidate, value: Any) -> None:
             raise ConfirmationError(
                 f"q{candidate.query_id} counterexample without a witness has no reason"
             )
+    if "parameters" in value:
+        parameters = value["parameters"]
+        if "witness" not in value or not isinstance(parameters, Mapping) or not parameters or any(
+            not isinstance(name, str) or len(name) < 2 or not name.startswith("$")
+            or (item is not None and type(item) not in (bool, int, str))
+            for name, item in parameters.items()
+        ):
+            raise ConfirmationError(f"q{candidate.query_id} raw verifier parameters are malformed")
+        expected.add("parameters")
     if set(value) != expected:
         raise ConfirmationError(
             f"q{candidate.query_id} raw verifier verdict has unknown or missing fields"

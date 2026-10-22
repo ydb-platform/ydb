@@ -8,6 +8,36 @@ The [archive](history/README.md) is evidence history, not the current contract.
 The [findings ledger](FINDINGS.md) separates current runtime reproductions,
 fixed regressions, bounded routing findings, and model false positives.
 
+## Symbolic query inputs
+
+Scalar `Parameter(name, type)` leaves are captured with their exact source name,
+scalar type, and optionality. Names must begin with `$` and have a nonempty
+suffix; internal `%kqp...` transaction/materialization bindings require separate
+producer lineage and are rejected. Only Bool, the reviewed fixed-width integers,
+Date/Datetime/Timestamp/Timestamp64, String/Utf8, and Decimal are admitted. Descriptor text,
+descriptor type annotation, and result annotation must agree; scalar safety
+metadata is checked on the complete descriptor. Double, nested optionals,
+structured/list/Pg inputs, and parameter-backed row sources remain unsupported.
+This extension does not admit dynamic LIMIT/OFFSET or new read-range grammars.
+
+A query input has one symbolic value and (when optional) one NULL flag shared by
+both plans, every row, all stages, correlated invocations, and every buffered
+result in a bundle. The input contract assumes that callers supply valid typed
+bindings; absent/malformed binding protocol errors are outside this model. It is
+part of the database valuation, never a quantified
+execution choice. Exact storage domains are asserted for integers, dates and
+Decimal, including Decimal infinities and NaN. String inputs participate in the
+existing order/equality representative universe. No supplied example/default
+value is substituted, and NULL flags are not constrained to be present.
+
+Same-name type or nullability conflicts are rejected across all captured nodes
+and snapshots, including names pruned from one side and conflicts between result
+slots. A parameter removed on one side remains a free shared query input. Opaque
+source audits retain parameters as explicit external arguments, preserving their
+value dependence. Existing model-domain exclusions and totality obligations are
+unchanged; the proof still must rule them out. Counterexample output includes a
+`parameters` map; Decimal values use the existing scaled/special integer codes.
+
 ## What is trusted
 
 | Review unit | Responsibility |
@@ -269,9 +299,16 @@ leaf audit, including matching member types, constant patterns and reviewed
 Re2 descriptors. String and Utf8 remain distinct typed inputs.
 
 R6 allows the same reviewed predicate before stage assignment, where it has
-ordinary row-local filter semantics. A physical stage graph must still place
-the predicate in a column-storage source stage. Pushed limits continue to
-require that stage boundary because their selection is task-local. Logical
+ordinary row-local filter semantics. Column-storage predicates retain that
+admission. Row-storage predicates admit only the reviewed single nonnullable
+Int32/Int64 primary-key interval: exact same-type required literal or external
+parameter bounds, finite inclusive/exclusive ends or unbounded ends. The native
+exporter audits the actual `LiteralRange` selected by physical conversion and
+rejects nullable/composite keys, system views, computed or optional bounds, empty
+exclusive boundaries and identical exclusive endpoints. Source partitioning
+intersects the already filtered row-presence bits without changing bag contents.
+Pushed limits still require a column-storage stage because their selection is
+task-local. Logical
 intermediate comparisons use the diagnostic transformation-prefix entrypoint;
 normal initial/final admission roles are unchanged.
 

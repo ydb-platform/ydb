@@ -123,6 +123,13 @@ def _confirm_candidate(
     except (ConfirmationError, OSError) as error:
         return _unresolved(result, "input", str(error))
 
+    if "parameters" in inputs.verdict:
+        return _unresolved(
+            result,
+            "parameter_replay",
+            "UNSUPPORTED_PARAMETER_REPLAY: saved query parameter values are not yet bound "
+            "for inspection or runtime replay",
+        )
     if "witness" not in inputs.verdict:
         return _unresolved(
             result,

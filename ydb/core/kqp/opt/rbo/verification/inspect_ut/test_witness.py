@@ -1,5 +1,6 @@
 import os
 import unittest
+from dataclasses import replace
 
 try:
     import yatest.common as yatest_common
@@ -83,6 +84,13 @@ class WitnessBindingTest(unittest.TestCase):
                 "x": decimal.INF,
             }]
         }
+
+    def test_table_only_witness_cannot_silently_leave_parameters_unbound(self):
+        problem = replace(self.problem(), parameters={"$p": object()})
+        initial = tuple(problem.script.assertions)
+        with self.assertRaisesRegex(InvalidWitness, "UNSUPPORTED_PARAMETER_REPLAY"):
+            bind_witness(problem, self.witness())
+        self.assertEqual(tuple(problem.script.assertions), initial)
 
     def test_decoded_database_round_trips_with_absent_slots_and_nulls(self):
         problem = self.problem()

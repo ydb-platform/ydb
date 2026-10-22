@@ -5889,6 +5889,25 @@ def _preferred_keyed_mismatch_branches(
     return tuple(branches) or None
 
 
+def _preferred_singleton_mismatch_branches(
+    mismatch: FamilyMismatch,
+) -> tuple[MismatchBranch, ...] | None:
+    """Keep one exact obligation for two total singleton languages.
+
+    Compare complete predicates, including guards and quantifier binders. Equal
+    payloads alone do not establish equality of the two inclusion directions.
+    The caller retains the canonical formula and all model-domain exclusions.
+    """
+    if len(mismatch.branches) != 4:
+        return None
+    left_empty, right_empty, left_unmatched, right_unmatched = mismatch.branches
+    if left_empty.predicate != smt.FALSE or right_empty.predicate != smt.FALSE:
+        return None
+    if left_unmatched.predicate != right_unmatched.predicate:
+        return None
+    return (left_unmatched,)
+
+
 def _family_mismatch(
     left: RelationFamily,
     right: RelationFamily,
@@ -5907,6 +5926,10 @@ def _family_mismatch(
     if universal:
         return mismatch
     preferred = _preferred_keyed_mismatch_branches(left, right, scalar, ordered)
+    if preferred is None:
+        # A canonical P-or-P probe followed by P restarts the same proof with
+        # less time. Select the one complete predicate before solver timing.
+        preferred = _preferred_singleton_mismatch_branches(mismatch)
     if preferred is None and len(left.outcomes) == 1 and len(right.outcomes) >= MIN_GROUPED_PHYSICAL_OUTCOMES:
         # One logical outcome against many physical schedules benefits from
         # small exact disjunctions. Every original branch, including the two

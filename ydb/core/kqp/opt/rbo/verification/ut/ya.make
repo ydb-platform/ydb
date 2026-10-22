@@ -20,6 +20,7 @@ TEST_SRCS(
     test_project_error.py
     test_sort.py
     test_scalar.py
+    test_parameters.py
     test_sql_in.py
     test_stage_compaction.py
     test_stage_ports.py

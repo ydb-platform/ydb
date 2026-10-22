@@ -8,6 +8,7 @@ except ImportError:
     yatest_common = None
 
 from ydb.core.kqp.opt.rbo.verification.inspector.trace import (
+    PreparedInspection,
     Probes,
     _add_family,
     _family_json,
@@ -297,6 +298,21 @@ def _average_family(
 
 
 class ObserverTest(unittest.TestCase):
+    def test_parameter_inspection_fails_before_obligation_or_solver(self):
+        expression = {"kind": "parameter", "name": "$p", "type": "Int64", "nullable": False}
+        before, after = _logical(expression), _staged(expression)
+        with mock.patch("ydb.core.kqp.opt.rbo.verification.inspector.trace.build_problem") as build:
+            with self.assertRaisesRegex(InspectionError, "UNSUPPORTED_PARAMETER_REPLAY"):
+                prepare(before, after, 2)
+            build.assert_not_called()
+        prepared = PreparedInspection(
+            before, after, 2, mock.Mock(parameters={"$p": object()}), mock.Mock(), mock.Mock()
+        )
+        with mock.patch("ydb.core.kqp.opt.rbo.verification.inspector.trace.query_solver") as solver:
+            with self.assertRaisesRegex(InspectionError, "UNSUPPORTED_PARAMETER_REPLAY"):
+                prepared.solve("unused-solver", 1000)
+            solver.assert_not_called()
+
     def test_trace_order_json_shows_only_present_comparison_tags(self):
         ordinary = SortOrder("k", True, False)
         tagged = SortOrder(

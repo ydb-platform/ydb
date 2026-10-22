@@ -165,6 +165,10 @@ def _load_verifier_witness(path: Path, row_bound: int) -> object:
         raise InvalidWitness(
             "transformation-prefix verdict cannot be traced as a whole-optimizer witness"
         )
+    if "parameters" in verdict:
+        raise InspectionError(
+            "UNSUPPORTED_PARAMETER_REPLAY: saved query parameter values cannot yet be fixed in a concrete trace"
+        )
     expected_fields = {"status", "row_bound", "task_bound", "witness"}
     if set(verdict) != expected_fields:
         raise InvalidWitness("verifier counterexample has unknown or missing fields")

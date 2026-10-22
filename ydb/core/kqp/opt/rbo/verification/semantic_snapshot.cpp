@@ -120,7 +120,7 @@ bool IsSupportedType(TStringBuf type) {
         "Bool",
         "Int8", "Int16", "Int32", "Int64",
         "Uint8", "Uint16", "Uint32", "Uint64",
-        "String", "Utf8", "Date", "Datetime", "Timestamp",
+        "String", "Utf8", "Date", "Datetime", "Timestamp", "Timestamp64",
     };
     if (Types.contains(type)) {
         return true;
@@ -133,7 +133,7 @@ bool IsSupportedLiteralType(TStringBuf type) {
         "Bool",
         "Int8", "Int16", "Int32", "Int64",
         "Uint8", "Uint16", "Uint32", "Uint64",
-        "String", "Utf8", "Date", "Datetime", "Timestamp",
+        "String", "Utf8", "Date", "Datetime", "Timestamp", "Timestamp64",
     };
     return Types.contains(type);
 }
@@ -233,6 +233,11 @@ void ValidateOperatorArity(IOperator& op, bool allowRoot) {
             return;
 
         case EOperator::Aggregate:
+            // Storage-side aggregation has a separate physical implementation.
+            // Reject before normalization can absorb an intermediate aggregate.
+            if (static_cast<const TOpAggregate&>(op).IsPushedToOlap()) {
+                Unsupported("Aggregate pushed to OLAP is not modeled");
+            }
             if (children != 1) {
                 Unsupported("Aggregate must have one input");
             }
@@ -606,7 +611,7 @@ void AuditExactScalarExpression(const NJson::TJsonValue& root) {
         };
 
         if (kind == "column" || kind == "bound" || kind == "void" ||
-            kind == "literal" || kind == "null" ||
+            kind == "literal" || kind == "null" || kind == "parameter" ||
             kind == "window_sum" || kind == "window_avg" ||
             kind == "window_rank" || kind == "window_rows_sum" ||
             kind == "window_rows_max")
@@ -768,6 +773,8 @@ void CheckUnsignedRange(ui64 value, TStringBuf type) {
     }
 }
 
+void CheckScalarSafetyMetadata(const TExprNode& node, bool allowUnorderedChildren);
+
 NJson::TJsonValue LiteralExpr(const TExprNode& node) {
     const TString type(node.Content());
     if (!IsSupportedLiteralType(type) || node.ChildrenSize() != 1 || !node.Child(0)->IsAtom()) {
@@ -811,6 +818,24 @@ NJson::TJsonValue LiteralExpr(const TExprNode& node) {
             CheckUnsignedRange<ui16>(parsed, type);
         } else if (type == "Uint32") {
             CheckUnsignedRange<ui32>(parsed, type);
+        }
+        result["value"] = parsed;
+        return result;
+    }
+
+    if (type == "Timestamp64") {
+        CheckScalarSafetyMetadata(node, false);
+        CheckScalarSafetyMetadata(*node.Child(0), false);
+        bool nullable = false;
+        if (TypeName(node.GetTypeAnn(), &nullable) != type || nullable) {
+            Unsupported("Timestamp64 literal type annotation does not match its callable");
+        }
+        const i64 parsed = ParseInteger<i64>(value, type);
+        if (parsed < NUdf::MIN_TIMESTAMP64 || parsed > NUdf::MAX_TIMESTAMP64) {
+            Unsupported(TStringBuilder()
+                << type << " literal is out of range ["
+                << NUdf::MIN_TIMESTAMP64 << ", " << NUdf::MAX_TIMESTAMP64
+                << "]: " << value);
         }
         result["value"] = parsed;
         return result;
@@ -1079,14 +1104,15 @@ bool ScalarEqualityComparisonCompatible(TStringBuf left, TStringBuf right) {
 
 bool ScalarOrderingComparisonCompatible(TStringBuf left, TStringBuf right) {
     return IntegralDataComparisonCompatible(left, right) ||
-        (left == right && (left == "Date" || left == "Datetime" || left == "Timestamp")) ||
+        (left == right && (left == "Date" || left == "Datetime" ||
+            left == "Timestamp" || left == "Timestamp64")) ||
         StringComparisonCompatible(left, right) ||
         DecimalComparisonCompatible(left, right);
 }
 
 bool IsModeledOrderingType(TStringBuf type) {
     return IsIntegerType(type) || type == "Date" || type == "Datetime" ||
-        type == "Timestamp" || IsStringType(type) ||
+        type == "Timestamp" || type == "Timestamp64" || IsStringType(type) ||
         IsCanonicalDecimalType(type);
 }
 
@@ -2148,7 +2174,10 @@ void CheckOpaqueCallable(
         }
         CheckScalarArity(node, 2, 2);
         const TString resultType = ScalarTypeName(node);
-        ScalarTypeName(*node.Child(0));
+        const TString sourceType = ScalarTypeName(*node.Child(0));
+        if (sourceType == "Timestamp64" || resultType == "Timestamp64") {
+            Unsupported("Timestamp64 casts require a separately reviewed conversion model");
+        }
         if (!node.Child(1)->IsCallable("DataType") &&
             !node.Child(1)->IsCallable("OptionalType"))
         {
@@ -3393,7 +3422,8 @@ const TCallableExprType& CheckCompiledLikeUdf(
     TString* matchPattern = nullptr);
 
 TString CheckCompiledLikePatternApply(const TExprNode& node) {
-    if (!node.IsCallable("Apply") || node.ChildrenSize() != 2 ||
+    if (!node.IsCallable("Apply") ||
+        (node.ChildrenSize() != 2 && node.ChildrenSize() != 3) ||
         !IsCompiledLikeType(node.GetTypeAnn(), ECompiledLikeType::String))
     {
         Unsupported("Malformed Re2.PatternFromLike Apply");
@@ -3401,6 +3431,27 @@ TString CheckCompiledLikePatternApply(const TExprNode& node) {
     const auto& callable = CheckCompiledLikeUdf(
         *node.Child(0), ECompiledLikeUdf::PatternFromLike);
     const auto& literal = *node.Child(1);
+    if (node.ChildrenSize() == 3) {
+        const auto& escape = *node.Child(2);
+        if (!IsSameAnnotation(*node.GetTypeAnn(), *callable.GetReturnType()) ||
+            !IsCompiledLikeType(literal.GetTypeAnn(), ECompiledLikeType::String) ||
+            !IsSameAnnotation(*literal.GetTypeAnn(), *callable.GetArguments()[0].Type) ||
+            (!IsCompiledLikeType(escape.GetTypeAnn(), ECompiledLikeType::String) &&
+             !IsCompiledLikeType(escape.GetTypeAnn(), ECompiledLikeType::OptionalString)))
+        {
+            Unsupported("Malformed Re2.PatternFromLike ESCAPE arguments");
+        }
+        // ESCAPE is a valid optional UDF argument; its semantics are outside
+        // the admitted compiled LIKE subset even for a literal pattern.
+        Unsupported("Compiled LIKE explicit ESCAPE argument is not modeled");
+    }
+    if (!literal.IsCallable("String") &&
+        IsSameAnnotation(*node.GetTypeAnn(), *callable.GetReturnType()) &&
+        IsCompiledLikeType(literal.GetTypeAnn(), ECompiledLikeType::String) &&
+        IsSameAnnotation(*literal.GetTypeAnn(), *callable.GetArguments()[0].Type))
+    {
+        Unsupported("Compiled LIKE dynamic patterns are not modeled");
+    }
     if (!IsSameAnnotation(*node.GetTypeAnn(), *callable.GetReturnType()) ||
         !literal.IsCallable("String") || literal.ChildrenSize() != 1 ||
         !literal.Child(0)->IsAtom() ||
@@ -4804,6 +4855,71 @@ NJson::TJsonValue NullableDateYearExpr(
     return result;
 }
 
+struct TScalarParameter {
+    TString Name;
+    TString Type;
+    bool Nullable;
+};
+
+TScalarParameter AuditScalarParameter(const TExprNode& node) {
+    CheckScalarSafetyMetadata(node);
+    CheckScalarArity(node, 2, 2);
+    if (!node.IsCallable("Parameter") || !node.Child(0)->IsAtom() || node.Child(0)->Content().empty()) {
+        Unsupported("Scalar Parameter requires a nonempty name atom and exact data type descriptor");
+    }
+    CheckScalarSafetyMetadata(*node.Child(0));
+    const auto name = node.Child(0)->Content();
+    // Materialized transaction results also use Parameter, but their value is
+    // tied to an earlier computation. Their reserved % names are not inputs.
+    if (name.size() < 2 || !name.StartsWith("$")) {
+        Unsupported("Only external SQL Parameter names beginning with '$' are modeled");
+    }
+    const auto& descriptor = *node.Child(1);
+    bool descriptorNullable = false;
+    const TString descriptorType = DataTypeDescriptorName(descriptor, &descriptorNullable);
+    // The descriptor has only DataType atoms and at most one OptionalType.
+    TVector<const TExprNode*> pending{&descriptor};
+    while (!pending.empty()) {
+        const auto* child = pending.back();
+        pending.pop_back();
+        CheckScalarSafetyMetadata(*child);
+        for (const auto& nested : child->Children()) {
+            pending.push_back(nested.Get());
+        }
+    }
+    bool nullable = false;
+    const TString type = ScalarTypeName(node, &nullable);
+    const auto annotation = descriptor.GetTypeAnn();
+    bool annotationNullable = false;
+    if (descriptorType != type || descriptorNullable != nullable ||
+        !annotation || annotation->GetKind() != ETypeAnnotationKind::Type ||
+        TypeName(annotation->Cast<TTypeExprType>()->GetType(), &annotationNullable) != type ||
+        annotationNullable != nullable)
+    {
+        Unsupported("Scalar Parameter descriptor and result annotations disagree");
+    }
+    if (descriptorNullable) {
+        const auto itemAnnotation = descriptor.Child(0)->GetTypeAnn();
+        bool itemNullable = false;
+        if (!itemAnnotation || itemAnnotation->GetKind() != ETypeAnnotationKind::Type ||
+            TypeName(itemAnnotation->Cast<TTypeExprType>()->GetType(), &itemNullable) != type ||
+            itemNullable)
+        {
+            Unsupported("Scalar Parameter item descriptor annotation disagrees with its declared type");
+        }
+    }
+    return {TString(node.Child(0)->Content()), type, nullable};
+}
+
+NJson::TJsonValue ParameterExpr(const TString& name, const TString& type, bool nullable) {
+    auto result = JsonMap();
+    result["kind"] = "parameter";
+    result["name"] = name;
+    result["type"] = type;
+    result["nullable"] = nullable;
+    return result;
+}
+
 #include "opaque_expression_audit_impl.h"
 
 bool IsPassiveDoubleCarrierCandidate(const TExprNode& node) {
@@ -5586,6 +5702,11 @@ NJson::TJsonValue ExportExprNode(
             << MaxExactScalarDepth);
     }
     budget.Charge(normalizedDepth);
+
+    if (node.IsCallable("Parameter")) {
+        const auto parameter = AuditScalarParameter(node);
+        return ParameterExpr(parameter.Name, parameter.Type, parameter.Nullable);
+    }
 
     // Active Double is a separate, explicit interpretation. Every primitive
     // stays visible to the verifier; no aggregate or arithmetic subtree is
@@ -12344,9 +12465,10 @@ private:
                     Unsupported("Read has range or ordering semantics absent from logical snapshot v1");
                 }
                 if (read.RangeInfo &&
-                    read.StorageType != NYql::EStorageType::ColumnStorage)
+                    read.StorageType != NYql::EStorageType::ColumnStorage &&
+                    read.StorageType != NYql::EStorageType::RowStorage)
                 {
-                    Unsupported("Read pushed range is supported only for column storage");
+                    Unsupported("Read pushed range requires an audited row or column source");
                 }
                 if (read.OlapFilterLambda &&
                     read.StorageType != NYql::EStorageType::ColumnStorage)

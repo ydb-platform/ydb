@@ -31,15 +31,15 @@ namespace {
 // them only when the complete read-only AST result list matches distinct roots.
 class TResultSlotSnapshotSink final : public IRBOSemanticSnapshotSink {
 public:
-    TResultSlotSnapshotSink(IRBOSemanticSnapshotSink& sink, const TExprNode& resultList,
+    TResultSlotSnapshotSink(IRBOSemanticSnapshotSink& sink, const TExprNode* resultList,
         const TVector<TIntrusivePtr<TOpRoot>>& roots)
         : Sink(sink)
     {
-        if (roots.empty() || roots.size() > Max<ui32>()) {
+        if (!resultList || roots.empty() || roots.size() > Max<ui32>()) {
             return;
         }
         THashMap<const TExprNode*, ui32> ordinals;
-        for (const auto& slot : resultList.Children()) {
+        for (const auto& slot : resultList->Children()) {
             if (slot->IsList() && slot->ChildrenSize() == 0) {
                 continue; // Empty query preamble.
             }
@@ -581,17 +581,20 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
     TRBOTraceOutput traceOutput(rboCtx);
     const auto semanticSnapshotSink = TransformCtx->RBOSemanticSnapshotSink;
     std::optional<TResultSlotSnapshotSink> resultSlotSink;
-    if (semanticSnapshotSink && containers.size() == 1) {
-        resultSlotSink.emplace(*semanticSnapshotSink, *containers.front(), Roots);
+    if (semanticSnapshotSink) {
+        // Multiple containers do not establish one complete SQL result order.
+        // Still clear any incoming mapping explicitly instead of forwarding it.
+        resultSlotSink.emplace(*semanticSnapshotSink,
+            containers.size() == 1 ? containers.front().Get() : nullptr, Roots);
     }
     auto optimizedPlan = RBO.Optimize(Roots, rboCtx,
         resultSlotSink ? &*resultSlotSink : semanticSnapshotSink.get());
     traceOutput.Flush();
-    AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
     // Prefix capture stops before producing an executable physical plan.
     if (!optimizedPlan) {
         return TStatus::Error;
     }
+    AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
 
     TNodeOnNodeOwnedMap replacements;
     for (const auto& container : containers) {

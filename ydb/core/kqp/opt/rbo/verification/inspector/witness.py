@@ -28,6 +28,10 @@ def bind_witness(
     and plan choices remain free for reconstructing an execution of those rows.
     """
 
+    if problem.parameters:
+        raise InvalidWitness(
+            "UNSUPPORTED_PARAMETER_REPLAY: a table-only witness cannot fix query parameter values"
+        )
     if not isinstance(value, Mapping) or any(not isinstance(key, str) for key in value):
         raise InvalidWitness("witness must be an object with string table identities")
     if set(value) != set(problem.witness):

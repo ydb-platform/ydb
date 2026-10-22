@@ -269,6 +269,46 @@ class FakeCommands:
 
 
 class ConfirmationTest(unittest.TestCase):
+    def test_parameter_counterexample_preserves_exact_evidence_and_skips_children(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Fixture(Path(temporary))
+            row = fixture.report_value["queries"][0]
+            path = fixture.root / row["artifacts"]["verifier_verdict"]
+            verdict = json.loads(path.read_bytes())
+            exact = 10**35 + 1
+            verdict["parameters"] = {"$p": exact, "$q": None}
+            content = (json.dumps(verdict) + "\n").encode()
+            path.write_bytes(content)
+            row["artifacts"]["verifier_verdict_sha256"] = _sha(content)
+            fixture.write_report()
+            commands = FakeCommands(fixture.witnesses)
+            result = confirm(fixture.config(), run=commands)
+            candidate = result["candidates"][0]
+            self.assertEqual(candidate["classification"], "UNRESOLVED")
+            self.assertEqual(candidate["unresolved_phase"], "parameter_replay")
+            self.assertIn("UNSUPPORTED_PARAMETER_REPLAY", candidate["reason"])
+            self.assertEqual(commands.calls, [])
+            copied = list(fixture.config().artifacts.rglob("*verifier*.json"))
+            self.assertTrue(any(path.read_bytes() == content for path in copied))
+
+    def test_malformed_parameter_witness_remains_an_input_error(self):
+        for parameters in ({}, {"$p": []}, {"p": 1}, {"$p": 1.5}):
+            with self.subTest(parameters=parameters), tempfile.TemporaryDirectory() as temporary:
+                fixture = Fixture(Path(temporary))
+                row = fixture.report_value["queries"][0]
+                path = fixture.root / row["artifacts"]["verifier_verdict"]
+                verdict = json.loads(path.read_bytes())
+                verdict["parameters"] = parameters
+                content = json.dumps(verdict).encode()
+                path.write_bytes(content)
+                row["artifacts"]["verifier_verdict_sha256"] = _sha(content)
+                fixture.write_report()
+                commands = FakeCommands(fixture.witnesses)
+                candidate = confirm(fixture.config(), run=commands)["candidates"][0]
+                self.assertEqual(candidate["classification"], "UNRESOLVED")
+                self.assertEqual(candidate["unresolved_phase"], "input")
+                self.assertEqual(commands.calls, [])
+
     def test_version_four_report_remains_supported(self):
         with tempfile.TemporaryDirectory() as temporary:
             fixture = Fixture(Path(temporary), ("VERIFIED_BOUNDED",))

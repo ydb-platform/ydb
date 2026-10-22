@@ -16,6 +16,10 @@ class ReplayError(ValueError):
     """The replay input or environment cannot be used without guessing."""
 
 
+class UnsupportedParameterReplay(ReplayError):
+    """Runtime replay has no audited query-parameter binding path yet."""
+
+
 class InconclusiveReplay(ReplayError):
     """The bounded trace permits more than one observable runtime result."""
 

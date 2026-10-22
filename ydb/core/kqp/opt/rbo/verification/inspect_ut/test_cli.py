@@ -12,6 +12,26 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import SchemaMismatch
 
 
 class CliTest(unittest.TestCase):
+    def test_saved_parameter_witness_is_explicitly_unsupported_without_solving(self):
+        with tempfile.TemporaryDirectory() as directory:
+            verdict = Path(directory) / "verdict.json"
+            verdict.write_text(json.dumps({
+                "status": "COUNTEREXAMPLE", "row_bound": 2, "task_bound": 2,
+                "witness": {"A": []}, "parameters": {"$p": 7}}), encoding="utf-8")
+            errors = io.StringIO()
+            with (
+                mock.patch.object(cli, "load_snapshot", side_effect=[object(), object()]),
+                mock.patch.object(cli, "prepare") as prepare,
+                redirect_stderr(errors),
+            ):
+                code = cli.main(["witness", "before", "after", "--solver", "unused",
+                                 "--verifier-verdict", str(verdict)])
+            self.assertEqual(code, 2)
+            result = json.loads(errors.getvalue())
+            self.assertEqual(result["status"], "UNSUPPORTED")
+            self.assertIn("UNSUPPORTED_PARAMETER_REPLAY", result["reason"])
+            prepare.assert_not_called()
+
     def test_missing_snapshot_is_a_structured_io_error(self):
         errors = io.StringIO()
         with redirect_stderr(errors):

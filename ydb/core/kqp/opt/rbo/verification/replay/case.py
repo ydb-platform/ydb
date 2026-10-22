@@ -24,6 +24,7 @@ from ..rbo_verifier.ir import (
     Table,
     UnionAll,
     parse_snapshot,
+    query_parameters,
 )
 from ..rbo_verifier.string_order import MAX_STRING_BYTES
 from ..rbo_verifier.types import family
@@ -32,6 +33,7 @@ from .model import (
     ReplayCase,
     ReplayError,
     ReplayTable,
+    UnsupportedParameterReplay,
     canonical_json,
     primary_key,
     require_mapping,
@@ -80,6 +82,10 @@ def prepare_case(
     query: str,
     query_sha256: str | None = None,
 ) -> ReplayCase:
+    if query_parameters(before) or query_parameters(after):
+        raise UnsupportedParameterReplay(
+            "UNSUPPORTED_PARAMETER_REPLAY: runtime parameter bindings are not yet modeled"
+        )
     if before.stage_graph is not None or after.stage_graph is None:
         raise ReplayError("expected an initial logical snapshot and a final StageGraph snapshot")
     if before.tables != after.tables:
@@ -90,6 +96,10 @@ def prepare_case(
         raise ReplayError("query text is empty")
 
     document = require_mapping(trace, "trace")
+    if "parameters" in document:
+        raise UnsupportedParameterReplay(
+            "UNSUPPORTED_PARAMETER_REPLAY: runtime parameter bindings are not yet modeled"
+        )
     if document.get("format") != TRACE_FORMAT or document.get("version") != TRACE_VERSION:
         raise ReplayError("replay requires a version-one kqp_rbo_inspect concrete trace")
     if document.get("status") != "COUNTEREXAMPLE" or "witness" not in document:

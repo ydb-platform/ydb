@@ -267,7 +267,7 @@ struct TFixture {
 
     TSemanticSnapshotExportResult CorrelatedScalarCount(
         TInfoUnitId captured, bool passiveMap = false, bool wrongType = false,
-        bool aggregateCapture = false)
+        bool aggregateCapture = false, bool pushedToOlap = false)
     {
         const auto pos = TPositionHandle();
         const auto* int32 = Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
@@ -313,6 +313,9 @@ struct TFixture {
         auto aggregate = MakeIntrusive<TOpAggregate>(aggregateInput,
             TAggregationIUs{{count, {argument, "count", false, false}}},
             TOrderedIUs<>{}, EOpPhase::Undefined, false, pos);
+        if (pushedToOlap) {
+            aggregate->SetPushedToOlap();
+        }
         SetType(*aggregate, {{count, uint64}});
         auto outer = Read();
         auto call = MakeColumnAccess(binding, pos, &Expr, &ExpressionProps);
@@ -486,7 +489,8 @@ struct TFixture {
         return Export(root);
     }
 
-    TSemanticSnapshotExportResult KeyOnlyAggregate(bool staged, bool extraKey = false, bool distinctAll = false) {
+    TSemanticSnapshotExportResult KeyOnlyAggregate(bool staged, bool extraKey = false, bool distinctAll = false,
+        bool pushedToOlap = false) {
         const auto pos = TPositionHandle();
         const auto* int32 = Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
         const auto* groupType = Expr.MakeType<TOptionalExprType>(
@@ -502,6 +506,9 @@ struct TFixture {
         }
         auto aggregate = MakeIntrusive<TOpAggregate>(read, TAggregationIUs{}, keys,
             staged ? EOpPhase::Intermediate : EOpPhase::Undefined, distinctAll, pos);
+        if (pushedToOlap) {
+            aggregate->SetPushedToOlap();
+        }
         SetType(*aggregate, columns);
         TIntrusivePtr<IOperator> result = aggregate;
         if (staged) {
@@ -529,7 +536,7 @@ struct TFixture {
     TRBOContext Rbo;
     TInfoUnitRegistry Registry;
     TPlanProps ExpressionProps;
-    const TKikimrTableDescription* Table = nullptr;
+    TKikimrTableDescription* Table = nullptr;
     TInfoUnitId Key;
     TInfoUnitId Other;
     const TTypeAnnotationNode* OtherType = nullptr;
@@ -1142,6 +1149,144 @@ TSemanticSnapshotExportResult NativeStablePickle(
     return fixture.Export(root);
 }
 
+
+enum class ETimestamp64LiteralMetadataMutation {
+    None,
+    RootResult,
+    RootPosition,
+    RootSemilatticeEffects,
+    RootGeneralEffects,
+    RootUnordered,
+    AtomResult,
+    AtomPosition,
+    AtomSemilatticeEffects,
+    AtomGeneralEffects,
+};
+
+TSemanticSnapshotExportResult NativeTimestamp64Expression(
+    TStringBuf text, TStringBuf operation = "literal", bool nullable = true,
+    TString sourceType = "Timestamp64", TString literalType = "Timestamp64",
+    TString annotationType = "Timestamp64", bool nullableLiteral = false,
+    ETimestamp64LiteralMetadataMutation metadataMutation = ETimestamp64LiteralMetadataMutation::None)
+{
+    TFixture fixture(sourceType, !nullable);
+    const auto pos = TPositionHandle();
+    const auto* int32 = fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    const auto* boolean = fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Bool);
+    const auto* sourceItem = fixture.Expr.MakeType<TDataExprType>(*NUdf::FindDataSlot(sourceType));
+    const TTypeAnnotationNode* source = nullable
+        ? static_cast<const TTypeAnnotationNode*>(fixture.Expr.MakeType<TOptionalExprType>(sourceItem))
+        : sourceItem;
+    const auto* literalItem = fixture.Expr.MakeType<TDataExprType>(*NUdf::FindDataSlot(annotationType));
+    const TTypeAnnotationNode* literalAnnotation = nullableLiteral
+        ? static_cast<const TTypeAnnotationNode*>(fixture.Expr.MakeType<TOptionalExprType>(literalItem))
+        : literalItem;
+    auto read = fixture.Read();
+    read->GetColumns() = TUnorderedIUs{fixture.Key, fixture.Group};
+    fixture.SetType(*read, {{fixture.Key, int32}, {fixture.Group, source}});
+    auto row = fixture.Expr.NewArgument(pos, "row");
+    row->SetTypeAnn(read->Type->Cast<TListExprType>()->GetItemType());
+    auto member = fixture.Expr.NewCallable(pos, "Member", {row, fixture.Expr.NewAtom(pos, ToString(fixture.Group))});
+    member->SetTypeAnn(source);
+    auto literal = fixture.Expr.NewCallable(pos, literalType, {fixture.Expr.NewAtom(pos, text)});
+    literal->SetTypeAnn(literalAnnotation);
+    switch (metadataMutation) {
+        case ETimestamp64LiteralMetadataMutation::None:
+            break;
+        case ETimestamp64LiteralMetadataMutation::RootResult:
+            literal->SetResult(fixture.Expr.NewAtom(pos, "executed"));
+            break;
+        case ETimestamp64LiteralMetadataMutation::RootPosition:
+            literal->SetPosAware();
+            break;
+        case ETimestamp64LiteralMetadataMutation::RootSemilatticeEffects:
+            literal->SetSideEffects(ESideEffects::SemilatticeRT);
+            break;
+        case ETimestamp64LiteralMetadataMutation::RootGeneralEffects:
+            literal->SetSideEffects(ESideEffects::General);
+            break;
+        case ETimestamp64LiteralMetadataMutation::RootUnordered:
+            literal->SetUnorderedChildren();
+            break;
+        case ETimestamp64LiteralMetadataMutation::AtomResult:
+            literal->Child(0)->SetResult(fixture.Expr.NewAtom(pos, "executed"));
+            break;
+        case ETimestamp64LiteralMetadataMutation::AtomPosition:
+            literal->Child(0)->SetPosAware();
+            break;
+        case ETimestamp64LiteralMetadataMutation::AtomSemilatticeEffects:
+            literal->Child(0)->SetSideEffects(ESideEffects::SemilatticeRT);
+            break;
+        case ETimestamp64LiteralMetadataMutation::AtomGeneralEffects:
+            literal->Child(0)->SetSideEffects(ESideEffects::General);
+            break;
+    }
+    auto body = literal;
+    const TTypeAnnotationNode* resultType = literalAnnotation;
+    if (operation == "<" || operation == "<=" || operation == "==") {
+        resultType = nullable || nullableLiteral
+            ? static_cast<const TTypeAnnotationNode*>(fixture.Expr.MakeType<TOptionalExprType>(boolean))
+            : boolean;
+        body = fixture.Expr.NewCallable(pos, operation, {member, literal});
+        body->SetTypeAnn(resultType);
+    } else if (operation == "+") {
+        resultType = source;
+        body = fixture.Expr.NewCallable(pos, operation, {member, literal});
+        body->SetTypeAnn(resultType);
+    } else if (operation == "SafeCast" || operation == "Convert") {
+        resultType = nullable || operation == "SafeCast"
+            ? static_cast<const TTypeAnnotationNode*>(fixture.Expr.MakeType<TOptionalExprType>(literalItem))
+            : literalItem;
+        auto descriptor = ExpandType(pos, *resultType, fixture.Expr);
+        body = fixture.Expr.NewCallable(pos, operation, {member, descriptor});
+        body->SetTypeAnn(resultType);
+    }
+    auto expression = fixture.Expr.NewLambda(pos, fixture.Expr.NewArguments(pos, {row}), std::move(body));
+    const auto result = fixture.Registry.Add(TInfoUnit("", "value"));
+    auto map = MakeIntrusive<TOpMap>(read, pos,
+        TMapIUs{{result, TMapElement(TExpression(expression, &fixture.Expr, &fixture.ExpressionProps))}});
+    fixture.SetType(*map, {{fixture.Key, int32}, {fixture.Group, source}, {result, resultType}});
+    TOpRoot root(map, pos, {{fixture.Key, "key"}, {result, "value"}});
+    return fixture.Export(root);
+}
+
+
+TSemanticSnapshotExportResult NativeTimestamp64Extrema(const TString& function, bool nullable, bool split) {
+    TFixture f("Timestamp64", !nullable);
+    const auto pos = TPositionHandle();
+    auto read = f.Read();
+    read->GetColumns() = TUnorderedIUs{f.Key, f.Group};
+    const auto* item = f.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Timestamp64);
+    const TTypeAnnotationNode* valueType = nullable
+        ? static_cast<const TTypeAnnotationNode*>(f.Expr.MakeType<TOptionalExprType>(item)) : item;
+    f.SetType(*read, {{f.Key, f.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32)}, {f.Group, valueType}});
+    const auto result = f.Registry.Add(TInfoUnit("", "extreme"));
+    TIntrusivePtr<IOperator> plan;
+    if (split) {
+        const auto state = f.Registry.Add(TInfoUnit("", "state"));
+        auto partial = MakeIntrusive<TOpAggregate>(read,
+            TAggregationIUs{{state, {f.Group, function, false, false}}},
+            TOrderedIUs<>{}, EOpPhase::Intermediate, false, pos);
+        plan = MakeIntrusive<TOpAggregate>(partial,
+            TAggregationIUs{{result, {state, function, false, false}}},
+            TOrderedIUs<>{}, EOpPhase::Final, false, pos);
+    } else {
+        plan = MakeIntrusive<TOpAggregate>(read,
+            TAggregationIUs{{result, {f.Group, function, false, false}}},
+            TOrderedIUs<>{}, EOpPhase::Undefined, false, pos);
+    }
+    TOpRoot root(plan, pos, {{result, "extreme"}});
+    root.PlanProps.InfoUnitRegistry = f.Registry;
+    for (const auto& entry : root) {
+        entry.Current->BindExpressionPlanProps(&root.PlanProps);
+    }
+    UNIT_ASSERT(root.ComputeTypes(f.Rbo) == IGraphTransformer::TStatus::Ok);
+    if (split) {
+        f.StageSerial(root);
+    }
+    return f.Export(root);
+}
+
 TSemanticSnapshotExportResult NativeAliasedDecimalWindow(
     const TString& function, size_t aliasCount, bool staged)
 {
@@ -1514,6 +1659,73 @@ TSemanticSnapshotExportResult NativeCompiledLike(
     return fixture.Export(root);
 }
 
+TSemanticSnapshotExportResult NativeScalarParameter(
+    const TString& type, bool nullable, bool staged, const TString& name = "$p",
+    bool mismatchedDescriptor = false, bool divide = false, TString itemDescriptorMutation = {})
+{
+    TFixture fixture;
+    auto& ctx = fixture.Expr;
+    const auto pos = TPositionHandle();
+    const auto* int32 = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    const TTypeAnnotationNode* scalar = type == "Decimal"
+        ? static_cast<const TTypeAnnotationNode*>(ctx.MakeType<TDataExprParamsType>(
+            NUdf::EDataSlot::Decimal, "15", "2"))
+        : ctx.MakeType<TDataExprType>(*NUdf::FindDataSlot(type));
+    const TTypeAnnotationNode* valueType = nullable ? ctx.MakeType<TOptionalExprType>(scalar) : scalar;
+    TExprNode::TListType descriptorArguments{ctx.NewAtom(pos, type)};
+    if (type == "Decimal") {
+        descriptorArguments.push_back(ctx.NewAtom(pos, "15"));
+        descriptorArguments.push_back(ctx.NewAtom(pos, "2"));
+    }
+    auto descriptor = ctx.NewCallable(pos, "DataType", std::move(descriptorArguments));
+    descriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(scalar));
+    if (!itemDescriptorMutation.empty()) {
+        UNIT_ASSERT(nullable);
+        if (itemDescriptorMutation == "missing") {
+            descriptor->SetTypeAnn(nullptr);
+        } else if (itemDescriptorMutation == "wrong_kind") {
+            descriptor->SetTypeAnn(scalar);
+        } else if (itemDescriptorMutation == "wrong_type") {
+            descriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Bool)));
+        } else if (itemDescriptorMutation == "nested_optional") {
+            descriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(ctx.MakeType<TOptionalExprType>(scalar)));
+        } else {
+            UNIT_FAIL("Unknown parameter descriptor mutation");
+        }
+    }
+    if (nullable) {
+        descriptor = ctx.NewCallable(pos, "OptionalType", {descriptor});
+        descriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(valueType));
+    }
+    if (mismatchedDescriptor) {
+        descriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Bool)));
+    }
+    auto body = ctx.NewCallable(pos, "Parameter", {ctx.NewAtom(pos, name), descriptor});
+    body->SetTypeAnn(valueType);
+    if (divide) {
+        UNIT_ASSERT_VALUES_EQUAL(type, "Int32");
+        auto one = ctx.NewCallable(pos, "Int32", {ctx.NewAtom(pos, "1")});
+        one->SetTypeAnn(int32);
+        body = ctx.NewCallable(pos, "/", {body, one});
+        valueType = ctx.MakeType<TOptionalExprType>(int32);
+        body->SetTypeAnn(valueType);
+    }
+    auto read = fixture.Read();
+    auto row = ctx.NewArgument(pos, "row");
+    row->SetTypeAnn(read->Type->Cast<TListExprType>()->GetItemType());
+    auto lambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(body));
+    lambda->SetTypeAnn(valueType);
+    const auto result = fixture.Registry.Add(TInfoUnit("", "parameter_value"));
+    auto map = MakeIntrusive<TOpMap>(read, pos,
+        TMapIUs{{result, TMapElement(TExpression(lambda, &ctx, &fixture.ExpressionProps))}});
+    fixture.SetType(*map, {{fixture.Key, int32}, {fixture.Other, int32}, {result, valueType}});
+    TOpRoot root(map, pos, {{fixture.Key, "key"}, {result, "value"}});
+    if (staged) {
+        fixture.StageSerial(root);
+    }
+    return fixture.Export(root);
+}
+
 TSemanticSnapshotExportResult NativeIntegralCoalesce(
     const TString& type, bool coalesce, bool staged, bool changedFallback = false, bool wrongFallbackType = false, const TString& fallbackSource = {})
 {
@@ -1600,6 +1812,190 @@ TSemanticSnapshotExportResult NativeBooleanCoalesce(bool coalesce, bool staged, 
         fixture.StageSerial(plan);
     }
     return fixture.Export(plan);
+}
+
+struct TNativeRowRangeOptions {
+    TString KeyType = "Int32";
+    std::optional<TString> Lower;
+    std::optional<TString> Upper;
+    bool LowerInclusive = true;
+    bool UpperInclusive = true;
+    bool Parameters = false;
+    bool PruneKey = false;
+    bool Residual = false;
+    bool AnnotatedWrappers = true;
+    TString Mutation;
+};
+
+TSemanticSnapshotExportResult NativeRowLiteralRange(
+    const TNativeRowRangeOptions& options, bool pushed, bool staged)
+{
+    TFixture fixture;
+    auto& ctx = fixture.Expr;
+    const auto pos = TPositionHandle();
+    const auto* keyType = ctx.MakeType<TDataExprType>(*NUdf::FindDataSlot(options.KeyType));
+    const auto* int32 = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    const auto* uint64 = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Uint64);
+    const auto* boolean = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Bool);
+    const bool nullableKey = options.Mutation == "nullable_key";
+    fixture.Table->Metadata->Columns["k"] = TKikimrColumnMetadata("k", 1, options.KeyType, !nullableKey);
+    if (options.Mutation == "composite_key") {
+        fixture.Table->Metadata->KeyColumnNames = {"k", "x"};
+    }
+    if (options.Mutation == "system_view") {
+        fixture.Table->Metadata->SysView = "unaudited_test_view";
+    }
+    UNIT_ASSERT(fixture.Table->Load(ctx));
+    const TTypeAnnotationNode* emittedKeyType = nullableKey
+        ? static_cast<const TTypeAnnotationNode*>(ctx.MakeType<TOptionalExprType>(keyType)) : keyType;
+    auto read = fixture.Read();
+    fixture.SetType(*read, {{fixture.Key, emittedKeyType}, {fixture.Other, int32}});
+
+    const auto literal = [&](TStringBuf type, const TString& text, const TTypeAnnotationNode* annotation) {
+        auto value = ctx.NewCallable(pos, type, {ctx.NewAtom(pos, text)});
+        value->SetTypeAnn(annotation);
+        return value;
+    };
+    const auto boundValue = [&](const TString& text) {
+        TExprNode::TPtr value;
+        if (options.Parameters) {
+            auto descriptor = ctx.NewCallable(pos, "DataType", {ctx.NewAtom(pos, options.KeyType)});
+            descriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(keyType));
+            const TTypeAnnotationNode* parameterType = keyType;
+            if (options.Mutation == "optional_parameter") {
+                parameterType = ctx.MakeType<TOptionalExprType>(keyType);
+                descriptor = ctx.NewCallable(pos, "OptionalType", {descriptor});
+                descriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(parameterType));
+            }
+            value = ctx.NewCallable(pos, "Parameter", {ctx.NewAtom(pos, text), descriptor});
+            value->SetTypeAnn(parameterType);
+        } else {
+            value = literal(options.KeyType, text, keyType);
+        }
+        if (options.Mutation == "missing_annotation") {
+            value->SetTypeAnn(nullptr);
+        } else if (options.Mutation == "wrong_annotation") {
+            value->SetTypeAnn(boolean);
+        } else if (options.Mutation == "computed_bound") {
+            value = ctx.NewCallable(pos, "+", {value, literal(options.KeyType, "0", keyType)});
+            value->SetTypeAnn(keyType);
+        } else if (options.Mutation == "null_bound") {
+            auto descriptor = ctx.NewCallable(pos, "DataType", {ctx.NewAtom(pos, options.KeyType)});
+            descriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(keyType));
+            const auto* optional = ctx.MakeType<TOptionalExprType>(keyType);
+            descriptor = ctx.NewCallable(pos, "OptionalType", {descriptor});
+            descriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(optional));
+            value = ctx.NewCallable(pos, "Nothing", {descriptor});
+            value->SetTypeAnn(optional);
+        } else if (options.Mutation == "unsafe_bound") {
+            value->SetSideEffects(ESideEffects::General);
+        }
+        return value;
+    };
+    const auto lower = options.Lower ? boundValue(*options.Lower) : TExprNode::TPtr();
+    const auto upper = options.Upper ? boundValue(*options.Upper) : TExprNode::TPtr();
+    if (pushed) {
+        const auto boundary = [&](bool inclusive, const TExprNode::TPtr& value) {
+            TExprNode::TListType children;
+            TTypeAnnotationNode::TListType itemTypes;
+            if (value) {
+                children.push_back(value);
+                itemTypes.push_back(value->GetTypeAnn() ? value->GetTypeAnn().Get() : keyType);
+            }
+            if (options.Mutation == "boundary_arity") {
+                children.push_back(literal(options.KeyType, "7", keyType));
+                itemTypes.push_back(keyType);
+            }
+            auto result = ctx.NewCallable(pos,
+                options.Mutation == "boundary_tag" ? "WrongKeyBound" : inclusive ? "KqlKeyInc" : "KqlKeyExc",
+                std::move(children));
+            if (options.AnnotatedWrappers) {
+                result->SetTypeAnn(ctx.MakeType<TTupleExprType>(itemTypes));
+            }
+            if (options.Mutation == "boundary_annotation") {
+                result->SetTypeAnn(boolean);
+            }
+            return result;
+        };
+        auto from = boundary(options.LowerInclusive, lower);
+        auto to = boundary(options.UpperInclusive, upper);
+        auto range = ctx.NewList(pos, {from, to});
+        if (options.AnnotatedWrappers) {
+            range->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
+                from->GetTypeAnn().Get(), to->GetTypeAnn().Get()}));
+        }
+        if (options.Mutation == "outer_annotation") {
+            range->SetTypeAnn(boolean);
+        } else if (options.Mutation == "outer_shape") {
+            range = ctx.NewCallable(pos, "KqlKeyRange", {from, to});
+        } else if (options.Mutation == "unordered_bounds") {
+            range->SetUnorderedChildren();
+        }
+
+        // Deliberately disagree with the literal interval: row physical
+        // conversion selects LiteralRange, never this otherwise valid point.
+        auto descriptor = ctx.NewCallable(pos, "DataType", {ctx.NewAtom(pos, options.KeyType)});
+        descriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(keyType));
+        auto point = ctx.NewCallable(pos, "RangeFor", {
+            ctx.NewAtom(pos, "==="), literal("Int32", "999", int32), descriptor});
+        auto rangeUnion = ctx.NewCallable(pos, "RangeUnion", {point});
+        auto multiply = ctx.NewCallable(pos, "RangeMultiply", {
+            literal("Uint64", "10000", uint64), rangeUnion});
+        read->RangeInfo = TOpRead::TRangeInfo{
+            .ComputeNode = ctx.NewCallable(pos, "RangeFinalize", {multiply}),
+            .KeyColumns = options.Mutation == "composite_key" ? TVector<TString>{"k", "x"} :
+                TVector<TString>{options.Mutation == "wrong_key" ? "x" : "k"},
+            .UsedPrefixLen = 1,
+            .ExpectedMaxRanges = options.Mutation == "range_count" ? 2 : 1,
+            .LiteralRange = options.Mutation == "missing_literal" ? TExprNode::TPtr() : range,
+        };
+        if (options.PruneKey) {
+            read->GetColumns() = {fixture.Other};
+            fixture.SetType(*read, {{fixture.Other, int32}});
+        }
+    }
+
+    auto row = ctx.NewArgument(pos, "row");
+    row->SetTypeAnn(read->Type->Cast<TListExprType>()->GetItemType());
+    const auto member = [&](TInfoUnitId id, const TTypeAnnotationNode* type) {
+        auto result = ctx.NewCallable(pos, "Member", {row, ctx.NewAtom(pos, ToString(id))});
+        result->SetTypeAnn(type);
+        return result;
+    };
+    TExprNode::TListType predicates;
+    if (!pushed) {
+        if (lower) {
+            auto comparison = ctx.NewCallable(pos, options.LowerInclusive ? ">=" : ">", {member(fixture.Key, keyType), lower});
+            comparison->SetTypeAnn(boolean);
+            predicates.push_back(comparison);
+        }
+        if (upper) {
+            auto comparison = ctx.NewCallable(pos, options.UpperInclusive ? "<=" : "<", {member(fixture.Key, keyType), upper});
+            comparison->SetTypeAnn(boolean);
+            predicates.push_back(comparison);
+        }
+    }
+    if (options.Residual) {
+        auto comparison = ctx.NewCallable(pos, ">", {member(fixture.Other, int32), literal("Int32", "0", int32)});
+        comparison->SetTypeAnn(boolean);
+        predicates.push_back(comparison);
+    }
+    auto predicate = predicates.empty() ? literal("Bool", "true", boolean) :
+        predicates.size() == 1 ? predicates.front() : ctx.NewCallable(pos, "And", std::move(predicates));
+    predicate->SetTypeAnn(boolean);
+    auto expression = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(predicate));
+    auto filter = MakeIntrusive<TOpFilter>(read, pos,
+        TExpression(expression, &ctx, &fixture.ExpressionProps));
+    filter->Type = read->Type;
+    TVector<std::pair<TInfoUnitId, TString>> outputs{{fixture.Other, "value"}};
+    if (!options.PruneKey) {
+        outputs.insert(outputs.begin(), {fixture.Key, "key"});
+    }
+    TOpRoot root(filter, pos, TOrderedIUs<TString>(outputs.begin(), outputs.end()));
+    if (staged) {
+        fixture.StageSerial(root);
+    }
+    return fixture.Export(root);
 }
 
 TSemanticSnapshotExportResult NativeInt32ReadPoint(bool pushed, bool staged, i32 pointValue,
@@ -1842,6 +2238,64 @@ TSemanticSnapshotExportResult StagedRead(ui32 firstStage) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
+    Y_UNIT_TEST(NativeScalarParametersShareInputAcrossStaging) {
+        for (const auto& type : TVector<TString>{"Bool", "Int32", "Uint64", "Date", "Timestamp", "Timestamp64", "String", "Utf8", "Decimal"}) {
+            for (bool nullable : {false, true}) {
+                const auto before = NativeScalarParameter(type, nullable, false);
+                const auto after = NativeScalarParameter(type, nullable, true);
+                Parse(before);
+                Parse(after);
+                UNIT_ASSERT_STRING_CONTAINS(before.Json, "parameter");
+                UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeScalarParameterRenameProducesCounterexample) {
+        const auto before = NativeScalarParameter("Int32", false, false, "$p");
+        const auto after = NativeScalarParameter("Int32", false, true, "$q");
+        Parse(before);
+        Parse(after);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "COUNTEREXAMPLE");
+        // Division is routed through the complete source-audit path as well as
+        // the interpreted exporter. A parameter must be admitted in both.
+        const auto dividedBefore = NativeScalarParameter("Int32", true, false, "$p", false, true);
+        const auto dividedAfter = NativeScalarParameter("Int32", true, true, "$p", false, true);
+        Parse(dividedBefore);
+        Parse(dividedAfter);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(dividedBefore.Json, dividedAfter.Json), "VERIFIED_BOUNDED");
+    }
+
+    Y_UNIT_TEST(NativeScalarParameterRejectsContradictoryInnerOptionalDescriptor) {
+        for (const TString& mutation : {TString("missing"), TString("wrong_kind"),
+                                       TString("wrong_type"), TString("nested_optional")}) {
+            for (const bool opaqueAudit : {false, true}) {
+                const auto result = NativeScalarParameter("Int32", true, false,
+                    "$p", false, opaqueAudit, mutation);
+                UNIT_ASSERT(!result.IsSupported());
+                UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "item descriptor annotation");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeScalarParameterRejectsBadNameAndDescriptorAnnotation) {
+        const auto emptyName = NativeScalarParameter("Int32", false, false, "");
+        UNIT_ASSERT(!emptyName.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(emptyName.UnsupportedReason, "Parameter");
+        for (bool nullable : {false, true}) {
+            const auto changed = NativeScalarParameter("Int32", nullable, false, "$p", true);
+            UNIT_ASSERT(!changed.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(changed.UnsupportedReason, "annotations disagree");
+        }
+        for (const auto& name : TVector<TString>{"$", "p", "%kqp_physical_tx_param_binding_0", "%kqp%tx_result_binding_0_0"}) {
+            const auto internal = NativeScalarParameter("Int32", false, false, name);
+            UNIT_ASSERT(!internal.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(internal.UnsupportedReason, "external SQL Parameter");
+        }
+        const auto floating = NativeScalarParameter("Double", false, false);
+        UNIT_ASSERT(!floating.IsSupported());
+    }
+
     Y_UNIT_TEST(NativeFilterFusionIsVisibleToTransformationProofs) {
         TFixture f;
         const auto pos = TPositionHandle();
@@ -2624,7 +3078,7 @@ Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
     }
 
     Y_UNIT_TEST(NativeTemporalColumnsPreserveUnitsAcrossStages) {
-        for (const TString& type : {TString("Date"), TString("Datetime"), TString("Timestamp")}) {
+        for (const TString& type : {TString("Date"), TString("Datetime"), TString("Timestamp"), TString("Timestamp64")}) {
             TFixture fixture(type);
             auto read = fixture.Read();
             read->GetColumns() = TUnorderedIUs{fixture.Key, fixture.Group};
@@ -2645,6 +3099,128 @@ Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
         }
     }
 
+
+    Y_UNIT_TEST(NativeTimestamp64ExportsSignedLiteralBoundariesAndComparisons) {
+        for (const i64 value : {NUdf::MIN_TIMESTAMP64, i64(-1), i64(0), NUdf::MAX_TIMESTAMP64}) {
+            for (const bool nullable : {false, true}) {
+                const auto exported = NativeTimestamp64Expression(ToString(value), "literal", nullable);
+                auto json = Parse(exported);
+                bool found = false;
+                for (const auto& node : json["plan"]["nodes"].GetArraySafe()) {
+                    if (node["op"].GetStringSafe() != "project") {
+                        continue;
+                    }
+                    for (const auto& column : node["columns"].GetArraySafe()) {
+                        const auto& expression = column["expression"];
+                        if (expression["kind"].GetStringSafe() == "literal" &&
+                            expression["type"].GetStringSafe() == "Timestamp64")
+                        {
+                            UNIT_ASSERT_VALUES_EQUAL(expression["value"].GetIntegerSafe(), value);
+                            found = true;
+                        }
+                    }
+                }
+                UNIT_ASSERT(found);
+                Parse(NativeTimestamp64Expression(ToString(value), "<", nullable));
+                Parse(NativeTimestamp64Expression(ToString(value), "==", nullable));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeTimestamp64RejectsOutOfDomainAndMismatchedLiterals) {
+        for (const TString& value : {ToString(NUdf::MIN_TIMESTAMP64 - 1),
+                                    ToString(NUdf::MAX_TIMESTAMP64 + 1),
+                                    TString("9223372036854775808"), TString("1970-01-01T00:00:00Z")}) {
+            UNIT_ASSERT(!NativeTimestamp64Expression(value).IsSupported());
+        }
+        UNIT_ASSERT(!NativeTimestamp64Expression("0", "literal", true,
+            "Timestamp64", "Timestamp64", "Timestamp").IsSupported());
+        UNIT_ASSERT(!NativeTimestamp64Expression("0", "literal", true,
+            "Timestamp64", "Timestamp64", "Timestamp64", true).IsSupported());
+    }
+
+    Y_UNIT_TEST(NativeTimestamp64RejectsUnsafeLiteralMetadata) {
+        Parse(NativeTimestamp64Expression("0"));
+        const TVector<std::pair<ETimestamp64LiteralMetadataMutation, TStringBuf>> cases{
+            {ETimestamp64LiteralMetadataMutation::RootResult, "executed Result node"},
+            {ETimestamp64LiteralMetadataMutation::RootPosition, "position-aware node"},
+            {ETimestamp64LiteralMetadataMutation::RootSemilatticeEffects, "side-effecting or CSE-unsafe"},
+            {ETimestamp64LiteralMetadataMutation::RootGeneralEffects, "side-effecting or CSE-unsafe"},
+            {ETimestamp64LiteralMetadataMutation::RootUnordered, "unordered children"},
+            {ETimestamp64LiteralMetadataMutation::AtomResult, "executed Result node"},
+            {ETimestamp64LiteralMetadataMutation::AtomPosition, "position-aware node"},
+            {ETimestamp64LiteralMetadataMutation::AtomSemilatticeEffects, "side-effecting or CSE-unsafe"},
+            {ETimestamp64LiteralMetadataMutation::AtomGeneralEffects, "side-effecting or CSE-unsafe"},
+        };
+        for (const auto& [mutation, reason] : cases) {
+            const auto result = NativeTimestamp64Expression("0", "literal", true,
+                "Timestamp64", "Timestamp64", "Timestamp64", false, mutation);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, reason);
+        }
+    }
+
+    Y_UNIT_TEST(NativeTimestamp64RejectsUnreviewedConversionsArithmeticAndPacking) {
+        for (const TString& type : {TString("Int64"), TString("Timestamp"), TString("Date")}) {
+            UNIT_ASSERT(!NativeTimestamp64Expression("0", "<", true,
+                "Timestamp64", type, type).IsSupported());
+            UNIT_ASSERT(!NativeTimestamp64Expression("0", "==", true,
+                "Timestamp64", type, type).IsSupported());
+            for (const TString& cast : {TString("SafeCast"), TString("Convert")}) {
+                UNIT_ASSERT(!NativeTimestamp64Expression("0", cast, true,
+                    "Timestamp64", type, type).IsSupported());
+                UNIT_ASSERT(!NativeTimestamp64Expression("0", cast, true,
+                    type, "Timestamp64", "Timestamp64").IsSupported());
+            }
+        }
+        UNIT_ASSERT(!NativeTimestamp64Expression("1", "+").IsSupported());
+        for (const bool nullable : {false, true}) {
+            UNIT_ASSERT(!NativeStablePickle("Timestamp64", nullable, false).IsSupported());
+        }
+    }
+
+
+    Y_UNIT_TEST(NativeTimestamp64ExtremaPreserveNullableAndEmptyPartitionResults) {
+        for (const bool nullable : {false, true}) {
+            for (const TString& function : {TString("min"), TString("max")}) {
+                const auto before = NativeTimestamp64Extrema(function, nullable, false);
+                const auto after = NativeTimestamp64Extrema(function, nullable, true);
+                Parse(before);
+                Parse(after);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+            }
+            const auto before = NativeTimestamp64Extrema("min", nullable, false);
+            const auto changed = NativeTimestamp64Extrema("max", nullable, true);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, changed.Json), "COUNTEREXAMPLE");
+        }
+    }
+
+    Y_UNIT_TEST(NativeTimestamp64PrimaryKeyMetadataSurvivesProjectionAndStaging) {
+        TFixture fixture("String", false, "Timestamp64");
+        fixture.Table->Metadata->KeyColumnNames = {"x"};
+        auto read = fixture.Read();
+        const auto copy = fixture.Registry.Add(TInfoUnit("", "copy"));
+        auto access = MakeColumnAccess(fixture.Other, TPositionHandle(), &fixture.Expr, &fixture.ExpressionProps);
+        access.GetExpressionBody()->SetTypeAnn(fixture.OtherType);
+        auto map = MakeIntrusive<TOpMap>(read, TPositionHandle(), TMapIUs{{copy, TMapElement(access)}});
+        fixture.SetType(*map, {
+            {fixture.Key, fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32)},
+            {fixture.Other, fixture.OtherType}, {copy, fixture.OtherType}});
+        TOpRoot root(map, TPositionHandle(), {{copy, "time"}});
+        const auto before = fixture.Export(root);
+        auto json = Parse(before);
+        const auto& tables = json["schema"]["tables"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);
+        const auto& keys = tables[0]["unique_keys"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(keys[0]["columns"].GetArraySafe().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(keys[0]["columns"].GetArraySafe()[0].GetStringSafe(), "x");
+        fixture.StageSerial(root);
+        const auto after = fixture.Export(root);
+        Parse(after);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+    }
+
     Y_UNIT_TEST(NativeSortUsesPhysicalNullPlacement) {
         CheckNativeSortNullPlacement(false);
     }
@@ -2659,6 +3235,34 @@ Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
 
     Y_UNIT_TEST(InitialBoundaryMaterializesNativeComputedMapTypes) {
         CheckNativeInitialScalarTypes(false);
+    }
+
+    Y_UNIT_TEST(NativePushedOlapAggregateIsRejectedBeforeNormalization) {
+        for (const bool staged : {false, true}) {
+            TFixture controlFixture;
+            const auto control = controlFixture.KeyOnlyAggregate(staged);
+            UNIT_ASSERT_C(control.IsSupported(), control.UnsupportedReason);
+            UNIT_ASSERT(!control.Json.empty());
+
+            TFixture pushedFixture;
+            const auto pushed = pushedFixture.KeyOnlyAggregate(staged, false, false, true);
+            UNIT_ASSERT(!pushed.IsSupported());
+            UNIT_ASSERT(pushed.Json.empty());
+            UNIT_ASSERT_STRING_CONTAINS(pushed.UnsupportedReason, "Aggregate pushed to OLAP is not modeled");
+        }
+    }
+
+    Y_UNIT_TEST(NativePushedOlapAggregateInScalarSubplanIsRejected) {
+        TFixture controlFixture;
+        const auto control = controlFixture.CorrelatedScalarCount(controlFixture.Key);
+        UNIT_ASSERT_C(control.IsSupported(), control.UnsupportedReason);
+        UNIT_ASSERT(!control.Json.empty());
+
+        TFixture pushedFixture;
+        const auto pushed = pushedFixture.CorrelatedScalarCount(pushedFixture.Key, false, false, false, true);
+        UNIT_ASSERT(!pushed.IsSupported());
+        UNIT_ASSERT(pushed.Json.empty());
+        UNIT_ASSERT_STRING_CONTAINS(pushed.UnsupportedReason, "Aggregate pushed to OLAP is not modeled");
     }
 
     Y_UNIT_TEST(NativeKeyOnlyAggregatePreservesNullableGroups) {
@@ -2741,6 +3345,135 @@ Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
                     "COUNTEREXAMPLE");
             }
         }
+    }
+
+    Y_UNIT_TEST(NativeRowLiteralRangesMatchLogicalIntervalPredicates) {
+        TVector<TNativeRowRangeOptions> cases{
+            {.Lower = TString("0"), .LowerInclusive = false},
+            {.Upper = TString("42")},
+            {.Upper = TString("42"), .UpperInclusive = false},
+            {.Lower = TString("-2"), .Upper = TString("3")},
+            {.Lower = TString("-2"), .Upper = TString("3"), .LowerInclusive = false, .UpperInclusive = false},
+            {.Lower = TString("42"), .Upper = TString("42")},
+            {.Lower = TString("42"), .Upper = TString("42"), .LowerInclusive = false},
+            {.Lower = TString("43"), .Upper = TString("42")},
+            {.Lower = TString("-2147483648"), .Upper = TString("2147483647")},
+            {.Lower = TString("2147483647")},
+            {.Upper = TString("-2147483648")},
+            {},
+            {.KeyType = "Int64", .Lower = TString("-9223372036854775808"), .Upper = TString("9223372036854775807")},
+        };
+        for (const auto& options : cases) {
+            const auto before = NativeRowLiteralRange(options, false, false);
+            const auto after = NativeRowLiteralRange(options, true, true);
+            Parse(before);
+            Parse(after);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+        }
+        auto unannotated = cases.front();
+        unannotated.AnnotatedWrappers = false;
+        const auto before = NativeRowLiteralRange(unannotated, false, false);
+        const auto after = NativeRowLiteralRange(unannotated, true, true);
+        Parse(before);
+        Parse(after);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+    }
+
+    Y_UNIT_TEST(NativeRowLiteralBoundsAndInclusivityMutationsProduceCounterexamples) {
+        const TNativeRowRangeOptions original{.Lower = TString("0"), .Upper = TString("2")};
+        const auto before = NativeRowLiteralRange(original, false, false);
+        Parse(before);
+        for (ui32 mutation = 0; mutation < 4; ++mutation) {
+            auto options = original;
+            if (mutation == 0) { options.LowerInclusive = false; }
+            if (mutation == 1) { options.UpperInclusive = false; }
+            if (mutation == 2) { options.Lower = TString("-1"); }
+            if (mutation == 3) { options.Upper = TString("3"); }
+            const auto after = NativeRowLiteralRange(options, true, true);
+            Parse(after);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "COUNTEREXAMPLE");
+        }
+        const TNativeRowRangeOptions point{.Lower = TString("42"), .Upper = TString("42")};
+        auto shifted = point;
+        shifted.Lower = TString("43");
+        shifted.Upper = TString("43");
+        const auto pointBefore = NativeRowLiteralRange(point, false, false);
+        const auto pointAfter = NativeRowLiteralRange(shifted, true, true);
+        Parse(pointBefore);
+        Parse(pointAfter);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(pointBefore.Json, pointAfter.Json), "COUNTEREXAMPLE");
+    }
+
+    Y_UNIT_TEST(NativeRowRangePrunedKeyAndResidualFilterRemainObservable) {
+        const TNativeRowRangeOptions options{
+            .Lower = TString("0"), .Upper = TString("10"), .PruneKey = true, .Residual = true};
+        const auto before = NativeRowLiteralRange(options, false, false);
+        const auto after = NativeRowLiteralRange(options, true, true);
+        Parse(before);
+        Parse(after);
+        UNIT_ASSERT_STRING_CONTAINS(after.Json, "predicate_columns");
+        UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+        auto droppedResidual = options;
+        droppedResidual.Residual = false;
+        const auto changed = NativeRowLiteralRange(droppedResidual, true, true);
+        Parse(changed);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, changed.Json), "COUNTEREXAMPLE");
+    }
+
+    Y_UNIT_TEST(NativeRowRangesRejectUnauditedKeysBoundsAndMetadata) {
+        for (const auto& mutation : TVector<TString>{
+            "nullable_key", "composite_key", "system_view", "null_bound", "computed_bound", "missing_annotation",
+            "wrong_annotation", "unsafe_bound", "boundary_arity", "boundary_tag", "boundary_annotation",
+            "outer_annotation", "outer_shape", "unordered_bounds", "wrong_key", "missing_literal", "range_count",
+        }) {
+            TNativeRowRangeOptions options{.Lower = TString("0"), .Upper = TString("42")};
+            options.Mutation = mutation;
+            const auto rejected = NativeRowLiteralRange(options, true, true);
+            UNIT_ASSERT_C(!rejected.IsSupported(), mutation);
+            UNIT_ASSERT(rejected.Json.empty());
+        }
+        for (bool lower : {false, true}) {
+            TNativeRowRangeOptions options;
+            options.LowerInclusive = !lower;
+            options.UpperInclusive = lower;
+            UNIT_ASSERT(!NativeRowLiteralRange(options, true, true).IsSupported());
+        }
+        const TNativeRowRangeOptions exclusivePoint{
+            .Lower = TString("42"), .Upper = TString("42"), .LowerInclusive = false, .UpperInclusive = false};
+        const auto rejected = NativeRowLiteralRange(exclusivePoint, true, true);
+        UNIT_ASSERT(!rejected.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.UnsupportedReason, "identical exclusive bounds");
+        for (const auto& value : TVector<TString>{"2147483648", "-2147483649"}) {
+            TNativeRowRangeOptions options{.Lower = value};
+            UNIT_ASSERT(!NativeRowLiteralRange(options, true, true).IsSupported());
+        }
+    }
+
+    // Requires the scalar-parameter support patch and its annotation/replay companion.
+    Y_UNIT_TEST(NativeRowRangeRequiredParametersShareLogicalInputs) {
+        const TNativeRowRangeOptions options{
+            .Lower = TString("$lower"), .Upper = TString("$upper"), .Parameters = true};
+        const auto before = NativeRowLiteralRange(options, false, false);
+        const auto after = NativeRowLiteralRange(options, true, true);
+        Parse(before);
+        Parse(after);
+        UNIT_ASSERT_STRING_CONTAINS(after.Json, "parameter");
+        UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+        auto renamed = options;
+        renamed.Lower = TString("$other");
+        const auto changed = NativeRowLiteralRange(renamed, true, true);
+        Parse(changed);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, changed.Json), "COUNTEREXAMPLE");
+        auto optional = options;
+        optional.Mutation = "optional_parameter";
+        UNIT_ASSERT(!NativeRowLiteralRange(optional, true, true).IsSupported());
+        auto internal = options;
+        internal.Lower = TString("%kqp_physical_tx_param_binding_0");
+        UNIT_ASSERT(!NativeRowLiteralRange(internal, true, true).IsSupported());
+        auto exclusive = options;
+        exclusive.Upper = exclusive.Lower;
+        exclusive.LowerInclusive = exclusive.UpperInclusive = false;
+        UNIT_ASSERT(!NativeRowLiteralRange(exclusive, true, true).IsSupported());
     }
 
     Y_UNIT_TEST(NativeReadPointRangesRespectInt32Keys) {

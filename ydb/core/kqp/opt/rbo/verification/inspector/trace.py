@@ -164,6 +164,10 @@ class PreparedInspection:
         return self.problem.formula()
 
     def solve(self, solver: str | Path, timeout_ms: int | None) -> dict[str, Any]:
+        if self.problem.parameters:
+            raise InspectionError(
+                "UNSUPPORTED_PARAMETER_REPLAY: query parameter values cannot yet be fixed in a concrete trace"
+            )
         requested = tuple(
             dict.fromkeys(self.problem.witness_values() + self.probes.requested)
         )
@@ -251,6 +255,10 @@ def prepare(
 ) -> PreparedInspection:
     """Build one obligation, observe it read-only, then add trace aliases."""
 
+    if ir.query_parameters(before) or ir.query_parameters(after):
+        raise InspectionError(
+            "UNSUPPORTED_PARAMETER_REPLAY: query parameter values cannot yet be fixed in a concrete trace"
+        )
     observation = Observation()
     problem = build_problem(
         before,

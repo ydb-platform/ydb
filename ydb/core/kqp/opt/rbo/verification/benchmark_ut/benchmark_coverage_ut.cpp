@@ -427,6 +427,7 @@ NJson::TJsonValue VerdictForCoverageReport(
     // counterexample witness only in the byte-for-byte verifier artifact.
     if (status == "COUNTEREXAMPLE") {
         verdict.EraseValue("witness");
+        verdict.EraseValue("parameters");
     }
     return verdict;
 }
@@ -1521,7 +1522,8 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const TString verifierVerdict =
             "{\"row_bound\":2,\"status\":\"COUNTEREXAMPLE\",\"task_bound\":2,"
             "\"witness\":{\"table\":[{\"amount\":"
-            "99999999999999999999999999999999999}]}}\n";
+            "99999999999999999999999999999999999}]},"
+            "\"parameters\":{\"$p\":99999999999999999999999999999999999}}\n";
         const TString formula = "(check-sat)\n";
         const TRBOSemanticSnapshotBoundaryResultV1 initial{
             ERBOSemanticSnapshotBoundaryV1::Initial,
@@ -1609,9 +1611,11 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         NJson::TJsonValue parsedVerdict;
         UNIT_ASSERT(ParseJson(verifierVerdict, parsedVerdict));
         UNIT_ASSERT(parsedVerdict.Has("witness"));
+        UNIT_ASSERT(parsedVerdict.Has("parameters"));
         const auto reportVerdict = VerdictForCoverageReport(
             std::move(parsedVerdict), "COUNTEREXAMPLE");
         UNIT_ASSERT(!reportVerdict.Has("witness"));
+        UNIT_ASSERT(!reportVerdict.Has("parameters"));
         UNIT_ASSERT_VALUES_EQUAL(
             reportVerdict["status"].GetStringSafe(),
             "COUNTEREXAMPLE");

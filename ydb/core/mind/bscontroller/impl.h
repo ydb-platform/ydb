@@ -2093,6 +2093,7 @@ private:
         const TGroupId TargetGroupId;
         THashMap<TNodeId, TPerNodeInfo> NodeIds;
         bool InCommit = false;
+        ui64 StaticCommitCookie = 0;
 
         TSyncerState(TGroupId bridgeProxyGroupId, TGroupId targetGroupId)
             : BridgeProxyGroupId(bridgeProxyGroupId)
@@ -2101,6 +2102,7 @@ private:
     };
 
     THashMap<TGroupId, TSyncerState> TargetGroupToSyncerState;
+    ui64 NextStaticSyncerCommitCookie = 0;
     std::set<std::tuple<TNodeId, TSyncerState*>> NodeToSyncerState;
     TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction;
 

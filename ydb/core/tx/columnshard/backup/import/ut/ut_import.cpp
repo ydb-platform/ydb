@@ -10,7 +10,6 @@
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
-#include <ydb/core/tx/datashard/backup_restore_traits.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
@@ -27,7 +26,6 @@ namespace NKikimr {
 
 using namespace NColumnShard;
 using namespace NTxUT;
-using NDataShard::NBackupRestoreTraits::EDataFormat;
 
 Y_UNIT_TEST_SUITE(ImportSessionStateMachine) {
     static std::shared_ptr<NOlap::NImport::TSession> MakeSession() {
@@ -166,8 +164,7 @@ void FillRestoreDescription(NKikimrSchemeOp::TTableDescription& description) {
 }
 
 NKikimrTxColumnShard::TBackupTxBody MakeBackupTxBody(const ui64 tableId, const NOlap::TSnapshot& snapshot, const TString& bucket,
-    const std::optional<ui64> bytesBatchSize = {},
-    const NDataShard::NBackupRestoreTraits::EDataFormat dataFormat = NDataShard::NBackupRestoreTraits::EDataFormat::YdbDump) {
+    const std::optional<ui64> bytesBatchSize = {}) {
     NKikimrTxColumnShard::TBackupTxBody txBody;
     auto& backupTask = *txBody.MutableBackupTask();
     backupTask.SetTableName("abcde");
@@ -177,11 +174,7 @@ NKikimrTxColumnShard::TBackupTxBody MakeBackupTxBody(const ui64 tableId, const N
     auto& s3Settings = *backupTask.MutableS3Settings();
     s3Settings.SetEndpoint(GetEnv("S3_ENDPOINT"));
     s3Settings.SetBucket(bucket);
-    if (dataFormat == NDataShard::NBackupRestoreTraits::EDataFormat::Parquet) {
-        s3Settings.MutableExportDataSettings()->MutableParquet();
-    } else {
-        s3Settings.MutableExportDataSettings()->MutableYdbDump();
-    }
+    s3Settings.MutableExportDataSettings()->MutableYdbDump();
     if (bytesBatchSize) {
         backupTask.MutableScanSettings()->SetBytesBatchSize(*bytesBatchSize);
     }
@@ -278,10 +271,8 @@ Y_UNIT_TEST_SUITE(Restore) {
         PlanCommit(runtime, sender, planStep, txId);
     }
 
-    void ProposeRestore(EDataFormat dataFormat) {
-        UNIT_ASSERT(dataFormat == EDataFormat::YdbDump || dataFormat == EDataFormat::Parquet);
-
-        const TString bucketName = dataFormat == EDataFormat::Parquet ? "test-parquet" : "test-csv";
+    Y_UNIT_TEST(ProposeRestore) {
+        const TString bucketName = "test-csv";
         Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
         NTestUtils::CreateBucket(bucketName, s3Client);
         const auto schema = MakeRestoreSchema();
@@ -290,7 +281,6 @@ Y_UNIT_TEST_SUITE(Restore) {
         {
             TTestBasicRuntime runtime;
             TTester::Setup(runtime);
-            runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
 
             auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
             auto planStep = PrepareTablet(runtime, tableId, schema, 2);
@@ -306,7 +296,7 @@ Y_UNIT_TEST_SUITE(Restore) {
             }, TDuration::Seconds(1000));
 
             RunCountedTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP,
-                MakeBackupTxBody(tableId, NOlap::TSnapshot(planStep.Val(), txId), bucketName, {}, dataFormat).SerializeAsString(), txId, [&]() {
+                MakeBackupTxBody(tableId, NOlap::TSnapshot(planStep.Val(), txId), bucketName).SerializeAsString(), txId, [&]() {
                     return csControllerGuard->GetFinishedExportsCount();
                 });
             TestWaitCondition(runtime, "export", [&]() {
@@ -350,14 +340,6 @@ Y_UNIT_TEST_SUITE(Restore) {
                 "\"4\",\n    \"15\",\n    \"16\",\n    \"17\",\n    \"18\",\n    \"19\",\n    \"20\",\n    \"21\",\n    \"22\",\n    "
                 "\"23\",\n    \"24\"\n  ]\n");
         }
-    }
-
-    Y_UNIT_TEST(ProposeRestoreYdbDump) {
-        ProposeRestore(EDataFormat::YdbDump);
-    }
-
-    Y_UNIT_TEST(ProposeRestoreParquet) {
-        ProposeRestore(EDataFormat::Parquet);
     }
 
     Y_UNIT_TEST(RestoreOversizedBatch) {

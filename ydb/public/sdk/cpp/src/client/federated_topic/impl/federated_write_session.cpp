@@ -421,15 +421,26 @@ void TFederatedWriteSessionImpl::MaybePrepareInitSeqNoArm() {
     if (!InitSeqNoPromise.Initialized() || !Subsession) {
         return;
     }
-    const auto current = InitSeqNoPromise.GetFuture();
-    if (current.HasValue() || current.HasException()) {
-        return;
-    }
     if (InitSeqNoArmedGeneration == SubsessionGeneration) {
         return;
     }
 
+    const auto current = InitSeqNoPromise.GetFuture();
+    // The public promise is one-shot. A replacement subsession still needs
+    // GetInitSeqNo() so ValidateSeqNo locks manual mode, as on a direct session.
+    const bool publish = !InitSeqNoSettled && !current.HasValue() && !current.HasException();
+
     InitSeqNoArmedGeneration = SubsessionGeneration;
+    if (!publish) {
+        try {
+            Subsession->GetInitSeqNo();
+        } catch (...) {
+            // Already settled. A contract error means this subsession is in auto
+            // mode; a later manual write fails there. Do not reopen the promise.
+        }
+        return;
+    }
+
     PendingInitSeqNoGeneration = SubsessionGeneration;
     PendingInitSeqNoError = nullptr;
     try {

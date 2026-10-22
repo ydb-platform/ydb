@@ -126,9 +126,6 @@ private:
     void WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& message);
     bool MaybeWriteImpl();
 
-    void CloseImpl(EStatus statusCode, NYdb::NIssue::TIssues&& issues);
-    void CloseImpl(NTopic::TSessionClosedEvent const& ev);
-
     bool MessageQueuesAreEmptyImpl() const;
 
     void IssueTokenIfAllowed();

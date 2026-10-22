@@ -55,6 +55,34 @@ public:
         }
         completion.Apply();
     }
+
+    // Opens another subsession on the current database, as a federation switch does.
+    static void ReopenSubsession(TFederatedWriteSession& session) {
+        auto impl = session.TryGetImpl();
+        std::shared_ptr<NTopic::IWriteSession> old;
+        with_lock(impl->Lock) {
+            UNIT_ASSERT_C(impl->CurrentDatabase, "subsession has not been opened yet");
+            old = impl->OpenSubsessionImpl(impl->CurrentDatabase);
+        }
+        impl->DispatchPendingInitSeqNoArm();
+        if (old) {
+            old->Close(TDuration::Zero());
+        }
+    }
+
+    static void WaitForSubsessionToken(TFederatedWriteSession& session) {
+        auto impl = session.TryGetImpl();
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (TInstant::Now() < deadline) {
+            with_lock(impl->Lock) {
+                if (impl->PendingToken.has_value()) {
+                    return;
+                }
+            }
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_FAIL("replacement subsession did not become ready");
+    }
 };
 
 }  // namespace NYdb::NFederatedTopic
@@ -732,6 +760,39 @@ Y_UNIT_TEST_SUITE(SimpleBlockingFederatedWriteSession) {
 
         fixture.RespondSingleDatabase();
         UNIT_ASSERT_C(initSeqNo.Wait(TDuration::Seconds(30)), "GetInitSeqNo was not set from the current subsession");
+        UNIT_ASSERT_VALUES_EQUAL(initSeqNo.GetValue(), 0u);
+        session->Close(TDuration::Seconds(10));
+    }
+
+    Y_UNIT_TEST(GetInitSeqNoLocksManualModeOnReplacementSubsession) {
+        TSimpleBlockingWriteSessionTestFixture fixture(TEST_CASE_NAME);
+        auto session = fixture.CreateAsyncWriteSession(fixture.DefaultWriteSettings());
+        const auto initSeqNo = session->GetInitSeqNo();
+        fixture.RespondSingleDatabase();
+        UNIT_ASSERT_C(initSeqNo.Wait(TDuration::Seconds(30)), "initial GetInitSeqNo was not set");
+        UNIT_ASSERT_VALUES_EQUAL(initSeqNo.GetValue(), 0u);
+
+        auto& concrete = static_cast<TFederatedWriteSession&>(*session);
+        TFederatedWriteSessionTestAccess::ReopenSubsession(concrete);
+        TFederatedWriteSessionTestAccess::WaitForSubsessionToken(concrete);
+
+        std::optional<NTopic::TContinuationToken> token;
+        const TInstant tokenDeadline = TInstant::Now() + TDuration::Seconds(10);
+        while (!token && TInstant::Now() < tokenDeadline) {
+            session->WaitEvent().Wait(TDuration::Seconds(1));
+            while (auto event = session->GetEvent(false)) {
+                if (auto* ready = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+                    token = std::move(ready->ContinuationToken);
+                }
+            }
+        }
+        UNIT_ASSERT_C(token, "write session did not become ready");
+
+        auto message = NTopic::TWriteMessage("no-seq");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            session->Write(std::move(*token), std::move(message)),
+            NYdb::TContractViolation,
+            "manual-seqNo");
         UNIT_ASSERT_VALUES_EQUAL(initSeqNo.GetValue(), 0u);
         session->Close(TDuration::Seconds(10));
     }

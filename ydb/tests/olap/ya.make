@@ -15,6 +15,7 @@ PY3TEST()
         test_create.py
         test_delete.py
         test_insert.py
+        test_primary_key_ordering.py
         test_replace.py
         test_select.py
         test_update.py

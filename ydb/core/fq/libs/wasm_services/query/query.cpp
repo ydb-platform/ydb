@@ -250,7 +250,13 @@ public:
         if (Config->EnrichRows) {
             Y_ENSURE(inputType->GetKind() == TType::EKind::Struct, "Service input must be a struct");
             const auto* inputRow = AS_TYPE(TStructType, inputType);
-            InputEnabledIndex = inputRow->FindMemberIndex("_yql_service_enabled");
+            TString maskName = "_yql_service_enabled";
+            while (std::any_of(Method.Input.begin(), Method.Input.end(), [&](const auto& field) {
+                return field.Name == maskName;
+            })) {
+                maskName += "_";
+            }
+            InputEnabledIndex = inputRow->FindMemberIndex(maskName);
             if (InputEnabledIndex) {
                 const auto* enabledType = inputRow->GetMemberType(*InputEnabledIndex);
                 Y_ENSURE(enabledType->GetKind() == TType::EKind::Data && AS_TYPE(TDataType, enabledType)->GetSchemeType() ==

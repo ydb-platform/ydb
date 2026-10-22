@@ -514,3 +514,57 @@ def test_service_expression_preserves_random_branch_decision(service, tmp_path):
     received = [value for _, request, _ in service.requests
                 for value in (request if isinstance(request, tuple) else (request,))]
     assert sorted(received) == selected
+
+
+@pytest.mark.parametrize('batch_size', [1, 8, 64])
+def test_service_expression_shared_call_under_two_guards(service, tmp_path, batch_size):
+    runner = Runner(tmp_path, service)
+    source = ','.join('AsStruct(%dul AS id)' % i for i in range(1000, 1200))
+    sql = ("$options=AsStruct('/Root/profiles' AS connection, %d AS batch_size);" % batch_size +
+           "$f=($id)->{ $p=WASM_PROFILE::Profile($id,$options).id; "
+           "RETURN AsStruct(IF($id%2ul==0ul,$p,0ul) AS a_even, IF($id%2ul!=0ul,$p,0ul) AS z_odd); };"
+           "$input=SELECT * FROM AS_TABLE(AsList(" + source + "));"
+           "$r=SELECT id,$f(id) AS x FROM $input;"
+           "SELECT id,x.a_even AS even,x.z_odd AS odd FROM $r ORDER BY id;")
+    assert runner.wait(runner.start(sql=sql)) == 0, runner.output()
+    rows = runner.rows()
+    assert len(rows) == 200
+    assert [(int(row['even']), int(row['odd'])) for row in rows] == [
+        (i, 0) if i % 2 == 0 else (0, i) for i in range(1000, 1200)]
+    received = [value for _, request, _ in service.requests
+                for value in (request if isinstance(request, tuple) else (request,))]
+    assert sorted(received) == list(range(1000, 1200))
+
+
+@pytest.mark.parametrize('guarded', [False, True])
+def test_service_expression_manifest_mask_name_is_user_data(service, tmp_path, guarded):
+    runner = Runner(tmp_path, service)
+    manifest_path = Path(str(runner.module) + '.manifest.json')
+    manifest = json.loads(manifest_path.read_text())
+    manifest['service_methods'][0]['input'][0]['name'] = '_yql_service_enabled'
+    manifest_path.write_text(json.dumps(manifest))
+    source = ','.join('AsStruct(%dul AS id)' % i for i in range(1000, 1020))
+    call = 'WASM_PROFILE::Profile(id,$options).id'
+    if guarded:
+        call = 'IF(id%2ul==0ul,' + call + ',id)'
+    sql = ("$options=AsStruct('/Root/profiles' AS connection, 8 AS batch_size);"
+           "$input=SELECT * FROM AS_TABLE(AsList(" + source + "));"
+           "SELECT id," + call + " AS result FROM $input ORDER BY id;")
+    assert runner.wait(runner.start(sql=sql)) == 0, runner.output()
+    assert [(int(row['id']), int(row['result'])) for row in runner.rows()] == [(i, i) for i in range(1000, 1020)]
+    received = [value for _, request, _ in service.requests
+                for value in (request if isinstance(request, tuple) else (request,))]
+    assert sorted(received) == [i for i in range(1000, 1020) if not guarded or i % 2 == 0]
+
+
+def test_service_expression_payload_quota_applies_backpressure(service, tmp_path):
+    runner = Runner(tmp_path, service)
+    runner.config.write_text(runner.config.read_text().replace('WasmServices {', 'WasmServices { MaxBufferedBytes: 1024'))
+    source = ','.join('AsStruct(%dul AS id, %s AS payload)' % (i, json.dumps('x' * 400)) for i in range(1000, 1020))
+    sql = ("$options=AsStruct('/Root/profiles' AS connection, 1 AS batch_size);"
+           "$input=SELECT * FROM AS_TABLE(AsList(" + source + "));"
+           "SELECT id,payload,WASM_PROFILE::Profile(id,$options).id AS result FROM $input ORDER BY id;")
+    assert runner.wait(runner.start(sql=sql)) == 0, runner.output()
+    rows = runner.rows()
+    assert len(rows) == 20
+    assert all(int(row['id']) == int(row['result']) and row['payload'] == 'x' * 400 for row in rows)

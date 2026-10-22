@@ -77,13 +77,21 @@ namespace NYql::NDqFunction {
             TDqFunctionState::TPtr State;
         };
 
+        TString MaskFieldName(const TStructExprType& type) {
+            TString name = "_yql_service_enabled";
+            while (type.FindItem(name)) {
+                name += "_";
+            }
+            return name;
+        }
+
         TExprNode::TPtr AddPayloadType(const TTypeAnnotationNode* row, TPositionHandle pos, TExprContext& ctx, bool masked = false) {
             auto expanded = ExpandType(pos, *row, ctx);
             auto fields = expanded->ChildrenList();
             fields.push_back(
                 ctx.NewList(pos, {ctx.NewAtom(pos, "_yql_service_payload"), ctx.NewCallable(pos, "DataType", {ctx.NewAtom(pos, "String")})}));
             if (masked) {
-                fields.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, "_yql_service_enabled"),
+                fields.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, MaskFieldName(*row->Cast<TStructExprType>())),
                                                    ctx.NewCallable(pos, "DataType", {ctx.NewAtom(pos, "Bool")})}));
             }
             return ctx.NewCallable(pos, "StructType", std::move(fields));
@@ -147,6 +155,58 @@ namespace NYql::NDqFunction {
             if (!call) {
                 return node;
             }
+            // A node can have several guarded uses. A single invocation serves
+            // their union; replacing all references using only the first path
+            // would expose inactive placeholders through the remaining uses.
+            std::vector<TGuards> paths;
+            std::function<void(const TExprNode::TPtr&, const TGuards&, bool)> uses = [&](const auto& part, const auto& path, bool invalid) {
+                if (part == call) {
+                    paths.push_back(path);
+                    unsupported |= invalid;
+                    return;
+                }
+                if (part->IsCallable("If")) {
+                    auto branch = path;
+                    for (ui32 i = 0; i + 1 < part->ChildrenSize(); i += 2) {
+                        uses(part->ChildPtr(i), branch, invalid);
+                        branch.push_back({part, i, true});
+                        uses(part->ChildPtr(i + 1), branch, invalid);
+                        branch.back().Positive = false;
+                    }
+                    uses(part->TailPtr(), branch, invalid);
+                    return;
+                }
+                for (const auto& child : part->Children()) {
+                    uses(child, path, invalid || part->IsLambda() || part->IsCallable({"IfStrict", "IfPresent", "Coalesce", "And", "Or"}));
+                }
+            };
+            uses(lambda->TailPtr(), {}, false);
+            const auto same = [](const TGuard& a, const TGuard& b) { return a.Parent == b.Parent && a.Index == b.Index && a.Positive == b.Positive; };
+            std::vector<TGuards> minimal;
+            for (const auto& path : paths) {
+                bool covered = false;
+                for (const auto& existing : minimal) {
+                    if (existing.size() <= path.size() && std::equal(existing.begin(), existing.end(), path.begin(), same)) {
+                        covered = true;
+                    }
+                }
+                if (covered) {
+                    continue;
+                }
+                std::erase_if(minimal, [&](const auto& existing) {
+                    return path.size() <= existing.size() && std::equal(path.begin(), path.end(), existing.begin(), same);
+                });
+                minimal.push_back(path);
+            }
+            paths = std::move(minimal);
+            guards.clear();
+            for (const auto& path : paths) {
+                for (const auto& guard : path) {
+                    if (std::none_of(guards.begin(), guards.end(), [&](const auto& existing) { return existing.Parent == guard.Parent && existing.Index == guard.Index; })) {
+                        guards.push_back(guard);
+                    }
+                }
+            }
             if (unsupported) {
                 ctx.AddError(TIssue(ctx.GetPosition(call->Pos()), "Service calls require a row lambda; use IF/CASE for conditional calls"));
                 return {};
@@ -168,24 +228,55 @@ namespace NYql::NDqFunction {
                 auto row = ctx.NewArgument(pos, "guard_input");
                 TExprNode::TListType fields{ctx.NewList(pos, {ctx.NewAtom(pos, "row"), row})};
                 TVector<const TItemExprType*> types{ctx.MakeType<TItemExprType>("row", rowType)};
-                TExprNode::TPtr active = boolean(true);
-                enabled = boolean(true);
+                const auto indexOf = [&](const TGuard& guard) {
+                    for (ui32 i = 0; i < guards.size(); ++i) {
+                        if (guards[i].Parent == guard.Parent && guards[i].Index == guard.Index) {
+                            return i;
+                        }
+                    }
+                    Y_UNREACHABLE();
+                };
                 TNodeOnNodeOwnedMap rowRemap;
                 rowRemap.emplace(&lambda->Head().Head(), row);
-                for (ui32 i = 0; i < guards.size(); ++i) {
-                    const auto& guard = guards[i];
-                    auto condition = ctx.ReplaceNodes(guard.Parent->ChildPtr(guard.Index), rowRemap);
-                    const auto name = "condition" + ToString(i);
-                    auto saved = ctx.NewCallable(pos, "If", {active, condition, boolean(false)});
-                    fields.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, name), saved}));
-                    types.push_back(ctx.MakeType<TItemExprType>(name, ctx.MakeType<TDataExprType>(EDataSlot::Bool)));
-                    auto selection = guard.Positive ? saved : ctx.NewCallable(pos, "Not", {saved});
-                    active = ctx.NewCallable(pos, "And", {active, selection});
-                    auto cached = ctx.NewCallable(pos, "Member", {argument, ctx.NewAtom(pos, name)});
-                    if (!guard.Positive) {
-                        cached = ctx.NewCallable(pos, "Not", {cached});
+                TVector<TExprNode::TPtr> conditions(guards.size());
+                const auto selected = [&](TExprNode::TPtr value, bool positive) {
+                    return positive ? value : ctx.NewCallable(pos, "Not", {value});
+                };
+                std::function<TExprNode::TPtr(ui32)> condition = [&](ui32 index) -> TExprNode::TPtr {
+                    if (conditions[index]) {
+                        return conditions[index];
                     }
-                    enabled = ctx.NewCallable(pos, "And", {enabled, cached});
+                    auto active = boolean(false);
+                    for (const auto& path : paths) {
+                        if (std::none_of(path.begin(), path.end(), [&](const auto& guard) { return indexOf(guard) == index; })) {
+                            continue;
+                        }
+                        auto prefix = boolean(true);
+                        for (const auto& guard : path) {
+                            const auto current = indexOf(guard);
+                            if (current == index) {
+                                active = ctx.NewCallable(pos, "Or", {active, prefix});
+                                break;
+                            }
+                            prefix = ctx.NewCallable(pos, "And", {prefix, selected(condition(current), guard.Positive)});
+                        }
+                    }
+                    auto value = ctx.ReplaceNodes(guards[index].Parent->ChildPtr(guards[index].Index), rowRemap);
+                    return conditions[index] = ctx.NewCallable(pos, "If", {active, value, boolean(false)});
+                };
+                for (ui32 i = 0; i < guards.size(); ++i) {
+                    const auto name = "condition" + ToString(i);
+                    fields.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, name), condition(i)}));
+                    types.push_back(ctx.MakeType<TItemExprType>(name, ctx.MakeType<TDataExprType>(EDataSlot::Bool)));
+                }
+                enabled = boolean(false);
+                for (const auto& path : paths) {
+                    auto active = boolean(true);
+                    for (const auto& guard : path) {
+                        auto cached = ctx.NewCallable(pos, "Member", {argument, ctx.NewAtom(pos, "condition" + ToString(indexOf(guard)))});
+                        active = ctx.NewCallable(pos, "And", {active, selected(cached, guard.Positive)});
+                    }
+                    enabled = ctx.NewCallable(pos, "Or", {enabled, active});
                 }
                 auto saved = ctx.NewCallable(pos, "AsStruct", std::move(fields));
                 input = ctx.NewCallable(pos, "Map", {input, ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(saved))});
@@ -197,7 +288,7 @@ namespace NYql::NDqFunction {
             auto args = ctx.ReplaceNodes(call->ChildPtr(1), inputRemap);
             if (enabled) {
                 args = ctx.NewCallable(pos, "If", {enabled, args, EmptyArguments(*call->Child(1)->GetTypeAnn()->Cast<TStructExprType>(), pos, ctx)});
-                args = ctx.NewCallable(pos, "AddMember", {args, ctx.NewAtom(pos, "_yql_service_enabled"), enabled});
+                args = ctx.NewCallable(pos, "AddMember", {args, ctx.NewAtom(pos, MaskFieldName(*call->Child(1)->GetTypeAnn()->Cast<TStructExprType>())), enabled});
             }
             auto encoded = ctx.NewCallable(pos, "AddMember", {args, ctx.NewAtom(pos, "_yql_service_payload"), ctx.NewCallable(pos, "Pickle", {argument})});
             auto projected = ctx.NewCallable(pos, "Map", {input, ctx.NewLambda(pos, ctx.NewArguments(pos, {argument}), std::move(encoded))});

@@ -201,6 +201,85 @@ Y_UNIT_TEST_SUITE(TFqWasmQueryTest) {
         }
     }
 
+    Y_UNIT_TEST(MaskedEnrichmentReplays200RowsAfterPendingRpcAndBarrier) {
+        THttpMock http;
+        TGrpcMock grpc;
+        TVector<ui64> ids;
+        TVector<TString> payloads;
+        TVector<bool> enabled;
+        for (ui64 i = 0; i < 200; ++i) {
+            ids.push_back(1000 + i % 3);
+            payloads.push_back(TStringBuilder() << "saved-row-" << i);
+            enabled.push_back(i >= 8 && i % 2 == 0);
+        }
+        {
+            TQueryTransformEnv old(Bindings(http, grpc)[2], 5000, 1, 0, 65536, 0, true, false, false, {}, 8, true, true);
+            old.Setup.AsyncOutputWrite([](auto&) {
+                return NKikimr::NMiniKQL::TUnboxedValueBatch{};
+            }, NYql::NDq::CreateCheckpoint(0));
+            Eventually([&] {
+                std::lock_guard lock(old.Output->Mutex);
+                return old.Output->Events.size() == 1;
+            });
+            old.Start(ids, false, payloads, enabled);
+            http.State->Wait(0);
+            old.Setup.AsyncOutputWrite([](auto&) {
+                return NKikimr::NMiniKQL::TUnboxedValueBatch{};
+            }, NYql::NDq::CreateCheckpoint(1));
+            old.Setup.Terminate();
+            std::lock_guard lock(old.Output->Mutex);
+            UNIT_ASSERT_VALUES_EQUAL(old.Output->Events.front(), "checkpoint:0");
+            UNIT_ASSERT_VALUES_EQUAL(old.Output->Rows.size(), 8);
+            UNIT_ASSERT_VALUES_EQUAL(old.Output->Events.size(), 9);
+        }
+        TQueryTransformEnv restored(Bindings(http, grpc)[2], 5000, 1, 0, 65536, 0, true, false, false, {}, 8, true, true);
+        restored.Setup.LoadSink({}, NYql::NDq::CreateCheckpoint(0));
+        restored.Output->BlockAfterRows = 1;
+        restored.Start(ids, false, payloads, enabled);
+        restored.Setup.AsyncOutputWrite([](auto&) {
+            return NKikimr::NMiniKQL::TUnboxedValueBatch{};
+        }, NYql::NDq::CreateCheckpoint(1), true);
+        Eventually([&] {
+            return restored.Output->Blocked.load();
+        });
+        {
+            std::lock_guard lock(restored.Output->Mutex);
+            UNIT_ASSERT_VALUES_EQUAL(restored.Output->Events, (TVector<TString>{ "row:0" }));
+        }
+        restored.Output->BlockAfterRows = 0;
+        restored.Output->Blocked = false;
+        restored.Setup.Execute([](auto& actor) {
+            actor.DqAsyncOutput->OnOutputConsumerReady();
+        });
+        size_t requestIndex = 1;
+        for (size_t offset = 8; offset < ids.size(); offset += 8) {
+            TVector<ui64> batch;
+            for (size_t i = offset; i < std::min(offset + 8, ids.size()); ++i) {
+                if (enabled[i]) {
+                    batch.push_back(ids[i]);
+                }
+            }
+            http.State->Wait(requestIndex);
+            if (requestIndex == 1) {
+                // A late reply to the destroyed compartment must never satisfy the replay.
+                http.State->Reply(0, "not a valid service response", 200);
+            }
+            http.State->Reply(requestIndex++, HttpBatchPayload(batch), 200);
+        }
+        Eventually([&] {
+            return restored.Output->Finished.load();
+        });
+        std::lock_guard lock(restored.Output->Mutex);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Output->Rows.size(), 200);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Output->Payloads, payloads);
+        for (size_t i = 0; i < ids.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(restored.Output->Rows[i].Id, enabled[i] ? ids[i] : 0);
+            UNIT_ASSERT_VALUES_EQUAL(restored.Output->Rows[i].Score, enabled[i] ? 97 : 0);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(restored.Output->Events.at(200), "checkpoint:1");
+        UNIT_ASSERT_VALUES_EQUAL(restored.Output->Events.back(), "finish");
+    }
+
     Y_UNIT_TEST(MaskedRowsPreserveCheckpointAndRecovery200Rows) {
         THttpMock http;
         TGrpcMock grpc;

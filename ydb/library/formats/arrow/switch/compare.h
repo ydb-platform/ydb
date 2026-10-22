@@ -114,7 +114,7 @@ public:
     static std::partial_ordering CompareValueNotNull(const T& x, const T& y) {
         if constexpr (std::is_same_v<T, arrow::util::string_view>) {
             size_t minSize = (x.size() < y.size()) ? x.size() : y.size();
-            int cmp = memcmp(x.data(), y.data(), minSize);
+            int cmp = minSize ? memcmp(x.data(), y.data(), minSize) : 0;
             if (cmp < 0) {
                 return std::partial_ordering::less;
             } else if (cmp > 0) {

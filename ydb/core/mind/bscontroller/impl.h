@@ -7,6 +7,7 @@
 #include "types.h"
 #include "resources.h"
 #include "stat_processor.h"
+#include "bridge_sync_counters.h"
 #include "indir.h"
 #include "self_heal.h"
 #include "storage_pool_stat.h"
@@ -1615,6 +1616,7 @@ private:
     THashMap<TPDiskId, std::reference_wrapper<const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk>> StaticPDiskMap;
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
     std::unique_ptr<TStoragePoolStat> StoragePoolStat;
+    std::unique_ptr<TBridgeSyncCounters> BridgeSyncCounters;
     bool StopGivingGroups = false;
     bool GroupLayoutSanitizerEnabled = false;
     bool AllowMultipleRealmsOccupation = true;
@@ -2216,6 +2218,8 @@ private:
     // no part in the pile, the addition gives it to them
     bool IsBridgePileAwaitingParts(TBridgePileId pileId) const;
     ui64 BridgePileAddedOperationId = 0; // ADD operation BSC has done its part of (in memory, it is repeated on restart)
+
+    void UpdateBridgeSyncCounters();
 
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
         TSet<TGroupId>& groupIdsToRead, bool comprehensive);

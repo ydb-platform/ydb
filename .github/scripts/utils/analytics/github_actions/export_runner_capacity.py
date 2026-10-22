@@ -30,7 +30,7 @@ if str(_ANALYTICS_ROOT) not in sys.path:
 from collector.flush import has_send_credentials
 from collector.schema import TTL_MINUTES, _open_ydb_wrapper, build_column_types, resolve_table_path
 from collector.values import parse_datetime
-from github_actions.export_github_job_metrics import attach_pull_requests, list_open_pulls, list_run_jobs
+from github_actions.export_github_job_metrics import attach_pull_requests, list_run_jobs
 from github_actions.github_api import github_get
 
 DEFAULT_TABLE_PATH = "analytics/ci_capacity"
@@ -753,14 +753,9 @@ def list_workflow_runs(org, repo, status, per_page=RUN_PAGE_SIZE, max_pages=RUN_
     )
 
 
-def enrich_run_pull(
-    org: str,
-    repo: str,
-    run: Dict[str, Any],
-    open_pulls: Optional[list] = None,
-) -> Dict[str, Any]:
+def enrich_run_pull(org: str, repo: str, run: Dict[str, Any]) -> Dict[str, Any]:
     if run.get("event") in PR_EVENTS:
-        return attach_pull_requests(org, repo, run, open_pulls=open_pulls)
+        return attach_pull_requests(org, repo, run)
     if run.get("pull_requests"):
         cleaned = dict(run)
         cleaned["pull_requests"] = []
@@ -770,12 +765,11 @@ def enrich_run_pull(
 
 def collect_open_jobs(org: str, repo: str) -> List[tuple]:
     pairs = []
-    open_pulls = list_open_pulls(org, repo)
     for status in ("in_progress", "queued"):
         for run in list_workflow_runs(org, repo, status):
             if run.get("id") is None:
                 continue
-            run = enrich_run_pull(org, repo, run, open_pulls=open_pulls)
+            run = enrich_run_pull(org, repo, run)
             pairs.extend((run, job) for job in list_run_jobs(org, repo, int(run["id"])))
     return pairs
 

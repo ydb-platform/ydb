@@ -410,19 +410,6 @@ def list_run_jobs(
     return jobs
 
 
-def pull_refs_from_commit_pulls(pulls: Any) -> List[Dict[str, Any]]:
-    """Keep number + target branch from GET /commits/{sha}/pulls."""
-    refs: List[Dict[str, Any]] = []
-    if not isinstance(pulls, list):
-        return refs
-    for pull in pulls:
-        if not isinstance(pull, dict):
-            continue
-        base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
-        refs.append({"number": pull.get("number"), "base": {"ref": base.get("ref")}})
-    return refs
-
-
 def pull_requests_have_target(pulls: Any) -> bool:
     if not isinstance(pulls, list):
         return False
@@ -466,51 +453,11 @@ def _get_list(get, url: str, params: Optional[Dict[str, Any]] = None) -> list:
     return payload if isinstance(payload, list) else []
 
 
-def list_open_pulls(org: str, repo: str, fetcher=None) -> list:
-    get = fetcher or github_get
-    pulls: list = []
-    page = 1
-    while True:
-        rows = _get_list(
-            get,
-            "https://api.github.com/repos/%s/%s/pulls" % (org, repo),
-            {"state": "open", "per_page": 100, "page": page},
-        )
-        if not rows:
-            return pulls
-        pulls.extend(rows)
-        if len(rows) < 100:
-            return pulls
-        page += 1
-
-
-def match_open_pull(run: Dict[str, Any], pulls: Optional[list], org: str) -> Optional[Dict[str, Any]]:
-    if not pulls:
-        return None
-    sha = str(run.get("head_sha") or "")
-    owner = _head_owner(run) or org
-    branch = str(run.get("head_branch") or "")
-    by_head = None
-    for pull in pulls:
-        if not isinstance(pull, dict) or pull.get("number") is None:
-            continue
-        head = pull.get("head") if isinstance(pull.get("head"), dict) else {}
-        if sha and head.get("sha") == sha:
-            return pull
-        repo = head.get("repo") if isinstance(head.get("repo"), dict) else {}
-        head_owner = repo.get("owner") if isinstance(repo.get("owner"), dict) else {}
-        login = head_owner.get("login") or ""
-        if by_head is None and branch and head.get("ref") == branch and (not login or login == owner):
-            by_head = pull
-    return by_head
-
-
 def attach_pull_requests(
     org: str,
     repo: str,
     run: Dict[str, Any],
     fetcher=None,
-    open_pulls: Optional[list] = None,
 ) -> Dict[str, Any]:
     """Fill number and base.ref when list-runs omits pull_requests (forks)."""
     get = fetcher or github_get
@@ -518,20 +465,20 @@ def attach_pull_requests(
         return run
     if pull_requests_have_target(run.get("pull_requests")):
         return run
-    chosen = match_open_pull(run, open_pulls, org)
+    owner = _head_owner(run) or org
+    branch = run.get("head_branch") or ""
+    chosen = None
+    if owner and branch:
+        chosen = _first_pull(_get_list(
+            get,
+            "https://api.github.com/repos/%s/%s/pulls" % (org, repo),
+            {"head": "%s:%s" % (owner, branch), "state": "open", "per_page": 10},
+        ))
     sha = run.get("head_sha")
     if chosen is None and sha:
         chosen = _first_pull(_get_list(
             get,
             "https://api.github.com/repos/%s/%s/commits/%s/pulls" % (org, repo, quote(str(sha))),
-        ))
-    owner = _head_owner(run) or org
-    branch = run.get("head_branch") or ""
-    if chosen is None and owner and branch:
-        chosen = _first_pull(_get_list(
-            get,
-            "https://api.github.com/repos/%s/%s/pulls" % (org, repo),
-            {"head": "%s:%s" % (owner, branch), "state": "open", "per_page": 10},
         ))
     if chosen is None:
         return run

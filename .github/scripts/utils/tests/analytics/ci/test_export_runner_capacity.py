@@ -374,15 +374,15 @@ class SnapshotRowsTest(unittest.TestCase):
         run = {
             "name": "PR-check",
             "event": "pull_request_target",
-            "head_branch": "codex/cuthistory-main",
-            "display_title": "Cut history",
-            "pull_requests": [{"number": 53649, "title": "Cut history", "base": {"ref": "main"}}],
+            "head_branch": "feature",
+            "display_title": "fix it",
+            "pull_requests": [{"number": 42, "title": "fix it", "base": {"ref": "main"}}],
         }
         out = enrich_run_pull("ydb-platform", "ydb", run)
-        self.assertEqual(pull_info(out), ("53649", "Cut history"))
+        self.assertEqual(pull_info(out), ("42", "fix it"))
         self.assertEqual(target_branch(out), "main")
         rows = queue_jobs([(out, {"id": 1, "status": "queued", "name": "Build and test relwithdebinfo"})], NOW)
-        self.assertEqual(rows[0]["pr_number"], "53649")
+        self.assertEqual(rows[0]["pr_number"], "42")
         self.assertEqual(rows[0]["branch"], "main")
         self.assertEqual(rows[0]["workflow"], "PR-check")
 
@@ -424,28 +424,15 @@ class SnapshotRowsTest(unittest.TestCase):
         self.assertEqual(by_job["Build and test relwithdebinfo"]["workflow"], "PR-check")
         self.assertEqual(by_job["Build and test relwithdebinfo"]["branch"], "main")
 
-    def test_enrich_fork_run_from_open_pulls(self):
+    def test_enrich_strips_pulls_on_push(self):
         run = {
-            "event": "pull_request_target",
-            "head_sha": "abc123",
-            "head_branch": "feature",
-            "display_title": "fix it",
-            "pull_requests": [],
-            "head_repository": {"owner": {"login": "fork-user"}},
+            "event": "push",
+            "head_branch": "main",
+            "pull_requests": [{"number": 42, "title": "fix it", "base": {"ref": "main"}}],
         }
-        open_pulls = [{
-            "number": 42,
-            "title": "fix it",
-            "state": "open",
-            "base": {"ref": "main"},
-            "head": {
-                "sha": "abc123",
-                "ref": "feature",
-                "repo": {"owner": {"login": "fork-user"}},
-            },
-        }]
-        out = enrich_run_pull("ydb-platform", "ydb", run, open_pulls=open_pulls)
-        self.assertEqual(pull_info(out), ("42", "fix it"))
+        out = enrich_run_pull("ydb-platform", "ydb", run)
+        self.assertEqual(out["pull_requests"], [])
+        self.assertEqual(pull_info(out), (None, None))
         self.assertEqual(target_branch(out), "main")
 
     def test_short_in_progress_page_plus_long_queue_is_incomplete(self):

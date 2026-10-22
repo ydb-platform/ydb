@@ -24,7 +24,6 @@ from github_actions.export_github_job_metrics import (
     completed_since,
     metrics_from_workflow_run,
     open_runs_to_save,
-    pull_refs_from_commit_pulls,
     pull_requests_have_target,
     selected_workflows,
 )
@@ -52,17 +51,6 @@ class WorkflowNamesTest(unittest.TestCase):
 
 
 class PullRefsTest(unittest.TestCase):
-    def test_keeps_target_branch(self):
-        self.assertEqual(
-            pull_refs_from_commit_pulls(
-                [{"number": 42, "base": {"ref": "main"}, "head": {"ref": "feature"}}]
-            ),
-            [{"number": 42, "base": {"ref": "main"}}],
-        )
-
-    def test_skips_non_dicts(self):
-        self.assertEqual(pull_refs_from_commit_pulls("nope"), [])
-
     def test_attach_keeps_existing_pulls(self):
         run = {
             "event": "pull_request_target",
@@ -116,41 +104,13 @@ class PullRefsTest(unittest.TestCase):
         }
 
         def fetcher(url, params=None):
+            if params and params.get("head"):
+                return []
             self.assertIn("/commits/abc123/pulls", url)
             return [{"number": 10, "title": "fix it", "state": "open", "base": {"ref": "stable-26"}}]
 
         out = attach_pull_requests("ydb-platform", "ydb", run, fetcher=fetcher)
         self.assertEqual(out["pull_requests"][0]["base"]["ref"], "stable-26")
-
-    def test_open_pulls_recover_fork_without_commit_lookup(self):
-        run = {
-            "event": "pull_request_target",
-            "head_sha": "abc123",
-            "head_branch": "feature",
-            "display_title": "fix it",
-            "pull_requests": [],
-            "head_repository": {"owner": {"login": "fork-user"}},
-        }
-        open_pulls = [{
-            "number": 42,
-            "title": "fix it",
-            "state": "open",
-            "base": {"ref": "main"},
-            "head": {
-                "sha": "abc123",
-                "ref": "feature",
-                "repo": {"owner": {"login": "fork-user"}},
-            },
-        }]
-
-        def fetcher(url, params=None):
-            raise AssertionError("should use open_pulls, not %s" % url)
-
-        out = attach_pull_requests(
-            "ydb-platform", "ydb", run, fetcher=fetcher, open_pulls=open_pulls,
-        )
-        self.assertEqual(out["pull_requests"][0]["number"], 42)
-        self.assertEqual(out["pull_requests"][0]["base"]["ref"], "main")
 
 
 class CreatedUntilTest(unittest.TestCase):

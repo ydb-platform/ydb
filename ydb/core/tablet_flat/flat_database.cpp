@@ -534,6 +534,16 @@ ui64 TDatabase::GetTableMemSize(ui32 tableId, TEpoch epoch) const {
     return Require(tableId)->GetMemSize(epoch);
 }
 
+std::optional<TEpoch> TDatabase::GetTableOldestMemEpoch(ui32 tableId, TEpoch before) const {
+    std::optional<TEpoch> oldest;
+    for (const auto& mem : Require(tableId)->GetMemTables()) {
+        if (mem->Epoch < before && (!oldest || mem->Epoch < *oldest)) {
+            oldest = mem->Epoch;
+        }
+    }
+    return oldest;
+}
+
 ui64 TDatabase::GetTableMemRowCount(ui32 tableId) const {
     return Require(tableId)->GetMemRowCount();
 }
@@ -615,6 +625,50 @@ void TDatabase::Truncate(ui32 table)
     Y_ENSURE(Redo, "Cannot Truncate outside a transaction");
     ++Change->Snapshots;
     DatabaseImpl->TruncateTable(table);
+    if (HasEraseAll(table)) {
+        DatabaseImpl->VersionedMetadataTouched.try_emplace(table, false);
+    }
+}
+
+void TDatabase::Truncate(ui32 table, TRowVersion version)
+{
+    Y_ENSURE(Redo, "Cannot Truncate outside a transaction");
+    if (DatabaseImpl->TruncateTable(table, version)) {
+        ++Change->Snapshots;
+    }
+}
+
+bool TDatabase::HasEraseAll(ui32 table) const
+{
+    if (auto& wrap = DatabaseImpl->Get(table, false)) {
+        return wrap->HasEraseAll();
+    }
+    return false;
+}
+
+const TVector<TVersionedTableMetadata>& TDatabase::GetVersionedMetadata(ui32 table) const
+{
+    if (auto& wrap = DatabaseImpl->Get(table, false)) {
+        return wrap->GetVersionedMetadata();
+    }
+
+    static const TVector<TVersionedTableMetadata> empty;
+    return empty;
+}
+
+void TDatabase::SetVersionedMetadata(ui32 table, TVector<TVersionedTableMetadata> metadata)
+{
+    if (auto& wrap = DatabaseImpl->Get(table, false)) {
+        wrap->SetVersionedMetadata(std::move(metadata));
+    }
+}
+
+std::optional<TRowVersion> TDatabase::SourceHiddenSince(ui32 table, TEpoch epoch, const std::optional<TRowVersion>& stamp) const
+{
+    if (auto& wrap = DatabaseImpl->Get(table, false)) {
+        return wrap->SourceHiddenSince(epoch, stamp);
+    }
+    return stamp;
 }
 
 TAutoPtr<TSubset> TDatabase::CompactionSubset(ui32 table, TEpoch before, TArrayRef<const TLogoBlobID> bundle) const
@@ -738,7 +792,8 @@ bool TDatabase::HasChanges() const
 {
     Y_ENSURE(Redo, "Transaction is not in progress");
 
-    return *Redo || (Alter_ && *Alter_) || Change->Snapshots || Change->RemovedRowVersions;
+    return *Redo || (Alter_ && *Alter_) || Change->Snapshots || Change->RemovedRowVersions
+        || !DatabaseImpl->VersionedMetadataTouched.empty();
 }
 
 TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator *cookieAllocator)
@@ -822,8 +877,29 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
                 for (const auto& range : xpair.second) {
                     wrap->RemoveRowVersions(range.Lower, range.Upper);
                 }
+                if (wrap->HasEraseAll()) {
+                    DatabaseImpl->VersionedMetadataTouched.try_emplace(xpair.first, false);
+                }
             }
         }
+
+        for (auto [table, metadataChanged] : DatabaseImpl->VersionedMetadataTouched) {
+            if (auto& wrap = DatabaseImpl->Get(table, false)) {
+                if (wrap->HasEraseAll()) {
+                    wrap.Aggr(DatabaseImpl->Stats, false /* leave */);
+                    if (auto dropped = wrap->DropExpiredSources(metadataChanged)) {
+                        Change->Expired.push_back({ table, std::move(dropped) });
+                        // Keep metadata on expiry switches to group follower GC acknowledgements.
+                        metadataChanged = true;
+                    }
+                    wrap.Aggr(DatabaseImpl->Stats, true /* enter */);
+                }
+                if (metadataChanged) {
+                    Change->VersionedMetadata[table] = wrap->GetVersionedMetadata();
+                }
+            }
+        }
+        DatabaseImpl->VersionedMetadataTouched.clear();
 
         Change->Garbage = std::move(DatabaseImpl->Garbage);
         Change->Deleted = std::move(DatabaseImpl->Deleted);

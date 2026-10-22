@@ -49,6 +49,7 @@ message TBundle {
     // An optional epoch used for ordering bundles in logical time
 
     optional int64 Epoch = 5;
+    optional NKikimrProto.TRowVersion HiddenSince = 6;
 }
 
 message TBundleChange {
@@ -66,6 +67,27 @@ message TBundleMove {
     optional NKikimrProto.TLogoBlobID Label = 1;
     optional int64 RebasedEpoch = 2;
     optional uint32 SourceTable = 3;
+    optional NKikimrProto.TRowVersion HiddenSince = 4;
+}
+
+message TVersionedTableMetadataState {
+    message TEraseAll {
+        optional int64 Epoch = 1;
+    }
+
+    message TEffect {
+        oneof Kind {
+            TEraseAll EraseAll = 1;
+        }
+    }
+
+    message TVersion {
+        optional NKikimrProto.TRowVersion Version = 1;
+        repeated TEffect Effects = 2;
+    }
+
+    optional uint32 Table = 1;
+    repeated TVersion Versions = 2;
 }
 
 message TTxStatus {
@@ -187,6 +209,7 @@ message TLogSnapshot {
     repeated TCompactionState CompactionStates = 19;
     repeated TRowVersionState RowVersionStates = 20;
     repeated TLogTxStatusSnap TxStatusParts = 21;
+    repeated TVersionedTableMetadataState VersionedTableMetadata = 22;
 }
 
 message TTablePartSwitch {
@@ -203,6 +226,7 @@ message TTablePartSwitch {
 
     repeated NKikimrProto.TLogoBlobID LeavingTxStatus = 16;
     optional TLogTxStatusSnap IntroducedTxStatus = 17;
+    optional TVersionedTableMetadataState VersionedTableMetadata = 18;
 }
 
 message TExternalGcEntry {

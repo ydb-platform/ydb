@@ -61,6 +61,10 @@ public:
         return DB.GetTableMemSize(table, epoch);
     }
 
+    std::optional<TEpoch> TableOldestMemEpoch(ui32 table, TEpoch before) override {
+        return DB.GetTableOldestMemEpoch(table, before);
+    }
+
     TPartView TablePart(ui32 table, const TLogoBlobID& label) override {
         auto partView = DB.GetPartView(table, label);
         Y_ENSURE(partView, "Unexpected part " << label);
@@ -77,6 +81,15 @@ public:
 
     const TRowVersionRanges& TableRemovedRowVersions(ui32 table) override {
         return DB.GetRemovedRowVersions(table);
+    }
+
+    std::optional<TRowVersion> TableSourceHiddenSince(
+            ui32 table, TEpoch epoch, const std::optional<TRowVersion>& stamp) override {
+        return DB.SourceHiddenSince(table, epoch, stamp);
+    }
+
+    bool TableHasEraseAll(ui32 table) override {
+        return DB.HasEraseAll(table);
     }
 
     ui64 BeginCompaction(THolder<TCompactionParams> params) override {
@@ -133,7 +146,7 @@ public:
         // Note: we don't compact TxStatus in these tests
         Y_ENSURE(subset->TxStatus.empty());
 
-        Y_ENSURE(!*subset || subset->IsStickedToHead());
+        Y_ENSURE(!*subset || subset->IsStickedToHead(DB.HasEraseAll(params->Table)));
 
         const auto& scheme = DB.GetScheme();
         auto* family = scheme.DefaultFamilyFor(params->Table);
@@ -170,7 +183,9 @@ public:
 
         DB.Replace(params->Table, *subset, parts, { });
 
-        return MakeHolder<TCompactionResult>(subset->Epoch(), std::move(parts));
+        // Match the executor: an empty output has no part epoch.
+        const auto resultEpoch = parts.empty() ? TEpoch::Max() : subset->Epoch();
+        return MakeHolder<TCompactionResult>(resultEpoch, std::move(parts));
     }
 
     void ApplyChanges(ui32 table, TCompactionChanges changes) {

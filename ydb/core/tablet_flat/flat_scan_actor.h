@@ -185,6 +185,7 @@ namespace NOps {
                     .Legacy = Part->Legacy,
                     .Opaque = Part->Opaque,
                     .Epoch = Part->Epoch,
+                    .HiddenSince = Part->HiddenSince,
                 };
                 Loader.emplace(std::move(parts));
                 Become(&TThis::StateLoadPart);

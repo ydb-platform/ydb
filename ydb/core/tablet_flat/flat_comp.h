@@ -4,6 +4,8 @@
 #include "flat_page_conf.h"
 #include "flat_part_iface.h"
 #include "flat_row_versions.h"
+
+#include <optional>
 #include "flat_table_subset.h"
 #include "flat_dbase_scheme.h"
 #include <ydb/core/base/memory_controller_iface.h>
@@ -46,6 +48,9 @@ namespace NTable {
 
         // When true all erase markers are removed
         bool IsFinal = false;
+
+        // Mem compaction flushed only the oldest erase-visibility group.
+        bool PartialMem = false;
 
         // Underlay mask with possible keys under compacted data
         THolder<NPage::IKeySpace> UnderlayMask;
@@ -161,6 +166,8 @@ namespace NTable {
          */
         virtual ui64 TableMemSize(ui32 table, TEpoch epoch = TEpoch::Max()) = 0;
 
+        virtual std::optional<TEpoch> TableOldestMemEpoch(ui32 table, TEpoch before) = 0;
+
         /**
          * Returns current part with the specified label
          */
@@ -176,6 +183,10 @@ namespace NTable {
          * Returns currently removed row versions
          */
         virtual const TRowVersionRanges& TableRemovedRowVersions(ui32 table) = 0;
+
+        virtual std::optional<TRowVersion> TableSourceHiddenSince(
+                ui32 table, TEpoch epoch, const std::optional<TRowVersion>& stamp) = 0;
+        virtual bool TableHasEraseAll(ui32 table) = 0;
 
         /**
          * Begins compaction with the specified params

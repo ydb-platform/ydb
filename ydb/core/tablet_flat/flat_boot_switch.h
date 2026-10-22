@@ -3,6 +3,7 @@
 #include "flat_boot_blobs.h"
 #include "flat_store_hotdog.h"
 #include "flat_store_solid.h"
+#include "flat_table_metadata_proto.h"
 
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
 
@@ -18,6 +19,7 @@ namespace NBoot {
             TString Opaque;
             TVector<TString> Deltas;
             NTable::TEpoch Epoch = NTable::TEpoch::Max();
+            std::optional<TRowVersion> HiddenSince;
             bool Load = true;
 
             template<class TLookup>
@@ -48,6 +50,7 @@ namespace NBoot {
             TLogoBlobID Label;
             NTable::TEpoch RebasedEpoch = NTable::TEpoch::Max();
             ui32 SourceTable = Max<ui32>();
+            std::optional<TRowVersion> HiddenSince;
         };
 
         struct TCompactionChanges {
@@ -110,6 +113,10 @@ namespace NBoot {
                 Init(proto.GetRowVersionChanges());
             }
 
+            if (proto.HasVersionedTableMetadata()) {
+                Init(proto.GetVersionedTableMetadata());
+            }
+
             if (proto.HasIntroducedTxStatus()) {
                 Init(proto.GetIntroducedTxStatus());
             }
@@ -162,6 +169,9 @@ namespace NBoot {
 
                     if (bundle.HasEpoch())
                         one.Epoch = NTable::TEpoch(bundle.GetEpoch());
+
+                    if (bundle.HasHiddenSince())
+                        one.HiddenSince = TRowVersion::FromProto(bundle.GetHiddenSince());
                 }
             }
         }
@@ -201,6 +211,13 @@ namespace NBoot {
             }
         }
 
+        void Init(const NKikimrExecutorFlat::TVersionedTableMetadataState &proto)
+        {
+            InitTable(proto.GetTable());
+            HasVersionedMetadata = true;
+            VersionedMetadata = NTable::MetadataFromProto(proto);
+        }
+
         void AddChange(const NKikimrExecutorFlat::TBundleChange &change)
         {
             auto &c = Changes.emplace_back();
@@ -235,6 +252,9 @@ namespace NBoot {
 
             if (proto.HasSourceTable())
                 m.SourceTable = proto.GetSourceTable();
+
+            if (proto.HasHiddenSince())
+                m.HiddenSince = TRowVersion::FromProto(proto.GetHiddenSince());
         }
 
     private:
@@ -275,6 +295,9 @@ namespace NBoot {
         TCompactionChanges CompactionChanges;
 
         TVector<TRemovedRowVersions> RemovedRowVersions;
+
+        bool HasVersionedMetadata = false;
+        TVector<NTable::TVersionedTableMetadata> VersionedMetadata;
     };
 }
 }

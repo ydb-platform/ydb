@@ -29,6 +29,7 @@ namespace NBoot {
             , Opaque(std::move(bundle.Opaque))
             , Deltas(std::move(bundle.Deltas))
             , Epoch(bundle.Epoch)
+            , HiddenSince(bundle.HiddenSince)
         {
 
         }
@@ -101,6 +102,7 @@ namespace NBoot {
                     .Opaque = std::move(Opaque),
                     .Deltas = std::move(Deltas),
                     .Epoch = Epoch,
+                    .HiddenSince = HiddenSince,
                 };
 
                 // Pass pre-built collections — StageParseMeta fills null slots from components
@@ -162,6 +164,7 @@ namespace NBoot {
         TString Opaque;
         TVector<TString> Deltas;
         NTable::TEpoch Epoch;
+        std::optional<TRowVersion> HiddenSince;
 
         TLeft LeftMetas;
         TLeft LeftReads;

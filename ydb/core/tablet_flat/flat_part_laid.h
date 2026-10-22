@@ -5,6 +5,10 @@
 #include "flat_part_slice.h"
 #include "util_basics.h"
 
+#include <ydb/core/base/row_version.h>
+
+#include <optional>
+
 namespace NKikimr {
 namespace NTable {
 
@@ -44,12 +48,13 @@ namespace NTable {
         }
 
         TPartView CloneWithEpoch(TEpoch epoch) const {
-            return TPartView{ Part->CloneWithEpoch(epoch), Screen, Slices };
+            return TPartView{ Part->CloneWithEpoch(epoch), Screen, Slices, HiddenSince };
         }
 
         TIntrusiveConstPtr<TPart> Part;
         TIntrusiveConstPtr<TScreen> Screen;
         TIntrusiveConstPtr<TSlices> Slices;
+        std::optional<TRowVersion> HiddenSince = std::nullopt;
     };
 
     struct TWriteStats {

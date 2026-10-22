@@ -264,9 +264,11 @@ namespace NCompGen {
         ui64 FinalCompactionId = 0;
         ui32 FinalCompactionLevel = 0;
         size_t FinalCompactionTaken = 0;
+        bool ContinueBorrowedCompaction = false;
         EForcedState ForcedState = EForcedState::None;
         ui64 ForcedMemCompactionId = 0;
         ui32 ForcedGeneration = 0;
+        std::optional<TEpoch> ForcedCompactionEpoch;
 
         ui64 CurrentForcedGenCompactionId = 0;
         ui64 NextForcedGenCompactionId = 0;

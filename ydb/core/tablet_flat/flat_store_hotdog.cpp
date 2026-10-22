@@ -49,6 +49,9 @@ void TPageCollectionProtoHelper::Do(TBundle *bundle, const TPartComponents &pc)
         bundle->SetOpaque(opaque);
 
     bundle->SetEpoch(pc.GetEpoch().ToProto());
+    if (pc.HiddenSince) {
+        pc.HiddenSince->ToProto(bundle->MutableHiddenSince());
+    }
 }
 
 void TPageCollectionProtoHelper::Do(TBundle *bundle, const NTable::TPartView &partView)
@@ -74,6 +77,9 @@ void TPageCollectionProtoHelper::Do(TBundle *bundle, const NTable::TPartView &pa
     }
 
     bundle->SetEpoch(part->Epoch.ToProto());
+    if (partView.HiddenSince) {
+        partView.HiddenSince->ToProto(bundle->MutableHiddenSince());
+    }
 }
 
 void TPageCollectionProtoHelper::Do(TBundle *bundle, const TIntrusiveConstPtr<NTable::TColdPart> &part)
@@ -100,6 +106,9 @@ void TPageCollectionProtoHelper::Do(TBundle *bundle, const TIntrusiveConstPtr<NT
     }
 
     bundle->SetEpoch(partStore->Epoch.ToProto());
+    if (part->HiddenSince) {
+        part->HiddenSince->ToProto(bundle->MutableHiddenSince());
+    }
 }
 
 void TPageCollectionProtoHelper::Bundle(NKikimrExecutorFlat::TPageCollection *pageCollectionProto, const TPrivatePageCache::TPageCollection &pageCollection_)
@@ -156,7 +165,11 @@ NTable::TPartComponents TPageCollectionProtoHelper::MakePageCollectionComponents
         }
     }
 
-    return NTable::TPartComponents{ std::move(components), std::move(opaque), std::move(opaqueExt), { }, epoch };
+    NTable::TPartComponents result{ std::move(components), std::move(opaque), std::move(opaqueExt), { }, epoch };
+    if (proto.HasHiddenSince()) {
+        result.HiddenSince = TRowVersion::FromProto(proto.GetHiddenSince());
+    }
+    return result;
 }
 
 }

@@ -2,6 +2,7 @@
 #include <algorithm>
 
 #include "flat_executor.h"
+#include "flat_table_metadata_proto.h"
 #include "flat_executor_bootlogic.h"
 #include "flat_executor_txloglogic.h"
 #include "flat_executor_borrowlogic.h"
@@ -937,6 +938,7 @@ TExecutorCaches TExecutor::CleanupState() {
     PostponedFollowerUpdates.clear();
     PendingPartSwitches.clear();
     ReadyPartSwitches = 0;
+    PendingFollowerVersionedMetadata = false;
     Y_ENSURE(!LogicRedo);
     Database.Destroy();
     Y_ENSURE(!GcLogic);
@@ -1278,12 +1280,16 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
         }
 
         bool hadPendingPartSwitches = bool(PendingPartSwitches);
+        const size_t firstPartSwitch = PendingPartSwitches.size();
+        bool hasVersionedMetadata = false;
 
         ui32 nextAuxIdx = 0;
         for (ui32 idx : xrange(partSwitches.size())) {
             const TString uncompressed = NPageCollection::TSlicer::Lz4()->Decode(partSwitches[idx]);
 
             const TProtoBox<NKikimrExecutorFlat::TTablePartSwitch> proto(uncompressed);
+            hasVersionedMetadata |= proto.HasVersionedTableMetadata();
+            PendingFollowerVersionedMetadata |= proto.HasVersionedTableMetadata();
 
             const NKikimrExecutorFlat::TFollowerPartSwitchAux::TBySwitch *aux = nullptr;
             if (proto.HasIntroducedParts() || proto.HasIntroducedTxStatus()) {
@@ -1306,6 +1312,14 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
                         Database->RollUpRemoveRowVersions(tableId, lower, upper);
                     }
                 }
+            }
+        }
+
+        if (hasVersionedMetadata && update->NeedFollowerGcAck) {
+            // Expiry writes row-version changes and removed parts in separate
+            // switches. Acknowledge their shared update after its final switch.
+            for (size_t i = firstPartSwitch; i + 1 < PendingPartSwitches.size(); ++i) {
+                PendingPartSwitches[i].DeferFollowerGcAck = true;
             }
         }
 
@@ -1393,6 +1407,14 @@ void TExecutor::AddFollowerPartSwitch(
         if (x.HasSourceTable()) {
             move.SourceTable = x.GetSourceTable();
         }
+        if (x.HasHiddenSince()) {
+            move.HiddenSince = TRowVersion::FromProto(x.GetHiddenSince());
+        }
+    }
+
+    if (switchProto.HasVersionedTableMetadata()) {
+        partSwitch.HasVersionedMetadata = true;
+        partSwitch.VersionedMetadata = NTable::MetadataFromProto(switchProto.GetVersionedTableMetadata());
     }
 }
 
@@ -1414,7 +1436,8 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, NTable::TPar
                 std::move(largeGlobIds),
                 std::move(pc.Legacy),
                 std::move(pc.Opaque),
-                pc.GetEpoch());
+                pc.GetEpoch(),
+                pc.HiddenSince);
             partSwitch.NewColdParts.push_back(std::move(part));
             return false;
         }
@@ -1602,6 +1625,9 @@ bool TExecutor::ApplyReadyPartSwitches() {
         }
     }
 
+    if (std::exchange(PendingFollowerVersionedMetadata, false)) {
+        PlanTransactionActivation();
+    }
     return true;
 }
 
@@ -1705,6 +1731,10 @@ ECacheMode TExecutor::GetCacheMode(const TVector<NTable::TPartScheme::TColumn>& 
 }
 
 void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
+    if (partSwitch.HasVersionedMetadata) {
+        Database->SetVersionedMetadata(partSwitch.TableId, partSwitch.VersionedMetadata);
+    }
+
     TVector<NTable::TPartView> newParts;
     newParts.reserve(partSwitch.NewBundles.size());
     const auto& stickyColumns = GetStickyColumns(partSwitch.TableId);
@@ -1764,7 +1794,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
 
         if (partSwitch.Head != subset->Head) {
             Y_TABLET_ERROR("Follower table epoch head has diverged from leader");
-        } else if (*subset && !subset->IsStickedToHead()) {
+        } else if (*subset && !subset->IsStickedToHead(Database->HasEraseAll(partSwitch.TableId))) {
             Y_TABLET_ERROR("Follower table replace subset isn't sticked to head");
         }
 
@@ -1774,7 +1804,9 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
         for (auto &gone : subset->Flatten)
             DropPartStorePageCollections(*gone);
 
-        Send(Owner->Tablet(), new TEvTablet::TEvFGcAck(Owner->TabletID(), Generation(), partSwitch.FollowerUpdateStep));
+        if (!partSwitch.DeferFollowerGcAck) {
+            Send(Owner->Tablet(), new TEvTablet::TEvFGcAck(Owner->TabletID(), Generation(), partSwitch.FollowerUpdateStep));
+        }
     } else {
         bool merged = false;
         for (auto &partView : newParts) {
@@ -1806,6 +1838,7 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
         struct TMoveState {
             TVector<TLogoBlobID> Bundles;
             THashMap<TLogoBlobID, NTable::TEpoch> BundleToEpoch;
+            THashMap<TLogoBlobID, TRowVersion> BundleHiddenSince;
         };
 
         TMap<ui32, TMoveState> perTable;
@@ -1814,6 +1847,9 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
             state.Bundles.push_back(move.Label);
             if (move.RebasedEpoch != NTable::TEpoch::Max()) {
                 state.BundleToEpoch.emplace(move.Label, move.RebasedEpoch);
+            }
+            if (move.HiddenSince) {
+                state.BundleHiddenSince.emplace(move.Label, *move.HiddenSince);
             }
         }
 
@@ -1826,6 +1862,11 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
                 Y_ENSURE(!partView->TxIdStats, "Cannot move parts with uncommitted deltas");
                 NTable::TEpoch epoch = state.BundleToEpoch.Value(partView->Label, partView->Epoch);
                 rebased.push_back(partView.CloneWithEpoch(epoch));
+                if (!state.BundleHiddenSince.empty()) {
+                    if (auto* hidden = state.BundleHiddenSince.FindPtr(partView->Label)) {
+                        rebased.back().HiddenSince = *hidden;
+                    }
+                }
             }
 
             // Remove source parts from the source table
@@ -2021,7 +2062,10 @@ void TExecutor::ConfirmReadOnlyLease(std::function<void()> callback) {
 }
 
 bool TExecutor::CanExecuteTransaction() const {
-    return Stats->IsActive && (Stats->IsFollower() || PendingPartSwitches.empty()) && !BrokenTransaction;
+    // Erase metadata and redo must become visible together. Ordinary follower
+    // part switches only change physical storage and can still run with reads.
+    return Stats->IsActive && !PendingFollowerVersionedMetadata
+        && (Stats->IsFollower() || PendingPartSwitches.empty()) && !BrokenTransaction;
 }
 
 ui64 TExecutor::DoExecute(TAutoPtr<ITransaction> self, ETxMode mode) {
@@ -2458,6 +2502,8 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             || change->Scheme
             || change->Annex  /* Required for replication to followers */
             || change->RemovedRowVersions  /* Required for replication to followers */
+            || change->VersionedMetadata
+            || change->Expired
             || change->Truncated
             || env.MakeSnap
             || env.DropSnap
@@ -2558,6 +2604,57 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             }
         }
 
+        for (auto& record : change->Expired) {
+            NKikimrExecutorFlat::TTablePartSwitch proto;
+            proto.SetTableId(record.Table);
+
+            commit->WaitFollowerGcAck = true;
+
+            TVector<TLogoBlobID> partLabels;
+            for (auto& gone : record.Subset->Flatten) {
+                LogoBlobIDFromLogoBlobID(gone->Label, proto.AddLeavingBundles());
+                partLabels.push_back(gone->Label);
+            }
+            for (auto& gone : record.Subset->ColdParts) {
+                LogoBlobIDFromLogoBlobID(gone->Label, proto.AddLeavingBundles());
+                partLabels.push_back(gone->Label);
+            }
+
+            if (auto it = change->VersionedMetadata.find(record.Table); it != change->VersionedMetadata.end()) {
+                NTable::MetadataToProto(record.Table, it->second, *proto.MutableVersionedTableMetadata());
+                change->VersionedMetadata.erase(it);
+            }
+
+            const auto logicResult = CompactionLogic->RemovedParts(record.Table, partLabels);
+            Y_ENSURE(!logicResult.Changes.SliceChanges, "Unexpected slice changes when removing expired parts");
+            if (logicResult.Changes.StateChanges) {
+                auto* x = proto.MutableCompactionChanges();
+                x->SetTable(record.Table);
+                x->SetStrategy(logicResult.Strategy);
+                x->MutableKeyValues()->Reserve(logicResult.Changes.StateChanges.size());
+                for (const auto& kv : logicResult.Changes.StateChanges) {
+                    auto* p = x->AddKeyValues();
+                    p->SetKey(kv.first);
+                    if (kv.second) {
+                        p->SetValue(kv.second);
+                    }
+                }
+            }
+
+            auto body = proto.SerializeAsString();
+            auto glob = CommitManager->Turns.One(commit->Refs, std::move(body), true);
+            Y_UNUSED(glob);
+        }
+
+        for (const auto& xpair : change->VersionedMetadata) {
+            NKikimrExecutorFlat::TTablePartSwitch proto;
+            proto.SetTableId(xpair.first);
+            NTable::MetadataToProto(xpair.first, xpair.second, *proto.MutableVersionedTableMetadata());
+            auto body = proto.SerializeAsString();
+            auto glob = CommitManager->Turns.One(commit->Refs, std::move(body), true);
+            Y_UNUSED(glob);
+        }
+
         for (auto num : xrange(change->Deleted.size())) {
             /* Wipe and table deletion happens before any data updates, so
                 edge should be put before the current redo log step and table
@@ -2656,6 +2753,9 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
                         }
                         labels.push_back(partView->Label);
                         rebased.push_back(partView.CloneWithEpoch(dstEpoch));
+                        if (Database->HasEraseAll(src)) {
+                            rebased.back().HiddenSince = Database->SourceHiddenSince(src, partView.Epoch(), partView.HiddenSince);
+                        }
                     }
 
                     // Remove source parts from the source table
@@ -2708,6 +2808,9 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
                         LogoBlobIDFromLogoBlobID(partView->Label, x->MutableLabel());
                         x->SetRebasedEpoch(partView->Epoch.ToProto());
                         x->SetSourceTable(src);
+                        if (partView.HiddenSince) {
+                            partView.HiddenSince->ToProto(x->MutableHiddenSince());
+                        }
                     }
 
                     auto body = proto.SerializeAsString();
@@ -2718,6 +2821,11 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             }
 
             InFlySnapCollectionBarriers.emplace(commit->Step, std::move(result.Barriers));
+        }
+
+        // Register snapshot loans before collecting parts expired by this transaction.
+        for (const auto& record : change->Expired) {
+            UtilizeSubset(*record.Subset, commit);
         }
 
         if (auto truncated = std::move(change->Truncated)) {
@@ -3149,6 +3257,10 @@ void TExecutor::MakeLogSnapshot() {
                 upper->SetStep(range.Upper.Step);
                 upper->SetTxId(range.Upper.TxId);
             }
+        }
+
+        if (!Database->GetVersionedMetadata(tableId).empty()) {
+            NTable::MetadataToProto(tableId, Database->GetVersionedMetadata(tableId), *snap.AddVersionedTableMetadata());
         }
     }
 
@@ -3601,7 +3713,7 @@ void TExecutor::StartSeat(ui64 task, TResource *cookie_)
     EnqueueActivation(seat, CanExecuteTransaction());
 }
 
-THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::TCompactionParams *params, TRowVersion snapshot)
+THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, NTable::TCompactionParams *params, TRowVersion snapshot)
 {
     LogicRedo->FlushBatchedLog();
 
@@ -3622,6 +3734,29 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
     if (params) {
         subset = Database->CompactionSubset(table, params->Edge.Head, { });
 
+        // A newer part cannot be committed while an older frozen memtable
+        // remains. Flush the oldest visibility group and continue later.
+        if (Database->HasEraseAll(table) && subset->Frozen) {
+            const auto group = Database->SourceHiddenSince(table, subset->Frozen.front()->Epoch, std::nullopt);
+            NTable::TEpoch limit = subset->Frozen.front()->Epoch + 1;
+            bool split = false;
+            for (size_t i = 1; i < subset->Frozen.size(); ++i) {
+                const auto hidden = Database->SourceHiddenSince(table, subset->Frozen[i]->Epoch, std::nullopt);
+                if (hidden != group) {
+                    split = true;
+                    break;
+                }
+                limit = subset->Frozen[i]->Epoch + 1;
+            }
+            if (split) {
+                subset = Database->CompactionSubset(table, limit, { });
+                params->PartialMem = true;
+                if (params->Edge.Head != NTable::TEpoch::Max()) {
+                    params->Edge.Head = subset->Head;
+                }
+            }
+        }
+
         if (params->Parts) {
             subset->Flatten.insert(subset->Flatten.end(), params->Parts.begin(), params->Parts.end());
         }
@@ -3631,7 +3766,7 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
         }
 
         if (*subset) {
-            Y_ENSURE(subset->IsStickedToHead(),
+            Y_ENSURE(subset->IsStickedToHead(Database->HasEraseAll(table)),
                 "Got table subset with unexpected head " << subset->Head
                 << " and epoch " << subset->Epoch());
         }
@@ -3991,6 +4126,36 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     }
 
     THashMap<TLogoBlobID, NKikimrExecutorFlat::TBundleChange*> bundleChanges;
+
+    if (results && ops->Subset && Database->HasEraseAll(tableId)) {
+        std::optional<TRowVersion> produced;
+        bool haveGroup = false;
+        bool mixed = false;
+        auto note = [&](NTable::TEpoch epoch, const std::optional<TRowVersion>& stamp) {
+            auto hidden = Database->SourceHiddenSince(tableId, epoch, stamp);
+            if (!haveGroup) {
+                produced = hidden;
+                haveGroup = true;
+            } else if (produced != hidden) {
+                mixed = true;
+            }
+        };
+        for (const auto& part : ops->Subset->Flatten) {
+            note(part.Epoch(), part.HiddenSince);
+        }
+        for (const auto& part : ops->Subset->ColdParts) {
+            note(part->Epoch, part->HiddenSince);
+        }
+        for (const auto& mem : ops->Subset->Frozen) {
+            note(mem->Epoch, std::nullopt);
+        }
+        if (haveGroup && produced && !mixed) {
+            for (auto& result : results) {
+                result.Part.HiddenSince = produced;
+            }
+        }
+        Y_ENSURE(!mixed, "Compaction mixed erase visibility groups");
+    }
 
     { /*_ Replace original subset with compacted results */
         TVector<NTable::TPartView> newParts(Reserve(results.size()));
@@ -4417,7 +4582,10 @@ TString TExecutor::BorrowSnapshot(ui32 table, const TTableSnapshotContext &snap,
     proto.SetLenderTablet(TabletId());
     proto.MutableParts()->Reserve(subset->Flatten.size());
 
-    for (const auto &partView : subset->Flatten) {
+    for (auto &partView : subset->Flatten) {
+        if (Database->HasEraseAll(table)) {
+            partView.HiddenSince = Database->SourceHiddenSince(table, partView.Epoch(), partView.HiddenSince);
+        }
         auto *x = proto.AddParts();
 
         TPageCollectionProtoHelper(false).Do(x->MutableBundle(), partView);
@@ -4428,6 +4596,12 @@ TString TExecutor::BorrowSnapshot(ui32 table, const TTableSnapshotContext &snap,
         auto *x = proto.AddParts();
 
         TPageCollectionProtoHelper(false).Do(x->MutableBundle(), part);
+        if (Database->HasEraseAll(table)) {
+            const auto hidden = Database->SourceHiddenSince(table, part->Epoch, part->HiddenSince);
+            if (hidden) {
+                hidden->ToProto(x->MutableBundle()->MutableHiddenSince());
+            }
+        }
         snap.Impl->Borrowed(Step(), table, part->Label, loaner);
     }
 
@@ -5042,6 +5216,11 @@ ui64 TExecutor::TableMemSize(ui32 table, NTable::TEpoch epoch)
     return Database->GetTableMemSize(table, epoch);
 }
 
+std::optional<NTable::TEpoch> TExecutor::TableOldestMemEpoch(ui32 table, NTable::TEpoch before)
+{
+    return Database->GetTableOldestMemEpoch(table, before);
+}
+
 NTable::TPartView TExecutor::TablePart(ui32 table, const TLogoBlobID& label)
 {
     auto partView = Database->GetPartView(table, label);
@@ -5064,6 +5243,17 @@ TVector<TIntrusiveConstPtr<NTable::TColdPart>> TExecutor::TableColdParts(ui32 ta
 const NTable::TRowVersionRanges& TExecutor::TableRemovedRowVersions(ui32 table)
 {
     return Database->GetRemovedRowVersions(table);
+}
+
+std::optional<TRowVersion> TExecutor::TableSourceHiddenSince(
+        ui32 table, NTable::TEpoch epoch, const std::optional<TRowVersion>& stamp)
+{
+    return Database->SourceHiddenSince(table, epoch, stamp);
+}
+
+bool TExecutor::TableHasEraseAll(ui32 table)
+{
+    return Database->HasEraseAll(table);
 }
 
 bool TExecutor::HasSchemaChanges(ui32 table) const {

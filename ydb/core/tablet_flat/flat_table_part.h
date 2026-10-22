@@ -13,6 +13,9 @@
 #include "flat_page_txidstat.h"
 #include "flat_page_txstatus.h"
 
+#include <ydb/core/base/row_version.h>
+
+#include <optional>
 #include <type_traits>
 #include <variant>
 
@@ -43,9 +46,10 @@ namespace NTable {
      */
     class TColdPart : public virtual TThrRefBase {
     public:
-        TColdPart(const TLogoBlobID &label, TEpoch epoch)
+        TColdPart(const TLogoBlobID &label, TEpoch epoch, std::optional<TRowVersion> hiddenSince = std::nullopt)
             : Label(label)
             , Epoch(epoch)
+            , HiddenSince(hiddenSince)
         {}
 
         virtual ~TColdPart() = default;
@@ -58,6 +62,7 @@ namespace NTable {
     public:
         const TLogoBlobID Label;
         const TEpoch Epoch;
+        const std::optional<TRowVersion> HiddenSince;
     };
 
     class TPart : public virtual TThrRefBase {

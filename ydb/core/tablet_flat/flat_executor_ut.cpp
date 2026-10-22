@@ -4354,6 +4354,175 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Cold) {
         }
     };
 
+    struct TTxEraseAndBorrowSnapshot : public TTxBorrowSnapshot {
+        TRowVersion EraseVersion;
+
+        TTxEraseAndBorrowSnapshot(TString& body, TIntrusivePtr<TTableSnapshotContext> snapshot,
+                ui64 targetTabletId, TRowVersion eraseVersion)
+            : TTxBorrowSnapshot(body, std::move(snapshot), targetTabletId)
+            , EraseVersion(eraseVersion)
+        {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+            txc.DB.Truncate(TRowsModel::TableId, EraseVersion);
+            return TTxBorrowSnapshot::Execute(txc, ctx);
+        }
+    };
+
+    struct TTxBorrowColdSnapshotWithRollback : public ITransactionWithExecutor {
+        TIntrusivePtr<TTableSnapshotContext> SnapContext;
+        ui64 TargetTabletId;
+        bool RollbackErase = true;
+
+        TTxBorrowColdSnapshotWithRollback(TIntrusivePtr<TTableSnapshotContext> snapContext, ui64 targetTabletId)
+            : SnapContext(std::move(snapContext))
+            , TargetTabletId(targetTabletId)
+        {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            const auto coldParts = txc.DB.GetTableColdParts(TRowsModel::TableId);
+            UNIT_ASSERT(!coldParts.empty());
+            if (RollbackErase) {
+                txc.DB.Truncate(TRowsModel::TableId, TRowVersion(10, 1));
+            } else {
+                UNIT_ASSERT(txc.DB.GetVersionedMetadata(TRowsModel::TableId).empty());
+                for (const auto& part : coldParts) {
+                    UNIT_ASSERT(!part->HiddenSince);
+                }
+            }
+
+            UNIT_ASSERT(!Executor->BorrowSnapshot(TRowsModel::TableId, *SnapContext, { }, { }, TargetTabletId).empty());
+            txc.Env.DropSnapshot(SnapContext);
+            if (std::exchange(RollbackErase, false)) {
+                txc.Reschedule();
+                return false;
+            }
+            return true;
+        }
+
+        void Complete(const TActorContext& ctx) override {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    Y_UNIT_TEST(VersionedColdBorrowRestart) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto startTablet = [&] {
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+        };
+        auto stopTablet = [&] {
+            env.SendSync(new TEvents::TEvPoison, false, true);
+            env.WaitForGone();
+        };
+        auto checkRows = [&](ui32 count, TRowVersion version) {
+            env.SendAsync(new TEvTestFlatTablet::TEvQueueScan(count, version));
+            env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+        };
+        auto borrowErased = [&](TRowVersion version, bool expectCold = false) {
+            env.SendSync(new NFake::TEvExecute{ new TTxMakeSnapshot });
+            auto snapshot = env.GrabEdgeEvent<TEvTestFlatTablet::TEvSnapshotComplete>();
+            if (expectCold) {
+                env.SendSync(new NFake::TEvExecute{ new TTxCheckOnlyColdParts });
+            }
+            TString body;
+            env.SendSync(new NFake::TEvExecute{ new TTxEraseAndBorrowSnapshot(
+                body, snapshot->Get()->SnapContext, env.Tablet + 1, version) });
+            return body;
+        };
+
+        startTablet();
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(rows.MakeRows(100, 0, 100));
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        TString body = borrowErased(TRowVersion(10, 1));
+
+        stopTablet();
+        ++env.Tablet;
+        startTablet();
+        {
+            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+            // Snapshot compactions must leave borrowed parts in the final level.
+            policy->Generations.push_back({100 * 1024 * 1024, 10, 10, 200 * 1024 * 1024,
+                NLocalDb::LegacyQueueIdToTaskName(1), true});
+            env.SendSync(new NFake::TEvExecute{ new TTxInitColdSchema(std::move(policy)) });
+        }
+        env.SendSync(new NFake::TEvExecute{ new TTxLoanSnapshot(body) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckOnlyColdParts });
+        checkRows(0, TRowVersion::Max());
+        checkRows(100, TRowVersion(9, 1));
+
+        stopTablet();
+        startTablet();
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckOnlyColdParts }, true);
+        checkRows(0, TRowVersion::Max());
+        checkRows(100, TRowVersion(9, 1));
+
+        // Reborrowing must retain the earlier of the part stamp and local erase.
+        body = borrowErased(TRowVersion(5, 1), true);
+        stopTablet();
+        ++env.Tablet;
+        startTablet();
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(new NFake::TEvExecute{ new TTxLoanSnapshot(body) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckNoColdParts });
+        checkRows(0, TRowVersion(6, 1));
+        checkRows(100, TRowVersion(4, 1));
+
+        stopTablet();
+        startTablet();
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckNoColdParts }, true);
+        checkRows(0, TRowVersion(6, 1));
+        checkRows(100, TRowVersion(4, 1));
+    }
+
+    Y_UNIT_TEST(ColdBorrowRollback) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto startTablet = [&] {
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+        };
+        startTablet();
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(rows.MakeRows(100, 0, 100));
+        env.SendSync(new NFake::TEvExecute{ new TTxMakeSnapshot });
+        auto snapshot = env.GrabEdgeEvent<TEvTestFlatTablet::TEvSnapshotComplete>();
+        TString body;
+        env.SendSync(new NFake::TEvExecute{ new TTxBorrowSnapshot(
+            body, snapshot->Get()->SnapContext, env.Tablet + 1) });
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        ++env.Tablet;
+        startTablet();
+        {
+            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+            // Snapshot compactions must leave borrowed parts in the final level.
+            policy->Generations.push_back({100 * 1024 * 1024, 10, 10, 200 * 1024 * 1024,
+                NLocalDb::LegacyQueueIdToTaskName(1), true});
+            env.SendSync(new NFake::TEvExecute{ new TTxInitColdSchema(std::move(policy)) });
+        }
+        env.SendSync(new NFake::TEvExecute{ new TTxLoanSnapshot(body) });
+        env.SendSync(new NFake::TEvExecute{ new TTxMakeSnapshot });
+        auto coldSnapshot = env.GrabEdgeEvent<TEvTestFlatTablet::TEvSnapshotComplete>();
+
+        // Retrying a borrow must preserve the shared parts after erase rollback.
+        env.SendSync(new NFake::TEvExecute{ new TTxBorrowColdSnapshotWithRollback(
+            coldSnapshot->Get()->SnapContext, env.Tablet + 1) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckOnlyColdParts });
+        env.SendAsync(new TEvTestFlatTablet::TEvQueueScan(100));
+        env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+    }
+
     Y_UNIT_TEST(ColdBorrowScan) {
         TMyEnvBase env;
         TRowsModel rows;
@@ -9585,10 +9754,14 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Truncate) {
     struct TTxCheckRows : public ITransaction {
         bool ExpectOld;
         i64 ExpectNew;
+        TRowVersion Snapshot;
+        ui32 TableId;
 
-        TTxCheckRows(bool expectOld, i64 expectNew)
+        TTxCheckRows(bool expectOld, i64 expectNew, TRowVersion snapshot = TRowVersion::Max(), ui32 tableId = TRowsModel::TableId)
             : ExpectOld(expectOld)
             , ExpectNew(expectNew)
+            , Snapshot(snapshot)
+            , TableId(tableId)
         {}
 
         bool Execute(TTransactionContext &txc, const TActorContext &) override {
@@ -9598,7 +9771,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Truncate) {
                 TVector<TRawTypeValue> key;
                 key.emplace_back(&keyId, sizeof(keyId), NScheme::TInt64::TypeId);
                 NTable::TRowState row;
-                auto ready = txc.DB.Select(TRowsModel::TableId, key, tags, row);
+                auto ready = txc.DB.Select(TableId, key, tags, row, 0, Snapshot);
                 if (ready == NTable::EReady::Page) {
                     return false;
                 }
@@ -10388,6 +10561,557 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Truncate) {
             return new TTestFlatTablet(env.Edge, tablet, info);
         });
         env.WaitForWakeUp();
+    }
+
+    struct TTxVersionedTruncate : public ITransaction {
+        bool Execute(TTransactionContext &txc, const TActorContext &) override {
+            txc.DB.Truncate(TRowsModel::TableId, TRowVersion(10, 1));
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    struct TTxDropExpired : public ITransaction {
+        bool Execute(TTransactionContext &txc, const TActorContext &) override {
+            txc.DB.RemoveRowVersions(TRowsModel::TableId, TRowVersion::Min(), TRowVersion(10, 1));
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    struct TTxExpectHiddenPersisted : public ITransaction {
+        bool ExpectMetadata;
+        bool ExpectParts;
+
+        TTxExpectHiddenPersisted(bool expectMetadata, bool expectParts)
+            : ExpectMetadata(expectMetadata)
+            , ExpectParts(expectParts)
+        {}
+
+        bool Execute(TTransactionContext &txc, const TActorContext &) override {
+            const auto& metadata = txc.DB.GetVersionedMetadata(TRowsModel::TableId);
+            if (ExpectMetadata) {
+                Y_ENSURE(!metadata.empty());
+            } else {
+                Y_ENSURE(metadata.empty());
+            }
+            const bool hasParts = !txc.DB.GetTableParts(TRowsModel::TableId).empty()
+                || !txc.DB.GetTableColdParts(TRowsModel::TableId).empty();
+            Y_ENSURE(hasParts == ExpectParts);
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    Y_UNIT_TEST(VersionedTruncateRestartAndExpiry) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        {
+            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+            env.SendSync(rows.MakeScheme(std::move(policy)));
+        }
+
+        env.SendSync(rows.MakeRows(100, 0, 100));
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        env.SendSync(new NFake::TEvExecute{ new TTxVersionedTruncate });
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 0) });
+        env.SendSync(new NFake::TEvExecute{ new TTxExpectHiddenPersisted(true, true) });
+
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 0) });
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 0) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxExpectHiddenPersisted(true, true) }, true);
+
+        env.SendSync(new NFake::TEvExecute{ new TTxDropExpired }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 0) });
+        env.SendSync(new NFake::TEvExecute{ new TTxExpectHiddenPersisted(false, false) });
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 0) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxExpectHiddenPersisted(false, false) }, true);
+    }
+
+    void TestVersionedThenPhysicalTruncate(i64 writeCount) {
+        TMyEnvBase env;
+        TRowsModel rows;
+        auto startTablet = [&] {
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+        };
+        auto check = [&](i64 count) {
+            env.SendSync(new NFake::TEvExecute{ new TTxLambda([](TTransactionContext& txc) {
+                UNIT_ASSERT(txc.DB.GetVersionedMetadata(TRowsModel::TableId).empty());
+                UNIT_ASSERT(!txc.DB.HasEraseAll(TRowsModel::TableId));
+                return true;
+            }) }, true);
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, count) });
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, count, TRowVersion(9, 1)) });
+        };
+
+        startTablet();
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(rows.MakeRows(50, 0, 50));
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        env.SendSync(rows.MakeRows(50, 0, 50));
+        env.SendSync(new NFake::TEvExecute{ new TTxVersionedTruncate });
+        env.SendSync(new NFake::TEvExecute{ new TTxExpectHiddenPersisted(true, true) });
+
+        env.SendSync(new NFake::TEvExecute{ new TTxTruncateAndWrite(writeCount) });
+        check(writeCount);
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        startTablet();
+        check(writeCount);
+
+        // Fresh writes below the retired erase version remain visible after compaction and reboot.
+        env.SendSync(rows.RowTo(101 + writeCount).VersionTo(TRowVersion(1, 1)).MakeRows(4, 0, 4));
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        check(writeCount + 4);
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        startTablet();
+        check(writeCount + 4);
+    }
+
+    Y_UNIT_TEST(VersionedThenPhysicalTruncate) {
+        TestVersionedThenPhysicalTruncate(0);
+    }
+
+    Y_UNIT_TEST(VersionedThenPhysicalTruncateAndWrite) {
+        TestVersionedThenPhysicalTruncate(4);
+    }
+
+    Y_UNIT_TEST(VersionedTruncateWhileCompacting) {
+        TMyEnvBase env;
+        TRowsModel rows;
+        auto startTablet = [&] {
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+        };
+        startTablet();
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+
+        env.SendSync(rows.MakeRows(50, 0, 50));
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        env.SendSync(rows.MakeRows(50, 0, 50));
+
+        TBlockEvents<NOps::TEvResult> blockedCompaction(env.Env);
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env->WaitFor("blocked compaction", [&] { return !blockedCompaction.empty(); });
+        const auto& subset = *blockedCompaction.front()->Get()->Subset;
+        UNIT_ASSERT(!subset.Flatten.empty());
+        UNIT_ASSERT(!subset.Frozen.empty());
+        UNIT_ASSERT(subset.Flatten.front().Epoch() < subset.Frozen.front()->Epoch);
+
+        // The erase boundary is newer than every input, even when their epochs differ.
+        env.SendSync(new NFake::TEvExecute{ new TTxVersionedTruncate });
+        env.SendSync(rows.VersionTo(TRowVersion(20, 1)).MakeRows(4, 0, 4));
+        blockedCompaction.Stop().Unblock();
+        env.WaitFor<NFake::TEvCompacted>();
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 4) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0, TRowVersion(9, 1)) });
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        startTablet();
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 4) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0, TRowVersion(9, 1)) }, true);
+    }
+
+    void TestVersionedTruncateFrozenGroups(bool snapshot, bool withParts = false) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto startTablet = [&] {
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+        };
+        startTablet();
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+
+        if (withParts) {
+            env.SendSync(rows.MakeRows(50, 0, 50));
+            env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+            env.WaitFor<NFake::TEvCompacted>();
+        }
+        env.SendSync(rows.MakeRows(withParts ? 50 : 100, 0, 100));
+        env.SendSync(new NFake::TEvExecute{ new TTxVersionedTruncate });
+        env.SendSync(rows.VersionTo(TRowVersion(20, 1)).MakeRows(4, 0, 4));
+
+        if (snapshot) {
+            env.SendSync(new NFake::TEvExecute{ new NTestSuiteTFlatTableExecutor_Cold::TTxMakeSnapshot });
+            auto completed = env.GrabEdgeEvent<TEvTestFlatTablet::TEvSnapshotComplete>();
+            env.SendSync(new NFake::TEvExecute{ new TTxLambda([&](TTransactionContext& txc) {
+                txc.Env.DropSnapshot(completed->Get()->SnapContext);
+                return true;
+            }) });
+        } else {
+            env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+            env.WaitFor<NFake::TEvCompacted>();
+        }
+        env.SendSync(new NFake::TEvExecute{ new TTxLambda([](TTransactionContext& txc) {
+            UNIT_ASSERT_VALUES_EQUAL(txc.DB.GetTableMemRowCount(TRowsModel::TableId), 0);
+            return true;
+        }) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 4) });
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0, TRowVersion(9, 1)) });
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        startTablet();
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 4) }, true);
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0, TRowVersion(9, 1)) }, true);
+    }
+
+    Y_UNIT_TEST(VersionedTruncateFrozenGroups) {
+        TestVersionedTruncateFrozenGroups(false);
+    }
+
+    Y_UNIT_TEST(VersionedTruncateSnapshotFrozenGroups) {
+        TestVersionedTruncateFrozenGroups(true);
+    }
+
+    Y_UNIT_TEST(VersionedTruncateFrozenGroupsWithParts) {
+        TestVersionedTruncateFrozenGroups(false, true);
+    }
+
+    struct TTxBorrowAndExpireSnapshot : public NTestSuiteTFlatTableExecutor_Cold::TTxBorrowSnapshot {
+        using TTxBorrowSnapshot::TTxBorrowSnapshot;
+
+        bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+            const bool ready = TTxBorrowSnapshot::Execute(txc, ctx);
+            txc.DB.Truncate(TRowsModel::TableId, TRowVersion(10, 1));
+            txc.DB.RemoveRowVersions(TRowsModel::TableId, TRowVersion::Min(), TRowVersion(10, 1));
+            return ready;
+        }
+    };
+
+    void TestVersionedBorrowExpiry(bool cold, bool expireOnBorrow = false) {
+        TMyEnvBase env;
+        TRowsModel rows;
+        auto startTablet = [&] {
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+        };
+        auto stopTablet = [&] {
+            env.SendSync(new TEvents::TEvPoison, false, true);
+            env.WaitForGone();
+        };
+        auto expire = [&] {
+            env.SendSync(new NFake::TEvExecute{ new TTxVersionedTruncate });
+            env.SendSync(new NFake::TEvExecute{ new TTxExpectHiddenPersisted(true, true) });
+            env.SendSync(new NFake::TEvExecute{ new TTxDropExpired });
+            env.SendSync(new NFake::TEvExecute{ new TTxExpectHiddenPersisted(false, false) });
+            stopTablet();
+            startTablet();
+            env.SendSync(new NFake::TEvExecute{ new TTxExpectHiddenPersisted(false, false) }, true);
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 0) });
+        };
+
+        startTablet();
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(rows.MakeRows(100, 0, 100));
+        env.SendSync(new NFake::TEvExecute{ new NTestSuiteTFlatTableExecutor_Cold::TTxMakeSnapshot });
+        auto snapshot = env.GrabEdgeEvent<TEvTestFlatTablet::TEvSnapshotComplete>();
+        TString body;
+        // Expiring the owner's loaned parts must preserve the borrower's blobs.
+        if (expireOnBorrow) {
+            env.SendSync(new NFake::TEvExecute{ new TTxBorrowAndExpireSnapshot(
+                body, snapshot->Get()->SnapContext, env.Tablet + 1) });
+            env.SendSync(new NFake::TEvExecute{ new TTxExpectHiddenPersisted(false, false) });
+            stopTablet();
+            startTablet();
+            env.SendSync(new NFake::TEvExecute{ new TTxExpectHiddenPersisted(false, false) }, true);
+            // Let the owner finish GC before the borrower loads the snapshot.
+            env->SimulateSleep(TDuration::Seconds(1));
+        } else {
+            env.SendSync(new NFake::TEvExecute{ new NTestSuiteTFlatTableExecutor_Cold::TTxBorrowSnapshot(
+                body, snapshot->Get()->SnapContext, env.Tablet + 1) });
+            expire();
+        }
+        stopTablet();
+        ++env.Tablet;
+        startTablet();
+        if (cold) {
+            env.SendSync(new NFake::TEvExecute{ new NTestSuiteTFlatTableExecutor_Cold::TTxInitColdSchema(new TCompactionPolicy()) });
+        } else {
+            env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        }
+        env.SendSync(new NFake::TEvExecute{ new NTestSuiteTFlatTableExecutor_Cold::TTxLoanSnapshot(body) });
+        if (cold) {
+            env.SendSync(new NFake::TEvExecute{ new NTestSuiteTFlatTableExecutor_Cold::TTxCheckOnlyColdParts });
+        }
+        env.SendAsync(new TEvTestFlatTablet::TEvQueueScan(100));
+        env.WaitFor<TEvTestFlatTablet::TEvScanFinished>();
+
+        // Exercise both warm and cold borrowed bundles in UtilizeSubset.
+        expire();
+    }
+
+    Y_UNIT_TEST(VersionedBorrowExpiry) {
+        TestVersionedBorrowExpiry(false);
+    }
+
+    Y_UNIT_TEST(VersionedColdBorrowExpiry) {
+        TestVersionedBorrowExpiry(true);
+    }
+
+    Y_UNIT_TEST(VersionedBorrowAndExpire) {
+        TestVersionedBorrowExpiry(false, true);
+    }
+
+    Y_UNIT_TEST(VersionedColdBorrowAndExpire) {
+        TestVersionedBorrowExpiry(true, true);
+    }
+
+    Y_UNIT_TEST(VersionedMoveSnapshotRestart) {
+        TMyEnvBase env;
+        TRowsModel rows;
+        constexpr ui32 TargetTable = TRowsModel::TableId + 1;
+        auto startTablet = [&] {
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+        };
+        auto check = [&] {
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 0, TRowVersion::Max(), TargetTable) }, true);
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0, TRowVersion(9, 1), TargetTable) });
+            env.SendSync(new NFake::TEvExecute{ new TTxLambda([](TTransactionContext& txc) {
+                const auto parts = txc.DB.GetTableParts(TargetTable);
+                UNIT_ASSERT(!parts.empty());
+                for (const auto& part : parts) {
+                    UNIT_ASSERT(part.HiddenSince == TRowVersion(10, 1));
+                }
+                return true;
+            }) });
+        };
+
+        startTablet();
+        env.SendSync(new NFake::TEvExecute{ new NTestSuiteTFlatTableExecutor_MoveTableData::TTxInitSchema });
+        env.SendSync(rows.MakeRows(100, 0, 100));
+        env.SendSync(new NFake::TEvExecute{ new NTestSuiteTFlatTableExecutor_Cold::TTxMakeSnapshot });
+        auto snapshot = env.GrabEdgeEvent<TEvTestFlatTablet::TEvSnapshotComplete>();
+        env.SendSync(new NFake::TEvExecute{ new TTxLambdaAndWaitForCommit([&](TTransactionContext& txc) {
+            txc.DB.Truncate(TRowsModel::TableId, TRowVersion(10, 1));
+            txc.Env.MoveSnapshot(*snapshot->Get()->SnapContext, TRowsModel::TableId, TargetTable);
+            txc.Env.DropSnapshot(snapshot->Get()->SnapContext);
+            return true;
+        }) });
+        check();
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        startTablet();
+        check();
+    }
+
+    Y_UNIT_TEST(VersionedTruncateAtFollowerWhileLoadingPart) {
+        TMyEnvBase env;
+        TRowsModel rows;
+        constexpr ui32 SecondTableId = TRowsModel::TableId + 1;
+        auto startTablet = [&] {
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+        };
+
+        startTablet();
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(rows.MakeRows(100, 0, 100));
+        env.SendSync(new NFake::TEvExecute{ new NTestSuiteTFlatTableExecutor_Cold::TTxMakeSnapshot });
+        auto snapshot = env.GrabEdgeEvent<TEvTestFlatTablet::TEvSnapshotComplete>();
+        TString body;
+        env.SendSync(new NFake::TEvExecute{ new NTestSuiteTFlatTableExecutor_Cold::TTxBorrowSnapshot(
+            body, snapshot->Get()->SnapContext, env.Tablet + 1) });
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+
+        ++env.Tablet;
+        startTablet();
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(new NFake::TEvExecute{ new TTxLambda([](TTransactionContext& txc) {
+            txc.DB.Alter()
+                .AddTable("second", SecondTableId)
+                .AddColumn(SecondTableId, "key", TRowsModel::ColumnKeyId, NScheme::TInt64::TypeId, false, false)
+                .AddColumn(SecondTableId, "value", TRowsModel::ColumnValueId, NScheme::TString::TypeId, false, false)
+                .AddColumnToKey(SecondTableId, TRowsModel::ColumnKeyId)
+                .SetCompactionPolicy(SecondTableId, TCompactionPolicy());
+            return true;
+        }) });
+        env.SendSync(rows.RowTo(1).MakeRows(100, 0, 100));
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        TActorId followerExecutor;
+        auto followerAttach = env->AddObserver<NSharedCache::TEvAttach>([&](auto& ev) {
+            followerExecutor = ev->Sender;
+        });
+        env.FireFollower(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, /* followerId */ 1);
+        env.WaitForWakeUp();
+        followerAttach.Remove();
+        UNIT_ASSERT(followerExecutor);
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0) });
+
+        TBlockEvents<TEvBlobStorage::TEvGet> blockedBlobs(env.Env, [&](const auto& ev) {
+            return ev->Sender == followerExecutor;
+        });
+        TBlockEvents<NSharedCache::TEvRequest> blockedPages(env.Env, [&](const auto& ev) {
+            return ev->Sender == followerExecutor;
+        });
+        env.SendSync(new NFake::TEvExecute{ new TTxLambdaAndWaitForCommit([&](TTransactionContext& txc) {
+            txc.DB.Truncate(TRowsModel::TableId, TRowVersion(10, 1));
+            const auto key = NScheme::TInt64::TInstance(101);
+            const auto value = NScheme::TString::TInstance("value");
+            NTable::TUpdateOp op{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, value };
+            txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { key }, { op }, TRowVersion(20, 1));
+            txc.Env.LoanTable(SecondTableId, body);
+            return true;
+        }) });
+        env->WaitFor("follower part loading", [&] { return !blockedBlobs.empty() || !blockedPages.empty(); });
+
+        struct TTxCheckAtomicErase : TTxCheckRows {
+            bool& Executed;
+
+            explicit TTxCheckAtomicErase(bool& executed)
+                : TTxCheckRows(false, 1)
+                , Executed(executed)
+            {}
+
+            bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+                Executed = true;
+                return TTxCheckRows::Execute(txc, ctx);
+            }
+        };
+        bool executed = false;
+        env.SendFollowerAsync(new NFake::TEvExecute{ new TTxCheckAtomicErase(executed) });
+        // This actor callback runs even while executor transactions are paused.
+        env.SendFollowerSync(new NFake::TEvExecute{ [](auto*, const auto& ctx) {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        } });
+        UNIT_ASSERT(!executed);
+
+        blockedBlobs.Stop().Unblock();
+        blockedPages.Stop().Unblock();
+        env.WaitForWakeUp();
+        UNIT_ASSERT(executed);
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0, TRowVersion(9, 1)) });
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0, TRowVersion::Max(), SecondTableId) });
+    }
+
+    Y_UNIT_TEST(VersionedTruncateAtFollower) {
+        TMyEnvBase env;
+        TRowsModel rows;
+        constexpr ui32 SecondTableId = TRowsModel::TableId + 1;
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.FireFollower(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, /* followerId */ 1);
+        env.WaitForWakeUp();
+
+        {
+            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+            env.SendSync(rows.MakeScheme(std::move(policy)));
+        }
+
+        env.SendSync(new NFake::TEvExecute{ new TTxLambda([](TTransactionContext& txc) {
+            txc.DB.Alter()
+                .AddTable("second", SecondTableId)
+                .AddColumn(SecondTableId, "key", 1, NScheme::TInt64::TypeId, false, false)
+                .AddColumnToKey(SecondTableId, 1)
+                .SetCompactionPolicy(SecondTableId, TCompactionPolicy());
+            const auto key = NScheme::TInt64::TInstance(1);
+            txc.DB.Update(SecondTableId, NTable::ERowOp::Upsert, { key }, { });
+            return true;
+        }) });
+
+        env.SendSync(rows.MakeRows(100, 0, 100));
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        env.SendSync(new NFake::TEvCompact(SecondTableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        env->SimulateSleep(TDuration::MilliSeconds(1));
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0) });
+
+        env.SendSync(new NFake::TEvExecute{ new TTxLambda([](TTransactionContext& txc) {
+            txc.DB.Truncate(TRowsModel::TableId, TRowVersion(10, 1));
+            txc.DB.Truncate(SecondTableId, TRowVersion(10, 1));
+            return true;
+        }) });
+        env->SimulateSleep(TDuration::MilliSeconds(1));
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(false, 0) });
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxExpectHiddenPersisted(true, true) });
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxLambda([](TTransactionContext& txc) {
+            UNIT_ASSERT(!txc.DB.GetTableParts(SecondTableId).empty());
+            UNIT_ASSERT(!txc.DB.GetVersionedMetadata(SecondTableId).empty());
+            return true;
+        }) });
+
+        env.SendSync(new NFake::TEvExecute{ new TTxLambda([](TTransactionContext& txc) {
+            txc.DB.RemoveRowVersions(TRowsModel::TableId, TRowVersion::Min(), TRowVersion(10, 1));
+            txc.DB.RemoveRowVersions(SecondTableId, TRowVersion::Min(), TRowVersion(10, 1));
+            return true;
+        }) });
+        env->SimulateSleep(TDuration::MilliSeconds(1));
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(false, 0) });
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxExpectHiddenPersisted(false, false) });
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxLambda([](TTransactionContext& txc) {
+            UNIT_ASSERT(txc.DB.GetTableParts(SecondTableId).empty());
+            UNIT_ASSERT(txc.DB.GetVersionedMetadata(SecondTableId).empty());
+            return true;
+        }) });
     }
 
 }

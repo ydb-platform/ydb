@@ -179,6 +179,371 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
         UNIT_ASSERT(!backend.CheckChangesFlag());
     }
 
+    Y_UNIT_TEST(EraseAllMemCompactionKeepsEraseMarkers) {
+        TSimpleBackend backend;
+        TSimpleBroker broker;
+        TSimpleLogger logger;
+        TSimpleTime time;
+
+        {
+            auto db = backend.Begin();
+            db.Materialize<Schema>();
+            backend.DB.Alter().SetCompactionPolicy(Table, TCompactionPolicy());
+            db.Table<Schema::Data>().Key(0).Update<Schema::Data::Value>(42);
+            backend.Commit();
+        }
+
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, &logger, "suffix");
+        strategy.Start({ });
+        backend.SimpleMemCompaction(&strategy);
+
+        {
+            backend.Begin();
+            backend.DB.Truncate(Table, TRowVersion(5, 1));
+            backend.Commit();
+        }
+        {
+            auto db = backend.Begin();
+            db.Table<Schema::Data>().Key(1).Update<Schema::Data::Value>(43);
+            backend.Commit();
+        }
+        backend.SimpleMemCompaction(&strategy);
+
+        {
+            auto db = backend.Begin();
+            db.Table<Schema::Data>().Key(1).Delete();
+            backend.Commit();
+        }
+
+        auto compactionId = strategy.BeginMemCompaction(0, { 0, TEpoch::Max() }, 0);
+        UNIT_ASSERT(!backend.StartedCompactions.at(compactionId)->IsFinal);
+        auto outcome = backend.RunCompaction(compactionId);
+        auto changes = strategy.CompactionFinished(
+                compactionId, std::move(outcome.Params), std::move(outcome.Result));
+        backend.ApplyChanges(Table, std::move(changes));
+
+        {
+            auto db = backend.Begin();
+            auto row = db.Table<Schema::Data>().Key(1).Select<Schema::Data::Value>();
+            UNIT_ASSERT(row.IsReady());
+            UNIT_ASSERT(!row.IsValid());
+            backend.Commit();
+        }
+    }
+
+    Y_UNIT_TEST(EraseAllCompactionWithoutGenerations) {
+        TSimpleBackend backend;
+        TSimpleBroker broker;
+        TSimpleLogger logger;
+        TSimpleTime time;
+
+        {
+            auto db = backend.Begin();
+            db.Materialize<Schema>();
+            backend.DB.Alter().SetCompactionPolicy(Table, TCompactionPolicy());
+            db.Table<Schema::Data>().Key(0).Update<Schema::Data::Value>(42);
+            backend.Commit();
+        }
+
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, &logger, "suffix");
+        strategy.Start({ });
+        backend.SimpleMemCompaction(&strategy);
+        {
+            backend.Begin();
+            backend.DB.Truncate(Table, TRowVersion(5, 1));
+            backend.Commit();
+        }
+
+        for (ui32 value = 0; value < 3; ++value) {
+            {
+                auto db = backend.Begin();
+                db.Table<Schema::Data>().Key(1).UpdateV<Schema::Data::Value>(TRowVersion(6 + value, 1), value);
+                backend.Commit();
+            }
+            backend.SimpleMemCompaction(&strategy);
+            // The old snapshot group and the current group each need one part.
+            UNIT_ASSERT_VALUES_EQUAL(backend.TableParts(Table).size(), 2u);
+        }
+
+        auto compactionId = strategy.BeginMemCompaction(0, { 0, TEpoch::Max() }, 123);
+        UNIT_ASSERT_VALUES_EQUAL(backend.StartedCompactions.at(compactionId)->Parts.size(), 1u);
+        auto outcome = backend.RunCompaction(compactionId);
+        auto changes = strategy.CompactionFinished(
+                compactionId, std::move(outcome.Params), std::move(outcome.Result));
+        backend.ApplyChanges(Table, std::move(changes));
+        UNIT_ASSERT_VALUES_EQUAL(strategy.GetLastFinishedForcedCompactionId(), 123u);
+        UNIT_ASSERT_VALUES_EQUAL(backend.TableParts(Table).size(), 2u);
+
+        {
+            auto db = backend.Begin();
+            auto current = db.Table<Schema::Data>().Key(1).Select<Schema::Data::Value>();
+            UNIT_ASSERT(current.IsReady());
+            UNIT_ASSERT(current.IsValid());
+            UNIT_ASSERT_VALUES_EQUAL(current.GetValue<Schema::Data::Value>(), 2u);
+            auto hidden = db.Table<Schema::Data>().Key(0).Select<Schema::Data::Value>();
+            UNIT_ASSERT(hidden.IsReady());
+            UNIT_ASSERT(!hidden.IsValid());
+
+            const ui64 oldKey = 0;
+            const NIceDb::TTypeValue rawKey(oldKey);
+            const ui32 tags[] = { 2 };
+            TRowState historical;
+            UNIT_ASSERT(backend.DB.Select(Table, { &rawKey, 1 }, tags, historical, 0, TRowVersion(4, 1)) == EReady::Data);
+            UNIT_ASSERT_VALUES_EQUAL(historical.Get(0).AsValue<ui32>(), 42u);
+            backend.Commit();
+        }
+    }
+
+    void TestEraseAllBorrowedCompaction(bool removePart, bool forceAfter = false) {
+        TSimpleBackend backend;
+        TSimpleBroker broker;
+        TSimpleLogger logger;
+        TSimpleTime time;
+
+        {
+            auto db = backend.Begin();
+            db.Materialize<Schema>();
+            backend.DB.Alter().SetCompactionPolicy(Table, TCompactionPolicy());
+            db.Table<Schema::Data>().Key(0).Update<Schema::Data::Value>(42);
+            backend.Commit();
+        }
+
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, &logger, "suffix");
+        strategy.Start({ });
+        backend.SimpleMemCompaction(&strategy);
+        {
+            backend.Begin();
+            backend.DB.Truncate(Table, TRowVersion(5, 1));
+            backend.Commit();
+        }
+
+        {
+            auto db = backend.Begin();
+            db.Table<Schema::Data>().Key(1).UpdateV<Schema::Data::Value>(TRowVersion(6, 1), 43);
+            backend.Commit();
+        }
+        backend.SimpleMemCompaction(&strategy);
+        {
+            backend.Begin();
+            backend.DB.Truncate(Table, TRowVersion(10, 1));
+            backend.Commit();
+        }
+
+        strategy.Stop();
+        ++backend.TabletId;
+        strategy.Start({ });
+        {
+            auto db = backend.Begin();
+            db.Table<Schema::Data>().Key(2).UpdateV<Schema::Data::Value>(TRowVersion(11, 1), 44);
+            backend.Commit();
+        }
+        backend.SimpleMemCompaction(&strategy);
+
+        // The owned visible group is now ahead of two borrowed hidden groups.
+        UNIT_ASSERT(strategy.ScheduleBorrowedCompaction());
+        if (removePart) {
+            // Part removal cancels pending work and rebuilds the strategy.
+            for (const auto& part : backend.TableParts(Table)) {
+                if (part->Label.TabletID() == backend.TabletId) {
+                    const auto label = part->Label;
+                    auto subset = backend.DB.PartSwitchSubset(Table, TEpoch::Zero(), { label }, { });
+                    backend.DB.Replace(Table, *subset, { }, { });
+                    strategy.PartsRemoved({ label });
+                    break;
+                }
+            }
+        }
+        ui32 compactions = 0;
+        while (broker.RunPending()) {
+            UNIT_ASSERT_C(++compactions <= 2, "Borrowed compaction made no progress");
+            auto outcome = backend.RunCompaction();
+            UNIT_ASSERT_VALUES_EQUAL(outcome.Params->Parts.size(), 1u);
+            UNIT_ASSERT(outcome.Params->Parts.front()->Label.TabletID() != backend.TabletId);
+            broker.FinishTask(outcome.Params->TaskId, EResourceStatus::Finished);
+            auto changes = strategy.CompactionFinished(
+                outcome.CompactionId, std::move(outcome.Params), std::move(outcome.Result));
+            backend.ApplyChanges(Table, std::move(changes));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(compactions, 2u);
+        UNIT_ASSERT(!strategy.ScheduleBorrowedCompaction());
+        UNIT_ASSERT_VALUES_EQUAL(backend.TableParts(Table).size(), removePart ? 2u : 3u);
+        for (const auto& part : backend.TableParts(Table)) {
+            UNIT_ASSERT_VALUES_EQUAL(part->Label.TabletID(), backend.TabletId);
+        }
+        if (forceAfter) {
+            // Borrowed compaction left the oldest hidden group at the front.
+            // Repeated full passes must reach every original visibility group.
+            const auto parts = backend.TableParts(Table);
+            for (size_t pass = 0; pass < parts.size(); ++pass) {
+                const auto forcedId = backend.SimpleMemCompaction(&strategy, true);
+                UNIT_ASSERT_VALUES_EQUAL(strategy.GetLastFinishedForcedCompactionId(), forcedId);
+            }
+            for (const auto& part : parts) {
+                UNIT_ASSERT(!backend.DB.GetPartView(Table, part->Label));
+            }
+            for (ui32 pass = 0; pass < 3; ++pass) {
+                {
+                    auto db = backend.Begin();
+                    db.Table<Schema::Data>().Key(2).UpdateV<Schema::Data::Value>(TRowVersion(20 + pass, 1), 45 + pass);
+                    backend.Commit();
+                }
+                backend.SimpleMemCompaction(&strategy);
+                UNIT_ASSERT_VALUES_EQUAL(backend.TableParts(Table).size(), parts.size());
+                backend.SimpleMemCompaction(&strategy, true);
+                UNIT_ASSERT_VALUES_EQUAL(backend.TableParts(Table).size(), parts.size());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(EraseAllFullCompactionAfterBorrowed) {
+        TestEraseAllBorrowedCompaction(false, true);
+    }
+
+    Y_UNIT_TEST(EraseAllBorrowedCompactionMakesProgress) {
+        TestEraseAllBorrowedCompaction(false);
+    }
+
+    Y_UNIT_TEST(EraseAllBorrowedCompactionAfterPartsRemoved) {
+        TestEraseAllBorrowedCompaction(true);
+    }
+
+    Y_UNIT_TEST(EraseAllColdCompactionMakesProgress) {
+        TSimpleBackend backend;
+        TSimpleBroker broker;
+        TSimpleLogger logger;
+        TSimpleTime time;
+
+        {
+            auto db = backend.Begin();
+            db.Materialize<Schema>();
+            backend.DB.Alter().SetCompactionPolicy(Table, TCompactionPolicy());
+            db.Table<Schema::Data>().Key(1).Update<Schema::Data::Value>(43);
+            backend.Commit();
+        }
+
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, &logger, "suffix");
+        strategy.Start({ });
+        backend.SimpleMemCompaction(&strategy);
+
+        TIntrusiveConstPtr<TColdPart> cold = new TColdPart(
+            TLogoBlobID(backend.TabletId - 1, 1, 1, 1, 1, 0), TEpoch::Zero(), TRowVersion(5, 1));
+        backend.DB.Merge(Table, cold);
+        strategy.PartMerged(cold, 255);
+
+        UNIT_ASSERT(strategy.ScheduleBorrowedCompaction());
+        UNIT_ASSERT(broker.RunPending());
+        UNIT_ASSERT_VALUES_EQUAL(backend.StartedCompactions.size(), 1u);
+        const auto& params = *backend.StartedCompactions.begin()->second;
+        UNIT_ASSERT(params.Parts.empty());
+        UNIT_ASSERT_VALUES_EQUAL(params.ColdParts.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(params.ColdParts.front()->Label, cold->Label);
+        UNIT_ASSERT(!params.IsFinal);
+        strategy.Stop();
+
+        // A full compaction must also reach cold data behind another warm group.
+        strategy.Start({ });
+        const auto compactionId = strategy.BeginMemCompaction(0, { 0, TEpoch::Max() }, 123);
+        const auto& forced = *backend.StartedCompactions.at(compactionId);
+        UNIT_ASSERT(forced.Parts.empty());
+        UNIT_ASSERT_VALUES_EQUAL(forced.ColdParts.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(forced.ColdParts.front()->Label, cold->Label);
+        strategy.Stop();
+    }
+
+    void TestEraseAllForcedCompaction(bool concurrentWrites, ui32 hiddenGroups = 1) {
+        TSimpleBackend backend;
+        TSimpleBroker broker;
+        TSimpleLogger logger;
+        TSimpleTime time;
+
+        {
+            auto db = backend.Begin();
+            db.Materialize<Schema>();
+            TCompactionPolicy policy;
+            policy.Generations.emplace_back(10 * 1024 * 1024, 2, 10, 100 * 1024 * 1024, "compact_gen1", true);
+            backend.DB.Alter().SetCompactionPolicy(Table, policy);
+            db.Table<Schema::Data>().Key(0).Update<Schema::Data::Value>(42);
+            backend.Commit();
+        }
+
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, &logger, "suffix");
+        strategy.Start({ });
+        backend.SimpleMemCompaction(&strategy);
+
+        for (ui32 group = 1; group <= hiddenGroups; ++group) {
+            backend.Begin();
+            backend.DB.Truncate(Table, TRowVersion(5 * group, 1));
+            backend.Commit();
+
+            auto db = backend.Begin();
+            db.Table<Schema::Data>().Key(group).Update<Schema::Data::Value>(43);
+            backend.Commit();
+            backend.SimpleMemCompaction(&strategy);
+        }
+
+        constexpr ui64 forcedId = 123;
+        const auto memCompactionId = strategy.BeginMemCompaction(0, { 0, TEpoch::Max() }, forcedId);
+        auto memOutcome = backend.RunCompaction(memCompactionId);
+        UNIT_ASSERT(memOutcome.Result->Parts.empty());
+        UNIT_ASSERT(memOutcome.Result->Epoch == TEpoch::Max());
+        auto memChanges = strategy.CompactionFinished(
+            memCompactionId, std::move(memOutcome.Params), std::move(memOutcome.Result));
+        backend.ApplyChanges(Table, std::move(memChanges));
+        UNIT_ASSERT_VALUES_EQUAL(strategy.GetLastFinishedForcedCompactionId(), 0u);
+
+        for (ui32 group = 0; group <= hiddenGroups; ++group) {
+            UNIT_ASSERT(broker.RunPending());
+            UNIT_ASSERT_VALUES_EQUAL(backend.StartedCompactions.size(), 1u);
+            const auto compactionId = backend.StartedCompactions.begin()->first;
+            if (concurrentWrites) {
+                // These writes must not keep extending the original forced pass.
+                {
+                    auto db = backend.Begin();
+                    db.Table<Schema::Data>().Key(100 + group).Update<Schema::Data::Value>(44);
+                    backend.Commit();
+                }
+                backend.SimpleMemCompaction(&strategy);
+            }
+            auto outcome = backend.RunCompaction(compactionId);
+            UNIT_ASSERT_VALUES_EQUAL(outcome.Params->Parts.size(),
+                concurrentWrites && group == hiddenGroups ? hiddenGroups + 1 : 1u);
+            broker.FinishTask(outcome.Params->TaskId, EResourceStatus::Finished);
+            auto changes = strategy.CompactionFinished(
+                    outcome.CompactionId, std::move(outcome.Params), std::move(outcome.Result));
+            backend.ApplyChanges(Table, std::move(changes));
+            UNIT_ASSERT_VALUES_EQUAL(strategy.GetLastFinishedForcedCompactionId(), group < hiddenGroups ? 0u : forcedId);
+        }
+        UNIT_ASSERT(strategy.AllowForcedCompaction());
+        if (concurrentWrites) {
+            // The last write can still be merged with the visible final part.
+            // Afterwards the remaining hidden groups must not cause repeated
+            // background rewrites of the single visible part.
+            UNIT_ASSERT(broker.RunPending());
+            auto outcome = backend.RunCompaction();
+            UNIT_ASSERT_VALUES_EQUAL(outcome.Params->Parts.size(), 2u);
+            broker.FinishTask(outcome.Params->TaskId, EResourceStatus::Finished);
+            auto changes = strategy.CompactionFinished(
+                outcome.CompactionId, std::move(outcome.Params), std::move(outcome.Result));
+            backend.ApplyChanges(Table, std::move(changes));
+            UNIT_ASSERT_VALUES_EQUAL(strategy.GetLastFinishedForcedCompactionId(), forcedId);
+            UNIT_ASSERT(strategy.AllowForcedCompaction());
+        }
+        UNIT_ASSERT(!broker.HasPending());
+    }
+
+    Y_UNIT_TEST(EraseAllForcedCompactionFinishesAllGroups) {
+        TestEraseAllForcedCompaction(false);
+    }
+
+    Y_UNIT_TEST(EraseAllForcedCompactionDoesNotChaseNewWrites) {
+        TestEraseAllForcedCompaction(true);
+    }
+
+    Y_UNIT_TEST(EraseAllBackgroundCompactionDoesNotRewriteSingleGroup) {
+        TestEraseAllForcedCompaction(true, 2);
+    }
+
     Y_UNIT_TEST(ForcedCompactionWithGenerations) {
         TSimpleBackend backend;
         TSimpleBroker broker;

@@ -1484,8 +1484,9 @@ namespace NActors {
                     params.emplace(item.GetKey(), item.GetValue());
                 }
 
+                const bool peerRequestedRdma = request.HasRdmaHandshake();
                 std::optional<NActorsInterconnect::TRdmaHandshake> rdmaIncomingHandshake;
-                if (Rdma && request.HasRdmaHandshake()) {
+                if (Rdma && peerRequestedRdma) {
                     rdmaIncomingHandshake = request.GetRdmaHandshake();
                 } else {
                     Rdma.Clear();
@@ -1532,7 +1533,7 @@ namespace NActors {
                     } else {
                         success.SetRdmaErr("Rdma is not ready on the incoming side");
                     }
-                    if (request.HasRdmaHandshake() && RunDelayedRdmaHandshake) {
+                    if (peerRequestedRdma && RunDelayedRdmaHandshake) {
                         success.SetRdmaRetryable(true);
                     }
 

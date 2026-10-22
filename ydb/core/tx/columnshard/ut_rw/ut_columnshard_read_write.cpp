@@ -2035,6 +2035,37 @@ Y_UNIT_TEST_SUITE(TColumnShardInit) {
         TActorId sender = runtime.AllocateEdgeActor();
         Y_UNUSED(SetupSchema(runtime, sender, 1, TestTableDescription{}));
     }
+
+    Y_UNIT_TEST(CompactsPortionsLoadedOnStart) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        const ui64 tableId = 1;
+        const TestTableDescription table;
+        Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
+        const TString data = MakeTestBlob({ 0, 75 * 1000 }, table.Schema);
+        for (ui64 writeId = 0, txId = 100; writeId < 3; ++writeId, ++txId) {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+            PlanCommit(runtime, sender, ProposeCommit(runtime, sender, txId, writeIds), txId);
+        }
+
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        csControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        for (ui32 i = 0; i < 60 && !csControllerGuard->GetCompactionFinishedCounter().Val(); ++i) {
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true));
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_GT(csControllerGuard->GetCompactionFinishedCounter().Val(), 0);
+    }
 }
 
 Y_UNIT_TEST_SUITE(EvWrite) {

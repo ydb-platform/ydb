@@ -5808,6 +5808,336 @@ selector_config: []
         CheckBridgeCommittedCatchup(EBridgeCommittedCatchup::ColdIntermediate);
     }
 
+    Y_UNIT_TEST(ReassignVDiskStatusTimeoutReleasesQueue) {
+        TCommitConfirmationFixture fixture;
+        fixture.Start();
+        auto& runtime = fixture.Runtime;
+        runtime.RegisterService(MakeBlobStorageVDiskID(1, 1, 0), runtime.Register(new TIgnoreActor, 1));
+        const TActorId root = fixture.Root();
+        const TActorId reassignEdge = runtime.AllocateEdgeActor(1);
+        const TActorId queryEdge = runtime.AllocateEdgeActor(1);
+        const TVDiskID vdiskId(TGroupId::Zero(), 1, 0, 0, 0);
+        TActorId handler;
+        ui32 statusRequests = 0;
+        ui32 reassignReplies = 0;
+        bool baseConfigReplied = false;
+        std::unique_ptr<IEventHandle> lateStatus;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> reassignResponse;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> queryResponse;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (CaptureInvokeResult(*ev, reassignEdge, reassignResponse)) {
+                ++reassignReplies;
+                return false;
+            }
+            if (CaptureInvokeResult(*ev, queryEdge, queryResponse)) {
+                return false;
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVStatus::EventType) {
+                ++statusRequests;
+                handler = ev->Sender;
+                lateStatus = std::make_unique<IEventHandle>(handler, ev->Recipient,
+                    new TEvBlobStorage::TEvVStatusResult(NKikimrProto::OK, vdiskId, true, true, false, 1));
+                return false;
+            }
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenQueryBaseConfig::EventType) {
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, new NStorage::TEvNodeWardenBaseConfig), nodeId);
+                baseConfigReplied = true;
+                return false;
+            }
+            return true;
+        };
+        auto reassign = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        VDiskIDFromVDiskID(vdiskId, reassign->Record.MutableReassignGroupDisk()->MutableVDiskId());
+        runtime.Send(new IEventHandle(root, reassignEdge, reassign.release()), 1);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return statusRequests && baseConfigReplied; }),
+            "status requests=" << statusRequests << " base config replied=" << baseConfigReplied
+            << " response=" << (reassignResponse ? reassignResponse->DebugString() : "none"));
+        UNIT_ASSERT_VALUES_EQUAL(statusRequests, 1);
+        auto query = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        query->Record.MutableQueryConfig();
+        runtime.Send(new IEventHandle(root, queryEdge, query.release()), 1);
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(25));
+        UNIT_ASSERT(!reassignResponse && !queryResponse);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return reassignResponse && queryResponse; }, TDuration::Seconds(10)),
+            "A lost VStatus reply blocked the configuration queue");
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        UNIT_ASSERT_C(reassignResponse->GetStatus() == TResult::ERROR, reassignResponse->DebugString());
+        UNIT_ASSERT(TString(reassignResponse->GetErrorReason()).Contains("Timed out waiting for VDisk status"));
+        UNIT_ASSERT_C(queryResponse->GetStatus() == TResult::OK, queryResponse->DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(queryResponse->GetQueryConfig().GetConfig().GetGeneration(), 1);
+        UNIT_ASSERT(!runtime.GetActor(handler));
+        runtime.Send(lateStatus.release(), 1);
+        QueryKeeper(runtime, root);
+        UNIT_ASSERT_VALUES_EQUAL(reassignReplies, 1);
+        CheckDurableConfigConverges(fixture, fixture.Config);
+    }
+
+    void CheckConsolePublishesLatestConfig(bool delayPropose) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.UseMirror3dcGroup();
+        fixture.State.RequiredRootNodeId = 1;
+        auto *stateStorage = fixture.Config.MutableStateStorageConfig();
+        stateStorage->SetSSId(1);
+        stateStorage->MutableRing()->SetNToSelect(1);
+        stateStorage->MutableRing()->AddNode(1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        auto& runtime = fixture.Runtime;
+        TActorId tabletServer;
+        ui32 validations = 0;
+        ui32 proposes = 0;
+        ui32 commits = 0;
+        TString publishedYaml;
+        std::unique_ptr<IEventHandle> firstProposeResponse;
+        std::unique_ptr<IEventHandle> firstCommitResponse;
+        std::unique_ptr<IEventHandle> duplicateCommitResponse;
+        std::unique_ptr<IEventHandle> secondProposeResponse;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (!tabletServer) {
+                tabletServer = runtime.Register(new TIgnoreActor, 1);
+                runtime.RegisterService(MakeTabletResolverID(), runtime.Register(new TIgnoreActor, 1));
+            }
+            const ui32 type = ev->GetTypeRewrite();
+            if (type == TEvTabletResolver::TEvForward::EventType) {
+                const ui64 tabletId = ev->Get<TEvTabletResolver::TEvForward>()->TabletID;
+                if (tabletId == MakeBSControllerID() || tabletId == MakeConsoleID()) {
+                    runtime.Send(new IEventHandle(ev->Sender, tabletServer,
+                        new TEvTabletResolver::TEvForwardResult(tabletId, tabletServer, tabletServer, 0)), nodeId);
+                    return false;
+                }
+            } else if (type == TEvTabletPipe::TEvConnect::EventType && ev->GetRecipientRewrite() == tabletServer) {
+                const ui64 tabletId = ev->Get<TEvTabletPipe::TEvConnect>()->Record.GetTabletId();
+                runtime.Send(new IEventHandle(ev->Sender, tabletServer, new TEvTabletPipe::TEvConnectResult(
+                    NKikimrProto::OK, tabletId, ev->Sender, tabletServer, true, 1, TString()), 0, ev->Cookie), nodeId);
+                return false;
+            }
+            if (type != TEvTabletPipe::EvSend) {
+                return true;
+            }
+            std::unique_ptr<IEventBase> response;
+            if (ev->Type == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+                auto result = std::make_unique<TEvBlobStorage::TEvControllerConfigResponse>();
+                result->Record.MutableResponse()->AddStatus()->SetInterfaceVersion(BSC_INTERFACE_DISTCONF_CONTROL);
+                response = std::move(result);
+            } else if (ev->Type == TEvBlobStorage::TEvControllerDistconfRequest::EventType) {
+                auto result = std::make_unique<TEvBlobStorage::TEvControllerDistconfResponse>();
+                result->Record.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::OK);
+                response = std::move(result);
+            } else if (ev->Type == TEvBlobStorage::TEvControllerValidateConfigRequest::EventType) {
+                auto result = std::make_unique<TEvBlobStorage::TEvControllerValidateConfigResponse>();
+                result->Record.SetStatus(NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigIsValid);
+                result->Record.SetYAML(fixture.MakeReplacementYaml(++validations, "mirror-3-dc"));
+                response = std::move(result);
+            } else if (ev->Type == TEvBlobStorage::TEvControllerProposeConfigRequest::EventType) {
+                auto result = std::make_unique<TEvBlobStorage::TEvControllerProposeConfigResponse>();
+                if (ev->Get<TEvBlobStorage::TEvControllerProposeConfigRequest>()->Record.HasConfigHash()) {
+                    ++proposes;
+                    result->Record.SetStatus(NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNeeded);
+                    if (delayPropose && proposes == 1) {
+                        firstProposeResponse = std::make_unique<IEventHandle>(ev->Sender, tabletServer,
+                            result.release(), 0, ev->Cookie);
+                        return false;
+                    }
+                    if (proposes == 2) {
+                        secondProposeResponse = std::make_unique<IEventHandle>(ev->Sender, tabletServer,
+                            result.release(), 0, ev->Cookie);
+                        return false;
+                    }
+                } else {
+                    result->Record.SetStatus(NKikimrBlobStorage::TEvControllerProposeConfigResponse::ReverseCommit);
+                }
+                response = std::move(result);
+            } else if (ev->Type == TEvBlobStorage::TEvControllerConsoleCommitRequest::EventType) {
+                ++commits;
+                publishedYaml = ev->Get<TEvBlobStorage::TEvControllerConsoleCommitRequest>()->Record.GetYAML();
+                auto result = std::make_unique<TEvBlobStorage::TEvControllerConsoleCommitResponse>();
+                result->Record.SetStatus(NKikimrBlobStorage::TEvControllerConsoleCommitResponse::Committed);
+                if (commits == 1) {
+                    auto duplicate = std::make_unique<TEvBlobStorage::TEvControllerConsoleCommitResponse>();
+                    duplicate->Record.CopyFrom(result->Record);
+                    duplicateCommitResponse = std::make_unique<IEventHandle>(ev->Sender, tabletServer,
+                        duplicate.release(), 0, ev->Cookie);
+                    firstCommitResponse = std::make_unique<IEventHandle>(ev->Sender, tabletServer,
+                        result.release(), 0, ev->Cookie);
+                    return false;
+                }
+                response = std::move(result);
+            } else {
+                return true;
+            }
+            runtime.Send(new IEventHandle(ev->Sender, tabletServer, response.release(), 0, ev->Cookie), nodeId);
+            return false;
+        };
+        fixture.Start();
+        auto first = fixture.MakeReplaceRequest(0, "mirror-3-dc");
+        first->Record.MutableReplaceStorageConfig()->SetSkipConsoleValidation(false);
+        InvokeKeeper(runtime, fixture.Keepers.front(), std::move(first));
+        UNIT_ASSERT(SimUntil(runtime, [&] { return delayPropose ? bool(firstProposeResponse) : bool(firstCommitResponse); }));
+        auto second = fixture.MakeReplaceRequest(1, "mirror-3-dc");
+        second->Record.MutableReplaceStorageConfig()->SetSkipConsoleValidation(delayPropose);
+        InvokeKeeper(runtime, fixture.Keepers.front(), std::move(second));
+        UNIT_ASSERT_VALUES_EQUAL(validations, delayPropose ? 1 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(proposes, 1);
+        UNIT_ASSERT_VALUES_EQUAL(commits, delayPropose ? 0 : 1);
+        if (delayPropose) {
+            runtime.Send(firstProposeResponse.release(), 1);
+            UNIT_ASSERT(SimUntil(runtime, [&] { return bool(firstCommitResponse); }));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(publishedYaml, fixture.MakeReplacementYaml(0, "mirror-3-dc"));
+        runtime.Send(firstCommitResponse.release(), 1);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return bool(secondProposeResponse); }),
+            "The latest committed config was not proposed after the old Console commit completed");
+        runtime.Send(duplicateCommitResponse.release(), 1);
+        SimUntil(runtime, [] { return false; }, TDuration::MilliSeconds(1));
+        runtime.Send(secondProposeResponse.release(), 1);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return commits == 2; }));
+        UNIT_ASSERT_VALUES_EQUAL(publishedYaml, fixture.MakeReplacementYaml(1, "mirror-3-dc"));
+        const auto winner = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(winner.GetGeneration(), 3);
+        CheckDurableConfigConverges(fixture, winner);
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(proposes, 2);
+        UNIT_ASSERT_VALUES_EQUAL(commits, 2);
+    }
+
+    Y_UNIT_TEST(ConsolePublishesLatestConfigAfterDelayedCommit) {
+        CheckConsolePublishesLatestConfig(false);
+    }
+
+    Y_UNIT_TEST(ConsolePublishesLatestConfigAfterDelayedPropose) {
+        CheckConsolePublishesLatestConfig(true);
+    }
+
+    void CheckDisconnectPreservesOtherAddedNodeResponses(ui32 disconnectedNodeId) {
+        TCommitConfirmationFixture fixture(false, 18);
+        fixture.UseMirror3dcGroup(9);
+        fixture.Config.SetGeneration(2);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (const auto& node : fixture.Config.GetAllNodes()) {
+            fixture.Metadata(node.GetNodeId()).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        auto expanded = MakeStorageConfig(18, 3, {1, 2, 3}, TBlobStorageGroupType::ErasureMirror3dc);
+        expanded.MutableSelfManagementConfig()->CopyFrom(fixture.Config.GetSelfManagementConfig());
+        for (auto& node : *expanded.MutableAllNodes()) {
+            node.MutableLocation()->CopyFrom(fixture.Config.GetAllNodes((node.GetNodeId() - 1) % 9).GetLocation());
+        }
+        expanded.MutablePrevConfig()->CopyFrom(fixture.Config);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&expanded);
+        const std::vector<ui32> oldNodes{1, 2, 3, 4, 5, 6, 7, 8, 9};
+        std::vector<ui32> healthyNodes;
+        for (ui32 nodeId = 1; nodeId <= 18; ++nodeId) {
+            if (nodeId != disconnectedNodeId) {
+                healthyNodes.push_back(nodeId);
+            }
+        }
+        UNIT_ASSERT(HasTestConfigQuorum(fixture.Config, oldNodes));
+        auto healthyOldNodes = oldNodes;
+        std::erase(healthyOldNodes, disconnectedNodeId);
+        UNIT_ASSERT(HasTestConfigQuorum(fixture.Config, healthyOldNodes));
+        UNIT_ASSERT(!HasTestConfigQuorum(expanded, oldNodes));
+        UNIT_ASSERT(HasTestConfigQuorum(expanded, healthyNodes));
+
+        auto& runtime = fixture.Runtime;
+        TActorId edge;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        bool holdNewGathers = true;
+        bool sawDisconnect = false;
+        THashSet<ui32> targetedNodes;
+        THashSet<ui32> proposedNodes;
+        THashSet<ui32> gatheredNodes;
+        ui32 controllerRequests = 0;
+        std::vector<std::unique_ptr<IEventHandle>> delayedGathers;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTabletPipe::EvSend) {
+                controllerRequests += ev->Type == TEvBlobStorage::TEvControllerConfigRequest::EventType
+                    || ev->Type == TEvBlobStorage::TEvControllerDistconfRequest::EventType;
+            }
+            if (nodeId >= 10 && ev->GetTypeRewrite() == NStorage::TEvNodeConfigScatter::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigScatter>()->Record;
+                if (record.GetTargeted() && record.HasProposeStorageConfig()) {
+                    targetedNodes.insert(nodeId);
+                }
+            }
+            if (nodeId >= 10 && ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType
+                    && ev->Get<NStorage::TEvNodeWardenWriteMetadata>()->Record
+                        .GetProposedStorageConfig().GetGeneration() == 3) {
+                proposedNodes.insert(nodeId);
+            }
+            if (HandleReplaceEvent(runtime, nodeId, *ev, edge, response)) {
+                return false;
+            }
+            if (!fixture.Keepers.empty() && ev->GetRecipientRewrite() == fixture.Keepers.front()
+                    && ev->GetTypeRewrite() == TEvInterconnect::TEvNodeDisconnected::EventType
+                    && ev->Get<TEvInterconnect::TEvNodeDisconnected>()->NodeId == disconnectedNodeId) {
+                sawDisconnect = true;
+            }
+            if (holdNewGathers && nodeId == 1 && ev->Sender.NodeId() >= 10
+                    && ev->GetTypeRewrite() == NStorage::TEvNodeConfigGather::EventType
+                    && ev->Get<NStorage::TEvNodeConfigGather>()->Record.HasProposeStorageConfig()) {
+                gatheredNodes.insert(ev->Sender.NodeId());
+                delayedGathers.push_back(std::move(ev));
+                return false;
+            }
+            return true;
+        };
+        fixture.Start(true);
+        auto base = expanded;
+        base.SetGeneration(0);
+        base.ClearPrevConfig();
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&base);
+        const TString yaml = fixture.MakeReplacementYaml(expanded, 0, "mirror-3-dc");
+        for (ui32 nodeId = 10; nodeId <= 18; ++nodeId) {
+            fixture.Keepers.push_back(RegisterKeeper(runtime, base, nodeId, fixture.State, yaml));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return !runtime.HasImmediateEvents(); }, TDuration::Seconds(1)));
+        for (ui32 nodeId = 10; nodeId <= 18; ++nodeId) {
+            UNIT_ASSERT(!fixture.Metadata(nodeId).HasCommittedStorageConfig());
+        }
+        edge = runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableReplaceStorageConfig()->SetYAML(yaml);
+        request->Record.MutableReplaceStorageConfig()->SetSkipConsoleValidation(true);
+        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        const bool proposed = SimUntil(runtime, [&] { return gatheredNodes.size() == 9 || response; });
+        UNIT_ASSERT_C(proposed && gatheredNodes.size() == 9,
+            "the new nodes did not persist and answer the targeted proposal: controllerRequests=" << controllerRequests
+            << " targeted=" << targetedNodes.size() << " persisted=" << proposedNodes.size()
+            << " gathered=" << gatheredNodes.size() << " response="
+            << (response ? response->DebugString() : "pending"));
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(4));
+        UNIT_ASSERT(!response);
+        runtime.StopNode(disconnectedNodeId);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return sawDisconnect; }, TDuration::Seconds(1)),
+            "root did not observe the node disconnection");
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(1));
+        UNIT_ASSERT_C(!response, "disconnect discarded the pending responses from healthy new nodes");
+        holdNewGathers = false;
+        ReplayDelayedEvents(runtime, delayedGathers);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return response.has_value(); }), "Replace did not finish");
+        UNIT_ASSERT_C(response->GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            response->DebugString());
+        const auto committed = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(committed.GetGeneration(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(committed.AllNodesSize(), 18);
+        UNIT_ASSERT(QueryKeeper(runtime, fixture.Keepers.front(), true).HasScepter());
+        UNIT_ASSERT_C(SimUntil(runtime, [&] {
+            return std::ranges::all_of(healthyNodes, [&](ui32 nodeId) {
+                return fixture.Metadata(nodeId).GetCommittedStorageConfig().GetFingerprint() == committed.GetFingerprint();
+            });
+        }), "the expansion did not become durable on the healthy nodes");
+    }
+
+    Y_UNIT_TEST(OldNodeDisconnectPreservesAddedNodeResponses) {
+        CheckDisconnectPreservesOtherAddedNodeResponses(2);
+    }
+
+    Y_UNIT_TEST(AddedNodeDisconnectPreservesOtherAddedNodeResponses) {
+        CheckDisconnectPreservesOtherAddedNodeResponses(10);
+    }
+
     enum class EConfigValidationWait {
         ControllerInterface,
         ControllerConfig,

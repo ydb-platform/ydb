@@ -18,7 +18,7 @@
     * `NEW_AND_OLD_IMAGES` - комбинация режимов `NEW_IMAGE` и `OLD_IMAGE`. Будут записаны значения всех столбцов _до_ и _в результате_ изменения.
 * `FORMAT` — формат данных, в котором будут записаны данные:
     * `JSON` — записывать данные в формате {% if oss == true and backend_name == "YDB" %}[JSON](../../../../concepts/cdc.md#json-record-structure){% else %}JSON{% endif %}.
-    * `BINARY` — записывать данные в {% if oss == true and backend_name == "YDB" %}[двоичном формате](../../../../concepts/cdc.md#binary-record-structure){% else %}двоичном формате{% endif %}. Новые потоки изменений асинхронной репликации создаются в этом формате.
+    * `BINARY` — записывать данные в {% if oss == true and backend_name == "YDB" %}[двоичном формате](../../../../concepts/cdc.md#binary-record-structure){% else %}двоичном формате{% endif %}. Новые потоки изменений асинхронной репликации создаются в этом формате, когда в кластере включены двоичные потоки для асинхронной репликации. Иначе они создаются в формате JSON.
 
     {% if audience == "tech" %}
 

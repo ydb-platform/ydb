@@ -40,6 +40,7 @@ public:
 
     void OnRestart() override;
     bool NeedToReadKeys() const override;
+    bool NeedHistoricalPrecharge(const TTableId& tableId, TArrayRef<const TRawTypeValue> key) const override;
 
     bool Collect(const TTableId& tableId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,

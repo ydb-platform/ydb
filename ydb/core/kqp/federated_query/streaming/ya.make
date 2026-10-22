@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/fq/libs/state
     ydb/core/kqp/common
     ydb/core/kqp/federated_query/actors
+    ydb/core/kqp/script_executions/common
     ydb/core/protos
     ydb/library/actors/core
     ydb/library/services

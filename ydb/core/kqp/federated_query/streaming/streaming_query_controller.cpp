@@ -5,8 +5,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/federated_query/actors/streaming_query_nodes_manager.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>

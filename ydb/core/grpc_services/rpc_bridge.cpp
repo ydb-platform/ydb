@@ -158,6 +158,7 @@ private:
     STFUNC(StateWaitForConfig) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvNodeWardenStorageConfig, Handle);
+            default: return TBase::StateFuncBase(ev); // operation timeout and client cancellation
         }
     }
 
@@ -331,6 +332,7 @@ private:
     STFUNC(StateWaitForPropose) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
+            default: return TBase::StateFuncBase(ev); // operation timeout and client cancellation
         }
     }
 
@@ -367,6 +369,7 @@ public:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvNodeWardenStorageConfig, Handle);
+            default: return TBase::StateFuncBase(ev); // operation timeout and client cancellation
         }
     }
 
@@ -419,6 +422,7 @@ public:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
+            default: return TBase::StateFuncBase(ev); // operation timeout and client cancellation
         }
     }
 

@@ -1127,7 +1127,11 @@ void ProcessAggregations(TExprNode::TPtr lambdaToProcess, TString&& resultColNam
             } else {
                 auto member = TCoMember(body);
                 originalColName = TInfoUnit(member.Name().StringValue());
-                expressionsMapPreAgg.emplace_back(originalColName.GetFullName(), lambda.Ptr(), false);
+                // Multiple DISTINCT result aliases may read the same input.
+                // Materialize that input once while preserving every result trait.
+                if (aggregationUniqueColNames.insert(originalColName.GetFullName()).second) {
+                    expressionsMapPreAgg.emplace_back(originalColName.GetFullName(), lambda.Ptr(), false);
+                }
             }
         }
 

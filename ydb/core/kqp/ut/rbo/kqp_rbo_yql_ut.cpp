@@ -815,6 +815,126 @@ FROM (
 
     }
 
+    Y_UNIT_TEST(DistinctRepeatedInputAliases) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto* tableService = appConfig.MutableTableServiceConfig();
+        tableService->SetEnableNewRBO(true);
+        tableService->SetEnableFallbackToYqlOptimizer(false);
+        tableService->SetEnableFallbackOnDML(false);
+        tableService->SetDefaultLangVer(202501);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto schema = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/DistinctRepeatedSource` (
+                Id Int32 NOT NULL,
+                PayloadK Int32,
+                PRIMARY KEY (Id)
+            );
+            CREATE TABLE `/Root/DistinctRepeatedTarget` (
+                Id Int32 NOT NULL,
+                Zeta Int32,
+                Alpha Int32,
+                Middle Int32,
+                PRIMARY KEY (Id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+
+        // The distinct input is deliberately not the primary key. Repeated
+        // payloads, including NULL, must each produce exactly one result row.
+        const std::vector<std::optional<i32>> payloads{42, std::nullopt, -7, 42, -7, std::nullopt};
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < payloads.size(); ++i) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("Id").Int32(static_cast<i32>(i + 1))
+                .AddMember("PayloadK").OptionalInt32(payloads[i])
+                .EndStruct();
+        }
+        rows.EndList();
+        const auto seeded = kikimr.GetTableClient().BulkUpsert(
+            "/Root/DistinctRepeatedSource", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(seeded.IsSuccess(), seeded.GetIssues().ToString());
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        using TBag = std::vector<std::vector<std::optional<i32>>>;
+        const TBag pairs{{std::nullopt, std::nullopt}, {-7, -7}, {42, 42}};
+        const TBag triples{{std::nullopt, std::nullopt, std::nullopt}, {-7, -7, -7}, {42, 42, 42}};
+        const auto checkSelect = [&](const TString& query, const std::vector<std::string>& columns, TBag expected) {
+            const auto before = GetNewRBOCompileCounters(kikimr);
+            const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << "\n" << result.GetIssues().ToString());
+            const auto after = GetNewRBOCompileCounters(kikimr);
+            UNIT_ASSERT_C(after.first > before.first, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(after.second, before.second, query);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            const auto& resultSet = result.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultSet.RowsCount(), expected.size(), query);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultSet.GetColumnsMeta().size(), columns.size(), query);
+            for (size_t i = 0; i < columns.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL_C(resultSet.GetColumnsMeta()[i].Name, columns[i], query);
+                UNIT_ASSERT_VALUES_EQUAL_C(resultSet.GetColumnsMeta()[i].Type.ToString(), "Int32?", query);
+            }
+            TBag actual;
+            TResultSetParser parser(resultSet);
+            while (parser.TryNextRow()) {
+                auto& row = actual.emplace_back();
+                for (size_t i = 0; i < columns.size(); ++i) {
+                    row.push_back(parser.ColumnParser(i).GetOptionalInt32());
+                }
+            }
+            // DISTINCT has no row-order guarantee; retain column order while
+            // comparing bags, including duplicate multiplicities and NULLs.
+            std::sort(actual.begin(), actual.end());
+            std::sort(expected.begin(), expected.end());
+            UNIT_ASSERT_C(actual == expected, query << "\n" << FormatResultSetYson(resultSet));
+        };
+
+        checkSelect(R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT DISTINCT t.PayloadK AS zeta, t.PayloadK AS alpha
+            FROM `/Root/DistinctRepeatedSource` AS t;
+        )", {"zeta", "alpha"}, pairs);
+        checkSelect(R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT DISTINCT t.PayloadK AS middle, t.PayloadK AS zeta, t.PayloadK AS alpha
+            FROM `/Root/DistinctRepeatedSource` AS t;
+        )", {"middle", "zeta", "alpha"}, triples);
+        checkSelect(R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT DISTINCT t.PayloadK AS zeta, t.PayloadK + CAST(1 AS Int32) AS middle, t.PayloadK AS alpha
+            FROM `/Root/DistinctRepeatedSource` AS t;
+        )", {"zeta", "middle", "alpha"},
+            {{std::nullopt, std::nullopt, std::nullopt}, {-7, -6, -7}, {42, 43, 42}});
+
+        // Keep the repeated aliases on the INSERT SELECT path as well. The
+        // separate non-null key allows the NULL payload group to be inserted.
+        const auto beforeInsert = GetNewRBOCompileCounters(kikimr);
+        const auto inserted = session.ExecuteQuery(R"(
+            PRAGMA YqlSelect = 'force';
+            INSERT INTO `/Root/DistinctRepeatedTarget` (Middle, Id, Alpha, Zeta)
+            SELECT DISTINCT t.PayloadK AS z, COALESCE(t.PayloadK, CAST(-1000 AS Int32)) AS row_id,
+                t.PayloadK AS m, t.PayloadK AS a
+            FROM `/Root/DistinctRepeatedSource` AS t;
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+        const auto afterInsert = GetNewRBOCompileCounters(kikimr);
+        UNIT_ASSERT_C(afterInsert.first > beforeInsert.first, "INSERT must use the new RBO");
+        UNIT_ASSERT_VALUES_EQUAL(afterInsert.second, beforeInsert.second);
+        checkSelect(R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT Zeta, Alpha, Middle FROM `/Root/DistinctRepeatedTarget`;
+        )", {"Zeta", "Alpha", "Middle"}, triples);
+        const auto keys = session.ExecuteQuery(R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT Id FROM `/Root/DistinctRepeatedTarget` ORDER BY Id;
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(keys.IsSuccess(), keys.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(keys.GetResultSet(0)), R"([[-1000];[-7];[42]])");
+    }
+
+
     Y_UNIT_TEST_TWIN(InsertSelectColumnOrder, Distinct) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

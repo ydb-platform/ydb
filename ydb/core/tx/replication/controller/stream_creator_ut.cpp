@@ -2,6 +2,7 @@
 #include "private_events.h"
 #include "stream_creator.h"
 #include "target_table.h"
+#include "target_transfer.h"
 
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
@@ -12,6 +13,134 @@ namespace NKikimr::NReplication::NController {
 
 Y_UNIT_TEST_SUITE(StreamCreator) {
     using namespace NTestHelpers;
+
+    enum class EAcknowledgedSource { Enabled, Disabled };
+    enum class EAcknowledgedConsistency { Row, Global };
+
+    void AcknowledgedRetentionCreationAndFallback(EAcknowledgedSource source,
+            EAcknowledgedConsistency consistency,
+            NKikimrReplication::TReplicationDefaults::ESourceTopicRetentionPolicy retentionPolicy) {
+        TEnv env(true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(source == EAcknowledgedSource::Enabled);
+            runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(false);
+        }
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table", .KeyColumns = {"key"}, .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+        ui64 addConsumers = 0;
+        auto observe = runtime.AddObserver<TEvYdbProxy::TEvAlterTopicRequest>([&](auto&) { ++addConsumers; });
+        const auto creator = runtime.Register(CreateStreamCreator(
+            env.GetSender(), env.GetYdbProxy(), 1, 1,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+            "Stream", "replicationConsumer", TDuration::Days(1),
+            consistency == EAcknowledgedConsistency::Global ? std::make_optional(TDuration::Seconds(10)) : std::nullopt,
+            false, true, false, true, false, retentionPolicy));
+        runtime.EnableScheduleForActor(creator);
+        const auto requested = runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender(), TDuration::Seconds(30));
+        UNIT_ASSERT(requested);
+        runtime.Send(creator, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender(), TDuration::Seconds(60));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Status.GetIssues().ToString());
+        const auto config = env.GetDescription("/Root/Table/Stream/streamImpl")
+            .GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+        UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionConfig().GetLifetimeSeconds(), 86400);
+        UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 1);
+        const bool acknowledged = source == EAcknowledgedSource::Enabled
+            && retentionPolicy == NKikimrReplication::TReplicationDefaults::SOURCE_TOPIC_RETENTION_ACKNOWLEDGED;
+        UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers(0).GetImportant(), acknowledged);
+        UNIT_ASSERT_VALUES_EQUAL(addConsumers, acknowledged ? 0 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(config.GetPartitionConfig().GetRetentionPolicy()), static_cast<i32>(acknowledged
+            ? NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED
+            : NKikimrPQ::TPartitionConfig::RETENTION_POLICY_STANDARD));
+        if (acknowledged) {
+            // Reproduce an old destination replaying Creating after the source
+            // already committed the atomic ACK topic configuration.
+            const auto legacy = runtime.Register(CreateStreamCreator(
+                env.GetSender(), env.GetYdbProxy(), 1, 1,
+                std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+                "Stream", "replicationConsumer", TDuration::Days(1),
+                consistency == EAcknowledgedConsistency::Global ? std::make_optional(TDuration::Seconds(10)) : std::nullopt,
+                false, true, false, true, false,
+                NKikimrReplication::TReplicationDefaults::SOURCE_TOPIC_RETENTION_STANDARD));
+            runtime.EnableScheduleForActor(legacy);
+            UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender(), TDuration::Seconds(30)));
+            runtime.Send(legacy, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+            const auto replayed = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender(), TDuration::Seconds(60));
+            UNIT_ASSERT(replayed);
+            UNIT_ASSERT_C(replayed->Get()->IsSuccess(), replayed->Get()->Status.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(addConsumers, 1);
+            const auto preserved = env.GetDescription("/Root/Table/Stream/streamImpl")
+                .GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+            UNIT_ASSERT_VALUES_EQUAL(preserved.ConsumersSize(), 1);
+            UNIT_ASSERT(preserved.GetConsumers(0).GetImportant());
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(preserved.GetPartitionConfig().GetRetentionPolicy()), static_cast<i32>(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED));
+        }
+    }
+
+    Y_UNIT_TEST(AcknowledgedRetentionCreationAndFallback) {
+        for (auto source : {EAcknowledgedSource::Enabled, EAcknowledgedSource::Disabled}) {
+            for (auto consistency : {EAcknowledgedConsistency::Row, EAcknowledgedConsistency::Global}) {
+                AcknowledgedRetentionCreationAndFallback(source, consistency,
+                    NKikimrReplication::TReplicationDefaults::SOURCE_TOPIC_RETENTION_ACKNOWLEDGED);
+            }
+        }
+        AcknowledgedRetentionCreationAndFallback(EAcknowledgedSource::Enabled, EAcknowledgedConsistency::Row,
+            NKikimrReplication::TReplicationDefaults::SOURCE_TOPIC_RETENTION_STANDARD);
+    }
+
+    Y_UNIT_TEST(AcknowledgedRetentionExcludedTargetsRemainStandard) {
+        for (auto kind : {TReplication::ETargetKind::IndexTable, TReplication::ETargetKind::Transfer}) {
+            TEnv env(true, ERuntimeMode::Simulated);
+            auto& runtime = env.GetRuntime();
+            for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+                runtime.GetAppData(node).FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(true);
+                runtime.GetAppData(node).FeatureFlags.SetEnableChangefeedsOnIndexTables(true);
+                runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(false);
+            }
+            TReplication::ITarget::IConfig::TPtr config;
+            TString topic;
+            if (kind == TReplication::ETargetKind::IndexTable) {
+                NYdb::NTable::TTableClient client(env.GetDriver());
+                const auto created = env.RunCall([&] {
+                    auto result = client.CreateSession().GetValueSync();
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                    auto session = result.GetSession();
+                    return session.ExecuteSchemeQuery(R"(
+                        CREATE TABLE `/Root/Table` (key Uint32, value Utf8, PRIMARY KEY(key),
+                            INDEX by_value GLOBAL ON(value));
+                    )").GetValueSync();
+                });
+                UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/Table/by_value", "/Root/Replica/by_value");
+                topic = "/Root/Table/by_value/indexImplTable/Stream/streamImpl";
+            } else {
+                NYdb::NTopic::TTopicClient client(env.GetDriver());
+                const auto created = env.RunCall([&] { return client.CreateTopic("/Root/Topic", {}).GetValueSync(); });
+                UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+                config = std::make_shared<TTargetTransfer::TTransferConfig>("/Root/Topic", "/Root/Replica",
+                    NKikimrReplication::TReplicationConfig());
+                topic = "/Root/Topic";
+            }
+            const auto creator = runtime.Register(CreateStreamCreator(env.GetSender(), env.GetYdbProxy(), 1, 1,
+                config, "Stream", "replicationConsumer", TDuration::Days(1), std::nullopt,
+                false, true, false, false, false,
+                NKikimrReplication::TReplicationDefaults::SOURCE_TOPIC_RETENTION_ACKNOWLEDGED));
+            runtime.EnableScheduleForActor(creator);
+            UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender(), TDuration::Seconds(30)));
+            runtime.Send(creator, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+            const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender(), TDuration::Seconds(60));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Status.GetIssues().ToString());
+            const auto persisted = env.GetDescription(topic).GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(persisted.GetPartitionConfig().GetRetentionPolicy()), static_cast<i32>(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_STANDARD));
+            UNIT_ASSERT_VALUES_EQUAL(persisted.ConsumersSize(), 1);
+            UNIT_ASSERT(!persisted.GetConsumers(0).GetImportant());
+        }
+    }
 
     void SessionAcquisitionFailure(Ydb::StatusIds::StatusCode failure) {
         TEnv env(true, ERuntimeMode::Simulated);

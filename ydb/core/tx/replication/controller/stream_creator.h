@@ -2,6 +2,8 @@
 
 #include "replication.h"
 
+#include <ydb/core/protos/replication.pb.h>
+
 #include <optional>
 
 namespace NKikimr::NReplication::NController {
@@ -12,6 +14,8 @@ IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 
     const TString& streamName, const TString& consumerName, const TDuration& streamRetentionPeriod,
     const std::optional<TDuration>& resolvedTimestamps = std::nullopt,
     bool supportsTopicAutopartitioning = false, bool needCreate = true, bool schemaChanges = false,
-    bool initialScan = true, bool describeOnly = false);
+    bool initialScan = true, bool describeOnly = false,
+    NKikimrReplication::TReplicationDefaults::ESourceTopicRetentionPolicy retentionPolicy =
+        NKikimrReplication::TReplicationDefaults::SOURCE_TOPIC_RETENTION_STANDARD);
 
 }

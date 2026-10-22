@@ -82,7 +82,10 @@ class TEnv {
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(Endpoint)
             .SetDatabase(Database);
-        Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+        // Synchronous SDK discovery requires actor progress in simulated mode.
+        RunCall([&] {
+            Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+        });
 
         YdbProxy = Server.GetRuntime()->Register(CreateYdbProxy(
             Endpoint, UseDatabase ? Database : "", false /* ssl */, "" /* cert */, std::forward<Args>(args)...));

@@ -26,11 +26,18 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             const TString& name,
             const TDuration& retentionPeriod,
             const std::optional<TDuration>& resolvedTimestamps,
-            const NJson::TJsonMap& attrs,
+            NJson::TJsonMap attrs,
+            NKikimrReplication::TReplicationDefaults::ESourceTopicRetentionPolicy retentionPolicy,
+            const TString& consumerName,
             bool schemaChanges,
             bool initialScan)
     {
         using namespace NYdb::NTable;
+
+        if (retentionPolicy == NKikimrReplication::TReplicationDefaults::SOURCE_TOPIC_RETENTION_ACKNOWLEDGED) {
+            attrs["retention_policy"] = "acknowledged";
+            attrs["retention_consumer"] = consumerName;
+        }
 
         auto desc = TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json)
             .WithRetentionPeriod(retentionPeriod)
@@ -117,6 +124,9 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         } else {
             YDB_LOG_INFO("Success",
                 {"issues", result.GetIssues().ToOneLineString()});
+            if (RetentionPolicy == NKikimrReplication::TReplicationDefaults::SOURCE_TOPIC_RETENTION_ACKNOWLEDGED) {
+                return CheckConsumerExists();
+            }
             return CreateConsumer();
         }
     }
@@ -225,6 +235,9 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
         if (exists) {
             Reply(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues()));
+        } else if (NeedCreate) {
+            // An older or feature-disabled source did not create the consumer.
+            CreateConsumer();
         } else {
             NYdb::NIssue::TIssues issues;
             issues.AddIssue(TStringBuilder() << "consumer '" << SrcConsumerName << "' does not exist");
@@ -303,7 +316,8 @@ public:
             bool schemaChanges,
             bool needCreate,
             bool initialScan,
-            bool describeOnly)
+            bool describeOnly,
+            NKikimrReplication::TReplicationDefaults::ESourceTopicRetentionPolicy retentionPolicy)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -311,13 +325,15 @@ public:
         , Kind(config->GetKind())
         , SrcPath(config->GetSrcPath())
         , SrcConsumerName(consumerName)
+        , RetentionPolicy(Kind == TReplication::ETargetKind::Table ? retentionPolicy
+            : NKikimrReplication::TReplicationDefaults::SOURCE_TOPIC_RETENTION_STANDARD)
         , Changefeed(MakeChangefeed(streamName, retentionPeriod, resolvedTimestamps, NJson::TJsonMap{
             {"path", config->GetDstPath()},
             {"id", ToString(rid)},
             // A schema barrier snapshots its partition membership, so topic
             // repartitioning is unsupported for schema-aware streams.
             {"supports_topic_autopartitioning", supportsTopicAutopartitioning && !schemaChanges},
-        }, schemaChanges, initialScan))
+        }, RetentionPolicy, consumerName, schemaChanges, initialScan))
         , NeedCreate(needCreate)
         , DescribeOnly(describeOnly)
         , LogPrefix(CreateActorLogPrefix("StreamCreator", ReplicationId, TargetId))
@@ -351,6 +367,7 @@ private:
     const TReplication::ETargetKind Kind;
     const TString SrcPath;
     const TString SrcConsumerName;
+    const NKikimrReplication::TReplicationDefaults::ESourceTopicRetentionPolicy RetentionPolicy;
     const NYdb::NTable::TChangefeedDescription Changefeed;
     const bool NeedCreate;
     const bool DescribeOnly;
@@ -376,18 +393,20 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
         replication->GetId(), target->GetId(),
         target->GetConfig(), target->GetStreamName(), target->GetStreamConsumerName(),
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
-        supportsTopicAutopartitioning, needCreate, schemaChanges, initialScan, describeOnly);
+        supportsTopicAutopartitioning, needCreate, schemaChanges, initialScan, describeOnly,
+        AppData()->ReplicationConfig.GetSourceTopicRetentionPolicy());
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
         const TReplication::ITarget::IConfig::TPtr& config,
         const TString& streamName, const TString& consumerName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
-        bool supportsTopicAutopartitioning, bool needCreate, bool schemaChanges, bool initialScan, bool describeOnly)
+        bool supportsTopicAutopartitioning, bool needCreate, bool schemaChanges, bool initialScan, bool describeOnly,
+        NKikimrReplication::TReplicationDefaults::ESourceTopicRetentionPolicy retentionPolicy)
 {
     return new TStreamCreator(parent, proxy, rid, tid, config,
         streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
-        schemaChanges, needCreate, initialScan, describeOnly);
+        schemaChanges, needCreate, initialScan, describeOnly, retentionPolicy);
 }
 
 }

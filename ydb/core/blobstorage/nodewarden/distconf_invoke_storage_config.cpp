@@ -264,6 +264,12 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::HandleWakeup(STFUNC_SIG) {
+        if (ev->Cookie == VStatusTimeoutCookie) {
+            if (!PendingVDiskIds.empty()) {
+                throw TExError() << "Timed out waiting for VDisk status before group reassignment";
+            }
+            return;
+        }
         if (ev->Cookie == ConfigValidationTimeoutCookie) {
             if (WaitingForConfigValidation) {
                 throw TExError() << "Timed out waiting for BSC or Console before config proposition"

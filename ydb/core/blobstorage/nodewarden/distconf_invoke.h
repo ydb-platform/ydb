@@ -154,6 +154,7 @@ namespace NKikimr::NStorage {
         TMonotonic CommitConfirmationDeadline;
         bool FullCommitConfirmationNeeded = false;
         static constexpr ui64 ConfigValidationTimeoutCookie = 1;
+        static constexpr ui64 VStatusTimeoutCookie = 2;
         bool WaitingForConfigValidation = false;
 
         TActorId ControllerPipeId;

@@ -34,6 +34,12 @@ public:
 
     bool IsValidJson(TString& error) const;
 
+    // Binary row changes are checked before they are applied. A malformed
+    // record returns false so the worker stops with an error. Serialize() and
+    // GetKey() still abort if this check was skipped: that is an internal miss,
+    // not a way to handle a bad payload.
+    bool CheckData(TString& error) const;
+
     void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record, TMemoryPool& pool) const;
 
     TConstArrayRef<TCell> GetKey(TMemoryPool& pool) const;

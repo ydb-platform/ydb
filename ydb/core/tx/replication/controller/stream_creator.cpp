@@ -29,11 +29,13 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             const std::optional<TDuration>& resolvedTimestamps,
             const NJson::TJsonMap& attrs,
             bool schemaChanges,
-            bool initialScan)
+            bool initialScan,
+            bool binaryFormat)
     {
         using namespace NYdb::NTable;
 
-        auto desc = TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Binary)
+        const auto format = binaryFormat ? EChangefeedFormat::Binary : EChangefeedFormat::Json;
+        auto desc = TChangefeedDescription(name, EChangefeedMode::Updates, format)
             .WithRetentionPeriod(retentionPeriod)
             .AddAttribute("__async_replication", NJson::WriteJson(attrs, false));
 
@@ -426,7 +428,7 @@ public:
             // A schema barrier snapshots its partition membership, so topic
             // repartitioning is unsupported for schema-aware streams.
             {"supports_topic_autopartitioning", supportsTopicAutopartitioning && !schemaChanges},
-        }, schemaChanges, initialScan))
+        }, schemaChanges, initialScan, AppData()->FeatureFlags.GetEnableBinaryChangefeedForAsyncReplication()))
         , StreamRetentionPeriod(streamRetentionPeriod)
         , ConsumerAvailabilityPeriod(consumerAvailabilityPeriod)
         , ConsumerImportant(consumerImportant)

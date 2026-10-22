@@ -5,9 +5,13 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
+#include <bit>
 #include <cstring>
 
 namespace NKikimr::NChangeExchange {
+
+static_assert(std::endian::native == std::endian::little,
+    "binary CDC stores multi-byte integers in native order and requires little-endian");
 
 namespace {
 
@@ -386,6 +390,39 @@ bool TBinaryCdcReader::ReadIndexed(ui16 count, TArrayRef<const NScheme::TTypeInf
         }
         indexes.push_back(index);
         cells.push_back(cell);
+    }
+    return true;
+}
+
+bool TBinaryCdcReader::SkipOptionalTail(TString& error) {
+    if (!Parsed_) {
+        error = "binary CDC record is not parsed";
+        return false;
+    }
+
+    auto skip = [&](const char* what) {
+        ui16 len = 0;
+        if (!Take(Rest_, len, error)) {
+            error = TStringBuilder() << "truncated binary CDC " << what;
+            return false;
+        }
+        if (Rest_.size() < len) {
+            error = TStringBuilder() << "truncated binary CDC " << what;
+            return false;
+        }
+        Rest_.Skip(len);
+        return true;
+    };
+
+    if (Header_.Has(EBinaryCdcFlag::HasUser) && !skip("user SID")) {
+        return false;
+    }
+    if (Header_.Has(EBinaryCdcFlag::HasTrace) && !skip("trace id")) {
+        return false;
+    }
+    if (Rest_) {
+        error = "trailing bytes in binary CDC record";
+        return false;
     }
     return true;
 }

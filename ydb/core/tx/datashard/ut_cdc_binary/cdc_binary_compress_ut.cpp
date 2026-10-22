@@ -266,6 +266,53 @@ Y_UNIT_TEST_SUITE(BinaryCdcCompression) {
         UNIT_ASSERT_VALUES_EQUAL(TString(cells[0].AsBuf()), value);
         UNIT_ASSERT(reader.Rest().empty());
     }
+
+    Y_UNIT_TEST(WideIndexStartsAfter127ValueColumns) {
+        auto makeTable = [](ui32 valueColumns) {
+            auto table = MakeIntrusive<TUserTable>();
+            table->KeyColumnIds = {1};
+            table->KeyColumnTypes.push_back(NScheme::TTypeInfo(NScheme::NTypeIds::Uint64));
+            table->Columns.emplace(1, TUserTable::TUserColumn(
+                NScheme::TTypeInfo(NScheme::NTypeIds::Uint64), {}, "key", true));
+            for (ui32 i = 0; i < valueColumns; ++i) {
+                TString name = "c000";
+                name[1] = static_cast<char>('0' + i / 100);
+                name[2] = static_cast<char>('0' + (i / 10) % 10);
+                name[3] = static_cast<char>('0' + i % 10);
+                table->Columns.emplace(i + 2, TUserTable::TUserColumn(
+                    NScheme::TTypeInfo(NScheme::NTypeIds::Uint8), {}, name, false));
+            }
+            NKikimrSchemeOp::TTableDescription description;
+            table->SetSchema(description);
+            return table;
+        };
+
+        auto write = [](TUserTable::TPtr table) {
+            NKikimrChangeExchange::TDataChange change;
+            auto& keyCells = *change.MutableKey();
+            keyCells.AddTags(1);
+            keyCells.SetData(TSerializedCellVec::Serialize({TCell::Make(ui64(1))}));
+            const ui8 value = 3;
+            auto& upsert = *change.MutableUpsert();
+            upsert.AddTags(2);
+            upsert.SetData(TSerializedCellVec::Serialize({TCell::Make(value)}));
+            auto record = TChangeRecordBuilder(TChangeRecord::EKind::CdcDataChange)
+                .WithOrder(1)
+                .WithSchema(table)
+                .WithBody(change.SerializeAsString())
+                .Build();
+            NKikimrClient::TPersQueuePartitionRequest::TCmdWrite cmd;
+            MakeSerializer(NKikimrSchemeOp::ECdcStreamFormatBinary, false)->Serialize(cmd, *record);
+            NChangeExchange::TBinaryCdcReader reader;
+            TString error;
+            const auto stored = ReadPayload(cmd);
+            UNIT_ASSERT_C(reader.Parse(stored.Payload, error), error);
+            return reader.Header().Has(NChangeExchange::EBinaryCdcFlag::WideIndex);
+        };
+
+        UNIT_ASSERT(!write(makeTable(127)));
+        UNIT_ASSERT(write(makeTable(128)));
+    }
 }
 
 } // namespace NKikimr::NDataShard

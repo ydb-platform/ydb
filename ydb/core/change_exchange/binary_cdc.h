@@ -8,7 +8,9 @@
 
 namespace NKikimr::NChangeExchange {
 
-// Compact CDC record. Little-endian, no padding.
+// Compact CDC record. Multi-byte integers are little-endian.
+// Append/Take store the native byte order. binary_cdc.cpp static_asserts
+// that the platform is little-endian, which is every supported build.
 //
 //   u8  version = 1
 //   u8  kind    = 1 data, 2 heartbeat, 3 schema
@@ -30,8 +32,9 @@ namespace NKikimr::NChangeExchange {
 // 0 means a value follows, 1 means NULL and no value bytes follow. Without NullKeys
 // every key cell is a value, so a record with no NULL key is unchanged.
 // Value indexes are positions of non-key columns sorted by name at the schema version
-// that produced the record. Index 0 is one byte while every index in the record is
-// below 128; otherwise the record sets WideIndex and each index is u16.
+// that produced the record. The writer sets WideIndex when the table has more than
+// 127 non-key columns, and every index in that record is u16. A table with at most
+// 127 non-key columns uses a one-byte index.
 //
 // A schema record carries the same JSON snapshot as FORMAT JSON, after a u32 length.
 // Async replication reads that snapshot with the existing schema-change parser.
@@ -130,6 +133,10 @@ public:
     bool ReadKeys(TArrayRef<const NScheme::TTypeInfo> types, TVector<TCell>& cells, TString& error);
     bool ReadIndexed(ui16 count, TArrayRef<const NScheme::TTypeInfo> typeByIndex,
         TVector<ui16>& indexes, TVector<TCell>& cells, TString& error);
+
+    // Consumes the user SID and trace id when their flags are set, then requires
+    // the record to end. Replication does not apply those strings.
+    bool SkipOptionalTail(TString& error);
 
     TStringBuf Rest() const {
         return Rest_;

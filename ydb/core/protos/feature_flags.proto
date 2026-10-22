@@ -477,5 +477,10 @@ message TFeatureFlags {
     // Enables policy-driven data tiering for row-oriented tables.
     // When disabled, no new migrations to colder tiers are scheduled.
     // Existing data in all tiers remains readable.
-    optional bool EnableDataTiering = 383 [default = false];    
+    optional bool EnableDataTiering = 383 [default = false];
+    // Permits FORMAT BINARY for changefeeds and for asynchronous replication.
+    // A binary replication stream is written only when this flag is enabled
+    // both on the destination, which accepts the replication, and on the
+    // source, which accepts the changefeed. Existing streams stay as they are.
+    optional bool EnableBinaryChangefeedForAsyncReplication = 384 [default = false];
 }

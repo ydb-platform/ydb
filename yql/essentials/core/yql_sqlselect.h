@@ -5,6 +5,9 @@
 
 namespace NYql {
 
+// Keep duplicate output names assigned to the same source columns in typechecking and execution.
+TVector<const TItemExprType*> GetSqlStarItems(const TStructExprType& type, const TColumnOrder& order);
+
 using TAggsRewriter = std::function<TExprNode::TPtr(TExprNode::TPtr arg, TExprNode::TPtr row)>;
 
 TExprNode::TPtr ExpandYqlTraitsFactory(

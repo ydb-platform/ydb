@@ -596,13 +596,10 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
     const auto rightFields = fields(rightNode);
     Y_ENSURE(outputFields.size() == leftFields.size() && outputFields.size() == rightFields.size());
     // Widen on this edge only; never mutate a memoized producer's source AST.
-    // Only a direct Map input is widened, as if its elements were forced
-    // optional; other producers keep their types.
-    const auto widen = [&](TIntrusivePtr<IOperator> child, const TExprNode::TPtr& sourceNode, const auto& fields,
+    // A nested set operation or another producer needs the same conversion
+    // as a direct Map when this set operation introduces optionality.
+    const auto widen = [&](TIntrusivePtr<IOperator> child, const auto& fields,
                            TExpression::TBindings& bindings) -> TIntrusivePtr<IOperator> {
-        if (!TKqpOpMap::Match(sourceNode.Get())) {
-            return child;
-        }
         TMapIUs definitions;
         for (size_t i = 0; i < fields.size(); ++i) {
             if (outputFields[i]->GetItemType()->IsOptionalOrNull() && !fields[i]->GetItemType()->IsOptionalOrNull()) {
@@ -617,8 +614,8 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
         }
         return MakeIntrusive<TOpMap>(std::move(child), node->Pos(), std::move(definitions));
     };
-    left = widen(std::move(left), leftNode, leftFields, leftBindings);
-    right = widen(std::move(right), rightNode, rightFields, rightBindings);
+    left = widen(std::move(left), leftFields, leftBindings);
+    right = widen(std::move(right), rightFields, rightBindings);
     const auto kind = source.SetOp().StringValue();
     auto output = std::make_shared<TExpression::TBindings>();
     TIntrusivePtr<IOperator> result;

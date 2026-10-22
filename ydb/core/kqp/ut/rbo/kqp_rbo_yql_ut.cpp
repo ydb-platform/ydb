@@ -2548,6 +2548,178 @@ FROM (
         UNIT_ASSERT_VALUES_EQUAL(converter.PlanProps.InfoUnitRegistry.Get(outerId).GetFullName(), "out");
     }
 
+    Y_UNIT_TEST(NestedSetOpOptionalWideningPreservesColumnBindings) {
+        for (const bool requiredOnLeft : {true, false}) {
+            for (const bool wrapLimit : {false, true}) {
+                NTests::TIdTestContext f;
+                auto& ctx = f.ExprCtx;
+                const auto* stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+                const auto* intType = ctx.MakeType<TDataExprType>(EDataSlot::Int32);
+                const auto* optionalString = ctx.MakeType<TOptionalExprType>(stringType);
+                const auto rowType = [&](bool nullable) {
+                    return ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+                        ctx.MakeType<TItemExprType>("alpha", intType),
+                        ctx.MakeType<TItemExprType>("omega", nullable ? optionalString : static_cast<const TTypeAnnotationNode*>(stringType))
+                    }));
+                };
+                const auto leaf = [&](bool nullable) {
+                    auto empty = ctx.NewCallable(f.Pos, "KqpOpEmptySource", {});
+                    const auto element = [&](TStringBuf name, TStringBuf type, TStringBuf value,
+                                             const TTypeAnnotationNode* annotation, bool optional) {
+                        auto literal = ctx.NewCallable(f.Pos, type, {ctx.NewAtom(f.Pos, value)});
+                        literal->SetTypeAnn(annotation);
+                        auto lambda = ctx.NewLambda(f.Pos,
+                            ctx.NewArguments(f.Pos, {ctx.NewArgument(f.Pos, "row")}), literal);
+                        return ctx.NewCallable(f.Pos, "KqpOpMapElementLambda", {
+                            empty, ctx.NewAtom(f.Pos, name), lambda,
+                            ctx.NewAtom(f.Pos, optional ? "True" : "False")});
+                    };
+                    // Projection order intentionally differs from canonical struct-name order.
+                    auto map = ctx.NewCallable(f.Pos, "KqpOpMap", {empty, ctx.NewList(f.Pos, {
+                        element("omega", "String", "value", stringType, nullable),
+                        element("alpha", "Int32", "7", intType, false)
+                    }), ctx.NewAtom(f.Pos, "true")});
+                    map->SetTypeAnn(rowType(nullable));
+                    return map;
+                };
+                const auto merge = [&](TExprNode::TPtr left, TExprNode::TPtr right, bool nullable) {
+                    auto node = ctx.NewCallable(f.Pos, "KqpOpSetOp", {
+                        left, right, ctx.NewAtom(f.Pos, "union_all")});
+                    node->SetTypeAnn(rowType(nullable));
+                    return node;
+                };
+                auto required = merge(leaf(false), leaf(false), false);
+                if (wrapLimit) {
+                    required = ctx.NewCallable(f.Pos, "KqpOpLimit", {required, f.Constant().Node});
+                    required->SetTypeAnn(rowType(false));
+                }
+                auto nullable = leaf(true);
+                auto unionNode = requiredOnLeft ? merge(required, nullable, true) : merge(nullable, required, true);
+                const auto* originalRequiredType = required->GetTypeAnn();
+                // Exercise positional renaming after the union: first SELECT column is omega.
+                auto renamed = ctx.NewCallable(f.Pos, "KqpOpReplaceColumns", {unionNode,
+                    ctx.NewList(f.Pos, {ctx.NewAtom(f.Pos, "first"), ctx.NewAtom(f.Pos, "second")})});
+                PlanConverter converter(f.TypeCtx, ctx);
+                auto plan = converter.ExprNodeToOperator(renamed);
+                auto& rename = CastOperator<TOpMap>(*plan);
+                auto& outer = CastOperator<TOpUnionAll>(*rename.GetInput());
+                const auto childIndex = requiredOnLeft ? 0U : 1U;
+                UNIT_ASSERT_VALUES_EQUAL(outer.GetChild(childIndex)->Kind, EOperator::Map);
+                auto& widened = CastOperator<TOpMap>(*outer.GetChild(childIndex));
+                UNIT_ASSERT_VALUES_EQUAL(widened.GetInput()->Kind, wrapLimit ? EOperator::Limit : EOperator::UnionAll);
+                UNIT_ASSERT_VALUES_EQUAL(widened.GetMapElements().Items().size(), 1);
+                const auto& [fresh, element] = *widened.GetMapElements().Items().begin();
+                const auto& expression = element.GetExpression();
+                UNIT_ASSERT(expression.GetExpressionBody()->IsCallable("Just"));
+                UNIT_ASSERT(expression.GetInputIUs().IsSubsetOf(widened.GetInput()->GetOutputIUs()));
+                UNIT_ASSERT(!widened.GetInput()->GetOutputIUs().Contains(fresh));
+                UNIT_ASSERT(required->GetTypeAnn() == originalRequiredType);
+                for (const auto& [output, inputs] : outer.GetColumns().Items()) {
+                    const auto name = converter.PlanProps.InfoUnitRegistry.Get(output).GetFullName();
+                    if (name == "omega") {
+                        UNIT_ASSERT_VALUES_EQUAL(inputs.Inputs[childIndex], fresh);
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(name, "alpha");
+                        UNIT_ASSERT(widened.GetInput()->GetOutputIUs().Contains(inputs.Inputs[childIndex]));
+                    }
+                }
+                for (const auto& [output, expression] : rename.GetMapElements().Items()) {
+                    const auto name = converter.PlanProps.InfoUnitRegistry.Get(output).GetFullName();
+                    const auto sourceName = converter.PlanProps.InfoUnitRegistry.Get(expression.GetColumnAccess()).GetFullName();
+                    UNIT_ASSERT_VALUES_EQUAL(sourceName, name == "first" ? "omega" : "alpha");
+                }
+                NTests::AssertIdInvariants(*plan, converter.PlanProps);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NullableUnionAllNestedProducersExecute) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto* config = appConfig.MutableTableServiceConfig();
+        config->SetEnableNewRBO(true);
+        config->SetEnableFallbackToYqlOptimizer(false);
+        config->SetDefaultLangVer(202501);
+        config->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        const auto scheme = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/required` (id Int32 NOT NULL, value String NOT NULL, PRIMARY KEY(id));
+            CREATE TABLE `/Root/nullable` (id Int32 NOT NULL, value String, PRIMARY KEY(id));
+            CREATE TABLE `/Root/right` (id Int32 NOT NULL, value String NOT NULL, PRIMARY KEY(id));
+        )").GetValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+        NYdb::TValueBuilder required;
+        required.BeginList()
+            .AddListItem().BeginStruct().AddMember("id").Int32(1).AddMember("value").String("a").EndStruct()
+            .AddListItem().BeginStruct().AddMember("id").Int32(2).AddMember("value").String("b").EndStruct()
+            .EndList();
+        const auto loadRequired = db.BulkUpsert("/Root/required", required.Build()).GetValueSync();
+        UNIT_ASSERT_C(loadRequired.IsSuccess(), loadRequired.GetIssues().ToString());
+        NYdb::TValueBuilder nullable;
+        nullable.BeginList()
+            .AddListItem().BeginStruct().AddMember("id").Int32(1).AddMember("value").OptionalString("n").EndStruct()
+            .AddListItem().BeginStruct().AddMember("id").Int32(2).AddMember("value").OptionalString(std::nullopt).EndStruct()
+            .EndList();
+        const auto loadNullable = db.BulkUpsert("/Root/nullable", nullable.Build()).GetValueSync();
+        UNIT_ASSERT_C(loadNullable.IsSuccess(), loadNullable.GetIssues().ToString());
+        NYdb::TValueBuilder right;
+        right.BeginList()
+            .AddListItem().BeginStruct().AddMember("id").Int32(1).AddMember("value").String("r").EndStruct()
+            .EndList();
+        const auto loadRight = db.BulkUpsert("/Root/right", right.Build()).GetValueSync();
+        UNIT_ASSERT_C(loadRight.IsSuccess(), loadRight.GetIssues().ToString());
+
+        const std::vector<std::pair<std::string, std::string>> cases = {
+            {R"(
+                SELECT value AS v FROM `/Root/required`
+                UNION ALL SELECT value AS v FROM `/Root/nullable`
+                ORDER BY v;
+            )", R"([[#];[["a"]];[["b"]];[["n"]]])"},
+            {R"(
+                SELECT value AS v FROM `/Root/required`
+                UNION ALL SELECT value AS v FROM `/Root/required`
+                UNION ALL SELECT value AS v FROM `/Root/nullable`
+                ORDER BY v;
+            )", R"([[#];[["a"]];[["a"]];[["b"]];[["b"]];[["n"]]])"},
+            {R"(
+                SELECT value AS v FROM `/Root/nullable`
+                UNION ALL SELECT value AS v FROM `/Root/required`
+                UNION ALL SELECT value AS v FROM `/Root/required`
+                ORDER BY v;
+            )", R"([[#];[["a"]];[["a"]];[["b"]];[["b"]];[["n"]]])"},
+            {R"(
+                SELECT value AS v FROM `/Root/nullable`
+                UNION ALL (SELECT value AS v FROM `/Root/required`
+                    UNION ALL SELECT value AS v FROM `/Root/required`)
+                ORDER BY v;
+            )", R"([[#];[["a"]];[["a"]];[["b"]];[["b"]];[["n"]]])"},
+            {R"(
+                SELECT DISTINCT value AS v FROM `/Root/required`
+                UNION ALL SELECT DISTINCT value AS v FROM `/Root/required`
+                UNION ALL SELECT r.value AS v FROM `/Root/required` AS l
+                    LEFT JOIN `/Root/right` AS r ON l.id = r.id
+                ORDER BY v;
+            )", R"([[#];[["a"]];[["a"]];[["b"]];[["b"]];[["r"]]])"},
+            {R"(
+                SELECT value || "!" AS v FROM `/Root/required`
+                UNION ALL SELECT w.value AS v FROM (
+                    SELECT value, ROW_NUMBER() OVER (ORDER BY id) AS rn FROM `/Root/required`
+                ) AS w WHERE w.rn <= 2
+                UNION ALL SELECT value AS v FROM `/Root/nullable`
+                ORDER BY v;
+            )", R"([[#];[["a"]];[["a!"]];[["b"]];[["b!"]];[["n"]]])"}
+        };
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        for (const auto& [sql, expected] : cases) {
+            const std::string query = "PRAGMA YqlSelect = 'force';\n" + sql;
+            const auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString() << "\n" << query);
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), expected, query);
+        }
+    }
+
     Y_UNIT_TEST(ReplaceAliasSubqueryDoesNotDuplicateVisibleColumns) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

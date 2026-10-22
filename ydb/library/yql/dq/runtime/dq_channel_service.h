@@ -167,7 +167,7 @@ struct TDqChannelLimits {
     // channels tell their consumers and producers what changed, rather than being polled: a union of inputs visits
     // the channels which have something for it, see TDqInputReadySet, and a compute actor checks its output channels
     // for finish only once one of them has, see TDqOutputFinishEpoch; off, the channels are polled as before
-    bool EnableChannelNotifications = false; // to by in sync with proto in stable-26-4-1
+    bool EnableChannelNotifications = false; // to be in sync with proto in stable-26-4-1
     TDuration UnboundWaitPeriod = TDuration::Minutes(10); // an auto-created descriptor nobody binds to is erased after this
 };
 

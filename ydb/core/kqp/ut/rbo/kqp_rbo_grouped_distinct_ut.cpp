@@ -108,6 +108,19 @@ public:
         UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, sql);
     }
 
+    void CheckOptionalUint64Bag(const TString& sql, std::vector<std::optional<ui64>> expected) {
+        const auto resultSet = Execute(sql);
+        CheckColumns(resultSet, {"n"}, "Uint64?", sql);
+        std::vector<std::optional<ui64>> actual;
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            actual.push_back(parser.ColumnParser(0).GetOptionalUint64());
+        }
+        std::sort(actual.begin(), actual.end());
+        std::sort(expected.begin(), expected.end());
+        UNIT_ASSERT_C(actual == expected, sql);
+    }
+
 private:
     static NKikimrConfig::TAppConfig Config() {
         NKikimrConfig::TAppConfig config;
@@ -277,14 +290,21 @@ Y_UNIT_TEST_SUITE(KqpRboGroupedDistinct) {
         )", {"k"}, {{-2}, {-1}, {1}, {2}, {std::nullopt}});
     }
 
-    Y_UNIT_TEST(GroupedDistinctSortBindsSelectedAliasesOrdinalsAndExpressions) {
+    Y_UNIT_TEST(GroupedDistinctSortBindsSelectedAliasesAndExpressions) {
         TGroupedDistinctFixture fixture;
-        for (const TStringBuf order : {"sq", "1", "t.K * t.K", "sq + 1"}) {
+        for (const TStringBuf order : {"sq", "t.K * t.K", "sq + 1"}) {
             const TString sql = TStringBuilder()
                 << "SELECT DISTINCT t.K * t.K AS sq FROM `/Root/GroupedDistinct` AS t "
                 << "WHERE t.K IS NOT NULL GROUP BY t.K ORDER BY " << order << " DESC;";
             fixture.CheckInt64Sequence(sql, {"sq"}, {{4}, {1}});
         }
+        // This dialect does not support ordinal ORDER BY. When this constant
+        // expression is admitted, its tied rows have no specified order.
+        fixture.CheckInt64Bag(R"(
+            SELECT DISTINCT t.K * t.K AS sq
+            FROM `/Root/GroupedDistinct` AS t WHERE t.K IS NOT NULL
+            GROUP BY t.K ORDER BY 1 DESC;
+        )", {"sq"}, {{1}, {4}});
         // Projection aliases have priority over an unqualified source name.
         fixture.CheckInt64Sequence(R"(
             SELECT DISTINCT t.K * t.K AS K
@@ -338,13 +358,13 @@ Y_UNIT_TEST_SUITE(KqpRboGroupedDistinct) {
     Y_UNIT_TEST(GroupedDistinctConstantAndEmptyMixedExpressionKeepCardinality) {
         {
             TGroupedDistinctFixture populated;
-            populated.CheckCountBag(R"(
+            populated.CheckOptionalUint64Bag(R"(
                 SELECT DISTINCT CAST(1 AS Uint64) AS n
                 FROM `/Root/GroupedDistinct` AS t GROUP BY t.K;
             )", {1});
         } // Release this server before creating the empty fixture.
         TGroupedDistinctFixture empty(false);
-        empty.CheckCountBag(R"(
+        empty.CheckOptionalUint64Bag(R"(
             SELECT DISTINCT CAST(1 AS Uint64) AS n
             FROM `/Root/GroupedDistinct` AS t GROUP BY t.K;
         )", {});

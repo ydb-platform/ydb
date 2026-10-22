@@ -2454,14 +2454,14 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         // clang-format on
 
         if (distinctAfterProjection) {
-            TVector<TExprNode::TPtr> distinctTraits;
             TVector<TInfoUnit> distinctKeys;
             for (const auto& column : finalProjection) {
-                distinctTraits.push_back(BuildAggregationTraits(column, "distinct", column, ctx, node->Pos()));
                 distinctKeys.emplace_back(column);
             }
             Y_ENSURE(!distinctKeys.empty(), "Grouped DISTINCT requires a nonempty result tuple");
-            setItemPtr = BuildAggregate(setItemPtr, distinctTraits, distinctKeys, /*distinctAll=*/true, ctx, node->Pos());
+            // Grouping by the complete selected tuple removes duplicates and
+            // exposes each selected column once, without aggregate outputs.
+            setItemPtr = BuildAggregate(setItemPtr, {}, distinctKeys, /*distinctAll=*/false, ctx, node->Pos());
         }
 
         if (sort) {

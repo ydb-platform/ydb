@@ -2485,6 +2485,14 @@ public:
         LoadedAt = TActivationContext::Monotonic();
         ApplyStorageConfig();
 
+        // configs handled while loading (the first one at least) didn't make BSC check parts of its groups in unsynced
+        // piles: the ones not reset for the current sync of the pile yet are reset now, and if everything is synced
+        // already (e.g. the notification got lost with the restart), distconf gets notified
+        if (StorageConfig && BridgeInfo) {
+            RecheckUnsyncedBridgePiles = true;
+            CheckUnsyncedBridgePiles();
+        }
+
         for (const auto& [id, info] : GroupMap) {
             if (info->VirtualGroupState) {
                 StartVirtualGroupSetupMachine(info.Get());

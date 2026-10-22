@@ -26,6 +26,7 @@ struct TEnvironmentSetup {
     const ui32 NumGroups = 1;
     TIntrusivePtr<NFake::TProxyDS> Group0 = MakeIntrusive<NFake::TProxyDS>();
     std::map<std::pair<ui32, ui32>, TIntrusivePtr<TPDiskMockState>> PDiskMockStates;
+    std::map<std::pair<ui32, TString>, std::shared_ptr<TPDiskMockState::TMetadata>> PDiskMetadataByPath;
     TVector<TActorId> PDiskActors;
     std::set<TActorId> CommencedReplication;
     std::unordered_map<ui32, TString> Cache;
@@ -103,8 +104,12 @@ struct TEnvironmentSetup {
                 TPDiskMockState::ESpaceColorPolicy spaceColorPolicy = Env.Settings.TrackSharedQuotaInPDiskMock
                         ? TPDiskMockState::ESpaceColorPolicy::SharedQuota
                         : TPDiskMockState::ESpaceColorPolicy::None;
+                auto& metadata = Env.PDiskMetadataByPath[{nodeId, cfg->Path}];
+                if (!metadata) {
+                    metadata = std::make_shared<TPDiskMockState::TMetadata>();
+                }
                 state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, Env.Settings.PDiskSize, chunkSize,
-                        cfg->ReadOnly, Env.Settings.DiskType, spaceColorPolicy));
+                        cfg->ReadOnly, Env.Settings.DiskType, spaceColorPolicy, metadata));
             }
             const TActorId& actorId = ctx.Register(CreatePDiskMockActor(state), TMailboxType::HTSwap, poolId);
             const TActorId& serviceId = MakeBlobStoragePDiskID(nodeId, pdiskId);

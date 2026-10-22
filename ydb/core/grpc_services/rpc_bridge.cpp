@@ -146,9 +146,19 @@ public:
     }
 
 private:
+    void PassAway() override {
+        if (IsDisconnectingRequest) {
+            IsDisconnectingRequest = false;
+            Send(NKikimr::MakeGRpcServersManagerId(SelfId().NodeId()),
+                new NKikimr::TEvGRpcServersManager::TEvDisconnectRequestFinished());
+        }
+        TBase::PassAway();
+    }
+
     STFUNC(StateWaitForConfig) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvNodeWardenStorageConfig, Handle);
+            default: return TBase::StateFuncBase(ev); // operation timeout and client cancellation
         }
     }
 
@@ -285,19 +295,6 @@ private:
         finalPromoted->CopyToProto(&newClusterState, &NKikimrBridge::TClusterState::SetPromotedPile);
         newClusterState.SetGeneration(currentClusterState.GetGeneration() + 1);
 
-        // check if current node is transitioning to DISCONNECTED state
-        // if so, notify GRpcServersManager to wait for this request before shutting down
-        const auto selfNodePileId = bridgeInfo->SelfNodePile->BridgePileId;
-        if (selfNodePileId.GetPileIndex() < newClusterState.PerPileStateSize()) {
-            const auto newSelfState = newClusterState.GetPerPileState(selfNodePileId.GetPileIndex());
-            if (newSelfState == NKikimrBridge::TClusterState::DISCONNECTED ||
-                newSelfState == NKikimrBridge::TClusterState::SUSPENDED) {
-                IsDisconnectingRequest = true;
-                self->ActorContext().Send(NKikimr::MakeGRpcServersManagerId(self->SelfId().NodeId()),
-                    new NKikimr::TEvGRpcServersManager::TEvDisconnectRequestStarted());
-            }
-        }
-
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         auto *cmd = request->Record.MutableSwitchBridgeClusterState();
         cmd->MutableNewClusterState()->CopyFrom(newClusterState);
@@ -317,6 +314,17 @@ private:
             }
         }
 
+        const auto selfNodePileId = bridgeInfo->SelfNodePile->BridgePileId;
+        if (selfNodePileId.GetPileIndex() < newClusterState.PerPileStateSize()) {
+            const auto newSelfState = newClusterState.GetPerPileState(selfNodePileId.GetPileIndex());
+            if (newSelfState == NKikimrBridge::TClusterState::DISCONNECTED ||
+                newSelfState == NKikimrBridge::TClusterState::SUSPENDED) {
+                IsDisconnectingRequest = true;
+                self->ActorContext().Send(NKikimr::MakeGRpcServersManagerId(self->SelfId().NodeId()),
+                    new NKikimr::TEvGRpcServersManager::TEvDisconnectRequestStarted());
+            }
+        }
+
         self->ActorContext().Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), request.release());
         self->Become(&TThis::StateWaitForPropose);
     }
@@ -324,6 +332,7 @@ private:
     STFUNC(StateWaitForPropose) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
+            default: return TBase::StateFuncBase(ev); // operation timeout and client cancellation
         }
     }
 
@@ -331,22 +340,13 @@ private:
         const auto& response = ev->Get()->Record;
         auto* self = Self();
         const bool success = response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK;
-        auto notifyDisconnectFinished = [&]() {
-            if (IsDisconnectingRequest) {
-                self->ActorContext().Send(NKikimr::MakeGRpcServersManagerId(self->SelfId().NodeId()),
-                    new NKikimr::TEvGRpcServersManager::TEvDisconnectRequestFinished());
-            }
-        };
-
         if (!success) {
-            notifyDisconnectFinished();
             self->Reply(Ydb::StatusIds::INTERNAL_ERROR, response.GetErrorReason(),
                 NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
             return;
         }
         Ydb::Bridge::UpdateClusterStateResult result;
         self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
-        notifyDisconnectFinished();
     }
 };
 
@@ -369,6 +369,7 @@ public:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvNodeWardenStorageConfig, Handle);
+            default: return TBase::StateFuncBase(ev); // operation timeout and client cancellation
         }
     }
 
@@ -421,6 +422,7 @@ public:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
+            default: return TBase::StateFuncBase(ev); // operation timeout and client cancellation
         }
     }
 

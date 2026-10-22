@@ -2423,6 +2423,59 @@ selector_config: []
         UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig().GetGeneration(), 0);
     }
 
+    Y_UNIT_TEST(SelfHealRefreshStartsAfterQuorumRecovery) {
+        TCommitConfirmationFixture fixture(true);
+        ui32 requests = 0;
+        TActorId requester;
+        fixture.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTabletPipe::EvSend
+                    && ev->Type == NStorage::TEvNodeConfigGetSelfHealState::EventType) {
+                ++requests;
+                requester = ev->Sender;
+                return false; // Observe the real outgoing request without running CMS.
+            }
+            return true;
+        };
+        StartZeroGenerationRoot(fixture);
+        const auto scepter = QueryKeeper(fixture.Runtime, fixture.Root()).GetScepter().GetId();
+        UNIT_ASSERT_VALUES_EQUAL(requests, 0);
+
+        auto recovered = MakeNextConfig(fixture.Config, 1);
+        auto *ss = recovered.MutableStateStorageConfig();
+        ss->ClearRing();
+        ss->ClearRingGroups();
+        auto *group = ss->AddRingGroups();
+        group->SetNToSelect(3);
+        for (ui32 node : {1, 2, 3}) {
+            group->AddRing()->AddNode(node);
+        }
+        recovered.MutableStateStorageBoardConfig()->CopyFrom(recovered.GetStateStorageConfig());
+        recovered.MutableSchemeBoardConfig()->CopyFrom(recovered.GetStateStorageConfig());
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&recovered);
+        auto collected = MakeCollectedConfigs(fixture.Config);
+        AddCollectedConfig(collected, recovered, {1, 2, 3});
+        for (ui32 node : {1, 2, 3}) {
+            fixture.Metadata(node).MutableCommittedStorageConfig()->CopyFrom(recovered);
+        }
+        const auto result = ProcessCollectedConfigs(fixture, collected);
+        UNIT_ASSERT_C(!result.ErrorReason, result.ErrorReason.value_or(""));
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] { return requests != 0; }));
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetScepter().GetId(), scepter);
+
+        // A disabled Sentinel completes this refresh. Subsequent configuration
+        // changes in the same tenure must not start another refresh loop.
+        auto disabled = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+        disabled->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+        disabled->Record.SetErrorReason("Sentinel is disabled");
+        fixture.Runtime.Send(new IEventHandle(requester, fixture.Root(), disabled.release()), requester.NodeId());
+        const auto updated = MakeNextConfig(recovered, 2);
+        UNIT_ASSERT(fixture.Runtime.WrapInActorContext(fixture.Root(), [&](IActor *actor) {
+            static_cast<NStorage::TDistributedConfigKeeper*>(actor)->ApplyCommittedStorageConfig(updated);
+        }));
+        UNIT_ASSERT_C(!SimUntil(fixture.Runtime, [&] { return requests > 1; }, TDuration::Seconds(15)),
+            "a completed refresh restarted on an ordinary configuration update");
+    }
+
     Y_UNIT_TEST(PublishedConfigFencesEmptyRecovery) {
         TCommitConfirmationFixture fixture(true);
         StartZeroGenerationRoot(fixture);
@@ -8992,6 +9045,79 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         UNIT_ASSERT_EXCEPTION(
             Reallocate(s, NodeIds({2}), /*applyNodeAllowList=*/ true, TBlobStorageGroupType::Erasure4Plus2Block, /*numFailDomains=*/ 8),
             NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(UsesReportedSlotCountForStaticGroupReassignment) {
+        struct TCase {
+            ui32 ConfiguredSlotCount;
+            std::optional<ui32> ReportedSlotCount;
+            bool CanReassign;
+        };
+        const TCase cases[] = {
+            {1, 2, true},
+            {2, 1, false},
+            {0, 2, true},
+            {1, std::nullopt, false},
+            {2, std::nullopt, true},
+            {0, std::nullopt, true},
+        };
+
+        for (const auto& test : cases) {
+            TSetup s = MakeSetup();
+            for (auto& pdisk : *s.BaseConfig.MutablePDisk()) {
+                if (pdisk.GetNodeId() == 2) {
+                    pdisk.SetExpectedSlotCount(test.ConfiguredSlotCount);
+                    pdisk.MutablePDiskConfig()->SetExpectedSlotCount(test.ConfiguredSlotCount);
+                    pdisk.MutablePDiskConfig()->SetSlotSizeInUnits(1);
+                    if (test.ReportedSlotCount) {
+                        auto *metrics = pdisk.MutablePDiskMetrics();
+                        metrics->SetSlotCount(*test.ReportedSlotCount);
+                        metrics->SetSlotSizeInUnits(1);
+                    }
+                }
+            }
+
+            // One dynamic VDisk already occupies a slot on the only allowed target.
+            auto *vslot = s.BaseConfig.AddVSlot();
+            vslot->MutableVSlotId()->SetNodeId(2);
+            vslot->MutableVSlotId()->SetPDiskId(1);
+            vslot->MutableVSlotId()->SetVSlotId(7);
+            vslot->SetGroupId(0x80000001);
+            vslot->SetGroupGeneration(1);
+            vslot->SetStatus("READY");
+
+            if (test.CanReassign) {
+                UNIT_ASSERT_NO_EXCEPTION(Reallocate(s, NodeIds({2}), true));
+                UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 2u);
+                for (const auto& pdisk : s.Config.GetBlobStorageConfig().GetServiceSet().GetPDisks()) {
+                    if (pdisk.GetNodeID() == 2) {
+                        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetPDiskConfig().GetExpectedSlotCount(), test.ConfiguredSlotCount);
+                    }
+                }
+            } else {
+                UNIT_ASSERT_EXCEPTION(Reallocate(s, NodeIds({2}), true),
+                    NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+                UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 1u);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(UsesReportedSlotSizeForStaticGroupReassignment) {
+        TSetup s = MakeSetup();
+        for (auto& pdisk : *s.BaseConfig.MutablePDisk()) {
+            if (pdisk.GetNodeId() == 2 || pdisk.GetNodeId() == 3) {
+                auto *config = pdisk.MutablePDiskConfig();
+                config->SetExpectedSlotCount(2);
+                config->SetSlotSizeInUnits(pdisk.GetNodeId() == 2 ? 2 : 1);
+                auto *metrics = pdisk.MutablePDiskMetrics();
+                metrics->SetSlotCount(2);
+                metrics->SetSlotSizeInUnits(pdisk.GetNodeId() == 2 ? 1 : 2);
+            }
+        }
+
+        // A static group uses one unit; prefer the reported single-unit slot.
+        Reallocate(s, NodeIds({2, 3}), true);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 2u);
     }
 }
 

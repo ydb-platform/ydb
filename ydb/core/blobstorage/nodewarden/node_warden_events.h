@@ -7,6 +7,11 @@
 
 namespace NKikimr::NStorage {
 
+    struct TEvNodeConfigGetSelfHealState
+        : TEventPB<TEvNodeConfigGetSelfHealState, NKikimrBlobStorage::TEvNodeConfigGetSelfHealState,
+            TEvBlobStorage::EvNodeConfigGetSelfHealState>
+    {};
+
     struct TEvNodeConfigPush
         : TEventPB<TEvNodeConfigPush, NKikimrBlobStorage::TEvNodeConfigPush, TEvBlobStorage::EvNodeConfigPush>
     {

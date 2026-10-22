@@ -422,3 +422,8 @@ message TConnectivityPayload {
     optional uint32 BridgePileId = 2; // bridge pile id of a sender
     TStorageConfig CommittedStorageConfig = 3; // committed version of storage config
 }
+
+// Ask CMS/Sentinel for a fresh SelfHealNodesStateUpdate. Sentinel replies only
+// after collecting enough observations to classify every configured node.
+message TEvNodeConfigGetSelfHealState {
+}

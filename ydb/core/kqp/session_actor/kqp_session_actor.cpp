@@ -1877,35 +1877,18 @@ public:
         AFL_ENSURE(txCtx.TxManager);
         const bool broken = !!txCtx.TxManager->GetLockIssue();
 
-        if (txCtx.TxHasEffects() && broken) {
+        if ((txCtx.TxHasEffects() && broken) || txCtx.TxManager->BrokenLocks()) {
             EmitVictimTliLog(
                 txCtx.TxManager->GetVictimQuerySpanId(),
                 std::nullopt,
                 txCtx.TxManager->GetBrokenLocksCount());
-            ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
+            ReplyQueryError(Ydb::StatusIds::ABORTED,
+                txCtx.TxHasEffects() ? "tx has effects, but locks are broken" : "transaction locks invalidated",
                 MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
             return false;
         }
 
-        if (tx && tx->GetHasEffects() && broken) {
-            EmitVictimTliLog(
-                txCtx.TxManager->GetVictimQuerySpanId(),
-                std::nullopt,
-                txCtx.TxManager->GetBrokenLocksCount());
-            ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
-                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
-            return false;
-        }
-
-        if (txCtx.TxManager->BrokenLocks()) {
-            EmitVictimTliLog(
-                txCtx.TxManager->GetVictimQuerySpanId(),
-                std::nullopt,
-                txCtx.TxManager->GetBrokenLocksCount());
-            ReplyQueryError(Ydb::StatusIds::ABORTED, "transaction locks invalidated",
-                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
-            return false;
-        }
+        AFL_ENSURE(!tx || !tx->GetHasEffects() || !broken);
 
         return true;
     }

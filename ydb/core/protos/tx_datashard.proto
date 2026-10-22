@@ -340,6 +340,11 @@ message TKqpReadRangesSourceSettings {
 
     optional string PoolId = 28;
     optional TReadSampling Sampling = 29;
+    // Approximate, unprefixed HNSW search only: select shards intersecting
+    // Ranges, then search each selected shard in full. Ordinary range reads
+    // must preserve their bounds and never set this flag.
+    optional bool HnswShardRouting = 30 [default = false];
+    optional bool HnswPreciseShardRouting = 31 [default = false];
 }
 
 // Takes input rows with a vector column, resolves the leaf cluster ID using the given
@@ -454,6 +459,10 @@ message TKqpVectorSearchSettings {
     // Search all posting partitions without k-means cluster-range pruning.
     optional bool FullRangeHnsw = 29;
     optional uint32 HnswEfSearch = 30 [default = 15];
+    optional bool HnswShardRouting = 31 [default = false];
+    optional bool HnswPreciseShardRouting = 32 [default = false];
+    optional double HnswAdaptiveProbeRatio = 33 [default = 0];
+    optional uint32 HnswAdaptiveOneProbeEfSearch = 34 [default = 0];
 }
 
 message TKqpTaskInfo {

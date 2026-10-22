@@ -1213,6 +1213,10 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
     settings->SetVectorColumnIndex(vectorSearch.GetVectorColumnIndex());
     settings->SetHasPrefix(vectorSearch.GetHasPrefix());
     settings->SetFullRangeHnsw(vectorSearch.GetFullRangeHnsw());
+    settings->SetHnswShardRouting(vectorSearch.GetHnswShardRouting());
+    settings->SetHnswPreciseShardRouting(vectorSearch.GetHnswPreciseShardRouting());
+    settings->SetHnswAdaptiveProbeRatio(vectorSearch.GetHnswAdaptiveProbeRatio());
+    settings->SetHnswAdaptiveOneProbeEfSearch(vectorSearch.GetHnswAdaptiveOneProbeEfSearch());
 
     YQL_ENSURE(stageInfo.Meta.IndexMetas.size() == 2);
     const auto& levelTableInfo = stageInfo.Meta.IndexMetas[0].TableConstInfo;

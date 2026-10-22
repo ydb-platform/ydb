@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
@@ -381,6 +382,14 @@ TExprBase KqpBuildReadTableVectorIndexStage(TExprBase node, TExprContext& ctx, c
         .HasPrefix(ctx.NewAtom(pos, hasPrefix ? "true" : "false"))
         .Done();
 
+    TDqStageSettings searchStageSettings;
+    if (!hasPrefix && indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw
+            && kqpCtx.Config->HNSWFuseTopSort.Get().GetOrElse(false)) {
+        // The vector transform merges all selected posting shards into one
+        // stream, including full-range search. Make its single task explicit.
+        searchStageSettings.SetPartitionMode(TDqStageSettings::EPartitionMode::Single);
+    }
+
     auto readStage = Build<TDqStage>(ctx, pos)
         .Inputs()
             .Add(connection)
@@ -391,7 +400,7 @@ TExprBase KqpBuildReadTableVectorIndexStage(TExprBase node, TExprContext& ctx, c
                 .Input("rows")
                 .Build()
             .Build()
-        .Settings().Build()
+        .Settings(searchStageSettings.BuildNode(ctx, pos))
         .Done();
 
     return Build<TDqCnUnionAll>(ctx, pos)

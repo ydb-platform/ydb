@@ -9,7 +9,7 @@ IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
     SIZE(MEDIUM)
 ENDIF()
 

@@ -11,9 +11,12 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/string/builder.h>
 
 namespace NKikimr::NReplication::NService {
 
@@ -970,6 +973,145 @@ Y_UNIT_TEST_SUITE(Worker) {
         runtime.Send(new IEventHandle(latestWriter, edge, new TEvents::TEvWakeup()));
         auto released = runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(edge);
         UNIT_ASSERT_VALUES_EQUAL(released->Sender, latestWriter);
+    }
+
+    // KIKIMR-27431: construct the state after restoring only the receiver.
+    // The snapshot table has both old rows and old DataShard deduplication
+    // offsets. The real source consumer advances through the production worker.
+    // Switching the writer target models rollback; this is not a disk snapshot
+    // test, and Simple/ROW mode deliberately isolates the reader-resume path.
+    void CheckReceiverRollbackState(bool restoreSnapshot) {
+        TEnv env;
+        auto& runtime = env.GetRuntime();
+        const TString topicPath = "/Root/topic";
+        const TString consumer = "consumer";
+        const TString baseline = R"({"key":[1], "update":{"value":"before-snapshot"}})";
+
+        auto topic = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(env.GetYdbProxy(),
+            new TEvYdbProxy::TEvCreateTopicRequest(topicPath,
+                NYdb::NTopic::TCreateTopicSettings()
+                    .BeginAddConsumer().ConsumerName(consumer).EndAddConsumer()));
+        UNIT_ASSERT_C(topic->Get()->Result.IsSuccess(), topic->Get()->Result.GetIssues().ToString());
+
+        for (const TString& name : {TString("Live"), TString("Snapshot")}) {
+            const auto status = env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+                .Name = name,
+                .KeyColumns = {"key"},
+                .Columns = {{.Name = "key", .Type = "Uint32"}, {.Name = "value", .Type = "Utf8"}},
+            }));
+            UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
+        }
+
+        // Seed the old destination with the same source identity and offset
+        // used by RemoteTopicReader, including the durable deduplication state.
+        const auto snapshotWriter = runtime.Register(CreateLocalTableWriter("/Root", env.GetPathId("/Root/Snapshot")));
+        env.Send<TEvWorker::TEvHandshake>(snapshotWriter, new TEvWorker::TEvHandshake());
+        env.Send<TEvWorker::TEvPoll>(snapshotWriter, new TEvWorker::TEvData(0, "0", {
+            TTopicMessage(0, baseline),
+        }));
+        env.SendAsync(snapshotWriter, new TEvents::TEvPoison());
+
+        NYdb::NTopic::TTopicClient topicClient(env.GetDriver());
+        auto waitCommitted = [&](ui64 expected, bool requireClosedSession = false) {
+            ui64 committed = 0;
+            for (const auto deadline = TInstant::Now() + TDuration::Seconds(30); TInstant::Now() < deadline;) {
+                const auto result = topicClient.DescribeConsumer(topicPath, consumer,
+                    NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true).ClientTimeout(TDuration::Seconds(5))).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                const auto& partitions = result.GetConsumerDescription().GetPartitions();
+                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+                const auto& stats = partitions.front().GetPartitionConsumerStats();
+                UNIT_ASSERT(stats);
+                committed = stats->GetCommittedOffset();
+                if (committed == expected && (!requireClosedSession || stats->GetReadSessionId().empty())) {
+                    return;
+                }
+                UNIT_ASSERT_C(committed <= expected, TStringBuilder()
+                    << "consumer unexpectedly advanced to " << committed << ", expected " << expected);
+            }
+            UNIT_FAIL(TStringBuilder() << "consumer committed " << committed << ", expected " << expected
+                << "; require closed read session: " << requireClosedSession);
+        };
+
+        NYdb::NTable::TTableClient tableClient(env.GetDriver());
+        const auto sessionResult = tableClient.CreateSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        auto readKeys = [&](const TString& tablePath) {
+            const auto result = session.ExecuteDataQuery(
+                TStringBuilder() << "SELECT key FROM `" << tablePath << "` ORDER BY key",
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto parser = result.GetResultSetParser(0);
+            TVector<ui32> keys;
+            while (parser.TryNextRow()) {
+                keys.push_back(parser.ColumnParser(0).GetOptionalUint32().value());
+            }
+            return keys;
+        };
+
+        auto startWorker = [&](const TString& tablePath) {
+            return runtime.Register(CreateWorker(env.GetSender(),
+                [ydbProxy = env.GetYdbProxy(), topicPath, consumer] {
+                    return CreateRemoteTopicReader(ydbProxy,
+                        TEvYdbProxy::TTopicReaderSettings()
+                            .ConsumerName(consumer)
+                            .AppendTopics(NYdb::NTopic::TTopicReadSettings().Path(topicPath).AppendPartitionIds(0)));
+                },
+                [tablePathId = env.GetPathId(tablePath)] {
+                    return CreateLocalTableWriter("/Root", tablePathId);
+                }));
+        };
+
+        auto worker = startWorker("/Root/Live");
+        UNIT_ASSERT(WriteTopic(env, topicPath, baseline));
+        waitCommitted(1);
+        UNIT_ASSERT_VALUES_EQUAL(readKeys("/Root/Live"), (TVector<ui32>{1}));
+        UNIT_ASSERT_VALUES_EQUAL(readKeys("/Root/Snapshot"), (TVector<ui32>{1}));
+
+        TVector<ui32> allKeys{1};
+        for (ui32 key = 7000; key != 7030; ++key) {
+            UNIT_ASSERT(WriteTopic(env, topicPath,
+                TStringBuilder() << R"({"key":[)" << key << R"(],"update":{"value":"after-snapshot"}})"));
+            allKeys.push_back(key);
+        }
+        // Source acknowledgement follows durable destination application.
+        // Wait for that observable condition rather than sleeping for delivery.
+        waitCommitted(31);
+        UNIT_ASSERT_VALUES_EQUAL(readKeys("/Root/Live"), allKeys);
+        UNIT_ASSERT_VALUES_EQUAL(readKeys("/Root/Snapshot"), (TVector<ui32>{1}));
+        env.SendAsync(worker, new TEvents::TEvPoison());
+        // The proxy closes its SDK session asynchronously. Wait until the
+        // source no longer assigns the partition to it before starting another.
+        waitCommitted(31, true);
+
+        const TString resumedTable = restoreSnapshot ? "/Root/Snapshot" : "/Root/Live";
+        worker = startWorker(resumedTable);
+        UNIT_ASSERT(WriteTopic(env, topicPath, R"({"key":[8000], "update":{"value":"after-restart"}})"));
+        waitCommitted(32);
+        const auto actualKeys = readKeys(resumedTable);
+        env.SendAsync(worker, new TEvents::TEvPoison());
+        waitCommitted(32, true);
+        Cerr << "KIKIMR-27431: source committed offset=32, restoreSnapshot=" << restoreSnapshot
+            << ", destination rows=" << actualKeys.size() << Endl;
+
+        allKeys.push_back(8000);
+        if (restoreSnapshot) {
+            // Characterization of the existing bug: subsequent input is applied
+            // while all 30 previously committed rows remain permanently absent.
+            UNIT_ASSERT_VALUES_EQUAL(actualKeys, (TVector<ui32>{1, 8000}));
+            UNIT_ASSERT_VALUES_UNEQUAL(actualKeys, allKeys);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(actualKeys, allKeys);
+        }
+    }
+
+    Y_UNIT_TEST(ReceiverRollbackStateSkipsCommittedRows) {
+        CheckReceiverRollbackState(true);
+    }
+
+    Y_UNIT_TEST(OrdinaryWorkerRestartPreservesCommittedRows) {
+        CheckReceiverRollbackState(false);
     }
 
     Y_UNIT_TEST(Basic) {

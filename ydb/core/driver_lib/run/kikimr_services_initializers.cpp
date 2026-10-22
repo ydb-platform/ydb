@@ -257,7 +257,7 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
-#include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
+#include <ydb/library/actors/interconnect/interconnect_uring_engine_client.h>
 #include <ydb/library/actors/interconnect/handshake_broker.h>
 #include <ydb/library/actors/interconnect/load.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
@@ -785,14 +785,14 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             if (settings.V2.Enable) {
                 // Create the shared v2 io_uring data-plane engine once, at startup, and publish it in Common.
                 // The actor system does not exist yet, so the engine is bound to it later (once it is up,
-                // TInterconnectProxyTCP::Registered calls SetActorSystem). CreateUringEngine returns null when
+                // OnActorSystemCreated installs its client). CreateUringEngine returns null when
                 // io_uring is unavailable, in which case v2 is simply never negotiated during the handshake.
-                // The engine takes its parameters from Common, so Settings/MonCounters/DestructorId must
+                // The engine takes its parameters from Common, so Settings/MonCounters must
                 // already be filled in by this point.
                 icCommon->UringEngineV2 = CreateUringEngine(icCommon);
-                setup->OnActorSystemCreated.push_back([engine = icCommon->UringEngineV2](TActorSystem *actorSystem) {
-                    if (engine) {
-                        engine->SetActorSystem(actorSystem);
+                setup->OnActorSystemCreated.push_back([common = icCommon](TActorSystem *actorSystem) {
+                    if (const auto& engine = common->UringEngineV2) {
+                        engine->SetClient(CreateUringEngineClient(*common, actorSystem));
                     }
                 });
             }

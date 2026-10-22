@@ -583,7 +583,7 @@ class StaticConfigGenerator(object):
         if self.__is_dynamic_node:
             if self.__cluster_details.use_new_style_kikimr_cfg:
                 return kikimr_cfg_for_dynamic_node_new_style(
-                    self.__node_broker_port,
+                    self.__cluster_details.node_broker_port or self.__node_broker_port,
                     self._database,
                     self.__ic_port,
                     self.__grpc_port,
@@ -597,10 +597,12 @@ class StaticConfigGenerator(object):
                     use_auth_token_file=self._use_auth_token_file,
                     dynamic_node=self.__cluster_details.get_service("dynamic_node"),
                     grpcs_port=self.__grpcs_port,
+                    node_broker_use_tls=self.__cluster_details.node_broker_use_tls,
+                    grpc_client_cert_params=self.__cluster_details.grpc_client_cert_params,
                 )
 
             return kikimr_cfg_for_dynamic_node(
-                self.__node_broker_port,
+                self.__cluster_details.node_broker_port or self.__node_broker_port,
                 self._database,
                 self.__ic_port,
                 self.__mon_port,
@@ -2107,7 +2109,10 @@ class StaticConfigGenerator(object):
             domain = ""
             if len(self.__cluster_details.domains) == 1:
                 domain = self.__cluster_details.domains[0].domain_name
-            return dynamic_cfg_new_style(self._enable_cores, use_auth_token_file=self.__use_auth_token_file, domain=domain)
+            return dynamic_cfg_new_style(
+                self._enable_cores, use_auth_token_file=self.__use_auth_token_file, domain=domain, node_broker_port=self.__cluster_details.node_broker_port or self.__node_broker_port,
+                node_broker_use_tls=self.__cluster_details.node_broker_use_tls, grpc_client_cert_params=self.__cluster_details.grpc_client_cert_params,
+            )
         return kikimr_cfg_for_dynamic_slot(
             self._enable_cores, cert_params=self.__cluster_details.ic_cert_params
         )

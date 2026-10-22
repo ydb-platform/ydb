@@ -10,6 +10,7 @@
 #include "types.h"
 #include "resources.h"
 #include "stat_processor.h"
+#include "bridge_sync_counters.h"
 #include "indir.h"
 #include "self_heal.h"
 #include "storage_pool_stat.h"
@@ -1658,6 +1659,7 @@ private:
     THashMap<TPDiskId, std::reference_wrapper<const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk>> StaticPDiskMap;
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
     std::unique_ptr<TStoragePoolStat> StoragePoolStat;
+    std::unique_ptr<TBridgeSyncCounters> BridgeSyncCounters;
     bool StopGivingGroups = false;
     bool GroupLayoutSanitizerEnabled = false;
     bool AllowMultipleRealmsOccupation = true;
@@ -2259,6 +2261,8 @@ private:
 
     // the pile is being removed, so new groups get no parts there
     bool IsBridgePileBeingRemoved(TBridgePileId pileId) const;
+
+    void UpdateBridgeSyncCounters();
 
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
         TSet<TGroupId>& groupIdsToRead, bool comprehensive);

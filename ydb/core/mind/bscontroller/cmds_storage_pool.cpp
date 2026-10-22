@@ -52,18 +52,21 @@ namespace NKikimr::NBsController {
 
         const auto current = StoragePools.Get().find(id);
         const bool existing = current != StoragePools.Get().end();
-        if (cmd.HasBridgeMode()) {
+        const bool defaultBridgeMode = BridgeInfo && !BridgeInfo->IsImplicit;
+        const bool bridgeMode = existing ? current->second.BridgeMode
+            : cmd.HasBridgeMode() ? cmd.GetBridgeMode() : defaultBridgeMode;
+        if (existing && cmd.HasBridgeMode() && cmd.GetBridgeMode() != bridgeMode) {
+            throw TExError() << "can't change storage pool BridgeMode";
+        }
+        if (!existing && bridgeMode != defaultBridgeMode) {
             const auto& details = Self.StorageConfig
                 ? Self.StorageConfig->GetClusterStateDetails()
                 : NKikimrBridge::TClusterStateDetails::default_instance();
-            if (!BridgeInfo || BridgeInfo->IsImplicit || details.GetBscConversionPending()) {
+            if (!defaultBridgeMode || details.GetBscConversionPending()) {
                 throw TExError() << "BridgeMode override requires a bridged cluster with BSC conversion complete";
             }
             if (!details.GetNonUniformStorageEnabled()) {
                 throw TExError() << "BridgeMode override requires bridge_config.enable_non_uniform_storage";
-            }
-            if (existing && cmd.GetBridgeMode() != current->second.BridgeMode) {
-                throw TExError() << "can't change storage pool BridgeMode";
             }
         }
 
@@ -76,20 +79,8 @@ namespace NKikimr::NBsController {
             throw TExError() << "invalid ErasureSpecies# " << erasureSpecies;
         }
 
-        // The override is immutable once supplied; an omitted update retains it. Legacy pools keep their
-        // resolved policy even if the cluster default has changed since their creation.
-        storagePool.BridgeMode = existing ? current->second.BridgeMode : BridgeInfo && !BridgeInfo->IsImplicit;
-        if (existing) {
-            storagePool.BridgeModeOverride = current->second.BridgeModeOverride;
-        }
-        if (cmd.HasBridgeMode()) {
-            storagePool.BridgeModeOverride = cmd.GetBridgeMode();
-            storagePool.BridgeMode = cmd.GetBridgeMode();
-        }
-        if (storagePool.BridgeModeOverride && !*storagePool.BridgeModeOverride
-                && storagePool.ErasureSpecies != TBlobStorageGroupType::ErasureMirror3dc) {
-            throw TExError() << "ordinary storage in a bridged cluster requires mirror-3-dc";
-        }
+        // Resolve the default only at creation; updates preserve the stored mode.
+        storagePool.BridgeMode = bridgeMode;
 
         if (cmd.HasGeometry()) {
             const auto &geom = cmd.GetGeometry();

@@ -663,8 +663,15 @@ namespace NKikimr {
                 }
             }
 
+            bool UsesCrossPilePlacement() const {
+                // Activation requires completed BSC conversion. Until then legacy ordinary pools
+                // must remain confined to the implicit pile.
+                return !StoragePool.BridgeMode && !DDisk && State.Self.StorageConfig
+                    && State.Self.StorageConfig->GetClusterStateDetails().GetNonUniformStorageEnabled();
+            }
+
             TGroupMapper::TPileScope GetPlacementScope(TBridgePileId groupPileId) const {
-                if (StoragePool.BridgeModeOverride && !*StoragePool.BridgeModeOverride) {
+                if (UsesCrossPilePlacement()) {
                     Y_ABORT_UNLESS(!groupPileId && !StoragePool.BridgeMode);
                     return TGroupMapper::TPileScope::AcrossPiles();
                 }
@@ -710,7 +717,7 @@ namespace NKikimr {
                         return;
                     }
 
-                    if (StoragePool.BridgeModeOverride && !*StoragePool.BridgeModeOverride && State.BridgeInfo) {
+                    if (UsesCrossPilePlacement() && State.BridgeInfo) {
                         const auto *pile = State.BridgeInfo->GetPileForNode(id.NodeId);
                         // Keep existing placements for accounting, but don't allocate into disconnected,
                         // inactive or suspended piles. Ordinary VDisks recover without bridge synchronization.
@@ -921,7 +928,6 @@ namespace NKikimr {
                     TStringBuilder identifier;
                     identifier << "Erasure# " << storagePool.ErasureSpecies
                         << " BridgeMode# " << storagePool.BridgeMode
-                        << " AcrossPiles# " << (storagePool.BridgeModeOverride && !*storagePool.BridgeModeOverride)
                         << " Geometry# " << storagePool.RealmLevelBegin << "," << storagePool.RealmLevelEnd
                         << "," << storagePool.DomainLevelBegin << "," << storagePool.DomainLevelEnd
                         << "," << storagePool.NumFailRealms << "," << storagePool.NumFailDomainsPerFailRealm

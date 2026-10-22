@@ -346,17 +346,13 @@ struct Schema : NIceDb::Schema {
 
         struct PersistentBufferAllocationMode : Column<30, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
 
-        // Null means inherited cluster default; distinct from the resolved BridgeMode.
-        struct BridgeModeOverride : Column<31, NScheme::NTypeIds::Bool> {};
-
         using TKey = TableKey<BoxId, StoragePoolId>;
 
         using TColumns = TableColumns<BoxId, StoragePoolId, Name, ErasureSpecies, RealmLevelBegin, RealmLevelEnd,
             DomainLevelBegin, DomainLevelEnd, NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain,
             VDiskKind, SpaceBytes, WriteIOPS, WriteBytesPerSecond, ReadIOPS, ReadBytesPerSecond, InMemCacheBytes,
             Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping,
-            DefaultGroupSizeInUnits, BridgeMode, DDisk, VDiskHeapAllocatorNumLeadingDisks, PersistentBufferAllocationMode,
-            BridgeModeOverride>;
+            DefaultGroupSizeInUnits, BridgeMode, DDisk, VDiskHeapAllocatorNumLeadingDisks, PersistentBufferAllocationMode>;
     };
 
     struct BoxStoragePoolUser : Table<121> {

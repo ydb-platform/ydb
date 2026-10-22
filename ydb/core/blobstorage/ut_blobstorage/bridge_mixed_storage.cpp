@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
     Y_UNIT_TEST(PoolPolicyAndDataSurviveRestart) {
         TEnvironmentSetup env(MixedSettings());
         env.CreatePool();
-        UNIT_ASSERT(!ReadPool(env, 1).HasBridgeMode());
+        UNIT_ASSERT(ReadPool(env, 1).GetBridgeMode());
         for (const auto [id, mode] : {std::pair{2u, false}, std::pair{3u, true}}) {
             const auto response = DefinePool(env, NewPool(env, id, mode));
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
         UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "can't change storage pool BridgeMode");
 
         env.RestartNode(1);
-        UNIT_ASSERT(!ReadPool(env, 1).HasBridgeMode());
+        UNIT_ASSERT(ReadPool(env, 1).GetBridgeMode());
         pool = ReadPool(env, 2);
         UNIT_ASSERT(pool.HasBridgeMode() && !pool.GetBridgeMode());
         pool = ReadPool(env, 3);
@@ -166,9 +166,88 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
         checker.CheckAll();
     }
 
+    Y_UNIT_TEST(ResolvedModeRoundtripInUnbridgedCluster) {
+        TEnvironmentSetup env(MakeUnbridgedSettings());
+        env.CreatePool();
+        auto pool = ReadPool(env, 1);
+        UNIT_ASSERT(pool.HasBridgeMode() && !pool.GetBridgeMode());
+        auto response = DefinePool(env, pool);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        pool = ReadPool(env, 1);
+        pool.ClearBridgeMode();
+        response = DefinePool(env, pool);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        pool = ReadPool(env, 1);
+        UNIT_ASSERT(pool.HasBridgeMode() && !pool.GetBridgeMode());
+        pool.SetBridgeMode(true);
+        response = DefinePool(env, pool);
+        UNIT_ASSERT(!response.GetSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "can't change storage pool BridgeMode");
+
+        pool = NewPool(env, 2, true);
+        response = DefinePool(env, pool);
+        UNIT_ASSERT(!response.GetSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "requires a bridged cluster");
+        pool.SetBridgeMode(false);
+        response = DefinePool(env, pool);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        env.RestartNode(1);
+        pool = ReadPool(env, 2);
+        UNIT_ASSERT(pool.HasBridgeMode() && !pool.GetBridgeMode());
+    }
+
+    Y_UNIT_TEST_TWIN(OrdinarySingleDatacenterErasure, erasureNone) {
+        TEnvironmentSetup env(MixedSettings(true, 2));
+        env.CreatePool();
+        auto pool = NewPool(env, 2, false);
+        const TString erasure = erasureNone ? "none" : "block-4-2";
+        pool.SetErasureSpecies(erasure);
+        auto response = DefinePool(env, pool);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+        TDataChecker checker(env);
+        auto checkGroups = [&](ui32 expectedCount) {
+            const auto config = env.FetchBaseConfig();
+            const auto groups = GetPoolGroups(config, 2);
+            UNIT_ASSERT_VALUES_EQUAL(groups.size(), expectedCount);
+            for (const auto* group : groups) {
+                const auto info = GetGroupInfo(env, group->GetGroupId());
+                UNIT_ASSERT(!info.HasBridgeGroupState());
+                UNIT_ASSERT(!info.HasBridgePileId());
+                UNIT_ASSERT(!info.HasBridgeProxyGroupId());
+                UNIT_ASSERT_VALUES_EQUAL(group->GetErasureSpecies(), erasure);
+                UNIT_ASSERT_VALUES_EQUAL(group->VSlotIdSize(), erasureNone ? 1 : 8);
+                std::set<ui32> datacenters;
+                for (const auto& slot : group->GetVSlotId()) {
+                    datacenters.insert((slot.GetNodeId() - 1) / 9);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(datacenters.size(), 1);
+                checker.Write(group->GetGroupId());
+            }
+            checker.CheckAll();
+        };
+        checkGroups(1);
+        env.RestartNode(1);
+        checker.CheckAll();
+        pool = ReadPool(env, 2);
+        UNIT_ASSERT(pool.HasBridgeMode() && !pool.GetBridgeMode());
+        pool.ClearBridgeMode();
+        pool.SetNumGroups(2);
+        response = DefinePool(env, pool);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        pool = ReadPool(env, 2);
+        UNIT_ASSERT(pool.HasBridgeMode() && !pool.GetBridgeMode());
+        checkGroups(2);
+    }
+
     Y_UNIT_TEST(ActivationAndValidation) {
         TEnvironmentSetup env(MixedSettings(false));
         env.CreatePool();
+        // Returning the resolved mode must not make read/redefine depend on feature activation.
+        auto unchanged = DefinePool(env, ReadPool(env, 1));
+        UNIT_ASSERT_C(unchanged.GetSuccess(), unchanged.GetErrorDescription());
+        auto explicitDefault = DefinePool(env, NewPool(env, 3, true));
+        UNIT_ASSERT_C(explicitDefault.GetSuccess(), explicitDefault.GetErrorDescription());
         auto pool = NewPool(env, 2, false);
         auto response = DefinePool(env, pool);
         UNIT_ASSERT(!response.GetSuccess());
@@ -183,11 +262,6 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
         const auto config = QueryStorageConfig(env);
         UNIT_ASSERT_VALUES_EQUAL(NStorage::GetRequiredBridgeFeatureLevel(config),
             ui32(NStorage::BridgeFeatureLevelNonUniformStorage));
-        pool.SetErasureSpecies("block-4-2");
-        response = DefinePool(env, pool);
-        UNIT_ASSERT(!response.GetSuccess());
-        UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "requires mirror-3-dc");
-        pool.SetErasureSpecies("mirror-3-dc");
         response = DefinePool(env, pool);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
         OrdinaryGroup(env);
@@ -309,7 +383,7 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
         UNIT_ASSERT_VALUES_EQUAL(OrdinaryGroup(env), ordinary);
     }
 
-    Y_UNIT_TEST(OrdinaryPoolRequiresThreeDatacenters) {
+    Y_UNIT_TEST(Mirror3dcPoolRequiresThreeDatacenters) {
         TEnvironmentSetup env(MixedSettings(true, 2));
         env.CreatePool();
         const auto response = DefinePool(env, NewPool(env, 2, false));

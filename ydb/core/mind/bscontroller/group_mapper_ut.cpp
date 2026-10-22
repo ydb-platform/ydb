@@ -627,7 +627,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
 
     Y_UNIT_TEST(AcrossPilesPreservesDatacenterGeometry) {
         TBlobStorageController::TStoragePoolInfo pool;
-        pool.BridgeModeOverride = false;
+        pool.BridgeMode = false;
         const auto geometry = TGroupGeometryInfo::FromStoragePool(TBlobStorageGroupType::ErasureMirror3dc, pool);
         TTestContext context(3, 1, 4, 1, 1);
         TGroupMapper mapper(geometry);

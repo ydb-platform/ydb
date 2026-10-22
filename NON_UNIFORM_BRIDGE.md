@@ -6,16 +6,18 @@ Design exploration based on source inspection of checkout `c946cc018e2`, followe
 
 The current source changes implement the pool-level interface and allocation path:
 
-- `TDefineStoragePool.BridgeMode` is optional. BSC persists its explicit override separately from the resolved mode, preserves absent fields on update, and returns only the stored override on read. Effective mode cannot change, and an explicit ordinary override requires `mirror-3-dc`.
+- `TDefineStoragePool.BridgeMode` is optional. BSC resolves it from the request or cluster default when creating a pool and persists only the existing resolved `BridgeMode` boolean. Updates that omit the field preserve the stored mode, conflicting values are rejected, and reads return the resolved mode. Ordinary pools may use any supported erasure, subject to normal geometry and eligible-disk constraints.
 - `bridge_config.enable_non_uniform_storage: true` enables the feature. Activation is durable and irreversible: later configuration replacements must retain the flag. For an existing cluster, BSC bridge conversion must already be complete; native bridged bootstrap can enable it from the start.
 - Activation raises the required bridge feature level to 3. Configuration replacement uses the existing connected-node capability check before raising that requirement. The persisted requirement also fences incompatible nodes on reconnect.
-- Ordinary pools use explicit cross-pile placement for allocation, reassignment, repair, and allocation reserve checks. For explicit `false`, geometry ignores the logical `BridgePileName` prefix during allocation, layout checking, and self-heal; actual `DataCenter`/rack levels and the nodes' pile labels remain intact. Disconnected, inactive, and suspended piles are not new-placement targets.
+- After non-uniform storage activation, ordinary pools use explicit cross-pile placement for allocation, reassignment, repair, and allocation reserve checks. Physical geometry follows the pool's resolved mode: ordinary pools ignore the logical `BridgePileName` prefix during allocation, layout checking, and self-heal; actual `DataCenter`/rack levels and the nodes' pile labels remain intact. The cross-pile scope remains feature-gated to preserve legacy conversion behavior. Disconnected, inactive, and suspended piles are not new-placement targets.
 - Group moves between different effective modes are rejected. Existing ordinary DSProxy/quorum behavior and the guard against removing a pile that still hosts ordinary VDisks remain in place. Health formatting avoids attributing ordinary-group issues to an empty pile name.
 - BSC [LoadFinished](ydb/core/mind/bscontroller/impl.h#L2474) rechecks unsynchronized piles when bridge configuration is present. This resumes recovery when the controller starts with an already unsynchronized cluster state, including after physically stopped piles rejoin.
 
 The root remains bridged, and existing storage-kind templates carry the override through database creation; no database-mode API is added. Build and test execution is restricted to remote `qa4`.
 
 ### Validation status
+
+Validation of the current simplification—removing `BridgeModeOverride`, returning the resolved mode, and allowing ordinary erasures beyond `mirror-3-dc`—is pending on `qa4`. The results below describe the earlier implementation and do not establish those changes.
 
 All **18 selected C++ checks passed on `qa4` at `87fd43406da`**:
 
@@ -167,46 +169,46 @@ The accepted boundaries are:
 - Keep shared Hive placement and promotion, state storage, and interconnect isolation. A storage policy does not create an independent control domain.
 - Select the mode only for new databases and new storage pools, with pool mode immutable. No existing-database, existing-pool, or data migration is included, and no cross-mode channel rebinding or automatic reclamation of existing storage is provided.
 - Support growth, restart, repair, and reassignment within the selected policy for those new databases. Activate the feature in an already bridged cluster after legacy conversion completes, or during native bridged bootstrap.
-- Support and test ordinary `mirror-3-dc` across three distinct datacenters first, alongside the existing bridged `block-4-2` pools. Other ordinary layouts need explicit validation before support.
+- Allow ordinary pools to use any supported erasure, subject to its normal geometry and eligible-disk constraints. `mirror-3-dc` requires three distinct datacenters because of its own failure model; that requirement does not apply to all ordinary pools. Keep the existing mixed `mirror-3-dc`/bridged `block-4-2` coverage and add ordinary `block-4-2` and `none` cases.
 - Database-specific placement, state-storage, and connectivity policies are outside this scope.
 
-For a new pool, absent `BridgeMode` preserves the cluster default, `true` explicitly requests bridged storage, and `false` explicitly requests ordinary storage. For an existing pool, an omitted update preserves its stored choice. The persisted override must distinguish absence from explicit `false`, separately from the existing resolved `BridgeMode` boolean, so read/redefine operations preserve intent and legacy defaults remain compatible. Explicit mixed-storage overrides are supported only after the cluster is bridged and legacy conversion has completed.
+For a new pool, absent `BridgeMode` selects the cluster default, `true` requests bridged storage, and `false` requests ordinary storage. Resolve this choice once at creation and persist only the existing `BridgeMode` boolean. For an existing pool, an omitted update preserves its stored mode and a different supplied mode is rejected. Reads return the resolved value; unchanged read/redefine operations must remain valid without non-uniform storage activation. Creating an ordinary pool in a bridged cluster requires the feature to be enabled and legacy conversion to have completed.
 
 ### Deferred follow-up: location filters
 
 After completing the current work, extend the required properties of `TPDiskFilter` with `Location(TNodeLocation)`. Match all supplied location fields by exact equality in conjunction; unspecified fields impose no constraint. A filter supplying only `DataCenter` therefore selects all PDisks in that datacenter, subject to the other PDisk filter properties.
 
-The motivating example has two datacenters with capacity for 100 and 50 physical groups: use 50 bridged groups, each with one component in each datacenter, and 50 additional single-datacenter groups in the larger datacenter. This is a separate follow-up, not part of the current implementation. Ordinary pools currently remain limited to `mirror-3-dc` across three datacenters; any future single-datacenter or reduced-reliability erasure policy needs separate validation.
+The motivating example has two datacenters with capacity for 100 and 50 physical groups: use 50 bridged groups, each with one component in each datacenter, and 50 additional single-datacenter groups in the larger datacenter. The location filter is a separate follow-up, not part of this branch. Ordinary erasure selection is unrestricted by bridge policy; a location filter supplies the additional constraint needed to keep those groups in the intended datacenter.
 
 ## Implementation and validation checklist
 
 The first deliverable is **BSC-managed bridged and ordinary groups coexisting correctly**, exercised through the storage configuration API. Then verify existing tenant provisioning with the configured pool kinds. The status above distinguishes source changes and test results from remaining work; the checks below are the acceptance inventory, not a claim that all have passed.
 
-### 1. Persist explicit storage-pool policy
+### 1. Resolve and persist storage-pool policy
 
 The source now adds `optional bool BridgeMode` to `TDefineStoragePool` in [blobstorage_config.proto](ydb/core/protos/blobstorage_config.proto), with persistence and response serialization in [scheme.h](ydb/core/mind/bscontroller/scheme.h), [impl.h](ydb/core/mind/bscontroller/impl.h), [cmds_storage_pool.cpp](ydb/core/mind/bscontroller/cmds_storage_pool.cpp), and [config.cpp](ydb/core/mind/bscontroller/config.cpp). Verify the following contracts:
 
-- Keep explicit policy intent separate from the existing persisted, resolved `BridgeMode`. Preserve legacy/default behavior without adding a migration workflow for the new overrides.
+- Resolve the optional request field at pool creation and persist only the existing `BridgeMode` boolean. Preserve legacy/default behavior without adding a migration workflow or separate override-presence state.
 - Preserve the stored policy when an update omits the new field. Distinguish omitted update fields from an explicit policy value, and reject attempts to change an existing pool's mode.
-- Define validation for cluster capabilities, completed bridge conversion, erasure, placement geometry, and unsupported combinations. Reject conflicting mixed-pool creation while legacy conversion is pending. The initial explicitly ordinary configuration requires a supported cross-DC `mirror-3-dc` layout in an already bridged cluster.
+- Define validation for cluster capabilities, completed bridge conversion, erasure, placement geometry, and unsupported combinations. Reject conflicting mixed-pool creation while legacy conversion is pending. Creating an ordinary pool in a bridged cluster requires non-uniform storage activation; normal erasure and geometry validation decides whether its groups can be allocated.
 - Retain the existing rejection of `ExistingGroups` imports. Verify the new `TMoveGroups` check rejecting different effective bridge modes.
-- Preserve the optional override when reading and redefining pool configuration: serializing an inherited effective value into the override would accidentally make it explicit. Report effective mode separately where needed, based on current BSC state. Keep the new metadata inert behind the feature gate until allocation, lifecycle, and compatibility protections are ready.
+- Return the stored, resolved mode when reading pool configuration. Accept an unchanged mode on redefine without requiring non-uniform storage activation. Gate creation of ordinary pools in a bridged cluster and cross-pile allocation, while keeping legacy conversion placement intact.
 
-Acceptance: all three override states survive read/redefine and BSC restart; legacy configuration round-trips unchanged; omitted updates preserve the stored override; conflicting mode changes and incompatible moves fail before mutation. Cover these cases in [bscontroller/ut](ydb/core/mind/bscontroller/ut) and [ut_bscontroller](ydb/core/mind/bscontroller/ut_bscontroller).
+Acceptance: omitted, explicit `true`, and explicit `false` creation requests resolve correctly; the resolved mode survives read/redefine and BSC restart; legacy definitions remain valid; omitted updates preserve the stored mode; conflicting mode changes and incompatible moves fail before mutation. Cover these cases in [bscontroller/ut](ydb/core/mind/bscontroller/ut) and [ut_bscontroller](ydb/core/mind/bscontroller/ut_bscontroller).
 
 ### 2. Allocate ordinary groups across piles
 
 The source now carries an explicit `TGroupMapper::TPileScope`, including `AcrossPiles()`, through [group_mapper.h](ydb/core/mind/bscontroller/group_mapper.h), [group_mapper.cpp](ydb/core/mind/bscontroller/group_mapper.cpp), [group_geometry_info.h](ydb/core/mind/bscontroller/group_geometry_info.h), and [config_fit_groups.cpp](ydb/core/mind/bscontroller/config_fit_groups.cpp). Validate its use across the following paths:
 
 - Preserve legacy implicit-pile semantics. Do not reinterpret a missing `BridgePileId` as a wildcard, and do not clear the node's pile labels to obtain cross-pile placement.
-- Select cross-pile placement only for explicitly supported ordinary pools. Ignore the logical `BridgePileName` location prefix for their geometry calculations, while preserving physical DC/rack failure domains and existing eligible-node restrictions, including pile-state restrictions where applicable.
+- Select cross-pile placement for ordinary pools only after non-uniform storage activation. Derive physical geometry from the resolved pool mode, ignoring the logical `BridgePileName` location prefix for ordinary pools while preserving physical DC/rack failure domains and existing eligible-node restrictions, including pile-state restrictions where applicable.
 - Carry the scope through initial allocation, reassignment, layout repair, balancing, and reserve calculations. Keep bridged physical groups and inline groups confined to their intended pile.
 - Ordinary physical groups must carry no bridge-group metadata. Verify that the existing NodeWarden dispatch creates ordinary DSProxy actors for them.
 - Add mapper and storage integration tests immediately, before enabling mixed pool kinds for database provisioning. Use three distinct `DataCenter` values with matching pile assignments, enough racks for the geometry, and spare nodes for replacement tests.
 
-The existing [bridge_common.h](ydb/core/blobstorage/ut_blobstorage/bridge_common.h) helper assigns all nodes to `my_dc`, so its layout cannot prove `mirror-3-dc` placement. The added [bridge_mixed_storage.cpp](ydb/core/blobstorage/ut_blobstorage/bridge_mixed_storage.cpp) fixture instead uses 27 nodes across three distinct datacenters and piles, with distinct racks and spare placement capacity. Its two-datacenter variant checks allocation rejection.
+The existing [bridge_common.h](ydb/core/blobstorage/ut_blobstorage/bridge_common.h) helper assigns all nodes to `my_dc`, so its layout cannot prove `mirror-3-dc` placement. The added [bridge_mixed_storage.cpp](ydb/core/blobstorage/ut_blobstorage/bridge_mixed_storage.cpp) fixture instead uses 27 nodes across three distinct datacenters and piles, with distinct racks and spare placement capacity. Its two-datacenter variant checks `mirror-3-dc` allocation rejection; this is an erasure-specific requirement.
 
-Acceptance: one test environment allocates both layouts; ordinary groups span three DCs with the required geometry, while every bridged component stays in its pile. Allocation, replacement, repair, and reserve checks all honor the same scope. Insufficient eligible DCs or racks produces a clear allocation error.
+Acceptance: one test environment allocates both modes; ordinary `mirror-3-dc` groups span three DCs, other ordinary erasures satisfy their own geometry, and every bridged component stays in its pile. Allocation, replacement, repair, and reserve checks all honor the same scope. Insufficient eligible DCs or racks for the selected erasure produces a clear allocation error.
 
 ### 3. Preserve policy through bridge lifecycle operations
 
@@ -241,7 +243,7 @@ storage_pool_types:
 ```
 
 - Confirm full-template propagation through [run.cpp](ydb/core/driver_lib/run/run.cpp), [console__create_tenant.cpp](ydb/core/cms/console/console__create_tenant.cpp), and the later `MakeStoragePool` / [console__alter_tenant.cpp](ydb/core/cms/console/console__alter_tenant.cpp) paths. [TStoragePool](ydb/core/cms/console/console_tenants_manager.h#L289) already copies the complete definition; allocation copies it again and Console persists the full protobuf. Add regression coverage for optional field presence through load, retries, and pool redefinition.
-- Confirm that growing a pool created for a new database preserves its override and effective mode. A later template edit must not silently change that pool's mode. Additional capacity within the selected policy uses the configured kind and normal compatibility checks.
+- Confirm that growing a pool created for a new database preserves its resolved mode. A later template edit must not silently change that pool's mode. Additional capacity within the selected policy uses the configured kind and normal compatibility checks.
 - Verify channel-profile and default-family resolution for the chosen kind names. [ResolveSubdomainsChannels](ydb/core/tx/schemeshard/schemeshard_impl.cpp#L1506) uses profile 0, and [TabletResolveChannelsDetails](ydb/core/tx/schemeshard/schemeshard_impl.cpp#L1562) falls back to the first pool for missing kinds only for that default profile. With one selected pool, this supports default tablet bindings without a new policy layer.
 - Cover explicit profiles and exact-kind paths separately: [ResolveChannelsDetailsAsIs](ydb/core/tx/schemeshard/schemeshard_impl.cpp#L1546) and [ResolvePoolNames](ydb/core/tx/schemeshard/schemeshard_impl.cpp#L63), including topic paths, require matching kinds. [ApplyStorageConfig](ydb/core/tx/schemeshard/schemeshard_impl.cpp#L946) uses `PreferredPoolKind` and `AllowOtherKinds`. Document the required profiles for the chosen kinds, and test table/family/topic selection as applicable; do not generalize the default-profile fallback to all APIs.
 - For the first end-to-end scenario, verify that all intended data and log channels plus SchemeShard, coordinators, mediators, and private Hive where present use the selected pools. Cover creation/default bindings, restart, and same-mode maintenance; cross-mode channel rebinding is excluded. Establish this with dedicated external subdomains, and describe shared/legacy tablet dependencies accurately.
@@ -283,8 +285,8 @@ The acceptance matrix is:
 | Activate through configuration replacement or native bridged bootstrap | Persist activation and bridge feature level 3; later attempts to disable it fail |
 | Create, grow, inspect, and restart new databases of both types | Policies and bindings persist; both layouts store and retrieve data without mode changes |
 | Promote the primary pile | Both database types follow shared placement and management |
-| Disconnect one pile | Both progress after shared management settles, with sufficient healthy disks in the remaining DCs |
-| Isolate two piles, leaving one connected pile after a valid bridge transition | Bridged storage continues; ordinary writes cannot succeed without their normal quorum |
+| Disconnect one pile | Each pool follows its selected erasure's quorum and failure model after shared management settles; ordinary storage is not guaranteed to survive the loss |
+| Isolate two piles, leaving one connected pile after a valid bridge transition | Bridged storage continues; ordinary writes require their selected erasure's normal quorum and reachable VDisks |
 | Rejoin stale nodes and complete recovery | Acknowledged data remains intact; generation, block, and GC fencing hold |
 | Attempt destructive removal of a pile hosting ordinary VDisks | The existing removal guard rejects the operation |
 | Exhaust ordinary storage | Unrelated bridged databases continue unless shared physical resources are also exhausted |

@@ -12,6 +12,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/public/pqdata_transaction_compat.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
 #include <ydb/core/persqueue/pqtablet/partition/autopartitioning_manager.h>
@@ -459,6 +460,51 @@ static TDuration GetAvailabilityPeriod(const TUserInfo& consumer)  {
     return consumer.AvailabilityPeriod;
 }
 
+bool TPartition::HasAcknowledgedReplicationRetention() const {
+    return Config.GetPartitionConfig().GetRetentionPolicy()
+        == NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED;
+}
+
+std::optional<ui64> TPartition::GetAcknowledgedReplicationOffset() const {
+    if (!HasAcknowledgedReplicationRetention() || ChangeConfig || ChangingConfig) {
+        return std::nullopt;
+    }
+    const auto& name = Config.GetPartitionConfig().GetRetentionConsumer();
+    const auto* consumer = GetConsumer(Config, name);
+    const auto* durable = UsersInfoStorage->GetIfExists(name);
+    if (name.empty() || !consumer || !consumer->GetImportant()
+        || consumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING
+        || consumer->GetReadFromTimestampsMs() != 0 || consumer->HasAvailabilityPeriodMs()
+        || !durable || durable->User != name || !durable->HasReadRule || !durable->Important
+        || durable->ReadRuleGeneration != consumer->GetGeneration() || durable->Offset < 0
+        || durable->ReadFromTimestamp != TInstant::MilliSeconds(1) || durable->AvailabilityPeriod != TDuration::Zero())
+    {
+        return std::nullopt;
+    }
+    if (AffectedUsers.contains(name)) {
+        const auto pending = PendingUsersInfo.find(name);
+        if (pending == PendingUsersInfo.end()) {
+            return std::nullopt; // The required read rule is being dropped.
+        }
+        const auto& next = pending->second;
+        if (next.User != durable->User || next.ReadRuleGeneration != durable->ReadRuleGeneration
+            || next.Important != durable->Important || next.ReadFromTimestamp != durable->ReadFromTimestamp
+            || next.AvailabilityPeriod != durable->AvailabilityPeriod || next.Offset < durable->Offset)
+        {
+            return std::nullopt;
+        }
+    }
+    // Offset-only pending advances must not starve cleanup of this old durable
+    // prefix. Never use the pending offset to authorize physical deletion.
+    return durable->Offset;
+}
+
+bool TPartition::CanReclaimAcknowledgedBlob(const TDataKey& currentKey, const TDataKey* nextKey, TInstant now) const {
+    const auto offset = GetAcknowledgedReplicationOffset();
+    return offset && nextKey
+        && !ImportantConsumerNeedToKeepCurrentKey(TDuration::Max(), *offset, currentKey, *nextKey, now);
+}
+
 bool TPartition::ImportantConsumersNeedToKeepCurrentKey(const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now) const {
     for (const auto& [name, userInfo] : UsersInfoStorage->ViewImportant()) {
         const TDuration availabilityPeriod = GetAvailabilityPeriod(userInfo);
@@ -591,6 +637,9 @@ bool TPartition::CleanUpBlobsInEncoder(TPartitionBlobEncoder& encoder, bool isCo
             }
         }
 
+        if (HasAcknowledgedReplicationRetention()) {
+            return !isLastBlob && CanReclaimAcknowledgedBlob(firstKey, nextKey, now);
+        }
         if (hasStorageLimit) {
             const auto dataSizeAfterDrop = getEncoderDataSize() - firstKey.Size;
             if (dataSizeAfterDrop < partConfig.GetStorageLimitBytes()) {
@@ -731,7 +780,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
 
     AutopartitioningManager->CleanUp();
 
-    if (AppData()->FeatureFlags.GetEnableTopicRetentionDeleteLastBlob()) {
+    if (AppData()->FeatureFlags.GetEnableTopicRetentionDeleteLastBlob() || HasAcknowledgedReplicationRetention()) {
         ProcessTxsAndUserActs(ctx);
     }
 }
@@ -833,7 +882,11 @@ bool TPartition::CleanUpBlobsLegacy(TEvKeyValue::TEvRequest *request, const TAct
             break;
         }
 
-        if (hasStorageLimit) {
+        if (HasAcknowledgedReplicationRetention()) {
+            if (!CanReclaimAcknowledgedBlob(firstKey, &nextKey, now)) {
+                break;
+            }
+        } else if (hasStorageLimit) {
             const auto bodySize = CompactionBlobEncoder.BodySize - firstKey.Size;
             if (bodySize < partConfig.GetStorageLimitBytes()) {
                 break;

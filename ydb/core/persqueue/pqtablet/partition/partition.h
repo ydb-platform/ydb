@@ -350,6 +350,9 @@ private:
     // stored in this blob has expired and they have been read by all important consumers.
     bool CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx);
     bool CleanUpBlobsLegacy(TEvKeyValue::TEvRequest *request, const TActorContext& ctx);
+    bool HasAcknowledgedReplicationRetention() const;
+    std::optional<ui64> GetAcknowledgedReplicationOffset() const;
+    bool CanReclaimAcknowledgedBlob(const TDataKey& currentKey, const TDataKey* nextKey, TInstant now) const;
     // Checks if any consumer has uncommited messages in their availability window
     bool ImportantConsumersNeedToKeepCurrentKey(const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now) const;
     bool ImportantConsumersNeedToKeepLastKey(const TDataKey& currentKey, const TInstant now) const;

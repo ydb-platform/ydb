@@ -79,6 +79,14 @@ public:
     {}
 };
 
+enum class EAcknowledgedCleanupMode { Legacy, Encoder };
+
+enum class EAcknowledgedConsumerState {
+    Valid, MissingConfig, MissingDurableState, WrongIdentity, NoReadRule,
+    StaleGeneration, NegativeOffset, PendingConfig, PendingUser, PendingAdvance, PendingGeneration,
+    PendingRewind, PendingIdentity, PendingImportant, PendingReadFrom, PendingAvailability,
+};
+
 class TPartitionTestWrapper {
 public:
     TPartitionTestWrapper(TInitMetaStep* metaStep)
@@ -108,6 +116,60 @@ public:
 
     static bool CleanUpBlobs(TPartition& partition, const TActorContext& ctx) {
         return partition.CleanUpBlobs(nullptr, ctx);
+    }
+
+    static void PrepareAcknowledgedRetention(TPartition& partition, i64 offset,
+            EAcknowledgedConsumerState state, const TActorContext& ctx) {
+        auto* config = partition.Config.MutablePartitionConfig();
+        config->SetRetentionPolicy(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED);
+        config->SetRetentionConsumer("replication");
+        config->SetLifetimeSeconds(1);
+        config->SetStorageLimitBytes(1);
+        partition.Config.ClearConsumers();
+        auto* consumer = partition.Config.AddConsumers();
+        consumer->SetName("replication");
+        consumer->SetImportant(true);
+        consumer->SetGeneration(0);
+        auto& user = partition.UsersInfoStorage->GetOrCreate("replication", ctx, 0);
+        partition.UsersInfoStorage->SetImportant(user, true, TDuration::Zero());
+        user.HasReadRule = true;
+        user.ReadFromTimestamp = TInstant::MilliSeconds(1);
+        user.ReadRuleGeneration = 0;
+        user.Offset = offset;
+        partition.ChangingConfig = false;
+        partition.AffectedUsers.clear();
+        partition.PendingUsersInfo.clear();
+        switch (state) {
+        case EAcknowledgedConsumerState::Valid: break;
+        case EAcknowledgedConsumerState::MissingConfig: partition.Config.ClearConsumers(); break;
+        case EAcknowledgedConsumerState::MissingDurableState:
+            partition.UsersInfoStorage->Remove("replication", ctx); break;
+        case EAcknowledgedConsumerState::WrongIdentity: config->SetRetentionConsumer("other"); break;
+        case EAcknowledgedConsumerState::NoReadRule: user.HasReadRule = false; break;
+        case EAcknowledgedConsumerState::StaleGeneration: user.ReadRuleGeneration = 1; break;
+        case EAcknowledgedConsumerState::NegativeOffset: user.Offset = -1; break;
+        case EAcknowledgedConsumerState::PendingConfig: partition.ChangingConfig = true; break;
+        case EAcknowledgedConsumerState::PendingUser: partition.AffectedUsers.insert("replication"); break;
+        case EAcknowledgedConsumerState::PendingAdvance:
+            partition.GetOrCreatePendingUser("replication").Offset = offset + 5; break;
+        case EAcknowledgedConsumerState::PendingGeneration:
+            partition.GetOrCreatePendingUser("replication").ReadRuleGeneration = 1; break;
+        case EAcknowledgedConsumerState::PendingRewind:
+            partition.GetOrCreatePendingUser("replication").Offset = offset - 1; break;
+        case EAcknowledgedConsumerState::PendingIdentity:
+            partition.GetOrCreatePendingUser("replication").User = "other"; break;
+        case EAcknowledgedConsumerState::PendingImportant:
+            partition.GetOrCreatePendingUser("replication").Important = false; break;
+        case EAcknowledgedConsumerState::PendingReadFrom:
+            partition.GetOrCreatePendingUser("replication").ReadFromTimestamp = TInstant::Seconds(1); break;
+        case EAcknowledgedConsumerState::PendingAvailability:
+            partition.GetOrCreatePendingUser("replication").AvailabilityPeriod = TDuration::Seconds(1); break;
+        }
+    }
+
+    static void KeepFreshAcknowledgedBlobs(TPartition& partition) {
+        partition.Config.MutablePartitionConfig()->ClearStorageLimitBytes();
+        partition.Config.MutablePartitionConfig()->SetLifetimeSeconds(86400);
     }
 
     static TInstant GetWriteTimeEstimate(TPartition& partition, ui64 offset) {
@@ -8607,6 +8669,117 @@ Y_UNIT_TEST_F(FinalizeEmptyBlobEncoderClearsNewHead, TPartitionFixture) {
     UNIT_ASSERT_VALUES_EQUAL(encoder.NewHead.Offset, 100u);
     UNIT_ASSERT_VALUES_EQUAL(encoder.NewHeadKey.Size, 0u);
     UNIT_ASSERT_VALUES_EQUAL(encoder.NewHeadKey.Key.GetOffset(), 0u);
+}
+
+Y_UNIT_TEST_F(AcknowledgedRetentionMultipartBoundary, TPartitionFixture) {
+    auto* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+    struct TCase {
+        ui64 First;
+        ui64 Next;
+        ui16 Part;
+        ui64 Commit;
+        bool Delete;
+    };
+    const TVector<TCase> cases = {
+        {0, 5, 0, 4, false}, {0, 5, 0, 5, true},
+        {0, 5, 2, 5, false}, {0, 5, 2, 6, true},
+        {100, 200, 0, 200, true}, {100, 200, 2, 200, false},
+    };
+    auto probe = [&](const TActorContext& ctx) {
+        enum class ELayout { Legacy, Encoder, CrossZone };
+        for (auto layout : {ELayout::Legacy, ELayout::Encoder, ELayout::CrossZone}) {
+            Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableTopicRetentionDeleteLastBlob(layout != ELayout::Legacy);
+            for (const auto& item : cases) {
+                TPartitionTestWrapper::PrepareAcknowledgedRetention(*partition, item.Commit,
+                    EAcknowledgedConsumerState::Valid, ctx);
+                auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+                auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+                ClearEncoderKeys(cz);
+                ClearEncoderKeys(fwz);
+                SetEncoderRange(cz, item.First, item.Next + 1);
+                SetEncoderRange(fwz, item.Next + 1, item.Next + 1);
+                AddBodyKeyToEncoder(cz, partitionId, item.First, 1000);
+                if (layout == ELayout::CrossZone) {
+                    SetEncoderRange(cz, item.First, item.Next);
+                    SetEncoderRange(fwz, item.Next, item.Next + 1);
+                    AddBodyKeyToEncoder(fwz, partitionId, item.Next, 1000, TInstant::MilliSeconds(1), item.Part);
+                } else {
+                    AddBodyKeyToEncoder(cz, partitionId, item.Next, 1000, TInstant::MilliSeconds(1), item.Part);
+                }
+                TPartitionTestWrapper::CleanUpBlobs(*partition, ctx);
+                const bool candidateRetained = !cz.DataKeysBody.empty() && cz.DataKeysBody.front().Key.GetOffset() == item.First;
+                UNIT_ASSERT_VALUES_EQUAL_C(candidateRetained, !item.Delete,
+                    "next=" << item.Next << " part=" << item.Part << " commit=" << item.Commit);
+                UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size() + fwz.DataKeysBody.size(), item.Delete ? 1 : 2);
+            }
+        }
+    };
+    Ctx->Runtime->Register(new TPartitionMethodTestActor(Ctx->Edge, std::move(probe)));
+    UNIT_ASSERT(Ctx->Runtime->GrabEdgeEvent<TEvents::TEvWakeup>(Ctx->Edge, TDuration::Seconds(30)));
+}
+
+Y_UNIT_TEST_F(AcknowledgedRetentionPendingAdvanceUsesDurablePrefix, TPartitionFixture) {
+    auto* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+    auto probe = [&](const TActorContext& ctx) {
+        for (auto mode : {EAcknowledgedCleanupMode::Legacy, EAcknowledgedCleanupMode::Encoder}) {
+            Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableTopicRetentionDeleteLastBlob(mode == EAcknowledgedCleanupMode::Encoder);
+            TPartitionTestWrapper::PrepareAcknowledgedRetention(*partition, 5,
+                EAcknowledgedConsumerState::PendingAdvance, ctx);
+            TPartitionTestWrapper::KeepFreshAcknowledgedBlobs(*partition);
+            auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+            auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+            ClearEncoderKeys(cz);
+            ClearEncoderKeys(fwz);
+            SetEncoderRange(cz, 0, 11);
+            SetEncoderRange(fwz, 11, 11);
+            for (ui64 offset : {0, 5, 10}) {
+                AddBodyKeyToEncoder(cz, partitionId, offset, 1000, ctx.Now());
+            }
+            TPartitionTestWrapper::CleanUpBlobs(*partition, ctx);
+            UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.front().Key.GetOffset(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(cz.DataKeysBody.back().Key.GetOffset(), 10);
+        }
+    };
+    Ctx->Runtime->Register(new TPartitionMethodTestActor(Ctx->Edge, std::move(probe)));
+    UNIT_ASSERT(Ctx->Runtime->GrabEdgeEvent<TEvents::TEvWakeup>(Ctx->Edge, TDuration::Seconds(30)));
+}
+
+Y_UNIT_TEST_F(AcknowledgedRetentionInvalidDurableConsumerState, TPartitionFixture) {
+    auto* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+    auto probe = [&](const TActorContext& ctx) {
+        for (auto mode : {EAcknowledgedCleanupMode::Legacy, EAcknowledgedCleanupMode::Encoder}) {
+            Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableTopicRetentionDeleteLastBlob(mode == EAcknowledgedCleanupMode::Encoder);
+            for (auto state : {
+                EAcknowledgedConsumerState::MissingConfig, EAcknowledgedConsumerState::MissingDurableState,
+                EAcknowledgedConsumerState::WrongIdentity, EAcknowledgedConsumerState::NoReadRule,
+                EAcknowledgedConsumerState::StaleGeneration, EAcknowledgedConsumerState::NegativeOffset,
+                EAcknowledgedConsumerState::PendingConfig, EAcknowledgedConsumerState::PendingUser,
+                EAcknowledgedConsumerState::PendingGeneration, EAcknowledgedConsumerState::PendingRewind,
+                EAcknowledgedConsumerState::PendingIdentity, EAcknowledgedConsumerState::PendingImportant,
+                EAcknowledgedConsumerState::PendingReadFrom, EAcknowledgedConsumerState::PendingAvailability,
+                EAcknowledgedConsumerState::Valid})
+            {
+                TPartitionTestWrapper::PrepareAcknowledgedRetention(*partition, 5, state, ctx);
+                auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+                auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+                ClearEncoderKeys(cz);
+                ClearEncoderKeys(fwz);
+                SetEncoderRange(cz, 0, 6);
+                SetEncoderRange(fwz, 6, 6);
+                AddBodyKeyToEncoder(cz, partitionId, 0, 1000);
+                AddBodyKeyToEncoder(cz, partitionId, 5, 1000);
+                TPartitionTestWrapper::CleanUpBlobs(*partition, ctx);
+                UNIT_ASSERT_VALUES_EQUAL_C(cz.DataKeysBody.size(), state == EAcknowledgedConsumerState::Valid ? 1 : 2,
+                    "state=" << static_cast<int>(state) << " mode=" << static_cast<int>(mode));
+            }
+        }
+    };
+    Ctx->Runtime->Register(new TPartitionMethodTestActor(Ctx->Edge, std::move(probe)));
+    UNIT_ASSERT(Ctx->Runtime->GrabEdgeEvent<TEvents::TEvWakeup>(Ctx->Edge, TDuration::Seconds(30)));
 }
 
 Y_UNIT_TEST_F(CleanUpBlobsResetsStaleCompactionZoneHeadPartNo, TPartitionFixture) {

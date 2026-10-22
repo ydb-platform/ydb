@@ -5271,5 +5271,398 @@ Y_UNIT_TEST(TestRetentionCrossZoneMessages) {
     WaitRetentionCleanup(tc, 203, 203, retentionSeconds);
 }
 
+// This suite exercises real PQ transactions, persisted keys and restart recovery.
+// It needs only the new proto declarations before its first behavioral red run.
+enum class EAcknowledgedCleanupPath { Legacy, Encoder };
+enum class EAcknowledgedConsumerSet { RequiredOnly, AdditionalImportant, MissingRequired };
+
+void AcknowledgedRetentionDurableCommit(
+        EAcknowledgedCleanupPath cleanupPath, EAcknowledgedConsumerSet consumerSet) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    if (cleanupPath == EAcknowledgedCleanupPath::Encoder) {
+        SetEnableTopicRetentionDeleteLastBlob(tc);
+    }
+    tc.Runtime->SetScheduledLimit(5000);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+
+    const TTabletPreparationParameters parameters{
+        .deleteTime = 86400,
+        .partitions = 1,
+        .writeSpeed = 50_MB,
+    };
+    TVector<TConsumerPreparationParameters> consumers;
+    if (consumerSet != EAcknowledgedConsumerSet::MissingRequired) {
+        consumers.push_back({.Name = "replication", .Important = true});
+    }
+    if (consumerSet == EAcknowledgedConsumerSet::AdditionalImportant) {
+        consumers.push_back({.Name = "backup", .Important = true});
+    }
+    auto config = MakePQTabletConfig(parameters, consumers, *tc.Runtime, 1);
+    config.MutablePartitionConfig()->SetRetentionPolicy(
+        NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED);
+    config.MutablePartitionConfig()->SetRetentionConsumer("replication");
+    SendPQTabletConfig(*tc.Runtime, tc.TabletId, tc.Edge, config,
+        tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
+
+    // Several complete body blobs are necessary for the legacy cleanup branch.
+    // Distinct multipart messages also make an offset equality bug destructive.
+    for (ui64 offset = 0; offset < 3; ++offset) {
+        CmdWrite(0, "source", {{offset + 1, TString(10_MB, 'a' + offset)}},
+            tc, false, {}, offset == 0);
+        CmdRunCompaction(0, tc);
+    }
+    PQGetPartInfo(0, 3, tc);
+    const auto originalKeys = GetTabletKeys(tc);
+    THashSet<TString> firstMessageKeys;
+    for (const auto& key : originalKeys) {
+        if (!key.empty() && key.front() == TKeyPrefix::TypeData && TKey::FromString(key).GetOffset() == 0) {
+            firstMessageKeys.insert(key);
+        }
+    }
+    UNIT_ASSERT_C(firstMessageKeys.size() > 1, "Fixture must put offset zero across physical blobs");
+
+    if (consumerSet == EAcknowledgedConsumerSet::MissingRequired) {
+        config.SetVersion(2);
+        config.MutablePartitionConfig()->SetLifetimeSeconds(1);
+        SendPQTabletConfig(*tc.Runtime, tc.TabletId, tc.Edge, config,
+            tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
+        tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(30));
+        for (ui32 i = 0; i < 5; ++i) {
+            DispatchUntilWakeup(tc);
+        }
+        PQGetPartInfo(0, 3, tc);
+        PQTabletRestart(tc);
+        PQGetPartInfo(0, 3, tc);
+        CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {0});
+        return;
+    }
+
+    // Reading does not acknowledge. This call moves the required consumer's
+    // read cursor, but the durable commit remains zero.
+    CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {0}, 0, 0, "replication");
+    CmdGetOffset(0, "replication", 0, tc);
+    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(30));
+    for (ui32 i = 0; i < 5; ++i) {
+        DispatchUntilWakeup(tc);
+    }
+    PQGetPartInfo(0, 3, tc);
+
+    // Activation is not the runtime safety switch of an already persisted policy.
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(false);
+    CmdSetOffset(0, "replication", 1, false, tc);
+    CmdGetOffset(0, "replication", 1, tc);
+    if (consumerSet == EAcknowledgedConsumerSet::AdditionalImportant) {
+        tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(30));
+        for (ui32 i = 0; i < 5; ++i) {
+            DispatchUntilWakeup(tc);
+        }
+        PQGetPartInfo(0, 3, tc);
+        CmdSetOffset(0, "backup", 1, false, tc);
+        CmdGetOffset(0, "backup", 1, tc);
+    }
+
+    // No source write or compaction after the commit: idle cleanup must work.
+    WaitRetentionCleanup(tc, 1, 3, 0);
+    const auto reclaimedKeys = GetTabletKeys(tc);
+    bool removedFirstMessageKey = false;
+    for (const auto& key : firstMessageKeys) {
+        removedFirstMessageKey |= !reclaimedKeys.contains(key);
+    }
+    UNIT_ASSERT_C(removedFirstMessageKey, "StartOffset must reflect actual KV deletion");
+    PQTabletRestart(tc);
+    CmdGetOffset(0, "replication", 1, tc);
+    PQGetPartInfo(1, 3, tc);
+    for (i64 offset = 1; offset < 3; ++offset) {
+        TPQCmdReadSettings settings{"", 0, offset, 1, 16_MB, 1, false,
+            {static_cast<i32>(offset)}, 0, 0, "user"};
+        const auto result = CmdReadAndGetResult(settings, tc);
+        UNIT_ASSERT_VALUES_EQUAL(result.ResultSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResult(0).GetOffset(), offset);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResult(0).GetData(), TString(10_MB, 'a' + offset));
+    }
+
+    CmdSetOffset(0, "replication", 3, false, tc);
+    if (consumerSet == EAcknowledgedConsumerSet::AdditionalImportant) {
+        CmdSetOffset(0, "backup", 3, false, tc);
+    }
+    config.SetVersion(2);
+    config.MutablePartitionConfig()->SetLifetimeSeconds(1);
+    config.MutablePartitionConfig()->SetStorageLimitBytes(1);
+    SendPQTabletConfig(*tc.Runtime, tc.TabletId, tc.Edge, config,
+        tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
+    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(30));
+    for (ui32 i = 0; i < 5; ++i) {
+        DispatchUntilWakeup(tc);
+    }
+    PQTabletRestart(tc);
+    const auto finalKeys = GetTabletKeys(tc);
+    UNIT_ASSERT_C(AnyOf(finalKeys, [](const auto& key) {
+        return !key.empty() && key.front() == TKeyPrefix::TypeData;
+    }), "The last physical blob must survive even with all offsets acknowledged and storage pressure");
+}
+
+void AcknowledgedRetentionPendingOffsetRecovery(EAcknowledgedCleanupPath cleanupPath) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    if (cleanupPath == EAcknowledgedCleanupPath::Encoder) {
+        SetEnableTopicRetentionDeleteLastBlob(tc);
+    }
+    tc.Runtime->SetScheduledLimit(5000);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+    auto config = MakePQTabletConfig({.deleteTime = 86400, .partitions = 1, .writeSpeed = 50_MB},
+        TVector<TConsumerPreparationParameters>{{.Name = "replication", .Important = true}}, *tc.Runtime, 1);
+    config.MutablePartitionConfig()->SetRetentionPolicy(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED);
+    config.MutablePartitionConfig()->SetRetentionConsumer("replication");
+    SendPQTabletConfig(*tc.Runtime, tc.TabletId, tc.Edge, config,
+        tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
+    for (ui64 offset = 0; offset < 3; ++offset) {
+        CmdWrite(0, "source", {{offset + 1, TString(10_MB, 'a' + offset)}}, tc, false, {}, offset == 0);
+        CmdRunCompaction(0, tc);
+    }
+    const auto before = GetTabletKeys(tc);
+    config.SetVersion(2);
+    config.MutablePartitionConfig()->SetLifetimeSeconds(1);
+    config.MutablePartitionConfig()->SetStorageLimitBytes(1);
+    SendPQTabletConfig(*tc.Runtime, tc.TabletId, tc.Edge, config,
+        tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
+    THolder<IEventHandle> pendingPersistence;
+    auto observer = tc.Runtime->AddObserver<TEvKeyValue::TEvRequest>([&](auto& ev) {
+        for (const auto& write : ev->Get()->Record.GetCmdWrite()) {
+            if (!write.GetKey().EndsWith("replication")) {
+                continue;
+            }
+            NKikimrPQ::TUserInfo user;
+            if (user.ParseFromString(write.GetValue()) && user.GetOffset() == 1) {
+                UNIT_ASSERT(!pendingPersistence);
+                pendingPersistence.Reset(ev.Release());
+                break;
+            }
+        }
+    });
+    auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* partition = request->Record.MutablePartitionRequest();
+    partition->SetPartition(0);
+    partition->SetCookie(1234);
+    auto* commit = partition->MutableCmdSetClientOffset();
+    commit->SetClientId("replication");
+    commit->SetOffset(1);
+    const auto commitEdge = tc.Runtime->AllocateEdgeActor();
+    tc.Runtime->SendToPipe(tc.TabletId, commitEdge, request.Release());
+    tc.Runtime->WaitFor("offset KV request before durable execution", [&] { return bool(pendingPersistence); }, TDuration::Seconds(30));
+    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(30));
+    const auto whilePending = GetTabletKeys(tc);
+    for (const auto& key : before) {
+        if (!key.empty() && key.front() == TKeyPrefix::TypeData) {
+            UNIT_ASSERT_C(whilePending.contains(key), "Pending offset must not authorize key deletion");
+        }
+    }
+    pendingPersistence.Reset(); // discard request from the doomed generation
+    observer.Remove();
+    PQTabletRestart(tc);
+    // The doomed generation rejects this real outstanding request. Consume its
+    // identified reply before helpers that scan all edge actors for responses.
+    const auto aborted = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(commitEdge, TDuration::Seconds(30));
+    UNIT_ASSERT(aborted);
+    UNIT_ASSERT_VALUES_EQUAL(aborted->Get()->Record.GetPartitionResponse().GetCookie(), 1234);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(aborted->Get()->Record.GetErrorCode()),
+        static_cast<i32>(NPersQueue::NErrorCode::INITIALIZING));
+    CmdGetOffset(0, "replication", 0, tc);
+    PQGetPartInfo(0, 3, tc);
+    CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {0});
+    CmdSetOffset(0, "replication", 1, false, tc);
+    CmdGetOffset(0, "replication", 1, tc);
+    WaitRetentionCleanup(tc, 1, 3, 0);
+    PQTabletRestart(tc);
+    CmdGetOffset(0, "replication", 1, tc);
+    PQGetPartInfo(1, 3, tc);
+}
+
+Y_UNIT_TEST(AcknowledgedRetentionPendingOffsetRecoveryLegacy) {
+    AcknowledgedRetentionPendingOffsetRecovery(EAcknowledgedCleanupPath::Legacy);
+}
+
+Y_UNIT_TEST(AcknowledgedRetentionPendingOffsetRecoveryEncoder) {
+    AcknowledgedRetentionPendingOffsetRecovery(EAcknowledgedCleanupPath::Encoder);
+}
+
+enum class EAcknowledgedPolicyInterpretation { Standard, OldPq };
+
+void AcknowledgedRetentionStandardCompatibility(EAcknowledgedPolicyInterpretation interpretation) {
+    for (auto cleanupPath : {EAcknowledgedCleanupPath::Legacy, EAcknowledgedCleanupPath::Encoder}) {
+        TTestContext tc;
+        TFinalizer finalizer(tc);
+        tc.Prepare();
+        if (cleanupPath == EAcknowledgedCleanupPath::Encoder) {
+            SetEnableTopicRetentionDeleteLastBlob(tc);
+        }
+        tc.Runtime->SetScheduledLimit(5000);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+        auto config = MakePQTabletConfig({.deleteTime = 86400, .partitions = 1, .writeSpeed = 50_MB},
+            TVector<TConsumerPreparationParameters>{{.Name = "replication", .Important = true}}, *tc.Runtime, 1);
+        if (interpretation == EAcknowledgedPolicyInterpretation::OldPq) {
+            config.MutablePartitionConfig()->SetRetentionPolicy(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED);
+            config.MutablePartitionConfig()->SetRetentionConsumer("replication");
+            // An older protobuf schema ignores only these new optional fields.
+            config.MutablePartitionConfig()->ClearRetentionPolicy();
+            config.MutablePartitionConfig()->ClearRetentionConsumer();
+        }
+        SendPQTabletConfig(*tc.Runtime, tc.TabletId, tc.Edge, config,
+            tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
+        for (ui64 offset = 0; offset < 3; ++offset) {
+            CmdWrite(0, "source", {{offset + 1, TString(10_MB, 'a' + offset)}}, tc, false, {}, offset == 0);
+            CmdRunCompaction(0, tc);
+        }
+        if (interpretation == EAcknowledgedPolicyInterpretation::Standard) {
+            CmdSetOffset(0, "replication", 1, false, tc);
+            tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(30));
+            for (ui32 i = 0; i < 5; ++i) {
+                DispatchUntilWakeup(tc);
+            }
+            PQGetPartInfo(0, 3, tc); // fresh standard data must not be reclaimed early
+        }
+        config.SetVersion(2);
+        config.MutablePartitionConfig()->SetLifetimeSeconds(1);
+        config.MutablePartitionConfig()->SetStorageLimitBytes(1);
+        SendPQTabletConfig(*tc.Runtime, tc.TabletId, tc.Edge, config,
+            tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
+        tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(30));
+        if (interpretation == EAcknowledgedPolicyInterpretation::OldPq) {
+            for (ui32 i = 0; i < 5; ++i) {
+                DispatchUntilWakeup(tc);
+            }
+            PQGetPartInfo(0, 3, tc);
+            CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {0});
+            CmdSetOffset(0, "replication", 1, false, tc);
+        }
+        // Legacy PQ needs a write to run cleanup; this is not an ACK idle-cleanup test.
+        CmdWrite(0, "source", {{4, "sentinel"}}, tc);
+        WaitRetentionCleanup(tc, 1, 4, 0);
+        PQTabletRestart(tc);
+        PQGetPartInfo(1, 4, tc);
+        CmdRead(0, 1, 1, Max<i32>(), 1, false, tc, {1});
+    }
+}
+
+Y_UNIT_TEST(AcknowledgedRetentionStandardFreshBlobs) {
+    AcknowledgedRetentionStandardCompatibility(EAcknowledgedPolicyInterpretation::Standard);
+}
+
+Y_UNIT_TEST(AcknowledgedRetentionOldPqImportantFallback) {
+    AcknowledgedRetentionStandardCompatibility(EAcknowledgedPolicyInterpretation::OldPq);
+}
+
+enum class EAcknowledgedPayload { Native, Kafka };
+
+void AcknowledgedRetentionNativeKafkaAndGaps(EAcknowledgedPayload payload) {
+    for (auto cleanupPath : {EAcknowledgedCleanupPath::Legacy, EAcknowledgedCleanupPath::Encoder}) {
+        TTestContext tc;
+        TFinalizer finalizer(tc);
+        tc.Prepare();
+        SetEnableTopicMessagesBatching(tc);
+        if (cleanupPath == EAcknowledgedCleanupPath::Encoder) {
+            SetEnableTopicRetentionDeleteLastBlob(tc);
+        }
+        tc.Runtime->SetScheduledLimit(5000);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+        auto config = MakePQTabletConfig({.deleteTime = 86400, .partitions = 1, .writeSpeed = 50_MB},
+            TVector<TConsumerPreparationParameters>{{.Name = "replication", .Important = true}}, *tc.Runtime, 1);
+        config.MutablePartitionConfig()->SetRetentionPolicy(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED);
+        config.MutablePartitionConfig()->SetRetentionConsumer("replication");
+        SendPQTabletConfig(*tc.Runtime, tc.TabletId, tc.Edge, config,
+            tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
+        if (payload == EAcknowledgedPayload::Native) {
+            CmdWrite(0, "prefix", {{1, "small"}, {2, TString(600_KB, 'p')}}, tc, false, {}, true, "", -1, 100);
+        } else {
+            CmdWriteKafkaBatch(0, "prefix", 1, {"first"}, tc, 100);
+            CmdWriteKafkaBatch(0, "prefix", 2, {"second", "third"}, tc, 101);
+        }
+        CmdWrite(0, "padding", {{1, TString(7_MB, 'x')}}, tc, false, {}, true, "", -1, 110);
+        CmdRunCompaction(0, tc);
+        const TVector<TString> suffix = {TString(600_KB, 's'), "tail"};
+        if (payload == EAcknowledgedPayload::Native) {
+            CmdWrite(0, "suffix", {{1, suffix[0]}, {2, suffix[1]}}, tc, false, {}, true, "", -1, 200);
+        } else {
+            CmdWriteKafkaBatch(0, "suffix", 1, suffix, tc, 200);
+        }
+        CmdWrite(0, "sentinel", {{1, TString(10_MB, 'z')}}, tc, false, {}, true, "", -1, 202);
+        CmdRunCompaction(0, tc);
+        PQGetPartInfo(100, 203, tc);
+        const auto before = GetTabletKeys(tc);
+        CmdSetOffset(0, "replication", 101, false, tc);
+        tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(30));
+        for (ui32 i = 0; i < 5; ++i) {
+            DispatchUntilWakeup(tc);
+        }
+        PQGetPartInfo(100, 203, tc); // still inside the first native/multi-record blob
+        CmdSetOffset(0, "replication", 200, false, tc);
+        for (ui32 i = 0; i < 10; ++i) {
+            DispatchUntilWakeup(tc);
+        }
+        PQGetPartInfo([](ui64 start) { return start > 100 && start <= 200; }, 203, tc);
+        const auto after = GetTabletKeys(tc);
+        UNIT_ASSERT_C(AnyOf(before, [&](const auto& key) {
+            return !key.empty() && key.front() == TKeyPrefix::TypeData && !after.contains(key);
+        }), "Acknowledged physical prefix keys must disappear");
+        PQTabletRestart(tc);
+        for (ui64 offset = 200; offset < 202; ++offset) {
+            TPQCmdReadSettings settings{"", 0, static_cast<i64>(offset), 1, 16_MB, 1, false,
+                {static_cast<i32>(offset)}, 0, 0, "user"};
+            const auto read = CmdReadAndGetResult(settings, tc);
+            UNIT_ASSERT_VALUES_EQUAL(read.ResultSize(), 1);
+            if (payload == EAcknowledgedPayload::Native) {
+                UNIT_ASSERT_VALUES_EQUAL(read.GetResult(0).GetData(), suffix[offset - 200]);
+            } else {
+                AssertKafkaBatchCutMessage(read.GetResult(0), offset, offset - 199, suffix[offset - 200]);
+            }
+        }
+        if (payload == EAcknowledgedPayload::Kafka) {
+            TPQCmdReadSettings settings{"", 0, 200, 2, 16_MB, 1, false, {200}, 0, 0, "user"};
+            settings.CanReadBatches = true;
+            const auto read = CmdReadAndGetResult(settings, tc);
+            UNIT_ASSERT_VALUES_EQUAL(read.ResultSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(read.GetResult(0).GetLogicalMessageCount(), 2);
+            NKikimrPQClient::TDataChunk chunk;
+            UNIT_ASSERT(chunk.ParseFromString(read.GetResult(0).GetData()));
+            UNIT_ASSERT_VALUES_EQUAL(chunk.GetData(), MakeKafkaBatchPayload(suffix, 1));
+        }
+        CmdRead(0, 202, 1, Max<i32>(), 1, false, tc, {202});
+    }
+}
+
+Y_UNIT_TEST(AcknowledgedRetentionNativeMultipartAndGaps) {
+    AcknowledgedRetentionNativeKafkaAndGaps(EAcknowledgedPayload::Native);
+}
+
+Y_UNIT_TEST(AcknowledgedRetentionKafkaBatchAndGaps) {
+    AcknowledgedRetentionNativeKafkaAndGaps(EAcknowledgedPayload::Kafka);
+}
+
+Y_UNIT_TEST(AcknowledgedRetentionDurableCommitLegacy) {
+    AcknowledgedRetentionDurableCommit(EAcknowledgedCleanupPath::Legacy, EAcknowledgedConsumerSet::RequiredOnly);
+}
+
+Y_UNIT_TEST(AcknowledgedRetentionDurableCommitEncoder) {
+    AcknowledgedRetentionDurableCommit(EAcknowledgedCleanupPath::Encoder, EAcknowledgedConsumerSet::RequiredOnly);
+}
+
+Y_UNIT_TEST(AcknowledgedRetentionAdditionalImportantLegacy) {
+    AcknowledgedRetentionDurableCommit(EAcknowledgedCleanupPath::Legacy, EAcknowledgedConsumerSet::AdditionalImportant);
+}
+
+Y_UNIT_TEST(AcknowledgedRetentionAdditionalImportantEncoder) {
+    AcknowledgedRetentionDurableCommit(EAcknowledgedCleanupPath::Encoder, EAcknowledgedConsumerSet::AdditionalImportant);
+}
+
+Y_UNIT_TEST(AcknowledgedRetentionMissingRequiredLegacy) {
+    AcknowledgedRetentionDurableCommit(EAcknowledgedCleanupPath::Legacy, EAcknowledgedConsumerSet::MissingRequired);
+}
+
+Y_UNIT_TEST(AcknowledgedRetentionMissingRequiredEncoder) {
+    AcknowledgedRetentionDurableCommit(EAcknowledgedCleanupPath::Encoder, EAcknowledgedConsumerSet::MissingRequired);
+}
+
 } // Y_UNIT_TEST_SUITE(TPQTest)
 } // namespace NKikimr::NPQ

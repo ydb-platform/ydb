@@ -90,6 +90,7 @@ public:
         TExprNode::TPtr outputType;
         TExprNode::TPtr batchSize;
         bool enrichRows = false;
+        TExprNode::TPtr occurrenceId;
 
         for (const auto &tuple: callable.Settings().Ref().Children()) {
             const auto paramName = tuple->Head().Content();
@@ -99,6 +100,8 @@ public:
                 inputType = tuple->TailPtr();
             } else if (paramName == "output_type") {
                 outputType = tuple->TailPtr();
+            } else if (paramName == "service_occurrence") {
+                occurrenceId = tuple->Tail().HeadPtr();
             } else if (paramName == "enrich_rows") {
                 enrichRows = tuple->Tail().Head().IsAtom("true");
             } else if (paramName == "batch_size") {
@@ -138,6 +141,10 @@ public:
         if (enrichRows) {
             if (!batchSize) settingsBuilder.BatchSize().Build("0");
             settingsBuilder.EnrichRows().Build("true");
+        }
+        if (occurrenceId) {
+            YQL_ENSURE(enrichRows);
+            settingsBuilder.OccurrenceId(occurrenceId);
         }
         auto settings = settingsBuilder.Done();
 

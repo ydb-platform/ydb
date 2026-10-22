@@ -4,6 +4,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_type_helpers.h>
+#include <util/string/cast.h>
 
 namespace NYql::NDqFunction {
     namespace {
@@ -36,6 +37,37 @@ namespace NYql::NDqFunction {
             fields.push_back(
                 ctx.NewList(pos, {ctx.NewAtom(pos, "_yql_service_payload"), ctx.NewCallable(pos, "DataType", {ctx.NewAtom(pos, "String")})}));
             return ctx.NewCallable(pos, "StructType", std::move(fields));
+        }
+
+        // Preserve shared argument values, not just the input row: evaluating
+        // RandomNumber again in the continuation would change SQL row semantics.
+        TExprNode::TListType SharedArguments(const TExprNode::TPtr& body, const TExprNode::TPtr& call) {
+            THashSet<const TExprNode*> arguments;
+            std::function<void(const TExprNode::TPtr&)> collect = [&](const auto& part) {
+                if (part->IsLambda() || !arguments.insert(part.Get()).second) {
+                    return;
+                }
+                for (const auto& child : part->Children()) {
+                    collect(child);
+                }
+            };
+            collect(call->ChildPtr(1));
+            TExprNode::TListType shared;
+            THashSet<const TExprNode*> visited;
+            std::function<void(const TExprNode::TPtr&)> find = [&](const auto& part) {
+                if (part == call || part->IsLambda() || !visited.insert(part.Get()).second) {
+                    return;
+                }
+                if (part->IsCallable() && arguments.contains(part.Get()) && part->GetTypeAnn() && part->GetTypeAnn()->IsPersistable()) {
+                    shared.push_back(part);
+                    return;
+                }
+                for (const auto& child : part->Children()) {
+                    find(child);
+                }
+            };
+            find(body);
+            return shared;
         }
 
         TExprNode::TPtr Lower(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -81,12 +113,34 @@ namespace NYql::NDqFunction {
             const auto rowType = inputType->Cast<TListExprType>()->GetItemType();
             const auto pos = node->Pos();
             auto argument = ctx.NewArgument(pos, "service_input");
+            const auto shared = SharedArguments(lambda->TailPtr(), call);
+            auto input = node->HeadPtr();
+            const TTypeAnnotationNode* payloadType = rowType;
+            auto originalInput = argument;
+            if (!shared.empty()) {
+                auto row = ctx.NewArgument(pos, "capture_input");
+                TNodeOnNodeOwnedMap remap;
+                remap.emplace(&lambda->Head().Head(), row);
+                TExprNode::TListType fields{ctx.NewList(pos, {ctx.NewAtom(pos, "row"), row})};
+                TVector<const TItemExprType*> types{ctx.MakeType<TItemExprType>("row", rowType)};
+                for (ui32 i = 0; i < shared.size(); ++i) {
+                    const auto name = "captured" + ToString(i);
+                    fields.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, name), ctx.ReplaceNodes(TExprNode::TPtr(shared[i]), remap)}));
+                    types.push_back(ctx.MakeType<TItemExprType>(name, shared[i]->GetTypeAnn()));
+                }
+                input = ctx.NewCallable(pos, "Map", {input, ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), ctx.NewCallable(pos, "AsStruct", std::move(fields)))});
+                payloadType = ctx.MakeType<TStructExprType>(types);
+                originalInput = ctx.NewCallable(pos, "Member", {argument, ctx.NewAtom(pos, "row")});
+            }
             TNodeOnNodeOwnedMap inputRemap;
-            inputRemap.emplace(&lambda->Head().Head(), argument);
+            inputRemap.emplace(&lambda->Head().Head(), originalInput);
+            for (ui32 i = 0; i < shared.size(); ++i) {
+                inputRemap.emplace(shared[i].Get(), ctx.NewCallable(pos, "Member", {argument, ctx.NewAtom(pos, "captured" + ToString(i))}));
+            }
             auto args = ctx.ReplaceNodes(call->ChildPtr(1), inputRemap);
             auto encoded =
                 ctx.NewCallable(pos, "AddMember", {args, ctx.NewAtom(pos, "_yql_service_payload"), ctx.NewCallable(pos, "Pickle", {argument})});
-            auto projected = ctx.NewCallable(pos, "Map", {node->HeadPtr(), ctx.NewLambda(pos, ctx.NewArguments(pos, {argument}), std::move(encoded))});
+            auto projected = ctx.NewCallable(pos, "Map", {input, ctx.NewLambda(pos, ctx.NewArguments(pos, {argument}), std::move(encoded))});
             auto settings = call->Head().Child(2)->ChildrenList();
             for (auto& entry : settings) {
                 if (entry->Head().IsAtom("input_type")) {
@@ -96,15 +150,20 @@ namespace NYql::NDqFunction {
                 }
             }
             settings.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, "enrich_rows"), ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, "true")})}));
+            settings.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, "service_occurrence"), ctx.NewCallable(pos, "String", {call->ChildPtr(2)})}));
             auto external = ctx.ChangeChild(call->Head(), 2, ctx.NewList(pos, std::move(settings)));
             auto enriched = ctx.NewCallable(pos, "Apply", {external, projected});
             auto result = ctx.NewArgument(pos, "service_output");
             auto payload = ctx.NewCallable(pos, "Member", {result, ctx.NewAtom(pos, "_yql_service_payload")});
-            auto original = ctx.NewCallable(pos, "Unpickle", {ExpandType(pos, *rowType, ctx), payload});
+            auto saved = ctx.NewCallable(pos, "Unpickle", {ExpandType(pos, *payloadType, ctx), payload});
+            auto original = shared.empty() ? saved : ctx.NewCallable(pos, "Member", {saved, ctx.NewAtom(pos, "row")});
             auto value = ctx.NewCallable(pos, "RemoveMember", {result, ctx.NewAtom(pos, "_yql_service_payload")});
             TNodeOnNodeOwnedMap outputRemap;
             outputRemap.emplace(&lambda->Head().Head(), original);
             outputRemap.emplace(call.Get(), value);
+            for (ui32 i = 0; i < shared.size(); ++i) {
+                outputRemap.emplace(shared[i].Get(), ctx.NewCallable(pos, "Member", {saved, ctx.NewAtom(pos, "captured" + ToString(i))}));
+            }
             auto body = ctx.ReplaceNodes(lambda->TailPtr(), outputRemap);
             return ctx.NewCallable(pos, node->Content(), {enriched, ctx.NewLambda(pos, ctx.NewArguments(pos, {result}), std::move(body))});
         }

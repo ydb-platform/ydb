@@ -12656,6 +12656,11 @@ IGraphTransformer::TStatus SqlExternalFunctionWrapper(const TExprNode::TPtr& inp
             if (!EnsureStringOrUtf8Type(*tuple->Child(1), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
+        } else if (paramName == "service_occurrence") {
+            if (!tuple->Child(1)->IsCallable("String")) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(tuple->Pos()), "Invalid internal service occurrence"));
+                return IGraphTransformer::TStatus::Error;
+            }
         } else if (paramName == "enrich_rows") {
             if (!tuple->Child(1)->IsCallable("Bool") || !tuple->Child(1)->Head().IsAtom("true")) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(tuple->Pos()), "Invalid internal service enrichment option"));

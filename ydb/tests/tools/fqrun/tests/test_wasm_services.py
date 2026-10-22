@@ -845,3 +845,36 @@ def test_service_expression_invalid_before_network(service, tmp_path, expression
     assert runner.wait(runner.start(sql=sql)) != 0
     assert not service.requests
     assert 'Service' in runner.output()
+
+
+@pytest.mark.parametrize('batch_size', [1, 8])
+def test_service_expression_sibling_occurrences(service, tmp_path, batch_size):
+    runner = Runner(tmp_path, service)
+    source = ','.join('AsStruct(%dul AS id)' % i for i in range(1000, 1020))
+    sql = ("$options=AsStruct('profiles_http' AS connection, %d AS batch_size);" % batch_size +
+           "$input=SELECT * FROM AS_TABLE(AsList(" + source + "));"
+           "$a=SELECT WASM_PROFILE::Profile(id,$options).id AS id FROM $input;"
+           "$b=SELECT WASM_PROFILE::Profile(id,$options).id AS id FROM $input;"
+           "SELECT * FROM $a UNION ALL SELECT * FROM $b;")
+    assert runner.wait(runner.start(sql=sql)) == 0, runner.output()
+    expected = sorted(list(range(1000, 1020)) * 2)
+    assert sorted(int(row['id']) for row in runner.rows()) == expected
+    received = [value for _, request, _ in service.requests
+                for value in (request if isinstance(request, tuple) else (request,))]
+    assert sorted(received) == expected
+
+
+def test_service_expression_preserves_shared_argument_value(service, tmp_path):
+    runner = Runner(tmp_path, service)
+    source = ','.join('AsStruct(%dul AS id)' % i for i in range(1000, 1200))
+    value = '1000ul + Unwrap(RandomNumber(id) % 1000000ul)'
+    sql = ("$options=AsStruct('profiles_http' AS connection, 8 AS batch_size);"
+           "$input=SELECT * FROM AS_TABLE(AsList(" + source + "));"
+           "SELECT " + value + " AS sent, WASM_PROFILE::Profile(" + value + ",$options).id AS received FROM $input;")
+    assert runner.wait(runner.start(sql=sql)) == 0, runner.output()
+    rows = runner.rows()
+    assert len(rows) == 200
+    assert all(int(row['sent']) == int(row['received']) for row in rows)
+    received = [value for _, request, _ in service.requests
+                for value in (request if isinstance(request, tuple) else (request,))]
+    assert sorted(received) == sorted(int(row['sent']) for row in rows)

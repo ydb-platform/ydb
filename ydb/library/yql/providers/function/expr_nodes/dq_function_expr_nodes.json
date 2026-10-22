@@ -34,7 +34,8 @@
           "Children": [
             {"Index": 0, "Name": "InvokeUrl", "Type": "TCoAtom"},
             {"Index": 1, "Name": "BatchSize", "Type": "TCoAtom", "Optional": true},
-            {"Index": 2, "Name": "EnrichRows", "Type": "TCoAtom", "Optional": true}
+            {"Index": 2, "Name": "EnrichRows", "Type": "TCoAtom", "Optional": true},
+            {"Index": 3, "Name": "OccurrenceId", "Type": "TCoAtom", "Optional": true}
           ]
         }
     ]

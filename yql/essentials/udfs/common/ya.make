@@ -48,6 +48,16 @@ IF (NOT EXPORT_CMAKE)
         yson2
         yson2/impl
     )
+    IF (OS_LINUX AND ARCH_X86_64)
+        IF (SANITIZER_TYPE != "undefined")
+            RECURSE(string/fat)
+        ENDIF()
+        IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+            RECURSE(string/static_host)
+        ELSEIF (SANITIZER_TYPE == "undefined")
+            RECURSE(string/static_host)
+        ENDIF()
+    ENDIF()
     IF (ARCH_X86_64)
         RECURSE(
             hyperscan

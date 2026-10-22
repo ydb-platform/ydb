@@ -188,7 +188,7 @@ Key cells follow the primary key order. Each value cell is prefixed with the ind
 
 With virtual timestamps enabled, the record stores `step` and `txId` as two 64-bit integers. A heartbeat is that header and the timestamp. A schema record wraps the same JSON snapshot as [JSON format](#json-record-structure). User SID and trace id, when enabled, follow the cells as a 16-bit length and raw bytes.
 
-Async replication creates changefeeds in this format. Column names, base64, and the partition-key digest are not part of the stored payload.
+Async replication creates changefeeds in this format. Column names, base64, and the partition-key digest are not part of the stored payload. The topic stores that payload with zstd when the compressed bytes are smaller than the raw record, and stores it unchanged otherwise. A reader receives the record after decompression.
 
 {% if audience == "tech" %}
 

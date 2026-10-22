@@ -30,20 +30,9 @@ class PrimaryKeyOrdering:
     def setUpClass(cls):
         config = KikimrConfigGenerator(
             nodes=1,
-            extra_feature_flags={
-                "enable_columnshard_bool": True,
-                "enable_columnshard_interval": True,
-                "enable_columnshard_uuid": True,
-                "enable_columnshard_dy_number": True,
-            },
             column_shard_config={
-                "compaction_enabled": True,
-                "deduplication_enabled": True,
-                "reader_class_name": "SIMPLE",
                 "enable_interval_tree_for_metadata_select": cls.interval_tree,
                 "alter_object_enabled": True,
-                "compaction_actualization_lag_ms": 0,
-                "optimizer_freshness_check_duration_ms": 0,
                 "periodic_wakeup_activation_period_ms": 1000,
             },
         )

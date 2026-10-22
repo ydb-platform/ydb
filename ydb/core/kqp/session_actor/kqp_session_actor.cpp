@@ -22,6 +22,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
+#include <ydb/core/kqp/session_actor/kqp_snapshot_tables.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -834,7 +835,15 @@ public:
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
         auto snapMgrActorId = RegisterWithSameMailbox(snapMgr);
 
-        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(QueryState->PreparedQuery->GetQueryTables(), QueryId, std::move(QueryState->Orbit));
+        auto tables = BuildSnapshotTables(*QueryState->PreparedQuery, *QueryState->QueryData);
+        STLOG_D("Acquire persistent snapshot tables",
+            (tables, tables.size()),
+            (bounded_tables, CountBoundedTables(tables)),
+            (trace_id, TraceId()));
+        AcquireSnapshotSpan.Attribute("tables", static_cast<i64>(tables.size()))
+            .Attribute("bounded_tables", static_cast<i64>(CountBoundedTables(tables)));
+        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(
+            std::move(tables), QueryId, std::move(QueryState->Orbit));
         Send(snapMgrActorId, ev.release());
 
         QueryState->TxCtx->SnapshotHandle.ManagingActor = snapMgrActorId;

@@ -363,7 +363,8 @@ public:
             bool schemaChanges,
             bool needCreate,
             bool initialScan,
-            bool describeOnly)
+            bool describeOnly,
+            bool binaryFormat)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -383,6 +384,7 @@ public:
         }, false))
         , SchemaChangesFlag(schemaChanges)
         , InitialScan(initialScan)
+        , BinaryFormat(binaryFormat)
         , NeedCreate(needCreate)
         , DescribeOnly(describeOnly)
         , LogPrefix(CreateActorLogPrefix("StreamCreator", ReplicationId, TargetId))
@@ -391,9 +393,15 @@ public:
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
+        const bool binaryAllowed = !BinaryFormat
+            || AppData()->FeatureFlags.GetEnableBinaryChangefeedForAsyncReplication();
+        if (!binaryAllowed && NeedCreate && !DescribeOnly) {
+            NYdb::NIssue::TIssues issues;
+            issues.AddIssue("BINARY format is not supported yet");
+            return Finish(NYdb::TStatus(NYdb::EStatus::PRECONDITION_FAILED, std::move(issues)));
+        }
         Changefeed.emplace(MakeChangefeed(StreamName, RetentionPeriod, ResolvedTimestamps, ChangefeedAttrs,
-            SchemaChangesFlag, InitialScan,
-            AppData()->FeatureFlags.GetEnableBinaryChangefeedForAsyncReplication()));
+            SchemaChangesFlag, InitialScan, BinaryFormat && binaryAllowed));
         if (DescribeOnly) {
             DescribeStreamTable();
         } else if (NeedCreate) {
@@ -427,6 +435,7 @@ private:
     const TString ChangefeedAttrs;
     const bool SchemaChangesFlag;
     const bool InitialScan;
+    const bool BinaryFormat;
     std::optional<NYdb::NTable::TChangefeedDescription> Changefeed;
     const bool NeedCreate;
     const bool DescribeOnly;
@@ -447,23 +456,25 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
     const bool supportsTopicAutopartitioning = !consistency.HasGlobal() && AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication();
     const bool schemaChanges = AppData()->FeatureFlags.GetEnableAsyncReplicationSchemaChanges();
     const bool initialScan = config.GetInitialScan() || target->IsIndexBuild();
+    const bool binaryFormat = config.GetChangefeedFormat() == NKikimrReplication::CHANGEFEED_FORMAT_BINARY;
 
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(),
         target->GetConfig(), target->GetStreamName(), target->GetStreamConsumerName(),
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
-        supportsTopicAutopartitioning, needCreate, schemaChanges, initialScan, describeOnly);
+        supportsTopicAutopartitioning, needCreate, schemaChanges, initialScan, describeOnly, binaryFormat);
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
         const TReplication::ITarget::IConfig::TPtr& config,
         const TString& streamName, const TString& consumerName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
-        bool supportsTopicAutopartitioning, bool needCreate, bool schemaChanges, bool initialScan, bool describeOnly)
+        bool supportsTopicAutopartitioning, bool needCreate, bool schemaChanges, bool initialScan, bool describeOnly,
+        bool binaryFormat)
 {
     return new TStreamCreator(parent, proxy, rid, tid, config,
         streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
-        schemaChanges, needCreate, initialScan, describeOnly);
+        schemaChanges, needCreate, initialScan, describeOnly, binaryFormat);
 }
 
 }

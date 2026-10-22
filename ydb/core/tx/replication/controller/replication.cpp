@@ -316,6 +316,9 @@ public:
             // Invalidate the old callbacks immediately, including A -> B -> A.
             ++CredentialsRevision;
         }
+        if (config.GetChangefeedFormat() == NKikimrReplication::CHANGEFEED_FORMAT_UNSPECIFIED) {
+            config.SetChangefeedFormat(Config.GetChangefeedFormat());
+        }
         Config = config;
     }
 

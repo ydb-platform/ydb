@@ -457,8 +457,9 @@ message TFeatureFlags {
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
     optional bool EnableCompileCacheV2 = 369 [default = false];
-    // New async-replication changefeeds are created as FORMAT BINARY when this
-    // is set. Existing streams stay as they are. Default off: a mixed-version
-    // cluster keeps creating JSON streams that old nodes can read.
+    // Permits FORMAT BINARY for changefeeds and for asynchronous replication.
+    // A binary replication stream is written only when this flag is enabled
+    // both on the destination, which accepts the replication, and on the
+    // source, which accepts the changefeed. Existing streams stay as they are.
     optional bool EnableBinaryChangefeedForAsyncReplication = 370 [default = false];
 }

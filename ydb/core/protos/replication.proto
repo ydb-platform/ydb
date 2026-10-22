@@ -80,6 +80,12 @@ message TBatchingSettings {
     optional uint64 BatchSizeBytes = 2 [default = 8388608];
 }
 
+enum EChangefeedFormat {
+    CHANGEFEED_FORMAT_UNSPECIFIED = 0;
+    CHANGEFEED_FORMAT_JSON = 1;
+    CHANGEFEED_FORMAT_BINARY = 2;
+}
+
 message TReplicationConfig {
     message TTargetEverything {
         optional string DstPrefix = 1;
@@ -129,6 +135,10 @@ message TReplicationConfig {
     optional NKikimrProto.NMetricsConfig.TMetricsConfig MetricsConfig = 9;
     optional TReplicationLocationConfig Location = 10;
     optional bool InitialScan = 11 [default = true];
+    // Record format of the changefeeds this replication creates on the source.
+    // Unspecified means JSON. BINARY is stored only when the destination
+    // accepted it; the source still rejects the stream unless its own flag is on.
+    optional EChangefeedFormat ChangefeedFormat = 12;
 
     // targets to be replicated
     // Currently, only OLTP tables are supported.

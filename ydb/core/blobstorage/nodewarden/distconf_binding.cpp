@@ -112,7 +112,8 @@ namespace NKikimr::NStorage {
     };
 
     void TDistributedConfigKeeper::CheckBindingLiveness() {
-        if (Binding && Binding->RootNodeId && Binding->SessionId && !BindingLivenessActorId) {
+        if (Binding && Binding->RootNodeId && Binding->SessionId && Binding->SupportsDirectRootQueries
+            && !BindingLivenessActorId) {
             BindingLivenessActorId = RegisterWithSameMailbox(new TBindingLivenessActor(this, *Binding));
         }
     }
@@ -912,6 +913,10 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(!Binding || Binding->RootNodeId != SelfId().NodeId());
 
             if (Binding) {
+                Binding->SupportsDirectRootQueries = record.GetSupportsDirectRootQueries();
+                if (!Binding->SupportsDirectRootQueries) {
+                    CancelBindingLiveness();
+                }
                 BindFailuresStreak = 0;
                 LastUnboundWarnAt = TInstant::Zero();
             }

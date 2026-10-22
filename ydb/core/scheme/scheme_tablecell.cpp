@@ -364,8 +364,18 @@ namespace {
     Y_FORCE_INLINE void SerializeCellMatrix(TConstArrayRef<TCell> cells, ui32 rowCount, ui16 colCount, TString& resultBuffer, TVector<TCell>* resultCells) {
         Y_ENSURE(cells.size() == (size_t)rowCount * (size_t)colCount);
 
-        if (!SerializeCellVecInit(cells, resultBuffer, resultCells))
+        if (!SerializeCellVecInit(cells, resultBuffer, resultCells)) {
+            // An empty matrix still carries its header, so a 0-row matrix is
+            // distinguishable from an unparsed payload on deserialization.
+            Y_ENSURE(rowCount == 0);
+            resultBuffer.ReserveAndResize(CellMatrixHeaderSize);
+            char* resultBufferData = resultBuffer.Detach();
+
+            WriteUnaligned<ui32>(resultBufferData, rowCount);
+            resultBufferData += sizeof(rowCount);
+            WriteUnaligned<ui16>(resultBufferData, colCount);
             return;
+        }
 
         size_t size = CellMatrixHeaderSize;
         for (auto& cell : cells)

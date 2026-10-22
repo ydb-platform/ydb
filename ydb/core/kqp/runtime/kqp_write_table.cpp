@@ -2048,6 +2048,10 @@ public:
                     // prepare carries fresh echo locks from it.
                     THashSet<ui64> routedTargets;
                     for (auto& [destShardId, fragment] : fragments) {
+                        // SplitBatchByShards only ever returns non-empty fragments (its
+                        // flush loop breaks on an empty batcher flush); the deliberate
+                        // empty batches are manufactured below.
+                        AFL_ENSURE(fragment && !fragment->IsEmpty());
                         routedTargets.insert(destShardId);
                         pushReroutedBatch(destShardId, std::move(fragment));
                     }
@@ -2061,6 +2065,11 @@ public:
                     }
                 } else {
                     for (auto& [destShardId, fragment] : fragments) {
+                        // SplitBatchByShards only ever returns non-empty fragments (its
+                        // flush loop breaks on an empty batcher flush); the deliberate
+                        // empty batches are manufactured separately in the
+                        // EnableWriteSeqNum branch above.
+                        AFL_ENSURE(fragment && !fragment->IsEmpty());
                         pushReroutedBatch(destShardId, std::move(fragment));
                     }
                 }
@@ -2277,16 +2286,9 @@ public:
                 // for a covering target that received no data): it still must produce
                 // an operation carrying the write chain (WriteSeqNum + OriginalShard),
                 // so the datashard validates/advances the transferred ancestor chain.
-                // The empty payload is a 0-row cell matrix with the operation's column
-                // count (TSerializedCellMatrix::Serialize skips the header for no cells,
-                // so the header is written manually).
                 TString payload;
                 if (inFlightBatch.Data->IsEmpty()) {
-                    payload.ReserveAndResize(GetCellMatrixHeaderSize());
-                    char* payloadData = payload.Detach();
-                    WriteUnaligned<ui32>(payloadData, 0); // rowCount
-                    payloadData += sizeof(ui32);
-                    WriteUnaligned<ui16>(payloadData, static_cast<ui16>(writeInfo.Serializer->GetWriteColumnIds().size()));
+                    payload = TSerializedCellMatrix::Serialize({}, 0, writeInfo.Serializer->GetWriteColumnIds().size());
                 } else {
                     payload = inFlightBatch.Data->SerializeToString();
                 }

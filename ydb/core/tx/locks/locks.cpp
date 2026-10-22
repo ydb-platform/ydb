@@ -1450,11 +1450,20 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
     // Operations that register no key ranges but consume a write seq num (e.g. an
     // empty re-routed batch for a covering shard after a split/merge) have no
     // affected tables; echo the lock over the tables of the lock itself instead, so
-    // the client still learns the lock with its updated write chain.
+    // the client still learns the lock with its updated write chain. When the lock
+    // could not be acquired (broken or too many), echo the error lock over the same
+    // tables, so the client sees the same lock-acquire failure a data write would
+    // produce instead of a silently successful empty write. Duplicate writes are
+    // excluded: their echoes, including the current-shard one, are already produced
+    // by the duplicate-echo path below.
     THashSet<TPathId> chainOnlyTables;
-    if (Update->AffectedTables.Empty() && Update->WriteSeqNumUpdate && Update->Lock) {
-        chainOnlyTables = Update->Lock->GetReadTables();
-        chainOnlyTables.insert(Update->Lock->GetWriteTables().begin(), Update->Lock->GetWriteTables().end());
+    if (Update->AffectedTables.Empty() && Update->WriteSeqNumUpdate
+        && !Update->WriteSeqNumUpdate->ThisShardDuplicateWrite) {
+        const TLockInfo* echoLock = Update->Lock ? Update->Lock.Get() : lock.Get();
+        if (echoLock) {
+            chainOnlyTables = echoLock->GetReadTables();
+            chainOnlyTables.insert(echoLock->GetWriteTables().begin(), echoLock->GetWriteTables().end());
+        }
     }
 
     auto makeEchoLocks = [&](const TPathId& tableId) {
@@ -1464,8 +1473,7 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
             tableId, Update->Lock && Update->Lock->IsWriteLock(),
             Update->Lock ? Update->Lock->GetLockWriteSeqNum() : TLockWriteSeqNum{}));
 
-        if (Update->WriteSeqNumUpdate) {
-            Y_ENSURE(Update->Lock);
+        if (Update->WriteSeqNumUpdate && Update->Lock) {
             const auto& lock = Update->Lock;
             for (auto [shardId, seqNum] : Update->WriteSeqNumUpdate->SetAncestorWriteSeqNums) {
                 auto it = lock->AncestorLocks.find(shardId);

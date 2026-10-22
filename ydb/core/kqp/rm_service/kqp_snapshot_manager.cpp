@@ -67,8 +67,8 @@ private:
             req->Record.SetExecTimeoutPeriod(RequestTimeout.MilliSeconds());
             req->Record.SetDatabaseName(Database);
             auto* createSnapshot = req->Record.MutableTransaction()->MutableCreateVolatileSnapshot();
-            for (const TString& tablePath : Tables) {
-                createSnapshot->AddTables()->SetTablePath(tablePath);
+            for (const auto& table : Tables) {
+                createSnapshot->AddTables()->CopyFrom(table);
             }
             createSnapshot->SetTimeoutMs(SnapshotTimeout.MilliSeconds());
             createSnapshot->SetIgnoreSystemViews(true);
@@ -201,8 +201,12 @@ private:
         auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         req->Record.SetExecTimeoutPeriod(RequestTimeout.MilliSeconds());
         auto* refreshSnapshot = req->Record.MutableTransaction()->MutableRefreshVolatileSnapshot();
-        for (const TString& tablePath : Tables) {
-            refreshSnapshot->AddTables()->SetTablePath(tablePath);
+        for (const auto& table : Tables) {
+            auto* target = refreshSnapshot->AddTables();
+            target->SetTablePath(table.GetTablePath());
+            if (table.HasKeyRange()) {
+                target->MutableKeyRange()->CopyFrom(table.GetKeyRange());
+            }
         }
         refreshSnapshot->SetIgnoreSystemViews(true);
         refreshSnapshot->SetSnapshotStep(Snapshot.Step);
@@ -250,8 +254,12 @@ private:
         auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         req->Record.SetExecTimeoutPeriod(RequestTimeout.MilliSeconds());
         auto* discardSnapshot = req->Record.MutableTransaction()->MutableDiscardVolatileSnapshot();
-        for (const TString& tablePath : Tables) {
-            discardSnapshot->AddTables()->SetTablePath(tablePath);
+        for (const auto& table : Tables) {
+            auto* target = discardSnapshot->AddTables();
+            target->SetTablePath(table.GetTablePath());
+            if (table.HasKeyRange()) {
+                target->MutableKeyRange()->CopyFrom(table.GetKeyRange());
+            }
         }
         discardSnapshot->SetIgnoreSystemViews(true);
         discardSnapshot->SetSnapshotStep(Snapshot.Step);
@@ -283,7 +291,7 @@ private:
 
 private:
     const TString Database;
-    TVector<TString> Tables;
+    TVector<NKikimrTxUserProxy::TCreateVolatileSnapshotTx::TTable> Tables;
     TActorId ClientActorId;
     IKqpGateway::TKqpSnapshot Snapshot;
     NLWTrace::TOrbit Orbit;

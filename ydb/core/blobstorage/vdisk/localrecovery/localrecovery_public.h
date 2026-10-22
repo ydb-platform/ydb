@@ -85,6 +85,7 @@ namespace NKikimr {
                 const TVDiskID &selfVDiskId,
                 const TActorId &skeletonId,
                 const TActorId skeletonFrontId,
-                std::shared_ptr<TRopeArena> arena);
+                std::shared_ptr<TRopeArena> arena,
+                std::optional<ui32> survivingRealm = std::nullopt);
 
 } // NKikimr

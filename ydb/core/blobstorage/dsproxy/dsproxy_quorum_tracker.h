@@ -68,6 +68,18 @@ namespace NKikimr {
         }
 
         NKikimrProto::EReplyStatus CalculateStatus() {
+            if (Info->EnableSingleDcMode) {
+                ui32 successful = 0;
+                ui32 erroneous = 0;
+                for (const auto& vdisk : Info->GetVDisks()) {
+                    if (Info->IsVDiskInActiveRealm(Info->GetVDiskId(vdisk.OrderNumber))) {
+                        successful += SuccessfulDisks[vdisk.OrderNumber];
+                        erroneous += ErroneousDisks[vdisk.OrderNumber];
+                    }
+                }
+                return erroneous >= 2 ? NKikimrProto::ERROR
+                    : successful >= 2 ? NKikimrProto::OK : NKikimrProto::UNKNOWN;
+            }
             const auto& checker = Info->GetQuorumChecker();
             return !checker.CheckFailModelForGroup(ErroneousDisks) ? NKikimrProto::ERROR  :
                    checker.CheckQuorumForGroup(SuccessfulDisks)    ? NKikimrProto::OK     :

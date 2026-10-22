@@ -190,7 +190,10 @@ public:
         }
 
         for (const auto& vdisk : Info->GetVDisks()) {
-            SendCollectGarbageRequest(Info->GetVDiskId(vdisk.OrderNumber));
+            const auto vdiskId = Info->GetVDiskId(vdisk.OrderNumber);
+            if (Info->IsVDiskInActiveRealm(vdiskId)) {
+                SendCollectGarbageRequest(vdiskId);
+            }
         }
 
         Become(&TBlobStorageGroupCollectGarbageRequest::StateWait);

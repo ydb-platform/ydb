@@ -12,6 +12,28 @@ namespace NKikimr {
 
     Y_UNIT_TEST_SUITE(TBlobStorageIngress) {
 
+        Y_UNIT_TEST(Mirror3dcRestoreCanonicalPlacement) {
+            TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 1, 3, 3);
+            const auto& topology = info.GetTopology();
+            const TLogoBlobID id(5000, 1, 1, 0, 1000, 0);
+            const auto source = topology.GetVDiskInSubgroup(0, id.Hash());
+            const auto ingress = *TIngress::CreateIngressWithLocal(&topology, source, TLogoBlobID(id, 1));
+            const auto raw = ingress.Raw();
+            for (ui8 index = 0; index < 3; ++index) {
+                const auto target = topology.GetVDiskInSubgroup(index, id.Hash());
+                UNIT_ASSERT(ingress.PartsWeMustHaveLocally(&topology, target, id, true)
+                    == TVectorType::MakeOneHot(index, 3));
+                if (index != 0) {
+                    UNIT_ASSERT(ingress.PartsWeMustHaveLocally(&topology, target, id).Empty());
+                    UNIT_ASSERT(ingress.KnownParts(info.Type, index).Empty());
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(ingress.Raw(), raw);
+            UNIT_ASSERT(ingress.LocalParts(info.Type) == TVectorType::MakeOneHot(0, 3));
+            TIngress empty;
+            UNIT_ASSERT(empty.PartsWeMustHaveLocally(&topology, source, id, true).Empty());
+        }
+
         Y_UNIT_TEST(Ingress) {
             TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3of4, 2, 8);
             using TGroupId = TGroupId;
@@ -286,6 +308,25 @@ namespace NKikimr {
         //         UNIT_ASSERT(res5 == TIngress::TPairOfVectors(moveVec, delVec));
         //     }
         // }
+
+        Y_UNIT_TEST(SingleDcBarrierQuorum) {
+            TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 1, 3, 3);
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                const auto cache = TIngressCache::Create(info.PickTopology(), info.GetVDiskId(0), realm);
+                for (ui32 mask = 0; mask < 512; ++mask) {
+                    TBarrierIngress ingress;
+                    ui32 selected = 0;
+                    for (ui32 i = 0; i < 9; ++i) {
+                        if (mask & (1u << i)) {
+                            TBarrierIngress bit(i);
+                            TBarrierIngress::Merge(ingress, bit);
+                            selected += info.GetVDiskId(i).FailRealm == realm;
+                        }
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(ingress.IsQuorum(cache.Get()), selected >= 2);
+                }
+            }
+        }
 
         Y_UNIT_TEST(IngressCache4Plus2) {
             TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure4Plus2Block, 2, 8);

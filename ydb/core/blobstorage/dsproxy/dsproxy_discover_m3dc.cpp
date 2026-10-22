@@ -59,9 +59,10 @@ class TDiscoverVDiskWorker {
     TDeque<TBlobQueueItem> BlobQueue;
 
 public:
-    TDiscoverVDiskWorker(const TVDiskID& vdiskId, ui64 tabletId, ui32 minGeneration, ui32 forceBlockedGeneration)
+    TDiscoverVDiskWorker(const TVDiskID& vdiskId, ui64 tabletId, ui32 minGeneration, ui32 forceBlockedGeneration, bool active = true)
         : VDiskId(vdiskId)
         , TabletId(tabletId)
+        , Finished(!active)
         , FirstBlob(tabletId, Max<ui32>(), Max<ui32>(), 0, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie)
         , LastBlob(tabletId, minGeneration, 0, 0, 0, 0)
         , ForceBlockedGeneration(forceBlockedGeneration)
@@ -270,7 +271,10 @@ public:
         const ui32 numDisks = Info->GetTotalVDisksNum();
         VDiskWorkers.reserve(numDisks);
         for (ui32 i = 0; i < numDisks; ++i) {
-            VDiskWorkers.emplace_back(Info->GetVDiskId(i), tabletId, minGeneration, forceBlockedGeneration);
+            const auto vdiskId = Info->GetVDiskId(i);
+            const bool active = Info->IsVDiskInActiveRealm(vdiskId);
+            VDiskWorkers.emplace_back(vdiskId, tabletId, minGeneration, forceBlockedGeneration, active);
+            NumReadyWorkers += !active;
         }
     }
 
@@ -321,6 +325,9 @@ private:
         TBlobStorageGroupInfo::TGroupVDisks failedGroupDisks(&Info->GetTopology());
         for (const TDiscoverVDiskWorker& worker : VDiskWorkers) {
             if (worker.IsErroneous()) {
+                if (Info->EnableSingleDcMode) {
+                    return false; // An unavailable index may contain the latest surviving blob.
+                }
                 failedGroupDisks += TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), worker.GetVDiskId());
             }
         }
@@ -380,6 +387,21 @@ private:
                 perDiskStatus.push_back(status);
                 mergedIngress.Merge(ingress);
                 NumReadyWorkers -= !worker.IsReady();
+            }
+
+            if (Info->EnableSingleDcMode) {
+                bool candidate = false;
+                for (const auto status : perDiskStatus) {
+                    if (status != NKikimrProto::OK && status != NKikimrProto::NODATA) {
+                        return false;
+                    }
+                    candidate |= status == NKikimrProto::OK;
+                }
+                if (candidate) {
+                    // Probe bytes through Get; a single surviving copy is sufficient to recover the blob.
+                    StateQ.push(TDiscoveryState{maxId, false});
+                }
+                continue;
             }
 
             // check for failure model; if number of reported errors exceeds failure model, return error in discovery
@@ -497,6 +519,9 @@ public:
         if (DiscoverBlockedGeneration) {
             for (const auto& vdisk : Info->GetVDisks()) {
                 auto vd = Info->GetVDiskId(vdisk.OrderNumber);
+                if (!Info->IsVDiskInActiveRealm(vd)) {
+                    continue;
+                }
                 auto query = std::make_unique<TEvBlobStorage::TEvVGetBlock>(TabletId, vd, Deadline);
 
                 DSP_LOG_DEBUG_S("DSPDM06", "sending TEvVGetBlock# " << query->ToString());
@@ -561,7 +586,8 @@ public:
                 GetInFlight = true;
                 Y_ABORT_UNLESS(ResultBlobId.PartId() == 0);
                 auto query = std::make_unique<TEvBlobStorage::TEvGet>(ResultBlobId, 0U, 0U, Deadline,
-                        NKikimrBlobStorage::Discover, true, !ReadBody, TEvBlobStorage::TEvGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration));
+                        NKikimrBlobStorage::Discover, true, !ReadBody && !Info->EnableSingleDcMode,
+                        TEvBlobStorage::TEvGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration));
                 query->IsInternal = true;
 
                 DSP_LOG_DEBUG_S("DSPDM17", "sending TEvGet# " << query->ToString());

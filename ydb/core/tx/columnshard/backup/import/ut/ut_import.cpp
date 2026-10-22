@@ -163,8 +163,8 @@ void FillRestoreDescription(NKikimrSchemeOp::TTableDescription& description) {
     }
 }
 
-NKikimrTxColumnShard::TBackupTxBody MakeBackupTxBody(const ui64 tableId, const NOlap::TSnapshot& snapshot, const TString& bucket,
-    const std::optional<ui64> bytesBatchSize = {}) {
+NKikimrTxColumnShard::TBackupTxBody MakeBackupTxBody(
+    const ui64 tableId, const NOlap::TSnapshot& snapshot, const TString& bucket, const std::optional<ui64> bytesBatchSize = {}) {
     NKikimrTxColumnShard::TBackupTxBody txBody;
     auto& backupTask = *txBody.MutableBackupTask();
     backupTask.SetTableName("abcde");

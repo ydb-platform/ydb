@@ -11,6 +11,7 @@
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/uuid/uuid.h>
@@ -19,10 +20,13 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
+#include <library/cpp/streams/zstd/zstd.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
+#include <util/generic/maybe.h>
+#include <util/generic/ylimits.h>
 #include <util/stream/str.h>
 #include <util/string/printf.h>
 
@@ -797,6 +801,25 @@ class TBinaryCdcSerializer: public TBaseSerializer {
         return result;
     }
 
+    // zstd level 3 (TZstdCompress quality 0). Keep the raw payload when the
+    // frame does not shrink it: a tiny row or an erase must not grow on disk.
+    void StoreBinaryPayload(NKikimrPQClient::TDataChunk& data, TString payload) {
+        TStringStream out;
+        {
+            TZstdCompress compress(&out);
+            compress.Write(payload.data(), payload.size());
+        }
+        if (out.Size() < payload.size()) {
+            data.SetCodec(NPersQueueCommon::ZSTD);
+            if (payload.size() <= static_cast<size_t>(Max<i32>())) {
+                UncompressedSize = static_cast<ui32>(payload.size());
+            }
+            data.SetData(out.Str());
+            return;
+        }
+        data.SetData(std::move(payload));
+    }
+
     void FillDataChunk(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) override {
         using NChangeExchange::EBinaryCdcFlag;
         using NChangeExchange::EBinaryCdcKind;
@@ -812,7 +835,7 @@ class TBinaryCdcSerializer: public TBaseSerializer {
             TBinaryCdcWriter writer;
             writer.Start(header);
             writer.SetSchemaJson(TYdbJsonSerializer::RenderSchemaChangeJson(record));
-            data.SetData(writer.Finish());
+            StoreBinaryPayload(data, writer.Finish());
             return;
         }
         case TChangeRecord::EKind::CdcHeartbeat: {
@@ -824,7 +847,7 @@ class TBinaryCdcSerializer: public TBaseSerializer {
             header.TxId = record.GetTxId();
             TBinaryCdcWriter writer;
             writer.Start(header);
-            data.SetData(writer.Finish());
+            StoreBinaryPayload(data, writer.Finish());
             return;
         }
         case TChangeRecord::EKind::CdcDataChange:
@@ -939,11 +962,21 @@ class TBinaryCdcSerializer: public TBaseSerializer {
         if (!trace.empty()) {
             writer.SetTrace(trace);
         }
-        data.SetData(writer.Finish());
+        StoreBinaryPayload(data, writer.Finish());
     }
+
+    TMaybe<ui32> UncompressedSize;
 
 public:
     using TBaseSerializer::TBaseSerializer;
+
+    void Serialize(TCmdWrite& cmd, const TChangeRecord& record) override {
+        UncompressedSize.Clear();
+        TBaseSerializer::Serialize(cmd, record);
+        if (UncompressedSize.Defined()) {
+            cmd.SetUncompressedSize(static_cast<i32>(*UncompressedSize));
+        }
+    }
 
     TString DebugString(const TChangeRecord& record) override {
         return TStringBuilder() << "binary CDC kind " << static_cast<int>(record.GetKind());

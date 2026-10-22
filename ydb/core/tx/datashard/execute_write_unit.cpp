@@ -509,28 +509,10 @@ public:
                         && userDb.GetCollectAffectedRows());
 
                 if (operationNeedsRead || userDb.NeedToReadBeforeWrite(fullTableId)) {
+                    const auto* collector = userDb.GetChangeCollector(fullTableId);
                     for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx) {
                         FillKey(scheme, userTable, tableInfo, validatedOperation, rowIdx, key);
-
-                        // Precharge history only for initial CDC snapshot reads
-                        // beyond the persisted scan progress.
-                        bool needsMvccRead = false;
-                        const auto keyCells = matrix.GetRow(rowIdx).Slice(0, userTable.KeyColumnTypes.size());
-                        for (const auto& [pathId, stream] : userTable.CdcStreams) {
-                            if (stream.State != NKikimrSchemeOp::ECdcStreamStateScan) {
-                                continue;
-                            }
-                            if (const auto* info = DataShard.GetCdcStreamScanManager().Get(pathId)) {
-                                Y_ENSURE(!info->LastKey || info->LastKey->GetCells().size() == keyCells.size());
-                                if (!info->LastKey ||
-                                    CompareTypedCellVectors(keyCells.data(), info->LastKey->GetCells().data(),
-                                        userTable.KeyColumnTypes.data(), keyCells.size()) > 0)
-                                {
-                                    needsMvccRead = true;
-                                    break;
-                                }
-                            }
-                        }
+                        const bool needsMvccRead = collector && collector->NeedHistoricalPrecharge(fullTableId, key);
                         userDb.PrechargeRow(fullTableId, key, needsMvccRead);
                     }
                 }

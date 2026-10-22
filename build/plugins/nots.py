@@ -416,9 +416,15 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
             dirs.append(os.path.join("build", "platform", dir_name, str(nodejs_version)))
             _set_resource_vars(unit, erm_json, tool, nodejs_version)
 
-            if nodejs_version.major >= 25 and unit.get("OS_LINUX") == "yes":
-                dirs.append(os.path.join("build", "platform", dir_name, "libatomic"))
-                unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $LIBATOMIC_1_2_0_RESOURCE_GLOBAL"])
+            if nodejs_version.major >= 25:
+                target_needs_libatomic = unit.get("OS_LINUX") == "yes"
+                host_needs_libatomic = unit.get("HOST_OS_LINUX") == "yes"
+                if target_needs_libatomic or host_needs_libatomic:
+                    dirs.append(os.path.join("build", "platform", dir_name, "libatomic"))
+                if target_needs_libatomic:
+                    unit.set(["_TARGET_NEEDS_LIBATOMIC", "yes"])
+                if host_needs_libatomic:
+                    unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $LIBATOMIC_1_2_0_RESOURCE_GLOBAL"])
 
         elif erm_json.is_resource_multiplatform(tool):
             v = erm_json.select_version_of(tool)
@@ -438,6 +444,19 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
 
     if dirs:
         unit.onpeerdir(dirs)
+
+
+@ymake.macro
+def _NODEJS_BINARY_FOR_CONFIGURE(unit: ymake.Unit) -> None:
+    # _PEERDIR_TS_RESOURCE marks the target's libatomic requirement separately from the host environment.
+    # Use this marker to avoid duplicating its Node.js version and platform checks.
+    if unit.get("_TARGET_NEEDS_LIBATOMIC") == "yes":
+        unit.set(
+            [
+                "COPY_LIBATOMIC_CMD",
+                '$COPY_CMD $WITH_LIBATOMIC_1_2_0_RESOURCE_GLOBAL/libatomic.so.1 ${output:"libatomic.so.1"}',
+            ]
+        )
 
 
 def _should_setup_build_env(unit: ymake.Unit) -> bool:
@@ -749,6 +768,9 @@ def _set_resource_vars(
 
     unit.set(["{}_ROOT".format(resource_name), "${}".format(yamake_resource_var)])
     unit.set(["{}-ROOT-VAR-NAME".format(resource_name), yamake_resource_var])
+
+    if tool == "nodejs":
+        unit.set(["WITH_NODEJS_ROOT", "$WITH_{}".format(yamake_resource_var)])
 
 
 def _select_matching_version(erm_json: 'ErmJsonLite', resource_name: str, range_str: str) -> 'Version':

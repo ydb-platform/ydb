@@ -28,11 +28,41 @@ namespace {
         bool Value = false;
     };
 
+    // No default case: the compiler warns (-Wswitch) about a new enum value until it is listed
+
+    bool IsValid(NPage::ECodec codec) {
+        switch (codec) {
+            case NPage::ECodec::Plain:
+            case NPage::ECodec::LZ4:
+                return true;
+        }
+        return false;
+    }
+
+    bool IsValid(NPage::ECache cache) {
+        switch (cache) {
+            case NPage::ECache::None:
+            case NPage::ECache::Once:
+            case NPage::ECache::Ever:
+                return true;
+        }
+        return false;
+    }
+
+    bool IsValid(NPage::ECacheMode cacheMode) {
+        switch (cacheMode) {
+            case NPage::ECacheMode::Regular:
+            case NPage::ECacheMode::TryKeepInMemory:
+                return true;
+        }
+        return false;
+    }
+
     // Validates page settings of a family or a tier
     void ValidatePageSettings(NPage::ECodec codec, NPage::ECache cache, NPage::ECacheMode cacheMode) {
-        Y_ENSURE(ui32(codec) <= ui32(NPage::ECodec::LZ4), "Invalid page encoding code value");
-        Y_ENSURE(ui32(cache) <= ui32(NPage::ECache::Ever), "Invalid pages cache policy value");
-        Y_ENSURE(ui32(cacheMode) <= ui32(NPage::ECacheMode::TryKeepInMemory), "Invalid cache mode value");
+        Y_ENSURE(IsValid(codec), "Invalid page encoding code value");
+        Y_ENSURE(IsValid(cache), "Invalid pages cache policy value");
+        Y_ENSURE(IsValid(cacheMode), "Invalid cache mode value");
     }
 
     TScheme::TTier TierFromProto(const NTabletFlatScheme::TTierSettings& proto) {

@@ -180,15 +180,34 @@ A barrier record contains a single field `resolved` with a virtual timestamp:
 
 {% endnote %}
 
-### Binary format {#binary-record-structure}
+### Binary Format {#binary-record-structure}
 
-`FORMAT = 'BINARY'` stores a little-endian record without column names. The header is a version byte (`1`), a kind (`1` data, `2` heartbeat, `3` schema), an operation (`1` upsert, `2` reset, `3` erase), flags, and the counts of key and value cells.
+`FORMAT = 'BINARY'` writes one binary record per table change. Every multi-byte integer is unsigned and little-endian. The record does not store column names.
 
-Key cells follow the primary key order. Each value cell is prefixed with the index of a non-key column. Indexes are the positions of non-key columns sorted by name in the schema version that produced the record. A fixed-width cell is its raw bytes. A variable-length cell is a 32-bit length plus raw bytes. NULL is allowed on value cells: the high bit of the index is set and the cell body is omitted.
+The first eight bytes are:
 
-With virtual timestamps enabled, the record stores `step` and `txId` as two 64-bit integers. A heartbeat is that header and the timestamp. A schema record wraps the same JSON snapshot as [JSON format](#json-record-structure). User SID and trace id, when enabled, follow the cells as a 16-bit length and raw bytes.
+* version: `1`.
+* kind: `1` for a row change, `2` for a [barrier](#barriers), `3` for a schema change.
+* operation: `1` update, `2` replacement, `3` erase. These are the same operations as the JSON fields `update`, `reset`, and `erase`. A barrier or a schema change uses `0`. One record has one operation.
+* flags, from the least significant bit: `1` [virtual timestamp](#virtual-timestamps), `2` two-byte column index, `4` old image (`oldImage`), `8` new image (`newImage`), `16` user SID, `32` trace id. A set bit means that part is present.
+* number of key cells, 16 bits.
+* number of value cells, 16 bits.
 
-Async replication creates changefeeds in this format. Column names, base64, and the partition-key digest are not part of the stored payload. The topic stores that payload with zstd when the compressed bytes are smaller than the raw record, and stores it unchanged otherwise. A reader receives the record after decompression.
+When the old-image bit is set, the next field is the 16-bit number of old-image cells. When the new-image bit is set, the next field is the 16-bit number of new-image cells. When the virtual-timestamp bit is set, the next fields are `step` and `txId`: two 64-bit integers with the same meaning as in [JSON format](#json-record-structure).
+
+Key cells follow, in primary-key order. A key cell is not NULL. Value cells come next, then old-image cells, then new-image cells. Each of those cells starts with the column index. The index is the position of a non-key column after sorting non-key column names. It is one byte when the table has at most 127 non-key columns. When the table has more, the two-byte index bit is set and every index in the record is two bytes. NULL is allowed only on these indexed cells: the most significant bit of the index value is set, and the cell has no bytes after the index.
+
+A cell whose type has a fixed size is stored as that many bytes. Any other cell is a 32-bit length followed by that many bytes. The bytes are the value stored in the table. A non-NULL empty value has length `0`.
+
+In `NEW_IMAGE`, `OLD_IMAGE`, and `NEW_AND_OLD_IMAGES` the value-cell count is `0`. The column values are in the images whose flag bits are set. In [JSON format](#json-record-structure), `update` or `reset` is then only the operation flag.
+
+A barrier has kind `2`, operation `0`, no cells, and always includes `step` and `txId`. A schema change has kind `3` and operation `0`. After its eight-byte header it stores a 32-bit length and a JSON document with the table schema. Column indexes in later row records refer to non-key columns of that schema, sorted by name. This JSON document is not a row record of [JSON format](#json-record-structure). Its virtual timestamp is inside the document, not in the binary header.
+
+When `USER_SIDS` or `TRACE_IDS` is enabled and the value is not empty, the value is written after the cells. The user SID comes before the trace id. Each value is a 16-bit length followed by its bytes.
+
+The topic compresses this binary record with zstd when the compressed bytes are shorter than the record, and stores the record without zstd otherwise. The topic client removes that zstd compression before it returns the message body. The body is still this binary record. The application parses the record from that body; removing zstd does not parse it.
+
+New asynchronous replication changefeeds are created in this format.
 
 {% if audience == "tech" %}
 

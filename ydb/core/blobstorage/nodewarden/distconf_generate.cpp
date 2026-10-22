@@ -225,6 +225,7 @@ namespace NKikimr::NStorage {
 
         ui32 defaultMaxSlots = 16;
 
+        THashMap<TPDiskId, ui32> maxVSlotId;
         if (baseConfig) {
             std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> pdiskSpaceColorBorder;
             ui32 pdiskSpaceMarginPromille = 150;
@@ -301,6 +302,7 @@ namespace NKikimr::NStorage {
             for (const auto& vslot : baseConfig->GetVSlot()) {
                 const auto& vslotId = vslot.GetVSlotId();
                 const TPDiskId pdiskId(vslotId.GetNodeId(), vslotId.GetPDiskId());
+                maxVSlotId[pdiskId] = Max(maxVSlotId[pdiskId], vslotId.GetVSlotId());
                 if (const auto it = pdisks.find(pdiskId); it != pdisks.end()) {
                     TPDiskInfo& pdiskInfo = it->second;
                     ++pdiskInfo.UsedSlots; // TODO(ydynnikov): account GroupSizeInUnits
@@ -316,7 +318,6 @@ namespace NKikimr::NStorage {
         // then all existing drives from the current storage config; also extract group definition, if it exists
         NBsController::TGroupMapper::TGroupDefinition groupDefinition;
         THashMap<ui32, ui32> maxPDiskId;
-        THashMap<TPDiskId, ui32> maxVSlotId;
         THashSet<TPDiskId> addedPDisks;
         THashMap<TVDiskIdShort, NKikimrBlobStorage::TVDiskLocation> vdiskLocations;
 

@@ -77,6 +77,7 @@ ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_early_events_
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_late_events_policy[DROP-expected0-True-2-no_shared]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_wm_after_parsing[False-2-no_shared]
 ydb/tests/fq/yds test_disposition.py.TestDisposition.test_disposition_time_ago[v1-mvp_external_ydb_endpoint0]
+ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start_with_filter
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[1-no_shared]
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[2-no_shared]
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[no_shared]
@@ -99,6 +100,7 @@ ydb/tests/functional/federation_test unittest.[*/*] chunk
 ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_basic
 ydb/tests/functional/serverless test_serverless.py.test_connect_permission_not_inherited_in_serverless[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
+ydb/tests/functional/serverless test_serverless.py.test_create_table[enable_alter_database_create_hive_first--true-enable_pool_encryption--false]
 ydb/tests/functional/serverless test_serverless.py.test_discovery_with_inner_path[enable_alter_database_create_hive_first--false-enable_pool_encryption--true]
 ydb/tests/functional/serverless test_serverless.py.test_discovery_with_inner_path[enable_alter_database_create_hive_first--true-enable_pool_encryption--false]
 ydb/tests/functional/serverless test_serverless.py.test_fixtures[enable_alter_database_create_hive_first--true-enable_pool_encryption--false]

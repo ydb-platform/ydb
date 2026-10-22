@@ -89,7 +89,7 @@ class TEnv {
         Sender = Server.GetRuntime()->AllocateEdgeActor();
     }
 
-    void Login(const TString& database, const TString& user, const TString& password) {
+    Ydb::StatusIds::StatusCode LoginStatus(const TString& database, const TString& user, const TString& password) {
         Ydb::Auth::LoginRequest request;
         request.set_user(user);
         request.set_password(password);
@@ -97,16 +97,23 @@ class TEnv {
         using TEvLoginRequest = NGRpcService::TGRpcRequestWrapperNoAuth<
             NGRpcService::TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;
 
-        auto result = NRpcService::DoLocalRpc<TEvLoginRequest>(
-            std::move(request), database, {}, Server.GetRuntime()->GetActorSystem(0)
-        ).ExtractValueSync();
+        auto result = RunCall([&] {
+            return NRpcService::DoLocalRpc<TEvLoginRequest>(
+                std::move(request), database, {}, Server.GetRuntime()->GetActorSystem(0)
+            ).ExtractValueSync();
+        });
 
         const auto& operation = result.operation();
-        UNIT_ASSERT_VALUES_EQUAL_C(operation.status(), Ydb::StatusIds::SUCCESS, operation.issues(0).message());
+        if (operation.status() == Ydb::StatusIds::SUCCESS) {
+            Ydb::Auth::LoginResult loginResult;
+            operation.result().UnpackTo(&loginResult);
+            UNIT_ASSERT(!loginResult.token().empty());
+        }
+        return operation.status();
+    }
 
-        Ydb::Auth::LoginResult loginResult;
-        operation.result().UnpackTo(&loginResult);
-        UNIT_ASSERT(!loginResult.token().empty());
+    void Login(const TString& database, const TString& user, const TString& password) {
+        UNIT_ASSERT_VALUES_EQUAL(LoginStatus(database, user, password), Ydb::StatusIds::SUCCESS);
     }
 
 public:
@@ -157,7 +164,11 @@ public:
     }
 
     explicit TEnv(const TString& user, const TString& password)
-        : TEnv(false)
+        : TEnv(user, password, ERuntimeMode::RealThreads)
+    {}
+
+    TEnv(const TString& user, const TString& password, ERuntimeMode runtimeMode)
+        : TEnv(false, runtimeMode)
     {
         NKikimrReplication::TStaticCredentials staticCreds;
         staticCreds.SetUser(user);
@@ -167,10 +178,10 @@ public:
         const auto db = "/" + ToString(DomainName);
         // create user & set owner
         {
-            auto st = Client.CreateUser(db, user, password);
+            auto st = RunCall([&] { return Client.CreateUser(db, user, password); });
             UNIT_ASSERT_VALUES_EQUAL(st, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
 
-            Client.ModifyOwner("/", DomainName, user);
+            RunCall([&] { return Client.ModifyOwner("/", DomainName, user); });
         }
         // init security state
         {
@@ -178,7 +189,7 @@ public:
         }
         // update security state
         {
-            auto resp = Client.Ls(db);
+            auto resp = RunCall([&] { return Client.Ls(db); });
 
             const auto& desc = resp->Record;
             UNIT_ASSERT(desc.HasPathDescription());
@@ -189,6 +200,26 @@ public:
             Server.GetRuntime()->Send(new IEventHandle(MakeTicketParserID(), Sender,
                 new TEvTicketParser::TEvUpdateLoginSecurityState(secState)));
         }
+    }
+
+    void RotatePassword(const TString& user, const TString& newPassword, const TString& oldPassword) {
+        const auto db = "/" + ToString(DomainName);
+        auto status = RunCall([&] {
+            return Client.ModifyUser(db, {.User = user, .Password = newPassword});
+        });
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+
+        auto resp = RunCall([&] { return Client.Ls(db); });
+        const auto& desc = resp->Record;
+        UNIT_ASSERT(desc.HasPathDescription());
+        UNIT_ASSERT(desc.GetPathDescription().HasDomainDescription());
+        UNIT_ASSERT(desc.GetPathDescription().GetDomainDescription().HasSecurityState());
+        const auto& secState = desc.GetPathDescription().GetDomainDescription().GetSecurityState();
+        Server.GetRuntime()->Send(new IEventHandle(MakeTicketParserID(), Sender,
+            new TEvTicketParser::TEvUpdateLoginSecurityState(secState)));
+
+        UNIT_ASSERT_VALUES_EQUAL(LoginStatus(db, user, newPassword), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(LoginStatus(db, user, oldPassword), Ydb::StatusIds::UNAUTHORIZED);
     }
 
     template <typename... Args>

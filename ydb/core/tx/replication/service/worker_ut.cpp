@@ -9,13 +9,204 @@
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/core/tx/replication/ut_helpers/write_topic.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/services/persqueue_v1/actors/events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/scope.h>
 
 namespace NKikimr::NReplication::NService {
+
+Y_UNIT_TEST_SUITE(ServiceCredentials) {
+    using namespace NTestHelpers;
+
+    Y_UNIT_TEST(ChangedStaticPasswordStartsSourceReadOnSameService) {
+        TEnv<true> env("user1", "password1", ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        runtime.SetFastSimulatedTime(false);
+        const auto edge = env.GetSender();
+
+        auto topic = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(env.GetYdbProxy(),
+            new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic",
+                NYdb::NTopic::TCreateTopicSettings()
+                    .BeginAddConsumer().ConsumerName("consumer").EndAddConsumer()));
+        UNIT_ASSERT_C(topic->Get()->Result.IsSuccess(), topic->Get()->Result.GetIssues().ToString());
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}, {.Name = "value", .Type = "Utf8"}},
+        }));
+
+        const auto service = runtime.Register(CreateReplicationService());
+        runtime.Send(new IEventHandle(service, edge, new TEvService::TEvHandshake(42, 1)), 0, true);
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvStatus>(edge, TDuration::Seconds(30)));
+
+        THashSet<TActorId> serverReadSessions;
+        TTestActorRuntimeBase::TRegistrationObserver previousRegistrationObserver;
+        previousRegistrationObserver = runtime.SetRegistrationObserverFunc(
+            [&](TTestActorRuntimeBase& actorRuntime, const TActorId& parent, const TActorId& actorId) {
+                previousRegistrationObserver(actorRuntime, parent, actorId);
+                if (actorRuntime.FindActor(actorId)->GetActivityType() == NKikimrServices::TActivity::FRONT_PQ_READ) {
+                    serverReadSessions.insert(actorId);
+                }
+            });
+        Y_DEFER {
+            runtime.SetRegistrationObserverFunc(std::move(previousRegistrationObserver));
+        };
+
+        auto oldRun = MakeHolder<TEvService::TEvRunWorker>();
+        oldRun->Record.MutableController()->SetTabletId(42);
+        oldRun->Record.MutableController()->SetGeneration(1);
+        oldRun->Record.MutableWorker()->SetReplicationId(1);
+        oldRun->Record.MutableWorker()->SetTargetId(1);
+        oldRun->Record.MutableWorker()->SetWorkerId(0);
+        auto* command = oldRun->Record.MutableCommand();
+        command->SetDatabase("/Root");
+        auto* reader = command->MutableRemoteTopicReader();
+        auto* connection = reader->MutableConnectionParams();
+        connection->SetEndpoint(env.GetEndpoint());
+        connection->SetDatabase(env.GetDatabase());
+        connection->MutableStaticCredentials()->SetUser("user1");
+        connection->MutableStaticCredentials()->SetPassword("password1");
+        reader->SetTopicPath("/Root/topic");
+        reader->SetConsumerName("consumer");
+        reader->SetTopicPartitionId(0);
+        env.GetPathId("/Root/Table").ToProto(command->MutableLocalTableWriter()->MutablePathId());
+
+        auto newRun = MakeHolder<TEvService::TEvRunWorker>();
+        newRun->Record.CopyFrom(oldRun->Record);
+        newRun->Record.MutableCommand()->MutableRemoteTopicReader()->MutableConnectionParams()
+            ->MutableStaticCredentials()->SetPassword("password2");
+        const auto workerId = oldRun->Record.GetWorker();
+
+        auto requireStatus = [&](NKikimrReplication::TEvWorkerStatus::EStatus expected) {
+            auto status = runtime.GrabEdgeEvent<TEvService::TEvWorkerStatus>(edge, TDuration::Seconds(30));
+            UNIT_ASSERT(status);
+            UNIT_ASSERT_VALUES_EQUAL(status->Get()->Record.GetWorker().SerializeAsString(), workerId.SerializeAsString());
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(status->Get()->Record.GetStatus()), static_cast<int>(expected));
+        };
+
+        NActors::TBlockEvents<TEvYdbProxy::TEvCreateTopicReaderRequest> blocked(runtime);
+        runtime.Send(new IEventHandle(service, edge, oldRun.Release()));
+        requireStatus(NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
+        runtime.WaitFor("first remote reader request", [&] { return blocked.size() == 1; }, TDuration::Seconds(30));
+        const auto oldReader = blocked.front()->Sender;
+        const auto oldProxy = blocked.front()->GetRecipientRewrite();
+
+        auto stop = MakeHolder<TEvService::TEvStopWorker>();
+        stop->Record.MutableController()->SetTabletId(42);
+        stop->Record.MutableController()->SetGeneration(1);
+        stop->Record.MutableWorker()->CopyFrom(workerId);
+        runtime.Send(new IEventHandle(service, edge, stop.Release()));
+        requireStatus(NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
+
+        constexpr auto data = R"({"key":[7], "update":{"value":"after-rotation"}})";
+        UNIT_ASSERT(env.RunCall([&] { return WriteTopic(env, "/Root/topic", data); }));
+
+        env.RotatePassword("user1", "password2", "password1");
+
+        TActorId oldSession;
+        bool oldSessionPoisoned = false;
+        auto observeResponse = runtime.AddObserver<TEvYdbProxy::TEvCreateTopicReaderResponse>(
+            [&](TEvYdbProxy::TEvCreateTopicReaderResponse::TPtr& ev) {
+                if (ev->Sender == oldProxy && ev->GetRecipientRewrite() == oldReader) {
+                    oldSession = ev->Get()->Result;
+                }
+            });
+        auto observePoison = runtime.AddObserver<TEvents::TEvPoison>([&](TEvents::TEvPoison::TPtr& ev) {
+            if (oldSession && ev->GetRecipientRewrite() == oldSession) {
+                oldSessionPoisoned = true;
+            }
+        });
+        blocked.Stop().Unblock(1);
+        runtime.WaitFor("old reader cleanup", [&] { return oldSessionPoisoned; }, TDuration::Seconds(30));
+        UNIT_ASSERT(oldSession);
+        observeResponse.Remove();
+        observePoison.Remove();
+
+        struct TReadProof {
+            ui32 Partition;
+            ui64 Offset;
+            TString Data;
+        };
+        TVector<TReadProof> reads;
+        auto observeData = runtime.AddObserver<TEvWorker::TEvData>([&](TEvWorker::TEvData::TPtr& ev) {
+            for (const auto& record : ev->Get()->Records) {
+                reads.push_back({ev->Get()->PartitionId, record.GetOffset(), record.GetData()});
+            }
+        });
+        TActorId newSession;
+        TActorId newProxy;
+        auto observeNewReader = runtime.AddObserver<TEvYdbProxy::TEvCreateTopicReaderResponse>(
+            [&](TEvYdbProxy::TEvCreateTopicReaderResponse::TPtr& ev) {
+                newSession = ev->Get()->Result;
+                newProxy = ev->Sender;
+            });
+
+        runtime.Send(new IEventHandle(service, edge, newRun.Release()));
+        requireStatus(NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
+        TDispatchOptions readOptions;
+        readOptions.CustomFinalCondition = [&] { return !reads.empty(); };
+        readOptions.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+        runtime.DispatchEvents(readOptions, TDuration::Seconds(30));
+        UNIT_ASSERT_C(!reads.empty(), "replacement worker did not read source after password rotation");
+        UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reads[0].Partition, 0);
+        UNIT_ASSERT_VALUES_EQUAL(reads[0].Offset, 0);
+        UNIT_ASSERT_VALUES_EQUAL(reads[0].Data, data);
+        observeData.Remove();
+        observeNewReader.Remove();
+        UNIT_ASSERT(newSession);
+        UNIT_ASSERT(newProxy);
+
+        THashSet<TActorId> cleanupActors{service, env.GetYdbProxy(), oldReader, oldSession, oldProxy, newSession, newProxy};
+        auto observeShutdown = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->HasEvent() && ev->GetTypeRewrite() == TEvents::TEvPoison::EventType
+                && cleanupActors.contains(ev->Sender))
+            {
+                cleanupActors.insert(ev->GetRecipientRewrite());
+            }
+        });
+
+        auto stopNew = MakeHolder<TEvService::TEvStopWorker>();
+        stopNew->Record.MutableController()->SetTabletId(42);
+        stopNew->Record.MutableController()->SetGeneration(1);
+        stopNew->Record.MutableWorker()->CopyFrom(workerId);
+        runtime.Send(new IEventHandle(service, edge, stopNew.Release()));
+        requireStatus(NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
+        runtime.WaitFor("source readers stopped", [&] {
+            return !runtime.FindActor(oldReader) && !runtime.FindActor(oldSession) && !runtime.FindActor(newSession);
+        }, TDuration::Seconds(30));
+        runtime.Send(new IEventHandle(service, edge, new TEvents::TEvPoison()));
+        runtime.Send(new IEventHandle(env.GetYdbProxy(), edge, new TEvents::TEvPoison()));
+        runtime.WaitFor("owned replication actors stopped", [&] {
+            for (const auto& actor : cleanupActors) {
+                if (runtime.FindActor(actor)) {
+                    return false;
+                }
+            }
+            return true;
+        }, TDuration::Seconds(30));
+        UNIT_ASSERT_C(!serverReadSessions.empty(), "source read session was not registered on the server");
+        for (const auto& actor : serverReadSessions) {
+            if (runtime.FindActor(actor)) {
+                runtime.Send(new IEventHandle(actor, edge, new NGRpcProxy::V1::TEvPQProxy::TEvDone()));
+            }
+        }
+        runtime.WaitFor("server read sessions stopped", [&] {
+            for (const auto& actor : serverReadSessions) {
+                if (runtime.FindActor(actor)) {
+                    return false;
+                }
+            }
+            return true;
+        }, TDuration::Seconds(30));
+        observeShutdown.Remove();
+    }
+}
 
 Y_UNIT_TEST_SUITE(ServiceSchemaProtocol) {
     using namespace NTestHelpers;

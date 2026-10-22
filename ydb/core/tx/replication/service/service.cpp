@@ -549,14 +549,23 @@ private:
 
 }; // TSessionInfo
 
-struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
+enum class ECredentialsKind {
+    Static,
+    OAuthToken,
+    Iam,
+};
+
+struct TConnectionParams: std::tuple<TString, TString, bool, TString, ECredentialsKind, TString, TString> {
     explicit TConnectionParams(
             const TString& endpoint,
             const TString& database,
             bool ssl,
             const TString& caCert,
-            const TString& user)
-        : std::tuple<TString, TString, bool, TString, TString>(endpoint, database, ssl, caCert, user)
+            ECredentialsKind credentialsKind,
+            const TString& identity,
+            const TString& password = {})
+        : std::tuple<TString, TString, bool, TString, ECredentialsKind, TString, TString>(
+            endpoint, database, ssl, caCert, credentialsKind, identity, password)
     {
     }
 
@@ -584,11 +593,14 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
 
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
-            return TConnectionParams(endpoint, database, ssl, caCert, params.GetStaticCredentials().GetUser());
+            return TConnectionParams(endpoint, database, ssl, caCert, ECredentialsKind::Static,
+                params.GetStaticCredentials().GetUser(), params.GetStaticCredentials().GetPassword());
         case NKikimrReplication::TConnectionParams::kOAuthToken:
-            return TConnectionParams(endpoint, database, ssl, caCert, params.GetOAuthToken().GetToken());
+            return TConnectionParams(endpoint, database, ssl, caCert, ECredentialsKind::OAuthToken,
+                params.GetOAuthToken().GetToken());
         case NKikimrReplication::TConnectionParams::kIamCredentials:
-            return TConnectionParams(endpoint, database, ssl, caCert, params.GetIamCredentials().GetServiceAccountId());
+            return TConnectionParams(endpoint, database, ssl, caCert, ECredentialsKind::Iam,
+                params.GetIamCredentials().GetServiceAccountId());
         default:
             Y_ABORT("Unexpected credentials");
         }
@@ -599,7 +611,8 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
 } // NKikimr::NReplication::NService
 
 template <>
-struct THash<NKikimr::NReplication::NService::TConnectionParams> : THash<std::tuple<TString, TString, bool, TString, TString>> {};
+struct THash<NKikimr::NReplication::NService::TConnectionParams>
+    : THash<std::tuple<TString, TString, bool, TString, NKikimr::NReplication::NService::ECredentialsKind, TString, TString>> {};
 
 namespace NKikimr::NReplication {
 

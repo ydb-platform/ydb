@@ -30,7 +30,7 @@ if str(_ANALYTICS_ROOT) not in sys.path:
 from collector.flush import has_send_credentials
 from collector.schema import TTL_MINUTES, _open_ydb_wrapper, build_column_types, resolve_table_path
 from collector.values import parse_datetime
-from github_actions.export_github_job_metrics import attach_pull_requests, list_run_jobs
+from github_actions.export_github_job_metrics import attach_pull_requests, list_open_pulls, list_run_jobs
 from github_actions.github_api import github_get
 
 DEFAULT_TABLE_PATH = "analytics/ci_capacity"
@@ -314,7 +314,19 @@ def target_branch(run: Dict[str, Any]) -> str:
         ref = ((pull.get("base") or {}).get("ref") if isinstance(pull.get("base"), dict) else None)
         if ref:
             return str(ref)
+    if (run or {}).get("event") in PR_EVENTS:
+        return ""
     return str((run or {}).get("head_branch") or "")
+
+
+def display_workflow(run: Dict[str, Any], job: Optional[Dict[str, Any]] = None) -> str:
+    job_name = str((job or {}).get("name") or "")
+    if job_name.startswith("Postcommit"):
+        return "Postcommit"
+    name = str((run or {}).get("name") or "")
+    if name == "PR-check" and (run or {}).get("event") == "push":
+        return "Postcommit"
+    return name or "(no workflow)"
 
 
 def index_runner_jobs(pairs: List[tuple]) -> Dict[str, Dict[str, Any]]:
@@ -331,7 +343,7 @@ def index_runner_jobs(pairs: List[tuple]) -> Dict[str, Dict[str, Any]]:
         number, title = pull_info(run or {})
         best[runner] = {
             "status": status,
-            "workflow": (run or {}).get("name") or "",
+            "workflow": display_workflow(run or {}, job),
             "job_name": job_name,
             "branch": target_branch(run or {}),
             "run_url": job.get("html_url") or (run or {}).get("html_url") or "",
@@ -395,7 +407,7 @@ def queue_jobs(pairs: List[tuple], now: datetime, specs=None, default=None) -> L
         used.add(name)
         jobs.append({
             "name": name,
-            "workflow": run.get("name") or "(no workflow)",
+            "workflow": display_workflow(run, job),
             "job_name": job_name,
             "branch": target_branch(run) or None,
             "run_url": job.get("html_url") or run.get("html_url") or None,
@@ -745,9 +757,15 @@ def list_workflow_runs(org, repo, status, per_page=RUN_PAGE_SIZE, max_pages=RUN_
     )
 
 
-def enrich_run_pull(org: str, repo: str, run: Dict[str, Any]) -> Dict[str, Any]:
+def enrich_run_pull(
+    org: str,
+    repo: str,
+    run: Dict[str, Any],
+    cache: Optional[Dict[str, list]] = None,
+    open_pulls: Optional[list] = None,
+) -> Dict[str, Any]:
     if run.get("event") in PR_EVENTS:
-        return attach_pull_requests(org, repo, run)
+        return attach_pull_requests(org, repo, run, cache=cache, open_pulls=open_pulls)
     if run.get("pull_requests"):
         cleaned = dict(run)
         cleaned["pull_requests"] = []
@@ -757,11 +775,13 @@ def enrich_run_pull(org: str, repo: str, run: Dict[str, Any]) -> Dict[str, Any]:
 
 def collect_open_jobs(org: str, repo: str) -> List[tuple]:
     pairs = []
+    cache: Dict[str, list] = {}
+    open_pulls = list_open_pulls(org, repo)
     for status in ("in_progress", "queued"):
         for run in list_workflow_runs(org, repo, status):
             if run.get("id") is None:
                 continue
-            run = enrich_run_pull(org, repo, run)
+            run = enrich_run_pull(org, repo, run, cache=cache, open_pulls=open_pulls)
             pairs.extend((run, job) for job in list_run_jobs(org, repo, int(run["id"])))
     return pairs
 

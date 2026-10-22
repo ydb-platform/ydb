@@ -26,6 +26,7 @@ from github_actions.export_runner_capacity import (
     hosts_that_fit,
     index_runner_jobs,
     instance_nrd_gib,
+    display_workflow,
     enrich_run_pull,
     is_ghrun,
     is_github_hosted_job,
@@ -261,6 +262,10 @@ class SnapshotRowsTest(unittest.TestCase):
             "main",
         )
         self.assertEqual(target_branch({"head_branch": "stable-25-1"}), "stable-25-1")
+        self.assertEqual(
+            target_branch({"event": "pull_request_target", "head_branch": "docs-fix-storage-terms"}),
+            "",
+        )
         indexed = index_runner_jobs([
             (
                 {"name": "PR-check", "event": "pull_request", "display_title": "dist-cache miss", "head_branch": "feature", "pull_requests": [{"number": 55140, "base": {"ref": "main"}}]},
@@ -367,6 +372,7 @@ class SnapshotRowsTest(unittest.TestCase):
 
     def test_enrich_keeps_pr_and_target_branch(self):
         run = {
+            "name": "PR-check",
             "event": "pull_request_target",
             "head_branch": "codex/cuthistory-main",
             "display_title": "Cut history",
@@ -378,6 +384,69 @@ class SnapshotRowsTest(unittest.TestCase):
         rows = queue_jobs([(out, {"id": 1, "status": "queued", "name": "Build and test relwithdebinfo"})], NOW)
         self.assertEqual(rows[0]["pr_number"], "53649")
         self.assertEqual(rows[0]["branch"], "main")
+        self.assertEqual(rows[0]["workflow"], "PR-check")
+
+    def test_postcommit_is_not_grouped_as_pr_check(self):
+        self.assertEqual(
+            display_workflow(
+                {"name": "PR-check", "event": "push"},
+                {"name": "Postcommit · Build and test relwithdebinfo"},
+            ),
+            "Postcommit",
+        )
+        self.assertEqual(
+            display_workflow(
+                {"name": "PR-check", "event": "pull_request_target"},
+                {"name": "Build and test relwithdebinfo"},
+            ),
+            "PR-check",
+        )
+        rows = queue_jobs([
+            (
+                {"id": 1, "name": "PR-check", "event": "push", "head_branch": "main"},
+                {"id": 11, "status": "queued", "name": "Postcommit · Build and test relwithdebinfo"},
+            ),
+            (
+                {
+                    "id": 2,
+                    "name": "PR-check",
+                    "event": "pull_request_target",
+                    "head_branch": "docs-fix-storage-terms",
+                    "display_title": "Fix storage terms",
+                    "pull_requests": [{"number": 1, "title": "Fix storage terms", "base": {"ref": "main"}}],
+                },
+                {"id": 22, "status": "queued", "name": "Build and test relwithdebinfo"},
+            ),
+        ], NOW)
+        by_job = {row["job_name"]: row for row in rows}
+        self.assertEqual(by_job["Postcommit · Build and test relwithdebinfo"]["workflow"], "Postcommit")
+        self.assertIsNone(by_job["Postcommit · Build and test relwithdebinfo"]["pr_number"])
+        self.assertEqual(by_job["Build and test relwithdebinfo"]["workflow"], "PR-check")
+        self.assertEqual(by_job["Build and test relwithdebinfo"]["branch"], "main")
+
+    def test_enrich_fork_run_from_open_pulls(self):
+        run = {
+            "event": "pull_request_target",
+            "head_sha": "e8c72cf7",
+            "head_branch": "cursor/cdc-binary-docs-eb18",
+            "display_title": "Document the BINARY changefeed format",
+            "pull_requests": [],
+            "head_repository": {"owner": {"login": "zinal"}},
+        }
+        open_pulls = [{
+            "number": 56374,
+            "title": "Document the BINARY changefeed format",
+            "state": "open",
+            "base": {"ref": "main"},
+            "head": {
+                "sha": "e8c72cf7",
+                "ref": "cursor/cdc-binary-docs-eb18",
+                "repo": {"owner": {"login": "zinal"}},
+            },
+        }]
+        out = enrich_run_pull("ydb-platform", "ydb", run, cache={}, open_pulls=open_pulls)
+        self.assertEqual(pull_info(out), ("56374", "Document the BINARY changefeed format"))
+        self.assertEqual(target_branch(out), "main")
 
     def test_short_in_progress_page_plus_long_queue_is_incomplete(self):
         self.assertTrue(github_jobs_incomplete(124, 24, 96))

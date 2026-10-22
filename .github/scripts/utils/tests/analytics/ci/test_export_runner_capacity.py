@@ -263,7 +263,7 @@ class SnapshotRowsTest(unittest.TestCase):
         )
         self.assertEqual(target_branch({"head_branch": "stable-25-1"}), "stable-25-1")
         self.assertEqual(
-            target_branch({"event": "pull_request_target", "head_branch": "docs-fix-storage-terms"}),
+            target_branch({"event": "pull_request_target", "head_branch": "feature"}),
             "",
         )
         indexed = index_runner_jobs([
@@ -411,9 +411,9 @@ class SnapshotRowsTest(unittest.TestCase):
                     "id": 2,
                     "name": "PR-check",
                     "event": "pull_request_target",
-                    "head_branch": "docs-fix-storage-terms",
-                    "display_title": "Fix storage terms",
-                    "pull_requests": [{"number": 1, "title": "Fix storage terms", "base": {"ref": "main"}}],
+                    "head_branch": "feature",
+                    "display_title": "fix it",
+                    "pull_requests": [{"number": 1, "title": "fix it", "base": {"ref": "main"}}],
                 },
                 {"id": 22, "status": "queued", "name": "Build and test relwithdebinfo"},
             ),
@@ -427,25 +427,25 @@ class SnapshotRowsTest(unittest.TestCase):
     def test_enrich_fork_run_from_open_pulls(self):
         run = {
             "event": "pull_request_target",
-            "head_sha": "e8c72cf7",
-            "head_branch": "cursor/cdc-binary-docs-eb18",
-            "display_title": "Document the BINARY changefeed format",
+            "head_sha": "abc123",
+            "head_branch": "feature",
+            "display_title": "fix it",
             "pull_requests": [],
-            "head_repository": {"owner": {"login": "zinal"}},
+            "head_repository": {"owner": {"login": "fork-user"}},
         }
         open_pulls = [{
-            "number": 56374,
-            "title": "Document the BINARY changefeed format",
+            "number": 42,
+            "title": "fix it",
             "state": "open",
             "base": {"ref": "main"},
             "head": {
-                "sha": "e8c72cf7",
-                "ref": "cursor/cdc-binary-docs-eb18",
-                "repo": {"owner": {"login": "zinal"}},
+                "sha": "abc123",
+                "ref": "feature",
+                "repo": {"owner": {"login": "fork-user"}},
             },
         }]
         out = enrich_run_pull("ydb-platform", "ydb", run, open_pulls=open_pulls)
-        self.assertEqual(pull_info(out), ("56374", "Document the BINARY changefeed format"))
+        self.assertEqual(pull_info(out), ("42", "fix it"))
         self.assertEqual(target_branch(out), "main")
 
     def test_short_in_progress_page_plus_long_queue_is_incomplete(self):

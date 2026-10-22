@@ -320,13 +320,9 @@ def target_branch(run: Dict[str, Any]) -> str:
 
 
 def display_workflow(run: Dict[str, Any], job: Optional[Dict[str, Any]] = None) -> str:
-    job_name = str((job or {}).get("name") or "")
-    if job_name.startswith("Postcommit"):
+    if str((job or {}).get("name") or "").startswith("Postcommit"):
         return "Postcommit"
-    name = str((run or {}).get("name") or "")
-    if name == "PR-check" and (run or {}).get("event") == "push":
-        return "Postcommit"
-    return name or "(no workflow)"
+    return str((run or {}).get("name") or "") or "(no workflow)"
 
 
 def index_runner_jobs(pairs: List[tuple]) -> Dict[str, Dict[str, Any]]:

@@ -84,27 +84,27 @@ class PullRefsTest(unittest.TestCase):
         run = {
             "event": "pull_request_target",
             "head_sha": "deadbeef",
-            "head_branch": "codex/cuthistory-main",
-            "display_title": "Cut history",
+            "head_branch": "feature",
+            "display_title": "fix it",
             "pull_requests": [],
-            "head_repository": {"owner": {"login": "lberserq"}},
+            "head_repository": {"owner": {"login": "fork-user"}},
         }
 
         def fetcher(url, params=None):
             if "/commits/" in url:
                 return []
-            self.assertEqual(params["head"], "lberserq:codex/cuthistory-main")
+            self.assertEqual(params["head"], "fork-user:feature")
             return [{
-                "number": 53649,
-                "title": "Cut history",
+                "number": 42,
+                "title": "fix it",
                 "state": "open",
                 "base": {"ref": "main"},
             }]
 
         out = attach_pull_requests("ydb-platform", "ydb", run, fetcher=fetcher)
-        self.assertEqual(out["pull_requests"][0]["number"], 53649)
+        self.assertEqual(out["pull_requests"][0]["number"], 42)
         self.assertEqual(out["pull_requests"][0]["base"]["ref"], "main")
-        self.assertEqual(out["pull_requests"][0]["title"], "Cut history")
+        self.assertEqual(out["pull_requests"][0]["title"], "fix it")
 
     def test_refetches_when_number_exists_without_base(self):
         run = {
@@ -125,21 +125,21 @@ class PullRefsTest(unittest.TestCase):
     def test_open_pulls_recover_fork_without_commit_lookup(self):
         run = {
             "event": "pull_request_target",
-            "head_sha": "e8c72cf7",
-            "head_branch": "cursor/cdc-binary-docs-eb18",
-            "display_title": "Document the BINARY changefeed format",
+            "head_sha": "abc123",
+            "head_branch": "feature",
+            "display_title": "fix it",
             "pull_requests": [],
-            "head_repository": {"owner": {"login": "zinal"}},
+            "head_repository": {"owner": {"login": "fork-user"}},
         }
         open_pulls = [{
-            "number": 56374,
-            "title": "Document the BINARY changefeed format",
+            "number": 42,
+            "title": "fix it",
             "state": "open",
             "base": {"ref": "main"},
             "head": {
-                "sha": "e8c72cf7",
-                "ref": "cursor/cdc-binary-docs-eb18",
-                "repo": {"owner": {"login": "zinal"}},
+                "sha": "abc123",
+                "ref": "feature",
+                "repo": {"owner": {"login": "fork-user"}},
             },
         }]
 
@@ -149,7 +149,7 @@ class PullRefsTest(unittest.TestCase):
         out = attach_pull_requests(
             "ydb-platform", "ydb", run, fetcher=fetcher, open_pulls=open_pulls,
         )
-        self.assertEqual(out["pull_requests"][0]["number"], 56374)
+        self.assertEqual(out["pull_requests"][0]["number"], 42)
         self.assertEqual(out["pull_requests"][0]["base"]["ref"], "main")
 
 

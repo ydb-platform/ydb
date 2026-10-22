@@ -459,7 +459,7 @@ def _first_pull(pulls: Any) -> Optional[Dict[str, Any]]:
 
 def _get_list(get, url: str, params: Optional[Dict[str, Any]] = None) -> list:
     try:
-        payload = get(url, params=params) if params is not None else get(url)
+        payload = get(url, params=params)
     except Exception as exc:  # noqa: BLE001 — keep exporting the run
         print("Warning: %s: %s" % (url, exc))
         return []

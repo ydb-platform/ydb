@@ -754,6 +754,168 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
         UNIT_ASSERT(!record->IsValidJson(error));
         UNIT_ASSERT_STRING_CONTAINS(error, "unsupported binary CDC version");
     }
+
+    Y_UNIT_TEST(BinaryCheckDataReportsErrors) {
+        auto schema = MakeBinarySchema();
+        const auto keyType = NScheme::TTypeInfo(NScheme::NTypeIds::Uint64);
+        const auto valueType = NScheme::TTypeInfo(NScheme::NTypeIds::Utf8);
+
+        auto dataHeader = [&](ui8 flags, ui16 values, ui16 oldImages) {
+            NChangeExchange::TBinaryCdcHeader header;
+            header.Version = NChangeExchange::BinaryCdcVersion;
+            header.Kind = NChangeExchange::EBinaryCdcKind::Data;
+            header.Op = NChangeExchange::EBinaryCdcOp::Upsert;
+            header.Flags = flags;
+            header.KeyCount = 1;
+            header.ValueCount = values;
+            header.OldImageCount = oldImages;
+            return header;
+        };
+
+        {
+            NChangeExchange::TBinaryCdcWriter writer;
+            writer.Start(dataHeader(static_cast<ui8>(NChangeExchange::EBinaryCdcFlag::HasOldImage), 0, 1));
+            writer.AddKey(TCell::Make(ui64(1)), keyType);
+            writer.AddOldImage(0, TCell(), valueType);
+            auto record = TChangeRecordBuilder().WithBody(writer.Finish()).WithSchema(schema).Build();
+            TString error;
+            UNIT_ASSERT(!record->CheckData(error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "image");
+        }
+
+        {
+            NChangeExchange::TBinaryCdcWriter writer;
+            writer.Start(dataHeader(0, 1, 0));
+            writer.AddKey(TCell::Make(ui64(1)), keyType);
+            const TString text = "x";
+            writer.AddValue(5, TCell(text.data(), text.size()), valueType);
+            auto record = TChangeRecordBuilder().WithBody(writer.Finish()).WithSchema(schema).Build();
+            TString error;
+            UNIT_ASSERT(!record->CheckData(error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "column index");
+        }
+
+        {
+            TString body = MakeBinaryData(NChangeExchange::EBinaryCdcOp::Upsert, false, 0, 0);
+            body.push_back('\x01');
+            auto record = TChangeRecordBuilder().WithBody(std::move(body)).WithSchema(schema).Build();
+            TString error;
+            UNIT_ASSERT(!record->CheckData(error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "trailing bytes");
+        }
+
+        {
+            NChangeExchange::TBinaryCdcWriter writer;
+            writer.Start(dataHeader(static_cast<ui8>(NChangeExchange::EBinaryCdcFlag::HasUser), 0, 0));
+            writer.AddKey(TCell::Make(ui64(1)), keyType);
+            auto record = TChangeRecordBuilder().WithBody(writer.Finish()).WithSchema(schema).Build();
+            TString error;
+            UNIT_ASSERT(!record->CheckData(error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "truncated binary CDC user SID");
+        }
+
+        {
+            const ui8 flags = static_cast<ui8>(NChangeExchange::EBinaryCdcFlag::HasUser)
+                | static_cast<ui8>(NChangeExchange::EBinaryCdcFlag::HasTrace);
+            NChangeExchange::TBinaryCdcWriter writer;
+            writer.Start(dataHeader(flags, 0, 0));
+            writer.AddKey(TCell::Make(ui64(7)), keyType);
+            writer.SetUser("user-sid");
+            writer.SetTrace("trace-id");
+            TString body = writer.Finish();
+            auto record = TChangeRecordBuilder().WithBody(body).WithSchema(schema).Build();
+            TString error;
+            UNIT_ASSERT_C(record->CheckData(error), error);
+            NKikimrTxDataShard::TEvApplyReplicationChanges::TChange change;
+            TMemoryPool pool(256);
+            record->Serialize(change, pool);
+            UNIT_ASSERT(change.HasErase() || change.HasUpsert());
+
+            body.push_back('\x00');
+            auto extra = TChangeRecordBuilder().WithBody(std::move(body)).WithSchema(schema).Build();
+            UNIT_ASSERT(!extra->CheckData(error));
+            UNIT_ASSERT_STRING_CONTAINS(error, "trailing bytes");
+        }
+    }
+
+    Y_UNIT_TEST(BinaryWideIndexRoundTrip) {
+        auto schema = MakeIntrusive<TLightweightSchema>();
+        schema->KeyColumns.push_back(NScheme::TTypeInfo(NScheme::NTypeIds::Uint64));
+        TVector<TString> names;
+        names.reserve(128);
+        for (ui32 i = 0; i < 128; ++i) {
+            TString name = "c000";
+            name[1] = static_cast<char>('0' + i / 100);
+            name[2] = static_cast<char>('0' + (i / 10) % 10);
+            name[3] = static_cast<char>('0' + i % 10);
+            names.push_back(name);
+            schema->ValueColumns.emplace(names.back(), TLightweightSchema::TColumn{
+                static_cast<NTable::TTag>(i + 1),
+                NScheme::TTypeInfo(NScheme::NTypeIds::Uint8),
+            });
+        }
+
+        const ui8 value = 9;
+        NChangeExchange::TBinaryCdcHeader header;
+        header.Version = NChangeExchange::BinaryCdcVersion;
+        header.Kind = NChangeExchange::EBinaryCdcKind::Data;
+        header.Op = NChangeExchange::EBinaryCdcOp::Upsert;
+        header.Flags = static_cast<ui8>(NChangeExchange::EBinaryCdcFlag::WideIndex);
+        header.KeyCount = 1;
+        header.ValueCount = 1;
+        NChangeExchange::TBinaryCdcWriter writer;
+        writer.Start(header);
+        writer.AddKey(TCell::Make(ui64(3)), schema->KeyColumns[0]);
+        writer.AddValue(127, TCell::Make(value), NScheme::TTypeInfo(NScheme::NTypeIds::Uint8));
+
+        auto record = TChangeRecordBuilder().WithBody(writer.Finish()).WithSchema(schema).Build();
+        TString error;
+        UNIT_ASSERT_C(record->CheckData(error), error);
+        NKikimrTxDataShard::TEvApplyReplicationChanges::TChange change;
+        TMemoryPool pool(256);
+        record->Serialize(change, pool);
+        UNIT_ASSERT_VALUES_EQUAL(change.GetUpsert().TagsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(change.GetUpsert().GetTags(0), 128);
+        TSerializedCellVec values;
+        UNIT_ASSERT(TSerializedCellVec::TryParse(TString(change.GetUpsert().GetData()), values));
+        ui8 parsed = 0;
+        UNIT_ASSERT(values.GetCells()[0].ToValue(parsed, error));
+        UNIT_ASSERT_VALUES_EQUAL(parsed, value);
+    }
+
+    Y_UNIT_TEST(BinaryFixedWidthMatchesScheme) {
+        auto check = [](NScheme::TTypeInfo type) {
+            const ui32 schemeSize = NScheme::GetFixedSize(type);
+            if (!schemeSize) {
+                return;
+            }
+            TString bytes(schemeSize, '\x5a');
+            NChangeExchange::TBinaryCdcHeader header;
+            header.Version = NChangeExchange::BinaryCdcVersion;
+            header.Kind = NChangeExchange::EBinaryCdcKind::Data;
+            header.Op = NChangeExchange::EBinaryCdcOp::Erase;
+            header.KeyCount = 1;
+            NChangeExchange::TBinaryCdcWriter writer;
+            writer.Start(header);
+            writer.AddKey(TCell(bytes.data(), bytes.size()), type);
+            const TString body = writer.Finish();
+            UNIT_ASSERT_VALUES_EQUAL_C(body.size(), 8 + schemeSize, NScheme::TypeName(type));
+
+            NChangeExchange::TBinaryCdcReader reader;
+            TString error;
+            UNIT_ASSERT_C(reader.Parse(body, error), error);
+            TVector<TCell> cells;
+            UNIT_ASSERT_C(reader.ReadKeys(TVector<NScheme::TTypeInfo>{type}, cells, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(cells[0].Size(), schemeSize);
+            UNIT_ASSERT(!cells[0].IsNull());
+            UNIT_ASSERT_C(reader.SkipOptionalTail(error), error);
+        };
+
+#define CHECK_BINARY_CDC_TYPE(typeEnum, typeType, ...) \
+        check(NScheme::TTypeInfo(NScheme::NTypeIds::typeEnum));
+        KIKIMR_FOREACH_TYPE(CHECK_BINARY_CDC_TYPE)
+#undef CHECK_BINARY_CDC_TYPE
+    }
 }
 
 }

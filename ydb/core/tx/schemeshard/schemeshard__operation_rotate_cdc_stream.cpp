@@ -265,7 +265,12 @@ public:
         switch (newStreamDesc.GetFormat()) {
         case NKikimrSchemeOp::ECdcStreamFormatProto:
         case NKikimrSchemeOp::ECdcStreamFormatJson:
+            break;
         case NKikimrSchemeOp::ECdcStreamFormatBinary:
+            if (!AppData()->FeatureFlags.GetEnableBinaryChangefeedForAsyncReplication()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "BINARY format is not supported yet");
+                return result;
+            }
             break;
         case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
             if (!AppData()->FeatureFlags.GetEnableChangefeedDynamoDBStreamsFormat()) {

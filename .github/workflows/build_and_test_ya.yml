@@ -27,7 +27,7 @@ on:
         description: "run tests"
       test_threads:
         type: string
-        default: 56
+        default: 64
         description: "Test threads count"
       link_threads:
         type: string

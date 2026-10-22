@@ -912,9 +912,14 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
         };
 
 #define CHECK_BINARY_CDC_TYPE(typeEnum, typeType, ...) \
-        check(NScheme::TTypeInfo(NScheme::NTypeIds::typeEnum));
+        if (!NScheme::NTypeIds::IsParametrizedType(NScheme::NTypeIds::typeEnum)) { \
+            check(NScheme::TTypeInfo(NScheme::NTypeIds::typeEnum)); \
+        }
         KIKIMR_FOREACH_TYPE(CHECK_BINARY_CDC_TYPE)
 #undef CHECK_BINARY_CDC_TYPE
+        // Decimal is parameterized, so it cannot be built from a bare type id.
+        // Its stored width is still the fixed integer-pair size.
+        check(NScheme::TTypeInfo(NScheme::TDecimalType::Default()));
     }
 }
 

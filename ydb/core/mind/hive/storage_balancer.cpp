@@ -206,12 +206,14 @@ public:
     }
 };
 
-void THive::StartHiveStorageBalancer(TStorageBalancerSettings settings) {
-    if (IsItPossibleToStartBalancer(EBalancerType::Storage)) {
-        auto* balancer = new THiveStorageBalancer(this, std::move(settings));
-        SubActors.emplace_back(balancer);
-        RegisterWithSameMailbox(balancer);
+bool THive::StartHiveStorageBalancer(TStorageBalancerSettings settings) {
+    if (!IsItPossibleToStartBalancer(EBalancerType::Storage)) {
+        return false;
     }
+    auto* balancer = new THiveStorageBalancer(this, std::move(settings));
+    SubActors.emplace_back(balancer);
+    RegisterWithSameMailbox(balancer);
+    return true;
 }
 
 } // NHive

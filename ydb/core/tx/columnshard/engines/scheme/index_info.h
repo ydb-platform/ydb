@@ -294,8 +294,8 @@ public:
         return Indexes;
     }
 
-    // Compatible bloom-ngram sizes on `columnId` for `caseSensitive` probes.
-    std::optional<NArrow::NSSA::TBloomNgramSizes> GetBloomNgramSize(ui32 columnId, bool caseSensitive) const;
+    // Smallest bloom-ngram size on `columnId` that accepts `caseSensitive` probes.
+    std::optional<ui32> GetBloomNgramSize(ui32 columnId, bool caseSensitive) const;
 
     TString DebugString() const {
         TStringBuilder sb;

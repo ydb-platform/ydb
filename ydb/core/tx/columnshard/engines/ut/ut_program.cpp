@@ -855,13 +855,9 @@ Y_UNIT_TEST_SUITE(TestProgram) {
     public:
         using TIndexColumnResolver::TIndexColumnResolver;
         std::optional<ui32> NgramSize;
-        std::optional<ui32> MaxNgramSize;
 
-        std::optional<NArrow::NSSA::TBloomNgramSizes> GetBloomNgramSize(const ui32 /*columnId*/, const bool /*caseSensitive*/) const override {
-            if (!NgramSize) {
-                return std::nullopt;
-            }
-            return NArrow::NSSA::TBloomNgramSizes{ *NgramSize, MaxNgramSize.value_or(*NgramSize) };
+        std::optional<ui32> GetBloomNgramSize(const ui32 /*columnId*/, const bool /*caseSensitive*/) const override {
+            return NgramSize;
         }
     };
 

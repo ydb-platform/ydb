@@ -73,13 +73,14 @@ constexpr std::array<std::string_view, 13> Re2OptionOrder = {
     "NeverCapture", "CaseSensitive", "PerlClasses", "WordBoundary", "OneLine",
 };
 
+// A type node (DataType, CallableType, and the rest) is annotated as Type. Re2::Options type
+// structs mention every option name; those mentions are not settings. No annotation is not a type.
 bool IsTypeExpr(const NYql::TExprNode* node) {
     node = UnwrapQuote(node);
-    return node && node->IsCallable({
-        "DataType", "OptionalType", "StructType", "TupleType", "ListType", "DictType", "CallableType",
-        "NullType", "VoidType", "UnitType", "ResourceType", "TaggedType", "VariantType", "PgType",
-        "EmptyListType", "EmptyDictType",
-    });
+    if (!node || !node->GetTypeAnn()) {
+        return false;
+    }
+    return node->GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Type;
 }
 
 // Nodes that may appear in a fully known Re2::Options value. If / Parameter / any other callable
@@ -111,8 +112,6 @@ void AcceptSetting(const std::string_view name, const NYql::TExprNode* valueNode
     }
     scan.Unsupported = true;
 }
-
-void ScanOptions(const NYql::TExprNode& node, TOptionScan& scan);
 
 void ScanPositionalOptions(const NYql::TExprNode& positional, TOptionScan& scan) {
     ui32 index = 0;
@@ -213,8 +212,8 @@ bool IsStringOrUtf8(const NYql::TTypeAnnotationNode* type) {
     return slot == NYql::EDataSlot::String || slot == NYql::EDataSlot::Utf8;
 }
 
-// Optional columns are applied via Map/FlatMap (UDF AutoMap). The matched column is that input,
-// or Unwrap(Member) when the match is applied directly. SafeCast is the byte identity only for
+// An optional column is matched through Map/FlatMap (UDF AutoMap). The column is that lambda
+// input, or Unwrap(Member) when the match is applied directly. SafeCast is accepted only from
 // String and Utf8; a cast from another type must not receive a string bloom probe.
 const NYql::TExprNode* MemberColumn(const NYql::TExprNode* node) {
     node = SkipJust(UnwrapQuote(node));

@@ -142,13 +142,6 @@ public:
     }
 };
 
-// Min is the smallest compatible bloom-ngram size, Max the largest. EndsWith probes must fit Max:
-// scan may select any of the indexes, and a short suffix does not match a larger index's suffix window.
-struct TBloomNgramSizes {
-    ui32 Min = 0;
-    ui32 Max = 0;
-};
-
 class IColumnResolver {
 public:
     virtual ~IColumnResolver() = default;
@@ -185,9 +178,9 @@ public:
     }
     virtual TColumnInfo GetDefaultColumn() const = 0;
 
-    // Bloom-ngram sizes on this column that accept the case mode. Empty when no such index exists.
-    // Min sizes Contains probes. Max sizes EndsWith probes: a larger index can be the one selected.
-    virtual std::optional<TBloomNgramSizes> GetBloomNgramSize(const ui32 /*columnId*/, const bool /*caseSensitive*/) const {
+    // Smallest bloom-ngram size on this column that accepts the case mode.
+    // Empty when no such index exists. A Contains shorter than this size is not a probe.
+    virtual std::optional<ui32> GetBloomNgramSize(const ui32 /*columnId*/, const bool /*caseSensitive*/) const {
         return std::nullopt;
     }
 };

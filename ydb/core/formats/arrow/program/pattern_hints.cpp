@@ -14,7 +14,11 @@ struct TLiteralRun {
     bool AtEnd = false;
 };
 
-// '%' and '_' end a run. An escaped byte is literal. Nothing when the pattern ends on the escape byte.
+// SQL LIKE wildcards. LikeAnyString is any string, LikeAnyChar is one character.
+constexpr char LikeAnyString = '%';
+constexpr char LikeAnyChar = '_';
+
+// LikeAnyString and LikeAnyChar end a run. An escaped byte is literal. Nothing when the pattern ends on the escape byte.
 std::optional<std::vector<TLiteralRun>> SplitLiteralRuns(const TStringBuf pattern, const TStringBuf escape) {
     if (escape.size() > 1) {
         return std::nullopt;
@@ -35,7 +39,7 @@ std::optional<std::vector<TLiteralRun>> SplitLiteralRuns(const TStringBuf patter
             escaped = true;
             continue;
         }
-        if (c == '%' || c == '_') {
+        if (c == LikeAnyString || c == LikeAnyChar) {
             if (!current.empty()) {
                 runs.push_back(TLiteralRun{current, atStart, false});
                 current.clear();
@@ -60,13 +64,15 @@ struct TPiece {
     bool AtEnd = false;
 };
 
-// Re2's case fold maps these ASCII letters onto bytes the bloom does not fold.
+// RE2 cycle-folds 'k' to U+212A (Kelvin) and 's' to U+017F (long s): CycleFoldRune in
+// contrib/libs/re2/re2/parse.cc, table in contrib/libs/re2/re2/unicode_casefold.h.
+// The bloom folds ASCII only, so a probe that contains these letters can miss a matching portion.
 bool BreaksCaseInsensitiveProbe(const unsigned char c) {
     return c >= 128 || c == 'k' || c == 'K' || c == 's' || c == 'S';
 }
 
-// Case-sensitive: the whole run. Case-insensitive: ASCII pieces, split where a probe would not be
-// implied. A piece keeps an anchor only when it is the corresponding end of the run.
+// Case-sensitive: the whole run. Case-insensitive: ASCII pieces, split on bytes the bloom cannot
+// probe. A piece keeps an anchor only when it is still the corresponding end of the run.
 std::vector<TPiece> PiecesOf(const TLiteralRun& run, const bool caseSensitive) {
     if (caseSensitive) {
         return {TPiece{run.Bytes, run.AtStart, run.AtEnd}};

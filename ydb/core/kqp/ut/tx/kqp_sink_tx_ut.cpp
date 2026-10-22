@@ -2260,11 +2260,11 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     }
 
     // A split where all of the removed shard's rows land in one of the two new shards
-    // leaves the other one lock-only: it holds the transferred ancestor lock but
-    // receives no rows and no re-routed batch. It still must join the distributed
-    // commit (the transferred lock makes it a participant; the prepare reaches it through
-    // the external-shards path) so that the ancestor lock is validated and cleaned by
-    // the commit.
+    // leaves the other one lock-only: it holds the transferred ancestor lock and
+    // receives no rows, only the empty re-routed batch carrying the write chain, which
+    // it answers as a duplicate. The echoed lock makes the shard a participant of the
+    // distributed commit, and its prepare must carry the ancestor lock of the removed
+    // shard so it is validated and cleaned by the commit.
     class TUncommittedWriteSeqNumLockOnlyShardJoinsCommit : public TTableDataModificationTester {
     protected:
         void Setup(TKikimrSettings& settings) override {

@@ -1453,12 +1453,9 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
     // the client still learns the lock with its updated write chain. When the lock
     // could not be acquired (broken or too many), echo the error lock over the same
     // tables, so the client sees the same lock-acquire failure a data write would
-    // produce instead of a silently successful empty write. Duplicate writes are
-    // excluded: their echoes, including the current-shard one, are already produced
-    // by the duplicate-echo path below.
+    // produce instead of a silently successful empty write.
     THashSet<TPathId> chainOnlyTables;
-    if (Update->AffectedTables.Empty() && Update->WriteSeqNumUpdate
-        && !Update->WriteSeqNumUpdate->ThisShardDuplicateWrite) {
+    if (Update->AffectedTables.Empty() && Update->WriteSeqNumUpdate) {
         const TLockInfo* echoLock = Update->Lock ? Update->Lock.Get() : lock.Get();
         if (echoLock) {
             chainOnlyTables = echoLock->GetReadTables();
@@ -1466,13 +1463,11 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
         }
     }
 
-    auto makeEchoLocks = [&](const TPathId& tableId) {
-        out.push_back(MakeLock(
-            Update->LockTxId, Self->TabletID(),
-            lock ? lock->GetGeneration() : Self->Generation(), counter,
-            tableId, Update->Lock && Update->Lock->IsWriteLock(),
-            Update->Lock ? Update->Lock->GetLockWriteSeqNum() : TLockWriteSeqNum{}));
-
+    // Fresh ancestor continuation seq nums are echoed per table, independently of
+    // the current-shard echo. Per shard they are disjoint from
+    // AncestorShardsWithDuplicateWrites (each group is either fresh or duplicate),
+    // so no ancestor lock is ever echoed twice.
+    auto makeAncestorEchoes = [&](const TPathId& tableId) {
         if (Update->WriteSeqNumUpdate && Update->Lock) {
             const auto& lock = Update->Lock;
             for (auto [shardId, seqNum] : Update->WriteSeqNumUpdate->SetAncestorWriteSeqNums) {
@@ -1492,11 +1487,27 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
         }
     };
 
+    auto makeEchoLocks = [&](const TPathId& tableId) {
+        out.push_back(MakeLock(
+            Update->LockTxId, Self->TabletID(),
+            lock ? lock->GetGeneration() : Self->Generation(), counter,
+            tableId, Update->Lock && Update->Lock->IsWriteLock(),
+            Update->Lock ? Update->Lock->GetLockWriteSeqNum() : TLockWriteSeqNum{}));
+        makeAncestorEchoes(tableId);
+    };
+
     for (auto& table : Update->AffectedTables) {
         makeEchoLocks(table.GetTableId());
     }
     for (const auto& table : chainOnlyTables) {
-        makeEchoLocks(table);
+        if (!Update->WriteSeqNumUpdate->ThisShardDuplicateWrite) {
+            makeEchoLocks(table);
+        } else {
+            // This shard's own write is a duplicate: the current-shard echo is
+            // produced by the duplicate-echo path below over the same tables, but
+            // fresh ancestor continuation seq nums still need their echoes.
+            makeAncestorEchoes(table);
+        }
     }
 
     if (Update->HasSeqNumDuplicateWrites()) {

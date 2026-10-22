@@ -312,6 +312,19 @@ namespace {
         return *table;
     }
 
+    // TAlter writes every change as a separate record, merge them into one
+    TAutoPtr<TSchemeChanges> AsOneRecord(TAlter& alter) {
+        auto changes = alter.Flush();
+        UNIT_ASSERT(changes->DeltaSize() > 1);
+        for (int i = 1; i < changes->DeltaSize(); ++i) {
+            changes->MutableDelta(0)->MergeFrom(changes->GetDelta(i));
+        }
+        while (changes->DeltaSize() > 1) {
+            changes->MutableDelta()->RemoveLast();
+        }
+        return changes;
+    }
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeTiering) {
@@ -437,12 +450,15 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
         policy.Unit = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS;
         apply(policy);
 
-        // Unknown tier, rules out of order
+        // Unknown tier, rules out of order, no rules
         policy = RelativePolicy();
         policy.Rules[0].TierId = 3;
         UNIT_ASSERT_EXCEPTION(apply(policy), yexception);
         policy = RelativePolicy();
         std::swap(policy.Rules[0], policy.Rules[1]);
+        UNIT_ASSERT_EXCEPTION(apply(policy), yexception);
+        policy = RelativePolicy();
+        policy.Rules.clear();
         UNIT_ASSERT_EXCEPTION(apply(policy), yexception);
     }
 
@@ -470,6 +486,65 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
             TAlter drop;
             drop.DropColumn(TableId, TModel::ColId2);
             UNIT_ASSERT(TSchemeModifier(scheme).Apply(*drop.Flush()));
+        }
+    }
+
+    Y_UNIT_TEST(ConflictingChangesInOneRecord) {
+        {
+            TScheme scheme = Apply(BuildTiered());
+            TAlter alter;
+            alter.SetTieringPolicy(TableId, RelativePolicy());
+            alter.ResetTieringPolicy(TableId);
+            UNIT_ASSERT_EXCEPTION(TSchemeModifier(scheme).Apply(*AsOneRecord(alter)), yexception);
+        }
+
+        {
+            TScheme scheme = Apply(BuildTiered());
+            TAlter alter;
+            alter.SetTier(TableId, 3, ColdRoom, ECodec::Plain, ECache::None, ECacheMode::Regular);
+            alter.DropTier(TableId, 3);
+            UNIT_ASSERT_EXCEPTION(TSchemeModifier(scheme).Apply(*AsOneRecord(alter)), yexception);
+        }
+
+        {
+            // Different tiers can be set and dropped in one record
+            TScheme scheme = Apply(BuildTiered());
+            TAlter alter;
+            alter.SetTier(TableId, 3, ColdRoom, ECodec::Plain, ECache::None, ECacheMode::Regular);
+            alter.DropTier(TableId, ArchiveTier);
+            UNIT_ASSERT(TSchemeModifier(scheme).Apply(*AsOneRecord(alter)));
+            UNIT_ASSERT(Table(scheme).Tiers.contains(3));
+            UNIT_ASSERT(Table(scheme).Tiers.contains(HddTier));
+            UNIT_ASSERT(!Table(scheme).Tiers.contains(ArchiveTier));
+        }
+    }
+
+    Y_UNIT_TEST(RecordIsValidatedAsAWhole) {
+        auto alter = BuildTiered();
+        alter.SetTier(TableId, 3, ColdRoom, ECodec::Plain, ECache::None, ECacheMode::Regular);
+        alter.SetTieringPolicy(TableId, RelativePolicy());
+
+        {
+            // An invalid record changes nothing, even settings it lists before the tiering ones
+            TScheme scheme = Apply(alter);
+            TAlter change;
+            change.SetColdBorrow(TableId, true);
+            change.DropTier(TableId, 3);
+            change.DropTier(TableId, HddTier);
+            UNIT_ASSERT_EXCEPTION(TSchemeModifier(scheme).Apply(*AsOneRecord(change)), yexception);
+            UNIT_ASSERT(!Table(scheme).ColdBorrow);
+            UNIT_ASSERT_VALUES_EQUAL(Table(scheme).Tiers.size(), 3u);
+        }
+
+        {
+            // Tiers are checked against the policy that the record leaves
+            TScheme scheme = Apply(alter);
+            TAlter change;
+            change.ResetTieringPolicy(TableId);
+            change.DropTier(TableId, HddTier);
+            UNIT_ASSERT(TSchemeModifier(scheme).Apply(*AsOneRecord(change)));
+            UNIT_ASSERT(!Table(scheme).TieringPolicy);
+            UNIT_ASSERT(!Table(scheme).Tiers.contains(HddTier));
         }
     }
 }

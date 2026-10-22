@@ -27,6 +27,79 @@ namespace {
     private:
         bool Value = false;
     };
+
+    // Validates page settings of a family or a tier
+    void ValidatePageSettings(NPage::ECodec codec, NPage::ECache cache, NPage::ECacheMode cacheMode) {
+        Y_ENSURE(ui32(codec) <= ui32(NPage::ECodec::LZ4), "Invalid page encoding code value");
+        Y_ENSURE(ui32(cache) <= ui32(NPage::ECache::Ever), "Invalid pages cache policy value");
+        Y_ENSURE(ui32(cacheMode) <= ui32(NPage::ECacheMode::TryKeepInMemory), "Invalid cache mode value");
+    }
+
+    TScheme::TTier TierFromProto(const NTabletFlatScheme::TTierSettings& proto) {
+        TScheme::TTier tier;
+        tier.Room = proto.GetRoomId();
+        tier.Codec = NPage::ECodec(proto.GetCodec());
+        tier.Cache = NPage::ECache(proto.GetCache());
+        tier.CacheMode = NPage::ECacheMode(proto.GetCacheMode());
+        return tier;
+    }
+
+    /**
+     * Checks the tiering changes of a SetTable record against the tiers and the
+     * policy they produce, so that an invalid record is rejected before it
+     * changes anything. Returns the policy set by the record, if any.
+     */
+    std::optional<TTieringPolicy> ValidateTiering(const TScheme::TTableInfo& tableInfo, const TAlterRecord& delta) {
+        // TAlter writes every tiering change as a separate record, so a record
+        // never both sets and resets the policy or both sets and drops a tier
+        Y_ENSURE(!delta.HasTieringPolicy() || !delta.GetResetTieringPolicy(),
+            "Tiering policy is both set and reset in one record");
+
+        THashSet<ui32> tiers;
+        for (const auto& it : tableInfo.Tiers) {
+            tiers.insert(it.first);
+        }
+
+        for (const auto& tierProto : delta.GetSetTiers()) {
+            const ui32 tierId = tierProto.GetTierId();
+            Y_ENSURE(tierId != TTierPredicate::DefaultTierId && tierId != Max<ui32>(), "Invalid tier id " << tierId);
+            Y_ENSURE(tableInfo.Rooms.contains(tierProto.GetRoomId()),
+                "Room " << tierProto.GetRoomId() << " of tier " << tierId << " does not exist");
+            const auto tier = TierFromProto(tierProto);
+            ValidatePageSettings(tier.Codec, tier.Cache, tier.CacheMode);
+            tiers.insert(tierId);
+        }
+
+        for (const ui32 tierId : delta.GetDropTiers()) {
+            for (const auto& tierProto : delta.GetSetTiers()) {
+                Y_ENSURE(tierProto.GetTierId() != tierId,
+                    "Tier " << tierId << " is both set and dropped in one record");
+            }
+            tiers.erase(tierId);
+        }
+
+        std::optional<TTieringPolicy> newPolicy;
+        if (delta.HasTieringPolicy()) {
+            newPolicy = TieringPolicyFromProto(delta.GetTieringPolicy());
+            TTierPredicate::Validate(*newPolicy);
+
+            const auto* column = tableInfo.Columns.FindPtr(newPolicy->ColumnTag);
+            Y_ENSURE(column, "Tiering column " << newPolicy->ColumnTag << " does not exist");
+            TTierPredicate::ValidateColumn(*newPolicy, column->PType);
+
+            for (const auto& rule : newPolicy->Rules) {
+                Y_ENSURE(tiers.contains(rule.TierId),
+                    "Tiering policy refers to tier " << rule.TierId << " that does not exist");
+            }
+        } else if (tableInfo.TieringPolicy && !delta.GetResetTieringPolicy()) {
+            for (const auto& rule : tableInfo.TieringPolicy->Rules) {
+                Y_ENSURE(tiers.contains(rule.TierId),
+                    "Cannot drop tier " << rule.TierId << " used by the tiering policy");
+            }
+        }
+
+        return newPolicy;
+    }
 }
 
 TSchemeModifier::TSchemeModifier(TScheme &scheme, TSchemeRollbackState *rollbackState)
@@ -91,8 +164,6 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
 
         auto codec = delta.HasCodec() ? ECodec(delta.GetCodec()) :family.Codec;
 
-        Y_ENSURE(ui32(codec) <= 1, "Invalid page encoding code value");
-
         // FIXME: for now these changes will affect old parts on boot only (see RequestInMemPagesForPartStore)
         bool ever = delta.HasInMemory() && delta.GetInMemory();
         auto cache = ever ? ECache::Ever : family.Cache;
@@ -102,12 +173,11 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         ui32 large = delta.HasLarge() ? delta.GetLarge() : family.Large;
 
         auto cacheMode = delta.HasCacheMode() ? ECacheMode(delta.GetCacheMode()) : family.CacheMode;
-        Y_ENSURE(ui32(cacheMode) <= 1, "Invalid cache mode value");
+        ValidatePageSettings(codec, cache, cacheMode);
         if (family.CacheMode != cacheMode) {
             ChangeTableSetting(table, tableInfo.PendingCacheModeChange, true);
         }
 
-        Y_ENSURE(ui32(cache) <= 2, "Invalid pages cache policy value");
         if (family.Cache != cache && cache == ECache::Ever) {
             ChangeTableSetting(table, tableInfo.PendingCacheEnable, true);
         }
@@ -150,6 +220,9 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
 
     } else if (action == TAlterRecord::SetTable) {
         auto &tableInfo = *Table(table);
+
+        // The policy set by the record, if any
+        const std::optional<TTieringPolicy> tieringPolicy = ValidateTiering(tableInfo, delta);
 
         if (delta.HasByKeyFilter()) {
             // Legacy: convert ByKeyFilter bool to a prefix entry for full key
@@ -212,60 +285,26 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
             changes |= ChangeTableSetting(table, tableInfo.SpecialTableType, type);
         }
 
+        // Tiering changes are validated by ValidateTiering above
         for (const auto& tierProto : delta.GetSetTiers()) {
             const ui32 tierId = tierProto.GetTierId();
-            Y_ENSURE(tierId != TTierPredicate::DefaultTierId && tierId != Max<ui32>(), "Invalid tier id " << tierId);
-            Y_ENSURE(tableInfo.Rooms.contains(tierProto.GetRoomId()),
-                "Room " << tierProto.GetRoomId() << " of tier " << tierId << " does not exist");
-
-            TScheme::TTier tier;
-            tier.Room = tierProto.GetRoomId();
-            tier.Codec = ECodec(tierProto.GetCodec());
-            tier.Cache = ECache(tierProto.GetCache());
-            tier.CacheMode = ECacheMode(tierProto.GetCacheMode());
-            Y_ENSURE(ui32(tier.Codec) <= 1, "Invalid page encoding code value");
-            Y_ENSURE(ui32(tier.Cache) <= 2, "Invalid pages cache policy value");
-            Y_ENSURE(ui32(tier.CacheMode) <= 1, "Invalid cache mode value");
-
             if (!tableInfo.Tiers.contains(tierId)) {
                 PreserveTable(table);
                 changes |= true;
             }
-            changes |= ChangeTableSetting(table, tableInfo.Tiers[tierId], tier);
+            changes |= ChangeTableSetting(table, tableInfo.Tiers[tierId], TierFromProto(tierProto));
         }
 
-        if (delta.HasTieringPolicy()) {
-            std::optional<TTieringPolicy> policy = TieringPolicyFromProto(delta.GetTieringPolicy());
-            TTierPredicate::Validate(*policy);
-
-            const auto* column = tableInfo.Columns.FindPtr(policy->ColumnTag);
-            Y_ENSURE(column, "Tiering column " << policy->ColumnTag << " does not exist");
-            TTierPredicate::ValidateColumn(*policy, column->PType);
-
-            for (const auto& rule : policy->Rules) {
-                Y_ENSURE(tableInfo.Tiers.contains(rule.TierId),
-                    "Tiering policy refers to tier " << rule.TierId << " that does not exist");
-            }
-
-            changes |= ChangeTableSetting(table, tableInfo.TieringPolicy, policy);
-        }
-
-        if (delta.GetResetTieringPolicy()) {
-            changes |= ChangeTableSetting(table, tableInfo.TieringPolicy, std::optional<TTieringPolicy>());
+        if (tieringPolicy || delta.GetResetTieringPolicy()) {
+            changes |= ChangeTableSetting(table, tableInfo.TieringPolicy, tieringPolicy);
         }
 
         for (const ui32 tierId : delta.GetDropTiers()) {
-            if (!tableInfo.Tiers.contains(tierId)) {
-                continue;
+            if (tableInfo.Tiers.contains(tierId)) {
+                PreserveTable(table);
+                tableInfo.Tiers.erase(tierId);
+                changes |= true;
             }
-            if (tableInfo.TieringPolicy) {
-                for (const auto& rule : tableInfo.TieringPolicy->Rules) {
-                    Y_ENSURE(rule.TierId != tierId, "Cannot drop tier " << tierId << " used by the tiering policy");
-                }
-            }
-            PreserveTable(table);
-            tableInfo.Tiers.erase(tierId);
-            changes |= true;
         }
 
     } else if (action == TAlterRecord::UpdateExecutorInfo) {

@@ -121,6 +121,10 @@ message TMirror3dcGroupState {
     // I = Included, E = Excluded, J = Joining, L = Leaving. Layouts use interchangeable realms.
     // WriteOk alternatives are OR-ed; WriteDurability is the background replication target.
     // CW describes old-blob guarantees; stronger WriteOk alone affects only new blobs.
+    // If a Joining realm is present and a CW layout fits entirely in Included realms,
+    // that layout is guaranteed within Included realms alone, without relying on Joining.
+    // Additional copies may exist in Joining realms. For example, with I/I/J, CW 1+1
+    // guarantees a copy in each Included realm; with I/J/E, CW 2 guarantees two copies in I.
     // Mode transitions; realm-index checks in CanTransitionTo still apply.
     // Matching RECOVERY, RECOVERY INV1, and RECOVERY INV2 labels connect distant arrows.
     // Identical-state requests are idempotent; self-loops are omitted.

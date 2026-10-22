@@ -321,6 +321,8 @@ def create_argv(cfg, name, userdata_path):
 
 
 def ssh_argv(cfg, ip):
+    # A replaced VM often gets an old address, and the previous host key is then wrong.
+    subprocess.run(["ssh-keygen", "-R", ip], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return [
         "ssh",
         "-J", cfg["jump_host"],

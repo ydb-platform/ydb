@@ -525,7 +525,7 @@ struct TUserTable : public TThrRefBase {
 
     TMap<TPathId, TCdcStream> CdcStreams;
     ui32 AsyncIndexCount = 0;
-    ui32 JsonCdcStreamCount = 0;
+    ui32 SchemaSnapshotCdcStreamCount = 0;
     TSet<TPathId> SchemaChangesCdcStreams;
 
     // Tablet thread access only, updated in-place

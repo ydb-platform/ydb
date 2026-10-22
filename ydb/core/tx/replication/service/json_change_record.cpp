@@ -151,6 +151,13 @@ bool TChangeRecord::IsValidJson(TString& error) const {
     return false;
 }
 
+bool TChangeRecord::CheckData(TString& error) const {
+    if (!IsBinary || GetKind() != EKind::CdcDataChange) {
+        return true;
+    }
+    return EnsureBinaryCells(error);
+}
+
 NChangeExchange::IChangeRecord::EKind TChangeRecord::GetKind() const {
     if (IsBinary) {
         switch (BinaryHeader.Kind) {
@@ -270,11 +277,9 @@ bool TChangeRecord::EnsureBinaryCells(TString& error) const {
         error = BinaryError;
         return false;
     }
-    if (!reader.Header().Has(NChangeExchange::EBinaryCdcFlag::HasUser)
-        && !reader.Header().Has(NChangeExchange::EBinaryCdcFlag::HasTrace)
-        && !reader.Rest().empty())
-    {
-        return fail("trailing bytes in binary CDC record");
+    if (!reader.SkipOptionalTail(BinaryError)) {
+        error = BinaryError;
+        return false;
     }
 
     BinaryOp = reader.Header().Op;

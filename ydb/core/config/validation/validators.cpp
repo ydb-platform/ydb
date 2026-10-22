@@ -269,7 +269,12 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
         const bool hasGrpcEndpoint = hasEndpoint(grpcConfig) || AnyOf(grpcConfig.GetExtEndpoints(), hasEndpoint);
         const bool hasConfigEndpoint = hasConfigService(grpcConfig)
                                        || AnyOf(grpcConfig.GetExtEndpoints(), hasConfigService);
-        try {
+        CHECK_ERR(!hasGrpcEndpoint || hasConfigEndpoint,
+                  "FeatureFlags.SwitchToConfigV2 requires the 'config' gRPC service on at least one endpoint; "
+                  "enable it in services/services_enabled and remove it from services_disabled for that endpoint");
+    }
+
+    try {
         NPathAliasing::TPathNormalizer{config.GetResourcePathPrefixMapping()};
     } catch (const yexception& e) {
         msg = {e.what()};

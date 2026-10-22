@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/util/backoff.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <util/generic/algorithm.h>
@@ -62,13 +63,21 @@ inline bool IsRetryableError(const NYdb::TStatus status) {
     return IsRetryableError(status, defaultRetryableErrors);
 }
 
-inline bool IsRetryableEndpointError(const NYdb::TStatus& status) {
+inline bool IsRetryableError(const NYdb::TStatus& status, const TBackoff& backoff) {
+    if (!IsRetryableError(status)) {
+        return false;
+    }
+
     // Endpoint availability has no finite recovery deadline. Preserve the
     // discovery budget for server errors, and the terminal setting/auth checks.
-    return (status.GetStatus() == NYdb::EStatus::TRANSPORT_UNAVAILABLE
-        || status.GetStatus() == NYdb::EStatus::CLIENT_DISCOVERY_FAILED
-        || status.GetStatus() == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED)
-        && IsRetryableError(status);
+    switch (status.GetStatus()) {
+    case NYdb::EStatus::TRANSPORT_UNAVAILABLE:
+    case NYdb::EStatus::CLIENT_DISCOVERY_FAILED:
+    case NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED:
+        return true;
+    default:
+        return backoff.HasMore();
+    }
 }
 
 }

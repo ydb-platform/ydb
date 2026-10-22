@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/protos/subdomains.pb.h>
 
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -34,6 +35,10 @@ constexpr const char* TestCluster = "local_rbo_prefix_capture";
 struct TOptions {
     TString SchemaPath;
     TString QueryPath;
+    TString SchemaDirectory;
+    TString QueryDirectory;
+    TString SchemeLimitsPath;
+    ui32 LanguageVersion = NYql::GetMaxLangVersion();
     TString OutputPath;
     ui64 TransformationOrdinal = 0;
     bool BenchmarkColumnStore = false;
@@ -74,13 +79,23 @@ TOptions ParseOptions(int argc, char** argv) {
     options.SetFreeArgsNum(0);
     options.AddHelpOption('h');
     options.AddLongOption("schema", "YQL schema file to execute")
-        .Required()
         .RequiredArgument("PATH")
         .StoreResult(&result.SchemaPath);
     options.AddLongOption("query", "YQL query file to prepare exactly once")
-        .Required()
         .RequiredArgument("PATH")
         .StoreResult(&result.QueryPath);
+    options.AddLongOption("schema-dir", "Execute immediate .sql/.yql schema files in filename order")
+        .RequiredArgument("DIR")
+        .StoreResult(&result.SchemaDirectory);
+    options.AddLongOption("query-dir", "Capture immediate .sql/.yql queries serially, continuing after failures")
+        .RequiredArgument("DIR")
+        .StoreResult(&result.QueryDirectory);
+    options.AddLongOption("scheme-limits", "Root domain TSchemeLimits protobuf text file")
+        .RequiredArgument("PATH")
+        .StoreResult(&result.SchemeLimitsPath);
+    options.AddLongOption("lang-version", "SQL language version (defaults to the newest supported version)")
+        .RequiredArgument("VERSION")
+        .StoreResult(&result.LanguageVersion);
     options.AddLongOption("query-mode", "Preparation mode: data, generic, or generic-spilling")
         .RequiredArgument("MODE")
         .StoreResult(&result.QueryMode);
@@ -102,6 +117,11 @@ TOptions ParseOptions(int argc, char** argv) {
         .RequiredArgument("DIR")
         .StoreResult(&result.OutputPath);
     NLastGetopt::TOptsParseResult parsed(&options, argc, argv);
+    if (result.SchemaPath.empty() == result.SchemaDirectory.empty() ||
+        result.QueryPath.empty() == result.QueryDirectory.empty())
+    {
+        ythrow yexception() << "specify exactly one of --schema/--schema-dir and --query/--query-dir";
+    }
     if (result.QueryMode != "data" && result.QueryMode != "generic" && result.QueryMode != "generic-spilling") {
         ythrow yexception() << "--query-mode must be data, generic, or generic-spilling";
     }
@@ -130,6 +150,32 @@ TString ReadInput(const TString& name, TStringBuf description) {
     return value;
 }
 
+TVector<TString> InputPaths(const TString& file, const TString& directory) {
+    if (!file.empty()) {
+        return {file};
+    }
+    const TFsPath path(directory);
+    if (!path.IsDirectory() || path.IsSymlink()) {
+        ythrow yexception() << "input is not a regular directory: " << directory;
+    }
+    TVector<TString> names;
+    path.ListNames(names);
+    std::sort(names.begin(), names.end());
+    TVector<TString> result;
+    for (const auto& name : names) {
+        const TFsPath child = path / name;
+        if ((name.EndsWith(".sql") || name.EndsWith(".yql")) && child.IsFile()) {
+            // ReadInput rejects symlinks rather than following external inputs.
+            ReadInput(child.GetPath(), "directory input");
+            result.push_back(child.GetPath());
+        }
+    }
+    if (result.empty()) {
+        ythrow yexception() << "input directory has no .sql/.yql files: " << directory;
+    }
+    return result;
+}
+
 TFsPath PrepareOutputDirectory(const TString& name) {
     TFsPath output(name);
     if (output.Exists()) {
@@ -147,7 +193,10 @@ TFsPath PrepareOutputDirectory(const TString& name) {
     return output;
 }
 
-TIntrusivePtr<IKqpGateway> MakeGateway(Tests::TServer& server) {
+TIntrusivePtr<IKqpGateway> MakeGateway(
+    Tests::TServer& server,
+    const NYql::TKikimrConfiguration::TPtr& config)
+{
     auto counters = MakeIntrusive<TKqpRequestCounters>();
     counters->Counters = new TKqpCounters(
         server.GetRuntime()->GetAppData(0).Counters);
@@ -156,7 +205,7 @@ TIntrusivePtr<IKqpGateway> MakeGateway(Tests::TServer& server) {
     auto loader = std::make_shared<TKqpTableMetadataLoader>(
         TestCluster,
         server.GetRuntime()->GetAnyNodeActorSystem(),
-        TIntrusivePtr<NYql::TKikimrConfiguration>(),
+        config,
         false);
     return CreateKikimrIcGateway(
         TestCluster,
@@ -170,7 +219,7 @@ TIntrusivePtr<IKqpGateway> MakeGateway(Tests::TServer& server) {
         server.GetSettings().AppConfig->GetQueryServiceConfig());
 }
 
-NYql::TKikimrConfiguration::TPtr MakeConfiguration(TStringBuf queryMode) {
+NYql::TKikimrConfiguration::TPtr MakeConfiguration(Tests::TServer& server, TStringBuf queryMode) {
     auto config = MakeIntrusive<NYql::TKikimrConfiguration>();
     const TString defaultsData = NResource::Find("kqp_default_settings.txt");
     TStringInput defaultsStream(defaultsData);
@@ -182,27 +231,37 @@ NYql::TKikimrConfiguration::TPtr MakeConfiguration(TStringBuf queryMode) {
         defaults.GetDefaultSettings(),
         TestCluster,
         TVector<NKikimrKqp::TKqpSetting>{},
-        true);
-    config->SetEnableNewRBO(true);
-    config->SetEnableFallbackToYqlOptimizer(false);
-    config->SetAllowOlapDataQuery(true);
-    config->SetDefaultLangVer(NYql::GetMaxLangVersion());
-    config->SetBackportMode(
-        NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-    config->_ResultRowsLimit.Clear();
+        false);
+    // Match the production compile actor's database-relative SQL resolution.
+    config->_KqpTablePathPrefix = "/Root";
+    config->ApplyServiceConfig(server.GetSettings().AppConfig->GetTableServiceConfig());
+    // This helper runs outside actor activation context; use the test runtime
+    // rather than the TLS-based AppData() accessor used by the compile actor.
+    config->FeatureFlags = server.GetRuntime()->GetAppData(0).FeatureFlags;
+    if (queryMode != "data") {
+        const auto rowsLimit = server.GetSettings().AppConfig->GetQueryServiceConfig().GetScriptResultRowsLimit();
+        if (rowsLimit > 0) {
+            config->_ResultRowsLimit = rowsLimit;
+        } else {
+            config->_ResultRowsLimit.Clear();
+        }
+        config->_KqpYqlConstraintsTransformerEnabled = config->FeatureFlags.GetEnableKqpConstraintsTransformer();
+    }
+    config->OptValidateStreamingCheckpoints = false;
     if (queryMode == "generic-spilling") {
         config->_KqpEnableSpilling = true;
     }
+    config->FreezeDefaults();
     return config;
 }
 
-TKikimrRunner MakeRunner() {
+TKikimrRunner MakeRunner(ui32 languageVersion) {
     NKikimrConfig::TAppConfig appConfig;
     auto* service = appConfig.MutableTableServiceConfig();
     service->SetEnableNewRBO(true);
     service->SetEnableFallbackToYqlOptimizer(false);
     service->SetAllowOlapDataQuery(true);
-    service->SetDefaultLangVer(NYql::GetMaxLangVersion());
+    service->SetDefaultLangVer(languageVersion);
     service->SetBackportMode(
         NKikimrConfig::TTableServiceConfig_EBackportMode_All);
     return TKikimrRunner(TKikimrSettings(appConfig).SetWithSampleTables(false));
@@ -212,13 +271,13 @@ TIntrusivePtr<IKqpHost> MakeHost(
     Tests::TServer& server,
     NYql::IModuleResolver::TPtr moduleResolver,
     std::shared_ptr<IRBOSemanticSnapshotSink> sink,
-    TStringBuf queryMode)
+    const NYql::TKikimrConfiguration::TPtr& config)
 {
     return CreateKqpHost(
-        MakeGateway(server),
+        MakeGateway(server, config),
         TestCluster,
         "/Root",
-        MakeConfiguration(queryMode),
+        config,
         std::move(moduleResolver),
         std::nullopt,
         nullptr,
@@ -270,6 +329,7 @@ void WriteCapture(const TFsPath& output, const TCaptureOutput& capture, const TO
     }
     NJson::TJsonValue preparation(NJson::JSON_MAP);
     preparation["query_mode"] = options.QueryMode;
+    preparation["language_version"] = options.LanguageVersion;
     preparation["benchmark_column_store"] = options.BenchmarkColumnStore;
     preparation["new_rbo"] = true;
     preparation["fallback_to_yql_optimizer"] = false;
@@ -278,36 +338,32 @@ void WriteCapture(const TFsPath& output, const TCaptureOutput& capture, const TO
     WriteNew(output / "capture.json", RenderManifest(capture));
 }
 
-int Run(const TOptions& options) {
-    const TFsPath output = PrepareOutputDirectory(options.OutputPath);
-    TString schema = ReadInput(options.SchemaPath, "schema input");
+void CaptureQuery(TKikimrRunner& runner, const TOptions& options, const TFsPath& output) {
+    NJson::TJsonValue started(NJson::JSON_MAP);
+    started["query_path"] = options.QueryPath;
+    WriteNew(output / "started.json", NJson::WriteJson(started, true, true));
     TString query = ReadInput(options.QueryPath, "query input");
     if (options.BenchmarkColumnStore) {
-        const TString rewritten = RewriteBenchmarkSchemaToColumnStore(schema);
-        if (rewritten == schema) {
-            ythrow yexception()
-                << "benchmark schema rewrite found no CREATE TABLE statement";
-        }
-        schema = rewritten;
         query = AddBenchmarkQueryPrelude(query);
     }
 
-    auto runner = MakeRunner();
-    ExecuteSchema(runner, schema);
-
-    NYql::TExprContext moduleContext;
     NYql::IModuleResolver::TPtr moduleResolver;
-    if (!NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver)) {
+    if (!NYql::GetYqlDefaultModuleResolverWithContext(moduleResolver)) {
         ythrow yexception() << "cannot create the default YQL module resolver";
     }
     auto sink = std::make_shared<TRecordingSink>(options.TransformationOrdinal);
+    auto config = MakeConfiguration(runner.GetTestServer(), options.QueryMode);
     auto host = MakeHost(
         runner.GetTestServer(),
         std::move(moduleResolver),
         sink,
-        options.QueryMode);
+        config);
     IKqpHost::TPrepareSettings settings;
     settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+    if (options.QueryMode != "data") {
+        // QUERY_TYPE_SQL_GENERIC_QUERY serializes SQL result blocks.
+        settings.ConcurrentResults = false;
+    }
     // Constant-expression evaluation expects the actor activation context used
     // by a production KQP request and by the benchmark coverage harness.
     const auto prepared = runner.GetTestServer().GetRuntime()->RunCall([
@@ -326,13 +382,91 @@ int Run(const TOptions& options) {
         return preparing->GetResult();
     });
 
+    auto boundaries = sink->Take();
+    NJson::TJsonValue attempt(NJson::JSON_MAP);
+    attempt["query_path"] = options.QueryPath;
+    attempt["query_mode"] = options.QueryMode;
+    attempt["language_version"] = options.LanguageVersion;
+    attempt["preparation_succeeded"] = prepared.Success();
+    attempt["preparation_issues"] = prepared.Issues().ToString();
+    attempt["boundaries"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+    for (const auto& boundary : boundaries) {
+        NJson::TJsonValue item(NJson::JSON_MAP);
+        item["boundary"] = boundary.Boundary == ERBOSemanticSnapshotBoundaryV1::Initial
+            ? "Initial" : boundary.Boundary == ERBOSemanticSnapshotBoundaryV1::Final ? "Final" : "Prefix";
+        item["root_ordinal"] = boundary.RootOrdinal;
+        item["root_count"] = boundary.RootCount;
+        item["result_count"] = boundary.ResultCount;
+        if (boundary.ResultOrdinal) {
+            item["result_ordinal"] = *boundary.ResultOrdinal;
+        } else {
+            item["result_ordinal"] = NJson::TJsonValue(NJson::JSON_NULL);
+        }
+        item["supported"] = boundary.IsSupported();
+        item["unsupported_reason"] = boundary.UnsupportedReason;
+        attempt["boundaries"].AppendValue(std::move(item));
+    }
+    // Keep preparation and exporter failures distinct even when no valid
+    // capture manifest can be produced (e.g. an unsupported initial boundary).
+    WriteNew(output / "attempt.json", NJson::WriteJson(attempt, true, true));
     auto capture = ClassifyCapture(
         options.TransformationOrdinal,
         prepared.Success(),
-        sink->Take(),
+        std::move(boundaries),
         prepared.Issues().ToString());
     WriteCapture(output, capture, options);
+    if (!options.QueryDirectory.empty()) {
+        Cout << options.QueryPath << ": ";
+    }
     Cout << StatusName(capture.Status) << Endl;
+}
+
+int Run(const TOptions& options) {
+    const auto schemas = InputPaths(options.SchemaPath, options.SchemaDirectory);
+    const auto queries = InputPaths(options.QueryPath, options.QueryDirectory);
+    const TFsPath output = PrepareOutputDirectory(options.OutputPath);
+    auto runner = MakeRunner(options.LanguageVersion);
+    if (!options.SchemeLimitsPath.empty()) {
+        NKikimrSubDomains::TSubDomainSettings subdomain;
+        subdomain.SetName("Root");
+        const TString limits = ReadInput(options.SchemeLimitsPath, "scheme limits");
+        TStringInput text(limits);
+        if (!TryParseFromTextFormat(text, *subdomain.MutableSchemeLimits())) {
+            ythrow yexception() << "cannot parse root scheme limits";
+        }
+        if (runner.GetTestClient().AlterSubdomain("/", subdomain) != NMsgBusProxy::MSTATUS_OK) {
+            ythrow yexception() << "cannot apply root scheme limits";
+        }
+    }
+    for (const auto& path : schemas) {
+        TString schema = ReadInput(path, "schema input");
+        if (options.BenchmarkColumnStore) {
+            const TString rewritten = RewriteBenchmarkSchemaToColumnStore(schema);
+            if (rewritten == schema) {
+                ythrow yexception() << "benchmark schema rewrite found no CREATE TABLE statement";
+            }
+            schema = rewritten;
+        }
+        ExecuteSchema(runner, schema);
+    }
+    WriteNew(output / "schema-ready.json", "{\"ready\":true}\n");
+    for (const auto& path : queries) {
+        auto selected = options;
+        selected.QueryPath = path;
+        if (options.QueryDirectory.empty()) {
+            CaptureQuery(runner, selected, output);
+        } else {
+            const auto child = PrepareOutputDirectory((output / TFsPath(path).GetName()).GetPath());
+            try {
+                CaptureQuery(runner, selected, child);
+            } catch (const std::exception& error) {
+                NJson::TJsonValue failure(NJson::JSON_MAP);
+                failure["error"] = TString(error.what());
+                WriteNew(child / "error.json", NJson::WriteJson(failure, true, true));
+                Cout << path << ": CAPTURE_ERROR: " << error.what() << Endl;
+            }
+        }
+    }
     return 0;
 }
 

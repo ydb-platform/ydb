@@ -18,6 +18,23 @@ namespace NActorsInterconnect {
 
 namespace NActors {
 
+<<<<<<< HEAD
+=======
+    class IEventDestructor;
+
+    struct TExEventFormatError : std::exception {
+        const char* what() const noexcept override {
+            return "interconnect v2 event format error";
+        }
+    };
+
+    struct TExEventTooLarge : std::exception {
+        const char* what() const noexcept override {
+            return "interconnect v2 serialized event is too large";
+        }
+    };
+
+>>>>>>> eaa3738b081 (Decouple Interconnect V2 engine from actor system (#56287))
     // Allocate a section buffer with the requested headroom/tailroom, aligning the payload pointer
     // (TRcBuf::GetData()) to `alignment` when alignment > 1. Used by the v2 XDC receive path so
     // GetPayloadWithHeader can take the reserved-headroom fast path.
@@ -248,10 +265,11 @@ namespace NActors {
 
         // Notification issued when produced bytes have been sent. Pass XDC bytes as the second argument
         // when that socket completed a write; existing single-stream callers can omit it (defaults to 0).
-        void CommitProducedBytes(size_t numMainBytes, size_t numXdcBytes = 0,
+        // Transfers completed events/buffers to the destructor, or destroys them if omitted.
+        // Returns their total serialized size for output queue accounting.
+        size_t CommitProducedBytes(size_t numMainBytes, size_t numXdcBytes = 0,
             std::vector<ui64> *eventToWireTime = nullptr,
-            std::vector<std::unique_ptr<IEventBase>> *events = nullptr,
-            std::vector<TIntrusivePtr<TEventSerializedData>> *buffers = nullptr);
+            IEventDestructor* eventDestructor = nullptr);
 
         void ResetCounters() {
             SerializeEventTime = 0;

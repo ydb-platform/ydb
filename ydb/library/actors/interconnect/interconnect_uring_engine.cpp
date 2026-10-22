@@ -9,9 +9,6 @@
 #include "interconnect_direct_session.h"
 #include "interconnect_uring_event_queue.h"
 
-#include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/actors/core/actor.h>
-
 #include <ydb/library/actors/protos/interconnect.pb.h>
 
 // Must be included AFTER YDB headers because linux/uapi headers pulled by
@@ -32,7 +29,6 @@
 #include <cerrno>
 #include <deque>
 #include <memory>
-#include <mutex>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -103,33 +99,8 @@ namespace NActors {
         {}
     };
 
-    struct TEvDestroyEvents : TEventLocal<TEvDestroyEvents, 0> {
-        std::vector<std::unique_ptr<IEventBase>> Events;
-        std::vector<TIntrusivePtr<TEventSerializedData>> Buffers;
-        size_t Bytes = 0;
-        std::shared_ptr<std::atomic<TAtomicBase>> Counter;
-
-        ~TEvDestroyEvents() {
-            if (Counter) {
-                Counter->fetch_sub(Bytes, std::memory_order_relaxed);
-            }
-        }
-
-        size_t CalculateTotalSize() const {
-            size_t bytes = 0;
-            for (const auto& ev : Events) {
-                bytes += ev->CalculateSerializedSizeCached();
-            }
-            for (const auto& buffer : Buffers) {
-                bytes += buffer->GetSize();
-            }
-            return bytes;
-        }
-    };
-
     class TUringEngine final : public IUringEngine {
-        TActorSystem *ActorSystem = nullptr; // bound after construction via SetActorSystem()
-        std::once_flag ActorSystemInitFlag;
+        IUringEngineClientPtr Client;
         std::atomic_bool Stopping{false};
 
         // Shared interconnect parameters this engine was created with. Common owns the engine as well, so
@@ -158,7 +129,7 @@ namespace NActors {
             const TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
             const TActorId SessionId;
             const std::function<void(TDisconnectReason)> OnDisconnectCallback;
-            TActorSystem* const ActorSystem;
+            IUringEngineClient& Client;
             TEventSerializer Serializer;
             TEventDeserializer Deserializer;
             TRcBuf ReadBuffer;
@@ -222,7 +193,7 @@ namespace NActors {
 
             TSession(ui32 shardIdx, TIntrusivePtr<NInterconnect::TStreamSocket> socket,
                     TActorId sessionId, bool checksumming, TScopeId peerScopeId,
-                    std::function<void(TDisconnectReason)> onDisconnectCallback, TActorSystem *actorSystem,
+                    std::function<void(TDisconnectReason)> onDisconnectCallback, IUringEngineClient& client,
                     bool sendPings, std::shared_ptr<std::atomic<int64_t>> clockSkew,
                     std::shared_ptr<std::atomic<uint64_t>> pingRTT,
                     TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket)
@@ -231,7 +202,7 @@ namespace NActors {
                 , XdcSocket(std::move(xdcSocket))
                 , SessionId(sessionId)
                 , OnDisconnectCallback(std::move(onDisconnectCallback))
-                , ActorSystem(actorSystem)
+                , Client(client)
                 , Serializer(checksumming, /*useExternalDataChannel=*/ bool(XdcSocket))
                 , Deserializer(peerScopeId)
                 , SendPings(sendPings)
@@ -291,7 +262,7 @@ namespace NActors {
                     it->second->Receive(ev.release());
                     ++EventsReceivedCallback;
                 } else {
-                    ActorSystem->Send(ev.release());
+                    Client.Send(std::move(ev));
                     ++EventsReceivedActorSystem;
                 }
                 ReceiveCycles += GetCycleCountFast();
@@ -438,8 +409,7 @@ namespace NActors {
             }
 
             void ApplyBytesWritten(size_t num, bool xdc,
-                    std::vector<ui64> *eventToWireTime, std::vector<std::unique_ptr<IEventBase>> *events,
-                    std::vector<TIntrusivePtr<TEventSerializedData>> *buffers) {
+                    std::vector<ui64> *eventToWireTime) {
                 (xdc ? BytesSentXdc : BytesSent) += num;
 
                 size_t& unsent = xdc ? XdcUnsentBytes : UnsentBytes;
@@ -449,17 +419,9 @@ namespace NActors {
 
                 Y_ABORT_UNLESS(num <= unsent, "num# %zu unsent# %zu xdc# %d", num, unsent, int(xdc));
                 unsent -= num;
-                size_t numEvents = events->size();
-                size_t numBuffers = buffers->size();
-                size_t bytes = 0;
-                Serializer.CommitProducedBytes(xdc ? 0 : num, xdc ? num : 0, eventToWireTime, events, buffers);
+                const size_t bytes = Serializer.CommitProducedBytes(
+                    xdc ? 0 : num, xdc ? num : 0, eventToWireTime, &Client);
                 SerializeWindow.CompleteWrite(num, bytesToWrite, xdc);
-                for (size_t i = numEvents, count = events->size(); i < count; ++i) {
-                    bytes += (*events)[i]->CalculateSerializedSizeCached();
-                }
-                for (size_t i = numBuffers, count = buffers->size(); i < count; ++i) {
-                    bytes += (*buffers)[i]->GetSize();
-                }
                 TotalOutputQueueSize.fetch_sub(bytes, std::memory_order_relaxed);
             }
 
@@ -762,8 +724,6 @@ namespace NActors {
             std::vector<ui64> EventToWireTimeVec;
 
             TShardLoad& Load;
-
-            std::unique_ptr<TEvDestroyEvents> EvDestroyEvents = std::make_unique<TEvDestroyEvents>();
 
             const ui32 MinReadBufferSize;
             const ui32 MinWriteBufferSize;
@@ -1328,20 +1288,6 @@ namespace NActors {
                         MaybeEraseSession(*session);
                     }
 
-                    // discard pending events/buffers, if any
-                    SwitchActivity(&DestroyEventsTotalTime);
-                    if (!EvDestroyEvents->Events.empty() || !EvDestroyEvents->Buffers.empty()) {
-                        const size_t bytes = EvDestroyEvents->CalculateTotalSize();
-                        const auto& counter = Engine.Common->DestructorQueueSize;
-                        const size_t max = Engine.Common->MaxDestructorQueueSize;
-                        EvDestroyEvents->Counter = counter;
-                        EvDestroyEvents->Bytes = bytes;
-                        if (Y_LIKELY(!counter || counter->fetch_add(bytes, std::memory_order_relaxed) + bytes <= max)) {
-                            Engine.ActorSystem->Send(new IEventHandle(Engine.DestructorActorId, {}, EvDestroyEvents.release()));
-                        }
-                        EvDestroyEvents = std::make_unique<TEvDestroyEvents>();
-                    }
-
                     // wait for CQ in there is no progress
                     SwitchActivity(&CompleteWaitTotalTime);
                     const ui64 waitStartTimestamp = LastActivitySwitchTimestamp;
@@ -1513,7 +1459,7 @@ namespace NActors {
             void ProcessMonRequest(TSession& session, NMon::TEvHttpInfoRes::TPtr ev) {
                 TStringOutput str(const_cast<TString&>(static_cast<NMon::TEvHttpInfoRes*>(ev->Get())->Answer));
                 session.RenderHtml(str, Engine.DeadPeerTimeout, Engine.PingPeriod);
-                Engine.ActorSystem->Send(ev.Release());
+                Engine.Client->Send(std::unique_ptr<IEventHandle>(ev.Release()));
             }
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1823,13 +1769,13 @@ namespace NActors {
                 } else {
                     *BytesSent += res;
                     ACTIVITY(&ApplyBytesWrittenTotalTime) {
-                        session.ApplyBytesWritten(res, xdc,
-                            &EventToWireTimeVec, &EvDestroyEvents->Events, &EvDestroyEvents->Buffers);
+                        session.ApplyBytesWritten(res, xdc, &EventToWireTimeVec);
                         for (const ui64 time : EventToWireTimeVec) {
                             EventToWireTime->Collect(time * Freq, 1u);
                         }
                         EventToWireTimeVec.clear();
                     }
+                    *DestroyEventsTotalTime += Engine.Client->GetAndResetDestroyEventsCycles() * Freq;
                 }
 
                 TouchedSessions.PushBack(&session);
@@ -1978,7 +1924,6 @@ namespace NActors {
         std::atomic_uint64_t NextShardIdx;
 
         NMonitoring::TDynamicCounterPtr UringCounters;
-        TActorId DestructorActorId;
 
     public:
         TUringEngine(TIntrusivePtr<TInterconnectProxyCommon> common)
@@ -2011,16 +1956,11 @@ namespace NActors {
             Stop();
         }
 
-        void SetActorSystem(TActorSystem* actorSystem) override {
-            Y_ABORT_UNLESS(actorSystem);
-            // DestructorId is filled in after the engine is created, so it is picked up here rather than in
-            // the constructor. Published together with ActorSystem, i.e. before the first Register and thus
-            // before any shard worker can reach the code using either of them.
-            DestructorActorId = Common->DestructorId;
-            ActorSystem = actorSystem;
-            // Stop the reaper threads while the actor system is still up, so no completion is posted to a
-            // torn-down system.
-            actorSystem->DeferPreStop([self = TIntrusivePtr<IUringEngine>(this)] { self->Stop(); });
+        void SetClient(IUringEngineClientPtr client) override {
+            Y_ABORT_UNLESS(client);
+            Y_ABORT_UNLESS(!Client);
+            Client = std::move(client);
+            Client->Start(TUringEnginePtr(this));
         }
 
         ui64 Register(TIntrusivePtr<NInterconnect::TStreamSocket> socket, const TActorId& sessionActorId,
@@ -2031,7 +1971,7 @@ namespace NActors {
             if (Stopping) {
                 return 0; // engine is shutting down; caller treats 0 as a failed registration and terminates
             }
-            Y_ABORT_UNLESS(ActorSystem);
+            Y_ABORT_UNLESS(Client);
 
             // Prefer the currently least-loaded shard (in-process signal); fall back to round-robin.
             ui32 shardIdx = NextShardIdx++ % Shards.size();
@@ -2050,7 +1990,7 @@ namespace NActors {
             const ui32 maxReadBufferSize = ClampIoSize(v2.MinReadBufferSize, v2.MaxReadBufferSize, tcpBuf);
 
             auto session = std::make_unique<TSession>(shardIdx, std::move(socket), sessionActorId,
-                ChecksumEvents, peerScopeId, std::move(onDisconnectCallback), ActorSystem, sendPings,
+                ChecksumEvents, peerScopeId, std::move(onDisconnectCallback), *Client, sendPings,
                 std::move(clockSkew), std::move(pingRTT), std::move(xdcSocket));
             session->ReadTarget = TReadTarget(v2.MinReadBufferSize, maxReadBufferSize);
             session->MainScratch = TScratchTarget(v2.MinWriteBufferSize, v2.MaxWriteBufferSize);
@@ -2099,6 +2039,9 @@ namespace NActors {
             if (!Stopping.exchange(true)) {
                 for (auto& shard : Shards) {
                     shard->Stop();
+                }
+                if (Client) {
+                    Client->Stop();
                 }
                 // Common holds this engine, so keeping a reference to it here would make the pair
                 // unreclaimable. The workers are joined by now and nothing dereferences Common past this

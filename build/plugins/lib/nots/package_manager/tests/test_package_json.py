@@ -287,3 +287,27 @@ def test_file_override_without_manifest_uses_directory_name(tmp_path, selector):
     (app / "package.json").write_text(json.dumps({"name": "app", "pnpm": {"overrides": {selector: "file:../peer"}}}))
     pj = PackageJson.load(str(app / "package.json"))
     assert pj.get_dep_paths_by_names() == {"app": str(app), "peer": str(peer)}
+
+
+@pytest.mark.parametrize("indent", ["  ", "    ", "\t"])
+def test_write_preserves_indent(tmp_path, indent):
+    source = tmp_path / "package.json"
+    data = {"name": "example", "engines": {"pnpm": "10"}}
+    original = json.dumps(data, indent=indent) + "\n"
+    source.write_text(original)
+    package_json = PackageJson.load(str(source))
+    package_json.data["engines"]["pnpm"] = "11.27.0"
+    output = tmp_path / "generated.json"
+    package_json.write(str(output))
+    assert output.read_text() == original.replace('"10"', '"11.27.0"')
+    assert source.read_text() == original
+
+
+def test_read_redetects_indent(tmp_path):
+    source = tmp_path / "package.json"
+    package_json = PackageJson(str(source))
+    for indent in ("\t", "    ", None):
+        source.write_text(json.dumps({"name": "example"}, indent=indent))
+        package_json.read()
+        package_json.write()
+        assert source.read_text() == json.dumps({"name": "example"}, indent=indent or "  ") + "\n"

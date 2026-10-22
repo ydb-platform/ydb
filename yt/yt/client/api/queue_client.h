@@ -12,6 +12,8 @@
 
 #include <yt/yt/client/ypath/rich.h>
 
+#include <yt/yt/core/misc/error.h>
+
 namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -44,6 +46,7 @@ struct TPullRowsResult
     NChaosClient::TReplicationProgress ReplicationProgress;
     ITypeErasedRowsetPtr Rowset;
     bool Versioned = true;
+    std::vector<TError> SubrequestErrors;
 };
 
 struct TPullQueueOptions

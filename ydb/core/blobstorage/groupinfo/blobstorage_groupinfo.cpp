@@ -871,7 +871,7 @@ std::optional<TVector<TBlobStorageGroupInfo::TFailRealmState>> TBlobStorageGroup
     for (const auto& realm : states.GetFailRealm()) {
         if (!realm.HasFailRealmIdx() || !realm.HasState()
                 || realm.GetState() < NKikimrBlobStorage::TFailRealmStates::Included
-                || realm.GetState() > NKikimrBlobStorage::TFailRealmStates::Joining) {
+                || realm.GetState() > NKikimrBlobStorage::TFailRealmStates::Leaving) {
             return fail("Failrealm requires an index and a valid participation state");
         }
         if (realm.GetFailRealmIdx() >= topology.GetTotalFailRealmsNum()) {
@@ -974,9 +974,14 @@ bool TBlobStorageGroupInfo::TMirror3dcState::CanTransitionTo(const TMirror3dcSta
     }
     switch (Mode) {
         case T::NORMAL:
-            return next.Mode == T::DC_FAILURE_PENDING;
+            return next.Mode == T::DC_FAILURE_PENDING || next.Mode == T::DC_FAILURE_PENDING_INV_1
+                || next.Mode == T::DC_FAILURE_PENDING_INV_2;
         case T::DC_FAILURE_PENDING:
             return next.Mode == T::DC_FAILURE;
+        case T::DC_FAILURE_PENDING_INV_1:
+            return next.Mode == T::DC_FAILURE_INV_1;
+        case T::DC_FAILURE_PENDING_INV_2:
+            return next.Mode == T::DC_FAILURE_INV_2;
         case T::DC_FAILURE:
             return next.Mode == T::DC_FAILURE_INV_1_PENDING || next.Mode == T::DC_RECOVERY_PENDING;
         case T::DC_FAILURE_INV_1_PENDING:
@@ -1019,6 +1024,9 @@ TVector<TBlobStorageGroupInfo::TFailRealmState> TBlobStorageGroupInfo::TMirror3d
         case T::NORMAL:
             return {};
         case T::DC_FAILURE_PENDING:
+        case T::DC_FAILURE_PENDING_INV_1:
+        case T::DC_FAILURE_PENDING_INV_2:
+            return {{*FailedFailRealmIdx, S::Leaving}};
         case T::DC_RECOVERY_PENDING:
         case T::DC_RECOVERY:
         case T::NORMAL_PENDING:
@@ -1061,7 +1069,10 @@ TBlobStorageGroupInfo::TWritePolicy TBlobStorageGroupInfo::TMirror3dcState::GetW
         case T::NORMAL_PENDING:
             return {{{1, 1, 1}, {2, 2}}, {{1, 1, 1}}};
         case T::DC_FAILURE_PENDING:
-            return {{{1, 1, 1}, {2, 2}}, {{1, 1}}};
+            return {{{2, 2}}, {{1, 1}}};
+        case T::DC_FAILURE_PENDING_INV_1:
+        case T::DC_FAILURE_PENDING_INV_2:
+            return {{{2, 2}}, {{2, 2}}};
         case T::DC_FAILURE:
         case T::DC_FAILURE_INV_1_PENDING:
         case T::DC_FAILURE_INV_1:
@@ -1097,8 +1108,18 @@ TBlobStorageGroupInfo::TConfirmedWrites TBlobStorageGroupInfo::TMirror3dcState::
             // Invariant I is confirmed for old blobs; 2+2 is only the new-write policy.
             layouts = {{1, 1}};
             break;
+        case T::DC_FAILURE_PENDING:
+            // Project the normal 1+1+1 OR 2+2 guarantee onto the two continuing realms.
+            layouts = {{1, 1}, {2}};
+            break;
+        case T::DC_FAILURE_PENDING_INV_1:
+            layouts = {{1, 1}};
+            break;
+        case T::DC_FAILURE_PENDING_INV_2:
+            layouts = {{2, 2}};
+            break;
         default:
-            // Pending/recovery states and SOLO_DC_INV_1 do not assert full replication of old data.
+            // Other pending/recovery states and SOLO_DC_INV_1 retain old-data guarantees.
             break;
     }
     layouts.insert(layouts.end(), policy.WriteOk.begin(), policy.WriteOk.end());

@@ -55,12 +55,32 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         UNIT_ASSERT(TState::Parse(proto, topology));
 
         TState normal;
+        TState pending{T::DC_FAILURE_PENDING, 0, {}};
+        TState pendingInv1{T::DC_FAILURE_PENDING_INV_1, 0, {}};
+        TState pendingInv2{T::DC_FAILURE_PENDING_INV_2, 0, {}};
         TState failed{T::DC_FAILURE, 0, {}};
         TState inv1{T::DC_FAILURE_INV_1, 0, {}};
         TState inv2{T::DC_FAILURE_INV_2, 0, {}};
         TState solo1{T::SOLO_DC_INV_1, 0, 2};
         TState solo2{T::SOLO_DC_INV_2, 0, 2};
         UNIT_ASSERT(!normal.CanTransitionTo(failed));
+        UNIT_ASSERT(normal.CanTransitionTo(pending));
+        UNIT_ASSERT(normal.CanTransitionTo(pendingInv1));
+        UNIT_ASSERT(normal.CanTransitionTo(pendingInv2));
+        UNIT_ASSERT(pending.CanTransitionTo(failed));
+        UNIT_ASSERT(!pending.CanTransitionTo(inv1));
+        UNIT_ASSERT(pendingInv1.CanTransitionTo(inv1));
+        UNIT_ASSERT(!pendingInv1.CanTransitionTo(failed));
+        UNIT_ASSERT(pendingInv2.CanTransitionTo(inv2));
+        UNIT_ASSERT(!pendingInv2.CanTransitionTo(inv1));
+        UNIT_ASSERT(pending.GetFailRealmStates() == pendingInv1.GetFailRealmStates());
+        UNIT_ASSERT(pending.GetFailRealmStates() == pendingInv2.GetFailRealmStates());
+        UNIT_ASSERT(pending.GetFailRealmStates()[0].State == TInfo::EFailRealmState::Leaving);
+        UNIT_ASSERT(!pending.GetWritePolicy().CheckWriteOk({1, 1}));
+        UNIT_ASSERT(pending.GetWritePolicy().CheckWriteOk({2, 2}));
+        UNIT_ASSERT(pending.GetWritePolicy().CheckWriteDurability({1, 1}));
+        UNIT_ASSERT(!pendingInv1.GetWritePolicy().CheckWriteDurability({1, 1}));
+        UNIT_ASSERT(pendingInv1.GetWritePolicy() == pendingInv2.GetWritePolicy());
         TState preparingInv1{T::DC_FAILURE_INV_1_PENDING, 0, {}};
         UNIT_ASSERT(!failed.CanTransitionTo(inv1));
         UNIT_ASSERT(failed.CanTransitionTo(preparingInv1));
@@ -110,7 +130,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         UNIT_ASSERT(!solo2.GetWritePolicy().CheckWriteOk({1}));
 
         const TVector<TState> path = {
-            normal, {T::DC_FAILURE_PENDING, 0, {}}, failed, preparingInv1, inv1,
+            normal, pending, failed, preparingInv1, inv1,
             {T::SOLO_DC_INV_1_PENDING, 0, 2}, solo1, preparingSolo2, solo2,
             preparingRecovery, soloRecovery, preparingInv1, inv1, strengthening, inv2,
             {T::DC_RECOVERY_PENDING, 0, {}}, {T::DC_RECOVERY, 0, {}}, {T::NORMAL_PENDING, 0, {}}, normal,
@@ -118,7 +138,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         for (size_t i = 1; i < path.size(); ++i) {
             UNIT_ASSERT_C(path[i - 1].CanTransitionTo(path[i]), i);
         }
-        for (int mode = T::NORMAL; mode <= T::DC_FAILURE_INV_1_PENDING; ++mode) {
+        for (int mode = T::NORMAL; mode <= T::DC_FAILURE_PENDING_INV_2; ++mode) {
             if (!T::EMode_IsValid(mode)) {
                 continue;
             }
@@ -197,8 +217,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
             UNIT_ASSERT_C(state.GetConfirmedWrites(before) == expected, T::EMode_Name(mode));
         };
         check(T::NORMAL, {}, normal);
-        check(T::DC_FAILURE_PENDING, normal, normal);
-        check(T::DC_FAILURE, normal, normal); // Excluding a realm does not assert a stronger old-data guarantee.
+        const auto projected = minimize({{1, 1}, {2}});
+        check(T::DC_FAILURE_PENDING, normal, projected);
+        check(T::DC_FAILURE_PENDING_INV_1, normal, failure);
+        check(T::DC_FAILURE_PENDING_INV_2, normal, inv2);
+        check(T::DC_FAILURE, projected, projected);
         check(T::DC_FAILURE_INV_1_PENDING, solo, solo);
         check(T::DC_FAILURE_INV_1, minimize({{1, 1}, {2}}), failure);
         check(T::DC_FAILURE_INV_1, failure, failure);
@@ -275,8 +298,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         group.ClearFailRealmStates();
         auto* invalid = group.MutableFailRealmStates()->AddFailRealm();
         invalid->SetFailRealmIdx(0);
-        invalid->GetReflection()->MutableUnknownFields(invalid)->AddVarint(2, 3);
+        invalid->GetReflection()->MutableUnknownFields(invalid)->AddVarint(2, 99);
         UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr));
+        group.ClearFailRealmStates();
+        add(2, TProto::Leaving);
+        UNIT_ASSERT(TInfo::Parse(group, nullptr, nullptr));
         group.ClearFailRealmStates();
         UNIT_ASSERT(TInfo::Parse(group, nullptr, nullptr)->FailRealmStates.empty());
     }

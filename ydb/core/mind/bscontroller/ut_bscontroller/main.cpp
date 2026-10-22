@@ -439,6 +439,12 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT(!group.HasMirror3dcState());
         UNIT_ASSERT(!env.Invoke(request({T::SOLO_DC_INV_2, 0, 2})).GetSuccess());
         UNIT_ASSERT(!query().HasMirror3dcState());
+        for (auto mode : {T::DC_FAILURE_PENDING_INV_1, T::DC_FAILURE_PENDING_INV_2}) {
+            auto req = request({mode, 0, {}});
+            req.SetRollback(true);
+            UNIT_ASSERT(env.Invoke(req).GetRollbackSuccess());
+            UNIT_ASSERT(!query().HasMirror3dcState());
+        }
         const TVector<TState> path = {
             {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE, 0, {}}, {T::DC_FAILURE_INV_1_PENDING, 0, {}},
             {T::DC_FAILURE_INV_1, 0, {}}, {T::DC_FAILURE_INV_2_PENDING, 0, {}}, {T::DC_FAILURE_INV_2, 0, {}},
@@ -458,7 +464,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT(!query().HasMirror3dcState());
         using TConfirmed = TBlobStorageGroupInfo::TConfirmedWrites;
         const TVector<TConfirmed> expectedConfirmed = {
-            {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}}, // pending, failure, INV_1_PENDING
+            {{{1, 1}, {2}}}, {{{1, 1}, {2}}}, {{{1, 1}, {2}}}, // pending, failure, INV_1_PENDING
             {{{1, 1}}}, {{{1, 1}}}, {{{2, 2}}}, // INV_1, INV_2_PENDING, INV_2
             {{{2}}}, {{{2}}}, // SOLO_INV_2_PENDING and SOLO_INV_2
             {{{2}}}, {{{2}}}, {{{2}}}, {{{1, 1}}}, // recovery pending, recovery, INV_1_PENDING, INV_1

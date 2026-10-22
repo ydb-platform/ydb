@@ -102,6 +102,17 @@ namespace {
         return config;
     }
 
+    THashMap<TString, TBridgePileId> MakeBridgePileNameMap(const NKikimrConfig::TBridgeConfig *bridgeConfig) {
+        THashMap<TString, TBridgePileId> result;
+        if (bridgeConfig) {
+            const auto& piles = bridgeConfig->GetPiles();
+            for (int i = 0; i < piles.size(); ++i) {
+                result.emplace(piles[i].GetName(), TBridgePileId::FromPileIndex(i));
+            }
+        }
+        return result;
+    }
+
     class TIgnoreActor : public TActor<TIgnoreActor> {
     public:
         TIgnoreActor()
@@ -2790,7 +2801,7 @@ selector_config: []
             disks.emplace_back(NStorage::TNodeIdentifier(config.GetAllNodes(nodeId - 1)),
                 "/dev/disk" + std::to_string(nodeId) + "_1", nodeId * 1000 + 1);
         }
-        return NStorage::HasConfigQuorum(config, disks, TBridgePileId(),
+        return NStorage::HasConfigQuorum(config, disks, MakeBridgePileNameMap(bridge), TBridgePileId(),
             *MakeNodeWardenConfig(config, bridge), true);
     }
 
@@ -5073,12 +5084,12 @@ selector_config: []
             disks.emplace_back(NStorage::TNodeIdentifier(fixture.Config.GetAllNodes(nodeId - 1)),
                 "/dev/disk" + std::to_string(nodeId) + "_1", nodeId * 1000 + 1);
             if (nodeId == 78) {
-                UNIT_ASSERT(!NStorage::HasConfigQuorum(fixture.Config, disks, TBridgePileId(),
+                UNIT_ASSERT(!NStorage::HasConfigQuorum(fixture.Config, disks, {}, TBridgePileId(),
                     *nodeWardenConfig, true));
             }
         }
         disks.pop_back();
-        UNIT_ASSERT(NStorage::HasConfigQuorum(fixture.Config, disks, TBridgePileId(),
+        UNIT_ASSERT(NStorage::HasConfigQuorum(fixture.Config, disks, {}, TBridgePileId(),
             *nodeWardenConfig, true));
         const auto replace = [&](ui64 version, bool silentLeaf) {
             UNIT_ASSERT(SimUntil(runtime, [&] { return !runtime.HasImmediateEvents(); }, TDuration::Seconds(1)));
@@ -5656,7 +5667,7 @@ selector_config: []
             for (ui32 nodeId : nodeIds) {
                 nodes.emplace_back(config.GetAllNodes(nodeId - 1));
             }
-            return NStorage::HasNodeQuorum(config, nodes, TBridgePileId(),
+            return NStorage::HasNodeQuorum(config, nodes, MakeBridgePileNameMap(&bridge), TBridgePileId(),
                 *MakeNodeWardenConfig(config, &bridge), nullptr, false);
         };
         UNIT_ASSERT(!hasNodeQuorum(fixture.Config, {1, 2, 3}));
@@ -6908,11 +6919,11 @@ selector_config: []
         }
         const auto nwConfig = MakeNodeWardenConfig(fixture.Config);
         TStringStream quorumError;
-        UNIT_ASSERT_C(NStorage::HasConfigQuorum(fixture.Config, readable,
+        UNIT_ASSERT_C(NStorage::HasConfigQuorum(fixture.Config, readable, {},
             TBridgePileId(), *nwConfig, false, &quorumError), quorumError.Str());
         auto insufficient = readable;
         insufficient.pop_back();
-        UNIT_ASSERT(!NStorage::HasConfigQuorum(fixture.Config, insufficient,
+        UNIT_ASSERT(!NStorage::HasConfigQuorum(fixture.Config, insufficient, {},
             TBridgePileId(), *nwConfig, false));
     }
 

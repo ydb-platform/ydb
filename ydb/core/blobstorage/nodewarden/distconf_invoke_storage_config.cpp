@@ -617,7 +617,7 @@ namespace NKikimr::NStorage {
             }
 
             const bool committedQuorum = HasConfigQuorum(*ConfigAwaitingCommit, successfulDisks,
-                TBridgePileId(), *Self->Cfg, false);
+                Self->BridgePileNameMap, TBridgePileId(), *Self->Cfg, false);
             if (!Self->BridgeInfo && !metadataOnly && (committedQuorum || Self->ConfigRecoveryRequired)) {
                 auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true);
                 if (result.ErrorReason || !result.RecoveredConfig) {

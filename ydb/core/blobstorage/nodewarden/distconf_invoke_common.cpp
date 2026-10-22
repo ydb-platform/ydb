@@ -445,7 +445,7 @@ namespace NKikimr::NStorage {
                 }
             }
             TStringStream err;
-            if (!HasConfigQuorum(quorumConfig, successfulDisks, TBridgePileId(), *Self->Cfg, false, &err)) {
+            if (!HasConfigQuorum(quorumConfig, successfulDisks, Self->BridgePileNameMap, TBridgePileId(), *Self->Cfg, false, &err)) {
                 throw TExNoQuorum() << "No quorum for bridge configuration collection:" << err.Str();
             }
             auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true, false,

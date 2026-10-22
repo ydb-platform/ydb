@@ -4,12 +4,12 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(50)
 
-REQUIREMENTS(ram:32 cpu:4)
-
 IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32 cpu:4)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
+    REQUIREMENTS(ram:32 cpu:2)
     SIZE(MEDIUM)
 ENDIF()
 

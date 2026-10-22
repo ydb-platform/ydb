@@ -314,7 +314,7 @@ namespace NKikimr::NStorage {
                                 throw TExConfigError() << "Location requires current string fields";
                             }
                             const auto it = nodeLocations.find(nodeId);
-                            pMatch = it != nodeLocations.end() && MatchPDiskLocation(it->second, p.GetLocation());
+                            pMatch = it != nodeLocations.end() && MatchPDiskLocation(it->second, TNodeLocation(p.GetLocation()));
                             break;
                         }
                         case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:

@@ -5,6 +5,9 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 
 import requests
+from google.protobuf.json_format import ParseDict
+
+from ydb.core.protos import cms_pb2, msgbus_pb2
 
 from test_three_piles import TestBridgeThreePiles as BridgeThreePiles
 from ydb.tests.library.harness.util import LogLevels
@@ -45,11 +48,13 @@ class BridgeStateStorageSelfHeal:
     step_seconds = 5
     relax_seconds = 30
     timeout = 300
-    self_management_options = {}
-    selfheal_options = {}
-    node_location_overrides = {}
+    self_management_options = None
+    selfheal_options = None
+    node_location_overrides = None
 
     def setup_method(self):
+        for name in ("self_management_options", "selfheal_options", "node_location_overrides"):
+            setattr(self, name, copy.deepcopy(getattr(self, name) or {}))
         self.bridge = BridgeThreePiles()
         self.bridge.additional_log_configs = {"BS_NODE": LogLevels.DEBUG, "CMS": LogLevels.DEBUG}
         self.bridge.nodes_count = self.nodes_per_pile * len(self.bridge.pile_names)
@@ -104,11 +109,32 @@ class BridgeStateStorageSelfHeal:
                         assert placement(group) == expected, (name, group, expected)
                 return config
 
+            self.configure_sentinel()
             self.initial = self.wait(ready, "healthy, colocated replicas on all three piles")
             self.bridge.create_data()
         except BaseException:
             self.bridge.teardown_method()
             raise
+
+    def configure_sentinel(self):
+        def protobuf_names(config):
+            return {
+                "".join(part.capitalize() for part in key.split("_")): (
+                    protobuf_names(value) if isinstance(value, dict) else value
+                )
+                for key, value in config.items()
+            }
+
+        config = protobuf_names(self.bridge.cms_config)
+        # CMS may become active before its local YAML subscription is applied.
+        # Initialize the real Sentinel explicitly with the test configuration.
+        # Restart it so existing updater timers also use the shortened intervals.
+        for enabled in (False, True):
+            request = msgbus_pb2.TCmsRequest()
+            ParseDict(config, request.SetConfigRequest.Config)
+            request.SetConfigRequest.Config.SentinelConfig.Enable = enabled
+            response = self.bridge.cluster.client.send_request(request, "CmsRequest")
+            assert response.SetConfigResponse.Status.Code == cms_pb2.TStatus.OK, response
 
     def teardown_method(self):
         self.bridge.teardown_method()
@@ -120,16 +146,16 @@ class BridgeStateStorageSelfHeal:
             self.check_observer()
             try:
                 return action()
-            except (AssertionError, requests.RequestException) as error:
+            except (AssertionError, KeyError, requests.RequestException) as error:
                 last_error = error
                 time.sleep(0.5)
         raise AssertionError(f"Timed out waiting for {description}") from last_error
 
-    def invoke(self, command):
+    def invoke(self, command, timeout=10):
         node = self.control_node
         response = requests.post(
             f"http://{node.host}:{node.mon_port}/actors/nodewarden?page=distconf",
-            headers={"content-type": "application/json"}, json=command, timeout=10,
+            headers={"content-type": "application/json"}, json=command, timeout=timeout,
         )
         response.raise_for_status()
         result = response.json()
@@ -138,8 +164,8 @@ class BridgeStateStorageSelfHeal:
             raise requests.RequestException(f"Distconf request {command} failed: {result}")
         return result
 
-    def read_config(self, nodes_state=False):
-        return self.invoke({"GetStateStorageConfig": {"NodesState": nodes_state}})["StateStorageConfig"]
+    def read_config(self, nodes_state=False, timeout=10):
+        return self.invoke({"GetStateStorageConfig": {"NodesState": nodes_state}}, timeout=timeout)["StateStorageConfig"]
 
     def assert_pile_locality(self, config):
         for name in CONFIG_NAMES:
@@ -177,8 +203,9 @@ class BridgeStateStorageSelfHeal:
         def collect():
             while not self.observer_stop.is_set():
                 try:
-                    config = self.read_config()
-                except requests.RequestException:
+                    # Bound an in-flight read so teardown can stop the observer.
+                    config = self.read_config(timeout=(1, 3))
+                except (KeyError, requests.RequestException):
                     # A failed read is not an observed configuration. The main
                     # thread still requires every expected phase before its deadline.
                     self.observer_stop.wait(0.5)
@@ -218,7 +245,10 @@ class BridgeStateStorageSelfHeal:
         # failover cases exercise loss of the control/root node separately.
         candidates.discard(self.bridge.pile_nodes[pile][0].node_id)
         candidates.discard(self.control_node.node_id)
-        root = self.invoke({"GetStateStorageConfig": {}})["Scepter"]["NodeId"]
+        root = self.wait(
+            lambda: self.invoke({"GetStateStorageConfig": {}})["Scepter"]["NodeId"],
+            "distconf root election",
+        )
         candidates.discard(root)
         assert len(candidates) >= count, (pile, candidates)
         victims = sorted(candidates)[:count]

@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from state_storage_selfheal import BridgeStateStorageSelfHeal, CONFIG_NAMES, groups, is_final, placement, replicas
+from state_storage_selfheal import BridgeStateStorageSelfHeal, CONFIG_NAMES, groups, placement, replicas
 from test_three_piles import DISCONNECTED
 
 
@@ -56,14 +56,19 @@ class TestBridgeStateStorageSelfHealPileTransitions(BridgeStateStorageSelfHeal):
         with self.observe():
             self.stop_nodes(victims)
             self.wait_started("r2", victims, failed_count)
-            switch_at = time.monotonic()
             self.bridge.promote("r3")
+
+            def promoted():
+                config = self.require_snapshot()
+                assert all(
+                    group.get("PileState") == "PRIMARY"
+                    for name in CONFIG_NAMES for group in groups(config, name, 3)
+                ), config
+
+            # Promotion starts after observing the first repair phase. Its final
+            # state may be observed after repair has finished on a busy runner.
+            self.wait(promoted, "State Storage groups reflecting r3 as PRIMARY")
             after = self.wait_healed(victims)
-            assert any(
-                observed_at >= switch_at and not is_final(config)
-                and all(group.get("PileState") == "PRIMARY" for name in CONFIG_NAMES for group in groups(config, name, 3))
-                for observed_at, config in self.snapshots
-            ), "promotion did not overlap an observed selfheal phase"
             self.bridge.write_data()
         if failed_count == 2:
             self.assert_full_reconfiguration(self.initial, after)

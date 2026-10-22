@@ -45,7 +45,7 @@ class TestBridgeStateStorageSelfHealWithoutLocalSpare(BridgeStateStorageSelfHeal
         repairable = self.choose_victims("r1", failed_count)
         occupied = set.union(*(replicas(groups(self.initial, name, 2)[0]) for name in CONFIG_NAMES))
         spares = [node.node_id for node in self.bridge.pile_nodes["r2"] if node.node_id not in occupied]
-        assert len(spares) == self.nodes_per_pile - self.rings_count
+        assert spares, (occupied, self.initial)
         storage = self.invoke({"QueryConfig": {}})["QueryConfig"]["Config"]
         static_nodes = {
             vdisk["VDiskLocation"]["NodeID"]

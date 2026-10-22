@@ -466,11 +466,14 @@ void TFederatedWriteSessionImpl::DispatchPendingInitSeqNoArm() {
 
     // Subscribe can run inline when the subsession future is already ready, and this
     // method is reachable from a discovery callback that still holds LockShared.
-    // Hop to the response queue so public promise callbacks run outside that borrow.
+    // The subsession promise itself is completed on the read callback stack
+    // (TWriteSessionImpl::OnReadDone). Public subscribers must run on neither:
+    // a subscriber that drops the session would destroy that subsession reentrantly,
+    // and LockShared would deadlock the context destructor.
     auto connections = Connections;
     auto selfCtx = SelfContext;
-    connections->PostToResponseQueue([selfCtx, generation, future = std::move(future), error = std::move(error)]() mutable {
-        auto apply = [selfCtx, generation, error = std::move(error)](const NThreading::TFuture<uint64_t>& ready) mutable {
+    connections->PostToResponseQueue([selfCtx, generation, future = std::move(future), error = std::move(error), connections]() mutable {
+        auto apply = [selfCtx, generation, error = std::move(error), connections](const NThreading::TFuture<uint64_t>& ready) mutable {
             TInitSeqNoCompletion completion;
             {
                 auto self = selfCtx->LockShared();
@@ -480,14 +483,14 @@ void TFederatedWriteSessionImpl::DispatchPendingInitSeqNoArm() {
                     }
                 }
             }
-            completion.Apply();
+            connections->PostToResponseQueue([completion = std::move(completion)]() mutable {
+                completion.Apply();
+            });
         };
         if (error || !future.Initialized()) {
             apply(future);
             return;
         }
-        // Runs inline only if InitResponse is already here. This callback itself is on the
-        // response queue, so an outer LockShared from discovery is not on the stack.
         future.Subscribe(std::move(apply));
     });
 }

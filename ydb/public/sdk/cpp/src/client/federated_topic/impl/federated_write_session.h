@@ -131,7 +131,8 @@ private:
     void IssueTokenIfAllowed();
 
     // Forwards the current subsession's GetInitSeqNo() once the caller has asked for it.
-    // Prepared under Lock. The public promise is completed only after LockShared is dropped.
+    // Prepared under Lock. The public promise is completed on the response queue,
+    // after LockShared is dropped and off the subsession read callback stack.
     void MaybePrepareInitSeqNoArm();
     void DispatchPendingInitSeqNoArm();
     bool IsDeduplicationEnabled() const;

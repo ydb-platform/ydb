@@ -14,6 +14,7 @@
 #include <library/cpp/threading/future/async.h>
 
 #include <atomic>
+#include <exception>
 
 namespace NYdb::NFederatedTopic::NTests {
 
@@ -655,6 +656,121 @@ Y_UNIT_TEST_SUITE(SimpleBlockingFederatedWriteSession) {
         UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
         UNIT_ASSERT(initSeqNo.HasException());
         UNIT_ASSERT(initReadyAtClose.load());
+    }
+
+    Y_UNIT_TEST(GetInitSeqNoStaysClosedAfterLateInitResponse) {
+        TSimpleBlockingWriteSessionTestFixture fixture(TEST_CASE_NAME);
+        auto session = fixture.CreateAsyncWriteSession(fixture.DefaultWriteSettings());
+        const auto initSeqNo = session->GetInitSeqNo();
+
+        UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
+        UNIT_ASSERT(initSeqNo.HasException());
+
+        fixture.RespondSingleDatabase();
+        Sleep(TDuration::Seconds(2));
+
+        UNIT_ASSERT(!initSeqNo.HasValue());
+        UNIT_ASSERT(initSeqNo.HasException());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(initSeqNo.GetValue(), yexception, "session closed");
+    }
+
+    Y_UNIT_TEST(GetInitSeqNoAfterCloseIsAlreadyFailed) {
+        TSimpleBlockingWriteSessionTestFixture fixture(TEST_CASE_NAME);
+        auto session = fixture.CreateAsyncWriteSession(fixture.DefaultWriteSettings());
+        UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
+
+        const auto initSeqNo = session->GetInitSeqNo();
+        UNIT_ASSERT(initSeqNo.HasException());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(initSeqNo.GetValue(), yexception, "session closed");
+    }
+
+    Y_UNIT_TEST(GetInitSeqNoCallbackCanDropTheSession) {
+        TSimpleBlockingWriteSessionTestFixture fixture(TEST_CASE_NAME);
+        std::atomic<bool> dropped{false};
+        std::atomic<bool> hasValue{false};
+        std::atomic<uint64_t> value{0};
+        std::exception_ptr error;
+        {
+            auto session = fixture.CreateAsyncWriteSession(fixture.DefaultWriteSettings());
+            auto initSeqNo = session->GetInitSeqNo();
+            // The callback is the last owner. Completing the promise under LockShared,
+            // or on the subsession read stack, deadlocks or destroys that subsession
+            // before its read callback returns.
+            initSeqNo.Subscribe([session = std::move(session), &dropped, &hasValue, &value, &error](const NThreading::TFuture<uint64_t>& future) mutable {
+                try {
+                    value.store(future.GetValue());
+                    hasValue.store(true);
+                } catch (...) {
+                    error = std::current_exception();
+                }
+                session.reset();
+                dropped.store(true);
+            });
+        }
+
+        fixture.RespondSingleDatabase();
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (!dropped.load() && TInstant::Now() < deadline) {
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(dropped.load(), "init callback did not return after dropping the session");
+        UNIT_ASSERT_C(!error, "GetInitSeqNo callback failed");
+        UNIT_ASSERT(hasValue.load());
+        UNIT_ASSERT_VALUES_EQUAL(value.load(), 0u);
+    }
+
+    Y_UNIT_TEST(GetInitSeqNoAllowsExplicitDedupWithoutIds) {
+        TSimpleBlockingWriteSessionTestFixture fixture(TEST_CASE_NAME);
+        auto settings = fixture.DefaultWriteSettings();
+        settings.MessageGroupId("");
+        settings.ProducerId("");
+        settings.DeduplicationEnabled(true);
+        auto session = fixture.CreateAsyncWriteSession(std::move(settings));
+
+        const auto initSeqNo = session->GetInitSeqNo();
+        UNIT_ASSERT(!initSeqNo.IsReady());
+        fixture.RespondSingleDatabase();
+        UNIT_ASSERT_C(initSeqNo.Wait(TDuration::Seconds(30)), "GetInitSeqNo with explicit deduplication was not set");
+        UNIT_ASSERT_VALUES_EQUAL(initSeqNo.GetValue(), 0u);
+        session->Close(TDuration::Seconds(10));
+    }
+
+    Y_UNIT_TEST(GetInitSeqNoFailsAfterAutoSeqNoWrite) {
+        TSimpleBlockingWriteSessionTestFixture fixture(TEST_CASE_NAME);
+        auto session = fixture.CreateAsyncWriteSession(fixture.DefaultWriteSettings());
+        fixture.RespondSingleDatabase();
+
+        std::optional<NTopic::TContinuationToken> token;
+        const TInstant tokenDeadline = TInstant::Now() + TDuration::Seconds(10);
+        while (!token && TInstant::Now() < tokenDeadline) {
+            session->WaitEvent().Wait(TDuration::Seconds(1));
+            while (auto event = session->GetEvent(false)) {
+                if (auto* ready = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+                    token = std::move(ready->ContinuationToken);
+                }
+            }
+        }
+        UNIT_ASSERT_C(token, "write session did not become ready");
+        auto message = NTopic::TWriteMessage("auto-seq");
+        session->Write(std::move(*token), std::move(message));
+
+        bool gotAck = false;
+        const TInstant ackDeadline = TInstant::Now() + TDuration::Seconds(30);
+        while (!gotAck && TInstant::Now() < ackDeadline) {
+            session->WaitEvent().Wait(TDuration::Seconds(1));
+            while (auto event = session->GetEvent(false)) {
+                if (std::holds_alternative<NTopic::TWriteSessionEvent::TAcksEvent>(*event)) {
+                    gotAck = true;
+                }
+            }
+        }
+        UNIT_ASSERT_C(gotAck, "auto seq no write was not acknowledged");
+
+        const auto initSeqNo = session->GetInitSeqNo();
+        UNIT_ASSERT_C(initSeqNo.Wait(TDuration::Seconds(10)), "GetInitSeqNo after an auto write did not complete");
+        UNIT_ASSERT(initSeqNo.HasException());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(initSeqNo.GetValue(), yexception, "Auto SeqNo");
+        session->Close(TDuration::Seconds(10));
     }
 
 }

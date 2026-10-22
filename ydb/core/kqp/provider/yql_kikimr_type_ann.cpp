@@ -2936,6 +2936,7 @@ private:
                 "commit_interval",
                 "initial_scan",
                 "availability_period",
+                "format",
             };
             settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
             return settings;

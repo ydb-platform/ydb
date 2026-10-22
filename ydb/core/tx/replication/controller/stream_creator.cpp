@@ -414,7 +414,8 @@ public:
             bool describeOnly,
             TDuration streamRetentionPeriod,
             TDuration consumerAvailabilityPeriod,
-            bool consumerImportant)
+            bool consumerImportant,
+            bool binaryFormat)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -428,10 +429,11 @@ public:
             // A schema barrier snapshots its partition membership, so topic
             // repartitioning is unsupported for schema-aware streams.
             {"supports_topic_autopartitioning", supportsTopicAutopartitioning && !schemaChanges},
-        }, schemaChanges, initialScan, AppData()->FeatureFlags.GetEnableBinaryChangefeedForAsyncReplication()))
+        }, schemaChanges, initialScan, binaryFormat && AppData()->FeatureFlags.GetEnableBinaryChangefeedForAsyncReplication()))
         , StreamRetentionPeriod(streamRetentionPeriod)
         , ConsumerAvailabilityPeriod(consumerAvailabilityPeriod)
         , ConsumerImportant(consumerImportant)
+        , BinaryFormat(binaryFormat)
         , NeedCreate(needCreate)
         , DescribeOnly(describeOnly)
         , LogPrefix(CreateActorLogPrefix("StreamCreator", ReplicationId, TargetId))
@@ -447,7 +449,13 @@ public:
             issues.AddIssue("Replication stream retention must be at least one second and finite consumer availability must be positive");
             return Finish(NYdb::TStatus(NYdb::EStatus::BAD_REQUEST, std::move(issues)));
         }
-
+        if (BinaryFormat && NeedCreate && !DescribeOnly
+            && !AppData()->FeatureFlags.GetEnableBinaryChangefeedForAsyncReplication())
+        {
+            NYdb::NIssue::TIssues issues;
+            issues.AddIssue("BINARY format is not supported yet");
+            return Finish(NYdb::TStatus(NYdb::EStatus::PRECONDITION_FAILED, std::move(issues)));
+        }
         if (DescribeOnly) {
             DescribeStreamTable();
         } else if (NeedCreate) {
@@ -479,6 +487,7 @@ private:
     const TDuration StreamRetentionPeriod;
     const TDuration ConsumerAvailabilityPeriod;
     const bool ConsumerImportant;
+    const bool BinaryFormat;
     ETopicOperation TopicOperation = ETopicOperation::CreateConsumer;
     bool VerifyConsumerSettings = false;
     const bool NeedCreate;
@@ -505,6 +514,7 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
     const auto consumerAvailabilityPeriod = consumerImportant ? TDuration::Zero()
         : config.GetAvailabilityPeriod().HasDuration() ? GetDuration(config.GetAvailabilityPeriod().GetDuration())
         : TDuration::Seconds(AppData()->ReplicationConfig.GetConsumerAvailabilityPeriodSeconds());
+    const bool binaryFormat = config.GetChangefeedFormat() == NKikimrReplication::CHANGEFEED_FORMAT_BINARY;
 
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(),
@@ -512,7 +522,7 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
         supportsTopicAutopartitioning, needCreate, schemaChanges, initialScan, describeOnly,
         TDuration::Seconds(AppData()->ReplicationConfig.GetStreamRetentionPeriodSeconds()),
-        consumerAvailabilityPeriod, consumerImportant);
+        consumerAvailabilityPeriod, consumerImportant, binaryFormat);
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
@@ -520,11 +530,13 @@ IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 
         const TString& streamName, const TString& consumerName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
         bool supportsTopicAutopartitioning, bool needCreate, bool schemaChanges, bool initialScan, bool describeOnly,
-        TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant)
+        TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant,
+        bool binaryFormat)
 {
     return new TStreamCreator(parent, proxy, rid, tid, config,
         streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
-        schemaChanges, needCreate, initialScan, describeOnly, streamRetentionPeriod, consumerAvailabilityPeriod, consumerImportant);
+        schemaChanges, needCreate, initialScan, describeOnly, streamRetentionPeriod, consumerAvailabilityPeriod,
+        consumerImportant, binaryFormat);
 }
 
 }

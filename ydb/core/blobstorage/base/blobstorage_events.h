@@ -610,4 +610,16 @@ namespace NKikimr {
         ~TEvNodeWardenStorageConfig();
     };
 
+    struct TEvInterpilePut
+        : TEventPB<TEvInterpilePut, NKikimrBlobStorage::TEvInterpilePut, TEvBlobStorage::EvInterpilePut>
+    {
+        TEvInterpilePut() = default;
+    };
+
+    struct TEvInterpilePutResult
+        : TEventPB<TEvInterpilePutResult, NKikimrBlobStorage::TEvInterpilePutResult, TEvBlobStorage::EvInterpilePutResult>
+    {
+        TEvInterpilePutResult() = default;
+    };
+
 } // NKikimr

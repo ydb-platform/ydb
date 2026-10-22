@@ -72,13 +72,13 @@ Each dynamic group belongs to a single [database](#database) and stores that dat
 
 #### Virtual storage group {#virtual-storage-groups}
 
-**Virtual storage group** is an entity that exposes the same external interface as a [storage group](#storage-group). It stores the data of [tablets](#tablet) assigned to it in the [dynamic storage groups](#dynamic-group) or in S3-compatible storage.
+**Virtual storage group** is an entity that exposes the same external interface as a [storage group](#storage-group). It stores the data of [tablets](#tablet) assigned to it either in other [dynamic groups](#dynamic-group) or in S3-compatible storage.
 
-Virtual storage groups decouple the physical data placement from tablet logical storage allocation. This gives the administrator more flexibility in storage management, including the ability to decommission the dynamic groups to reduce the storage requirements of the particular [database](#database).
+Virtual storage groups decouple physical data placement from logical storage allocation for tablets. This gives the administrator more flexibility in storage management, including the ability to decommission dynamic groups and reduce the storage allocated to a particular [database](#database).
 
 #### BlobDepot {#blob-depot}
 
-**BlobDepot** is a system [tablet](#tablet) in [distributed storage](#distributed-storage) that serves [virtual storage groups](#virtual-storage-groups). It stores a virtual group's data in other storage groups and is also used for decommissioning physical groups.
+**BlobDepot** is a system [tablet](#tablet) in [distributed storage](#distributed-storage) that serves [virtual storage groups](#virtual-storage-groups). It stores a virtual group's data in other storage groups and is also used for decommissioning dynamic groups.
 
 ### Storage pool {#storage-pool}
 
@@ -830,7 +830,7 @@ Distributed storage stores immutable data, with each immutable data block identi
 
 **PDisk** or **physical disk** is a component that controls a physical disk drive (block device). In other words, PDisk is a subsystem that implements an abstraction similar to a specialized file system on top of block devices (or files that emulate a block device for testing purposes).
 
-PDisk protects data integrity with checksums and with [erasure coding](#erasure-coding) of sector groups, so data on individual damaged sectors can be recovered. It also provides the durability guarantees for disk operations (write acknowledgment strictly after `fsync`). In addition, PDisk supports transparent encryption of all data on the disk.
+PDisk protects data integrity with checksums and uses [erasure coding](#erasure-coding) of sector groups to recover data on individual damaged sectors. It also provides durability guarantees for disk operations (write acknowledgment strictly after `fsync`). In addition, PDisk supports transparent encryption of all data on the disk.
 
 PDisk contains a scheduler that ensures shared use of the device's bandwidth among multiple clients ([VDisk](#vdisk)). PDisk divides the block device into [slots](#slot). At any given time, no more than one VDisk can own each slot. PDisk maintains a recovery log shared by PDisk service records and all VDisks.
 

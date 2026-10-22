@@ -14,6 +14,80 @@ from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION
 
 
 class YdbTelemetryTest(unittest.TestCase):
+    def test_archive_unchanged_integer_counters_do_not_serialize_each_sensor(self):
+        encoder = ydb_telemetry.CountersArchiveEncoder()
+        record = {
+            "host": "host",
+            "role": "static",
+            "index": 1,
+            "port": 1234,
+            "counters": {
+                "sensors": [
+                    {"kind": "RATE", "labels": {"sensor": str(index), "group": "private"}, "value": index}
+                    for index in range(1000)
+                ]
+            },
+        }
+        encoder.encode(record)
+        previous_size = encoder.state_bytes
+        # Label insertion order is not part of a metric's identity.
+        for sensor in record["counters"]["sensors"]:
+            sensor["labels"] = dict(reversed(list(sensor["labels"].items())))
+        with mock.patch.object(ydb_telemetry, "_archive_json", side_effect=AssertionError("per-sensor JSON")):
+            encoded = encoder.encode(record)
+        self.assertEqual(encoded["changes"], [])
+        self.assertEqual(encoded["definitions"], [])
+        self.assertNotIn("present", encoded)
+        self.assertEqual(encoder.state_bytes, previous_size)
+
+    def test_archive_identity_preserves_json_types_and_mutable_inputs(self):
+        encoder = ydb_telemetry.CountersArchiveEncoder()
+        record = {
+            "host": "host",
+            "role": "static",
+            "index": 1,
+            "port": 1234,
+            "counters": {"sensors": [{"labels": {"sensor": "x"}, "value": 0}]},
+        }
+        encoder.encode(record)
+        sensor = record["counters"]["sensors"][0]
+        for value in (0.0, False, -0.0, 0):
+            sensor["value"] = value
+            self.assertEqual(encoder.encode(record)["changes"], [[0, {"value": value}]])
+        sensor["labels"]["sensor"] = "changed"
+        self.assertEqual(encoder.encode(record)["definitions"], [[1, {"labels": {"sensor": "changed"}}]])
+        for value in (float("nan"), float("inf")):
+            sensor["value"] = value
+            with self.assertRaises(ValueError):
+                encoder.encode(record)
+
+    def test_archive_optimized_encoding_matches_json_state(self):
+        meta = {"host": "host", "role": "static", "index": 1, "port": 1234}
+        records = []
+        for index in range(12):
+            sensors = [
+                {"labels": {"sensor": "duplicate"}, "value": value}
+                for value in (0, index, -index, 0.0, False, -0.0, 1.5, "text", None)
+            ]
+            sensors.append({"labels": {"sensor": "hist"}, "hist": {"bounds": [1, 10], "buckets": [index, 0]}})
+            sensors.append({"labels": {"sensor": "nested"}, "extra": [True, 1, 1.0, {"x": "ю"}], "value": index})
+            if index % 3:
+                sensors.reverse()
+            records.append(dict(meta, index=index % 2, counters={"sensors": sensors}))
+        records.extend([dict(meta, error="offline"), dict(meta, counters={"sensors": []}), records[0]])
+        optimized = ydb_telemetry.CountersArchiveEncoder()
+        reference = ydb_telemetry.CountersArchiveEncoder()
+        for record in records:
+            encoded = optimized.encode(record)
+            with mock.patch.object(
+                ydb_telemetry,
+                "_archive_definition",
+                side_effect=lambda definition, _previous: ydb_telemetry._archive_json(definition),
+            ), mock.patch.object(ydb_telemetry, "_archive_value", ydb_telemetry._archive_json):
+                expected = reference.encode(record)
+            self.assertEqual(ydb_telemetry._archive_json(encoded), ydb_telemetry._archive_json(expected))
+            self.assertEqual(optimized.state_bytes, reference.state_bytes)
+
     def test_archive_delta_roundtrip(self):
         def sensor(value):
             return {"kind": "RATE", "labels": {"sensor": "a"}, "value": value}

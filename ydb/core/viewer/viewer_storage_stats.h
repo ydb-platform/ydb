@@ -74,6 +74,8 @@ class TJsonStorageStats : public TViewerPipeClient {
     std::vector<TVDiskRequestInfo> VDiskRequests;
     std::unordered_map<TActorId, size_t> VDiskRequestIndex;
     std::unordered_map<TTabletId, TTabletStorageInfo> TabletStorageInfo;
+    // Populated only by SchemeShard, Hive and Whiteboard, never by VDisk responses.
+    std::unordered_set<TTabletId> SelectedTablets;
     std::unordered_map<TString, TPathStorageInfo> PathStorageInfo;
     std::vector<TString> Problems;
 
@@ -226,15 +228,20 @@ public:
                 hiveIds.push_back(rootHiveId);
             }
         }
-        if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
-            const auto& resultSet = DatabaseNavigateResponse->Get()->Request->ResultSet;
-            if (!resultSet.empty()) {
-                const auto& entry = resultSet.front();
-                if (entry.DomainInfo && entry.DomainInfo->Params.HasHive()) {
-                    hiveIds.push_back(entry.DomainInfo->Params.GetHive());
+        auto addHive = [&](const auto& navigateResponse) {
+            if (navigateResponse && navigateResponse->IsOk()) {
+                const auto& resultSet = navigateResponse->Get()->Request->ResultSet;
+                if (!resultSet.empty()) {
+                    const auto& entry = resultSet.front();
+                    if (entry.DomainInfo && entry.DomainInfo->Params.HasHive()) {
+                        hiveIds.push_back(entry.DomainInfo->Params.GetHive());
+                    }
                 }
             }
-        }
+        };
+        addHive(DatabaseNavigateResponse);
+        // Serverless tablets may be managed by the shared database's Hive.
+        addHive(ResourceNavigateResponse);
         std::ranges::sort(hiveIds);
         auto duplicates = std::ranges::unique(hiveIds);
         hiveIds.erase(duplicates.begin(), duplicates.end());
@@ -428,6 +435,7 @@ public:
                 pathStorageInfo.Tablets.erase(duplicates.begin(), duplicates.end());
             }
         }
+        SelectedTablets.insert(pathStorageInfo.Tablets.begin(), pathStorageInfo.Tablets.end());
     }
 
     void ProcessResponses() {
@@ -477,6 +485,7 @@ public:
     void ProcessHiveInfo(const TEvHive::TEvResponseHiveInfo& hiveInfo) {
         for (const auto& tabletInfo : hiveInfo.Record.GetTablets()) {
             TTabletId tabletId = tabletInfo.GetTabletID();
+            SelectedTablets.insert(tabletId);
             auto& tabletStorageInfo = TabletStorageInfo[tabletId];
             tabletStorageInfo.Type = tabletInfo.GetTabletType();
         }
@@ -544,8 +553,12 @@ public:
 
     void Handle(TEvGetLogoBlobIndexStatResponse::TPtr& ev) {
         if (ev->Cookie < VDiskRequests.size()) {
-            if (VDiskRequests[ev->Cookie].VDiskRequest.Set(std::move(ev))) {
-                ProcessVDiskResponse(ev->Cookie);
+            const size_t requestIndex = ev->Cookie;
+            auto& vdiskRequest = VDiskRequests[requestIndex].VDiskRequest;
+            if (vdiskRequest.Set(std::move(ev))) {
+                if (vdiskRequest.IsOk()) {
+                    ProcessVDiskResponse(requestIndex);
+                }
                 RequestDone();
             }
         } else {
@@ -580,6 +593,7 @@ public:
                         }
                     }
                     TTabletId tabletId = tabletInfo.GetTabletId();
+                    SelectedTablets.insert(tabletId);
                     auto& tabletStorageInfo(TabletStorageInfo[tabletId]);
                     tabletStorageInfo.Type = static_cast<TTabletTypes::EType>(tabletInfo.GetType());
                 }
@@ -683,7 +697,12 @@ public:
             }
             std::map<TTabletTypes::EType, TTabletStorageInfo> tabletTypeAccumulated;
             std::map<TTabletTypes::EType, std::vector<TTabletId>> tabletIdsByType;
-            for (const auto& [tabletId, tabletStorageInfo] : TabletStorageInfo) {
+            for (const auto& tabletId : SelectedTablets) {
+                auto it = TabletStorageInfo.find(tabletId);
+                if (it == TabletStorageInfo.end()) {
+                    continue;
+                }
+                const auto& tabletStorageInfo = it->second;
                 auto& typeAccumulated = tabletTypeAccumulated[tabletStorageInfo.Type];
                 typeAccumulated.TabletCount += 1;
                 typeAccumulated.DataSize += tabletStorageInfo.DataSize;

@@ -51,6 +51,10 @@ namespace NKikimr::NDDisk {
     struct TPersistentBufferBarriersManager {
         using TTabletKey = TPersistentBufferTabletKey;
 
+        static constexpr ui64 MaxRegistrations(ui32 barriersLimit) {
+            return ui64(barriersLimit) * TPersistentBufferBarriers::MaxBarriersPerHeader;
+        }
+
         struct TErase {
             std::vector<ui64> Lsns;
             ui32 ChunkIdx = Max<ui32>();

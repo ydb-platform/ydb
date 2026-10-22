@@ -6,6 +6,8 @@
 
 #include <library/cpp/compproto/huff.h>
 
+#include <memory>
+
 namespace NCompTable {
     struct TCompressorTable {
         ui32 Table[65536];
@@ -47,7 +49,7 @@ namespace NCompTable {
 
     private:
         bool HighQuality;
-        THolder<TDataCompressor> Compressor;
+        std::unique_ptr<TDataCompressor> Compressor;
     };
 
     class TChunkDecompressor {
@@ -58,7 +60,7 @@ namespace NCompTable {
 
     private:
         bool HighQuality;
-        THolder<TDataDecompressor> Decompressor;
+        std::unique_ptr<TDataDecompressor> Decompressor;
     };
 
 }

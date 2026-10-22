@@ -28,6 +28,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/services/workload_manager/query_classifier.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
+#include <ydb/core/kqp/session_actor/kqp_snapshot_tables.h>
 #include <ydb/core/kqp/tracing/kqp_query_stats_rendering.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -738,7 +739,9 @@ public:
         QueryState->ContinueTime = TInstant::Now();
         EndQueryTraceSpan(QueryState->AdmissionSpan, ev->Get()->Status);
 
-        if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
+        using EAdmissionResult = NWorkloadManager::TEvContinueRequest::EAdmissionResult;
+        const auto admissionResult = ev->Get()->GetAdmissionResult();
+        if (admissionResult == EAdmissionResult::ContinueWithoutPool) {
             YDB_LOG_TRACE("Failed to place request in resource pool, feature flag is disabled",
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
@@ -749,7 +752,7 @@ public:
         }
 
         const TString& poolId = ev->Get()->PoolId;
-        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS && !ev->Get()->IsDiskFull()) {
+        if (admissionResult == EAdmissionResult::Reject) {
             google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
             NYql::IssuesToMessage(std::move(ev->Get()->Issues), &issues);
             ReplyQueryError(ev->Get()->Status, TStringBuilder() << "Query failed during adding/waiting in workload pool " << poolId, issues);
@@ -1284,10 +1287,6 @@ public:
     }
 
     void AcquirePersistentSnapshot() {
-        YDB_LOG_DEBUG("Acquire persistent snapshot",
-            {"marker", "KQPSA"},
-            {"logPrefix", LogPrefix()},
-            {"traceId", TraceId()});
         QueryState->AcquireSnapshotSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::SessionAcquireSnapshot,
             QueryState->KqpSessionSpan.GetTraceId(), {
                 .Name = "Acquire persistent snapshot",
@@ -1300,7 +1299,20 @@ public:
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
         auto snapMgrActorId = RegisterWithSameMailbox(snapMgr);
 
-        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(QueryState->PreparedQuery->GetQueryTables(), QueryId, std::move(QueryState->Orbit));
+        auto tables = BuildSnapshotTables(*QueryState->PreparedQuery, *QueryState->QueryData);
+        YDB_LOG_DEBUG("Acquire persistent snapshot",
+            {"marker", "KQPSA"},
+            {"logPrefix", LogPrefix()},
+            {"tables", tables.size()},
+            {"boundedTables", CountBoundedTables(tables)},
+            {"traceId", TraceId()});
+        if (QueryState->AcquireSnapshotSpan) {
+            QueryState->AcquireSnapshotSpan
+                .Attribute("tables", static_cast<i64>(tables.size()))
+                .Attribute("bounded_tables", static_cast<i64>(CountBoundedTables(tables)));
+        }
+        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(
+            std::move(tables), QueryId, std::move(QueryState->Orbit));
         Send(snapMgrActorId, ev.release(), 0, 0, QueryState->AcquireSnapshotSpan.GetTraceId());
 
         QueryState->TxCtx->SnapshotHandle.ManagingActor = snapMgrActorId;
@@ -1569,6 +1581,20 @@ public:
         }
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+
+        const bool allowModifications = QueryState->IsInternalCall() || QueryState->IsCreateTableAs()
+            || AppData()->FeatureFlags.GetEnableClientModifications();
+        if (!allowModifications) {
+            for (const auto& op : phyQuery.GetTableOps()) {
+                if (TYdbOperation(op.GetOperation()) & KikimrModifyOps()) {
+                    const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
+                    std::vector<TIssue> issues{YqlIssue(pos, TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                        "Client data writes are disabled")};
+                    ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "", MessageFromIssues(issues));
+                    return false;
+                }
+            }
+        }
 
         auto checkSchemeTx = [&]() {
             for (const auto &tx : phyQuery.GetTransactions()) {
@@ -2400,7 +2426,7 @@ public:
             txCtx->TxManager->AddTopicsToShards();
 
             auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
-                __LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+                __LOCATION__, NKikimr::TAlignedPagePoolCounters(), false);
 
             const auto& queryLimitsProto = Settings.TableService.GetQueryLimits();
             const auto& bufferLimitsProto = queryLimitsProto.GetBufferLimits();
@@ -3192,6 +3218,7 @@ public:
             stats->Compilation->FromCache = (QueryState->CompileStats.FromCache);
             stats->Compilation->DurationUs = (QueryState->CompileStats.DurationUs);
             stats->Compilation->CpuTimeUs = (QueryState->CompileStats.CpuTimeUs);
+            stats->Compilation->UsedNewRbo = QueryState->CompileResult->UsedNewRbo;
         }
 
         if (IsExecuteAction(QueryState->GetAction())) {
@@ -3281,6 +3308,17 @@ public:
                 response->SetEffectivePoolId(NResourcePool::DEFAULT_POOL_ID);
             } else {
                 response->SetEffectivePoolId(QueryState->UserRequestContext->PoolId);
+            }
+        }
+        if (!QueryState->RequestEv) {
+            return;
+        }
+        if (auto updater = QueryState->RequestEv->GetWmSessionUpdater()) {
+            const auto state = updater->GetState();
+            response->SetWmState(NWorkloadManager::WmStateToProto(state));
+            const auto classifiedBy = updater->GetClassifiedBy();
+            if (!classifiedBy.empty()) {
+                response->SetWmClassifiedBy(classifiedBy);
             }
         }
     }

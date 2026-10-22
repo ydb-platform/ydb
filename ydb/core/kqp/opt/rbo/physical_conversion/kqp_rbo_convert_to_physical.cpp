@@ -80,15 +80,56 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
         THashMap<ui32, TExprNode::TPtr> stages;
         THashMap<ui32, TVector<TExprNode::TPtr>> stageArgs;
         THashMap<ui32, TPositionHandle> stagePos;
+        // Types of the left rows passed through lookups in join mode; a lookup by keys of the input lookup reuses them.
+        THashMap<const IOperator*, const TStructExprType*> lookupJoinLeftRowTypes;
         auto& graph = root->PlanProps.StageGraph;
         THashSet<const TReplicate*> builtReplicates;
         for (auto id : graph.StageIds) {
             stageArgs[id] = TVector<TExprNode::TPtr>();
         }
 
+        // A read program computes each aggregate pushed to column shards. The
+        // aggregate builds that read, its read and map have no lowering of their own.
+        THashMap<const IOperator*, TOlapAggregate> olapAggregates;
+        THashSet<const IOperator*> olapAggregateInputs;
+        for (const auto& iter : *root) {
+            const auto* op = iter.Current;
+            if (op->Kind != EOperator::Aggregate || !CastOperator<TOpAggregate>(*op).IsPushedToOlap()) {
+                continue;
+            }
+            auto olapAggregate = MatchOlapAggregate(CastOperator<TOpAggregate>(*op), ctx);
+            Y_ENSURE(olapAggregate, "An aggregate pushed to column shards no longer matches its read");
+            olapAggregateInputs.insert(olapAggregate->Read);
+            if (olapAggregate->Map) {
+                olapAggregateInputs.insert(olapAggregate->Map);
+            }
+            olapAggregates.emplace(op, std::move(*olapAggregate));
+        }
+
+        auto buildSource = [&](TOpRead& opRead, const TOlapAggregate* olapAggregate) {
+            const auto& table = rboCtx.KqpCtx.Tables->ExistingTable(
+                rboCtx.KqpCtx.Cluster, TKqpTable(opRead.TableCallable).Path().Value());
+
+            TString carrierColumn;
+            if (opRead.GetColumns().Empty() && opRead.GetTableStorageType() == NYql::EStorageType::ColumnStorage) {
+                Y_ENSURE(!table.Metadata->KeyColumnNames.empty(), "An OLAP table needs a primary key");
+                carrierColumn = table.Metadata->KeyColumnNames.front();
+            }
+            TPhysicalSourceBuilder builder(opRead, ctx, opRead.Pos, names, root->PlanProps.InfoUnitRegistry,
+                graph.StageGUIDs.at(*opRead.Props.StageId), table.Metadata->Kind == NYql::EKikimrTableKind::SysView,
+                std::move(carrierColumn));
+            if (olapAggregate) {
+                builder.WithOlapAggregate(*olapAggregate);
+            }
+            return builder.BuildPhysicalOp();
+        };
+
         for (const auto& iter : *root) {
             auto op = iter.Current;
             auto opStageId = *(op->Props.StageId);
+            if (olapAggregateInputs.contains(op)) {
+                continue;
+            }
 
             TExprNode::TPtr currentStageBody;
             if (stages.contains(opStageId)) {
@@ -135,17 +176,7 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
                 stagePos[opStageId] = op->Pos;
                 YQL_CLOG(TRACE, CoreDq) << "Converted Empty Source " << opStageId;
             } else if (op->Kind == EOperator::Source) {
-                auto& opRead = CastOperator<TOpRead>(*op);
-
-                TString carrierColumn;
-                if (opRead.GetColumns().Empty() && opRead.GetTableStorageType() == NYql::EStorageType::ColumnStorage) {
-                    const auto& table = rboCtx.KqpCtx.Tables->ExistingTable(
-                        rboCtx.KqpCtx.Cluster, TKqpTable(opRead.TableCallable).Path().Value());
-                    Y_ENSURE(!table.Metadata->KeyColumnNames.empty(), "An OLAP table needs a primary key");
-                    carrierColumn = table.Metadata->KeyColumnNames.front();
-                }
-                currentStageBody = TPhysicalSourceBuilder(opRead, ctx, op->Pos, names, root->PlanProps.InfoUnitRegistry,
-                    graph.StageGUIDs.at(opStageId), std::move(carrierColumn)).BuildPhysicalOp();
+                currentStageBody = buildSource(CastOperator<TOpRead>(*op), nullptr);
 
                 stages[opStageId] = currentStageBody;
                 stagePos[opStageId] = op->Pos;
@@ -267,6 +298,16 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
             } else if (op->Kind == EOperator::Aggregate) {
                 auto& aggregate = CastOperator<TOpAggregate>(*op);
 
+                if (const auto* olapAggregate = olapAggregates.FindPtr(op)) {
+                    Y_ENSURE(!currentStageBody, "A pushed aggregate must start the stage of its read");
+                    currentStageBody = buildSource(*olapAggregate->Read, olapAggregate);
+
+                    stages[opStageId] = currentStageBody;
+                    stagePos[opStageId] = op->Pos;
+                    YQL_CLOG(TRACE, CoreDq) << "Converted Aggregate pushed to column shards " << opStageId;
+                    continue;
+                }
+
                 if (!currentStageBody) {
                     auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
                     stageArgs[opStageId].push_back(stageArg);
@@ -280,9 +321,10 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
 
                 // The full physical-stage peephole performs this pruning later.
                 const bool pruneUnusedOutputs = !rboCtx.KqpCtx.Config->GetEnableNewRBOPhysicalStagePeephole();
-                currentStageBody = TPhysicalAggregationBuilder(aggregate, ctx, op->Pos, names, pruneUnusedOutputs,
-                    rboCtx.KqpCtx.Config->GetDqHashOperatorsUseBlocks())
-                    .BuildPhysicalOp(currentStageBody, memLimit);
+                currentStageBody = NPhysicalConvertionUtils::TransformStageOutput(currentStageBody, [&](TExprNode::TPtr body) {
+                    return TPhysicalAggregationBuilder(aggregate, ctx, op->Pos, names, pruneUnusedOutputs,
+                        rboCtx.KqpCtx.Config->GetDqHashOperatorsUseBlocks()).BuildPhysicalOp(body, memLimit);
+                }, GetReplicateOutputIndex(aggregate), ctx);
 
                 stages[opStageId] = currentStageBody;
                 stagePos[opStageId] = op->Pos;
@@ -299,9 +341,19 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
                 const auto connection = graph.TryGetConnection(inputStageId, opStageId);
                 auto* streamLookup = dynamic_cast<TStreamLookupConnection*>(connection.Get());
                 Y_ENSURE(streamLookup, "A table lookup must be fed by a stream lookup connection");
-                auto keys = NLookupJoinBuilder::BuildLookupKeys(lookup, stages.at(inputStageId), ctx, names);
-                stages[inputStageId] = keys.InputStage;
-                streamLookup->SetInputType(keys.InputType);
+                if (lookup.KeysFromInputLookup) {
+                    // The output of the input lookup is passed as is: the rows it fetched are the lookup keys.
+                    const auto inputLookup = CastOperator<TOpTableLookup>(lookup.GetInput());
+                    const auto* leftRowType = lookupJoinLeftRowTypes.at(inputLookup.Get());
+                    lookupJoinLeftRowTypes[&lookup] = leftRowType;
+                    streamLookup->SetInputType(NLookupJoinBuilder::BuildKeysFromInputLookupType(
+                        *inputLookup, leftRowType, names, root->PlanProps.InfoUnitRegistry, ctx));
+                } else {
+                    auto keys = NLookupJoinBuilder::BuildLookupKeys(lookup, stages.at(inputStageId), ctx, names);
+                    stages[inputStageId] = keys.InputStage;
+                    streamLookup->SetInputType(keys.InputType);
+                    lookupJoinLeftRowTypes[&lookup] = keys.LeftRowType;
+                }
 
                 if (lookup.IsJoin()) {
                     YQL_CLOG(TRACE, CoreDq) << "Converted TableLookupJoin " << opStageId;

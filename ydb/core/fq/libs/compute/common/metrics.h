@@ -17,7 +17,8 @@ struct TComputeRequestCounters: public virtual TThrRefBase {
     explicit TComputeRequestCounters(const TString& name, const ::NMonitoring::TDynamicCounterPtr& counters = nullptr)
         : Name(name)
         , Counters(counters)
-    { }
+    {
+    }
 
     void Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
         Counters = counters;
@@ -35,10 +36,10 @@ struct TComputeRequestCounters: public virtual TThrRefBase {
 
 private:
     static ::NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() {
-        return ::NMonitoring::ExplicitHistogram({0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000, 500000});
+        return ::NMonitoring::ExplicitHistogram({ 0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000, 500000 });
     }
 };
 
 using TComputeRequestCountersPtr = TIntrusivePtr<TComputeRequestCounters>;
 
-} /* NFq */
+}   // namespace NFq

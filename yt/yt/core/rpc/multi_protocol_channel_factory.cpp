@@ -4,7 +4,7 @@
 #include "config.h"
 #include "endpoint_address.h"
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 namespace NYT::NRpc {
 
@@ -39,7 +39,7 @@ public:
 private:
     const TMultiProtocolClientConfigPtr Config_;
 
-    NThreading::TAtomicObject<THashMap<IBackend*, IChannelFactoryPtr>> BackendToFactory_;
+    TAtomicObject<THashMap<IBackend*, IChannelFactoryPtr>> BackendToFactory_;
 
     IChannelFactoryPtr GetOrCreateChannelFactory(IBackend* backend, const std::any& config)
     {

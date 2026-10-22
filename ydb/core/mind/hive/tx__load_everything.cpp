@@ -39,6 +39,8 @@ public:
         Self->Domains.clear();
         Self->BlockedOwners.clear();
         Self->BridgePiles.clear();
+        Self->RecentNodeEvents.Clear();
+        Self->RecentTabletEvents.Clear();
 
         Self->ResetTotalResourceValues();
 
@@ -366,19 +368,7 @@ public:
                 TNodeId nodeId = nodeRowset.GetValue<Schema::Node::ID>();
                 TNodeInfo& node = Self->Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *Self)).first->second;
                 node.Local = nodeRowset.GetValue<Schema::Node::Local>();
-                node.SetDown(nodeRowset.GetValue<Schema::Node::Down>());
-                node.SetFreeze(nodeRowset.GetValue<Schema::Node::Freeze>());
-                node.Drain = nodeRowset.GetValueOrDefault<Schema::Node::Drain>();
-                node.DrainInitiators = nodeRowset.GetValueOrDefault<Schema::Node::DrainInitiators>();
-                node.ServicedDomains = nodeRowset.GetValueOrDefault<Schema::Node::ServicedDomains>();
-                node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();
                 node.Name = nodeRowset.GetValueOrDefault<Schema::Node::Name>();
-                node.BecomeUpOnRestart = nodeRowset.GetValueOrDefault<Schema::Node::BecomeUpOnRestart>(false);
-                if (node.BecomeUpOnRestart) {
-                    // If a node must become up on restart, it must have been down
-                    // That was not persisted to avoid issues with downgrades
-                    node.SetDown(true);
-                }
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();
                     if (location.HasDataCenter()) {
@@ -386,12 +376,32 @@ public:
                         node.LocationAcquired = true;
                     }
                 }
-                node.DrainSeqNo = nodeRowset.GetValueOrDefault<Schema::Node::DrainSeqNo>();
-                node.BridgePileId = TBridgePileId::FromLocalDb(nodeRowset.GetValueOrDefault<Schema::Node::BridgePileId>());
+                node.ServicedDomains = nodeRowset.GetValueOrDefault<Schema::Node::ServicedDomains>();
                 if (!node.ServicedDomains) {
                     node.ServicedDomains = { Self->RootDomainKey };
                 }
                 node.LastSeenServicedDomains = node.ServicedDomains; // to keep Down and Freeze flags on restarts
+                node.BridgePileId = TBridgePileId::FromLocalDb(nodeRowset.GetValueOrDefault<Schema::Node::BridgePileId>());
+                if (const auto implicitPileId = NBridge::GetImplicitPileId(Self->BridgeInfo.get());
+                        !node.BridgePileId && implicitPileId) {
+                    // node was registered before the cluster got its single-pile bridge config (it is being converted into
+                    // bridged one), so it implicitly belongs to the only pile; its Local may survive Hive restart and
+                    // register again without the change of actor id, so the pile is assigned here
+                    node.BridgePileId = implicitPileId;
+                    db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::BridgePileId>(node.BridgePileId.GetLocalDb());
+                }
+                node.Drain = nodeRowset.GetValueOrDefault<Schema::Node::Drain>();
+                node.DrainInitiators = nodeRowset.GetValueOrDefault<Schema::Node::DrainInitiators>();
+                node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();
+                node.SetDown(nodeRowset.GetValue<Schema::Node::Down>(), EHiveEventReason::LoadedFromDatabase);
+                node.SetFreeze(nodeRowset.GetValue<Schema::Node::Freeze>(), EHiveEventReason::LoadedFromDatabase);
+                node.BecomeUpOnRestart = nodeRowset.GetValueOrDefault<Schema::Node::BecomeUpOnRestart>(false);
+                if (node.BecomeUpOnRestart) {
+                    // If a node must become up on restart, it must have been down
+                    // That was not persisted to avoid issues with downgrades
+                    node.SetDown(true, EHiveEventReason::LoadedFromDatabase);
+                }
+                node.DrainSeqNo = nodeRowset.GetValueOrDefault<Schema::Node::DrainSeqNo>();
                 if (!(bool)node.Local) {
                     // it's safe to call here, because there is no any tablets in the node yet
                     node.BecomeDisconnected();
@@ -535,7 +545,7 @@ public:
                             || !tablet.LockedToActor
                             || !Self->CurrentConfig.GetLockedTabletsSendMetrics())
                     {
-                        tablet.BecomeStopped();
+                        tablet.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                     }
                 } else {
                     auto it = Self->Nodes.find(tablet.NodeId);
@@ -543,7 +553,7 @@ public:
                         tablet.BecomeUnknown(&it->second);
                     } else {
                         tablet.NodeId = 0;
-                        tablet.BecomeStopped();
+                        tablet.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                     }
                 }
                 tablet.InitTabletMetrics();
@@ -717,13 +727,13 @@ public:
                         Self->DataCenters[dc].Followers[{tabletId, followerGroup.Id}].push_back(std::prev(tablet->Followers.end()));
                     }
                     if (nodeId == 0) {
-                        follower.BecomeStopped();
+                        follower.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                     } else {
                         auto it = Self->Nodes.find(nodeId);
                         if (it != Self->Nodes.end() && it->second.IsUnknown()) {
                             follower.BecomeUnknown(&it->second);
                         } else {
-                            follower.BecomeStopped();
+                            follower.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                         }
                     }
                     follower.InitTabletMetrics();

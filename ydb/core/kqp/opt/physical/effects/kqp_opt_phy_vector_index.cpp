@@ -137,7 +137,7 @@ TVectorIndexPrefixLookup BuildVectorIndexPrefixLookup(
     TVector<TStringBuf> prefixColumns(indexDesc->KeyColumns.begin(), indexDesc->KeyColumns.end()-1);
     THashSet<TStringBuf> postingColumnsSet;
     TVector<TStringBuf> postingColumns;
-    auto embeddingColumn = indexDesc->KeyColumns.back();
+    const auto& embeddingColumn = indexDesc->KeyColumns.back(); // the column views below must not point into a local copy
     YQL_ENSURE(postingColumnsSet.emplace(embeddingColumn).second);
     postingColumns.emplace_back(embeddingColumn);
     for (const auto& column : table.Metadata->KeyColumnNames) {

@@ -7,18 +7,22 @@ TDummyTopic::TDummyTopic(const TString& cluster, const TString& topicName, const
     , TopicName(topicName)
     , Path(path)
     , PartitionsCount(partitionCount)
-{}
+{
+}
 
 TDummyTopic& TDummyTopic::SetPartitionsCount(size_t count) {
     PartitionsCount = count;
     return *this;
 }
 
-TString SkipDatabasePrefix(const TString& path, const TString& database) {
+TString SkipDatabasePrefix(const TString& path, const TString& database, bool isCluster) {
     TStringBuf pathCanonized(path);
+    if (isCluster) {
+        pathCanonized.SkipPrefix("cluster:default_");
+    }
     pathCanonized.SkipPrefix(database);
     pathCanonized.SkipPrefix("/");
     return TString(pathCanonized);
 }
 
-} // namespace NYql
+}   // namespace NYql

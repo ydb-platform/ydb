@@ -7396,6 +7396,11 @@ IGraphTransformer::TStatus SqlInWrapper(const TExprNode::TPtr& input, TExprNode:
     }
 
     const auto lookupType = lookup->GetTypeAnn();
+    if (lookupType->HasUniversal()) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     const bool isAnsi = HasSetting(*options, "ansi");
 
     auto collectionType = collection->GetTypeAnn();

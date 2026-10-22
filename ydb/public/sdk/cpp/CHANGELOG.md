@@ -1,4 +1,18 @@
+* Added `TExecuteQueryIterator::Cancel()` to explicitly cancel a query response stream, including a pending read.
+
+* Added `TBridgeClient::RemovePile()` to remove a DISCONNECTED pile from a bridged cluster along with its data.
+
+* Added `TBridgeClient::AddPile()` to add an INACTIVE pile to a bridged cluster, and `TGetClusterStateResult::GetPendingPileOperation()`.
+
+* Added `TBridgeClient::ConvertToBridge()` to convert a non-bridged cluster into a bridged one with a single pile, and `TGetClusterStateResult::IsConversionInProgress()`.
+
+* Fixed Topic and PersQueue write-session memory accounting to include queued data protobufs until transport completion.
+
+* Fixed table and query sessions being reused after commit or rollback errors that require closing the session.
+
 * Fixed async credentials acquisition for unary and streaming RPCs and Topic/PersQueue write sessions; the SDK now uses the token returned by `GetAuthInfoAsync()` without a second synchronous lookup.
+
+* Fixed a thread leak in topic and PersQueue write sessions: asynchronous compression no longer keeps the client thread pool alive until process exit.
 
 ## v3.24.0
 

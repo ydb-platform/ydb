@@ -1,12 +1,11 @@
-#include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
-#include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/object.h>
 #include <ydb/services/metadata/abstract/request_features.h>
+#include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/object.h>
+#include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <unordered_set>
-
 
 namespace NKikimr::NWorkloadManager {
 
@@ -104,11 +103,9 @@ Y_UNIT_TEST_SUITE(TResourcePoolClassifierConfigSerialization) {
     }
 
     Y_UNIT_TEST(ParseRejectsEmptyResourcePool) {
-        NYql::TFeaturesExtractor extractor(
-            THashMap<TString, TString>{
-                {"resource_pool", ""},
-            },
-            std::unordered_set<TString>{});
+        NYql::TFeaturesExtractor extractor(THashMap<TString, TString>{
+                                               { "resource_pool", "" },
+                                           }, std::unordered_set<TString>{});
         TResourcePoolClassifierConfig::TParseResult result;
         const auto error = TResourcePoolClassifierConfig::ParseFromFeaturesExtractor(extractor, &result);
         UNIT_ASSERT(error.has_value());
@@ -120,39 +117,31 @@ Y_UNIT_TEST_SUITE(TResourcePoolClassifierConfigSerialization) {
 namespace {
 
 TQueryRunnerResult ReadSysView(TIntrusivePtr<IYdbSetup> ydb, const TString& classifierName) {
-    return ydb->ExecuteQuery(
-        TStringBuilder() << R"(
+    return ydb->ExecuteQuery(TStringBuilder() << R"(
             SELECT *
             FROM `.sys/resource_pool_classifiers`
             WHERE Name = ")" << classifierName << R"("
-        )",
-        TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
+        )", TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
 }
 
-
 TQueryRunnerResult ReadMetadataTable(TIntrusivePtr<IYdbSetup> ydb, const TString& classifierName) {
-    return ydb->ExecuteQuery(
-        TStringBuilder() << R"(
+    return ydb->ExecuteQuery(TStringBuilder() << R"(
             SELECT database, name, rank, config
             FROM `.metadata/workload_manager/classifiers/resource_pool_classifiers`
             WHERE name = ")" << classifierName << R"("
-        )",
-        TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
+        )", TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
 }
 
 /// Parse a JSON string; fatally fail the test on parse error.
 NJson::TJsonValue ParseJson(const TString& raw) {
     NJson::TJsonValue json;
-    UNIT_ASSERT_C(NJson::ReadJsonTree(raw, &json),
-        TStringBuilder() << "config column must be valid JSON, got: " << raw);
+    UNIT_ASSERT_C(NJson::ReadJsonTree(raw, &json), TStringBuilder() << "config column must be valid JSON, got: " << raw);
     return json;
 }
 
-}  // namespace
-
+}   // namespace
 
 Y_UNIT_TEST_SUITE(ClassifierRepresentation) {
-
     /// Minimal classifier (Name, Rank, ResourcePool only):
     Y_UNIT_TEST(MinimalClassifier) {
         auto ydb = TYdbSetupSettings().Create();
@@ -175,23 +164,17 @@ Y_UNIT_TEST_SUITE(ClassifierRepresentation) {
             UNIT_ASSERT_C(rs.TryNextRow(), "Expected one row in sys-view");
 
             // Mandatory columns
-            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("Name").GetOptionalUtf8(),         "some_classifier");
-            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("Rank").GetOptionalInt64(),         10);
+            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("Name").GetOptionalUtf8(), "some_classifier");
+            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("Rank").GetOptionalInt64(), 10);
             UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ResourcePool").GetOptionalUtf8(), "default");
 
             // Optional columns must be NULL
-            UNIT_ASSERT_C(!rs.ColumnParser("MemberName").GetOptionalUtf8().has_value(),
-                "MemberName must be NULL when absent");
-            UNIT_ASSERT_C(!rs.ColumnParser("HasAppName").GetOptionalUtf8().has_value(),
-                "HasAppName must be NULL when absent");
-            UNIT_ASSERT_C(!rs.ColumnParser("HasFullScan").GetOptionalUtf8().has_value(),
-                "HasFullScan must be NULL when absent");
-            UNIT_ASSERT_C(!rs.ColumnParser("HasPath").GetOptionalUtf8().has_value(),
-                "HasPath must be NULL when absent");
-            UNIT_ASSERT_C(!rs.ColumnParser("Action").GetOptionalUtf8().has_value(),
-                "Action must be NULL when absent");
-            UNIT_ASSERT_C(!rs.ColumnParser("HasStream").GetOptionalBool().has_value(),
-                "HasStream must be NULL when absent");
+            UNIT_ASSERT_C(!rs.ColumnParser("MemberName").GetOptionalUtf8().has_value(), "MemberName must be NULL when absent");
+            UNIT_ASSERT_C(!rs.ColumnParser("HasAppName").GetOptionalUtf8().has_value(), "HasAppName must be NULL when absent");
+            UNIT_ASSERT_C(!rs.ColumnParser("HasFullScan").GetOptionalUtf8().has_value(), "HasFullScan must be NULL when absent");
+            UNIT_ASSERT_C(!rs.ColumnParser("HasPath").GetOptionalUtf8().has_value(), "HasPath must be NULL when absent");
+            UNIT_ASSERT_C(!rs.ColumnParser("Action").GetOptionalUtf8().has_value(), "Action must be NULL when absent");
+            UNIT_ASSERT_C(!rs.ColumnParser("HasStream").GetOptionalBool().has_value(), "HasStream must be NULL when absent");
         }
 
         // ---- metadata table ----
@@ -203,19 +186,19 @@ Y_UNIT_TEST_SUITE(ClassifierRepresentation) {
 
             // Scalar columns
             UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("database").GetOptionalUtf8(), dbName);
-            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("name").GetOptionalUtf8(),     "some_classifier");
-            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("rank").GetOptionalInt64(),    10);
+            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("name").GetOptionalUtf8(), "some_classifier");
+            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("rank").GetOptionalInt64(), 10);
 
             // JSON config: mandatory key present, optional keys absent
             const auto json = ParseJson(TString(*rs.ColumnParser("config").GetOptionalJsonDocument()));
             UNIT_ASSERT_C(json.Has("resource_pool"), "JSON must contain 'resource_pool'");
             UNIT_ASSERT_VALUES_EQUAL(json["resource_pool"].GetString(), "default");
-            UNIT_ASSERT_C(!json.Has("member_name"),   "'member_name' must be absent from JSON");
-            UNIT_ASSERT_C(!json.Has("has_app_name"),  "'has_app_name' must be absent from JSON");
+            UNIT_ASSERT_C(!json.Has("member_name"), "'member_name' must be absent from JSON");
+            UNIT_ASSERT_C(!json.Has("has_app_name"), "'has_app_name' must be absent from JSON");
             UNIT_ASSERT_C(!json.Has("has_full_scan"), "'has_full_scan' must be absent from JSON");
-            UNIT_ASSERT_C(!json.Has("has_path"),      "'has_path' must be absent from JSON");
-            UNIT_ASSERT_C(!json.Has("action"),        "'action' must be absent from JSON");
-            UNIT_ASSERT_C(!json.Has("has_stream"),    "'has_stream' must be absent from JSON");
+            UNIT_ASSERT_C(!json.Has("has_path"), "'has_path' must be absent from JSON");
+            UNIT_ASSERT_C(!json.Has("action"), "'action' must be absent from JSON");
+            UNIT_ASSERT_C(!json.Has("has_stream"), "'has_stream' must be absent from JSON");
         }
     }
 
@@ -244,18 +227,17 @@ Y_UNIT_TEST_SUITE(ClassifierRepresentation) {
             NYdb::TResultSetParser rs(result.GetResultSet(0));
             UNIT_ASSERT_C(rs.TryNextRow(), "Expected one row in sys-view");
 
-            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("MemberName").GetOptionalUtf8(),  "alice@staff");
-            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("HasAppName").GetOptionalUtf8(),  "myapp");
+            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("MemberName").GetOptionalUtf8(), "alice@staff");
+            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("HasAppName").GetOptionalUtf8(), "myapp");
             UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("HasFullScan").GetOptionalUtf8(), "/Root/.*");
-            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("HasPath").GetOptionalUtf8(),     "/Root/db/.*");
+            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("HasPath").GetOptionalUtf8(), "/Root/db/.*");
 
             const auto hasStream = rs.ColumnParser("HasStream").GetOptionalBool();
             UNIT_ASSERT_C(hasStream.has_value(), "HasStream must not be NULL");
             UNIT_ASSERT_VALUES_EQUAL(*hasStream, true);
 
             // Action was not specified
-            UNIT_ASSERT_C(!rs.ColumnParser("Action").GetOptionalUtf8().has_value(),
-                "Action must be NULL when not specified");
+            UNIT_ASSERT_C(!rs.ColumnParser("Action").GetOptionalUtf8().has_value(), "Action must be NULL when not specified");
         }
 
         // ---- metadata table ----
@@ -266,14 +248,13 @@ Y_UNIT_TEST_SUITE(ClassifierRepresentation) {
             UNIT_ASSERT_C(rs.TryNextRow(), "Expected one row in metadata table");
 
             const auto json = ParseJson(TString(*rs.ColumnParser("config").GetOptionalJsonDocument()));
-            UNIT_ASSERT_VALUES_EQUAL(json["member_name"].GetString(),  "alice@staff");
+            UNIT_ASSERT_VALUES_EQUAL(json["member_name"].GetString(), "alice@staff");
             UNIT_ASSERT_VALUES_EQUAL(json["has_app_name"].GetString(), "myapp");
             UNIT_ASSERT_VALUES_EQUAL(json["has_full_scan"].GetString(), "/Root/.*");
-            UNIT_ASSERT_VALUES_EQUAL(json["has_path"].GetString(),     "/Root/db/.*");
+            UNIT_ASSERT_VALUES_EQUAL(json["has_path"].GetString(), "/Root/db/.*");
 
             UNIT_ASSERT_C(json.Has("has_stream"), "JSON must contain 'has_stream'");
-            UNIT_ASSERT_C(json["has_stream"].GetType() == NJson::JSON_BOOLEAN,
-                "'has_stream' must be a JSON boolean");
+            UNIT_ASSERT_C(json["has_stream"].GetType() == NJson::JSON_BOOLEAN, "'has_stream' must be a JSON boolean");
             UNIT_ASSERT_VALUES_EQUAL(json["has_stream"].GetBoolean(), true);
 
             UNIT_ASSERT_C(!json.Has("action"), "'action' must be absent from JSON when not specified");
@@ -315,8 +296,7 @@ Y_UNIT_TEST_SUITE(ClassifierRepresentation) {
 
             const auto json = ParseJson(TString(*rs.ColumnParser("config").GetOptionalJsonDocument()));
             UNIT_ASSERT_C(json.Has("has_stream"), "JSON must contain 'has_stream'");
-            UNIT_ASSERT_C(json["has_stream"].GetType() == NJson::JSON_BOOLEAN,
-                "'has_stream' must be a JSON boolean");
+            UNIT_ASSERT_C(json["has_stream"].GetType() == NJson::JSON_BOOLEAN, "'has_stream' must be a JSON boolean");
             UNIT_ASSERT_VALUES_EQUAL(json["has_stream"].GetBoolean(), false);
         }
     }
@@ -343,11 +323,9 @@ Y_UNIT_TEST_SUITE(ClassifierRepresentation) {
 
             UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("Action").GetOptionalUtf8(), "reject");
             // ResourcePool must be NULL for reject classifiers (not stored in config)
-            UNIT_ASSERT_C(!rs.ColumnParser("ResourcePool").GetOptionalUtf8().has_value(),
-                "ResourcePool must be NULL for Reject classifiers");
+            UNIT_ASSERT_C(!rs.ColumnParser("ResourcePool").GetOptionalUtf8().has_value(), "ResourcePool must be NULL for Reject classifiers");
             // Other optional fields absent
-            UNIT_ASSERT_C(!rs.ColumnParser("MemberName").GetOptionalUtf8().has_value(),
-                "MemberName must be NULL");
+            UNIT_ASSERT_C(!rs.ColumnParser("MemberName").GetOptionalUtf8().has_value(), "MemberName must be NULL");
         }
 
         // ---- metadata table ----
@@ -396,7 +374,7 @@ Y_UNIT_TEST_SUITE(ClassifierRepresentation) {
             NYdb::TResultSetParser rs(result.GetResultSet(0));
             UNIT_ASSERT_C(rs.TryNextRow(), "Expected one row in sys-view");
 
-            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("Rank").GetOptionalInt64(),       99);
+            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("Rank").GetOptionalInt64(), 99);
             UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("MemberName").GetOptionalUtf8(), "updated@user");
         }
 
@@ -484,8 +462,7 @@ Y_UNIT_TEST_SUITE(ClassifierRepresentation) {
             NYdb::TResultSetParser rs(result.GetResultSet(0));
             UNIT_ASSERT_C(rs.TryNextRow(), "Expected one row in sys-view");
             UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("Rank").GetOptionalInt64(), 20);
-            UNIT_ASSERT_C(!rs.ColumnParser("MemberName").GetOptionalUtf8().has_value(),
-                "MemberName must be NULL after RESET");
+            UNIT_ASSERT_C(!rs.ColumnParser("MemberName").GetOptionalUtf8().has_value(), "MemberName must be NULL after RESET");
         }
 
         // ---- metadata table: member_name key is absent after RESET; rank unchanged ----
@@ -666,8 +643,7 @@ Y_UNIT_TEST_SUITE(ClassifierRepresentation) {
             )");
             ydb->WaitForClassifierPropagation();
             {
-                UNIT_ASSERT_C(!getSysViewAction().has_value(),
-                    "Action must be NULL in sys-view after RESET(ACTION)");
+                UNIT_ASSERT_C(!getSysViewAction().has_value(), "Action must be NULL in sys-view after RESET(ACTION)");
                 auto json = getConfigJson();
                 UNIT_ASSERT_C(!json.Has("action"), "action must be absent from JSON after RESET");
             }
@@ -680,6 +656,6 @@ Y_UNIT_TEST_SUITE(ClassifierRepresentation) {
         }
     }
 
-}  // Y_UNIT_TEST_SUITE(ClassifierRepresentation)
+}   // Y_UNIT_TEST_SUITE(ClassifierRepresentation)
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

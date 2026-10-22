@@ -1,0 +1,82 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "TupleType";
+                                    [
+                                        [
+                                            "OptionalType";
+                                            [
+                                                "DataType";
+                                                "String"
+                                            ]
+                                        ];
+                                        [
+                                            "DataType";
+                                            "String"
+                                        ];
+                                        [
+                                            "OptionalType";
+                                            [
+                                                "DataType";
+                                                "Uuid"
+                                            ]
+                                        ];
+                                        [
+                                            "DataType";
+                                            "String"
+                                        ];
+                                        [
+                                            "OptionalType";
+                                            [
+                                                "DataType";
+                                                "Yson"
+                                            ]
+                                        ];
+                                        [
+                                            "DataType";
+                                            "String"
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            [
+                                "string"
+                            ];
+                            "<class 'str'>";
+                            [
+                                [
+                                    "GLwSGDhY3kyYqihzAml7kA=="
+                                ]
+                            ];
+                            "<class 'bytes'>";
+                            [
+                                {
+                                    "abc" = {
+                                        "$type" = "int64";
+                                        "$value" = "1"
+                                    }
+                                }
+                            ];
+                            "<class 'bytes'>"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

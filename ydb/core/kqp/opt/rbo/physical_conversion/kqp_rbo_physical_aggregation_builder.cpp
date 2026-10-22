@@ -195,10 +195,11 @@ TExprNode::TPtr TPhysicalAggregationBuilder::GetDataTypeForSumAggregation(const 
         return GetDecimalDataType(type);
     }
 
-    TString typeName = TString(type->Cast<TDataExprType>()->GetName());
-    if (typeName.StartsWith("Int")) {
+    const auto* dataType = type->Cast<TDataExprType>();
+    TString typeName = TString(dataType->GetName());
+    if (NYql::IsDataTypeSigned(dataType->GetSlot())) {
         typeName = "Int64";
-    } else if (typeName.StartsWith("Uint")) {
+    } else if (NYql::IsDataTypeUnsigned(dataType->GetSlot())) {
         typeName = "Uint64";
     }
 
@@ -211,14 +212,27 @@ TExprNode::TPtr TPhysicalAggregationBuilder::GetDataTypeForSumAggregation(const 
     // clang-format on
 }
 
-TExprNode::TPtr TPhysicalAggregationBuilder::BuildSumAggregationInitialState(TExprNode::TPtr lambdaArg, const TTypeAnnotationNode* itemType) {
+TExprNode::TPtr TPhysicalAggregationBuilder::CastToSumType(TExprNode::TPtr value, const TTypeAnnotationNode* itemType) const {
     // clang-format off
-    return Ctx.Builder(Pos)
+    auto result = Ctx.Builder(Pos)
         .Callable("SafeCast")
-            .Add(0, lambdaArg)
+            .Add(0, value)
             .Add(1, GetDataTypeForSumAggregation(itemType))
         .Seal().Build();
     // clang-format on
+
+    // AggrAdd of intervals may overflow, so the sum is optional even for a non optional input,
+    // and AggrAdd requires both operands to have the same type.
+    const TTypeAnnotationNode* sumType = nullptr;
+    Y_ENSURE(NYql::GetSumResultType(Pos, *itemType, sumType, Ctx), "Unsupported type for sum aggregation function");
+    if (sumType->IsOptionalOrNull() && !itemType->IsOptionalOrNull()) {
+        result = Ctx.NewCallable(Pos, "Just", {std::move(result)});
+    }
+    return result;
+}
+
+TExprNode::TPtr TPhysicalAggregationBuilder::BuildSumAggregationInitialState(TExprNode::TPtr lambdaArg, const TTypeAnnotationNode* itemType) {
+    return CastToSumType(std::move(lambdaArg), itemType);
 }
 
 TExprNode::TPtr TPhysicalAggregationBuilder::BuildCountAggregationUpdateStateForOptionalType(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField) {
@@ -657,10 +671,7 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildSumAggregationUpdateState(TExp
     return Ctx.Builder(Pos)
         .Callable("AggrAdd")
             .Add(0, lambdaArgState)
-            .Callable(1, "SafeCast")
-                .Add(0, lambdaArgField)
-                .Add(1, GetDataTypeForSumAggregation(itemType))
-            .Seal()
+            .Add(1, CastToSumType(lambdaArgField, itemType))
         .Seal().Build();
     // clang-format on
 }

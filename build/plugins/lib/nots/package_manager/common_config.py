@@ -1,5 +1,6 @@
 """Explicit, source-relative NOTS settings shared by injected modules."""
 
+import copy
 import logging
 import os
 import re
@@ -9,7 +10,10 @@ try:
 except ImportError:
     import yaml
 
+T0_SETTINGS_PATH = "devtools/frontend_build_platform/nots/constants/src/tier0-settings.yaml"
+
 logger = logging.getLogger(__name__)
+_reported_ignored_fields = set()
 
 # npm range syntax: partial versions, comparators, unions and hyphen ranges.
 _NUM = r"(?:0|[1-9][0-9]*)"
@@ -64,29 +68,40 @@ if yaml.__name__ != "ymakeyaml":
     _ConfigLoader = _UniqueKeyLoader
 
 
-def load_common_config(pj, sources_root, inject_peers):
+def load_common_config(pj, sources_root, include_settings=False):
     """Return (Arcadia-relative config path, catalogs); never rewrite the manifest."""
     settings = pj.data.get("nots", {})
     if not isinstance(settings, dict):
         raise ValueError("{}: nots must be a mapping".format(pj.path))
     has_config = "commonConfigPath" in settings
     config_path = settings.get("commonConfigPath")
-    if not inject_peers:
-        if has_config:
-            logger.warning("%s: commonConfigPath requires injected peers; ignoring config", pj.path)
-        return None, {}
 
     catalogs = {}
+    settings = {}
     relative_path = None
     if has_config:
         if not isinstance(config_path, str) or not config_path or os.path.isabs(config_path):
             raise ValueError("{}: commonConfigPath must be a nonempty relative path".format(pj.path))
-        absolute_path = os.path.normpath(os.path.join(os.path.dirname(pj.path), config_path))
+        module_directory = os.path.abspath(os.path.dirname(pj.path))
+        absolute_path = os.path.normpath(os.path.join(module_directory, config_path))
         source_root = os.path.abspath(sources_root)
-        if os.path.commonpath([source_root, absolute_path]) != source_root or os.path.commonpath(
-            [os.path.realpath(source_root), os.path.realpath(absolute_path)]
-        ) != os.path.realpath(source_root):
+        if os.path.commonpath([source_root, absolute_path]) != source_root:
             raise ValueError("{}: commonConfigPath escapes Arcadia: {}".format(pj.path, config_path))
+        config_directory = os.path.dirname(absolute_path)
+        if (
+            os.path.commonpath([source_root, config_directory]) != source_root
+            or os.path.commonpath([module_directory, config_directory]) != config_directory
+        ):
+            raise ValueError(
+                "{}: commonConfigPath must be in the module directory or a parent directory: {}".format(
+                    pj.path, config_path
+                )
+            )
+        current = source_root
+        for component in os.path.relpath(absolute_path, source_root).split(os.sep):
+            current = os.path.join(current, component)
+            if os.path.islink(current):
+                raise ValueError("{}: commonConfigPath must not contain symlinks: {}".format(pj.path, config_path))
         relative_path = os.path.relpath(absolute_path, source_root)
         try:
             with open(absolute_path) as stream:
@@ -95,9 +110,13 @@ def load_common_config(pj, sources_root, inject_peers):
             raise ValueError("{}: cannot read common config {}: {}".format(pj.path, absolute_path, error)) from error
         if not isinstance(data, dict):
             raise ValueError("{}: {} must contain a mapping".format(pj.path, absolute_path))
-        for key in data:
-            if key != "catalogs":
-                logger.warning("%s: ignoring unknown common config key %s in %s", pj.path, key, absolute_path)
+        ignored = [str(key) for key in data if key not in ("catalogs",) + PNPM_SETTINGS]
+        warning_key = (pj.path, absolute_path, tuple(ignored))
+        if ignored and warning_key not in _reported_ignored_fields:
+            _reported_ignored_fields.add(warning_key)
+            logger.warning("%s: ignoring common config fields: %s", pj.path, ", ".join(ignored))
+        settings = validate_pnpm_settings(data)
+        validate_config_paths(settings, os.path.dirname(absolute_path), source_root)
         catalogs = data.get("catalogs", {})
         if not isinstance(catalogs, dict):
             raise ValueError("{}: catalogs must be a mapping in {}".format(pj.path, absolute_path))
@@ -125,6 +144,14 @@ def load_common_config(pj, sources_root, inject_peers):
                         )
                     )
 
+    for name, spec in pj.data.get("peerDependencies", {}).items():
+        if spec.startswith("file:"):
+            raise ValueError(
+                "peerDependencies {}: file: не поддерживается; укажите semver, workspace: или catalog:".format(name)
+            )
+    validate_override_references(
+        join_pnpm_settings(settings, select_pnpm_settings(pj.data.get("pnpm"))), pj.data, pj.path
+    )
     for name, spec in pj.dependencies_iter():
         if isinstance(spec, str) and spec.startswith("catalog:"):
             group = spec[len("catalog:") :]
@@ -132,20 +159,208 @@ def load_common_config(pj, sources_root, inject_peers):
                 raise ValueError(
                     "{}: unresolved {} for {} in common config {}".format(pj.path, spec, name, relative_path)
                 )
-    return relative_path, catalogs
+    return (relative_path, catalogs, settings) if include_settings else (relative_path, catalogs)
 
 
-def merge_config_sources(target, incoming):
-    """Map source file paths to group names; preserve ownership across peer workspaces."""
-    for filename, groups in incoming.items():
-        for previous, previous_groups in target.items():
-            if previous == filename:
+def load_tier0_settings():
+    # The builder embeds the policy; ymake plugins read the same source file.
+    try:
+        import library.python.resource as resource
+
+        content = resource.find("nots/tier0-settings.yaml")
+    except ImportError:
+        content = None
+    if content is None:
+        policy_path = os.path.join(
+            os.path.dirname(__file__),
+            "../../../../../",
+            T0_SETTINGS_PATH,
+        )
+        with open(policy_path) as policy_file:
+            return yaml.load(policy_file, Loader=yaml.CSafeLoader)
+    return yaml.load(content, Loader=yaml.CSafeLoader)
+
+
+PNPM_SETTING_TYPES = load_tier0_settings()["pnpm"]["supportedCustomSettings"]
+PNPM_SETTINGS = tuple(key for key in PNPM_SETTING_TYPES if key != "catalogs")
+
+
+def select_pnpm_settings(source):
+    """Copy only supported settings; unknown pnpm options have no effect in NOTS."""
+    if not isinstance(source, dict):
+        return {}
+    return validate_pnpm_settings(source)
+
+
+def validate_pnpm_settings(data):
+    settings = {}
+    for key in PNPM_SETTINGS:
+        if key not in data:
+            continue
+        entries = data[key]
+        if PNPM_SETTING_TYPES[key] == "boolean":
+            if not isinstance(entries, bool):
+                raise ValueError("{} must be a boolean".format(key))
+            settings[key] = entries
+            continue
+        if PNPM_SETTING_TYPES[key] == "non-negative-integer":
+            if not isinstance(entries, int) or isinstance(entries, bool) or not 0 <= entries <= 9007199254740991:
+                raise ValueError("{} must be a non-negative integer".format(key))
+            settings[key] = entries
+            continue
+        if PNPM_SETTING_TYPES[key] == "string-list":
+            if not isinstance(entries, list) or any(not isinstance(entry, str) for entry in entries):
+                raise ValueError("{} must be a list of strings".format(key))
+            settings[key] = copy.deepcopy(entries)
+            continue
+        if not isinstance(entries, dict):
+            raise ValueError("{} must be a mapping".format(key))
+        for name, value in entries.items():
+            if not isinstance(name, str) or not name:
+                raise ValueError("invalid {} selector".format(key))
+            if PNPM_SETTING_TYPES[key] == "supported-architectures":
+                if name not in ("os", "cpu", "libc"):
+                    raise ValueError("invalid {} architecture {}".format(key, name))
+                if not isinstance(value, list) or any(not isinstance(v, str) for v in value):
+                    raise ValueError("{}.{} must be a list of strings".format(key, name))
                 continue
-            if os.path.dirname(previous) == os.path.dirname(filename):
-                raise ValueError("Conflicting common configs: {} and {}".format(previous, filename))
-            overlap = set(groups).intersection(previous_groups)
-            if overlap:
-                raise ValueError(
-                    "Conflicting catalog groups {} in {} and {}".format(sorted(overlap), previous, filename)
-                )
-        target[filename] = sorted(set(target.get(filename, [])).union(groups))
+            if PNPM_SETTING_TYPES[key] == "peer-rules":
+                if name in ("ignoreMissing", "allowAny"):
+                    if not isinstance(value, list) or any(not isinstance(v, str) for v in value):
+                        raise ValueError("invalid peerDependencyRules {}".format(name))
+                elif name == "allowedVersions":
+                    if not isinstance(value, dict) or any(
+                        not isinstance(k, str) or not isinstance(v, str) for k, v in value.items()
+                    ):
+                        raise ValueError("invalid allowedVersions")
+                else:
+                    raise ValueError("invalid peerDependencyRules {}".format(name))
+                continue
+            if PNPM_SETTING_TYPES[key] != "package-extensions":
+                if not isinstance(value, str) or not value:
+                    raise ValueError("invalid {} value for {}".format(key, name))
+                continue
+            if not isinstance(value, dict):
+                raise ValueError("package extension must be a mapping")
+            for section, dependencies in value.items():
+                if section not in (
+                    "dependencies",
+                    "optionalDependencies",
+                    "peerDependencies",
+                    "peerDependenciesMeta",
+                ) or not isinstance(dependencies, dict):
+                    raise ValueError("invalid package extension section: {}".format(section))
+                for dep, spec in dependencies.items():
+                    if not isinstance(dep, str) or not dep:
+                        raise ValueError("invalid extension dependency")
+                    if section == "peerDependenciesMeta":
+                        if not isinstance(spec, dict) or any(
+                            k != "optional" or not isinstance(v, bool) for k, v in spec.items()
+                        ):
+                            raise ValueError("invalid peerDependenciesMeta")
+                    elif not isinstance(spec, str) or not spec:
+                        raise ValueError("invalid extension dependency specifier")
+        settings[key] = copy.deepcopy(entries)
+    return settings
+
+
+def rebase_pnpm_settings(settings, source_dir, target_dir):
+    result = copy.deepcopy(settings)
+    if os.path.abspath(source_dir) == os.path.abspath(target_dir):
+        return result
+
+    def rebase(value, patch=False):
+        match = re.match(r"^(workspace:|file:|link:)(.*)$", value)
+        if not patch and (
+            not match or os.path.isabs(match[2]) or (match[1] == "workspace:" and not re.match(r"^\.\.?/", match[2]))
+        ):
+            return value
+        relative = os.path.relpath(
+            os.path.normpath(os.path.join(source_dir, value if patch else match[2])), target_dir
+        ).replace(os.sep, "/")
+        return relative if patch else match[1] + (relative if relative.startswith(".") else "./" + relative)
+
+    for key in PNPM_SETTINGS:
+        if PNPM_SETTING_TYPES[key] not in ("dependency-map", "patch-map", "package-extensions"):
+            continue
+        for name, value in result.get(key, {}).items():
+            if PNPM_SETTING_TYPES[key] == "package-extensions":
+                for section, dependencies in value.items():
+                    if section != "peerDependenciesMeta":
+                        value[section] = {dep: rebase(spec) for dep, spec in dependencies.items()}
+            else:
+                result[key][name] = rebase(value, PNPM_SETTING_TYPES[key] == "patch-map")
+    return result
+
+
+def validate_override_references(settings, manifest=None, owner=None):
+    """Reject effective workspace overrides, including references to direct dependencies."""
+    manifest = manifest or {}
+    dependencies = {}
+    for section in ("devDependencies", "dependencies", "optionalDependencies"):
+        dependencies.update(manifest.get(section, {}))
+    names = []
+    for name, value in settings.get("overrides", {}).items():
+        resolved = dependencies.get(value[1:]) if value.startswith("$") else value
+        if resolved and resolved.startswith("workspace:"):
+            names.append(name)
+    if names:
+        raise ValueError(
+            "{}: overrides {}: workspace: протокол не поддерживается; перейдите на file: протокол".format(
+                owner, ", ".join(names)
+            )
+        )
+
+
+def workspace_settings_paths(settings):
+    overrides = list(settings.get("overrides", {}).values())
+    specs = list(overrides)
+    for extension in settings.get("packageExtensions", {}).values():
+        for section in ("dependencies", "optionalDependencies", "peerDependencies"):
+            specs.extend(extension.get(section, {}).values())
+    paths = [spec[len("workspace:") :] for spec in specs if re.match(r"^workspace:\.\.?/", spec)]
+    for spec in overrides:
+        if not spec.startswith("file:"):
+            continue
+        paths.append(spec[len("file:") :])
+    return paths
+
+
+def validate_config_paths(settings, directory, root):
+    paths = list(settings.get("patchedDependencies", {}).values()) + workspace_settings_paths(settings)
+    for value in paths:
+        absolute = os.path.normpath(os.path.join(directory, value))
+        if (
+            os.path.isabs(value)
+            or os.path.commonpath([root, absolute]) != root
+            or os.path.commonpath([os.path.realpath(root), os.path.realpath(absolute)]) != os.path.realpath(root)
+        ):
+            raise ValueError("common config path escapes Arcadia: {}".format(value))
+
+
+def common_config_inputs(pj, sources_root):
+    """Only the target's explicit config and effective patches are build inputs."""
+    inputs = set()
+    filename, _, settings = load_common_config(pj, sources_root, include_settings=True)
+    directory = os.path.dirname(pj.path)
+    if filename:
+        inputs.add(filename)
+        settings = rebase_pnpm_settings(settings, os.path.join(sources_root, os.path.dirname(filename)), directory)
+    settings = join_pnpm_settings(settings, select_pnpm_settings(pj.data.get("pnpm")))
+    inputs.update(
+        os.path.relpath(os.path.normpath(os.path.join(directory, p)), sources_root)
+        for p in settings.get("patchedDependencies", {}).values()
+    )
+    return sorted(inputs)
+
+
+def join_pnpm_settings(common, target):
+    """Join dependency maps recursively; target leaves win and rule lists combine."""
+    if isinstance(common, dict) and isinstance(target, dict):
+        result = copy.deepcopy(common)
+        for key, value in target.items():
+            result[key] = join_pnpm_settings(result.get(key), value)
+        return result
+    if isinstance(common, list) and isinstance(target, list):
+        return list(dict.fromkeys(common + target))
+    return copy.deepcopy(target)

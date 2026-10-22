@@ -1,3 +1,4 @@
+#include <ydb/core/subsystems/actor_system_monitoring/subsystem.h>
 #include <ydb/core/subsystems/inmemory_metrics_monitoring/subsystem.h>
 #include <ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart/resources.h>
 #include <library/cpp/monlib/service/pages/resource_mon_page.h>
@@ -16,6 +17,7 @@
 #include <ydb/core/audit/heartbeat_actor/heartbeat_actor.h>
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/bridge.h>
 #include <ydb/core/base/config_units.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/event_filter.h>
@@ -266,7 +268,7 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
-#include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
+#include <ydb/library/actors/interconnect/interconnect_uring_engine_client.h>
 #include <ydb/library/actors/interconnect/handshake_broker.h>
 #include <ydb/library/actors/interconnect/load.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
@@ -640,6 +642,14 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     }));
 
     if (auto* mon = appData->Mon) {
+        auto monitoring = NActorSystemMonitoring::MakeConfig(
+            systemConfig, appData->BatchPoolId, useAutoConfig);
+        monitoring.RegisterPage = [mon](NActors::TActorSystem& system, const NActors::TActorId& actor) {
+            auto* actors = mon->RegisterIndexPage("actors", "Actors");
+            mon->RegisterActorPage(actors, "system", "Actor system", false, &system, actor, /*useAuth=*/true);
+        };
+        setup->RegisterSubSystem(NActorSystemMonitoring::MakeActorSystemMonitoring(std::move(monitoring)));
+
         NMetricChart::RegisterResources(mon);
         mon->Register(new NMonitoring::TResourceMonPage("static/inmemory-metrics/overview.js",
             "inmemory-metrics/overview.js", NMonitoring::TResourceMonPage::JAVASCRIPT));
@@ -802,14 +812,14 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 // negotiation and can be flipped later by a cluster config update, so the engine has to be
                 // in place beforehand. Zero Threads means the node never runs v2, whatever Enable says.
                 // The actor system does not exist yet, so the engine is bound to it later (once it is up,
-                // TInterconnectProxyTCP::Registered calls SetActorSystem). CreateUringEngine returns null when
+                // OnActorSystemCreated installs its client). CreateUringEngine returns null when
                 // io_uring is unavailable, in which case v2 is simply never negotiated during the handshake.
-                // The engine takes its parameters from Common, so Settings/MonCounters/DestructorId must
+                // The engine takes its parameters from Common, so Settings/MonCounters must
                 // already be filled in by this point.
                 icCommon->UringEngineV2 = CreateUringEngine(icCommon);
-                setup->OnActorSystemCreated.push_back([engine = icCommon->UringEngineV2](TActorSystem *actorSystem) {
-                    if (engine) {
-                        engine->SetActorSystem(actorSystem);
+                setup->OnActorSystemCreated.push_back([common = icCommon](TActorSystem *actorSystem) {
+                    if (const auto& engine = common->UringEngineV2) {
+                        engine->SetClient(CreateUringEngineClient(*common, actorSystem));
                     }
                 });
             }
@@ -961,35 +971,29 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             if (Config.HasBridgeConfig()) {
                 // when we work in Bridge mode, we need special actor to ensure connectivity check between nodes
                 const auto& bridge = Config.GetBridgeConfig();
-                TString name;
+                std::optional<TString> bridgePileName;
 
                 if (Config.GetDynamicNodeConfig().HasNodeInfo()) {
                     const auto& nodeInfo = Config.GetDynamicNodeConfig().GetNodeInfo();
                     Y_ABORT_UNLESS(nodeInfo.HasLocation());
-                    const auto& bridgePileName = TNodeLocation(nodeInfo.GetLocation()).GetBridgePileName();
-                    Y_ABORT_UNLESS(bridgePileName);
-                    name = *bridgePileName;
+                    bridgePileName = TNodeLocation(nodeInfo.GetLocation()).GetBridgePileName();
                 } else {
                     const auto it = table->StaticNodeTable.find(NodeId);
                     Y_ABORT_UNLESS(it != table->StaticNodeTable.end());
-                    const auto& entry = it->second;
-                    const auto& bridgePileName = entry.Location.GetBridgePileName();
-                    Y_ABORT_UNLESS(bridgePileName);
-                    name = *bridgePileName;
+                    bridgePileName = it->second.Location.GetBridgePileName();
                 }
 
-                size_t i;
-                for (i = 0; i < bridge.PilesSize(); ++i) {
-                    if (bridge.GetPiles(i).GetName() == name) {
-                        break;
-                    }
-                }
-                Y_ABORT_UNLESS(i != bridge.PilesSize());
-                const auto selfBridgePileId = TBridgePileId::FromPileIndex(i);
+                // pile name may be omitted for the implicit pile (the only one of the cluster converted from
+                // non-bridged one); pile id is resolved against local config here as there is no storage config yet,
+                // the actor will correct it when it gets one
+                const auto index = NBridge::ResolvePileIndex(bridge, bridgePileName);
+                Y_VERIFY_S(index, "can't resolve bridge pile for this node BridgePileName# "
+                    << bridgePileName.value_or("<none>"));
+                const auto selfBridgePileId = TBridgePileId::FromPileIndex(*index);
 
                 const TActorId actorId = MakeDistconfBridgeConnectionCheckerActorId();
                 setup->LocalServices.emplace_back(actorId, TActorSetupCmd(
-                    CreateDistconfBridgeConnectionCheckerActor(selfBridgePileId),
+                    CreateDistconfBridgeConnectionCheckerActor(selfBridgePileId, bridgePileName),
                     TMailboxType::ReadAsFilled,
                     interconnectPoolId));
                 icCommon->ConnectionCheckerActorIds.push_back(actorId);

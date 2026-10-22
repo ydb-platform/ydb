@@ -681,11 +681,15 @@ public:
         srcRange->SetKeyRangeEnd(tableInfo->GetPartitions()[srcPartitionIdx]->EndOfRange);
 
         // Check that ranges are sorted in ascending order
+        // The parsed cells point directly into the source buffers
+        // (rangeEnds elements and EndOfRange), which are alive and
+        // unmodified for the whole scope of this check.
         TVector<TCell> prevKey;
+        TVector<TCell> key;
         if (srcPartitionIdx != 0) {
             // Take the end of previous shard
-            TSerializedCellVec key(tableInfo->GetPartitions()[srcPartitionIdx-1]->EndOfRange);
-            prevKey.assign(key.GetCells().begin(), key.GetCells().end());
+            Y_ENSURE(TSerializedCellVec::TryParseCells(
+                tableInfo->GetPartitions()[srcPartitionIdx-1]->EndOfRange, prevKey));
         } else {
             // Or start from (NULL, NULL, .., NULL)
             prevKey.resize(keyColTypeIds.size());
@@ -694,12 +698,12 @@ public:
         srcRange->SetKeyRangeBegin(firstRangeBegin);
 
         for (ui32 i = 0; i < rangeEnds.size(); ++i) {
-            TSerializedCellVec key(rangeEnds[i]);
-            if (CompareBorders<true, true>(prevKey, key.GetCells(), true, true, keyColTypeIds) >= 0) {
+            Y_ENSURE(TSerializedCellVec::TryParseCells(rangeEnds[i], key));
+            if (CompareBorders<true, true>(prevKey, key, true, true, keyColTypeIds) >= 0) {
                 errStr = Sprintf("Partition ranges are not sorted at index %u", i);
                 return false;
             }
-            prevKey.assign(key.GetCells().begin(), key.GetCells().end());
+            prevKey.swap(key);
         }
 
         // Allocate new datashard ids

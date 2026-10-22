@@ -6,11 +6,10 @@
 namespace NYql::NTestHelpers {
 
 THttpGatewayHolder::THttpGatewayHolder()
-    : LoggerScope(std::make_shared<NYql::NLog::YqlLoggerScope>(
-        new NYql::NLog::TTlsLogBackend(new TNullLogBackend())
-      ))
+    : LoggerScope(std::make_shared<NYql::NLog::YqlLoggerScope>(new NYql::NLog::TTlsLogBackend(new TNullLogBackend())))
     , HttpGateway(NYql::IHTTPGateway::Make())
-{}
+{
+}
 
 THttpGatewayHolder::~THttpGatewayHolder() {
     // By this point, all threads using c-ares must be stopped.
@@ -25,4 +24,4 @@ const THttpGatewayHolder& GetGlobalHttpGatewayHolder() {
     return holder;
 }
 
-}  // namespace NYql::NTestHelpers
+}   // namespace NYql::NTestHelpers

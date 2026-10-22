@@ -335,6 +335,17 @@ class TPushFilterUnderMapRule : public ISimplifiedRule {
 };
 
 /**
+ * Push filter through aggregate.
+ */
+class TPushFilterThroughAggregateRule : public ISimplifiedRule {
+  public:
+    TPushFilterThroughAggregateRule() : ISimplifiedRule("Push filter through aggregate", ERuleProperties::RequireParents) {}
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
  * Extract common conjuncts from OR branches to expose top-level filters.
  */
 class TExtractCommonConjunctsRule : public ISimplifiedRule {
@@ -411,6 +422,17 @@ class TPushOlapFilterRule : public ISimplifiedRule {
 class TPushOlapProjectionRule : public ISimplifiedRule {
   public:
       TPushOlapProjectionRule() : ISimplifiedRule("Push olap projection", ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireLiveness) {}
+
+      virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+      virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Push down an intermediate aggregate to the column table read in its stage.
+ */
+class TPushOlapAggregateRule : public ISimplifiedRule {
+  public:
+      TPushOlapAggregateRule() : ISimplifiedRule("Push olap aggregate", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
 
       virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
       virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;

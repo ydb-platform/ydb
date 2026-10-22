@@ -46,11 +46,13 @@ JOIN_SRCS(
 JOIN_SRCS(
     all_push_filter.cpp
     push_filter_into_join.cpp
+    push_filter_through_aggregate.cpp
     push_filter_under_map.cpp
 )
 
 JOIN_SRCS(
     all_push_olap.cpp
+    push_olap_aggregate.cpp
     push_olap_filter.cpp
     push_olap_projection.cpp
 )

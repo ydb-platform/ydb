@@ -1,3 +1,4 @@
+import json
 import os
 
 import pytest
@@ -236,3 +237,53 @@ def test_get_bin_path_custom_bin_name():
 
     # act + assert
     assert pj.get_bin_path("tsc") == "./bin/tsc"
+
+
+@pytest.mark.parametrize("selector", ["foo", "foo@^1", "parent>foo@^1", "@scope/parent@^1>@scope/foo@^2"])
+@pytest.mark.parametrize("marker", ["ya.make", "output.tar.uuid"])
+def test_file_override_workspace_map_uses_manifest_names(tmp_path, selector, marker):
+    app = tmp_path / "app"
+    peer = tmp_path / "peer"
+    leaf = tmp_path / "leaf"
+    for directory in (app, peer, leaf):
+        directory.mkdir()
+    (peer / marker).write_text("")
+    (leaf / marker).write_text("")
+    (app / "package.json").write_text(json.dumps({"name": "app", "pnpm": {"overrides": {selector: "file:../peer"}}}))
+    (peer / "package.json").write_text(
+        json.dumps({"name": "replacement", "dependencies": {"leaf-alias": "file:../leaf"}})
+    )
+    (leaf / "package.json").write_text(json.dumps({"name": "leaf"}))
+    pj = PackageJson.load(str(app / "package.json"))
+
+    assert pj.get_workspace_dep_paths() == [str(peer)]
+    assert [dep.get_name() for dep in pj.get_workspace_deps()] == ["replacement"]
+    assert pj.get_dep_paths_by_names() == {"app": str(app), "replacement": str(peer), "leaf": str(leaf)}
+    assert pj.get_workspace_map()[str(leaf)][1] == 2
+
+
+@pytest.mark.parametrize("section", ["dependencies", "devDependencies", "optionalDependencies"])
+def test_direct_file_peer_with_dollar_override_uses_manifest_name(tmp_path, section):
+    app = tmp_path / "app"
+    peer = tmp_path / "peer"
+    app.mkdir()
+    peer.mkdir()
+    (peer / "ya.make").write_text("")
+    (peer / "package.json").write_text(json.dumps({"name": "replacement"}))
+    (app / "package.json").write_text(
+        json.dumps({"name": "app", section: {"alias": "file:../peer"}, "pnpm": {"overrides": {"alias": "$alias"}}})
+    )
+    pj = PackageJson.load(str(app / "package.json"))
+    assert pj.get_dep_paths_by_names() == {"app": str(app), "replacement": str(peer)}
+
+
+@pytest.mark.parametrize("selector", ["foo@^1", "parent>foo@^1"])
+def test_file_override_without_manifest_uses_directory_name(tmp_path, selector):
+    app = tmp_path / "app"
+    peer = tmp_path / "peer"
+    app.mkdir()
+    peer.mkdir()
+    (peer / "ya.make").write_text("")
+    (app / "package.json").write_text(json.dumps({"name": "app", "pnpm": {"overrides": {selector: "file:../peer"}}}))
+    pj = PackageJson.load(str(app / "package.json"))
+    assert pj.get_dep_paths_by_names() == {"app": str(app), "peer": str(peer)}

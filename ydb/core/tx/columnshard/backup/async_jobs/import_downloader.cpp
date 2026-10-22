@@ -15,13 +15,13 @@
 
 namespace NKikimr::NColumnShard::NBackup {
 
-TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(const NActors::TActorId& subscriberActorId, ui64 txId,
-    const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo) {
+TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(const NActors::TActorId& subscriberActorId, ui64 tabletId,
+    ui64 txId, const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo) {
     const auto settingsKind = restoreTask.GetSettingsCase();
     switch (settingsKind) {
         case NKikimrSchemeOp::TRestoreTask::kS3Settings:
 #ifndef KIKIMR_DISABLE_S3_OPS
-            return std::unique_ptr<NActors::IActor>(CreateS3Downloader(subscriberActorId, txId, restoreTask, tableInfo));
+            return std::unique_ptr<NActors::IActor>(CreateS3Downloader(subscriberActorId, tabletId, txId, restoreTask, tableInfo));
 #else
             return TConclusionStatus::Fail("Import from S3 are disabled");
 #endif
@@ -32,9 +32,10 @@ TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(con
 
 class TImportDownloader: public TActorBootstrapped<TImportDownloader> {
 public:
-    TImportDownloader(const NActors::TActorId& subscriberActorId, ui64 txId, const NKikimrSchemeOp::TRestoreTask& restoreTask,
+    TImportDownloader(const NActors::TActorId& subscriberActorId, ui64 tabletId, ui64 txId, const NKikimrSchemeOp::TRestoreTask& restoreTask,
         const NKikimr::NDataShard::TTableInfo& tableInfo, const THashMap<ui32, std::pair<TString, NScheme::TTypeInfo>>& ydbSchema)
         : SubscriberActorId(subscriberActorId)
+        , TabletId(tabletId)
         , TxId(txId)
         , RestoreTask(restoreTask)
         , TableInfo(tableInfo)
@@ -44,7 +45,7 @@ public:
 
     void Bootstrap() {
         Counters.OnActorAlive();
-        auto result = CreateAsyncJobImportDownloader(SelfId(), TxId, RestoreTask, TableInfo);
+        auto result = CreateAsyncJobImportDownloader(SelfId(), TabletId, TxId, RestoreTask, TableInfo);
         if (!result) {
             Counters.OnError();
             return Fail(result.GetError().GetErrorMessage());
@@ -59,7 +60,6 @@ public:
                 hFunc(TEvPrivate::TEvBackupImportRecordBatchResult, Handle) cFunc(NActors::TEvents::TEvPoisonPill::EventType, HandlePoisonPill))
 
     void HandlePoisonPill() {
-        Counters.OnActorDead();
         PassAway();
     }
 
@@ -174,7 +174,6 @@ public:
             return Fail(product->Error);
         }
         Send(SubscriberActorId, std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(nullptr, true));
-        Counters.OnActorDead();
         PassAway();
     }
 
@@ -182,7 +181,6 @@ public:
         auto result = std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(nullptr, true);
         result->Error = error;
         Send(SubscriberActorId, std::move(result));
-        Counters.OnActorDead();
         PassAway();
     }
 
@@ -191,6 +189,7 @@ private:
     NDataShard::TS3Download LastInfo;
     TActorId LastActorId;
     NActors::TActorId SubscriberActorId;
+    ui64 TabletId;
     ui64 TxId;
     NKikimrSchemeOp::TRestoreTask RestoreTask;
     NKikimr::NDataShard::TTableInfo TableInfo;
@@ -198,10 +197,10 @@ private:
     TImportDownloaderCounters Counters;
 };
 
-std::unique_ptr<NActors::IActor> CreateImportDownloader(const NActors::TActorId& subscriberActorId, ui64 txId,
+std::unique_ptr<NActors::IActor> CreateImportDownloader(const NActors::TActorId& subscriberActorId, ui64 tabletId, ui64 txId,
     const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo,
     const THashMap<ui32, std::pair<TString, NScheme::TTypeInfo>>& ydbSchema) {
-    return std::make_unique<TImportDownloader>(subscriberActorId, txId, restoreTask, tableInfo, ydbSchema);
+    return std::make_unique<TImportDownloader>(subscriberActorId, tabletId, txId, restoreTask, tableInfo, ydbSchema);
 }
 
 }   // namespace NKikimr::NColumnShard::NBackup

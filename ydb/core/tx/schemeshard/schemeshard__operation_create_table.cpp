@@ -93,14 +93,19 @@ bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
     partitions.emplace_back(InvalidShardIdx, TString());
 
     // Check that range ends are sorted in ascending order
-    TVector<TCell> prevKey(keyColTypeIds.size()); // Start from (NULL, NULL, .., NULL)
+    // Start from (NULL, NULL, .., NULL)
+    // The parsed cells point directly into the source buffers
+    // (partitions elements), which are alive and unmodified for the
+    // whole scope of this check.
+    TVector<TCell> prevKey(keyColTypeIds.size());
+    TVector<TCell> key;
     for (ui32 i = 0; i < partitions.size(); ++i) {
-        TSerializedCellVec key(partitions[i].EndOfRange);
-        if (CompareBorders<true, true>(prevKey, key.GetCells(), true, true, keyColTypeIds) >= 0) {
+        Y_ENSURE(TSerializedCellVec::TryParseCells(partitions[i].EndOfRange, key));
+        if (CompareBorders<true, true>(prevKey, key, true, true, keyColTypeIds) >= 0) {
             errStr = Sprintf("Partition ranges are not sorted at index %u", i);
             return false;
         }
-        prevKey.assign(key.GetCells().begin(), key.GetCells().end());
+        prevKey.swap(key);
     }
 
     return true;

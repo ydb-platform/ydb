@@ -78,7 +78,7 @@ public:
     }
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     i64 TotalResources_;
     i64 UsedResources_ = 0;
 };
@@ -539,7 +539,7 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
 
     struct TQueueRequests
     {
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, Lock);
         THashMap<TGuid, int> SlotIdToRequestCount;
         THashSet<TGuid> SlotIds;
         THashMap<TGuid, i64> SlotIdToRequestSize;

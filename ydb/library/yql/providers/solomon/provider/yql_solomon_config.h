@@ -1,17 +1,19 @@
 #pragma once
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
-#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 
 namespace NYql {
 
 struct TSolomonSettings {
     using TConstPtr = std::shared_ptr<const TSolomonSettings>;
+
 private:
     static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
+
 public:
     NCommon::TConfSetting<bool, Static> _EnableReading;
     NCommon::TConfSetting<bool, Static> _EnableRuntimeListing;
@@ -30,10 +32,7 @@ public:
     NCommon::TConfSetting<ui64, Static> LabelsListingLimit;
 };
 
-struct TSolomonConfiguration
-    : public TSolomonSettings
-    , public NCommon::TSettingDispatcher
-{
+struct TSolomonConfiguration: public NCommon::TDispatcherAndSettings<TSolomonSettings> {
     using TPtr = TIntrusivePtr<TSolomonConfiguration>;
 
     explicit TSolomonConfiguration(bool strictConfigValidation = false);
@@ -43,18 +42,20 @@ struct TSolomonConfiguration
     void Init(const TProtoConfig& config, TIntrusivePtr<TTypeAnnotationContext> typeCtx)
     {
         TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
-        for (auto& cluster: config.GetClusterMapping()) {
+        for (auto& cluster : config.GetClusterMapping()) {
             clusters.push_back(cluster.GetName());
             ClusterConfigs[cluster.GetName()] = cluster;
 
-            const TString authToken = typeCtx->Credentials->FindCredentialContent("cluster:default_" + cluster.GetName(), "default_solomon", cluster.GetToken());
-            Tokens[cluster.GetName()] = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
+            const TString authToken =
+                typeCtx->Credentials->FindCredentialContent("cluster:default_" + cluster.GetName(), "default_solomon", cluster.GetToken());
+            Tokens[cluster.GetName()] =
+                ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
         }
 
         this->SetValidClusters(clusters);
 
         this->Dispatch(config.GetDefaultSettings());
-        for (auto& cluster: config.GetClusterMapping()) {
+        for (auto& cluster : config.GetClusterMapping()) {
             this->Dispatch(cluster.GetName(), cluster.GetSettings());
         }
         this->FreezeDefaults();
@@ -66,4 +67,4 @@ struct TSolomonConfiguration
     THashMap<TString, TString> Tokens;
 };
 
-} // NYql
+}   // namespace NYql

@@ -2,6 +2,7 @@
 #include "yql_pq_settings.h"
 #include "yql_pq_topic_key_parser.h"
 
+#include <ydb/library/yql/providers/common/message_stream/provider.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
 #include <yql/essentials/ast/yql_expr.h>
@@ -19,21 +20,24 @@ using namespace NNodes;
 
 namespace {
 
-class TPqLoadTopicMetadataTransformer : public TGraphTransformerBase {
+class TPqLoadTopicMetadataTransformer: public TGraphTransformerBase {
 private:
     struct TPendingTopic {
         TPqState::TTopicMeta Meta;
         IPqGateway::TAsyncDescribeFederatedTopicResult Future;
     };
+
     using TTopicKey = std::pair<TString, TString>;
     using TTopics = THashMap<TTopicKey, TPendingTopic>;
 
 public:
     explicit TPqLoadTopicMetadataTransformer(TPqState::TPtr state)
         : State_(std::move(state))
-    {}
+    {
+    }
 
-    void AddToPendingTopics(const TString& cluster, const TString& topicPath, TPositionHandle pos, TExprNode::TPtr rowSpec, TExprNode::TPtr columnOrder, TTopics& pendingTopics) {
+    void AddToPendingTopics(const TString& cluster, const TString& topicPath, TPositionHandle pos, TExprNode::TPtr rowSpec,
+        TExprNode::TPtr columnOrder, TTopics& pendingTopics) {
         const auto topicKey = std::make_pair(cluster, topicPath);
         if (State_->Topics.contains(topicKey) || pendingTopics.FindPtr(topicKey)) {
             return;
@@ -62,12 +66,14 @@ public:
                 }
 
                 TTopicKeyParser topicParser(read.Arg(2).Ref(), read.Ref().Child(4), ctx);
-                AddToPendingTopics(read.DataSource().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), topicParser.GetUserSchema(), topicParser.GetColumnOrder(), PendingReadTopics_);
+                AddToPendingTopics(read.DataSource().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(),
+                    topicParser.GetUserSchema(), topicParser.GetColumnOrder(), PendingReadTopics_);
             } else if (auto maybePqWrite = TMaybeNode<TPqWrite>(node)) {
                 TPqWrite write = maybePqWrite.Cast();
                 if (write.DataSink().Category().Value() == PqProviderName) {
                     TTopicKeyParser topicParser(write.Arg(2).Ref(), nullptr, ctx);
-                    AddToPendingTopics(write.DataSink().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), {}, {}, PendingWriteTopics_);
+                    AddToPendingTopics(
+                        write.DataSink().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), {}, {}, PendingWriteTopics_);
                 }
             }
             return true;
@@ -83,21 +89,13 @@ public:
         auto launchFetch = [&](TTopics& pendingTopics) {
             for (auto& [key, pending] : pendingTopics) {
                 auto& [cluster, topic] = key;
-                pending.Future = State_->Gateway->DescribeFederatedTopic(
-                    State_->SessionId,
-                    cluster,
-                    State_->Configuration->GetDatabaseForTopic(cluster),
-                    topic,
-                    State_->Configuration->Tokens.at(cluster));
+                pending.Future = State_->Gateway->DescribeFederatedTopic(State_->SessionId, cluster,
+                    State_->Configuration->GetDatabaseForTopic(cluster), topic, State_->Configuration->Tokens.at(cluster));
 
                 // Use a completion promise that always resolves with a value (never exceptional),
                 // so WaitAll does not see exceptions and DoApplyAsyncChanges is always invoked.
                 // Per-topic errors are handled in DoApplyAsyncChanges via pending.Future.GetValue().
-                auto completionPromise = NThreading::NewPromise();
-                pending.Future.NoexceptSubscribe([p = completionPromise](const auto&) mutable {
-                    p.TrySetValue();
-                });
-                handles.push_back(completionPromise.GetFuture());
+                handles.push_back(NFq::NMessageStream::CompletionFuture(pending.Future));
             }
         };
 
@@ -126,36 +124,19 @@ public:
     }
 
 private:
-    static const TStructExprType* CreateDefaultItemType(TExprContext& ctx) {
-        // Schema for topic:
-        // {
-        //     Data:String
-        // }
-        TVector<const TItemExprType*> items;
-        items.reserve(1);
-
-        // Data column.
-        {
-            const TTypeAnnotationNode* typeNode = ctx.MakeType<TDataExprType>(NYql::NUdf::EDataSlot::String);
-            items.push_back(ctx.MakeType<TItemExprType>(ctx.AppendString("Data"), typeNode));
-        }
-
-        return ctx.MakeType<TStructExprType>(items);
-    }
-
     TStatus FillState(TTopics& pendingTopics, TExprContext& ctx, bool isWrite) {
         for (auto& [key, pending] : pendingTopics) {
             try {
                 pending.Meta.FederatedTopic = pending.Future.GetValue();
             } catch (const std::exception& ex) {
-                if (!State_->UseYtflowEngine || !isWrite) {
+                if (!State_->IsYtflowEngine() || !isWrite) {
                     TIssues issues;
                     issues.AddIssue(ex.what());
                     ctx.IssueManager.AddIssues(issues);
                     return TStatus::Error;
                 }
             }
-            const TStructExprType* itemType = CreateDefaultItemType(ctx);
+            const TStructExprType* itemType = NFq::NMessageStream::MakeRawRowType(ctx);
 
             if (!pending.Meta.RowSpec) {
                 pending.Meta.RowSpec = ExpandType(pending.Meta.Pos, *itemType, ctx);
@@ -183,8 +164,6 @@ private:
         return TStatus::Ok;
     }
 
-
-
     void Rewind() final {
         PendingWriteTopics_.clear();
         PendingReadTopics_.clear();
@@ -198,10 +177,10 @@ private:
     NThreading::TFuture<void> AsyncFuture_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 THolder<IGraphTransformer> CreatePqLoadTopicMetadataTransformer(TPqState::TPtr state) {
     return MakeHolder<TPqLoadTopicMetadataTransformer>(state);
 }
 
-} // namespace NYql
+}   // namespace NYql

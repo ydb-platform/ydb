@@ -233,7 +233,7 @@ public:
     TReflectSchemeChangesResult ReflectSchemeChanges();
     void ProvideMemTableMemoryConsumer(ui32 table, TIntrusivePtr<NMemory::IMemoryConsumer> memTableMemoryConsumer);
     void ReflectRemovedRowVersions(ui32 table);
-    void UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size);
+    void UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size, bool compactionComplete = false);
     void CheckInMemStats(ui32 table);
     void UpdateLogUsage(TArrayRef<const NRedo::TUsage>);
     void UpdateLogUsage(const NRedo::TUsage&);

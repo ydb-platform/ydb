@@ -260,6 +260,33 @@ Y_UNIT_TEST_SUITE(SchedulerActorLinux) {
         UNIT_ASSERT(!delivered.Detach());
     }
 
+    Y_UNIT_TEST(CancelsAlreadyQueuedTimer) {
+        TObservation observation;
+        TSchedulerCookieHolder cancelled(ISchedulerCookie::Make2Way());
+        TFixture fixture;
+        const auto recipient = fixture.System->Register(new TReceiver(observation, 1));
+        const auto now = fixture.System->Monotonic();
+        fixture.Schedule(recipient, now + TDuration::Hours(24), 99,
+            observation.CancelledDestroyed, cancelled.Get());
+        // Both entries use the same FIFO reader. Delivery of the marker proves
+        // the scheduler consumed the future timer while its cookie was armed.
+        fixture.Schedule(recipient, now, 1, observation.Destroyed);
+        const bool consumed = observation.Done.WaitT(TDuration::Seconds(30));
+        if (!consumed) {
+            fixture.System->Stop();
+        }
+        UNIT_ASSERT(consumed);
+        UNIT_ASSERT(cancelled.Get()->IsArmed());
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGet(observation.CancelledDestroyed), 0);
+        UNIT_ASSERT(cancelled.Detach());
+        fixture.System->Stop();
+        fixture.System->Cleanup();
+        UNIT_ASSERT_VALUES_EQUAL(observation.Delivered.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(observation.Delivered[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGet(observation.CancelledDestroyed), 1);
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGet(observation.Destroyed), 1);
+    }
+
     Y_UNIT_TEST(StopsWithPendingTimers) {
         TObservation observation;
         TSchedulerCookieHolder pending(ISchedulerCookie::Make2Way());

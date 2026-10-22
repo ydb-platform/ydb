@@ -1,0 +1,13 @@
+LIBRARY()
+SRCS(
+    config.cpp
+    subsystem.cpp
+    viewer.cpp
+)
+PEERDIR(
+    ydb/core/protos
+    ydb/library/actors/core
+    ydb/library/actors/core/subsystems
+)
+END()
+RECURSE_FOR_TESTS(ut)

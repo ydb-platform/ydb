@@ -20,6 +20,7 @@ namespace NKikimr {
     class TBridgedBlobStorageProxyActor : public TActorBootstrapped<TBridgedBlobStorageProxyActor> {
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
         TGroupId GroupId;
+        TActorId InnerProxyId; // DS proxy of the inline pile, if this group is an inline pile one
 
         using TClusterState = NKikimrBridge::TClusterState;
 
@@ -34,6 +35,7 @@ namespace NKikimr {
             TActorId Sender;
             ui64 Cookie;
             TIntrusivePtr<TBlobStorageGroupInfo> Info;
+            TBridgeInfo::TPtr BridgeInfo; // the one the request was admitted with along with Info
             std::unique_ptr<IEventBase> OriginalRequest;
             ui32 ResponsesPending = 0;
             TStorageStatusFlags StatusFlags;
@@ -260,12 +262,13 @@ namespace NKikimr {
             }
 
             bool DataIsTrustedInPile(const TBridgeInfo::TPile& pile) const {
-                if (!NBridge::PileStateTraits(pile.State).RequiresDataQuorum) {
+                // the part of the pile that has been out (NOT_SYNCHRONIZED_2 one included) may show the SYNCED stage of
+                // its previous sync until BSC resets it, so only the synchronized pile's part is sure to hold everything
+                if (pile.State != NKikimrBridge::TClusterState::SYNCHRONIZED) {
                     return false;
                 }
-                const auto& state = Info->Group->GetBridgeGroupState();
-                const auto& gp = state.GetPile(pile.BridgePileId.GetPileIndex());
-                return gp.GetStage() == NKikimrBridge::TGroupState::SYNCED;
+                const auto *gp = NBridge::GetGroupPile(Info->Group->GetBridgeGroupState(), pile.BridgePileId);
+                return gp && gp->GetStage() == NKikimrBridge::TGroupState::SYNCED;
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvGetResult> ev,
@@ -296,7 +299,9 @@ namespace NKikimr {
                         Y_ABORT_UNLESS(response.Id == RestoreQueue[payload.Index].Id);
                         Y_ABORT_UNLESS(response.Buffer.size() == response.Id.BlobSize());
                         RestoreQueue[payload.Index].Buffer = static_cast<TRcBuf>(response.Buffer);
-                        RestoreQueue[payload.Index].IssueKeepFlag = response.DoNotKeep < response.Keep;
+                        // the flag may be known from the earlier response about this blob, while this read may come from
+                        // VDisks not knowing it yet
+                        RestoreQueue[payload.Index].IssueKeepFlag |= response.DoNotKeep < response.Keep;
                         IssueRestorePut(self, payload.Index);
                         return nullptr;
                     } else {
@@ -631,16 +636,29 @@ namespace NKikimr {
                 return ProcessFullQuorumResponse(self, std::move(ev));
             }
 
+            template<typename TRequestEvent, typename TEvent>
+            std::unique_ptr<IEventBase> ProcessTrustedPileResponse(TThis& self, std::unique_ptr<TEvent> ev,
+                    const TBridgeInfo::TPile& pile) {
+                if (ev->Status != NKikimrProto::OK || DataIsTrustedInPile(pile)) {
+                    // synced pile holds the whole content of the group, so its answer is the answer
+                    return ev;
+                } else if (ResponsesPending) {
+                    return nullptr; // wait for the trusted pile
+                } else {
+                    Y_DEBUG_ABORT("missing response from trusted pile");
+                    return static_cast<TRequestEvent&>(*OriginalRequest).MakeErrorResponse(
+                        NKikimrProto::ERROR, "failed to obtain response from trusted pile", self.GroupId);
+                }
+            }
+
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvAssimilateResult> ev,
-                    const TBridgeInfo::TPile& /*pile*/, TRequestPayload& /*payload*/) {
-                (void)self, (void)ev;
-                return nullptr;
+                    const TBridgeInfo::TPile& pile, TRequestPayload& /*payload*/) {
+                return ProcessTrustedPileResponse<TEvBlobStorage::TEvAssimilate>(self, std::move(ev), pile);
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvCheckIntegrityResult> ev,
-                    const TBridgeInfo::TPile& /*pile*/, TRequestPayload& /*payload*/) {
-                (void)self, (void)ev;
-                return nullptr;
+                    const TBridgeInfo::TPile& pile, TRequestPayload& /*payload*/) {
+                return ProcessTrustedPileResponse<TEvBlobStorage::TEvCheckIntegrity>(self, std::move(ev), pile);
             }
         };
         struct TRequestInFlight {
@@ -656,15 +674,21 @@ namespace NKikimr {
 
         std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
         TBridgeInfo::TPtr BridgeInfo;
+        bool NotCapableReported = false;
 
         std::deque<std::unique_ptr<IEventHandle>> PendingQ;
         std::deque<std::tuple<TMonotonic, std::unique_ptr<IEventHandle>>> PendingForNextGeneration;
+        // requests waiting for the cluster state not older than the one the group state was made for
+        std::deque<std::tuple<TMonotonic, std::unique_ptr<IEventHandle>>> PendingForClusterState;
 
     public:
-        TBridgedBlobStorageProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info)
+        TBridgedBlobStorageProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId innerProxyId)
             : Info(std::move(info))
             , GroupId(Info->GroupID)
-        {}
+            , InnerProxyId(innerProxyId)
+        {
+            Y_ABORT_UNLESS(Info->IsInlinePile() == static_cast<bool>(InnerProxyId));
+        }
 
         void Bootstrap() {
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(/*subscribe=*/ true));
@@ -674,23 +698,14 @@ namespace NKikimr {
 
         void HandleWakeup() {
             TMonotonic dropBefore = TActivationContext::Monotonic() - TDuration::Seconds(2);
-            while (!PendingForNextGeneration.empty()) {
-                if (auto& [timestamp, ev] = PendingForNextGeneration.front(); timestamp < dropBefore) {
-                    switch (ev->GetTypeRewrite()) {
-#define MAKE_ERROR(TYPE) \
-                        case TYPE::EventType: \
-                            Send(ev->Sender, static_cast<TYPE*>(ev->GetBase())->MakeErrorResponse(NKikimrProto::ERROR, \
-                                "bridge request timed out", GroupId), 0, ev->Cookie); \
-                            break;
-
-                        DSPROXY_ENUM_EVENTS(MAKE_ERROR)
-#undef MAKE_ERROR
-                        default:
-                            Y_ABORT();
+            for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState}) {
+                while (!queue->empty()) {
+                    if (auto& [timestamp, ev] = queue->front(); timestamp < dropBefore) {
+                        ReplyWithError(*ev, "bridge request timed out");
+                        queue->pop_front();
+                    } else {
+                        break;
                     }
-                    PendingForNextGeneration.pop_front();
-                } else {
-                    break;
                 }
             }
             TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(),
@@ -698,73 +713,217 @@ namespace NKikimr {
         }
 
         void PassAway() override {
+            ReplyToAllWithError("bridge proxy is stopped");
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0,
                 MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), nullptr, 0));
+            if (InnerProxyId) {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, InnerProxyId, SelfId(), nullptr, 0));
+            }
             TActorBootstrapped::PassAway();
         }
 
         void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             StorageConfig = std::move(ev->Get()->Config);
             BridgeInfo = std::move(ev->Get()->BridgeInfo);
+            for (auto& [timestamp, ev] : std::exchange(PendingForClusterState, {})) {
+                TActivationContext::Send(ev.release());
+            }
+        }
+
+        template<typename TEvent>
+        void ReplyWithError(TEvent& msg, TActorId sender, ui64 cookie, const TString& errorReason) {
+            auto response = msg.MakeErrorResponse(NKikimrProto::ERROR, errorReason, GroupId);
+            SetExecutionRelay(*response, std::exchange(msg.ExecutionRelay, {}));
+            Send(sender, response.release(), 0, cookie);
+        }
+
+        void ReplyWithError(IEventBase& msg, TActorId sender, ui64 cookie, const TString& errorReason) {
+            switch (msg.Type()) {
+#define MAKE_ERROR(TYPE) \
+                case TYPE::EventType: \
+                    ReplyWithError(static_cast<TYPE&>(msg), sender, cookie, errorReason); \
+                    break;
+
+                DSPROXY_ENUM_EVENTS(MAKE_ERROR)
+#undef MAKE_ERROR
+                case TEvBlobStorage::EvBunchOfEvents:
+                    for (auto& ev : static_cast<TEvBlobStorage::TEvBunchOfEvents&>(msg).Bunch) {
+                        ReplyWithError(*ev, errorReason);
+                    }
+                    break;
+            }
+        }
+
+        void ReplyWithError(IEventHandle& ev, const TString& errorReason) {
+            ReplyWithError(*ev.GetBase(), ev.Sender, ev.Cookie, errorReason);
+        }
+
+        // reply with error to every request this proxy holds, as DS proxy does when stopped; this happens, for instance,
+        // when the group gets decommitted and loses its piles, and the requests are retried through the BlobDepot agent
+        void ReplyToAllWithError(const TString& errorReason) {
+            for (auto& [cookie, item] : RequestsInFlight) {
+                TRequest& request = *item.Request;
+                if (!request.Finished) {
+                    request.Finished = true;
+                    if (request.Span) {
+                        request.Span.EndError(errorReason);
+                    }
+                    ReplyWithError(*request.OriginalRequest, request.Sender, request.Cookie, errorReason);
+                }
+            }
+            RequestsInFlight.clear();
+            for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState}) {
+                for (auto& [timestamp, ev] : std::exchange(*queue, {})) {
+                    ReplyWithError(*ev, errorReason);
+                }
+            }
+            for (auto& ev : std::exchange(PendingQ, {})) {
+                ReplyWithError(*ev, errorReason);
+            }
+        }
+
+        template<typename TEvent>
+        static bool IsFencedWrite([[maybe_unused]] const TEvent& ev) {
+            if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut> ||
+                    std::is_same_v<TEvent, TEvBlobStorage::TEvBlock> ||
+                    std::is_same_v<TEvent, TEvBlobStorage::TEvPatch>) {
+                return true;
+            } else if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
+                return !TBlobStorageGroupInfo::IsAssimilationBarrier(ev.Hard, ev.RecordGeneration);
+            } else {
+                return false;
+            }
+        }
+
+        // service id of decommitted group points to the BlobDepot agent, and this proxy serves only agent's requests
+        bool IsBehindAgent() const {
+            return Info->BlobDepotId.value_or(0);
+        }
+
+        // the request to be processed later is sent to us again; handles of puts restarted by DS proxy come unaddressed
+        std::unique_ptr<IEventHandle> MakePendingHandle(IEventHandle& ev) {
+            return std::make_unique<IEventHandle>(SelfId(), ev.Sender, ev.ReleaseBase().Release(), 0, ev.Cookie, nullptr,
+                std::move(ev.TraceId));
         }
 
         template<typename TEvent>
         void HandleProxyRequest(TAutoPtr<TEventHandle<TEvent>>& ev) {
-            Y_ABORT_UNLESS(BridgeInfo);
+            if (InnerProxyId && ev->Get()->ForceGroupGeneration) {
+                // request to the physical group of the inline pile (e.g. phantom check from replication), it has to reach
+                // DS proxy as is, with its own generation fence, sender and cookie
+                TActivationContext::Send(ev->Forward(InnerProxyId));
+                return;
+            }
+            if (!BridgeInfo) {
+                // this process runs without BridgeConfig, but the group is bridged one; this happens when the node was
+                // not prepared before the cluster got converted to bridged one, and it can't serve bridged groups until
+                // restarted with BridgeConfig
+                STLOG(NotCapableReported ? PRI_DEBUG : PRI_CRIT, BS_PROXY_BRIDGE, BPB04,
+                    "bridged group request on node running without BridgeConfig", (GroupId, GroupId));
+                NotCapableReported = true;
+                ReplyWithError(*ev->Get(), ev->Sender, ev->Cookie,
+                    "node runs without BridgeConfig and can't serve bridged group");
+                return;
+            }
+
+            if (Info->DecommitBlocksWrites() && IsFencedWrite(*ev->Get())) {
+                // piles of bridged group don't know about its decommission, so this proxy is the only one to block
+                // writes not coming from the BlobDepot (e.g. requests restarted after the group switched to it)
+                ReplyWithError(*ev->Get(), ev->Sender, ev->Cookie, "group is being decommitted");
+                return;
+            }
+
+            // group state and cluster state come by different paths; stages of piles in the group state are valid with the
+            // pile states of the cluster state it was made for, or newer one, as the pile which takes no part in data quorum
+            // by older cluster state may have got synced already
+            Y_ABORT_UNLESS(Info->Group);
+            const auto& state = Info->Group->GetBridgeGroupState();
+            if (const ui64 generation = StorageConfig->GetClusterState().GetGeneration();
+                    generation < state.GetClusterStateGeneration()) {
+                STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB05, "request waits for newer cluster state", (GroupId, GroupId),
+                    (GroupGeneration, Info->GroupGeneration), (ClusterStateGeneration, generation),
+                    (BridgeGroupState, state));
+                PendingForClusterState.emplace_back(TActivationContext::Monotonic(), MakePendingHandle(*ev));
+                return;
+            }
+
+            // decide which piles get the request with the group state and the cluster state we have now
+            std::vector<std::tuple<TBridgePileId, std::unique_ptr<IEventBase>>> subrequests;
+            NBridge::ForEachGroupPile(state, [&](TBridgePileId bridgePileId,
+                    const NKikimrBridge::TGroupState::TPile& groupPileInfo) {
+                const TBridgeInfo::TPile *pile = BridgeInfo->FindPile(bridgePileId);
+                if (!pile) {
+                    // bridge info is not older than group info, so the pile has left the cluster (or the group state comes
+                    // from the version not telling its cluster state, and then the pile is just added and holds no data)
+                    return;
+                } else if (!NBridge::PileStateTraits(pile->State).RequiresDataQuorum) {
+                    return; // skip this pile, no data quorum needed
+                }
+
+                // check the sync state for this group
+                if (auto eventToSend = PrepareEvent(groupPileInfo, *ev->Get(), pile->BridgePileId)) {
+                    subrequests.emplace_back(pile->BridgePileId, std::move(eventToSend));
+                }
+            });
+            if (subrequests.empty()) {
+                // no pile is able to take this request with the group state we have; it is older than the cluster state
+                // (e.g. the node has just got back and the pile which is synced now is not synced in its group state)
+                STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB06, "request waits for newer group state", (GroupId, GroupId),
+                    (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
+                PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), MakePendingHandle(*ev));
+                return;
+            }
 
             std::unique_ptr<TEvent> evPtr(ev->Release().Release());
             const TEvent& originalRequest = *evPtr;
             auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, std::move(evPtr), Info, *this,
                     ev->GetTypeRewrite(), std::move(ev->TraceId));
+            request->BridgeInfo = BridgeInfo;
 
             STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->RequestId),
                 (GroupId, GroupId), (GroupGeneration, request->Info->GroupGeneration),
                 (BridgeGroupState, request->Info->Group->GetBridgeGroupState()),
                 (Request, originalRequest.ToString()));
 
-            Y_ABORT_UNLESS(request->Info->Group);
-            const auto& state = request->Info->Group->GetBridgeGroupState();
-            for (size_t i = 0; i < state.PileSize(); ++i) {
-                const auto bridgePileId = TBridgePileId::FromPileIndex(i);
-                const TBridgeInfo::TPile *pile = BridgeInfo->GetPile(bridgePileId);
-                if (!NBridge::PileStateTraits(pile->State).RequiresDataQuorum) {
-                    continue; // skip this pile, no data quorum needed
-                }
-
-                // check the sync state for this group
-                const auto& groupPileInfo = state.GetPile(i);
-                if (auto eventToSend = PrepareEvent(groupPileInfo, originalRequest, pile->BridgePileId)) {
-                    SendQuery(request, pile->BridgePileId, std::move(eventToSend));
-                }
+            for (auto& [bridgePileId, eventToSend] : subrequests) {
+                SendQuery(request, bridgePileId, std::move(eventToSend));
             }
-
-            Y_ABORT_UNLESS(request->ResponsesPending);
         }
 
         void SendQuery(std::shared_ptr<TRequest> request, TBridgePileId bridgePileId, std::unique_ptr<IEventBase> ev,
                 TRequestPayload&& payload = {}) {
-            const auto& state = request->Info->Group->GetBridgeGroupState();
-            const auto& groupPileInfo = state.GetPile(bridgePileId.GetPileIndex());
-            const auto groupId = TGroupId::FromProto(&groupPileInfo, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+            const auto *groupPileInfo = NBridge::GetGroupPile(request->Info->Group->GetBridgeGroupState(),
+                bridgePileId);
+            Y_ABORT_UNLESS(groupPileInfo);
+            const auto groupId = TGroupId::FromProto(groupPileInfo, &NKikimrBridge::TGroupState::TPile::GetGroupId);
 
             auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(ev.get());
             Y_ABORT_UNLESS(common);
-            common->ForceGroupGeneration = groupPileInfo.GetGroupGeneration();
+            common->ForceGroupGeneration = groupPileInfo->GetGroupGeneration();
 
             STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB03, "new subrequest", (RequestId, request->RequestId),
                 (BridgePileId, bridgePileId), (Request, ev->ToString()), (Cookie, LastRequestCookie + 1),
-                (GroupPileInfo, groupPileInfo));
+                (GroupPileInfo, *groupPileInfo));
 
             // allocate cookie for this specific request and bind it to the common one
             const ui64 cookie = ++LastRequestCookie;
-            const auto [it, inserted] = RequestsInFlight.try_emplace(cookie, request, BridgeInfo,
-                BridgeInfo->GetPile(bridgePileId), groupId, std::move(payload));
+            const auto [it, inserted] = RequestsInFlight.try_emplace(cookie, request, request->BridgeInfo,
+                request->BridgeInfo->GetPile(bridgePileId), groupId, std::move(payload));
             Y_DEBUG_ABORT_UNLESS(inserted);
             const auto [it1, inserted1] = request->CookiesInFlight.insert(cookie);
             Y_DEBUG_ABORT_UNLESS(inserted1);
 
-            // send event
-            SendToBSProxy(SelfId(), groupId, ev.release(), cookie, request->Span.GetTraceId());
+            // send event; inline pile is served by inner proxy, as the service id of this group points to us
+            if (groupId == GroupId && !InnerProxyId) {
+                // the inline pile has been removed (with its DS proxy) while the request was running against the group
+                // configuration having it; the subrequests the inner proxy was running got errors when it stopped, and so
+                // do the ones issued afterwards (like restore writes)
+                ReplyWithError(*ev, SelfId(), cookie, "inline pile has been removed from the cluster");
+            } else if (groupId == GroupId) {
+                Send(InnerProxyId, ev.release(), 0, cookie, request->Span.GetTraceId());
+            } else {
+                SendToBSProxy(SelfId(), groupId, ev.release(), cookie, request->Span.GetTraceId());
+            }
             ++request->ResponsesPending;
         }
 
@@ -820,6 +979,15 @@ namespace NKikimr {
             if (!res) {
                 res = std::make_unique<TEvent>(TEvBlobStorage::CloneEventPolicy, ev);
             }
+
+            if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate>) {
+                if (Info->DecommitBlocksWrites()) {
+                    // pile groups don't carry decommit state of their bridge proxy group, while this proxy blocks writes
+                    // for them; let the VDisks of piles proceed with assimilation
+                    res->IgnoreDecommitState = true;
+                }
+            }
+
             return res;
         }
 
@@ -868,8 +1036,10 @@ namespace NKikimr {
                     ++common->RestartCounter;
                     auto handle = std::make_unique<IEventHandle>(SelfId(), request->Sender, ev.release(), 0, request->Cookie);
 
-                    const auto& bridgeGroupState = Info->Group->GetBridgeGroupState();
-                    const ui32 myGeneration = bridgeGroupState.GetPile(pile.BridgePileId.GetPileIndex()).GetGroupGeneration();
+                    // when the group has no part in this pile anymore, our configuration is newer than the one the
+                    // request was executed with
+                    const auto *groupPile = NBridge::GetGroupPile(Info->Group->GetBridgeGroupState(), pile.BridgePileId);
+                    const ui32 myGeneration = groupPile ? groupPile->GetGroupGeneration() : Max<ui32>();
 
                     Y_VERIFY_DEBUG_S(common->RestartCounter < 100, "GroupId# " << GroupId
                         << " item.GroupId# " << item.GroupId
@@ -883,8 +1053,12 @@ namespace NKikimr {
                     if (myGeneration < msg->RacingGeneration) {
                         PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), std::move(handle));
                     } else if (msg->RacingGeneration < myGeneration) {
-                        std::unique_ptr<IEventHandle> h(CreateEventForBSProxy(handle->Sender, GroupId,
-                            handle->ReleaseBase().Release(), handle->Cookie, std::move(handle->TraceId)));
+                        // when the group is decommitted, its service id points to the BlobDepot agent, which would take
+                        // restarted request for its client's one; restart it right here then
+                        std::unique_ptr<IEventHandle> h(IsBehindAgent()
+                            ? handle.release()
+                            : CreateEventForBSProxy(handle->Sender, GroupId, handle->ReleaseBase().Release(),
+                                handle->Cookie, std::move(handle->TraceId)));
                         if (TGroupID(item.GroupId).ConfigurationType() == EGroupConfigurationType::Static) {
                             // static group configuration is updated a bit differently, so we can't expect for instant update;
                             // here we introduce a backoff timer
@@ -900,8 +1074,8 @@ namespace NKikimr {
                     } else {
                         // we can retry this message (obviously, we HAD request executed at incorrect generation, but
                         // now generation is correct)
-                        Y_DEBUG_ABORT_UNLESS(request->Info->Group->GetBridgeGroupState().GetPile(
-                            pile.BridgePileId.GetPileIndex()).GetGroupGeneration() < myGeneration);
+                        Y_DEBUG_ABORT_UNLESS(NBridge::GetGroupPile(request->Info->Group->GetBridgeGroupState(),
+                            pile.BridgePileId)->GetGroupGeneration() < myGeneration);
                         TActivationContext::Send(handle.release());
                     }
                     request->Finished = true;
@@ -937,6 +1111,10 @@ namespace NKikimr {
                             request->Span.EndError(common->ErrorReason);
                         }
 
+                        // subrequests are clones without the relay, so return the one of the original request
+                        auto *originalCommon = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(request->OriginalRequest.get());
+                        Y_ABORT_UNLESS(originalCommon);
+                        SetExecutionRelay(*response, std::exchange(originalCommon->ExecutionRelay, {}));
                         Send(request->Sender, response.release(), 0, request->Cookie);
                         request->Finished = true;
                     }
@@ -956,7 +1134,30 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
-            auto prevInfo = std::exchange(Info, std::move(ev->Get()->Info));
+            auto *msg = ev->Get();
+            if (msg->Info && msg->Info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
+                // decommitted group has lost its piles, so there is nothing to route requests to; BlobDepot agent in front
+                // of us stops us right away, and the requests we hold are answered with error then
+                return;
+            }
+            if (InnerProxyId && msg->Info && !msg->Info->IsInlinePile()) {
+                // the pile of the inline pile has been removed from the cluster along with its VDisks, the group serves
+                // as bridge proxy group only now
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, InnerProxyId, SelfId(), nullptr, 0));
+                InnerProxyId = {};
+            }
+            if (InnerProxyId) {
+                // inner proxy has to see its group as an ordinary pile one
+                Y_ABORT_UNLESS(!msg->Info || msg->Info->IsInlinePile());
+                Send(InnerProxyId, new TEvBlobStorage::TEvConfigureProxy(
+                    msg->Info ? msg->Info->MakeInlinePileView() : nullptr, msg->NodeLayoutInfo, msg->StoragePoolCounters));
+            }
+            if (!msg->Info) {
+                // keep current configuration; the inner proxy (if any) waits for the new one, and subrequests are sent
+                // with forced group generation anyway
+                return;
+            }
+            auto prevInfo = std::exchange(Info, std::move(msg->Info));
             Y_ABORT_UNLESS(prevInfo);
             Y_ABORT_UNLESS(Info);
             if (prevInfo->GroupGeneration < Info->GroupGeneration) {
@@ -964,6 +1165,12 @@ namespace NKikimr {
                     TActivationContext::Send(ev.release());
                 }
             }
+        }
+
+        void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev) {
+            // puts restarted by DS proxy of the inline pile, which were started before the group got converted and
+            // came back through node warden to the service of the group
+            ev->Get()->Process(this);
         }
 
         void FixGroupId(IEventBase& ev) {
@@ -994,6 +1201,7 @@ namespace NKikimr {
             DSPROXY_ENUM_EVENTS(HANDLE_RESULT)
 
             hFunc(TEvBlobStorage::TEvConfigureProxy, Handle)
+            hFunc(TEvBlobStorage::TEvBunchOfEvents, Handle)
             hFunc(TEvNodeWardenStorageConfig, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup)
@@ -1010,8 +1218,7 @@ namespace NKikimr {
                     TActivationContext::Send(ev.release());
                 }
             } else if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
-                // TODO(alexvru): make PendingQ events undelivered somehow
-                StateFunc(ev);
+                StateFunc(ev); // pending requests are answered with error
             } else {
                 PendingQ.emplace_back(ev.Release());
             }
@@ -1019,7 +1226,11 @@ namespace NKikimr {
     };
 
     IActor *CreateBridgeProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info) {
-        return new TBridgedBlobStorageProxyActor(std::move(info));
+        return new TBridgedBlobStorageProxyActor(std::move(info), TActorId());
+    }
+
+    IActor *CreateInlinePileBridgeProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId innerProxyId) {
+        return new TBridgedBlobStorageProxyActor(std::move(info), innerProxyId);
     }
 
 } // NKikimr

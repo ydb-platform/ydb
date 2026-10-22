@@ -47,7 +47,7 @@ The data client is optional: other sources can provide the same series format.
 `request({line, seconds, signal})` reads the viewer's existing JSON protocol;
 `queryMany(queries, {seconds, signal, catalog})` returns `{catalog, series, limited}`.
 It fetches histories sequentially and reuses each line response within the batch.
-Limits remain 8 selectors, 16 lines per selector, and 64 series per batch. Use an
+Limits remain 8 selectors, 16 matching series per selector, and 64 series per batch. Use an
 AbortController and discard stale results when switching requests. Authentication
 uses the existing same-origin monitoring session. Cross-origin access requires
 configuration of the destination server; the module does not change access rules.
@@ -142,3 +142,31 @@ Build sources, package manifests and lockfiles for this bundle are not kept in
 this repository. When replacing the prebuilt resources, update
 `chartkit.js.LEGAL.txt` and `THIRD_PARTY_LICENSES.txt` to match the included
 libraries. The C++ build embeds these assets directly without invoking npm.
+### Consumer-specific presentation
+
+Charts support units `iops` (ops/s) and `bytesPerSecond` (IEC bytes/s).
+`tooltipOrder: 'series'` preserves the supplied order initially; the default is
+value order. `tooltipTotal: false` hides the sum, or pass a string to rename it.
+Existing consumers retain value sorting and the Sum row.
+
+Allocation bars accept `mode: 'prepared'`: preserve all supplied segments and
+their order, without top-N selection or implicit Other/free/unattributed segments.
+The caller owns selection and aggregation (and should bound its segment count).
+Zero-valued segments remain in the legend. Supply every category explicitly;
+capacity controls the denominator, scaled up if the segment sum is larger.
+Use the default `mode: 'auto'` for the existing registry allocation view.
+
+Additional bar options: `summary: false`, `legend: false`, `title`, `entityLabel`,
+`totalLabel`, `emptyText`, `formatValue(value)` (complete formatted value),
+`onHover(segmentOrNull)` and `segmentLabels: true` (labels for shares >=8%).
+A segment may supply `href` (HTTP(S) or relative, including query links),
+`segmentLabel`, `color`, and `pattern: 'striped'`. Links retain normal browser
+navigation; in prepared mode `onSelect` handles selection, or clicking pins the tooltip.
+Automatic mode keeps its existing click-to-pin behavior.
+`highlight` does not emit `onHover`, so consumers can synchronize bars and rows.
+Names and formatted values are rendered as text, not HTML.
+An area series with an explicit `width` also draws its upper boundary as a line.
+
+Browser contract tests: serve the checkout with a static HTTP server and open
+`ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart/tests/index.html`. They exercise both default and
+customized components without requiring a cluster.

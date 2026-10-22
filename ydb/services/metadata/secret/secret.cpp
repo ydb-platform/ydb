@@ -1,8 +1,11 @@
 #include "checker_secret.h"
 #include "secret.h"
 #include "secret_behaviour.h"
+
 #include <ydb/core/base/appdata.h>
+
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
+
 #include <library/cpp/digest/md5/md5.h>
 
 namespace NKikimr::NMetadata::NSecret {
@@ -32,4 +35,4 @@ IClassBehaviour::TPtr TSecret::GetBehaviour() {
     return TSecretBehaviour::GetInstance();
 }
 
-}
+}   // namespace NKikimr::NMetadata::NSecret

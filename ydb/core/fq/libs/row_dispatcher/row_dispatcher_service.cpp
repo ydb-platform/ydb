@@ -1,7 +1,6 @@
-#include "row_dispatcher_service.h"
 #include "actors_factory.h"
-
 #include "row_dispatcher.h"
+#include "row_dispatcher_service.h"
 
 namespace NFq {
 
@@ -9,34 +8,14 @@ using namespace NActors;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<NActors::IActor> NewRowDispatcherService(
-    const TRowDispatcherSettings& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-    const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqStaticGateway::TPtr& pqGateway,
-    NYdb::TDriver driver,
-    NActors::TMon* monitoring,
-    ::NMonitoring::TDynamicCounterPtr countersRoot,
-    NActors::TActorId nodesManagerId,
-    bool enableStreamingQueriesCounters)
+std::unique_ptr<NActors::IActor> NewRowDispatcherService(const TRowDispatcherSettings& config,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TString& tenant, const ::NMonitoring::TDynamicCounterPtr& counters,
+    const NYql::IPqStaticGateway::TPtr& pqGateway, NYdb::TDriver driver, NActors::TMon* monitoring,
+    ::NMonitoring::TDynamicCounterPtr countersRoot, NActors::TActorId nodesManagerId, bool enableStreamingQueriesCounters)
 {
-    return NewRowDispatcher(
-        config,
-        credentialsProviderFactory,
-        credentialsFactory,
-        tenant,
-        NFq::NRowDispatcher::CreateActorFactory(),
-        functionRegistry,
-        counters,
-        countersRoot,
-        pqGateway,
-        driver,
-        monitoring,
-        nodesManagerId,
-        enableStreamingQueriesCounters);
+    return NewRowDispatcher(config, credentialsProviderFactory, credentialsFactory, tenant, NFq::NRowDispatcher::CreateActorFactory(),
+        functionRegistry, counters, countersRoot, pqGateway, driver, monitoring, nodesManagerId, enableStreamingQueriesCounters);
 }
 
-} // namespace NFq
+}   // namespace NFq

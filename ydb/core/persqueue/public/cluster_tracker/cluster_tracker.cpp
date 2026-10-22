@@ -312,6 +312,16 @@ private:
                     }
                     return;
                 }
+                if (IssuesLookLikeMissingVersionsTable(issues)) {
+                    // ListBalancers joins Versions, so a dropped Versions table fails this query.
+                    YDB_LOG_ERROR_CTX(Ctx(), "Failed to list balancers, CREATE TABLE Versions",
+                        {"record", record});
+                    ClustersList = nullptr;
+                    PendingClustersList = nullptr;
+                    ReplyAllGetClustersListRequests(false);
+                    BeginDdl(EQueryKind::MigrateCreateVersions, MakeCreateVersionsQuery(Cfg().GetVersionTablePath()));
+                    return;
+                }
                 {
                     const bool missing = IssuesLookLikeClusterSchemaGone(issues);
                     YDB_LOG_ERROR_CTX(Ctx(), "Failed to list balancers, publish clusters with last balancer cache",
@@ -360,20 +370,24 @@ private:
 
         bool firstRow = parser.TryNextRow();
         YQL_ENSURE(firstRow);
-        clustersList->ClusterVersion = parser.ColumnParser(5).GetOptionalInt64().value_or(0);
+        clustersList->ClusterVersion = parser.ColumnParser("version").GetOptionalInt64().value_or(0);
         size_t i = 0;
 
         do {
             auto& cluster = clustersList->Clusters[i];
 
-            cluster.Name = TString(parser.ColumnParser(0).GetOptionalUtf8().value_or(""));
+            cluster.Name = TString(parser.ColumnParser("name").GetOptionalUtf8().value_or(""));
             cluster.Datacenter = cluster.Name;
-            cluster.Balancer = TString(parser.ColumnParser(1).GetOptionalUtf8().value_or(""));
+            cluster.Balancer = TString(parser.ColumnParser("balancer").GetOptionalUtf8().value_or(""));
 
-            cluster.IsLocal = parser.ColumnParser(2).GetOptionalBool().value_or(false);
-            cluster.IsEnabled = parser.ColumnParser(3).GetOptionalBool().value_or(false);
-            cluster.Weight = parser.ColumnParser(4).GetOptionalUint64().value_or(1000);
+            cluster.IsLocal = parser.ColumnParser("local").GetOptionalBool().value_or(false);
+            cluster.IsEnabled = parser.ColumnParser("enabled").GetOptionalBool().value_or(false);
+            cluster.Weight = parser.ColumnParser("weight").GetOptionalUint64().value_or(1000);
             cluster.IsFnx = false;
+            // Absent on not-yet-migrated schema; NULL -> available (LOGBROKER-10701)
+            if (parser.ColumnIndex("available") >= 0) {
+                cluster.IsAvailable = parser.ColumnParser("available").GetOptionalBool().value_or(true);
+            }
 
             ++i;
         } while (parser.TryNextRow());
@@ -397,7 +411,7 @@ private:
             if (!name.empty()) {
                 clustersList->Balancers[name] = ParseFnxClusterCsv(csv);
             }
-            clustersList->BalancerVersion = std::max(
+            clustersList->BalancerVersion = std::max<i64>(
                 clustersList->BalancerVersion,
                 parser.ColumnParser(2).GetOptionalInt64().value_or(0));
         }

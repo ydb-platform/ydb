@@ -42,8 +42,9 @@ std::expected<void, std::string> ValidateKeyRangeSequence(const auto& partitions
     for (const auto& partition : partitions) {
         bounds.push_back({
             .PartitionId = partition.GetPartition(),
-            .FromBound = partition.GetKeyRange().HasFromBound() ? MakeMaybe(partition.GetKeyRange().GetFromBound()) : Nothing(),
-            .ToBound = partition.GetKeyRange().HasToBound() ? MakeMaybe(partition.GetKeyRange().GetToBound()) : Nothing(),
+            // views into the proto strings; MakeMaybe(const TString&) would make a TMaybe<TString> temporary
+            .FromBound = partition.GetKeyRange().HasFromBound() ? MakeMaybe<TStringBuf>(partition.GetKeyRange().GetFromBound()) : Nothing(),
+            .ToBound = partition.GetKeyRange().HasToBound() ? MakeMaybe<TStringBuf>(partition.GetKeyRange().GetToBound()) : Nothing(),
         });
     }
     return NKikimr::NPQ::ValidateKeyRangeSequence(bounds);

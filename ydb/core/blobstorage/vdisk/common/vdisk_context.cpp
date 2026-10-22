@@ -34,14 +34,16 @@ namespace NKikimr {
                 TReplQuoter::TPtr replPDiskWriteQuoter,
                 TReplQuoter::TPtr replNodeRequestQuoter,
                 TReplQuoter::TPtr replNodeResponseQuoter,
-                TIntrusivePtr<::NMonitoring::TDynamicCounters> vdiskSpaceReportCounters)
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> vdiskSpaceReportCounters,
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> vdiskAsyncCounters)
         : TBSProxyContext(vdiskCounters->GetSubgroup("subsystem", "memhull"))
         , VDiskActorId(vdiskActorId)
         , Top(std::move(top))
         , VDiskCounters(vdiskCounters)
+        , VDiskAsyncCounters(vdiskAsyncCounters ? std::move(vdiskAsyncCounters) : vdiskCounters)
         , VDiskSpaceReportCounters(std::move(vdiskSpaceReportCounters))
         , VDiskMemCounters(vdiskCounters->GetSubgroup("subsystem", "memhull"))
-        , Histograms(VDiskCounters, type)
+        , Histograms(VDiskCounters, VDiskAsyncCounters, type)
         , IFaceMonGroup(std::make_shared<NMonGroup::TVDiskIFaceGroup>(VDiskCounters, "subsystem", "interface"))
         , GroupId(selfVDisk.GroupID)
         , ShortSelfVDisk(selfVDisk)
@@ -66,7 +68,6 @@ namespace NKikimr {
         , OOSMonGroup(std::make_shared<NMonGroup::TOutOfSpaceGroup>(VDiskCounters, "subsystem", "oos"))
         , ResponseStatusMonGroup(std::make_shared<NMonGroup::TResponseStatusGroup>(VDiskCounters))
         , OutOfSpaceState(Top->GetTotalVDisksNum(), Top->GetOrderNumber(ShortSelfVDisk))
-        , CostMonGroup(vdiskCounters, "subsystem", "cost")
         , Logger(as ? ActorSystemLogger(as) : DevNullLogger())
     {
         Y_ABORT_UNLESS(!VDiskLogPrefix.empty());

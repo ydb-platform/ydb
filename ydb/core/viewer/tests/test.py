@@ -2292,6 +2292,30 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def test_storage_stats_tablet_type_response(cls):
+        # Use path=table1 to check grouping by tablet type for a single table.
+        for database in (cls.dedicated_db, cls.serverless_db):
+            params = {'database': database, 'path': 'table1', 'everything': 'true', 'debug': 'true'}
+
+            def get_table_with_storage_stats():
+                by_path = cls.get_viewer('/viewer/storage_stats', params)
+                table = by_path['Paths'][0]
+                assert table['StorageSize'] > 0 and table['Tablets'], table
+                return table
+
+            # Storage statistics become available asynchronously after the fixture writes data.
+            table = retry_assertions(get_table_with_storage_stats)
+
+            tablet_ids = {tablet['TabletId'] for tablet in table['Tablets']}
+            by_type = cls.get_viewer('/viewer/storage_stats', {**params, 'group_by': 'tablet_type'})
+            assert len(by_type['Tablets']) == 1, by_type
+            tablets = by_type['Tablets'][0]
+            assert tablets['Type'] == 'DataShard', tablets
+            assert set(tablets['TabletIds']) == tablet_ids, tablets
+            assert tablets['TabletCount'] == len(tablet_ids), tablets
+            assert tablets['StorageSize'] > 0, tablets
+
+    @classmethod
     def test_storage_stats(cls):
         result = {}
         tries = 15

@@ -11,6 +11,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_arena.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_leveledssts.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 #define STR     Cnull
 
@@ -30,6 +31,36 @@ namespace NKikimr {
         using TTask = ::NKikimr::NHullComp::TTask<TKeyLogoBlob, TMemRecLogoBlob>;
         using TUtils = ::NKikimr::NHullComp::TUtils<TKeyLogoBlob, TMemRecLogoBlob>;
         using TLeveledSstsIterator = TLeveledSsts<TKeyLogoBlob, TMemRecLogoBlob>::TIterator;
+
+        void RunInActorContext(std::function<void()> callback) {
+            class TRunner : public TActor<TRunner> {
+                std::function<void()> Callback;
+
+                STFUNC(Execute) {
+                    Y_UNUSED(ev);
+                    Callback();
+                    PassAway();
+                }
+
+            public:
+                explicit TRunner(std::function<void()> callback)
+                    : TActor(&TRunner::Execute)
+                    , Callback(std::move(callback))
+                {}
+            };
+
+            TTestActorRuntimeBase runtime;
+            runtime.Initialize();
+            const auto actor = runtime.Register(new TRunner(std::move(callback)));
+            runtime.Send(new IEventHandle(actor, {}, new TEvents::TEvWakeup));
+        }
+
+        template<class TKey, class TMemRec>
+        NHullComp::EAction SelectInActorContext(NHullComp::TStrategy<TKey, TMemRec>& strategy) {
+            NHullComp::EAction action = NHullComp::ActNothing;
+            RunInActorContext([&] { action = strategy.Select(); });
+            return action;
+        }
 
         struct TPriorityTestEnv {
             TTestContexts Contexts;
@@ -105,7 +136,7 @@ namespace NKikimr {
                 }
                 TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap),
                     &task, false);
-                return strategy.Select();
+                return SelectInActorContext(strategy);
             }
         };
 
@@ -291,8 +322,10 @@ namespace NKikimr {
             // calculate storage ratio
             TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriersEssence =
                 snap.BarriersSnap.CreateEssence(snap.HullCtx);
-            NHullComp::TStrategyStorageRatio<TKeyLogoBlob, TMemRecLogoBlob>
-                (snap.HullCtx, snap.LogoBlobsSnap, std::move(barriersEssence), true).Work();
+            RunInActorContext([&] {
+                NHullComp::TStrategyStorageRatio<TKeyLogoBlob, TMemRecLogoBlob>
+                    (snap.HullCtx, snap.LogoBlobsSnap, std::move(barriersEssence), true).Work();
+            });
 
             snap.LogoBlobsSnap.Output(STR);
             STR << "\n";
@@ -307,7 +340,7 @@ namespace NKikimr {
             NHullComp::TSelectorParams params = {boundaries, 1.0, TInstant::Seconds(0), {}};
             TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap),
                     &task, true);
-            auto action = strategy.Select();
+            auto action = SelectInActorContext(strategy);
             STR << "action = " << NHullComp::ActionToStr(action) << "\n";
         }
 
@@ -542,7 +575,7 @@ namespace NKikimr {
             params.EmergencyMode = true;
             TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap),
                     &task, true);
-            AssertAction(strategy.Select(), NHullComp::ActCompactSsts);
+            AssertAction(SelectInActorContext(strategy), NHullComp::ActCompactSsts);
             AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::Emergency);
             UNIT_ASSERT_VALUES_EQUAL(task.Priority.MaxRank, 2.0 / 128);
             UNIT_ASSERT(task.Priority.EmergencyMode);
@@ -602,7 +635,7 @@ namespace NKikimr {
             params.EmergencyMode = false;
             TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap),
                     &task, true);
-            AssertAction(strategy.Select(), NHullComp::ActCompactSsts);
+            AssertAction(SelectInActorContext(strategy), NHullComp::ActCompactSsts);
             AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::BalanceLevel);
         }
 
@@ -625,7 +658,7 @@ namespace NKikimr {
             params.EmergencyMode = true;
             TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap),
                     &task, true);
-            AssertAction(strategy.Select(), NHullComp::ActDeleteSsts);
+            AssertAction(SelectInActorContext(strategy), NHullComp::ActDeleteSsts);
             AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::DelSst);
         }
 
@@ -730,7 +763,7 @@ namespace NKikimr {
 
             TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap),
                     &task, true);
-            AssertAction(strategy.Select(), NHullComp::ActCompactSsts);
+            AssertAction(SelectInActorContext(strategy), NHullComp::ActCompactSsts);
             AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::Emergency);
             UNIT_ASSERT(task.Forecast.Valid);
             UNIT_ASSERT_VALUES_EQUAL(task.Forecast.InputChunks, 2u);
@@ -747,7 +780,7 @@ namespace NKikimr {
             TTask task;
             TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap),
                     &task, true);
-            AssertAction(strategy.Select(), NHullComp::ActCompactSsts);
+            AssertAction(SelectInActorContext(strategy), NHullComp::ActCompactSsts);
             AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::Explicit);
             UNIT_ASSERT(task.Forecast.Valid);
             UNIT_ASSERT_VALUES_EQUAL(task.Forecast.InputChunks, CountSstsToDelete(task));
@@ -764,7 +797,7 @@ namespace NKikimr {
             NHullComp::TSelectorParams params = {hull.Boundaries, 1.0, TInstant::Seconds(0), {}};
             TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap),
                     &task, true);
-            AssertAction(strategy.Select(), NHullComp::ActNothing);
+            AssertAction(SelectInActorContext(strategy), NHullComp::ActNothing);
             UNIT_ASSERT(!task.Forecast.Valid);
         }
 
@@ -931,7 +964,7 @@ namespace NKikimr {
             TBlockTask task;
             TBlockStrategy strategy(snap.HullCtx, params, std::move(snap.BlocksSnap), std::move(snap.BarriersSnap),
                 &task, true);
-            AssertAction(strategy.Select(), NHullComp::ActCompactSsts);
+            AssertAction(SelectInActorContext(strategy), NHullComp::ActCompactSsts);
             UNIT_ASSERT(task.Forecast.Valid);
             UNIT_ASSERT_VALUES_EQUAL(task.Forecast.InputChunks, 0u);
             UNIT_ASSERT_VALUES_EQUAL(task.Forecast.OutputChunks, 0u);
@@ -946,7 +979,7 @@ namespace NKikimr {
             TBlockTask chunkTask;
             TBlockStrategy chunkStrategy(snap2.HullCtx, params, std::move(snap2.BlocksSnap),
                 std::move(snap2.BarriersSnap), &chunkTask, true);
-            AssertAction(chunkStrategy.Select(), NHullComp::ActNothing);
+            AssertAction(SelectInActorContext(chunkStrategy), NHullComp::ActNothing);
             UNIT_ASSERT(!chunkTask.Forecast.Valid);
         }
 
@@ -971,7 +1004,7 @@ namespace NKikimr {
 
             TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap),
                 &task, true);
-            AssertAction(strategy.Select(), NHullComp::ActCompactSsts);
+            AssertAction(SelectInActorContext(strategy), NHullComp::ActCompactSsts);
             AssertStrategy(task.SelectStrategy, NHullComp::ESelectStrategy::Emergency);
             UNIT_ASSERT(task.Forecast.Valid);
             UNIT_ASSERT_VALUES_EQUAL(task.Forecast.InputChunks, 2u);

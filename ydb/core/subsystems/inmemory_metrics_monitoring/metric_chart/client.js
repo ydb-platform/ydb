@@ -44,12 +44,13 @@ export function createInMemoryMetricsClient({endpoint}){
   if(queries.length>8)throw Error('At most 8 queries are allowed.');
   catalog=catalog||await request({seconds,signal});const common=catalog.common_labels||[],result=[],details=new Map();let limited=false;
   for(const [queryIndex,query] of queries.entries()){
-   const matching=catalog.lines.filter(l=>l.fields.some(f=>f.name===query.metric&&queryMatches([...common,...l.labels,...f.labels],query.filters)));if(matching.length>16)limited=true;
-   for(const line of matching.slice(0,16)){
+   const matching=catalog.lines.flatMap(line=>line.fields.map((field,index)=>({line,field,index})).filter(({field})=>field.name===query.metric&&queryMatches([...common,...line.labels,...field.labels],query.filters)));
+   if(matching.length>16)limited=true;
+   for(const {line,field,index} of matching.slice(0,16)){
     if(result.length>=64){limited=true;break;}
     if(!details.has(line.id))details.set(line.id,await request({line:line.id,seconds,signal}));
-    const detail=details.get(line.id),row=detail.lines[0],index=line.fields.findIndex(f=>f.name===query.metric),k=query.id+'|'+query.metric+'|'+key(line),labelValues=[...common,...line.labels,...line.fields[index].labels],labels=labelText(labelValues);
-    result.push({key:k,queryId:query.id,color:queries.length===1?color(k,line):palette[result.length%palette.length],name:line.name,metric:query.metric,queryLabel:String.fromCharCode(65+queryIndex),labelValues,labels,display:String.fromCharCode(65+queryIndex)+' \u00b7 '+query.metric+(labels?' \u00b7 '+labels:''),step:line.frontend==='on_change',readable:line.readable,closed:line.closed,truncated:row&&row.truncated,end:detail.timestamp_ms,points:(row?row.points:[]).map(p=>({time:p.timestamp_ms,raw:p.values[index],value:numeric(p.values[index])}))});
+    const detail=details.get(line.id),row=detail.lines[0],k=query.id+'|'+query.metric+'|'+key(line)+'|'+index,labelValues=[...common,...line.labels,...field.labels],labels=labelText(labelValues);
+    result.push({key:k,queryId:query.id,color:queries.length===1?color(k,{...line,labels:labelValues}):palette[result.length%palette.length],name:line.name,metric:query.metric,queryLabel:String.fromCharCode(65+queryIndex),labelValues,labels,display:String.fromCharCode(65+queryIndex)+' \u00b7 '+query.metric+(labels?' \u00b7 '+labels:''),step:line.frontend==='on_change',readable:line.readable,closed:line.closed,truncated:row&&row.truncated,end:detail.timestamp_ms,points:(row?row.points:[]).map(p=>({time:p.timestamp_ms,raw:p.values[index],value:numeric(p.values[index])}))});
    }
   }
   return {catalog,series:result,limited};

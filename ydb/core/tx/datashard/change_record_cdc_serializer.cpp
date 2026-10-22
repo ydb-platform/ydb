@@ -941,6 +941,12 @@ class TBinaryCdcSerializer: public TBaseSerializer {
         if (!trace.empty()) {
             header.Flags |= static_cast<ui8>(EBinaryCdcFlag::HasTrace);
         }
+        for (const auto& cell : keyCells.GetCells()) {
+            if (cell.IsNull()) {
+                header.Flags |= static_cast<ui8>(EBinaryCdcFlag::NullKeys);
+                break;
+            }
+        }
 
         TBinaryCdcWriter writer;
         writer.Start(header);

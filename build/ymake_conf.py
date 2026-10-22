@@ -1534,6 +1534,9 @@ class GnuCompiler(Compiler):
         self.target = self.build.target
         self.tc = tc
 
+        # Indexing needs GNU pubnames across all inputs, so this is a global flag.
+        self.gdb_index_enabled = preset('GDB_INDEX') == 'yes'
+
         self.debug_info_flags = [
             '-g',
         ]
@@ -1545,7 +1548,8 @@ class GnuCompiler(Compiler):
             # DTCC-1231: Clang 14 has switched to DWARFv5 by default
             self.debug_info_flags.append('-fdebug-default-version=4')
         if self.tc.is_clang and self.target.is_linux:
-            self.debug_info_flags.append('-ggnu-pubnames')
+            if self.gdb_index_enabled:
+                self.debug_info_flags.append('-ggnu-pubnames')
             if self.build.is_release:
                 # Clang's more accurate debug info for sampling-PGO purposes. PGO only makes sense in release builds
                 self.debug_info_flags.append('-fdebug-info-for-profiling')
@@ -1775,6 +1779,7 @@ class GnuCompiler(Compiler):
         emit('C_COMPILER', '"{}"'.format(self.tc.c_compiler))
         emit('OPTIMIZE', self.optimize)
         emit('_DEBUG_INFO_FLAGS', self.debug_info_flags)
+        emit('_GDB_INDEX_ENABLED', 'yes' if self.gdb_index_enabled else 'no')
         emit('_C_FLAGS', self.c_flags)
         emit('_C_FOPTIONS', self.c_foptions)
         emit('_CXX_FOPTIONS', self.cxx_foptions)

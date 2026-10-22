@@ -2,6 +2,7 @@
 #include "distconf_quorum.h"
 #include "distconf_invoke.h"
 
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/retro_tracing/collector/retro_span_deserialization.h>
 #include <ydb/library/actors/retro_tracing/span/retro_span.h>
 #include <ydb/library/actors/retro_tracing/span/span_buffer.h>
@@ -183,6 +184,8 @@ namespace NKikimr::NStorage {
             if (Cfg->BridgeConfig) {
                 Send(MakeDistconfBridgeConnectionCheckerActorId(), new TEvNodeWardenStorageConfig(
                     StorageConfig, SelfManagementEnabled, BridgeInfo, CommittedStorageConfig));
+                Send(MakeDistconfBridgeConnectionCheckerActorId(),
+                    new TEvPrivate::TEvUpdateBridgeFeatureRequirement(std::nullopt));
             }
             for (const auto& node : proposition.AddedOrChangedNodeIdentifiers) {
                 UnsubscribeQueue.insert(node.NodeId());
@@ -1466,6 +1469,10 @@ namespace NKikimr::NStorage {
                 std::make_shared<NKikimrBlobStorage::TStorageConfig>(CurrentProposition->StorageConfig),
                 SelfManagementEnabled,
                 Cfg->BridgeConfig ? GenerateBridgeInfo(CurrentProposition->StorageConfig) : nullptr));
+            if (Cfg->BridgeConfig) {
+                Send(MakeDistconfBridgeConnectionCheckerActorId(), new TEvPrivate::TEvUpdateBridgeFeatureRequirement(
+                    GetRequiredBridgeFeatureLevel(CurrentProposition->StorageConfig)));
+            }
         }
 
         // issue scatter task

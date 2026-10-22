@@ -1055,8 +1055,8 @@ namespace NKikimr {
                 }
                 NKikimrBlobStorage::TConfigResponse::TStatus status;
                 std::deque<ui64> expectedSlotSize;
-                TGroupFitter fitter(state, availabilityDomainId, cmd, expectedSlotSize, {}, PDiskSpaceMarginPromille, storagePoolId,
-                    it->second, status, VSlotReadyTimestampQ, false);
+                TGroupFitter fitter(state, availabilityDomainId, cmd, expectedSlotSize, PDiskSpaceMarginPromille, storagePoolId,
+                    it->second, status, VSlotReadyTimestampQ);
                 for (const TGroupId groupId : groupIds) {
                     try {
                         added->emplace_back(groupId, fitter.AddPileToGroup(groupId, pileId, becameUnsyncedGeneration));

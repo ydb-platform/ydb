@@ -7384,7 +7384,7 @@ selector_config: []
         CheckDurableConfigConverges(fixture, committed);
     }
 
-    void CheckBridgeFreshNodeExpansion(bool crossPile, bool failProposal) {
+    void CheckBridgeFreshNodeExpansion(bool crossPile, bool failProposal, bool changePileList = false) {
         TCommitConfirmationFixture fixture(false, 5);
         fixture.Config = MakeTwoPileBridgedConfig("pile0", "pile1");
         auto *secondHost = fixture.Config.MutableBlobStorageConfig()->MutableDefineBox()->AddHost();
@@ -7417,17 +7417,26 @@ selector_config: []
         auto *host = expanded.MutableBlobStorageConfig()->MutableDefineBox()->AddHost();
         host->SetHostConfigId(5);
         host->SetEnforcedNodeId(5);
+        if (changePileList) {
+            auto nextBridge = bridge;
+            nextBridge.AddPiles()->SetName("pile2");
+            bool changed = false;
+            if (const auto error = NStorage::UpdatePileRegistry(nextBridge, &expanded, &bridge, &bridge, &changed)) {
+                UNIT_FAIL(*error);
+            }
+            UNIT_ASSERT(changed);
+        }
         expanded.SetGeneration(2);
         expanded.MutablePrevConfig()->CopyFrom(fixture.Config);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&expanded);
         auto fresh = expanded;
         fresh.SetGeneration(0);
         fresh.ClearPrevConfig();
-        fresh.MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(2));
+        fresh.MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(changePileList ? 3 : 2));
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fresh);
         const TString yaml = fixture.MakeReplacementYaml(expanded, 0, "none")
             + "  bridge_config:\n    piles:\n    - {name: pile0}\n    - {name: pile1}\n"
-           ;
+            + (changePileList ? "    - {name: pile2}\n" : "");
 
         std::array<TActorId, 6> checkers;
         THashMap<ui32, std::shared_ptr<const NKikimrBlobStorage::TStorageConfig>> configs;
@@ -7511,6 +7520,19 @@ selector_config: []
         SimUntil(runtime, [] { return false; }, TDuration::MilliSeconds(1));
         const auto rootParams = prepare(1, 5);
         UNIT_ASSERT_VALUES_EQUAL(storageConfig(rootParams).GetGeneration(), 1);
+        THashMap<TString, TString> olderParams;
+        if (changePileList) {
+            UNIT_ASSERT(rootParams.contains("distconf-pile-list-changed"));
+            UNIT_ASSERT(!storageConfig(rootParams).GetClusterStateDetails().GetPileRegistry().GetPileListChanged());
+            NKikimrBlobStorage::TConnectivityPayload older;
+            TBridgePileId::FromPileIndex(1).CopyToProto(&older,
+                &NKikimrBlobStorage::TConnectivityPayload::SetBridgePileId);
+            older.MutableStorageConfig()->CopyFrom(fixture.Config);
+            UNIT_ASSERT(older.SerializeToString(&olderParams["distconf"]));
+            const auto error = check(1, 2, olderParams);
+            UNIT_ASSERT(error);
+            UNIT_ASSERT_STRING_CONTAINS(*error, "has to be upgraded");
+        }
         const auto freshParams = prepare(5, 1);
         UNIT_ASSERT_VALUES_EQUAL(storageConfig(freshParams).GetGeneration(), 0);
         const auto rootError = check(1, 5, freshParams);
@@ -7539,6 +7561,10 @@ selector_config: []
             UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig().GetGeneration(), 1);
             const auto afterAbort = prepare(1, 5);
             UNIT_ASSERT_VALUES_EQUAL(storageConfig(afterAbort).GetGeneration(), 1);
+            if (changePileList) {
+                UNIT_ASSERT(afterAbort.contains("distconf"));
+                UNIT_ASSERT(!check(1, 2, olderParams));
+            }
             UNIT_ASSERT_VALUES_EQUAL(configs.at(5)->GetGeneration(), 0);
             UNIT_ASSERT(!fixture.Metadata(5).HasCommittedStorageConfig());
             return;
@@ -7550,6 +7576,12 @@ selector_config: []
             replaceResponse->DebugString());
         const auto committedParams = prepare(1, 5);
         UNIT_ASSERT_VALUES_EQUAL(storageConfig(committedParams).GetGeneration(), 2);
+        if (changePileList) {
+            UNIT_ASSERT(committedParams.contains("distconf-pile-list-changed"));
+            const auto error = check(1, 2, olderParams);
+            UNIT_ASSERT(error);
+            UNIT_ASSERT_STRING_CONTAINS(*error, "has to be upgraded");
+        }
         check(5, 1, committedParams);
         UNIT_ASSERT(SimUntil(runtime, [&] { return configs.at(5)->GetGeneration() == 2; }));
         UNIT_ASSERT(!check(1, 5, prepare(5, 1)));
@@ -7576,7 +7608,13 @@ selector_config: []
         CheckBridgeFreshNodeExpansion(true, true);
     }
 
+    Y_UNIT_TEST(BridgePendingFeatureGateClearedAfterFailedExpansion) {
+        CheckBridgeFreshNodeExpansion(true, true, true);
+    }
 
+    Y_UNIT_TEST(BridgePendingFeatureGateRetainedAfterCommittedExpansion) {
+        CheckBridgeFreshNodeExpansion(true, false, true);
+    }
 
     enum class EConfigValidationWait {
         ControllerInterface,

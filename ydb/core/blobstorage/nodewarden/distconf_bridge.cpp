@@ -506,15 +506,11 @@ namespace NKikimr::NStorage {
 
             ++nextGroupId;
             try {
-                AllocateStaticGroup({
-                    .Config = config,
-                    .GroupId = nextGroupId,
-                    .GroupGeneration = 1,
-                    .GroupType = *groupType,
-                    .BaseConfig = baseConfig,
-                    .BridgePileId = pileId,
-                    .BridgeProxyGroupId = proxyGroupId,
-                });
+                const auto& smConfig = config->GetSelfManagementConfig();
+                AllocateStaticGroup(config, nextGroupId, 1, *groupType,
+                    smConfig.GetGeometry(), smConfig.GetPDiskFilter(),
+                    smConfig.HasPDiskType() ? std::make_optional(smConfig.GetPDiskType()) : std::nullopt,
+                    {}, {}, 0, baseConfig, false, false, false, pileId, proxyGroupId);
             } catch (const TExConfigError& ex) {
                 return TStringBuilder() << "failed to allocate part of static group GroupId# " << proxyGroupId
                     << " in the pile: " << ex.what();
@@ -543,14 +539,14 @@ namespace NKikimr::NStorage {
             return "pile has no nodes";
         }
         std::unordered_set<ui32> usedNodes;
-        auto addRingGroup = [&](NKikimrConfig::TStateStorageConfig *pb, bool automaticManagement) -> std::optional<TString> {
+        auto addRingGroup = [&](NKikimrConfig::TDomainsConfig::TStateStorage *pb, bool automaticManagement) -> std::optional<TString> {
             if (!automaticManagement) {
                 return std::nullopt; // the operator manages this config
             }
-            NKikimrConfig::TStateStorageConfig generated;
-            GenerateStateStorageConfig(&generated, *config, usedNodes, pileNodes, pb);
+            NKikimrConfig::TDomainsConfig::TStateStorage generated;
+            GenerateStateStorageConfig(&generated, *config, usedNodes, pileNodes, *pb);
             for (auto& ringGroup : *generated.MutableRingGroups()) {
-                if (TBridgePileId::FromProto(&ringGroup, &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId) !=
+                if (TBridgePileId::FromProto(&ringGroup, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::GetBridgePileId) !=
                         pileId) {
                     return "state storage ring group generated for wrong pile";
                 }
@@ -558,7 +554,7 @@ namespace NKikimr::NStorage {
             }
             return std::nullopt;
         };
-        const auto *sm = Cfg->SelfManagementConfig.get();
+        const auto *sm = Cfg->SelfManagementConfig ? &*Cfg->SelfManagementConfig : nullptr;
 #define ADD_RING_GROUP(NAME) \
         if (config->Has##NAME##Config()) { \
             if (auto error = addRingGroup(config->Mutable##NAME##Config(), !sm || sm->GetAutomatic##NAME##Management())) { \
@@ -638,9 +634,9 @@ namespace NKikimr::NStorage {
         UpdateStaticVDiskGenerations(ss, bumpedGenerations);
 
         // state storage replicas of the pile
-        return ForEachStateStorageConfig(config, [&](NKikimrConfig::TStateStorageConfig *pb) -> std::optional<TString> {
+        return ForEachStateStorageConfig(config, [&](NKikimrConfig::TDomainsConfig::TStateStorage *pb) -> std::optional<TString> {
             EraseIf(*pb->MutableRingGroups(), [&](const auto& ringGroup) {
-                return TBridgePileId::FromProto(&ringGroup, &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId) ==
+                return TBridgePileId::FromProto(&ringGroup, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::GetBridgePileId) ==
                     pileId;
             });
             return std::nullopt;

@@ -94,6 +94,16 @@ namespace NKikimr::NStorage {
                EvBindingTimeout,
                EvRetryConfigPropagation,
                EvScatterTaskTimeout,
+               EvUpdateBridgeFeatureRequirement,
+            };
+
+            struct TEvUpdateBridgeFeatureRequirement
+                : TEventLocal<TEvUpdateBridgeFeatureRequirement, EvUpdateBridgeFeatureRequirement> {
+                const std::optional<ui32> RequiredLevel;
+
+                explicit TEvUpdateBridgeFeatureRequirement(std::optional<ui32> requiredLevel)
+                    : RequiredLevel(requiredLevel)
+                {}
             };
 
             struct TEvScatterTaskTimeout : TEventLocal<TEvScatterTaskTimeout, EvScatterTaskTimeout> {
@@ -587,7 +597,7 @@ namespace NKikimr::NStorage {
             std::optional<NKikimrBlobStorage::EPDiskType> pdiskType,
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid,
-            i64 requiredSpace, NKikimrBlobStorage::TBaseConfig *baseConfig,
+            i64 requiredSpace, const NKikimrBlobStorage::TBaseConfig *baseConfig,
             bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit, TBridgePileId bridgePileId,
             std::optional<TGroupId> bridgeProxyGroupId,
             const NProtoBuf::RepeatedField<ui32>& selfHealAllowedNodes = {},

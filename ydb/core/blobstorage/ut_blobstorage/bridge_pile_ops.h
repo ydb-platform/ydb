@@ -105,7 +105,7 @@ namespace NBridgeTest {
                 &config.GetSchemeBoardConfig()}) {
             size_t numRingGroups = 0;
             for (const auto& ringGroup : pb->GetRingGroups()) {
-                if (TBridgePileId::FromProto(&ringGroup, &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId) ==
+                if (TBridgePileId::FromProto(&ringGroup, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::GetBridgePileId) ==
                         pileId) {
                     ++numRingGroups;
                     for (const auto& ring : ringGroup.GetRing()) {
@@ -207,7 +207,7 @@ namespace NBridgeTest {
                 &config.GetSchemeBoardConfig()}) {
             for (const auto& ringGroup : pb->GetRingGroups()) {
                 UNIT_ASSERT_UNEQUAL(TBridgePileId::FromProto(&ringGroup,
-                    &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId), pileId);
+                    &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::GetBridgePileId), pileId);
             }
         }
 

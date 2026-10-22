@@ -23,6 +23,7 @@ namespace NKikimr::NStorage {
         bool SelfManagementEnabled = false;
         bool IsSelfStatic = false;
         ui32 MaxStaticNodeId = Max<ui32>();
+        std::optional<ui32> PendingFeatureRequirement;
 
         std::deque<std::unique_ptr<IEventHandle>> PendingEvents;
 
@@ -87,15 +88,7 @@ namespace NKikimr::NStorage {
                 Receive(temp);
             }
 
-            // peers of older versions can't work with the configuration requiring the features they don't support
-            const ui32 required = GetRequiredBridgeFeatureLevel(*StorageConfig);
-            for (auto it = PeerFeatureLevels.begin(); it != PeerFeatureLevels.end(); ) {
-                const auto [peerNodeId, level] = *it++;
-                if (level < required) {
-                    DisconnectIncapablePeer(peerNodeId, level);
-                    PeerFeatureLevels.erase(peerNodeId);
-                }
-            }
+            DisconnectIncapablePeers();
 
             // disconnect peers if needed
             TActorSystem* const as = TActivationContext::ActorSystem();
@@ -151,7 +144,7 @@ namespace NKikimr::NStorage {
         THashMap<TString, TString> CreateParams(const NKikimrBlobStorage::TConnectivityPayload& outgoing) {
             THashMap<TString, TString> res;
             if (outgoing.ByteSizeLong()) {
-                const ui32 required = StorageConfig ? GetRequiredBridgeFeatureLevel(*StorageConfig) : 0;
+                const ui32 required = GetRequiredFeatureLevel();
                 const TStringBuf key = DistconfKeys[Min<ui32>(required, BridgeFeatureLevel)];
                 const bool success = outgoing.SerializeToString(&res[key]);
                 Y_ABORT_UNLESS(success);
@@ -176,7 +169,28 @@ namespace NKikimr::NStorage {
 
         // peer of older version can't work with the configuration requiring the features it doesn't support
         bool IsPeerIncompatible(const NKikimrBlobStorage::TConnectivityPayload& incoming) const {
-            return StorageConfig && GetPeerFeatureLevel(incoming) < GetRequiredBridgeFeatureLevel(*StorageConfig);
+            return GetPeerFeatureLevel(incoming) < GetRequiredFeatureLevel();
+        }
+
+        ui32 GetRequiredFeatureLevel() const {
+            return Max(StorageConfig ? GetRequiredBridgeFeatureLevel(*StorageConfig) : 0,
+                PendingFeatureRequirement.value_or(0));
+        }
+
+        void DisconnectIncapablePeers() {
+            const ui32 required = GetRequiredFeatureLevel();
+            for (auto it = PeerFeatureLevels.begin(); it != PeerFeatureLevels.end(); ) {
+                const auto [peerNodeId, level] = *it++;
+                if (level < required) {
+                    DisconnectIncapablePeer(peerNodeId, level);
+                    PeerFeatureLevels.erase(peerNodeId);
+                }
+            }
+        }
+
+        void Handle(TEvPrivate::TEvUpdateBridgeFeatureRequirement::TPtr ev) {
+            PendingFeatureRequirement = ev->Get()->RequiredLevel;
+            DisconnectIncapablePeers();
         }
 
         // remember bridge feature level of the peer of just established session
@@ -639,6 +653,7 @@ namespace NKikimr::NStorage {
 
         STRICT_STFUNC(StateFunc,
             hFunc(TEvNodeWardenStorageConfig, Handle)
+            hFunc(TEvPrivate::TEvUpdateBridgeFeatureRequirement, Handle)
             hFunc(TEvInterconnect::TEvNodesInfo, Handle)
             hFunc(TEvInterconnect::TEvPrepareOutgoingConnection, Handle)
             hFunc(TEvInterconnect::TEvCheckIncomingConnection, Handle)

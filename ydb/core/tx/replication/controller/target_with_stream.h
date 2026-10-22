@@ -79,6 +79,8 @@ public:
         SetLocation();
     }
 
+    bool IsStreamCreator(const TActorId& actorId) const override { return StreamCreator == actorId; }
+
     void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
 

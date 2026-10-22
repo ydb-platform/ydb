@@ -46,6 +46,7 @@ struct TEvPrivate {
         EvPrepareAttachDstResult,
         EvRestoreSession,
         EvBootPersistedWorkers,
+        EvCancelCreateStream,
 
         EvEnd,
     };
@@ -312,6 +313,9 @@ struct TEvPrivate {
     };
 
     struct TEvRequestCreateStream: public TEventLocal<TEvRequestCreateStream, EvRequestCreateStream> {
+    };
+
+    struct TEvCancelCreateStream: public TEventLocal<TEvCancelCreateStream, EvCancelCreateStream> {
     };
 
     struct TEvAllowCreateStream: public TEventLocal<TEvAllowCreateStream, EvAllowCreateStream> {

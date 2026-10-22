@@ -1,5 +1,6 @@
 #include "replication.h"
 #include "target_table.h"
+#include "util.h"
 
 #include <ydb/core/protos/replication.pb.h>
 
@@ -8,6 +9,29 @@
 namespace NKikimr::NReplication::NController {
 
 Y_UNIT_TEST_SUITE(Replication) {
+    Y_UNIT_TEST(SourceRetryClassification) {
+        struct TCase {
+            NYdb::EStatus Status;
+            TString Issue;
+            bool Retry;
+        };
+        for (const auto& test : TVector<TCase>{
+            {NYdb::EStatus::TRANSPORT_UNAVAILABLE, "Domain name not found", true},
+            {NYdb::EStatus::TRANSPORT_UNAVAILABLE, "connection refused", true},
+            {NYdb::EStatus::TRANSPORT_UNAVAILABLE, "Misformatted domain name", false},
+            {NYdb::EStatus::TRANSPORT_UNAVAILABLE, "Client TLS credentials validation failed", false},
+            {NYdb::EStatus::CLIENT_UNAUTHENTICATED, "expired credentials", false},
+            {NYdb::EStatus::UNAUTHORIZED, "permission denied", false},
+            {NYdb::EStatus::BAD_REQUEST, "invalid endpoint settings", false},
+            {NYdb::EStatus::SCHEME_ERROR, "incompatible object", false},
+        }) {
+            NYdb::NIssue::TIssues issues;
+            issues.AddIssue(test.Issue);
+            UNIT_ASSERT_VALUES_EQUAL_C(IsRetryableError(NYdb::TStatus(test.Status, std::move(issues))),
+                test.Retry, test.Issue);
+        }
+    }
+
     Y_UNIT_TEST(ResourceId) {
         const ui64 id = 1;
         const auto pathId = TPathId(1, 2);

@@ -13,6 +13,8 @@
 
 #include <library/cpp/threading/future/async.h>
 
+#include <atomic>
+
 namespace NYdb::NFederatedTopic::NTests {
 
 // Test fixture providing common setup for federated topic tests
@@ -622,6 +624,37 @@ Y_UNIT_TEST_SUITE(SimpleBlockingFederatedWriteSession) {
         settings.DeduplicationEnabled(false);
         auto session = fixture.CreateAsyncWriteSession(std::move(settings));
         UNIT_ASSERT_EXCEPTION(session->GetInitSeqNo(), NYdb::TContractViolation);
+    }
+
+    Y_UNIT_TEST(GetInitSeqNoRejectsImplicitlyDisabledDeduplication) {
+        TSimpleBlockingWriteSessionTestFixture fixture(TEST_CASE_NAME);
+        auto settings = fixture.DefaultWriteSettings();
+        settings.MessageGroupId("");
+        settings.ProducerId("");
+        auto session = fixture.CreateAsyncWriteSession(std::move(settings));
+        UNIT_ASSERT_EXCEPTION(session->GetInitSeqNo(), NYdb::TContractViolation);
+    }
+
+    Y_UNIT_TEST(GetInitSeqNoIsReadyWhenCloseWakesWaitEvent) {
+        TSimpleBlockingWriteSessionTestFixture fixture(TEST_CASE_NAME);
+        auto session = fixture.CreateAsyncWriteSession(fixture.DefaultWriteSettings());
+        const auto initSeqNo = session->GetInitSeqNo();
+
+        // Drop the token issued at Start() so the next WaitEvent is the close signal.
+        session->GetEvent(false);
+
+        std::atomic<bool> initReadyAtClose{false};
+        session->WaitEvent().Subscribe([&](const NThreading::TFuture<void>&) {
+            if (auto event = session->GetEvent(false)) {
+                if (std::holds_alternative<NTopic::TSessionClosedEvent>(*event)) {
+                    initReadyAtClose = initSeqNo.IsReady();
+                }
+            }
+        });
+
+        UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
+        UNIT_ASSERT(initSeqNo.HasException());
+        UNIT_ASSERT(initReadyAtClose.load());
     }
 
 }

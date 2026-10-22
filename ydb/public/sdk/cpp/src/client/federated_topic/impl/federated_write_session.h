@@ -6,6 +6,7 @@
 
 #include <deque>
 #include <exception>
+#include <optional>
 
 namespace NYdb::inline Dev::NFederatedTopic {
 
@@ -130,10 +131,26 @@ private:
     void IssueTokenIfAllowed();
 
     // Forwards the current subsession's GetInitSeqNo() once the caller has asked for it.
-    // Prepared under Lock, subscribed after the lock is released.
+    // Prepared under Lock. The public promise is completed only after LockShared is dropped.
     void MaybePrepareInitSeqNoArm();
     void DispatchPendingInitSeqNoArm();
-    void CompleteInitSeqNoFromSubsession(size_t generation, const NThreading::TFuture<uint64_t>& future);
+    bool IsDeduplicationEnabled() const;
+
+    struct TInitSeqNoCompletion {
+        NThreading::TPromise<uint64_t> Promise;
+        std::optional<uint64_t> Value;
+        std::exception_ptr Error;
+
+        void Apply();
+    };
+
+    TInitSeqNoCompletion ClaimInitSeqNo(size_t generation, const NThreading::TFuture<uint64_t>& future, std::exception_ptr error);
+
+    // Marks the session closed and claims a still-pending init promise.
+    // PublishPendingClose() must run after LockShared is released: it fails the
+    // init promise before ClientEventsQueue::Close wakes WaitEvent subscribers.
+    void BeginClose(const NTopic::TSessionClosedEvent& event);
+    void PublishPendingClose();
 
     TStringBuilder GetLogPrefixImpl() const;
 
@@ -185,11 +202,16 @@ private:
     // Stays uninitialized until the first GetInitSeqNo() call so a read of the
     // seq no is not forced onto sessions that write in auto mode.
     NThreading::TPromise<uint64_t> InitSeqNoPromise;
+    bool InitSeqNoSettled = false;
     size_t InitSeqNoArmedGeneration = 0;
     bool HasPendingInitSeqNoArm = false;
     size_t PendingInitSeqNoGeneration = 0;
     NThreading::TFuture<uint64_t> PendingInitSeqNoFuture;
     std::exception_ptr PendingInitSeqNoError;
+
+    bool PendingCloseActive = false;
+    std::optional<NTopic::TSessionClosedEvent> PendingCloseEvent;
+    NThreading::TPromise<uint64_t> PendingCloseInitSeqNo;
 };
 
 class TFederatedWriteSession : public NTopic::IWriteSession,

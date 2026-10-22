@@ -1,0 +1,39 @@
+name: Runner fleet check
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runner-fleet-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Poll runner fleet
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+    - name: Install yc
+      run: |
+        curl -fsSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i "$HOME/yandex-cloud" -n
+        echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+    - name: Configure yc
+      run: |
+        yc config set service-account-key "$CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
+        yc config set cloud-id b1ggceeul2pkher8vhb6
+        yc config set folder-id b1grf3mpoatgflnlavjd
+    - name: Check fleet
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        python3 ydb/ci/gh-runner-provision/provision.py reconcile
+        python3 ydb/ci/gh-runner-provision/provision.py poll

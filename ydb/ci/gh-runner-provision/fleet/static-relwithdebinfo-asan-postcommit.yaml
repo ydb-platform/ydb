@@ -1,6 +1,6 @@
 shape: ../shapes/static-relwithdebinfo.yaml
 name: static-relwithdebinfo-d
-count: 8
+count: 10
 labels:
   - auto-provisioned
   - postcommit

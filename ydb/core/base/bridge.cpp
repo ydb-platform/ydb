@@ -81,7 +81,7 @@ namespace NKikimr {
             for (const auto& pile : registry.GetPiles()) {
                 auto *slot = res.AddPiles();
                 if (pile.HasName() && configured.contains(pile.GetName())) {
-                    slot->SetName(pile.GetName());
+                    slot->CopyFrom(pile); // the pile keeps its slot along with its settings
                     placed.insert(pile.GetName());
                 }
             }

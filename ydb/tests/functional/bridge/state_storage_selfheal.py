@@ -48,11 +48,13 @@ class BridgeStateStorageSelfHeal:
     step_seconds = 5
     relax_seconds = 30
     timeout = 300
-    self_management_options = {}
-    selfheal_options = {}
-    node_location_overrides = {}
+    self_management_options = None
+    selfheal_options = None
+    node_location_overrides = None
 
     def setup_method(self):
+        for name in ("self_management_options", "selfheal_options", "node_location_overrides"):
+            setattr(self, name, copy.deepcopy(getattr(self, name) or {}))
         self.bridge = BridgeThreePiles()
         self.bridge.additional_log_configs = {"BS_NODE": LogLevels.DEBUG, "CMS": LogLevels.DEBUG}
         self.bridge.nodes_count = self.nodes_per_pile * len(self.bridge.pile_names)
@@ -145,16 +147,16 @@ class BridgeStateStorageSelfHeal:
             self.check_observer()
             try:
                 return action()
-            except (AssertionError, requests.RequestException) as error:
+            except (AssertionError, KeyError, requests.RequestException) as error:
                 last_error = error
                 time.sleep(0.5)
         raise AssertionError(f"Timed out waiting for {description}") from last_error
 
-    def invoke(self, command):
+    def invoke(self, command, timeout=10):
         node = self.control_node
         response = requests.post(
             f"http://{node.host}:{node.mon_port}/actors/nodewarden?page=distconf",
-            headers={"content-type": "application/json"}, json=command, timeout=10,
+            headers={"content-type": "application/json"}, json=command, timeout=timeout,
         )
         response.raise_for_status()
         result = response.json()
@@ -163,8 +165,8 @@ class BridgeStateStorageSelfHeal:
             raise requests.RequestException(f"Distconf request {command} failed: {result}")
         return result
 
-    def read_config(self, nodes_state=False):
-        return self.invoke({"GetStateStorageConfig": {"NodesState": nodes_state}})["StateStorageConfig"]
+    def read_config(self, nodes_state=False, timeout=10):
+        return self.invoke({"GetStateStorageConfig": {"NodesState": nodes_state}}, timeout=timeout)["StateStorageConfig"]
 
     def assert_pile_locality(self, config):
         for name in CONFIG_NAMES:
@@ -202,8 +204,9 @@ class BridgeStateStorageSelfHeal:
         def collect():
             while not self.observer_stop.is_set():
                 try:
-                    config = self.read_config()
-                except requests.RequestException:
+                    # Bound an in-flight read so teardown can stop the observer.
+                    config = self.read_config(timeout=(1, 3))
+                except (KeyError, requests.RequestException):
                     # A failed read is not an observed configuration. The main
                     # thread still requires every expected phase before its deadline.
                     self.observer_stop.wait(0.5)
@@ -243,7 +246,10 @@ class BridgeStateStorageSelfHeal:
         # failover cases exercise loss of the control/root node separately.
         candidates.discard(self.bridge.pile_nodes[pile][0].node_id)
         candidates.discard(self.control_node.node_id)
-        root = self.invoke({"GetStateStorageConfig": {}})["Scepter"]["NodeId"]
+        root = self.wait(
+            lambda: self.invoke({"GetStateStorageConfig": {}})["Scepter"]["NodeId"],
+            "distconf root election",
+        )
         candidates.discard(root)
         assert len(candidates) >= count, (pile, candidates)
         victims = sorted(candidates)[:count]
@@ -290,6 +296,65 @@ class BridgeStateStorageSelfHeal:
             return config
 
         return self.wait(healed, f"automatic replacement of {victims}")
+
+    def assert_reassign(self, before, after, victims):
+        assert len(victims) == 1
+        victim = victims[0]
+        pile_id = self.node_piles[victim]
+        for name in CONFIG_NAMES:
+            initial_group = groups(before, name, pile_id)[0]
+            final_group = groups(after, name, pile_id)[0]
+            assert initial_group.get("RingGroupActorIdOffset", 0) == final_group.get("RingGroupActorIdOffset", 0)
+            assert len(initial_group["Ring"]) == len(final_group["Ring"])
+            removed = replicas(initial_group) - replicas(final_group)
+            added = replicas(final_group) - replicas(initial_group)
+            assert removed == {victim}, (name, removed)
+            assert len(added) == 1, (name, added)
+            for old_ring, new_ring in zip(initial_group["Ring"], final_group["Ring"]):
+                assert [node for node in old_ring["Node"] if node != victim] == [
+                    node for node in new_ring["Node"] if node not in added
+                ], (name, old_ring, new_ring)
+            assert any(
+                any(ring.get("IsDisabled", False) and victim in ring["Node"] for ring in group["Ring"])
+                for _, config in self.snapshots for group in groups(config, name, pile_id)
+            ), f"{name}: did not observe the disabled source ring"
+            assert all(len(groups(config, name)) == 3 for _, config in self.snapshots), name
+            for other in set(range(1, 4)) - {pile_id}:
+                assert groups(before, name, other) == groups(after, name, other), (name, other)
+
+    def assert_full_reconfiguration(self, before, after):
+        for name in CONFIG_NAMES:
+            old = {pile_id: groups(before, name, pile_id)[0] for pile_id in range(1, 4)}
+            new = {pile_id: groups(after, name, pile_id)[0] for pile_id in range(1, 4)}
+            for pile_id in range(1, 4):
+                assert old[pile_id].get("RingGroupActorIdOffset", 0) != new[pile_id].get("RingGroupActorIdOffset", 0)
+            expected_phases = [
+                [("old", False), ("new", True)],
+                [("old", False), ("new", False)],
+                [("new", False), ("old", True)],
+                [("new", False)],
+            ]
+            next_phase = 0
+            for _, config in self.snapshots:
+                if next_phase == len(expected_phases):
+                    break
+                matches = True
+                for pile_id in range(1, 4):
+                    observed = groups(config, name, pile_id)
+                    expected = expected_phases[next_phase]
+                    if len(observed) != len(expected):
+                        matches = False
+                        break
+                    for group, (version, write_only) in zip(observed, expected):
+                        reference = old[pile_id] if version == "old" else new[pile_id]
+                        matches &= (
+                            placement(group) == placement(reference)
+                            and group.get("RingGroupActorIdOffset", 0) == reference.get("RingGroupActorIdOffset", 0)
+                            and group.get("WriteOnly", False) == write_only
+                        )
+                if matches:
+                    next_phase += 1
+            assert next_phase == len(expected_phases), (name, next_phase, self.snapshots)
 
     def wait_converged(self, expected):
         def local_meta(node):

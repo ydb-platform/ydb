@@ -1,8 +1,5 @@
 LIBRARY()
 
-# Work around LLVM 20 ThinLTO codegen crashes in StreamExecuteQuery.
-NO_LTO()
-
 SRCS(
     exec_query.cpp
     exec_query.h

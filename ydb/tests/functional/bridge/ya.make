@@ -10,6 +10,8 @@ TEST_SRCS(
     test_three_piles.py
     test_sdk_cleanup.py
     test_sdk_reconnect.py
+    test_state_storage_selfheal.py
+    test_state_storage_selfheal_piles.py
     test_state_storage_selfheal_root_restart.py
 )
 

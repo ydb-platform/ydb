@@ -14,7 +14,7 @@ COUNT(T?)->Uint64
 
 Counting the number of rows in a row or columnar table (if `*` or constant is specified as the argument) or non-empty values in a table column (if the column name is specified as an argument).
 
-Like other aggregate functions, it can be combined with [GROUP BY](../syntax/select/group-by.md) to get statistics on the parts of the table that correspond to the values in the columns being grouped. {% if select_statement != "SELECT STREAM" %}Use the modifier [DISTINCT](../syntax/select/group-by.md#distinct) to count distinct values.{% endif %}
+Like other aggregate functions, it can be combined with [GROUP BY](../syntax/select/group-by.md) to get statistics on the parts of the table that correspond to the values in the columns being grouped. Use the modifier [DISTINCT](../syntax/select/group-by.md#distinct) to count distinct values.
 
 ### Examples
 
@@ -28,14 +28,9 @@ SELECT COUNT(*) FROM my_table;
 SELECT key, COUNT(value) FROM my_table GROUP BY key;
 ```
 
-
-{% if select_statement != "SELECT STREAM" %}
-
 ```yql
 SELECT COUNT(DISTINCT value) FROM my_table;
 ```
-
-{% endif %}
 
 ## MIN and MAX {#min-max}
 
@@ -138,9 +133,6 @@ SELECT
 FROM my_table;
 ```
 
-
-{% if select_statement != "SELECT STREAM" %}
-
 {% note info %}
 
 To count distinct values in rows meeting the condition, unlike other aggregate functions, you can't use the modifier [DISTINCT](../syntax/select/group-by.md#distinct) because arguments contain no values. To get such a result, use a query like this:
@@ -153,8 +145,6 @@ FROM my_table;
 ```
 
 {% endnote %}
-
-{% endif %}
 
 ## SUM_IF and AVG_IF {#sum-if}
 

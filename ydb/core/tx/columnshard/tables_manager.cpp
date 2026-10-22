@@ -162,7 +162,9 @@ void TTablesManager::AddTableInfo(const TUnifiedPathId unifiedPathId, TTableInfo
     SchemeShardLocalToInternal.emplace(unifiedPathId.SchemeShardLocalPathId, unifiedPathId.InternalPathId);
 }
 
-bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info) {
+bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info, TTablesLoadDurations* durations) {
+    TTablesLoadDurations ignoredDurations;
+    TTablesLoadDurations& loadDurations = durations ? *durations : ignoredDurations;
     {
         std::optional<ui64> tabletSchemeShardLocalPathIdValue;
         if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::OwnerPathId, tabletSchemeShardLocalPathIdValue)) {
@@ -197,7 +199,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
     }
     TMap<TSchemeShardLocalPathId, TInternalPathId> mutableTables;
     {
-        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableLoadTimeCounters.StartGuard();
+        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableLoadTimeCounters.StartGuard(&loadDurations.Tables);
         TMemoryProfileGuard g("TTablesManager/InitFromDB::TablesV1");
         auto rowset = db.Table<Schema::TableInfoV1>().Select();
         if (!rowset.IsReady()) {
@@ -225,7 +227,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
         }
     }
     {
-        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableLoadTimeCounters.StartGuard();
+        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableLoadTimeCounters.StartGuard(&loadDurations.Tables);
         TMemoryProfileGuard g("TTablesManager/InitFromDB::Tables");
         auto rowset = db.Table<Schema::TableInfo>().Select();
         if (!rowset.IsReady()) {
@@ -271,7 +273,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
 
     std::optional<TSchemaPreset> preset;
     {
-        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->SchemaPresetLoadTimeCounters.StartGuard();
+        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->SchemaPresetLoadTimeCounters.StartGuard(&loadDurations.SchemaPresets);
         TMemoryProfileGuard g("TTablesManager/InitFromDB::SchemaPresets");
         auto rowset = db.Table<Schema::SchemaPresetInfo>().Select();
         if (!rowset.IsReady()) {
@@ -301,7 +303,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
     }
 
     {
-        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableVersionsLoadTimeCounters.StartGuard();
+        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableVersionsLoadTimeCounters.StartGuard(&loadDurations.TableVersions);
         TMemoryProfileGuard g("TTablesManager/InitFromDB::Versions");
         auto rowset = db.Table<Schema::TableVersionInfo>().Select();
         if (!rowset.IsReady()) {
@@ -337,7 +339,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
     }
 
     {
-        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->SchemaPresetVersionsLoadTimeCounters.StartGuard();
+        TLoadTimeSignals::TLoadTimer timer =
+            LoadTimeCounters->SchemaPresetVersionsLoadTimeCounters.StartGuard(&loadDurations.SchemaPresetVersions);
         TMemoryProfileGuard g("TTablesManager/InitFromDB::PresetVersions");
 
         auto rowset = db.Table<Schema::SchemaPresetVersionInfo>().Select();

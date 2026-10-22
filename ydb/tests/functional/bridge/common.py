@@ -11,6 +11,7 @@ from ydb.public.api.protos.ydb_keyvalue_pb2 import ReadResult
 
 from hamcrest import assert_that, is_, has_entries
 
+import copy
 import logging
 import time
 
@@ -48,9 +49,9 @@ class BridgeKiKiMRTest(object):
     pile_names = ("r1", "r2")
     bridge_rpc_timeout = 10
     cms_config = None
-    self_management_options = {}
-    additional_log_configs = {}
-    node_location_overrides = {}
+    self_management_options = None
+    additional_log_configs = None
+    node_location_overrides = None
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,
@@ -59,6 +60,10 @@ class BridgeKiKiMRTest(object):
     logger = logging.getLogger(__name__)
 
     def setup_method(self):
+        for name in ("self_management_options", "additional_log_configs", "node_location_overrides"):
+            setattr(self, name, copy.deepcopy(getattr(self, name) or {}))
+        self.cms_config = copy.deepcopy(self.cms_config)
+        self.metadata_section = copy.deepcopy(self.metadata_section)
         log_configs = {
             'GRPC_SERVER': LogLevels.DEBUG,
             'GRPC_PROXY': LogLevels.DEBUG,
@@ -84,15 +89,21 @@ class BridgeKiKiMRTest(object):
             cms_config=self.cms_config,
         )
         self.configurator.yaml_config["self_management_config"].update(self.self_management_options)
+        hosts = self.configurator.yaml_config["hosts"]
+        hosts_by_port = {host["port"]: host for host in hosts}
+        assert len(hosts_by_port) == len(hosts), hosts
         for node_id, location in self.node_location_overrides.items():
-            self.configurator.yaml_config["hosts"][node_id - 1].setdefault("location", {}).update(location)
+            port = self.configurator.port_allocator.get_node_port_allocator(node_id).ic_port
+            hosts_by_port[port].setdefault("location", {}).update(location)
 
         self.cluster = KiKiMR(configurator=self.configurator)
         self.cluster.start()
 
         self.pile_nodes = {name: [] for name in self.pile_names}
-        for node_id, host in enumerate(self.configurator.yaml_config["hosts"], 1):
-            self.pile_nodes[host["location"]["bridge_pile_name"]].append(self.cluster.nodes[node_id])
+        for node_id, node in self.cluster.nodes.items():
+            port = self.configurator.port_allocator.get_node_port_allocator(node_id).ic_port
+            host = hosts_by_port[port]
+            self.pile_nodes[host["location"]["bridge_pile_name"]].append(node)
         self.bridge_clients = {}
         for name, nodes in self.pile_nodes.items():
             client = BridgeClient(nodes[0].host, nodes[0].port, timeout=self.bridge_rpc_timeout)

@@ -209,7 +209,7 @@ message TFeatureFlags {
     optional bool SwitchToConfigV1 = 180 [default = false];
     // Implies EnableExportFiltering.
     optional bool EnableEncryptedExport = 181 [default = false];
-    optional bool EnableAlterDatabase = 182 [default = false];
+    optional bool EnableAlterDatabase = 182 [default = true];
     optional bool EnableExportAutoDropping = 183 [default = true];
     optional bool EnableThrottlingReport = 184 [default = true];
     optional bool EnableNodeBrokerDeltaProtocol = 185 [default = true];
@@ -257,7 +257,7 @@ message TFeatureFlags {
     optional bool EnableTopicsSqlIoOperations = 226 [default = true];
     optional bool EnableSysViewPermissionsExport = 227 [default = false];
     optional bool EnableCmsSmartAvailabilityMode = 228 [default = true];
-    optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
+    optional bool EnableConditionalEraseResponseBatching = 229 [default = true];
     optional bool EnablePDiskDataEncryption = 230 [default = true];
     optional bool EnableForcedCompactions = 231 [default = true];
     optional bool EnableLocalBloomFilterIndex = 232 [default = true];
@@ -314,9 +314,9 @@ message TFeatureFlags {
     // Use TablePartitionsByShardIdx (keyed by ShardIdx) instead of TablePartitions
     // (keyed by positional index) for local tables.  When ON, split/merge writes only
     // O(k) rows (src+dst shards) instead of O(N) rows (all partitions after srcFirstIdx).
-    optional bool EnableTablePartitionsFormatShardIdx = 271 [default = false];
-    optional bool EnableTablePartitionsFormatShardIdxByDefault = 272 [default = false];
-    optional bool EnableTablePartitionsFormatAutoConvert = 273 [default = false];
+    optional bool EnableTablePartitionsFormatShardIdx = 271 [default = true];
+    optional bool EnableTablePartitionsFormatShardIdxByDefault = 272 [default = true];
+    optional bool EnableTablePartitionsFormatAutoConvert = 273 [default = true];
     optional bool EnableTopicMessagesBatching = 274 [default = false, (RequireRestart) = true];
     optional bool EnableTopicWriteOffsetDeltaInKeys = 275 [default = false, (RequireRestart) = true];
     optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];

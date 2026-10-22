@@ -263,6 +263,10 @@ message TUpdateDriveStatus {
     uint64 StatusChangeTimestamp = 6; // used only in return of ReadDriveStatus
     EDecommitStatus DecommitStatus = 7;
     TMaintenanceStatus.E MaintenanceStatus = 8;
+    // set by the one judging the drive by what it sees of it (CMS sentinel): the status of the drive of the pile that is
+    // not allowed to connect to the cluster (DISCONNECTED or INACTIVE one) is kept then, as nobody can see the drive;
+    // this way a stale request, e.g. a retry, doesn't override what BSC has done to the drive of the removed pile
+    bool SkipIfPileCutOff = 9;
 }
 
 message TReadDriveStatus {

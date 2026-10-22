@@ -5,6 +5,7 @@ SRCS(
     global_inlining.cpp
     global_pruning.cpp
     kqp_expression.cpp
+    kqp_olap_aggregate.cpp
     kqp_olap_expr_inspection.cpp
     kqp_operator.cpp
     kqp_plan_conversion_utils.cpp

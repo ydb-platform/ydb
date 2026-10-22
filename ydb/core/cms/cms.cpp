@@ -3361,6 +3361,8 @@ void TCms::Handle(::NKikimr::TEvNodeWardenStorageConfig::TPtr &ev, const TActorC
 {
     const auto& record = *ev->Get();
 
+    State->BridgeInfo = record.BridgeInfo;
+
     if (!record.Config || !record.Config->HasClusterState()) {
         return;
     }

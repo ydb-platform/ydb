@@ -7,6 +7,10 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -3286,6 +3290,231 @@ Y_UNIT_TEST_SUITE(Cdc) {
             });
             runtime.DispatchEvents(opts);
         }
+    }
+
+    enum class ECompressionSourceConfig { Default, Gzip };
+    enum class ECompressionWire { Raw, Gzip };
+
+    void CheckPayloadCompressionSource(ECompressionSourceConfig sourceConfig, const TString& declaration,
+            ECompressionWire expectedWire, NKikimrSchemeOp::ECdcStreamFormat format = NKikimrSchemeOp::ECdcStreamFormatJson)
+    {
+        TPortManager portManager;
+        auto settings = TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false).SetDomainName("Root").SetEnableChangefeedInitialScan(true)
+            .SetEnableChangefeedDebeziumJsonFormat(true);
+        if (sourceConfig == ECompressionSourceConfig::Gzip) {
+            // Proto2 wire: field 34, enum 1, before source actors are created.
+            UNIT_ASSERT(settings.AppConfig->MutableDataShardConfig()->ParseFromString(TString("\x90\x02\x01", 3)));
+        }
+        TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(runtime.GetAppData(0).DataShardConfig.GetCdcPayloadCompression()),
+            sourceConfig == ECompressionSourceConfig::Gzip
+                ? static_cast<i32>(NKikimrConfig::TDataShardConfig::CDC_PAYLOAD_COMPRESSION_GZIP)
+                : static_cast<i32>(NKikimrConfig::TDataShardConfig::CDC_PAYLOAD_COMPRESSION_DISABLED));
+        const auto edge = runtime.AllocateEdgeActor();
+        InitRoot(server, edge);
+        const auto [shards, tableId] = CreateShardedTable(server, edge, "/Root", "Table", TShardedTableOptions().Columns({
+            {"key", "Uint32", true, false}, {"value", "Utf8", false, false}}));
+        Y_UNUSED(tableId);
+        const TString value(16 * 1024, 'Q');
+        ExecSQL(server, edge, TStringBuilder() << "UPSERT INTO `/Root/Table` (key, value) VALUES (1, '" << value << "');");
+
+        // The real scheme request persists the private capability before scan
+        // starts; no fake scheme-cache response or serializer policy is injected.
+        auto attributes = runtime.AddObserver<TEvTxUserProxy::TEvProposeTransaction>([&](auto& ev) {
+            const auto& tx = ev->Get()->Record.GetTransaction().GetModifyScheme();
+            if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateCdcStream && declaration) {
+                auto* attr = ev->Get()->Record.MutableTransaction()->MutableModifyScheme()->MutableCreateCdcStream()->MutableStreamDescription()->AddUserAttributes();
+                attr->SetKey("__async_replication");
+                attr->SetValue(declaration);
+            }
+        });
+        TVector<NKikimrClient::TPersQueuePartitionRequest::TCmdWrite> writes;
+        auto wire = runtime.AddObserver<NPQ::TEvPartitionWriter::TEvWriteRequest>([&](auto& ev) {
+            for (const auto& cmd : ev->Get()->Record.GetPartitionRequest().GetCmdWrite()) {
+                if (cmd.HasData()) {
+                    writes.push_back(cmd);
+                }
+            }
+        });
+        auto streamDescription = format == NKikimrSchemeOp::ECdcStreamFormatDebeziumJson ? NewImage(format) : Updates(format);
+        if (format == NKikimrSchemeOp::ECdcStreamFormatJson) {
+            streamDescription = WithInitialScan(streamDescription);
+        }
+        WaitTxNotification(server, edge, AsyncAlterAddStream(server, "/Root", "Table", streamDescription));
+        const auto persistedStream = Ls(runtime, edge, "/Root/Table/Stream");
+        UNIT_ASSERT_VALUES_EQUAL(persistedStream->ErrorCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(persistedStream->ResultSet.size(), 1);
+        const auto& streamEntry = persistedStream->ResultSet.front();
+        UNIT_ASSERT_VALUES_EQUAL(streamEntry.Kind, NSchemeCache::TSchemeCacheNavigate::KindCdcStream);
+        const auto capability = streamEntry.Attributes.find("__async_replication");
+        if (declaration) {
+            UNIT_ASSERT(capability != streamEntry.Attributes.end());
+            UNIT_ASSERT_VALUES_EQUAL(capability->second, declaration);
+        } else {
+            UNIT_ASSERT(capability == streamEntry.Attributes.end());
+        }
+        if (format != NKikimrSchemeOp::ECdcStreamFormatJson) {
+            ExecSQL(server, edge, TStringBuilder() << "UPSERT INTO `/Root/Table` (key, value) VALUES (1, '" << value << "R');");
+        }
+        const auto topicDescription = GetTopicDescription(runtime, edge, "/Root/Table/Stream");
+        const auto& pqConfig = topicDescription.GetPQTabletConfig();
+        bool permitsGzip = pqConfig.GetCodecs().IdsSize() == 0;
+        for (const auto id : pqConfig.GetCodecs().GetIds()) {
+            permitsGzip |= id == 1;
+        }
+        UNIT_ASSERT_C(permitsGzip, "Fixture requires an unrestricted or stored-GZIP-enabled topic");
+        for (const auto& consumer : pqConfig.GetConsumers()) {
+            UNIT_ASSERT_VALUES_UNEQUAL(consumer.GetName(), "replicationConsumer");
+        }
+        runtime.WaitFor("initial-scan CDC write before consumer registration", [&] { return !writes.empty(); }, TDuration::Seconds(30));
+        const auto first = writes.front();
+        NKikimrPQClient::TDataChunk firstChunk;
+        UNIT_ASSERT(firstChunk.ParseFromString(first.GetData()));
+        UNIT_ASSERT_VALUES_EQUAL(firstChunk.GetCodec(), expectedWire == ECompressionWire::Gzip ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(first.HasUncompressedSize(), expectedWire == ECompressionWire::Gzip);
+        if (expectedWire == ECompressionWire::Raw) {
+            // Covers actual config/capability/format propagation through sender creation.
+            UNIT_ASSERT(!first.HasUncompressedSize());
+            return;
+        }
+        NYdb::NTopic::TGzipCodec gzip;
+        const NYdb::NTopic::ICodec& codec = gzip;
+        const TString decoded(codec.Decompress(std::string(firstChunk.GetData().data(), firstChunk.GetData().size())));
+        const TString expected = TStringBuilder() << R"({"update":{"value":")" << value << R"("},"key":[1]})";
+        AssertJsonsEqual(decoded, expected);
+        UNIT_ASSERT_VALUES_EQUAL(first.GetUncompressedSize(), expected.size());
+        UNIT_ASSERT(firstChunk.GetData().size() < expected.size() / 4);
+        auto rawEquivalent = firstChunk;
+        rawEquivalent.SetCodec(0);
+        rawEquivalent.SetData(decoded);
+        Cerr << "CDC compression source fixture: raw_payload_bytes=" << decoded.size()
+            << " gzip_payload_bytes=" << firstChunk.GetData().size()
+            << " raw_envelope_bytes=" << rawEquivalent.ByteSizeLong()
+            << " gzip_envelope_bytes=" << first.GetData().size() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(first.GetPartitionKey(), CalcPartitionKey(expected));
+
+        // Read the durable PQ result itself; GetRecords/WaitForContent would
+        // treat the compressed bytes as JSON and cannot be reused here.
+        const auto readHistory = [&] {
+            auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+            auto* partition = request->Record.MutablePartitionRequest();
+            partition->SetTopic("/Root/Table/Stream");
+            partition->SetPartition(0);
+            auto* read = partition->MutableCmdRead();
+            read->SetClientId(NPQ::CLIENTID_WITHOUT_CONSUMER);
+            read->SetCount(100);
+            read->SetBytes(4 * 1024 * 1024);
+            read->SetOffset(0);
+            read->SetReadTimestampMs(0);
+            read->SetExternalOperation(true);
+            ForwardToTablet(runtime, ResolvePqTablet(runtime, edge, "/Root/Table/Stream", 0), edge, request.Release());
+            auto response = runtime.GrabEdgeEventRethrow<TEvPersQueue::TEvResponse>(edge);
+            UNIT_ASSERT(response);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(response->Get()->Record.GetErrorCode()), static_cast<i32>(NPersQueue::NErrorCode::OK));
+            return response->Get()->Record.GetPartitionResponse().GetCmdReadResult();
+        };
+        ExecSQL(server, edge, TStringBuilder() << "UPSERT INTO `/Root/Table` (key, value) VALUES (1, '" << value << "R');");
+        ExecSQL(server, edge, "DELETE FROM `/Root/Table` WHERE key = 1;");
+        RebootTablet(runtime, shards.front(), edge);
+        ExecSQL(server, edge, TStringBuilder() << "UPSERT INTO `/Root/Table` (key, value) VALUES (2, '" << value << "');");
+        runtime.GetAppData(0).DataShardConfig.ClearCdcPayloadCompression();
+        RebootTablet(runtime, shards.front(), edge);
+        ExecSQL(server, edge, TStringBuilder() << "UPSERT INTO `/Root/Table` (key, value) VALUES (3, '" << value << "');");
+        NKikimrClient::TCmdReadResult history;
+        runtime.WaitFor("complete mixed CDC history", [&] {
+            history = readHistory();
+            return history.ResultSize() >= 5;
+        }, TDuration::Seconds(60));
+        UNIT_ASSERT_VALUES_EQUAL(history.ResultSize(), 5);
+        const TVector<TString> expectedHistory = {
+            expected,
+            TStringBuilder() << R"({"update":{"value":")" << value << R"(R"},"key":[1]})",
+            R"({"erase":{},"key":[1]})",
+            TStringBuilder() << R"({"update":{"value":")" << value << R"("},"key":[2]})",
+            TStringBuilder() << R"({"update":{"value":")" << value << R"("},"key":[3]})",
+        };
+        const TVector<ui32> storedCodecs{1, 1, 0, 1, 0};
+        for (size_t i = 0; i < expectedHistory.size(); ++i) {
+            const auto& item = history.GetResult(i);
+            const auto chunk = NKikimr::GetDeserializedData(item.GetData());
+            UNIT_ASSERT_VALUES_EQUAL(item.GetOffset(), i);
+            UNIT_ASSERT_VALUES_EQUAL(chunk.GetCodec(), storedCodecs[i]);
+            const TString body = storedCodecs[i] == 1
+                ? TString(codec.Decompress(std::string(chunk.GetData().data(), chunk.GetData().size()))) : chunk.GetData();
+            AssertJsonsEqual(body, expectedHistory[i]);
+            UNIT_ASSERT_VALUES_EQUAL(item.GetPartitionKey(), CalcPartitionKey(expectedHistory[i]));
+            if (storedCodecs[i] == 1) {
+                UNIT_ASSERT_VALUES_EQUAL(item.GetUncompressedSize(), expectedHistory[i].size());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(PayloadCompressionInitialScanUpdatesAndRollback) {
+        CheckPayloadCompressionSource(ECompressionSourceConfig::Gzip,
+            R"({"path":"/Root/replica","id":"1","supported_payload_codecs":["gzip"]})", ECompressionWire::Gzip);
+    }
+
+    Y_UNIT_TEST(PayloadCompressionGatesRemainRaw) {
+        CheckPayloadCompressionSource(ECompressionSourceConfig::Default,
+            R"({"supported_payload_codecs":["gzip"]})", ECompressionWire::Raw);
+        for (const auto& declaration : TVector<TString>{"", "{}",
+                R"({"supported_payload_codecs":["future"]})", R"({"supported_payload_codecs":["gzip",42]})"}) {
+            CheckPayloadCompressionSource(ECompressionSourceConfig::Gzip, declaration, ECompressionWire::Raw);
+        }
+        CheckPayloadCompressionSource(ECompressionSourceConfig::Gzip,
+            R"({"supported_payload_codecs":["gzip"]})", ECompressionWire::Raw, NKikimrSchemeOp::ECdcStreamFormatProto);
+        CheckPayloadCompressionSource(ECompressionSourceConfig::Gzip,
+            R"({"supported_payload_codecs":["gzip"]})", ECompressionWire::Raw, NKikimrSchemeOp::ECdcStreamFormatDebeziumJson);
+
+        // Native stream creation rejects malformed private JSON before any
+        // sender exists. The pure policy tests also cover corrupt declarations.
+        TPortManager ports;
+        auto settings = TServerSettings(ports.GetPort(), {}, DefaultPQConfig())
+            .SetUseRealThreads(false).SetDomainName("Root");
+        settings.AppConfig->MutableDataShardConfig()->SetCdcPayloadCompression(
+            NKikimrConfig::TDataShardConfig::CDC_PAYLOAD_COMPRESSION_GZIP);
+        TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto edge = runtime.AllocateEdgeActor();
+        InitRoot(server, edge);
+        CreateShardedTable(server, edge, "/Root", "Table", SimpleTable());
+        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        request->Record.SetExecTimeoutPeriod(Max<ui64>());
+        request->Record.SetRequestType("_document_api_request");
+        auto& modify = *request->Record.MutableTransaction()->MutableModifyScheme();
+        modify.SetWorkingDir("/Root");
+        modify.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateCdcStream);
+        auto& create = *modify.MutableCreateCdcStream();
+        create.SetTableName("Table");
+        auto& stream = *create.MutableStreamDescription();
+        stream.SetName("Invalid");
+        stream.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+        stream.SetFormat(NKikimrSchemeOp::ECdcStreamFormatJson);
+        auto& attribute = *stream.AddUserAttributes();
+        attribute.SetKey("__async_replication");
+        attribute.SetValue("{");
+        runtime.Send(new IEventHandle(MakeTxProxyID(), edge, request.Release()));
+        const auto rejected = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->Record.GetStatus(),
+            static_cast<ui32>(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError));
+        UNIT_ASSERT(!rejected->Get()->Record.GetIssues().empty());
+        UNIT_ASSERT_STRING_CONTAINS(rejected->Get()->Record.GetIssues(0).message(), "__async_replication");
+        UNIT_ASSERT_STRING_CONTAINS(rejected->Get()->Record.GetIssues(0).message(), "has invalid value");
+        // Navigate/Ls require success, so inspect the actual negative response.
+        auto lookup = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto& entry = lookup->ResultSet.emplace_back();
+        entry.Path = {"Root", "Table", "Invalid"};
+        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        entry.ShowPrivatePath = true;
+        runtime.Send(MakeSchemeCacheID(), edge, new TEvTxProxySchemeCache::TEvNavigateKeySet(lookup.Release()));
+        const auto missing = runtime.GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(edge);
+        const auto& result = *missing->Get()->Request;
+        UNIT_ASSERT_VALUES_EQUAL(result.ErrorCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.ResultSet.size(), 1);
+        UNIT_ASSERT(result.ResultSet.front().Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown);
     }
 
     void InitialScanTest(bool topicAutoPartitioning) {

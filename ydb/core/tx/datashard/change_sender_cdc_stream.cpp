@@ -282,7 +282,8 @@ public:
             const TDataShardId& dataShard,
             ui32 partitionId,
             ui64 shardId,
-            const TUserTable::TCdcStream& stream)
+            const TUserTable::TCdcStream& stream,
+            ECdcPayloadCompression payloadCompression)
         : Parent(parent)
         , DataShard(dataShard)
         , PartitionId(partitionId)
@@ -296,6 +297,7 @@ public:
             .ShardId = DataShard.TabletId,
             .UserSIDs = stream.UserSIDs,
             .TraceIds = stream.TraceIds,
+            .PayloadCompression = payloadCompression,
         }))
     {
     }
@@ -522,6 +524,10 @@ class TCdcChangeSenderMain
         }
 
         Stream = TUserTable::TCdcStream(entry.CdcStreamInfo->Description);
+        ReplicationAttributes.clear();
+        if (const auto it = entry.Attributes.find("__async_replication"); it != entry.Attributes.end()) {
+            ReplicationAttributes = it->second;
+        }
 
         Y_ENSURE(entry.ListNodeEntry->Children.size() == 1);
         const auto& topic = entry.ListNodeEntry->Children.at(0);
@@ -585,6 +591,12 @@ class TCdcChangeSenderMain
             return;
         }
 
+        const auto& pqDesc = entry.PQGroupInfo->Description;
+        const auto& pqConfig = pqDesc.GetPQTabletConfig();
+        PayloadCompression = Stream.Format == NKikimrSchemeOp::ECdcStreamFormatJson
+            ? SelectCdcPayloadCompression(AppData()->DataShardConfig, ReplicationAttributes, pqConfig)
+            : ECdcPayloadCompression::Raw;
+
         const auto topicVersion = entry.Self->Info.GetVersion().GetGeneralVersion();
         if (TopicVersion && TopicVersion == topicVersion) {
             CreateSenders();
@@ -592,9 +604,6 @@ class TCdcChangeSenderMain
         }
 
         TopicVersion = topicVersion;
-
-        const auto& pqDesc = entry.PQGroupInfo->Description;
-        const auto& pqConfig = pqDesc.GetPQTabletConfig();
 
         PartitionToShard.clear();
         for (const auto& partition : pqDesc.GetPartitions()) {
@@ -646,7 +655,7 @@ class TCdcChangeSenderMain
     IActor* CreateSender(ui64 partitionId) const override {
         Y_ENSURE(PartitionToShard.contains(partitionId));
         const auto shardId = PartitionToShard.at(partitionId);
-        return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId, Stream);
+        return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId, Stream, PayloadCompression);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -756,6 +765,8 @@ private:
     const TDataShardId DataShard;
 
     TUserTable::TCdcStream Stream;
+    TString ReplicationAttributes;
+    ECdcPayloadCompression PayloadCompression = ECdcPayloadCompression::Raw;
     TPathId TopicPathId;
     ui64 TopicVersion;
     THolder<NKikimr::TKeyDesc> KeyDesc;

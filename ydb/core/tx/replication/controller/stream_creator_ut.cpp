@@ -7,6 +7,7 @@
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/json/json_reader.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -101,6 +102,95 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
     Y_UNIT_TEST(TerminalSessionAcquisitionFailureReplies) {
         SessionAcquisitionFailure(Ydb::StatusIds::UNAUTHORIZED);
+    }
+
+    Y_UNIT_TEST(AdvertisesPayloadCodecsBeforeConsumerCreation) {
+        for (const bool internal : {false, true}) {
+            TEnv env(true, ERuntimeMode::Simulated);
+            env.GetRuntime().GetAppData().FeatureFlags.SetTransferInternalDataDecompression(internal);
+            auto& runtime = env.GetRuntime();
+            env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+                .Name = "Table", .KeyColumns = {"key"},
+                .Columns = {{.Name = "key", .Type = "Uint32"}}, .ReplicationConfig = Nothing(),
+            }));
+            TActorId creator;
+            THolder<IEventHandle> consumerRequest;
+            auto blockConsumer = runtime.AddObserver<TEvYdbProxy::TEvAlterTopicRequest>([&](auto& ev) {
+                if (ev->Sender == creator) {
+                    consumerRequest.Reset(ev.Release());
+                }
+            });
+            creator = runtime.Register(CreateStreamCreator(env.GetSender(), env.GetYdbProxy(), 7, 9,
+                std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+                "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt));
+            runtime.EnableScheduleForActor(creator);
+            const auto request = runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender(), TDuration::Seconds(30));
+            UNIT_ASSERT(request);
+            runtime.Send(creator, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+            runtime.WaitFor("consumer request after persisted CDC creation", [&] { return bool(consumerRequest); }, TDuration::Seconds(30));
+            const auto description = env.GetDescription("/Root/Table/Stream");
+            TString attribute;
+            for (const auto& attr : description.GetPathDescription().GetUserAttributes()) {
+                if (attr.GetKey() == "__async_replication") {
+                    attribute = attr.GetValue();
+                }
+            }
+            NJson::TJsonValue json;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(attribute, &json), attribute);
+            UNIT_ASSERT_VALUES_EQUAL(json["path"].GetString(), "/Root/Replica");
+            UNIT_ASSERT_VALUES_EQUAL(json["id"].GetString(), "7");
+            UNIT_ASSERT(json["supports_topic_autopartitioning"].IsBoolean());
+            UNIT_ASSERT(json["supported_payload_codecs"].IsArray());
+            UNIT_ASSERT_VALUES_EQUAL(json["supported_payload_codecs"].GetArraySafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(json["supported_payload_codecs"][0].GetString(), "gzip");
+            blockConsumer.Remove();
+            runtime.Send(consumerRequest.Release());
+            const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender(), TDuration::Seconds(60));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Status.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ReusesLegacyStreamWithoutAdvertisingPayloadCodecs) {
+        TEnv env(true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table", .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}}, .ReplicationConfig = Nothing(),
+        }));
+        const TString legacy = R"({"path":"/Root/Replica","id":"7","supports_topic_autopartitioning":false})";
+        const auto created = env.Send<TEvYdbProxy::TEvAlterTableResponse>(env.GetYdbProxy(),
+            new TEvYdbProxy::TEvAlterTableRequest("/Root/Table", NYdb::NTable::TAlterTableSettings()
+                .AppendAddChangefeeds(NYdb::NTable::TChangefeedDescription("Stream",
+                    NYdb::NTable::EChangefeedMode::Updates, NYdb::NTable::EChangefeedFormat::Json)
+                    .AddAttribute("__async_replication", legacy))));
+        UNIT_ASSERT_C(created->Get()->Result.IsSuccess(), created->Get()->Result.GetIssues().ToString());
+        const auto getAttribute = [&] {
+            const auto description = env.GetDescription("/Root/Table/Stream");
+            for (const auto& attr : description.GetPathDescription().GetUserAttributes()) {
+                if (attr.GetKey() == "__async_replication") {
+                    return attr.GetValue();
+                }
+            }
+            return TString();
+        };
+        UNIT_ASSERT_VALUES_EQUAL(getAttribute(), legacy);
+        const auto registered = env.Send<TEvYdbProxy::TEvAlterTopicResponse>(env.GetYdbProxy(),
+            new TEvYdbProxy::TEvAlterTopicRequest("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()
+                .BeginAddConsumer("replicationConsumer").EndAddConsumer()));
+        UNIT_ASSERT(registered);
+        UNIT_ASSERT_C(registered->Get()->Result.IsSuccess(), registered->Get()->Result.GetIssues().ToString());
+        const auto creator = runtime.Register(CreateStreamCreator(env.GetSender(), env.GetYdbProxy(), 7, 9,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt, false, false));
+        runtime.EnableScheduleForActor(creator);
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender(), TDuration::Seconds(60));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Status.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(getAttribute(), legacy);
+        const auto consumer = env.Send<TEvYdbProxy::TEvDescribeConsumerResponse>(env.GetYdbProxy(),
+            new TEvYdbProxy::TEvDescribeConsumerRequest("/Root/Table/Stream", "replicationConsumer", {}));
+        UNIT_ASSERT_C(consumer->Get()->Result.IsSuccess(), consumer->Get()->Result.GetIssues().ToString());
     }
 
     void Basic(const std::optional<TDuration>& resolvedTimestamps = {}) {

@@ -3,6 +3,7 @@
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/transactions/locks_db.h>
 #include <ydb/core/tx/tiering/manager.h>
@@ -218,7 +219,11 @@ bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
 
 std::shared_ptr<NKikimr::ITxReader> TTablesManagerInitializer::BuildNextReaderAfterLoad() {
     if (Self->TablesManager.HasPrimaryIndex()) {
-        return Self->TablesManager.MutablePrimaryIndex().BuildLoader(std::make_shared<TBlobGroupSelector>(Self->Info()));
+        const auto sharing = Self->GetStoragesManager()->GetDefaultOperator()->GetSharedBlobs();
+        return Self->TablesManager.MutablePrimaryIndex().BuildLoader(
+            std::make_shared<TBlobGroupSelector>(Self->Info(), [sharing](const TLogoBlobID& blob) {
+                return sharing->GetForeignGroup(blob);
+            }));
     } else {
         return nullptr;
     }

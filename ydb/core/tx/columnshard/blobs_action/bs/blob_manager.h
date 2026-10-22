@@ -13,6 +13,7 @@
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 #include <ydb/core/util/backoff.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
 #include <map>
@@ -149,6 +150,8 @@ private:
     const ui32 CurrentGen;
     ui32 CurrentStep;
     std::optional<TGenStep> CollectGenStepInFlight;
+    // Groups the in-flight task sends requests to: its blobs are in no queue below until it commits.
+    THashSet<ui32> GCTaskInFlightGroups;
     // Lists of blobs that need Keep flag to be set
     TBlobsByGenStep BlobsToKeep;
     // Lists of blobs that need DoNotKeep flag to be set
@@ -189,6 +192,14 @@ public:
 
     bool IsWeightedDataChannelSelectionEnabled() const {
         return WeightedDataChannelSelection;
+    }
+
+    // Scans the pending keep/delete queues, not live portions.
+    bool HasBlobsForGroups(const THashSet<ui32>& groups) const;
+
+    // True once a barrier from this generation was broadcast to every historical group and committed.
+    bool HasCollectedBeforeCurrentGeneration() const {
+        return LastCollectedGenStep >= TGenStep(CurrentGen, 0);
     }
 
     bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const {

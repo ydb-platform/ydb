@@ -1,4 +1,5 @@
 #include "columnshard_impl.h"
+#include "columnshard_move_data.h"
 
 #include "bg_tasks/manager/manager.h"
 #include "blobs_reader/actor.h"
@@ -56,6 +57,8 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     for (auto&& i : ActorsToStop) {
         ctx.Send(i, new TEvents::TEvPoisonPill);
     }
+    // The driver holds a raw pointer to this tablet, so it must not outlive it.
+    TMoveDataDriver::Stop(*this, ctx);
 
     StoragesManager->Stop();
     DataLocksManager->Stop();

@@ -7,6 +7,8 @@
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 
+#include <iterator>
+
 namespace NKikimr::NOlap {
 
 class TGranulesStat {
@@ -148,6 +150,15 @@ public:
         return OptimizerRuntimeSettings;
     }
 
+    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests() {
+        std::vector<TCSMetadataRequest> result;
+        for (auto&& i : Tables) {
+            auto r = i.second->CollectMoveDataMetadataRequests();
+            result.insert(result.end(), std::make_move_iterator(r.begin()), std::make_move_iterator(r.end()));
+        }
+        return result;
+    }
+
     std::vector<TCSMetadataRequest> CollectMetadataRequests() {
         std::vector<TCSMetadataRequest> result;
         for (auto&& i : Tables) {
@@ -155,7 +166,7 @@ public:
             if (!r.size()) {
                 continue;
             }
-            result.insert(result.end(), r.begin(), r.end());
+            result.insert(result.end(), std::make_move_iterator(r.begin()), std::make_move_iterator(r.end()));
         }
         return result;
     }

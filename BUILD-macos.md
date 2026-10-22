@@ -36,12 +36,12 @@ The version must be `26.5`. Use a path without spaces for the flags below. The p
 Use a new checkout for this recipe. The remote is deliberately named `official`; the commands do not assume that an `origin` remote exists.
 
 ```bash
-mkdir -p "$HOME/Work"
-cd "$HOME/Work"
+mkdir -p "$HOME/ydbwork"
+cd "$HOME/ydbwork"
 git clone --origin official https://github.com/ydb-platform/ydb.git ydb
 cd ydb
 git switch -c local/macos-build 1e590daa02c797f658ce1d606429ecfe86da236f
-export YA_CACHE_DIR="$HOME/Work/.ya"
+export YA_CACHE_DIR="$HOME/ydbwork/.ya"
 ```
 
 This base is a `main` revision from October 22, 2026. Pinning it avoids applying an already-merged fix again when `main` advances. Cherry-picking requires Git's `user.name` and `user.email` to be configured for your own identity.

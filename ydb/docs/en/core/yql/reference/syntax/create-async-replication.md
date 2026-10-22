@@ -20,6 +20,9 @@ WITH (option = value [, ...])
 
     * `CONNECTION_STRING` — a [connection string](../../../concepts/connect.md#connection_string) for the source database (mandatory).
     * `CA_CERT` — a [root certificate for TLS](../../../concepts/connect.md#tls-cert). Optional parameter. Can be specified if the source database supports an encrypted data interchange protocol (`CONNECTION_STRING` starts with `grpcs://`).
+    * `INITIAL_SCAN`: whether to perform an [initial scan](../../../concepts/async-replication.md#initial-scan). An optional `Bool` parameter. If omitted, the server setting is used; the default is `TRUE`.
+        * `TRUE`: source data is transferred through changefeeds, and replica objects are created automatically.
+        * `FALSE`: replication is created in the `PAUSED` state and prepares changefeeds without an initial scan. Target tables are not created or attached to replication until it switches to `STANDBY`. First, back up the source and restore the data on the target, then start replication using [ALTER ASYNC REPLICATION](alter-async-replication.md). When replication starts, target tables must exist and match the source schemas, including indexes. For the procedure, see the [initial synchronization guide](../../../devops/async-replication-initial-sync.md).
     * Authentication details for the source database (mandatory) depending on the authentication method:
 
         * [Access token](../../../recipes/ydb-sdk/auth-access-token.md):
@@ -133,7 +136,22 @@ WITH (
 );
 ```
 
+The following statement creates replication for [initial synchronization using backup and restore](../../../devops/async-replication-initial-sync.md):
+
+```yql
+CREATE ASYNC REPLICATION my_replication_without_initial_scan
+FOR original_table AS replica_table
+WITH (
+    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    TOKEN_SECRET_PATH = 'my_secret',
+    INITIAL_SCAN = FALSE
+);
+```
+
+Replication prepares changefeeds in the `PAUSED` state. Wait until they are ready, perform the backup and restore, and then switch replication to `STANDBY` using [ALTER ASYNC REPLICATION](alter-async-replication.md).
+
 ## See also
 
+* [Initial synchronization using backup and restore](../../../devops/async-replication-initial-sync.md)
 * [ALTER ASYNC REPLICATION](alter-async-replication.md)
 * [DROP ASYNC REPLICATION](drop-async-replication.md)

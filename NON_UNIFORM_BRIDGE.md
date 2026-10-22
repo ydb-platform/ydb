@@ -17,7 +17,7 @@ The root remains bridged, and existing storage-kind templates carry the override
 
 ### Validation status
 
-Validation of the current simplification—removing `BridgeModeOverride`, returning the resolved mode, and allowing ordinary erasures beyond `mirror-3-dc`—is pending on `qa4`. The results below describe the earlier implementation and do not establish those changes.
+The simplification passed all **15 selected tests across three suites on `qa4` at `6caaeb3f87ff`**. Coverage includes all seven `BridgeMixedStorage` tests (ordinary `block-4-2` and `none` in two datacenters, the erasure-specific `mirror-3-dc` rejection, resolved-mode round-trips, activation, restart/data persistence, and shared disconnection), two legacy-conversion regressions, three mapper geometry checks, and three BSC configuration/capacity checks. The results below describe the earlier implementation separately.
 
 All **18 selected C++ checks passed on `qa4` at `87fd43406da`**:
 

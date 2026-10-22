@@ -122,12 +122,14 @@ namespace NBridgeTest {
     }
 
     inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult InvokeDistconf(TEnvironmentSetup& env,
-            const std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&)>& fill, ui32 nodeId = 1) {
+            const std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&)>& fill, ui32 nodeId = 1,
+            TInstant deadline = TInstant::Max()) {
         const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
         auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         fill(ev->Record);
         env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge, ev.release()), nodeId);
-        auto res = env.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge, false);
+        auto res = env.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge, false, deadline);
+        UNIT_ASSERT_C(res, "Timed out waiting for a bridge configuration command");
         return res->Get()->Record;
     }
 
@@ -135,10 +137,34 @@ namespace NBridgeTest {
         return InvokeDistconf(env, [](auto& record) { record.MutableConvertToBridge(); });
     }
 
-    inline NKikimrBlobStorage::TStorageConfig QueryStorageConfig(TEnvironmentSetup& env) {
-        const auto res = InvokeDistconf(env, [](auto& record) { record.MutableQueryConfig(); });
+    inline NKikimrBlobStorage::TStorageConfig QueryStorageConfig(TEnvironmentSetup& env,
+            TInstant deadline = TInstant::Max()) {
+        const auto res = InvokeDistconf(env, [](auto& record) { record.MutableQueryConfig(); }, 1, deadline);
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
         return res.GetQueryConfig().GetConfig();
+    }
+
+    inline void SwitchBridgePileState(TEnvironmentSetup& env, ui32 pileIndex,
+            NKikimrBridge::TClusterState::EPileState state) {
+        const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+        for (;;) {
+            const auto config = QueryStorageConfig(env, deadline);
+            const auto response = InvokeDistconf(env, [&](auto& record) {
+                auto *next = record.MutableSwitchBridgeClusterState()->MutableNewClusterState();
+                next->CopyFrom(config.GetClusterState());
+                next->SetPerPileState(pileIndex, state);
+                next->SetGeneration(next->GetGeneration() + 1);
+            }, 1, deadline);
+            if (response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+                return;
+            }
+            // Synchronization can advance another pile between QueryConfig and the command.
+            const auto current = QueryStorageConfig(env, deadline).GetClusterState();
+            UNIT_ASSERT_C(current.GetGeneration() > config.GetClusterState().GetGeneration()
+                && env.Runtime->GetClock() < deadline,
+                response.DebugString() << " before# " << config.GetClusterState().ShortDebugString()
+                    << " current# " << current.ShortDebugString());
+        }
     }
 
     inline std::vector<const NKikimrBlobStorage::TBaseConfig::TGroup*> GetPoolGroups(

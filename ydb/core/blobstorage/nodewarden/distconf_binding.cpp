@@ -243,7 +243,7 @@ namespace NKikimr::NStorage {
     };
 
     void TDistributedConfigKeeper::RequestConfigRefill() {
-        if (PendingConfigRefill && !BridgeInfo && !HasLocalConfig() && Binding && Binding->RootNodeId
+        if (PendingConfigRefill && !IsBridged() && !HasLocalConfig() && Binding && Binding->RootNodeId
             && !LegacyConfigRefill && !ConfigRefillActorId) {
             ConfigRefillActorId = RegisterWithSameMailbox(new TConfigRefillActor(this, *Binding));
         }
@@ -258,7 +258,7 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::DeferConfigRefill(const NKikimrBlobStorage::TStorageConfig& config) {
-        if (BridgeInfo || HasLocalConfig() || !config.GetGeneration() || !Binding || LegacyConfigRefill) {
+        if (IsBridged() || HasLocalConfig() || !config.GetGeneration() || !Binding || LegacyConfigRefill) {
             return false;
         }
         if (!PendingConfigRefill || PendingConfigRefill->GetGeneration() < config.GetGeneration()) {
@@ -548,7 +548,7 @@ namespace NKikimr::NStorage {
         record.SetInitial(true);
         record.SetSubtreeHeight(GetSubtreeHeight());
         record.SetSupportsMetadataOnlyCollect(true);
-        if (BridgeInfo && StorageConfig->GetGeneration()
+        if (IsBridged() && StorageConfig->GetGeneration()
             && ((!LocalCommittedStorageConfig
                     || LocalCommittedStorageConfig->GetGeneration() < StorageConfig->GetGeneration())
                 || (!CommittedStorageConfig && !DirectBoundNodes.empty()))) {
@@ -764,7 +764,7 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::IsProvisionalPeer(ui32 nodeId) const {
-        return !BridgeInfo && Scepter && CurrentProposition
+        return !IsBridged() && Scepter && CurrentProposition
                && std::ranges::binary_search(CurrentProposition->AddedOrChangedNodeIdentifiers,
                    nodeId, {}, &TNodeIdentifier::NodeId);
     }
@@ -1040,7 +1040,7 @@ namespace NKikimr::NStorage {
             boundNode->MutableMeta()->CopyFrom(node.Configs.back());
         }
 
-        if (Scepter && !BridgeInfo) {
+        if (Scepter && !IsBridged()) {
             const bool appliedConfigChanged = RememberAppliedConfig(meta);
             if ((prev != node.Configs.back() || (refInserted && !meta.GetGeneration()))
                 && (!meta.GetGeneration() || meta.GetGeneration() > StorageConfig->GetGeneration()
@@ -1236,7 +1236,7 @@ namespace NKikimr::NStorage {
             FanOutReversePush(CommittedStorageConfig.get());
         }
 
-        if (BridgeInfo && record.GetRequestedCommittedConfigGeneration()) {
+        if (IsBridged() && record.GetRequestedCommittedConfigGeneration()) {
             const ui64 generation = record.GetRequestedCommittedConfigGeneration();
             if (CommittedStorageConfig && generation <= CommittedStorageConfig->GetGeneration()) {
                 auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId());

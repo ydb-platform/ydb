@@ -4,6 +4,8 @@
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 
 using NBridgeTest::GetBridgedLocation;
+using NBridgeTest::QueryStorageConfig;
+using NBridgeTest::SwitchBridgePileState;
 
 Y_UNIT_TEST_SUITE(BridgeRejoin) {
     Y_UNIT_TEST(TwoDisconnectedPilesRecoverData) {
@@ -46,40 +48,6 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             }
         }
         UNIT_ASSERT_VALUES_EQUAL_C(pileGroups.size(), 3, groupResponse->Get()->Record.DebugString());
-
-        auto invoke = [&](std::unique_ptr<NStorage::TEvNodeConfigInvokeOnRoot> request, bool requireSuccess = true) {
-            runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), sender, request.release()), 1);
-            auto response = env.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(sender, false,
-                runtime->GetClock() + TDuration::Seconds(30));
-            UNIT_ASSERT_C(response, "Timed out waiting for a bridge configuration command");
-            UNIT_ASSERT_C(!requireSuccess || response->Get()->Record.GetStatus() ==
-                NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, response->Get()->Record.DebugString());
-            return response->Get()->Record;
-        };
-        auto query = [&] {
-            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-            request->Record.MutableQueryConfig();
-            return invoke(std::move(request)).GetQueryConfig().GetConfig();
-        };
-        auto change = [&](ui32 index, NKikimrBridge::TClusterState::EPileState state) {
-            const auto deadline = runtime->GetClock() + TDuration::Seconds(30);
-            for (;;) {
-                auto config = query();
-                auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-                auto *next = request->Record.MutableSwitchBridgeClusterState()->MutableNewClusterState();
-                next->CopyFrom(config.GetClusterState());
-                next->SetPerPileState(index, state);
-                next->SetGeneration(next->GetGeneration() + 1);
-                auto response = invoke(std::move(request), false);
-                if (response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
-                    break;
-                }
-                // Synchronization can advance another pile between QueryConfig and the command.
-                const auto current = query().GetClusterState();
-                UNIT_ASSERT_C(current.GetGeneration() > config.GetClusterState().GetGeneration() &&
-                    runtime->GetClock() < deadline, response.DebugString());
-            }
-        };
 
         std::vector<std::pair<TLogoBlobID, TString>> blobs;
         auto put = [&](TString data) {
@@ -125,8 +93,8 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
 
         put("before disconnect");
         put(TString(128_KB, 'a'));
-        change(1, NKikimrBridge::TClusterState::DISCONNECTED);
-        change(2, NKikimrBridge::TClusterState::DISCONNECTED);
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::DISCONNECTED);
         // The root's acknowledgement can precede propagation to the local bridge proxy.
         runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), sender,
             new TEvNodeWardenQueryStorageConfig(true)), 1);
@@ -149,11 +117,11 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             checkData(pileGroups[i].GetRawId(), 1 + 8 * i, false);
         }
 
-        change(1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
-        change(2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
         const auto deadline = runtime->GetClock() + TDuration::Minutes(5);
         for (;;) {
-            auto config = query();
+            auto config = QueryStorageConfig(env, runtime->GetClock() + TDuration::Seconds(30));
             const auto& state = config.GetClusterState();
             if (state.GetPerPileState(1) == NKikimrBridge::TClusterState::SYNCHRONIZED &&
                     state.GetPerPileState(2) == NKikimrBridge::TClusterState::SYNCHRONIZED) {

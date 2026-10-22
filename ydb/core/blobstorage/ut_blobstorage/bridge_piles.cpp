@@ -179,6 +179,20 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
         checker.Write(groupId);
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
 
+        auto waitForWorkingRoot = [&] {
+            const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+            for (;;) {
+                const auto response = InvokeDistconf(env, [](auto& record) {
+                    record.MutableQueryConfig();
+                }, 1, deadline);
+                if (response.GetStatus() == TResult::OK && response.HasScepter()) {
+                    return;
+                }
+                UNIT_ASSERT_C(env.Runtime->GetClock() < deadline, response.DebugString());
+                env.Sim(TDuration::Seconds(1));
+            }
+        };
+
         // INACTIVE pile has no part in static groups and state storage, and the nodes of active piles keep all VDisks
         auto checkInactivePile = [&] {
             const auto config = QueryStorageConfig(env);
@@ -204,6 +218,7 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
             Cerr << "*** cycle " << cycle << Endl;
 
             // the pile is added to the config of running cluster
+            waitForWorkingRoot();
             auto res = AddThirdPileToConfig(env);
             UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
             env.Sim(TDuration::Seconds(10));
@@ -254,12 +269,14 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
             checker.CheckAll();
 
             // INACTIVE pile is removed from the config along with its nodes; active piles can't be removed
+            waitForWorkingRoot();
             res = RemovePileFromConfig(env, "pile_2");
             UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
             UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "pile 'pile_2' in state SYNCHRONIZED can't be removed");
             for (ui32 nodeId = FirstThirdPileNodeId; nodeId <= LastThirdPileNodeId; ++nodeId) {
                 env.StopNode(nodeId);
             }
+            waitForWorkingRoot();
             res = RemovePileFromConfig(env, "pile_3");
             UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
             env.Sim(TDuration::Seconds(10));

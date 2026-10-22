@@ -110,7 +110,7 @@ namespace NKikimr::NStorage {
         for (const auto& [nodeId, node] : AllBoundNodes) {
             RememberAppliedConfig(node.Configs.back());
         }
-        ConfigRecoveryRequired = !BridgeInfo && (StorageConfig->GetGeneration() || KnownAppliedConfig);
+        ConfigRecoveryRequired = !IsBridged() && (StorageConfig->GetGeneration() || KnownAppliedConfig);
         ++ConfigRecoveryGeneration;
 
         // start config collection
@@ -185,8 +185,10 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::UndoCurrentPropositionNodeChange(TProposition& proposition) {
         if (!proposition.AddedOrChangedNodeIdentifiers.empty()) {
-            for (TActorId actorId : {MakeDistconfBridgeConnectionCheckerActorId(), GetNameserviceActorId()}) {
-                Send(actorId, new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo));
+            Send(GetNameserviceActorId(), new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo));
+            if (Cfg->BridgeConfig) {
+                Send(MakeDistconfBridgeConnectionCheckerActorId(), new TEvNodeWardenStorageConfig(
+                    StorageConfig, SelfManagementEnabled, BridgeInfo, CommittedStorageConfig));
             }
             for (const auto& node : proposition.AddedOrChangedNodeIdentifiers) {
                 UnsubscribeQueue.insert(node.NodeId());
@@ -236,7 +238,7 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::RememberAppliedConfig(const TStorageConfigMeta& meta) {
-        if (!Scepter || BridgeInfo || !meta.GetGeneration()) {
+        if (!Scepter || IsBridged() || !meta.GetGeneration()) {
             return false;
         }
         MaxObservedConfigGeneration = Max(MaxObservedConfigGeneration, meta.GetGeneration());
@@ -251,7 +253,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::RequestConfigRecovery(bool invalidateInFlight) {
-        if (!Scepter || BridgeInfo || (!StorageConfig->GetGeneration() && !KnownAppliedConfig)) {
+        if (!Scepter || IsBridged() || (!StorageConfig->GetGeneration() && !KnownAppliedConfig)) {
             return;
         }
         if (invalidateInFlight) {
@@ -339,7 +341,7 @@ namespace NKikimr::NStorage {
         }
 
         TStringStream err;
-        const bool recoverNonzero = !BridgeInfo
+        const bool recoverNonzero = !IsBridged()
                                     && (StorageConfig->GetGeneration()
                                         || KnownAppliedConfig
                                         || std::ranges::any_of(res->GetCommittedConfigs(), [](const auto& item) {
@@ -754,10 +756,10 @@ namespace NKikimr::NStorage {
 
     bool TDistributedConfigKeeper::IsPropositionCurrent(const TProposition& proposition) const {
         if (proposition.RecoveryProposition) {
-            return !Binding && (Scepter || bool(BridgeInfo))
+            return !Binding && (Scepter || IsBridged())
                 && proposition.ConfigRecoveryGeneration == ConfigRecoveryGeneration;
         }
-        return bool(BridgeInfo) || ((!ConfigRecoveryRequired || IsConflictingGenerationAdvance(proposition))
+        return IsBridged() || ((!ConfigRecoveryRequired || IsConflictingGenerationAdvance(proposition))
                    && proposition.ConfigRecoveryGeneration == ConfigRecoveryGeneration);
     }
 
@@ -947,7 +949,7 @@ namespace NKikimr::NStorage {
         if (task.Request.HasProposeStorageConfig()) {
             const auto& proposed = task.Request.GetProposeStorageConfig().GetConfig();
             const bool bootstrap = IsBootstrapProposition(proposed);
-            if (!BridgeInfo && std::holds_alternative<TScatterTaskOriginTargeted>(task.Origin)
+            if (!IsBridged() && std::holds_alternative<TScatterTaskOriginTargeted>(task.Origin)
                 && (!LocalCommittedStorageConfig || !LocalCommittedStorageConfig->GetGeneration())
                 && !bootstrap && !task.TargetedPropositionAdmitted) {
                 const auto containsSelf = [this](const auto& node) { return node.GetNodeId() == SelfNode.NodeId(); };
@@ -978,7 +980,7 @@ namespace NKikimr::NStorage {
                 const bool duplicate = proposed.GetGeneration() && LocalCommittedStorageConfig
                     && proposedMeta == TStorageConfigMeta(*StorageConfig)
                     && proposedMeta == TStorageConfigMeta(*LocalCommittedStorageConfig);
-                if (!bool(BridgeInfo) && !HasLocalConfig() && !task.TargetedPropositionAdmitted
+                if (!IsBridged() && !HasLocalConfig() && !task.TargetedPropositionAdmitted
                     && !IsBootstrapProposition(proposed)) {
                     auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                     SelfNode.Serialize(status->MutableNodeId());
@@ -1335,7 +1337,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *committedStorageConfig,
                                                      bool onlyOutdated) {
         const ui32 rootNodeId = GetRootNodeId();
-        if (committedStorageConfig && !BridgeInfo) {
+        if (committedStorageConfig && !IsBridged()) {
             const ui64 generation = committedStorageConfig->GetGeneration();
             const bool belowKnown = IsBelowKnownAppliedConfig(*committedStorageConfig);
             if (generation < StorageConfig->GetGeneration() || (Scepter && (ConfigRecoveryRequired || belowKnown))) {
@@ -1460,15 +1462,10 @@ namespace NKikimr::NStorage {
         std::ranges::sort(addedOrChangedNodeIdentifiers, {}, &TNodeIdentifier::NodeId);
 
         if (!addedOrChangedNodeIdentifiers.empty()) {
-            for (TActorId actorId : {MakeDistconfBridgeConnectionCheckerActorId(), GetNameserviceActorId()}) {
-                Send(actorId, new TEvNodeWardenStorageConfig(
-                    std::make_shared<NKikimrBlobStorage::TStorageConfig>(CurrentProposition->StorageConfig),
-                    SelfManagementEnabled,
-                    Cfg->BridgeConfig
-                        ? GenerateBridgeInfo(CurrentProposition->StorageConfig)
-                        : nullptr
-                ));
-            }
+            Send(GetNameserviceActorId(), new TEvNodeWardenStorageConfig(
+                std::make_shared<NKikimrBlobStorage::TStorageConfig>(CurrentProposition->StorageConfig),
+                SelfManagementEnabled,
+                Cfg->BridgeConfig ? GenerateBridgeInfo(CurrentProposition->StorageConfig) : nullptr));
         }
 
         // issue scatter task

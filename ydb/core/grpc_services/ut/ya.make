@@ -8,6 +8,7 @@ ENDIF()
 
 SRCS(
     rpc_calls_ut.cpp
+    rpc_bridge_ut.cpp
     rpc_load_rows_ut.cpp
     operation_helpers_ut.cpp
 )

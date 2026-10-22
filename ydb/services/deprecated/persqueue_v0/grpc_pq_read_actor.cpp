@@ -856,11 +856,16 @@ void TReadSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& 
         {"maskedTicket", maskedTicket},
         {"hasError", ev->Get()->Error.has_value()},
         {"error", ev->Get()->Error.has_value() ? ev->Get()->Error->Message : TString()},
-        {"user", !ev->Get()->Error.has_value() ? ev->Get()->Token->GetUserSID() : TString()});
+        {"user", (!ev->Get()->Error.has_value() && ev->Get()->Token) ? ev->Get()->Token->GetUserSID() : TString()});
 
     if (ev->Get()->Error.has_value()) {
         if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
             CloseSession(TStringBuilder() << "Ticket parsing error: " << *ev->Get()->Error, NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
+            return;
+        }
+    } else if (!ev->Get()->Token) {
+        if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+            CloseSession("Ticket parser returned an empty user token", NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
             return;
         }
     }

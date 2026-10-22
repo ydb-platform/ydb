@@ -131,6 +131,10 @@ namespace NKikimr::NHttpProxy {
                 if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
                     return ReplyWithError(ctx, ev->Get()->Error->Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->Error->Message});
                 }
+            } else if (!ev->Get()->Token) {
+                if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+                    return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED, "Access denied");
+                }
             } else {
                 userToken = *ev->Get()->Token;
             }

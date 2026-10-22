@@ -1,3 +1,4 @@
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_create_cdc_stream.h>
@@ -562,6 +563,227 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
                 {"key", "value"},
             })
         });
+    }
+
+    enum class EAcknowledgedRetentionActivation { Disabled, Enabled };
+
+    void AcknowledgedRetentionAtomicCreation(EAcknowledgedRetentionActivation activation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnableChangefeedInitialScan(true));
+        runtime.GetAppData().FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(
+            activation == EAcknowledgedRetentionActivation::Enabled);
+        runtime.GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(false);
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TVector<NKikimrPQ::TPQTabletConfig> initialConfigs;
+        auto observeConfig = runtime.AddObserver<TEvPersQueue::TEvProposeTransaction>(
+            [&](TEvPersQueue::TEvProposeTransaction::TPtr& ev) {
+                const auto& record = ev->Get()->GetRecord();
+                if (record.HasConfig()) {
+                    initialConfigs.push_back(record.GetConfig().GetTabletConfig());
+                }
+            });
+        THolder<IEventHandle> blockedScan;
+        auto blockScan = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanRequest>(
+            [&](TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev) {
+                UNIT_ASSERT_C(!initialConfigs.empty(), "Scan must follow initial topic configuration");
+                blockedScan.Reset(ev.Release());
+            });
+        NJson::TJsonValue attrs;
+        attrs["id"] = "1";
+        attrs["path"] = "/Root/replication";
+        attrs["retention_policy"] = "acknowledged";
+        attrs["retention_consumer"] = "replicationConsumer";
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "Table"
+            StreamDescription {
+                Name: "Stream"
+                Mode: ECdcStreamModeUpdate
+                Format: ECdcStreamFormatJson
+                State: ECdcStreamStateScan
+                UserAttributes { Key: "__async_replication" Value: "%s" }
+            }
+            RetentionPeriodSeconds: 86400
+        )", EscapeC(NJson::WriteJson(attrs, false)).c_str()));
+        env.TestWaitNotification(runtime, txId);
+        if (!blockedScan) {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back([&](IEventHandle&) { return bool(blockedScan); });
+            runtime.DispatchEvents(options);
+        }
+        UNIT_ASSERT(blockedScan);
+        UNIT_ASSERT(!initialConfigs.empty());
+        auto persisted = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl")
+            .GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+        initialConfigs.push_back(persisted);
+        // No AddConsumer has ever been issued. Check both first delivered config
+        // and persisted schema, while the initial scan cannot yet produce data.
+        for (const auto& config : initialConfigs) {
+            const auto& part = config.GetPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(part.GetLifetimeSeconds(), 86400);
+            if (activation == EAcknowledgedRetentionActivation::Disabled) {
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(part.GetRetentionPolicy()), static_cast<i32>(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_STANDARD));
+                UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 0);
+                continue;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(part.GetRetentionPolicy()), static_cast<i32>(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED));
+            UNIT_ASSERT_VALUES_EQUAL(part.GetRetentionConsumer(), "replicationConsumer");
+            UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 1);
+            const auto& consumer = config.GetConsumers(0);
+            UNIT_ASSERT_VALUES_EQUAL(consumer.GetName(), "replicationConsumer");
+            UNIT_ASSERT(consumer.GetImportant());
+            UNIT_ASSERT_VALUES_EQUAL(consumer.GetReadFromTimestampsMs(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(consumer.GetGeneration(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(consumer.GetVersion(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(consumer.GetAvailabilityPeriodMs(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(AcknowledgedRetentionAtomicCreationBeforeScan) {
+        AcknowledgedRetentionAtomicCreation(EAcknowledgedRetentionActivation::Enabled);
+    }
+
+    Y_UNIT_TEST(AcknowledgedRetentionDisabledCreationPreservesStandard) {
+        AcknowledgedRetentionAtomicCreation(EAcknowledgedRetentionActivation::Disabled);
+    }
+
+    Y_UNIT_TEST(AcknowledgedRetentionInternalAlterPreservesIdentity) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(true);
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        NJson::TJsonValue attrs;
+        attrs["id"] = "1";
+        attrs["path"] = "/Root/replication";
+        attrs["retention_policy"] = "acknowledged";
+        attrs["retention_consumer"] = "replication";
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "Table"
+            StreamDescription {
+                Name: "Stream"
+                Mode: ECdcStreamModeUpdate
+                Format: ECdcStreamFormatJson
+                UserAttributes { Key: "__async_replication" Value: "%s" }
+            }
+        )", EscapeC(NJson::WriteJson(attrs, false)).c_str()));
+        env.TestWaitNotification(runtime, txId);
+        const auto describe = [&] {
+            return DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl")
+                .GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+        };
+        auto stored = describe();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(stored.GetPartitionConfig().GetRetentionPolicy()), static_cast<i32>(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED));
+        auto alter = [&](NKikimrPQ::TPQTabletConfig config, NKikimrScheme::EStatus expected) {
+            config.ClearPartitionKeySchema();
+            auto* request = InternalTransaction(AlterPQGroupRequest(++txId,
+                "/MyRoot/Table/Stream", "Name: \"streamImpl\""));
+            request->Record.MutableTransaction(0)->MutableAlterPersQueueGroup()->MutablePQTabletConfig()->CopyFrom(config);
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+            TestModificationResult(runtime, txId, expected);
+            if (expected == NKikimrScheme::StatusAccepted) {
+                env.TestWaitNotification(runtime, txId);
+            }
+        };
+        auto omitted = stored;
+        omitted.MutablePartitionConfig()->ClearRetentionPolicy();
+        omitted.MutablePartitionConfig()->ClearRetentionConsumer();
+        omitted.MutablePartitionConfig()->SetLifetimeSeconds(7200);
+        alter(omitted, NKikimrScheme::StatusAccepted);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        stored = describe();
+        UNIT_ASSERT_VALUES_EQUAL(stored.GetPartitionConfig().GetRetentionConsumer(), "replication");
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(stored.GetPartitionConfig().GetRetentionPolicy()), static_cast<i32>(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED));
+        auto standard = stored;
+        standard.MutablePartitionConfig()->SetRetentionPolicy(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_STANDARD);
+        alter(standard, NKikimrScheme::StatusInvalidParameter);
+        auto renamed = stored;
+        renamed.MutablePartitionConfig()->SetRetentionConsumer("other");
+        alter(renamed, NKikimrScheme::StatusInvalidParameter);
+        auto missing = stored;
+        missing.ClearConsumers();
+        alter(missing, NKikimrScheme::StatusInvalidParameter);
+        auto recreated = stored;
+        recreated.MutableConsumers(0)->SetVersion(1);
+        alter(recreated, NKikimrScheme::StatusInvalidParameter);
+        auto generation = stored;
+        generation.MutableConsumers(0)->SetGeneration(stored.GetConsumers(0).GetGeneration() + 1);
+        alter(generation, NKikimrScheme::StatusInvalidParameter);
+    }
+
+    Y_UNIT_TEST(AcknowledgedRetentionCreationValidation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(true);
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        struct TCase {
+            TString Policy;
+            TString Consumer;
+            TString Mode;
+            TString Format;
+        };
+        const TVector<TCase> cases = {
+            {"", "replication", "ECdcStreamModeUpdate", "ECdcStreamFormatJson"},
+            {"unknown", "replication", "ECdcStreamModeUpdate", "ECdcStreamFormatJson"},
+            {"acknowledged", "", "ECdcStreamModeUpdate", "ECdcStreamFormatJson"},
+            {"acknowledged", "invalid|consumer", "ECdcStreamModeUpdate", "ECdcStreamFormatJson"},
+            {"acknowledged", "replication", "ECdcStreamModeKeysOnly", "ECdcStreamFormatJson"},
+            {"acknowledged", "replication", "ECdcStreamModeUpdate", "ECdcStreamFormatProto"},
+        };
+        TSchemeLimits limits;
+        limits.MaxTableCdcStreams = cases.size();
+        SetSchemeshardSchemaLimits(runtime, limits);
+        for (size_t i = 0; i < cases.size(); ++i) {
+            const auto& item = cases[i];
+            NJson::TJsonValue attrs;
+            attrs["id"] = "1";
+            attrs["path"] = "/Root/replication";
+            if (item.Policy) {
+                attrs["retention_policy"] = item.Policy;
+            }
+            if (item.Consumer) {
+                attrs["retention_consumer"] = item.Consumer;
+            }
+            const auto name = TStringBuilder() << "Stream" << i;
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamDescription {
+                    Name: "%s"
+                    Mode: %s
+                    Format: %s
+                    State: ECdcStreamStateReady
+                    UserAttributes { Key: "__async_replication" Value: "%s" }
+                }
+            )", name.c_str(), item.Mode.c_str(), item.Format.c_str(), EscapeC(NJson::WriteJson(attrs, false)).c_str()));
+            env.TestWaitNotification(runtime, txId);
+            const auto config = DescribePrivatePath(runtime, TStringBuilder() << "/MyRoot/Table/" << name << "/streamImpl")
+                .GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(config.GetPartitionConfig().GetRetentionPolicy()), static_cast<i32>(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_STANDARD));
+            UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 0);
+        }
     }
 
     Y_UNIT_TEST(ReplicationAttribute) {

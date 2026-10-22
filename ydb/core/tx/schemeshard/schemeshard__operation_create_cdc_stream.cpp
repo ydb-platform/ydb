@@ -6,6 +6,9 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/persqueue/public/constants.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <library/cpp/json/json_reader.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
@@ -654,6 +657,36 @@ void DoCreateLock(
     result.push_back(CreateLock(NextPartId(opId, result), outTx));
 }
 
+TString GetAcknowledgedRetentionConsumer(const NKikimrSchemeOp::TCreateCdcStream& op) {
+    const auto& stream = op.GetStreamDescription();
+    if (!AppData()->FeatureFlags.GetEnableReplicationTopicAcknowledgedRetention()
+        || stream.GetMode() != NKikimrSchemeOp::ECdcStreamModeUpdate
+        || stream.GetFormat() != NKikimrSchemeOp::ECdcStreamFormatJson)
+    {
+        return {};
+    }
+    for (const auto& attribute : stream.GetUserAttributes()) {
+        if (attribute.GetKey() != ATTR_ASYNC_REPLICATION || !attribute.HasValue()) {
+            continue;
+        }
+        NJson::TJsonValue attrs;
+        if (!NJson::ReadJsonFastTree(attribute.GetValue(), &attrs) || !attrs.IsMap()) {
+            return {};
+        }
+        const auto& policy = attrs["retention_policy"];
+        const auto& consumer = attrs["retention_consumer"];
+        if (!policy.IsString() || policy.GetString() != "acknowledged" || !consumer.IsString()) {
+            return {};
+        }
+        auto name = NPersQueue::ConvertNewConsumerName(consumer.GetString(), AppData()->PQConfig);
+        if (name.empty() || name.Contains('/') || name.Contains('|') || name == NPQ::CLIENTID_COMPACTION_CONSUMER) {
+            return {};
+        }
+        return name;
+    }
+    return {};
+}
+
 bool IsReplicationSupportTopicAutopartitioning(const NKikimrSchemeOp::TCreateCdcStream& op) {
     auto& descr = op.GetStreamDescription();
     for (auto& attribute : descr.GetUserAttributes()) {
@@ -741,6 +774,18 @@ void DoCreatePqPart(
 
     auto& partitionConfig = *pqConfig.MutablePartitionConfig();
     partitionConfig.SetLifetimeSeconds(op.GetRetentionPeriodSeconds());
+    if (auto name = GetAcknowledgedRetentionConsumer(op); !name.empty()) {
+        partitionConfig.SetRetentionPolicy(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED);
+        partitionConfig.SetRetentionConsumer(name);
+        auto* consumer = pqConfig.AddConsumers();
+        consumer->SetName(name);
+        consumer->SetImportant(true);
+        consumer->SetReadFromTimestampsMs(0);
+        consumer->SetFormatVersion(0);
+        consumer->SetServiceType(AppData()->PQConfig.GetDefaultClientServiceType().GetName());
+        consumer->SetGeneration(0);
+        consumer->SetVersion(0);
+    }
     partitionConfig.SetWriteSpeedInBytesPerSecond(1_MB); // TODO: configurable write speed
     partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
     partitionConfig.SetMaxCountInPartition(Max<i32>());

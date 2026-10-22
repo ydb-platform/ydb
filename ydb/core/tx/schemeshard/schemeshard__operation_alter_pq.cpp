@@ -9,6 +9,7 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/public/config.h>
+#include <ydb/core/persqueue/public/schema/common.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range_sequence.h>
 #include <ydb/core/persqueue/public/partition_index_generator/partition_index_generator.h>
@@ -252,6 +253,36 @@ public:
             NKikimrPQ::TPQTabletConfig alterConfig = alter.GetPQTabletConfig();
             alterConfig.ClearPartitionIds();
             alterConfig.ClearPartitions();
+
+            const auto& oldPartition = tabletConfig->GetPartitionConfig();
+            auto& newPartition = *alterConfig.MutablePartitionConfig();
+            if (oldPartition.GetRetentionPolicy() == NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED) {
+                if ((newPartition.HasRetentionPolicy() && newPartition.GetRetentionPolicy() != oldPartition.GetRetentionPolicy())
+                    || (newPartition.HasRetentionConsumer() && newPartition.GetRetentionConsumer() != oldPartition.GetRetentionConsumer()))
+                {
+                    errStr = "Acknowledged retention policy and required consumer are immutable";
+                    return nullptr;
+                }
+                newPartition.SetRetentionPolicy(oldPartition.GetRetentionPolicy());
+                newPartition.SetRetentionConsumer(oldPartition.GetRetentionConsumer());
+                const auto* oldConsumer = NPQ::GetConsumer(*tabletConfig, oldPartition.GetRetentionConsumer());
+                const auto* newConsumer = NPQ::GetConsumer(alterConfig, oldPartition.GetRetentionConsumer());
+                if (!oldConsumer || !newConsumer || newConsumer->GetVersion() != oldConsumer->GetVersion()
+                    || (newConsumer->HasGeneration() && newConsumer->GetGeneration() != oldConsumer->GetGeneration()))
+                {
+                    errStr = "Cannot recreate the required acknowledged-retention consumer";
+                    return nullptr;
+                }
+                if (auto validation = NPQ::NSchema::ValidateConsumersConfig(alterConfig, NPQ::NSchema::EOperation::Alter); !validation) {
+                    errStr = validation.GetErrorMessage();
+                    return nullptr;
+                }
+            } else if (newPartition.GetRetentionPolicy() != NKikimrPQ::TPartitionConfig::RETENTION_POLICY_STANDARD
+                || newPartition.HasRetentionConsumer())
+            {
+                errStr = "Acknowledged retention can only be enabled when creating a replication stream";
+                return nullptr;
+            }
 
             if (!CheckPersQueueConfig(alterConfig, false, &errStr)) {
                 return nullptr;

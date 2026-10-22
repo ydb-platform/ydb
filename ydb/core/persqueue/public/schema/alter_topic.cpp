@@ -291,6 +291,12 @@ TResult ApplyChangesInt(
         bool erase = false;
         for (auto consumer: request.drop_consumers()) {
             if (consumer == name || consumer == oldName) {
+                const auto& partition = pqTabletConfig->GetPartitionConfig();
+                if (partition.GetRetentionPolicy() == NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED
+                    && partition.GetRetentionConsumer() == oldName)
+                {
+                    return {Ydb::StatusIds::BAD_REQUEST, "Cannot drop the required acknowledged-retention consumer"};
+                }
                 erase = true;
                 ++dropped;
                 break;

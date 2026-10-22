@@ -145,6 +145,89 @@ Y_UNIT_TEST(AlterCdcAllowsRetentionAndWriteLimits) {
     }
 }
 
+Y_UNIT_TEST(AcknowledgedRetentionAlterPreservesIdentity) {
+    auto setup = CreateSetup("AcknowledgedAlter");
+    auto& runtime = setup->GetRuntime();
+    for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+        runtime.GetAppData(node).FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(true);
+        runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(false);
+    }
+    ExecuteDDL(*setup, "CREATE TABLE ack_table (id Uint64, PRIMARY KEY (id))");
+    auto client = setup->MakeTableClient();
+    auto session = client.CreateSession().GetValueSync().GetSession();
+    auto created = session.AlterTable("/Root/ack_table", NYdb::NTable::TAlterTableSettings()
+        .AppendAddChangefeeds(NYdb::NTable::TChangefeedDescription("feed",
+            NYdb::NTable::EChangefeedMode::Updates, NYdb::NTable::EChangefeedFormat::Json)
+            .AddAttribute("__async_replication", R"({"id":"1","path":"/Root/replica","retention_policy":"acknowledged","retention_consumer":"replication"})")))
+        .GetValueSync();
+    UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+    const TString path = "/Root/ack_table/feed";
+    const auto checkPolicy = [&] {
+        const auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(config.GetPartitionConfig().GetRetentionPolicy()), static_cast<i32>(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED));
+        UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionConfig().GetRetentionConsumer(), "replication");
+        const auto* required = NPQ::GetConsumer(config, "replication");
+        UNIT_ASSERT(required);
+        UNIT_ASSERT(required->GetImportant());
+        UNIT_ASSERT_VALUES_EQUAL(required->GetReadFromTimestampsMs(), 0);
+    };
+    checkPolicy();
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        request.set_set_partition_write_speed_bytes_per_second(9000);
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::SUCCESS);
+        checkPolicy();
+    }
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        request.add_add_consumers()->set_name("ordinary");
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::SUCCESS);
+        checkPolicy();
+    }
+    const TVector<std::function<void(Ydb::Topic::AlterTopicRequest&)>> mutations = {
+        [](auto& r) { r.add_drop_consumers("replication"); },
+        [](auto& r) { auto* c = r.add_alter_consumers(); c->set_name("replication"); c->set_set_important(false); },
+        [](auto& r) { auto* c = r.add_add_consumers(); c->set_name("other"); c->set_important(true); },
+        [](auto& r) {
+            r.add_drop_consumers("replication");
+            auto* c = r.add_add_consumers(); c->set_name("replication"); c->set_important(true);
+        },
+    };
+    for (const auto& mutate : mutations) {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        mutate(request);
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::BAD_REQUEST);
+        checkPolicy();
+    }
+    // With quota enabled, identity checks must reject recreation independently
+    // of the ordinary Important-consumer admission restriction.
+    for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+        runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
+    }
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        request.add_drop_consumers("replication");
+        auto* consumer = request.add_add_consumers();
+        consumer->set_name("replication");
+        consumer->set_important(true);
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::BAD_REQUEST);
+        checkPolicy();
+    }
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        auto* consumer = request.add_alter_consumers();
+        consumer->set_name("replication");
+        (*consumer->mutable_alter_attributes())["_version"] = "1";
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::BAD_REQUEST);
+        checkPolicy();
+    }
+}
+
 Y_UNIT_TEST(AlterMessagesPerSecond) {
     auto setup = CreateSetup("CoreAlterMsgPerSec");
     auto& runtime = setup->GetRuntime();

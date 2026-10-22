@@ -30,6 +30,7 @@
 #include "visited_list_pool.h"
 
 #include <condition_variable>
+#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -458,7 +459,8 @@ namespace similarity {
 
         virtual void LoadIndex(const string &location) override;
 
-        Hnsw(bool PrintProgress, const Space<dist_t> &space, const ObjectVector &data);
+        Hnsw(bool PrintProgress, const Space<dist_t> &space, const ObjectVector &data,
+            bool preferHugePages = false);
         void CreateIndex(const AnyParams &IndexParams) override;
 
         ~Hnsw();
@@ -471,6 +473,11 @@ namespace similarity {
         void ConfigureSearchWorkspaces(VisitedListPoolPolicy policy);
         void TrimSearchWorkspaces() const;
         VisitedListPoolStats GetSearchWorkspaceStats() const;
+
+        // Call before publishing the immutable index. The caller must budget
+        // up to data_.size() * dimension additional bytes. Other graphs and
+        // queries retain float distances; this representation is lossless.
+        bool EnableLosslessL2Bytes();
 
         void SetQueryTimeParams(const AnyParams &) override;
 
@@ -545,6 +552,7 @@ namespace similarity {
         size_t indexThreadQty_;
         const Space<dist_t> &space_;
         bool PrintProgress_;
+        const bool PreferHugePages_;
         int delaunay_type_;
         double mult_;
         int maxlevel_;
@@ -568,6 +576,27 @@ namespace similarity {
         char **linkLists_;
         size_t memoryPerObject_;
         EfficientDistFunc fstdistfunc_;
+        EfficientDistFunc byteL2DistFunc_ = nullptr;
+        std::vector<uint8_t> byteL2Data_;
+        size_t byteL2Dimension_ = 0;
+
+        void ResetLosslessL2Bytes() {
+            byteL2Data_ = std::vector<uint8_t>{};
+            byteL2DistFunc_ = nullptr;
+            byteL2Dimension_ = 0;
+        }
+
+        static bool EncodeLosslessL2Bytes(const float* values, uint8_t* bytes, size_t count) {
+            for (size_t i = 0; i < count; ++i) {
+                const float value = values[i];
+                // This also rejects NaNs and infinities before the cast.
+                if (!(value >= 0 && value <= 255) || value != static_cast<uint8_t>(value)) {
+                    return false;
+                }
+                bytes[i] = static_cast<uint8_t>(value);
+            }
+            return true;
+        }
 
         enum AlgoType { kOld, kV1Merge, kHybrid };
 

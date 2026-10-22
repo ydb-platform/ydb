@@ -312,7 +312,7 @@ public:
     // vectors of `dimension` float elements, without building anything.
     // Used to decide up front whether a build should even be attempted.
     static size_t EstimateMemoryBytes(size_t rowCount, size_t dimension, ui32 connectivity = 16,
-        size_t serializedKeyBytes = 0);
+        size_t serializedKeyBytes = 0, bool losslessL2 = false);
 
 private:
     class TGraph;

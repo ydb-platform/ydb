@@ -24,12 +24,19 @@
 */
 
 #include <atomic>
+#include <cerrno>
 #include <cmath>
 #include <iostream>
 #include <limits>
 #include <memory>
 
+#if defined(__linux__)
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
+
 #include <library/cpp/dot_product/dot_product.h>
+#include <util/system/cpu_id.h>
 
 #include "portable_prefetch.h"
 #include "portable_simd.h"
@@ -48,6 +55,7 @@
 #include <set>
 #include <sstream>
 #include <typeinfo>
+#include <type_traits>
 #include <vector>
 
 #include "sort_arr_bi.h"
@@ -70,6 +78,76 @@
 #define EXTRA_MEM_PAD_SIZE 64
 
 namespace similarity {
+
+#if defined(__x86_64__) && (defined(__clang__) || defined(__GNUC__))
+    __attribute__((target("avx2")))
+    float L2SqrBytesAvx2(const float* lhsRaw, const float* rhsRaw, size_t& qty, float*) {
+        const auto* lhs = reinterpret_cast<const uint8_t*>(lhsRaw);
+        const auto* rhs = reinterpret_cast<const uint8_t*>(rhsRaw);
+        __m256i sums[4] = {_mm256_setzero_si256(), _mm256_setzero_si256(),
+            _mm256_setzero_si256(), _mm256_setzero_si256()};
+        size_t offset = 0;
+        for (; qty - offset >= 64; offset += 64) {
+            for (size_t lane = 0; lane < 4; ++lane) {
+                const auto a = _mm256_cvtepu8_epi16(_mm_loadu_si128(
+                    reinterpret_cast<const __m128i*>(lhs + offset + lane * 16)));
+                const auto b = _mm256_cvtepu8_epi16(_mm_loadu_si128(
+                    reinterpret_cast<const __m128i*>(rhs + offset + lane * 16)));
+                const auto delta = _mm256_sub_epi16(a, b);
+                sums[lane] = _mm256_add_epi32(sums[lane], _mm256_madd_epi16(delta, delta));
+            }
+        }
+        for (; qty - offset >= 16; offset += 16) {
+            const auto a = _mm256_cvtepu8_epi16(_mm_loadu_si128(reinterpret_cast<const __m128i*>(lhs + offset)));
+            const auto b = _mm256_cvtepu8_epi16(_mm_loadu_si128(reinterpret_cast<const __m128i*>(rhs + offset)));
+            const auto delta = _mm256_sub_epi16(a, b);
+            sums[0] = _mm256_add_epi32(sums[0], _mm256_madd_epi16(delta, delta));
+        }
+        const auto sum = _mm256_add_epi32(_mm256_add_epi32(sums[0], sums[1]), _mm256_add_epi32(sums[2], sums[3]));
+        alignas(32) uint32_t lanes[8];
+        _mm256_store_si256(reinterpret_cast<__m256i*>(lanes), sum);
+        uint32_t result = 0;
+        for (const auto lane : lanes) {
+            result += lane;
+        }
+        for (; offset < qty; ++offset) {
+            const int delta = int(lhs[offset]) - int(rhs[offset]);
+            result += delta * delta;
+        }
+        // At dimension <=256 even the largest sum is below 2^24.
+        return static_cast<float>(result);
+    }
+
+    // Keep the rest of the library portable. Four independent accumulators
+    // avoid serializing every cache line on one FMA dependency chain.
+    __attribute__((target("avx2,fma")))
+    float L2SqrAvx2(const float* lhs, const float* rhs, size_t& qty, float*) {
+        __m256 sums[4] = {_mm256_setzero_ps(), _mm256_setzero_ps(),
+            _mm256_setzero_ps(), _mm256_setzero_ps()};
+        size_t offset = 0;
+        for (; qty - offset >= 32; offset += 32) {
+            for (size_t lane = 0; lane < 4; ++lane) {
+                const auto delta = _mm256_sub_ps(_mm256_loadu_ps(lhs + offset + lane * 8),
+                    _mm256_loadu_ps(rhs + offset + lane * 8));
+                sums[lane] = _mm256_fmadd_ps(delta, delta, sums[lane]);
+            }
+        }
+        for (; qty - offset >= 8; offset += 8) {
+            const auto delta = _mm256_sub_ps(_mm256_loadu_ps(lhs + offset), _mm256_loadu_ps(rhs + offset));
+            sums[0] = _mm256_fmadd_ps(delta, delta, sums[0]);
+        }
+        const auto sum = _mm256_add_ps(_mm256_add_ps(sums[0], sums[1]), _mm256_add_ps(sums[2], sums[3]));
+        alignas(32) float lanes[8];
+        _mm256_store_ps(lanes, sum);
+        float result = lanes[0] + lanes[1] + lanes[2] + lanes[3]
+            + lanes[4] + lanes[5] + lanes[6] + lanes[7];
+        for (; offset < qty; ++offset) {
+            const float delta = lhs[offset] - rhs[offset];
+            result += delta * delta;
+        }
+        return result;
+    }
+#endif
 
     float
     NegativeDotProduct(const float *pVect1, const float *pVect2, size_t &qty, float *) {
@@ -94,6 +172,12 @@ namespace similarity {
     }
 
     EfficientDistFunc getDistFunc(DistFuncType funcType) {
+#if defined(__x86_64__) && (defined(__clang__) || defined(__GNUC__))
+        if ((funcType == kL2Sqr16Ext || funcType == kL2SqrExt)
+                && NX86::HaveAVX2() && NX86::HaveFMA()) {
+            return L2SqrAvx2;
+        }
+#endif
         switch (funcType) {
             case kL2Sqr16Ext : return L2Sqr16Ext;
             case kL2SqrExt   : return L2SqrExt;
@@ -115,16 +199,91 @@ namespace similarity {
     using namespace std;
 
     template <typename dist_t>
-    Hnsw<dist_t>::Hnsw(bool PrintProgress, const Space<dist_t> &space, const ObjectVector &data)
+    Hnsw<dist_t>::Hnsw(bool PrintProgress, const Space<dist_t> &space, const ObjectVector &data,
+            bool preferHugePages)
         : Index<dist_t>(data)
         , space_(space)
         , PrintProgress_(PrintProgress)
+        , PreferHugePages_(preferHugePages)
         , visitedlistpool(nullptr)
         , enterpoint_(nullptr)
         , data_level0_memory_(nullptr)
         , linkLists_(nullptr)
         , fstdistfunc_(nullptr)
     {
+    }
+
+    namespace {
+    // Advise only complete pages within this allocation, before first touch.
+    // This is optional: unsupported platforms or unsuccessful hints keep the
+    // same allocation and ordinary pages. No query or graph bytes change.
+    void AdviseLargeRegion(void* data, size_t bytes, bool enabled) {
+#if defined(__linux__)
+        if (!enabled || !data || bytes < (size_t{2} << 20)) {
+            return;
+        }
+        const int previousErrno = errno;
+        const auto pageSize = sysconf(_SC_PAGESIZE);
+        if (pageSize <= 0) {
+            errno = previousErrno;
+            return;
+        }
+        const size_t page = static_cast<size_t>(pageSize);
+        const size_t offset = (page - reinterpret_cast<uintptr_t>(data) % page) % page;
+        if (offset < bytes) {
+            const size_t length = (bytes - offset) / page * page;
+            if (length >= (size_t{2} << 20)) {
+                (void)madvise(static_cast<char*>(data) + offset, length, MADV_HUGEPAGE);
+            }
+        }
+        errno = previousErrno;
+#else
+        (void)data;
+        (void)bytes;
+        (void)enabled;
+#endif
+    }
+    }
+
+    template <typename dist_t>
+    bool Hnsw<dist_t>::EnableLosslessL2Bytes() {
+        if constexpr (!std::is_same_v<dist_t, float>) {
+            return false;
+        }
+        if (!byteL2Data_.empty()) {
+            return true;
+        }
+        EfficientDistFunc distance = nullptr;
+#if defined(__x86_64__) && (defined(__clang__) || defined(__GNUC__))
+        if (NX86::HaveAVX2()) {
+            distance = L2SqrBytesAvx2;
+        }
+#endif
+        if (!distance || (dist_func_type_ != kL2SqrExt && dist_func_type_ != kL2Sqr16Ext)
+                || vectorlength_ <= 0 || vectorlength_ > 256 || data_rearranged_.empty()) {
+            return false;
+        }
+        const size_t dimension = vectorlength_;
+        if (data_rearranged_.size() > std::numeric_limits<size_t>::max() / dimension) {
+            return false;
+        }
+        std::vector<uint8_t> bytes;
+        const size_t byteCount = data_rearranged_.size() * dimension;
+        bytes.reserve(byteCount);
+        AdviseLargeRegion(bytes.data(), byteCount, PreferHugePages_);
+        bytes.resize(byteCount);
+        for (size_t i = 0; i < data_rearranged_.size(); ++i) {
+            const auto* object = data_rearranged_[i];
+            if (object->datalength() != dimension * sizeof(float)
+                    || !EncodeLosslessL2Bytes(reinterpret_cast<const float*>(object->data()),
+                        bytes.data() + i * dimension, dimension)) {
+                return false;
+            }
+        }
+        byteL2Dimension_ = dimension;
+        byteL2Data_.swap(bytes);
+        byteL2DistFunc_ = distance;
+        return true;
     }
 
     void
@@ -189,6 +348,7 @@ namespace similarity {
     void
     Hnsw<dist_t>::CreateIndex(const AnyParams &IndexParams)
     {
+        ResetLosslessL2Bytes();
         AnyParamManager pmgr(IndexParams);
 
         pmgr.GetParamOptional("M", M_, 16);
@@ -447,6 +607,7 @@ namespace similarity {
         offsetLevel0_ = dataSectionSize;
         offsetData_ = 0;
 
+        AdviseLargeRegion(data_level0_memory_, memoryPerObject_ * ElList_.size(), PreferHugePages_);
         memset(data_level0_memory_, 1, memoryPerObject_ * ElList_.size());
         LOG(LIB_INFO) << "Making optimized index";
         data_rearranged_.resize(ElList_.size());
@@ -837,6 +998,7 @@ namespace similarity {
 
     template <typename dist_t>
     void Hnsw<dist_t>::LoadTopology(std::istream& input, uint32_t connectivity, uint64_t maxBytes) {
+        ResetLosslessL2Bytes();
         if (!ElList_.empty() || data_level0_memory_)
             throw std::runtime_error("HNSW topology must be loaded into a new index");
         totalElementsStored_ = ReadTopologyWord(input);
@@ -1148,6 +1310,7 @@ namespace similarity {
     template <typename dist_t>
     void
     Hnsw<dist_t>::LoadIndex(const string &location) {
+        ResetLosslessL2Bytes();
         LOG(LIB_INFO) << "Loading index from " << location;
         std::ifstream input(location, 
                             std::ios::binary); /* text files can be opened in binary mode as well */
@@ -1233,6 +1396,7 @@ namespace similarity {
         // we allocate a few extra bytes to prevent prefetch from accessing out of range memory
         data_level0_memory_ = (char *)malloc(data_plus_links0_size + EXTRA_MEM_PAD_SIZE);
         CHECK(data_level0_memory_);
+        AdviseLargeRegion(data_level0_memory_, data_plus_links0_size, PreferHugePages_);
         input.read(data_level0_memory_, data_plus_links0_size);
         // we allocate a few extra bytes to prevent prefetch from accessing out of range memory
         linkLists_ = (char **)malloc( (sizeof(void *) * totalElementsStored_) + EXTRA_MEM_PAD_SIZE);

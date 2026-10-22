@@ -10816,7 +10816,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithTokenSecret, UseSchemaSecrets) {
         using namespace NReplication;
 
-        TKikimrRunner kikimr("root@builtin");
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetDisableOldSecretCreation(false);
+        TKikimrRunner kikimr(featureFlags, "root@builtin");
         if (UseSchemaSecrets) {
             kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
         }
@@ -14171,7 +14173,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto ydb = NWorkloadManager::TYdbSetupSettings()
             .CreateSampleTenants(true)
             .EnableMetadataObjectsOnServerless(false)
-            .Create();
+            .Create([](Tests::TServerSettings& settings) {
+                settings.FeatureFlags.SetDisableOldSecretCreation(false);
+            });
 
         auto checkDisabled = [](const auto& result) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());

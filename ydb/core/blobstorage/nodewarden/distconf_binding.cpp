@@ -717,8 +717,9 @@ namespace NKikimr::NStorage {
 
         // abort or restart scatter tasks issued to newly added nodes
         const TMonotonic now = TActivationContext::Monotonic();
-        for (auto it = AddedNodesScatterTasks.lower_bound({nodeId, 0}); it != AddedNodesScatterTasks.end(); ) {
-            const auto& [nodeId, cookie] = *it;
+        for (auto it = AddedNodesScatterTasks.lower_bound({nodeId, 0});
+                it != AddedNodesScatterTasks.end() && std::get<0>(*it) == nodeId; ) {
+            const ui64 cookie = std::get<1>(*it);
 
             // find matching scatter task
             const auto jt = ScatterTasks.find(cookie);
@@ -726,8 +727,9 @@ namespace NKikimr::NStorage {
             TScatterTask& task = jt->second;
 
             if (task.StartTimestamp + TDuration::Seconds(3) <= now) { // task has timed out -- abort it
+                AddedNodesScatterTasks.erase(it);
                 AbortScatterTask(cookie, nodeId);
-                it = AddedNodesScatterTasks.erase(it);
+                it = AddedNodesScatterTasks.lower_bound({nodeId, 0});
             } else { // restart scatter task for this node
                 IssueAddedNodeScatterTask(nodeId, cookie, task);
                 ++it;

@@ -115,22 +115,46 @@ message TFailRealmStates {
 // Administrative mirror-3-dc state machine (RFC 179/180).
 // Entering INV states asserts that existing blobs satisfy the invariant; BSC does not verify replicas.
 message TMirror3dcGroupState {
+    // Realm order below is A/B/C, not numeric indices: C is FailedFailRealmIdx;
+    // in SOLO modes A is SurvivingFailRealmIdx and B is the other non-failed realm.
+    // I = Included, E = Excluded, J = Joining. Layouts use interchangeable realms.
+    // WriteOk alternatives are OR-ed; WriteDurability is the background replication target.
+    // CW(prev) below means Min(previous ConfirmedWrites union current WriteOk).
+    // Invariant states assert the stated guarantee for old blobs; until then,
+    // a stronger WriteOk affects only new blobs.
     enum EMode {
+        // Realms I/I/I; WriteOk = WriteDurability = 1+1+1 OR 2+2; CW = 1+1+1 OR 2+2.
         NORMAL = 0;
+        // Realms I/I/J; WriteOk 1+1+1 OR 2+2; WriteDurability 1+1; CW = CW(prev).
         DC_FAILURE_PENDING = 1;
+        // Realms I/I/E; WriteOk = WriteDurability = 2+2; CW = CW(prev).
         DC_FAILURE = 2;
+        // Realms I/I/E; WriteOk = WriteDurability = 2+2; CW = 1+1 (invariant I).
         DC_FAILURE_INV_1 = 3;
+        // Realms I/I/E; WriteOk = WriteDurability = 2+2; CW = 2+2 (invariant II).
         DC_FAILURE_INV_2 = 4;
+        // Realms I/I/J; WriteOk 1+1+1 OR 2+2; WriteDurability 1+1+1; CW = CW(prev).
         DC_RECOVERY_PENDING = 5;
+        // Realms I/I/J; WriteOk 1+1+1 OR 2+2; WriteDurability 1+1+1; CW = CW(prev).
         DC_RECOVERY = 6;
+        // Realms I/I/J; WriteOk 1+1+1 OR 2+2; WriteDurability 1+1+1; CW = CW(prev).
         NORMAL_PENDING = 7;
+        // Realms I/E/E; WriteOk = WriteDurability = 2; CW = CW(prev), including old blobs.
         SOLO_DC_INV_1 = 8;
+        // Realms I/E/E; WriteOk = WriteDurability = 2; CW = 2 (invariant II).
         SOLO_DC_INV_2 = 9;
+        // Realms I/J/E; WriteOk = WriteDurability = 2+2; CW = CW(prev).
         SOLO_DC_RECOVERY_PENDING = 10;
+        // Realms I/J/E; WriteOk = WriteDurability = 2+2; CW = CW(prev).
         SOLO_DC_RECOVERY = 11;
+        // Realms I/J/E; WriteOk = WriteDurability = 2+2; CW = CW(prev); prepare to exclude B.
         SOLO_DC_INV_1_PENDING = 12;
+        // Realms I/E/E; WriteOk = WriteDurability = 2; CW = CW(prev); restore old blobs in A.
         SOLO_DC_INV_2_PENDING = 13;
-        DC_FAILURE_INV_2_PENDING = 14; // Write 2+2 while bringing existing blobs to invariant II.
+        // Realms I/I/E; WriteOk = WriteDurability = 2+2; CW = CW(prev).
+        DC_FAILURE_INV_2_PENDING = 14;
+        // Realms I/I/E; WriteOk = WriteDurability = 2+2; CW = CW(prev).
+        DC_FAILURE_INV_1_PENDING = 15;
     }
     optional EMode Mode = 1;
     // Excluded/returning realm for the three-to-two-DC transition.

@@ -440,11 +440,14 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT(!env.Invoke(request({T::SOLO_DC_INV_2, 0, 2})).GetSuccess());
         UNIT_ASSERT(!query().HasMirror3dcState());
         const TVector<TState> path = {
-            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE, 0, {}},
+            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE, 0, {}}, {T::DC_FAILURE_INV_1_PENDING, 0, {}},
             {T::DC_FAILURE_INV_1, 0, {}}, {T::DC_FAILURE_INV_2_PENDING, 0, {}}, {T::DC_FAILURE_INV_2, 0, {}},
             {T::SOLO_DC_INV_2_PENDING, 0, 2}, {T::SOLO_DC_INV_2, 0, 2},
-            {T::SOLO_DC_RECOVERY_PENDING, 0, 2}, {T::SOLO_DC_RECOVERY, 0, 2},
-            {T::DC_FAILURE_INV_2, 0, {}}, {T::DC_RECOVERY_PENDING, 0, {}},
+            {T::SOLO_DC_RECOVERY_PENDING, 0, 2}, {T::SOLO_DC_RECOVERY, 0, 2}, {T::DC_FAILURE_INV_1_PENDING, 0, {}}, {T::DC_FAILURE_INV_1, 0, {}},
+            {T::SOLO_DC_INV_1_PENDING, 0, 2}, {T::SOLO_DC_INV_1, 0, 2},
+            {T::SOLO_DC_INV_2_PENDING, 0, 2}, {T::SOLO_DC_INV_2, 0, 2},
+            {T::SOLO_DC_RECOVERY_PENDING, 0, 2}, {T::SOLO_DC_RECOVERY, 0, 2}, {T::DC_FAILURE_INV_1_PENDING, 0, {}}, {T::DC_FAILURE_INV_1, 0, {}},
+            {T::DC_RECOVERY_PENDING, 0, {}},
             {T::DC_RECOVERY, 0, {}}, {T::NORMAL_PENDING, 0, {}}, {},
         };
         auto combined = request(path[0]);
@@ -455,9 +458,14 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT(!query().HasMirror3dcState());
         using TConfirmed = TBlobStorageGroupInfo::TConfirmedWrites;
         const TVector<TConfirmed> expectedConfirmed = {
-            {{{1, 1, 1}, {2, 2}}}, {{{1, 1}}}, {{{1, 1}}}, {{{1, 1}}}, {{{2, 2}}},
-            {{{2, 2}}}, {{{2}}}, {{{2}}}, {{{2}}}, {{{2, 2}}},
-            {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}},
+            {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}}, {{{1, 1, 1}, {2, 2}}}, // pending, failure, INV_1_PENDING
+            {{{1, 1}}}, {{{1, 1}}}, {{{2, 2}}}, // INV_1, INV_2_PENDING, INV_2
+            {{{2}}}, {{{2}}}, // SOLO_INV_2_PENDING and SOLO_INV_2
+            {{{2}}}, {{{2}}}, {{{2}}}, {{{1, 1}}}, // recovery pending, recovery, INV_1_PENDING, INV_1
+            {{{1, 1}}}, {{{1, 1}, {2}}}, // SOLO_INV_1_PENDING and SOLO_INV_1
+            {{{1, 1}, {2}}}, {{{2}}}, // SOLO_INV_2_PENDING does not strengthen old data
+            {{{2}}}, {{{2}}}, {{{2}}}, {{{1, 1}}}, // recovery pending, recovery, INV_1_PENDING, INV_1
+            {{{1, 1}}}, {{{1, 1}}}, {{{1, 1}}}, {{{1, 1, 1}, {2, 2}}}, // return to NORMAL
         };
         UNIT_ASSERT_VALUES_EQUAL(path.size(), expectedConfirmed.size());
         size_t step = 0;
@@ -487,194 +495,44 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_VALUES_EQUAL(restored.GetWritePolicy().SerializeAsString(), group.GetWritePolicy().SerializeAsString());
             UNIT_ASSERT_VALUES_EQUAL(restored.GetConfirmedWrites().SerializeAsString(), group.GetConfirmedWrites().SerializeAsString());
             group = restored;
+            if (state.Mode == T::DC_FAILURE_INV_2) {
+                const auto sender = env.Runtime->AllocateEdgeActor(0);
+                const auto pipe = env.Runtime->ConnectToPipe(env.TabletId, sender, 0, GetPipeConfigWithRetries());
+                const ui32 nodeId = env.Runtime->GetNodeId(0);
+                const auto previousWarden = env.Runtime->RegisterService(MakeBlobStorageNodeWardenID(nodeId), sender, 0);
+                env.Runtime->SendToPipe(pipe, sender, new TEvBlobStorage::TEvControllerRegisterNode(
+                    nodeId, TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{}));
+                env.Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(sender);
+                env.Runtime->SendToPipe(pipe, sender, new TEvBlobStorage::TEvControllerGetGroup(nodeId, group.GetGroupId()));
+                const auto response = env.Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(
+                    sender, TDuration::Seconds(10));
+                UNIT_ASSERT(response);
+                bool found = false;
+                for (const auto& info : response->Get()->Record.GetServiceSet().GetGroups()) {
+                    if (info.GetGroupID() == group.GetGroupId()) {
+                        found = true;
+                        UNIT_ASSERT_VALUES_EQUAL(info.GetFailRealmStates().SerializeAsString(),
+                            group.GetFailRealmStates().SerializeAsString());
+                        UNIT_ASSERT_VALUES_EQUAL(info.GetMirror3dcState().SerializeAsString(),
+                            group.GetMirror3dcState().SerializeAsString());
+                        UNIT_ASSERT_VALUES_EQUAL(info.GetConfirmedWrites().SerializeAsString(),
+                            group.GetConfirmedWrites().SerializeAsString());
+                        UNIT_ASSERT(TBlobStorageGroupInfo::Parse(info, nullptr, nullptr));
+                        UNIT_ASSERT(info.HasWritePolicy());
+                        UNIT_ASSERT_VALUES_EQUAL(info.GetWritePolicy().SerializeAsString(),
+                            group.GetWritePolicy().SerializeAsString());
+                    }
+                }
+                UNIT_ASSERT(found);
+                env.Runtime->RegisterService(MakeBlobStorageNodeWardenID(nodeId), previousWarden, 0);
+            }
         }
-        NKikimrBlobStorage::TConfigRequest custom;
-        auto* policy = custom.AddCommand()->MutableSetGroupWritePolicy();
-        policy->SetGroupId(group.GetGroupId());
-        policy->SetGroupGeneration(group.GetGroupGeneration());
-        UNIT_ASSERT(!env.Invoke(custom).GetSuccess());
-        custom.ClearCommand();
-        auto* realms = custom.AddCommand()->MutableSetGroupFailRealmStates();
-        realms->SetGroupId(group.GetGroupId());
-        realms->SetGroupGeneration(group.GetGroupGeneration());
-        UNIT_ASSERT(!env.Invoke(custom).GetSuccess());
     }
 
-    Y_UNIT_TEST(FailRealmStatesAndWritePolicyPersistence) {
-        TEnvironmentSetup env(9, 3);
-        bool active = false;
-        env.Prepare("excluded-vdisks", [](TTestActorRuntime&) {}, active);
-        NKikimrBlobStorage::TConfigRequest request;
-        env.DefineBox(1, "test box", {{"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0}}, env.GetNodes(), request);
-        env.DefineStoragePool(1, 1, "pool", 1, NKikimrBlobStorage::ROT, {}, request, "mirror-3-dc");
-        const auto setupResponse = env.Invoke(request);
-        UNIT_ASSERT_C(setupResponse.GetSuccess(), setupResponse.GetErrorDescription());
-        auto query = [&] {
-            const auto config = FetchBaseConfig(&env);
-            UNIT_ASSERT_VALUES_EQUAL(config.GroupSize(), 1);
-            return config.GetGroup(0);
-        };
-        auto group = query();
-        auto set = [&](ui32 generation, std::initializer_list<ui32> realms, bool rollback = false,
-                NKikimrBlobStorage::TFailRealmStates::EState state = NKikimrBlobStorage::TFailRealmStates::Excluded) {
-            NKikimrBlobStorage::TConfigRequest req;
-            req.SetRollback(rollback);
-            auto *cmd = req.AddCommand()->MutableSetGroupFailRealmStates();
-            cmd->SetGroupId(group.GetGroupId());
-            cmd->SetGroupGeneration(generation);
-            for (ui32 realm : realms) {
-                auto* realmState = cmd->MutableFailRealmStates()->AddFailRealm();
-                realmState->SetFailRealmIdx(realm);
-                realmState->SetState(state);
-            }
-            return env.Invoke(req);
-        };
-        auto check = [&] {
-            UNIT_ASSERT_VALUES_EQUAL(group.GetFailRealmStates().FailRealmSize(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(group.GetFailRealmStates().GetFailRealm(0).GetFailRealmIdx(), 0);
-        };
-        UNIT_ASSERT_VALUES_EQUAL(group.GetFailRealmStates().FailRealmSize(), 0);
-        const ui32 generation = group.GetGroupGeneration();
-        UNIT_ASSERT(!set(generation, {9}).GetSuccess());
-        UNIT_ASSERT(set(generation, {0}, true).GetRollbackSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(query().GetGroupGeneration(), generation);
-        UNIT_ASSERT_VALUES_EQUAL(query().GetFailRealmStates().FailRealmSize(), 0);
-        UNIT_ASSERT(set(generation, {0, 0}).GetSuccess());
-        group = query();
-        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), generation + 1);
-        check();
-        UNIT_ASSERT(!set(generation, {2}).GetSuccess());
-        UNIT_ASSERT(set(group.GetGroupGeneration(), {0}).GetSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(query().GetGroupGeneration(), group.GetGroupGeneration());
-        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
-        group = query();
-        check();
-        auto setPolicy = [&](ui32 generation, const NKikimrBlobStorage::TGroupWritePolicy* policy,
-                bool rollback = false) {
-            NKikimrBlobStorage::TConfigRequest req;
-            req.SetRollback(rollback);
-            auto* cmd = req.AddCommand()->MutableSetGroupWritePolicy();
-            cmd->SetGroupId(group.GetGroupId());
-            cmd->SetGroupGeneration(generation);
-            if (policy) {
-                cmd->MutableWritePolicy()->CopyFrom(*policy);
-            }
-            return env.Invoke(req);
-        };
-        NKikimrBlobStorage::TGroupWritePolicy policy;
-        auto* ok = policy.AddWriteOk();
-        ok->AddPartsPerFailRealm(1);
-        ok->AddPartsPerFailRealm(2);
-        policy.AddWriteOk()->CopyFrom(*ok);
-        auto* durable = policy.AddWriteDurability();
-        for (ui32 i = 0; i < 3; ++i) {
-            durable->AddPartsPerFailRealm(2);
-        }
-        const ui32 policyGeneration = group.GetGroupGeneration();
-        NKikimrBlobStorage::TGroupWritePolicy invalid;
-        UNIT_ASSERT(!setPolicy(policyGeneration, &invalid).GetSuccess());
-        invalid = policy;
-        invalid.MutableWriteDurability(0)->SetPartsPerFailRealm(0, 4);
-        UNIT_ASSERT(!setPolicy(policyGeneration, &invalid).GetSuccess());
-        UNIT_ASSERT(setPolicy(policyGeneration, &policy, true).GetRollbackSuccess());
-        UNIT_ASSERT(!query().HasWritePolicy());
-        UNIT_ASSERT(setPolicy(policyGeneration, &policy).GetSuccess());
-        group = query();
-        UNIT_ASSERT(group.HasWritePolicy());
-        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), policyGeneration + 1);
-        UNIT_ASSERT(!setPolicy(policyGeneration, &policy).GetSuccess());
-        const TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1, true);
-        const auto normalized = TBlobStorageGroupInfo::TWritePolicy::Parse(policy, topology)->ToProto();
-        UNIT_ASSERT_VALUES_EQUAL(group.GetWritePolicy().SerializeAsString(), normalized.SerializeAsString());
-        UNIT_ASSERT(setPolicy(group.GetGroupGeneration(), &normalized).GetSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(query().GetGroupGeneration(), group.GetGroupGeneration());
-        auto changed = normalized;
-        changed.MutableWriteOk(0)->ClearPartsPerFailRealm();
-        changed.MutableWriteOk(0)->AddPartsPerFailRealm(2);
-        const ui32 beforeOk = group.GetGroupGeneration();
-        UNIT_ASSERT(setPolicy(beforeOk, &changed).GetSuccess());
-        group = query();
-        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), beforeOk + 1);
-        changed.MutableWriteDurability(0)->SetPartsPerFailRealm(0, 3);
-        const ui32 beforeDurability = group.GetGroupGeneration();
-        UNIT_ASSERT(setPolicy(beforeDurability, &changed).GetSuccess());
-        group = query();
-        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), beforeDurability + 1);
-        UNIT_ASSERT(setPolicy(group.GetGroupGeneration(), &normalized).GetSuccess());
-        group = query();
-        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
-        group = query();
-        check();
-        UNIT_ASSERT(group.HasWritePolicy());
-        UNIT_ASSERT_VALUES_EQUAL(group.GetWritePolicy().SerializeAsString(), normalized.SerializeAsString());
-        const auto sender = env.Runtime->AllocateEdgeActor(0);
-        const auto pipe = env.Runtime->ConnectToPipe(env.TabletId, sender, 0, GetPipeConfigWithRetries());
-        const ui32 nodeId = env.Runtime->GetNodeId(0);
-        const auto previousWarden = env.Runtime->RegisterService(MakeBlobStorageNodeWardenID(nodeId), sender, 0);
-        env.Runtime->SendToPipe(pipe, sender, new TEvBlobStorage::TEvControllerRegisterNode(
-            nodeId, TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{}));
-        env.Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(sender);
-        env.Runtime->SendToPipe(pipe, sender, new TEvBlobStorage::TEvControllerGetGroup(nodeId, group.GetGroupId()));
-        const auto response = env.Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(
-            sender, TDuration::Seconds(10));
-        UNIT_ASSERT(response);
-        bool found = false;
-        for (const auto& info : response->Get()->Record.GetServiceSet().GetGroups()) {
-            if (info.GetGroupID() == group.GetGroupId()) {
-                found = true;
-                UNIT_ASSERT_VALUES_EQUAL(info.GetFailRealmStates().SerializeAsString(),
-                    group.GetFailRealmStates().SerializeAsString());
-                UNIT_ASSERT(info.HasWritePolicy());
-                UNIT_ASSERT_VALUES_EQUAL(info.GetWritePolicy().SerializeAsString(),
-                    group.GetWritePolicy().SerializeAsString());
-            }
-        }
-        UNIT_ASSERT(found);
-        env.Runtime->RegisterService(MakeBlobStorageNodeWardenID(nodeId), previousWarden, 0);
-        const ui32 beforeReset = group.GetGroupGeneration();
-        UNIT_ASSERT(setPolicy(beforeReset, nullptr).GetSuccess());
-        group = query();
-        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), beforeReset + 1);
-        UNIT_ASSERT(!group.HasWritePolicy());
-        const ui32 beforeJoining = group.GetGroupGeneration();
-        UNIT_ASSERT(set(beforeJoining, {0, 0}, false,
-            NKikimrBlobStorage::TFailRealmStates::Joining).GetSuccess());
-        group = query();
-        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), beforeJoining + 1);
-        check();
-        for (const auto& disk : group.GetFailRealmStates().GetFailRealm()) {
-            UNIT_ASSERT(disk.GetState() == NKikimrBlobStorage::TFailRealmStates::Joining);
-        }
-        UNIT_ASSERT(set(group.GetGroupGeneration(), {0}, false,
-            NKikimrBlobStorage::TFailRealmStates::Joining).GetSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(query().GetGroupGeneration(), group.GetGroupGeneration());
-        UNIT_ASSERT(!set(group.GetGroupGeneration(), {3}, false,
-            NKikimrBlobStorage::TFailRealmStates::Joining).GetSuccess());
-        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
-        group = query();
-        check();
-        UNIT_ASSERT(group.GetFailRealmStates().GetFailRealm(0).GetState() ==
-            NKikimrBlobStorage::TFailRealmStates::Joining);
-        const ui32 beforeIncluded = group.GetGroupGeneration();
-        UNIT_ASSERT(set(beforeIncluded, {0}, false,
-            NKikimrBlobStorage::TFailRealmStates::Included).GetSuccess());
-        group = query();
-        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), beforeIncluded + 1);
-        UNIT_ASSERT_VALUES_EQUAL(group.GetFailRealmStates().FailRealmSize(), 0);
-        UNIT_ASSERT(set(group.GetGroupGeneration(), {0}).GetSuccess());
-        group = query();
-        const ui32 beforeClear = group.GetGroupGeneration();
-        UNIT_ASSERT(set(beforeClear, {}).GetSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(query().GetGroupGeneration(), beforeClear + 1);
-        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
-        UNIT_ASSERT_VALUES_EQUAL(query().GetFailRealmStates().FailRealmSize(), 0);
-        UNIT_ASSERT(!query().HasWritePolicy());
-    }
-
-    Y_UNIT_TEST(WritePolicyBlock42Persistence) {
+    Y_UNIT_TEST(Mirror3dcStateRejectsBlock42) {
         TEnvironmentSetup env(8, 1);
         bool active = false;
-        env.Prepare("block-write-policy", [](TTestActorRuntime&) {}, active);
+        env.Prepare("block-mirror3dc-state", [](TTestActorRuntime&) {}, active);
         NKikimrBlobStorage::TConfigRequest setup;
         env.DefineBox(1, "box", {{"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0}}, env.GetNodes(), setup);
         env.DefineStoragePool(1, 1, "pool", 1, NKikimrBlobStorage::ROT, {}, setup, "block-4-2");
@@ -686,23 +544,14 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             return config.GetGroup(0);
         };
         const auto group = query();
-        auto set = [&](ui32 count) {
-            NKikimrBlobStorage::TConfigRequest req;
-            auto* cmd = req.AddCommand()->MutableSetGroupWritePolicy();
-            cmd->SetGroupId(group.GetGroupId());
-            cmd->SetGroupGeneration(group.GetGroupGeneration());
-            cmd->MutableWritePolicy()->AddWriteOk()->AddPartsPerFailRealm(count);
-            cmd->MutableWritePolicy()->AddWriteDurability()->AddPartsPerFailRealm(6);
-            return env.Invoke(req);
-        };
-        UNIT_ASSERT(!set(3).GetSuccess());
-        UNIT_ASSERT(!set(9).GetSuccess());
-        UNIT_ASSERT(set(4).GetSuccess());
+        NKikimrBlobStorage::TConfigRequest req;
+        auto* cmd = req.AddCommand()->MutableSetMirror3DcGroupState();
+        cmd->SetGroupId(group.GetGroupId());
+        cmd->SetGroupGeneration(group.GetGroupGeneration());
+        cmd->MutableState()->SetMode(NKikimrBlobStorage::TMirror3dcGroupState::NORMAL);
+        UNIT_ASSERT(!env.Invoke(req).GetSuccess());
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
-        const auto updated = query();
-        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroupGeneration(), group.GetGroupGeneration() + 1);
-        UNIT_ASSERT(updated.HasWritePolicy());
-        UNIT_ASSERT_VALUES_EQUAL(updated.GetWritePolicy().GetWriteOk(0).GetPartsPerFailRealm(0), 4);
+        UNIT_ASSERT_VALUES_EQUAL(query().SerializeAsString(), group.SerializeAsString());
     }
 
     Y_UNIT_TEST(Basic) {

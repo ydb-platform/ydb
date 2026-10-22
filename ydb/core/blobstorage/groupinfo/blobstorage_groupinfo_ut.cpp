@@ -61,7 +61,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         TState solo1{T::SOLO_DC_INV_1, 0, 2};
         TState solo2{T::SOLO_DC_INV_2, 0, 2};
         UNIT_ASSERT(!normal.CanTransitionTo(failed));
-        UNIT_ASSERT(failed.CanTransitionTo(inv1));
+        TState preparingInv1{T::DC_FAILURE_INV_1_PENDING, 0, {}};
+        UNIT_ASSERT(!failed.CanTransitionTo(inv1));
+        UNIT_ASSERT(failed.CanTransitionTo(preparingInv1));
+        UNIT_ASSERT(preparingInv1.CanTransitionTo(inv1));
         UNIT_ASSERT(!inv1.CanTransitionTo(inv2));
         TState strengthening{T::DC_FAILURE_INV_2_PENDING, 0, {}};
         UNIT_ASSERT(inv1.CanTransitionTo(strengthening));
@@ -73,10 +76,33 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         UNIT_ASSERT(!inv2.CanTransitionTo(solo2));
         UNIT_ASSERT(!solo1.CanTransitionTo(normal));
         UNIT_ASSERT(!solo2.CanTransitionTo(inv2));
-        UNIT_ASSERT(solo1.CanTransitionTo(solo2));
+        TState preparingSolo2{T::SOLO_DC_INV_2_PENDING, 0, 2};
+        TState preparingRecovery{T::SOLO_DC_RECOVERY_PENDING, 0, 2};
+        TState soloRecovery{T::SOLO_DC_RECOVERY, 0, 2};
+        UNIT_ASSERT(!solo1.CanTransitionTo(solo2));
+        UNIT_ASSERT(solo1.CanTransitionTo(preparingSolo2));
+        UNIT_ASSERT(preparingSolo2.CanTransitionTo(solo2));
+        for (const auto& state : {solo1, preparingSolo2, solo2}) {
+            UNIT_ASSERT(state.CanTransitionTo(preparingRecovery));
+            UNIT_ASSERT(!state.CanTransitionTo(soloRecovery));
+        }
+        UNIT_ASSERT(preparingRecovery.CanTransitionTo(soloRecovery));
+        UNIT_ASSERT(!preparingRecovery.CanTransitionTo(preparingInv1));
+        UNIT_ASSERT(soloRecovery.CanTransitionTo(preparingInv1));
+        UNIT_ASSERT(!soloRecovery.CanTransitionTo(inv1));
+        UNIT_ASSERT(!soloRecovery.CanTransitionTo(inv2));
+        UNIT_ASSERT(!soloRecovery.CanTransitionTo(solo2));
+        UNIT_ASSERT(preparingSolo2.GetWritePolicy().CheckWriteOk({2}));
+        UNIT_ASSERT(preparingSolo2.GetWritePolicy().CheckWriteDurability({2}));
+        UNIT_ASSERT(!preparingSolo2.GetWritePolicy().CheckWriteOk({1}));
+        UNIT_ASSERT(preparingSolo2.GetFailRealmStates() == solo2.GetFailRealmStates());
         UNIT_ASSERT(!solo2.CanTransitionTo({T::SOLO_DC_INV_2, 0, 1}));
         UNIT_ASSERT(!inv1.CanTransitionTo({T::DC_FAILURE_INV_2, 1, {}}));
-        UNIT_ASSERT(failed.GetWritePolicy().CheckWriteOk({1, 1}));
+        UNIT_ASSERT(!failed.GetWritePolicy().CheckWriteOk({1, 1}));
+        UNIT_ASSERT(failed.GetWritePolicy().CheckWriteOk({2, 2}));
+        UNIT_ASSERT(!preparingInv1.GetWritePolicy().CheckWriteOk({1, 1}));
+        UNIT_ASSERT(preparingInv1.GetWritePolicy().CheckWriteOk({2, 2}));
+        UNIT_ASSERT(normal.GetWritePolicy().WriteOk == normal.GetWritePolicy().WriteDurability);
         UNIT_ASSERT(!inv2.GetWritePolicy().CheckWriteOk({1, 2}));
         UNIT_ASSERT(inv2.GetWritePolicy().CheckWriteOk({2, 2}));
         UNIT_ASSERT(!inv2.GetWritePolicy().CheckWriteDurability({1, 2}));
@@ -84,15 +110,18 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         UNIT_ASSERT(!solo2.GetWritePolicy().CheckWriteOk({1}));
 
         const TVector<TState> path = {
-            normal, {T::DC_FAILURE_PENDING, 0, {}}, failed, inv1,
-            {T::SOLO_DC_INV_1_PENDING, 0, 2}, solo1, solo2,
-            {T::SOLO_DC_RECOVERY_PENDING, 0, 2}, {T::SOLO_DC_RECOVERY, 0, 2}, inv2,
+            normal, {T::DC_FAILURE_PENDING, 0, {}}, failed, preparingInv1, inv1,
+            {T::SOLO_DC_INV_1_PENDING, 0, 2}, solo1, preparingSolo2, solo2,
+            preparingRecovery, soloRecovery, preparingInv1, inv1, strengthening, inv2,
             {T::DC_RECOVERY_PENDING, 0, {}}, {T::DC_RECOVERY, 0, {}}, {T::NORMAL_PENDING, 0, {}}, normal,
         };
         for (size_t i = 1; i < path.size(); ++i) {
             UNIT_ASSERT_C(path[i - 1].CanTransitionTo(path[i]), i);
         }
-        for (int mode = T::NORMAL; mode <= T::DC_FAILURE_INV_2_PENDING; ++mode) {
+        for (int mode = T::NORMAL; mode <= T::DC_FAILURE_INV_1_PENDING; ++mode) {
+            if (!T::EMode_IsValid(mode)) {
+                continue;
+            }
             TState state;
             state.Mode = static_cast<T::EMode>(mode);
             if (mode != T::NORMAL) {
@@ -169,11 +198,14 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         };
         check(T::NORMAL, {}, normal);
         check(T::DC_FAILURE_PENDING, normal, normal);
-        check(T::DC_FAILURE, normal, failure); // Weaker new writes weaken the guarantee immediately.
+        check(T::DC_FAILURE, normal, normal); // Excluding a realm does not assert a stronger old-data guarantee.
+        check(T::DC_FAILURE_INV_1_PENDING, solo, solo);
+        check(T::DC_FAILURE_INV_1, minimize({{1, 1}, {2}}), failure);
         check(T::DC_FAILURE_INV_1, failure, failure);
         check(T::DC_FAILURE_INV_2_PENDING, failure, failure);
         check(T::DC_FAILURE_INV_2, failure, inv2);
-        check(T::SOLO_DC_INV_2_PENDING, inv2, inv2);
+        check(T::SOLO_DC_INV_2_PENDING, inv2, solo);
+        check(T::SOLO_DC_INV_2_PENDING, minimize({{1, 1}, {2}}), minimize({{1, 1}, {2}}));
         check(T::SOLO_DC_INV_2, inv2, solo);
         check(T::SOLO_DC_INV_1, failure, minimize({{1, 1}, {2}}));
         check(T::SOLO_DC_RECOVERY_PENDING, solo, solo);

@@ -6,7 +6,7 @@ codecov:
   strict_yaml_branch: default
   # Wait for CI to finish, but still publish the standard comment when our
   # non-required patch-coverage job is red. Report processing is independent of
-  # notification delivery; that job reads processed totals, not commit statuses.
+  # notification delivery; that job waits for its upload, then checks its LCOV.
   require_ci_to_pass: false
   notify:
     wait_for_ci: true

@@ -876,6 +876,8 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn('--run-id "$GITHUB_RUN_ID"', check["run"])
         self.assertIn('--upload-receipt "$RUNNER_TEMP/codecov-uploads/codecov-upload-${suite}.json"',
                       check["run"])
+        self.assertIn('--coverage-report "$RUNNER_TEMP/codecov-uploads/codecov-upload-${suite}.lcov"',
+                      check["run"])
         self.assertIn('--base-sha "$PR_BASE_SHA" --head-sha "$PR_HEAD_SHA"', check["run"])
         self.assertIn('exit "$failed"', check["run"])
         self.assertNotIn("continue-on-error", check)
@@ -888,7 +890,7 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIs(saved["with"]["overwrite"], True)
         self.assertEqual(saved["with"]["if-no-files-found"], "error")
         receipts = next(step for step in patch["steps"]
-                        if step.get("name") == "Download Codecov upload receipts")
+                        if step.get("name") == "Download Codecov uploads and receipts")
         self.assertEqual(receipts["with"]["pattern"], "codecov-upload-*-${{ github.run_id }}")
         self.assertEqual(receipts["with"]["path"], "${{ runner.temp }}/codecov-uploads")
         self.assertIs(receipts["with"]["merge-multiple"], True)
@@ -965,11 +967,14 @@ class WorkflowContractTest(unittest.TestCase):
                         upload["run"].index("path.write_text"))
         self.assertEqual(receipt["if"], "inputs.pr_number != ''")
         self.assertEqual(receipt["with"]["name"], "codecov-upload-${{ inputs.suite }}-${{ github.run_id }}")
-        self.assertEqual(receipt["with"]["path"], "${{ runner.temp }}/codecov-upload-${{ inputs.suite }}.json")
+        self.assertEqual(receipt["with"]["path"].splitlines(), [
+            "${{ runner.temp }}/codecov-upload-${{ inputs.suite }}.json",
+            "${{ runner.temp }}/codecov-upload-${{ inputs.suite }}.lcov",
+        ])
         self.assertNotIn("run_attempt", receipt["with"]["name"])
         self.assertIs(receipt["with"]["overwrite"], True)
         self.assertEqual(receipt["with"]["if-no-files-found"], "error")
-        from check_patch_coverage import load_upload_receipt
+        from check_patch_coverage import load_lcov, load_upload_receipt
 
         # Execute the actual YAML shell/Python snippet, replacing only the
         # network uploader. This also checks heredoc indentation and schema.
@@ -977,6 +982,8 @@ class WorkflowContractTest(unittest.TestCase):
             for upload_result in (0, 7):
                 with self.subTest(suite=suite, upload_result=upload_result), tempfile.TemporaryDirectory() as tmp:
                     arguments = Path(tmp) / "arguments.txt"
+                    source = SUITES[suite]["lcov_prefixes"][0] + "example.cpp"
+                    (Path(tmp) / "coverage.lcov").write_text(f"TN:\nSF:{Path.cwd()}/{source}\nDA:1,1\nLF:1\nend_of_record\n")
                     env = {**os.environ, "SUITE": suite, "FLAG": suite,
                            "CODECOV_TOKEN": "test-token", "COMMIT_SHA": "a" * 40,
                            "BRANCH": "test-branch", "PR_NUMBER": "123",
@@ -993,9 +1000,12 @@ class WorkflowContractTest(unittest.TestCase):
                     if upload_result:
                         self.assertFalse(receipt_path.exists())
                     else:
-                        name = load_upload_receipt(receipt_path, "a" * 40, suite, 456)
+                        pin = load_upload_receipt(receipt_path, "a" * 40, suite, 456)
                         uploaded = arguments.read_text().splitlines()
-                        self.assertEqual(uploaded[uploaded.index("--name") + 1], name)
+                        self.assertEqual(uploaded[uploaded.index("--name") + 1], pin.name)
+                        report_path = Path(tmp) / f"codecov-upload-{suite}.lcov"
+                        self.assertEqual(uploaded[uploaded.index("--file") + 1], str(report_path))
+                        self.assertEqual(set(load_lcov(report_path, pin, suite)), {source})
 
     def test_landing_revalidates_pr_head_before_s3_upload(self) -> None:
         workflow = (

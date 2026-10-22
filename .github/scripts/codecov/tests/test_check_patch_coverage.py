@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import io
 import json
 import subprocess
@@ -23,6 +24,28 @@ HEAD = "b" * 40
 CLI = "ydb/public/lib/ydb_cli/main.cpp"
 SDK = "ydb/public/sdk/cpp/main.cpp"
 UPLOAD = "cli-123-1"
+ROOT = "/runner/ydb"
+
+
+def lcov(kinds, path=CLI):
+    rows = ["TN:", f"SF:{ROOT}/{path}"]
+    for line, kind in enumerate(kinds, 1):
+        rows.append(f"DA:{line},{int(kind != 'M')}")
+        if kind == "P":
+            rows += [f"BRDA:{line},0,0,1", f"BRDA:{line},0,1,0"]
+    return "\n".join([*rows, f"LF:{len(kinds)}", "end_of_record", ""])
+
+
+def save_upload(directory, kinds, attempt=1, path=CLI):
+    coverage = directory / f"upload-{attempt}.lcov"
+    coverage.write_text(lcov(kinds, path), encoding="utf-8")
+    receipt = directory / f"receipt-{attempt}.json"
+    receipt.write_text(json.dumps({
+        "version": 2, "head_sha": HEAD, "flag": "cli", "run_id": "123",
+        "run_attempt": str(attempt), "upload_name": f"cli-123-{attempt}",
+        "source_root": ROOT, "report_sha256": hashlib.sha256(coverage.read_bytes()).hexdigest(),
+    }))
+    return receipt, coverage
 
 
 def upload(name=UPLOAD, state="MERGED", flags=None, errors=0):
@@ -262,20 +285,21 @@ class UploadReceiptTest(unittest.TestCase):
 
     def read(self, **overrides):
         data = {
-            "version": 1, "head_sha": HEAD, "flag": "cli", "run_id": "123",
+            "version": 2, "head_sha": HEAD, "flag": "cli", "run_id": "123",
+            "source_root": ROOT, "report_sha256": "c" * 64,
             "run_attempt": "1", "upload_name": UPLOAD, **overrides,
         }
         self.path.write_text(json.dumps(data), encoding="utf-8")
         return gate.load_upload_receipt(self.path, HEAD, "cli", 123)
 
     def test_receipt_binds_the_exact_successful_suite_attempt(self):
-        self.assertEqual(self.read(), UPLOAD)
-        self.assertEqual(self.read(run_attempt="2", upload_name="cli-123-2"), "cli-123-2")
+        self.assertEqual(self.read().name, UPLOAD)
+        self.assertEqual(self.read(run_attempt="2", upload_name="cli-123-2").name, "cli-123-2")
 
     def test_older_successful_receipt_is_valid_when_only_other_jobs_rerun(self):
         # No comparison with GITHUB_RUN_ATTEMPT: successful coverage jobs need
         # not run again when GitHub reruns a failed patch checker or other suite.
-        self.assertEqual(self.read(run_attempt="1"), UPLOAD)
+        self.assertEqual(self.read(run_attempt="1").name, UPLOAD)
 
     def test_stale_head_wrong_flag_and_other_run_are_rejected(self):
         for override in ({"head_sha": BASE}, {"flag": "cpp_sdk"}, {"run_id": "124"}, {"run_id": 123}):
@@ -283,7 +307,12 @@ class UploadReceiptTest(unittest.TestCase):
                 self.read(**override)
 
     def test_invalid_attempt_name_and_version_are_rejected(self):
-        for override in ({"run_attempt": "0"}, {"run_attempt": 1}, {"run_attempt": "2-extra"}, {"upload_name": "cli-123-2"}, {"version": True}, {"version": 2}):
+        for override in ({"run_attempt": "0"}, {"run_attempt": 1}, {"run_attempt": "2-extra"}, {"upload_name": "cli-123-2"}, {"version": True}, {"version": 1}):
+            with self.subTest(override=override), self.assertRaises(gate.CoverageError):
+                self.read(**override)
+
+    def test_invalid_root_and_digest_are_rejected(self):
+        for override in ({"source_root": "relative"}, {"source_root": "/"}, {"source_root": "/a/../b"}, {"source_root": "/a/"}, {"report_sha256": "c" * 63}, {"report_sha256": None}):
             with self.subTest(override=override), self.assertRaises(gate.CoverageError):
                 self.read(**override)
 
@@ -295,6 +324,61 @@ class UploadReceiptTest(unittest.TestCase):
             gate.load_upload_receipt(self.path, HEAD, "cli", 123)
         with mock.patch.object(gate, "MAX_RECEIPT_BYTES", 10), self.assertRaises(gate.CoverageError):
             self.read()
+
+
+class LcovTest(unittest.TestCase):
+    def read(self, text):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "coverage.lcov"
+            path.write_text(text, encoding="utf-8")
+            receipt = gate.UploadReceipt(UPLOAD, ROOT, hashlib.sha256(path.read_bytes()).hexdigest())
+            return gate.load_lcov(path, receipt, "cli")
+
+    def test_branch_lines_keep_codecov_partial_semantics_not_just_da_hits(self):
+        text = lcov("HHH").replace("LF:3", "BRDA:1,0,0,0\nBRDA:1,0,1,-\nBRDA:2,0,0,1\nBRDA:2,0,1,0\nBRDA:3,0,0,1\nBRDA:3,0,1,2\nLF:3")
+        self.assertEqual(self.read(text)[CLI], report("MPH"))
+
+    def test_mangled_cpp_function_start_keeps_da_as_in_codecov_parser(self):
+        for extension, expected in (("cpp", "HHP"), ("h", "PPP")):
+            path = CLI.replace(".cpp", f".{extension}")
+            text = lcov("PPP", path).replace("LF:3", "FN:1,_Zfoo\nFN:2,_Gbar\nFN:3,ordinary_function\nLF:3")
+            self.assertEqual(self.read(text)[path], report(expected))
+
+    def test_branch_only_line_is_measured(self):
+        text = lcov("H").replace("LF:1", "BRDA:2,0,0,0\nLF:1")
+        self.assertEqual(self.read(text)[CLI], report("HM"))
+
+    def test_relative_and_absolute_source_paths(self):
+        for text in (lcov("H"), lcov("H").replace(ROOT + "/", "")):
+            self.assertEqual(self.read(text), {CLI: report("H")})
+
+    def test_llvm_summary_does_not_replace_actual_line_records(self):
+        # Real LLVM exports have LF != count(DA), e.g. 148 versus 104 for
+        # ydb_root.cpp. Codecov's parser classifies DA/BRDA and ignores LF.
+        self.assertEqual(self.read(lcov("HMP").replace("LF:3", "LF:148"))[CLI], report("HMP"))
+
+    def test_wrong_component_unknown_root_and_traversal_are_errors(self):
+        for path in (SDK, f"../{CLI}", f"/different/{CLI}", CLI.replace("main", "../main")):
+            with self.subTest(path=path), self.assertRaises(gate.CoverageError):
+                self.read(lcov("H").replace(f"{ROOT}/{CLI}", path))
+
+    def test_incomplete_duplicate_and_malformed_reports_fail_closed(self):
+        cases = ["", lcov(""), lcov("H").replace("end_of_record", ""), lcov("H").replace("LF:1\n", ""), lcov("H") * 2]
+        for replacement in ("DA:1,1\nDA:1,0", "DA:0,1", "DA:1,-1", "DA:1,nan", "BRDA:1,0,0,1\nBRDA:1,0,0,0", "FN:bad", "UNKNOWN:1", "DA:1,1\nLF:1"):
+            cases.append(lcov("H").replace("DA:1,1", replacement))
+        for text in cases:
+            with self.subTest(text=text), self.assertRaises(gate.CoverageError):
+                self.read(text)
+
+    def test_wrong_digest_and_oversized_report_are_errors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            receipt, coverage = save_upload(Path(directory), "H")
+            pin = gate.load_upload_receipt(receipt, HEAD, "cli", 123)
+            with mock.patch.object(gate, "MAX_LCOV_BYTES", 10), self.assertRaises(gate.CoverageError):
+                gate.load_lcov(coverage, pin, "cli")
+            coverage.write_text(lcov("M"))
+            with self.assertRaisesRegex(gate.CoverageError, "digest"):
+                gate.load_lcov(coverage, pin, "cli")
 
 
 class ApiTest(unittest.TestCase):
@@ -338,26 +422,6 @@ class ApiTest(unittest.TestCase):
         with mock.patch.object(gate.time, "sleep"), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(client.wait(mock.Mock(side_effect=[gate.NotReady("processing"), 42])), 42)
 
-    def test_file_batch_binds_exact_head_and_flag_and_quotes_paths(self):
-        client = gate.Client("ydb-platform/ydb", HEAD)
-        path = 'ydb/public/lib/ydb_cli/a "имя"\n.cpp'
-        client.query = mock.Mock(return_value={"commitid": HEAD, "coverageAnalytics": {"f0": report("H")}})
-        self.assertEqual(client.files([path], "cli"), {path: report("H")})
-        query, variables = client.query.call_args.args
-        self.assertIn(json.dumps(path), query)
-        self.assertEqual(variables, {"flag": "cli"})
-
-    def test_missing_file_response_is_not_noncoverable_file(self):
-        client = gate.Client("ydb-platform/ydb", HEAD)
-        client.query = mock.Mock(return_value={"commitid": HEAD, "coverageAnalytics": {}})
-        with self.assertRaises(gate.CoverageError):
-            client.files([CLI], "cli")
-
-    def test_oversized_api_batch_is_rejected_locally(self):
-        with self.assertRaises(gate.CoverageError):
-            gate.Client("ydb-platform/ydb", HEAD).files([CLI] * 11, "cli")
-
-
 class CliTest(unittest.TestCase):
     def test_invalid_percentages_and_shas_are_rejected(self):
         for value in ("nan", "Infinity", "-1", "101", "not a number"):
@@ -369,21 +433,46 @@ class CliTest(unittest.TestCase):
     def test_gate_exit_codes_and_absent_files_summary(self):
         with tempfile.TemporaryDirectory() as directory:
             manifest = Path(directory) / "patch.json"
-            receipt = Path(directory) / "receipt.json"
             summary = Path(directory) / "summary.md"
             manifest.write_text(json.dumps({"version": 1, "base_sha": BASE, "head_sha": HEAD, "files": {CLI: [[1, 10]]}}))
-            receipt.write_text(json.dumps({"version": 1, "head_sha": HEAD, "flag": "cli", "run_id": "123", "run_attempt": "1", "upload_name": UPLOAD}))
-            args = ["check", "--repository", "ydb-platform/ydb", "--base-sha", BASE, "--head-sha", HEAD, "--flag", "cli", "--run-id", "123", "--upload-receipt", str(receipt), "--changed-lines-file", str(manifest)]
             for kinds, expected in (("HHHHHHHHMP", 0), ("HHHHHHHMPP", 1)):
-                with mock.patch.object(gate.Client, "upload_ready", return_value=UPLOAD), mock.patch.object(gate.Client, "files", return_value={CLI: report(kinds)}), mock.patch.dict(gate.os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}), contextlib.redirect_stdout(io.StringIO()):
+                receipt, coverage = save_upload(Path(directory), kinds)
+                args = ["check", "--repository", "ydb-platform/ydb", "--base-sha", BASE, "--head-sha", HEAD, "--flag", "cli", "--run-id", "123", "--upload-receipt", str(receipt), "--coverage-report", str(coverage), "--changed-lines-file", str(manifest)]
+                with mock.patch.object(gate.Client, "upload_ready", return_value=UPLOAD), mock.patch.dict(gate.os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}), contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(gate.main(args), expected)
-            with mock.patch.object(gate.Client, "upload_ready", return_value=UPLOAD), mock.patch.object(gate.Client, "files", return_value={CLI: {"totals": None, "coverage": []}}), mock.patch.dict(gate.os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}), contextlib.redirect_stdout(io.StringIO()):
+            save_upload(Path(directory), "H", path=CLI.replace("main", "other"))
+            with mock.patch.object(gate.Client, "upload_ready", return_value=UPLOAD), mock.patch.dict(gate.os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(gate.main(args), 0)
             self.assertIn("not applicable", summary.read_text())
             self.assertIn("not assumed covered", summary.read_text())
             with mock.patch.object(gate.Client, "upload_ready", side_effect=gate.CoverageError("missing report")), mock.patch.dict(gate.os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}), contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(gate.main(args), 2)
             self.assertIn("Measurement error: missing report", summary.read_text())
+
+    def test_two_uploads_same_head_and_flag_cannot_mask_current_misses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = root / "patch.json"
+            manifest.write_text(json.dumps({"version": 1, "base_sha": BASE, "head_sha": HEAD, "files": {CLI: [[1, 10]]}}))
+            older = save_upload(root, "H" * 10, attempt=1)
+            current = save_upload(root, "M" * 10, attempt=2)
+            # The processed commit/flag report would merge these into 100%.
+            # Expose both MERGED uploads, but no coverageFile query is allowed.
+            def query(_client, text, extra=None):
+                self.assertEqual(text, gate.UPLOAD_QUERY)
+                return commit(uploads=[upload(), upload(name="cli-123-2")])
+
+            for (receipt, coverage), expected, fraction in ((older, 0, "10/10"), (current, 1, "0/10")):
+                args = ["check", "--repository", "ydb-platform/ydb", "--base-sha", BASE, "--head-sha", HEAD, "--flag", "cli", "--run-id", "123", "--upload-receipt", str(receipt), "--coverage-report", str(coverage), "--changed-lines-file", str(manifest)]
+                output = io.StringIO()
+                with mock.patch.object(gate.Client, "query", new=query), contextlib.redirect_stdout(output):
+                    self.assertEqual(gate.main(args), expected)
+                self.assertIn(fraction, output.getvalue())
+            # A receipt from the new attempt cannot be paired with the old LCOV.
+            args[args.index("--coverage-report") + 1] = str(older[1])
+            with mock.patch.object(gate.Client, "query") as api, contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(gate.main(args), 2)
+                api.assert_not_called()
 
 
 if __name__ == "__main__":

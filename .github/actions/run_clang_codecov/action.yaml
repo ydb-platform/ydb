@@ -276,6 +276,10 @@ runs:
           exit 1
         fi
         export PATH="${HOME}/.local/bin:${PATH}"
+        # Upload the preserved copy itself, so the patch job cannot read a
+        # different report or merged data from earlier runs at the same SHA.
+        report_copy="${RUNNER_TEMP}/codecov-upload-${SUITE}.lcov"
+        cp "${OUT}/coverage.lcov" "$report_copy"
         upload_args=(
           --fail-on-error
           --git-service github
@@ -284,7 +288,7 @@ runs:
           --branch "${BRANCH}"
           --disable-search
           --plugin noop
-          --file "${OUT}/coverage.lcov"
+          --file "$report_copy"
           --flag "${FLAG}"
           --name "${SUITE}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
         )
@@ -296,6 +300,7 @@ runs:
         # Pin the exact successful upload for the patch job. A failed-jobs-only
         # rerun can legitimately reuse a successful component's older receipt.
         python3 - <<'PY'
+        import hashlib
         import json
         import os
         from pathlib import Path
@@ -303,13 +308,16 @@ runs:
         suite = os.environ["SUITE"]
         run_id = os.environ["GITHUB_RUN_ID"]
         run_attempt = os.environ["GITHUB_RUN_ATTEMPT"]
+        report = Path(os.environ["RUNNER_TEMP"]) / f"codecov-upload-{suite}.lcov"
         receipt = {
-            "version": 1,
+            "version": 2,
             "head_sha": os.environ["COMMIT_SHA"],
             "flag": os.environ["FLAG"],
             "run_id": run_id,
             "run_attempt": run_attempt,
             "upload_name": f"{suite}-{run_id}-{run_attempt}",
+            "source_root": str(Path.cwd()),
+            "report_sha256": hashlib.sha256(report.read_bytes()).hexdigest(),
         }
         path = Path(os.environ["RUNNER_TEMP"]) / f"codecov-upload-{suite}.json"
         path.write_text(json.dumps(receipt) + "\n", encoding="utf-8")
@@ -320,7 +328,9 @@ runs:
       uses: actions/upload-artifact@v4
       with:
         name: codecov-upload-${{ inputs.suite }}-${{ github.run_id }}
-        path: ${{ runner.temp }}/codecov-upload-${{ inputs.suite }}.json
+        path: |
+          ${{ runner.temp }}/codecov-upload-${{ inputs.suite }}.json
+          ${{ runner.temp }}/codecov-upload-${{ inputs.suite }}.lcov
         retention-days: 7
         if-no-files-found: error
         overwrite: true

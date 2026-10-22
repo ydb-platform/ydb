@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Check the original PR patch using Codecov's canonical HEAD line classifications.
+"""Check the original PR patch against the exact LCOV sent by its suite job.
 
 Do not use Codecov's cached per-flag comparison totals here: those can use a
 different base from the PR patch (including after Codecov adjusts its project
-baseline). Fetching H/M/P annotations for the pinned HEAD keeps Codecov's
-definition of partial coverage without trusting that adjusted comparison.
+baseline). Commit/flag annotations also merge earlier uploads at the same SHA.
+Use the receipt-bound LCOV instead, retaining Codecov's LCOV branch/partial
+semantics without combining uploads or trusting an adjusted comparison.
 
 ``collect`` runs in the trusted detect job, where the complete Git history is
 already available. ``check`` runs after upload, without checking out PR code.
@@ -14,6 +15,7 @@ No Codecov notification/status or CI completion is needed to read this API.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -33,9 +35,9 @@ API_URL = "https://api.codecov.io/graphql/gh"
 MAX_FILES = 1000
 MAX_MANIFEST_BYTES = 8 * 1024 * 1024
 MAX_RECEIPT_BYTES = 4096
+MAX_LCOV_BYTES = 64 * 1024 * 1024
 MAX_RESPONSE_BYTES = 32 * 1024 * 1024
 MAX_UPLOAD_PAGES = 20
-FILE_BATCH_SIZE = 10
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 EXCLUDE_RE = re.compile(COVERAGE_EXCLUDE_REGEXP)
@@ -181,14 +183,21 @@ def load_changed_lines(path: Path, base: str, head: str, flag: str) -> dict[str,
     return result
 
 
-def load_upload_receipt(path: Path, head: str, flag: str, run_id: int) -> str:
+@dataclass(frozen=True)
+class UploadReceipt:
+    name: str
+    source_root: str
+    report_sha256: str
+
+
+def load_upload_receipt(path: Path, head: str, flag: str, run_id: int) -> UploadReceipt:
     """Bind polling to the exact upload produced by the successful suite job.
 
     Looking for the newest upload visible in Codecov is insufficient: during
     eventual consistency an older merged upload can be visible while the new
     attempt has not appeared yet. A trusted CI artifact records the expected
-    identity. Successful suites can retain their previous-attempt receipt when
-    GitHub reruns only failed jobs.
+    identity and digest of the preserved LCOV. Successful suites can retain
+    their previous-attempt artifact when GitHub reruns only failed jobs.
     """
     try:
         with path.open("rb") as source:
@@ -198,7 +207,7 @@ def load_upload_receipt(path: Path, head: str, flag: str, run_id: int) -> str:
         receipt = json.loads(raw)
     except (OSError, ValueError) as exc:
         raise CoverageError("could not read the trusted upload receipt") from exc
-    if not isinstance(receipt, dict) or type(receipt.get("version")) is not int or receipt["version"] != 1:
+    if not isinstance(receipt, dict) or type(receipt.get("version")) is not int or receipt["version"] != 2:
         raise CoverageError("unsupported upload receipt")
     if receipt.get("head_sha") != head or receipt.get("flag") != flag or receipt.get("run_id") != str(run_id):
         raise CoverageError("upload receipt does not match the pinned HEAD, flag and workflow run")
@@ -208,7 +217,118 @@ def load_upload_receipt(path: Path, head: str, flag: str, run_id: int) -> str:
     expected = f"{flag}-{run_id}-{attempt}"
     if receipt.get("upload_name") != expected:
         raise CoverageError("upload receipt contains an inconsistent upload name")
-    return expected
+    root, digest = receipt.get("source_root"), receipt.get("report_sha256")
+    if (
+        not isinstance(root, str) or not root.startswith("/") or root.endswith("/")
+        or any(part in ("", ".", "..") for part in root.split("/")[1:])
+        or not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
+    ):
+        raise CoverageError("upload receipt has an invalid source root or report digest")
+    return UploadReceipt(expected, root, digest)
+
+
+def load_lcov(path: Path, receipt: UploadReceipt, flag: str) -> dict:
+    """Read our LLVM LCOV dialect; malformed/duplicate records fail closed.
+
+    Match Codecov's services/report/languages/lcov.py: BRDA replaces DA on a
+    branch line; zero/some/all taken branches mean M/P/H. Mangled function
+    starts in .cpp files keep DA instead of branch data, as in that parser.
+    No session, attempt or other file is ever merged into this report.
+    """
+    try:
+        with path.open("rb") as source:
+            raw = source.read(MAX_LCOV_BYTES + 1)
+        if len(raw) > MAX_LCOV_BYTES:
+            raise CoverageError("LCOV report exceeds the safety limit")
+        if hashlib.sha256(raw).hexdigest() != receipt.report_sha256:
+            raise CoverageError("LCOV report does not match the upload receipt digest")
+        text = raw.decode("utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise CoverageError("could not read the exact uploaded LCOV report") from exc
+
+    def number(value: str) -> int:
+        if not re.fullmatch(r"[0-9]+", value):
+            raise CoverageError("invalid LLVM LCOV integer")
+        return int(value)
+
+    def line_number(value: str) -> int:
+        result = number(value)
+        if not 0 < result <= 2**31 - 1:
+            raise CoverageError("invalid LLVM LCOV line number")
+        return result
+
+    reports = {}
+    name = None
+    lines, branches, skipped = {}, {}, set()
+    found = None
+    for row in text.splitlines():
+        if row == "end_of_record":
+            if name is None or found is None:
+                raise CoverageError("incomplete LLVM LCOV record")
+            kinds = {line: "H" if hits else "M" for line, hits in lines.items()}
+            for line, outcomes in branches.items():
+                if line not in skipped:
+                    hits = sum(outcomes.values())
+                    kinds[line] = "M" if hits == 0 else "H" if hits == len(outcomes) else "P"
+            reports[name] = {
+                "totals": {"lineCount": len(kinds)},
+                "coverage": [{"line": line, "coverage": kind} for line, kind in sorted(kinds.items())],
+            }
+            name = None
+            lines, branches, skipped = {}, {}, set()
+            found = None
+            continue
+        if not row or row.startswith("TN:"):
+            continue
+        tag, separator, value = row.partition(":")
+        if not separator:
+            raise CoverageError("malformed LLVM LCOV row")
+        if tag == "SF":
+            prefix = receipt.source_root + "/"
+            relative = value[len(prefix):] if value.startswith(prefix) else value
+            if name is not None or not owned_path(relative, flag) or relative in reports:
+                raise CoverageError("unexpected or duplicate source in LLVM LCOV")
+            name = relative
+            continue
+        if name is None:
+            raise CoverageError("LLVM LCOV data outside a source record")
+        if tag == "DA":
+            values = value.split(",")
+            if len(values) not in (2, 3):
+                raise CoverageError("malformed LLVM LCOV DA row")
+            line, hits = line_number(values[0]), number(values[1])
+            if line in lines:
+                raise CoverageError("duplicate LLVM LCOV DA line")
+            lines[line] = hits
+        elif tag == "BRDA":
+            values = value.split(",")
+            if len(values) != 4:
+                raise CoverageError("malformed LLVM LCOV BRDA row")
+            line = line_number(values[0])
+            key = (number(values[1]), number(values[2]))
+            hits = 0 if values[3] == "-" else number(values[3])
+            outcomes = branches.setdefault(line, {})
+            if key in outcomes:
+                raise CoverageError("duplicate LLVM LCOV branch")
+            outcomes[key] = hits > 0
+        elif tag == "FN":
+            start, comma, function = value.partition(",")
+            if not comma or not function:
+                raise CoverageError("malformed LLVM LCOV FN row")
+            line = line_number(start)
+            if name.endswith(".cpp") and function.startswith(("_Z", "_G")):
+                skipped.add(line)
+        elif tag == "LF":
+            if found is not None:
+                raise CoverageError("duplicate LLVM LCOV LF total")
+            # LLVM's summary can count template instantiations differently
+            # from its DA rows. Codecov also ignores LF when classifying lines.
+            found = number(value)
+        elif tag not in ("FNDA", "FNF", "FNH", "LH", "BRF", "BRH"):
+            raise CoverageError("unsupported LLVM LCOV row")
+    if name is not None or not reports or not any(r["coverage"] for r in reports.values()):
+        raise CoverageError("empty or truncated LLVM LCOV report")
+    return reports
 
 
 def request(query: str, variables: dict, timeout: float) -> dict:
@@ -357,26 +477,6 @@ class Client:
                 raise NotReady(f"upload {name} is {upload.get('state')}, not merged")
         return name
 
-    def files(self, paths: list[str], flag: str) -> dict:
-        # The public API rejects an eleventh coverageFile alias in one query.
-        if not 1 <= len(paths) <= FILE_BATCH_SIZE:
-            raise CoverageError("invalid Codecov file batch size")
-        fields = "\n".join(
-            f"f{index}: coverageFile(path: {json.dumps(path)}, flags: [$flag]) "
-            "{ totals { lineCount } coverage { line coverage } }"
-            for index, path in enumerate(paths)
-        )
-        query = """
-query PatchFiles($owner: String!, $repo: String!, $head: String!, $flag: String!) {
- owner(username: $owner) { repository(name: $repo) { __typename ... on Repository {
-  commit(id: $head) { commitid coverageAnalytics {
-""" + fields + "\n} } } } } }"
-        commit = self.query(query, {"flag": flag})
-        analytics = commit.get("coverageAnalytics")
-        if not isinstance(analytics, dict) or any(f"f{i}" not in analytics for i in range(len(paths))):
-            raise CoverageError("Codecov returned an incomplete file batch")
-        return {path: analytics[f"f{index}"] for index, path in enumerate(paths)}
-
 
 @dataclass
 class Totals:
@@ -390,24 +490,24 @@ class Totals:
 
     def add_file(self, ranges: list[list[int]], report: object) -> bool:
         if not isinstance(report, dict) or not isinstance(report.get("coverage"), list):
-            raise CoverageError("Codecov returned malformed file coverage")
+            raise CoverageError("malformed LCOV file coverage")
         annotations = report["coverage"]
         if report.get("totals") is None:
             if annotations:
-                raise CoverageError("Codecov file has annotations but no totals")
+                raise CoverageError("LCOV file has annotations but no totals")
             return False
         if not isinstance(report["totals"], dict):
-            raise CoverageError("invalid Codecov file totals")
+            raise CoverageError("invalid LCOV file totals")
         lines = report["totals"].get("lineCount")
         if type(lines) is not int or lines != len(annotations):
-            raise CoverageError("Codecov file annotations are incomplete or inconsistent with its totals")
+            raise CoverageError("LCOV file annotations are incomplete or inconsistent with its totals")
         seen = set()
         for annotation in annotations:
             if not isinstance(annotation, dict):
-                raise CoverageError("invalid Codecov line annotation")
+                raise CoverageError("invalid LCOV line annotation")
             line, kind = annotation.get("line"), annotation.get("coverage")
             if type(line) is not int or line <= 0 or line in seen or kind not in ("H", "M", "P"):
-                raise CoverageError("invalid or duplicate Codecov line annotation")
+                raise CoverageError("invalid or duplicate LCOV line annotation")
             seen.add(line)
             if any(start <= line <= end for start, end in ranges):
                 if kind == "H":
@@ -423,7 +523,7 @@ class Totals:
 
     def description(self, flag: str, threshold: Decimal) -> str:
         if not self.lines:
-            return f"{flag}: not applicable (no changed lines measured by Codecov)"
+            return f"{flag}: not applicable (no changed lines measured in the uploaded LCOV)"
         percent = Decimal(100 * self.hits) / self.lines
         verdict = "PASS" if self.passes(threshold) else "FAIL"
         return (
@@ -434,26 +534,21 @@ class Totals:
 
 def check(args: argparse.Namespace) -> int:
     files = load_changed_lines(args.changed_lines_file, args.base_sha, args.head_sha, args.flag)
-    upload_name = (
-        load_upload_receipt(args.upload_receipt, args.head_sha, args.flag, args.run_id)
-        if args.upload_receipt else args.upload_name
-    )
+    receipt = load_upload_receipt(args.upload_receipt, args.head_sha, args.flag, args.run_id)
+    reports = load_lcov(args.coverage_report, receipt, args.flag)
     client = Client(args.repository, args.head_sha, args.timeout)
-    client.wait(lambda: client.upload_ready(args.flag, upload_name))
+    client.wait(lambda: client.upload_ready(args.flag, receipt.name))
     totals = Totals()
     absent = []
-    paths = sorted(files)
-    for offset in range(0, len(paths), FILE_BATCH_SIZE):
-        batch = paths[offset : offset + FILE_BATCH_SIZE]
-        reports = client.wait(lambda: client.files(batch, args.flag))
-        for path in batch:
-            if not totals.add_file(files[path], reports[path]):
-                absent.append(path)
+    for path in sorted(files):
+        if not totals.add_file(files[path], reports.get(path, {"totals": None, "coverage": []})):
+            absent.append(path)
     description = totals.description(args.flag, args.threshold)
     print(description)
-    print(f"Measured HEAD {args.head_sha}; original PR base {args.base_sha}; upload {upload_name}")
+    print(f"Measured HEAD {args.head_sha}; original PR base {args.base_sha}; upload {receipt.name}")
+    print(f"Exact uploaded LCOV SHA-256: {receipt.report_sha256}")
     if absent:
-        print("Files absent from the processed Codecov report (not counted as covered):")
+        print("Files absent from the exact uploaded LCOV (not counted as covered):")
         for path in absent:
             print(json.dumps(path))
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
@@ -461,9 +556,10 @@ def check(args: argparse.Namespace) -> int:
         with open(summary, "a", encoding="utf-8") as output:
             output.write(f"### Patch coverage: {args.flag}\n\n{description}\n\n")
             output.write(f"Base `{args.base_sha}` → HEAD `{args.head_sha}`.\n\n")
-            output.write("Uses Codecov H/M/P annotations for the original PR diff; partial lines are not hits.\n\n")
+            output.write(f"Upload `{receipt.name}`; LCOV SHA-256 `{receipt.report_sha256}`.\n\n")
+            output.write("Uses the exact uploaded LCOV and Codecov's branch/partial semantics for the original PR diff; partial lines are not hits.\n\n")
             if absent:
-                output.write("Files without Codecov annotations (excluded from the denominator, not assumed covered):\n\n")
+                output.write("Files absent from that LCOV (excluded from the denominator, not assumed covered):\n\n")
                 for path in absent:
                     output.write(f"- {json.dumps(path).replace('<', '&lt;').replace('>', '&gt;')}\n")
                 output.write("\n")
@@ -482,16 +578,13 @@ def main(argv: list[str] | None = None) -> int:
     check_parser.add_argument("--base-sha", type=sha, required=True)
     check_parser.add_argument("--head-sha", type=sha, required=True)
     check_parser.add_argument("--flag", choices=sorted(SUITES), required=True)
-    upload = check_parser.add_mutually_exclusive_group(required=True)
-    upload.add_argument("--upload-name", help="exact upload name, useful for read-only validation of an existing report")
-    upload.add_argument("--upload-receipt", type=Path, help="trusted artifact recording this suite job's exact upload")
-    check_parser.add_argument("--run-id", type=positive, help="expected workflow run ID; required with --upload-receipt")
+    check_parser.add_argument("--upload-receipt", type=Path, required=True, help="trusted artifact recording this suite job's exact upload")
+    check_parser.add_argument("--coverage-report", type=Path, required=True, help="exact uploaded LCOV bound to the receipt digest")
+    check_parser.add_argument("--run-id", type=positive, required=True, help="expected workflow run ID")
     check_parser.add_argument("--changed-lines-file", type=Path, required=True)
     check_parser.add_argument("--threshold", type=percentage, default=Decimal(80))
     check_parser.add_argument("--timeout", type=positive, default=300)
     args = parser.parse_args(argv)
-    if args.command == "check" and args.upload_receipt and args.run_id is None:
-        parser.error("--run-id is required with --upload-receipt")
     try:
         if args.command == "collect":
             result = collect(args.base_sha, args.head_sha)

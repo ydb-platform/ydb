@@ -464,7 +464,7 @@ jobs:
           name: codecov-patch-${{ github.run_id }}
           path: ${{ runner.temp }}/codecov-patch
 
-      - name: Download Codecov upload receipts
+      - name: Download Codecov uploads and receipts
         uses: actions/download-artifact@v4
         with:
           pattern: codecov-upload-*-${{ github.run_id }}
@@ -480,7 +480,8 @@ jobs:
         run: |
           set -euo pipefail
           # Do not wait for Codecov notification statuses: they wait for CI.
-          # Query processed line classifications for the exact uploaded HEAD.
+          # Wait for the exact upload, then evaluate its preserved LCOV, not
+          # commit/flag annotations merged with other uploads at the same SHA.
           mapfile -t suites < <(python3 -c 'import json,os; print("\n".join(json.loads(os.environ["MATRIX"])))')
           if [ "${#suites[@]}" -eq 0 ]; then
             echo "Expected at least one coverage component" >&2
@@ -497,6 +498,7 @@ jobs:
               --base-sha "$PR_BASE_SHA" --head-sha "$PR_HEAD_SHA" \
               --flag "$suite" --run-id "$GITHUB_RUN_ID" \
               --upload-receipt "$RUNNER_TEMP/codecov-uploads/codecov-upload-${suite}.json" \
+              --coverage-report "$RUNNER_TEMP/codecov-uploads/codecov-upload-${suite}.lcov" \
               --changed-lines-file "$RUNNER_TEMP/codecov-patch/codecov-patch.json" \
               --threshold 80 --timeout 300; then
               failed=1

@@ -116,6 +116,10 @@ def load_config(path):
         raise ConfigError("set either name or names, not both")
     cfg = dict(DEFAULTS)
     cfg.update(data)
+    if "folder_id" not in data:
+        env_folder = os.environ.get("YC_FOLDER_ID", "").strip()
+        if env_folder:
+            cfg["folder_id"] = env_folder
     cfg["_explicit"] = set(data)
     cfg["_pool"] = path.stem
     cfg["_fleet"] = fleet_keys is not None
@@ -1042,6 +1046,14 @@ labels:
 """
     cfg = load_config_text(sample)
     assert runner_names(cfg) == ["tiny-worker-2026-10-08", "tiny-worker-2026-10-09"]
+    os.environ["YC_FOLDER_ID"] = "folder-from-env"
+    try:
+        from_env = load_config_text(sample)
+        assert from_env["folder_id"] == "folder-from-env"
+        pinned = load_config_text(sample + "folder_id: pinned-folder\n")
+        assert pinned["folder_id"] == "pinned-folder"
+    finally:
+        os.environ.pop("YC_FOLDER_ID", None)
     plain = load_config_text(sample.replace("count: 2\nstart: 8\nindex_width: 2\n", ""))
     assert runner_names(plain) == ["tiny-worker-2026-10"]
     listed = load_config_text(

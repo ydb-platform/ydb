@@ -20,6 +20,9 @@ jobs:
   check:
     name: Poll runner fleet
     runs-on: ubuntu-latest
+    env:
+      YC_CLOUD_ID: ${{ vars.YC_CLOUD_ID }}
+      YC_FOLDER_ID: ${{ vars.YC_FOLDER_ID }}
     steps:
     - name: Checkout
       uses: actions/checkout@v5
@@ -33,9 +36,11 @@ jobs:
         echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
     - name: Configure yc
       run: |
+        test -n "$YC_CLOUD_ID"
+        test -n "$YC_FOLDER_ID"
         yc config set service-account-key "$CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-        yc config set cloud-id b1ggceeul2pkher8vhb6
-        yc config set folder-id b1grf3mpoatgflnlavjd
+        yc config set cloud-id "$YC_CLOUD_ID"
+        yc config set folder-id "$YC_FOLDER_ID"
     - name: Install SSH key
       env:
         RECONCILE_SSH_KEY: ${{ secrets.GH_RUNNER_RECONCILE_SSH_KEY }}

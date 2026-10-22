@@ -27,6 +27,11 @@ namespace {
         return lay;
     }
 
+    // Interval(offset): value <= now - offset
+    TTierRange Interval(TDuration offset) {
+        return TTierRange{ .To = TTierRelativeBound{ offset }, .ToInclusive = true };
+    }
+
     TTieringPolicy MakePolicy(std::initializer_list<std::pair<TDuration, ui32>> rules,
             EUnit unit = NKikimrSchemeOp::TTTLSettings::UNIT_AUTO)
     {
@@ -34,7 +39,7 @@ namespace {
         policy.ColumnTag = ValueTag;
         policy.Unit = unit;
         for (const auto& [offset, tierId] : rules) {
-            policy.Rules.push_back(TTierRule{ .TierId = tierId, .Before = TTierRelativeBound{ offset } });
+            policy.Rules.push_back(TTierRule{ .TierId = tierId, .Ranges = { Interval(offset) } });
         }
         return policy;
     }
@@ -64,8 +69,7 @@ namespace {
     template <typename T>
     bool SingleRuleMatches(NScheme::TTypeId type, EUnit unit, TDuration offset, T value, TInstant now = Now) {
         auto lay = MakeLayout(type);
-        TTierPredicate predicate(MakePolicy({{offset, 1}}, unit));
-        predicate.Bind(now, *lay);
+        TTierPredicate predicate(MakePolicy({{offset, 1}}, unit), now, *lay);
         UNIT_ASSERT(predicate.GetUnrepresentableTierIds().empty());
         return EvaluateValue(*lay, predicate, value) == Tier(1);
     }
@@ -146,6 +150,60 @@ namespace {
         auto result = NDyNumber::ParseDyNumberString(ToString(value));
         Y_ENSURE(result);
         return *result;
+    }
+
+    TString DyNumber(TStringBuf text) {
+        auto result = NDyNumber::ParseDyNumberString(text);
+        Y_ENSURE(result);
+        return *result;
+    }
+
+    // Days since the epoch for a proleptic Gregorian date
+    // (http://howardhinnant.github.io/date_algorithms.html#days_from_civil)
+    i64 DaysFromCivil(i64 year, ui32 month, ui32 day) {
+        year -= month <= 2 ? 1 : 0;
+        const i64 era = (year >= 0 ? year : year - 399) / 400;
+        const ui32 yoe = static_cast<ui32>(year - era * 400);
+        const ui32 doy = (153 * (month > 2 ? month - 3 : month + 9) + 2) / 5 + day - 1;
+        const ui32 doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+        return era * 146097 + static_cast<i64>(doe) - 719468;
+    }
+
+    TTierAbsoluteBound Date(i64 year, ui32 month = 1, ui32 day = 1) {
+        return TTierAbsoluteBound{ DaysFromCivil(year, month, day) * 86400 * 1000000 };
+    }
+
+    TTierRange Year(i64 year) {
+        return TTierRange{ .From = Date(year), .To = Date(year + 1) };
+    }
+
+    TTieringPolicy MakeRangePolicy(std::initializer_list<std::pair<TVector<TTierRange>, ui32>> rules,
+            EUnit unit = NKikimrSchemeOp::TTTLSettings::UNIT_AUTO)
+    {
+        TTieringPolicy policy;
+        policy.ColumnTag = ValueTag;
+        policy.Unit = unit;
+        for (const auto& [ranges, tierId] : rules) {
+            policy.Rules.push_back(TTierRule{ .TierId = tierId, .Ranges = ranges });
+        }
+        return policy;
+    }
+
+    template <typename T>
+    bool RangesMatch(NScheme::TTypeId type, EUnit unit, TVector<TTierRange> ranges, T value, TInstant now = Now) {
+        auto lay = MakeLayout(type);
+        TTierPredicate predicate(MakeRangePolicy({{std::move(ranges), 1}}, unit), now, *lay);
+        UNIT_ASSERT(predicate.GetUnrepresentableTierIds().empty());
+        return EvaluateValue(*lay, predicate, value) == Tier(1);
+    }
+
+    // Checks the edges of a range given in column units: [from, to)
+    template <typename TMake>
+    void CheckEdges(NScheme::TTypeId type, EUnit unit, const TTierRange& range, i64 from, i64 to, TMake make) {
+        UNIT_ASSERT_C(!RangesMatch(type, unit, {range}, make(from - 1)), "type# " << type << " unit# " << int(unit));
+        UNIT_ASSERT_C(RangesMatch(type, unit, {range}, make(from)), "type# " << type << " unit# " << int(unit));
+        UNIT_ASSERT_C(RangesMatch(type, unit, {range}, make(to - 1)), "type# " << type << " unit# " << int(unit));
+        UNIT_ASSERT_C(!RangesMatch(type, unit, {range}, make(to)), "type# " << type << " unit# " << int(unit));
     }
 
 } // namespace
@@ -382,8 +440,7 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
     Y_UNIT_TEST(RulesOrder) {
         auto lay = MakeLayout(NScheme::NTypeIds::Timestamp);
         // Coldest first: P3D -> tier 2, then P1D -> tier 1
-        TTierPredicate predicate(MakePolicy({{TDuration::Days(3), 2}, {TDuration::Days(1), 1}}));
-        predicate.Bind(Now, *lay);
+        TTierPredicate predicate(MakePolicy({{TDuration::Days(3), 2}, {TDuration::Days(1), 1}}), Now, *lay);
 
         auto age = [&](TDuration age) {
             return EvaluateValue(*lay, predicate, (Now - age).MicroSeconds());
@@ -396,8 +453,7 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
 
     Y_UNIT_TEST(EmptyPolicy) {
         auto lay = MakeLayout(NScheme::NTypeIds::Timestamp);
-        TTierPredicate predicate(MakePolicy({}));
-        predicate.Bind(Now, *lay);
+        TTierPredicate predicate(MakePolicy({}), Now, *lay);
 
         UNIT_ASSERT(EvaluateValue(*lay, predicate, ui64(0)) == Tier(0));
     }
@@ -406,8 +462,7 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
         auto lay = MakeLayout(NScheme::NTypeIds::Timestamp);
         const TRowScheme& scheme = *lay;
         const TPos pos = scheme.ColInfo(ValueTag)->Pos;
-        TTierPredicate predicate(MakePolicy({{TDuration::Days(1), 1}}));
-        predicate.Bind(Now, scheme);
+        TTierPredicate predicate(MakePolicy({{TDuration::Days(1), 1}}), Now, scheme);
 
         const TCell old = TCell::Make(ui64(0));
         UNIT_ASSERT(predicate.Evaluate(MakeRow(scheme, old)) == Tier(1));
@@ -447,16 +502,14 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
         }
     }
 
-    Y_UNIT_TEST(Rebind) {
+    Y_UNIT_TEST(LaterNow) {
         auto lay = MakeLayout(NScheme::NTypeIds::Timestamp);
-        TTierPredicate predicate(MakePolicy({{TDuration::Days(1), 1}}));
+        const auto policy = MakePolicy({{TDuration::Days(1), 1}});
         const ui64 value = (Now - TDuration::Hours(12)).MicroSeconds();
 
-        predicate.Bind(Now, *lay);
-        UNIT_ASSERT(EvaluateValue(*lay, predicate, value) == Tier(0));
-
-        predicate.Bind(Now + TDuration::Days(1), *lay);
-        UNIT_ASSERT(EvaluateValue(*lay, predicate, value) == Tier(1));
+        // The same row becomes older on a later compaction
+        UNIT_ASSERT(EvaluateValue(*lay, TTierPredicate(policy, Now, *lay), value) == Tier(0));
+        UNIT_ASSERT(EvaluateValue(*lay, TTierPredicate(policy, Now + TDuration::Days(1), *lay), value) == Tier(1));
     }
 
     Y_UNIT_TEST(SchemeChange) {
@@ -486,24 +539,21 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
 
         auto policy = MakePolicy({{TDuration::Days(1), 1}});
         policy.ColumnTag = TieringTag;
-        TTierPredicate predicate(policy);
+        TTierPredicate beforeDrop(policy, Now, *before);
+        UNIT_ASSERT_VALUES_EQUAL(beforeDrop.GetColumnPos(), 2u);
+        UNIT_ASSERT(beforeDrop.Evaluate(makeRow(*before, 0)) == Tier(1));
 
-        predicate.Bind(Now, *before);
-        UNIT_ASSERT_VALUES_EQUAL(predicate.GetColumnPos(), 2u);
-        UNIT_ASSERT(predicate.Evaluate(makeRow(*before, 0)) == Tier(1));
-
-        predicate.Bind(Now, *after);
-        UNIT_ASSERT_VALUES_EQUAL(predicate.GetColumnPos(), 1u);
-        UNIT_ASSERT(predicate.Evaluate(makeRow(*after, 0)) == Tier(1));
-        UNIT_ASSERT(predicate.Evaluate(makeRow(*after, Now.MicroSeconds())) == Tier(0));
+        TTierPredicate afterDrop(policy, Now, *after);
+        UNIT_ASSERT_VALUES_EQUAL(afterDrop.GetColumnPos(), 1u);
+        UNIT_ASSERT(afterDrop.Evaluate(makeRow(*after, 0)) == Tier(1));
+        UNIT_ASSERT(afterDrop.Evaluate(makeRow(*after, Now.MicroSeconds())) == Tier(0));
     }
 
     Y_UNIT_TEST(PolicyChanges) {
         auto lay = MakeLayout(NScheme::NTypeIds::Timestamp);
 
         auto decide = [&](const TTieringPolicy& policy, TDuration age) {
-            TTierPredicate predicate(policy);
-            predicate.Bind(Now, *lay);
+            TTierPredicate predicate(policy, Now, *lay);
             return EvaluateValue(*lay, predicate, (Now - age).MicroSeconds());
         };
 
@@ -536,26 +586,195 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
 
         auto unknownColumn = MakePolicy({{TDuration::Days(1), 1}});
         unknownColumn.ColumnTag = 100;
-        UNIT_ASSERT_EXCEPTION(TTierPredicate(unknownColumn).Bind(Now, *lay), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(unknownColumn, Now, *lay), yexception);
 
         auto stringLay = MakeLayout(NScheme::NTypeIds::String);
-        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}})).Bind(Now, *stringLay), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}}), Now, *stringLay), yexception);
 
         auto uintLay = MakeLayout(NScheme::NTypeIds::Uint64);
-        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}})).Bind(Now, *uintLay), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}}), Now, *uintLay), yexception);
 
         // Rules must go from the coldest tier to the warmest
-        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}, {TDuration::Days(3), 2}})), yexception);
-        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}, {TDuration::Days(1), 2}})), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakePolicy({{TDuration::Days(1), 1}, {TDuration::Days(3), 2}})), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakePolicy({{TDuration::Days(1), 1}, {TDuration::Days(1), 2}})), yexception);
 
-        TTierPredicate unbound(MakePolicy({{TDuration::Days(1), 1}}));
-        UNIT_ASSERT_EXCEPTION(EvaluateValue(*lay, unbound, ui64(0)), yexception);
+        // The constructor validates the policy too
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}, {TDuration::Days(3), 2}}), Now, *lay), yexception);
+    }
 
-        // A failed bind leaves the predicate unbound
-        TTierPredicate rebound(MakePolicy({{TDuration::Days(1), 1}}));
-        rebound.Bind(Now, *lay);
-        UNIT_ASSERT_EXCEPTION(rebound.Bind(Now, *stringLay), yexception);
-        UNIT_ASSERT_EXCEPTION(EvaluateValue(*lay, rebound, ui64(0)), yexception);
+    Y_UNIT_TEST(AbsoluteRangeEdges) {
+        const auto seconds = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS;
+        const auto millis = NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS;
+        const auto micros = NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS;
+        const auto nanos = NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS;
+
+        for (i64 year : {2025, 1965}) {
+            const auto range = Year(year);
+            const i64 fromUs = std::get<TTierAbsoluteBound>(*range.From).Micros;
+            const i64 toUs = std::get<TTierAbsoluteBound>(*range.To).Micros;
+            const i64 day = 86400ll * 1000000;
+
+            CheckEdges(NScheme::NTypeIds::Date32, {}, range, fromUs / day, toUs / day, [](i64 v) { return i32(v); });
+            CheckEdges(NScheme::NTypeIds::Datetime64, {}, range, fromUs / 1000000, toUs / 1000000, [](i64 v) { return v; });
+            CheckEdges(NScheme::NTypeIds::Timestamp64, {}, range, fromUs, toUs, [](i64 v) { return v; });
+            if (year < 1970) {
+                // TODO(https://github.com/ydb-platform/ydb/issues/56231): check negative DyNumber
+                // edges too, once bytewise comparison orders a common mantissa prefix correctly
+                continue;
+            }
+
+            for (auto unit : {seconds, millis, micros}) {
+                const i64 scale = unit == seconds ? 1000000 : unit == millis ? 1000 : 1;
+                CheckEdges(NScheme::NTypeIds::DyNumber, unit, range, fromUs / scale, toUs / scale,
+                    [](i64 v) { return DyNumber(v); });
+            }
+            CheckEdges(NScheme::NTypeIds::DyNumber, nanos, range, fromUs * 1000, toUs * 1000,
+                [](i64 v) { return DyNumber(v); });
+
+            CheckEdges(NScheme::NTypeIds::Date, {}, range, fromUs / day, toUs / day, [](i64 v) { return ui16(v); });
+            CheckEdges(NScheme::NTypeIds::Datetime, {}, range, fromUs / 1000000, toUs / 1000000, [](i64 v) { return ui32(v); });
+            CheckEdges(NScheme::NTypeIds::Timestamp, {}, range, fromUs, toUs, [](i64 v) { return ui64(v); });
+            CheckEdges(NScheme::NTypeIds::Uint32, seconds, range, fromUs / 1000000, toUs / 1000000, [](i64 v) { return ui32(v); });
+            for (auto unit : {seconds, millis, micros}) {
+                const i64 scale = unit == seconds ? 1000000 : unit == millis ? 1000 : 1;
+                CheckEdges(NScheme::NTypeIds::Uint64, unit, range, fromUs / scale, toUs / scale, [](i64 v) { return ui64(v); });
+            }
+            // Nanoseconds are compared as whole microseconds, like TTL does
+            CheckEdges(NScheme::NTypeIds::Uint64, nanos, range, fromUs * 1000, toUs * 1000, [](i64 v) { return ui64(v); });
+        }
+    }
+
+    Y_UNIT_TEST(DyNumberZeroNanos) {
+        // A zero bound in nanoseconds is serialized as "0000"
+        const auto nanos = NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS;
+        const TTierRange upToZero{ .To = TTierAbsoluteBound{ 0 }, .ToInclusive = true };
+        UNIT_ASSERT(RangesMatch(NScheme::NTypeIds::DyNumber, nanos, {upToZero}, DyNumber(0)));
+        UNIT_ASSERT(RangesMatch(NScheme::NTypeIds::DyNumber, nanos, {upToZero}, DyNumber(-1)));
+        UNIT_ASSERT(!RangesMatch(NScheme::NTypeIds::DyNumber, nanos, {upToZero}, DyNumber(1)));
+    }
+
+    Y_UNIT_TEST(AbsoluteFractionalDyNumber) {
+        // DyNumber values may be fractional, so absolute bounds are exact
+        const auto seconds = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS;
+        const i64 from = Date(2025).Micros / 1000000;
+        const i64 to = Date(2026).Micros / 1000000;
+        UNIT_ASSERT(!RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {Year(2025)}, DyNumber(ToString(from - 1) + ".5")));
+        UNIT_ASSERT(RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {Year(2025)}, DyNumber(ToString(from) + ".5")));
+        UNIT_ASSERT(RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {Year(2025)}, DyNumber(ToString(to - 1) + ".999")));
+        UNIT_ASSERT(!RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {Year(2025)}, DyNumber(ToString(to) + ".5")));
+
+        // A bound with a fraction of a second
+        const TTierRange range{ .From = TTierAbsoluteBound{ Date(2025).Micros + 500000 } };
+        UNIT_ASSERT(!RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {range}, DyNumber(ToString(from) + ".4")));
+        UNIT_ASSERT(RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {range}, DyNumber(ToString(from) + ".5")));
+
+        // Inclusive absolute upper bounds are exact too: a single point [0.5s, 0.5s]
+        const TTierRange point{
+            .From = TTierAbsoluteBound{ 500000 },
+            .To = TTierAbsoluteBound{ 500000 },
+            .ToInclusive = true,
+        };
+        UNIT_ASSERT(RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {point}, DyNumber(TStringBuf("0.5"))));
+        UNIT_ASSERT(!RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {point}, DyNumber(TStringBuf("0.4"))));
+        UNIT_ASSERT(!RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {point}, DyNumber(TStringBuf("0.6"))));
+        const TTierRange upTo{ .To = TTierAbsoluteBound{ 1500000 }, .ToInclusive = true };
+        UNIT_ASSERT(RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {upTo}, DyNumber(TStringBuf("1.5"))));
+        UNIT_ASSERT(!RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {upTo}, DyNumber(TStringBuf("1.6"))));
+    }
+
+    Y_UNIT_TEST(AbsoluteOpenAndInclusiveRanges) {
+        const auto type = NScheme::NTypeIds::Timestamp;
+        const ui64 from = Date(2025).Micros;
+
+        UNIT_ASSERT(!RangesMatch(type, {}, {TTierRange{ .From = Date(2025) }}, from - 1));
+        UNIT_ASSERT(RangesMatch(type, {}, {TTierRange{ .From = Date(2025) }}, Max<ui64>()));
+        UNIT_ASSERT(RangesMatch(type, {}, {TTierRange{ .To = Date(2025) }}, ui64(0)));
+        UNIT_ASSERT(!RangesMatch(type, {}, {TTierRange{ .To = Date(2025) }}, from));
+        UNIT_ASSERT(RangesMatch(type, {}, {TTierRange{ .To = Date(2025), .ToInclusive = true }}, from));
+
+        // A single point
+        const TTierRange point{ .From = Date(2025), .To = Date(2025), .ToInclusive = true };
+        UNIT_ASSERT(RangesMatch(type, {}, {point}, from));
+        UNIT_ASSERT(!RangesMatch(type, {}, {point}, from + 1));
+        UNIT_ASSERT(!RangesMatch(type, {}, {point}, from - 1));
+    }
+
+    Y_UNIT_TEST(AbsoluteBoundsOutsideColumnRange) {
+        // Unsigned columns cannot hold values before the epoch
+        UNIT_ASSERT(!RangesMatch(NScheme::NTypeIds::Timestamp, {}, {Year(1965)}, ui64(0)));
+        UNIT_ASSERT(!RangesMatch(NScheme::NTypeIds::Timestamp, {}, {TTierRange{ .To = Date(1965) }}, ui64(0)));
+        UNIT_ASSERT(RangesMatch(NScheme::NTypeIds::Timestamp, {}, {TTierRange{ .From = Date(1965) }}, ui64(0)));
+
+        // Date holds days up to year 2149
+        UNIT_ASSERT(!RangesMatch(NScheme::NTypeIds::Date, {}, {Year(2200)}, Max<ui16>()));
+        UNIT_ASSERT(RangesMatch(NScheme::NTypeIds::Date, {}, {TTierRange{ .To = Date(2200) }}, Max<ui16>()));
+    }
+
+    Y_UNIT_TEST(MultipleRanges) {
+        const auto type = NScheme::NTypeIds::Timestamp;
+        const TVector<TTierRange> ranges{Year(2023), Year(2025)};
+        UNIT_ASSERT(RangesMatch(type, {}, ranges, ui64(Date(2023, 6, 1).Micros)));
+        UNIT_ASSERT(!RangesMatch(type, {}, ranges, ui64(Date(2024, 6, 1).Micros)));
+        UNIT_ASSERT(RangesMatch(type, {}, ranges, ui64(Date(2025, 6, 1).Micros)));
+    }
+
+    Y_UNIT_TEST(AbsoluteRulesOrderDoesNotMatter) {
+        auto lay = MakeLayout(NScheme::NTypeIds::Timestamp);
+        auto decide = [&](const TTieringPolicy& policy, i64 year) {
+            TTierPredicate predicate(policy, Now, *lay);
+            return EvaluateValue(*lay, predicate, ui64(Date(year, 6, 1).Micros));
+        };
+
+        const auto forward = MakeRangePolicy({{{Year(2024)}, 10}, {{Year(2025)}, 20}});
+        const auto backward = MakeRangePolicy({{{Year(2025)}, 20}, {{Year(2024)}, 10}});
+        for (const auto& policy : {forward, backward}) {
+            UNIT_ASSERT(decide(policy, 2023) == Tier(0));
+            UNIT_ASSERT(decide(policy, 2024) == Tier(10));
+            UNIT_ASSERT(decide(policy, 2025) == Tier(20));
+            UNIT_ASSERT(decide(policy, 2026) == Tier(0));
+        }
+
+        // A new year tier inserted in the middle keeps other tier ids
+        const auto inserted = MakeRangePolicy({{{Year(2024)}, 10}, {{Year(2026)}, 30}, {{Year(2025)}, 20}});
+        UNIT_ASSERT(decide(inserted, 2024) == Tier(10));
+        UNIT_ASSERT(decide(inserted, 2025) == Tier(20));
+        UNIT_ASSERT(decide(inserted, 2026) == Tier(30));
+    }
+
+    Y_UNIT_TEST(InvalidRangePolicy) {
+        const TTierRange interval = Interval(TDuration::Days(1));
+
+        // Relative and absolute bounds cannot be mixed, neither across rules nor within a range
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakeRangePolicy({{{Year(2025)}, 2}, {{interval}, 1}})), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakeRangePolicy({{{TTierRange{
+            .From = Date(2025), .To = TTierRelativeBound{ TDuration::Days(1) } }}, 1}})), yexception);
+
+        // Ranges of different absolute rules must not overlap
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakeRangePolicy({{{Year(2024), Year(2025)}, 1}, {{Year(2025)}, 2}})), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakeRangePolicy({{{TTierRange{ .From = Date(2025) }}, 1}, {{Year(2030)}, 2}})), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakeRangePolicy({{{TTierRange{ .To = Date(2025), .ToInclusive = true }}, 1},
+            {{Year(2025)}, 2}})), yexception);
+        // Adjacent ranges do not overlap, and ranges of one rule may overlap
+        TTierPredicate::Validate(MakeRangePolicy({{{Year(2024)}, 1}, {{Year(2025)}, 2}}));
+        TTierPredicate::Validate(MakeRangePolicy({{{Year(2024), TTierRange{ .From = Date(2024, 6, 1), .To = Date(2025) }}, 1}}));
+
+        // Empty rules, unbounded and empty ranges
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakeRangePolicy({{{}, 1}})), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakeRangePolicy({{{TTierRange{}}, 1}})), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakeRangePolicy({{{TTierRange{ .From = Date(2025), .To = Date(2025) }}, 1}})), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakeRangePolicy({{{TTierRange{ .From = Date(2026), .To = Date(2025) }}, 1}})), yexception);
+
+        // A relative rule must be a single inclusive upper bound (Interval)
+        const TTierRange from3To1Days{ .From = TTierRelativeBound{ TDuration::Days(3) }, .To = TTierRelativeBound{ TDuration::Days(1) } };
+        const TTierRange exclusive{ .To = TTierRelativeBound{ TDuration::Days(1) } };
+        const TTierRange fromOnly{ .From = TTierRelativeBound{ TDuration::Days(1) } };
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakeRangePolicy({{{from3To1Days}, 1}})), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakeRangePolicy({{{exclusive}, 1}})), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakeRangePolicy({{{fromOnly}, 1}})), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakeRangePolicy({{{interval, Interval(TDuration::Days(3))}, 1}})), yexception);
+        // so the order is checked for every relative rule
+        UNIT_ASSERT_EXCEPTION(TTierPredicate::Validate(MakeRangePolicy({{{interval}, 1}, {{Interval(TDuration::Days(3))}, 2}})), yexception);
+        TTierPredicate::Validate(MakeRangePolicy({{{Interval(TDuration::Days(3))}, 2}, {{interval}, 1}}));
     }
 
 }

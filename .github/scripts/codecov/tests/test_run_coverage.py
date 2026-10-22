@@ -350,7 +350,7 @@ class TestOutcomeTest(unittest.TestCase):
         self.assertFalse(self.assess())
 
     def test_container_errors_and_non_regular_report_failures_are_not_accepted(self) -> None:
-        for event in ("chunk-event", "suite-event"):
+        for event in ("chunk-event", "suite-event", "chunk_event", "suite_event"):
             self.write_trace(extra=[{"name": event, "value": {"errors": [["fail", "recipe failed"]]}}])
             self.assertFalse(self.assess())
         self.write_trace()
@@ -363,6 +363,8 @@ class TestOutcomeTest(unittest.TestCase):
             "yatest.common.process.ExecutionTimeoutError: execution timed out",
             "Command '/path/ydb' has failed with code -11.",
             "Command '/path/ydb' has failed with code 137.",
+            str(subprocess.CalledProcessError(-signal.SIGSEGV, ["/path/ydb"])),
+            str(subprocess.CalledProcessError(-signal.SIGKILL, ["/path/ydb"])),
             "AssertionError: Local command failed with exit code -9:",
             "Process exit_code = -9",
             "assert -9 == 0\n + where -9 = <Result>.returncode",
@@ -381,6 +383,41 @@ class TestOutcomeTest(unittest.TestCase):
                 self.report["results"][2].pop("rich-snippet")
         self.write_trace()
         self.report["results"][2]["rich-snippet"] = "Command 'ydb' has failed with code 1."
+        self.assertTrue(self.assess())
+
+    def test_dictionary_exit_code_requires_matching_assertion_context(self) -> None:
+        cases = [
+            ("    assert result['exit_code'] == 0\nE assert -9 == 0", False),
+            ('> assert result["exit_code"] == 0\nE assert -11 == 0', False),
+            ("    assert result['exit_code'] == 0, f\"Profile creation failed: {result['stderr']}\"\n"
+             "E AssertionError: Profile creation failed\nE assert -9 == 0", False),
+            ('    assert execution.result["returncode"] == 0\nE assert -9 == 0', False),
+            ("[[bad]]> assert result['exit_code'] == 0[[rst]]\nE assert -9 == 0", False),
+            ("E assert -9 == 0", True),
+            ("    assert delta == 0\nE assert -9 == 0", True),
+            ("    assert result['offset'] == 0\nE assert -9 == 0", True),
+            ("    assert result['exit_code'] == 0\nE assert 1 == 0", True),
+            ("    assert result['exit_code'] == 0\n"
+             "> assert delta == 0\nE assert -9 == 0", True),
+        ]
+        for message, usable in cases:
+            for source in ("trace", "rich-snippet"):
+                with self.subTest(message=message, source=source):
+                    self.write_trace()
+                    self.report["results"][2].pop("rich-snippet", None)
+                    if source == "trace":
+                        event = json.loads(self.trace.read_text())
+                        event["value"]["comment"] = message
+                        self.trace.write_text(json.dumps(event))
+                    else:
+                        self.report["results"][2]["rich-snippet"] = message
+                    self.assertEqual(self.assess(), usable)
+
+    def test_container_metrics_without_errors_remain_usable(self) -> None:
+        self.write_trace(extra=[
+            {"name": "chunk_event", "value": {"metrics": {"duration": 1}}},
+            {"name": "suite_event", "value": {"errors": []}},
+        ])
         self.assertTrue(self.assess())
 
     def test_build_failure_incomplete_progress_and_not_launched_are_not_accepted(self) -> None:
@@ -728,7 +765,14 @@ if scenario.startswith("assertion") or scenario in ("crash", "timeout", "not_lau
     trace_dir.mkdir(parents=True)
     if scenario != "missing_trace":
         trace = {"name": "subtest-finished", "value": {"class": "Example", "subtest": "assertion", "status": "crashed" if scenario == "crash" else "fail"}}
-        (trace_dir / "ytest.report.trace").write_text(json.dumps(trace) + "\n")
+        if scenario == "assertion_signal_process":
+            trace["value"]["comment"] = "Command 'ydb' died with <Signals.SIGSEGV: 11>."
+        if scenario == "assertion_dict_process":
+            trace["value"]["comment"] = "    assert result['exit_code'] == 0\nE assert -9 == 0"
+        events = [trace]
+        if scenario == "assertion_chunk_error":
+            events.append({"name": "chunk_event", "value": {"errors": [["fail", "recipe failed"]]}})
+        (trace_dir / "ytest.report.trace").write_text("".join(json.dumps(event) + "\n" for event in events))
     if scenario == "assertion_unknown_command":
         print(f"command (pid: 124) /tools/compiler input.cpp failed with exit code 1 in {build_root}")
     sys.exit(10)
@@ -938,10 +982,21 @@ class CoverageSubprocessTest(unittest.TestCase):
         self.assertIn("[muted] tests/example: Example.assertion", result.stdout)
 
     def test_muting_never_accepts_crashes_or_timeouts(self) -> None:
-        for scenario in ("crash", "timeout", "not_launched", "container_failure", "missing_trace", "assertion_missing_artifacts"):
+        for scenario in ("crash", "timeout", "not_launched", "container_failure", "missing_trace",
+                         "assertion_missing_artifacts", "assertion_signal_process", "assertion_dict_process",
+                         "assertion_chunk_error"):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
                 self.root = Path(temporary)
                 result, calls, outputs = self.run_scenario(scenario, muted=True)
+                self.assertEqual(result.returncode, 10, result.stderr + result.stdout)
+                self.assertEqual(len(calls), 3)
+                self.assertNotIn("out_dir", outputs)
+
+    def test_embedded_process_and_chunk_errors_stay_failed_after_all_retries(self) -> None:
+        for scenario in ("assertion_signal_process", "assertion_dict_process", "assertion_chunk_error"):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
+                self.root = Path(temporary)
+                result, calls, outputs = self.run_scenario(scenario)
                 self.assertEqual(result.returncode, 10, result.stderr + result.stdout)
                 self.assertEqual(len(calls), 3)
                 self.assertNotIn("out_dir", outputs)

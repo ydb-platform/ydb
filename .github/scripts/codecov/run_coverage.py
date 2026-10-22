@@ -57,11 +57,22 @@ INTERRUPTED_PROCESS = re.compile(
     r"ExecutionTimeoutError|SignalInterruptionError|subprocess\.TimeoutExpired|"
     r"yatest\.common\.process\.TimeoutError|"
     r"\bhas failed with code (?:-\d+|134|137|139|143)\b|"
+    r"\bdied with <Signals\.[A-Z0-9_]+:\s*\d+>|"
     r"\b(?:exit[ _]code|returncode)\s*[:=]?\s*-\d+\b|"
     r"(?<!\w)-\d+\s*=\s*[^\n]{0,200}\.(?:returncode|exit_code)\b|"
     r"\b(?:killed|terminated) by signal\b|\bSegmentation fault\b|\bcore dumped\b|"
     r"\b(?:AddressSanitizer|UndefinedBehaviorSanitizer|ThreadSanitizer):",
     re.IGNORECASE,
+)
+# Match the expanded negative value only in the same pytest failure block as
+# an assertion about a process-result field. Bare 'assert -9 == 0' is ambiguous.
+INTERRUPTED_DICT_ASSERTION = re.compile(
+    r"^[ \t]*(?:>[ \t]*)?assert[ \t]+[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*"
+    r"\[[ \t]*(?P<quote>['\"])(?:exit_code|returncode|return_code)(?P=quote)[ \t]*\]"
+    r"[ \t]*==[ \t]*0\b[^\n]*"
+    r"(?:\n[ \t]*E(?:[ \t][^\n]*)?)*?"
+    r"\n[ \t]*E[ \t]+assert[ \t]+-[1-9]\d*[ \t]+==[ \t]+0\b",
+    re.MULTILINE,
 )
 LOG_NAMES = {
     "run_test.log", "ytest.report.trace", "results_accumulator.log",
@@ -207,6 +218,12 @@ def failed_test_rows(report: dict, mutes: list) -> list[dict]:
     return failures
 
 
+def interrupted_process(message: str) -> bool:
+    # YA/pytest may surround source and error lines with presentation markup.
+    text = re.sub(r"\[\[[^\]\n]*\]\]", "", ANSI.sub("", message))
+    return bool(INTERRUPTED_PROCESS.search(text) or INTERRUPTED_DICT_ASSERTION.search(text))
+
+
 def assertion_only_failure(report: dict, output: Path, build_root: Path) -> tuple[bool, str]:
     """Check evidence of ordinary failures in the authoritative merged trace.
 
@@ -224,7 +241,7 @@ def assertion_only_failure(report: dict, output: Path, build_root: Path) -> tupl
     failing = [row for row in results if row.get("type") == "test" and row.get("status") == "FAILED"]
     if any(row.get("error_type") != "REGULAR" for row in failing):
         return False, "test report contains non-regular failures"
-    if any(INTERRUPTED_PROCESS.search(row.get("rich-snippet", "")) for row in failing):
+    if any(interrupted_process(row.get("rich-snippet", "")) for row in failing):
         return False, "test failure reports an interrupted child process or sanitizer error"
     suites = [row for row in results if row.get("type") == "test" and row.get("suite")]
     leaves = [row for row in failing if not row.get("suite") and not row.get("chunk")]
@@ -261,7 +278,7 @@ def assertion_only_failure(report: dict, output: Path, build_root: Path) -> tupl
                     event = json.loads(line)
                     value = event["value"]
                     event_name = event["name"]
-                    if event_name in {"suite-event", "chunk-event"} and value.get("errors"):
+                    if event_name in {"suite-event", "chunk-event", "suite_event", "chunk_event"} and value.get("errors"):
                         raise ValueError("trace contains container errors")
                     if event_name not in {"subtest-started", "subtest-finished"}:
                         continue
@@ -270,7 +287,7 @@ def assertion_only_failure(report: dict, output: Path, build_root: Path) -> tupl
                     status = value.get("status") if event_name == "subtest-finished" else "started"
                     if status not in {"started", "good", "fail", "diff", "skipped", "deselected", "xfail", "xpass"}:
                         raise ValueError(f"unsafe test trace status: {status}")
-                    if status in {"fail", "diff"} and INTERRUPTED_PROCESS.search(value.get("comment", "")):
+                    if status in {"fail", "diff"} and interrupted_process(value.get("comment", "")):
                         raise ValueError("failed test reports an interrupted child process or sanitizer error")
                     states[key] = status
             if not states or "started" in states.values():

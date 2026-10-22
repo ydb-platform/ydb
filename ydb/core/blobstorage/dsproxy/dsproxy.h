@@ -538,7 +538,8 @@ struct TBlobStorageGroupAssimilateParameters {
 };
 IActor* CreateBlobStorageGroupAssimilateRequest(TBlobStorageGroupAssimilateParameters params);
 
-IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon);
+IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
+    const TControlWrapper& dormantTimeoutMinutes = DormantTimeoutDefaultControl);
 
 struct TBlobStorageProxyControlWrappers {
     TMemorizableControlWrapper EnablePutBatching;
@@ -546,6 +547,7 @@ struct TBlobStorageProxyControlWrappers {
 
     TMemorizableControlWrapper LongRequestThresholdMs = LongRequestThresholdDefaultControl;
     TMemorizableControlWrapper MaxPutTimeoutSeconds = MaxPutTimeoutDefaultControl;
+    TMemorizableControlWrapper DormantTimeoutMinutes = DormantTimeoutDefaultControl;
 
 #define DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(prefix)              \
     TMemorizableControlWrapper prefix = prefix##DefaultControl;         \

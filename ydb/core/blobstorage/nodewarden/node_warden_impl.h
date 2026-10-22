@@ -275,6 +275,7 @@ namespace NKikimr::NStorage {
         TControlWrapper ReportingControllerLeakDurationMs;
         TControlWrapper ReportingControllerLeakRate;
         TControlWrapper MaxPutTimeoutSeconds;
+        TControlWrapper DormantTimeoutMinutes;
 
         TControlWrapper EnableDeepScrubbing;
 

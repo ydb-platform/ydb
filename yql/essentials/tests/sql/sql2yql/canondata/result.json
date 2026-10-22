@@ -6903,9 +6903,9 @@
     ],
     "test_sql2yql.test[optimizers-pushdown_struct_subset_some]": [
         {
-            "checksum": "1317569fb198d3728c5711c26692362d",
-            "size": 2197,
-            "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_optimizers-pushdown_struct_subset_some_/sql.yql"
+            "checksum": "5db004e8d8dd49fc66580e550250de5f",
+            "size": 16406,
+            "uri": "https://{canondata_backend}/1130705/a6b536a6d936a8d72277a14097472ad314ff90e4/resource.tar.gz#test_sql2yql.test_optimizers-pushdown_struct_subset_some_/sql.yql"
         }
     ],
     "test_sql2yql.test[optimizers-pushdown_struct_subset_some_key]": [

@@ -46,8 +46,7 @@ public:
             {"actorName", ActorName},
             {"actorId", ctx.SelfID},
             {"status", static_cast<ui64>(response.Status)},
-            {"hasError", response.Error.has_value()},
-            {"error", response.Error.has_value() ? response.Error->Message : TString()}
+            {"error", response.Error}
         );
 
         if (response.Status == TEvLdapAuthProvider::EStatus::SUCCESS) {
@@ -56,10 +55,10 @@ public:
             YDB_LOG_INFO_CTX(ctx, "LDAP authentication failed",
                 {"actorName", ActorName},
                 {"actorId", ctx.SelfID},
-                {"error", *response.Error}
+                {"error", response.Error}
             );
-            SendError(ConvertLdapStatus(response.Status), response.Error->Message,
-                NLogin::NSasl::EScramServerError::OtherError, response.Error->LogMessage);
+            SendError(ConvertLdapStatus(response.Status), response.Error.Message,
+                NLogin::NSasl::EScramServerError::OtherError, response.Error.LogMessage);
             return CleanupAndDie(ctx);
         }
     }

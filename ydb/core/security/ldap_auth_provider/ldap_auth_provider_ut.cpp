@@ -7,6 +7,9 @@
 #include <ydb/library/testlib/service_mocks/ldap_mock/ldap_defines.h>
 
 #include <ydb/core/security/ldap_auth_provider/test_utils/test_settings.h>
+#include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
+#include <ydb/core/security/sasl/events.h>
+#include <ydb/core/security/sasl/plain_ldap_auth_proxy_actor.h>
 
 namespace NKikimr::NCertTestUtils {
 
@@ -641,6 +644,81 @@ void LdapFetchGroupsWithDefaultGroupAttributeGood(const ESecurityConnectionType&
 } // namespace
 
 Y_UNIT_TEST_SUITE(LdapAuthProviderTests) {
+
+Y_UNIT_TEST(SaslLdapFailureWithEmptyMessage) {
+    TLdapKikimrServer ydbServer(InitLdapSettings);
+    auto* runtime = ydbServer.GetRuntime();
+    const auto sender = runtime->AllocateEdgeActor();
+    const auto ldap = runtime->AllocateEdgeActor();
+    runtime->RegisterService(MakeLdapAuthProviderID(), ldap);
+    const std::string authMsg = std::string(1, '\0') + "ldapuser" + '\0' + "password";
+
+    for (const bool emptyDetails : {true, false}) {
+        runtime->Register(NSasl::CreatePlainLdapAuthProxyActor(sender, "/Root", authMsg, "localhost").release());
+        const auto request = runtime->GrabEdgeEvent<TEvLdapAuthProvider::TEvAuthenticateRequest>(ldap);
+        TEvLdapAuthProvider::TError error;
+        if (!emptyDetails) {
+            error = TEvLdapAuthProvider::TError{.Message = "", .LogMessage = "LDAP failure details", .Retryable = true};
+        }
+        runtime->Send(new IEventHandle(request->Sender, ldap,
+            new TEvLdapAuthProvider::TEvAuthenticateResponse(TEvLdapAuthProvider::EStatus::UNAVAILABLE, error)), 0);
+        const auto response = runtime->GrabEdgeEvent<NSasl::TEvSasl::TEvSaslPlainLdapLoginResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Issue.GetCode(), static_cast<ui32>(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE));
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Issue.GetMessage(), "");
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Reason,
+            emptyDetails ? "" : "LDAP failure details");
+        UNIT_ASSERT(response->Get()->Token.empty());
+    }
+}
+
+Y_UNIT_TEST(RetryLdapFailureWithEmptyMessage) {
+    TLdapKikimrServer ydbServer(InitLdapSettings);
+    auto* runtime = ydbServer.GetRuntime();
+    const auto sender = runtime->AllocateEdgeActor();
+    const auto ldap = runtime->AllocateEdgeActor();
+    runtime->RegisterService(MakeLdapAuthProviderID(), ldap);
+    const auto loginResponse = GetLoginResponse(ydbServer, "ldapuser");
+    const auto authorize = [&] {
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
+    };
+
+    authorize();
+    const auto request = runtime->GrabEdgeEvent<TEvLdapAuthProvider::TEvEnrichGroupsRequest>(ldap);
+    runtime->Send(new IEventHandle(request->Sender, ldap,
+        new TEvLdapAuthProvider::TEvEnrichGroupsResponse(request->Get()->Key,
+            TEvLdapAuthProvider::EStatus::UNAVAILABLE, TEvLdapAuthProvider::TError{.Retryable = true})), 0);
+    const auto failure = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(sender);
+    UNIT_ASSERT(failure->Get()->Error.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(failure->Get()->Error->Message, "");
+    UNIT_ASSERT(failure->Get()->Error->Retryable);
+    UNIT_ASSERT(!failure->Get()->Token);
+
+    const auto retry = runtime->GrabEdgeEvent<TEvLdapAuthProvider::TEvEnrichGroupsRequest>(ldap, TDuration::Seconds(5));
+    UNIT_ASSERT_C(retry, "An empty LDAP error message must not prevent a retry");
+    runtime->Send(new IEventHandle(retry->Sender, ldap,
+        new TEvLdapAuthProvider::TEvEnrichGroupsResponse(retry->Get()->Key, "ldapuser", {"group"})), 0);
+    authorize();
+    const auto success = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(sender);
+    UNIT_ASSERT_C(!success->Get()->Error.has_value(), *success->Get()->Error);
+    UNIT_ASSERT(success->Get()->Token);
+    UNIT_ASSERT_VALUES_EQUAL(success->Get()->Token->GetUserSID(), "ldapuser@ldap");
+    UNIT_ASSERT(success->Get()->Token->IsExist("group@ldap"));
+
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender,
+        new TEvTicketParser::TEvRefreshTicket(request->Get()->Key)), 0);
+    const auto recheck = runtime->GrabEdgeEvent<TEvLdapAuthProvider::TEvEnrichGroupsRequest>(ldap);
+    runtime->Send(new IEventHandle(recheck->Sender, ldap,
+        new TEvLdapAuthProvider::TEvEnrichGroupsResponse(recheck->Get()->Key,
+            TEvLdapAuthProvider::EStatus::UNAUTHORIZED, TEvLdapAuthProvider::TError{.Retryable = false})), 0);
+    authorize();
+    const auto denied = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(sender);
+    UNIT_ASSERT(denied->Get()->Error.has_value());
+    UNIT_ASSERT(!denied->Get()->Error->Retryable);
+    UNIT_ASSERT(!denied->Get()->Token);
+}
 
 Y_UNIT_TEST(CanFetchGroupsWithDefaultGroupAttributeStartTls) {
     LdapFetchGroupsWithDefaultGroupAttributeGood(ESecurityConnectionType::START_TLS);

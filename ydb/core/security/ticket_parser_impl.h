@@ -1015,11 +1015,7 @@ private:
                     .AuthType = record.GetAuthType()
                 }));
             } else {
-                if (response->Error.has_value()) {
-                    SetError(key, record, *response->Error);
-                } else {
-                    SetError(key, record, {.Message = "Unknown error", .Retryable = false});
-                }
+                SetError(key, record, response->Error);
             }
             if (record.ResponsesLeft == 0) {
                 Respond(record);
@@ -2125,7 +2121,7 @@ protected:
                         request->Sender,
                         new TEvTicketParser::TEvAuthorizeTicketResult(
                             record.Ticket,
-                            TEvTicketParser::TError{.Message = "Unknown error", .Retryable = false}
+                            TEvTicketParser::TError{.Message = "Unknown error", .Retryable = true}
                         ),
                         0,
                         request->Cookie

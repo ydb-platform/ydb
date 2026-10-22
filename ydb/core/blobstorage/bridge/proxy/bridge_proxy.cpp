@@ -252,7 +252,9 @@ namespace NKikimr {
             }
 
             bool DataIsTrustedInPile(const TBridgeInfo::TPile& pile) const {
-                if (!NBridge::PileStateTraits(pile.State).RequiresDataQuorum) {
+                // the part of the pile that has been out (NOT_SYNCHRONIZED_2 one included) may show the SYNCED stage of
+                // its previous sync until BSC resets it, so only the synchronized pile's part is sure to hold everything
+                if (pile.State != NKikimrBridge::TClusterState::SYNCHRONIZED) {
                     return false;
                 }
                 const auto *gp = NBridge::GetGroupPile(Info->Group->GetBridgeGroupState(), pile.BridgePileId);

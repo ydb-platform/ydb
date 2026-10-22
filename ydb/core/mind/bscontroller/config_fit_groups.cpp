@@ -138,7 +138,22 @@ namespace NKikimr {
                         const TGroupId groupId = CreateGroup(bridgePileId, mainGroupId);
                         groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
                         pile->SetGroupGeneration(1);
-                        pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
+                        // the part belongs to the current sync of the pile, if there is one going
+                        if (const auto *pss = State.Self.FindPileSyncState(bridgePileId)) {
+                            pile->SetBecameUnsyncedGeneration(pss->GetBecameUnsyncedGeneration());
+                        }
+                        if (NBridge::PileStateTraits(bridgeInfo->GetPile(bridgePileId)->State).RequiresDataQuorum) {
+                            pile->SetStage(NKikimrBridge::TGroupState::SYNCED); // gets every write from the very beginning
+                        } else {
+                            // writes skip the pile, so its part is to be synced when the pile gets back
+                            State.Callbacks.push_back([&self = State.Self, mainGroupId, groupId] {
+                                const auto [it, inserted] = self.TargetGroupToSyncerState.try_emplace(groupId,
+                                    mainGroupId, groupId);
+                                if (inserted) {
+                                    self.SyncersRequiringAction.PushBack(&it->second);
+                                }
+                            });
+                        }
                     });
                     while (mainGroupState->PileSize() && mainGroupState->GetPile(mainGroupState->PileSize() - 1).GetAbsent()) {
                         mainGroupState->MutablePile()->RemoveLast(); // absent piles at the end are not stored

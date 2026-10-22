@@ -32,7 +32,7 @@ CFLAGS(
     -DINSTALLDIR=\"/var/empty/bison-3.7.6/bin\"
 )
 
-IF (OPENSOURCE)
+IF (OPENSOURCE AND NOT OS_DARWIN)
     LDFLAGS(-Wl,--allow-multiple-definition)
 ENDIF()
 

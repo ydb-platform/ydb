@@ -972,6 +972,19 @@ TACLAttrs ConvertYdbPermissionNameToACLAttrs(const TString& name) {
     return it->second;
 }
 
+// TODO: Remove this workaround after revisiting revoke semantics.
+// SQL/Scheme do not expose inheritance; matching it can leave older grants untouched.
+// Consider removing Allow ACEs by subject and exact mask, regardless of inheritance.
+// Decide whether Viewer follows this rule or retains explicit inheritance matching.
+void RevokeYdbPermission(const TString& name, const TString& sid, NACLib::TDiffACL& acl) {
+    const auto attrs = ConvertYdbPermissionNameToACLAttrs(name);
+    acl.RemoveAccess(NACLib::EAccessType::Allow, attrs.AccessMask, sid, attrs.InheritanceType);
+    if (attrs.AccessMask == NACLib::EAccessRights::ConnectDatabase) {
+        // CONNECT grants created before inheritance support must also be revoked.
+        acl.RemoveAccess(NACLib::EAccessType::Allow, attrs.AccessMask, sid, NACLib::EInheritanceType::InheritNone);
+    }
+}
+
 TVector<TString> ConvertACLMaskToYdbPermissionNames(ui32 mask) {
     static const TVector<std::pair<ui32, TString>> maskByPower = CalcMaskByPower();
     TVector<TString> result;

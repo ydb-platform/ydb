@@ -56,7 +56,7 @@ Many terms related to the [implementation of distributed storage](#distributed-s
 
 **Storage group**, **distributed storage group**, or **Blob storage group** is a place for reliable data storage, similar to [RAID](https://en.wikipedia.org/wiki/RAID), but using disks from multiple servers. Depending on the selected [cluster topology](#topology), storage groups use different algorithms to ensure high availability, similar to [standard RAID levels](https://en.wikipedia.org/wiki/Standard_RAID_levels).
 
-[Distributed storage](#distributed-storage) typically manages a large number of relatively small storage groups. Cluster-wide information is stored in a single [static group](#static-group). Each [database](#database) includes one to many [dynamic groups](#dynamic-group), which provide the disk space capacity and I/O throughput to that database.
+[Distributed storage](#distributed-storage) typically manages a large number of relatively small storage groups. Cluster-wide persistent data is stored in [static groups](#static-group). Each [database](#database) includes one or more [dynamic groups](#dynamic-group), which provide the disk space capacity and I/O throughput to that database.
 
 #### Static group {#static-group}
 
@@ -68,13 +68,13 @@ A static group requires special attention during major cluster maintenance, such
 
 Ordinary storage groups that are not [static](#static-group) are called **dynamic groups**. They are called dynamic because they can be created and deleted on the fly while the [cluster](#cluster) is running.
 
-Each dynamic group belongs to a single [database](#database), and stores its data. The [tablets](#tablet) within the database are assigned to one of its dynamic groups through [storage channels](#channel), and this assignment can change over time.
+Each dynamic group belongs to a single [database](#database) and stores that database's data. The [tablets](#tablet) within the database are linked to the dynamic groups through [channels](#channel), and this assignment can change over time.
 
 #### Virtual storage group {#virtual-storage-groups}
 
 **Virtual storage group** is an entity that exposes the same external interface as a [storage group](#storage-group). It stores the data of [tablets](#tablet) assigned to it in the [dynamic storage groups](#dynamic-group) or in S3-compatible storage.
 
-Virtual storage groups decouple the physical data placement from tablet logical storage allocation. This gives the administrator more flexibility in storage management, including the ability to decomission the dynamic groups to reduce the storage requirements of the particular [database](#database).
+Virtual storage groups decouple the physical data placement from tablet logical storage allocation. This gives the administrator more flexibility in storage management, including the ability to decommission the dynamic groups to reduce the storage requirements of the particular [database](#database).
 
 #### BlobDepot {#blob-depot}
 

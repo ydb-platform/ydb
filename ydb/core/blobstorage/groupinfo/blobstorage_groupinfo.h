@@ -548,7 +548,6 @@ public:
         Included = 0,
         Excluded = 1,
         Joining = 2,
-        Leaving = 3,
     };
     struct TFailRealmState {
         ui32 FailRealmIdx;

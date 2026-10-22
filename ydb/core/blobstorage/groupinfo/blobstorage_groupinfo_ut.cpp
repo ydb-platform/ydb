@@ -275,11 +275,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         group.ClearFailRealmStates();
         auto* invalid = group.MutableFailRealmStates()->AddFailRealm();
         invalid->SetFailRealmIdx(0);
-        invalid->GetReflection()->MutableUnknownFields(invalid)->AddVarint(2, 99);
+        invalid->GetReflection()->MutableUnknownFields(invalid)->AddVarint(2, 3);
         UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr));
-        group.ClearFailRealmStates();
-        add(2, TProto::Leaving);
-        UNIT_ASSERT(TInfo::Parse(group, nullptr, nullptr));
         group.ClearFailRealmStates();
         UNIT_ASSERT(TInfo::Parse(group, nullptr, nullptr)->FailRealmStates.empty());
     }

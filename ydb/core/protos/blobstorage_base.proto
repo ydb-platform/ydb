@@ -102,7 +102,6 @@ message TFailRealmStates {
         Included = 0; // Reads and acknowledged writes.
         Excluded = 1; // No client operations or quorum participation.
         Joining = 2; // Writes count toward WriteOk; reads cannot establish absence.
-        Leaving = 3; // Existing data can be read; no new client writes.
     }
     message TFailRealm {
         optional uint32 FailRealmIdx = 1;

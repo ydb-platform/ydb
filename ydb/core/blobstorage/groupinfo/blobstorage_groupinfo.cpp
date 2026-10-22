@@ -871,7 +871,7 @@ std::optional<TVector<TBlobStorageGroupInfo::TFailRealmState>> TBlobStorageGroup
     for (const auto& realm : states.GetFailRealm()) {
         if (!realm.HasFailRealmIdx() || !realm.HasState()
                 || realm.GetState() < NKikimrBlobStorage::TFailRealmStates::Included
-                || realm.GetState() > NKikimrBlobStorage::TFailRealmStates::Leaving) {
+                || realm.GetState() > NKikimrBlobStorage::TFailRealmStates::Joining) {
             return fail("Failrealm requires an index and a valid participation state");
         }
         if (realm.GetFailRealmIdx() >= topology.GetTotalFailRealmsNum()) {

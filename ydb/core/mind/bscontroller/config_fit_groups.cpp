@@ -147,14 +147,30 @@ namespace NKikimr {
                     Y_ABORT_UNLESS(bridgeInfo);
                     bridgeInfo->ForEachPile([&](TBridgePileId bridgePileId) {
                         NKikimrBridge::TGroupState::TPile *pile = mainGroupState->AddPile();
-                        if (bridgeInfo->GetPile(bridgePileId)->State == NKikimrBridge::TClusterState::INACTIVE) {
-                            pile->SetAbsent(true); // there are no resources in this pile
+                        if (bridgeInfo->GetPile(bridgePileId)->State == NKikimrBridge::TClusterState::INACTIVE ||
+                                State.Self.IsBridgePileBeingRemoved(bridgePileId)) {
+                            pile->SetAbsent(true); // there are no resources in this pile (or they are going away)
                             return;
                         }
                         const TGroupId groupId = CreateGroup(bridgePileId, mainGroupId);
                         groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
                         pile->SetGroupGeneration(1);
-                        pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
+                        // the part belongs to the current sync of the pile, if there is one going
+                        if (const auto *pss = State.Self.FindPileSyncState(bridgePileId)) {
+                            pile->SetBecameUnsyncedGeneration(pss->GetBecameUnsyncedGeneration());
+                        }
+                        if (NBridge::PileStateTraits(bridgeInfo->GetPile(bridgePileId)->State).RequiresDataQuorum) {
+                            pile->SetStage(NKikimrBridge::TGroupState::SYNCED); // gets every write from the very beginning
+                        } else {
+                            // writes skip the pile, so its part is to be synced when the pile gets back
+                            State.Callbacks.push_back([&self = State.Self, mainGroupId, groupId] {
+                                const auto [it, inserted] = self.TargetGroupToSyncerState.try_emplace(groupId,
+                                    mainGroupId, groupId);
+                                if (inserted) {
+                                    self.SyncersRequiringAction.PushBack(&it->second);
+                                }
+                            });
+                        }
                     });
                     while (mainGroupState->PileSize() && mainGroupState->GetPile(mainGroupState->PileSize() - 1).GetAbsent()) {
                         mainGroupState->MutablePile()->RemoveLast(); // absent piles at the end are not stored
@@ -169,13 +185,14 @@ namespace NKikimr {
                 const TGroupInfo *proxyGroup = State.Groups.Find(proxyGroupId);
                 Y_ABORT_UNLESS(proxyGroup && proxyGroup->BridgeGroupInfo);
                 std::optional<ui32> groupSizeInUnits; // the same as other parts of the group have
-                NBridge::ForEachGroupPile(proxyGroup->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                NBridge::FindGroupPile(proxyGroup->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
                         const NKikimrBridge::TGroupState::TPile& pile) {
                     const TGroupInfo *group = State.Groups.Find(TGroupId::FromProto(&pile,
                         &NKikimrBridge::TGroupState::TPile::GetGroupId));
-                    if (group && !groupSizeInUnits) {
+                    if (group) {
                         groupSizeInUnits = group->GroupSizeInUnits;
                     }
+                    return group != nullptr;
                 });
 
                 const TGroupId groupId = CreateGroup(bridgePileId, proxyGroupId, groupSizeInUnits);
@@ -793,8 +810,8 @@ namespace NKikimr {
                                     const auto currentVSlotId = pdiskInfo->NextVSlotId;
                                     pdiskInfo->NextVSlotId = currentVSlotId + 1;
                                     vslotId = TVSlotId(pdiskId, currentVSlotId);
-                                    if (!State.VSlots.Find(vslotId)) {
-                                        break;
+                                    if (!State.VSlots.Find(vslotId) && !State.StaticVSlots.contains(vslotId)) {
+                                        break; // static VDisks may be placed on PDisks of BSC too
                                     }
                                 }
 

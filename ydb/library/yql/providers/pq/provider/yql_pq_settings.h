@@ -44,7 +44,7 @@ struct TPqClusterConfigurationSettings {
     TString ReadGroup;
 };
 
-struct TPqConfiguration: public TPqSettings, public NCommon::TSettingDispatcher {
+struct TPqConfiguration: public NCommon::TDispatcherAndSettings<TPqSettings> {
     using TPtr = TIntrusivePtr<TPqConfiguration>;
 
     explicit TPqConfiguration(bool strictConfigValidation = false);

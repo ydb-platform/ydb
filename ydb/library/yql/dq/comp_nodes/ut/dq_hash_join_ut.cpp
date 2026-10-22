@@ -2656,6 +2656,48 @@ TPhysicalJoin DispatchPhysicalJoin(EJoinKind kind, ESide preservedSide, bool isG
     return dispatched->GetPhysicalJoin();
 }
 
+// Records the OutputRows counter the join registers with the task counters provider.
+class TJoinOutputRowsCounters: public NYql::NUdf::ICountersProvider {
+public:
+    NYql::NUdf::TCounter GetCounter(const NYql::NUdf::TStringRef& module, const NYql::NUdf::TStringRef& name, bool) override {
+        Module = TString(module);
+        Name = TString(name);
+        ++Requests;
+        return NYql::NUdf::TCounter(&Rows);
+    }
+
+    NYql::NUdf::TScopedProbe GetScopedProbe(const NYql::NUdf::TStringRef&, const NYql::NUdf::TStringRef&) override {
+        return NYql::NUdf::TScopedProbe();
+    }
+
+    i64 Rows = 0;
+    int Requests = 0;
+    TString Module;
+    TString Name;
+};
+
+void TestOutputRowsOperatorStat(TJoinTestData td, bool blockJoin) {
+    const i64 expectedRows = static_cast<i64>(td.Result.Value.GetListLength());
+    TJoinOutputRowsCounters counters;
+    td.Setup->CountersProvider = &counters;
+
+    // Keep td in place: its memory-limit callback captures this.
+    auto descr = MakeJoinDescription(td);
+    descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    THolder<IComputationGraph> got = ConstructJoinGraphStream(
+        td.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr, true, td.JoinSettings);
+    if (blockJoin) {
+        CompareListAndBlockStreamIgnoringOrder(td.Result, *got);
+    } else {
+        CompareListAndStreamIgnoringOrder(td.Result, *got);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(counters.Requests, 1);
+    UNIT_ASSERT_VALUES_EQUAL(counters.Rows, expectedRows);
+    UNIT_ASSERT_VALUES_EQUAL(counters.Module, TString(Operator_Join) + "0");
+    UNIT_ASSERT_VALUES_EQUAL(counters.Name, TString(Counter_OutputRows));
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
@@ -2675,6 +2717,11 @@ Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
 Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     Y_UNIT_TEST_TWIN(TestBasicPassthrough, BlockJoin) {
         Test(BasicInnerJoinTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestOutputRowsOperatorStat, BlockJoin) {
+        TestOutputRowsOperatorStat(BasicInnerJoinTestData(), BlockJoin);
+        TestOutputRowsOperatorStat(EmptyInnerJoinTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestCrossPassthrough, BlockJoin) {

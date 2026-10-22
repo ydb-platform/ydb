@@ -234,7 +234,7 @@ namespace NKikimr::NStorage {
     };
 
     void TDistributedConfigKeeper::RequestConfigRefill() {
-        if (PendingConfigRefill && !BridgeInfo && !HasLocalConfig() && Binding && Binding->RootNodeId
+        if (PendingConfigRefill && !IsBridged() && !HasLocalConfig() && Binding && Binding->RootNodeId
             && !LegacyConfigRefill && !ConfigRefillActorId) {
             ConfigRefillActorId = RegisterWithSameMailbox(new TConfigRefillActor(this, *Binding));
         }
@@ -249,7 +249,7 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::DeferConfigRefill(const NKikimrBlobStorage::TStorageConfig& config) {
-        if (BridgeInfo || HasLocalConfig() || !config.GetGeneration() || !Binding || LegacyConfigRefill) {
+        if (IsBridged() || HasLocalConfig() || !config.GetGeneration() || !Binding || LegacyConfigRefill) {
             return false;
         }
         if (!PendingConfigRefill || PendingConfigRefill->GetGeneration() < config.GetGeneration()) {
@@ -539,7 +539,7 @@ namespace NKikimr::NStorage {
         record.SetInitial(true);
         record.SetSubtreeHeight(GetSubtreeHeight());
         record.SetSupportsMetadataOnlyCollect(true);
-        if (BridgeInfo && StorageConfig->GetGeneration()
+        if (IsBridged() && StorageConfig->GetGeneration()
             && ((!LocalCommittedStorageConfig
                     || LocalCommittedStorageConfig->GetGeneration() < StorageConfig->GetGeneration())
                 || (!CommittedStorageConfig && !DirectBoundNodes.empty()))) {
@@ -734,8 +734,9 @@ namespace NKikimr::NStorage {
 
         // abort or restart scatter tasks issued to newly added nodes
         const TMonotonic now = TActivationContext::Monotonic();
-        for (auto it = AddedNodesScatterTasks.lower_bound({nodeId, 0}); it != AddedNodesScatterTasks.end(); ) {
-            const auto& [nodeId, cookie] = *it;
+        for (auto it = AddedNodesScatterTasks.lower_bound({nodeId, 0});
+                it != AddedNodesScatterTasks.end() && std::get<0>(*it) == nodeId; ) {
+            const ui64 cookie = std::get<1>(*it);
 
             // find matching scatter task
             const auto jt = ScatterTasks.find(cookie);
@@ -743,8 +744,9 @@ namespace NKikimr::NStorage {
             TScatterTask& task = jt->second;
 
             if (task.StartTimestamp + TDuration::Seconds(3) <= now) { // task has timed out -- abort it
+                AddedNodesScatterTasks.erase(it);
                 AbortScatterTask(cookie, nodeId);
-                it = AddedNodesScatterTasks.erase(it);
+                it = AddedNodesScatterTasks.lower_bound({nodeId, 0});
             } else { // restart scatter task for this node
                 IssueAddedNodeScatterTask(nodeId, cookie, task);
                 ++it;
@@ -753,7 +755,7 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::IsProvisionalPeer(ui32 nodeId) const {
-        return !BridgeInfo && Scepter && CurrentProposition
+        return !IsBridged() && Scepter && CurrentProposition
                && std::ranges::binary_search(CurrentProposition->AddedOrChangedNodeIdentifiers,
                    nodeId, {}, &TNodeIdentifier::NodeId);
     }
@@ -1025,7 +1027,7 @@ namespace NKikimr::NStorage {
             boundNode->MutableMeta()->CopyFrom(node.Configs.back());
         }
 
-        if (Scepter && !BridgeInfo) {
+        if (Scepter && !IsBridged()) {
             const bool appliedConfigChanged = RememberAppliedConfig(meta);
             if ((prev != node.Configs.back() || (refInserted && !meta.GetGeneration()))
                 && (!meta.GetGeneration() || meta.GetGeneration() > StorageConfig->GetGeneration()
@@ -1221,7 +1223,7 @@ namespace NKikimr::NStorage {
             FanOutReversePush(CommittedStorageConfig.get());
         }
 
-        if (BridgeInfo && record.GetRequestedCommittedConfigGeneration()) {
+        if (IsBridged() && record.GetRequestedCommittedConfigGeneration()) {
             const ui64 generation = record.GetRequestedCommittedConfigGeneration();
             if (CommittedStorageConfig && generation <= CommittedStorageConfig->GetGeneration()) {
                 auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId());

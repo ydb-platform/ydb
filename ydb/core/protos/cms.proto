@@ -691,6 +691,7 @@ message TPDiskInfo {
         RATIO_BY_RACK = 5;
         TOO_MANY_FAULTY_PER_NODE = 6;
         RATIO_BY_PILE = 7;
+        PILE_CUT_OFF = 8; // the node belongs to the pile that is not allowed to connect to the cluster
     }
 
     optional uint32 State = 1; // EPDiskState

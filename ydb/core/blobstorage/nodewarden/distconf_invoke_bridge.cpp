@@ -61,10 +61,13 @@ namespace NKikimr::NStorage {
                     if (currentState == NKikimrBridge::TClusterState::INACTIVE) {
                         throw TExError() << "Pile '" << Self->BridgeInfo->Piles[i].Name
                             << "' is not added to the cluster";
-                    } else if (NBridge::GetPendingPileOperationPileId(Self->StorageConfig->GetClusterStateDetails()) ==
-                            TBridgePileId::FromPileIndex(i)) {
-                        throw TExError() << "Pile '" << Self->BridgeInfo->Piles[i].Name
-                            << "' is being added to the cluster, its state can't be changed until BSC finishes";
+                    } else if (const auto& details = Self->StorageConfig->GetClusterStateDetails();
+                            NBridge::GetPendingPileOperationPileId(details) == TBridgePileId::FromPileIndex(i)) {
+                        const bool adding = details.GetPendingPileOperation().GetKind() ==
+                            NKikimrBridge::TClusterStateDetails::TPendingPileOperation::ADD;
+                        throw TExError() << "Pile '" << Self->BridgeInfo->Piles[i].Name << "' is being "
+                            << (adding ? "added to" : "removed from")
+                            << " the cluster, its state can't be changed until BSC finishes";
                     }
                     switch (newState) {
                         case NKikimrBridge::TClusterState::DISCONNECTED:
@@ -160,45 +163,11 @@ namespace NKikimr::NStorage {
         }
 
         if (!disconnectedPileIndices.empty()) {
-            // Bump each static group once per configuration, even when several piles fail.
-            auto *ss = config.MutableBlobStorageConfig()->MutableServiceSet();
-            THashMap<TGroupId, NKikimrBlobStorage::TGroupInfo*> groupMap;
-            for (auto& group : *ss->MutableGroups()) {
-                groupMap.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), &group);
+            std::vector<TBridgePileId> pileIds;
+            for (size_t pileIndex : disconnectedPileIndices) {
+                pileIds.push_back(TBridgePileId::FromPileIndex(pileIndex));
             }
-            THashSet<TGroupId> changedGroupIds;
-            for (const auto& [groupId, group] : groupMap) {
-                if (!group->HasBridgeGroupState()) {
-                    continue;
-                }
-                auto *state = group->MutableBridgeGroupState();
-                for (size_t pileIndex : disconnectedPileIndices) {
-                    auto *pile = NBridge::GetGroupPile(state, TBridgePileId::FromPileIndex(pileIndex));
-                    Y_ABORT_UNLESS(pile); // disconnected pile is not INACTIVE, so the group has its part there
-                    pile->ClearStage();
-                    pile->SetBecameUnsyncedGeneration(clusterState->GetGeneration() + 1);
-                }
-                NBridge::ForEachGroupPile(state, [&](TBridgePileId, NKikimrBridge::TGroupState::TPile& pile) {
-                    const auto refGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
-                    auto *refGroup = groupMap[refGroupId];
-                    Y_ABORT_UNLESS(refGroup);
-                    Y_ABORT_UNLESS(refGroup->GetGroupGeneration() == pile.GetGroupGeneration());
-                    refGroup->SetGroupGeneration(refGroup->GetGroupGeneration() + 1);
-                    pile.SetGroupGeneration(refGroup->GetGroupGeneration());
-                    changedGroupIds.insert(refGroupId);
-                });
-                BumpBridgeProxyGeneration(group, [&](TGroupId id) { return changedGroupIds.contains(id); });
-            }
-            for (auto& vdisk : *ss->MutableVDisks()) {
-                auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-                if (!changedGroupIds.contains(vdiskId.GroupID)) {
-                    continue;
-                }
-                auto *group = groupMap[vdiskId.GroupID];
-                Y_ABORT_UNLESS(group);
-                vdiskId.GroupGeneration = group->GetGroupGeneration();
-                VDiskIDFromVDiskID(vdiskId, vdisk.MutableVDiskID());
-            }
+            ResetStaticGroupPileParts(&config, pileIds, clusterState->GetGeneration());
         }
 
         StartProposition(&config, /*mindPrev=*/ false);
@@ -295,13 +264,7 @@ namespace NKikimr::NStorage {
         });
 
         // update vdisk generations
-        for (auto& vdisk : *ss->MutableVDisks()) {
-            auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-            if (const auto it = referencedGroups.find(vdiskId.GroupID); it != referencedGroups.end()) {
-                vdiskId.GroupGeneration = it->second;
-                VDiskIDFromVDiskID(vdiskId, vdisk.MutableVDiskID());
-            }
-        }
+        UpdateStaticVDiskGenerations(ss, referencedGroups);
 
         StartProposition(&config);
     }
@@ -338,12 +301,13 @@ namespace NKikimr::NStorage {
             throw TExError() << "Cluster is already bridged one";
         }
 
-        // nodes running without BridgeConfig won't be able to work in bridged cluster
+        // nodes running without BridgeConfig won't be able to work in bridged cluster, as well as the ones of versions
+        // not supporting the features the converted cluster requires
         THashSet<ui32> requiredNodeIds;
         for (const auto& node : Self->StorageConfig->GetAllNodes()) {
             requiredNodeIds.insert(node.GetNodeId());
         }
-        RequireBridgeCapability(false, std::move(requiredNodeIds), {}, [this] {
+        RequireBridgeCapability(BridgeFeatureLevel, std::move(requiredNodeIds), {}, [this] {
             NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
             if (auto error = ConvertStorageConfigToBridge(&config, *Self->Cfg->BridgeConfig)) {
                 throw TExError() << *error;
@@ -352,7 +316,7 @@ namespace NKikimr::NStorage {
         });
     }
 
-    void TInvokeRequestHandlerActor::RequireBridgeCapability(bool pileListChange, THashSet<ui32> requiredNodeIds,
+    void TInvokeRequestHandlerActor::RequireBridgeCapability(ui32 minFeatureLevel, THashSet<ui32> requiredNodeIds,
             THashSet<ui32> ignoredNodeIds, std::function<void()> callback) {
         // every required static node must positively report its capability, as the one being temporarily disconnected
         // may still run without it and return later; dynamic nodes can't be enumerated this way, the ones that are
@@ -360,21 +324,29 @@ namespace NKikimr::NStorage {
         // so it must be capable even being ignored (that is, going to leave the cluster)
         TEvScatter task;
         task.MutableCollectBridgeCapability();
-        IssueScatterTask(std::move(task), [this, pileListChange, requiredNodeIds = std::move(requiredNodeIds),
+        IssueScatterTask(std::move(task), [this, minFeatureLevel, requiredNodeIds = std::move(requiredNodeIds),
                 ignoredNodeIds = std::move(ignoredNodeIds), callback = std::move(callback)](TEvGather *res) {
             if (!res->HasCollectBridgeCapability()) {
                 throw TExError() << "Incorrect CollectBridgeCapability response";
             }
             const auto& response = res->GetCollectBridgeCapability();
 
-            const auto& capableIds = pileListChange
-                ? response.GetPileListChangeCapableNodeIds()
-                : response.GetCapableNodeIds();
-            const THashSet<ui32> capable(capableIds.begin(), capableIds.end());
+            // older versions don't report feature levels, but the ones supporting changes of the list of piles say so
+            THashMap<ui32, ui32> levels;
+            for (const ui32 nodeId : response.GetPileListChangeCapableNodeIds()) {
+                levels[nodeId] = BridgeFeatureLevelPileList;
+            }
+            for (const auto& item : response.GetFeatureLevels()) {
+                levels[item.GetNodeId()] = item.GetLevel();
+            }
+            THashSet<ui32> capable;
             std::set<ui32> notCapable(response.GetNotCapableNodeIds().begin(), response.GetNotCapableNodeIds().end());
             for (const ui32 nodeId : response.GetCapableNodeIds()) {
-                if (!capable.contains(nodeId)) {
-                    notCapable.insert(nodeId); // node runs older version not supporting changes of the list of piles
+                const auto it = levels.find(nodeId);
+                if (!minFeatureLevel || (it != levels.end() && it->second >= minFeatureLevel)) {
+                    capable.insert(nodeId);
+                } else {
+                    notCapable.insert(nodeId); // node runs older version not supporting the required bridge features
                 }
             }
             std::set<ui32> unknown;
@@ -392,9 +364,9 @@ namespace NKikimr::NStorage {
             if (!notCapable.empty() || !unknown.empty()) {
                 TStringBuilder err;
                 if (!notCapable.empty()) {
-                    err << (pileListChange
-                        ? "Some connected nodes are running without BridgeConfig or with version not supporting changes"
-                            " of the list of piles, they have to be upgraded or stopped first NodeIds#"
+                    err << (minFeatureLevel
+                        ? "Some connected nodes are running without BridgeConfig or with version not supporting the"
+                            " bridge features the operation requires, they have to be upgraded or stopped first NodeIds#"
                         : "Some nodes are running without BridgeConfig NodeIds#");
                     for (const ui32 nodeId : notCapable) {
                         err << ' ' << nodeId;
@@ -429,45 +401,60 @@ namespace NKikimr::NStorage {
         StartProposition(&config);
     }
 
-    void TInvokeRequestHandlerActor::AddBridgePile(const TQuery::TAddBridgePile& cmd) {
+    TBridgePileId TInvokeRequestHandlerActor::CheckPileOperation(const TString& pileName,
+            NKikimrBridge::TClusterState::EPileState expectedState, bool adding) {
         RunCommonChecks();
         NeedBridgeMode();
 
+        const char *verb = adding ? "added to" : "removed from";
         if (!Self->SelfManagementEnabled) {
-            throw TExError() << "Self-management must be enabled to add piles";
+            throw TExError() << "Self-management must be enabled for piles to be " << verb << " the cluster";
         }
 
         const auto& config = *Self->StorageConfig;
-        const auto& clusterState = config.GetClusterState();
         const auto& details = config.GetClusterStateDetails();
         const auto registry = Self->GetConfigPileRegistry(config);
         Y_ABORT_UNLESS(registry); // the node runs with BridgeConfig
 
-        const TBridgePileId pileId = NBridge::ResolvePileId(*registry, cmd.GetPileName());
+        const TBridgePileId pileId = NBridge::ResolvePileId(*registry, pileName);
         if (!pileId) {
-            throw TExError() << "Pile '" << cmd.GetPileName() << "' is not listed in BridgeConfig";
-        } else if (const auto state = NBridge::GetPileState(clusterState, pileId); state != NKikimrBridge::TClusterState::INACTIVE) {
-            throw TExError() << "Pile '" << cmd.GetPileName() << "' is already added to the cluster, its state is "
-                << NKikimrBridge::TClusterState::EPileState_Name(state);
-        } else if (details.GetBscConversionPending()) {
-            throw TExError() << "Piles can't be added until BSC finishes conversion of the cluster";
+            throw TExError() << "Pile '" << pileName << "' is not listed in BridgeConfig";
         } else if (const auto *pending = Self->BridgeInfo->FindPile(NBridge::GetPendingPileOperationPileId(details))) {
             throw TExError() << "Operation on pile '" << pending->Name << "' is in progress";
+        } else if (const auto state = NBridge::GetPileState(config.GetClusterState(), pileId); state != expectedState) {
+            throw TExError() << "Pile '" << pileName << "' has to be " << NKikimrBridge::TClusterState::EPileState_Name(
+                expectedState) << " to be " << verb << " the cluster, its state is "
+                << NKikimrBridge::TClusterState::EPileState_Name(state);
+        } else if (details.GetBscConversionPending()) {
+            throw TExError() << "Piles can't be " << verb << " the cluster until BSC finishes conversion of the cluster";
         }
+        return pileId;
+    }
 
-        // every node of the cluster must know of pending pile operations and take pile ids from the registry; nodes of
-        // INACTIVE piles (including the one being added) are not connected to the cluster
+    void TInvokeRequestHandlerActor::RequirePileOperationCapability(TBridgePileId leavingPileId,
+            std::function<void()> callback) {
+        // every node connected to the cluster has to support pile operations; nodes of INACTIVE piles (including the one
+        // being added), of DISCONNECTED ones (including the one being removed) can't connect, and the ones of lower
+        // feature level are refused when their pile is back (connections are checked against the required level)
+        const auto& config = *Self->StorageConfig;
+        const auto registry = Self->GetConfigPileRegistry(config);
         THashSet<ui32> requiredNodeIds;
         THashSet<ui32> ignoredNodeIds;
         for (const auto& node : config.GetAllNodes()) {
             const auto bridgePileId = ResolveNodePileId(registry, TNodeLocation(node.GetLocation()));
-            const bool inactive = !bridgePileId || NBridge::GetPileState(clusterState, *bridgePileId) ==
-                NKikimrBridge::TClusterState::INACTIVE;
-            (inactive ? ignoredNodeIds : requiredNodeIds).insert(node.GetNodeId());
+            const bool outside = !bridgePileId || *bridgePileId == leavingPileId || !NBridge::PileStateTraits(
+                NBridge::GetPileState(config.GetClusterState(), *bridgePileId)).AllowsConnection;
+            (outside ? ignoredNodeIds : requiredNodeIds).insert(node.GetNodeId());
         }
-        RequireBridgeCapability(true, std::move(requiredNodeIds), std::move(ignoredNodeIds), [this, pileId] {
+        RequireBridgeCapability(BridgeFeatureLevelPileOps, std::move(requiredNodeIds), std::move(ignoredNodeIds),
+            std::move(callback));
+    }
+
+    void TInvokeRequestHandlerActor::AddBridgePile(const TQuery::TAddBridgePile& cmd) {
+        const TBridgePileId pileId = CheckPileOperation(cmd.GetPileName(), NKikimrBridge::TClusterState::INACTIVE, true);
+        RequirePileOperationCapability(TBridgePileId(), [this, pileId] {
             // PDisks of the new pile are already known to BSC, static groups have to be allocated on the same ones
-            AddedBridgePileId = pileId;
+            BridgePileOpPileId = pileId;
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryBaseConfig);
         });
     }
@@ -476,7 +463,7 @@ namespace NKikimr::NStorage {
         RunCommonChecks();
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
-        if (auto error = Self->AddBridgePileToConfig(&config, AddedBridgePileId, &BaseConfig.value())) {
+        if (auto error = Self->AddBridgePileToConfig(&config, BridgePileOpPileId, &BaseConfig.value())) {
             throw TExError() << "Can't add pile to the cluster: " << *error;
         }
         ProposedStorageConfig = std::move(config);
@@ -494,7 +481,8 @@ namespace NKikimr::NStorage {
         if (const auto pileId = NBridge::GetPendingPileOperationPileId(details); !pileId) {
             throw TExError() << "No pending pile operation";
         } else if (pileId != TBridgePileId::FromProto(&cmd, &TQuery::TNotifyBridgePileOperation::GetBridgePileId) ||
-                op.GetKind() != cmd.GetKind()) {
+                op.GetKind() != cmd.GetKind() || op.GetOperationId() != cmd.GetOperationId()) {
+            // the notification may come late, when the operation it refers to has already been finished
             throw TExError() << "Pending pile operation is another one";
         } else if (cmd.HasErrorReason() && op.HasErrorReason() && op.GetErrorReason() == cmd.GetErrorReason()) {
             return Finish(TResult::OK, std::nullopt); // nothing changes
@@ -504,10 +492,69 @@ namespace NKikimr::NStorage {
         auto *mutableDetails = config.MutableClusterStateDetails();
         if (cmd.HasErrorReason()) {
             mutableDetails->MutablePendingPileOperation()->SetErrorReason(cmd.GetErrorReason());
+        } else if (op.GetKind() == NKikimrBridge::TClusterStateDetails::TPendingPileOperation::REMOVE) {
+            // BSC has deleted parts of its groups in the pile, static ones go away now
+            if (auto error = RemoveBridgePileFromConfig(&config, NBridge::GetPendingPileOperationPileId(details))) {
+                throw TExError() << "Can't remove pile from the cluster: " << *error;
+            }
         } else {
             mutableDetails->ClearPendingPileOperation();
         }
         StartProposition(&config);
+    }
+
+    void TInvokeRequestHandlerActor::RemoveBridgePile(const TQuery::TRemoveBridgePile& cmd) {
+        const TBridgePileId pileId = CheckPileOperation(cmd.GetPileName(), NKikimrBridge::TClusterState::DISCONNECTED,
+            false);
+
+        // nodes without pile name belong to the implicit pile, they can't be resolved without it
+        const auto& config = *Self->StorageConfig;
+        const auto registry = Self->GetConfigPileRegistry(config);
+        for (const auto& node : config.GetAllNodes()) {
+            if (const TNodeLocation location(node.GetLocation()); !location.GetBridgePileName() &&
+                    ResolveNodePileId(registry, location) == pileId) {
+                throw TExError() << "Pile '" << cmd.GetPileName() << "' is the implicit one and NodeId# "
+                    << node.GetNodeId() << " has no pile name, nodes have to get the name of their pile first";
+            }
+        }
+
+        // data of static VDisks in the pile is lost with it, so they have to belong to parts of bridged groups
+        THashMap<TGroupId, TBridgePileId> groupPiles;
+        for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+            groupPiles.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID),
+                TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId));
+        }
+        for (const auto& vdisk : config.GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
+            const auto groupId = VDiskIDFromVDiskID(vdisk.GetVDiskID()).GroupID;
+            if (vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
+                continue;
+            } else if (const auto it = groupPiles.find(groupId); it != groupPiles.end() && it->second == pileId) {
+                continue;
+            } else if (const auto *pile = Self->BridgeInfo->GetPileForNode(vdisk.GetVDiskLocation().GetNodeID());
+                    pile && pile->BridgePileId == pileId) {
+                throw TExError() << "Static GroupId# " << groupId << " has VDisks in pile '" << cmd.GetPileName()
+                    << "', but it is not a part of bridged group";
+            }
+        }
+
+        RequirePileOperationCapability(pileId, [this, pileId] {
+            NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+            auto *details = config.MutableClusterStateDetails();
+            auto *op = details->MutablePendingPileOperation();
+            pileId.CopyToProto(op, &NKikimrBridge::TClusterStateDetails::TPendingPileOperation::SetBridgePileId);
+            op->SetKind(NKikimrBridge::TClusterStateDetails::TPendingPileOperation::REMOVE);
+            op->SetOperationId(config.GetGeneration() + 1); // the generation of the config being proposed
+            // nodes of older versions can't work with INACTIVE piles and removed static groups
+            auto *registry = details->MutablePileRegistry();
+            registry->SetPileListChanged(true);
+            registry->SetRequiredFeatureLevel(Max<ui32>(registry->GetRequiredFeatureLevel(), BridgeFeatureLevelPileOps));
+            ProposedStorageConfig = std::move(config);
+
+            // BSC checks whether it can delete parts of its groups before anything is committed
+            BridgePileOpPileId = pileId;
+            ControllerOp = EControllerOp::REMOVE_BRIDGE_PILE;
+            ConnectToController();
+        });
     }
 
 } // NKikimr::NStorage

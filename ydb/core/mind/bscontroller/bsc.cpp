@@ -315,6 +315,7 @@ void TBlobStorageController::OnActivateExecutor(const TActorContext& ctx) {
 
     // create storage pool stats monitor
     StoragePoolStat = std::make_unique<TStoragePoolStat>(GetServiceCounters(AppData()->Counters, "storage_pool_stat"));
+    BridgeSyncCounters = std::make_unique<TBridgeSyncCounters>(GetServiceCounters(AppData()->Counters, "bridge"));
 
     // initiate timer
     ScrubState.HandleTimer();
@@ -338,6 +339,17 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     auto prevStaticVSlots = std::exchange(StaticVSlots, {});
     auto prevStaticGroups = std::exchange(StaticGroups, {});
     StaticVDiskMap.clear();
+
+    // static entities may go away (e.g. along with the pile removed), so that they are deleted from system views
+    for (const auto& [pdiskId, _] : prevStaticPDisks) {
+        SysViewChangedPDisks.insert(pdiskId);
+    }
+    for (const auto& [vslotId, _] : prevStaticVSlots) {
+        SysViewChangedVSlots.insert(vslotId);
+    }
+    for (const auto& [groupId, _] : prevStaticGroups) {
+        SysViewChangedGroups.insert(groupId);
+    }
 
     const TMonotonic mono = TActivationContext::Monotonic();
 
@@ -836,6 +848,19 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
             }
             // the transaction replies when it is done
             Execute(CreateTxValidateAddBridgePile(pileId, std::move(storageConfig), std::exchange(h, {})));
+            return;
+        }
+
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateRemoveBridgePile: {
+            const auto pileId = TBridgePileId::FromProto(&record,
+                &NKikimrBlobStorage::TEvControllerDistconfRequest::GetBridgePileId);
+            if (!BridgeInfo || !BridgeInfo->FindPile(pileId)) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("unknown pile");
+                break;
+            }
+            // the transaction replies when it is done
+            Execute(CreateTxValidateRemoveBridgePile(pileId, std::exchange(h, {})));
             return;
         }
 

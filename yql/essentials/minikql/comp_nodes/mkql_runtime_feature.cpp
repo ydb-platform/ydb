@@ -12,8 +12,7 @@ namespace {
 
 TMaybe<TString> GetHostSetting(const NYql::TRuntimeSettings& runtimeSettings, TStringBuf name) {
     TMaybe<TString> result;
-    NYql::TRuntimeSettingsConfiguration conf(runtimeSettings);
-    conf.SerializeStaticSettings([&](const TString& settingName, const TString& value) {
+    NYql::TRuntimeSettingsConfiguration::Get().SerializeStaticSettings(runtimeSettings, [&](const TString& settingName, const TString& value) {
         if (settingName == name) {
             result = value;
         }

@@ -162,7 +162,7 @@ public:
         AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         auto& shardInfo = ShardsInfo.at(shardId);
         shardInfo.Flags |= action;
-        if (action & EAction::WRITE) {
+        if (action & (EAction::WRITE | EAction::PESSIMISTIC_LOCK)) {
             ReadOnly = false;
             // Track all QuerySpanIds of queries that wrote to this shard
             AddBreakerQuerySpanId(shardInfo, querySpanId);
@@ -830,10 +830,17 @@ public:
                 continue;
             }
 
-            const ui32 affectedFlags = (shardInfo.Flags != 0)
-                ? shardInfo.Flags
-                : static_cast<ui32>(EAction::READ);
-            AFL_ENSURE(affectedFlags != 0);
+            // The coordinator's affected-set flags only distinguish read (1) and
+            // write (2), so PESSIMISTIC_LOCK must not leak through: it is
+            // replaced with WRITE (breaks its own locks on commit), READ is
+            // kept when the shard also read.
+            ui32 flags = shardInfo.Flags & (EAction::READ | EAction::WRITE);
+            // Every participant holds at least one action; a lock-only shard
+            // always registers an action together with its locks (see AddLock
+            // call sites).
+            AFL_ENSURE(shardInfo.Flags != 0)("shardId", shardId)("lockCount", shardInfo.Locks.size());
+            flags |= (shardInfo.Flags & EAction::PESSIMISTIC_LOCK) ? EAction::WRITE : 0;
+            const ui32 affectedFlags = flags;
 
             result.ShardsInfo.push_back(TCommitShardInfo{
                 .ShardId = shardId,

@@ -8,7 +8,7 @@ namespace NYql {
 Y_UNIT_TEST_SUITE(TRuntimeSettingsSerializationTest) {
 
 Y_UNIT_TEST(Serialization) {
-    auto config = MakeIntrusive<TRuntimeSettingsConfiguration>();
+    auto config = MakeRuntimeSettingsMutable();
     config->DatumValidation.Set(NYql::EDatumValidationMode::Cheap);
     config->TestHostSetting.Set(true);
     config->SetUdfSetting("MyModule", "Key", "Val");

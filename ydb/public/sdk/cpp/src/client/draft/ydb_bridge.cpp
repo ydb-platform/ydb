@@ -111,6 +111,16 @@ public:
             &Ydb::Bridge::V1::BridgeService::Stub::AsyncAddPile,
             TRpcRequestSettings::Make(settings));
     }
+
+    TAsyncStatus RemovePile(const std::string& pileName, const TRemovePileSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::RemovePileRequest>(settings);
+        request.set_pile_name(pileName);
+
+        return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::RemovePileRequest, Ydb::Bridge::RemovePileResponse>(
+            std::move(request),
+            &Ydb::Bridge::V1::BridgeService::Stub::AsyncRemovePile,
+            TRpcRequestSettings::Make(settings));
+    }
 };
 
 TBridgeClient::TBridgeClient(const TDriver& driver, const TCommonClientSettings& settings)
@@ -134,6 +144,10 @@ TAsyncStatus TBridgeClient::ConvertToBridge(const TConvertToBridgeSettings& sett
 
 TAsyncStatus TBridgeClient::AddPile(const std::string& pileName, const TAddPileSettings& settings) {
     return Impl_->AddPile(pileName, settings);
+}
+
+TAsyncStatus TBridgeClient::RemovePile(const std::string& pileName, const TRemovePileSettings& settings) {
+    return Impl_->RemovePile(pileName, settings);
 }
 
 }

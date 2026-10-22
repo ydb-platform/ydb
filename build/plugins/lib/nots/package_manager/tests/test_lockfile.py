@@ -194,7 +194,7 @@ def test_package_meta_missing_resolution():
     assert str(e.value) == "Invalid package meta for '/valid@1.2.3', missing 'resolution' key"
 
 
-def test_package_meta_missing_tarball():
+def test_package_meta_missing_integrity_without_tarball():
     lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {
         "packages": {
@@ -207,7 +207,116 @@ def test_package_meta_missing_tarball():
     with pytest.raises(TypeError) as e:
         list(lf.get_packages_meta())
 
-    assert str(e.value) == "Invalid package meta for '/valid@1.2.3', missing 'tarball' key"
+    assert str(e.value) == "Invalid package meta for '/valid@1.2.3', missing 'integrity' key"
+
+
+@pytest.mark.parametrize(
+    "key, path",
+    [
+        ("@emnapi/runtime@1.11.2", "@emnapi%2fruntime/-/runtime-1.11.2.tgz"),
+        ("lodash@4.17.21", "lodash/-/lodash-4.17.21.tgz"),
+        ("@scope.name/Foo_bar-baz@1.2.3", "@scope.name%2fFoo_bar-baz/-/Foo_bar-baz-1.2.3.tgz"),
+        ("@scope~name/pkg!name@1.2.3", "@scope~name%2fpkg!name/-/pkg!name-1.2.3.tgz"),
+        ("pkg@1.2.3-rc.1+build.2", "pkg/-/pkg-1.2.3-rc.1+build.2.tgz"),
+        ("/@emnapi/runtime@1.11.2", "@emnapi%2fruntime/-/runtime-1.11.2.tgz"),
+        ("/pkg@1.2.3(@scope/peer@4.5.6)", "pkg/-/pkg-1.2.3.tgz"),
+    ],
+)
+def test_lockfile_infers_missing_tarball(key, path):
+    lf = Lockfile(path="/pnpm-lock.yaml")
+    lf.data = {"packages": {key: {"resolution": {"integrity": "sha512-aGFzaA=="}}}}
+
+    (pkg,) = lf.get_packages_meta()
+
+    assert pkg.tarball_url == "https://npm.yandex-team.ru/" + path
+    assert pkg.tarball_path == path.replace("%2f", "/")
+    assert pkg.to_uri() == "https://npm.yandex-team.ru/" + path + "#integrity=sha512-aGFzaA=="
+    assert pkg.sky_id == ""
+    assert "tarball" not in lf.data["packages"][key]["resolution"]
+
+    lf.update_tarball_resolutions(lambda meta: "file:__tarballs__/" + meta.tarball_path)
+
+    assert lf.data["packages"][key]["resolution"]["tarball"] == "file:__tarballs__/" + path.replace("%2f", "/")
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "invalid",
+        "pkg@file:../pkg",
+        "pkg@https://example.org/pkg.tgz",
+        "pkg@^1.2.3",
+        ".@1.2.3",
+        "..@1.2.3",
+        "@scope/..@1.2.3",
+    ],
+)
+def test_lockfile_does_not_infer_tarball_for_non_registry_keys(key):
+    lf = Lockfile(path="/pnpm-lock.yaml")
+    lf.data = {"packages": {key: {"resolution": {"integrity": "sha512-aGFzaA=="}}}}
+
+    with pytest.raises(TypeError, match="cannot infer tarball URL"):
+        list(lf.get_packages_meta())
+
+
+@pytest.mark.parametrize("name", ["foo{}bar", "@scope/foo{}bar", "@scope{}name/foo"])
+@pytest.mark.parametrize("character", ["?", "#", "%", " ", "\\", "\t", "\n", "é"])
+def test_lockfile_rejects_unsafe_package_names(name, character):
+    key = name.format(character) + "@1.2.3"
+    lf = Lockfile(path="/pnpm-lock.yaml")
+    lf.data = {"packages": {key: {"resolution": {"integrity": "sha512-aGFzaA=="}}}}
+
+    with pytest.raises(TypeError, match="cannot infer tarball URL"):
+        list(lf.get_packages_meta())
+    with pytest.raises(TypeError, match="cannot infer tarball URL"):
+        lf.update_tarball_resolutions(lambda meta: "file:__tarballs__/" + meta.tarball_path)
+    assert "tarball" not in lf.data["packages"][key]["resolution"]
+
+
+@pytest.mark.parametrize(
+    "version",
+    [
+        "01.2.3",
+        "1.02.3",
+        "1.2.03",
+        "1.2.3-..",
+        "1.2.3-alpha..1",
+        "1.2.3-.alpha",
+        "1.2.3-alpha.",
+        "1.2.3-01",
+        "1.2.3-alpha.01",
+        "1.2.3-",
+        "1.2.3+",
+        "1.2.3+build..2",
+        "1.2.3+.build",
+        "1.2.3+build.",
+    ],
+)
+def test_lockfile_rejects_invalid_fixed_semver(version):
+    key = "pkg@" + version
+    lf = Lockfile(path="/pnpm-lock.yaml")
+    lf.data = {"packages": {key: {"resolution": {"integrity": "sha512-aGFzaA=="}}}}
+
+    with pytest.raises(TypeError, match="cannot infer tarball URL"):
+        list(lf.get_packages_meta())
+    with pytest.raises(TypeError, match="cannot infer tarball URL"):
+        lf.update_tarball_resolutions(lambda meta: "file:__tarballs__/" + meta.tarball_path)
+    assert "tarball" not in lf.data["packages"][key]["resolution"]
+
+
+@pytest.mark.parametrize(
+    "version",
+    ["0.0.0", "1.2.3-0", "1.2.3-alpha.0", "1.2.3-01a", "1.2.3-x-y-z.--", "1.2.3+build.001", "1.2.3-0.alpha+001.sha-2"],
+)
+def test_lockfile_infers_tarball_for_valid_fixed_semver(version):
+    key = "pkg@" + version
+    lf = Lockfile(path="/pnpm-lock.yaml")
+    lf.data = {"packages": {key: {"resolution": {"integrity": "sha512-aGFzaA=="}}}}
+
+    (pkg,) = lf.get_packages_meta()
+
+    assert pkg.tarball_url == "https://npm.yandex-team.ru/pkg/-/pkg-" + version + ".tgz"
+    assert pkg.tarball_path == "pkg/-/pkg-" + version + ".tgz"
 
 
 def test_lockfile_convertion_to_v9_simple():

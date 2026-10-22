@@ -33,6 +33,7 @@
 #include <util/system/file_lock.h>
 #include <util/stream/null.h>
 #include <util/system/env.h>
+#include <util/system/error.h>
 #include <util/system/fs.h>
 #include <util/system/fstat.h>
 #include <util/system/guard.h>
@@ -41,37 +42,9 @@
 #include <util/system/utime.h>
 #include <util/folder/path.h>
 
+#include <cerrno>
+
 namespace NYql {
-
-namespace NFileStorageUtil {
-
-class TPvPathFinder {
-public:
-    TPvPathFinder() {
-        YQL_LOG(DEBUG) << "Searching for pv utility";
-        TShellCommand cmd("which", {"pv"});
-        cmd.Run().Wait();
-        if (*cmd.GetExitCode() == 0) {
-            Path_ = "pv";
-            YQL_LOG(DEBUG) << "Found pv in PATH";
-            return;
-        }
-        ythrow yexception() << "pv utility not found in PATH";
-    }
-
-    const TString& Get() const {
-        return Path_;
-    }
-
-private:
-    TString Path_;
-};
-
-TString GetPvPath() {
-    return Default<TPvPathFinder>().Get();
-}
-
-} // namespace NFileStorageUtil
 
 namespace {
 
@@ -150,18 +123,28 @@ public:
         TFileLinkPtr result = Storage_.Put(storageFileName, "", "", [file, bandwidthLimit, this](const TFsPath& dstPath) {
             ui64 size;
             TString md5;
-            const TString tmpFileSuffix = TStringBuilder() << getpid() << "." << (uint64_t)this;
-
-            TShellCommand cmd = bandwidthLimit.empty()
-                                    ? TShellCommand("strip", {file, "-o", dstPath.GetPath()})
-                                    : TShellCommand("sh", {"-c",
-                                                           TStringBuilder() << "strip " << '"' << file << '"'
-                                                                            << " -o /dev/shm/strip_tmp." << tmpFileSuffix << " && " << NFileStorageUtil::GetPvPath() << " -L " << '"' << bandwidthLimit << '"'
-                                                                            << " < /dev/shm/strip_tmp." << tmpFileSuffix << " > " << '"' << dstPath.GetPath() << '"'
-                                                                            << "; rm -f /dev/shm/strip_tmp." << tmpFileSuffix});
-            cmd.Run().Wait();
-            if (*cmd.GetExitCode() != 0) {
-                ythrow yexception() << "'strip' exited with code " << *cmd.GetExitCode() << ". Stderr: " << cmd.GetError();
+            if (bandwidthLimit.empty()) {
+                TShellCommand cmd("strip", {file, "-o", dstPath.GetPath()});
+                cmd.Run().Wait();
+                if (*cmd.GetExitCode() != 0) {
+                    ythrow yexception() << "'" << cmd.GetQuotedCommand() << "' exited with code " << *cmd.GetExitCode() << ". Stderr: " << cmd.GetError();
+                }
+            } else {
+                const TString tmpFilePath = TStringBuilder() << "/dev/shm/strip_tmp." << getpid() << "." << (uint64_t)this;
+                TShellCommand cmd(TStringBuilder() << "strip " << '"' << file << '"'
+                                                   << " -o " << tmpFilePath << " && pv -L " << '"' << bandwidthLimit << '"'
+                                                   << " < " << tmpFilePath << " > " << '"' << dstPath.GetPath() << '"');
+                cmd.Run().Wait();
+                auto cleanupError = 0;
+                if (!NFs::Remove(tmpFilePath)) {
+                    cleanupError = LastSystemError();
+                }
+                if (*cmd.GetExitCode() != 0) {
+                    ythrow yexception() << "'" << cmd.GetQuotedCommand() << "' exited with code " << *cmd.GetExitCode() << ". Stderr: " << cmd.GetError();
+                }
+                if (cleanupError != 0 && cleanupError != ENOENT) {
+                    ythrow TSystemError(cleanupError) << "cannot remove temporary stripped file '" << tmpFilePath << "'";
+                }
             }
             md5 = MD5::File(dstPath.GetPath());
             size = TFile(dstPath.GetPath(), OpenExisting | RdOnly).GetLength();

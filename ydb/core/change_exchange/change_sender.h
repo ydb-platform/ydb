@@ -122,7 +122,8 @@ class TChangeSender {
     bool RequestRecords();
     void SendRecords();
     void SendPreparedRecords(ui64 partitionId);
-    void ReEnqueueRecords(ui64 partitionId, const TSender& sender);
+    enum class ESenderRemoval { Reconnect, PartitionRemoved };
+    void ReEnqueueRecords(ui64 partitionId, const TSender& sender, ESenderRemoval reason);
 
     TBroadcast& EnsureBroadcast(IChangeRecord::TPtr record);
     bool AddBroadcastPartition(ui64 order, ui64 partitionId);

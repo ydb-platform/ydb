@@ -7,6 +7,8 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -5071,6 +5073,424 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     "Record with ts " << ts << " after resolved " << resolved);
             }
         }
+    }
+
+    enum class ESchemaReconnectRecovery { Reconnect, RebootSource };
+    enum class EBroadcastDelivery { Prepared, InFlight };
+
+    // Same real LocalMKQL boundary as datashard_ut_change_collector.cpp:17-78.
+    THashSet<ui64> ReadDurableChangeOrders(TTestActorRuntime& runtime,
+            const TActorId& edge, ui64 tabletId, const TString& table) {
+        UNIT_ASSERT(table == "ChangeRecords" || table == "ChangeRecordDetails");
+        const TString query = TStringBuilder() << R"(((let range '( '('Order (Uint64 '0) (Void) )))
+            (let columns '('Order))
+            (let result (SelectRange ')" << table << R"( range columns '()))
+            (return (AsList (SetResult 'Result result)))))";
+        auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+        request->Record.MutableProgram()->MutableProgram()->SetText(query);
+        runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+        auto response = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(edge, TDuration::Seconds(10));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), NKikimrProto::OK);
+        auto value = NClient::TValue::Create(response->Get()->Record.GetExecutionEngineEvaluatedResponse());
+        const auto& list = value["Result"]["List"];
+        THashSet<ui64> orders;
+        for (size_t i = 0; i < list.Size(); ++i) {
+            orders.insert(ui64(list[i]["Order"]));
+        }
+        return orders;
+    }
+
+    void SchemaChangesBroadcastRecovery(ESchemaReconnectRecovery recovery,
+            EBroadcastDelivery delivery = EBroadcastDelivery::Prepared) {
+        using TExchange = NChangeExchange::TEvChangeExchange;
+        using TPrivate = NChangeExchange::TEvChangeExchangePrivate;
+        using TWriter = NPQ::TEvPartitionWriter;
+        using EKind = NChangeExchange::IChangeRecord::EKind;
+
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false).SetDomainName("Root"));
+        auto& runtime = *server->GetRuntime();
+        runtime.SetDispatchTimeout(TDuration::Seconds(30));
+        const auto edge = runtime.AllocateEdgeActor();
+        SetupLogging(runtime);
+        InitRoot(server, edge);
+        CreateShardedTable(server, edge, "/Root", "Table", SimpleTable());
+        WaitTxNotification(server, edge, AsyncAlterAddStream(server, "/Root", "Table",
+            WithTopicAutoPartitioning(false, WithSchemaChanges(Updates(NKikimrSchemeOp::ECdcStreamFormatJson)))));
+        const auto shards = GetTableShards(server, edge, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
+        const auto topic = GetTopicDescription(runtime, edge, "/Root/Table/Stream");
+        UNIT_ASSERT_VALUES_EQUAL(topic.PartitionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions(0).GetPartitionId(), 0);
+        const ui64 pqTablet = topic.GetPartitions(0).GetTabletId();
+
+        TActorId mainSender;
+        TActorId partitionSender;
+        TMaybe<ui64> schemaOrder;
+        size_t outgoingSchemaCopies = 0;
+        bool removedBeforeSubmission = false;
+        bool gone = false;
+        bool ordinaryAcknowledged = false;
+        bool holdAck = delivery == EBroadcastDelivery::Prepared;
+        auto observeReady = runtime.AddObserver<TPrivate::TEvReady>([&](auto& ev) {
+            if (partitionSender && ev->Sender == partitionSender && ev->Recipient == mainSender) {
+                ordinaryAcknowledged = true;
+            }
+        });
+        auto discover = runtime.AddObserver<TExchange::TEvRequestRecords>([&](auto& ev) {
+            if (!mainSender) {
+                mainSender = ev->Sender;
+            }
+        });
+        auto trace = runtime.AddObserver<TExchange::TEvRecords>([&](auto& ev) {
+            if (ev->Sender == mainSender) {
+                for (const auto& record : ev->Get()->Records) {
+                    if (record->GetKind() == EKind::CdcSchemaChange) {
+                        ++outgoingSchemaCopies;
+                    } else if (!partitionSender && !record->IsBroadcast()) {
+                        partitionSender = ev->Recipient;
+                    }
+                }
+            } else if (ev->Recipient == mainSender) {
+                for (const auto& record : ev->Get()->Records) {
+                    if (record->GetKind() == EKind::CdcSchemaChange) {
+                        schemaOrder = record->GetOrder();
+                    }
+                }
+            }
+        });
+        auto removes = runtime.AddObserver<TExchange::TEvRemoveRecords>([&](auto& ev) {
+            if (schemaOrder && !outgoingSchemaCopies) {
+                for (const auto order : ev->Get()->Records) {
+                    removedBeforeSubmission |= order == *schemaOrder;
+                }
+            }
+        });
+        auto observeGone = runtime.AddObserver<TPrivate::TEvGone>([&](auto& ev) {
+            if (ev->Sender == partitionSender && ev->Recipient == mainSender) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->PartitionId, 0);
+                gone = true;
+            }
+        });
+        TBlockEvents<TWriter::TEvWriteResponse> oldAck(runtime, [&](const auto& ev) {
+            return holdAck && partitionSender && ev->Recipient == partitionSender;
+        });
+        ExecSQL(server, edge, "UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);");
+        if (delivery == EBroadcastDelivery::Prepared) {
+            runtime.WaitFor("ordinary CDC write committed, response held", [&] { return oldAck.size() == 1; }, TDuration::Seconds(10));
+            UNIT_ASSERT(oldAck.front()->Get()->IsSuccess());
+        } else {
+            runtime.WaitFor("ordinary CDC write acknowledged", [&] { return ordinaryAcknowledged; }, TDuration::Seconds(10));
+            holdAck = true;
+        }
+        UNIT_ASSERT(mainSender && partitionSender);
+        discover.Remove();
+
+        WaitTxNotification(server, edge, AsyncAlterAddExtraColumn(server, "/Root", "Table"));
+        runtime.WaitFor("schema body delivered to CDC main", [&] { return bool(schemaOrder); }, TDuration::Seconds(10));
+        // Real request/reply barrier to the same actor, after the body event has been
+        // dispatched. Do not parse its HTML or inspect private Prepared state.
+        runtime.Send(new IEventHandle(mainSender, edge, new NMon::TEvRemoteHttpInfo("")), 0, true);
+        UNIT_ASSERT(runtime.GrabEdgeEventRethrow<NMon::TEvRemoteHttpInfoRes>(edge, TDuration::Seconds(10)));
+        const size_t expectedCopies = delivery == EBroadcastDelivery::Prepared ? 0 : 1;
+        if (delivery == EBroadcastDelivery::InFlight) {
+            runtime.WaitFor("schema CDC write committed, response held", [&] { return oldAck.size() == 1; }, TDuration::Seconds(10));
+            UNIT_ASSERT(oldAck.front()->Get()->IsSuccess());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(outgoingSchemaCopies, expectedCopies);
+        UNIT_ASSERT(ReadDurableChangeOrders(runtime, edge, shards[0], "ChangeRecords").contains(*schemaOrder));
+        UNIT_ASSERT(ReadDurableChangeOrders(runtime, edge, shards[0], "ChangeRecordDetails").contains(*schemaOrder));
+
+        // Hold only this sender's reconnect resolution. DDL/topic/tablet recovery
+        // traffic remains live. A PQ reboot produces the actual writer disconnect.
+        TBlockEvents<TEvTxProxySchemeCache::TEvNavigateKeySetResult> reconnect(runtime,
+            [&](const auto& ev) { return ev->Recipient == mainSender; });
+        RebootTablet(runtime, pqTablet, edge);
+        runtime.WaitFor("partition Gone and reconnect lookup", [&] { return gone && !reconnect.empty(); }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(outgoingSchemaCopies, expectedCopies);
+        // Capture these before recovery. Defer their assertions so a RED run also
+        // demonstrates the consumer-visible omission, not only a queue invariant.
+        const bool metadataRetained = ReadDurableChangeOrders(runtime, edge, shards[0], "ChangeRecords").contains(*schemaOrder);
+        const bool bodyRetained = ReadDurableChangeOrders(runtime, edge, shards[0], "ChangeRecordDetails").contains(*schemaOrder);
+        oldAck.Stop();
+        oldAck.clear(); // old partition actor died; never ACK a replacement with this event
+
+        if (recovery == ESchemaReconnectRecovery::RebootSource) {
+            // Remove trace before actor replacement; it intentionally identifies the
+            // original sender. Literal topic contents remain the delivery oracle.
+            trace.Remove();
+            removes.Remove();
+            RebootTablet(runtime, shards[0], edge);
+            reconnect.Stop();
+            reconnect.clear(); // results addressed to the dead original sender
+        } else {
+            reconnect.Stop().Unblock();
+        }
+
+        ExecSQL(server, edge, "UPSERT INTO `/Root/Table` (key, value, extra) VALUES (2, 20, 200);");
+        TVector<std::pair<TString, TString>> records;
+        bool finalRowSeen = false;
+        for (size_t attempt = 0; attempt < 30; ++attempt) {
+            records = GetRecords(runtime, edge, "/Root/Table/Stream", 0);
+            for (const auto& record : records) {
+                NJson::TJsonValue json;
+                UNIT_ASSERT(NJson::ReadJsonTree(record.second, &json));
+                if (json.Has("key") && json["key"][0].GetUInteger() == 2) {
+                    finalRowSeen = true;
+                }
+            }
+            if (finalRowSeen) {
+                break;
+            }
+            SimulateSleep(server, TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(finalRowSeen, "CDC did not resume after writer disconnect");
+        UNIT_ASSERT_VALUES_EQUAL_C(records.size(), 3,
+            "Expected old row, ADD COLUMN schema, new row; schema was lost on reconnect"
+            << "; metadataRetained=" << metadataRetained << "; bodyRetained=" << bodyRetained
+            << "; removedBeforeSubmission=" << removedBeforeSubmission);
+        AssertJsonsEqual(records[0].second, R"({"update":{"value":10},"key":[1]})");
+        AssertJsonsEqual(records[1].second, R"({"tableChanges":"***","ts":"***"})");
+        AssertJsonsEqual(records[2].second, R"({"update":{"extra":200,"value":20},"key":[2]})");
+        NJson::TJsonValue schema;
+        UNIT_ASSERT(NJson::ReadJsonTree(records[1].second, &schema));
+        UNIT_ASSERT_VALUES_EQUAL(schema["tableChanges"].GetArray().size(), 1);
+        const auto& table = schema["tableChanges"][0]["table"];
+        UNIT_ASSERT(table.Has("schemaVersion"));
+        UNIT_ASSERT_VALUES_EQUAL(table["primaryKeyColumnNames"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(table["primaryKeyColumnNames"][0].GetString(), "key");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"].GetMap().size(), 3);
+        AssertColumn(table, "key", "Uint32", "default");
+        AssertColumn(table, "value", "Uint32", "default");
+        AssertColumn(table, "extra", "Uint32", "default");
+        UNIT_ASSERT_C(metadataRetained && bodyRetained, "Unsent schema must survive in both durable tables");
+        UNIT_ASSERT_C(!removedBeforeSubmission, "Unsent schema was acknowledged for deletion");
+
+        // Successful delivery must eventually release the durable record too.
+        bool drained = false;
+        for (size_t attempt = 0; attempt < 10; ++attempt) {
+            const auto metadata = ReadDurableChangeOrders(runtime, edge, shards[0], "ChangeRecords");
+            const auto bodies = ReadDurableChangeOrders(runtime, edge, shards[0], "ChangeRecordDetails");
+            drained = !metadata.contains(*schemaOrder) && !bodies.contains(*schemaOrder);
+            if (drained) {
+                break;
+            }
+            SimulateSleep(server, TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(drained, "Delivered schema was never released from durable queue");
+    }
+
+    Y_UNIT_TEST(SchemaChangesPreparedBroadcastSurvivesWriterReconnect) {
+        SchemaChangesBroadcastRecovery(ESchemaReconnectRecovery::Reconnect);
+    }
+
+    Y_UNIT_TEST(SchemaChangesPreparedBroadcastSurvivesSourceReboot) {
+        SchemaChangesBroadcastRecovery(ESchemaReconnectRecovery::RebootSource);
+    }
+
+    Y_UNIT_TEST(SchemaChangesInFlightBroadcastSurvivesWriterReconnect) {
+        SchemaChangesBroadcastRecovery(ESchemaReconnectRecovery::Reconnect, EBroadcastDelivery::InFlight);
+    }
+
+    enum class EPartitionRemoval { Connected, AfterDisconnect };
+
+    // Exercise the shared sender through its real actor protocol. Only the
+    // external record store, partition routing and partition writers are edges.
+    class TTopologyChangeSender final
+        : public TActorBootstrapped<TTopologyChangeSender>
+        , public NChangeExchange::TChangeSender
+        , public NChangeExchange::IChangeSenderIdentity
+        , public NChangeExchange::IChangeSenderPathResolver
+        , public NChangeExchange::IChangeSenderFactory
+    {
+        using TExchange = NChangeExchange::TEvChangeExchange;
+        using TPrivate = NChangeExchange::TEvChangeExchangePrivate;
+
+        class TPartition final : public TActorBootstrapped<TPartition> {
+            const TActorId Parent;
+            const TActorId Sink;
+            const ui64 PartitionId;
+        public:
+            TPartition(TActorId parent, TActorId sink, ui64 partitionId)
+                : Parent(parent), Sink(sink), PartitionId(partitionId)
+            {}
+            void Bootstrap() {
+                Become(&TThis::StateWork);
+                Send(Parent, new TPrivate::TEvReady(PartitionId));
+            }
+            void Handle(TExchange::TEvRecords::TPtr& ev) {
+                Send(Sink, new TExchange::TEvRecords(std::move(ev->Get()->Records)), 0, PartitionId);
+            }
+            STATEFN(StateWork) {
+                switch (ev->GetTypeRewrite()) {
+                    hFunc(TExchange::TEvRecords, Handle);
+                    cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+                }
+            }
+        };
+
+        class TResolver final : public NChangeExchange::TBasePartitionResolver {
+            const bool& Removed;
+        public:
+            explicit TResolver(const bool& removed) : Removed(removed) {}
+            void Visit(const TChangeRecord& record) override {
+                SetPartitionId(!Removed && record.GetOrder() == 10 ? 0 : 1);
+            }
+        };
+
+        const TActorId Sink;
+        const TActorId Control;
+        bool Removed = false;
+        bool Resolving = false;
+    public:
+        TTopologyChangeSender(TActorId source, TActorId sink, TActorId control)
+            : NChangeExchange::TChangeSender(this, this, this, this, source)
+            , Sink(sink), Control(control)
+        {
+            SetPartitionResolver(new TResolver(Removed));
+        }
+        void Bootstrap() {
+            Become(&TThis::StateWork);
+            CreateSenders({0, 1});
+        }
+        TPathId GetChangeSenderIdentity() const override { return TPathId(1, 1); }
+        bool IsResolved() const override { return !Resolving; }
+        bool IsResolving() const override { return Resolving; }
+        void Resolve() override {
+            Resolving = true;
+            Send(Control, new TEvents::TEvWakeup());
+        }
+        IActor* CreateSender(ui64 partitionId) const override {
+            UNIT_ASSERT_C(!Removed || partitionId == 1, "Removed partition was recreated");
+            return new TPartition(SelfId(), Sink, partitionId);
+        }
+        void Handle(TExchange::TEvEnqueueRecords::TPtr& ev) { EnqueueRecords(std::move(ev->Get()->Records)); }
+        void Handle(TExchange::TEvRecords::TPtr& ev) { ProcessRecords(std::move(ev->Get()->Records)); }
+        void Handle(TPrivate::TEvReady::TPtr& ev) { OnReady(ev->Get()->PartitionId); }
+        void Handle(TPrivate::TEvGone::TPtr& ev) { OnGone(ev->Get()->PartitionId); }
+        void Handle(TEvents::TEvWakeup::TPtr&) {
+            Removed = true;
+            Resolving = false;
+            CreateSenders({1});
+            Send(Control, new TEvents::TEvWakeup());
+        }
+        STATEFN(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TExchange::TEvEnqueueRecords, Handle);
+                hFunc(TExchange::TEvRecords, Handle);
+                hFunc(TPrivate::TEvReady, Handle);
+                hFunc(TPrivate::TEvGone, Handle);
+                hFunc(TEvents::TEvWakeup, Handle);
+            }
+        }
+    };
+
+    void SchemaChangesRemovedPartitionDoesNotStall(EBroadcastDelivery delivery, EPartitionRemoval removal) {
+        using TExchange = NChangeExchange::TEvChangeExchange;
+        using TPrivate = NChangeExchange::TEvChangeExchangePrivate;
+        using EKind = NChangeExchange::IChangeRecord::EKind;
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134))
+            .SetUseRealThreads(false).SetDomainName("Root"));
+        auto& runtime = *server->GetRuntime();
+        runtime.SetDispatchTimeout(TDuration::Seconds(30));
+        const auto source = runtime.AllocateEdgeActor();
+        const auto sink = runtime.AllocateEdgeActor();
+        const auto control = runtime.AllocateEdgeActor();
+        const auto main = runtime.Register(new TTopologyChangeSender(source, sink, control));
+        auto expectRemoved = [&](ui64 order) {
+            auto event = runtime.GrabEdgeEventRethrow<TExchange::TEvRemoveRecords>(source, TDuration::Seconds(10));
+            UNIT_ASSERT_C(event, "Partition removal stalled the source queue at order " << order);
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Records.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Records[0], order);
+        };
+        auto body = [&](ui64 order, EKind kind) -> NChangeExchange::IChangeRecord::TPtr {
+            return TChangeRecordBuilder(kind).WithOrder(order).WithBody("record").Build();
+        };
+        auto provide = [&](ui64 order, EKind kind) {
+            runtime.Send(new IEventHandle(main, source, new TExchange::TEvEnqueueRecords({{order, TPathId(1, 1), 6}})), 0, true);
+            auto request = runtime.GrabEdgeEventRethrow<TExchange::TEvRequestRecords>(source, TDuration::Seconds(10));
+            UNIT_ASSERT(request);
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->Records.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->Records[0].Order, order);
+            runtime.Send(new IEventHandle(main, source, new TExchange::TEvRecords({body(order, kind)})), 0, true);
+        };
+        auto receive = [&](ui64 order, ui64 partition) {
+            auto event = runtime.GrabEdgeEventRethrow<TExchange::TEvRecords>(sink, TDuration::Seconds(10));
+            UNIT_ASSERT(event);
+            UNIT_ASSERT_VALUES_EQUAL(event->Cookie, partition);
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Records.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Records[0]->GetOrder(), order);
+            return event->Sender;
+        };
+        auto ready = [&](const TActorId& partitionActor, ui64 partition) {
+            runtime.Send(new IEventHandle(main, partitionActor, new TPrivate::TEvReady(partition)), 0, true);
+        };
+
+        TActorId partition0;
+        if (delivery == EBroadcastDelivery::Prepared) {
+            provide(10, EKind::CdcDataChange);
+            partition0 = receive(10, 0); // Keep partition 0 busy before the schema.
+        }
+        provide(11, EKind::CdcSchemaChange);
+        // Hash-map traversal does not promise a partition send order.
+        if (delivery == EBroadcastDelivery::InFlight) {
+            TActorId partition1;
+            for (size_t i = 0; i < 2; ++i) {
+                auto event = runtime.GrabEdgeEventRethrow<TExchange::TEvRecords>(sink, TDuration::Seconds(10));
+                UNIT_ASSERT(event);
+                UNIT_ASSERT_VALUES_EQUAL(event->Get()->Records.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(event->Get()->Records[0]->GetOrder(), 11);
+                if (event->Cookie == 0) {
+                    partition0 = event->Sender;
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(event->Cookie, 1);
+                    partition1 = event->Sender;
+                }
+            }
+            UNIT_ASSERT(partition0 && partition1);
+            ready(partition1, 1);
+        } else {
+            ready(receive(11, 1), 1);
+        }
+        if (removal == EPartitionRemoval::AfterDisconnect) {
+            runtime.Send(new IEventHandle(main, partition0, new TPrivate::TEvGone(0)), 0, true);
+            UNIT_ASSERT(runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(control, TDuration::Seconds(10)));
+            // The partition no longer has a TSender; topology reconciliation must
+            // still release its obligation, including an already-submitted copy.
+        }
+        runtime.Send(new IEventHandle(main, control, new TEvents::TEvWakeup()), 0, true);
+        UNIT_ASSERT(runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(control, TDuration::Seconds(10)));
+        expectRemoved(11);
+        if (delivery == EBroadcastDelivery::Prepared) {
+            auto request = runtime.GrabEdgeEventRethrow<TExchange::TEvRequestRecords>(source, TDuration::Seconds(10));
+            UNIT_ASSERT(request);
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->Records.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->Records[0].Order, 10);
+            runtime.Send(new IEventHandle(main, source, new TExchange::TEvRecords({body(10, EKind::CdcDataChange)})), 0, true);
+            ready(receive(10, 1), 1); // Ordinary data is rerouted to the remaining partition.
+        }
+        provide(12, EKind::CdcDataChange);
+        ready(receive(12, 1), 1);
+        if (delivery == EBroadcastDelivery::Prepared) {
+            expectRemoved(10);
+        }
+        expectRemoved(12);
+    }
+
+    Y_UNIT_TEST(SchemaChangesPreparedBroadcastRemovedPartitionDoesNotStall) {
+        SchemaChangesRemovedPartitionDoesNotStall(EBroadcastDelivery::Prepared, EPartitionRemoval::Connected);
+    }
+    Y_UNIT_TEST(SchemaChangesInFlightBroadcastRemovedPartitionDoesNotStall) {
+        SchemaChangesRemovedPartitionDoesNotStall(EBroadcastDelivery::InFlight, EPartitionRemoval::Connected);
+    }
+    Y_UNIT_TEST(SchemaChangesPreparedBroadcastDisconnectedPartitionRemovedDoesNotStall) {
+        SchemaChangesRemovedPartitionDoesNotStall(EBroadcastDelivery::Prepared, EPartitionRemoval::AfterDisconnect);
+    }
+    Y_UNIT_TEST(SchemaChangesInFlightBroadcastDisconnectedPartitionRemovedDoesNotStall) {
+        SchemaChangesRemovedPartitionDoesNotStall(EBroadcastDelivery::InFlight, EPartitionRemoval::AfterDisconnect);
     }
 
     Y_UNIT_TEST(SchemaChanges) {

@@ -47,11 +47,27 @@ void TChangeSender::CreateMissingSenders(const TVector<ui64>& partitionIds) {
     }
 
     for (const auto& [partitionId, sender] : Senders) {
-        ReEnqueueRecords(partitionId, sender);
+        ReEnqueueRecords(partitionId, sender, ESenderRemoval::PartitionRemoved);
         ProcessBroadcasting(&TChangeSender::RemoveBroadcastPartition, partitionId, sender.Broadcasting);
         if (sender.ActorId) {
             ActorOps->Send(sender.ActorId, new TEvents::TEvPoisonPill());
         }
+    }
+
+    // A disconnected sender is absent from Senders already. If resolution also
+    // removed its partition, release the retained broadcast obligations instead
+    // of waiting for a sender that will never be recreated.
+    for (const auto partitionId : GonePartitions) {
+        if (senders.contains(partitionId)) {
+            continue;
+        }
+        TVector<ui64> broadcasting;
+        for (const auto& [order, broadcast] : Broadcasting) {
+            if (broadcast.Partitions.contains(partitionId)) {
+                broadcasting.push_back(order);
+            }
+        }
+        ProcessBroadcasting(&TChangeSender::RemoveBroadcastPartition, partitionId, broadcasting);
     }
 
     Senders = std::move(senders);
@@ -329,7 +345,7 @@ void TChangeSender::OnGone(ui64 partitionId) {
         return;
     }
 
-    ReEnqueueRecords(partitionId, it->second);
+    ReEnqueueRecords(partitionId, it->second, ESenderRemoval::Reconnect);
     if (it->second.Ready) {
         --ReadySenders;
     }
@@ -344,7 +360,7 @@ void TChangeSender::OnGone(ui64 partitionId) {
     PathResolver->Resolve();
 }
 
-void TChangeSender::ReEnqueueRecords(ui64 partitionId, const TSender& sender) {
+void TChangeSender::ReEnqueueRecords(ui64 partitionId, const TSender& sender, ESenderRemoval reason) {
     for (const auto& record : sender.Pending) {
         Enqueued.insert(ReEnqueue(record));
     }
@@ -354,12 +370,12 @@ void TChangeSender::ReEnqueueRecords(ui64 partitionId, const TSender& sender) {
         if (!record->IsBroadcast()) {
             Enqueued.insert(ReEnqueue(record->GetOrder(), record->GetBodySize()));
             MemUsage -= record->GetBodySize();
-        } else {
-            // Broadcasts held back after a barrier split are not in sender.Broadcasting yet,
-            // but the partition was already removed from PendingPartitions when prepared.
-            // Drop them from the broadcast set so completion cannot stall if the sender is gone.
+        } else if (reason == ESenderRemoval::PartitionRemoved) {
             preparedBroadcasts.push_back(record->GetOrder());
         }
+        // On reconnect keep unsent broadcasts, just like sender.Broadcasting.
+        // LazyCreateSender restores the pending obligation and re-enqueues the
+        // record in order; removing it here would acknowledge an unsent copy.
     }
     if (preparedBroadcasts) {
         ProcessBroadcasting(&TChangeSender::RemoveBroadcastPartition, partitionId, preparedBroadcasts);

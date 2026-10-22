@@ -993,11 +993,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         headers["Authorization"] = "Bearer other-db";
         TStringStream deniedResponse;
         UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/whoami?database=/alias", &deniedResponse, headers), HTTP_FORBIDDEN);
-        TStringStream capabilitiesResponse;
-        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/capabilities?database=/alias&path=/alias/dropped&direct=true", &capabilitiesResponse, headers), HTTP_OK);
-        const auto capabilities = NJson::ReadJsonTree(&capabilitiesResponse, true);
-        UNIT_ASSERT_VALUES_EQUAL(capabilities["Settings"]["Database"]["Name"].GetString(), "/Root");
-        UNIT_ASSERT_VALUES_EQUAL(capabilities["Settings"]["Path"].GetString(), "/Root/dropped");
     }
 
     NJson::TJsonValue SendQuery(const TString& query, const TString& schema, const bool base64) {

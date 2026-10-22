@@ -8,6 +8,7 @@ import uuid
 
 import pytest
 import ydb
+from parameterized import parameterized_class
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -25,7 +26,11 @@ def integer_values(lower, upper):
     return sorted({lower, upper, *(value for value in boundaries if lower <= value <= upper)})
 
 
-class PrimaryKeyOrdering:
+@parameterized_class([
+    {"name": "with_interval_tree", "interval_tree": True},
+    {"name": "without_interval_tree", "interval_tree": False},
+])
+class TestPrimaryKeyOrdering(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         config = KikimrConfigGenerator(
@@ -234,11 +239,3 @@ class PrimaryKeyOrdering:
     def test_decimal(self):
         self.check_type("Decimal(22,9)", [decimal.Decimal(value) for value in ("-100", "-1", "0", "2", "10", "100")],
                         ydb.DecimalType(22, 9))
-
-
-class TestPrimaryKeyOrderingWithIntervalTree(PrimaryKeyOrdering, unittest.TestCase):
-    interval_tree = True
-
-
-class TestPrimaryKeyOrderingWithoutIntervalTree(PrimaryKeyOrdering, unittest.TestCase):
-    interval_tree = False

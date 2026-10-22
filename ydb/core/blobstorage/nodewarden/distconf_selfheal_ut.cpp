@@ -8,7 +8,7 @@
 namespace NKikimr::NStorage {
 
 Y_UNIT_TEST_SUITE(TStateStorageSelfhealRecovery) {
-    void AddGroup(NKikimrConfig::TDomainsConfig::TStateStorage& config, ui32 pileId, ui32 firstNode, ui32 rings) {
+    void AddGroup(NKikimrConfig::TStateStorageConfig& config, ui32 pileId, ui32 firstNode, ui32 rings) {
         auto *group = config.AddRingGroups();
         group->SetBridgePileId(pileId);
         group->SetNToSelect(rings);
@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TStateStorageSelfhealRecovery) {
 
     Y_UNIT_TEST(KeepReadableQuorumAcrossDifferentGeometries) {
         for (bool reverse : {false, true}) {
-            NKikimrConfig::TDomainsConfig::TStateStorage config;
+            NKikimrConfig::TStateStorageConfig config;
             AddGroup(config, 0, 1, 9);
             AddGroup(config, 0, 10, 3);
             auto states = HealthyNodes(12);
@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(TStateStorageSelfhealRecovery) {
     }
 
     Y_UNIT_TEST(CountUnhealthyRingsInsteadOfReplicas) {
-        NKikimrConfig::TDomainsConfig::TStateStorage config;
+        NKikimrConfig::TStateStorageConfig config;
         AddGroup(config, 0, 1, 3);
         AddGroup(config, 0, 4, 3);
         config.MutableRingGroups(0)->MutableRing(0)->AddNode(7);
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(TStateStorageSelfhealRecovery) {
     }
 
     Y_UNIT_TEST(NodeShorthandPreservesReadableQuorum) {
-        NKikimrConfig::TDomainsConfig::TStateStorage config;
+        NKikimrConfig::TStateStorageConfig config;
         AddGroup(config, 0, 1, 3);
         AddGroup(config, 0, 4, 9);
         for (auto& group : *config.MutableRingGroups()) {
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(TStateStorageSelfhealRecovery) {
     }
 
     Y_UNIT_TEST(KeepPossibleQuorumWhenNoGroupHasGuaranteedQuorum) {
-        NKikimrConfig::TDomainsConfig::TStateStorage config;
+        NKikimrConfig::TStateStorageConfig config;
         AddGroup(config, 0, 1, 3);
         AddGroup(config, 0, 4, 9);
         config.MutableRingGroups(1)->SetNToSelect(5);
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TStateStorageSelfhealRecovery) {
     }
 
     Y_UNIT_TEST(DisabledRingsCannotProvideQuorum) {
-        NKikimrConfig::TDomainsConfig::TStateStorage config;
+        NKikimrConfig::TStateStorageConfig config;
         AddGroup(config, 0, 1, 3);
         AddGroup(config, 0, 4, 3);
         config.MutableRingGroups(0)->MutableRing(0)->SetIsDisabled(true);
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(TStateStorageSelfhealRecovery) {
     }
 
     Y_UNIT_TEST(CompetingSourcesRequireKnownNodeStates) {
-        NKikimrConfig::TDomainsConfig::TStateStorage config;
+        NKikimrConfig::TStateStorageConfig config;
         AddGroup(config, 0, 1, 3);
         AddGroup(config, 0, 4, 3);
         UNIT_ASSERT(!ChooseStateStorageSelfHealSource(config, 0, {}));
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(TStateStorageSelfhealRecovery) {
     }
 
     Y_UNIT_TEST(WriteOnlyGroupsAreNotSources) {
-        NKikimrConfig::TDomainsConfig::TStateStorage config;
+        NKikimrConfig::TStateStorageConfig config;
         AddGroup(config, 0, 4, 3);
         AddGroup(config, 0, 7, 3);
         config.MutableRingGroups(0)->SetWriteOnly(true);

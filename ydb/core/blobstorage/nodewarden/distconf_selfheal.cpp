@@ -104,7 +104,7 @@ namespace NKikimr::NStorage {
         }
     }
 
-    std::optional<ui32> ChooseStateStorageSelfHealSource(const NKikimrConfig::TDomainsConfig::TStateStorage& config,
+    std::optional<ui32> ChooseStateStorageSelfHealSource(const NKikimrConfig::TStateStorageConfig& config,
             ui32 pileId, const std::unordered_map<ui32, ui32>& nodeStates) {
         std::vector<ui32> readable;
         for (ui32 i : xrange(config.RingGroupsSize())) {

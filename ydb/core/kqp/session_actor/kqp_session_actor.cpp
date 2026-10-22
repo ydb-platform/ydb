@@ -1882,9 +1882,18 @@ public:
                 txCtx.TxManager->GetVictimQuerySpanId(),
                 std::nullopt,
                 txCtx.TxManager->GetBrokenLocksCount());
-            ReplyQueryError(Ydb::StatusIds::ABORTED,
-                txCtx.TxHasEffects() ? "tx has effects, but locks are broken" : "transaction locks invalidated",
-                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+
+            if ((!txCtx.DeferredEffects.Empty() || txCtx.HasUnflushedEffectsInBuffer) && broken) {
+                ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has deferred effects, but locks are broken",
+                    MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            } else if (txCtx.TxHasEffects() && broken) {
+                ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
+                    MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            } else {
+                AFL_ENSURE(txCtx.TxManager->BrokenLocks());
+                ReplyQueryError(Ydb::StatusIds::ABORTED, "transaction locks invalidated",
+                    MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            }
             return false;
         }
 

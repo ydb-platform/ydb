@@ -447,8 +447,8 @@ public:
             limits.RemoteChannelInflightBytes = TableServiceConfig.GetRemoteChannelInflightBytes();
             limits.RemoteSessionInflightBytes = TableServiceConfig.GetNodeSessionIcInflightBytes();
             limits.ReconciliationCount = TableServiceConfig.GetDqChannelReconciliationCount();
-	    // for stable-26-4-1 to be in sync with proto default
-	    auto& config = TableServiceConfig.GetDqChannelConfig();
+            // for stable-26-4-1 to be in sync with proto default
+            auto& config = TableServiceConfig.GetDqChannelConfig();
             limits.EnableChannelNotifications = config.GetEnableChannelNotifications();
         }
 

@@ -344,7 +344,8 @@ Y_UNIT_TEST_SUITE(BridgeRemovePile) {
             " SYNCHRONIZED");
         ExpectError(RemovePile(env, "pile_3"), "its state is INACTIVE");
 
-        // the pile being added can't be removed until BSC finishes
+        // other piles can't be removed until BSC finishes adding the pile (its own removal cancels the addition, see
+        // BridgeAddPile::StuckAdditionCancelled)
         bool hold = true;
         env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
             return !hold || !GetBridgePileOperationNotification(*ev);
@@ -352,7 +353,6 @@ Y_UNIT_TEST_SUITE(BridgeRemovePile) {
         res = AddPile(env, "pile_3");
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
         env.Sim(TDuration::Seconds(10));
-        ExpectError(RemovePile(env, "pile_3"), "Operation on pile 'pile_3' is in progress");
         SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
         ExpectError(RemovePile(env, "pile_2"), "Operation on pile 'pile_3' is in progress");
         // the notification has been dropped, BSC (residing on node 1) performs its part again after restart

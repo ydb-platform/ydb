@@ -233,8 +233,27 @@ runcmd:
 """
 
 
+def public_key_from_private(path):
+    proc = subprocess.run(
+        ["ssh-keygen", "-y", "-f", str(path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    line = next((item.strip() for item in (proc.stdout or "").splitlines() if item.strip()), "")
+    if proc.returncode != 0 or not line:
+        raise ConfigError(f"failed to read public key from {path}")
+    return check_public_key(line)
+
+
 def read_public_key(path):
-    text = Path(os.path.expanduser(path)).read_text().strip()
+    expanded = Path(os.path.expanduser(path))
+    if not expanded.is_file():
+        private = expanded.with_suffix("") if expanded.name.endswith(".pub") else None
+        if private is not None and private.is_file():
+            return public_key_from_private(private)
+        raise ConfigError(f"ssh public key not found: {path}")
+    text = expanded.read_text().strip()
     line = next((item for item in text.splitlines() if item.strip() and not item.startswith("#")), "")
     return check_public_key(line.strip())
 
@@ -1062,9 +1081,27 @@ labels:
             f"  - {primary}\n"
         )
         assert public_key_lines(keyed) == [first, second]
+        derived = keydir / "derived"
+        subprocess.run(
+            ["ssh-keygen", "-t", "ed25519", "-f", str(derived), "-N", "", "-C", "derived-test"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        expected = (derived.with_suffix(".pub")).read_text().strip()
+        derived.with_suffix(".pub").unlink()
+        from_private = load_config_text(
+            "name: tiny\nplatform: standard-v4a\ncores: 4\nmemory_gb: 8\ndisk_gb: 186\n"
+            "labels:\n  - tiny-worker\n"
+            f"ssh_public_key: {derived}.pub\n"
+        )
+        assert public_key_lines(from_private) == [expected]
+        derived.unlink()
     finally:
         primary.unlink(missing_ok=True)
         extra.unlink(missing_ok=True)
+        for name in ("derived", "derived.pub"):
+            (keydir / name).unlink(missing_ok=True)
         keydir.rmdir()
     try:
         render_userdata(["not-a-key"])

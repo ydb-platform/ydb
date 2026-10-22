@@ -34,11 +34,18 @@ jobs:
     - name: Install SSH key
       env:
         RECONCILE_SSH_KEY: ${{ secrets.GH_RUNNER_RECONCILE_SSH_KEY }}
+        RECONCILE_SSH_PUB: ${{ secrets.GH_RUNNER_RECONCILE_SSH_PUB }}
       run: |
         test -n "$RECONCILE_SSH_KEY"
+        test -n "$RECONCILE_SSH_PUB"
         install -d -m 700 ~/.ssh
         printf '%s\n' "$RECONCILE_SSH_KEY" > ~/.ssh/id_ed25519
         chmod 600 ~/.ssh/id_ed25519
+        printf '%s\n' "$RECONCILE_SSH_PUB" > ~/.ssh/id_ed25519.pub
+        chmod 644 ~/.ssh/id_ed25519.pub
+        pub_blob=$(awk '{print $2}' ~/.ssh/id_ed25519.pub)
+        key_blob=$(ssh-keygen -y -f ~/.ssh/id_ed25519 | awk '{print $2}')
+        test -n "$pub_blob" && test "$pub_blob" = "$key_blob"
         cat > ~/.ssh/config << 'EOF'
         Host gh-runners-gw
           HostName 158.160.148.210

@@ -2,6 +2,17 @@
 #include "datashard_ut_common_kqp.h"
 #include "datashard_ut_common_pq.h"
 #include "datashard_active_transaction.h"
+#include "datashard_impl.h"
+#include "datashard_locks_db.h"
+#include "datashard_user_db.h"
+#include "setup_sys_locks.h"
+
+#include <ydb/core/engine/minikql/minikql_engine_host_counters.h>
+#include <ydb/core/protos/tx.pb.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/data_events/events.h>
+#include <ydb/library/aclib/user_context.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -1732,6 +1743,274 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         });
 
         UNIT_ASSERT(bulkUpsertFuture.HasValue());
+    }
+
+    namespace {
+
+    // Exercise the real lock/commit/storage path without SQL read barriers or
+    // coordinator ordering masking the dependency under test.
+    class TLockDependencyTx : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+    public:
+        using TCallback = std::function<void(NTabletFlatExecutor::TTransactionContext&)>;
+
+        TLockDependencyTx(TDataShard* shard, TCallback callback, bool& done)
+            : TBase(shard)
+            , Callback(std::move(callback))
+            , Done(done)
+        {}
+
+        bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext&) override {
+            Callback(txc);
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            Done = true;
+        }
+
+    private:
+        TCallback Callback;
+        bool& Done;
+    };
+
+    class TSubmitLockDependencyTx : public TActorBootstrapped<TSubmitLockDependencyTx> {
+    public:
+        TSubmitLockDependencyTx(NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor,
+                TAutoPtr<NTabletFlatExecutor::ITransaction> tx)
+            : Executor(executor)
+            , Tx(tx)
+        {}
+
+        void Bootstrap() {
+            Executor->Enqueue(Tx);
+            PassAway();
+        }
+
+    private:
+        NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* Executor;
+        TAutoPtr<NTabletFlatExecutor::ITransaction> Tx;
+    };
+
+    enum class ELockDependencySource {
+        Write,
+        LockRows,
+        LegacyPersistent,
+        LegacyMigrated,
+    };
+
+    enum class ELockDependencyState {
+        Waiting,
+        Resolved,
+        Aborting,
+        CommitOrdered,
+    };
+
+    void TestLockDependency(ELockDependencySource source,
+            ELockDependencyState state = ELockDependencyState::Waiting) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false)
+            .SetEnableDataShardVolatileTransactions(true);
+        TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1");
+        auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(ResolveTablet(runtime, shards.at(0))));
+        UNIT_ASSERT(shard);
+        auto* executor = dynamic_cast<NTabletFlatExecutor::NFlatExecutorSetup::IExecutor*>(
+            runtime.FindActor(shard->ExecutorID()));
+        UNIT_ASSERT(executor);
+        auto runTx = [&](TLockDependencyTx::TCallback callback) {
+            bool done = false;
+            runtime.Register(new TSubmitLockDependencyTx(executor,
+                new TLockDependencyTx(shard, std::move(callback), done)));
+            runtime.WaitFor("lock dependency transaction", [&] { return done; });
+        };
+
+        constexpr ui64 l1 = 100001, c1 = 100002, l2 = 100003, c2 = 100004;
+        const TRowVersion v1(100, c1), v2(101, c2);
+        const ui64 participant = shards.at(0) + 1;
+        const ui32 key = 1, value = 11;
+        const TVector<TRawTypeValue> rawKey{TRawTypeValue(&key, sizeof(key), NScheme::NTypeIds::Uint32)};
+        const TVector<TCell> cells{TCell::Make(key)};
+        const TVector<NIceDb::TUpdateOp> ops{
+            NIceDb::TUpdateOp(2, NTable::ECellOp::Set,
+                TRawTypeValue(&value, sizeof(value), NScheme::NTypeIds::Uint32))};
+        const auto tid = shard->GetLocalTableId(tableId);
+        auto& manager = shard->GetVolatileTxManager();
+
+        runTx([&](auto& txc) {
+            txc.DB.UpdateTx(tid, NTable::ERowOp::Upsert, rawKey, ops, l1);
+            shard->GetConflictsCache().GetTableCache(tid).AddUncommittedWrite(cells, l1, txc.DB);
+            manager.PersistAddVolatileTx(c1, v1, TVector<ui64>{l1}, {},
+                TVector<ui64>{participant}, {}, false, false, true, txc);
+        });
+        auto* first = manager.FindByTxId(c1);
+        UNIT_ASSERT(first && first->State == EVolatileTxState::Waiting);
+        UNIT_ASSERT_VALUES_EQUAL(first->CommitTxIds.size(), 1u);
+        UNIT_ASSERT(first->CommitTxIds.contains(l1));
+        UNIT_ASSERT(manager.FindByCommitTxId(l1) == first);
+        UNIT_ASSERT(!manager.FindByCommitTxId(c1)); // No alias masking C1 != L1.
+
+        if (source == ELockDependencySource::LockRows) {
+            // This must record C1 before any ordinary write can add it as well.
+            auto request = std::make_unique<NEvents::TDataEvents::TEvLockRows>(1);
+            request->Record.SetLockId(l2);
+            request->Record.SetLockNodeId(0);
+            request->Record.SetLockMode(NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
+            request->SetTableId(tableId);
+            request->Record.AddColumnIds(1);
+            request->Record.SetPayloadFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+            request->SetCellMatrix(TSerializedCellMatrix::Serialize(cells, 1, 1));
+            runtime.SendToPipe(shards.at(0), sender, request.release());
+            const auto response = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvLockRowsResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(),
+                NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS);
+            auto lock = shard->SysLocksTable().GetRawLock(l2);
+            UNIT_ASSERT(lock);
+            TVector<ui64> dependencies;
+            lock->ForAllVolatileDependencies([&](ui64 id) { dependencies.push_back(id); });
+            UNIT_ASSERT_VALUES_EQUAL(dependencies.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(dependencies.at(0), c1);
+        }
+
+        runTx([&](auto& txc) {
+            TDataShardLocksDb locksDb(*shard, txc);
+            TSetupSysLocks setup(l2, 0, *shard, &locksDb);
+            UNIT_ASSERT(shard->SysLocksTable().EnsureCurrentLock() == EEnsureCurrentLock::Success);
+            if (source == ELockDependencySource::Write) {
+                NMiniKQL::TEngineHostCounters counters;
+                TDataShardUserDb db(*shard, txc.DB, c2, v2, counters, runtime.GetCurrentTime());
+                db.SetLockTxId(l2);
+                db.UpsertRow(tableId, rawKey, ops, {});
+                UNIT_ASSERT(setup.VolatileDependencies.contains(c1));
+                UNIT_ASSERT(!setup.VolatileDependencies.contains(l1));
+            } else {
+                // Keep the selected source isolated from AddWriteConflict.
+                shard->SysLocksTable().SetWriteLock(tableId, cells);
+                txc.DB.UpdateTx(tid, NTable::ERowOp::Upsert, rawKey, ops, l2);
+            }
+            shard->SysLocksTable().ApplyLocks();
+            auto lock = shard->SysLocksTable().GetRawLock(l2);
+            UNIT_ASSERT(lock);
+            if (source == ELockDependencySource::LegacyPersistent) {
+                // Model the exact value restored from LockVolatileDependencies.
+                locksDb.PersistAddVolatileDependency(l2, l1);
+                lock->RestorePersistentVolatileDependency(l1);
+                // An upgraded writer may also add the canonical id to this lock.
+                // Both entries must become a single dependency on C1.
+                lock->AddVolatileDependency(c1, &locksDb);
+            } else if (source == ELockDependencySource::LegacyMigrated) {
+                lock->RestoreInMemoryVolatileDependency(l1);
+            }
+        });
+
+        auto resolveFirst = [&] {
+            runTx([&](auto& txc) {
+                TEvTxProcessing::TEvReadSet rs;
+                rs.Record.SetTxId(c1);
+                rs.Record.SetStep(v1.Step);
+                rs.Record.SetTabletSource(participant);
+                rs.Record.SetTabletDest(shards.at(0));
+                NKikimrTx::TReadSetData data;
+                data.SetDecision(NKikimrTx::TReadSetData::DECISION_COMMIT);
+                rs.Record.SetReadSet(data.SerializeAsString());
+                auto ack = MakeHolder<IEventHandle>(sender, shard->SelfId(), new TEvents::TEvWakeup());
+                manager.ProcessReadSet(rs, std::move(ack), txc);
+            });
+        };
+        if (state == ELockDependencyState::Resolved) {
+            resolveFirst();
+            runtime.WaitFor("first physical commit", [&] { return !manager.FindByTxId(c1); });
+        }
+
+        const bool ordered = state == ELockDependencyState::CommitOrdered;
+        const bool wait = state == ELockDependencyState::Waiting;
+        runTx([&](auto& txc) {
+            if (state == ELockDependencyState::Aborting) {
+                manager.AbortWaitingTransaction(manager.FindByTxId(c1));
+                UNIT_ASSERT(manager.FindByTxId(c1)->State == EVolatileTxState::Aborting);
+            }
+            NMiniKQL::TEngineHostCounters counters;
+            TDataShardUserDb db(*shard, txc.DB, c2, v2, counters, runtime.GetCurrentTime());
+            // Model AlwaysVolatile: loss of the dependency must not be masked by
+            // whether the dependent itself was chosen to use volatile commit.
+            db.SetVolatileTxId(c2);
+            db.SetVolatileCommitOrdered(ordered);
+            db.CommitChanges(tableId, l2);
+            if (!wait) {
+                UNIT_ASSERT(db.GetVolatileDependencies().empty());
+            }
+            manager.PersistAddVolatileTx(c2, v2, db.GetVolatileCommitTxIds(),
+                db.GetVolatileDependencies(), {}, {}, ordered, false, true, txc);
+        });
+
+        if (wait || ordered) {
+            runTx([&](auto& txc) {
+                // These are physical flat-storage statuses, not client replies
+                // or logical visibility through the volatile transaction map.
+                // On the broken Write path L2 is already physically committed.
+                UNIT_ASSERT(txc.DB.HasOpenTx(tid, l1));
+                UNIT_ASSERT(txc.DB.HasOpenTx(tid, l2));
+                UNIT_ASSERT(!txc.DB.HasCommittedTx(tid, l2));
+                auto* first = manager.FindByTxId(c1);
+                auto* second = manager.FindByTxId(c2);
+                UNIT_ASSERT(first && second);
+                UNIT_ASSERT(first->State == EVolatileTxState::Waiting);
+                UNIT_ASSERT(second->State == EVolatileTxState::Committed);
+                if (wait) {
+                    UNIT_ASSERT_VALUES_EQUAL(second->Dependencies.size(), 1u);
+                    UNIT_ASSERT(second->Dependencies.contains(c1));
+                    UNIT_ASSERT(first->Dependents.contains(c2));
+                } else {
+                    UNIT_ASSERT(second->CommitOrdered);
+                    UNIT_ASSERT(second->Dependencies.empty());
+                }
+            });
+            resolveFirst();
+        }
+        runtime.WaitFor("dependent physical commit", [&] {
+            return !manager.FindByTxId(c1) && !manager.FindByTxId(c2);
+        });
+        runTx([&](auto& txc) {
+            UNIT_ASSERT(!txc.DB.HasOpenTx(tid, l1));
+            UNIT_ASSERT(!txc.DB.HasOpenTx(tid, l2));
+            UNIT_ASSERT(txc.DB.HasCommittedTx(tid, l2));
+            if (state != ELockDependencyState::Aborting) {
+                UNIT_ASSERT(txc.DB.HasCommittedTx(tid, l1));
+            }
+        });
+    }
+
+    } // namespace
+
+    Y_UNIT_TEST(LockDependencyWriteCommitOrder) {
+        TestLockDependency(ELockDependencySource::Write);
+    }
+
+    Y_UNIT_TEST(LockDependencyLockRowsCommitOrder) {
+        TestLockDependency(ELockDependencySource::LockRows);
+    }
+
+    Y_UNIT_TEST(LockDependencyLegacyPersistentCommitOrder) {
+        TestLockDependency(ELockDependencySource::LegacyPersistent);
+    }
+
+    Y_UNIT_TEST(LockDependencyLegacyMigratedCommitOrder) {
+        TestLockDependency(ELockDependencySource::LegacyMigrated);
+    }
+
+    Y_UNIT_TEST(LockDependencyResolved) {
+        TestLockDependency(ELockDependencySource::Write, ELockDependencyState::Resolved);
+    }
+
+    Y_UNIT_TEST(LockDependencyAborting) {
+        TestLockDependency(ELockDependencySource::Write, ELockDependencyState::Aborting);
+    }
+
+    Y_UNIT_TEST(LockDependencyCommitOrdered) {
+        TestLockDependency(ELockDependencySource::Write, ELockDependencyState::CommitOrdered);
     }
 
     Y_UNIT_TEST(DistributedWriteThenLateWriteReadCommit) {

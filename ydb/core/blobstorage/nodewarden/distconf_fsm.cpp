@@ -118,10 +118,16 @@ namespace NKikimr::NStorage {
         ConfigRecoveryScheduled = true;
         Invoke(TCollectConfigsAndPropose{});
         CollectConfigsBackoffTimer.Reset();
+
+        // The previous root may have lost a selfheal actor mid-reconfiguration.
+        // Pull fresh statuses even if Sentinel has observed no node changes.
+        StartStateStorageSelfHealRefresh();
     }
 
     void TDistributedConfigKeeper::UnbecomeRoot() {
         AbortRootProbe();
+        CancelStateStorageSelfHealRefresh();
+        StateStorageSelfHealRefreshStarted = false;
         if (StateStorageSelfHealActor) {
             Send(new IEventHandle(TEvents::TSystem::Poison, 0, StateStorageSelfHealActor.value(), SelfId(), nullptr, 0));
             StateStorageSelfHealActor.reset();

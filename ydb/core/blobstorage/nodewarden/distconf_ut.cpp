@@ -2413,6 +2413,59 @@ selector_config: []
         UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig().GetGeneration(), 0);
     }
 
+    Y_UNIT_TEST(SelfHealRefreshStartsAfterQuorumRecovery) {
+        TCommitConfirmationFixture fixture(true);
+        ui32 requests = 0;
+        TActorId requester;
+        fixture.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTabletPipe::EvSend
+                    && ev->Type == NStorage::TEvNodeConfigGetSelfHealState::EventType) {
+                ++requests;
+                requester = ev->Sender;
+                return false; // Observe the real outgoing request without running CMS.
+            }
+            return true;
+        };
+        StartZeroGenerationRoot(fixture);
+        const auto scepter = QueryKeeper(fixture.Runtime, fixture.Root()).GetScepter().GetId();
+        UNIT_ASSERT_VALUES_EQUAL(requests, 0);
+
+        auto recovered = MakeNextConfig(fixture.Config, 1);
+        auto *ss = recovered.MutableStateStorageConfig();
+        ss->ClearRing();
+        ss->ClearRingGroups();
+        auto *group = ss->AddRingGroups();
+        group->SetNToSelect(3);
+        for (ui32 node : {1, 2, 3}) {
+            group->AddRing()->AddNode(node);
+        }
+        recovered.MutableStateStorageBoardConfig()->CopyFrom(recovered.GetStateStorageConfig());
+        recovered.MutableSchemeBoardConfig()->CopyFrom(recovered.GetStateStorageConfig());
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&recovered);
+        auto collected = MakeCollectedConfigs(fixture.Config);
+        AddCollectedConfig(collected, recovered, {1, 2, 3});
+        for (ui32 node : {1, 2, 3}) {
+            fixture.Metadata(node).MutableCommittedStorageConfig()->CopyFrom(recovered);
+        }
+        const auto result = ProcessCollectedConfigs(fixture, collected);
+        UNIT_ASSERT_C(!result.ErrorReason, result.ErrorReason.value_or(""));
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] { return requests != 0; }));
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetScepter().GetId(), scepter);
+
+        // A disabled Sentinel completes this refresh. Subsequent configuration
+        // changes in the same tenure must not start another refresh loop.
+        auto disabled = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+        disabled->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+        disabled->Record.SetErrorReason("Sentinel is disabled");
+        fixture.Runtime.Send(new IEventHandle(requester, fixture.Root(), disabled.release()), requester.NodeId());
+        const auto updated = MakeNextConfig(recovered, 2);
+        UNIT_ASSERT(fixture.Runtime.WrapInActorContext(fixture.Root(), [&](IActor *actor) {
+            static_cast<NStorage::TDistributedConfigKeeper*>(actor)->ApplyCommittedStorageConfig(updated);
+        }));
+        UNIT_ASSERT_C(!SimUntil(fixture.Runtime, [&] { return requests > 1; }, TDuration::Seconds(15)),
+            "a completed refresh restarted on an ordinary configuration update");
+    }
+
     Y_UNIT_TEST(PublishedConfigFencesEmptyRecovery) {
         TCommitConfirmationFixture fixture(true);
         StartZeroGenerationRoot(fixture);

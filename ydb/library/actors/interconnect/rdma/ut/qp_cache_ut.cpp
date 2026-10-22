@@ -10,6 +10,7 @@
 #include <util/system/yield.h>
 
 #include <atomic>
+#include <cerrno>
 #include <memory>
 #include <variant>
 #include <vector>
@@ -144,11 +145,13 @@ private:
 struct TQpCacheTestEnvironment {
     NMonitoring::TDynamicCounterPtr Counters;
     THolder<TTestActorRuntimeBase> ActorSystem;
+    TRdmaCtx* Ctx;
+    TActorId CqActor;
     ICq::TPtr Cq;
 };
 
-TQpCacheTestEnvironment CreateQpCacheTestEnvironment(ui16 cacheSize) {
-    auto [actorSystem, ctx] = PrepareTestRuntime("127.0.0.1");
+TQpCacheTestEnvironment CreateQpCacheTestEnvironment(ui16 cacheSize, bool useRealThreads = true) {
+    auto [actorSystem, ctx] = PrepareTestRuntime("127.0.0.1", useRealThreads);
     auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     const TRdmaRuntimeParams params{
         .MaxCqe = -1,
@@ -159,10 +162,17 @@ TQpCacheTestEnvironment CreateQpCacheTestEnvironment(ui16 cacheSize) {
         .MaxWrPerQp = 16,
     };
     const TActorId cqActor = actorSystem->Register(CreateCqActor(params, ECqMode::POLLING, counters.Get()));
+    if (!useRealThreads) {
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+        actorSystem->DispatchEvents(opts);
+    }
     ICq::TPtr cq = GetCqHandle(actorSystem.Get(), ctx, cqActor);
     return {
         .Counters = std::move(counters),
         .ActorSystem = std::move(actorSystem),
+        .Ctx = ctx,
+        .CqActor = cqActor,
         .Cq = std::move(cq),
     };
 }
@@ -280,12 +290,9 @@ TEST_F(TQpCacheTest, ConcurrentConsumers) {
             new TQpCacheClientActor(env.Cq, edge, QpsPerClient, false, startBarrier)));
     }
 
-    const TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
-    while (startBarrier->Ready.load(std::memory_order_acquire) != ClientCount && TInstant::Now() < deadline) {
-        ThreadYield();
-    }
-    const bool allClientsReady = startBarrier->Ready.load(std::memory_order_acquire) == ClientCount;
-    ASSERT_TRUE(allClientsReady);
+    ASSERT_TRUE(WaitFor([&] {
+        return startBarrier->Ready.load(std::memory_order_acquire) == ClientCount;
+    }));
     for (const TActorId client : clients) {
         env.ActorSystem->Send(new IEventHandle(client, edge, new TEvStartQpCacheTest), 0);
     }
@@ -313,6 +320,60 @@ TEST_F(TQpCacheTest, ConcurrentConsumers) {
         uniqueQps.insert(qp.get());
     }
     EXPECT_EQ(uniqueQps.size(), qps.size());
+}
+
+// A QP must not keep its ICq wrapper alive after a terminal error. It keeps only
+// the shared native verbs resources alive, so the wrapper is sent for destruction
+// before a still-referenced QP, while the verbs resources remain valid until that
+// QP is destroyed.
+TEST_F(TQpCacheTest, TerminalErrorDestroysCqWrapperBeforeQp) {
+    std::atomic<ui32> eventSequence = 0;
+    std::atomic<ui32> destroyCqEventAt = 0;
+    std::atomic<ui32> destroyQpEventAt = 0;
+
+    auto env = CreateQpCacheTestEnvironment(1, false);
+    const TActorId edge = env.ActorSystem->AllocateEdgeActor();
+    env.ActorSystem->Register(new TQpCacheClientActor(env.Cq, edge, 1, false));
+
+    auto ev = env.ActorSystem->GrabEdgeEvent<TEvQpCacheTestResult>(edge, TDuration::Seconds(10));
+    ASSERT_TRUE(ev);
+    ASSERT_TRUE(ev->Get()->Success) << ev->Get()->Error;
+    ASSERT_EQ(ev->Get()->Qps.size(), 1u);
+    TQueuePair::TPtr qp = std::move(ev->Get()->Qps.front());
+
+    env.ActorSystem->SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvPrivateDestroyCq::EventType) {
+            destroyCqEventAt.store(eventSequence.fetch_add(1, std::memory_order_relaxed) + 1,
+                std::memory_order_release);
+        } else if (ev->GetTypeRewrite() == TEvPrivateDestroyQp::EventType) {
+            destroyQpEventAt.store(eventSequence.fetch_add(1, std::memory_order_relaxed) + 1,
+                std::memory_order_release);
+        }
+        return false;
+    });
+
+    env.ActorSystem->Send(new IEventHandle(env.CqActor, edge,
+        new TEvPrivateInvalidateCq(env.Ctx, env.Cq, EIO)), 0);
+
+    // A newly returned handle proves that the invalidation was processed and
+    // the old wrapper was removed from TCqActor's map.
+    ICq::TPtr newCq = GetCqHandle(env.ActorSystem.Get(), env.Ctx, env.CqActor);
+    ASSERT_TRUE(newCq);
+    ASSERT_NE(newCq, env.Cq);
+
+    env.Cq.reset();
+    ASSERT_TRUE(WaitFor([&] {
+        return destroyCqEventAt.load(std::memory_order_acquire) != 0;
+    })) << "QP keeps the terminal CQ wrapper alive, destroy event was not sent";
+    EXPECT_EQ(destroyQpEventAt.load(std::memory_order_acquire), 0u);
+
+    qp.reset();
+
+    ASSERT_TRUE(WaitFor([&] {
+        return destroyQpEventAt.load(std::memory_order_acquire) != 0;
+    })) << "QP destroy event was not sent";
+    EXPECT_LT(destroyCqEventAt.load(std::memory_order_acquire),
+        destroyQpEventAt.load(std::memory_order_acquire));
 }
 
 } // anonymous namespace

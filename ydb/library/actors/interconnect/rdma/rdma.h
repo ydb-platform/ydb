@@ -34,6 +34,7 @@ namespace NInterconnect::NRdma {
 
 class TRdmaCtx;
 class TCqCommon;
+class TCqVerbsResources;
 class TCqActor;
 class IMemPool;
 class TMemRegion;
@@ -58,8 +59,6 @@ struct TRdmaRuntimeParams {
     ui32 QpActorPoolId;
 };
 
-class TQueuePair;
-
 // Wrapper for ibv Completion Queue
 // Hides logic to controll work request count
 // https://www.rdmamojo.com/2012/11/03/ibv_create_cq/
@@ -67,6 +66,7 @@ class ICq : public std::enable_shared_from_this<ICq>{
     ICq() {};
     friend class TCqCommon;
     friend class TCqActor;
+    friend class TQueuePair;
 public:
     class IWr {
     public:
@@ -112,14 +112,16 @@ public:
     using TGetQpResult = std::variant<std::shared_ptr<TQueuePair>, TQpCacheEmpty, TQpNoResources, TQpCacheError>;
     virtual TGetQpResult GetQp(const NActors::TActorContext& actorCtx) noexcept = 0;
 private:
+    virtual std::shared_ptr<TCqVerbsResources> GetVerbsResources() noexcept = 0;
     virtual void NotifyErr() noexcept = 0;
     virtual void StopQpCache() noexcept = 0;
 };
 
 class IQpCache;
+using TCqDestroyer = std::function<void(ICq*)>;
 
-ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter, std::shared_ptr<IQpCache> qpCache = {}) noexcept;
-ICq::TPtr CreateSimpleEventDrivenCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter, std::shared_ptr<IQpCache> qpCache = {}) noexcept;
+ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter, std::shared_ptr<IQpCache> qpCache = {}, TCqDestroyer cqDestroyer = {}) noexcept;
+ICq::TPtr CreateSimpleEventDrivenCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter, std::shared_ptr<IQpCache> qpCache = {}, TCqDestroyer cqDestroyer = {}) noexcept;
 
 struct THandshakeData {
     ui32 QpNum;
@@ -163,6 +165,7 @@ private:
     ibv_qp* Qp = nullptr;
     TRdmaCtx* Ctx = nullptr;
     mutable int LastState = UnknownQpState;
+    std::shared_ptr<TCqVerbsResources> VerbsResources;
 };
 
 class TIbVerbsBuilderImpl;

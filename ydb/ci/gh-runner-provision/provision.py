@@ -243,8 +243,13 @@ write_files:
     permissions: "0440"
     content: |
       runner ALL=(ALL) NOPASSWD:SETENV:ALL
+  - path: /etc/sysctl.d/99-ydb-ci.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      vm.max_map_count=1048576
 runcmd:
-  - [bash, -lc, "sysctl -w vm.max_map_count=1048576"]
+  - [sysctl, -p, /etc/sysctl.d/99-ydb-ci.conf]
   - [bash, -lc, "rdma link show | grep -q rxe_lo || rdma link add rxe_lo type rxe netdev lo || true"]
   - [touch, /var/lib/ydb-ci-host-prepared]
 """
@@ -397,6 +402,31 @@ def runner_busy(repo, name):
     return None, None
 
 
+def find_runner(repo, runner_id=None, name=None):
+    for runner in list_runners(repo):
+        if runner_id is not None and runner.get("id") == runner_id:
+            return runner
+        if runner_id is None and name and runner.get("name") == name:
+            return runner
+    return None
+
+
+def delete_blocked(runner, vm_known):
+    """A planned delete must not run if the runner took a job, or if a missing VM is online again."""
+    if not runner:
+        return False
+    if runner.get("busy"):
+        return True
+    return runner.get("status") == "online" and not vm_known
+
+
+def restart_blocked(runner):
+    """Do not restart a service that came back or picked up a job after the snapshot."""
+    if not runner:
+        return False
+    return bool(runner.get("busy")) or runner.get("status") == "online"
+
+
 def label_name(label):
     if isinstance(label, dict):
         return str(label.get("name") or "")
@@ -532,7 +562,18 @@ def _vm_rank(member, instance_status):
     return 3
 
 
-def reconcile_actions(pools, runners, instance_status):
+def matching_pools(pools, vm_name):
+    found = []
+    for pool in pools:
+        prefix = str(pool.get("name") or "")
+        if not prefix:
+            continue
+        if vm_name == prefix or vm_name.startswith(prefix + "-"):
+            found.append(pool)
+    return found
+
+
+def reconcile_actions(pools, runners, instance_status, instances=None):
     """Actions that bring runners in line with fleet. instance_status maps VM name to yc status."""
     members = {pool["_pool"]: [] for pool in pools}
     actions = []
@@ -616,9 +657,35 @@ def reconcile_actions(pools, runners, instance_status):
                     "replace": not revive_marked,
                 })
                 revive_marked = True
-        create_n = max(0, int(pool["count"]) - future)
+        adopted = []
+        for vm_name, info in (instances or {}).items():
+            if any(runner.get("name") == vm_name for runner in runners):
+                continue
+            labels = info.get("labels") or {}
+            if not isinstance(labels, dict) or labels.get("purpose") != "gh-runner":
+                continue
+            owners = matching_pools(pools, vm_name)
+            if len(owners) == 1 and owners[0]["_pool"] == pool["_pool"]:
+                adopted.append(vm_name)
+        for vm_name in adopted:
+            actions.append({"op": "adopt", "pool": pool["_pool"], "name": vm_name})
+        create_n = max(0, int(pool["count"]) - future - len(adopted))
         if create_n:
             actions.append({"op": "create", "pool": pool["_pool"], "count": create_n})
+    seen_unregistered = set()
+    for vm_name, info in (instances or {}).items():
+        if any(runner.get("name") == vm_name for runner in runners):
+            continue
+        labels = info.get("labels") or {}
+        if not isinstance(labels, dict) or labels.get("purpose") != "gh-runner":
+            continue
+        if vm_name in seen_unregistered:
+            continue
+        owners = matching_pools(pools, vm_name)
+        if len(owners) == 1:
+            continue
+        seen_unregistered.add(vm_name)
+        actions.append({"op": "unregistered", "name": vm_name})
     return actions
 
 
@@ -644,6 +711,10 @@ def format_action(action):
         text = f"{pool}: restart service on {action['name']}"
     elif op == "create":
         return f"{pool}: create {action['count']}"
+    elif op == "adopt":
+        return f"{pool}: register existing VM {action['name']}"
+    elif op == "unregistered":
+        return f"unregistered VM {action['name']} matches several configurations and was left running"
     else:
         return f"{pool}: {op}"
     if action.get("replace"):
@@ -652,6 +723,7 @@ def format_action(action):
 
 
 REVIVE_WAIT = 120
+REVIVE_BOOT_WAIT = 300
 
 
 def list_instances(cfg):
@@ -678,7 +750,7 @@ def delete_github_runner(repo, runner_id):
         raise SystemExit(proc.stderr.strip() or f"failed to delete runner {runner_id}")
 
 
-def delete_vm(cfg, name):
+def delete_vm(cfg, name, timeout):
     proc = run(
         ["yc", "--folder-id", cfg["folder_id"], "compute", "instance", "delete", "--name", name, "--async"],
         stdout=subprocess.PIPE,
@@ -686,6 +758,12 @@ def delete_vm(cfg, name):
     )
     if proc.returncode != 0 and "not found" not in (proc.stderr or "").lower():
         raise SystemExit(proc.stderr.strip() or f"failed to delete VM {name}")
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if yc_instance(cfg, name) is None:
+            return
+        time.sleep(10)
+    raise SystemExit(f"{name} was not deleted within {timeout}s")
 
 
 def start_vm(cfg, name, timeout):
@@ -736,14 +814,19 @@ def ensure_runner_up(cfg, name, timeout, allow_replace, taken, vm_was_running):
         vm_was_running = False
     else:
         ip = instance_ip(info)
-    if not vm_was_running and wait_runner_online(cfg["repo"], name, REVIVE_WAIT):
+    boot_wait = REVIVE_WAIT if vm_was_running else REVIVE_BOOT_WAIT
+    if not vm_was_running and wait_runner_online(cfg["repo"], name, boot_wait):
         return "online", taken
+    busy, status = runner_busy(cfg["repo"], name)
+    if restart_blocked({"busy": busy, "status": status}):
+        print(f"{name}: {status or 'busy'} now, not restarting", flush=True)
+        return "online" if status == "online" else "busy", taken
     proc = run(ssh_argv(cfg, ip) + ["sudo", "bash", "-s"], input=runner_service_script())
     if proc.returncode == 42:
         register(cfg, name, ip)
     elif proc.returncode != 0:
         print(f"{name}: service restart failed", flush=True)
-    if wait_runner_online(cfg["repo"], name, REVIVE_WAIT):
+    if wait_runner_online(cfg["repo"], name, boot_wait):
         return "online", taken
     if not allow_replace:
         print(f"{name}: still offline", flush=True)
@@ -756,7 +839,7 @@ def ensure_runner_up(cfg, name, timeout, allow_replace, taken, vm_was_running):
             break
     if runner_id:
         delete_github_runner(cfg["repo"], runner_id)
-    delete_vm(cfg, name)
+    delete_vm(cfg, name, timeout)
     taken.discard(name)
     new_name = next_instance_name(cfg["name"], taken)
     taken.add(new_name)
@@ -768,8 +851,10 @@ def cmd_reconcile(target, apply, timeout):
     pools = load_pools(target)
     runners = list_runners(pools[0]["repo"])
     instances = list_instances(pools[0])
+    if runners and not instances:
+        raise SystemExit("yc returned no instances while GitHub has runners; refusing to continue")
     status = {name: info.get("status") for name, info in instances.items()}
-    actions = reconcile_actions(pools, runners, status)
+    actions = reconcile_actions(pools, runners, status, instances)
     if not actions:
         print("fleet matches", flush=True)
         return 0
@@ -793,10 +878,15 @@ def cmd_reconcile(target, apply, timeout):
         elif op == "sync":
             set_runner_labels(pool["repo"], action["id"], action["labels"])
         elif op == "delete":
+            fresh = find_runner(pool["repo"], action.get("id"), action.get("name"))
+            if delete_blocked(fresh, action.get("vm")):
+                state = "busy" if fresh and fresh.get("busy") else "online"
+                print(f"{action['name']}: {state} now, left in place", flush=True)
+                continue
             if action.get("id"):
                 delete_github_runner(pool["repo"], action["id"])
             if action.get("vm"):
-                delete_vm(pool, action["name"])
+                delete_vm(pool, action["name"], timeout)
             taken.discard(action["name"])
         elif op in ("start", "restart"):
             allow = bool(action.get("replace")) and action["pool"] not in replaced
@@ -805,6 +895,18 @@ def cmd_reconcile(target, apply, timeout):
             )
             if outcome == "replaced":
                 replaced.add(action["pool"])
+        elif op == "adopt":
+            info = yc_instance(pool, action["name"])
+            if not info:
+                print(f"{action['name']}: VM disappeared", flush=True)
+                continue
+            if info.get("status") != "RUNNING":
+                ip = start_vm(pool, action["name"], timeout)
+            else:
+                ip = instance_ip(info)
+            wait_prepared(pool, ip, timeout)
+            register(pool, action["name"], ip)
+            print(f"{action['name']}: registered", flush=True)
         elif op == "create":
             for _ in range(action["count"]):
                 new_name = next_instance_name(pool["name"], taken)
@@ -1009,7 +1111,7 @@ def cmd_labels(cfg, names, dry_run):
         runner = by_name.get(name)
         if not runner:
             raise SystemExit(f"{name}: runner not found on GitHub")
-        final, added, removed = label_plan(runner.get("labels") or [], cfg["labels"])
+        final, added, removed = label_plan(runner.get("labels") or [], effective_labels(cfg))
         if not added and not removed:
             print(f"{name}: labels already match", flush=True)
             continue
@@ -1086,6 +1188,8 @@ labels:
     userdata = render_userdata([first, second])
     assert first in userdata and second in userdata
     assert "/var/lib/ydb-ci-host-prepared" in userdata
+    assert "sysctl.d/99-ydb-ci.conf" in userdata
+    assert "vm.max_map_count=1048576" in userdata
     assert "GITHUB_TOKEN" not in userdata
     script = authorize_script([first, second])
     assert script.count("grep -qxF") == 2
@@ -1238,6 +1342,27 @@ labels:
         "static-relwithdebinfo-asan-postcommit",
     }
     assert sum(pool["count"] for pool in pools) == 49
+    assert all(pool_label(pool) in effective_labels(pool) for pool in pools)
+    assert delete_blocked({"busy": True, "status": "online"}, True)
+    assert delete_blocked({"busy": False, "status": "online"}, False)
+    assert not delete_blocked({"busy": False, "status": "online"}, True)
+    assert restart_blocked({"busy": False, "status": "online"})
+    assert not restart_blocked({"busy": False, "status": "offline"})
+    adopted = reconcile_actions(
+        [tiny_pool],
+        [],
+        {"tiny-worker-9": "RUNNING"},
+        {"tiny-worker-9": {"labels": {"purpose": "gh-runner"}}},
+    )
+    assert any(item["op"] == "adopt" and item["name"] == "tiny-worker-9" for item in adopted)
+    assert all(item["op"] != "create" for item in adopted)
+    shared = reconcile_actions(
+        [tiny_pool, {**tiny_pool, "_pool": "other", "name": "tiny-worker"}],
+        [],
+        {"tiny-worker-9": "RUNNING"},
+        {"tiny-worker-9": {"labels": {"purpose": "gh-runner"}}},
+    )
+    assert any(item["op"] == "unregistered" and item["name"] == "tiny-worker-9" for item in shared)
     argv = create_argv(cfg, "tiny-worker-2026-10-08", "/tmp/user-data")
     assert "--async" in argv
     assert "purpose=gh-runner" in argv

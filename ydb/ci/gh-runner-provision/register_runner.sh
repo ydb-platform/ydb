@@ -25,6 +25,16 @@ current_version=""
 if [ -x ./config.sh ]; then
   current_version=$(sudo -u "$RUNNER_USERNAME" ./config.sh --version 2>/dev/null | awk 'NR==1{print $1}' || true)
 fi
+stop_runner() {
+  # stdin is the rest of this script. uninstall and remove must not consume it.
+  if [ -f .service ]; then
+    ./svc.sh uninstall </dev/null || true
+  fi
+  if [ -f .runner ]; then
+    sudo -u "$RUNNER_USERNAME" ./config.sh remove --token "$REMOVE_TOKEN" </dev/null
+  fi
+}
+
 if [ "$current_version" != "$RUNNER_VERSION" ]; then
   tmp=$(mktemp -d)
   if [ -n "${AGENT_MIRROR_URL_PREFIX:-}" ]; then
@@ -37,6 +47,7 @@ if [ "$current_version" != "$RUNNER_VERSION" ]; then
     curl -fsSL --retry 8 -o "$tmp/runner.tgz" \
       "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
   fi
+  stop_runner
   find . -mindepth 1 -maxdepth 1 -exec rm -rf {} +
   tar -xzf "$tmp/runner.tgz" -C "$H/actions_runner"
   rm -rf "$tmp"
@@ -44,11 +55,7 @@ if [ "$current_version" != "$RUNNER_VERSION" ]; then
 fi
 
 if [ -f .runner ]; then
-  if [ -f .service ]; then
-    ./svc.sh uninstall
-  fi
-  # remove does not accept --unattended. stdin is the rest of this script, so close it.
-  sudo -u "$RUNNER_USERNAME" ./config.sh remove --token "$REMOVE_TOKEN" </dev/null
+  stop_runner
 fi
 
 sudo -u "$RUNNER_USERNAME" ./config.sh --unattended --disableupdate --replace \

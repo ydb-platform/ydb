@@ -26,6 +26,8 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v5
+    - name: Self-test
+      run: python3 ydb/ci/gh-runner-provision/provision.py self-test
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
@@ -56,13 +58,16 @@ jobs:
         pub_blob=$(awk '{print $2}' ~/.ssh/id_ed25519.pub)
         key_blob=$(ssh-keygen -y -f ~/.ssh/id_ed25519 | awk '{print $2}')
         test -n "$pub_blob" && test "$pub_blob" = "$key_blob"
+        printf '%s\n' '158.160.148.210 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPKWQDKU6SvH+3eP/V0fz30nHeI2nMWoZlMjkIDVP8bk' > ~/.ssh/known_hosts
+        chmod 600 ~/.ssh/known_hosts
         cat > ~/.ssh/config << 'EOF'
         Host gh-runners-gw
           HostName 158.160.148.210
           User kirrysin
           IdentityFile ~/.ssh/id_ed25519
           IdentitiesOnly yes
-          StrictHostKeyChecking accept-new
+          StrictHostKeyChecking yes
+          UserKnownHostsFile ~/.ssh/known_hosts
         EOF
         chmod 600 ~/.ssh/config
     - name: Check fleet

@@ -52,7 +52,9 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
         ctx.Send(i, new TEvents::TEvPoisonPill);
     }
     for (const auto& [_, validator] : ColumnConstraintValidators) {
-        ctx.Send(validator.second, new TEvents::TEvPoisonPill);
+        if (validator.ActorId) {
+            ctx.Send(validator.ActorId, new TEvents::TEvPoisonPill);
+        }
     }
     ColumnConstraintValidators.clear();
 

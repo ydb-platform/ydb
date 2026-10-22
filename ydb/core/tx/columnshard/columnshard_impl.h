@@ -515,7 +515,15 @@ private:
     NBackgroundTasks::TControlInterfaceContainer<NOlap::NColumnFetching::TColumnDataManager> ColumnDataManager;
 
     std::vector<TActorId> ActorsToStop;
-    THashMap<ui64, std::pair<TSchemeShardLocalPathId, TActorId>> ColumnConstraintValidators;
+
+    struct TColumnConstraintValidation {
+        TSchemeShardLocalPathId PathId;
+        std::pair<ui64, ui64> SeqNo;
+        TActorId ActorId;
+        bool ScanStarted = false;
+    };
+
+    THashMap<ui64, TColumnConstraintValidation> ColumnConstraintValidators;
 
     TInFlightReadsTracker InFlightReadsTracker;
     TTablesManager TablesManager;

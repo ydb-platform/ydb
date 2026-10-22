@@ -426,8 +426,10 @@ void TColumnShard::RunAlterTable(
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(alterProto);
     for (auto it = ColumnConstraintValidators.begin(); it != ColumnConstraintValidators.end();) {
-        if (it->second.first == schemeShardLocalPathId) {
-            Send(it->second.second, new TEvents::TEvPoisonPill);
+        if (it->second.PathId == schemeShardLocalPathId) {
+            if (it->second.ActorId) {
+                Send(it->second.ActorId, new TEvents::TEvPoisonPill);
+            }
             ColumnConstraintValidators.erase(it++);
         } else {
             ++it;

@@ -3,12 +3,14 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/protos/set_column_constraint.pb.h>
+#include <ydb/core/tx/columnshard/engines/portions/compacted.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NColumnShard {
 namespace {
 
-class TColumnConstraintValidator : public TActorBootstrapped<TColumnConstraintValidator> {
+class TColumnConstraintValidator: public TActorBootstrapped<TColumnConstraintValidator> {
     const TActorId Shard;
     const TActorId ReplyTo;
     const ui64 Cookie;
@@ -72,15 +74,16 @@ class TColumnConstraintValidator : public TActorBootstrapped<TColumnConstraintVa
     }
 
 public:
-    TColumnConstraintValidator(TActorId shard, TActorId replyTo, ui64 cookie, ui64 operationId, ui64 tabletId,
-        std::unique_ptr<TEvDataShard::TEvKqpScan> request)
+    TColumnConstraintValidator(
+        TActorId shard, TActorId replyTo, ui64 cookie, ui64 operationId, ui64 tabletId, std::unique_ptr<TEvDataShard::TEvKqpScan> request)
         : Shard(shard)
         , ReplyTo(replyTo)
         , Cookie(cookie)
         , OperationId(operationId)
         , TabletId(tabletId)
         , Request(std::move(request))
-    {}
+    {
+    }
 
     void Bootstrap() {
         Become(&TThis::StateWork);
@@ -97,7 +100,7 @@ public:
     }
 };
 
-} // namespace
+}   // namespace
 
 void TColumnShard::Handle(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev, const TActorContext& ctx) {
     const auto& request = ev->Get()->Record;
@@ -111,8 +114,8 @@ void TColumnShard::Handle(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev
         response->Record.AddIssues()->set_message(error);
         ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
     };
-    if (request.GetOwnerId() != CurrentSchemeShardId || request.GetTabletId() != TabletID() ||
-        !internalPathId || !TablesManager.GetPrimaryIndex() || !request.NotNullColumnsSize()) {
+    if (request.GetOwnerId() != CurrentSchemeShardId || request.GetTabletId() != TabletID() || !internalPathId ||
+        !TablesManager.GetPrimaryIndex() || !request.NotNullColumnsSize()) {
         fail("Invalid column constraint validation request");
         return;
     }
@@ -126,13 +129,43 @@ void TColumnShard::Handle(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev
         }
         scan->Record.AddColumnTags(schema->GetColumnId(name));
     }
+    const auto seqNo = std::make_pair(request.GetSeqNoGeneration(), request.GetSeqNoRound());
+    auto [it, inserted] = ColumnConstraintValidators.try_emplace(request.GetId(), TColumnConstraintValidation{ pathId, seqNo, {} });
+    auto& validation = it->second;
+    if (!inserted) {
+        if (seqNo < validation.SeqNo || (seqNo == validation.SeqNo && validation.ScanStarted)) {
+            return;
+        }
+        if (seqNo > validation.SeqNo) {
+            if (validation.ActorId) {
+                ctx.Send(validation.ActorId, new TEvents::TEvPoisonPill);
+            }
+            validation = { pathId, seqNo, {} };
+        }
+    }
+    // Fence retries before waiting: a local timer may outlive its SchemeShard sender.
     // Drain pre-barrier writes, including transactions restored after a restart.
     if (OperationsManager->HasWriteOperationsBeforeSchema(*internalPathId, schema->GetVersion())) {
-        ctx.Schedule(TDuration::MilliSeconds(100),
-            std::make_unique<IEventHandle>(SelfId(), ev->Sender, ev->Release().Release(), 0, ev->Cookie));
+        ctx.Schedule(TDuration::MilliSeconds(100), std::make_unique<IEventHandle>(SelfId(), ev->Sender, ev->Release().Release(), 0, ev->Cookie));
         return;
     }
-    const auto snapshot = GetMaxReadVersion();
+    // A recovered timecast frontier may lag already committed portions. Derive
+    // a covering snapshot from durable metadata, then let scan admission wait
+    // until that fixed snapshot is readable.
+    auto snapshot = std::max(GetOutdatedSnapshot(), LastCleanupSnapshot);
+    const auto& granule = GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleVerified(*internalPathId);
+    for (const auto& [_, portion] : granule.GetPortions()) {
+        if (portion->IsAborted()) {
+            continue;
+        }
+        snapshot = std::max(snapshot, portion->RecordSnapshotMax());
+        if (portion->GetPortionType() == NOlap::EPortionType::Compacted) {
+            snapshot = std::max(snapshot, static_cast<const NOlap::TCompactedPortionInfo&>(*portion).GetAppeared());
+        }
+        if (const auto removed = portion->GetRemoveSnapshotOptional()) {
+            snapshot = std::max(snapshot, *removed);
+        }
+    }
     // The scan must apply MVCC and deletions before checking NULL values.
     scan->Record.SetLocalPathId(request.GetPathId());
     scan->Record.SetTxId(request.GetId());
@@ -140,19 +173,17 @@ void TColumnShard::Handle(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev
     scan->Record.MutableSnapshot()->SetTxId(snapshot.GetTxId());
     scan->Record.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
 
-    if (auto it = ColumnConstraintValidators.find(request.GetId()); it != ColumnConstraintValidators.end()) {
-        ctx.Send(it->second.second, new TEvents::TEvPoisonPill);
-    }
-    const auto actor = ctx.Register(new TColumnConstraintValidator(SelfId(), ev->Sender, ev->Cookie,
-        request.GetId(), TabletID(), std::move(scan)));
-    ColumnConstraintValidators[request.GetId()] = {pathId, actor};
+    validation.ActorId =
+        ctx.Register(new TColumnConstraintValidator(SelfId(), ev->Sender, ev->Cookie, request.GetId(), TabletID(), std::move(scan)));
+    validation.ScanStarted = true;
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvColumnConstraintValidationFinished::TPtr& ev, const TActorContext&) {
     const auto it = ColumnConstraintValidators.find(ev->Get()->OperationId);
-    if (it != ColumnConstraintValidators.end() && it->second.second == ev->Sender) {
-        ColumnConstraintValidators.erase(it);
+    if (it != ColumnConstraintValidators.end() && it->second.ActorId == ev->Sender) {
+        it->second.ActorId = {};
+        // Keep the attempt fence until the final ALTER removes the write barrier.
     }
 }
 
-} // namespace NKikimr::NColumnShard
+}   // namespace NKikimr::NColumnShard

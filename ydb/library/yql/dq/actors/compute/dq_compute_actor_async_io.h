@@ -196,6 +196,12 @@ struct IDqComputeActorAsyncOutput {
         return true;
     }
 
+    // Called under the allocator before a narrow row leaves its input buffer.
+    // reservedBytes belongs to this Pop attempt, not to the output queue.
+    virtual bool CanAcceptInputRow(const NUdf::TUnboxedValuePod&, ui64& /*reservedBytes*/) const {
+        return true;
+    }
+
     virtual const TDqAsyncStats& GetEgressStats() const = 0;
 
     // Sends data.

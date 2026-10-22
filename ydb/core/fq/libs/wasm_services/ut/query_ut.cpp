@@ -1,8 +1,67 @@
 #include "query_helpers.h"
 
+#include <ydb/library/yql/dq/runtime/dq_async_output.h>
+
 using namespace NFq::NWasmServices::NTestHelpers;
 
 Y_UNIT_TEST_SUITE(TFqWasmQueryTest) {
+    Y_UNIT_TEST(EnrichedRowsWaitInInputBufferUntilPayloadCapacityIsAvailable) {
+        THttpMock http;
+        TGrpcMock grpc;
+        TQueryTransformEnv env(Bindings(http, grpc)[2], 5000, 1, 0, 16, 1024, true, false, false, {}, 1, true);
+        NYql::NDq::IDqAsyncOutputBuffer::TPtr input;
+        const auto drain = [&](auto& actor) {
+            NKikimr::NMiniKQL::TUnboxedValueBatch batch;
+            ui64 reserved = 0;
+            const auto bytes = input->PopWithAdmission(batch, actor.DqAsyncOutput->GetFreeSpace(), [&](const auto& row) {
+                return actor.DqAsyncOutput->CanAcceptInputRow(row, reserved);
+            });
+            if (bytes) {
+                actor.DqAsyncOutput->SendData(std::move(batch), bytes, Nothing(), false);
+            }
+            return bytes;
+        };
+        env.Setup.Execute([&](auto& actor) {
+            using namespace NKikimr::NMiniKQL;
+            auto* type = TStructTypeBuilder(actor.TypeEnv)
+                             .Add("_yql_service_payload", TDataType::Create(NYql::NUdf::TDataType<char*>::Id, actor.TypeEnv))
+                             .Add("id", TDataType::Create(NYql::NUdf::TDataType<ui64>::Id, actor.TypeEnv))
+                             .Build();
+            input = NYql::NDq::CreateDqAsyncOutputBuffer(0, "test", type, 4096, NYql::NDq::TCollectStatsLevel::None);
+            for (ui64 id : { 42, 43 }) {
+                NYql::NUdf::TUnboxedValue* members;
+                auto row = actor.HolderFactory.CreateDirectArrayHolder(2, members);
+                members[0] = MakeString(TString(400, char(id)));
+                members[1] = NYql::NUdf::TUnboxedValuePod(id);
+                input->Push(std::move(row));
+            }
+            input->Finish();
+            UNIT_ASSERT(drain(actor) > 0);
+            UNIT_ASSERT_VALUES_EQUAL(drain(actor), 0);
+            UNIT_ASSERT(!input->IsFinished());
+        });
+        http.State->Wait();
+        http.State->Reply(0, R"({"id":42,"name":"Ada","score":97,"version":1})", 200);
+        Eventually([&] {
+            std::lock_guard lock(env.Output->Mutex);
+            return env.Output->Rows.size() == 1;
+        });
+        env.Setup.Execute([&](auto& actor) {
+            UNIT_ASSERT(drain(actor) > 0);
+            UNIT_ASSERT(input->IsFinished());
+            input.Reset();
+        });
+        http.State->Wait(1);
+        http.State->Reply(1, R"({"id":43,"name":"Ada","score":97,"version":1})", 200);
+        env.Start({}, true);
+        Eventually([&] {
+            return env.Output->Finished.load();
+        });
+        std::lock_guard lock(env.Output->Mutex);
+        UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(env.Output->Payloads, (TVector<TString>{ TString(400, char(42)), TString(400, char(43)) }));
+    }
+
     Y_UNIT_TEST(QueryBatchSizeCheckpointAndRestore200Rows) {
         THttpMock http;
         TGrpcMock grpc;

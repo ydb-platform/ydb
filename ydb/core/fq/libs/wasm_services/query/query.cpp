@@ -323,6 +323,23 @@ public:
         return static_cast<i64>(std::min<ui64>(MaxRows - BufferedRows(), available));
     }
 
+    bool CanAcceptInputRow(const NUdf::TUnboxedValuePod& row, ui64& reservedBytes) const override {
+        if (!Config->EnrichRows) {
+            return true;
+        }
+        const auto payload = row.GetElement(InputPayloadIndex);
+        const ui64 payloadBytes = payload.AsStringRef().Size();
+        Y_ENSURE(payloadBytes <= Config->MaxBufferedBytes - RowReservation, "WASM service saved row byte quota exceeded");
+        const ui64 required = payloadBytes + RowReservation;
+        const ui64 used = PayloadBytes + BufferedRows() * RowReservation;
+        if (used > Config->MaxBufferedBytes || reservedBytes > Config->MaxBufferedBytes - used ||
+            required > Config->MaxBufferedBytes - used - reservedBytes) {
+            return false;
+        }
+        reservedBytes += required;
+        return true;
+    }
+
     bool AllowFreeSpaceOvercommit() const override {
         return false;
     }

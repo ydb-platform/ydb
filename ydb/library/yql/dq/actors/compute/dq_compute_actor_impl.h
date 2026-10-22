@@ -2027,7 +2027,10 @@ protected:
         NDqProto::TWatermark watermark;
         NDqProto::TCheckpoint checkpoint;
 
-        const ui64 dataSize = !outputInfo.Finished ? sink->Pop(dataBatch, bytes) : 0;
+        ui64 reservedBytes = 0;
+        const ui64 dataSize = !outputInfo.Finished ? sink->PopWithAdmission(dataBatch, bytes, [&](const auto& row) {
+            return outputInfo.AsyncOutput->CanAcceptInputRow(row, reservedBytes);
+        }) : 0;
         const bool hasWatermark = sink->Pop(watermark);
         const bool hasCheckpoint = sink->Pop(checkpoint);
         if (!dataSize && !hasCheckpoint && !hasWatermark) {

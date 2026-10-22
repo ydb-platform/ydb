@@ -915,7 +915,7 @@ TPendingAttachment StartPendingAttachment(TTestEnv& env) {
     bool foundTarget = false;
     for (ui32 attempt = 0; attempt < 50; ++attempt) {
         const auto result = DescribeReplication(env, info);
-        if (result->Get()->Record.TargetsSize()) {
+        if (result->Get()->Record.TargetsSize() && result->Get()->Record.GetTargets(0).GetSrcStreamName()) {
             targetId = result->Get()->Record.GetTargets(0).GetId();
             foundTarget = true;
             break;
@@ -924,11 +924,12 @@ TPendingAttachment StartPendingAttachment(TTestEnv& env) {
     }
     UNIT_ASSERT(foundTarget);
 
-    // Keep this test focused on attachment: source stream setup is independent
-    // and may otherwise delay destination progress in the controller.
-    env.SendAsync(info.ControllerId, new TEvPrivate::TEvCreateStreamResult(1, targetId,
-        NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues())));
-    DescribeReplication(env, info);
+    // Attachment recovery requires a completed source setup, including when
+    // DONE deliberately makes that source unreachable. Wait for the current
+    // real creator's committed result instead of injecting an edge result.
+    UNIT_ASSERT_C(WaitFor([&] {
+        return ReadStreamSchemaChanges(env, info.ControllerId, TWorkerId(1, targetId, 0)).has_value();
+    }, 150), "Source stream setup did not complete before attachment");
 
     env.GetRuntime().Register(CreateDstCreator(
         env.GetSender(), env.GetSchemeshardId("/Root/table1"), env.GetYdbProxy(),
@@ -1306,7 +1307,7 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         ui64 targetId = 0;
         for (ui32 attempt = 0; attempt < 50; ++attempt) {
             const auto result = DescribeReplication(env, info);
-            if (result->Get()->Record.TargetsSize()) {
+            if (result->Get()->Record.TargetsSize() && result->Get()->Record.GetTargets(0).GetSrcStreamName()) {
                 targetId = result->Get()->Record.GetTargets(0).GetId();
                 break;
             }
@@ -1316,9 +1317,9 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
 
         UNIT_ASSERT(targetId);
 
-        env.SendAsync(info.ControllerId, new TEvPrivate::TEvCreateStreamResult(1, targetId,
-            NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues())));
-        DescribeReplication(env, info);
+        UNIT_ASSERT_C(WaitFor([&] {
+            return ReadStreamSchemaChanges(env, info.ControllerId, TWorkerId(1, targetId, 0)).has_value();
+        }, 150), "Source stream setup did not complete before attachment allocation");
 
         const auto txProxy = runtime.GetLocalServiceId(MakeTxProxyID());
         const auto gate = runtime.Register(new TAttachAllocationGate(txProxy, env.GetSender()));

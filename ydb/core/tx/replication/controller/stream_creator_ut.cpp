@@ -55,7 +55,20 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             }));
         }
         NYdb::NTable::TTableClient client(env.GetDriver());
-        auto session = env.RunCall([&] { return client.CreateSession().GetValueSync().GetSession(); });
+        std::optional<NYdb::NTable::TSession> acquiredSession;
+        const auto sessionStatus = env.RunCall([&] {
+            // The SDK retries only statuses allowed by its session-acquisition
+            // policy, and checks success before extracting the session.
+            return client.RetryOperationSync([&](NYdb::NTable::TSession readySession) {
+                acquiredSession.emplace(std::move(readySession));
+                return NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues());
+            }, NYdb::NTable::TRetryOperationSettings().MaxTimeout(TDuration::Seconds(60)));
+        });
+        UNIT_ASSERT_C(sessionStatus.IsSuccess(), TStringBuilder()
+            << "SDK session setup failed: " << sessionStatus.GetStatus()
+            << ": " << sessionStatus.GetIssues().ToString());
+        UNIT_ASSERT(acquiredSession);
+        auto session = std::move(*acquiredSession);
         auto query = [&](const TString& text) {
             auto result = env.RunCall([&] { return session.ExecuteSchemeQuery(text).GetValueSync(); });
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

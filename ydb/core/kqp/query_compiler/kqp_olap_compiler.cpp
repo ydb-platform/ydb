@@ -1,5 +1,6 @@
 #include "kqp_olap_compiler.h"
 
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 
@@ -11,6 +12,8 @@
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
 #include <memory>
+#include <optional>
+#include <util/generic/scope.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -1231,16 +1234,30 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
 
 void CompileOlapProgram(const TCoLambda& lambda, const TKikimrTableMetadata& tableMeta,
     NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames,
-    TExprContext &exprCtx, TTypeAnnotationContext& typesCtx)
+    TExprContext &exprCtx, TTypeAnnotationContext& typesCtx, TCompileTrace* trace)
 {
     YQL_ENSURE(lambda.Args().Size() == 1);
 
-    TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto, resultColNames, exprCtx, typesCtx);
-
-    CompileOlapProgramImpl(lambda.Body(), ctx);
-    CompileFinalProjection(ctx);
-
-    ctx.SerializeToProto();
+    std::optional<TKqpOlapCompileContext> ctx;
+    {
+        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Create OLAP compile context", "KqpQueryCompiler");
+        ctx.emplace(lambda.Args().Arg(0), tableMeta, readProto, resultColNames, exprCtx, typesCtx);
+    }
+    Y_DEFER {
+        // The registry is owned by the context: time its actual destruction,
+        // including when program compilation or serialization throws.
+        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Destroy OLAP compile context", "KqpQueryCompiler");
+        ctx.reset();
+    };
+    {
+        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Build OLAP program", "KqpQueryCompiler");
+        CompileOlapProgramImpl(lambda.Body(), *ctx);
+        CompileFinalProjection(*ctx);
+    }
+    {
+        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Serialize OLAP program", "KqpQueryCompiler");
+        ctx->SerializeToProto();
+    }
 }
 
 } // namespace NKqp

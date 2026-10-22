@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    kqp_compile_trace_transformer.cpp
     kqp_explain_prepared.cpp
     kqp_gateway_proxy.cpp
     kqp_host.cpp
@@ -20,6 +21,7 @@ PEERDIR(
     ydb/core/kqp/opt
     ydb/core/kqp/opt/cbo/solver
     ydb/core/kqp/provider
+    ydb/core/kqp/tracing
     ydb/core/local_indexes/bloom
     ydb/core/path_aliasing
     ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc

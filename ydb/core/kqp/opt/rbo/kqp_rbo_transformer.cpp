@@ -151,6 +151,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
     settings.VisitTuples = true;
 
     // At first step convert KqpOps to RBO Ops.
+    std::optional<TCompileTraceScope> traceScope(std::in_place, KqpCtx.GetCompileTrace(), TCompileTraceLevels::Step,
+        "Convert to RBO plan", "NewRBO");
     auto status = OptimizeExpr(
         output, output,
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
@@ -200,6 +202,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
         },
         ctx, settings);
 
+    traceScope->SetSuccess(status != TStatus::Error);
+    traceScope.reset();
     if (status != TStatus::Ok) {
         return status;
     }
@@ -218,6 +222,9 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
 
 NThreading::TFuture<void> TKqpNewRBOTransformer::DoGetAsyncFuture(const TExprNode& input) {
     Y_UNUSED(input);
+    if (auto* trace = KqpCtx.GetCompileTrace()) {
+        trace->AwaitDependency(ColumnStatisticsDependency);
+    }
     return ColumnStatisticsReadiness;
 }
 
@@ -402,31 +409,53 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(TExprContext& ctx) {
 }
 
 IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprContext& ctx) {
+    if (auto* trace = KqpCtx.GetCompileTrace()) {
+        ColumnStatisticsSpan = trace->StartSpan(TCompileTraceLevels::Phase, "Load column statistics", "NewRBO", "async");
+    }
     CollectTablesAndColumnsNames(ctx);
+    auto dependencyJoin = ColumnStatisticsSpan.CreateChild(TCompileTraceLevels::Step, "Await column statistics");
+    dependencyJoin.Attribute("ydb.compile.kind", TString("async"));
+    dependencyJoin.Attribute("ydb.compile.join", TString("all"));
+    ColumnStatisticsDependency = dependencyJoin.GetTraceId();
 
     TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
-                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; });
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; }, &dependencyJoin);
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
-                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; }, &dependencyJoin);
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_HEIGHT_HISTOGRAM, EqHeightHistTuplesByTableName,
-                   [](const NYql::TMultiColumnStatistics& stats) { return !!stats.EqHeightHistogram; });
+                   [](const NYql::TMultiColumnStatistics& stats) { return !!stats.EqHeightHistogram; }, &dependencyJoin);
 
+    ColumnStatisticsSpan.Attribute("ydb.statistics.requests", static_cast<i64>(futures.size()));
     if (futures.empty()) {
+        dependencyJoin.EndOk();
+        ColumnStatisticsSpan.EndOk();
         return TStatus::Ok;
     }
 
+    dependencyJoin.Attribute("ydb.compile.dependencies", static_cast<i64>(futures.size()));
+    // Only tracing needs the issues of all responses: the merged response keeps
+    // the issues of the first one. Preserve the existing result merge and the
+    // future's value/exception semantics.
+    ColumnStatisticsIssues = ColumnStatisticsSpan ? std::make_shared<NYql::TIssues>() : nullptr;
     auto sharedState = std::make_shared<TColumnStatisticsSharedState>();
     ColumnStatisticsReadiness = NThreading::WaitAll(futures).Apply(
-        [weakSharedState = std::weak_ptr{sharedState}, futures = std::move(futures)](const NThreading::TFuture<void>&) mutable {
+        [weakSharedState = std::weak_ptr{sharedState}, futures = std::move(futures), issues = ColumnStatisticsIssues](const NThreading::TFuture<void>&) mutable {
             for (auto& fut : futures) {
                 if (fut.HasException()) {
                     fut.TryRethrow();
                 }
 
                 auto newStats = fut.ExtractValue();
+                if (issues) {
+                    issues->AddIssues(newStats.Issues());
+                }
                 auto sharedState = weakSharedState.lock();
                 if (!sharedState) {
+                    if (issues) {
+                        // An abandoned merge has no successful aggregate result.
+                        issues->AddIssue(NYql::TIssue("Column statistics merge abandoned"));
+                    }
                     // parent already deleted, just return
                     return;
                 }
@@ -470,6 +499,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
             }
         });
 
+    ColumnStatisticsReadiness = TraceCompileDependency(ColumnStatisticsReadiness, std::move(dependencyJoin),
+        [issues = ColumnStatisticsIssues] { return !issues || issues->Empty(); });
     SharedState = sharedState;
     return TStatus::Async;
 }
@@ -546,7 +577,23 @@ void TKqpNewRBOTransformer::ApplyColumnStatistics() {
     }
 }
 
+void TKqpNewRBOTransformer::EndColumnStatisticsSpan(const char* unfinishedReason) {
+    if (ColumnStatisticsSpan) {
+        if (!ColumnStatisticsReadiness.Initialized() || !ColumnStatisticsReadiness.IsReady()) {
+            ColumnStatisticsSpan.EndError(unfinishedReason);
+        } else if (ColumnStatisticsReadiness.HasException()) {
+            ColumnStatisticsSpan.EndError("Column statistics request failed");
+        } else if (ColumnStatisticsIssues && !ColumnStatisticsIssues->Empty()) {
+            ColumnStatisticsSpan.EndError(ColumnStatisticsIssues->ToOneLineString());
+        } else {
+            ColumnStatisticsSpan.EndOk();
+        }
+    }
+    ColumnStatisticsIssues.reset();
+}
+
 IGraphTransformer::TStatus TKqpNewRBOTransformer::DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    EndColumnStatisticsSpan("Column statistics not ready");
     ApplyColumnStatistics();
     return ContinueOptimizations(input, output, ctx);
 }
@@ -570,6 +617,13 @@ void TKqpNewRBOTransformer::AddPlans(std::optional<NJson::TJsonValue> execPlan, 
 }
 
 void TKqpNewRBOTransformer::Rewind() {
+    ColumnStatisticsDependency = {};
+    EndColumnStatisticsSpan("Transformer rewound");
+}
+
+TKqpNewRBOTransformer::~TKqpNewRBOTransformer() {
+    // A failed request skips DoApplyAsyncChanges: the pipeline rethrows it.
+    EndColumnStatisticsSpan("Transformer destroyed");
 }
 
 IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) {

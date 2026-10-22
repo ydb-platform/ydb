@@ -396,6 +396,17 @@ struct TCBOOptimizerStats {
     // TreesOptimized counts candidates for which join enumeration completed.
     ui64 TreesTotal = 0;
     ui64 TreesOptimized = 0;
+
+    // Optional diagnostics, accumulated across join searches. DP table entries
+    // count relation subsets, not the number of alternative physical plans.
+    bool CollectSearchStats = false;
+    TString Algorithm;
+    ui64 EmittedPairs = 0;
+    ui64 DpTableEntries = 0;
+    ui64 PredictedTimeUs = 0;
+    ui64 BudgetExceeded = 0;
+    ui64 SearchFailures = 0;
+    ui64 HardTimeouts = 0;
 };
 
 class IOptimizerNew {

@@ -22,6 +22,8 @@
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
 
+#include <optional>
+
 using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
@@ -63,6 +65,9 @@ TVector<ui32> GetUnionAllInputArgumentOrder(TOpUnionAll& unionAll) {
 TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, TRBOContext& rboCtx) {
     TExprContext& ctx = rboCtx.ExprCtx;
     ui32 stageInputCounter = 0;
+    TCompileTraceScope traceScope(rboCtx.GetCompileTrace(), TCompileTraceLevels::Phase, "Convert to physical plan", "NewRBO");
+    std::optional<TCompileTraceScope> convertOperatorsTraceScope(std::in_place, rboCtx.GetCompileTrace(),
+        TCompileTraceLevels::Step, "Convert operators", "NewRBO");
 
     if (rboCtx.NeedToLog()) {
         rboCtx.TraceLog.stage("Physical AST generation");
@@ -367,6 +372,7 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
         allStageArgs.push_back(std::move(stageArgs));
         allStagePos.push_back(std::move(stagePos));
     }
+    convertOperatorsTraceScope.reset();
 
     return TPhysicalQueryBuilder(roots, std::move(queryGraphs), std::move(allStages), std::move(allStageArgs), std::move(allStagePos), std::move(allNames), rboCtx).BuildPhysicalQuery();
 

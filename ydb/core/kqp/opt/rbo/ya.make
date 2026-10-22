@@ -50,6 +50,7 @@ PEERDIR(
     ydb/library/yql/providers/s3/statistics
     ydb/library/yql/utils/plan
     ydb/core/kqp/provider
+    ydb/core/kqp/tracing
     ydb/library/formats/arrow/protos
     yql/essentials/core/extract_predicate
 )

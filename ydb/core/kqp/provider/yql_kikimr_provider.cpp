@@ -193,6 +193,7 @@ void TKikimrQueryContext::Reset() {
     RlPath.Clear();
     RpcCtx.reset();
     TranslationSettings = NSQLTranslation::TTranslationSettings();
+    CompileTrace.Reset();
 }
 
 const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TString& cluster,

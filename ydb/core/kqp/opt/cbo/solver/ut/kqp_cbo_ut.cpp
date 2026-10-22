@@ -72,10 +72,25 @@ Y_UNIT_TEST(JoinSearch2Rels) {
         false
         );
 
-    auto res = optimizer->JoinSearch(op);
+    TCBOOptimizerStats stats;
+    stats.CollectSearchStats = true;
+    auto res = optimizer->JoinSearch(op, {}, &stats);
+    UNIT_ASSERT_VALUES_EQUAL(stats.TreesOptimized, 1);
+    UNIT_ASSERT_VALUES_EQUAL(stats.Algorithm, "DPHypClassic");
+    UNIT_ASSERT_GT(stats.EmittedPairs, 0);
+    UNIT_ASSERT_VALUES_EQUAL(stats.DpTableEntries, 3); // Two leaves and their join.
     std::stringstream ss;
     res->Print(ss);
     Cout << ss.str() << '\n';
+
+    settings.CBOTimeout = 0;
+    optimizer.reset(MakeNativeOptimizerNew(pctx, settings, dummyCtx, false));
+    stats = {};
+    stats.CollectSearchStats = true;
+    UNIT_ASSERT(optimizer->JoinSearch(op, {}, &stats) == op);
+    UNIT_ASSERT_VALUES_EQUAL(stats.BudgetExceeded, 1);
+    UNIT_ASSERT_VALUES_EQUAL(stats.TreesOptimized, 0);
+    UNIT_ASSERT_VALUES_EQUAL(stats.EmittedPairs, 0);
 }
 
 Y_UNIT_TEST(JoinSearch3Rels) {

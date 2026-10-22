@@ -60,6 +60,7 @@ NWilson::TSpan MakeMetadataTraceSpan(const NWilson::TTraceId& parent, NActors::T
     span.Attribute("ydb.code.component", TString("KqpTableMetadataLoader"));
     span.Attribute("ydb.peer.actor.type", TString(loadsMetadata ? "SchemeCache" : "StatisticsService"));
     span.Attribute("ydb.compile_dependency.purpose", TString(purpose));
+    span.Attribute("ydb.compile.kind", TString("async"));
     return span;
 }
 

@@ -915,6 +915,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
             const auto describeJson = NJson::ReadJsonTree(&describeResponse, true);
             UNIT_ASSERT_VALUES_EQUAL(describeJson["Path"].GetString(), "/Root");
         }
+
+        headers["Content-Type"] = "application/json";
+        TStringStream postResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", R"({"database":"/alias","path":"/alias"})", &postResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&postResponse, true)["Path"].GetString(), "/Root");
+
+        TStringStream directoryResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/scheme/directory?database=/alias&path=/alias&direct=true", &directoryResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&directoryResponse, true)["self"]["name"].GetString(), "Root");
     }
 
     NJson::TJsonValue SendQuery(const TString& query, const TString& schema, const bool base64) {

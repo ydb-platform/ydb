@@ -13,6 +13,9 @@
 
 namespace NKikimr::NViewer {
 
+TCgiParameters NormalizePathParameters(TCgiParameters params);
+void NormalizePathParameters(NJson::TJsonValue& params);
+
 using TTabletId = ui64;
 
 inline TActorId MakeViewerID(ui32 node) {

@@ -138,6 +138,7 @@ TViewerPipeClient::TViewerPipeClient(NWilson::TTraceId traceId) {
 void TViewerPipeClient::BuildParamsFromJson(TStringBuf data) {
     NJson::TJsonValue jsonData;
     if (NJson::ReadJsonTree(data, &jsonData)) {
+        NormalizePathParameters(jsonData);
         if (jsonData.IsMap()) {
             for (const auto& [key, value] : jsonData.GetMap()) {
                 switch (value.GetType()) {
@@ -163,7 +164,7 @@ void TViewerPipeClient::BuildParamsFromJson(TStringBuf data) {
 }
 
 void TViewerPipeClient::BuildParamsFromFormData(TStringBuf data) {
-    for (const auto& [key, value] : TCgiParameters(data)) {
+    for (const auto& [key, value] : NormalizePathParameters(TCgiParameters(data))) {
         Params.InsertUnescaped(key, value);
     }
 }
@@ -218,7 +219,7 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
     : Viewer(viewer)
     , Event(ev)
 {
-    Params = Event->Get()->Request.GetParams();
+    Params = NormalizePathParameters(Event->Get()->Request.GetParams());
     if (NHttp::Trim(Event->Get()->Request.GetHeader("Content-Type").Before(';'), ' ') == "application/json") {
         BuildParamsFromJson(Event->Get()->Request.GetPostContent());
     }
@@ -236,7 +237,7 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NHttp::TEvHttpProxy::TEvHt
     : Viewer(viewer)
     , HttpEvent(ev)
 {
-    Params = TCgiParameters(HttpEvent->Get()->Request->URL.After('?'));
+    Params = NormalizePathParameters(TCgiParameters(HttpEvent->Get()->Request->URL.After('?')));
     NHttp::THeaders headers(HttpEvent->Get()->Request->Headers);
     if (NHttp::Trim(headers.Get("Content-Type").Before(';'), ' ') == "application/json") {
         BuildParamsFromJson(HttpEvent->Get()->Request->Body);

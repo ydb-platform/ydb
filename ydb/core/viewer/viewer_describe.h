@@ -4,7 +4,6 @@
 #include "log.h"
 #include "viewer.h"
 #include <ydb/core/external_sources/external_source_factory.h>
-#include <ydb/core/path_aliasing/path_normalizer.h>
 
 namespace NKikimr::NViewer {
 
@@ -137,9 +136,6 @@ public:
     void Bootstrap() override {
         if (NeedToRedirect()) {
             return;
-        }
-        if (Params.Has("path") && AppData()->PathNormalizer) {
-            Params.ReplaceUnescaped("path", AppData()->PathNormalizer->NormalizePath(Params.Get("path")));
         }
         if (Params.Has("path_id") || Params.Has("schemeshard_id")) {
             if (!Viewer->CheckAccessMonitoring(GetRequest())) {

@@ -72,7 +72,7 @@ Each dynamic group belongs to a single [database](#database) and stores that dat
 
 #### Virtual storage group {#virtual-storage-groups}
 
-**Virtual storage group** is an entity that exposes the same external interface as a [storage group](#storage-group). A virtual storage group stores the data written to it either in other storage groups or in S3-compatible storage - in contrast to [static](#static-group) and [dynamic groups](#dynamic-group) which store their data on [VDisks](#vdisk).
+**Virtual storage group** is an entity that exposes the same external interface as a [storage group](#storage-group). A virtual storage group stores the data written to it either in other storage groups or in S3-compatible storage, in contrast to [static](#static-group) and [dynamic groups](#dynamic-group), which store their data on [VDisks](#vdisk).
 
 Virtual storage groups decouple the physical placement of data from the logical allocation of storage to tablets. This gives the administrator more flexibility in storage management, including the ability to decommission dynamic groups and reduce the storage allocated to a particular [database](#database).
 
@@ -830,7 +830,7 @@ Distributed storage stores immutable data, with each immutable data block identi
 
 **PDisk** or **physical disk** is a component that controls a physical disk drive (block device). In other words, PDisk is a subsystem that implements an abstraction similar to a specialized file system on top of block devices (or files that emulate a block device for testing purposes). PDisk provides durability guarantees for disk operations (write acknowledgment strictly after `fsync`).
 
-PDisk stores data for its clients, [VDisks](#vdisk), and manages their I/O. Each PDisk supports multiple VDisks. It divides its capacity, IOPS, and bandwidth into [VDisk slots](#slot). At any given time, no more than one VDisk can own each slot. A scheduler, which is part of PDisk, shares the device's bandwidth among these VDisks.
+PDisk stores data for its clients ([VDisks](#vdisk)) and manages their I/O. Each PDisk supports multiple VDisks. It divides its capacity, IOPS, and bandwidth into [VDisk slots](#slot). At any given time, no more than one VDisk can own each slot. A scheduler, which is part of PDisk, shares the device's bandwidth among these VDisks.
 
 PDisk maintains a recovery log shared by PDisk service records and all VDisks. It protects data with checksums and uses erasure coding to recover damaged sectors of the log and service records. In addition, PDisk supports transparent encryption of all data on the disk.
 

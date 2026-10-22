@@ -189,13 +189,15 @@ The first eight bytes are:
 * version: `1`.
 * kind: `1` for a row change, `2` for a [barrier](#barriers), `3` for a schema change.
 * operation: `1` update, `2` replacement, `3` erase. These are the same operations as the JSON fields `update`, `reset`, and `erase`. A barrier or a schema change uses `0`. One record has one operation.
-* flags, from the least significant bit: `1` [virtual timestamp](#virtual-timestamps), `2` two-byte column index, `4` old image (`oldImage`), `8` new image (`newImage`), `16` user SID, `32` trace id. A set bit means that part is present.
+* flags, from the least significant bit: `1` [virtual timestamp](#virtual-timestamps), `2` two-byte column index, `4` old image (`oldImage`), `8` new image (`newImage`), `16` user SID, `32` trace id, `64` null key marker. A set bit means that part is present.
 * number of key cells, 16 bits.
 * number of value cells, 16 bits.
 
 When the old-image bit is set, the next field is the 16-bit number of old-image cells. When the new-image bit is set, the next field is the 16-bit number of new-image cells. When the virtual-timestamp bit is set, the next fields are `step` and `txId`: two 64-bit integers with the same meaning as in [JSON format](#json-record-structure).
 
-Key cells follow, in primary-key order. A key cell is not NULL. Value cells come next, then old-image cells, then new-image cells. Each of those cells starts with the column index. The index is the position of a non-key column after sorting non-key column names. It is one byte when the table has at most 127 non-key columns. When the table has more, the two-byte index bit is set and every index in the record is two bytes. NULL is allowed only on these indexed cells: the most significant bit of the index value is set, and the cell has no bytes after the index.
+Key cells follow, in primary-key order. Value cells come next, then old-image cells, then new-image cells. Each value, old-image, and new-image cell starts with the column index. The index is the position of a non-key column after sorting non-key column names. It is one byte when the table has at most 127 non-key columns. When the table has more, the two-byte index bit is set and every index in the record is two bytes. NULL on an indexed cell sets the most significant bit of the index value, and the cell has no bytes after the index.
+
+A key cell may be NULL. The writer sets flag bit `64` when at least one key cell is NULL. Each key cell is then preceded by one byte: `0` means a value follows, `1` means NULL and no value bytes follow. When the bit is clear, every key cell is a value and has no preceding byte.
 
 A cell whose type has a fixed size is stored as that many bytes. Any other cell is a 32-bit length followed by that many bytes. The bytes are the value stored in the table. A non-NULL empty value has length `0`.
 

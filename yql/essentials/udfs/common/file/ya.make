@@ -1,17 +1,13 @@
 YQL_UDF_CONTRIB(file_udf)
 
-YQL_ABI_VERSION(
-    2
-    27
-    0
-)
+IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
+ENDIF()
 
-SRCS(
-    file_udf.cpp
-)
-
-PEERDIR(
-    yql/essentials/core
-)
+INCLUDE(ya.make.inc)
 
 END()
+
+RECURSE_FOR_TESTS(
+    test
+)

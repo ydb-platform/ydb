@@ -1,6 +1,7 @@
 #include "runtime_settings_serialization.h"
+#include "runtime_settings_configuration.h"
 
-#include <yql/essentials/providers/common/config/yql_dispatch.h>
+#include <yql/essentials/providers/common/config/yql_config_qplayer.h>
 #include <yql/essentials/providers/common/activation/yql_activation.h>
 
 namespace NYql {
@@ -8,7 +9,7 @@ namespace NYql {
 namespace {
 
 void FillUdfSettings(
-    TRuntimeSettingsConfiguration& config,
+    TRuntimeSettings& config,
     const google::protobuf::RepeatedPtrField<NProto::TUdfSettings>& udfSettings,
     const std::function<bool(const NProto::TRuntimeSetting&)>& filter,
     const TQContext& qContext)
@@ -31,7 +32,7 @@ TRuntimeSettings::TPtr CreateRuntimeSettingsFromProtoImpl(
     const TQContext& qContext,
     const std::function<void(const TString&)>& onPartialFeatureActivation)
 {
-    auto config = MakeRuntimeSettingsConfigurationMutable(qContext);
+    auto config = MakeRuntimeSettingsMutable();
     auto filter = NConfig::MakeActivationFilter<NProto::TRuntimeSetting>(userName, credentials, [&](const TString& name) {
         YQL_ENSURE(allowActivation, "Activation is not allowed. "
                                     "Seems you are trying to load runtime settings with activation but all settings must be already activated.");
@@ -39,7 +40,7 @@ TRuntimeSettings::TPtr CreateRuntimeSettingsFromProtoImpl(
             onPartialFeatureActivation(name);
         }
     });
-    config->Dispatch(proto.GetHostSettings(), filter);
+    TRuntimeSettingsConfiguration::Get().Dispatch(*config, proto.GetHostSettings(), filter, qContext);
     FillUdfSettings(*config, proto.GetUdfSettings(), filter, qContext);
     return config;
 }
@@ -73,8 +74,7 @@ NProto::TRuntimeSettings SerializeRuntimeSettingsToProto(
     const TRuntimeSettings& config)
 {
     NProto::TRuntimeSettings proto;
-    TRuntimeSettingsConfiguration configuration(config);
-    configuration.SerializeStaticSettings([&proto](const TString& name, const TString& value) {
+    TRuntimeSettingsConfiguration::Get().SerializeStaticSettings(config, [&proto](const TString& name, const TString& value) {
         auto* setting = proto.AddHostSettings();
         setting->SetName(name);
         setting->SetValue(value);

@@ -60,7 +60,6 @@ public:
                 hFunc(TEvPrivate::TEvBackupImportRecordBatchResult, Handle) cFunc(NActors::TEvents::TEvPoisonPill::EventType, HandlePoisonPill))
 
     void HandlePoisonPill() {
-        Counters.OnActorDead();
         PassAway();
     }
 
@@ -175,7 +174,6 @@ public:
             return Fail(product->Error);
         }
         Send(SubscriberActorId, std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(nullptr, true));
-        Counters.OnActorDead();
         PassAway();
     }
 
@@ -183,7 +181,6 @@ public:
         auto result = std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(nullptr, true);
         result->Error = error;
         Send(SubscriberActorId, std::move(result));
-        Counters.OnActorDead();
         PassAway();
     }
 

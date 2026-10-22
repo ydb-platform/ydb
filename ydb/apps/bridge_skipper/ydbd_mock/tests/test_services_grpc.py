@@ -63,6 +63,33 @@ class GrpcCase(unittest.IsolatedAsyncioTestCase):
 
 
 class SuccessEnvelopeTest(GrpcCase):
+    async def test_empty_pile_name_survives_reads_control_and_mutations(self):
+        c = await self.make(pile_names=["named", ""])
+        label = c.label("named")
+        state = await self.get_state(c, label)
+        self.assertEqual([(p.pile_name, p.state) for p in state.pile_states], [("named", PRIMARY), ("", SYNC)])
+        response = await c.discovery(c.label("")).ListEndpoints(ydb_discovery_pb2.ListEndpointsRequest())
+        discovery = operations.unpack(response.operation, ydb_discovery_pb2.ListEndpointsResult)
+        self.assertEqual(discovery.endpoints[0].bridge_pile_name, "")
+        self.assertEqual([p.pile_name for p in discovery.pile_states], ["named", ""])
+
+        await self.control(c, "named", label=label, op="storage", piles=[""])
+        response = await c.monitoring(label).SelfCheck(ydb_monitoring_pb2.SelfCheckRequest())
+        health = operations.unpack(response.operation, ydb_monitoring_pb2.SelfCheckResult)
+        self.assertEqual(len(health.issue_log), 1)
+        self.assertTrue(health.issue_log[0].location.storage.pool.group.HasField("pile"))
+        self.assertEqual(health.issue_log[0].location.storage.pool.group.pile.name, "")
+        op = await self.update(c, label, ("", DISC))
+        self.assertEqual(op.status, model.SUCCESS)
+        response = await c.bridge(label).RemovePile(ydb_bridge_pb2.RemovePileRequest(pile_name=""))
+        self.assertEqual(response.operation.status, model.SUCCESS)
+        state = await self.get_state(c, label)
+        self.assertEqual([(p.pile_name, p.state) for p in state.pile_states],
+                         [("named", PRIMARY), ("", model.PUB_INACTIVE)])
+        status, body = await c.http("", "GET", "/state")
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["pile"], "")
+
     async def test_list_endpoints_returns_only_the_answering_node(self):
         c = await self.make()
         for pile in ("pile1", "pile2"):
@@ -377,6 +404,19 @@ class FaultTest(GrpcCase):
 
 
 class HealthOverGrpcTest(GrpcCase):
+    async def test_failed_resyncing_pile_is_not_reported_as_a_bridge_group_failure(self):
+        c = await self.make()
+        inst = c.inst("pile1")
+        inst.set_blocked([1])
+        state = inst.state.copy()
+        state.per_pile[1] = model.Stored.NOT_SYNCHRONIZED_2
+        inst.replica.force(state, True)
+        self.assertTrue(model.requires_data_quorum(state.per_pile[1]))
+        data = await self.self_check(c, c.label("pile1"))
+        self.assertEqual(data["self_check_result"], "GOOD")
+        self.assertFalse(data.get("issue_log"))
+        self.assertEqual(data["database_status"][0]["storage"]["pools"][0]["groups"][0]["overall"], "GREEN")
+
     async def self_check(self, c, label):
         resp = await c.monitoring(label).SelfCheck(ydb_monitoring_pb2.SelfCheckRequest())
         result = operations.unpack(resp.operation, ydb_monitoring_pb2.SelfCheckResult)
@@ -394,7 +434,7 @@ class HealthOverGrpcTest(GrpcCase):
         c = await self.make()
         await self.control(c, "pile1", label=c.label("pile1"), op="storage", piles=["pile2"])
         data = await self.self_check(c, c.label("pile1"))
-        self.assertEqual(data["self_check_result"], "EMERGENCY")
+        self.assertEqual(data["self_check_result"], "MAINTENANCE_REQUIRED")
         issues = [i for i in data["issue_log"] if self.demo_filter(i)]
         self.assertEqual([i["location"]["storage"]["pool"]["group"]["pile"]["name"] for i in issues], ["pile2"])
         self.assertIn("storage", issues[0]["message"])
@@ -413,7 +453,7 @@ class HealthOverGrpcTest(GrpcCase):
 
         await wait_until(blamed, message="auto blame of the dead pile")
         data = await self.self_check(c, label)
-        self.assertEqual(data["self_check_result"], "EMERGENCY")
+        self.assertEqual(data["self_check_result"], "MAINTENANCE_REQUIRED")
         op = await self.update(c, label, ("pile2", DISC))
         self.assertEqual(op.status, model.SUCCESS)
 

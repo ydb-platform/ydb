@@ -81,7 +81,11 @@ def validate_update(
     if err is not None:
         return Validation(error=err)
 
-    name_to_index = {name: i for i, name in enumerate(pile_names)}
+    configured = current.registered_names(pile_names)
+    name_to_index = {name: i for i, name in enumerate(pile_names) if name in configured}
+
+    def display_id(index):
+        return pile_id(index) if current.registry is None else current.registry.index(pile_names[index]) + 1
 
     # 5. Unknown names, before anything else in this group.
     for name, _ in updates:
@@ -94,10 +98,11 @@ def validate_update(
     for name, _ in updates:
         index = name_to_index[name]
         if current.stored(index) == Stored.SUSPENDED:
-            return _fail(model.BAD_REQUEST, "cannot update suspended pile: %d" % pile_id(index))
+            return _fail(model.BAD_REQUEST, "cannot update suspended pile: %d" % display_id(index))
+        if current.stored(index) == Stored.INACTIVE:
+            return _fail(model.BAD_REQUEST, "pile is not added to the cluster: %s" % name)
 
-    # 7. Re-derive every pile. Unnamed piles are re-derived from the current snapshot,
-    #    which turns NOT_SYNCHRONIZED_2 into NOT_SYNCHRONIZED_1.
+    # Roles are derived publicly; omitted piles retain their exact internal state.
     new_per_pile: typing.List[Stored] = list(current.per_pile)
     final_primary: typing.Optional[int] = None
     final_promoted: typing.Optional[int] = None
@@ -109,14 +114,16 @@ def validate_update(
             if final_primary is not None:
                 return _fail(
                     model.BAD_REQUEST,
-                    "Multiple primary piles are not allowed, found %d and %d" % (pile_id(final_primary), pile_id(i)))
+                    "Multiple primary piles are not allowed, found %d and %d" % (display_id(final_primary), display_id(i)))
             final_primary = i
         elif public == model.PUB_PROMOTED:
             if final_promoted is not None:
                 return _fail(
                     model.BAD_REQUEST,
-                    "Multiple promoted piles are not allowed, found %d and %d" % (pile_id(final_promoted), pile_id(i)))
+                    "Multiple promoted piles are not allowed, found %d and %d" % (display_id(final_promoted), display_id(i)))
             final_promoted = i
+        if i not in requested:
+            continue
         if model.PUB_INACTIVE is not None and public == model.PUB_INACTIVE:
             return _fail(
                 model.BAD_REQUEST,
@@ -161,6 +168,11 @@ def validate_update(
         if cur == new:
             continue
         num_different += 1
+        pending = current.pending_pile_operation
+        if pending and pending["pile_name"] == pile_names[i]:
+            return _fail(model.INTERNAL_ERROR,
+                         "Pile '%s' is being %s the cluster, its state can't be changed until BSC finishes" % (
+                             pile_names[i], "added to" if pending["kind"] == "ADD" else "removed from"))
         if new == Stored.DISCONNECTED or new == Stored.SUSPENDED:
             continue
         if new == Stored.SYNCHRONIZED:
@@ -173,7 +185,8 @@ def validate_update(
             return _fail(model.INTERNAL_ERROR, "Can't switch to NOT_SYNCHRONIZED_2 directly")
 
     # 15. More than one stored change.
-    if num_different > 1:
+    if num_different > 1 and any(new_per_pile[i] != Stored.DISCONNECTED
+                                 for i in range(current.num_piles()) if current.stored(i) != new_per_pile[i]):
         return _fail(model.INTERNAL_ERROR, "Too many state changes in new configuration")
 
     new_state = model.derive(

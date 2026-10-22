@@ -18,7 +18,9 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
         bridge_remove_pile.cpp
         bridge_restart.cpp
         bridge_routing.cpp
+        bridge_stale_parts.cpp
         bridge_syncer.cpp
+        bridge_static_sync_lifetime.cpp
         bridge_rejoin.cpp
     )
 

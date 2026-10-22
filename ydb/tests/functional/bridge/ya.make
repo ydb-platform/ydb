@@ -43,3 +43,7 @@ FORK_SUBTESTS()
 FORK_TEST_FILES()
 
 END()
+
+RECURSE_FOR_TESTS(
+    chaos
+)

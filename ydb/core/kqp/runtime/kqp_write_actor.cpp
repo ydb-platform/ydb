@@ -5237,6 +5237,10 @@ public:
 
         // Exclude shards prepared by write actors
         ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
+            // Only write-actor shards are erased: their locks are attached
+            // when their prepare/immediate write is filled (via GetLocks).
+            // Shards that hold only locks are not write-actor shards — they
+            // are sent by the loop below, which requires non-empty locks.
             for (const auto& shardId : actor->GetShardsIds()) {
                 shards.erase(shardId);
             }

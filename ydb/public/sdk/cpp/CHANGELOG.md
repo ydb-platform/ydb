@@ -1,3 +1,5 @@
+* Added `TExecuteQueryIterator::Cancel()` to explicitly cancel a query response stream, including a pending read.
+
 * Added `TBridgeClient::RemovePile()` to remove a DISCONNECTED pile from a bridged cluster along with its data.
 
 * Added `TBridgeClient::AddPile()` to add an INACTIVE pile to a bridged cluster, and `TGetClusterStateResult::GetPendingPileOperation()`.

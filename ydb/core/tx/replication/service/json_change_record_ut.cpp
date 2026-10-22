@@ -606,6 +606,93 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
         UNIT_ASSERT_VALUES_EQUAL(resetChange.GetReset().GetTags(0), 11);
     }
 
+    Y_UNIT_TEST(BinaryNullKey) {
+        auto schema = MakeIntrusive<TLightweightSchema>();
+        schema->KeyColumns.push_back(NScheme::TTypeInfo(NScheme::NTypeIds::Uint64));
+        schema->KeyColumns.push_back(NScheme::TTypeInfo(NScheme::NTypeIds::Utf8));
+        schema->ValueColumns.emplace("v", TLightweightSchema::TColumn{
+            static_cast<NTable::TTag>(4),
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
+        });
+
+        const ui64 key = 7;
+        const TString text = "ab";
+        const ui32 value = 5;
+        auto write = [&](bool nullFirst, bool nullSecond) {
+            NChangeExchange::TBinaryCdcHeader header;
+            header.Version = NChangeExchange::BinaryCdcVersion;
+            header.Kind = NChangeExchange::EBinaryCdcKind::Data;
+            header.Op = NChangeExchange::EBinaryCdcOp::Upsert;
+            header.KeyCount = 2;
+            header.ValueCount = 1;
+            if (nullFirst || nullSecond) {
+                header.Flags = static_cast<ui8>(NChangeExchange::EBinaryCdcFlag::NullKeys);
+            }
+            NChangeExchange::TBinaryCdcWriter writer;
+            writer.Start(header);
+            writer.AddKey(nullFirst ? TCell() : TCell::Make(key), schema->KeyColumns[0]);
+            writer.AddKey(nullSecond ? TCell() : TCell(text.data(), text.size()), schema->KeyColumns[1]);
+            writer.AddValue(0, TCell::Make(value), NScheme::TTypeInfo(NScheme::NTypeIds::Uint32));
+            return writer.Finish();
+        };
+
+        auto check = [&](const TString& body, bool nullFirst, bool nullSecond) {
+            auto record = TChangeRecordBuilder()
+                .WithBody(body)
+                .WithSchema(schema)
+                .Build();
+            NKikimrTxDataShard::TEvApplyReplicationChanges::TChange change;
+            TMemoryPool pool(256);
+            record->Serialize(change, pool);
+            TSerializedCellVec keys;
+            UNIT_ASSERT(TSerializedCellVec::TryParse(TString(change.GetKey()), keys));
+            UNIT_ASSERT_VALUES_EQUAL(keys.GetCells()[0].IsNull(), nullFirst);
+            UNIT_ASSERT_VALUES_EQUAL(keys.GetCells()[1].IsNull(), nullSecond);
+            if (!nullFirst) {
+                ui64 parsed = 0;
+                TString error;
+                UNIT_ASSERT(keys.GetCells()[0].ToValue(parsed, error));
+                UNIT_ASSERT_VALUES_EQUAL(parsed, key);
+            }
+            if (!nullSecond) {
+                UNIT_ASSERT_VALUES_EQUAL(TString(keys.GetCells()[1].AsBuf()), text);
+            }
+            TSerializedCellVec values;
+            UNIT_ASSERT(TSerializedCellVec::TryParse(TString(change.GetUpsert().GetData()), values));
+            ui32 parsedValue = 0;
+            TString error;
+            UNIT_ASSERT(values.GetCells()[0].ToValue(parsedValue, error));
+            UNIT_ASSERT_VALUES_EQUAL(parsedValue, value);
+        };
+
+        const TString plain = write(false, false);
+        NChangeExchange::TBinaryCdcReader plainReader;
+        TString error;
+        UNIT_ASSERT_C(plainReader.Parse(plain, error), error);
+        UNIT_ASSERT(!plainReader.Header().Has(NChangeExchange::EBinaryCdcFlag::NullKeys));
+        check(plain, false, false);
+        check(write(true, false), true, false);
+        check(write(false, true), false, true);
+        check(write(true, true), true, true);
+
+        TString bad = write(true, false);
+        // The null marker of the first key is the first byte after the 8-byte header.
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<unsigned char>(bad[8]), 1);
+        bad[8] = 2;
+        NChangeExchange::TBinaryCdcReader reader;
+        UNIT_ASSERT_C(reader.Parse(bad, error), error);
+        TVector<TCell> cells;
+        UNIT_ASSERT(!reader.ReadKeys(schema->KeyColumns, cells, error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "key null marker");
+
+        TString heartbeat(8, '\0');
+        heartbeat[0] = 1;
+        heartbeat[1] = static_cast<char>(NChangeExchange::EBinaryCdcKind::Heartbeat);
+        heartbeat[3] = static_cast<char>(NChangeExchange::EBinaryCdcFlag::NullKeys);
+        UNIT_ASSERT(!reader.Parse(heartbeat, error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "null key flag requires key cells");
+    }
+
     Y_UNIT_TEST(BinaryHeartbeat) {
         NChangeExchange::TBinaryCdcHeader header;
         header.Version = NChangeExchange::BinaryCdcVersion;

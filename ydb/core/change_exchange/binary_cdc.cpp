@@ -49,6 +49,10 @@ bool Take(TStringBuf& in, T& value, TString& error) {
 void TBinaryCdcWriter::Start(const TBinaryCdcHeader& header) {
     Y_ENSURE(header.Version == BinaryCdcVersion);
     Y_ENSURE((header.Flags & ~BinaryCdcKnownFlags) == 0);
+    if (header.Has(EBinaryCdcFlag::NullKeys)) {
+        Y_ENSURE(header.Kind == EBinaryCdcKind::Data && header.KeyCount > 0,
+            "binary CDC null key flag requires key cells");
+    }
     Header_ = header;
     Out_.clear();
     Out_.reserve(64);
@@ -91,7 +95,15 @@ void TBinaryCdcWriter::WriteCell(const TCell& cell, NScheme::TTypeInfo type) {
 void TBinaryCdcWriter::AddKey(const TCell& cell, NScheme::TTypeInfo type) {
     Y_ENSURE(Started_ && !Finished_);
     Y_ENSURE(Header_.Kind == EBinaryCdcKind::Data);
-    WriteCell(cell, type);
+    if (Header_.Has(EBinaryCdcFlag::NullKeys)) {
+        const ui8 marker = cell.IsNull() ? 1 : 0;
+        Append<ui8>(Out_, marker);
+        if (!cell.IsNull()) {
+            WriteCell(cell, type);
+        }
+    } else {
+        WriteCell(cell, type);
+    }
     ++Keys_;
 }
 
@@ -210,6 +222,13 @@ bool TBinaryCdcReader::Parse(TStringBuf body, TString& error) {
         return false;
     }
 
+    if (Header_.Has(EBinaryCdcFlag::NullKeys)
+        && (Header_.Kind != EBinaryCdcKind::Data || Header_.KeyCount == 0))
+    {
+        error = "binary CDC null key flag requires key cells";
+        return false;
+    }
+
     if (Header_.Has(EBinaryCdcFlag::HasOldImage) && !Take(body, Header_.OldImageCount, error)) {
         return false;
     }
@@ -313,9 +332,23 @@ bool TBinaryCdcReader::ReadKeys(TArrayRef<const NScheme::TTypeInfo> types, TVect
 
     cells.clear();
     cells.reserve(types.size());
+    const bool nullKeys = Header_.Has(EBinaryCdcFlag::NullKeys);
     for (const auto& type : types) {
+        bool isNull = false;
+        if (nullKeys) {
+            ui8 marker = 0;
+            if (!Take(Rest_, marker, error)) {
+                return false;
+            }
+            if (marker > 1) {
+                error = "binary CDC key null marker is not 0 or 1";
+                return false;
+            }
+            isNull = marker == 1;
+        }
+
         TCell cell;
-        if (!ReadCell(type, false, cell, error)) {
+        if (!ReadCell(type, isNull, cell, error)) {
             return false;
         }
         cells.push_back(cell);

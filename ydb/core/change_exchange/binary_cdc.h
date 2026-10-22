@@ -24,8 +24,11 @@ namespace NKikimr::NChangeExchange {
 //   [u16 len][bytes] trace id  if HasTrace
 //
 // A fixed-width cell is its raw bytes. A variable cell is u32 length plus raw bytes.
-// NULL is allowed only on indexed value cells: the high bit of the column index is set
-// and the cell body is omitted. Key cells are positional, in primary-key order.
+// NULL on an indexed value or image cell sets the high bit of the column index and
+// omits the cell body. Key cells are positional, in primary-key order. When any key
+// cell is NULL the record sets NullKeys, and every key cell is preceded by one byte:
+// 0 means a value follows, 1 means NULL and no value bytes follow. Without NullKeys
+// every key cell is a value, so a record with no NULL key is unchanged.
 // Value indexes are positions of non-key columns sorted by name at the schema version
 // that produced the record. Index 0 is one byte while every index in the record is
 // below 128; otherwise the record sets WideIndex and each index is u16.
@@ -56,6 +59,8 @@ enum class EBinaryCdcFlag : ui8 {
     HasNewImage = 1 << 3,
     HasUser = 1 << 4,
     HasTrace = 1 << 5,
+    // Each key cell is preceded by a 0/1 null marker.
+    NullKeys = 1 << 6,
 };
 
 inline constexpr ui8 BinaryCdcKnownFlags =
@@ -64,7 +69,8 @@ inline constexpr ui8 BinaryCdcKnownFlags =
     | ui8(EBinaryCdcFlag::HasOldImage)
     | ui8(EBinaryCdcFlag::HasNewImage)
     | ui8(EBinaryCdcFlag::HasUser)
-    | ui8(EBinaryCdcFlag::HasTrace);
+    | ui8(EBinaryCdcFlag::HasTrace)
+    | ui8(EBinaryCdcFlag::NullKeys);
 
 struct TBinaryCdcHeader {
     ui8 Version = 0;

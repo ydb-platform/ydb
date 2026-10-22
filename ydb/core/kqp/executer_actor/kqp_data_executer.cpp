@@ -402,8 +402,6 @@ public:
                 hFunc(TEvSaveScriptPhysicalGraphResponse, HandleResolve);
                 hFunc(TEvDescribeSecretsResponse, HandleResolve);
                 hFunc(TEvStreamingQueryPrepared, HandleResolve);
-                hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandlePartitionStats);
-                hFunc(TEvKqpExecuter::TEvPqTopicResolveStatus, HandleResolve);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 default:

@@ -316,7 +316,7 @@ namespace {
     TAutoPtr<TSchemeChanges> AsOneRecord(TAlter& alter) {
         auto changes = alter.Flush();
         UNIT_ASSERT(changes->DeltaSize() > 1);
-        for (int i = 1; i < changes->DeltaSize(); ++i) {
+        for (size_t i = 1; i < changes->DeltaSize(); ++i) {
             changes->MutableDelta(0)->MergeFrom(changes->GetDelta(i));
         }
         while (changes->DeltaSize() > 1) {

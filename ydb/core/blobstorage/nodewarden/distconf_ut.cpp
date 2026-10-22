@@ -5706,7 +5706,11 @@ selector_config: []
             for (ui32 nodeId : nodeIds) {
                 nodes.emplace_back(config.GetAllNodes(nodeId - 1));
             }
-            return NStorage::HasNodeQuorum(config, nodes, TBridgePileId(),
+            THashMap<TString, TBridgePileId> bridgePileNameMap;
+            for (ui32 i = 0; i < bridge.PilesSize(); ++i) {
+                bridgePileNameMap.emplace(bridge.GetPiles(i).GetName(), TBridgePileId::FromPileIndex(i));
+            }
+            return NStorage::HasNodeQuorum(config, nodes, bridgePileNameMap, TBridgePileId(),
                 *MakeNodeWardenConfig(config, &bridge), nullptr, false);
         };
         UNIT_ASSERT(!hasNodeQuorum(fixture.Config, {1, 2, 3}));

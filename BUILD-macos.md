@@ -44,9 +44,18 @@ git switch -c local/macos-build 1e590daa02c797f658ce1d606429ecfe86da236f
 export YA_CACHE_DIR="$HOME/ydbwork/.ya"
 ```
 
-This base is a `main` revision from October 22, 2026. Pinning it avoids applying an already-merged fix again when `main` advances. Cherry-picking requires Git's `user.name` and `user.email` to be configured for your own identity.
+This base is a `main` revision from October 22, 2026. Pinning it avoids applying an already-merged fix again when `main` advances.
 
 ## 3. Apply the build and runtime fixes
+
+Before cherry-picking, check your Git identity:
+
+```bash
+git config --get user.name
+git config --get user.email
+```
+
+If either value is missing or incorrect, set `git config --local user.name` and `git config --local user.email` with your own name and email before continuing.
 
 All PRs in this table were open when the recipe was checked. Fetch their public refs, then cherry-pick the exact commits below rather than moving PR heads.
 
@@ -96,7 +105,7 @@ printf '#include <random>\n#ifndef INFINITY\n#error INFINITY_is_missing\n#endif\
   && echo 'Clang 20 + selected SDK: OK'
 ```
 
-Continue only after this prints `Clang 20 + selected SDK: OK`.
+Continue only after this prints `Clang 20 + selected SDK: OK`. This checks the compiler and headers directly; it does not verify which SDK a subsequent `ya make` invocation selects.
 
 ## 5. Build the server
 
@@ -116,12 +125,24 @@ YDB_SDK_FLAGS="--sysroot=$YDB_SDK -isysroot $YDB_SDK"
 
 The SDK flags cover both the target and the host tools built during compilation. On Darwin, exporting `SDKROOT` alone is insufficient for this `ya` configuration. Adding only `--sysroot` can still leave the compiler using headers selected through `SDKROOT`. Supplying both `--sysroot` and `-isysroot` selects the intended SDK for headers and linking.
 
+On Darwin, `-DNO_SPLIT_DWARF=yes` skips the separate `dsymutil` step that produces a `.dSYM` bundle; it does not disable compilation with debug information. Omit it if you need that bundle.
+
 The first build downloads toolchains and compiles dependencies, so it can take hours. Keep the cache for subsequent builds. To build the CLI, repeat the same command with `ydb/apps/ydb` instead of `ydb/apps/ydbd`.
+
+The variables above apply only to the current terminal session. In a new terminal, restore them before repeating the build command (adjust the SDK path and job count if needed):
+
+```bash
+cd "$HOME/ydbwork/ydb"
+export YA_CACHE_DIR="$HOME/ydbwork/.ya"
+YDB_SDK=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk
+YDB_SDK_FLAGS="--sysroot=$YDB_SDK -isysroot $YDB_SDK"
+YDB_BUILD_JOBS=4
+```
 
 After the build exits successfully, check the executable:
 
 ```bash
-file ydb/apps/ydbd/ydbd
+file -L ydb/apps/ydbd/ydbd
 ./ydb/apps/ydbd/ydbd --help
 ```
 
@@ -150,6 +171,6 @@ Keep the same SDK flags when building test targets. See [Build and test YDB usin
 ## Troubleshooting
 
 - **`origin/main` or `origin` does not exist:** this recipe uses `official`. Inspect `git remote -v` before adapting commands to an existing checkout.
-- **`INFINITY` is undeclared in Arrow or libc++ `<random>`:** rerun step 4 and inspect the failing compiler command for the explicit `-isysroot` pointing to SDK 26.5. SDK 27 with Clang 20 reproduced this error. An Xcode switch or an exported `SDKROOT` is not sufficient evidence that the build uses the desired headers.
+- **`INFINITY` is undeclared in Arrow or libc++ `<random>`:** rerun step 4 and inspect the failing compiler command for the explicit `-isysroot` pointing to SDK 26.5. To collect diagnostic output from the build, add `--verbose --log-file="$PWD/macos-build.log"` to the step 5 command and inspect the compiler invocations in that log. SDK 27 with Clang 20 reproduced this error. An Xcode switch or an exported `SDKROOT` is not sufficient evidence that the build uses the desired headers.
 - **`lld22.json`, `clang22-rt`, or sanitizer headers are missing after experimenting with Clang 22:** start from the Clang 20 commands above. Remove the experimental `clang22-*`, `USE_ARCADIA_COMPILER_RUNTIME=no`, and `LLD_VERSION` overrides from the command and any local configuration before retrying.
 - **An SDK path exists but `xcrun` rejects it:** check `SDKSettings.json`, `usr/include/math.h`, and the direct compiler probe. Do not replace or redirect system SDK symlinks to make this recipe work.

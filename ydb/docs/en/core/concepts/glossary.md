@@ -828,15 +828,19 @@ Distributed storage stores immutable data, with each immutable data block identi
 
 #### PDisk {#pdisk}
 
-**PDisk** or **physical disk** is a component that controls a physical disk drive (block device). In other words, PDisk is a subsystem that implements an abstraction similar to a specialized file system on top of block devices (or files that emulate a block device for testing purposes).
+**PDisk** or **physical disk** is a component that controls a physical disk drive (block device). In other words, PDisk is a subsystem that implements an abstraction similar to a specialized file system on top of block devices (or files that emulate a block device for testing purposes). PDisk provides durability guarantees for disk operations (write acknowledgment strictly after `fsync`).
 
-PDisk protects data integrity with checksums and uses [erasure coding](#erasure-coding) of sector groups to recover data on individual damaged sectors. It also provides durability guarantees for disk operations (write acknowledgment strictly after `fsync`). In addition, PDisk supports transparent encryption of all data on the disk.
+PDisk's functional role is data storage and IO management for it clients - [VDisk](#vdisk)s. Each PDisk supports multiple VDisks and stores their data. PDisk divides the underlying block device into multiple [slots](#slot). At any given time, no more than one VDisk can own each slot. PDisk contains a scheduler that ensures fair shared use of the device's bandwidth among multiple VDisks.
 
-PDisk contains a scheduler that ensures shared use of the device's bandwidth among multiple clients ([VDisk](#vdisk)). PDisk divides the block device into [slots](#slot). At any given time, no more than one VDisk can own each slot. PDisk maintains a recovery log shared by PDisk service records and all VDisks.
+PDisk maintains a recovery log shared by PDisk service records and all VDisks. It also protects data integrity with checksums and uses [erasure coding](#erasure-coding) of sector groups to recover data on individual damaged sectors. In addition, PDisk supports transparent encryption of all data on the disk.
 
 #### VDisk {#vdisk}
 
-**VDisk**, **virtual disk** is a component that implements data storage of [distributed storage](#distributed-storage) [LogoBlob](#logoblob) on [PDisk](#pdisk). VDisk stores all its data on PDisk. One VDisk corresponds to one PDisk, but usually several VDisks are associated with one PDisk. Unlike PDisk, which hides blocks and journals behind itself, VDisk provides an interface at the LogoBlob and [LogoBlobID](#logoblobid) level, for example writing LogoBlob, reading LogoBlobID data, and deleting a set of LogoBlob using a special command. VDisk is a member of [storage group](#storage-group). VDisk itself is local, but many VDisks in a given group provide reliable data storage. VDisks in a group synchronize data with each other and replicate data in case of losses. A set of VDisks in a storage group forms a distributed RAID.
+**VDisk**, **virtual disk** is a component that implements data storage of [distributed storage](#distributed-storage) [LogoBlob](#logoblob) on [PDisk](#pdisk). VDisk stores all its data on PDisk. One VDisk corresponds to one PDisk, but usually several VDisks are associated with one PDisk.
+
+Unlike PDisk, which hides blocks and journals behind itself, VDisk provides an interface at the LogoBlob and [LogoBlobID](#logoblobid) level, for example writing LogoBlob, reading LogoBlobID data, and deleting a set of LogoBlob using a special command.
+
+VDisk is a member of [storage group](#storage-group). VDisk itself is local (resides on a single storage node within the cluster), but many VDisks in a given group provide reliable data storage. VDisks in a storage group synchronize data with each other and replicate data in case of losses. A set of VDisks in a storage group forms a distributed RAID.
 
 #### Yard {#yard}
 

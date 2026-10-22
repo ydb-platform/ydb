@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/ut/rbo/kqp_rbo_test_helpers.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 #include <ydb/core/kqp/opt/rbo/verification/semantic_snapshot.h>
+#include <ydb/core/kqp/opt/rbo/verification/read_range_diagnostics_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/scheme_types/scheme_decimal_type.h>
@@ -1726,6 +1727,119 @@ TSemanticSnapshotExportResult NativeScalarParameter(
     return fixture.Export(root);
 }
 
+TSemanticSnapshotExportResult NativeStringListParameter(
+    bool nullableItems, bool nullableLookup, bool ansi, bool staged,
+    const TString& mutation = {}, const TString& name = "$list",
+    int unsafeTarget = -1, int unsafeKind = 0)
+{
+    TFixture fixture("String", !nullableLookup);
+    auto& ctx = fixture.Expr;
+    const auto pos = TPositionHandle();
+    const auto* string = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::String);
+    const auto* boolean = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Bool);
+    const auto* int32 = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    const TTypeAnnotationNode* itemType = mutation == "utf8"
+        ? ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Utf8) : string;
+    auto dataDescriptor = ctx.NewCallable(pos, "DataType", {
+        ctx.NewAtom(pos, mutation == "utf8" ? "Utf8" : "String")});
+    dataDescriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(itemType));
+    auto itemDescriptor = dataDescriptor;
+    if (nullableItems) {
+        itemType = ctx.MakeType<TOptionalExprType>(itemType);
+        itemDescriptor = ctx.NewCallable(pos, "OptionalType", {dataDescriptor});
+        itemDescriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(itemType));
+    }
+    if (mutation == "nested_optional") {
+        itemType = ctx.MakeType<TOptionalExprType>(itemType);
+        itemDescriptor = ctx.NewCallable(pos, "OptionalType", {itemDescriptor});
+        itemDescriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(itemType));
+    }
+    const TTypeAnnotationNode* listType = ctx.MakeType<TListExprType>(itemType);
+    auto listDescriptor = ctx.NewCallable(pos, "ListType", {itemDescriptor});
+    listDescriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(listType));
+    if (mutation == "outer_optional") {
+        listType = ctx.MakeType<TOptionalExprType>(listType);
+        listDescriptor = ctx.NewCallable(pos, "OptionalType", {listDescriptor});
+        listDescriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(listType));
+    }
+    auto parameter = ctx.NewCallable(pos, "Parameter", {ctx.NewAtom(pos, name), listDescriptor});
+    parameter->SetTypeAnn(listType);
+    if (mutation == "outer_descriptor") {
+        listDescriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(boolean));
+    } else if (mutation == "item_descriptor") {
+        itemDescriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(boolean));
+    } else if (mutation == "data_descriptor") {
+        dataDescriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(boolean));
+    } else if (mutation == "missing_inner_annotation") {
+        dataDescriptor->SetTypeAnn(nullptr);
+    }
+    auto read = fixture.Read();
+    read->GetColumns() = {fixture.Key, fixture.Group};
+    const TTypeAnnotationNode* lookupType = nullableLookup
+        ? static_cast<const TTypeAnnotationNode*>(ctx.MakeType<TOptionalExprType>(string)) : string;
+    fixture.SetType(*read, {{fixture.Key, int32}, {fixture.Group, lookupType}});
+    auto row = ctx.NewArgument(pos, "row");
+    row->SetTypeAnn(read->Type->Cast<TListExprType>()->GetItemType());
+    auto lookup = ctx.NewCallable(pos, "Member", {row, ctx.NewAtom(pos, ToString(fixture.Group))});
+    lookup->SetTypeAnn(lookupType);
+    TExprNode::TListType options;
+    for (const TString& flag : TVector<TString>{ansi ? "ansi" : "warnNoAnsi", "isCompact"}) {
+        options.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, flag)}));
+    }
+    if (mutation == "duplicate_option") {
+        options.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, ansi ? "ansi" : "warnNoAnsi")}));
+    } else if (mutation == "tableSource" || mutation == "nullsProcessed" || mutation == "future_option") {
+        options.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, mutation)}));
+    } else if (mutation == "option_shape") {
+        options.push_back(ctx.NewList(pos, {}));
+    }
+    auto optionTuple = ctx.NewList(pos, std::move(options));
+    const bool resultNullable = nullableLookup || (ansi && nullableItems);
+    const TTypeAnnotationNode* resultType = (resultNullable != (mutation == "result_nullability"))
+        ? static_cast<const TTypeAnnotationNode*>(ctx.MakeType<TOptionalExprType>(boolean)) : boolean;
+    auto collection = parameter;
+    if (mutation == "transformed_list") {
+        collection = ctx.NewCallable(pos, "Reverse", {parameter});
+        collection->SetTypeAnn(listType);
+    }
+    auto body = ctx.NewCallable(pos, "SqlIn", {collection, lookup, optionTuple});
+    body->SetTypeAnn(resultType);
+    if (mutation == "projection") {
+        body = parameter;
+        resultType = listType;
+    } else if (mutation == "length") {
+        body = ctx.NewCallable(pos, "Length", {parameter});
+        resultType = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Uint64);
+        body->SetTypeAnn(resultType);
+    }
+    TVector<TExprNode*> safetyNodes{body.Get(), parameter.Get(), parameter->Child(0),
+        listDescriptor.Get(), itemDescriptor.Get(), dataDescriptor.Get(), dataDescriptor->Child(0),
+        optionTuple.Get(), optionTuple->Child(0), optionTuple->Child(0)->Child(0),
+        lookup.Get(), lookup->Child(1)};
+    if (unsafeTarget >= 0) {
+        UNIT_ASSERT(static_cast<size_t>(unsafeTarget) < safetyNodes.size());
+        auto* target = safetyNodes[unsafeTarget];
+        switch (unsafeKind) {
+            case 0: target->SetSideEffects(ESideEffects::General); break;
+            case 1: target->SetSideEffects(ESideEffects::SemilatticeRT); break;
+            case 2: target->SetResult(ctx.NewAtom(pos, "executed")); break;
+            case 3: target->SetPosAware(); break;
+            default: UNIT_FAIL("Unknown safety mutation");
+        }
+    }
+    auto lambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(body));
+    lambda->SetTypeAnn(resultType);
+    const auto output = fixture.Registry.Add(TInfoUnit("", "membership"));
+    auto map = MakeIntrusive<TOpMap>(read, pos,
+        TMapIUs{{output, TMapElement(TExpression(lambda, &ctx, &fixture.ExpressionProps))}});
+    fixture.SetType(*map, {{fixture.Key, int32}, {fixture.Group, lookupType}, {output, resultType}});
+    TOpRoot root(map, pos, {{fixture.Key, "key"}, {output, "membership"}});
+    if (staged) {
+        fixture.StageSerial(root);
+    }
+    return fixture.Export(root);
+}
+
 TSemanticSnapshotExportResult NativeIntegralCoalesce(
     const TString& type, bool coalesce, bool staged, bool changedFallback = false, bool wrongFallbackType = false, const TString& fallbackSource = {})
 {
@@ -1768,6 +1882,83 @@ TSemanticSnapshotExportResult NativeIntegralCoalesce(
     auto map = MakeIntrusive<TOpMap>(read, pos,
         TMapIUs{{output, TMapElement(TExpression(expression, &ctx, &fixture.ExpressionProps))}});
     fixture.SetType(*map, {{fixture.Key, int32}, {fixture.Group, optional}, {output, scalar}});
+    TOpRoot root(map, pos, {{fixture.Key, "key"}, {output, "value"}});
+    if (staged) {
+        fixture.StageSerial(root);
+    }
+    return fixture.Export(root);
+}
+
+TSemanticSnapshotExportResult NativeExactLiteralJust(
+    const TString& type, const TString& value, bool cast = false, bool staged = false,
+    TStringBuf mutation = {}, ui32 metadataDepth = 0)
+{
+    TFixture fixture;
+    auto& ctx = fixture.Expr;
+    const auto pos = TPositionHandle();
+    const auto* scalar = ctx.MakeType<TDataExprType>(*NUdf::FindDataSlot(type));
+    const auto* optional = ctx.MakeType<TOptionalExprType>(scalar);
+    const auto* int32 = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    const auto* boolean = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Bool);
+    const TTypeAnnotationNode* resultType = optional;
+    auto read = fixture.Read();
+    auto row = ctx.NewArgument(pos, "row");
+    row->SetTypeAnn(read->Type->Cast<TListExprType>()->GetItemType());
+    auto literal = ctx.NewCallable(pos, type, {ctx.NewAtom(pos, value)});
+    literal->SetTypeAnn(scalar);
+    TExprNode::TPtr body;
+    if (cast) {
+        // Match the actual SQL CAST(1 AS Uint64) initial snapshot, including
+        // the annotation on both the OptionalType and its DataType child.
+        UNIT_ASSERT_VALUES_EQUAL(type, "Uint64");
+        literal = ctx.NewCallable(pos, "Int32", {ctx.NewAtom(pos, value)});
+        literal->SetTypeAnn(int32);
+        auto descriptor = ExpandType(pos, *optional, ctx);
+        descriptor->Child(0)->SetTypeAnn(ctx.MakeType<TTypeExprType>(scalar));
+        descriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(optional));
+        body = ctx.NewCallable(pos, "SafeCast", {literal, descriptor});
+    } else {
+        if (mutation == "literal_annotation") {
+            literal->SetTypeAnn(boolean);
+        } else if (mutation == "literal_optional") {
+            literal->SetTypeAnn(optional);
+        } else if (mutation == "literal_arity") {
+            literal = ctx.NewCallable(pos, type, {ctx.NewAtom(pos, value), ctx.NewAtom(pos, value)});
+            literal->SetTypeAnn(scalar);
+        }
+        body = ctx.NewCallable(pos, "Just", {literal});
+        if (mutation == "result_annotation") {
+            resultType = ctx.MakeType<TOptionalExprType>(boolean);
+        } else if (mutation == "result_required") {
+            resultType = scalar;
+        } else if (mutation == "nested_optional") {
+            body->SetTypeAnn(optional);
+            body = ctx.NewCallable(pos, "Just", {body});
+            resultType = ctx.MakeType<TOptionalExprType>(optional);
+        }
+    }
+    body->SetTypeAnn(resultType);
+    // Exercise safety checks independently at Just, literal, and atom depth.
+    auto* target = body.Get();
+    for (ui32 depth = 0; depth < metadataDepth; ++depth) {
+        target = target->Child(0);
+    }
+    if (mutation == "executed") {
+        target->SetResult(ctx.NewAtom(pos, "executed"));
+    } else if (mutation == "position") {
+        target->SetPosAware();
+    } else if (mutation == "semilattice") {
+        target->SetSideEffects(ESideEffects::SemilatticeRT);
+    } else if (mutation == "general") {
+        target->SetSideEffects(ESideEffects::General);
+    } else if (mutation == "unordered") {
+        target->SetUnorderedChildren();
+    }
+    auto expression = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(body));
+    const auto output = fixture.Registry.Add(TInfoUnit("", "constant"));
+    auto map = MakeIntrusive<TOpMap>(read, pos,
+        TMapIUs{{output, TMapElement(TExpression(expression, &ctx, &fixture.ExpressionProps))}});
+    fixture.SetType(*map, {{fixture.Key, int32}, {fixture.Other, int32}, {output, resultType}});
     TOpRoot root(map, pos, {{fixture.Key, "key"}, {output, "value"}});
     if (staged) {
         fixture.StageSerial(root);
@@ -2101,6 +2292,72 @@ TSemanticSnapshotExportResult NativeDistinctAliases(bool nullable, bool aliases,
     return fixture.Export(root);
 }
 
+TSemanticSnapshotExportResult NativeRepeatedDistinctAliases(bool nullable, bool aliases,
+    bool duplicateKeys = false, bool reverseKeys = false, bool staged = false,
+    TStringBuf mutation = {})
+{
+    TFixture fixture("Int32", !nullable);
+    const auto pos = TPositionHandle();
+    const auto* int32 = fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    const TTypeAnnotationNode* groupType = nullable
+        ? static_cast<const TTypeAnnotationNode*>(fixture.Expr.MakeType<TOptionalExprType>(int32)) : int32;
+    auto read = fixture.Read();
+    read->GetColumns().Add(fixture.Group);
+    fixture.SetType(*read, {{fixture.Key, int32}, {fixture.Other, int32}, {fixture.Group, groupType}});
+    // Allocate output IDs in a different order from the root projection.
+    const auto third = fixture.Registry.Add(TInfoUnit("", "third"));
+    const auto first = fixture.Registry.Add(TInfoUnit("", "first"));
+    const auto second = fixture.Registry.Add(TInfoUnit("", "second"));
+    TAggregationIUs traits;
+    if (aliases) {
+        traits.Add(first, TOpAggregationTraits{fixture.Group, "distinct", false, false});
+        traits.Add(second, TOpAggregationTraits{
+            mutation == "missing_key" ? fixture.Group : fixture.Other, "distinct", false, false});
+        const auto thirdSource = mutation == "foreign_key" ? fixture.Key
+            : mutation == "wrong_binding" ? fixture.Other : fixture.Group;
+        traits.Add(third, TOpAggregationTraits{thirdSource,
+            mutation == "wrong_function" ? "min" : "distinct", mutation == "distinct_flag", false});
+    }
+    auto keys = reverseKeys ? TOrderedIUs<>{fixture.Group, fixture.Other}
+                            : TOrderedIUs<>{fixture.Other, fixture.Group};
+    if (duplicateKeys) {
+        keys.Append(fixture.Group);
+    }
+    auto aggregate = MakeIntrusive<TOpAggregate>(read, std::move(traits), keys,
+        EOpPhase::Undefined, aliases, pos);
+    const auto firstOutput = aliases ? first : fixture.Group;
+    const auto secondOutput = aliases ? second : fixture.Other;
+    const auto thirdOutput = aliases ? third : fixture.Group;
+    if (aliases) {
+        const TTypeAnnotationNode* thirdType = mutation == "wrong_type"
+            ? fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Uint64)
+            : mutation == "wrong_nullability" ? int32 : groupType;
+        TVector<std::pair<TInfoUnitId, const TTypeAnnotationNode*>> columns{
+            {first, groupType}, {second, int32}, {third, thirdType}};
+        if (mutation == "missing_column") {
+            columns.pop_back();
+        } else if (mutation == "extra_column") {
+            columns.emplace_back(fixture.Key, int32);
+        }
+        fixture.SetType(*aggregate, columns);
+    } else {
+        fixture.SetType(*aggregate, {{fixture.Other, int32}, {fixture.Group, groupType}});
+    }
+    if (mutation == "remove_distinct") {
+        TOpRoot root(read, pos, {{fixture.Group, "first"}, {fixture.Other, "second"}, {fixture.Group, "third"}});
+        if (staged) {
+            read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(read->StorageType);
+        }
+        return fixture.Export(root);
+    }
+    TOpRoot root(aggregate, pos, {{firstOutput, "first"}, {secondOutput, "second"}, {thirdOutput, "third"}});
+    if (staged) {
+        fixture.StageSerial(root);
+    }
+    return fixture.Export(root);
+}
+
+
 std::pair<TSemanticSnapshotExportResult, TSemanticSnapshotExportResult> NativeNullableCountDistinct(
     bool grouped, bool nullable = true, bool removeDistinct = false)
 {
@@ -2235,9 +2492,641 @@ TSemanticSnapshotExportResult StagedRead(ui32 firstStage) {
     return exported;
 }
 
+// Same schema family as compilation corpus 1487: nullable Bool index key,
+// required Utf8 base key, and nullable String fetched payload.
+std::pair<TSemanticSnapshotExportResult, TSemanticSnapshotExportResult> NativeSyncIndexLookup(
+    bool staged, TStringBuf mutation = {}, bool uniqueIndex = false)
+{
+    TFixture f("Bool", false, "String");
+    const auto pos = TPositionHandle();
+    auto& ctx = f.Expr;
+    auto& meta = *f.Table->Metadata;
+    meta.Columns.at("k") = TKikimrColumnMetadata("k", 1, "Utf8", true);
+    meta.Columns.at("x") = TKikimrColumnMetadata("x", 2, "String", false);
+    auto& index = f.Tables->GetOrAddTable("ut", "/Root", "/Root/NativeSnapshot/by_flag/indexImplTable");
+    index.Metadata = MakeIntrusive<TKikimrTableMetadata>("ut", "/Root/NativeSnapshot/by_flag/indexImplTable");
+    auto& impl = *index.Metadata;
+    impl.DoesExist = true;
+    impl.PathId = TKikimrPathId(1, 2);
+    impl.SchemaVersion = 1;
+    impl.Kind = EKikimrTableKind::Datashard;
+    impl.KeyColumnNames = {"g", "k"};
+    impl.ColumnOrder = {"g", "k"};
+    impl.Columns.emplace("g", TKikimrColumnMetadata("g", 1, "Bool", false));
+    impl.Columns.emplace("k", TKikimrColumnMetadata("k", 2, "Utf8", true));
+    if (mutation == "index_type") { impl.Columns.at("g").Type = "String"; }
+    if (mutation == "index_nullable") { impl.Columns.at("g").NotNull = true; }
+    if (mutation == "index_pk_order") { impl.KeyColumnNames = {"k", "g"}; }
+    if (mutation == "index_missing_column") { impl.Columns.erase("k"); }
+    meta.Indexes.emplace_back("by_flag", TVector<TString>{"g"}, TVector<TString>{},
+        mutation == "async" ? TIndexDescription::EType::GlobalAsync :
+        uniqueIndex ? TIndexDescription::EType::GlobalSyncUnique : TIndexDescription::EType::GlobalSync,
+        mutation == "not_ready" ? TIndexDescription::EIndexState::NotReady : TIndexDescription::EIndexState::Ready,
+        1, 2, 1, TIndexDescription::TSpecializedIndexDescription{});
+    meta.ImplTables.push_back(index.Metadata);
+    if (mutation == "extra_unique") {
+        auto unique = MakeIntrusive<TKikimrTableMetadata>("ut", "/Root/NativeSnapshot/unique_payload/indexImplTable");
+        unique->DoesExist = true;
+        unique->Kind = EKikimrTableKind::Datashard;
+        unique->PathId = TKikimrPathId(1, 4);
+        unique->SchemaVersion = 1;
+        unique->KeyColumnNames = {"x", "k"};
+        unique->ColumnOrder = unique->KeyColumnNames;
+        for (const auto& name : unique->ColumnOrder) { unique->Columns.emplace(name, meta.Columns.at(name)); }
+        meta.Indexes.emplace_back("unique_payload", TVector<TString>{"x"}, TVector<TString>{},
+            TIndexDescription::EType::GlobalSyncUnique, TIndexDescription::EIndexState::Ready,
+            1, 3, 1, TIndexDescription::TSpecializedIndexDescription{});
+        meta.ImplTables.push_back(unique);
+    }
+
+    const auto* boolean = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Bool);
+    const auto* optionalBool = ctx.MakeType<TOptionalExprType>(boolean);
+    const auto* utf8 = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Utf8);
+    const auto* payload = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(NUdf::EDataSlot::String));
+    auto baseTable = NOpt::BuildTableMeta(*f.Table, pos, ctx).Ptr();
+    auto base = MakeIntrusive<TOpRead>("same", TUnorderedIUs{f.Key, f.Group, f.Other},
+        NYql::EStorageType::RowStorage, baseTable, nullptr, nullptr, std::nullopt, std::nullopt,
+        ESortDir::None, TPhysicalOpProps{}, pos);
+    f.SetType(*base, {{f.Key, utf8}, {f.Group, optionalBool}, {f.Other, payload}});
+    auto row = ctx.NewArgument(pos, "row");
+    row->SetTypeAnn(base->Type->Cast<TListExprType>()->GetItemType());
+    auto flag = ctx.NewCallable(pos, "Member", {row, ctx.NewAtom(pos, ToString(f.Group))});
+    flag->SetTypeAnn(optionalBool);
+    auto no = ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, "false")});
+    no->SetTypeAnn(boolean);
+    auto predicate = ctx.NewCallable(pos, "Coalesce", {flag, no});
+    predicate->SetTypeAnn(boolean);
+    auto lambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(predicate));
+    auto filter = MakeIntrusive<TOpFilter>(base, pos, TExpression(lambda, &ctx, &f.ExpressionProps));
+    filter->Type = base->Type;
+    TOpRoot beforeRoot(filter, pos, {{f.Other, "value"}});
+    beforeRoot.PlanProps.InfoUnitRegistry = f.Registry;
+    const auto catalog = CaptureSemanticSnapshotCatalogV1(beforeRoot, f.Rbo);
+    UNIT_ASSERT_C(catalog.IsSupported(), catalog.UnsupportedReason);
+    const bool excludedIndex = mutation == "index_type" || mutation == "index_nullable" ||
+        mutation == "index_pk_order" || mutation == "index_missing_column" ||
+        mutation == "async" || mutation == "not_ready";
+    // Unsupported index metadata must not destroy an otherwise valid initial
+    // base-table snapshot. Final then fails because the index is absent.
+    UNIT_ASSERT_VALUES_EQUAL(catalog.Catalog.Tables.size(), excludedIndex ? 1 : mutation == "extra_unique" ? 3 : 2);
+    auto before = ExportSemanticSnapshotV1(beforeRoot, f.Rbo, catalog.Catalog);
+
+    const auto probeKey = f.Registry.Add(TInfoUnit("index", "k"));
+    const auto probeFlag = f.Registry.Add(TInfoUnit("index", "g"));
+    const auto prefixValue = mutation == "changed_prefix" ? "false" : "true";
+    auto lowerValue = ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, prefixValue)});
+    lowerValue->SetTypeAnn(mutation == "nullable_boundary" ? static_cast<const TTypeAnnotationNode*>(optionalBool) : boolean);
+    auto upperValue = ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, mutation == "different_upper" ? "false" : prefixValue)});
+    upperValue->SetTypeAnn(boolean);
+    if (mutation == "null_boundary") {
+        lowerValue = ctx.NewCallable(pos, "Nothing", {ExpandType(pos, *optionalBool, ctx)});
+        lowerValue->SetTypeAnn(optionalBool);
+    }
+    if (mutation == "diagnostic_long_reason") {
+        lowerValue = ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, TString(70 * 1024, 'x'))});
+        lowerValue->SetTypeAnn(boolean);
+    }
+    auto range = ctx.NewList(pos, {
+        ctx.NewCallable(pos, mutation == "exclusive_boundary" ? "KqlKeyExc" : "KqlKeyInc", {lowerValue}),
+        ctx.NewCallable(pos, "KqlKeyInc", {upperValue})});
+    auto read = MakeIntrusive<TOpRead>("index", TUnorderedIUs{probeKey, probeFlag}, NYql::EStorageType::RowStorage,
+        NOpt::BuildTableMeta(index, pos, ctx).Ptr(), nullptr, nullptr,
+        TOpRead::TRangeInfo{.ComputeNode = range, .KeyColumns = {"g", "k"},
+            .UsedPrefixLen = 1, .PointPrefixLen = 1, .ExpectedMaxRanges = 1, .LiteralRange = range},
+        std::nullopt, ESortDir::None, TPhysicalOpProps{}, pos);
+    f.SetType(*read, {{probeKey, utf8}, {probeFlag, optionalBool}});
+    if (mutation == "range_key_order") { read->RangeInfo->KeyColumns = {"k", "g"}; }
+    if (mutation == "range_prefix_len") { read->RangeInfo->UsedPrefixLen = 2; }
+    if (mutation == "diagnostic_compute_only") { read->RangeInfo->LiteralRange.Reset(); }
+    TOpTableLookup::TLookupKeys keys;
+    if (mutation != "missing_key") { keys.Append(mutation == "wrong_key" ? probeFlag : probeKey, "k"); }
+    auto lookup = MakeIntrusive<TOpTableLookup>(read, pos, baseTable, TUnorderedIUs{f.Other}, std::move(keys));
+    f.SetType(*lookup, {{f.Other, payload}});
+    if (mutation == "allow_null_setting") { lookup->AllowNullKeys = true; }
+    if (mutation == "input_lookup") { lookup->KeysFromInputLookup = true; }
+    if (mutation == "join") { lookup->Strategy = ELookupStrategy::LookupJoinRows; }
+    if (mutation == "prefix") { lookup->Prefix.emplace(); }
+    if (mutation == "fetched_type") { f.SetType(*lookup, {{f.Other, utf8}}); }
+    TOpRoot afterRoot(lookup, pos, {{f.Other, "value"}});
+    afterRoot.PlanProps.InfoUnitRegistry = f.Registry;
+    if (staged) {
+        auto& graph = afterRoot.PlanProps.StageGraph;
+        const auto source = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+        const auto sink = graph.AddStage();
+        read->Props.StageId = source;
+        lookup->Props.StageId = sink;
+        auto fetched = ctx.NewList(pos, mutation == "stream_columns" ? TExprNode::TListType{} :
+            TExprNode::TListType{ctx.NewAtom(pos, "x")});
+        auto settings = ctx.NewList(pos, {ctx.NewList(pos, {ctx.NewAtom(pos, "Strategy"),
+            ctx.NewAtom(pos, mutation == "stream_strategy" ? "LookupUniqueRows" : "LookupRows")})});
+        const auto* inputRow = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+            ctx.MakeType<TItemExprType>("k", mutation == "stream_type" ? boolean : utf8)});
+        auto inputType = ExpandType(pos, *ctx.MakeType<TListExprType>(inputRow), ctx);
+        if (mutation == "stream_annotation") {
+            inputType->SetTypeAnn(ctx.MakeType<TTypeExprType>(boolean));
+        }
+        if (mutation == "stream_map") {
+            graph.Connect(source, sink, MakeIntrusive<TMapConnection>(graph.GetOutputIndex(source)));
+        } else {
+            graph.Connect(source, sink, MakeIntrusive<TStreamLookupConnection>(graph.GetOutputIndex(source),
+                mutation == "stream_table" ? read->TableCallable : baseTable, fetched, inputType, settings));
+        }
+    }
+    return {std::move(before), ExportSemanticSnapshotV1(afterRoot, f.Rbo, catalog.Catalog)};
+}
+
+// Only k/x are projected, while hidden g/price carry an unselected UNIQUE law.
+TSemanticSnapshotCatalogCaptureResult NativeUniqueConstraintCatalog(TStringBuf mutation = {}) {
+    TFixture f;
+    auto& metadata = *f.Table->Metadata;
+    TVector<TString> keys = {"g", "price"};
+    if (mutation == "overlap_key") { keys = {"g", "k", "price"}; }
+    if (mutation == "composite_pk") { metadata.KeyColumnNames = {"x", "k"}; }
+    if (mutation == "empty_keys") { keys.clear(); }
+    if (mutation == "duplicate_key") { keys = {"g", "g"}; }
+    if (mutation == "unknown_key") { keys = {"missing"}; }
+    if (mutation == "unsupported_type") { metadata.Columns.at("g").Type = "Double"; }
+    if (mutation == "base_build") { metadata.Columns.at("g").IsBuildInProgress = true; }
+    if (mutation == "base_not_null_transition") { metadata.Columns.at("g").SetNotNullInProgress = true; }
+    if (mutation == "base_kind") { metadata.Kind = EKikimrTableKind::Olap; }
+    if (mutation == "base_missing") { metadata.DoesExist = false; }
+    if (mutation == "base_no_pk") { metadata.KeyColumnNames.clear(); }
+    if (mutation == "direct_index_impl") { metadata.IsIndexImplTable = true; }
+    auto impl = MakeIntrusive<TKikimrTableMetadata>("ut", "/Root/NativeSnapshot/unique_hidden/indexImplTable");
+    impl->DoesExist = true;
+    impl->Kind = EKikimrTableKind::Datashard;
+    impl->PathId = TKikimrPathId(1, 3);
+    impl->SchemaVersion = 1;
+    impl->KeyColumnNames = {"g", "price", "k"};
+    if (mutation == "overlap_key") { impl->KeyColumnNames = {"g", "k", "price"}; }
+    if (mutation == "composite_pk") { impl->KeyColumnNames = {"g", "price", "x", "k"}; }
+    impl->ColumnOrder = impl->KeyColumnNames;
+    for (const auto& name : impl->ColumnOrder) { impl->Columns.emplace(name, metadata.Columns.at(name)); }
+    if (mutation == "impl_order") { impl->KeyColumnNames = {"price", "g", "k"}; }
+    if (mutation == "impl_type") { impl->Columns.at("g").Type = "Utf8"; }
+    if (mutation == "impl_nullable") { impl->Columns.at("g").NotNull = true; }
+    if (mutation == "impl_build") { impl->Columns.at("g").IsBuildInProgress = true; }
+    if (mutation == "impl_not_null_transition") { impl->Columns.at("g").SetNotNullInProgress = true; }
+    if (mutation == "impl_path") { impl->Name = "/Root/NativeSnapshot/wrong/indexImplTable"; }
+    if (mutation == "impl_cluster") { impl->Cluster = "other"; }
+    if (mutation == "impl_truncated_pk") { impl->KeyColumnNames = {"g", "price"}; }
+    if (mutation == "impl_extra_column") { impl->Columns.emplace("x", metadata.Columns.at("x")); }
+    if (mutation == "impl_kind") { impl->Kind = EKikimrTableKind::Olap; }
+    if (mutation == "impl_missing_column") { impl->Columns.erase("price"); }
+    if (mutation == "impl_chain") { impl->Next = MakeIntrusive<TKikimrTableMetadata>("ut", "/Root/extra"); }
+    auto state = mutation == "not_ready" ? TIndexDescription::EIndexState::NotReady :
+        mutation == "write_only" ? TIndexDescription::EIndexState::WriteOnly :
+        mutation == "invalid_state" ? TIndexDescription::EIndexState::Invalid : TIndexDescription::EIndexState::Ready;
+    auto kind = mutation == "unknown_kind" ? static_cast<TIndexDescription::EType>(999) :
+        TIndexDescription::EType::GlobalSyncUnique;
+    TIndexDescription::TSpecializedIndexDescription special;
+    if (mutation == "specialized") { special = TIndexDescription::TLocalBloomFilterDescription{}; }
+    metadata.Indexes.emplace_back("unique_hidden", keys, TVector<TString>{}, kind, state, 1, 2, 1, special);
+    if (mutation != "missing_impl") { metadata.ImplTables.push_back(impl); }
+    if (mutation == "duplicate_name") {
+        metadata.Indexes.emplace_back("unique_hidden", keys, TVector<TString>{}, kind, state, 1, 4, 1, special);
+        metadata.ImplTables.push_back(impl);
+    }
+    if (mutation == "second_unique") {
+        auto second = MakeIntrusive<TKikimrTableMetadata>("ut", "/Root/NativeSnapshot/second/indexImplTable");
+        second->DoesExist = true;
+        second->Kind = EKikimrTableKind::Datashard;
+        second->PathId = TKikimrPathId(1, 5);
+        second->SchemaVersion = 1;
+        second->KeyColumnNames = {"price", "k"};
+        second->ColumnOrder = second->KeyColumnNames;
+        for (const auto& name : second->ColumnOrder) { second->Columns.emplace(name, metadata.Columns.at(name)); }
+        metadata.Indexes.emplace_back("second", TVector<TString>{"price"}, TVector<TString>{},
+            TIndexDescription::EType::GlobalSyncUnique, TIndexDescription::EIndexState::Ready,
+            1, 4, 1, TIndexDescription::TSpecializedIndexDescription{});
+        metadata.ImplTables.push_back(second);
+    }
+    auto read = f.Read();
+    TOpRoot root(read, TPositionHandle(), {{f.Key, "key"}});
+    root.PlanProps.InfoUnitRegistry = f.Registry;
+    return CaptureSemanticSnapshotCatalogV1(root, f.Rbo);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
+    Y_UNIT_TEST(NativeCatalogCapturesHiddenUnselectedUniqueConstraintsAndPhysicalKey) {
+        for (const TStringBuf mutation : {TStringBuf{}, TStringBuf("second_unique")}) {
+            const auto captured = NativeUniqueConstraintCatalog(mutation);
+            UNIT_ASSERT_C(captured.IsSupported(), captured.UnsupportedReason);
+            UNIT_ASSERT_VALUES_EQUAL(captured.Catalog.Tables.size(), mutation.empty() ? 2 : 3);
+            const auto& table = captured.Catalog.Tables.front();
+            UNIT_ASSERT(table.PrimaryKey);
+            UNIT_ASSERT_VALUES_EQUAL(*table.PrimaryKey, TVector<TString>({"k"}));
+            UNIT_ASSERT_VALUES_EQUAL(table.UniqueKeys.size(), mutation.empty() ? 2 : 3);
+            UNIT_ASSERT_VALUES_EQUAL(table.UniqueKeys[0].Columns, TVector<TString>({"k"}));
+            UNIT_ASSERT(!table.UniqueKeys[0].NullsDistinct);
+            UNIT_ASSERT_VALUES_EQUAL(table.UniqueKeys[1].Columns, TVector<TString>({"g", "price"}));
+            UNIT_ASSERT(table.UniqueKeys[1].NullsDistinct);
+            if (!mutation.empty()) {
+                UNIT_ASSERT_VALUES_EQUAL(table.UniqueKeys[2].Columns, TVector<TString>({"price"}));
+                UNIT_ASSERT(table.UniqueKeys[2].NullsDistinct);
+            }
+            bool hiddenString = false;
+            bool hiddenDecimal = false;
+            for (const auto& column : table.Columns) {
+                hiddenString |= column.Name == "g" && column.Type == "String" && column.Nullable;
+                hiddenDecimal |= column.Name == "price" && column.Type == "Decimal(15,2)" && column.Nullable;
+            }
+            UNIT_ASSERT(hiddenString && hiddenDecimal);
+            for (size_t i = 1; i < captured.Catalog.Tables.size(); ++i) {
+                const auto& derived = captured.Catalog.Tables[i];
+                UNIT_ASSERT(derived.DerivedFrom);
+                UNIT_ASSERT_VALUES_EQUAL(*derived.DerivedFrom, table.Name);
+                UNIT_ASSERT(derived.PrimaryKey);
+                const TVector<TString> expected = i == 1
+                    ? TVector<TString>{"g", "price", "k"} : TVector<TString>{"price", "k"};
+                UNIT_ASSERT_VALUES_EQUAL(*derived.PrimaryKey, expected);
+                UNIT_ASSERT_VALUES_EQUAL(derived.UniqueKeys.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(derived.UniqueKeys.front().Columns, expected);
+                UNIT_ASSERT(!derived.UniqueKeys.front().NullsDistinct);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeCatalogRejectsUnauditedEnforcedUniqueMetadata) {
+        UNIT_ASSERT(NativeUniqueConstraintCatalog().IsSupported());
+        for (const TStringBuf mutation : {"empty_keys", "duplicate_key", "unknown_key", "unsupported_type",
+                "base_build", "base_not_null_transition", "base_kind", "base_missing", "base_no_pk",
+                "impl_order", "impl_type", "impl_nullable", "impl_build", "impl_not_null_transition",
+                "impl_path", "impl_cluster", "impl_truncated_pk", "impl_extra_column",
+                "impl_kind", "impl_missing_column", "impl_chain", "not_ready", "write_only",
+                "invalid_state", "unknown_kind", "specialized", "missing_impl", "duplicate_name",
+                "direct_index_impl"})
+        {
+            const auto captured = NativeUniqueConstraintCatalog(mutation);
+            UNIT_ASSERT_C(!captured.IsSupported(), mutation);
+        }
+    }
+
+    Y_UNIT_TEST(NativeUniqueDerivedKeyKeepsBaseKeyOrderAndAvoidsDuplicateSuffix) {
+        for (const TStringBuf mutation : {"overlap_key", "composite_pk"}) {
+            const auto captured = NativeUniqueConstraintCatalog(mutation);
+            UNIT_ASSERT_C(captured.IsSupported(), captured.UnsupportedReason);
+            UNIT_ASSERT_VALUES_EQUAL(captured.Catalog.Tables.size(), 2);
+            const auto& base = captured.Catalog.Tables[0];
+            const auto& derived = captured.Catalog.Tables[1];
+            const bool overlap = mutation == "overlap_key";
+            const TVector<TString> baseKey = overlap
+                ? TVector<TString>{"k"} : TVector<TString>{"x", "k"};
+            const TVector<TString> businessKey = overlap
+                ? TVector<TString>{"g", "k", "price"} : TVector<TString>{"g", "price"};
+            const TVector<TString> physicalKey = overlap
+                ? TVector<TString>{"g", "k", "price"} : TVector<TString>{"g", "price", "x", "k"};
+            UNIT_ASSERT(base.PrimaryKey);
+            UNIT_ASSERT_VALUES_EQUAL(*base.PrimaryKey, baseKey);
+            UNIT_ASSERT_VALUES_EQUAL(base.UniqueKeys.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(base.UniqueKeys[0].Columns, baseKey);
+            UNIT_ASSERT(!base.UniqueKeys[0].NullsDistinct);
+            UNIT_ASSERT_VALUES_EQUAL(base.UniqueKeys[1].Columns, businessKey);
+            UNIT_ASSERT(base.UniqueKeys[1].NullsDistinct);
+            UNIT_ASSERT(derived.DerivedFrom);
+            UNIT_ASSERT_VALUES_EQUAL(*derived.DerivedFrom, base.Name);
+            UNIT_ASSERT(derived.PrimaryKey);
+            UNIT_ASSERT_VALUES_EQUAL(*derived.PrimaryKey, physicalKey);
+            UNIT_ASSERT_VALUES_EQUAL(derived.UniqueKeys.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(derived.UniqueKeys[0].Columns, physicalKey);
+            UNIT_ASSERT(!derived.UniqueKeys[0].NullsDistinct);
+            UNIT_ASSERT_VALUES_EQUAL(derived.Columns.size(), physicalKey.size());
+        }
+    }
+
+    Y_UNIT_TEST(NativeCatalogPhysicalPrimaryKeyHasIndependentValidatedIdentity) {
+        TFixture f;
+        auto read = f.Read();
+        TOpRoot root(read, TPositionHandle(), {{f.Key, "key"}});
+        root.PlanProps.InfoUnitRegistry = f.Registry;
+        const auto captured = CaptureSemanticSnapshotCatalogV1(root, f.Rbo);
+        UNIT_ASSERT_C(captured.IsSupported(), captured.UnsupportedReason);
+        const auto valid = ExportSemanticSnapshotV1(root, f.Rbo, captured.Catalog);
+        Parse(valid);
+        UNIT_ASSERT_STRING_CONTAINS(valid.Json, "primary_key");
+        for (const auto& badKey : TVector<TVector<TString>>{{}, {"missing"}, {"k", "k"}, {"x"}}) {
+            auto changed = captured.Catalog;
+            changed.Tables.front().PrimaryKey = badKey;
+            const auto exported = ExportSemanticSnapshotV1(root, f.Rbo, changed);
+            UNIT_ASSERT(!exported.IsSupported());
+        }
+        auto changed = captured.Catalog;
+        changed.Tables.front().UniqueKeys.front().NullsDistinct = true;
+        UNIT_ASSERT(!ExportSemanticSnapshotV1(root, f.Rbo, changed).IsSupported());
+    }
+
+    Y_UNIT_TEST(NativeOrdinaryLookupKeepsAllUnselectedUniqueConstraints) {
+        for (const bool staged : {false, true}) {
+            const auto [before, after] = NativeSyncIndexLookup(staged, "extra_unique");
+            const auto initial = Parse(before);
+            const auto final = Parse(after);
+            UNIT_ASSERT(after.Json.Contains("point_lookup"));
+            UNIT_ASSERT(initial["schema"] == final["schema"]);
+            const auto& tables = initial["schema"]["tables"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(tables.size(), 3);
+            const auto& keys = tables[0]["unique_keys"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(keys.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(keys[1]["columns"].GetArraySafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(keys[1]["columns"].GetArraySafe()[0].GetStringSafe(), "x");
+            UNIT_ASSERT(keys[1]["nulls_distinct"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(tables[0]["primary_key"].GetArraySafe()[0].GetStringSafe(), "k");
+            UNIT_ASSERT_VALUES_EQUAL(tables[2]["derived_from"].GetStringSafe(), tables[0]["name"].GetStringSafe());
+            const auto& physicalKey = tables[2]["primary_key"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(physicalKey.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(physicalKey[0].GetStringSafe(), "x");
+            UNIT_ASSERT_VALUES_EQUAL(physicalKey[1].GetStringSafe(), "k");
+        }
+    }
+
+    Y_UNIT_TEST(NativeSynchronousIndexLookupPreservesBaseRowsAndNullFlags) {
+        for (const bool staged : {false, true}) {
+            const auto [before, after] = NativeSyncIndexLookup(staged);
+            Parse(before); Parse(after);
+            UNIT_ASSERT(after.Json.Contains("point_lookup"));
+            UNIT_ASSERT(before.Json.Contains("derived_from"));
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json, !staged), "VERIFIED_BOUNDED");
+            const auto [sameBefore, changed] = NativeSyncIndexLookup(staged, "changed_prefix");
+            Parse(changed);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(sameBefore.Json, changed.Json, !staged), "COUNTEREXAMPLE");
+        }
+    }
+
+    Y_UNIT_TEST(NativeSelectedUniqueIndexKeepsBusinessAndPhysicalKeysSeparate) {
+        for (const bool staged : {false, true}) {
+            const auto [before, after] = NativeSyncIndexLookup(staged, {}, true);
+            const auto initial = Parse(before);
+            const auto final = Parse(after);
+            UNIT_ASSERT(initial["schema"] == final["schema"]);
+            const auto& tables = initial["schema"]["tables"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(tables.size(), 2);
+            const auto& base = tables[0];
+            const auto& derived = tables[1];
+            const auto& baseKey = base["primary_key"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(baseKey.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(baseKey[0].GetStringSafe(), "k");
+            const auto& baseLaws = base["unique_keys"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(baseLaws.size(), 2);
+            UNIT_ASSERT(baseLaws[0]["columns"] == base["primary_key"]);
+            UNIT_ASSERT(!baseLaws[0]["nulls_distinct"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(baseLaws[1]["columns"].GetArraySafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(baseLaws[1]["columns"].GetArraySafe()[0].GetStringSafe(), "g");
+            UNIT_ASSERT(baseLaws[1]["nulls_distinct"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(derived["derived_from"].GetStringSafe(), base["name"].GetStringSafe());
+            const auto& physicalKey = derived["primary_key"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(physicalKey.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(physicalKey[0].GetStringSafe(), "g");
+            UNIT_ASSERT_VALUES_EQUAL(physicalKey[1].GetStringSafe(), "k");
+            const auto& derivedLaws = derived["unique_keys"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(derivedLaws.size(), 1);
+            UNIT_ASSERT(derivedLaws[0]["columns"] == derived["primary_key"]);
+            UNIT_ASSERT(!derivedLaws[0]["nulls_distinct"].GetBooleanSafe());
+            bool nullableFlag = false;
+            for (const auto& column : derived["columns"].GetArraySafe()) {
+                nullableFlag |= column["name"].GetStringSafe() == "g" &&
+                    column["type"].GetStringSafe() == "Bool" && column["nullable"].GetBooleanSafe();
+            }
+            UNIT_ASSERT(nullableFlag);
+            size_t lookups = 0;
+            for (const auto& node : final["plan"]["nodes"].GetArraySafe()) {
+                if (node["op"].GetStringSafe() != "point_lookup") { continue; }
+                ++lookups;
+                UNIT_ASSERT_VALUES_EQUAL(node["table"].GetStringSafe(), base["name"].GetStringSafe());
+                UNIT_ASSERT_VALUES_EQUAL(node["keys"].GetArraySafe().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(node["keys"].GetArraySafe()[0]["source"].GetStringSafe(), "k");
+            }
+            UNIT_ASSERT_VALUES_EQUAL(lookups, 1);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json, !staged), "VERIFIED_BOUNDED");
+            const auto [sameBefore, changed] = NativeSyncIndexLookup(staged, "changed_prefix", true);
+            Parse(changed);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(sameBefore.Json, changed.Json, !staged), "COUNTEREXAMPLE");
+        }
+    }
+
+    Y_UNIT_TEST(NativeSelectedUniqueLookupKeepsExistingRangeAndLookupRestrictions) {
+        for (const TStringBuf mutation : {"nullable_boundary", "null_boundary", "different_upper",
+                "exclusive_boundary", "range_key_order", "range_prefix_len", "missing_key", "wrong_key",
+                "allow_null_setting", "input_lookup", "join", "prefix", "fetched_type",
+                "stream_columns", "stream_strategy", "stream_type", "stream_map", "stream_table", "stream_annotation"})
+        {
+            const auto [before, after] = NativeSyncIndexLookup(true, mutation, true);
+            Parse(before);
+            UNIT_ASSERT_C(!after.IsSupported(), mutation << ": " << after.Json);
+        }
+    }
+
+    Y_UNIT_TEST(NativeSynchronousIndexLookupRejectsUnauditedMetadataAndLookupSettings) {
+        for (const TStringBuf mutation : {"index_type", "index_nullable", "index_pk_order", "index_missing_column",
+                "async", "not_ready", "nullable_boundary", "null_boundary", "different_upper",
+                "exclusive_boundary", "range_key_order", "range_prefix_len", "missing_key", "wrong_key",
+                "allow_null_setting", "input_lookup", "join", "prefix", "fetched_type",
+                "stream_columns", "stream_strategy", "stream_type", "stream_map", "stream_table", "stream_annotation"})
+        {
+            const auto [before, after] = NativeSyncIndexLookup(true, mutation);
+            UNIT_ASSERT_C(!after.IsSupported(), mutation << ": " << after.Json);
+        }
+    }
+
+
+
+    Y_UNIT_TEST(NativeDerivedRangeRejectionKeepsOriginalFailureAndComputedEvidence) {
+        for (const bool staged : {false, true}) {
+            const auto [before, after] = NativeSyncIndexLookup(staged, "diagnostic_compute_only");
+            UNIT_ASSERT_C(before.IsSupported(), before.UnsupportedReason);
+            UNIT_ASSERT(!after.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(after.UnsupportedReason,
+                "Derived index range requires one exact literal Bool prefix of its physical key ; derived_index_range_v1{");
+            UNIT_ASSERT_STRING_CONTAINS(after.UnsupportedReason, ";selected=ComputeNode;");
+            UNIT_ASSERT_STRING_CONTAINS(after.UnsupportedReason, ";LiteralRange_root=absent;");
+            UNIT_ASSERT_STRING_CONTAINS(after.UnsupportedReason, "KqlKeyInc");
+            // The catalog identity exceeds the fragment limit; the small AST is complete.
+            UNIT_ASSERT_STRING_CONTAINS(after.UnsupportedReason, "END derived_index_range_v1 truncated=1 flags=2");
+            const auto [validBefore, validAfter] = NativeSyncIndexLookup(staged);
+            UNIT_ASSERT(validBefore.IsSupported());
+            UNIT_ASSERT_C(validAfter.IsSupported(), validAfter.UnsupportedReason);
+            UNIT_ASSERT(!validAfter.Json.Contains("derived_index_range_v1"));
+        }
+        // The inherited failure can fill yexception's 64KiB buffer. Keep that
+        // original failure rather than append an incomplete diagnostic silently.
+        const auto [longBefore, longFailure] = NativeSyncIndexLookup(false, "diagnostic_long_reason");
+        UNIT_ASSERT(longBefore.IsSupported());
+        UNIT_ASSERT(!longFailure.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(longFailure.UnsupportedReason, "Invalid Bool literal xxxxxxxxx");
+        UNIT_ASSERT(longFailure.UnsupportedReason.size() > 64 * 1024 - 512);
+        UNIT_ASSERT(!longFailure.UnsupportedReason.Contains("derived_index_range_v1"));
+    }
+
+    Y_UNIT_TEST(NativeDerivedRangeDiagnosticKeepsTypesIdentityAndRepresentation) {
+        TFixture f;
+        auto read = f.Read();
+        const auto pos = TPositionHandle();
+        const auto* decimal = f.Expr.MakeType<TDataExprParamsType>(NUdf::EDataSlot::Decimal, "15", "2");
+        const auto* optional = f.Expr.MakeType<TOptionalExprType>(decimal);
+        const auto* nested = f.Expr.MakeType<TOptionalExprType>(optional);
+        auto parameter = f.Expr.NewCallable(pos, "Parameter", {f.Expr.NewAtom(pos, "$threshold")});
+        parameter->SetTypeAnn(optional);
+        auto nothing = f.Expr.NewCallable(pos, "Nothing", {ExpandType(pos, *optional, f.Expr)});
+        nothing->SetTypeAnn(optional);
+        auto just = f.Expr.NewCallable(pos, "Just", {nothing});
+        just->SetTypeAnn(nested);
+        auto rangeFor = f.Expr.NewCallable(pos, "RangeFor", {f.Expr.NewAtom(pos, "=="), parameter, just});
+        auto compute = f.Expr.NewCallable(pos, "RangeFinalize", {
+            f.Expr.NewCallable(pos, "RangeMultiply", {f.Expr.NewAtom(pos, "10000"),
+                f.Expr.NewCallable(pos, "RangeUnion", {rangeFor, rangeFor})})});
+        auto literal = f.Expr.NewList(pos, {f.Expr.NewCallable(pos, "KqlKeyInc", {just}),
+            f.Expr.NewCallable(pos, "KqlKeyExc", {parameter})});
+        TOpRead::TRangeInfo range{.ComputeNode = compute, .KeyColumns = {"d", "k"},
+            .UsedPrefixLen = 1, .PointPrefixLen = 0, .ExpectedMaxRanges = 2, .LiteralRange = literal};
+        TSemanticSnapshotCatalogTableV1 table;
+        table.Name = "index"; table.DerivedFrom = "base"; table.PrimaryKey = TVector<TString>{"d", "k"};
+        table.Columns = {{"d", "Decimal(15,2)", true}, {"k", "Int32", false}};
+        const auto diagnostic = NDetail::TDerivedIndexRangeDiagnostic::Render(*read, table, range);
+        for (const TStringBuf expected : {"storage=RowStorage", "derived_from=\"base\"",
+                "physical_key=count=2[\"d\":type=\"Decimal(15,2)\":nullable=1,\"k\":type=\"Int32\":nullable=0]",
+                "used_prefix=1;point_prefix=0;expected_max_ranges=2;selected=LiteralRange",
+                "LiteralRange_root=present", "ComputeNode_root=present", "RangeFinalize", "RangeMultiply",
+                "10000", "RangeUnion", "RangeFor", "Parameter", "$threshold", "Nothing", "Just",
+                "KqlKeyInc", "KqlKeyExc", "Optional(", "param1=\"15\",param2=\"2\"", "@n",
+                "END derived_index_range_v1 truncated=0"})
+        {
+            UNIT_ASSERT_STRING_CONTAINS(diagnostic, expected);
+        }
+        range.LiteralRange.Reset(); range.ExpectedMaxRanges.Clear();
+        const auto computed = NDetail::TDerivedIndexRangeDiagnostic::Render(*read, table, range);
+        UNIT_ASSERT_STRING_CONTAINS(computed, "expected_max_ranges=absent;selected=ComputeNode");
+        UNIT_ASSERT_STRING_CONTAINS(computed, "LiteralRange_root=absent");
+    }
+
+    Y_UNIT_TEST(NativeDerivedRangeDiagnosticBoundsDepthEdgesNodesAndText) {
+        TFixture f;
+        auto read = f.Read();
+        TSemanticSnapshotCatalogTableV1 table;
+        TOpRead::TRangeInfo range;
+        const auto pos = TPositionHandle();
+        const auto check = [&](TStringBuf marker) {
+            const auto text = NDetail::TDerivedIndexRangeDiagnostic::Render(*read, table, range);
+            UNIT_ASSERT_C(text.size() <= 16 * 1024, text.size());
+            UNIT_ASSERT_STRING_CONTAINS(text, "END derived_index_range_v1 truncated=1");
+            UNIT_ASSERT_STRING_CONTAINS(text, marker);
+            for (const unsigned char byte : text) { UNIT_ASSERT(byte >= 0x20 && byte <= 0x7e); }
+        };
+        auto leaf = f.Expr.NewAtom(pos, "x");
+        range.ComputeNode = leaf;
+        for (size_t i = 0; i < 80; ++i) { range.ComputeNode = f.Expr.NewCallable(pos, "IfPresent", {range.ComputeNode}); }
+        check("<depth-cut>");
+        TExprNode::TListType children(600, leaf);
+        range.ComputeNode = f.Expr.NewList(pos, std::move(children));
+        check("<edges-cut>");
+        children.clear();
+        for (size_t i = 0; i < 240; ++i) { children.push_back(f.Expr.NewAtom(pos, ToString(i))); }
+        range.ComputeNode = f.Expr.NewList(pos, std::move(children));
+        check("<nodes-cut>");
+        const TString bytes = TString("\0\xff\x80\n\"\\", 6) + TString(256, 'z');
+        range.ComputeNode = f.Expr.NewAtom(pos, bytes);
+        check("<fragment-cut:bytes=262>");
+        const auto escaped = NDetail::TDerivedIndexRangeDiagnostic::Render(*read, table, range);
+        UNIT_ASSERT_STRING_CONTAINS(escaped, "\\x00\\xff\\x80\\x0a\\x22\\x5c");
+        children.clear();
+        for (size_t i = 0; i < 240; ++i) { children.push_back(f.Expr.NewAtom(pos, TString(96, 'z') + ToString(i))); }
+        range.ComputeNode = f.Expr.NewList(pos, std::move(children));
+        check("END derived_index_range_v1");
+        const auto capped = NDetail::TDerivedIndexRangeDiagnostic::Render(*read, table, range);
+        UNIT_ASSERT_C(capped.size() >= 16 * 1024 - 512, capped.size());
+        const TTypeAnnotationNode* type = f.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+        for (size_t i = 0; i < 80; ++i) { type = f.Expr.MakeType<TOptionalExprType>(type); }
+        range.ComputeNode = f.Expr.NewArgument(pos, "deepType");
+        range.ComputeNode->SetTypeAnn(type);
+        check("<type-depth-cut>");
+        const auto* boolean = f.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Bool);
+        TTypeAnnotationNode::TListType types(600, boolean);
+        range.ComputeNode = f.Expr.NewArgument(pos, "wideType");
+        range.ComputeNode->SetTypeAnn(f.Expr.MakeType<TTupleExprType>(types));
+        check("<type-edges-cut>");
+        types.clear();
+        for (size_t i = 0; i < 240; ++i) {
+            types.push_back(f.Expr.MakeType<TItemExprType>(ToString(i), boolean));
+        }
+        range.ComputeNode = f.Expr.NewArgument(pos, "manyTypes");
+        range.ComputeNode->SetTypeAnn(f.Expr.MakeType<TTupleExprType>(types));
+        check("<types-cut>");
+        table.PrimaryKey = TVector<TString>(40, "k");
+        range.ComputeNode = leaf;
+        check("<keys-cut>");
+        // Escaping can expand metadata beyond the text cap. Presence/precedence
+        // must already be visible before that variable-size section is clipped.
+        const TString binaryName(96, '\xff');
+        table.PrimaryKey = TVector<TString>(32, binaryName);
+        table.Columns = {{binaryName, binaryName, true}};
+        check("END derived_index_range_v1");
+        const auto metadataCut = NDetail::TDerivedIndexRangeDiagnostic::Render(*read, table, range);
+        UNIT_ASSERT_STRING_CONTAINS(metadataCut, ";selected=ComputeNode;");
+        UNIT_ASSERT_STRING_CONTAINS(metadataCut, ";LiteralRange_root=absent;");
+        UNIT_ASSERT_STRING_CONTAINS(metadataCut, "ComputeNode_root=present(Atom,\"x\",children=0)");
+    }
+
+    Y_UNIT_TEST(NativeStringListMembershipSharesInputsAcrossStages) {
+        for (bool nullableItems : {false, true}) {
+            for (bool nullableLookup : {false, true}) {
+                for (bool ansi : {false, true}) {
+                    const auto before = NativeStringListParameter(nullableItems, nullableLookup, ansi, false);
+                    const auto after = NativeStringListParameter(nullableItems, nullableLookup, ansi, true);
+                    const auto initial = Parse(before);
+                    Parse(after);
+                    size_t membershipExpressions = 0;
+                    for (const auto& node : initial["plan"]["nodes"].GetArraySafe()) {
+                        if (node["op"].GetStringSafe() != "project") {
+                            continue;
+                        }
+                        for (const auto& column : node["columns"].GetArraySafe()) {
+                            const auto& expression = column["expression"];
+                            if (expression["kind"].GetStringSafe() == "in_parameter") {
+                                ++membershipExpressions;
+                                UNIT_ASSERT_VALUES_EQUAL(expression["parameter_type"].GetStringSafe(),
+                                    nullableItems ? "List<Optional<String>>" : "List<String>");
+                            }
+                        }
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(membershipExpressions, 1);
+                    UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeStringListMembershipRenameIsARealInputChange) {
+        const auto before = NativeStringListParameter(false, false, true, false, {}, "$p");
+        const auto after = NativeStringListParameter(false, false, true, true, {}, "$q");
+        Parse(before);
+        Parse(after);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "COUNTEREXAMPLE");
+    }
+
+    Y_UNIT_TEST(NativeStringListMembershipRejectsUnsupportedShapesAndTypes) {
+        for (const TString& mutation : TVector<TString>{"utf8", "nested_optional", "outer_optional",
+                "outer_descriptor", "item_descriptor", "data_descriptor", "missing_inner_annotation",
+                "duplicate_option", "tableSource", "nullsProcessed", "future_option", "option_shape",
+                "result_nullability", "transformed_list", "projection", "length"}) {
+            const auto result = NativeStringListParameter(true, false, true, false, mutation);
+            UNIT_ASSERT_C(!result.IsSupported(), mutation);
+        }
+        for (const TString& name : TVector<TString>{"", "$", "p", "%kqp%tx_result_binding_0_0"}) {
+            const auto result = NativeStringListParameter(false, false, true, false, {}, name);
+            UNIT_ASSERT_C(!result.IsSupported(), name);
+        }
+    }
+
+    Y_UNIT_TEST(NativeStringListMembershipAuditsNestedSafetyMetadata) {
+        // Root, collection, name, each type descriptor/atom, all option payloads,
+        // lookup and its member-name atom must independently fail closed.
+        for (int target = 0; target != 12; ++target) {
+            for (int kind = 0; kind != 4; ++kind) {
+                const auto result = NativeStringListParameter(true, true, true, false, {}, "$p", target, kind);
+                UNIT_ASSERT_C(!result.IsSupported(), TStringBuilder() << "target=" << target << ", kind=" << kind);
+            }
+        }
+    }
+
     Y_UNIT_TEST(NativeScalarParametersShareInputAcrossStaging) {
         for (const auto& type : TVector<TString>{"Bool", "Int32", "Uint64", "Date", "Timestamp", "Timestamp64", "String", "Utf8", "Decimal"}) {
             for (bool nullable : {false, true}) {
@@ -2646,9 +3535,51 @@ Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
         UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, changed.Json), "COUNTEREXAMPLE");
     }
 
-    Y_UNIT_TEST(NativeDistinctAliasesRejectMissingOrRepeatedSourceKeys) {
+    Y_UNIT_TEST(NativeDistinctAliasesRejectUncoveredGroupingKeys) {
         UNIT_ASSERT(!NativeDistinctAliases(false, true, true, false, false, false, true).IsSupported());
     }
+
+    Y_UNIT_TEST(NativeDistinctRepeatedAliasesPreserveAllResultColumns) {
+        for (const bool nullable : {false, true}) {
+            const auto initial = NativeRepeatedDistinctAliases(nullable, false);
+            Parse(initial);
+            for (const bool duplicateKeys : {false, true}) {
+                for (const bool reverseKeys : {false, true}) {
+                    const auto final = NativeRepeatedDistinctAliases(nullable, true,
+                        duplicateKeys, reverseKeys, true);
+                    auto snapshot = Parse(final);
+                    for (const auto& node : snapshot["plan"]["nodes"].GetArraySafe()) {
+                        if (node["op"].GetStringSafe() == "aggregate") {
+                            UNIT_ASSERT_VALUES_EQUAL(node["keys"].GetArraySafe().size(), 2);
+                            UNIT_ASSERT_VALUES_EQUAL(node["aggregates"].GetArraySafe().size(), 3);
+                        }
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, final.Json), "VERIFIED_BOUNDED");
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeDistinctRepeatedAliasesRejectSchemaAndBindingMutations) {
+        for (const TStringBuf mutation : {"wrong_type", "wrong_nullability", "missing_column",
+             "extra_column", "foreign_key", "missing_key", "wrong_function", "distinct_flag"})
+        {
+            UNIT_ASSERT_C(!NativeRepeatedDistinctAliases(true, true, true, false, false, mutation).IsSupported(), mutation);
+        }
+        // Ordinary Aggregate admission still rejects repeated keys.
+        UNIT_ASSERT(!NativeRepeatedDistinctAliases(false, false, true).IsSupported());
+    }
+
+    Y_UNIT_TEST(NativeDistinctRepeatedAliasesObserveBindingAndMultiplicity) {
+        const auto initial = NativeRepeatedDistinctAliases(false, false);
+        Parse(initial);
+        for (const TStringBuf mutation : {"wrong_binding", "remove_distinct"}) {
+            const auto changed = NativeRepeatedDistinctAliases(false, true, true, false, true, mutation);
+            Parse(changed);
+            UNIT_ASSERT_VALUES_EQUAL_C(Verify(initial.Json, changed.Json), "COUNTEREXAMPLE", mutation);
+        }
+    }
+
 
     Y_UNIT_TEST(NativeDecimalAverageFollowsActualDistinctExpansionBindings) {
         for (const bool extraDistinct : {false, true}) {
@@ -2971,6 +3902,106 @@ Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
             Parse(changed);
             UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
             UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, changed.Json), "COUNTEREXAMPLE");
+        }
+    }
+
+    Y_UNIT_TEST(NativeLiteralJustPreservesOptionalConstantFolding) {
+        const auto initial = NativeExactLiteralJust("Uint64", "1", true);
+        const auto folded = NativeExactLiteralJust("Uint64", "1", false, true);
+        const auto changed = NativeExactLiteralJust("Uint64", "2", false, true);
+        Parse(initial);
+        Parse(folded);
+        Parse(changed);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, folded.Json), "VERIFIED_BOUNDED");
+        UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, changed.Json), "COUNTEREXAMPLE");
+    }
+
+    Y_UNIT_TEST(NativeLiteralJustExportsExactValuesAndOptionalTypes) {
+        const TVector<std::pair<TString, TString>> cases{
+            {"Bool", "true"}, {"Bool", "false"},
+            {"Int8", "-128"}, {"Int16", "-32768"}, {"Int32", "-2147483648"},
+            {"Int64", "-9223372036854775808"},
+            {"Uint8", "255"}, {"Uint16", "65535"}, {"Uint32", "4294967295"},
+            {"Uint64", "18446744073709551615"},
+            {"String", ""}, {"String", "literal"}, {"Utf8", "\xC3\xA9"},
+            {"Date", ToString(NUdf::MAX_DATE - 1)},
+            {"Datetime", ToString(NUdf::MAX_DATETIME - 1)},
+            {"Timestamp", ToString(NUdf::MAX_TIMESTAMP - 1)},
+            {"Timestamp64", ToString(NUdf::MIN_TIMESTAMP64)},
+            {"Timestamp64", "-1"}, {"Timestamp64", ToString(NUdf::MAX_TIMESTAMP64)},
+        };
+        for (const auto& [type, value] : cases) {
+            const auto json = Parse(NativeExactLiteralJust(type, value));
+            ui32 found = 0;
+            for (const auto& node : json["plan"]["nodes"].GetArraySafe()) {
+                if (node["op"].GetStringSafe() != "project") {
+                    continue;
+                }
+                for (const auto& column : node["columns"].GetArraySafe()) {
+                    const auto& expression = column["expression"];
+                    if (expression["kind"].GetStringSafe() == "column") {
+                        continue;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "if");
+                    UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), type);
+                    UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+                    UNIT_ASSERT_VALUES_EQUAL(expression["condition"]["kind"].GetStringSafe(), "literal");
+                    UNIT_ASSERT_VALUES_EQUAL(expression["condition"]["type"].GetStringSafe(), "Bool");
+                    UNIT_ASSERT(expression["condition"]["value"].GetBooleanSafe());
+                    UNIT_ASSERT_VALUES_EQUAL(expression["else"]["kind"].GetStringSafe(), "null");
+                    UNIT_ASSERT_VALUES_EQUAL(expression["else"]["type"].GetStringSafe(), type);
+                    const auto& present = expression["then"];
+                    UNIT_ASSERT_VALUES_EQUAL(present["kind"].GetStringSafe(), "literal");
+                    UNIT_ASSERT_VALUES_EQUAL(present["type"].GetStringSafe(), type);
+                    if (type == "Bool") {
+                        UNIT_ASSERT_VALUES_EQUAL(present["value"].GetBooleanSafe(), value == "true");
+                    } else if (type == "String" || type == "Utf8") {
+                        UNIT_ASSERT_VALUES_EQUAL(present["value"].GetStringSafe(), value);
+                    } else if (type.StartsWith("Int") || type == "Timestamp64") {
+                        UNIT_ASSERT_VALUES_EQUAL(present["value"].GetIntegerSafe(), FromString<i64>(value));
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(present["value"].GetUIntegerSafe(), FromString<ui64>(value));
+                    }
+                    ++found;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(found, 1);
+        }
+    }
+
+    Y_UNIT_TEST(NativeLiteralJustRejectsInvalidAnnotationsValuesAndMetadata) {
+        for (const TStringBuf mutation : {"literal_annotation", "literal_optional", "literal_arity",
+                                          "result_annotation", "result_required", "nested_optional"}) {
+            const auto result = NativeExactLiteralJust("Uint64", "1", false, false, mutation);
+            UNIT_ASSERT_C(!result.IsSupported(), mutation);
+        }
+        const TVector<std::pair<TString, TString>> invalid{
+            {"Bool", "1"}, {"Int8", "128"}, {"Uint8", "256"}, {"Uint64", "-1"},
+            {"Uint64", "18446744073709551616"}, {"Int64", "-9223372036854775809"},
+            {"Date", ToString(NUdf::MAX_DATE)},
+            {"Datetime", ToString(NUdf::MAX_DATETIME)},
+            {"Timestamp", ToString(NUdf::MAX_TIMESTAMP)},
+            {"Timestamp64", ToString(NUdf::MIN_TIMESTAMP64 - 1)},
+            {"Timestamp64", ToString(NUdf::MAX_TIMESTAMP64 + 1)},
+            {"String", "\xFF"}, {"Utf8", "\xFF"},
+        };
+        for (const auto& [type, value] : invalid) {
+            UNIT_ASSERT_C(!NativeExactLiteralJust(type, value).IsSupported(), type << ": " << value);
+        }
+        const TVector<std::pair<TStringBuf, TStringBuf>> unsafe{
+            {"executed", "executed Result node"}, {"position", "position-aware node"},
+            {"semilattice", "side-effecting or CSE-unsafe"},
+            {"general", "side-effecting or CSE-unsafe"}, {"unordered", "unordered children"},
+        };
+        for (const ui32 depth : {0u, 1u, 2u}) {
+            for (const auto& [mutation, reason] : unsafe) {
+                if (depth == 2 && mutation == "unordered") {
+                    continue; // Atom has no children to order.
+                }
+                const auto result = NativeExactLiteralJust("Uint64", "1", false, false, mutation, depth);
+                UNIT_ASSERT_C(!result.IsSupported(), depth << ": " << mutation);
+                UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, reason);
+            }
         }
     }
 

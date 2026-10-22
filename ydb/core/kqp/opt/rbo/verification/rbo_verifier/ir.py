@@ -55,7 +55,7 @@ JOIN_KINDS = frozenset(
         "exclusion",
     }
 )
-STAGE_CONNECTION_KINDS = frozenset({"map", "broadcast", "hash_shuffle", "union_all", "merge"})
+STAGE_CONNECTION_KINDS = frozenset({"map", "stream_lookup", "broadcast", "hash_shuffle", "union_all", "merge"})
 HASH_FUNCTIONS = frozenset({"HashV1", "HashV2"})
 OPERATOR_PHASES = frozenset({"undefined", "intermediate", "final"})
 INTEGRAL_AVG_RANK_COMPARISON = "integral_avg_rank_v1"
@@ -108,6 +108,10 @@ class Table:
     name: str
     columns: tuple[Column, ...]
     unique_keys: tuple[UniqueKey, ...]
+    # Ordinary synchronous index: exact same-name projection of base rows.
+    derived_from: str | None = None
+    # Absent in legacy snapshots: no physical key identity may be inferred.
+    primary_key: tuple[str, ...] | None = None
 
     def column_map(self) -> dict[str, Column]:
         return {column.name: column for column in self.columns}
@@ -144,6 +148,8 @@ class Expr:
     order_by: tuple[SortOrder, ...] | None = None
     window_frame: str | None = None
     parameter: str | None = None
+    parameter_type: str | None = None
+    ansi: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,6 +167,22 @@ class Scan:
     pushed_limit: Expr | None
     # Physical inputs available only while evaluating the pushed predicate.
     predicate_columns: tuple[ScanColumn, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class LookupKey:
+    input: str
+    source: str
+
+
+@dataclass(frozen=True, slots=True)
+class PointLookup:
+    """LookupRows with the complete physical key; NULL matches physical NULL."""
+    id: str
+    input: str
+    table: str
+    keys: tuple[LookupKey, ...]
+    columns: tuple[ScanColumn, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -323,6 +345,7 @@ class UnionAll:
 PlanNode: TypeAlias = (
     EmptySource
     | Scan
+    | PointLookup
     | Project
     | Filter
     | OuterBind
@@ -687,6 +710,21 @@ def _parse_expr(
             kind=kind, parameter=name, result_type=result_type,
             nullable=_bool(obj["nullable"], f"{path}.nullable"),
         )
+
+    if kind == "in_parameter":
+        _keys(obj, {"kind", "name", "parameter_type", "lookup", "ansi", "type", "nullable"}, path)
+        name = _string(obj["name"], f"{path}.name")
+        if len(name) < 2 or not name.startswith("$"):
+            _fail(f"{path}.name", "only external SQL parameter names beginning with '$' are modeled")
+        parameter_type = _string(obj["parameter_type"], f"{path}.parameter_type")
+        if parameter_type not in {"List<String>", "List<Optional<String>>"}:
+            _fail(f"{path}.parameter_type", "IN parameter requires List<String> or List<Optional<String>>")
+        if obj["type"] != BOOL:
+            _fail(f"{path}.type", "IN parameter result must be Bool")
+        return Expr(kind=kind, parameter=name, parameter_type=parameter_type,
+                    args=(parse_child(obj["lookup"], f"{path}.lookup"),), result_type=BOOL,
+                    ansi=_bool(obj["ansi"], f"{path}.ansi"),
+                    nullable=_bool(obj["nullable"], f"{path}.nullable"))
 
     if kind == "bound":
         _keys(obj, {"kind", "depth"}, path)
@@ -1149,7 +1187,7 @@ def _parse_sort_order(value: Any, path: str) -> tuple[SortOrder, ...]:
 
 def _parse_table(value: Any, path: str) -> Table:
     obj = _object(value, path)
-    _keys(obj, {"name", "columns", "unique_keys"}, path)
+    _keys(obj, {"name", "columns", "unique_keys"}, path, {"derived_from", "primary_key"})
     raw_columns = _array(obj["columns"], f"{path}.columns")
     if not raw_columns:
         _fail(f"{path}.columns", "must not be empty")
@@ -1188,6 +1226,11 @@ def _parse_table(value: Any, path: str) -> Table:
         name=_string(obj["name"], f"{path}.name"),
         columns=tuple(columns),
         unique_keys=tuple(unique_keys),
+        primary_key=(tuple(_string(item, f"{path}.primary_key[{index}]")
+                           for index, item in enumerate(_array(obj["primary_key"], f"{path}.primary_key")))
+                     if "primary_key" in obj else None),
+        derived_from=(_string(obj["derived_from"], f"{path}.derived_from")
+                      if "derived_from" in obj else None),
     )
 
 
@@ -1244,6 +1287,25 @@ def _parse_node(value: Any, path: str) -> PlanNode:
                 else _parse_uint64_literal(obj["pushed_limit"], f"{path}.pushed_limit")
             ),
         )
+
+    if operation == "point_lookup":
+        _keys(obj, {"id", "op", "input", "table", "keys", "columns"}, path)
+        keys = []
+        for index, raw in enumerate(_array(obj["keys"], f"{path}.keys")):
+            item_path = f"{path}.keys[{index}]"
+            item = _object(raw, item_path)
+            _keys(item, {"input", "source"}, item_path)
+            keys.append(LookupKey(_string(item["input"], item_path + ".input"),
+                                  _string(item["source"], item_path + ".source")))
+        columns = []
+        for index, raw in enumerate(_array(obj["columns"], f"{path}.columns")):
+            item_path = f"{path}.columns[{index}]"
+            item = _object(raw, item_path)
+            _keys(item, {"source", "output"}, item_path)
+            columns.append(ScanColumn(_string(item["source"], item_path + ".source"),
+                                      _string(item["output"], item_path + ".output")))
+        return PointLookup(node_id, _string(obj["input"], path + ".input"),
+                           _string(obj["table"], path + ".table"), tuple(keys), tuple(columns))
 
     if operation == "project":
         _keys(obj, {"id", "op", "input", "columns", "ordered"}, path)
@@ -2095,6 +2157,18 @@ def _infer_expr(
         infer(expr.args[0], columns, f"{path}.arg", bindings)
         return ValueType(BOOL, False)
 
+    if expr.kind == "in_parameter":
+        if (len(expr.args) != 1 or expr.parameter_type not in
+                {"List<String>", "List<Optional<String>>"} or type(expr.ansi) is not bool):
+            _fail(path, "malformed IN parameter expression")
+        lookup = infer(expr.args[0], columns, f"{path}.lookup", bindings)
+        if lookup.name != "String":
+            _fail(path, "IN parameter lookup must be exactly String or Optional<String>")
+        nullable = lookup.nullable or (expr.ansi and expr.parameter_type == "List<Optional<String>>")
+        if expr.result_type != BOOL or type(expr.nullable) is not bool or expr.nullable != nullable:
+            _fail(path, "IN parameter result type/nullability disagrees with native SQL semantics")
+        return ValueType(BOOL, nullable)
+
     if expr.kind == "in":
         lookup = infer(expr.args[0], columns, f"{path}.lookup", bindings)
         item_name = None
@@ -2455,7 +2529,7 @@ def _validate_integral_double_average(
 def plan_node_inputs(node: PlanNode) -> tuple[str, ...]:
     if isinstance(node, (EmptySource, Scan)):
         return ()
-    if isinstance(node, (Project, Filter, OuterBind, Limit, Sort, Aggregate)):
+    if isinstance(node, (Project, Filter, OuterBind, Limit, Sort, Aggregate, PointLookup)):
         return (node.input,)
     if isinstance(node, Join):
         return (node.left, node.right)
@@ -2936,17 +3010,24 @@ def query_parameters(snapshot: Snapshot) -> dict[str, ValueType]:
     while pending:
         expression = pending.pop()
         pending.extend(expression.args)
-        if expression.kind != "parameter":
+        if expression.kind not in {"parameter", "in_parameter"}:
             continue
         name = expression.parameter
         scalar_type = expression.result_type
         if not isinstance(name, str) or len(name) < 2 or not name.startswith("$"):
             _fail("snapshot.parameters", "only external SQL parameter names beginning with '$' are modeled")
-        if not isinstance(scalar_type, str) or not is_scalar_type(scalar_type) or scalar_type == DOUBLE:
-            _fail("snapshot.parameters", f"unsupported query parameter type {scalar_type!r}")
-        if type(expression.nullable) is not bool or expression.args:
-            _fail("snapshot.parameters", "parameter must be a typed leaf with exact nullability")
-        value_type = ValueType(scalar_type, expression.nullable)
+        if expression.kind == "in_parameter":
+            if (expression.parameter_type not in {"List<String>", "List<Optional<String>>"}
+                    or len(expression.args) != 1 or type(expression.ansi) is not bool
+                    or expression.result_type != BOOL or type(expression.nullable) is not bool):
+                _fail("snapshot.parameters", "malformed IN parameter declaration")
+            value_type = ValueType(expression.parameter_type, False)
+        else:
+            if not isinstance(scalar_type, str) or not is_scalar_type(scalar_type) or scalar_type == DOUBLE:
+                _fail("snapshot.parameters", f"unsupported query parameter type {scalar_type!r}")
+            if type(expression.nullable) is not bool or expression.args:
+                _fail("snapshot.parameters", "parameter must be a typed leaf with exact nullability")
+            value_type = ValueType(scalar_type, expression.nullable)
         previous = result.setdefault(name, value_type)
         if previous != value_type:
             _fail("snapshot.parameters", f"parameter {name!r} has inconsistent declared types")
@@ -3129,7 +3210,7 @@ def _validate_void_dataflow(
         _fail("snapshot.plan.root", message)
 
     for node in snapshot.plan.nodes:
-        if isinstance(node, (EmptySource, Scan)):
+        if isinstance(node, (EmptySource, Scan, PointLookup)):
             continue
 
         if isinstance(node, Project):
@@ -3212,10 +3293,24 @@ def stage_input_slots(plan: Plan, stage: Stage) -> tuple[tuple[str, int, str], .
 def _validate_row_read_range_predicate(snapshot: Snapshot, scan: Scan, path: str) -> None:
     """Only the native exporter's total single-key interval corridor."""
     table = snapshot.table_map()[scan.table]
-    if (len(table.unique_keys) != 1 or table.unique_keys[0].nulls_distinct
-            or len(table.unique_keys[0].columns) != 1):
+    if table.derived_from is not None:
+        if not table.primary_key or len(table.primary_key) < 2:
+            _fail(path, "index prefix needs one composite physical key")
+        key_name = table.primary_key[0]
+        key = table.column_map()[key_name]
+        bindings = [mapping.output for mapping in scan.columns + scan.predicate_columns
+                    if mapping.source == key_name]
+        predicate = scan.predicate
+        if (key.type != BOOL or len(bindings) != 1 or predicate is None
+                or predicate.kind != "eq" or predicate.null_safe or len(predicate.args) != 2
+                or predicate.args[0].kind != "column" or predicate.args[0].column != bindings[0]
+                or predicate.args[1].kind != "literal" or predicate.args[1].result_type != BOOL
+                or type(predicate.args[1].value) is not bool):
+            _fail(path, "derived index range requires an exact non-NULL Bool literal prefix")
+        return
+    if not table.primary_key or len(table.primary_key) != 1:
         _fail(path, "row read range requires one exact single-column primary key")
-    key_name = table.unique_keys[0].columns[0]
+    key_name = table.primary_key[0]
     key = table.column_map()[key_name]
     if key.type not in {"Int32", "Int64"} or key.nullable:
         _fail(path, "row read range key must be required Int32 or Int64")
@@ -3288,7 +3383,7 @@ def _validate_stage_graph(
             if node_id in owner:
                 _fail(f"{stage_path}.nodes", f"plan node {node_id!r} is also in stage {owner[node_id]!r}")
             local_inputs = [item for item in plan_node_inputs(plan_nodes[node_id]) if item in members]
-            if isinstance(plan_nodes[node_id], (Join, UnionAll)) and local_inputs:
+            if isinstance(plan_nodes[node_id], (Join, UnionAll, PointLookup)) and local_inputs:
                 _fail(
                     f"{stage_path}.nodes",
                     "Join/UnionAll inputs must cross stage boundaries",
@@ -3418,6 +3513,12 @@ def _validate_stage_graph(
             (edge.consumer_input, edge.occurrence)
         )
         adjacency[edge.producer].add(edge.consumer)
+
+        consumer_node = plan_nodes[stage_input_slots(snapshot.plan, consumer)[edge.consumer_input][0]]
+        if (edge.kind == "stream_lookup") != isinstance(consumer_node, PointLookup):
+            _fail(edge_path, "stream_lookup must connect exactly the PointLookup input")
+        if edge.kind == "stream_lookup" and len(consumer.inputs) != 1:
+            _fail(edge_path, "point lookup stage must have exactly one input")
 
         columns = schemas[produced_node]
         for column in edge.keys:
@@ -3551,7 +3652,7 @@ def _infer_stage_task_counts(graph: StageGraph, path: str) -> dict[str, int]:
             map_count = 0
             for edge in edges:
                 producer_tasks = task_count(edge.producer)
-                if edge.kind == "map":
+                if edge.kind in {"map", "stream_lookup"}:
                     result = producer_tasks
                     force_map_tasks = True
                     map_count += 1
@@ -3571,7 +3672,7 @@ def _infer_stage_task_counts(graph: StageGraph, path: str) -> dict[str, int]:
             # Channel builders impose these constraints after task counting.
             for edge in edges:
                 producer_tasks = task_count(edge.producer)
-                if edge.kind == "map" and producer_tasks != result:
+                if edge.kind in {"map", "stream_lookup"} and producer_tasks != result:
                     _fail(
                         f"stage {stage_id!r}.inputs",
                         "Map producer and consumer task counts must match",
@@ -3869,10 +3970,36 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
             )
         table_columns = table.column_map()
         for key in table.unique_keys:
+            if (not isinstance(key, UniqueKey) or not isinstance(key.columns, tuple)
+                    or not key.columns or any(not isinstance(name, str) for name in key.columns)
+                    or type(key.nulls_distinct) is not bool):
+                _fail(f"table {table.name!r}", "unique key needs nonempty columns and an exact NULL policy")
+            _unique(key.columns, f"table {table.name!r} unique key")
             for column in key.columns:
                 if column not in table_columns:
                     _fail(f"table {table.name!r}", f"unique key references unknown column {column!r}")
+        if table.primary_key is not None:
+            if not isinstance(table.primary_key, tuple) or not table.primary_key:
+                _fail(f"table {table.name!r}", "physical primary key must be a nonempty tuple")
+            if any(not isinstance(name, str) or name not in table_columns for name in table.primary_key):
+                _fail(f"table {table.name!r}", "physical primary key references an unknown column")
+            _unique(table.primary_key, f"table {table.name!r} physical primary key")
+            if UniqueKey(table.primary_key, False) not in table.unique_keys:
+                _fail(f"table {table.name!r}", "physical primary key lacks its exact NULL-safe unique constraint")
     tables = snapshot.table_map()
+    for table in snapshot.tables:
+        if table.derived_from is None:
+            continue
+        base = tables.get(table.derived_from)
+        if base is None or base.derived_from is not None or base is table:
+            _fail(f"table {table.name!r}", "derived index requires one independent base table")
+        if (not base.primary_key or not table.primary_key
+                or table.unique_keys != (UniqueKey(table.primary_key, False),)
+                or not set(base.primary_key).issubset(table.primary_key)):
+            _fail(f"table {table.name!r}", "derived index key must contain the complete physical base key")
+        base_columns = base.column_map()
+        if any(base_columns.get(column.name) != column for column in table.columns):
+            _fail(f"table {table.name!r}", "derived index columns must exactly match base types and nullability")
 
     if not snapshot.plan.nodes:
         _fail("snapshot.plan.nodes", "must not be empty")
@@ -4044,6 +4171,33 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         "scan predicate must be Boolean",
                     )
 
+        elif isinstance(node, PointLookup):
+            input_schema = schema_for(node.input)
+            table = tables.get(node.table)
+            if table is None or table.derived_from is not None:
+                _fail(f"node {node.id!r}", "point lookup requires an independent base-table target")
+            if snapshot.plan.subplans:
+                _fail(f"node {node.id!r}", "correlated point lookup is not yet admitted")
+            if (not table.primary_key or not node.keys
+                    or tuple(key.source for key in node.keys) != table.primary_key):
+                _fail(f"node {node.id!r}", "point lookup must bind the complete ordered physical primary key")
+            table_columns = table.column_map()
+            _unique([key.input for key in node.keys], f"node {node.id!r} key inputs")
+            for key in node.keys:
+                source = input_schema.get(key.input)
+                if source is None or source.type != table_columns[key.source].type:
+                    _fail(f"node {node.id!r}", "point lookup key requires the exact physical scalar type")
+            if any(column.type == VOID for column in input_schema.values()):
+                _fail(f"node {node.id!r}", "point lookup cannot discard an intermediate void carrier")
+            _unique([column.source for column in node.columns], f"node {node.id!r} lookup sources")
+            _unique([column.output for column in node.columns], f"node {node.id!r} lookup outputs")
+            result = {}
+            for column in node.columns:
+                source = table_columns.get(column.source)
+                if source is None:
+                    _fail(f"node {node.id!r}", "unknown fetched storage column")
+                result[column.output] = Column(column.output, source.type, source.nullable)
+
         elif isinstance(node, Project):
             input_schema = schema_for(node.input)
             expression_schema = dict(input_schema)
@@ -4204,11 +4358,11 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 _fail(f"node {node.id!r}.aggregates",
                       "empty traits require nonempty grouping keys and distinct_all:false")
             if node.distinct_all and (
-                not node.keys or len(node.aggregates) != len(node.keys)
+                not node.keys or {trait.input for trait in node.aggregates} != set(node.keys)
             ):
                 _fail(
                     f"node {node.id!r}",
-                    "DistinctAll requires one distinct trait for each ordered key",
+                    "DistinctAll requires aliases covering exactly its nonempty grouping keys",
                 )
             if sum(trait.distinct for trait in node.aggregates) > 2:
                 _fail(
@@ -4286,14 +4440,14 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     if trait.function != "distinct":
                         _fail(trait_path, "DistinctAll traits must use distinct")
                     if (
-                        trait.input != node.keys[index]
+                        trait.input not in node.keys
                         or trait.distinct
                         or trait.unwrap
                     ):
                         _fail(
                             trait_path,
                             "DistinctAll traits must be plain distinct aliases "
-                            "of their corresponding ordered keys",
+                            "of grouping keys",
                         )
                     if (
                         trait.output_type != input_column.type

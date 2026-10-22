@@ -1542,12 +1542,16 @@ class Script:
 
     def _render_body(self, branch: Term | None) -> str:
         # Declarations/assertions are append-only and their terms are immutable.
-        # Keep the branch itself alive and compare identity, avoiding id reuse
-        # and expensive structural comparisons over large expression DAGs.
+        # Default rendering and explicitly selecting the marked obligation
+        # have exactly the same assertion list. Keep that effective predicate
+        # alive and compare identity, avoiding id reuse and structural walks.
+        effective_branch = branch
+        if effective_branch is None and self._obligation_index is not None:
+            effective_branch = self._ordinary_assertions[self._obligation_index]
         version = (len(self._declarations), len(self._global_assertions),
                    len(self._ordinary_assertions))
         cached = self._rendered_body
-        if cached is not None and cached[0] == version and cached[1] is branch:
+        if cached is not None and cached[0] == version and cached[1] is effective_branch:
             return cached[2]
         self._rendered_body = None
         del cached  # release the previous large body before rendering another
@@ -1572,7 +1576,7 @@ class Script:
         lines.append("(check-sat)\n")
         body = "\n".join(lines)
         if sys.getsizeof(body) <= _MAX_RENDERED_BODY_BYTES:
-            self._rendered_body = (version, branch, body)
+            self._rendered_body = (version, effective_branch, body)
         return body
 
 

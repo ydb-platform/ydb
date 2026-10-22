@@ -76,16 +76,17 @@ def safe_identifier(value: str) -> str:
 
 
 def primary_key(table: Table) -> tuple[str, ...]:
+    if not table.primary_key:
+        raise ReplayError(f"table {table.name!r} has no explicit captured physical primary key; recapture required")
+    matching = [key for key in table.unique_keys
+                if not key.nulls_distinct and key.columns == table.primary_key]
+    if len(matching) != 1:
+        raise ReplayError(f"table {table.name!r} has inconsistent physical primary-key metadata")
     if len(table.unique_keys) != 1:
-        raise ReplayError(
-            f"table {table.name!r} does not have exactly one captured primary key"
-        )
-    key = table.unique_keys[0]
-    if key.nulls_distinct or not key.columns:
-        raise ReplayError(f"table {table.name!r} has unsupported primary-key semantics")
+        raise ReplayError("UNSUPPORTED_UNIQUE_CONSTRAINT_REPLAY: secondary uniqueness DDL is not materialized")
     columns = table.column_map()
-    for name in key.columns:
+    for name in table.primary_key:
         if name not in columns or columns[name].nullable:
             raise ReplayError(f"table {table.name!r} has an invalid nullable primary key")
         safe_identifier(name)
-    return key.columns
+    return table.primary_key

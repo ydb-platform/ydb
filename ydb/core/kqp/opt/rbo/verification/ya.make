@@ -13,6 +13,7 @@ PY_SRCS(
     rbo_verifier/floating.py
     rbo_verifier/ir.py
     rbo_verifier/join.py
+    rbo_verifier/list_parameters.py
     rbo_verifier/relation.py
     rbo_verifier/scalar.py
     rbo_verifier/smt.py
@@ -21,6 +22,7 @@ PY_SRCS(
     rbo_verifier/sort_strategy.py
     rbo_verifier/stages.py
     rbo_verifier/string_order.py
+    rbo_verifier/terminal_order.py
     rbo_verifier/types.py
     rbo_verifier/value_transport.py
     rbo_verifier/verify.py

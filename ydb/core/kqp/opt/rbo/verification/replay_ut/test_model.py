@@ -84,6 +84,7 @@ def schema(columns=None, key=("id",)):
                 {"name": "value", "type": "Int64", "nullable": True},
             ],
             "unique_keys": [{"columns": list(key), "nulls_distinct": False}],
+            "primary_key": list(key),
         }]
     }
 
@@ -242,6 +243,16 @@ class IdentityTest(unittest.TestCase):
 
 
 class CaseTest(unittest.TestCase):
+    def test_membership_only_list_input_is_not_a_table_only_replay(self):
+        before, after = snapshot(False), snapshot(True)
+        parameter = Expr(kind="in_parameter", parameter="$list", parameter_type="List<String>",
+                         args=(Expr(kind="literal", value="x", result_type="String", nullable=False),),
+                         ansi=True, result_type="Bool", nullable=False)
+        changed_scan = replace(before.plan.nodes[0], predicate=parameter)
+        before = replace(before, plan=replace(before.plan, nodes=(changed_scan,)))
+        with self.assertRaisesRegex(UnsupportedParameterReplay, "UNSUPPORTED_PARAMETER_REPLAY"):
+            prepare_case(before, after, {}, "DECLARE $list AS List<String>; SELECT 1")
+
     def test_parameter_replay_is_rejected_for_direct_api_and_cli(self):
         before, after = snapshot(False), snapshot(True)
         parameter = Expr(kind="parameter", parameter="$p", result_type="Bool", nullable=False)
@@ -261,11 +272,50 @@ class CaseTest(unittest.TestCase):
                 mock.patch.object(replay_cli, "run_replay") as run,
                 redirect_stdout(output),
             ):
-                code = replay_cli.main(["before", "after", "trace", str(query), "--ydb", "unused",
+                code = replay_cli.main([
+                    "before", "after", "trace", str(query), "--ydb", "unused",
                     "--baseline-endpoint", "grpc://a", "--baseline-database", "/Root/a",
-                    "--candidate-endpoint", "grpc://b", "--candidate-database", "/Root/b"])
+                    "--candidate-endpoint", "grpc://b", "--candidate-database", "/Root/b",
+                ])
             self.assertEqual(code, 2)
             self.assertEqual(json.loads(output.getvalue())["status"], "UNSUPPORTED_PARAMETER_REPLAY")
+            run.assert_not_called()
+
+    def test_secondary_unique_constraints_do_not_reach_runtime_replay(self):
+        from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import UniqueKey
+        before, after = snapshot(False), snapshot(True)
+        tables = (replace(before.tables[0], unique_keys=before.tables[0].unique_keys +
+                          (UniqueKey(("value",), True),)),)
+        before, after = replace(before, tables=tables), replace(after, tables=tables)
+        document = trace()
+        query_text = f"SELECT * FROM `{table_path(TABLE)}`;"
+        document["inputs"] = {
+            "before_semantic_sha256": snapshot_digest(before),
+            "after_semantic_sha256": snapshot_digest(after),
+            "query_sha256": hashlib.sha256(query_text.encode()).hexdigest(),
+        }
+        with self.assertRaisesRegex(ReplayError, "UNSUPPORTED_UNIQUE_CONSTRAINT_REPLAY"):
+            prepare_case(before, after, document, query_text)
+        with tempfile.TemporaryDirectory() as directory:
+            query = Path(directory) / "query.yql"
+            query.write_text(query_text, encoding="utf-8")
+            output, errors = io.StringIO(), io.StringIO()
+            with (
+                mock.patch.object(replay_cli, "load_snapshot", side_effect=[before, after]),
+                mock.patch.object(replay_cli, "load_json", return_value=document),
+                mock.patch.object(replay_cli, "run_replay") as run,
+                redirect_stdout(output), redirect_stderr(errors),
+            ):
+                code = replay_cli.main([
+                    "before", "after", "trace", str(query), "--ydb", "unused",
+                    "--baseline-endpoint", "grpc://a", "--baseline-database", "/Root/a",
+                    "--candidate-endpoint", "grpc://b", "--candidate-database", "/Root/b",
+                ])
+            self.assertEqual(code, 2)
+            self.assertEqual(output.getvalue(), "")
+            payload = json.loads(errors.getvalue())
+            self.assertEqual(payload["status"], "SETUP_ERROR")
+            self.assertIn("UNSUPPORTED_UNIQUE_CONSTRAINT_REPLAY", payload["reason"])
             run.assert_not_called()
 
     def test_prepares_exact_path_rewrite_and_column_ddl(self):

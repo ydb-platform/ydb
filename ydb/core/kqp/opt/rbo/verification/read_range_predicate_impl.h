@@ -22,19 +22,41 @@ public:
     }
 
     NJson::TJsonValue Export() {
+        if (Table.DerivedFrom && Read.StorageType == NYql::EStorageType::RowStorage) {
+            try {
+                return ExportBooleanIndexPrefix();
+            } catch (const TUnsupportedSnapshot& error) {
+                // Preserve the exact original rejection prefix and exception kind.
+                // A diagnostic failure must not replace the original rejection.
+                std::optional<TUnsupportedSnapshot> enriched;
+                try {
+                    const auto diagnostic = NDetail::TDerivedIndexRangeDiagnostic::Render(Read, Table, Range);
+                    enriched.emplace();
+                    *enriched << error.AsStrBuf() << diagnostic;
+                    // yexception has a fixed buffer: never publish a silently clipped suffix.
+                    if (enriched->AsStrBuf().size() != error.AsStrBuf().size() + diagnostic.size() ||
+                        !enriched->AsStrBuf().EndsWith(diagnostic))
+                    {
+                        enriched.reset();
+                    }
+                } catch (...) {
+                    enriched.reset();
+                }
+                if (enriched) { throw *enriched; } // plain throw, no second ythrow location
+                throw;
+            }
+        }
         if (Range.KeyColumns.size() != 1 || Range.UsedPrefixLen != 1) {
             Unsupported(
                 "Read range must constrain exactly one complete key prefix");
         }
-        if (Table.UniqueKeys.size() != 1 ||
-            Table.UniqueKeys.front().NullsDistinct ||
-            Table.UniqueKeys.front().Columns.size() != 1)
+        if (!Table.PrimaryKey || Table.PrimaryKey->size() != 1)
         {
             Unsupported(
                 "Read range requires one exact single-column primary key");
         }
         const TString& physicalKey =
-            Table.UniqueKeys.front().Columns.front();
+            Table.PrimaryKey->front();
         const TSemanticSnapshotCatalogColumnV1* catalogKey = nullptr;
         for (const auto& column : Table.Columns) {
             if (column.Name == physicalKey) {
@@ -134,6 +156,66 @@ public:
     }
 
 private:
+    NJson::TJsonValue ExportBooleanIndexPrefix() {
+        // First non-covering-index corridor: one non-NULL Bool literal prefix
+        // of the complete physical index key. MakeKeyRange pads the inclusive
+        // lower prefix with NULL and leaves the inclusive upper prefix short;
+        // together these include every suffix for precisely this Bool value.
+        // ExtractRanges only treats a serialized point as a point when its
+        // arity equals the complete key length, so this remains a range.
+        if (!TKqpTable(Read.TableCallable).SysView().StringValue().empty() ||
+            !Table.PrimaryKey || Table.PrimaryKey->size() < 2 ||
+            Range.KeyColumns != *Table.PrimaryKey ||
+            Range.UsedPrefixLen != 1 || Range.PointPrefixLen != 1 ||
+            !Range.LiteralRange || (Range.ExpectedMaxRanges && *Range.ExpectedMaxRanges != 1))
+        {
+            Unsupported("Derived index range requires one exact literal Bool prefix of its physical key");
+        }
+        const auto& name = Table.PrimaryKey->front();
+        const TSemanticSnapshotCatalogColumnV1* key = nullptr;
+        for (const auto& column : Table.Columns) { if (column.Name == name) { key = &column; } }
+        if (!key || key->Type != "Bool") { Unsupported("Derived index range prefix is not Bool"); }
+        const auto* binding = ResolveOlapColumn(name, Columns);
+        if (binding->Type != "Bool" || binding->Nullable != key->Nullable) {
+            Unsupported("Derived index range binding differs from physical index metadata");
+        }
+        const auto& range = Node(Range.LiteralRange, 1);
+        if (!range.IsList() || range.ChildrenSize() != 2) {
+            Unsupported("Derived index range requires two inclusive prefix boundaries");
+        }
+        if (range.GetTypeAnn() && (range.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Tuple ||
+            range.GetTypeAnn()->Cast<TTupleExprType>()->GetSize() != 2))
+        { Unsupported("Derived index range has an inconsistent tuple annotation"); }
+        std::optional<bool> value;
+        for (size_t side = 0; side < 2; ++side) {
+            const auto& bound = Node(*range.Child(side), 2);
+            if (!bound.IsCallable("KqlKeyInc") || bound.ChildrenSize() != 1) {
+                Unsupported("Derived index range requires one-value inclusive prefix boundaries");
+            }
+            KeyType = "Bool";
+            LiteralBoundAnnotation(bound.GetTypeAnn(), 1, "index prefix");
+            if (range.GetTypeAnn()) {
+                LiteralBoundAnnotation(range.GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[side],
+                    1, "index prefix outer tuple");
+            }
+            const auto& literal = Node(*bound.Child(0), 3);
+            if (!literal.IsCallable("Bool") || literal.ChildrenSize() != 1 || !literal.Child(0)->IsAtom()) {
+                Unsupported("Derived index range only admits direct Bool literals");
+            }
+            ExactScalarType(literal, "Bool", false, "index prefix");
+            auto exported = LiteralExpr(literal);
+            const bool current = exported["value"].GetBooleanSafe();
+            if (value && *value != current) {
+                Unsupported("Derived index prefix bounds must contain the same Bool literal");
+            }
+            value = current;
+        }
+        auto literal = JsonMap(); literal["kind"] = "literal"; literal["type"] = "Bool"; literal["value"] = *value;
+        auto result = BinaryExpr("eq", ColumnExpr(binding->Output), std::move(literal));
+        AuditExactScalarExpression(result);
+        return result;
+    }
+
     struct TLiteralBound {
         bool Inclusive = false;
         std::optional<NJson::TJsonValue> Value;

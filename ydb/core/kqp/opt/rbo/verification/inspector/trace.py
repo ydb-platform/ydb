@@ -164,7 +164,7 @@ class PreparedInspection:
         return self.problem.formula()
 
     def solve(self, solver: str | Path, timeout_ms: int | None) -> dict[str, Any]:
-        if self.problem.parameters:
+        if self.problem.parameters or self.problem.list_parameters:
             raise InspectionError(
                 "UNSUPPORTED_PARAMETER_REPLAY: query parameter values cannot yet be fixed in a concrete trace"
             )
@@ -259,6 +259,9 @@ def prepare(
         raise InspectionError(
             "UNSUPPORTED_PARAMETER_REPLAY: query parameter values cannot yet be fixed in a concrete trace"
         )
+    if any(table.derived_from is not None for snapshot in (before, after) for table in snapshot.tables) or any(
+            isinstance(node, ir.PointLookup) for snapshot in (before, after) for node in snapshot.plan.nodes):
+        raise InspectionError("UNSUPPORTED_INDEX_LOOKUP_REPLAY: index/lookup concrete traces are not yet audited")
     observation = Observation()
     problem = build_problem(
         before,

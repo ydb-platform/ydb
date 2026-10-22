@@ -12,8 +12,10 @@ TEST_SRCS(
     test_join.py
     test_key_only_aggregate.py
     test_decimal.py
+    test_distinct_aliases.py
     test_diagnostics.py
     test_encoding_strategies.py
+    test_endpoint_bag_probe.py
     test_limit.py
     test_logical_reference.py
     test_olap_filter.py
@@ -21,6 +23,10 @@ TEST_SRCS(
     test_sort.py
     test_scalar.py
     test_parameters.py
+    test_list_parameters.py
+    test_point_lookup.py
+    test_unique_constraints.py
+    test_list_lookup_joint.py
     test_sql_in.py
     test_stage_compaction.py
     test_stage_ports.py
@@ -32,6 +38,7 @@ TEST_SRCS(
     test_smt.py
     test_stable_pickle.py
     test_temporal.py
+    test_terminal_order.py
     test_verify.py
     test_window_avg.py
     test_window_rank.py
@@ -41,6 +48,8 @@ TEST_SRCS(
 
 PEERDIR(
     ydb/core/kqp/opt/rbo/verification
+    ydb/core/kqp/opt/rbo/verification/inspector
+    ydb/core/kqp/opt/rbo/verification/replay
 )
 
 DEPENDS(

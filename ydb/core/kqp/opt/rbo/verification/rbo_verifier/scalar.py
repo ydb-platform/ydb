@@ -7,6 +7,7 @@ from typing import Mapping, TypeAlias
 
 from . import decimal, floating, smt, stable_pickle
 from .ir import Expr, ValueType
+from .list_parameters import LIST_TYPES, ListParameter
 from .types import BOOL, DATE, DATE_TIME_BOUNDS, DOUBLE, VOID, family, integer_bounds, integer_width, is_scalar_type
 
 
@@ -142,18 +143,25 @@ class Encoder:
         # Query inputs belong to the database valuation, never to an execution
         # choice. One encoder is shared by both plans and all stage invocations.
         self.parameters: dict[str, Value] = {}
+        self.list_parameters: dict[str, ListParameter] = {}
         self._parameter_types: dict[str, ValueType] = {}
 
     def register_parameters(self, declarations: Mapping[str, ValueType]) -> None:
         for name, declared in declarations.items():
             if not isinstance(name, str) or len(name) < 2 or not name.startswith("$"):
                 raise smt.SmtError("only external SQL parameter names beginning with '$' are modeled")
-            if not is_scalar_type(declared.name) or type(declared.nullable) is not bool:
-                raise smt.SmtError("query parameter requires an exact scalar type and nullability")
+            is_list = declared.name in LIST_TYPES
+            if (not (is_scalar_type(declared.name) or is_list)
+                    or type(declared.nullable) is not bool or (is_list and declared.nullable)):
+                raise smt.SmtError("query parameter requires an exact supported type and nullability")
             previous = self._parameter_types.get(name)
             if previous is not None:
                 if previous != declared:
                     raise smt.SmtError(f"query parameter {name!r} has inconsistent declared types")
+                continue
+            if is_list:
+                self.list_parameters[name] = ListParameter.create(self.script, name, declared.name)
+                self._parameter_types[name] = declared
                 continue
             if declared.name == DOUBLE:
                 raise smt.SmtError("Double query parameters require a separate input-domain audit")
@@ -229,6 +237,19 @@ class Encoder:
                 expression.parameter: ValueType(expression.result_type, expression.nullable),
             })
             return self.parameters[expression.parameter]
+
+        if expression.kind == "in_parameter":
+            if (expression.parameter is None or expression.parameter_type not in LIST_TYPES
+                    or len(expression.args) != 1 or type(expression.ansi) is not bool):
+                raise smt.SmtError("malformed IN parameter expression")
+            self.register_parameters({expression.parameter: ValueType(expression.parameter_type, False)})
+            lookup = self._evaluate(expression.args[0], row, bindings, relational_values)
+            if lookup.type != "String":
+                raise smt.SmtError("IN parameter lookup must be String")
+            self.script.register_string_term(lookup.value)
+            parameter = self.list_parameters[expression.parameter]
+            is_null, truth = parameter.contains(lookup.is_null, lookup.value, expression.ansi)
+            return Value(BOOL, is_null, truth)
 
         if expression.kind == "bound":
             assert expression.depth is not None and 0 <= expression.depth < len(bindings)

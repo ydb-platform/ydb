@@ -428,6 +428,7 @@ NJson::TJsonValue VerdictForCoverageReport(
     if (status == "COUNTEREXAMPLE") {
         verdict.EraseValue("witness");
         verdict.EraseValue("parameters");
+        verdict.EraseValue("parameter_types");
     }
     return verdict;
 }
@@ -1523,7 +1524,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             "{\"row_bound\":2,\"status\":\"COUNTEREXAMPLE\",\"task_bound\":2,"
             "\"witness\":{\"table\":[{\"amount\":"
             "99999999999999999999999999999999999}]},"
-            "\"parameters\":{\"$p\":99999999999999999999999999999999999}}\n";
+            "\"parameters\":{\"$p\":99999999999999999999999999999999999,\"$list\":[\"a\",null]},"
+            "\"parameter_types\":{\"$p\":{\"type\":\"Decimal(35,0)\",\"nullable\":false},"
+            "\"$list\":{\"type\":\"List<Optional<String>>\",\"nullable\":false}}}\n";
         const TString formula = "(check-sat)\n";
         const TRBOSemanticSnapshotBoundaryResultV1 initial{
             ERBOSemanticSnapshotBoundaryV1::Initial,
@@ -1612,10 +1615,12 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(ParseJson(verifierVerdict, parsedVerdict));
         UNIT_ASSERT(parsedVerdict.Has("witness"));
         UNIT_ASSERT(parsedVerdict.Has("parameters"));
+        UNIT_ASSERT(parsedVerdict.Has("parameter_types"));
         const auto reportVerdict = VerdictForCoverageReport(
             std::move(parsedVerdict), "COUNTEREXAMPLE");
         UNIT_ASSERT(!reportVerdict.Has("witness"));
         UNIT_ASSERT(!reportVerdict.Has("parameters"));
+        UNIT_ASSERT(!reportVerdict.Has("parameter_types"));
         UNIT_ASSERT_VALUES_EQUAL(
             reportVerdict["status"].GetStringSafe(),
             "COUNTEREXAMPLE");

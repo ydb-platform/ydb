@@ -9,4 +9,8 @@ PY_SRCS(
     protocol.py
 )
 
+PEERDIR(
+    ydb/core/kqp/opt/rbo/verification
+)
+
 END()

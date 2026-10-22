@@ -324,7 +324,7 @@ class Evaluator:
         tasks: int,
         parallel_offset: int,
     ) -> Partitions:
-        if edge.kind == "map":
+        if edge.kind in {"map", "stream_lookup"}:
             if len(source.relations) != tasks:
                 raise StageError("map connection cannot change task count")
             return source

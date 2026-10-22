@@ -40,6 +40,7 @@ from .relation import (
     RelationFamily,
     WitnessRow,
     compare_families,
+    _endpoint_bag_mismatch,
     family_mismatch,
     successful_family_reachable,
 )
@@ -52,6 +53,7 @@ from .stages import (
     StageError,
 )
 from .types import family
+from .list_parameters import ListParameter, ListWitnessError, prepare_witnesses, decode_lists
 
 
 class VerificationError(ValueError):
@@ -72,6 +74,7 @@ class _ProcessDeadlineExceeded(RuntimeError):
 
 BoundaryObserver: TypeAlias = Callable[[str, RelationFamily], None]
 ComparisonObserver: TypeAlias = Callable[[FamilyComparison], None]
+RequestedValues: TypeAlias = Iterable[smt.Term] | Callable[[int | None], Iterable[smt.Term]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,8 +93,9 @@ class Problem:
     abstract_integral_average: bool = False
     observation_kind: str | None = None
     parameters: Mapping[str, Value] = field(default_factory=dict)
+    list_parameters: Mapping[str, ListParameter] = field(default_factory=dict)
 
-    def witness_values(self) -> tuple[smt.Term, ...]:
+    def witness_values(self, timeout_ms: int | None = None) -> tuple[smt.Term, ...]:
         values: list[smt.Term] = []
         for rows in self.witness.values():
             for row in rows:
@@ -104,6 +108,7 @@ class Problem:
             if parameter.is_null.operation == "symbol":
                 values.append(parameter.is_null)
             values.append(parameter.value)
+        values.extend(prepare_witnesses(self.script, self.list_parameters, timeout_ms=timeout_ms))
         return tuple(values)
 
     def formula(
@@ -160,6 +165,7 @@ class Result:
     reason: str | None = None
     semantic_mode: str | None = None
     parameters: Mapping[str, Any] | None = None
+    parameter_types: Mapping[str, Mapping[str, Any]] | None = None
 
     def to_json(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -171,6 +177,8 @@ class Result:
             result["witness"] = self.witness
         if self.parameters is not None:
             result["parameters"] = self.parameters
+        if self.parameter_types is not None:
+            result["parameter_types"] = self.parameter_types
         if self.reason is not None:
             result["reason"] = self.reason
         if self.semantic_mode is not None:
@@ -264,6 +272,8 @@ def build_problem(
         after_edge_observer,
         boundary_observer,
         comparison_observer,
+        allow_terminal_order_certificate=True,
+        allow_endpoint_bag_probe=True,
     )
 
 
@@ -690,9 +700,23 @@ def _build_problem(
     *,
     separate_stage_choices: bool = False,
     observed_order: bool | None = None,
+    allow_terminal_order_certificate: bool = False,
+    allow_endpoint_bag_probe: bool = False,
 ) -> Problem:
     before, after = _problem_snapshots((before, after))
     before_validated, after_validated = _validate_pair(before, after, row_bound)
+    certificate = None
+    if (allow_terminal_order_certificate and observed_order is None
+            and all(observer is None for observer in (
+                before_node_observer, after_node_observer, after_edge_observer,
+                boundary_observer, comparison_observer,
+            ))):
+        from .terminal_order import certify
+        certificate = certify(before_validated, after_validated)
+        if certificate is not None:
+            before_validated, after_validated = certificate.before, certificate.after
+            before, after = before_validated.snapshot, after_validated.snapshot
+            observed_order = False
     try:
         script = smt.Script(timeout_ms)
         database = Database(before, row_bound, script)
@@ -719,13 +743,24 @@ def _build_problem(
             comparison_observer(comparison)
             mismatch = comparison.mismatch
         else:
-            mismatch = family_mismatch(before_family, after_family, scalar, observed_order=observed_order)
+            mismatch = None
+            if (allow_endpoint_bag_probe and certificate is None and observed_order is None
+                    and all(observer is None for observer in (
+                        before_node_observer, after_node_observer, after_edge_observer,
+                        boundary_observer, comparison_observer,
+                    ))):
+                mismatch = _endpoint_bag_mismatch(before_family, after_family, scalar)
+            if mismatch is None:
+                mismatch = family_mismatch(before_family, after_family, scalar, observed_order=observed_order)
     except (AnalysisError, RelationError, StageError, smt.SmtError) as error:
         raise VerificationError(str(error)) from error
+    # Keep the ordinary endpoint verdict protocol. observation_kind is reserved
+    # for transformation diagnostics; the original Initial still declares the
+    # query's sequence observation, justified here by the private certificate.
     return _finish_problem(
         script, database, mismatch, soundness_exclusions, scalar.semantic_mode,
         abstract_integral_average=scalar.uses_abstract_integral_average,
-        parameters=scalar.parameters,
+        parameters=scalar.parameters, list_parameters=scalar.list_parameters,
     )
 
 
@@ -738,6 +773,7 @@ def _finish_problem(
     *,
     abstract_integral_average: bool = False,
     parameters: Mapping[str, Value] | None = None,
+    list_parameters: Mapping[str, ListParameter] | None = None,
 ) -> Problem:
     semantic_mismatch = MismatchBranch(
         "semantic_mismatch",
@@ -753,14 +789,14 @@ def _finish_problem(
         if soundness_exclusions
         else None
     )
+    # Preserve the semantic predicate identity when it is the complete
+    # obligation, so an emitted script can serve the canonical solver probe.
     script.assert_obligation(
-        smt.or_(
+        semantic_mismatch.predicate
+        if soundness_exclusion is None
+        else smt.or_(
             semantic_mismatch.predicate,
-            (
-                smt.FALSE
-                if soundness_exclusion is None
-                else soundness_exclusion.predicate
-            ),
+            soundness_exclusion.predicate,
         )
     )
     return Problem(
@@ -774,6 +810,7 @@ def _finish_problem(
         semantic_mode=semantic_mode,
         abstract_integral_average=abstract_integral_average,
         parameters={} if parameters is None else dict(parameters),
+        list_parameters={} if list_parameters is None else dict(list_parameters),
     )
 
 
@@ -791,10 +828,10 @@ def _check_boundary_roles(before: Snapshot, after: Snapshot) -> None:
 def query_solver(
     problem: Problem,
     solver: str | Path,
-    requested_values: Iterable[smt.Term] = (),
+    requested_values: RequestedValues = (),
     timeout_ms: int | None = None,
 ) -> SolverQuery:
-    requested = tuple(requested_values)
+    requested = requested_values if callable(requested_values) else tuple(requested_values)
     effective_timeout = (
         problem.script.timeout_ms
         if timeout_ms is None
@@ -953,7 +990,7 @@ def query_diagnostic_obligations(
 def _query_obligation(
     problem: Problem,
     solver: str | Path,
-    requested: tuple[smt.Term, ...],
+    requested: tuple[smt.Term, ...] | Callable[[int | None], Iterable[smt.Term]],
     budget: _SolverBudget,
     branch: MismatchBranch | None,
     check_limit_ms: int | None = None,
@@ -1008,6 +1045,16 @@ def _query_obligation(
         return SolverQuery(status, {})
     if status != "sat":
         raise SolverError(_diagnostic(first))
+
+    if callable(requested):
+        # Dense List graphs are needed only for a concrete SAT witness. Keep
+        # their aliases and budget limits out of every UNSAT proof attempt.
+        try:
+            requested = tuple(requested(budget.remaining_ms()))
+        except ListWitnessError as error:
+            return SolverQuery("unknown", {}, str(error), "model")
+        if not requested:
+            return SolverQuery("sat", {})
 
     timeout_ms = budget.remaining_ms()
     if timeout_ms == 0:
@@ -1076,22 +1123,34 @@ def solve(
     row_bound: int,
     timeout_ms: int | None = None,
 ) -> Result:
-    query = query_solver(problem, solver, problem.witness_values(), timeout_ms)
+    requested = problem.witness_values if problem.list_parameters else problem.witness_values()
+    query = query_solver(problem, solver, requested, timeout_ms)
     if query.status == "unsat":
         return Result("VERIFIED_BOUNDED", row_bound, semantic_mode=problem.semantic_mode)
     if query.status == "unknown":
-        if query.phase == "model" and problem.semantic_mode is None:
+        if query.phase == "model" and problem.semantic_mode is None and not problem.list_parameters:
             return Result("COUNTEREXAMPLE", row_bound, reason=query.reason)
         return Result("UNKNOWN", row_bound, reason=query.reason, semantic_mode=problem.semantic_mode)
     if query.status != "sat":
         raise SolverError(f"unexpected solver status {query.status!r}")
 
+    parameter_values = decode_parameters(problem.parameters, query.values, problem.script.string_literals)
+    try:
+        parameter_values.update(decode_lists(problem.list_parameters, query.values, problem.script.string_literals))
+    except ListWitnessError as error:
+        return Result("UNKNOWN", row_bound, reason=str(error), semantic_mode=problem.semantic_mode)
+    declarations = {
+        name: {"type": value.type, "nullable": value.is_null != smt.FALSE}
+        for name, value in problem.parameters.items()
+    }
+    declarations.update({name: {"type": value.type, "nullable": False}
+                         for name, value in problem.list_parameters.items()})
     return Result(
         "COUNTEREXAMPLE",
         row_bound,
         witness=decode_witness(problem.witness, query.values, problem.script.string_literals),
-        parameters=(decode_parameters(problem.parameters, query.values, problem.script.string_literals)
-                    if problem.parameters else None),
+        parameters=parameter_values or None,
+        parameter_types=declarations if problem.list_parameters else None,
     )
 
 

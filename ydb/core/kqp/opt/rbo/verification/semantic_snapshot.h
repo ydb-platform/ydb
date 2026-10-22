@@ -32,6 +32,10 @@ struct TSemanticSnapshotCatalogTableV1 {
     ui64 MaximumStoredStringCellBytes = 0;
     TVector<TSemanticSnapshotCatalogColumnV1> Columns;
     TVector<TSemanticSnapshotCatalogKeyV1> UniqueKeys;
+    // Ready ordinary GLOBAL SYNC index, exact same-name base-row projection.
+    std::optional<TString> DerivedFrom;
+    // Exact physical key identity; never inferred from a uniqueness constraint.
+    std::optional<TVector<TString>> PrimaryKey;
 };
 
 // Capture this once from the initial plan, then reuse it for both exports.  In

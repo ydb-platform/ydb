@@ -18,6 +18,7 @@ from ..rbo_verifier.ir import (
     Limit,
     OuterBind,
     Project,
+    PointLookup,
     Scan,
     Snapshot,
     Sort,
@@ -86,6 +87,9 @@ def prepare_case(
         raise UnsupportedParameterReplay(
             "UNSUPPORTED_PARAMETER_REPLAY: runtime parameter bindings are not yet modeled"
         )
+    if any(table.derived_from is not None for snapshot in (before, after) for table in snapshot.tables) or any(
+            isinstance(node, PointLookup) for snapshot in (before, after) for node in snapshot.plan.nodes):
+        raise ReplayError("UNSUPPORTED_INDEX_LOOKUP_REPLAY: index/lookup runtime replay is not yet audited")
     if before.stage_graph is not None or after.stage_graph is None:
         raise ReplayError("expected an initial logical snapshot and a final StageGraph snapshot")
     if before.tables != after.tables:

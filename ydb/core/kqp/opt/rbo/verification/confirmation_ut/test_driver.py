@@ -291,6 +291,51 @@ class ConfirmationTest(unittest.TestCase):
             copied = list(fixture.config().artifacts.rglob("*verifier*.json"))
             self.assertTrue(any(path.read_bytes() == content for path in copied))
 
+    def test_typed_list_counterexample_is_preserved_and_explicitly_unresolved(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = Fixture(Path(temporary))
+            row = fixture.report_value["queries"][0]
+            path = fixture.root / row["artifacts"]["verifier_verdict"]
+            verdict = json.loads(path.read_bytes())
+            verdict["parameters"] = {"$list": ["", "a", None], "$scalar": None}
+            verdict["parameter_types"] = {
+                "$list": {"type": "List<Optional<String>>", "nullable": False},
+                "$scalar": {"type": "String", "nullable": True}}
+            content = (json.dumps(verdict) + "\n").encode()
+            path.write_bytes(content)
+            row["artifacts"]["verifier_verdict_sha256"] = _sha(content)
+            fixture.write_report()
+            commands = FakeCommands(fixture.witnesses)
+            candidate = confirm(fixture.config(), run=commands)["candidates"][0]
+            self.assertEqual(candidate["classification"], "UNRESOLVED")
+            self.assertEqual(candidate["unresolved_phase"], "parameter_replay")
+            self.assertIn("UNSUPPORTED_PARAMETER_REPLAY", candidate["reason"])
+            self.assertEqual(commands.calls, [])
+            self.assertTrue(any(path.read_bytes() == content
+                                for path in fixture.config().artifacts.rglob("*verifier*.json")))
+
+    def test_malformed_typed_list_witness_remains_an_input_error(self):
+        for items, declaration in (([None], {"type": "List<String>", "nullable": False}),
+                                   ([["a"]], {"type": "List<String>", "nullable": False}),
+                                   (["a", "a"], {"type": "List<String>", "nullable": False}),
+                                   ([], {"type": "List<String>", "nullable": 0}),
+                                   (None, {"type": "List<String>", "nullable": False})):
+            with self.subTest(items=items, declaration=declaration), tempfile.TemporaryDirectory() as temporary:
+                fixture = Fixture(Path(temporary))
+                row = fixture.report_value["queries"][0]
+                path = fixture.root / row["artifacts"]["verifier_verdict"]
+                verdict = json.loads(path.read_bytes())
+                verdict["parameters"] = {"$list": items}
+                verdict["parameter_types"] = {"$list": declaration}
+                content = json.dumps(verdict).encode()
+                path.write_bytes(content)
+                row["artifacts"]["verifier_verdict_sha256"] = _sha(content)
+                fixture.write_report()
+                commands = FakeCommands(fixture.witnesses)
+                candidate = confirm(fixture.config(), run=commands)["candidates"][0]
+                self.assertEqual(candidate["unresolved_phase"], "input")
+                self.assertEqual(commands.calls, [])
+
     def test_malformed_parameter_witness_remains_an_input_error(self):
         for parameters in ({}, {"$p": []}, {"p": 1}, {"$p": 1.5}):
             with self.subTest(parameters=parameters), tempfile.TemporaryDirectory() as temporary:

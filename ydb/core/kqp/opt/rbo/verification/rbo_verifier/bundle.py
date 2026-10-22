@@ -85,7 +85,9 @@ def _union_catalog(pairs: tuple[SnapshotPair, ...]) -> tuple[Table, ...]:
     columns: dict[str, dict[str, Column]] = {}
     for before, _ in pairs:
         for table in before.tables:
-            if table.name in tables and tables[table.name].unique_keys != table.unique_keys:
+            if table.name in tables and (tables[table.name].unique_keys != table.unique_keys
+                                          or tables[table.name].derived_from != table.derived_from
+                                          or tables[table.name].primary_key != table.primary_key):
                 raise VerificationError(f"bundle table {table.name!r} has conflicting unique keys")
             tables[table.name] = table
             merged = columns.setdefault(table.name, {})
@@ -140,7 +142,7 @@ def build_bundle_problem(
         return _finish_problem(
             script, database, mismatch, exclusions, scalar.semantic_mode,
             abstract_integral_average=scalar.uses_abstract_integral_average,
-            parameters=scalar.parameters,
+            parameters=scalar.parameters, list_parameters=scalar.list_parameters,
         )
     except (AnalysisError, RelationError, StageError, smt.SmtError) as error:
         raise VerificationError(str(error)) from error

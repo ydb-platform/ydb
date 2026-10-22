@@ -6,6 +6,64 @@ are different evidence. The [archived finding inventory](history/pre-audit-refac
 retains the original observations and fix commits; do not read its milestone
 statuses as fresh results.
 
+## Main rebase and compilation corpus (2026-10-22)
+
+The verification branch is now based on fetched main
+`e8700d379b3b9c4fbaf68f36424e6bcf08314fd2`. The complete compilation-corpus
+campaign processed **6,813 files / 5,733 distinct queries**. Its distinct-query
+outcomes were 1,501 VERIFIED_BOUNDED, 47 UNKNOWN, 297 PREPARATION_FAILED and
+3,888 UNSUPPORTED, with no counterexamples or capture-health incidents.
+All 180 earlier distinct proofs remained; 1,321 additional distinct queries
+proved. These are endpoint proofs at two rows per table, two tasks, a ten-second
+solver budget and a separate 120-second construction deadline, not a claim of
+unbounded or runtime correctness. The frozen campaign and its complete audit
+are in `/tmp/rbo-compilation-followup-20261022`; the classified coverage gaps
+are in `/tmp/rbo-final-corpus-classifier-20261022/final-001`.
+
+The subsequent verifier checkpoint passes **225 native tests and 1,205 Python
+runtime tests**, plus all 52 import/style test items. An initially reused style
+result was rejected by the evidence collector; the test-only `--retest` run
+passed with fresh receipts. The gates are archived in
+`/tmp/rbo-next-validation-20261022/run-005`. Builds use one worker and one linker,
+with an eight-GiB allocation limit per process and a sampled 16-GiB process-tree
+RSS guard. Source files remain fixed during each build and proof campaign.
+
+On all 47 saved UNKNOWN endpoint pairs, the new verifier produces **nine bounded
+proofs and 38 UNKNOWN**, with no counterexamples. The newly proved query IDs are
+582, 584, 2370, 3260, 3763, 5163, 6229, 6532 and 6533. Bounds and deadlines are
+unchanged. Total guarded process time falls from 1,257.323 to 488.032 seconds;
+this includes construction, solver and transport, rather than solver time alone.
+All four former construction timeouts now reach the solver in 11.971–16.272
+seconds overall, with approximately 0.14–0.22 GiB peak tree RSS; their verdicts
+remain UNKNOWN. This is an incremental saved-snapshot campaign, not a second
+complete fresh corpus run. Evidence is in
+`/tmp/rbo-unknown-rerun-results-20261022/run-001`.
+
+Fresh captures of the populated/empty constant-aggregate cases now prove in
+both language versions 202501 and 202603 after exact literal `Just` export.
+The six selected-index follow-ups still have range-modeling gaps; their actual
+computed range trees are preserved in
+`/tmp/rbo-targeted-next-capture-v4-20261022/run-001`. Five of six exhaustively
+audited corpus traces prove every adjacent step. Query 4631 proves its endpoint
+but retains six unsupported comparisons around CBOTree and unassigned shuffle
+hashes; see `/tmp/rbo-pilot-adjacent-batch-draft-20261022/run-001`.
+
+A separate native investigation reproduces a spurious Decimal NaN-to-NaN match
+in both forced Grace and Block LEFT JOINs. The observed row is `(40,400)` where
+ordinary Decimal equality requires `(40,NULL)`. Core-selection and no-fallback
+checks pass. This is below the normal semantic-snapshot boundary; the affected
+physical join builder is unchanged from pinned main. A focused repair and
+expanded scalar/payload regressions are pending native validation. The original
+two failures are preserved separately in run-005's `direct-decimal-evidence`.
+
+Full TPCH/TPCDS coverage remains open. Prelaunch review of the fresh benchmark
+runner found that capture's implicit result limit can inject `Take(1001)` before
+Initial, whereas the native benchmark harness clears that limit. The prepared
+runner remains unlaunched pending configuration alignment and new validation.
+A possible literal/parameterized LIKE escape discrepancy also remains a
+source-level finding pending native reproduction. Neither is counted as an
+additional confirmed optimizer wrong-result case.
+
 ## Native representation audit (2026-10-20, in progress)
 
 The current audit is pinned to fetched main

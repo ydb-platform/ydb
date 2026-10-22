@@ -125,9 +125,11 @@ class ParameterAdmissionTest(unittest.TestCase):
             encoder.register_parameters({"$p": ValueType("Uint32", True)})
 
     def test_storage_domains_are_global_and_keep_decimal_specials(self):
-        for scalar_type, domain in (("Int8", integer_domain), ("Uint64", integer_domain),
-                                   ("Date", date_domain), ("Timestamp", date_domain), ("Timestamp64", date_domain),
-                                   ("Decimal(15,2)", decimal.domain)):
+        for scalar_type, domain in (
+            ("Int8", integer_domain), ("Uint64", integer_domain),
+            ("Date", date_domain), ("Timestamp", date_domain), ("Timestamp64", date_domain),
+            ("Decimal(15,2)", decimal.domain),
+        ):
             script = smt.Script()
             encoder = Encoder(script)
             encoder.register_parameters({"$p": ValueType(scalar_type, True)})

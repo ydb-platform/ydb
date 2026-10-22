@@ -59,6 +59,15 @@ def render_expression(expression: ir.Expr) -> str:
     kind = expression.kind
     if kind == "column":
         return f"column({_quote(str(_required(expression.column, 'column')))})"
+    if kind == "parameter":
+        name = _required(expression.parameter, "name")
+        scalar_type = _required(expression.result_type, "type")
+        nullable = _required(expression.nullable, "nullable")
+        if (not isinstance(name, str) or len(name) < 2 or not name.startswith("$")
+                or type(nullable) is not bool or expression.args):
+            raise InspectionError("malformed scalar parameter expression")
+        return (f"parameter(name={_quote(name)}, type={_quote(scalar_type)}, "
+                f"nullable={_boolean(nullable)})")
     if kind == "bound":
         depth = _required(expression.depth, "depth")
         if type(depth) is not int or depth < 0:
@@ -216,6 +225,15 @@ def render_expression(expression: ir.Expr) -> str:
         if len(expression.args) != 1:
             raise InspectionError("exists expression does not have exactly one argument")
         return f"exists(arg={render_expression(expression.args[0])})"
+    if kind == "in_parameter":
+        if (len(expression.args) != 1 or expression.parameter_type not in
+                {"List<String>", "List<Optional<String>>"} or type(expression.ansi) is not bool
+                or not isinstance(expression.parameter, str) or len(expression.parameter) < 2
+                or not expression.parameter.startswith("$")):
+            raise InspectionError("malformed IN parameter expression")
+        return (f"in_parameter(name={_quote(expression.parameter)}, "
+                f"parameter_type={_quote(expression.parameter_type)}, ansi={_boolean(expression.ansi)}, "
+                f"lookup={render_expression(expression.args[0])}, nullable={_boolean(expression.nullable)})")
     if kind == "in":
         if not 2 <= len(expression.args) <= ir.MAX_STATIC_IN_ITEMS + 1:
             raise InspectionError(
@@ -371,6 +389,10 @@ def render_node(node: ir.PlanNode) -> str:
     prefix = f"node {_quote(node.id)} "
     if isinstance(node, ir.EmptySource):
         return prefix + "empty_source"
+    if isinstance(node, ir.PointLookup):
+        return (f"point_lookup {_quote(node.id)} input={_quote(node.input)} table={_quote(node.table)} "
+                f"keys={_list(node.keys, lambda key: _quote(key.input) + '->' + _quote(key.source))} "
+                f"columns={_list(node.columns, lambda col: _quote(col.source) + '->' + _quote(col.output))}")
     if isinstance(node, ir.Scan):
         columns = _list(
             node.columns,
@@ -461,7 +483,7 @@ def render_edge(edge: ir.StageEdge) -> str:
         f"producer_output={edge.producer_output} consumer={_quote(edge.consumer)} "
         f"consumer_input={edge.consumer_input} occurrence={edge.occurrence} kind={edge.kind}"
     )
-    if edge.kind in {"map", "broadcast"}:
+    if edge.kind in {"map", "stream_lookup", "broadcast"}:
         return common
     if edge.kind == "hash_shuffle":
         use_spilling = _required(edge.use_spilling, "use_spilling")
@@ -549,6 +571,8 @@ def render_snapshot(snapshot: ir.Snapshot) -> str:
         lines.append(
             f"  table {_quote(table.name)} columns={_list(table.columns, _column)} "
             f"unique_keys={keys}"
+            + (f" primary_key={table.primary_key!r}" if table.primary_key is not None else "")
+            + (f" derived_from={_quote(table.derived_from)}" if table.derived_from is not None else "")
         )
 
     lines.extend((

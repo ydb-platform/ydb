@@ -1,6 +1,8 @@
 #include "semantic_snapshot.h"
+#include "read_range_diagnostics_impl.h"
 
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_context.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
@@ -147,11 +149,11 @@ void AppendIdentityField(TStringBuilder& out, TStringBuf name, TStringBuf value)
     out << name << ":" << value.size() << ":" << value << ";";
 }
 
-TTableReference TableReference(const TOpRead& read, TStringBuf cluster) {
-    if (!read.TableCallable || !TKqpTable::Match(read.TableCallable.Get())) {
+TTableReference TableReference(const TExprNode::TPtr& tableNode, TStringBuf cluster) {
+    if (!tableNode || !TKqpTable::Match(tableNode.Get())) {
         Unsupported("Read has no KqpTable metadata node");
     }
-    const auto table = TKqpTable(read.TableCallable);
+    const auto table = TKqpTable(tableNode);
     const TString path = table.Path().StringValue();
     if (path.empty()) {
         Unsupported("Read has an empty table path");
@@ -164,6 +166,31 @@ TTableReference TableReference(const TOpRead& read, TStringBuf cluster) {
     AppendIdentityField(identity, "sys_view", table.SysView().StringValue());
     AppendIdentityField(identity, "version", table.Version().StringValue());
     return {identity, path};
+}
+
+TTableReference TableReference(const TOpRead& read, TStringBuf cluster) {
+    return TableReference(read.TableCallable, cluster);
+}
+
+TTableReference MetadataTableReference(const TKikimrTableMetadata& table, TStringBuf cluster) {
+    TStringBuilder identity;
+    AppendIdentityField(identity, "cluster", cluster);
+    AppendIdentityField(identity, "path", table.Name);
+    AppendIdentityField(identity, "path_id", table.PathId.ToString());
+    AppendIdentityField(identity, "sys_view", table.SysView);
+    AppendIdentityField(identity, "version", ToString(table.SchemaVersion));
+    return {identity, table.Name};
+}
+
+void CheckPointLookupShape(const TOpTableLookup& lookup) {
+    if (lookup.Strategy != ELookupStrategy::LookupRows || lookup.IsJoin() || !lookup.JoinKind.empty() ||
+        lookup.Prefix || lookup.FetchedRowFilter || !lookup.ResidualJoinKeys.Items().empty() ||
+        lookup.AllowNullKeys || lookup.KeysFromInputLookup || lookup.LookupKeys.Items().empty())
+    {
+        Unsupported("TableLookup supports only plain LookupRows with a complete physical key");
+    }
+    // SourceRead is optimizer provenance: the LookupRows physical builder does
+    // not execute it. Executed predicates remain on the probe subtree.
 }
 
 void VisitOperators(
@@ -193,6 +220,13 @@ void ValidateOperatorArity(IOperator& op, bool allowRoot) {
             if (children != 0) {
                 Unsupported("Read unexpectedly has children");
             }
+            return;
+
+        case EOperator::TableLookup:
+            if (children != 1) {
+                Unsupported("TableLookup must have one probe input");
+            }
+            CheckPointLookupShape(static_cast<const TOpTableLookup&>(op));
             return;
 
         case EOperator::Replicate:
@@ -627,6 +661,10 @@ void AuditExactScalarExpression(const NJson::TJsonValue& root) {
             kind == "cast_double" || kind == "sqrt_double" || kind == "is_nan_double")
         {
             push(expression["arg"]);
+            continue;
+        }
+        if (kind == "in_parameter") {
+            push(expression["lookup"]);
             continue;
         }
         if (kind == "in") {
@@ -2588,14 +2626,14 @@ const TExprNode* ExactAlwaysPresentLiteralJustArgument(
 
     const auto& argument = *node.Child(0);
     TString argumentType;
-    if (argument.IsCallable("Date") &&
-        IsExactDataAnnotation(
-            argument.GetTypeAnn(),
-            NUdf::EDataSlot::Date,
-            false))
-    {
+    if (argument.IsCallable() && IsSupportedLiteralType(argument.Content())) {
+        const auto slot = NUdf::FindDataSlot(argument.Content());
+        if (!slot || !IsExactDataAnnotation(argument.GetTypeAnn(), *slot, false)) {
+            Unsupported(
+                "Exact literal Just requires a required literal with a matching Data annotation");
+        }
         LiteralExpr(argument);
-        argumentType = "Date";
+        argumentType = TString(argument.Content());
     } else if (const auto convert = CompleteIntegerLiteralConvert(argument);
         convert)
     {
@@ -4911,6 +4949,120 @@ TScalarParameter AuditScalarParameter(const TExprNode& node) {
     return {TString(node.Child(0)->Content()), type, nullable};
 }
 
+// A List input is modeled only by a direct SqlIn consumer. It must never
+// become a generic scalar/opaque parameter or a row-source carrier.
+struct TStringListParameter {
+    TString Name;
+    TString Type;
+    bool NullableItems;
+};
+
+TStringListParameter AuditStringListParameter(const TExprNode& node) {
+    CheckScalarSafetyMetadata(node);
+    CheckScalarArity(node, 2, 2);
+    if (!node.IsCallable("Parameter") || !node.Child(0)->IsAtom()) {
+        Unsupported("SqlIn List Parameter requires an external name atom");
+    }
+    CheckScalarSafetyMetadata(*node.Child(0));
+    const auto name = node.Child(0)->Content();
+    if (name.size() < 2 || !name.StartsWith("$")) {
+        Unsupported("Only external SQL Parameter names beginning with '$' are modeled");
+    }
+    const auto* annotation = node.GetTypeAnn().Get();
+    if (!annotation || annotation->GetKind() != ETypeAnnotationKind::List) {
+        Unsupported("SqlIn Parameter requires a non-optional List<String> collection");
+    }
+    const auto* itemType = annotation->Cast<TListExprType>()->GetItemType();
+    bool itemNullable = false;
+    if (TypeName(itemType, &itemNullable) != "String") {
+        Unsupported("SqlIn Parameter items must be exactly String or Optional<String>");
+    }
+    const auto& descriptor = *node.Child(1);
+    if (!descriptor.IsCallable("ListType") || descriptor.ChildrenSize() != 1) {
+        Unsupported("SqlIn Parameter requires an exact ListType descriptor");
+    }
+    bool descriptorNullable = false;
+    if (DataTypeDescriptorName(*descriptor.Child(0), &descriptorNullable) != "String" ||
+        descriptorNullable != itemNullable)
+    {
+        Unsupported("SqlIn List Parameter item descriptor disagrees with its annotation");
+    }
+    // Check each nested descriptor against its own expected type. In particular,
+    // a correct outer List annotation cannot conceal a contradictory inner Type.
+    const TExprNode* current = &descriptor;
+    const TTypeAnnotationNode* expected = annotation;
+    while (true) {
+        CheckScalarSafetyMetadata(*current);
+        const auto* type = current->GetTypeAnn().Get();
+        if (!type || type->GetKind() != ETypeAnnotationKind::Type ||
+            !IsSameAnnotation(*type->Cast<TTypeExprType>()->GetType(), *expected))
+        {
+            Unsupported("SqlIn List Parameter descriptor annotations disagree");
+        }
+        if (current->IsCallable("DataType")) {
+            for (const auto& atom : current->Children()) {
+                CheckScalarSafetyMetadata(*atom);
+            }
+            break;
+        }
+        if (expected->GetKind() == ETypeAnnotationKind::List) {
+            expected = expected->Cast<TListExprType>()->GetItemType();
+        } else if (expected->GetKind() == ETypeAnnotationKind::Optional) {
+            expected = expected->Cast<TOptionalExprType>()->GetItemType();
+        } else {
+            Unsupported("SqlIn List Parameter has an unsupported nested descriptor");
+        }
+        current = current->Child(0);
+    }
+    return {TString(name), itemNullable ? "List<Optional<String>>" : "List<String>", itemNullable};
+}
+
+void AuditListParameterLookupSafety(const TExprNode& lookup) {
+    // Some older scalar literal paths only audit the root. A new consumer must
+    // not accidentally admit unsafe payload atoms through those legacy paths.
+    TVector<std::pair<const TExprNode*, size_t>> pending{{&lookup, 1}};
+    size_t visited = 0;
+    while (!pending.empty()) {
+        const auto [node, depth] = pending.back();
+        pending.pop_back();
+        if (++visited > MaxExactScalarNodes || depth > MaxExactScalarDepth) {
+            Unsupported("SqlIn Parameter lookup exceeds its source safety audit budget");
+        }
+        CheckScalarSafetyMetadata(*node);
+        if (node->ChildrenSize() > MaxExactScalarNodes - visited ||
+            pending.size() > MaxExactScalarNodes - visited - node->ChildrenSize())
+        {
+            Unsupported("SqlIn Parameter lookup exceeds its source safety audit budget");
+        }
+        for (const auto& child : node->Children()) {
+            pending.emplace_back(child.Get(), depth + 1);
+        }
+    }
+}
+
+bool AuditListParameterSqlInOptions(const TExprNode& options) {
+    CheckScalarSafetyMetadata(options);
+    if (!options.IsList()) {
+        Unsupported("SqlIn options are not a tuple");
+    }
+    THashSet<TString> names;
+    for (const auto& option : options.Children()) {
+        CheckScalarSafetyMetadata(*option);
+        if (!option->IsList() || option->ChildrenSize() != 1 || !option->Child(0)->IsAtom()) {
+            Unsupported("SqlIn option must be a one-atom tuple");
+        }
+        CheckScalarSafetyMetadata(*option->Child(0));
+        const TString name(option->Child(0)->Content());
+        if (name != "ansi" && name != "warnNoAnsi" && name != "isCompact") {
+            Unsupported(TStringBuilder() << "Unsupported List Parameter SqlIn option " << name);
+        }
+        if (!names.insert(name).second) {
+            Unsupported(TStringBuilder() << "Duplicate SqlIn option " << name);
+        }
+    }
+    return names.contains("ansi");
+}
+
 NJson::TJsonValue ParameterExpr(const TString& name, const TString& type, bool nullable) {
     auto result = JsonMap();
     result["kind"] = "parameter";
@@ -6236,8 +6388,8 @@ NJson::TJsonValue ExportExprNode(
     }
 
     if (const auto* argument = ExactAlwaysPresentLiteralJustArgument(node)) {
-        // Just of either a direct Date literal or a complete integer-literal
-        // Convert is always present. Preserve the Optional result shape with
+        // Just of a supported direct non-null scalar literal or a complete
+        // integer-literal Convert is always present. Preserve the Optional result shape with
         // an explicit unreachable NULL branch.
         TOpaqueSourceAuditor(
             rowArgument,
@@ -7000,11 +7152,31 @@ NJson::TJsonValue ExportExprNode(
         if (ScalarTypeName(node, &resultNullable, binary64Mode) != "Bool") {
             Unsupported("SqlIn result is not Bool");
         }
+        const auto& collection = *node.Child(0);
+        if (collection.IsCallable("Parameter")) {
+            CheckScalarSafetyMetadata(node);
+            AuditListParameterLookupSafety(*node.Child(1));
+            const auto parameter = AuditStringListParameter(collection);
+            const bool ansi = AuditListParameterSqlInOptions(*node.Child(2));
+            if (lookupType != "String" || resultNullable != (lookupNullable || (ansi && parameter.NullableItems))) {
+                Unsupported("SqlIn List Parameter lookup/result type or nullability disagrees");
+            }
+            auto result = JsonMap();
+            result["kind"] = "in_parameter";
+            result["name"] = parameter.Name;
+            result["parameter_type"] = parameter.Type;
+            result["ansi"] = ansi;
+            result["type"] = "Bool";
+            result["nullable"] = resultNullable;
+            result["lookup"] = ExportExprNode(
+                *node.Child(1), rowArgument, visibleColumns, boundArguments, budget,
+                normalizedDepth + 1, sourceDepth + 1, binary64Mode);
+            return result;
+        }
         if (resultNullable != lookupNullable) {
             Unsupported("SqlIn result nullability does not match its lookup");
         }
 
-        const auto& collection = *node.Child(0);
         if (!collection.IsList() && !collection.IsCallable("AsList")) {
             Unsupported("SqlIn collection is not a direct static tuple or AsList");
         }
@@ -11811,6 +11983,25 @@ private:
             case EOperator::EmptySource:
                 break;
 
+            case EOperator::TableLookup: {
+                auto& lookup = static_cast<TOpTableLookup&>(base);
+                const auto table = TableReference(lookup.Table, Cluster);
+                const auto* captured = Catalog.FindPtr(table.Identity);
+                if (!captured) { Unsupported("TableLookup stored-value provenance lacks its target catalog"); }
+                for (const auto id : lookup.GetColumns()) {
+                    const TString& name = Root.PlanProps.InfoUnitRegistry.Get(id).GetColumnName();
+                    for (const auto& column : (*captured)->Columns) {
+                        if (column.Name == name && (column.Type == "String" || column.Type == "Utf8") &&
+                            (*captured)->MaximumStoredStringCellBytes != 0)
+                        {
+                            result.emplace(ToString(id), TStoredStringProvenance{
+                                column.Nullable, (*captured)->MaximumStoredStringCellBytes, column.Type});
+                        }
+                    }
+                }
+                break;
+            }
+
             case EOperator::Source: {
                 auto& read = static_cast<TOpRead&>(base);
                 const auto table = TableReference(read, Cluster);
@@ -12026,6 +12217,7 @@ private:
         switch (base.GetKind()) {
             case EOperator::EmptySource:
             case EOperator::Source:
+            case EOperator::TableLookup:
                 break;
 
             case EOperator::Replicate: {
@@ -12451,6 +12643,75 @@ private:
                 node["op"] = "project";
                 node["input"] = children.front();
                 node["ordered"] = false;
+                node["columns"] = std::move(columns);
+                return node;
+            }
+
+            case EOperator::TableLookup: {
+                auto& lookup = static_cast<TOpTableLookup&>(base);
+                CheckPointLookupShape(lookup);
+                if (children.size() != 1) { Unsupported("TableLookup has an invalid probe arity"); }
+                const auto reference = TableReference(lookup.Table, Cluster);
+                const auto* captured = Catalog.FindPtr(reference.Identity);
+                if (!captured || (*captured)->DerivedFrom || !(*captured)->PrimaryKey || (*captured)->PrimaryKey->empty() ||
+                    !TKqpTable(lookup.Table).SysView().StringValue().empty())
+                {
+                    Unsupported("TableLookup requires a captured ordinary base table with its physical key");
+                }
+                // This corridor only follows a validated ready synchronous index
+                // of this very target; arbitrary lookup join families stay closed.
+                auto* probe = lookup.GetInput().Get();
+                if (probe->GetKind() == EOperator::Filter) { probe = probe->GetChild(0).Get(); }
+                if (probe->GetKind() != EOperator::Source) {
+                    Unsupported("TableLookup probe must be one index Read with an optional residual Filter");
+                }
+                const auto indexReference = TableReference(static_cast<const TOpRead&>(*probe), Cluster);
+                const auto* index = Catalog.FindPtr(indexReference.Identity);
+                if (!index || !(*index)->DerivedFrom || *(*index)->DerivedFrom != reference.Identity) {
+                    Unsupported("TableLookup probe must be a derived synchronous index of its target");
+                }
+                const auto& primaryKey = *(*captured)->PrimaryKey;
+                if (lookup.LookupKeys.Items().size() != primaryKey.size()) {
+                    Unsupported("TableLookup does not bind every physical primary-key component");
+                }
+                THashMap<TString, const TSemanticSnapshotCatalogColumnV1*> physical;
+                for (const auto& column : (*captured)->Columns) { physical.emplace(column.Name, &column); }
+                auto keys = JsonArray();
+                size_t ordinal = 0;
+                THashSet<TString> inputNames;
+                for (const auto& [id, name] : lookup.LookupKeys.Items()) {
+                    const TString input = ToString(id);
+                    const auto* column = physical.FindPtr(name);
+                    if (name != primaryKey.at(ordinal++) || !column || !inputNames.insert(input).second ||
+                        ExactType(OutputType(*lookup.GetInput(), input)).Name != (*column)->Type)
+                    {
+                        Unsupported("TableLookup key order, identity, or scalar type differs from the physical key");
+                    }
+                    auto key = JsonMap(); key["input"] = input; key["source"] = name;
+                    keys.AppendValue(std::move(key));
+                }
+                auto columns = JsonArray();
+                THashSet<TString> fetched;
+                for (const auto id : lookup.GetColumns()) {
+                    const TString name = Root.PlanProps.InfoUnitRegistry.Get(id).GetColumnName();
+                    const TString output = ToString(id);
+                    const auto* column = physical.FindPtr(name);
+                    const auto type = ExactType(OutputType(lookup, output));
+                    if (!column || !fetched.insert(name).second || type.Name != (*column)->Type ||
+                        type.Nullable != (*column)->Nullable)
+                    {
+                        Unsupported("TableLookup fetched fields disagree with captured storage metadata");
+                    }
+                    auto mapping = JsonMap(); mapping["source"] = name; mapping["output"] = output;
+                    columns.AppendValue(std::move(mapping));
+                }
+                if (OutputStructType(lookup)->GetSize() != SnapshotOutputIUs(lookup).size()) {
+                    Unsupported("TableLookup output contains unmodeled fields");
+                }
+                node["op"] = "point_lookup";
+                node["input"] = children.front();
+                node["table"] = reference.Identity;
+                node["keys"] = std::move(keys);
                 node["columns"] = std::move(columns);
                 return node;
             }
@@ -13019,34 +13280,8 @@ private:
                     Unsupported(
                         "Aggregate supports at most two ordinary distinct traits");
                 }
-                if (aggregate.IsDistinctAll() &&
-                    (keyColumns.empty() || traits.size() != keyColumns.size()))
-                {
-                    Unsupported(
-                        "DistinctAll requires one distinct trait for each ordered key");
-                }
-
-                if (aggregate.IsDistinctAll()) {
-                    // Native traits are indexed by their output IDs. Their order
-                    // need not match the grouping tuple. Normalize only after
-                    // checking an exact bijection from input keys to aliases;
-                    // every output keeps its original source binding.
-                    THashMap<TString, size_t> aliases;
-                    for (size_t index = 0; index < traits.size(); ++index) {
-                        if (!aliases.emplace(traits[index].OriginalColName.GetFullName(), index).second) {
-                            Unsupported("DistinctAll has multiple aliases for one grouping key");
-                        }
-                    }
-                    TVector<TSnapshotAggregationTrait> ordered;
-                    ordered.reserve(keyColumns.size());
-                    for (const auto& key : keyColumns) {
-                        const auto* index = aliases.FindPtr(key.GetFullName());
-                        if (!index) {
-                            Unsupported("DistinctAll has no alias for a grouping key");
-                        }
-                        ordered.push_back(traits[*index]);
-                    }
-                    traits = std::move(ordered);
+                if (aggregate.IsDistinctAll() && keyColumns.empty()) {
+                    Unsupported("DistinctAll requires nonempty grouping keys");
                 }
 
                 auto keys = JsonArray();
@@ -13054,8 +13289,16 @@ private:
                 THashSet<TString> seenKeys;
                 for (const auto& key : keyColumns) {
                     const TString name = key.GetFullName();
-                    if (name.empty() || !inputNames.contains(name) || !seenKeys.insert(name).second) {
+                    if (name.empty() || !inputNames.contains(name)) {
                         Unsupported(TStringBuilder() << "Invalid Aggregate key " << name);
+                    }
+                    if (!seenKeys.insert(name).second) {
+                        if (!aggregate.IsDistinctAll()) {
+                            Unsupported(TStringBuilder() << "Invalid Aggregate key " << name);
+                        }
+                        // Repeating a direct IU does not change its grouping
+                        // tuple. Retain every result alias below, independently.
+                        continue;
                     }
                     keys.AppendValue(name);
                     if (!aggregate.IsDistinctAll()) {
@@ -13076,6 +13319,7 @@ private:
                 }
 
                 auto aggregates = JsonArray();
+                THashSet<TString> distinctAliasKeys;
                 THashSet<TString> integralAverageOutputs;
                 for (size_t index = 0; index < traits.size(); ++index) {
                     const auto& trait = traits[index];
@@ -13172,15 +13416,14 @@ private:
                         }
                     }
                     if (aggregate.IsDistinctAll()) {
-                        const TString key = keyColumns[index].GetFullName();
                         if (trait.AggFunction != "distinct" ||
-                            input != key ||
+                            !seenKeys.contains(input) ||
                             trait.Distinct ||
                             trait.Unwrap)
                         {
                             Unsupported(
                                 "DistinctAll traits must be plain distinct "
-                                "aliases of their corresponding ordered keys");
+                                "aliases of grouping keys");
                         }
                         bool inputNullable = false;
                         const TString inputType = TypeName(
@@ -13193,6 +13436,7 @@ private:
                                 "DistinctAll output type and nullability must "
                                 "match its input key");
                         }
+                        distinctAliasKeys.insert(input);
                     } else if (trait.AggFunction == "distinct") {
                         Unsupported(
                             "The distinct aggregate requires DistinctAll");
@@ -13247,6 +13491,9 @@ private:
                         item["state"] = std::move(state);
                     }
                     aggregates.AppendValue(std::move(item));
+                }
+                if (aggregate.IsDistinctAll() && distinctAliasKeys != seenKeys) {
+                    Unsupported("DistinctAll aliases must cover every grouping key");
                 }
                 const auto* outputStruct = OutputStructType(aggregate);
                 if (outputStruct->GetItems().size() != expectedOutputs.size()) {
@@ -13474,6 +13721,7 @@ private:
 
     struct TBoundary {
         IOperator* ProducerNode = nullptr;
+        IOperator* ConsumerNode = nullptr;
         TIntrusivePtr<TConnection> Connection;
         ui32 Occurrence = 0;
     };
@@ -13957,7 +14205,8 @@ private:
                 const auto producerStage = OperatorStage(*child);
                 if (producerStage == consumerStage) {
                     if (consumerNode->GetKind() == EOperator::Join ||
-                        consumerNode->GetKind() == EOperator::UnionAll)
+                        consumerNode->GetKind() == EOperator::UnionAll ||
+                        consumerNode->GetKind() == EOperator::TableLookup)
                     {
                         Unsupported(
                             "StageGraph Join/UnionAll input must be a cross-stage consumer input");
@@ -13978,7 +14227,7 @@ private:
                 if (!connection) {
                     Unsupported("StageGraph lacks a connection for a cross-stage logical child");
                 }
-                boundaries.push_back({child, connection, static_cast<ui32>(occurrence)});
+                boundaries.push_back({child, consumerNode, connection, static_cast<ui32>(occurrence)});
                 LogicalInputNodes[consumerStage].push_back(NodeId(*child));
             }
         }
@@ -14059,6 +14308,106 @@ private:
             DecimalAverageCarrierOutputs.FindPtr(
                 boundary.ProducerNode);
 
+        if (const auto* stream = dynamic_cast<const TStreamLookupConnection*>(&connection)) {
+            CheckConnectionType(connection, "StreamLookup");
+            if (boundary.ConsumerNode->GetKind() != EOperator::TableLookup ||
+                LogicalInputNodes[pair.second].size() != 1 || consumerInput != 0)
+            {
+                Unsupported("StreamLookup must be the sole input of its TableLookup stage");
+            }
+            auto& lookup = static_cast<TOpTableLookup&>(*boundary.ConsumerNode);
+            CheckPointLookupShape(lookup);
+            if (stream->Table != lookup.Table || !stream->Columns || !stream->Columns->IsList() ||
+                !stream->Settings || !stream->Settings->IsList() || stream->Settings->ChildrenSize() != 1 ||
+                !stream->InputType)
+            {
+                Unsupported("StreamLookup connection has mismatched table or noncanonical settings");
+            }
+            const auto& setting = *stream->Settings->Child(0);
+            if (!setting.IsList() || setting.ChildrenSize() != 2 || !setting.Child(0)->IsAtom() ||
+                !setting.Child(1)->IsAtom() || setting.Child(0)->Content() != "Strategy" ||
+                setting.Child(1)->Content() != "LookupRows")
+            {
+                Unsupported("StreamLookup supports exactly the LookupRows strategy setting");
+            }
+            THashSet<TString> expected, actual;
+            for (const auto id : lookup.GetColumns()) {
+                expected.insert(Root.PlanProps.InfoUnitRegistry.Get(id).GetColumnName());
+            }
+            for (const auto& column : stream->Columns->Children()) {
+                if (!column->IsAtom() || !actual.insert(TString(column->Content())).second) {
+                    Unsupported("StreamLookup fetched fields are not unique atoms");
+                }
+            }
+            if (actual != expected) { Unsupported("StreamLookup fetched columns disagree with TableLookup"); }
+            const auto& type = *stream->InputType;
+            if (!type.IsCallable("ListType") || type.ChildrenSize() != 1 ||
+                !type.Child(0)->IsCallable("StructType") ||
+                type.Child(0)->ChildrenSize() != lookup.LookupKeys.Items().size())
+            {
+                Unsupported("StreamLookup input type must describe the exact physical key struct list");
+            }
+            const TStructExprType* annotatedKeys = nullptr;
+            if (type.GetTypeAnn()) {
+                const auto& annotation = DescribedType(type, "StreamLookup annotated input");
+                if (annotation.GetKind() != ETypeAnnotationKind::List ||
+                    annotation.Cast<TListExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Struct)
+                { Unsupported("StreamLookup input descriptor has a contradictory annotation"); }
+                annotatedKeys = annotation.Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                if (annotatedKeys->GetSize() != lookup.LookupKeys.Items().size()) {
+                    Unsupported("StreamLookup input annotation omits or adds physical keys");
+                }
+            }
+            const TStructExprType* annotatedStruct = nullptr;
+            if (type.Child(0)->GetTypeAnn()) {
+                const auto& annotation = DescribedType(*type.Child(0), "StreamLookup annotated key struct");
+                if (annotation.GetKind() != ETypeAnnotationKind::Struct ||
+                    annotation.Cast<TStructExprType>()->GetSize() != lookup.LookupKeys.Items().size())
+                { Unsupported("StreamLookup key struct has a contradictory annotation"); }
+                annotatedStruct = annotation.Cast<TStructExprType>();
+            }
+            THashMap<TString, const TExprNode*> keyTypes;
+            for (const auto& item : type.Child(0)->Children()) {
+                if (!item->IsList() || item->ChildrenSize() != 2 || !item->Child(0)->IsAtom() ||
+                    !keyTypes.emplace(TString(item->Child(0)->Content()), item->Child(1)).second)
+                { Unsupported("StreamLookup key type has invalid or duplicate named fields"); }
+            }
+            for (const auto& [id, name] : lookup.LookupKeys.Items()) {
+                const auto* field = keyTypes.FindPtr(name);
+                if (!field) { Unsupported("StreamLookup key type omits a physical key component"); }
+                const auto* inputType = OutputType(*boundary.ProducerNode, ToString(id));
+                const auto exact = ExactType(inputType);
+                if (((*field)->GetTypeAnn() && !IsSameAnnotation(DescribedType(**field, "StreamLookup key"), *inputType)) ||
+                    (annotatedKeys && (!annotatedKeys->FindItemType(name) ||
+                     !IsSameAnnotation(*annotatedKeys->FindItemType(name), *inputType))) ||
+                    (annotatedStruct && (!annotatedStruct->FindItemType(name) ||
+                     !IsSameAnnotation(*annotatedStruct->FindItemType(name), *inputType))))
+                { Unsupported("StreamLookup key descriptor has contradictory scalar annotations"); }
+                const auto* scalar = *field;
+                if (exact.Nullable) {
+                    if (!scalar->IsCallable("OptionalType") || scalar->ChildrenSize() != 1) {
+                        Unsupported("StreamLookup key descriptor loses probe nullability");
+                    }
+                    scalar = scalar->Child(0);
+                }
+                if (scalar->GetTypeAnn()) {
+                    const auto annotated = ExactType(&DescribedType(*scalar, "StreamLookup primitive key"));
+                    if (annotated.Nullable || annotated.Name != exact.Name) {
+                        Unsupported("StreamLookup primitive key has a contradictory annotation");
+                    }
+                }
+                if (!scalar->IsCallable("DataType") || scalar->ChildrenSize() != 1 ||
+                    !scalar->Child(0)->IsAtom() || scalar->Child(0)->Content() != exact.Name)
+                {
+                    Unsupported("StreamLookup key descriptor is not the exact primitive probe type");
+                }
+            }
+            edge["kind"] = "stream_lookup";
+            return edge;
+        }
+        if (boundary.ConsumerNode->GetKind() == EOperator::TableLookup) {
+            Unsupported("TableLookup stage input requires its audited StreamLookup connection");
+        }
         if (dynamic_cast<const TMapConnection*>(&connection)) {
             CheckConnectionType(connection, "Map");
             edge["kind"] = "map";
@@ -14285,7 +14634,8 @@ private:
                     continue;
                 }
                 for (const auto& connection : Graph.GetConnections(producer, stageId)) {
-                    if (dynamic_cast<const TMapConnection*>(connection.Get())) {
+                    if (dynamic_cast<const TMapConnection*>(connection.Get()) ||
+                        dynamic_cast<const TStreamLookupConnection*>(connection.Get())) {
                         taskCount = TaskCounts[producer];
                         forceMapTasks = true;
                         ++mapConnectionCount;
@@ -14317,7 +14667,8 @@ private:
                     continue;
                 }
                 for (const auto& connection : Graph.GetConnections(producer, stageId)) {
-                    if (dynamic_cast<const TMapConnection*>(connection.Get())) {
+                    if (dynamic_cast<const TMapConnection*>(connection.Get()) ||
+                        dynamic_cast<const TStreamLookupConnection*>(connection.Get())) {
                         if (TaskCounts[producer] != taskCount) {
                             Unsupported(
                                 "StageGraph Map producer and consumer task counts must match");
@@ -14413,6 +14764,23 @@ NJson::TJsonValue ExportCatalog(const TSemanticSnapshotCatalogV1& catalog) {
             keys.AppendValue(std::move(keyJson));
         }
         tableJson["unique_keys"] = std::move(keys);
+        if (table.PrimaryKey) {
+            auto primary = JsonArray();
+            THashSet<TString> seen;
+            if (table.PrimaryKey->empty() || !std::any_of(table.UniqueKeys.begin(), table.UniqueKeys.end(),
+                [&](const auto& key) { return !key.NullsDistinct && key.Columns == *table.PrimaryKey; }))
+            {
+                Unsupported("Catalog physical primary key lacks its exact NULL-safe uniqueness constraint");
+            }
+            for (const auto& name : *table.PrimaryKey) {
+                if (!columnNames.contains(name) || !seen.insert(name).second) {
+                    Unsupported("Catalog physical primary key has unknown or repeated columns");
+                }
+                primary.AppendValue(name);
+            }
+            tableJson["primary_key"] = std::move(primary);
+        }
+        if (table.DerivedFrom) { tableJson["derived_from"] = *table.DerivedFrom; }
         tables.AppendValue(std::move(tableJson));
     }
 
@@ -14472,6 +14840,101 @@ TResult CatchUnsupported(TAction&& action) {
     return result;
 }
 
+// Collect enforced input-domain constraints even when an index is not selected.
+// Ready UNIQUE implementations may be derived below only after this validation.
+TVector<TSemanticSnapshotCatalogKeyV1> CaptureUniqueIndexConstraints(
+    const TKikimrTableMetadata& metadata, TStringBuf cluster, TStringBuf identity,
+    TSet<TString>& columns)
+{
+    if (metadata.IsIndexImplTable) {
+        Unsupported("Direct index-implementation reads lack parent UNIQUE constraint metadata");
+    }
+    TVector<TSemanticSnapshotCatalogKeyV1> constraints;
+    THashSet<TString> names;
+    THashSet<TString> implementationIdentities;
+    for (size_t ordinal = 0; ordinal < metadata.Indexes.size(); ++ordinal) {
+        const auto& index = metadata.Indexes[ordinal];
+        if (index.Name.empty() || index.Name.Contains('/') || !names.insert(index.Name).second) {
+            Unsupported("Catalog has ambiguous index names");
+        }
+        switch (index.Type) {
+            case TIndexDescription::EType::GlobalSyncUnique:
+                break;
+            case TIndexDescription::EType::GlobalSync:
+            case TIndexDescription::EType::GlobalAsync:
+            case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+            case TIndexDescription::EType::GlobalFulltextPlain:
+            case TIndexDescription::EType::GlobalFulltextRelevance:
+            case TIndexDescription::EType::LocalBloomFilter:
+            case TIndexDescription::EType::LocalBloomNgramFilter:
+            case TIndexDescription::EType::GlobalJson:
+            case TIndexDescription::EType::LocalMinMax:
+            case TIndexDescription::EType::GlobalFulltextCompact:
+            case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+            case TIndexDescription::EType::GlobalJsonCompact:
+                continue; // Known non-unique index kinds add no input constraint.
+            default:
+                Unsupported("Catalog index kind has unaudited uniqueness semantics");
+        }
+        if (index.State != TIndexDescription::EIndexState::Ready ||
+            !std::holds_alternative<std::monostate>(index.SpecializedIndexDescription) ||
+            !metadata.DoesExist || metadata.Kind != EKikimrTableKind::Datashard ||
+            !metadata.SysView.empty() || metadata.KeyColumnNames.empty() ||
+            metadata.Indexes.size() != metadata.ImplTables.size() ||
+            MetadataTableReference(metadata, cluster).Identity != identity ||
+            index.KeyColumns.empty())
+        {
+            Unsupported("Catalog UNIQUE index requires complete ready ordinary row-table metadata");
+        }
+        const auto& impl = metadata.ImplTables[ordinal];
+        const TString expectedPath = TStringBuilder() << metadata.Name << "/" << index.Name << "/indexImplTable";
+        if (!impl || impl->Next || !impl->DoesExist || impl->Kind != EKikimrTableKind::Datashard ||
+            !impl->SysView.empty() || impl->Name != expectedPath || impl->Cluster != metadata.Cluster ||
+            !impl->Indexes.empty())
+        {
+            Unsupported("Catalog UNIQUE index implementation is missing, chained, or inconsistent");
+        }
+        const auto implementationIdentity = MetadataTableReference(*impl, cluster).Identity;
+        if (implementationIdentity == identity || !implementationIdentities.insert(implementationIdentity).second) {
+            Unsupported("Catalog UNIQUE index implementations have ambiguous identities");
+        }
+        TVector<TString> expectedKeys = index.KeyColumns;
+        TSet<TString> expectedColumns(index.KeyColumns.begin(), index.KeyColumns.end());
+        if (expectedColumns.size() != index.KeyColumns.size()) {
+            Unsupported("Catalog UNIQUE index has duplicate original key columns");
+        }
+        for (const auto& key : metadata.KeyColumnNames) {
+            if (expectedColumns.insert(key).second) { expectedKeys.push_back(key); }
+        }
+        expectedColumns.insert(index.DataColumns.begin(), index.DataColumns.end());
+        if (impl->KeyColumnNames != expectedKeys || impl->Columns.size() != expectedColumns.size()) {
+            Unsupported("Catalog UNIQUE index does not have its exact physical key and stored schema");
+        }
+        for (const auto& name : expectedColumns) {
+            const auto baseColumn = metadata.Columns.find(name);
+            const auto indexColumn = impl->Columns.find(name);
+            if (baseColumn == metadata.Columns.end() || indexColumn == impl->Columns.end() ||
+                baseColumn->second.SetNotNullInProgress || indexColumn->second.SetNotNullInProgress ||
+                baseColumn->second.IsBuildInProgress || indexColumn->second.IsBuildInProgress ||
+                MetadataTypeName(baseColumn->second) != MetadataTypeName(indexColumn->second) ||
+                baseColumn->second.NotNull != indexColumn->second.NotNull)
+            {
+                Unsupported("Catalog UNIQUE index columns have unaudited types or constraint transitions");
+            }
+        }
+        for (const auto& key : index.KeyColumns) {
+            if (!IsSupportedType(MetadataTypeName(metadata.Columns.at(key)))) {
+                Unsupported("Catalog UNIQUE index key type has no exact storage-equality model");
+            }
+            columns.insert(key); // Hidden and unselected constraints need their original fields.
+        }
+        // Physical storage equality is used by the model, including NaN=self.
+        // Any NULL component exempts the tuple from this business-key law.
+        constraints.push_back({index.KeyColumns, true});
+    }
+    return constraints;
+}
+
 } // anonymous namespace
 
 TSemanticSnapshotCatalogCaptureResult CaptureSemanticSnapshotCatalogV1(
@@ -14520,6 +14983,59 @@ TSemanticSnapshotCatalogCaptureResult CaptureSemanticSnapshotCatalogV1(
             }
             const auto& metadata = *description.Metadata;
             columns.insert(metadata.KeyColumnNames.begin(), metadata.KeyColumnNames.end());
+            const auto uniqueConstraints = CaptureUniqueIndexConstraints(
+                metadata, ctx.KqpCtx.Cluster, identity, columns);
+            TVector<TSemanticSnapshotCatalogTableV1> derivedIndexes;
+            if (metadata.DoesExist && metadata.Kind == EKikimrTableKind::Datashard && metadata.SysView.empty() &&
+                !metadata.KeyColumnNames.empty() && metadata.Indexes.size() == metadata.ImplTables.size() &&
+                MetadataTableReference(metadata, ctx.KqpCtx.Cluster).Identity == identity)
+            {
+                for (size_t ordinal = 0; ordinal < metadata.Indexes.size(); ++ordinal) {
+                    const auto& index = metadata.Indexes[ordinal];
+                    const auto& impl = metadata.ImplTables[ordinal];
+                    // CaptureUniqueIndexConstraints above validates UNIQUE metadata
+                    // and keeps its original business-key law on the base table.
+                    // Both synchronous kinds store one row per base row, under
+                    // the original index keys plus the missing base-PK suffix.
+                    if ((index.Type != TIndexDescription::EType::GlobalSync &&
+                         index.Type != TIndexDescription::EType::GlobalSyncUnique) ||
+                        index.State != TIndexDescription::EIndexState::Ready || !impl || impl->Next ||
+                        !impl->DoesExist || impl->Kind != EKikimrTableKind::Datashard || !impl->SysView.empty() ||
+                        index.KeyColumns.empty()) { continue; }
+                    TVector<TString> expectedKeys = index.KeyColumns;
+                    TSet<TString> expectedColumns(index.KeyColumns.begin(), index.KeyColumns.end());
+                    if (expectedColumns.size() != index.KeyColumns.size()) { continue; }
+                    for (const auto& key : metadata.KeyColumnNames) {
+                        if (expectedColumns.insert(key).second) { expectedKeys.push_back(key); }
+                    }
+                    expectedColumns.insert(index.DataColumns.begin(), index.DataColumns.end());
+                    if (impl->KeyColumnNames != expectedKeys || impl->Columns.size() != expectedColumns.size()) { continue; }
+                    TSemanticSnapshotCatalogTableV1 derived;
+                    derived.Name = MetadataTableReference(*impl, ctx.KqpCtx.Cluster).Identity;
+                    derived.DerivedFrom = identity;
+                    derived.MaximumStoredStringCellBytes = MaxDatashardStoredStringBytes;
+                    derived.UniqueKeys.push_back({expectedKeys, false});
+                    derived.PrimaryKey = expectedKeys;
+                    bool exact = derived.Name != identity;
+                    for (const auto& name : expectedColumns) {
+                        const auto baseColumn = metadata.Columns.find(name);
+                        const auto indexColumn = impl->Columns.find(name);
+                        if (baseColumn == metadata.Columns.end() || indexColumn == impl->Columns.end() ||
+                            baseColumn->second.SetNotNullInProgress || indexColumn->second.SetNotNullInProgress ||
+                            baseColumn->second.IsBuildInProgress || indexColumn->second.IsBuildInProgress)
+                        { exact = false; break; }
+                        const TString type = MetadataTypeName(baseColumn->second);
+                        if (!IsSupportedType(type) || type != MetadataTypeName(indexColumn->second) ||
+                            baseColumn->second.NotNull != indexColumn->second.NotNull)
+                        { exact = false; break; }
+                        derived.Columns.push_back({name, type, !baseColumn->second.NotNull});
+                    }
+                    if (exact) {
+                        columns.insert(expectedColumns.begin(), expectedColumns.end());
+                        derivedIndexes.push_back(std::move(derived));
+                    }
+                }
+            }
 
             TSemanticSnapshotCatalogTableV1 table;
             table.Name = identity;
@@ -14557,8 +15073,13 @@ TSemanticSnapshotCatalogCaptureResult CaptureSemanticSnapshotCatalogV1(
             }
             if (!metadata.KeyColumnNames.empty()) {
                 table.UniqueKeys.push_back({metadata.KeyColumnNames, false});
+                table.PrimaryKey = metadata.KeyColumnNames;
             }
+            table.UniqueKeys.insert(table.UniqueKeys.end(), uniqueConstraints.begin(), uniqueConstraints.end());
             result.Catalog.Tables.push_back(std::move(table));
+            for (auto& index : derivedIndexes) {
+                result.Catalog.Tables.push_back(std::move(index));
+            }
         }
     });
 }

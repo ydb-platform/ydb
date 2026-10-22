@@ -29,6 +29,7 @@ from .ir import (
     Limit,
     OuterBind,
     PlanNode,
+    PointLookup,
     Project,
     Scan,
     ScalarSubplan,
@@ -49,7 +50,7 @@ from .scalar import (
     decimal_sum_state_terms,
 )
 from .scalar import Value, date_domain, integer_domain, smt_sort
-from .types import BOOL, DATE_TIME_BOUNDS, DOUBLE, family, is_decimal_type, is_ordered_type
+from .types import BOOL, DATE_TIME_BOUNDS, DOUBLE, family, is_decimal_type, is_ordered_type, is_scalar_type
 from .value_transport import (
     ValueTransportError,
     select_scalar,
@@ -337,6 +338,7 @@ MAX_OUTCOME_COMPARISONS = 4096
 MAX_ENUMERATED_SEQUENCE_ROWS = 3
 MAX_RELATION_ROWS = 4096
 MAX_RELATION_ROW_PAIRS = 16384
+_MIN_ENDPOINT_BAG_COMPARISON_PAIRS = 4096
 MAX_SORT_NETWORK_COMPARATORS = 32768
 # Stable logical-width budget for the packed representation: live input rows
 # times scalar payload lanes. It is not a Python-memory or final-formula byte
@@ -452,6 +454,8 @@ class Database:
         self.relations: dict[str, Relation] = {}
         self.witness: dict[str, tuple[WitnessRow, ...]] = {}
         for table in snapshot.tables:
+            if table.derived_from is not None:
+                continue
             rows: list[Row] = []
             witness_rows: list[WitnessRow] = []
             for slot in range(row_bound):
@@ -519,6 +523,19 @@ class Database:
                                 smt.and_(left_row.present, right_row.present, *equal_columns)
                             )
                         )
+
+        # Indexes share exact base-row presence and value terms. Only independent
+        # base tables are witness inputs; indexes never introduce symbols or
+        # assumptions that could accidentally exclude a base-table database.
+        for table in snapshot.tables:
+            if table.derived_from is None:
+                continue
+            source = self.relations[table.derived_from]
+            self.relations[table.name] = Relation(table.columns, tuple(
+                Row(row.present, {column.name: row.values[column.name] for column in table.columns},
+                    Occurrence("table", table.name, slot))
+                for slot, row in enumerate(source.rows)
+            ))
 
 
 class Evaluator:
@@ -672,6 +689,36 @@ class Evaluator:
                     "pushed scan limits must be evaluated per column-source task"
                 )
             return family
+
+        if isinstance(node, PointLookup):
+            target = self.database.relations[node.table]
+            columns = tuple(self.schemas[node.id].values())
+
+            def lookup(probes: Relation) -> Relation:
+                _require_relation_rows(len(probes.rows) * len(target.rows), "point lookup candidates")
+                rows = []
+                for probe in probes.rows:
+                    for row in target.rows:
+                        equal = []
+                        for key in node.keys:
+                            left, right = probe.values[key.input], row.values[key.source]
+                            equal.append(smt.or_(
+                                smt.and_(left.is_null, right.is_null),
+                                smt.and_(smt.not_(left.is_null), smt.not_(right.is_null),
+                                         smt.eq(left.value, right.value)),
+                            ))
+                        rows.append(Row(
+                            smt.and_(probe.present, row.present, *equal),
+                            {column.output: row.values[column.source] for column in node.columns},
+                            Occurrence("point_lookup", node.id,
+                                       inputs=tuple(x for x in (probe.occurrence, row.occurrence) if x is not None)),
+                            # Lookup requests return to the requesting task. The
+                            # target's source partition must never gate fetching.
+                            probe.partition_facts,
+                        ))
+                return Relation(columns, tuple(rows))
+
+            return map_family(self._input(node.id, 0, node.input), lookup)
 
         if isinstance(node, OuterBind):
             value = self.outer_bindings.get(node.id)
@@ -1227,9 +1274,9 @@ class Evaluator:
 
         rows: list[Row] = []
         if node.distinct_all:
-            if not node.keys or len(node.keys) != len(node.aggregates):
+            if not node.keys or {trait.input for trait in node.aggregates} != set(node.keys):
                 raise RelationError(
-                    "DistinctAll requires one distinct trait for each ordered key"
+                    "DistinctAll requires aliases covering exactly its nonempty grouping keys"
                 )
             rows.extend(self._grouped_aggregate_rows(node, source))
         elif not node.keys:
@@ -1449,8 +1496,8 @@ class Evaluator:
             if candidate is None:
                 raise RelationError("DistinctAll requires a group representative")
             return {
-                trait.output: candidate.values[key]
-                for key, trait in zip(node.keys, node.aggregates)
+                trait.output: candidate.values[trait.input]
+                for trait in node.aggregates
             }
         values = (
             {}
@@ -2822,8 +2869,8 @@ def _aggregate_partition_key(
     if not node.distinct_all:
         return key
     aliases = {
-        source: trait.output
-        for source, trait in zip(node.keys, node.aggregates)
+        trait.input: trait.output
+        for trait in node.aggregates
     }
     return frozenset(aliases[source] for source in key)
 
@@ -6094,6 +6141,79 @@ def compare_families(
         pair_equal,
         mismatch,
     )
+
+
+def _endpoint_bag_mismatch(
+    left: RelationFamily,
+    right: RelationFamily,
+    scalar: ScalarEncoder,
+) -> FamilyMismatch | None:
+    """Use an existential distinguishing tuple only in a standalone endpoint.
+
+    For each fixed database/routing valuation, some tuple has unequal bag
+    multiplicities iff the two bags differ. Free probe constants are therefore
+    sound in the final SAT counterexample query, but this predicate is NOT a
+    pointwise replacement for bag_equal or a language-membership predicate.
+    In particular, never insert it under execution-choice quantifiers.
+    """
+    if (scalar.binary64 is not None or scalar.uses_abstract_integral_average
+            or len(left.outcomes) != 1 or len(right.outcomes) != 1):
+        return None
+    for outcome in left.outcomes + right.outcomes:
+        relation = outcome.relation
+        if (outcome.enabled != smt.TRUE or outcome.error != smt.FALSE
+                or outcome.choices or outcome.decisions or relation.sequence
+                or relation.order is not None or relation.ordinals is not None):
+            return None
+    lrel, rrel = left.outcomes[0].relation, right.outcomes[0].relation
+
+    def signature(relation):
+        return tuple(
+            (column.type, column.nullable, column.integral_avg_rank)
+            for column in relation.columns
+        )
+
+    if signature(lrel) != signature(rrel):
+        return None
+    if any(column.integral_avg_rank or column.type == DOUBLE
+           or not is_scalar_type(column.type) for column in lrel.columns):
+        return None
+    for relation in (lrel, rrel):
+        if len({column.name for column in relation.columns}) != len(relation.columns):
+            return None
+        for row in relation.rows:
+            for column in relation.columns:
+                value = row.values[column.name]
+                if (value.type != column.type or value.average_metadata is not None
+                        or value.decimal_sum_state is not None or value.binary64_state is not None):
+                    return None
+    lrows = tuple(row for row in lrel.rows if row.present != smt.FALSE)
+    rrows = tuple(row for row in rrel.rows if row.present != smt.FALSE)
+    if min(len(lrows), len(rrows)) * (len(lrows) + len(rrows)) < _MIN_ENDPOINT_BAG_COMPARISON_PAIRS:
+        return None
+
+    # Keep the existing audit of registered choices and hidden dependencies.
+    # No declarations are added until it succeeds, including for hand-built IR.
+    _comparison_inputs(left, right, scalar.script, "endpoint_bag_probe", False)
+    probe = tuple(Value(
+        column.type,
+        scalar.script.fresh_constant(f"endpoint_bag_probe:{position}:null", smt.BOOL),
+        scalar.script.fresh_constant(f"endpoint_bag_probe:{position}:value", smt_sort(column.type)),
+    ) for position, column in enumerate(lrel.columns))
+
+    def multiplicity(relation: Relation, rows: tuple[Row, ...]) -> smt.Term:
+        return smt.add(*(smt.ite(smt.and_(
+            row.present,
+            *(scalar.not_distinct(row.values[column.name], value)
+              for column, value in zip(relation.columns, probe)),
+        ), smt.ONE, smt.ZERO) for row in rows))
+
+    # Do not register the probe as a query parameter or String-domain value.
+    # Any tuple outside the actual output domain counts zero on both sides;
+    # a differing count necessarily identifies an existing present row value.
+    predicate = smt.not_(smt.eq(multiplicity(lrel, lrows), multiplicity(rrel, rrows)))
+    branch = MismatchBranch("endpoint_bag_multiplicity", predicate)
+    return FamilyMismatch(predicate, (branch,), (branch,))
 
 
 def family_mismatch(

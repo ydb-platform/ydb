@@ -8,6 +8,8 @@ import shutil
 from pathlib import Path
 from typing import Any, Mapping
 
+from ..rbo_verifier.types import DOUBLE, family, is_scalar_type
+
 from .model import (
     COVERAGE_FORMAT,
     COVERAGE_VERSIONS,
@@ -300,6 +302,47 @@ def _decode_report(value: Any) -> tuple[str, int, int, tuple[Candidate, ...]]:
     return suite, row_bound, task_bound, tuple(sorted(candidates, key=lambda item: item.query_id))
 
 
+def _validate_typed_parameter_values(parameters: Mapping[str, Any], declarations: Any) -> None:
+    if not isinstance(declarations, Mapping) or set(declarations) != set(parameters):
+        raise ConfirmationError("typed parameter declarations are missing or incomplete")
+    cells = 0
+    encoded_bytes = 0
+    for name, value in parameters.items():
+        declaration = declarations[name]
+        if (not isinstance(declaration, Mapping) or set(declaration) != {"type", "nullable"}
+                or type(declaration["nullable"]) is not bool or not isinstance(declaration["type"], str)):
+            raise ConfirmationError("typed parameter declaration is malformed")
+        parameter_type = declaration["type"]
+        if parameter_type in {"List<String>", "List<Optional<String>>"}:
+            if declaration["nullable"] or not isinstance(value, list):
+                raise ConfirmationError("List parameter witness must be a required concrete list")
+            seen = set()
+            for item in value:
+                if not isinstance(item, str) and not (item is None and parameter_type == "List<Optional<String>>"):
+                    raise ConfirmationError("List parameter witness has an invalid element")
+                if item in seen:
+                    raise ConfirmationError("List parameter witness repeats a membership value")
+                seen.add(item)
+                if item is not None:
+                    cells += 1
+                    try:
+                        encoded_bytes += 6 * len(item.encode("utf-8")) + 4
+                    except UnicodeError as error:
+                        raise ConfirmationError("List parameter witness has invalid String encoding") from error
+                if cells > 16_384 or encoded_bytes > 16 << 20:
+                    raise ConfirmationError("List parameter witness exceeds its protocol budget")
+        else:
+            if not is_scalar_type(parameter_type) or parameter_type == DOUBLE:
+                raise ConfirmationError("unsupported scalar parameter declaration")
+            if value is None:
+                if not declaration["nullable"]:
+                    raise ConfirmationError("required scalar parameter witness is NULL")
+            else:
+                expected = bool if family(parameter_type) == "bool" else str if family(parameter_type) == "string" else int
+                if type(value) is not expected:
+                    raise ConfirmationError("scalar parameter witness disagrees with its declared type")
+
+
 def _validate_verifier_verdict(candidate: Candidate, value: Any) -> None:
     if not isinstance(value, Mapping):
         raise ConfirmationError(
@@ -331,11 +374,14 @@ def _validate_verifier_verdict(candidate: Candidate, value: Any) -> None:
         parameters = value["parameters"]
         if "witness" not in value or not isinstance(parameters, Mapping) or not parameters or any(
             not isinstance(name, str) or len(name) < 2 or not name.startswith("$")
-            or (item is not None and type(item) not in (bool, int, str))
+            or (item is not None and type(item) not in (bool, int, str, list))
             for name, item in parameters.items()
         ):
             raise ConfirmationError(f"q{candidate.query_id} raw verifier parameters are malformed")
         expected.add("parameters")
+        if "parameter_types" in value or any(isinstance(item, list) for item in parameters.values()):
+            _validate_typed_parameter_values(parameters, value.get("parameter_types"))
+            expected.add("parameter_types")
     if set(value) != expected:
         raise ConfirmationError(
             f"q{candidate.query_id} raw verifier verdict has unknown or missing fields"

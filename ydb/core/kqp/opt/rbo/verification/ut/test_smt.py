@@ -208,6 +208,71 @@ class SmtTest(unittest.TestCase):
         self.assertEqual(cached, limited)
         self.assertIsNone(script._rendered_body)
 
+    def test_default_and_explicit_obligation_reuse_the_exact_body(self):
+        for explicit_first in (False, True):
+            with self.subTest(explicit_first=explicit_first):
+                script = smt.Script(timeout_ms=100)
+                value = script.fresh_constant("value", smt.INT)
+                predicate = smt.or_(smt.lt(value, smt.ZERO), smt.lt(smt.ONE, value))
+                script.assert_obligation(predicate)
+                first = (script.render_branch(predicate) if explicit_first else script.render())
+                with mock.patch.object(smt, "_render_scope", side_effect=AssertionError("body rendered twice")):
+                    self.assertEqual(script.render(), first)
+                    self.assertEqual(script.render_branch(predicate), first)
+                    model = script.render_branch(predicate, (value,), timeout_ms=7)
+                    self.assertEqual(script.render((value,), timeout_ms=7), model)
+                self.assertEqual(
+                    model,
+                    first.replace(":timeout 100", ":timeout 7") + "(get-value (v_0))\n",
+                )
+
+    def test_effective_obligation_cache_keeps_identity_and_version_guards(self):
+        script = smt.Script()
+        value = script.fresh_constant("value", smt.INT)
+        predicate = smt.lt(value, smt.ONE)
+        script.assert_obligation(predicate)
+        baseline = script.render()
+        equal_copy = smt.Term(predicate.sort, predicate.operation, predicate.arguments, predicate.atom)
+        self.assertIsNot(equal_copy, predicate)
+        self.assertEqual(equal_copy, predicate)
+        with mock.patch.object(smt, "_render_scope", wraps=smt._render_scope) as render_scope:
+            self.assertEqual(script.render_branch(equal_copy), baseline)
+            self.assertGreater(render_scope.call_count, 0)
+        script.render_branch(predicate)
+        changed = smt.not_(predicate)
+        self.assertNotEqual(script.render_branch(changed), baseline)
+        self.assertEqual(script.render(), baseline)
+        mutations = (
+            lambda: script.fresh_constant("later", smt.BOOL),
+            lambda: script.assert_term(smt.lt(smt.ZERO, value)),
+            lambda: script.assert_global(smt.lt(value, smt.int_value(10))),
+        )
+        for mutate in mutations:
+            mutate()
+            with mock.patch.object(smt, "_render_scope", wraps=smt._render_scope) as render_scope:
+                current = script.render_branch(predicate)
+                self.assertGreater(render_scope.call_count, 0)
+            self.assertNotEqual(current, baseline)
+            self.assertEqual(script.render(), current)
+            baseline = current
+
+    def test_effective_obligation_cache_preserves_marker_and_byte_caps(self):
+        for cap in (0, 1, smt._MAX_RENDERED_BODY_BYTES):
+            with self.subTest(cap=cap), mock.patch.object(smt, "_MAX_RENDERED_BODY_BYTES", cap):
+                script = smt.Script()
+                value = script.fresh_constant("value", smt.INT)
+                script.assert_term(smt.lt(value, smt.int_value(10)))
+                unmarked = script.render()
+                with self.assertRaisesRegex(smt.SmtError, "no marked proof obligation"):
+                    script.render_branch(smt.FALSE)
+                predicate = smt.lt(smt.ZERO, value)
+                script.assert_obligation(predicate)
+                marked = script.render()
+                self.assertNotEqual(marked, unmarked)
+                self.assertEqual(script.render_branch(predicate), marked)
+                if cap <= 1:
+                    self.assertIsNone(script._rendered_body)
+
     def test_term_structural_hash_is_cached_for_deep_shared_dags(self):
         first = _deep_shared_term(smt.symbol("value", smt.INT))
         second = _deep_shared_term(smt.symbol("value", smt.INT))

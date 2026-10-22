@@ -349,3 +349,54 @@ comparison retain their previous strategies.
 One global solver deadline covers rendering, all solver checks and model
 extraction. Subprocess waits cannot extend beyond it. Late UNSAT and late
 models remain inconclusive; no timeout is treated as proof.
+
+
+### Synchronous indexes and complete-key LookupRows
+
+The `derived_from` table field is a trusted catalog relation, not an independent
+symbolic table: every index slot has the base slot's presence and exactly the
+same named cells. The base physical key must be contained in the index physical
+key. The native producer admits ready `GlobalSync` and `GlobalSyncUnique`
+row-store indexes with loaded implementation metadata, the exact index-key
+order followed by missing base-key columns, matching stored-column
+types/nullability, and no in-progress column constraints/builds. Async, special,
+chained, and unresolved indexes stay outside this corridor. Base rows alone
+appear in counterexample witnesses.
+
+Before deriving a UNIQUE implementation, `CaptureUniqueIndexConstraints`
+validates its ready metadata, parent identity, physical key and stored schema,
+and captures every original UNIQUE tuple on the base table. That business law
+uses non-NULL storage equality, including Decimal NaN equal to itself; any NULL
+component exempts the tuple. It does not discard NULL index rows or shorten the
+physical key. The derived table retains its full NULL-safe physical-key law.
+This contract concerns loader-visible READY metadata; it does not claim to
+detect NotReady descriptors filtered by the loader.
+
+`point_lookup` models plain `LookupRows` against the complete ordered physical
+base key. Each input occurrence performs its own lookup: equal probes remain
+duplicates, absent targets produce no rows, and NULL keys match physical NULL.
+Fetched output is the target payload, not a projection of probe columns. No
+join tuples, outer-join NULL extension, prefixes, residual fetch predicates,
+lookup chains, or noncanonical strategy settings are erased. Native admission
+requires a validated derived-index Read (optionally followed by one residual
+Filter) of that target; the IR model is also tested with independent probes.
+
+`stream_lookup` transports each probe to the same task ordinal and copies the
+producer task count. The node then fetches from the global shared target, so
+source placement of target rows never filters lookup results. Native export
+binds table, columns, input descriptor, output index, settings, and consumer
+operator to the same physical connection. The IR requires this edge to be the
+lookup stage's sole input and rejects interchange with Map or Broadcast.
+
+The separate row-range extension accepts one equal, inclusive, non-NULL Bool
+literal prefix of a derived index's composite physical key. It checks
+the actual `LiteralRange`, complete metadata key order, one used/point prefix,
+and exact scalar boundary types. SQL equality drops NULL index flags. Other
+nullable/composite range shapes remain unsupported.
+
+`ut/test_point_lookup.py` grounds duplicate/missing/NULL/composite cases and task
+ownership without a solver. Native fixtures check the 1487 schema family,
+changed-prefix counterexamples, and rejected metadata/settings/range mutations.
+Native execution and SMT verification remain separate validation gates. Concrete
+inspection and runtime replay currently reject index/lookup witnesses explicitly;
+these proofs must not be reported as replay-confirmed.

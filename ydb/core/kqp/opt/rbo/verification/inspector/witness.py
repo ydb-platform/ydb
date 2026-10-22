@@ -28,7 +28,7 @@ def bind_witness(
     and plan choices remain free for reconstructing an execution of those rows.
     """
 
-    if problem.parameters:
+    if problem.parameters or problem.list_parameters:
         raise InvalidWitness(
             "UNSUPPORTED_PARAMETER_REPLAY: a table-only witness cannot fix query parameter values"
         )

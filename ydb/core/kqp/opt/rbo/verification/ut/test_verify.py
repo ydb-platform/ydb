@@ -3653,6 +3653,88 @@ class SolverProtocolTest(unittest.TestCase):
                 with self.assertRaises(SolverError):
                     verifier.decode_string_atom(value, representatives)
 
+    def test_emitted_complete_obligation_is_reused_by_canonical_probe(self):
+        script = smt.Script()
+        left = script.fresh_constant("left_mismatch", smt.BOOL)
+        right = script.fresh_constant("right_mismatch", smt.BOOL)
+        predicate = smt.or_(left, right)
+        mismatch = relation_model.FamilyMismatch(predicate, (
+            relation_model.MismatchBranch("left", left),
+            relation_model.MismatchBranch("right", right),
+        ))
+        problem = verifier._finish_problem(script, mock.Mock(witness={}), mismatch, [])
+        emitted = problem.formula()
+        # A syntactically redundant OR must not lose the canonical identity.
+        self.assertIs(script.assertions[-1], predicate)
+        unsat = subprocess.CompletedProcess(["z3"], 0, "unsat\n", "")
+        with (
+            mock.patch.object(smt, "_render_scope", side_effect=AssertionError("canonical body rebuilt")),
+            mock.patch.object(verifier, "_run_solver", return_value=unsat) as run,
+        ):
+            query = verifier.query_solver(problem, "z3")
+        self.assertEqual(query.status, "unsat")
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[1], emitted)
+
+    def test_finished_obligation_preserves_legacy_formula_bytes(self):
+        for shape in ("false", "true", "symbol", "or", "wide_or", "and", "quantified"):
+            for excluded in (False, True):
+                with self.subTest(shape=shape, excluded=excluded):
+                    def render(legacy):
+                        script = smt.Script(timeout_ms=100)
+                        values = tuple(script.fresh_constant(f"value_{i}", smt.BOOL) for i in range(40))
+                        bound = smt.symbol("bound", smt.INT)
+                        predicates = {
+                            "false": smt.FALSE,
+                            "true": smt.TRUE,
+                            "symbol": values[0],
+                            "or": smt.or_(values[0], values[1]),
+                            "wide_or": smt.or_(*values),
+                            "and": smt.and_(values[0], values[1]),
+                            "quantified": smt.or_(values[0], smt.exists((bound,), smt.lt(bound, smt.ZERO))),
+                        }
+                        predicate = predicates[shape]
+                        script.assert_global(values[2])
+                        script.assert_term(smt.not_(values[3]))
+                        exclusions = [relation_model.MismatchBranch("excluded", values[4])] if excluded else []
+                        if legacy:
+                            script.assert_obligation(smt.or_(
+                                predicate,
+                                smt.or_(*(branch.predicate for branch in exclusions)) if exclusions else smt.FALSE,
+                            ))
+                        else:
+                            verifier._finish_problem(
+                                script, mock.Mock(witness={}),
+                                relation_model.FamilyMismatch(predicate, ()), exclusions,
+                            )
+                        return (script.render(), script.render_branch(predicate, values[:2], timeout_ms=7))
+                    self.assertEqual(render(False), render(True))
+
+    def test_finished_obligation_keeps_exclusions_and_semantics_separate(self):
+        script = smt.Script()
+        left = script.fresh_constant("left_mismatch", smt.BOOL)
+        right = script.fresh_constant("right_mismatch", smt.BOOL)
+        excluded = script.fresh_constant("excluded", smt.BOOL)
+        predicate = smt.or_(left, right)
+        mismatch = relation_model.FamilyMismatch(predicate, (
+            relation_model.MismatchBranch("left", left),
+            relation_model.MismatchBranch("right", right),
+        ))
+        exclusion = relation_model.MismatchBranch("excluded", excluded)
+        problem = verifier._finish_problem(script, mock.Mock(witness={}), mismatch, [exclusion])
+        emitted = problem.formula()
+        self.assertIn("(assert (or v_0 v_1 v_2))", emitted)
+        unsat = subprocess.CompletedProcess(["z3"], 0, "unsat\n", "")
+        with mock.patch.object(verifier, "_run_solver", return_value=unsat) as run:
+            query = verifier.query_solver(problem, "z3")
+        self.assertEqual(query.status, "unsat")
+        self.assertEqual(run.call_count, 2)
+        safety_formula, semantic_formula = (call.args[1] for call in run.call_args_list)
+        self.assertIn("(assert v_2)", safety_formula)
+        self.assertIn("(assert (or v_0 v_1))", semantic_formula)
+        self.assertNotIn("(assert (or v_0 v_1 v_2))", semantic_formula)
+        self.assertEqual(problem.formula(), emitted)
+
     def test_canonical_unsat_can_verify_without_branch_checks(self):
         problem, _, _ = self._branch_problem(3)
         unsat = subprocess.CompletedProcess(["z3"], 0, "unsat\n", "")
@@ -7100,7 +7182,8 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
         states = (None, (0, None), (0, -1), (0, 0), (0, 1))
         for rows in product(states, repeat=3):
             expected = Counter({(len({row[1] for row in rows
-                                     if row is not None and row[1] is not None}),): 1})
+                                     if row is not None and row[1] is not None}),):
+                                         1})
             with self.subTest(rows=rows):
                 self.assertEqual(self._symbolic_bag(relation, self._constants(database, rows)), expected)
 

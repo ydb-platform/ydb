@@ -92,6 +92,13 @@ class WitnessBindingTest(unittest.TestCase):
             bind_witness(problem, self.witness())
         self.assertEqual(tuple(problem.script.assertions), initial)
 
+    def test_table_only_witness_cannot_leave_list_membership_unbound(self):
+        problem = replace(self.problem(), list_parameters={"$list": object()})
+        initial = tuple(problem.script.assertions)
+        with self.assertRaisesRegex(InvalidWitness, "UNSUPPORTED_PARAMETER_REPLAY"):
+            bind_witness(problem, self.witness())
+        self.assertEqual(tuple(problem.script.assertions), initial)
+
     def test_decoded_database_round_trips_with_absent_slots_and_nulls(self):
         problem = self.problem()
         witness = self.witness()

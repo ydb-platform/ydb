@@ -1707,6 +1707,7 @@ class SnapshotTest(unittest.TestCase):
             parse_snapshot(row_source)
         row_source["schema"]["tables"][0]["unique_keys"] = [
             {"columns": ["k"], "nulls_distinct": False}]
+        row_source["schema"]["tables"][0]["primary_key"] = ["k"]
         self.assertEqual(parse_snapshot(row_source).plan.nodes[0].predicate.kind, "gte")
         row_source["plan"]["nodes"][0]["pushed_limit"] = {
             "kind": "literal", "type": "Uint64", "value": 1}
@@ -1730,6 +1731,7 @@ class SnapshotTest(unittest.TestCase):
         value = minimal_snapshot()
         table = value["schema"]["tables"][0]
         table["unique_keys"] = [{"columns": ["k"], "nulls_distinct": False}]
+        table["primary_key"] = ["k"]
         scan = value["plan"]["nodes"][0]
         lower = {"kind": "gte", "left": {"kind": "column", "column": "a.k"},
                  "right": {"kind": "literal", "type": "Int64", "value": -2}}
@@ -2825,7 +2827,7 @@ class SnapshotTest(unittest.TestCase):
         distinct_all["plan"]["nodes"][-1]["distinct_all"] = True
         with self.assertRaisesRegex(
             SnapshotError,
-            "DistinctAll traits must use distinct",
+            "DistinctAll requires aliases covering exactly",
         ):
             parse_snapshot(distinct_all)
 
@@ -2909,7 +2911,7 @@ class SnapshotTest(unittest.TestCase):
                 ):
                     parse_snapshot(malformed)
 
-    def test_distinct_all_contract_is_exact_and_positional(self):
+    def test_distinct_all_contract_preserves_explicit_bindings(self):
         value = minimal_snapshot()
         value["plan"]["nodes"] = [
             value["plan"]["nodes"][0],
@@ -2973,20 +2975,19 @@ class SnapshotTest(unittest.TestCase):
 
         reordered = copy.deepcopy(composite)
         reordered["plan"]["nodes"][-1]["keys"].reverse()
-        with self.assertRaisesRegex(SnapshotError, "plain distinct aliases"):
-            parse_snapshot(reordered)
+        self.assertEqual(parse_snapshot(reordered).output_schema(), snapshot.output_schema())
 
         mutations = []
         missing_key = copy.deepcopy(value)
         missing_key["plan"]["nodes"][-1]["keys"] = []
         mutations.append(
-            ("one distinct trait", missing_key)
+            ("aliases covering exactly", missing_key)
         )
 
         wrong_source = copy.deepcopy(value)
         wrong_source["plan"]["nodes"][-1]["aggregates"][0]["input"] = "a.flag"
         mutations.append(
-            ("plain distinct aliases", wrong_source)
+            ("aliases covering exactly", wrong_source)
         )
 
         wrong_function = copy.deepcopy(value)

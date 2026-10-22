@@ -313,6 +313,18 @@ class ObserverTest(unittest.TestCase):
                 prepared.solve("unused-solver", 1000)
             solver.assert_not_called()
 
+    def test_direct_prepared_inspection_rejects_unbound_list_before_solver(self):
+        expression = {"kind": "column", "column": "x"}
+        before, after = _logical(expression), _staged(expression)
+        prepared = PreparedInspection(
+            before, after, 2,
+            mock.Mock(parameters={}, list_parameters={"$list": object()}), mock.Mock(), mock.Mock(),
+        )
+        with mock.patch("ydb.core.kqp.opt.rbo.verification.inspector.trace.query_solver") as solver:
+            with self.assertRaisesRegex(InspectionError, "UNSUPPORTED_PARAMETER_REPLAY"):
+                prepared.solve("unused-solver", 1000)
+            solver.assert_not_called()
+
     def test_trace_order_json_shows_only_present_comparison_tags(self):
         ordinary = SortOrder("k", True, False)
         tagged = SortOrder(

@@ -1563,6 +1563,12 @@ message TEvControllerDistconfRequest {
         EnableDistconf = 0;
         DisableDistconf = 1;
         ValidateConfig = 2;
+        // check that bridged groups can get their parts in the pile being added (BridgePileId) without committing,
+        // taking into account static VDisks of StorageConfig being proposed
+        ValidateAddBridgePile = 3;
+        // check that parts of bridged groups in the pile being removed (BridgePileId) can be deleted without committing:
+        // every group having VDisks in the pile has to be bridged one
+        ValidateRemoveBridgePile = 4;
     }
 
     optional EOperation Operation = 1;
@@ -1574,6 +1580,7 @@ message TEvControllerDistconfRequest {
     optional bytes UserToken = 7 [(Ydb.sensitive) = true];
     optional google.protobuf.Any StorageConfig = 8; // TStorageConfig with this request that is going to be applied after operation
     optional bool DryRun = 9; // if set, perform validation without committing changes
+    optional uint32 BridgePileId = 10; // for ValidateAddBridgePile and ValidateRemoveBridgePile
 }
 
 message TEvControllerDistconfResponse {

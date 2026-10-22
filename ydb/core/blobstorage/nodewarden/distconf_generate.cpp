@@ -519,6 +519,28 @@ namespace NKikimr::NStorage {
             maxVSlotId[vslot.PDiskId] = Max(maxVSlotId[vslot.PDiskId], vslot.VSlotId.VSlotId);
         }
 
+        // static VDisks take slot ids below the ones BSC allocates from (its PDisks start with NextVSlotId of 1000), as
+        // BSC (of older versions) doesn't check VSlots of static VDisks, and VSlots of BSC being deleted are not even
+        // listed in base config; ids of the destroyed static VDisks are kept until they are slain; when static ids have
+        // already reached BSC's range, new ones go above every VSlot listed
+        static constexpr ui32 MinBscVSlotId = 1000;
+        THashMap<TPDiskId, ui32> maxStaticVSlotId;
+        if (bsConfig->HasServiceSet()) {
+            for (const auto& vdisk : bsConfig->GetServiceSet().GetVDisks()) {
+                const auto& location = vdisk.GetVDiskLocation();
+                auto& maxId = maxStaticVSlotId[TPDiskId(location.GetNodeID(), location.GetPDiskID())];
+                maxId = Max(maxId, location.GetVDiskSlotID());
+            }
+        }
+        auto allocateVSlotId = [&](TPDiskId pdiskId) {
+            ui32& id = maxStaticVSlotId[pdiskId];
+            if (++id >= MinBscVSlotId) {
+                id = Max(id, maxVSlotId[pdiskId] + 1);
+            }
+            maxVSlotId[pdiskId] = Max(maxVSlotId[pdiskId], id);
+            return id;
+        };
+
         // build PDisk locator map (nodeId:path -> pdiskId)
         THashSet<std::tuple<ui32, TString>> pdiskLocations;
         for (const auto& [pdiskId, item] : pdisks) {
@@ -558,6 +580,7 @@ namespace NKikimr::NStorage {
         };
         EnumerateConfigDrives(config, 0, processDrive, nullptr, true);
 
+        const auto pileRegistry = GetConfigPileRegistry(config);
         for (const auto& [pdiskId, item] : pdisks) {
             const auto it = nodeLocations.find(pdiskId.NodeId);
             if (it == nodeLocations.end()) {
@@ -586,7 +609,7 @@ namespace NKikimr::NStorage {
             pdiskState.ExpectedSlotCount = expectedSlotCount;
             pdiskState.SlotSizeInUnits = settings.SlotSizeInUnits;
             pdiskState.SlotSizeInBytes = settings.SlotSizeInBytes;
-            pdiskState.BridgePileId = ResolveNodePileId(pdiskState.Location);
+            pdiskState.BridgePileId = ResolveNodePileId(pileRegistry, pdiskState.Location).value_or(TBridgePileId());
             pdiskState.Usable = pdiskState.Usable && nodeAllowFilter;
             if (!nodeAllowFilter) {
                 pdiskState.WhyUnusable += 'H'; // node is not in the self-heal allow-list
@@ -604,7 +627,7 @@ namespace NKikimr::NStorage {
         request.ExistingGroup = existingGroup;
         request.TryToRelocateLocallyFirst = params.TryToRelocateBrokenDisksLocallyFirst;
         request.IgnoreGroupLayoutChecks = params.LayoutPolicy.AllowsRelaxedPlacement();
-        request.BridgePileId = params.BridgePileId;
+        request.BridgePileId = NBridge::GetPlacementPileId(params.BridgePileId, BridgeInfo.get());
 
         NBsController::TGroupGeometryInfo geometry(params.GroupType.GetErasure(), selfManagementConfig.GetGeometry());
         const NBsController::TGroupMapper::TOptions options{
@@ -742,7 +765,7 @@ namespace NKikimr::NStorage {
             } else {
                 sLoc->SetNodeID(pdiskId.NodeId);
                 sLoc->SetPDiskID(pdiskId.PDiskId);
-                sLoc->SetVDiskSlotID(++maxVSlotId[pdiskId]); // keep VDiskSlotID for unchanged items
+                sLoc->SetVDiskSlotID(allocateVSlotId(pdiskId)); // keep VDiskSlotID for unchanged items
                 sLoc->SetPDiskGuid(pdisk.GetPDiskGuid());
 
                 auto *sDisk = sSet->AddVDisks();
@@ -797,12 +820,18 @@ namespace NKikimr::NStorage {
         }
         std::map<TBridgePileId, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
         bool goodConfig = true;
+        // piles are taken into account only when the config is bridged one
+        const auto pileRegistry = baseConfig.HasClusterState() ? GetConfigPileRegistry(baseConfig) : std::nullopt;
         for (const auto& node : baseConfig.GetAllNodes()) {
             if (!nodesToUse.empty() && !nodesToUse.contains(node.GetNodeId())) {
                 continue;
             }
             TNodeLocation location(node.GetLocation());
-            TBridgePileId pileId = ResolveNodePileId(location);
+            TBridgePileId pileId = ResolveNodePileId(pileRegistry, location).value_or(TBridgePileId());
+            if (pileId && NBridge::GetPileState(baseConfig.GetClusterState(), pileId) ==
+                    NKikimrBridge::TClusterState::INACTIVE) {
+                continue; // INACTIVE pile has no state storage replicas
+            }
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
         for (auto& [pileId, nodesByDataCenter] : nodes) {

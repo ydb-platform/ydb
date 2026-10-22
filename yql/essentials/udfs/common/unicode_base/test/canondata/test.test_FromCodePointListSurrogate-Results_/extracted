@@ -1,0 +1,3 @@
+<tmp_path>/program.sql:<main>:1:17: Error: Unicode::FromCodePointList: invalid Unicode scalar value 55296
+	SELECT Unicode::FromCodePointList([0xD800u]);
+	                ^

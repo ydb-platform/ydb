@@ -782,7 +782,6 @@ ydb/tests/functional/tpc/medium/tpch test_s_float.py.TestTpchS0_2.test_tpch[11]
 ydb/tests/functional/tpc/medium/tpch test_s_float.py.TestTpchS0_2.test_tpch[12]
 ydb/tests/functional/tpc/medium/tpch test_s_float.py.TestTpchS0_2.test_tpch[13]
 ydb/tests/functional/tpc/medium/tpch test_s_float.py.TestTpchS0_2.test_tpch[14]
-ydb/tests/functional/tpc/medium/tpch test_s_float.py.TestTpchS0_2.test_tpch[15]
 ydb/tests/functional/tpc/medium/tpch test_s_float.py.TestTpchS0_2.test_tpch[16]
 ydb/tests/functional/tpc/medium/tpch test_s_float.py.TestTpchS0_2.test_tpch[17]
 ydb/tests/functional/tpc/medium/tpch test_s_float.py.TestTpchS0_2.test_tpch[18]
@@ -827,7 +826,6 @@ ydb/tests/olap/scenario py3test.[*/*] chunk
 ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
 ydb/tests/olap/scenario test_scheme_load.py.TestSchemeLoad.test[create_and_drop_tables]
 ydb/tests/olap/scenario test_scheme_load.py.TestSchemeLoad.test_multi[create_and_drop_tables]
-ydb/tests/stress/backup/tests test_workload.py.TestYdbBackupWorkload.test
 ydb/tests/stress/compare_index_performance/tests test_compare.py.TestCompareIndexPerformance.test_vector
 ydb/tests/stress/kafka/tests py3test.sole chunk
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test

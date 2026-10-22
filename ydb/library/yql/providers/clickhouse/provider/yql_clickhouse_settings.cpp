@@ -7,7 +7,7 @@ namespace NYql {
 using namespace NCommon;
 
 TClickHouseConfiguration::TClickHouseConfiguration(bool strictConfigValidation)
-    : NCommon::TSettingDispatcher(ClickHouseProviderName, TQContext(), strictConfigValidation)
+    : NCommon::TDispatcherAndSettings<TClickHouseSettings>(ClickHouseProviderName, TQContext(), strictConfigValidation)
 {
 }
 

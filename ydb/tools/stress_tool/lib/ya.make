@@ -15,15 +15,28 @@ PEERDIR(
 SRCS(
     ../device_test_tool.h
     ../device_test_tool_cli.cpp
-    ../device_test_tool_aio_test.h
-    ../device_test_tool_driveestimator.h
-    ../device_test_tool_trim_test.cpp
-    ../device_test_tool_trim_test.h
     ../device_test_tool_pdisk_test.h
 )
 
+IF (OS_LINUX)
+    SRCS(
+        ../device_test_tool_aio_test.h
+        ../device_test_tool_driveestimator.h
+        ../device_test_tool_trim_test.cpp
+        ../device_test_tool_trim_test.h
+    )
+ENDIF()
+
 END()
 
-RECURSE_FOR_TESTS(
-    ../ut
-)
+IF (OS_LINUX OR OS_DARWIN)
+    RECURSE_FOR_TESTS(
+        ../ut_sector_map
+    )
+ENDIF()
+
+IF (OS_LINUX)
+    RECURSE_FOR_TESTS(
+        ../ut
+    )
+ENDIF()

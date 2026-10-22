@@ -30,7 +30,7 @@ TKikimrSettings MakeSettings(bool enabled = true) {
     auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
     settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
     settings.AppConfig.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
-    settings.AppConfig.MutableFeatureFlags()->SetEnableColumnTableSetNotNull(enabled);
+    settings.AppConfig.MutableFeatureFlags()->SetEnableColumnShardSetNotNull(enabled);
     settings.AppConfig.MutableColumnShardConfig()->SetBulkUpsertRequireAllColumns(false);
     return settings;
 }
@@ -536,7 +536,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         const auto reboot = Arg<1>();
         if (reboot != EReboot::None) {
             // Recovery must finish even when admission is disabled.
-            runtime.GetAppData().FeatureFlags.SetEnableColumnTableSetNotNull(false);
+            runtime.GetAppData().FeatureFlags.SetEnableColumnShardSetNotNull(false);
             if (reboot == EReboot::SchemeShard || reboot == EReboot::Both) {
                 RebootTablet(runtime, schemeShardId, runtime.AllocateEdgeActor());
             }

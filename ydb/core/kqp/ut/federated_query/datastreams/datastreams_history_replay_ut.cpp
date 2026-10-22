@@ -1,8 +1,9 @@
 #include "common.h"
 
+#include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
+
 #include <fmt/format.h>
 #include <library/cpp/json/json_reader.h>
-#include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 
 namespace NKikimr::NKqp {
 
@@ -10,11 +11,11 @@ using namespace fmt::literals;
 
 namespace {
 
-class THistoryReplayFixture : public TStreamingTestFixture {
+class THistoryReplayFixture: public TStreamingTestFixture {
 public:
     const TString InputTopic = MakeExternalName("historyInput");
     const TString OutputTopic = MakeExternalName("historyOutput");
-    const NTestUtils::TSolomonLocation ReplayMetrics{MakeExternalName("history-replay"), "tests", "custom", false};
+    const NTestUtils::TSolomonLocation ReplayMetrics{ MakeExternalName("history-replay"), "tests", "custom", false };
 
     void Init(bool enabled = true, bool readFrom = false, bool compressedGraph = false, bool sharedReading = false) {
         auto& config = SetupAppConfig();
@@ -69,8 +70,7 @@ public:
     }
 
     void WaitCheckpoint() {
-        const auto completed = GetCounters()->GetSubgroup("subsystem", "checkpoint_coordinator")
-            ->GetCounter("CompletedCheckpoints", true);
+        const auto completed = GetCounters()->GetSubgroup("subsystem", "checkpoint_coordinator")->GetCounter("CompletedCheckpoints", true);
         const auto initial = completed->Val();
         // One in-flight barrier may precede the last observed output. The next
         // two completed checkpoints guarantee that the input offset is durable.
@@ -104,7 +104,7 @@ public:
             Sleep(TDuration::MilliSeconds(100));
         } while (TInstant::Now() < deadline);
         UNIT_FAIL("Missing replay metric " << sensor << " at " << timestamp << ": " << metrics
-            << "; query issues: " << GetStreamingQueryIssues("historyQuery"));
+                                           << "; query issues: " << GetStreamingQueryIssues("historyQuery"));
     }
 
     void AssertNoEarlierMetrics(const TString& sensor, ui64 firstOutputSecond) {
@@ -121,7 +121,7 @@ public:
     }
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
     Y_UNIT_TEST_TWIN_F(SharedHoppingRequiresProgramWatermarkGenerator, Force, THistoryReplayFixture) {
@@ -147,8 +147,8 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
             WaitMetric("shared-new", base.Seconds() + 19, 2);
         }
         ExecQuery(fmt::format("CREATE STREAMING QUERY sharedExplicit WITH (OUTPUT_FROM = Timestamp(\"{}\")) AS {}",
-            (base + TDuration::Seconds(6)).ToString(), Body(2, "shared-explicit")),
-            NYdb::EStatus::BAD_REQUEST, "requires a watermark generator before each hopping operator");
+                      (base + TDuration::Seconds(6)).ToString(), Body(2, "shared-explicit")), NYdb::EStatus::BAD_REQUEST,
+            "requires a watermark generator before each hopping operator");
     }
 
     Y_UNIT_TEST_F(SharedStatelessReaderContinuesWithoutForce, THistoryReplayFixture) {
@@ -246,9 +246,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
         )", outputFrom.ToString(), ReadFrom ? ", READ_FROM = EARLIEST" : "", "input_topic"_a = InputTopic, "output_topic"_a = OutputTopic));
         // Without watermarks, OUTPUT_FROM sets the input position unless an
         // explicit READ_FROM overrides it. Both paths must read retained data.
-        auto expected = ReadFrom
-            ? std::vector<std::string>{"before-output-from", "retained"}
-            : std::vector<std::string>{"retained"};
+        auto expected = ReadFrom ? std::vector<std::string>{ "before-output-from", "retained" } : std::vector<std::string>{ "retained" };
         ReadTopicMessages(OutputTopic, expected);
         WriteTopicMessage(InputTopic, "live");
         expected.push_back("live");
@@ -263,24 +261,23 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
             PRAGMA ydb.DisableCheckpoints = "TRUE";
             INSERT INTO historySource.`{output_topic}` SELECT Data FROM historySource.`{input_topic}`
         END DO)", "input_topic"_a = InputTopic, "output_topic"_a = OutputTopic);
-        const std::string outputFrom = "OUTPUT_FROM = Timestamp(\"2025-05-04T11:30:34Z\")"
-            + std::string(ReadFrom ? ", READ_FROM = EARLIEST" : "");
+        const std::string outputFrom =
+            "OUTPUT_FROM = Timestamp(\"2025-05-04T11:30:34Z\")" + std::string(ReadFrom ? ", READ_FROM = EARLIEST" : "");
         ExecQuery("CREATE STREAMING QUERY historyQuery WITH (RUN = FALSE)" + body);
         for (const auto prefix : {
-            "CREATE STREAMING QUERY rejectedOutput WITH (",
-            "ALTER STREAMING QUERY historyQuery SET (FORCE = TRUE, ",
-            "CREATE OR REPLACE STREAMING QUERY historyQuery WITH (FORCE = TRUE, ",
-        }) {
-            ExecQuery(std::string(prefix) + "RUN = TRUE, " + outputFrom + ")" + body,
-                NYdb::EStatus::GENERIC_ERROR, "Cannot use setting OUTPUT_FROM without checkpoints");
+                 "CREATE STREAMING QUERY rejectedOutput WITH (", "ALTER STREAMING QUERY historyQuery SET (FORCE = TRUE, ",
+                 "CREATE OR REPLACE STREAMING QUERY historyQuery WITH (FORCE = TRUE, ",
+             }) {
+            ExecQuery(std::string(prefix) + "RUN = TRUE, " + outputFrom + ")" + body, NYdb::EStatus::GENERIC_ERROR,
+                "Cannot use setting OUTPUT_FROM without checkpoints");
         }
 
         ExecQuery("CREATE STREAMING QUERY withoutCheckpoints" + body);
         WriteTopicMessage(InputTopic, "live");
-        ReadTopicMessages(OutputTopic, {"live"});
+        ReadTopicMessages(OutputTopic, { "live" });
         // Validate OUTPUT_FROM even when ALTER supplies no query text.
-        ExecQuery("ALTER STREAMING QUERY withoutCheckpoints SET (FORCE = TRUE, " + outputFrom + ")",
-            NYdb::EStatus::GENERIC_ERROR, "Cannot use setting OUTPUT_FROM without checkpoints");
+        ExecQuery("ALTER STREAMING QUERY withoutCheckpoints SET (FORCE = TRUE, " + outputFrom + ")", NYdb::EStatus::GENERIC_ERROR,
+            "Cannot use setting OUTPUT_FROM without checkpoints");
     }
 
     Y_UNIT_TEST_F(OutputFromWithReadFromOnCreateAlterAndReplace, THistoryReplayFixture) {
@@ -380,9 +377,8 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
             FROM historySource.`{input_topic}` WITH (
                 FORMAT = json_each_row, SCHEMA (ts String NOT NULL, k String NOT NULL){}
             ) WHERE k = "data"
-        END DO)", KeepWatermarks
-            ? ", WATERMARK = CAST(ts AS Timestamp) - Interval('PT5S'), WATERMARK_IDLE_TIMEOUT = \"PT1H\""
-            : "", "input_topic"_a = InputTopic, "metrics_project"_a = ReplayMetrics.ProjectId));
+        END DO)", KeepWatermarks ? ", WATERMARK = CAST(ts AS Timestamp) - Interval('PT5S'), WATERMARK_IDLE_TIMEOUT = \"PT1H\"" : "",
+            "input_topic"_a = InputTopic, "metrics_project"_a = ReplayMetrics.ProjectId));
         WaitMetric("early-new", base.Seconds() + 6, 1);
     }
 
@@ -397,17 +393,16 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
             END DO
         )", "input_topic"_a = InputTopic, "output_topic"_a = OutputTopic));
         WriteTopicMessage(InputTopic, "old");
-        ReadTopicMessages(OutputTopic, {"old"});
+        ReadTopicMessages(OutputTopic, { "old" });
         WaitCheckpoint();
         const std::string body = fmt::format(R"( AS DO BEGIN
             PRAGMA pq.EnableDeduplication = "FALSE";
             INSERT INTO historySource.`{output_topic}` SELECT "new:" || Data FROM historySource.`{input_topic}`
         END DO)", "input_topic"_a = InputTopic, "output_topic"_a = OutputTopic);
-        ExecQuery("ALTER STREAMING QUERY historyQuery SET (FORCE = FALSE)" + body,
-            NYdb::EStatus::BAD_REQUEST, "PQ sinks with deduplication");
+        ExecQuery("ALTER STREAMING QUERY historyQuery SET (FORCE = FALSE)" + body, NYdb::EStatus::BAD_REQUEST, "PQ sinks with deduplication");
         ExecQuery("ALTER STREAMING QUERY historyQuery SET (FORCE = TRUE)" + body);
         WriteTopicMessage(InputTopic, "live");
-        ReadTopicMessages(OutputTopic, {"old", "new:live"});
+        ReadTopicMessages(OutputTopic, { "old", "new:live" });
     }
 
     Y_UNIT_TEST_TWIN_F(ChangedConsumerAheadOfCheckpointIsRewound, SharedReading, THistoryReplayFixture) {
@@ -425,8 +420,9 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
         };
         const auto waitConsumer = [&](bool running, const TString& consumer = "test_consumer") {
             NTestUtils::WaitFor(TDuration::Seconds(30), "consumer session", [&](TString& error) {
-                const auto result = GetTopicClient()->DescribeConsumer(InputTopic, consumer,
-                    NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValue(TEST_OPERATION_TIMEOUT);
+                const auto result = GetTopicClient()
+                                        ->DescribeConsumer(InputTopic, consumer, NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true))
+                                        .GetValue(TEST_OPERATION_TIMEOUT);
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                 const auto& stats = result.GetConsumerDescription().GetPartitions().front().GetPartitionConsumerStats();
                 UNIT_ASSERT(stats);
@@ -437,7 +433,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
         ExecQuery("CREATE STREAMING QUERY historyQuery" + body("", "test_consumer"));
         waitConsumer(true);
         WriteTopicMessage(InputTopic, R"({"payload":"old"})");
-        ReadTopicMessages(OutputTopic, {"old"});
+        ReadTopicMessages(OutputTopic, { "old" });
         WaitCheckpoint();
         ExecQuery("ALTER STREAMING QUERY historyQuery SET (RUN = FALSE)");
         waitConsumer(false);
@@ -446,7 +442,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
         UNIT_ASSERT_C(committed.IsSuccess(), committed.GetIssues().ToString());
         ExecQuery("ALTER STREAMING QUERY historyQuery SET (RUN = TRUE, FORCE = FALSE)" + body("new:", "replacement_consumer"));
         waitConsumer(true, "replacement_consumer");
-        ReadTopicMessages(OutputTopic, {"old", "new:queued"});
+        ReadTopicMessages(OutputTopic, { "old", "new:queued" });
     }
 
     Y_UNIT_TEST_TWIN_F(StatelessQueryContinuesWithoutForce, NewDeduplication, THistoryReplayFixture) {
@@ -460,7 +456,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
             END DO
         )", "input_topic"_a = InputTopic, "output_topic"_a = OutputTopic));
         WriteTopicMessage(InputTopic, "old");
-        ReadTopicMessages(OutputTopic, {"old"});
+        ReadTopicMessages(OutputTopic, { "old" });
         WaitCheckpoint();
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY historyQuery SET (FORCE = FALSE) AS DO BEGIN
@@ -469,7 +465,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
             END DO
         )", NewDeduplication ? "TRUE" : "FALSE", "input_topic"_a = InputTopic, "output_topic"_a = OutputTopic));
         WriteTopicMessage(InputTopic, "live");
-        ReadTopicMessages(OutputTopic, {"old", "new:live"});
+        ReadTopicMessages(OutputTopic, { "old", "new:live" });
     }
 
     Y_UNIT_TEST_F(DisabledFlagPreservesExistingTextChangeRules, THistoryReplayFixture) {
@@ -482,16 +478,16 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
             END DO
         )", "input_topic"_a = InputTopic, "output_topic"_a = OutputTopic));
         WriteTopicMessage(InputTopic, "old");
-        ReadTopicMessages(OutputTopic, {"old"});
+        ReadTopicMessages(OutputTopic, { "old" });
         WaitCheckpoint();
         const std::string body = fmt::format(R"( AS DO BEGIN
             INSERT INTO historySource.`{output_topic}` SELECT "new:" || Data FROM historySource.`{input_topic}`
         END DO)", "input_topic"_a = InputTopic, "output_topic"_a = OutputTopic);
-        ExecQuery("ALTER STREAMING QUERY historyQuery SET (FORCE = FALSE)" + body,
-            NYdb::EStatus::PRECONDITION_FAILED, "Changing the query text will result in the loss of the checkpoint.");
+        ExecQuery("ALTER STREAMING QUERY historyQuery SET (FORCE = FALSE)" + body, NYdb::EStatus::PRECONDITION_FAILED,
+            "Changing the query text will result in the loss of the checkpoint.");
         ExecQuery("ALTER STREAMING QUERY historyQuery SET (FORCE = TRUE)" + body);
         WriteTopicMessage(InputTopic, "live");
-        ReadTopicMessages(OutputTopic, {"old", "new:live"});
+        ReadTopicMessages(OutputTopic, { "old", "new:live" });
     }
 
     Y_UNIT_TEST_TWIN_F(ReadFromBypassesHistoryReplay, Replace, THistoryReplayFixture) {
@@ -505,18 +501,18 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
             END DO
         )", "input_topic"_a = InputTopic, "output_topic"_a = OutputTopic));
         WriteTopicMessage(InputTopic, "old");
-        ReadTopicMessages(OutputTopic, {"old"});
+        ReadTopicMessages(OutputTopic, { "old" });
         WaitCheckpoint();
         // This sink cannot replay history. Explicit READ_FROM must still work without FORCE.
-        ExecQuery(std::string(Replace
-            ? "CREATE OR REPLACE STREAMING QUERY historyQuery WITH (READ_FROM = LATEST)"
-            : "ALTER STREAMING QUERY historyQuery SET (READ_FROM = LATEST)") + fmt::format(R"( AS DO BEGIN
+        ExecQuery(std::string(Replace ? "CREATE OR REPLACE STREAMING QUERY historyQuery WITH (READ_FROM = LATEST)"
+                                      : "ALTER STREAMING QUERY historyQuery SET (READ_FROM = LATEST)") +
+                  fmt::format(R"( AS DO BEGIN
                 PRAGMA pq.EnableDeduplication = "TRUE";
                 INSERT INTO historySource.`{output_topic}` SELECT "new:" || Data FROM historySource.`{input_topic}`
             END DO)", "input_topic"_a = InputTopic, "output_topic"_a = OutputTopic));
         WaitCheckpoint();
         WriteTopicMessage(InputTopic, "live");
-        ReadTopicMessages(OutputTopic, {"old", "new:live"});
+        ReadTopicMessages(OutputTopic, { "old", "new:live" });
     }
 
     Y_UNIT_TEST_TWIN_F(NestedWindowsReplayCompleteAggregates, ExplicitOutputFrom, THistoryReplayFixture) {
@@ -556,4 +552,4 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
     }
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

@@ -1,7 +1,7 @@
 #include "checker_access.h"
 
-#include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/secret/fetcher.h>
+#include <ydb/services/metadata/secret/snapshot.h>
 
 namespace NKikimr::NMetadata::NSecret {
 
@@ -33,8 +33,7 @@ void TAccessPreparationActor::Handle(NProvider::TEvRefreshSubscriberData::TPtr& 
 
 void TAccessPreparationActor::Bootstrap() {
     Become(&TThis::StateMain);
-    Send(NProvider::MakeServiceId(SelfId().NodeId()),
-        new NProvider::TEvAskSnapshot(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()));
+    Send(NProvider::MakeServiceId(SelfId().NodeId()), new NProvider::TEvAskSnapshot(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()));
 }
 
 TAccessPreparationActor::TAccessPreparationActor(std::vector<TAccess>&& objects,
@@ -44,7 +43,6 @@ TAccessPreparationActor::TAccessPreparationActor(std::vector<TAccess>&& objects,
     , Controller(controller)
     , Context(context)
 {
-
 }
 
-}
+}   // namespace NKikimr::NMetadata::NSecret

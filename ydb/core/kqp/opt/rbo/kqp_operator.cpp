@@ -1275,7 +1275,8 @@ TString TOpAggregate::ToString(TExprContext& ctx, const TInfoUnitRegistry& regis
         separator = ", ";
     }
     return text << " [" << FormatIds(KeyColumns.Items(), &registry, true) << "]] "
-                << (DistinctAll ? " (Distinct all) " : "") << ToStringPhase(AggregationPhase);
+                << (DistinctAll ? " (Distinct all) " : "") << ToStringPhase(AggregationPhase)
+                << (PushedToOlap ? " (Pushed to OLAP)" : "");
 }
 
 NJson::TJsonValue TOpAggregate::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
@@ -1298,6 +1299,9 @@ NJson::TJsonValue TOpAggregate::ToJson(ui32 explainFlags, const TInfoUnitRegistr
     result["Phase"] = ToStringPhase(AggregationPhase);
     if (DistinctAll) {
         result["Distinct"] = "All";
+    }
+    if (PushedToOlap) {
+        result["Pushdown"] = "True";
     }
     return result;
 }

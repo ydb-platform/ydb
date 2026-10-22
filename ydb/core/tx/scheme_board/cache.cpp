@@ -870,7 +870,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     partition.ShardId = src.GetDatashardId();
                 }
 
-                Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
+                Y_ABORT_UNLESS(Self);
+                Partitioning = std::make_shared<TPartitioning>(std::move(partitions),
+                    Self->Info.GetVersion().GetTablePartitionVersion());
             }
 
             if (pathDesc.HasDomainDescription()) {
@@ -1011,6 +1013,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         std::shared_ptr<const TPartitioning> FillRangePartitioning(const TTableRange& range) const {
             Y_ABORT_UNLESS(Partitioning);
             Y_ABORT_UNLESS(!Partitioning->Empty());
+            const auto version = Partitioning->GetVersion();
 
             if (range.IsFullRange(KeyColumnTypes.size())) {
                 return Partitioning;
@@ -1022,7 +1025,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             // so that it can handle readset logic (send empty result to other tx participants etc.)
             if (range.IsEmptyRange(KeyColumnTypes)) {
                 partitions.push_back(*Partitioning->begin());
-                return std::make_shared<TPartitioning>(std::move(partitions));
+                return std::make_shared<TPartitioning>(std::move(partitions), version);
             }
 
             TVector<TKeyDesc::TPartitionInfo>::const_iterator low = LowerBound(
@@ -1044,7 +1047,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 partitions.push_back(*low);
 
                 if (range.Point) {
-                    return std::make_shared<TPartitioning>(std::move(partitions));
+                    return std::make_shared<TPartitioning>(std::move(partitions), version);
                 }
 
                 const int prevComp = CompareBorders<true, true>(
@@ -1054,12 +1057,12 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 );
 
                 if (prevComp >= 0) {
-                    return std::make_shared<TPartitioning>(std::move(partitions));
+                    return std::make_shared<TPartitioning>(std::move(partitions), version);
                 }
 
             } while (++low != Partitioning->end());
 
-            return std::make_shared<TPartitioning>(std::move(partitions));
+            return std::make_shared<TPartitioning>(std::move(partitions), version);
         }
 
         static void FillTopicPartitioning(
@@ -2199,7 +2202,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         partitions.push_back(TKeyDesc::TPartitionInfo(columnShard));
                         partitions.back().Range = TKeyDesc::TPartitionRangeInfo();
                     }
-                    keyDesc.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
+                    keyDesc.Partitioning = std::make_shared<TPartitioning>(std::move(partitions), 0);
                     return;
                 } else if (Kind == TNavigate::KindColumnTable) {
                     FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ESource::ColumnTable);
@@ -2213,7 +2216,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         partitions.push_back(TKeyDesc::TPartitionInfo(columnShard));
                         partitions.back().Range = TKeyDesc::TPartitionRangeInfo();
                     }
-                    keyDesc.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
+                    keyDesc.Partitioning = std::make_shared<TPartitioning>(std::move(partitions), 0);
                     return;
                 }
 
@@ -2245,7 +2248,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     if (ok) {
                         TVector<TKeyDesc::TPartitionInfo> partitions;
                         partitions.push_back(TKeyDesc::TPartitionInfo(shard));
-                        keyDesc.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
+                        keyDesc.Partitioning = std::make_shared<TPartitioning>(std::move(partitions), 0);
                     } else {
                         keyDesc.Status = TKeyDesc::EStatus::OperationNotSupported;
                         ++context->Request->ErrorCount;
@@ -2258,7 +2261,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     partitions.push_back(TKeyDesc::TPartitionInfo(columnShard));
                     partitions.back().Range = TKeyDesc::TPartitionRangeInfo();
                 }
-                keyDesc.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
+                keyDesc.Partitioning = std::make_shared<TPartitioning>(std::move(partitions), 0);
             } else {
                 if (Partitioning && !Partitioning->Empty()) {
                     keyDesc.Partitioning = FillRangePartitioning(keyDesc.Range);

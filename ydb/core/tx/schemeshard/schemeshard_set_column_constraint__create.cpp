@@ -123,7 +123,7 @@ public:
         }
 
         if (tablePath->IsColumnTable()) {
-            if (!AppData()->FeatureFlags.GetEnableColumnTableSetNotNull()) {
+            if (!AppData()->FeatureFlags.GetEnableColumnShardSetNotNull()) {
                 return Reply(Ydb::StatusIds::UNSUPPORTED, "SET NOT NULL for column tables is disabled");
             }
             const auto table = Self->ColumnTables.GetVerifiedPtr(tablePath.Base()->PathId);

@@ -28,6 +28,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/services/workload_manager/query_classifier.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
+#include <ydb/core/kqp/session_actor/kqp_snapshot_tables.h>
 #include <ydb/core/kqp/tracing/kqp_query_stats_rendering.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -1286,10 +1287,6 @@ public:
     }
 
     void AcquirePersistentSnapshot() {
-        YDB_LOG_DEBUG("Acquire persistent snapshot",
-            {"marker", "KQPSA"},
-            {"logPrefix", LogPrefix()},
-            {"traceId", TraceId()});
         QueryState->AcquireSnapshotSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::SessionAcquireSnapshot,
             QueryState->KqpSessionSpan.GetTraceId(), {
                 .Name = "Acquire persistent snapshot",
@@ -1302,7 +1299,20 @@ public:
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
         auto snapMgrActorId = RegisterWithSameMailbox(snapMgr);
 
-        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(QueryState->PreparedQuery->GetQueryTables(), QueryId, std::move(QueryState->Orbit));
+        auto tables = BuildSnapshotTables(*QueryState->PreparedQuery, *QueryState->QueryData);
+        YDB_LOG_DEBUG("Acquire persistent snapshot",
+            {"marker", "KQPSA"},
+            {"logPrefix", LogPrefix()},
+            {"tables", tables.size()},
+            {"boundedTables", CountBoundedTables(tables)},
+            {"traceId", TraceId()});
+        if (QueryState->AcquireSnapshotSpan) {
+            QueryState->AcquireSnapshotSpan
+                .Attribute("tables", static_cast<i64>(tables.size()))
+                .Attribute("bounded_tables", static_cast<i64>(CountBoundedTables(tables)));
+        }
+        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(
+            std::move(tables), QueryId, std::move(QueryState->Orbit));
         Send(snapMgrActorId, ev.release(), 0, 0, QueryState->AcquireSnapshotSpan.GetTraceId());
 
         QueryState->TxCtx->SnapshotHandle.ManagingActor = snapMgrActorId;
@@ -1571,6 +1581,20 @@ public:
         }
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+
+        const bool allowModifications = QueryState->IsInternalCall() || QueryState->IsCreateTableAs()
+            || AppData()->FeatureFlags.GetEnableClientModifications();
+        if (!allowModifications) {
+            for (const auto& op : phyQuery.GetTableOps()) {
+                if (TYdbOperation(op.GetOperation()) & KikimrModifyOps()) {
+                    const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
+                    std::vector<TIssue> issues{YqlIssue(pos, TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                        "Client data writes are disabled")};
+                    ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "", MessageFromIssues(issues));
+                    return false;
+                }
+            }
+        }
 
         auto checkSchemeTx = [&]() {
             for (const auto &tx : phyQuery.GetTransactions()) {

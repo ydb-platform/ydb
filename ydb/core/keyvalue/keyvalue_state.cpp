@@ -2221,11 +2221,13 @@ void TKeyValueState::ProcessPostponedChannels(const TVector<ui32> &channels, con
 }
 
 bool TKeyValueState::TryAcquireRequestSlot(TIntermediate& intermediate, const TActorContext& ctx) {
-    const ui64 limit = RequestsInFlightLimit
-        ? RequestsInFlightLimit->Update(ctx.Now())
-        : DefaultRequestsInFlightLimit;
-    if (DataRequestsInFlight.size() >= limit) {
-        return false;
+    if (AppData(ctx)->FeatureFlags.GetEnableKeyValueRequestInFlightLimit()) {
+        const ui64 limit = RequestsInFlightLimit
+            ? RequestsInFlightLimit->Update(ctx.Now())
+            : DefaultRequestsInFlightLimit;
+        if (DataRequestsInFlight.size() >= limit) {
+            return false;
+        }
     }
 
     const bool inserted = DataRequestsInFlight.insert(intermediate.RequestUid).second;

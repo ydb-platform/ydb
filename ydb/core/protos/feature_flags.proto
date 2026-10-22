@@ -44,7 +44,7 @@ message TFeatureFlags {
     optional bool CheckDatabaseAccessPermission = 23 [default = false];
     optional bool AllowOnlineIndexBuild = 24 [default = true]; // deprecated: always true
     optional bool EnablePersistentQueryStats = 25 [default = true, (RequireRestart) = true];
-    optional bool DisableDataShardBarrier = 26 [default = false];
+    reserved 26; // DisableDataShardBarrier
     optional bool EnablePutBatchingForBlobStorage = 27 [default = true];
     optional bool EnableKqpWideFlow = 28 [default = true]; // deprecated: always true
     optional bool EnableKqpScanQueries = 29 [default = true]; // deprecated: always true
@@ -209,7 +209,7 @@ message TFeatureFlags {
     optional bool SwitchToConfigV1 = 180 [default = false];
     // Implies EnableExportFiltering.
     optional bool EnableEncryptedExport = 181 [default = false];
-    optional bool EnableAlterDatabase = 182 [default = false];
+    optional bool EnableAlterDatabase = 182 [default = true];
     optional bool EnableExportAutoDropping = 183 [default = true];
     optional bool EnableThrottlingReport = 184 [default = true];
     optional bool EnableNodeBrokerDeltaProtocol = 185 [default = true];
@@ -257,7 +257,7 @@ message TFeatureFlags {
     optional bool EnableTopicsSqlIoOperations = 226 [default = true];
     optional bool EnableSysViewPermissionsExport = 227 [default = false];
     optional bool EnableCmsSmartAvailabilityMode = 228 [default = true];
-    optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
+    optional bool EnableConditionalEraseResponseBatching = 229 [default = true];
     optional bool EnablePDiskDataEncryption = 230 [default = true];
     optional bool EnableForcedCompactions = 231 [default = true];
     optional bool EnableLocalBloomFilterIndex = 232 [default = true];
@@ -314,9 +314,9 @@ message TFeatureFlags {
     // Use TablePartitionsByShardIdx (keyed by ShardIdx) instead of TablePartitions
     // (keyed by positional index) for local tables.  When ON, split/merge writes only
     // O(k) rows (src+dst shards) instead of O(N) rows (all partitions after srcFirstIdx).
-    optional bool EnableTablePartitionsFormatShardIdx = 271 [default = false];
-    optional bool EnableTablePartitionsFormatShardIdxByDefault = 272 [default = false];
-    optional bool EnableTablePartitionsFormatAutoConvert = 273 [default = false];
+    optional bool EnableTablePartitionsFormatShardIdx = 271 [default = true];
+    optional bool EnableTablePartitionsFormatShardIdxByDefault = 272 [default = true];
+    optional bool EnableTablePartitionsFormatAutoConvert = 273 [default = true];
     optional bool EnableTopicMessagesBatching = 274 [default = false, (RequireRestart) = true];
     optional bool EnableTopicWriteOffsetDeltaInKeys = 275 [default = false, (RequireRestart) = true];
     optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];
@@ -326,7 +326,7 @@ message TFeatureFlags {
     optional bool EnableCompactFulltextIndex = 280 [default = true];
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
     optional bool EnableFulltextIndexPrefix = 282 [default = true];
-    optional bool EnableAccessServiceV2Interface = 283 [default = true, (RequireRestart) = true];
+    reserved 283; reserved "EnableAccessServiceV2Interface";
     optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
     optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
     optional bool EnableTopicDeferredPublish = 286 [default = false];
@@ -445,5 +445,16 @@ message TFeatureFlags {
     // Enables memory of table partitions split/merge demands
     optional bool EnableSplitMergeDemandTracking = 360 [default = false];
     optional bool EnableStreamingQuerySchemeOperations = 361 [default = true];
-    optional bool EnableColumnTableSetNotNull = 363 [default = false];
+    optional bool EnableKeyValueRequestInFlightLimit = 363 [default = false];
+    // Use optimized compaction selection strategy.
+    optional bool EnableHullCompStorageRatioOptimization = 364 [default = false];
+    // Skip StorageRatio calculation at compaction rank >= 10 while continuing compaction selection.
+    optional bool EnableHullCompStorageRatioHighRankSkip = 365 [default = false];
+    // Enables configuring column-table TTL on DyNumber, Date32, Datetime64 and Timestamp64.
+    // Existing TTL settings continue to execute when the flag is disabled.
+    optional bool EnableColumnShardExtendedTtlTypes = 366 [default = false];
+    optional bool EnableColumnShardSetNotNull = 367 [default = false];
+    // Allows client data writes and schema modifications.
+    optional bool EnableClientModifications = 368 [default = true];
+    optional bool EnableCompileCacheV2 = 369 [default = false];
 }

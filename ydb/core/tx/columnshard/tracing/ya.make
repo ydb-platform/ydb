@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     probes.cpp
+    startup_probes.cpp
     write_orbit.cpp
 )
 

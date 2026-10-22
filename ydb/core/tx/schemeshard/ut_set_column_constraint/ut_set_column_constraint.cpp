@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
     Y_UNIT_TEST_TWIN(ColumnTableAdmissionFeatureFlag, Enabled) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableColumnTableSetNotNull(Enabled);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnShardSetNotNull(Enabled);
         TestCreateColumnTable(runtime, 100, "/MyRoot", R"(
             Name: "ColumnTable"
             ColumnShardCount: 1

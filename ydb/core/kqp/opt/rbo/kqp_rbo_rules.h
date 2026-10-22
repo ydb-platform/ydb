@@ -428,6 +428,17 @@ class TPushOlapProjectionRule : public ISimplifiedRule {
 };
 
 /**
+ * Push down an intermediate aggregate to the column table read in its stage.
+ */
+class TPushOlapAggregateRule : public ISimplifiedRule {
+  public:
+      TPushOlapAggregateRule() : ISimplifiedRule("Push olap aggregate", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
+
+      virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+      virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
  * Disable blocks on columns limit.
  */
 class TDisableBlocksOnColumnsLimitRule : public ISimplifiedRule {

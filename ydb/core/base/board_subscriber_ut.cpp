@@ -160,7 +160,7 @@ void TBoardSubscriberTestBase::SimpleSubscriber() {
 
     {
         auto event = Context->GrabEdgeEventIf<TEvStateStorage::TEvBoardInfoUpdate>(
-            {edgeSubscriber}, [edgeSubscriber, publisher](const auto& ev){
+            {edgeSubscriber}, [edgeSubscriber, publisher](const TEvStateStorage::TEvBoardInfoUpdate::TPtr& ev){
             const auto &updates = ev->Get()->Updates;
             UNIT_ASSERT(updates.size() == 1);
             auto updatesIt = updates.find(publisher);
@@ -204,7 +204,7 @@ void TBoardSubscriberTestBase::ManySubscribersManyPublisher() {
         const auto publisher = CreatePublisher("path", ToString(i), edgePublisher, i % 3);
         for (const auto& subscriber : subscribers) {
             auto event = Context->GrabEdgeEventIf<TEvStateStorage::TEvBoardInfoUpdate>(
-                {subscriber}, [publisher](const auto& ev) mutable {
+                {subscriber}, [publisher](const TEvStateStorage::TEvBoardInfoUpdate::TPtr& ev) mutable {
                     const auto &updates = ev->Get()->Updates;
                     UNIT_ASSERT(updates.size() == 1);
                     auto updatesIt = updates.find(publisher);

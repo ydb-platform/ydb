@@ -166,6 +166,10 @@ public:
                 {"rid", rid},
                 {"tid", tid},
                 {"pathId", Ev->Get()->DstPathId});
+        } else if (target->GetPendingDstPathId() && Replication->GetDesiredState() == TReplication::EState::Done) {
+            // The attachment ALTER may have committed before validation failed.
+            // Complete DONE by detaching the pending path rather than attaching again.
+            target->SetDstState(TReplication::EDstState::Alter);
         } else {
             target->SetDstState(TReplication::EDstState::Error);
             target->SetIssue(TStringBuilder() << "Create dst error"

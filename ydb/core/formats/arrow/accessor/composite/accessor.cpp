@@ -36,10 +36,13 @@ std::shared_ptr<IChunkedArray> ICompositeChunkedArray::DoISlice(const ui32 offse
     ui32 currentIndex = 0;
     std::optional<IChunkedArray::TFullChunkedArrayAddress> arrAddress;
     std::vector<std::shared_ptr<IChunkedArray>> chunks;
+    if (!count) {
+        return std::make_shared<TCompositeChunkedArray>(std::move(chunks), count, GetDataType());
+    }
     while (currentIndex < offset + count) {
         arrAddress = GetArray(arrAddress, currentIndex, nullptr);
         const auto& arr = arrAddress->GetArray();
-        if (currentIndex + arr->GetRecordsCount() < offset) {
+        if (currentIndex + arr->GetRecordsCount() <= offset) {
         } else if (currentIndex >= offset && currentIndex + arr->GetRecordsCount() <= offset + count) {
             chunks.emplace_back(arr);
         } else {
@@ -92,7 +95,7 @@ IChunkedArray::TLocalChunkedArrayAddress TCompositeChunkedArray::DoGetLocalChunk
 }
 
 std::optional<bool> TCompositeChunkedArray::DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
-    std::optional<std::shared_ptr<arrow::Scalar>> result;
+    std::shared_ptr<arrow::Scalar> result;
     for (auto&& i : Chunks) {
         std::shared_ptr<arrow::Scalar> valLocal;
         auto res = i->CheckOneValueAccessor(valLocal);
@@ -101,13 +104,31 @@ std::optional<bool> TCompositeChunkedArray::DoCheckOneValueAccessor(std::shared_
         }
         if (!result) {
             result = valLocal;
-        } else if (!NArrow::ScalarCompareNullable(*result, valLocal)) {
+        } else if (!result->Equals(*valLocal)) {
             return false;
         }
     }
-    AFL_VERIFY(!!result);
-    value = *result;
+    AFL_VERIFY(result);
+    value = result;
     return true;
+}
+
+std::optional<bool> TCompositeChunkedArray::DoHasNulls() const {
+    if (Chunks.empty()) {
+        return false;
+    }
+    bool unknown = false;
+    for (const auto& chunk : Chunks) {
+        const std::optional<bool> hasNulls = chunk->HasNulls();
+        if (hasNulls == true) {
+            return true;
+        }
+        if (!hasNulls) {
+            // May still get a definite `true` later
+            unknown = true;
+        }
+    }
+    return unknown ? std::optional<bool>() : std::optional<bool>(false);
 }
 
 std::shared_ptr<arrow::ChunkedArray> TCompositeChunkedArray::DoGetChunkedArray(const TColumnConstructionContext& context) const {

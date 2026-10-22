@@ -1,5 +1,7 @@
 #include "helpers.h"
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+
 using namespace NKafkaRdkafkaTests;
 
 Y_UNIT_TEST_SUITE(KafkaLibrdkafkaGroupsAndOffsets) {
@@ -188,27 +190,45 @@ Y_UNIT_TEST_SUITE(KafkaLibrdkafkaGroupsAndOffsets) {
     }
 
     Y_UNIT_TEST(SaslScramSha256) {
-        auto producer = MakeSaslProducer({
+        const TString username = "scramtestuser";
+        const TString password = "Scram_test_password_1535";
+        auto driver = MakeYdbDriver();
+        NYdb::NQuery::TQueryClient queryClient(driver);
+
+        // Create the password on the tested server so the user has SCRAM keys.
+        const auto createUser = queryClient.ExecuteQuery(
+            std::string(TStringBuilder() << "CREATE USER " << username << " PASSWORD '" << password << "';"),
+            NYdb::NQuery::TTxControl::NoTx()
+        ).GetValueSync();
+        UNIT_ASSERT_C(createUser.IsSuccess(), createUser.GetIssues().ToString());
+
+        const auto grant = queryClient.ExecuteQuery(
+            std::string(TStringBuilder() << "GRANT ALL ON `" << DatabasePath() << "` TO " << username << ";"),
+            NYdb::NQuery::TTxControl::NoTx()
+        ).GetValueSync();
+        UNIT_ASSERT_C(grant.IsSuccess(), grant.GetIssues().ToString());
+
+        const THashMap<TString, TString> scramConfig = {
             {"sasl.mechanisms", "SCRAM-SHA-256"},
+            {"sasl.username", username},
+            {"sasl.password", password},
             {"socket.timeout.ms", "8000"},
-        });
+        };
+        auto producer = MakeSaslProducer(scramConfig);
         RdKafka::Metadata* metadata = nullptr;
         const auto err = producer->Handle->metadata(true, nullptr, &metadata, 10000);
         std::unique_ptr<RdKafka::Metadata> holder(metadata);
-        if (err != RdKafka::ERR_NO_ERROR) {
-            // Default recipe user may not have SCRAM keys; handshake must fail cleanly.
-            return;
-        }
+        AssertRdKafkaOk(err, "SCRAM-SHA-256 metadata");
 
         const TString topic = UniqueName("rdk-sasl-scram");
         CreateYdbTopic(topic, 1);
         WaitTopicPartitions(*producer->Handle, topic, 1);
-        ProduceAndFlush(*producer, topic, {"scram-payload"}, {"scram-key"});
+        const TVector<TString> expected = {"alpha", "бета", "end-03"};
+        ProduceAndFlush(*producer, topic, expected);
+        UNIT_ASSERT_VALUES_EQUAL(producer->Dr.Ok.load(), expected.size());
 
-        auto consumer = MakeSaslConsumer(UniqueName("scram-group"), {
-            {"sasl.mechanisms", "SCRAM-SHA-256"},
-        });
+        auto consumer = MakeSaslConsumer(UniqueName("scram-group"), scramConfig);
         AssertRdKafkaOk(consumer->Handle->subscribe({std::string(topic)}), "subscribe");
-        UNIT_ASSERT_VALUES_EQUAL(ConsumePayloads(*consumer->Handle, 1)[0], "scram-payload");
+        UNIT_ASSERT_VALUES_EQUAL(ConsumePayloads(*consumer->Handle, expected.size()), expected);
     }
 }

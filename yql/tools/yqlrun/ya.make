@@ -1,41 +1,20 @@
-SET(YQLRUN_RESOURCE None)
+YQL_PREBUILT_PROGRAM(yqlrun)
 
 IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
     INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
-    IF (SANITIZER_TYPE == "address")
-        SET(YQLRUN_RESOURCE ${YQLRUN_RESOURCE_ASAN})
-    ELSEIF (SANITIZER_TYPE == "memory")
-        SET(YQLRUN_RESOURCE ${YQLRUN_RESOURCE_MSAN})
-    ELSEIF (SANITIZER_TYPE == "thread")
-        SET(YQLRUN_RESOURCE ${YQLRUN_RESOURCE_TSAN})
-    ELSEIF (SANITIZER_TYPE == "undefined")
-        SET(YQLRUN_RESOURCE ${YQLRUN_RESOURCE_UBSAN})
-    ELSE()
-        SET(YQLRUN_RESOURCE ${YQLRUN_RESOURCE_DEFAULT})
-    ENDIF()
 ENDIF()
 
-IF (YQLRUN_RESOURCE != "None")
-    PACKAGE()
+SRCS(
+    yqlrun.cpp
+)
 
-    FROM_SANDBOX(FILE ${YQLRUN_RESOURCE} RENAME RESOURCE OUT_NOAUTO yqlrun)
+INCLUDE(ya.make.inc)
 
-    END()
-ELSE()
-    PROGRAM(yqlrun)
+YQL_CURRENT_ABI_VERSION()
 
-    SRCS(
-        yqlrun.cpp
-    )
+FILES(
+    ui.sh
+    uig.sh
+)
 
-    INCLUDE(ya.make.inc)
-
-    YQL_CURRENT_ABI_VERSION()
-
-    FILES(
-        ui.sh
-        uig.sh
-    )
-
-    END()
-ENDIF()
+END()

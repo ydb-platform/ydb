@@ -2939,6 +2939,7 @@ private:
                 "ca_cert",
                 "consistency_level",
                 "commit_interval",
+                "initial_scan",
             };
             settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
             return settings;

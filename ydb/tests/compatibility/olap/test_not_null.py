@@ -8,7 +8,7 @@ from ydb.tests.library.compatibility.fixtures import (
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
-FLAGS = ("enable_set_column_constraint", "enable_column_table_set_not_null")
+FLAGS = ("enable_set_column_constraint", "enable_column_shard_set_not_null")
 
 
 class NotNullChecks:

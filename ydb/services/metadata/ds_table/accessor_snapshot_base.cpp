@@ -1,4 +1,5 @@
 #include "accessor_snapshot_base.h"
+
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 
@@ -58,7 +59,7 @@ void TDSAccessorBase::Handle(NRequest::TEvRequestResult<NRequest::TDialogYQLRequ
 
     Y_ABORT_UNLESS((int)replyIdx == qResult.result_sets().size());
     Y_ABORT_UNLESS((size_t)qResultFull.result_sets().size() == SnapshotConstructor->GetManagers().size());
-    
+
     auto parsedSnapshot = SnapshotConstructor->ParseSnapshot(qResultFull, RequestedActuality);
 
     if (!parsedSnapshot) {
@@ -169,7 +170,6 @@ TDSAccessorBase::TDSAccessorBase(const NRequest::TConfig& config, NFetcher::ISna
     : Config(config)
     , SnapshotConstructor(snapshotConstructor)
 {
-
 }
 
 void TDSAccessorBase::Bootstrap() {
@@ -177,4 +177,4 @@ void TDSAccessorBase::Bootstrap() {
     OnBootstrap();
 }
 
-}
+}   // namespace NKikimr::NMetadata::NProvider

@@ -1,22 +1,20 @@
 #include "../yql_http_gateway.h"
 
-#include <library/cpp/testing/common/env.h>
-#include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/testing/hook/hook.h>
-#include <library/cpp/threading/future/core/future.h>
+#include <ydb/library/aws_init/aws.h>
 
+#include <library/cpp/testing/common/env.h>
+#include <library/cpp/testing/hook/hook.h>
+#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/threading/future/core/future.h>
 #include <util/generic/size_literals.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
-
-#include <ydb/library/aws_init/aws.h>
-
 #include <yql/essentials/utils/url_builder.h>
 
 #include <cstdlib>
 
 namespace {
-    
+
 TString Exec(const TString& cmd) {
     std::array<char, 128> buffer;
     TString result;
@@ -37,7 +35,7 @@ TString GetMinIoUrl() {
     return result ? "http://localhost:" + Strip(result.back()) : TString{};
 }
 
-} // namespace
+}   // namespace
 
 Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
     NKikimr::InitAwsAPI();
@@ -50,18 +48,12 @@ Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
 Y_UNIT_TEST_SUITE(THttpGateway) {
     Y_UNIT_TEST(RetriesWithAwsCreds) {
         const auto httpGateway = NYql::IHTTPGateway::Make();
-        const auto retryPolicy = NYql::IHTTPGateway::TRetryPolicy::GetFixedIntervalPolicy(
-            [](CURLcode, long httpCode) {
-                if (httpCode < 200 || httpCode >= 400) {
-                    return ERetryErrorClass::LongRetry;
-                }
-                return ERetryErrorClass::NoRetry;
-            },
-            TDuration::Seconds(6),
-            TDuration::Seconds(6),
-            1,
-            TDuration::Seconds(10)
-        );
+        const auto retryPolicy = NYql::IHTTPGateway::TRetryPolicy::GetFixedIntervalPolicy([](CURLcode, long httpCode) {
+            if (httpCode < 200 || httpCode >= 400) {
+                return ERetryErrorClass::LongRetry;
+            }
+            return ERetryErrorClass::NoRetry;
+        }, TDuration::Seconds(6), TDuration::Seconds(6), 1, TDuration::Seconds(10));
 
         const auto awsUserPwd = "minio:minio123";
         const auto awsSigV4 = "aws:amz:ru-central-1:s3";
@@ -69,35 +61,28 @@ Y_UNIT_TEST_SUITE(THttpGateway) {
         const auto requestHeaders = NYql::IHTTPGateway::MakeYcHeaders("0", "", {}, awsUserPwd, awsSigV4);
 
         auto promise = NThreading::NewPromise<std::optional<TString>>();
-        
+
         const TString EXPECTED_BODY = "{\"key\": \"1\", \"value\": \"trololo\"}\n{\"key\": \"2\", \"value\": \"hello world\"}\n";
 
         // it takes at least three seconds for docker to create requested bucket,
         // so the first request is always gonna fail with code 404 and retried (which is intended)
-        httpGateway->Download(
-            requestUrl,
-            requestHeaders,
-            0,
-            10_MB,
-            [&promise, EXPECTED_BODY](NYql::IHTTPGateway::TResult&& result) {
-                const long code = result.Content.HttpResponseCode;
-                const TString body = result.Content.Extract();
+        httpGateway->Download(requestUrl, requestHeaders, 0, 10_MB, [&promise, EXPECTED_BODY](NYql::IHTTPGateway::TResult&& result) {
+            const long code = result.Content.HttpResponseCode;
+            const TString body = result.Content.Extract();
 
-                std::optional<TString> error;
-                if (result.Issues) {
-                    error = result.Issues.ToOneLineString();
-                } else if (code < 200 || code >= 300) {
-                    error = TStringBuilder() << "Invalid http return code, expected 206, got " << code;
-                } else if (body != EXPECTED_BODY) {
-                    error = TStringBuilder() << "Invalid value from minio, expected `" << EXPECTED_BODY << "`, got `" << body << "`";
-                }
+            std::optional<TString> error;
+            if (result.Issues) {
+                error = result.Issues.ToOneLineString();
+            } else if (code < 200 || code >= 300) {
+                error = TStringBuilder() << "Invalid http return code, expected 206, got " << code;
+            } else if (body != EXPECTED_BODY) {
+                error = TStringBuilder() << "Invalid value from minio, expected `" << EXPECTED_BODY << "`, got `" << body << "`";
+            }
 
-                promise.SetValue(error);
-            },
-            {},
-            retryPolicy
-        );
-        
+            promise.SetValue(error);
+        },
+            {}, retryPolicy);
+
         auto future = promise.GetFuture();
         future.Wait();
 

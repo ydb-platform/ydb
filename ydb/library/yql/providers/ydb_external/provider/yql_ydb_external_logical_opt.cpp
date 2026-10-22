@@ -3,6 +3,7 @@
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/ydb_external/expr_nodes/yql_ydb_external_expr_nodes.h>
+
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
@@ -12,7 +13,7 @@ namespace {
 
 using namespace NNodes;
 
-class TLogicalOptimizer final : public TOptimizeTransformerBase {
+class TLogicalOptimizer final: public TOptimizeTransformerBase {
 public:
     explicit TLogicalOptimizer(TState::TPtr state)
         : TOptimizeTransformerBase(state->Types, NLog::EComponent::ProviderDq, {})
@@ -35,6 +36,7 @@ private:
         }
         // Only push a projection directly on a read. Common optimizers retain
         // columns used by intervening local filters before producing this shape.
+        // clang-format off
         return Build<TWrap>(ctx, node.Pos())
             .InitFrom(wrapper.Cast())
             .template Input<TYdbExternalReadTable>()
@@ -42,6 +44,7 @@ private:
                 .Columns(extract.Members())
             .Build()
             .Done();
+        // clang-format on
     }
 
     TMaybeNode<TExprBase> ExtractMembersSource(TExprBase node, TExprContext& ctx) const {
@@ -55,10 +58,10 @@ private:
         if (!columns->ChildrenSize()) {
             // A physical carrier preserves row count for COUNT(*) and constant
             // projections. The public RowType remains the empty projected type.
-            const auto& table = State_->Tables.at(TState::TTableKey(
-                source.Cast().Cluster().StringValue(), source.Cast().Table().StringValue()));
-            columns = ctx.NewList(node.Pos(), {ctx.NewAtom(node.Pos(), table.RowType->GetItems().front()->GetName())});
+            const auto& table = State_->Tables.at(TState::TTableKey(source.Cast().Cluster().StringValue(), source.Cast().Table().StringValue()));
+            columns = ctx.NewList(node.Pos(), { ctx.NewAtom(node.Pos(), table.RowType->GetItems().front()->GetName()) });
         }
+        // clang-format off
         return Build<TDqSourceWrap>(ctx, node.Pos())
             .InitFrom(wrapper.Cast())
             .Input<TYdbExternalSourceSettings>()
@@ -67,6 +70,7 @@ private:
             .Build()
             .RowType(ExpandType(node.Pos(), GetSeqItemType(*extract.Ref().GetTypeAnn()), ctx))
             .Done();
+        // clang-format on
     }
 
     TMaybeNode<TExprBase> RejectLookup(TExprBase node, TExprContext& ctx) const {
@@ -80,10 +84,10 @@ private:
     const TState::TPtr State_;
 };
 
-} // namespace
+}   // namespace
 
 THolder<IGraphTransformer> CreateLogicalOptimizer(TState::TPtr state) {
     return MakeHolder<TLogicalOptimizer>(std::move(state));
 }
 
-} // namespace NYql::NYdbExternal
+}   // namespace NYql::NYdbExternal

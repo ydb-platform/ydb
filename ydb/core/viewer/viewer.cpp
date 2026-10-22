@@ -51,12 +51,18 @@ bool IsPathParameter(TStringBuf name) {
     return name == "database" || name == "database_path" || name == "tenant" || name == "path" || name == "topic";
 }
 
-TString NormalizePathValue(TStringBuf value, const NPathAliasing::TPathNormalizer& normalizer) {
-    auto paths = StringSplitter(value).Split(',').ToList<TString>();
-    for (auto& path : paths) {
-        path = normalizer.NormalizePath(path);
+TString NormalizePathValue(TStringBuf key, TStringBuf value, const NPathAliasing::TPathNormalizer& normalizer, bool pathList = false) {
+    if (pathList && key == "path") {
+        auto paths = StringSplitter(value).Split(',').ToList<TString>();
+        for (auto& path : paths) {
+            path = normalizer.NormalizePath(path);
+        }
+        return JoinSeq(',', paths);
     }
-    return JoinSeq(',', paths);
+    if (!value.empty() && (key == "database" || key == "database_path" || key == "tenant")) {
+        return normalizer.NormalizePath(CanonizePath(TString(value)));
+    }
+    return normalizer.NormalizePath(value);
 }
 
 enum class EViewerEndpointAccessType {
@@ -90,19 +96,19 @@ TString GetLegacyJsonPathAlias(TStringBuf path) {
 
 }
 
-TCgiParameters NormalizePathParameters(TCgiParameters params) {
-    if (HasAppData() && AppData()->PathNormalizer) {
+TCgiParameters NormalizePathParameters(TCgiParameters params, bool pathList) {
+    if (HasAppData() && AppData()->PathNormalizer && AppData()->PathNormalizer->HasRules()) {
         for (auto& [key, value] : params) {
             if (IsPathParameter(key)) {
-                value = NormalizePathValue(value, *AppData()->PathNormalizer);
+                value = NormalizePathValue(key, value, *AppData()->PathNormalizer, pathList);
             }
         }
     }
     return params;
 }
 
-void NormalizePathParameters(NJson::TJsonValue& params) {
-    if (!params.IsMap() || !HasAppData() || !AppData()->PathNormalizer) {
+void NormalizePathParameters(NJson::TJsonValue& params, bool pathList) {
+    if (!params.IsMap() || !HasAppData() || !AppData()->PathNormalizer || !AppData()->PathNormalizer->HasRules()) {
         return;
     }
     for (auto& [key, value] : params.GetMapSafe()) {
@@ -110,11 +116,11 @@ void NormalizePathParameters(NJson::TJsonValue& params) {
             continue;
         }
         if (value.IsString()) {
-            value = NormalizePathValue(value.GetString(), *AppData()->PathNormalizer);
+            value = NormalizePathValue(key, value.GetString(), *AppData()->PathNormalizer, pathList);
         } else if (value.IsArray()) {
             for (auto& item : value.GetArraySafe()) {
                 if (item.IsString()) {
-                    item = NormalizePathValue(item.GetString(), *AppData()->PathNormalizer);
+                    item = NormalizePathValue(key, item.GetString(), *AppData()->PathNormalizer);
                 }
             }
         }

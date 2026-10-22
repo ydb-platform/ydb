@@ -13,8 +13,8 @@
 
 namespace NKikimr::NViewer {
 
-TCgiParameters NormalizePathParameters(TCgiParameters params);
-void NormalizePathParameters(NJson::TJsonValue& params);
+TCgiParameters NormalizePathParameters(TCgiParameters params, bool pathList = false);
+void NormalizePathParameters(NJson::TJsonValue& params, bool pathList = false);
 
 using TTabletId = ui64;
 

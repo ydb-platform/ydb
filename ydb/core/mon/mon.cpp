@@ -7,6 +7,7 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/http_database_param.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -66,8 +67,8 @@ TString ExtractMonDatabaseParam(const NHttp::THttpIncomingRequest* request) {
 
 void InitMonHttpIncomingRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event) {
     event->Database = ExtractMonDatabaseParam(event->Request.Get());
-    if (HasAppData() && AppData()->PathNormalizer) {
-        event->Database = AppData()->PathNormalizer->NormalizePath(event->Database);
+    if (!event->Database.empty() && HasAppData() && AppData()->PathNormalizer) {
+        event->Database = AppData()->PathNormalizer->NormalizePath(CanonizePath(event->Database));
     }
 }
 

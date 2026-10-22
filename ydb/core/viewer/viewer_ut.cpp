@@ -878,6 +878,50 @@ Y_UNIT_TEST_SUITE(Viewer) {
         return statusCode;
     }
 
+    class TDatabaseAliasTicketParser : public TActor<TDatabaseAliasTicketParser> {
+    public:
+        TDatabaseAliasTicketParser() : TActor(&TDatabaseAliasTicketParser::StateFunc) {}
+
+        void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+            const TCgiParameters paths("database=alias&path=/alias/a,/alias/b&topic=relative");
+            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths).Get("path"), "/Root/a,/alias/b");
+            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, true).Get("path"), "/Root/a,/Root/b");
+            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths).Get("topic"), "relative");
+            NJson::TJsonValue jsonPaths;
+            UNIT_ASSERT(NJson::ReadJsonTree(R"({"database":"alias","path":["/alias/a","/alias/b"],"message":"/alias"})", &jsonPaths));
+            NormalizePathParameters(jsonPaths);
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["database"].GetString(), "/Root");
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"][0].GetString(), "/Root/a");
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"][1].GetString(), "/Root/b");
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["message"].GetString(), "/alias");
+            jsonPaths["path"] = "/alias/a,/alias/b";
+            NormalizePathParameters(jsonPaths, true);
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"].GetString(), "/Root/a,/Root/b");
+
+            const auto& request = *ev->Get();
+            const TString allowedDatabase = request.Ticket == VALID_TOKEN ? "/Root" : "/Other";
+            if (request.Ticket != ROOT_TOKEN && (request.Database != allowedDatabase
+                || (request.Ticket != VALID_TOKEN && request.Ticket != "Bearer other-db"))) {
+                TEvTicketParser::TError error;
+                error.Message = "Token is not valid for this database";
+                error.Retryable = false;
+                Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(request.Ticket, error));
+                return;
+            }
+            NACLib::TUserToken::TUserTokenInitFields fields;
+            fields.UserSID = request.Ticket == ROOT_TOKEN ? ROOT_TOKEN : "username";
+            auto token = MakeIntrusive<NACLib::TUserToken>(fields);
+            token->SaveSerializationInfo();
+            Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(request.Ticket, token));
+        }
+
+        STFUNC(StateFunc) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
+            }
+        }
+    };
+
     Y_UNIT_TEST(DatabaseAlias) {
         TPortManager ports;
         const ui16 monPort = ports.GetPort(8765);
@@ -891,7 +935,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto* rule = settings.AppConfig->MutableResourcePathPrefixMapping()->AddRules();
         rule->SetSrc("/alias");
         rule->SetDst("/Root");
-        settings.CreateTicketParser = CreateFakeTicketParser;
+        settings.FeatureFlags.SetEnableExtraSidsControlForHttpViewer(true);
+        auto* security = settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
+        security->SetEnforceUserTokenCheckRequirement(true);
+        security->AddAdministrationAllowedSIDs(ROOT_TOKEN);
+        security->AddMonitoringAllowedSIDs(ROOT_TOKEN);
+        security->AddViewerAllowedSIDs(ROOT_TOKEN);
+        security->AddDatabaseAllowedSIDs("username");
+        settings.CreateTicketParser = [](const TTicketParserSettings&) -> IActor* { return new TDatabaseAliasTicketParser; };
         TServer server(settings);
         server.EnableGRpc(ports.GetPort(2135));
         TClient client(settings);
@@ -906,24 +957,42 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto status = httpClient.DoGet("/viewer/tenantinfo?database=/alias&direct=true", &response, headers);
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
         const auto json = NJson::ReadJsonTree(&response, true);
-        UNIT_ASSERT_VALUES_EQUAL(json["TenantInfo"][0]["Name"].GetString(), "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(json["TenantInfo"][0]["Name"].GetString(), "/alias");
 
         for (const auto* cache : {"never", "only"}) {
             TStringStream describeResponse;
             const auto describeStatus = httpClient.DoGet(TStringBuilder() << "/viewer/describe?database=/alias&path=/alias&direct=true&ask_scheme_cache=" << cache, &describeResponse, headers);
             UNIT_ASSERT_VALUES_EQUAL(describeStatus, HTTP_OK);
             const auto describeJson = NJson::ReadJsonTree(&describeResponse, true);
-            UNIT_ASSERT_VALUES_EQUAL(describeJson["Path"].GetString(), "/Root");
+            UNIT_ASSERT_VALUES_EQUAL(describeJson["Path"].GetString(), "/alias");
         }
+
+        TStringStream relativeResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/describe?database=alias&path=/alias&direct=true", &relativeResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&relativeResponse, true)["Path"].GetString(), "/alias");
 
         headers["Content-Type"] = "application/json";
         TStringStream postResponse;
         UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", R"({"database":"/alias","path":"/alias"})", &postResponse, headers), HTTP_OK);
-        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&postResponse, true)["Path"].GetString(), "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&postResponse, true)["Path"].GetString(), "/alias");
+
+        headers["Content-Type"] = "application/x-www-form-urlencoded";
+        TStringStream formResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", "database=alias&path=/alias", &formResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&formResponse, true)["Path"].GetString(), "/alias");
 
         TStringStream directoryResponse;
         UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/scheme/directory?database=/alias&path=/alias&direct=true", &directoryResponse, headers), HTTP_OK);
-        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&directoryResponse, true)["self"]["name"].GetString(), "Root");
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&directoryResponse, true)["self"]["name"].GetString(), "alias");
+        headers["Authorization"] = ROOT_TOKEN;
+        for (const auto* parameter : {"tenant", "path"}) {
+            TStringStream tenantResponse;
+            UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet(TStringBuilder() << "/viewer/tenantinfo?" << parameter << "=/alias&direct=true", &tenantResponse, headers), HTTP_OK);
+            UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&tenantResponse, true)["TenantInfo"][0]["Name"].GetString(), "/alias");
+        }
+        headers["Authorization"] = "Bearer other-db";
+        TStringStream deniedResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/whoami?database=/alias", &deniedResponse, headers), HTTP_FORBIDDEN);
     }
 
     NJson::TJsonValue SendQuery(const TString& query, const TString& schema, const bool base64) {

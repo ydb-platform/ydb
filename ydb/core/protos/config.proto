@@ -1578,6 +1578,11 @@ message TImmediateControlsConfig {
           MinValue: 0,
           MaxValue: 31536000, // 365 * 86400
           DefaultValue: 60 }];
+        optional uint64 HnswMaxIdleSearchWorkspaces = 26 [(ControlOptions) = {
+          Description: "Maximum retained search workspaces per shared HNSW graph",
+          MinValue: 0,
+          MaxValue: 256,
+          DefaultValue: 4 }];
     }
 
     message TTxLimitControls {

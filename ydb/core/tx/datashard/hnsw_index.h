@@ -264,6 +264,7 @@ public:
         std::shared_ptr<THnswCacheMemoryTracker> memoryTracker = {},
         size_t maxIdleSearchWorkspaces = 4);
     THnswSearchWorkspaceStats GetSearchWorkspaceStats() const;
+    void SetSearchWorkspaceRetentionLimit(size_t limit) const;
     void TrimSearchWorkspaces() const;
 
     // Versioned graph snapshot. Transaction-local and committed changes are

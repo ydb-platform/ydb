@@ -43,6 +43,7 @@ enum EEvMemory {
     EvMemTableUnregister,
 
     EvConsumerUnregister,
+    EvConsumerDemand,
 
     EvEnd
 };
@@ -51,13 +52,17 @@ static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_MEMORY), "expected EvEnd <
 
 struct TEvConsumerRegister : public TEventLocal<TEvConsumerRegister, EvConsumerRegister> {
     const EMemoryConsumerKind Kind;
+    // Startup cap in TEvConsumerLimit units; zero forbids growth until granted.
+    // An unbounded startup cap is represented by the maximum ui64 value.
+    const ui64 InitialLimitBytes;
 
-    TEvConsumerRegister(EMemoryConsumerKind kind)
+    TEvConsumerRegister(EMemoryConsumerKind kind, ui64 initialLimitBytes = 0)
         : Kind(kind)
+        , InitialLimitBytes(initialLimitBytes)
     {}
 };
 
-// Sent by the registrant itself: a consumer that stops serving its kind takes its bytes out of the accounting
+// Sent after the registrant has stopped using its grant and serving this kind.
 struct TEvConsumerUnregister : public TEventLocal<TEvConsumerUnregister, EvConsumerUnregister> {
     const EMemoryConsumerKind Kind;
 
@@ -78,8 +83,21 @@ struct TEvConsumerLimit : public TEventLocal<TEvConsumerLimit, EvConsumerLimit> 
     ui64 LimitBytes;
 
     TEvConsumerLimit(ui64 limitBytes)
-        : LimitBytes(limitBytes) {
+        : LimitBytes(limitBytes)
+    {
     }
+};
+
+// Replaces the configured share with a total limit in TEvConsumerLimit units; zero releases it.
+// Increases wait until the full target fits. Keep using the previous grant until TEvConsumerLimit.
+struct TEvConsumerDemand : public TEventLocal<TEvConsumerDemand, EvConsumerDemand> {
+    const EMemoryConsumerKind Kind;
+    const ui64 Desired;
+
+    TEvConsumerDemand(EMemoryConsumerKind kind, ui64 desired)
+        : Kind(kind)
+        , Desired(desired)
+    {}
 };
 
 struct TEvMemTableRegister : public TEventLocal<TEvMemTableRegister, EvMemTableRegister> {

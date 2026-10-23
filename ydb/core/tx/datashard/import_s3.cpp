@@ -1015,54 +1015,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             while (ProcessData(data, pool));
         }
 
-<<<<<<< HEAD
         // ProcessData may have finished the actor (e.g. a parse error or unsorted
         // keys); if so, stop here without advancing progress or uploading.
         if (DownloadInterrupted) {
             return;
-=======
-        // A row is rejected here, where the table is known; the parser adds its place in the file.
-        auto addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) -> std::expected<void, TString> {
-            if (keys.empty()) {
-                return std::unexpected("row has no key columns");
-            }
-
-            if (const auto* column = NotNullColumns->FindNull(keys, values)) {
-                return std::unexpected(TStringBuilder() << "column '" << *column
-                    << "' has a NULL value but is NOT NULL");
-            }
-
-            if (!TableInfo.IsMyKey(keys)) {
-                return std::unexpected("key is out of range");
-            }
-
-            if (DirectPartImportEnabled) {
-                if (auto error = CheckUploadKeySizeLimit(keys)) {
-                    return std::unexpected(std::move(error));
-                }
-                if (auto error = CheckUploadValueSizeLimit(values)) {
-                    return std::unexpected(std::move(error));
-                }
-                auto ctx = TActivationContext::AsActorContext();
-                if (!DirectImport->FeedRow(keys, values, ctx)) {
-                    TString error = DirectImport->Error();
-                    return std::unexpected(error.empty()
-                        ? TString("failed to add row to direct import writer")
-                        : std::move(error));
-                }
-            } else {
-                RequestBuilder.AddRow(keys, values);
-            }
-
-            return {};
-        };
-
-        IImportS3Engine::TAddChecksumChunkFn addChecksumChunk;
-        if (Checksum) {
-            addChecksumChunk = [&](TStringBuf chunk) {
-                Checksum->AddData(chunk);
-            };
->>>>>>> 1386065f3ab (DataShard: Fix direct-restore correctness and error handling (#56488))
         }
 
         if (const auto processed = Reader->ReadyBytes()) { // has progress
@@ -1127,8 +1083,18 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         }
 
         if (DirectPartImportEnabled) {
+            if (auto error = CheckUploadKeySizeLimit(keys)) {
+                Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                    << ": " << error << " on line: " << origLine);
+                return false;
+            }
+            if (auto error = CheckUploadValueSizeLimit(values)) {
+                Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                    << ": " << error << " on line: " << origLine);
+                return false;
+            }
             auto ctx = TActivationContext::AsActorContext();
-            if (!DirectImport->FeedRow(keys, values, TRowVersion::Min(), ctx)) {
+            if (!DirectImport->FeedRow(keys, values, ctx)) {
                 // The only expected failure is non-ascending/duplicate keys: the
                 // backup data is not sorted in key order (a real backup dump is).
                 Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
@@ -1636,7 +1602,7 @@ private:
 
     TCounters Counters;
 
-    const bool DirectPartImportEnabled;
+    bool DirectPartImportEnabled;
     THolder<TDirectImportWriter> DirectImport; // set iff DirectPartImportEnabled
     bool DownloadInterrupted = false; // current Process() pass ended (finish/error)
 

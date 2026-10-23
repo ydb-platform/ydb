@@ -1,9 +1,5 @@
 #include "replication.h"
-<<<<<<< HEAD
-=======
-#include "target_table.h"
 #include "util.h"
->>>>>>> 7d88b20229e (Fix async replication retries after DNS discovery failures (#56377))
 
 #include <ydb/core/protos/replication.pb.h>
 

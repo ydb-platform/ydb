@@ -88,6 +88,22 @@ Y_UNIT_TEST_SUITE(BridgePileOverrides) {
         }
         const auto info = GetGroupInfo(env, groupId);
         ReassignOneDisk(env, info.GetBridgeGroupState().GetPile(1).GetGroupId());
+        const auto staticConfig = QueryStorageConfig(env);
+        const auto staticInfo = GetGroupInfo(env, 0);
+        const ui32 staticPartId = staticInfo.GetBridgeGroupState().GetPile(1).GetGroupId();
+        bool reassigned = false;
+        for (const auto& vdisk : staticConfig.GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
+            if (vdisk.GetVDiskID().GetGroupID() == staticPartId) {
+                const auto result = InvokeDistconf(env, [&](auto& record) {
+                    record.MutableReassignGroupDisk()->MutableVDiskId()->CopyFrom(vdisk.GetVDiskID());
+                });
+                UNIT_ASSERT_EQUAL_C(result.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+                    result.GetErrorReason());
+                reassigned = true;
+                break;
+            }
+        }
+        UNIT_ASSERT(reassigned);
         env.RestartNode(1);
         env.Sim(TDuration::Seconds(60));
         checker.CheckAll();
@@ -100,5 +116,39 @@ Y_UNIT_TEST_SUITE(BridgePileOverrides) {
         ExpectError(ReplaceMainConfig(env, [](YAML::Node& config) {
             config["blob_storage_config"]["storage_pool_pile_overrides"][0]["kind"] = YAML::Node(YAML::NodeType::Sequence);
         }), "existing GroupId");
+
+        // Replace the original inline mirror-3-dc parts, retaining the logical group ids and data.
+        auto state = QueryStorageConfig(env).GetClusterState();
+        state.SetGeneration(state.GetGeneration() + 1);
+        TBridgePileId::FromPileIndex(1).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPrimaryPile);
+        TBridgePileId::FromPileIndex(1).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPromotedPile);
+        state.SetPerPileState(0, NKikimrBridge::TClusterState::DISCONNECTED);
+        auto invoke = [&](const auto& fill) {
+            const auto result = InvokeDistconf(env, fill, 10);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+                result.GetErrorReason());
+        };
+        invoke([&](auto& record) { record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(state); });
+        invoke([](auto& record) { record.MutableRemoveBridgePile()->SetPileName("pile_1"); });
+        WaitPileOperationFinished(env, 10);
+        checker.CheckAll(10);
+        result = ReplaceMainConfig(env, [](YAML::Node& config) { AddOverride(config, "pile_1"); }, 10);
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            result.GetErrorReason());
+        invoke([](auto& record) { record.MutableAddBridgePile()->SetPileName("pile_1"); });
+        WaitPileOperationFinished(env, 10);
+        state = QueryStorageConfig(env, 10).GetClusterState();
+        state.SetGeneration(state.GetGeneration() + 1);
+        state.SetPerPileState(0, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        invoke([&](auto& record) { record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(state); });
+        WaitUntil(env, [&] {
+            return QueryStorageConfig(env, 10).GetClusterState().GetPerPileState(0) == NKikimrBridge::TClusterState::SYNCHRONIZED;
+        }, "recreated original pile synchronized");
+        for (ui32 logical : {0u, groupId}) {
+            CheckErasure(env, logical, 0, TBlobStorageGroupType::Erasure4Plus2Block);
+            CheckErasure(env, logical, 1, TBlobStorageGroupType::Erasure4Plus2Block);
+        }
+        checker.CheckAll();
+        CheckPileData(env, checker, 0, 1);
     }
 }

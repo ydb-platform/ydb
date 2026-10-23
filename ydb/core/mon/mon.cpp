@@ -6,11 +6,17 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/counters.h>
+<<<<<<< HEAD
+=======
+#include <ydb/core/base/http_database_param.h>
+#include <ydb/core/base/path.h>
+>>>>>>> 016f538bd7a (Fix aliases in Viewer (#56311))
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/mon/audit/audit.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/protos/mon.pb.h>
 #include <ydb/core/util/wildcard.h>
 
@@ -63,6 +69,7 @@ bool HasJsonContent(const NHttp::THttpIncomingRequest* request) {
     return false;
 }
 
+<<<<<<< HEAD
 TString GetDatabase(const NHttp::THttpIncomingRequest* request) {
     NHttp::TUrlParameters urlParams(request->URL);
     TString database = urlParams["database"];
@@ -76,6 +83,13 @@ TString GetDatabase(const NHttp::THttpIncomingRequest* request) {
         }
     }
     return {};
+=======
+void InitMonHttpIncomingRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event) {
+    event->Database = ExtractMonDatabaseParam(event->Request.Get());
+    if (!event->Database.empty() && HasAppData() && AppData()->PathNormalizer) {
+        event->Database = AppData()->PathNormalizer->NormalizePath(CanonizePath(event->Database));
+    }
+>>>>>>> 016f538bd7a (Fix aliases in Viewer (#56311))
 }
 
 void LogAuthorizedHttpRequest(

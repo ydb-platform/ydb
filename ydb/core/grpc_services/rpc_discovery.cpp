@@ -12,6 +12,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/random/shuffle.h>
 
@@ -44,6 +45,10 @@ public:
 
     void Bootstrap() {
         const TString database = Request->NormalizePath(Request->GetProtoRequest()->database());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::RPC_REQUEST, "ListEndpoints request",
+            {"database", database},
+            {"endpoint", Request->GetAuthority()});
+
         // request endpoints
         Discoverer = Register(CreateDiscoverer(&MakeEndpointsBoardPath,
             database, Request->GetEndpointId().empty() && Request->GetProtoRequest()->Getservice().empty(),

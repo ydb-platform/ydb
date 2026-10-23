@@ -946,6 +946,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TServer server(settings);
         server.EnableGRpc(ports.GetPort(2135));
         TClient client(settings);
+        client.SetSecurityToken(ROOT_TOKEN);
         client.InitRootScheme();
         GrantRead(client);
         TKeepAliveHttpClient httpClient("localhost", monPort);

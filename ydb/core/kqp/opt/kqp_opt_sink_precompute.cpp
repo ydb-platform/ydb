@@ -336,7 +336,10 @@ private:
                     } else if (auto maybeTransform = output.Maybe<TDqTransform>()) {
                         const auto transform = maybeTransform.Cast();
                         const auto sinkSettings = transform.Settings().Maybe<TKqpTableSinkSettings>();
-                        AFL_ENSURE(sinkSettings);
+                        if (!sinkSettings) {
+                            // Service transforms are not table RETURNING effects.
+                            continue;
+                        }
                         sinkOrTransformOutputsCount++;
                         AFL_ENSURE(sinkSettings.Cast().Mode() != "fill_table");
                         AFL_ENSURE(kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Datashard);

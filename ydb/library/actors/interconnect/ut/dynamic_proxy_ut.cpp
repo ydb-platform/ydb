@@ -2,9 +2,6 @@
 #include <ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <algorithm>
-#include <iterator>
-
 TActorId MakeResponderServiceId(ui32 nodeId) {
     return TActorId(nodeId, TStringBuf("ResponderAct", 12));
 }
@@ -51,16 +48,13 @@ public:
             v.push_back(item.Index);
         }
         for (const auto& [queueId, st] : state) {
-            // A handshake failure may be followed by successful delivery, so errors
-            // need not form a suffix. Merge without sorting to keep checking the
-            // order within each stream as well as missing or duplicate indices.
-            Y_ABORT_UNLESS(std::is_sorted(st.Ok.begin(), st.Ok.end()), "delivered events reordered in queue# %u", queueId);
-            Y_ABORT_UNLESS(std::is_sorted(st.Error.begin(), st.Error.end()), "undelivered events reordered in queue# %u", queueId);
-            std::vector<ui32> merged;
-            std::merge(st.Ok.begin(), st.Ok.end(), st.Error.begin(), st.Error.end(), std::back_inserter(merged));
             ui32 expected = 0;
-            for (const ui32 index : merged) {
-                Y_ABORT_UNLESS(index == expected, "queueId# %u index# %u expected# %u", queueId, index, expected);
+            for (const ui32 index : st.Ok) {
+                Y_ABORT_UNLESS(index == expected);
+                ++expected;
+            }
+            for (const ui32 index : st.Error) {
+                Y_ABORT_UNLESS(index == expected);
                 ++expected;
             }
             if (st.Error.size()) {
@@ -201,17 +195,6 @@ void RaceTestIter(ui32 numThreads, ui32 count,
 }
 
 Y_UNIT_TEST_SUITE(DynamicProxy) {
-    Y_UNIT_TEST(InterleavedDeliveryResults) {
-        TArriveQueue arriveQueue(4);
-        // A failed handshake may reject earlier events before a connection succeeds.
-        // Delivery and nondelivery notifications arrive at different actors.
-        arriveQueue.Push(1, true);
-        arriveQueue.Push(0, false);
-        arriveQueue.Push(2, false);
-        arriveQueue.Push(3, true);
-        arriveQueue.Check();
-    }
-
     Y_UNIT_TEST(PoolSelection) {
         RaceTestIter(2, 1, {0, 1}, true);
     }

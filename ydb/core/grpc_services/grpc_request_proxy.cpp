@@ -138,11 +138,9 @@ private:
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
-        requestBaseCtx->InitializePathNormalization(AppData(ctx)->PathNormalizer);
+        requestBaseCtx->InitializePathNormalization(AppData(ctx)->PathNormalizer, AppData(ctx));
         requestBaseCtx->CountRequestPaths();
-
         LogRequest(event);
-
         if (!SchemeCache) {
             const TString error = "Grpc proxy is not ready to accept request, no proxy service";
             YDB_LOG_ERROR_CTX(ctx, error);
@@ -190,7 +188,7 @@ private:
                 HandleBootstrapClusterEvent(event);
                 return;
             }
-            const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName();
+            const auto maybeDatabaseName = requestBaseCtx->GetDatabaseName();
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
                 databaseName = CanonizePath(maybeDatabaseName.GetRef());
             } else {

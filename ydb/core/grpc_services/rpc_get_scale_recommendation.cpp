@@ -18,7 +18,9 @@ public:
     using TRpcRequestActor::TRpcRequestActor;
 
     void Bootstrap(const TActorContext&) {
-        ResolveDatabase(GetProtoRequest()->path());
+        const TString path = GetProtoRequest()->path();
+        ResolveDatabase(AppData()->FeatureFlags.GetEnableRelativePaths()
+            ? PrependDomainIfNeeded(DatabaseFromDomain(AppData()), path) : path);
         this->Become(&TThis::StateWork);
     }
 

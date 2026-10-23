@@ -2903,6 +2903,17 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             const ui32 attachTableId = attached.TableId;
             auto &result = attached.Result;
 
+            if (result->Parts.empty()) {
+                // An empty writer has no blobs to attach or protect until commit.
+                // Leave the table's epoch and redo log intact, and do not persist
+                // a part switch without any introduced parts.
+                ReleaseWritePart(result->Step);
+                if (result->YellowMoveChannels || result->YellowStopChannels) {
+                    CheckYellow(std::move(result->YellowMoveChannels), std::move(result->YellowStopChannels));
+                }
+                continue;
+            }
+
             // Place the part at the table's current head epoch and advance the
             // head above it, so it merges below the (new) mutable memtable. For
             // the empty restore target this is the table's only layer; the general

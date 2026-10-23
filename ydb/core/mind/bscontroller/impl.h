@@ -20,6 +20,7 @@
 #include <ydb/core/base/bridge.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/pdisk_filter.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
@@ -1237,6 +1238,9 @@ public:
             TMaybe<Schema::BoxStoragePoolPDiskFilter::SharedWithOs::Type> SharedWithOs;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::ReadCentric::Type> ReadCentric;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::Kind::Type> Kind;
+            TMaybe<Schema::BoxStoragePoolPDiskFilter::Location::Type> Location;
+
+            static TPDiskFilter Parse(ui64 boxId, ui64 storagePoolId, const NKikimrBlobStorage::TPDiskFilter& proto);
 
             template<typename TRowset>
             static TPDiskFilter CreateFromRowset(const TRowset &rowset) {
@@ -1256,10 +1260,14 @@ public:
                 if (rowset.template HaveValue<T::Kind>()) {
                     result.Kind = rowset.template GetValue<T::Kind>();
                 }
+                if (rowset.template HaveValue<T::Location>()) {
+                    result.Location = rowset.template GetValue<T::Location>();
+                }
                 return result;
             }
 
-            bool MatchPDisk(ui64 category, TMaybe<bool> sharedWithOs, TMaybe<bool> readCentric) const {
+            bool MatchPDisk(ui64 category, TMaybe<bool> sharedWithOs, TMaybe<bool> readCentric,
+                    const TNodeLocation& location) const {
                 TPDiskCategory c(category);
 
                 // determine disk type in terms of configuration
@@ -1271,11 +1279,12 @@ public:
                 return (!Type || *Type == type)
                     && (!SharedWithOs || *SharedWithOs == sharedWithOs)
                     && (!ReadCentric || *ReadCentric == readCentric)
-                    && (!Kind || *Kind == kind);
+                    && (!Kind || *Kind == kind)
+                    && (!Location || MatchPDiskLocation(location, TNodeLocation::ParseLocation(*Location)));
             }
 
-            bool MatchPDisk(const TPDiskInfo& pdisk) const {
-                return MatchPDisk(pdisk.Kind, pdisk.SharedWithOs, pdisk.ReadCentric);
+            bool MatchPDisk(const TPDiskInfo& pdisk, const TNodeLocation& location) const {
+                return MatchPDisk(pdisk.Kind, pdisk.SharedWithOs, pdisk.ReadCentric, location);
             }
 
             void Output(IOutputStream& s) const {
@@ -1293,6 +1302,9 @@ public:
                 if (const auto& x = Kind) {
                     s << comma() << "Kind:" << *x;
                 }
+                if (Location) {
+                    s << comma() << "Location:" << TNodeLocation::ParseLocation(*Location).ShortDebugString();
+                }
             }
 
             static TString ToString(const TSet<TPDiskFilter>& filters) {
@@ -1307,14 +1319,14 @@ public:
             }
 
             auto GetKey() const {
-                return std::tie(BoxId, StoragePoolId, Type, SharedWithOs, ReadCentric, Kind);
+                return std::tie(BoxId, StoragePoolId, Type, SharedWithOs, ReadCentric, Kind, Location);
             }
 
             friend bool operator <(const TPDiskFilter &x, const TPDiskFilter &y) {
                 return x.GetKey() < y.GetKey();
             }
 
-            Y_SAVELOAD_DEFINE(Type, SharedWithOs, ReadCentric, Kind);
+            Y_SAVELOAD_DEFINE(Type, SharedWithOs, ReadCentric, Kind, Location);
         };
 
         Table::Name::Type Name;

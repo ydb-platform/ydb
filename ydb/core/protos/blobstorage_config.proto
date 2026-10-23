@@ -139,6 +139,9 @@ message TPDiskFilter {
             bool SharedWithOs = 2; // require certain SharedWithOs property
             bool ReadCentric = 3; // require certain ReadCentric property
             uint64 Kind = 4; // require certain kind
+            // Exact match on supplied string fields; omitted fields are unconstrained.
+            // Deprecated numeric location fields are not accepted.
+            NActorsInterconnect.TNodeLocation Location = 5;
         }
     }
     repeated TRequiredProperty Property = 1; // conjunction of required properties; the same properties must not repeat
@@ -164,6 +167,9 @@ message TDefineStoragePool {
     NActorsInterconnect.TScopeId ScopeId = 13; // scope id for the pool clients
     bool RandomizeGroupMapping = 14; // minimize correlation of groups and drives
     repeated uint64 ExpectedGroupSlotSize = 15; // primarily for debugging purposes; expected slot size for group allocation
+    // Resolved at creation from this field or the cluster default; readback returns the stored mode.
+    // Omitted updates preserve it, and changing it is not allowed.
+    optional bool BridgeMode = 16;
 
     // item's generation to prevent concurrent modification
     uint64 ItemConfigGeneration = 100;

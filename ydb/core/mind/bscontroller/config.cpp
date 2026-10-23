@@ -1271,6 +1271,7 @@ namespace NKikimr::NBsController {
             }
 
             pb->SetKind(pool.Kind);
+            pb->SetBridgeMode(pool.BridgeMode);
             pb->SetNumGroups(pool.NumGroups);
             pb->SetRandomizeGroupMapping(pool.RandomizeGroupMapping);
             if (pool.DefaultGroupSizeInUnits != 0) {
@@ -1298,6 +1299,55 @@ namespace NKikimr::NBsController {
             }
         }
 
+        TBlobStorageController::TStoragePoolInfo::TPDiskFilter
+        TBlobStorageController::TStoragePoolInfo::TPDiskFilter::Parse(ui64 boxId, ui64 storagePoolId,
+                const NKikimrBlobStorage::TPDiskFilter& proto) {
+            TPDiskFilter filter;
+            filter.BoxId = boxId;
+            filter.StoragePoolId = storagePoolId;
+
+            for (const auto &property : proto.GetProperty()) {
+                switch (property.GetPropertyCase()) {
+#define PROPERTY(NAME) \
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::k ## NAME: { \
+                        if (filter.NAME) { \
+                            throw TExError() << #NAME << " already set"; \
+                        } else { \
+                            filter.NAME = property.Get ## NAME(); \
+                            continue; \
+                        } \
+                    }
+
+                    PROPERTY(Type)
+                    PROPERTY(SharedWithOs)
+                    PROPERTY(ReadCentric)
+                    PROPERTY(Kind)
+#undef PROPERTY
+
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kLocation:
+                        if (filter.Location) {
+                            throw TExError() << "Location already set";
+                        }
+                        if (!IsValidPDiskFilterLocation(property.GetLocation())) {
+                            throw TExError() << "Location requires current string fields; legacy numeric and unknown fields are not supported";
+                        }
+                        filter.Location = TNodeLocation(property.GetLocation()).GetSerializedLocation();
+                        continue;
+
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
+                        throw TExError() << "TPDiskFilter.TRequiredProperty.Property not set";
+                }
+
+                throw TExError() << "TPDiskFilter.TRequiredProperty.Property has invalid case";
+            }
+
+            if (!filter.Type) {
+                throw TExError() << "TPDiskFilter did not specify Type property";
+            }
+
+            return filter;
+        }
+
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter) {
 #define SERIALIZE_VARIABLE(NAME) (filter.NAME && (pb->AddProperty()->Set##NAME(*filter.NAME), true))
             SERIALIZE_VARIABLE(Type);
@@ -1305,6 +1355,9 @@ namespace NKikimr::NBsController {
             SERIALIZE_VARIABLE(ReadCentric);
             SERIALIZE_VARIABLE(Kind);
 #undef SERIALIZE_VARIABLE
+            if (filter.Location) {
+                *pb->AddProperty()->MutableLocation() = TNodeLocation::ParseLocation(*filter.Location);
+            }
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TPDisk *pb, const TPDiskId &id, const TPDiskInfo &pdisk) {

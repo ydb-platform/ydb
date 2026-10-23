@@ -2,7 +2,6 @@
 #include <ydb/library/yql/dq/actors/compute/dq_async_compute_actor.h>
 
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
-#include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
 
 #include <util/generic/size_literals.h>
 

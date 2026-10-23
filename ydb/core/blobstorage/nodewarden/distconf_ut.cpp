@@ -13,6 +13,7 @@
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 
 #include <ydb/library/pdisk_io/sector_map.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/core/util/random.h>
 
 #include <google/protobuf/text_format.h>
@@ -837,17 +838,20 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
     // dynamic nodes of older versions get no configuration once it requires the bridge features they don't support: the
     // ones taking pile ids from positions in their BridgeConfig once the list of piles has been changed, the ones
     // supporting only changes of the list of piles once a pile has been removed
-    Y_UNIT_TEST(OlderDynamicNodeGetsNoConfig) {
+    Y_UNIT_TEST_TWIN(OlderDynamicNodeGetsNoConfig, nonUniformStorage) {
         auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
         auto *registry = config.MutableClusterStateDetails()->MutablePileRegistry();
         registry->SetPileListChanged(true);
-        registry->SetRequiredFeatureLevel(NStorage::BridgeFeatureLevelPileOps);
+        const ui32 requiredLevel = nonUniformStorage ? NStorage::BridgeFeatureLevelNonUniformStorage
+            : NStorage::BridgeFeatureLevelPileOps;
+        registry->SetRequiredFeatureLevel(requiredLevel);
+        config.MutableClusterStateDetails()->SetNonUniformStorageEnabled(nonUniformStorage);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
 
         TNodeWardenTestState state;
         state.RequiredRootNodeId = 1;
         FillTwoPileBridgedMetadata(state, config);
-        TTestActorSystem runtime(7); // nodes 5-7 are dynamic ones
+        TTestActorSystem runtime(5 + NStorage::BridgeFeatureLevel); // nodes from 5 are dynamic ones
         auto& bridge = runtime.GetAppDataBridgeConfig();
         bridge.AddPiles()->SetName("pile0");
         bridge.AddPiles()->SetName("pile1");
@@ -862,8 +866,35 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         for (ui32 level = 0; level <= NStorage::BridgeFeatureLevel; ++level) {
             std::vector<NKikimrBlobStorage::TEvNodeWardenDynamicConfigPush> pushes;
             SubscribeDynamicNode(runtime, keepers.front(), 5 + level, level, pushes);
-            UNIT_ASSERT_VALUES_EQUAL_C(pushes.front().HasConfig(), level == NStorage::BridgeFeatureLevel, level);
+            UNIT_ASSERT_VALUES_EQUAL_C(pushes.front().HasConfig(), level >= requiredLevel, level);
         }
+    }
+
+    Y_UNIT_TEST(NonUniformStorageActivationValidation) {
+        auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
+        NKikimrConfig::TBridgeConfig bridge;
+        bridge.AddPiles()->SetName("pile0");
+        bridge.AddPiles()->SetName("pile1");
+        bridge.SetEnableNonUniformStorage(true);
+        bool pileListChanged = false;
+        auto pending = config;
+        pending.MutableClusterStateDetails()->SetBscConversionPending(true);
+        auto error = NStorage::UpdatePileRegistry(bridge, &pending, &bridge, &bridge, &pileListChanged);
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_STRING_CONTAINS(*error, "conversion to complete");
+
+        error = NStorage::UpdatePileRegistry(bridge, &config, &bridge, &bridge, &pileListChanged);
+        UNIT_ASSERT_C(!error, error.value_or(TString()));
+        UNIT_ASSERT(!pileListChanged);
+        UNIT_ASSERT(!NStorage::ValidateConfig(config));
+        auto proposed = config;
+        proposed.SetGeneration(config.GetGeneration() + 1);
+        proposed.MutableClusterStateDetails()->SetNonUniformStorageEnabled(false);
+        UNIT_ASSERT(NStorage::ValidateConfigUpdate(config, proposed));
+        proposed = config;
+        proposed.MutableClusterStateDetails()->MutablePileRegistry()->SetRequiredFeatureLevel(
+            NStorage::BridgeFeatureLevelPileOps);
+        UNIT_ASSERT(NStorage::ValidateConfig(proposed));
     }
 
     // the list of piles can't be changed, piles can't be added or removed unless every node supports these bridge
@@ -10910,6 +10941,28 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
                 .TargetPDiskId = NBsController::TPDiskId(2, 1),
             }),
             NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(PDiskLocationFilterRestrictsStaticPlacement) {
+        TSetup s = MakeSetup();
+        s.SetNodeRack(3, "selected-rack");
+        auto* settings = s.Config.MutableSelfManagementConfig();
+        settings->MutableGeometry()->CopyFrom(Geometry(1));
+        auto* filter = settings->AddPDiskFilter();
+        filter->AddProperty()->SetType(NKikimrBlobStorage::ROT);
+        filter->AddProperty()->MutableLocation()->SetRack("selected-rack");
+        NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+        keeper.AllocateStaticGroup({
+            .Config = &s.Config,
+            .GroupId = TGroupId::FromValue(0),
+            .GroupGeneration = 2,
+            .GroupType = TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+            .ReplacedDisks = {{TVDiskIdShort(0, 0, 0), NBsController::TPDiskId()}},
+            .BaseConfig = &s.BaseConfig,
+            .IgnoreVSlotQuotaCheck = true,
+            .AllowUnusableDisks = true,
+        });
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskPDisk().NodeId, 3u);
     }
 
     Y_UNIT_TEST(UsesValidExplicitTarget) {

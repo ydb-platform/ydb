@@ -184,6 +184,8 @@ void TCompletionChunkReadPart::UnencryptData(TActorSystem *actorSystem) {
     ui32 beginBadUserOffset = 0xffffffff;
     ui32 endBadUserOffset = 0xffffffff;
     ui32 userSectorSize = format.SectorPayloadSize();
+    // Sectors of one read were written the same way: remember the hash mode across them.
+    TPDiskHashCalculator hasher;
     while (PayloadReadSize > 0) {
         ui32 beginUserOffset = sectorIdx * userSectorSize;
 
@@ -191,7 +193,7 @@ void TCompletionChunkReadPart::UnencryptData(TActorSystem *actorSystem) {
             Read->BlobId);
         ui64 lastNonce = Min((ui64)0, ChunkNonce - 1);
         restorator.Restore(source, format.Offset(Read->ChunkIdx, sectorIdx), format.MagicDataChunk, lastNonce,
-            Read->Owner);
+            Read->Owner, &hasher);
 
         const ui32 sectorCount = 1;
         if (restorator.GoodSectorCount != sectorCount) {

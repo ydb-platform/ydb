@@ -503,6 +503,52 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
         }
     }
 
+    // One hasher shared by consecutive sectors keeps the hash mode it found, and still accepts a
+    // sector written in another mode: the mode is only the first guess.
+    Y_UNIT_TEST(SectorRestoratorSharedHasherMixedModes) {
+        const bool enableSectorEncryption = true;
+        TDiskFormat format = {};
+        format.Clear(enableSectorEncryption);
+        enum EMode { Salted, Ordinary, Old };
+        const EMode modes[] = {Ordinary, Ordinary, Salted, Salted, Old, Ordinary};
+        TSectorsWithData sectors(format.SectorSize, std::size(modes));
+        const ui64 magic = 0x123951924;
+        const ui64 offset = format.SectorSize * 17;
+        const TLogoBlobID blobId(1, 2, 3, 0, 100, 0, 1);
+        NPDisk::TPDiskHashCalculator writeHasher;
+        NPDisk::TPDiskHashCalculator readHasher;
+        for (ui32 i = 0; i < sectors.Size(); ++i) {
+            memset(sectors[i].Begin(), 13 + i, sectors[i].Size());
+            sectors[i].SetCanary();
+            auto *footer = sectors[i].GetDataFooter();
+            footer->SetVersionAndEncryption(enableSectorEncryption);
+            footer->Nonce = i + 1;
+            const ui8 *data = sectors[i].Begin();
+            const ui32 size = sectors[i].Size();
+            switch (modes[i]) {
+            case Salted:
+                footer->Hash = writeHasher.HashSector(offset, magic, data, size, blobId);
+                break;
+            case Ordinary:
+                footer->Hash = writeHasher.HashSector(offset, magic, data, size, {});
+                break;
+            case Old:
+                footer->Hash = writeHasher.OldHashSector(offset, magic, data, size);
+                break;
+            }
+            TSectorRestorator restorator(false, 1, false, format, blobId);
+            restorator.Restore(sectors[i].Begin(), offset, magic, 0, 0, &readHasher);
+            UNIT_ASSERT_C(restorator.GoodSectorCount == 1, "i# " << i
+                    << " GoodSectorCount# " << restorator.GoodSectorCount);
+        }
+
+        // A corrupted sector is still rejected with a shared hasher.
+        sectors[0][0] ^= 1;
+        TSectorRestorator restorator(false, 1, false, format, blobId);
+        restorator.Restore(sectors[0].Begin(), offset, magic, 0, 0, &readHasher);
+        UNIT_ASSERT_VALUES_EQUAL(restorator.GoodSectorCount, 0);
+    }
+
     Y_UNIT_TEST(SectorPrint) {
         TSectorsWithData sectors(97, 1);
         memset(sectors[0].Begin(), 0, sectors[0].Size());

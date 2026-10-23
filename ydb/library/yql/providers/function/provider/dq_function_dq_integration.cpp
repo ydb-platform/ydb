@@ -34,6 +34,9 @@ public:
         auto functionSettings = maybeSettings.Cast();
         NYql::NProto::TFunctionTransform transform;
         transform.SetInvokeUrl(TString{functionSettings.InvokeUrl().Value()});
+        if (const auto batchSize = functionSettings.BatchSize()) {
+            transform.SetBatchSize(FromString<ui32>(batchSize.Cast().Value()));
+        }
 
         transformSettings.PackFrom(transform);
     }

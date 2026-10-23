@@ -17,6 +17,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/wasm_services
     ydb/core/kqp/tracing
     ydb/core/actorlib_impl
     ydb/core/base

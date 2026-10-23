@@ -3615,6 +3615,13 @@ void TKqpTasksGraph::BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TSta
 
         if (transform.HasInternalSink()) {
             BuildInternalOutputTransform(transform, stageInfo, internalSinksOrder, task);
+        } else if (transform.HasExternalTransform()) {
+            TTransform outputTransform;
+            outputTransform.Type = transform.GetExternalTransform().GetType();
+            outputTransform.InputType = transform.GetInputType();
+            outputTransform.OutputType = transform.GetOutputType();
+            outputTransform.Settings = transform.GetExternalTransform().GetSettings();
+            task.Outputs[transform.GetOutputIndex()].Transform = std::move(outputTransform);
         } else {
             YQL_ENSURE(false, "unknown sink type");
         }

@@ -1,4 +1,3 @@
-#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include "kqp_host_impl.h"
 #include "kqp_statement_rewrite.h"
 
@@ -9,26 +8,32 @@
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cbo_factory.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/wasm_services/integration.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
+
 #include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 #include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
-#include <ydb/library/yql/providers/yt/provider/yql_yt_message_stream.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_settings.h>
-#include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
-#include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
-#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
-#include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_settings.h>
+#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
+#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include <ydb/library/yql/providers/ydb_external/provider/yql_ydb_external_provider.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_message_stream.h>
 
-#include <yql/essentials/core/yql_opt_proposed_by_data.h>
-#include <yql/essentials/core/yql_opt_utils.h>
+#include <library/cpp/cache/cache.h>
+#include <library/cpp/random_provider/random_provider.h>
+#include <library/cpp/time_provider/time_provider.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/core/yql_opt_proposed_by_data.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
@@ -39,13 +44,8 @@
 #include <yql/essentials/providers/config/yql_config_provider.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider_impl.h>
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
-
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <yt/yql/providers/yt/provider/yql_yt_provider.h>
-
-#include <library/cpp/cache/cache.h>
-#include <library/cpp/random_provider/random_provider.h>
-#include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr::NKqp {
 
@@ -2219,6 +2219,7 @@ private:
                 InitS3Provider(queryType);
                 InitGenericProvider();
                 InitYdbExternalProvider();
+                RegisterKqpWasmServiceProvider(*TypesCtx, FederatedQuerySetup->WasmServices, gatewayProxy, Cluster, ExternalSourceFactory);
                 InitSolomonProvider();
 
                 if (FederatedQuerySetup->YtGateway) {

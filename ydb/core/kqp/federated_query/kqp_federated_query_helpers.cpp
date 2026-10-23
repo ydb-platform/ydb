@@ -3,6 +3,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/fq/libs/credentials/structured_token_credentials.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
@@ -276,6 +277,7 @@ void IKqpFederatedQuerySetupFactory::Cleanup() {
 TKqpFederatedQuerySetupFactoryDefault::TKqpFederatedQuerySetupFactoryDefault(
     NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData, const NKikimrConfig::TAppConfig& appConfig) {
     const auto& queryServiceConfig = appConfig.GetQueryServiceConfig();
+    WasmServices = appConfig.GetFederatedQueryConfig().GetWasmServices();
 
     // Initialize HTTP Gateway
     HttpGatewayConfig = queryServiceConfig.HasHttpGateway() ? queryServiceConfig.GetHttpGateway() : DefaultHttpGatewayConfig();
@@ -369,6 +371,8 @@ std::optional<TKqpFederatedQuerySetup> TKqpFederatedQuerySetupFactoryDefault::Ma
         ActorSystemPtr,
         ScriptExecutionSettings,
     };
+
+    result.WasmServices = WasmServices;
 
     // Init DatabaseAsyncResolver only if all requirements are met
     if (DatabaseResolverActorId && MdbEndpointGenerator &&

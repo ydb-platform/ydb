@@ -171,6 +171,17 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr&) {
     ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "The writer disconnected");
 }
 
+void TDLQMoverActor::AppendProcessed(const TDLQMessage& message) {
+    Processed.emplace_back(message.Offset, message.SeqNo);
+}
+
+void TDLQMoverActor::ReleaseResolvedPrefix() {
+    while (!Pending.empty() && !Pending.front().WriteInFlight) {
+        AppendProcessed(Pending.front().Message);
+        Pending.pop_front();
+    }
+}
+
 void TDLQMoverActor::ProcessQueue() {
     if (PendingMessagesSize >= MaxPendingMessagesSize || Queue.empty()) {
         return;
@@ -192,10 +203,31 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     }
 
     auto& response = ev->Get()->Record;
-    if (!response.GetPartitionResponse().HasCmdReadResult()
-            || response.GetPartitionResponse().GetCmdReadResult().ResultSize() == 0) {
-        return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder()
-            << "Fetch message failed: empty read result: " << response.DebugString());
+    const bool hasResult = response.GetPartitionResponse().HasCmdReadResult()
+        && response.GetPartitionResponse().GetCmdReadResult().ResultSize() > 0;
+    const ui64 requestedOffset = Queue.front().Offset;
+    // A trimmed offset is read from StartOffset, so the result can be a later message.
+    // That body belongs to another offset. The requested one is already gone.
+    const bool gotRequested = hasResult
+        && response.GetPartitionResponse().GetCmdReadResult().GetResult(0).GetOffset() == requestedOffset;
+    if (!gotRequested) {
+        LOG_N(
+            "Source message is missing, treat as moved",
+            {"offset", requestedOffset},
+            {"seqNo", Queue.front().SeqNo},
+            {"hasResult", hasResult}
+        );
+        const TDLQMessage message = Queue.front();
+        Queue.pop_front();
+        if (Pending.empty()) {
+            AppendProcessed(message);
+        } else {
+            Pending.push_back({.Message = message, .Size = 0, .WriteInFlight = false});
+        }
+        if (Queue.empty() && Pending.empty()) {
+            return ReplySuccess();
+        }
+        return ProcessQueue();
     }
     auto* result = response.MutablePartitionResponse()->MutableCmdReadResult()->MutableResult(0);
     auto messageSize = result->GetData().size();
@@ -224,7 +256,7 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 
     Send(PartitionWriterActorId, std::move(writeRequest));
 
-    Pending.emplace_back(Queue.front(), messageSize);
+    Pending.push_back({.Message = Queue.front(), .Size = messageSize, .WriteInFlight = true});
     Queue.pop_front();
 
     PendingMessagesSize += messageSize;
@@ -252,13 +284,14 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
         return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Write error: " << result->GetError().Reason);
     }
 
-    if (Pending.empty()) {
+    if (Pending.empty() || !Pending.front().WriteInFlight) {
         return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Write error: unexpected result");
     }
 
-    auto [message, messageSize] = Pending.front();
-    Processed.emplace_back(message.Offset, message.SeqNo);
+    const ui64 messageSize = Pending.front().Size;
+    AppendProcessed(Pending.front().Message);
     Pending.pop_front();
+    ReleaseResolvedPrefix();
 
     LOG_D(
         "Dump NPQLOGPREFIX, queue, pending, processed",
@@ -266,15 +299,15 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
         {"pending", Pending.size()},
         {"processed", Processed.size()}
     );
-    if (Queue.empty() && Pending.empty()) {
-        return ReplySuccess();
-    }
 
     bool processingPaused = PendingMessagesSize >= MaxPendingMessagesSize;
     AFL_ENSURE(PendingMessagesSize >= messageSize)
         ("PendingMessagesSize", PendingMessagesSize)
         ("messageSize", messageSize);
     PendingMessagesSize -= messageSize;
+    if (Queue.empty() && Pending.empty()) {
+        return ReplySuccess();
+    }
     if (processingPaused) {
         ProcessQueue();
     }

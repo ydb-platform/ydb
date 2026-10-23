@@ -115,12 +115,10 @@ message TFailRealmStates {
 // Administrative mirror-3-dc state machine (RFC 179/180).
 // Each transition asserts the target state's old-blob guarantee; BSC does not verify replicas.
 message TMirror3dcGroupState {
-    // Realm order below is A/B/C, not numeric indices: C is FailedFailRealmIdx;
-    // in SOLO modes A is SurvivingFailRealmIdx and B is the other non-failed realm.
-    // These columns describe roles, not fixed physical IDs. IIJ -> SOLO recovery keeps J:
-    // with physical roles I/I/J and A surviving, the new roles are I/E/J. FailedFailRealmIdx
-    // changes from the old J to the newly excluded I; subsequent SOLO transitions retain it.
-    // Similarly, IIL -> SOLO pending keeps L and excludes one I, updating FailedFailRealmIdx.
+    // Realm columns below show role patterns, not fixed physical IDs.
+    // FailRealmStates explicitly assigns a role to each physical failrealm.
+    // Transitions preserve as many existing roles as the target pattern permits:
+    // IIJ -> SOLO recovery keeps J; IIL -> SOLO pending keeps L.
     // I = Included, E = Excluded, J = Joining, L = Leaving. Layouts use interchangeable realms.
     // WriteOk alternatives are OR-ed; WriteDurability is the background replication target.
     // CW describes old-blob guarantees; stronger WriteOk alone affects only new blobs.
@@ -137,12 +135,13 @@ message TMirror3dcGroupState {
     // Ordinary S -> T transitions recover using WriteDurability(S) while still in S, then
     // assert CW(T) with T's realm roles. BSC accepts the administrator's confirmation;
     // it does not perform replication or verify completion.
-    // DISASTER -> RESURECTION_PENDING returns the I/L -> E realm from entering DISASTER as L with CW 0.
-    // In DISASTER this is the realm other than FailedFailRealmIdx and SurvivingFailRealmIdx.
-    // RESURECTION_PENDING -> DISASTER excludes L again; retry returns that same realm.
+    // DISASTER -> RESURECTION_PENDING lets the administrator select either E as L, with CW 0.
+    // RESURECTION_PENDING -> DISASTER excludes L again. No recovery-target history is stored.
+    // The model assumes that the administrator returns a realm holding data when possible;
+    // BSC neither checks data availability nor restricts the choice to a previously used realm.
     // Recover from I/L into I using durability 2 before asserting CW 1 in RESURECTION.
     // A readable source is required.
-    // Mode transitions; realm-index checks in CanTransitionTo still apply.
+    // Mode transitions; physical-role checks in CanTransitionTo still apply.
     // Matching parenthesized labels connect distant arrows; they are not additional states.
     // RECOVERY INV2 is one-way into DC_RECOVERY; RECOVERY and RECOVERY INV1 are bidirectional.
     // SOLO 0/1/2 connect arrows into the corresponding SOLO pending states.
@@ -255,11 +254,9 @@ message TMirror3dcGroupState {
         SOLO_DC_RESURECTION_PENDING = 19;
     }
     optional EMode Mode = 1;
-    // Excluded/returning realm. On IIJ/IIL -> SOLO it changes to the newly excluded I,
-    // preserving the old J/L. Other non-NORMAL transitions preserve it.
-    optional uint32 FailedFailRealmIdx = 2;
-    // Required in SOLO states; the other non-failed realm is the recovery target.
-    optional uint32 SurvivingFailRealmIdx = 3;
+    // All three physical failrealms must be present with explicit indices and states,
+    // including Included. Their role counts must match Mode; entry order is irrelevant.
+    optional TFailRealmStates FailRealmStates = 2;
 }
 
 // Each entry is a minimum number of written parts in a distinct failrealm.

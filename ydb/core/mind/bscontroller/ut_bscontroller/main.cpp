@@ -419,6 +419,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
     Y_UNIT_TEST(Mirror3dcManualStateTransitions) {
         using T = NKikimrBlobStorage::TMirror3dcGroupState;
         using TState = TBlobStorageGroupInfo::TMirror3dcState;
+        using enum TBlobStorageGroupInfo::EFailRealmState;
         TEnvironmentSetup env(9, 3);
         bool active = false;
         env.Prepare("mirror3dc-state", [](TTestActorRuntime&) {}, active);
@@ -437,33 +438,39 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             return req;
         };
         UNIT_ASSERT(!group.HasMirror3dcState());
-        UNIT_ASSERT(!env.Invoke(request({T::SOLO_DC_INV_2, 0, 2})).GetSuccess());
+        UNIT_ASSERT(!env.Invoke(request({T::SOLO_DC_INV_2, {Excluded, Excluded, Included}})).GetSuccess());
         UNIT_ASSERT(!query().HasMirror3dcState());
         for (auto mode : {T::DC_FAILURE_PENDING_INV_1, T::DC_FAILURE_PENDING_INV_2}) {
-            auto req = request({mode, 0, {}});
+            auto req = request({mode, {Leaving, Included, Included}});
             req.SetRollback(true);
             UNIT_ASSERT(!env.Invoke(req).GetRollbackSuccess());
             UNIT_ASSERT(!query().HasMirror3dcState());
         }
+        auto malformed = request({T::DC_FAILURE_PENDING, {Leaving, Included, Included}});
+        malformed.MutableCommand(0)->MutableSetMirror3DcGroupState()->MutableState()
+            ->MutableFailRealmStates()->MutableFailRealm(0)->SetFailRealmIdx(1);
+        UNIT_ASSERT(!env.Invoke(malformed).GetSuccess());
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(query().SerializeAsString(), group.SerializeAsString());
         const TVector<TState> path = {
-            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE, 0, {}}, {T::DC_FAILURE_INV_1, 0, {}},
-            {T::SOLO_DC_INV_1_PENDING, 0, 2}, {T::SOLO_DC_INV_1, 0, 2},
-            {T::SOLO_DC_RECOVERY_PENDING_INV_1, 0, 2}, {T::SOLO_DC_RECOVERY_INV_1, 0, 2},
-            {T::DC_FAILURE_INV_1, 0, {}}, {T::DC_FAILURE_INV_2, 0, {}},
-            {T::SOLO_DC_INV_2_PENDING, 0, 2}, {T::SOLO_DC_INV_2, 0, 2},
-            {T::SOLO_DC_RECOVERY_PENDING_INV_2, 0, 2}, {T::SOLO_DC_RECOVERY_INV_1, 0, 2},
-            {T::DC_FAILURE_INV_1, 0, {}}, {T::DC_RECOVERY_PENDING_INV_1, 0, {}}, {T::DC_RECOVERY, 0, {}}, {},
+            {T::DC_FAILURE_PENDING, {Leaving, Included, Included}}, {T::DC_FAILURE, {Excluded, Included, Included}}, {T::DC_FAILURE_INV_1, {Excluded, Included, Included}},
+            {T::SOLO_DC_INV_1_PENDING, {Excluded, Leaving, Included}}, {T::SOLO_DC_INV_1, {Excluded, Excluded, Included}},
+            {T::SOLO_DC_RECOVERY_PENDING_INV_1, {Excluded, Joining, Included}}, {T::SOLO_DC_RECOVERY_INV_1, {Excluded, Joining, Included}},
+            {T::DC_FAILURE_INV_1, {Excluded, Included, Included}}, {T::DC_FAILURE_INV_2, {Excluded, Included, Included}},
+            {T::SOLO_DC_INV_2_PENDING, {Excluded, Leaving, Included}}, {T::SOLO_DC_INV_2, {Excluded, Excluded, Included}},
+            {T::SOLO_DC_RECOVERY_PENDING_INV_2, {Excluded, Joining, Included}}, {T::SOLO_DC_RECOVERY_INV_1, {Excluded, Joining, Included}},
+            {T::DC_FAILURE_INV_1, {Excluded, Included, Included}}, {T::DC_RECOVERY_PENDING_INV_1, {Joining, Included, Included}}, {T::DC_RECOVERY, {Joining, Included, Included}}, {},
             // Return while C is still Leaving, for each invariant level.
-            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_RECOVERY_PENDING, 0, {}}, {T::DC_RECOVERY, 0, {}}, {},
-            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE_PENDING_INV_1, 0, {}},
-            {T::DC_RECOVERY_PENDING_INV_1, 0, {}}, {T::DC_RECOVERY, 0, {}}, {},
-            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE_PENDING_INV_1, 0, {}},
-            {T::DC_FAILURE_PENDING_INV_2, 0, {}}, {T::DC_RECOVERY, 0, {}}, {},
+            {T::DC_FAILURE_PENDING, {Leaving, Included, Included}}, {T::DC_RECOVERY_PENDING, {Joining, Included, Included}}, {T::DC_RECOVERY, {Joining, Included, Included}}, {},
+            {T::DC_FAILURE_PENDING, {Leaving, Included, Included}}, {T::DC_FAILURE_PENDING_INV_1, {Leaving, Included, Included}},
+            {T::DC_RECOVERY_PENDING_INV_1, {Joining, Included, Included}}, {T::DC_RECOVERY, {Joining, Included, Included}}, {},
+            {T::DC_FAILURE_PENDING, {Leaving, Included, Included}}, {T::DC_FAILURE_PENDING_INV_1, {Leaving, Included, Included}},
+            {T::DC_FAILURE_PENDING_INV_2, {Leaving, Included, Included}}, {T::DC_RECOVERY, {Joining, Included, Included}}, {},
             // Emergency recovery: persist CW 0 before reading from the returning Leaving realm.
-            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE, 0, {}}, {T::SOLO_DC_DISASTER, 0, 2},
-            {T::SOLO_DC_RESURECTION_PENDING, 0, 2}, {T::SOLO_DC_RESURECTION, 0, 2},
-            {T::SOLO_DC_INV_1_PENDING, 0, 2}, {T::SOLO_DC_RECOVERY_PENDING_INV_1, 0, 2},
-            {T::SOLO_DC_INV_1_PENDING, 0, 2}, {T::SOLO_DC_INV_1, 0, 2},
+            {T::DC_FAILURE_PENDING, {Leaving, Included, Included}}, {T::DC_FAILURE, {Excluded, Included, Included}}, {T::SOLO_DC_DISASTER, {Excluded, Excluded, Included}},
+            {T::SOLO_DC_RESURECTION_PENDING, {Excluded, Leaving, Included}}, {T::SOLO_DC_RESURECTION, {Excluded, Leaving, Included}},
+            {T::SOLO_DC_INV_1_PENDING, {Excluded, Leaving, Included}}, {T::SOLO_DC_RECOVERY_PENDING_INV_1, {Excluded, Joining, Included}},
+            {T::SOLO_DC_INV_1_PENDING, {Excluded, Leaving, Included}}, {T::SOLO_DC_INV_1, {Excluded, Excluded, Included}},
         };
         auto combined = request(path[0]);
         auto second = combined.GetCommand(0);
@@ -554,6 +561,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         using T = NKikimrBlobStorage::TMirror3dcGroupState;
         using TInfo = TBlobStorageGroupInfo;
         using TState = TInfo::TMirror3dcState;
+        using enum TBlobStorageGroupInfo::EFailRealmState;
         using R = TInfo::EFailRealmState;
         TEnvironmentSetup env(9, 3);
         bool active = false;
@@ -581,55 +589,61 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             UNIT_ASSERT_VALUES_EQUAL(group.GetMirror3dcState().SerializeAsString(), state.ToProto().SerializeAsString());
         };
         for (const auto mode : {T::DC_RECOVERY_PENDING_INV_1, T::DC_RECOVERY}) {
-            for (ui32 joining = 0; joining != 3; ++joining) {
-                for (ui32 survivor = 0; survivor != 3; ++survivor) {
-                    if (survivor == joining) {
-                        continue;
+            std::array<ui32, 3> order{0, 1, 2};
+            do {
+                const auto physical = [&](TState state) {
+                    const auto roles = state.FailRealmStates;
+                    for (ui32 i = 0; i != 3; ++i) {
+                        state.FailRealmStates[order[i]] = roles[i];
                     }
-                    const ui32 excluded = 3 - joining - survivor;
-                    transition({T::DC_FAILURE_PENDING, joining, {}});
-                    transition({T::DC_FAILURE_PENDING_INV_1, joining, {}});
-                    transition({T::DC_RECOVERY_PENDING_INV_1, joining, {}});
-                    if (mode == T::DC_RECOVERY) {
-                        transition({mode, joining, {}});
-                        // Direct RECOVERY INV1 paths from the diagram.
-                        transition({T::DC_FAILURE_PENDING_INV_1, joining, {}});
-                        transition({T::DC_RECOVERY_PENDING_INV_1, joining, {}});
-                        transition({mode, joining, {}});
-                        transition({T::DC_FAILURE_INV_1, joining, {}});
-                        transition({T::DC_RECOVERY_PENDING_INV_1, joining, {}});
-                        transition({mode, joining, {}});
-                    }
-                    UNIT_ASSERT(!env.Invoke(request({T::SOLO_DC_RECOVERY_PENDING_INV_1, joining, survivor})).GetSuccess());
-                    UNIT_ASSERT_VALUES_EQUAL(query().SerializeAsString(), group.SerializeAsString());
-                    transition({T::SOLO_DC_RECOVERY_PENDING_INV_1, excluded, survivor});
-                    RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
-                    const auto restored = query();
-                    UNIT_ASSERT_VALUES_EQUAL(restored.GetMirror3dcState().SerializeAsString(),
-                        group.GetMirror3dcState().SerializeAsString());
-                    std::array<R, 3> roles{R::Included, R::Included, R::Included};
-                    for (const auto& realm : restored.GetFailRealmStates().GetFailRealm()) {
-                        roles[realm.GetFailRealmIdx()] = static_cast<R>(realm.GetState());
-                    }
-                    UNIT_ASSERT(roles[survivor] == R::Included);
-                    UNIT_ASSERT(roles[joining] == R::Joining);
-                    UNIT_ASSERT(roles[excluded] == R::Excluded);
-                    transition({T::SOLO_DC_INV_1_PENDING, excluded, survivor});
-                    transition({T::SOLO_DC_INV_1, excluded, survivor});
-                    transition({T::SOLO_DC_RECOVERY_PENDING_INV_1, excluded, survivor});
-                    transition({T::SOLO_DC_RECOVERY_INV_1, excluded, survivor});
-                    transition({T::DC_FAILURE_INV_1, excluded, {}});
-                    transition({T::DC_RECOVERY_PENDING_INV_1, excluded, {}});
-                    transition({T::DC_RECOVERY, excluded, {}});
-                    transition({});
+                    return state;
+                };
+                transition(physical({T::DC_FAILURE_PENDING, {Included, Included, Leaving}}));
+                transition(physical({T::DC_FAILURE_PENDING_INV_1, {Included, Included, Leaving}}));
+                transition(physical({T::DC_RECOVERY_PENDING_INV_1, {Included, Included, Joining}}));
+                if (mode == T::DC_RECOVERY) {
+                    transition(physical({mode, {Included, Included, Joining}}));
+                    // Direct RECOVERY INV1 paths from the diagram.
+                    transition(physical({T::DC_FAILURE_PENDING_INV_1, {Included, Included, Leaving}}));
+                    transition(physical({T::DC_RECOVERY_PENDING_INV_1, {Included, Included, Joining}}));
+                    transition(physical({mode, {Included, Included, Joining}}));
+                    transition(physical({T::DC_FAILURE_INV_1, {Included, Included, Excluded}}));
+                    transition(physical({T::DC_RECOVERY_PENDING_INV_1, {Included, Included, Joining}}));
+                    transition(physical({mode, {Included, Included, Joining}}));
                 }
-            }
+                UNIT_ASSERT(!env.Invoke(request(physical({T::SOLO_DC_RECOVERY_PENDING_INV_1,
+                    {Included, Joining, Excluded}}))).GetSuccess());
+                UNIT_ASSERT_VALUES_EQUAL(query().SerializeAsString(), group.SerializeAsString());
+                const auto recovering = physical({T::SOLO_DC_RECOVERY_PENDING_INV_1, {Included, Excluded, Joining}});
+                transition(recovering);
+                RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+                const auto restored = query();
+                UNIT_ASSERT_VALUES_EQUAL(restored.GetMirror3dcState().SerializeAsString(),
+                    group.GetMirror3dcState().SerializeAsString());
+                std::array<R, 3> roles{Included, Included, Included};
+                for (const auto& realm : restored.GetFailRealmStates().GetFailRealm()) {
+                    roles[realm.GetFailRealmIdx()] = static_cast<R>(realm.GetState());
+                }
+                UNIT_ASSERT(roles == recovering.FailRealmStates);
+                transition(physical({T::SOLO_DC_INV_1_PENDING, {Included, Excluded, Leaving}}));
+                transition(physical({T::SOLO_DC_INV_1, {Included, Excluded, Excluded}}));
+                // Retry with the other Excluded realm: BSC does not remember the previous target.
+                transition(physical({T::SOLO_DC_RECOVERY_PENDING_INV_1, {Included, Joining, Excluded}}));
+                RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+                UNIT_ASSERT_VALUES_EQUAL(query().SerializeAsString(), group.SerializeAsString());
+                transition(physical({T::SOLO_DC_RECOVERY_INV_1, {Included, Joining, Excluded}}));
+                transition(physical({T::DC_FAILURE_INV_1, {Included, Included, Excluded}}));
+                transition(physical({T::DC_RECOVERY_PENDING_INV_1, {Included, Included, Joining}}));
+                transition(physical({T::DC_RECOVERY, {Included, Included, Joining}}));
+                transition({});
+            } while (std::next_permutation(order.begin(), order.end()));
         }
     }
 
     Y_UNIT_TEST(Mirror3dcPendingToSolo) {
         using T = NKikimrBlobStorage::TMirror3dcGroupState;
         using TState = TBlobStorageGroupInfo::TMirror3dcState;
+        using enum TBlobStorageGroupInfo::EFailRealmState;
         TEnvironmentSetup env(9, 3);
         bool active = false;
         env.Prepare("mirror3dc-pending-to-solo", [](TTestActorRuntime&) {}, active);
@@ -656,26 +670,26 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 state.GetConfirmedWrites().ToProto().SerializeAsString());
         };
         const TVector<TState> path = {
-            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE, 0, {}},
-            {T::SOLO_DC_RESURECTION_PENDING, 0, 2}, {T::SOLO_DC_DISASTER, 0, 2},
-            {T::SOLO_DC_RESURECTION_PENDING, 0, 2}, {T::SOLO_DC_RESURECTION, 0, 2},
-            {T::SOLO_DC_RECOVERY_PENDING_INV_1, 0, 2}, {T::SOLO_DC_RECOVERY_INV_1, 0, 2},
-            {T::DC_FAILURE_INV_1, 0, {}}, {T::DC_RECOVERY_PENDING_INV_1, 0, {}},
-            {T::DC_RECOVERY, 0, {}}, {},
-            {T::DC_FAILURE_PENDING, 0, {}}, {T::SOLO_DC_RESURECTION_PENDING, 1, 2},
-            {T::SOLO_DC_DISASTER, 1, 2}, {T::SOLO_DC_RESURECTION_PENDING, 1, 2},
-            {T::SOLO_DC_RESURECTION, 1, 2}, {T::SOLO_DC_RECOVERY_PENDING_INV_1, 1, 2},
-            {T::SOLO_DC_RECOVERY_INV_1, 1, 2}, {T::DC_FAILURE_INV_1, 1, {}},
-            {T::DC_RECOVERY_PENDING_INV_1, 1, {}}, {T::DC_RECOVERY, 1, {}}, {},
-            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE_PENDING_INV_1, 0, {}},
-            {T::SOLO_DC_INV_1_PENDING, 1, 2}, {T::SOLO_DC_INV_1, 1, 2},
-            {T::SOLO_DC_RECOVERY_PENDING_INV_1, 1, 2}, {T::SOLO_DC_RECOVERY_INV_1, 1, 2},
-            {T::DC_FAILURE_INV_1, 1, {}}, {T::DC_RECOVERY_PENDING_INV_1, 1, {}}, {T::DC_RECOVERY, 1, {}}, {},
-            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE_PENDING_INV_1, 0, {}},
-            {T::DC_FAILURE_PENDING_INV_2, 0, {}}, {T::SOLO_DC_INV_2_PENDING, 1, 2},
-            {T::SOLO_DC_INV_2, 1, 2}, {T::SOLO_DC_RECOVERY_PENDING_INV_2, 1, 2},
-            {T::SOLO_DC_RECOVERY_INV_1, 1, 2}, {T::DC_FAILURE_INV_1, 1, {}},
-            {T::DC_RECOVERY_PENDING_INV_1, 1, {}}, {T::DC_RECOVERY, 1, {}}, {},
+            {T::DC_FAILURE_PENDING, {Leaving, Included, Included}}, {T::DC_FAILURE, {Excluded, Included, Included}},
+            {T::SOLO_DC_RESURECTION_PENDING, {Excluded, Leaving, Included}}, {T::SOLO_DC_DISASTER, {Excluded, Excluded, Included}},
+            {T::SOLO_DC_RESURECTION_PENDING, {Excluded, Leaving, Included}}, {T::SOLO_DC_RESURECTION, {Excluded, Leaving, Included}},
+            {T::SOLO_DC_RECOVERY_PENDING_INV_1, {Excluded, Joining, Included}}, {T::SOLO_DC_RECOVERY_INV_1, {Excluded, Joining, Included}},
+            {T::DC_FAILURE_INV_1, {Excluded, Included, Included}}, {T::DC_RECOVERY_PENDING_INV_1, {Joining, Included, Included}},
+            {T::DC_RECOVERY, {Joining, Included, Included}}, {},
+            {T::DC_FAILURE_PENDING, {Leaving, Included, Included}}, {T::SOLO_DC_RESURECTION_PENDING, {Leaving, Excluded, Included}},
+            {T::SOLO_DC_DISASTER, {Excluded, Excluded, Included}}, {T::SOLO_DC_RESURECTION_PENDING, {Leaving, Excluded, Included}},
+            {T::SOLO_DC_RESURECTION, {Leaving, Excluded, Included}}, {T::SOLO_DC_RECOVERY_PENDING_INV_1, {Joining, Excluded, Included}},
+            {T::SOLO_DC_RECOVERY_INV_1, {Joining, Excluded, Included}}, {T::DC_FAILURE_INV_1, {Included, Excluded, Included}},
+            {T::DC_RECOVERY_PENDING_INV_1, {Included, Joining, Included}}, {T::DC_RECOVERY, {Included, Joining, Included}}, {},
+            {T::DC_FAILURE_PENDING, {Leaving, Included, Included}}, {T::DC_FAILURE_PENDING_INV_1, {Leaving, Included, Included}},
+            {T::SOLO_DC_INV_1_PENDING, {Leaving, Excluded, Included}}, {T::SOLO_DC_INV_1, {Excluded, Excluded, Included}},
+            {T::SOLO_DC_RECOVERY_PENDING_INV_1, {Joining, Excluded, Included}}, {T::SOLO_DC_RECOVERY_INV_1, {Joining, Excluded, Included}},
+            {T::DC_FAILURE_INV_1, {Included, Excluded, Included}}, {T::DC_RECOVERY_PENDING_INV_1, {Included, Joining, Included}}, {T::DC_RECOVERY, {Included, Joining, Included}}, {},
+            {T::DC_FAILURE_PENDING, {Leaving, Included, Included}}, {T::DC_FAILURE_PENDING_INV_1, {Leaving, Included, Included}},
+            {T::DC_FAILURE_PENDING_INV_2, {Leaving, Included, Included}}, {T::SOLO_DC_INV_2_PENDING, {Leaving, Excluded, Included}},
+            {T::SOLO_DC_INV_2, {Excluded, Excluded, Included}}, {T::SOLO_DC_RECOVERY_PENDING_INV_2, {Joining, Excluded, Included}},
+            {T::SOLO_DC_RECOVERY_INV_1, {Joining, Excluded, Included}}, {T::DC_FAILURE_INV_1, {Included, Excluded, Included}},
+            {T::DC_RECOVERY_PENDING_INV_1, {Included, Joining, Included}}, {T::DC_RECOVERY, {Included, Joining, Included}}, {},
         };
         for (const auto& state : path) {
             transition(state);

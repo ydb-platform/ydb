@@ -31,45 +31,51 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         using T = NKikimrBlobStorage::TMirror3dcGroupState;
         using TInfo = TBlobStorageGroupInfo;
         using TState = TInfo::TMirror3dcState;
+        using enum TBlobStorageGroupInfo::EFailRealmState;
         const TInfo::TTopology topology(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1, true);
         const TInfo::TTopology other(TBlobStorageGroupType::ErasureNone, 1, 1, 1, true);
         const TInfo::TTopology empty(TBlobStorageGroupType::ErasureMirror3dc, 0, 0, 0);
         T proto;
         UNIT_ASSERT(!TState::Parse(proto, topology));
         proto.SetMode(T::NORMAL);
+        UNIT_ASSERT(!TState::Parse(proto, topology)); // All three roles are required even for NORMAL.
+        proto = TState{}.ToProto();
         UNIT_ASSERT(TState::Parse(proto, topology));
         UNIT_ASSERT(!TState::Parse(proto, other));
         UNIT_ASSERT(!TState::Parse(proto, empty));
-        proto.SetFailedFailRealmIdx(0);
-        UNIT_ASSERT(!TState::Parse(proto, topology));
-        proto.SetMode(T::DC_FAILURE);
-        UNIT_ASSERT(TState::Parse(proto, topology));
-        proto.SetFailedFailRealmIdx(3);
-        UNIT_ASSERT(!TState::Parse(proto, topology));
-        proto.SetFailedFailRealmIdx(0);
-        proto.SetMode(T::SOLO_DC_INV_1);
-        UNIT_ASSERT(!TState::Parse(proto, topology));
-        proto.SetSurvivingFailRealmIdx(0);
-        UNIT_ASSERT(!TState::Parse(proto, topology));
-        proto.SetSurvivingFailRealmIdx(2);
-        UNIT_ASSERT(TState::Parse(proto, topology));
-        for (auto mode : {T::SOLO_DC_DISASTER, T::SOLO_DC_RESURECTION_PENDING}) {
-            proto.SetMode(mode);
-            UNIT_ASSERT(TState::Parse(proto, topology));
-            proto.ClearSurvivingFailRealmIdx();
-            UNIT_ASSERT(!TState::Parse(proto, topology));
-            proto.SetSurvivingFailRealmIdx(2);
-        }
+        auto invalid = proto;
+        invalid.MutableFailRealmStates()->MutableFailRealm()->RemoveLast();
+        UNIT_ASSERT(!TState::Parse(invalid, topology));
+        invalid = proto;
+        invalid.MutableFailRealmStates()->AddFailRealm()->CopyFrom(proto.GetFailRealmStates().GetFailRealm(0));
+        UNIT_ASSERT(!TState::Parse(invalid, topology));
+        invalid = proto;
+        invalid.MutableFailRealmStates()->MutableFailRealm(0)->SetFailRealmIdx(1);
+        UNIT_ASSERT(!TState::Parse(invalid, topology));
+        invalid = proto;
+        invalid.MutableFailRealmStates()->MutableFailRealm(0)->SetFailRealmIdx(3);
+        UNIT_ASSERT(!TState::Parse(invalid, topology));
+        invalid = proto;
+        invalid.MutableFailRealmStates()->MutableFailRealm(0)->ClearFailRealmIdx();
+        UNIT_ASSERT(!TState::Parse(invalid, topology));
+        invalid = proto;
+        invalid.MutableFailRealmStates()->MutableFailRealm(0)->ClearState();
+        UNIT_ASSERT(!TState::Parse(invalid, topology));
+        invalid = proto;
+        invalid.SetMode(T::DC_FAILURE); // III does not match IIE.
+        UNIT_ASSERT(!TState::Parse(invalid, topology));
+        proto.MutableFailRealmStates()->MutableFailRealm()->SwapElements(0, 2);
+        UNIT_ASSERT(TState::Parse(proto, topology) == TState{});
 
         TState normal;
-        TState pending{T::DC_FAILURE_PENDING, 0, {}};
-        TState pendingInv1{T::DC_FAILURE_PENDING_INV_1, 0, {}};
-        TState pendingInv2{T::DC_FAILURE_PENDING_INV_2, 0, {}};
-        TState failed{T::DC_FAILURE, 0, {}};
-        TState inv1{T::DC_FAILURE_INV_1, 0, {}};
-        TState inv2{T::DC_FAILURE_INV_2, 0, {}};
-        TState solo1{T::SOLO_DC_INV_1, 0, 2};
-        TState solo2{T::SOLO_DC_INV_2, 0, 2};
+        TState pending{T::DC_FAILURE_PENDING, {Leaving, Included, Included}};
+        TState pendingInv1{T::DC_FAILURE_PENDING_INV_1, {Leaving, Included, Included}};
+        TState pendingInv2{T::DC_FAILURE_PENDING_INV_2, {Leaving, Included, Included}};
+        TState failed{T::DC_FAILURE, {Excluded, Included, Included}};
+        TState inv1{T::DC_FAILURE_INV_1, {Excluded, Included, Included}};
+        TState inv2{T::DC_FAILURE_INV_2, {Excluded, Included, Included}};
+        TState solo1{T::SOLO_DC_INV_1, {Excluded, Excluded, Included}};
+        TState solo2{T::SOLO_DC_INV_2, {Excluded, Excluded, Included}};
         UNIT_ASSERT(!normal.CanTransitionTo(failed));
         UNIT_ASSERT(normal.CanTransitionTo(pending));
         UNIT_ASSERT(!normal.CanTransitionTo(pendingInv1));
@@ -101,14 +107,14 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         UNIT_ASSERT(inv2.CanTransitionTo(solo2));
         UNIT_ASSERT(!solo1.CanTransitionTo(normal));
         UNIT_ASSERT(!solo2.CanTransitionTo(inv2));
-        TState leavingForSolo1{T::SOLO_DC_INV_1_PENDING, 0, 2};
-        TState leavingForSolo2{T::SOLO_DC_INV_2_PENDING, 0, 2};
-        TState preparingRecovery1{T::SOLO_DC_RECOVERY_PENDING_INV_1, 0, 2};
-        TState preparingRecovery2{T::SOLO_DC_RECOVERY_PENDING_INV_2, 0, 2};
-        TState soloRecovery1{T::SOLO_DC_RECOVERY_INV_1, 0, 2};
-        TState disaster{T::SOLO_DC_DISASTER, 0, 2};
-        TState resurection{T::SOLO_DC_RESURECTION, 0, 2};
-        TState resurectionPending{T::SOLO_DC_RESURECTION_PENDING, 0, 2};
+        TState leavingForSolo1{T::SOLO_DC_INV_1_PENDING, {Excluded, Leaving, Included}};
+        TState leavingForSolo2{T::SOLO_DC_INV_2_PENDING, {Excluded, Leaving, Included}};
+        TState preparingRecovery1{T::SOLO_DC_RECOVERY_PENDING_INV_1, {Excluded, Joining, Included}};
+        TState preparingRecovery2{T::SOLO_DC_RECOVERY_PENDING_INV_2, {Excluded, Joining, Included}};
+        TState soloRecovery1{T::SOLO_DC_RECOVERY_INV_1, {Excluded, Joining, Included}};
+        TState disaster{T::SOLO_DC_DISASTER, {Excluded, Excluded, Included}};
+        TState resurection{T::SOLO_DC_RESURECTION, {Excluded, Leaving, Included}};
+        TState resurectionPending{T::SOLO_DC_RESURECTION_PENDING, {Excluded, Leaving, Included}};
         UNIT_ASSERT(disaster.CanTransitionTo(resurectionPending));
         UNIT_ASSERT(!disaster.CanTransitionTo(resurection));
         UNIT_ASSERT(resurectionPending.CanTransitionTo(resurection));
@@ -122,7 +128,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         UNIT_ASSERT(resurection.CanTransitionTo(preparingRecovery1));
         UNIT_ASSERT(!resurection.CanTransitionTo(preparingRecovery2));
         UNIT_ASSERT(!resurection.CanTransitionTo(solo1));
-        UNIT_ASSERT(!resurection.CanTransitionTo({T::SOLO_DC_INV_1_PENDING, 0, 1}));
+        UNIT_ASSERT(!resurection.CanTransitionTo({T::SOLO_DC_INV_1_PENDING, {Excluded, Included, Leaving}}));
         UNIT_ASSERT(resurection.GetFailRealmStates() == leavingForSolo1.GetFailRealmStates());
         UNIT_ASSERT(resurection.GetWritePolicy() == solo1.GetWritePolicy());
         UNIT_ASSERT(solo1.CanTransitionTo(solo2));
@@ -144,7 +150,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         }
         for (const auto& state : {preparingRecovery1, preparingRecovery2}) {
             UNIT_ASSERT(!state.CanTransitionTo(inv1));
-            UNIT_ASSERT(!state.CanTransitionTo({state.Mode, 0, 1}));
+            UNIT_ASSERT(!state.CanTransitionTo({state.Mode, {Excluded, Included, Joining}}));
             UNIT_ASSERT(state.GetFailRealmStates()[1].State == TInfo::EFailRealmState::Joining);
             UNIT_ASSERT(state.GetWritePolicy().CheckWriteOk({2, 2}));
             UNIT_ASSERT(!state.GetWritePolicy().CheckWriteOk({2}));
@@ -167,17 +173,17 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         UNIT_ASSERT(leavingForSolo1.GetFailRealmStates() == leavingForSolo2.GetFailRealmStates());
         UNIT_ASSERT(leavingForSolo1.GetFailRealmStates()[1].State == TInfo::EFailRealmState::Leaving);
         UNIT_ASSERT(solo1.GetFailRealmStates() == solo2.GetFailRealmStates());
-        UNIT_ASSERT(!solo2.CanTransitionTo({T::SOLO_DC_INV_2, 0, 1}));
-        UNIT_ASSERT(!inv1.CanTransitionTo({T::DC_FAILURE_INV_2, 1, {}}));
+        UNIT_ASSERT(!solo2.CanTransitionTo({T::SOLO_DC_INV_2, {Excluded, Included, Excluded}}));
+        UNIT_ASSERT(!inv1.CanTransitionTo({T::DC_FAILURE_INV_2, {Included, Excluded, Included}}));
         UNIT_ASSERT(!failed.GetWritePolicy().CheckWriteOk({1, 1}));
         UNIT_ASSERT(failed.GetWritePolicy().CheckWriteOk({2, 2}));
         UNIT_ASSERT(!inv1.GetWritePolicy().CheckWriteOk({1, 1}));
         UNIT_ASSERT(inv1.GetWritePolicy().CheckWriteOk({2, 2}));
         UNIT_ASSERT(normal.GetWritePolicy().CheckWriteOk({2, 2}));
         UNIT_ASSERT(!normal.GetWritePolicy().CheckWriteDurability({2, 2}));
-        TState recoveryPending{T::DC_RECOVERY_PENDING, 0, {}};
-        TState recoveryPendingInv1{T::DC_RECOVERY_PENDING_INV_1, 0, {}};
-        TState recovery{T::DC_RECOVERY, 0, {}};
+        TState recoveryPending{T::DC_RECOVERY_PENDING, {Joining, Included, Included}};
+        TState recoveryPendingInv1{T::DC_RECOVERY_PENDING_INV_1, {Joining, Included, Included}};
+        TState recovery{T::DC_RECOVERY, {Joining, Included, Included}};
         for (const auto& state : {pending, failed}) {
             UNIT_ASSERT(state.CanTransitionTo(recoveryPending));
             UNIT_ASSERT(!state.CanTransitionTo(recoveryPendingInv1));
@@ -214,8 +220,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         UNIT_ASSERT(recovery.CanTransitionTo(inv1));
         UNIT_ASSERT(!recovery.CanTransitionTo(preparingRecovery1));
         UNIT_ASSERT(!recoveryPendingInv1.CanTransitionTo(preparingRecovery1));
-        UNIT_ASSERT(recovery.CanTransitionTo({T::SOLO_DC_RECOVERY_PENDING_INV_1, 1, 2}));
-        UNIT_ASSERT(recoveryPendingInv1.CanTransitionTo({T::SOLO_DC_RECOVERY_PENDING_INV_1, 1, 2}));
+        UNIT_ASSERT(recovery.CanTransitionTo({T::SOLO_DC_RECOVERY_PENDING_INV_1, {Joining, Excluded, Included}}));
+        UNIT_ASSERT(recoveryPendingInv1.CanTransitionTo({T::SOLO_DC_RECOVERY_PENDING_INV_1, {Joining, Excluded, Included}}));
         UNIT_ASSERT(recoveryPending.CanTransitionTo(disaster));
         UNIT_ASSERT(failed.CanTransitionTo(disaster));
         UNIT_ASSERT(preparingRecovery1.CanTransitionTo(leavingForSolo1));
@@ -243,18 +249,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         for (size_t i = 1; i < path.size(); ++i) {
             UNIT_ASSERT_C(path[i - 1].CanTransitionTo(path[i]), i);
         }
-        for (int mode = T::NORMAL; mode <= T::SOLO_DC_RESURECTION_PENDING; ++mode) {
-            if (!T::EMode_IsValid(mode)) {
-                continue;
-            }
-            TState state;
-            state.Mode = static_cast<T::EMode>(mode);
-            if (mode != T::NORMAL) {
-                state.FailedFailRealmIdx = 0;
-            }
-            if (state.RequiresSurvivingRealm()) {
-                state.SurvivingFailRealmIdx = 2;
-            }
+        for (const auto& state : {normal, pending, pendingInv1, pendingInv2, failed, inv1, inv2,
+                solo1, solo2, leavingForSolo1, leavingForSolo2, preparingRecovery1, preparingRecovery2,
+                soloRecovery1, disaster, resurection, resurectionPending, recoveryPending, recoveryPendingInv1, recovery}) {
             UNIT_ASSERT(TState::Parse(state.ToProto(), topology) == state);
             UNIT_ASSERT(TInfo::TWritePolicy::Parse(state.GetWritePolicy().ToProto(), topology) == state.GetWritePolicy());
             NKikimrBlobStorage::TGroupInfo group;
@@ -276,7 +273,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                 item->SetState(static_cast<NKikimrBlobStorage::TFailRealmStates::EState>(realm.State));
             }
             const auto info = TInfo::Parse(group, nullptr, nullptr);
-            UNIT_ASSERT_C(info, mode);
+            UNIT_ASSERT_C(info, state.Mode);
             UNIT_ASSERT(info->Mirror3dcState == state);
             auto wrongConfirmed = group;
             const TInfo::TConfirmedWrites zero{{TVector<ui32>{}}};
@@ -299,142 +296,89 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
 
     Y_UNIT_TEST(Mirror3dcRecoveryPreservesPhysicalRealms) {
         using T = NKikimrBlobStorage::TMirror3dcGroupState;
-        using TInfo = TBlobStorageGroupInfo;
-        using TState = TInfo::TMirror3dcState;
-        using R = TInfo::EFailRealmState;
-        const TInfo::TTopology topology(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1, true);
-        const auto roles = [](const TState& state) {
-            std::array<R, 3> result{R::Included, R::Included, R::Included};
-            for (const auto& realm : state.GetFailRealmStates()) {
-                result[realm.FailRealmIdx] = realm.State;
-            }
-            return result;
+        using TState = TBlobStorageGroupInfo::TMirror3dcState;
+        using enum TBlobStorageGroupInfo::EFailRealmState;
+        // Mode changes retain physical roles, including a pre-existing Joining/Leaving realm.
+        const std::pair<TState, TState> transitions[] = {
+            {{T::DC_RECOVERY, {Included, Included, Joining}},
+                {T::SOLO_DC_RECOVERY_PENDING_INV_1, {Included, Excluded, Joining}}},
+            {{T::DC_RECOVERY_PENDING_INV_1, {Included, Included, Joining}},
+                {T::SOLO_DC_RECOVERY_PENDING_INV_1, {Included, Excluded, Joining}}},
+            {{T::DC_FAILURE_PENDING, {Included, Included, Leaving}},
+                {T::SOLO_DC_RESURECTION_PENDING, {Included, Excluded, Leaving}}},
+            {{T::DC_FAILURE_PENDING_INV_1, {Included, Included, Leaving}},
+                {T::SOLO_DC_INV_1_PENDING, {Included, Excluded, Leaving}}},
+            {{T::DC_FAILURE_PENDING_INV_2, {Included, Included, Leaving}},
+                {T::SOLO_DC_INV_2_PENDING, {Included, Excluded, Leaving}}},
+            {{T::DC_FAILURE, {Included, Included, Excluded}},
+                {T::SOLO_DC_RESURECTION_PENDING, {Included, Leaving, Excluded}}},
         };
-        for (const auto mode : {T::DC_RECOVERY_PENDING_INV_1, T::DC_RECOVERY}) {
-            for (ui32 joining = 0; joining != 3; ++joining) {
-                const TState source{mode, joining, {}};
-                for (ui32 survivor = 0; survivor != 3; ++survivor) {
-                    if (survivor == joining) {
-                        continue;
-                    }
-                    const ui32 excluded = 3 - joining - survivor;
-                    const TState pending{T::SOLO_DC_RECOVERY_PENDING_INV_1, excluded, survivor};
-                    UNIT_ASSERT(source.CanTransitionTo(pending));
-                    UNIT_ASSERT(!source.CanTransitionTo({pending.Mode, joining, survivor}));
-                    UNIT_ASSERT(!source.CanTransitionTo({pending.Mode, excluded, joining}));
-                    UNIT_ASSERT(!source.CanTransitionTo({pending.Mode, excluded, excluded}));
-                    UNIT_ASSERT(!source.CanTransitionTo({T::DC_FAILURE_INV_1, excluded, {}}));
-                    const auto restored = TState::Parse(pending.ToProto(), topology);
-                    UNIT_ASSERT(restored && *restored == pending);
-                    const auto pendingRoles = roles(*restored);
-                    UNIT_ASSERT(pendingRoles[survivor] == R::Included);
-                    UNIT_ASSERT(pendingRoles[joining] == R::Joining);
-                    UNIT_ASSERT(pendingRoles[excluded] == R::Excluded);
-                    std::array<ui32, 3> copies{};
-                    copies[survivor] = copies[joining] = 2;
-                    UNIT_ASSERT(restored->CheckWriteOk(copies));
-                    copies[joining] = 0;
-                    copies[excluded] = 2;
-                    UNIT_ASSERT(!restored->CheckWriteOk(copies));
-
-                    // Completion includes the original J and leaves the newly failed I excluded.
-                    const TState recovery{T::SOLO_DC_RECOVERY_INV_1, excluded, survivor};
-                    const TState failed{T::DC_FAILURE_INV_1, excluded, {}};
-                    UNIT_ASSERT(pending.CanTransitionTo(recovery));
-                    UNIT_ASSERT(recovery.CanTransitionTo(failed));
-                    UNIT_ASSERT(roles(recovery) == pendingRoles);
-                    UNIT_ASSERT(roles(failed)[joining] == R::Included);
-                    UNIT_ASSERT(roles(failed)[survivor] == R::Included);
-                    UNIT_ASSERT(roles(failed)[excluded] == R::Excluded);
-
-                    // Aborting recovery changes the same J to L or E; a retry returns that realm.
-                    const TState leaving{T::SOLO_DC_INV_1_PENDING, excluded, survivor};
-                    const TState solo{T::SOLO_DC_INV_1, excluded, survivor};
-                    UNIT_ASSERT(pending.CanTransitionTo(leaving));
-                    UNIT_ASSERT(roles(leaving)[joining] == R::Leaving);
-                    UNIT_ASSERT(roles(leaving)[excluded] == R::Excluded);
-                    UNIT_ASSERT(leaving.CanTransitionTo(solo));
-                    UNIT_ASSERT(pending.CanTransitionTo(solo));
-                    UNIT_ASSERT(roles(solo)[joining] == R::Excluded);
-                    UNIT_ASSERT(leaving.CanTransitionTo(pending));
-                    UNIT_ASSERT(solo.CanTransitionTo(pending));
-                    UNIT_ASSERT(!solo.CanTransitionTo({pending.Mode, joining, survivor}));
-
-                    // Emergency resurrection returns the last Included realm, not the old J/E.
-                    for (const auto emergencyMode : {T::DC_FAILURE, T::DC_RECOVERY_PENDING}) {
-                        const TState emergencySource{emergencyMode, joining, {}};
-                        const TState disaster{T::SOLO_DC_DISASTER, joining, survivor};
-                        const TState resurrection{T::SOLO_DC_RESURECTION_PENDING, joining, survivor};
-                        UNIT_ASSERT(emergencySource.CanTransitionTo(disaster));
-                        UNIT_ASSERT(disaster.CanTransitionTo(resurrection));
-                        UNIT_ASSERT(resurrection.CanTransitionTo(disaster));
-                        UNIT_ASSERT(!resurrection.CanTransitionTo({disaster.Mode, excluded, survivor}));
-                        UNIT_ASSERT(!resurrection.CanTransitionTo({disaster.Mode, joining, excluded}));
-                        UNIT_ASSERT(roles(disaster)[survivor] == R::Included);
-                        UNIT_ASSERT(roles(disaster)[excluded] == R::Excluded);
-                        UNIT_ASSERT(roles(disaster)[joining] == R::Excluded);
-                        UNIT_ASSERT(disaster.GetConfirmedWrites() == resurrection.GetConfirmedWrites());
-                        UNIT_ASSERT(roles(resurrection)[excluded] == R::Leaving);
-                        UNIT_ASSERT(roles(resurrection)[joining] == R::Excluded);
-                        UNIT_ASSERT(!disaster.CanTransitionTo({resurrection.Mode, excluded, survivor}));
-                        if (emergencyMode == T::DC_FAILURE) {
-                            // The shortcut has the same physical roles as passing through DISASTER.
-                            UNIT_ASSERT(emergencySource.CanTransitionTo(resurrection));
-                            UNIT_ASSERT(!emergencySource.CanTransitionTo({resurrection.Mode, excluded, survivor}));
-                            UNIT_ASSERT(roles(resurrection)[survivor] == R::Included);
-                            UNIT_ASSERT(resurrection.GetConfirmedWrites().Layouts == TInfo::TWritePolicy::TLayouts{{}});
-                        }
-                    }
+        std::array<ui32, 3> order{0, 1, 2};
+        do {
+            for (const auto& [source, target] : transitions) {
+                auto from = source;
+                auto to = target;
+                for (ui32 i = 0; i != 3; ++i) {
+                    from.FailRealmStates[order[i]] = source.FailRealmStates[i];
+                    to.FailRealmStates[order[i]] = target.FailRealmStates[i];
                 }
+                UNIT_ASSERT(from.CanTransitionTo(to));
+                // This would replace the pre-existing J/L/E instead of retaining it.
+                auto swapped = to;
+                std::swap(swapped.FailRealmStates[order[1]], swapped.FailRealmStates[order[2]]);
+                UNIT_ASSERT(!from.CanTransitionTo(swapped));
+                auto sameMode = from;
+                std::swap(sameMode.FailRealmStates[order[0]], sameMode.FailRealmStates[order[2]]);
+                UNIT_ASSERT(!from.CanTransitionTo(sameMode));
+                std::array<ui32, 3> copies{};
+                copies[order[0]] = 2;
+                if (to.FailRealmStates[order[2]] == Joining) {
+                    copies[order[2]] = 2;
+                }
+                UNIT_ASSERT(to.CheckWriteOk(copies));
             }
-        }
+        } while (std::next_permutation(order.begin(), order.end()));
     }
 
-    Y_UNIT_TEST(Mirror3dcPendingPreservesLeavingRealm) {
+    Y_UNIT_TEST(Mirror3dcRecoveryCanChooseEitherExcludedRealm) {
         using T = NKikimrBlobStorage::TMirror3dcGroupState;
         using TInfo = TBlobStorageGroupInfo;
         using TState = TInfo::TMirror3dcState;
-        using R = TInfo::EFailRealmState;
-        const std::pair<T::EMode, T::EMode> transitions[] = {
-            {T::DC_FAILURE_PENDING, T::SOLO_DC_RESURECTION_PENDING},
-            {T::DC_FAILURE_PENDING_INV_1, T::SOLO_DC_INV_1_PENDING},
-            {T::DC_FAILURE_PENDING_INV_2, T::SOLO_DC_INV_2_PENDING},
-        };
-        for (const auto& [sourceMode, targetMode] : transitions) {
-            for (ui32 leaving = 0; leaving != 3; ++leaving) {
-                const TState source{sourceMode, leaving, {}};
-                for (ui32 survivor = 0; survivor != 3; ++survivor) {
-                    if (survivor == leaving) {
-                        continue;
-                    }
-                    const ui32 excluded = 3 - leaving - survivor;
-                    const TState target{targetMode, excluded, survivor};
-                    UNIT_ASSERT(source.CanTransitionTo(target));
-                    UNIT_ASSERT(!source.CanTransitionTo({targetMode, leaving, survivor}));
-                    UNIT_ASSERT(!source.CanTransitionTo({targetMode, excluded, leaving}));
-                    UNIT_ASSERT(!source.CanTransitionTo({targetMode, excluded, excluded}));
-                    for (const auto& [otherSource, otherTarget] : transitions) {
-                        if (otherSource != sourceMode) {
-                            UNIT_ASSERT(!source.CanTransitionTo({otherTarget, excluded, survivor}));
-                        }
-                    }
-                    std::array<R, 3> roles{R::Included, R::Included, R::Included};
-                    for (const auto& realm : target.GetFailRealmStates()) {
-                        roles[realm.FailRealmIdx] = realm.State;
-                    }
-                    UNIT_ASSERT(roles[survivor] == R::Included);
-                    UNIT_ASSERT(roles[leaving] == R::Leaving);
-                    UNIT_ASSERT(roles[excluded] == R::Excluded);
-                    std::array<ui32, 3> copies{};
-                    copies[survivor] = 2;
-                    UNIT_ASSERT(target.CheckWriteOk(copies));
-                    copies[survivor] = 0;
-                    copies[leaving] = 2;
-                    UNIT_ASSERT(!target.CheckWriteOk(copies));
-                    const TState next{targetMode == T::SOLO_DC_RESURECTION_PENDING ? T::SOLO_DC_RESURECTION
-                        : targetMode == T::SOLO_DC_INV_1_PENDING ? T::SOLO_DC_INV_1 : T::SOLO_DC_INV_2,
-                        excluded, survivor};
-                    UNIT_ASSERT(target.CanTransitionTo(next));
+        using enum TInfo::EFailRealmState;
+        const TInfo::TTopology topology(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1, true);
+        for (ui32 survivor = 0; survivor != 3; ++survivor) {
+            for (ui32 returning = 0; returning != 3; ++returning) {
+                if (returning == survivor) {
+                    continue;
+                }
+                const ui32 other = 3 - survivor - returning;
+                TState disaster{T::SOLO_DC_DISASTER, {Excluded, Excluded, Excluded}};
+                disaster.FailRealmStates[survivor] = Included;
+                auto pending = disaster;
+                pending.Mode = T::SOLO_DC_RESURECTION_PENDING;
+                pending.FailRealmStates[returning] = Leaving;
+                UNIT_ASSERT(disaster.CanTransitionTo(pending));
+                UNIT_ASSERT(pending.CanTransitionTo(disaster));
+                UNIT_ASSERT(TState::Parse(pending.ToProto(), topology) == pending);
+                UNIT_ASSERT(pending.GetConfirmedWrites() == disaster.GetConfirmedWrites());
+                // After abort, the administrator may choose the other E, with no history check.
+                auto retry = disaster;
+                retry.Mode = pending.Mode;
+                retry.FailRealmStates[other] = Leaving;
+                UNIT_ASSERT(disaster.CanTransitionTo(retry));
+                UNIT_ASSERT(!pending.CanTransitionTo(retry)); // Swap requires going through DISASTER.
+                auto wrongSurvivor = pending;
+                std::swap(wrongSurvivor.FailRealmStates[survivor], wrongSurvivor.FailRealmStates[returning]);
+                UNIT_ASSERT(!disaster.CanTransitionTo(wrongSurvivor));
+                // Positive-CW SOLO recovery also accepts either E as Joining.
+                for (const auto mode : {T::SOLO_DC_INV_1, T::SOLO_DC_INV_2}) {
+                    auto solo = disaster;
+                    solo.Mode = mode;
+                    auto recovery = solo;
+                    recovery.Mode = mode == T::SOLO_DC_INV_1
+                        ? T::SOLO_DC_RECOVERY_PENDING_INV_1 : T::SOLO_DC_RECOVERY_PENDING_INV_2;
+                    recovery.FailRealmStates[returning] = Joining;
+                    UNIT_ASSERT(solo.CanTransitionTo(recovery));
                 }
             }
         }
@@ -506,6 +450,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
     Y_UNIT_TEST(Mirror3dcWriteParticipation) {
         using T = NKikimrBlobStorage::TMirror3dcGroupState;
         using TState = TBlobStorageGroupInfo::TMirror3dcState;
+        using enum TBlobStorageGroupInfo::EFailRealmState;
         // Check all realm identities; counts remain indexed, rather than sorted across roles.
         for (ui32 c = 0; c < 3; ++c) {
             const ui32 a = (c + 1) % 3;
@@ -517,8 +462,15 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                 result[c] = inC;
                 return result;
             };
+            const auto stateFor = [&](T::EMode mode, const std::array<TBlobStorageGroupInfo::EFailRealmState, 3>& roles) {
+                TState state{mode};
+                state.FailRealmStates[a] = roles[0];
+                state.FailRealmStates[b] = roles[1];
+                state.FailRealmStates[c] = roles[2];
+                return state;
+            };
             for (auto mode : {T::DC_RECOVERY_PENDING_INV_1, T::DC_RECOVERY}) {
-                TState state{mode, c, {}};
+                auto state = stateFor(mode, {Included, Included, Joining});
                 UNIT_ASSERT_VALUES_EQUAL(state.GetWriteOkLayouts().size(), 2);
                 UNIT_ASSERT(state.CheckWriteOk(counts(2, 2, 0)));
                 UNIT_ASSERT(state.CheckWriteOk(counts(1, 1, 1)));
@@ -528,25 +480,26 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                 UNIT_ASSERT(state.CheckWriteDurability(counts(1, 1, 1)));
                 UNIT_ASSERT(!state.CheckWriteDurability(counts(2, 2, 0)));
             }
-            TState failurePending{T::DC_FAILURE_PENDING, c, {}};
+            auto failurePending = stateFor(T::DC_FAILURE_PENDING, {Included, Included, Leaving});
             UNIT_ASSERT(failurePending.CheckWriteOk(counts(2, 2, 0)));
             UNIT_ASSERT(!failurePending.CheckWriteOk(counts(2, 0, 3)));
             UNIT_ASSERT(!failurePending.CheckWriteDurability(counts(1, 0, 3)));
             UNIT_ASSERT(failurePending.CheckWriteDurability(counts(1, 1, 0)));
-            TState recoveryPending{T::DC_RECOVERY_PENDING, c, {}};
+            auto recoveryPending = stateFor(T::DC_RECOVERY_PENDING, {Included, Included, Joining});
             UNIT_ASSERT(recoveryPending.CheckWriteOk(counts(2, 2, 0)));
             UNIT_ASSERT(!recoveryPending.CheckWriteOk(counts(1, 2, 2)));
             UNIT_ASSERT(!recoveryPending.CheckWriteOk(counts(2, 1, 2)));
             for (auto mode : {T::SOLO_DC_DISASTER, T::SOLO_DC_RESURECTION_PENDING,
                     T::SOLO_DC_RESURECTION, T::SOLO_DC_INV_1_PENDING, T::SOLO_DC_INV_1}) {
-                TState state{mode, c, a};
+                auto state = stateFor(mode, {Included,
+                    mode == T::SOLO_DC_DISASTER || mode == T::SOLO_DC_INV_1 ? Excluded : Leaving, Excluded});
                 UNIT_ASSERT_VALUES_EQUAL(state.GetWriteOkLayouts().size(), 1);
                 UNIT_ASSERT(state.CheckWriteOk(counts(2, 0, 0)));
                 UNIT_ASSERT(!state.CheckWriteOk(counts(1, 3, 3)));
                 UNIT_ASSERT(!state.CheckWriteDurability(counts(1, 3, 3)));
                 UNIT_ASSERT(state.CheckWriteDurability(counts(2, 0, 0)));
             }
-            TState soloRecovery{T::SOLO_DC_RECOVERY_PENDING_INV_1, c, a};
+            auto soloRecovery = stateFor(T::SOLO_DC_RECOVERY_PENDING_INV_1, {Included, Joining, Excluded});
             UNIT_ASSERT(soloRecovery.CheckWriteOk(counts(2, 2, 0)));
             UNIT_ASSERT(!soloRecovery.CheckWriteOk(counts(0, 2, 3)));
             UNIT_ASSERT(!soloRecovery.CheckWriteOk(counts(2, 0, 3)));

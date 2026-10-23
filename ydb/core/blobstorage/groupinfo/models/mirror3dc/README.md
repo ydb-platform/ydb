@@ -17,13 +17,25 @@ the C++ implementation. `model_common.py` defines layout and replication helpers
 Changes to C++ transitions or policies require a separate check of these inputs.
 A successful model run does not prove the C++ implementation correct.
 
-The model preserves the existing Joining realm on `IIJ -> IJE`, excluding an
-Included realm instead. It also includes the direct `DC_RECOVERY` transitions to
-`DC_FAILURE_PENDING_INV_1` and `DC_FAILURE_INV_1`. Its `last` variable records the
-most recent `I -> E` realm, or the `L -> E` realm when recovery is aborted back
-to `SOLO_DC_DISASTER`; only that realm may return through `E -> L`. For the
-C++ disaster path, this is the realm distinct from both `FailedFailRealmIdx` and
-`SurvivingFailRealmIdx`.
+The group-state contract contains `Mode` and explicit `FailRealmStates`, with
+exactly one entry for each physical realm index `0..2`. Parsing checks that the
+entries are complete, unique and match the mode's role pattern. For example:
+
+```textproto
+Mode: SOLO_DC_RESURECTION_PENDING
+FailRealmStates {
+    FailRealm { FailRealmIdx: 0 State: Included }
+    FailRealm { FailRealmIdx: 1 State: Leaving }
+    FailRealm { FailRealmIdx: 2 State: Excluded }
+}
+```
+
+Transitions preserve the maximum possible number of physical realm roles. Thus
+`IIJ -> IJE` preserves the existing Joining realm and excludes an Included realm.
+An `IEE -> ILE` or `IEE -> IJE` transition may select either Excluded realm;
+neither the contract nor the model records a historical returning-realm choice.
+The graph also includes the direct `DC_RECOVERY` transitions to
+`DC_FAILURE_PENDING_INV_1` and `DC_FAILURE_INV_1`.
 
 The following `IIL -> ILE` transitions preserve the physical Leaving realm and
 exclude one of the Included realms:
@@ -34,14 +46,17 @@ exclude one of the Included realms:
 
 `DC_FAILURE -> SOLO_DC_RESURECTION_PENDING` is a direct `IIE -> ILE` shortcut
 without an intermediate `SOLO_DC_DISASTER`. The existing Excluded realm remains
-Excluded (`FailedFailRealmIdx` is unchanged); one Included realm is selected as
+Excluded; one Included realm is selected as
 the survivor and the other becomes Leaving. The target has CW 0.
 
 The reverse `SOLO_DC_RESURECTION_PENDING -> SOLO_DC_DISASTER` transition changes
-`ILE -> IEE`, keeps both realm indices and retains CW 0. Recording its `L -> E`
-realm allows a subsequent `SOLO_DC_DISASTER -> SOLO_DC_RESURECTION_PENDING` retry
-to restore the same Leaving realm. This also applies after the direct `IIE` or
-`IIL` shortcuts, where that realm need not have previously undergone `I -> E`.
+`ILE -> IEE`, preserves the Included realm and retains CW 0. A subsequent
+`SOLO_DC_DISASTER -> SOLO_DC_RESURECTION_PENDING` retry can select either
+Excluded realm under the contract. For this transition only, the one-blob model
+assumes that, if any Excluded realm holds a copy, a realm holding a copy is
+selected. If neither does, either choice is allowed and CW 0 still permits
+unrecoverability. This is a model assumption about selecting a recovery source,
+not a BSC constraint or a guarantee for a collection of blobs.
 
 ## Run
 

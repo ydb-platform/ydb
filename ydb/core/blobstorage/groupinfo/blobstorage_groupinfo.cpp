@@ -921,85 +921,117 @@ std::optional<TBlobStorageGroupInfo::TMirror3dcState> TBlobStorageGroupInfo::TMi
     if (!state.HasMode() || !T::EMode_IsValid(state.GetMode())) {
         return fail("Mirror3dc state requires a valid explicit mode");
     }
+    if (state.GetFailRealmStates().FailRealmSize() != 3) {
+        return fail("Mirror3dc state requires three explicit failrealm roles");
+    }
     TMirror3dcState result;
     result.Mode = state.GetMode();
-    if (state.HasFailedFailRealmIdx()) {
-        result.FailedFailRealmIdx = state.GetFailedFailRealmIdx();
+    std::array<bool, 3> seen{};
+    for (const auto& realm : state.GetFailRealmStates().GetFailRealm()) {
+        if (!realm.HasFailRealmIdx() || realm.GetFailRealmIdx() >= 3
+                || !realm.HasState() || !NKikimrBlobStorage::TFailRealmStates::EState_IsValid(realm.GetState())) {
+            return fail("Mirror3dc state has a missing or invalid failrealm index or role");
+        }
+        const ui32 index = realm.GetFailRealmIdx();
+        if (seen[index]) {
+            return fail("Mirror3dc state has duplicate failrealm indices");
+        }
+        seen[index] = true;
+        result.FailRealmStates[index] = static_cast<EFailRealmState>(realm.GetState());
     }
-    if (state.HasSurvivingFailRealmIdx()) {
-        result.SurvivingFailRealmIdx = state.GetSurvivingFailRealmIdx();
-    }
-    const bool solo = result.RequiresSurvivingRealm();
-    if ((result.Mode != T::NORMAL) != result.FailedFailRealmIdx.has_value()
-            || solo != result.SurvivingFailRealmIdx.has_value()
-            || (result.FailedFailRealmIdx && *result.FailedFailRealmIdx >= 3)
-            || (result.SurvivingFailRealmIdx && *result.SurvivingFailRealmIdx >= 3)
-            || (solo && result.FailedFailRealmIdx == result.SurvivingFailRealmIdx)) {
-        return fail("Mirror3dc mode has missing, redundant, or invalid failrealm indices");
+    if (!result.HasValidFailRealmStates()) {
+        return fail("Failrealm roles do not match the mirror3dc mode");
     }
     return result;
 }
 
-bool TBlobStorageGroupInfo::TMirror3dcState::RequiresSurvivingRealm() const {
+std::array<TBlobStorageGroupInfo::EFailRealmState, 3>
+TBlobStorageGroupInfo::TMirror3dcState::GetRealmPattern(EMode mode) {
     using T = NKikimrBlobStorage::TMirror3dcGroupState;
-    switch (Mode) {
+    using enum EFailRealmState;
+    switch (mode) {
+        case T::NORMAL:
+            return {Included, Included, Included};
+        case T::DC_FAILURE_PENDING:
+        case T::DC_FAILURE_PENDING_INV_1:
+        case T::DC_FAILURE_PENDING_INV_2:
+            return {Included, Included, Leaving};
+        case T::DC_FAILURE:
+        case T::DC_FAILURE_INV_1:
+        case T::DC_FAILURE_INV_2:
+            return {Included, Included, Excluded};
+        case T::DC_RECOVERY_PENDING:
+        case T::DC_RECOVERY_PENDING_INV_1:
+        case T::DC_RECOVERY:
+            return {Included, Included, Joining};
         case T::SOLO_DC_DISASTER:
-        case T::SOLO_DC_RESURECTION_PENDING:
-        case T::SOLO_DC_RESURECTION:
         case T::SOLO_DC_INV_1:
         case T::SOLO_DC_INV_2:
+            return {Included, Excluded, Excluded};
+        case T::SOLO_DC_RESURECTION_PENDING:
+        case T::SOLO_DC_RESURECTION:
         case T::SOLO_DC_INV_1_PENDING:
         case T::SOLO_DC_INV_2_PENDING:
+            return {Included, Leaving, Excluded};
         case T::SOLO_DC_RECOVERY_PENDING_INV_1:
         case T::SOLO_DC_RECOVERY_PENDING_INV_2:
         case T::SOLO_DC_RECOVERY_INV_1:
-            return true;
+            return {Included, Joining, Excluded};
         default:
-            return false;
+            Y_ABORT("Invalid mirror-3-dc mode");
     }
+}
+
+bool TBlobStorageGroupInfo::TMirror3dcState::HasValidFailRealmStates() const {
+    if (!NKikimrBlobStorage::TMirror3dcGroupState::EMode_IsValid(Mode)) {
+        return false;
+    }
+    auto actual = FailRealmStates;
+    auto expected = GetRealmPattern(Mode);
+    Sort(actual);
+    Sort(expected);
+    return actual == expected;
 }
 
 NKikimrBlobStorage::TMirror3dcGroupState TBlobStorageGroupInfo::TMirror3dcState::ToProto() const {
     NKikimrBlobStorage::TMirror3dcGroupState result;
     result.SetMode(Mode);
-    if (FailedFailRealmIdx) {
-        result.SetFailedFailRealmIdx(*FailedFailRealmIdx);
-    }
-    if (SurvivingFailRealmIdx) {
-        result.SetSurvivingFailRealmIdx(*SurvivingFailRealmIdx);
+    for (ui32 index = 0; index < FailRealmStates.size(); ++index) {
+        auto* realm = result.MutableFailRealmStates()->AddFailRealm();
+        realm->SetFailRealmIdx(index);
+        realm->SetState(static_cast<NKikimrBlobStorage::TFailRealmStates::EState>(FailRealmStates[index]));
     }
     return result;
 }
 
 bool TBlobStorageGroupInfo::TMirror3dcState::CanTransitionTo(const TMirror3dcState& next) const {
     using T = NKikimrBlobStorage::TMirror3dcGroupState;
+    if (!HasValidFailRealmStates() || !next.HasValidFailRealmStates()) {
+        return false;
+    }
+    // Preserve as many physical roles as the target mode permits. In particular, a
+    // mode change keeps an existing J/L when the target needs it, and keeps the surviving I.
+    // When two E realms are equivalent, either may be selected for L/J without history.
+    std::array<ui32, 4> previousCounts{};
+    std::array<ui32, 4> nextCounts{};
+    ui32 preserved = 0;
+    for (ui32 index = 0; index < FailRealmStates.size(); ++index) {
+        ++previousCounts[static_cast<ui32>(FailRealmStates[index])];
+        ++nextCounts[static_cast<ui32>(next.FailRealmStates[index])];
+        preserved += FailRealmStates[index] == next.FailRealmStates[index];
+    }
+    ui32 maxPreserved = 0;
+    for (ui32 role = 0; role < previousCounts.size(); ++role) {
+        maxPreserved += Min(previousCounts[role], nextCounts[role]);
+    }
+    if (preserved != maxPreserved) {
+        return false;
+    }
     if (*this == next) {
         return true;
     }
     if (next.Mode == T::NORMAL) {
         return Mode == T::DC_RECOVERY;
-    }
-    const bool enteringSoloWithJoining = (Mode == T::DC_RECOVERY_PENDING_INV_1 || Mode == T::DC_RECOVERY)
-        && next.Mode == T::SOLO_DC_RECOVERY_PENDING_INV_1;
-    const bool enteringSoloWithLeaving = (Mode == T::DC_FAILURE_PENDING && next.Mode == T::SOLO_DC_RESURECTION_PENDING)
-        || (Mode == T::DC_FAILURE_PENDING_INV_1 && next.Mode == T::SOLO_DC_INV_1_PENDING)
-        || (Mode == T::DC_FAILURE_PENDING_INV_2 && next.Mode == T::SOLO_DC_INV_2_PENDING);
-    if (enteringSoloWithJoining || enteringSoloWithLeaving) {
-        // Keep the existing Joining/Leaving realm. FailedFailRealmIdx now identifies the Included
-        // realm being excluded; the other Included realm must remain the survivor.
-        if (!FailedFailRealmIdx || !next.FailedFailRealmIdx || !next.SurvivingFailRealmIdx
-                || next.FailedFailRealmIdx == FailedFailRealmIdx
-                || next.SurvivingFailRealmIdx == FailedFailRealmIdx
-                || next.FailedFailRealmIdx == next.SurvivingFailRealmIdx) {
-            return false;
-        }
-    } else if (Mode != T::NORMAL && FailedFailRealmIdx != next.FailedFailRealmIdx) {
-        // Other transitions preserve the identity of the excluded/returning realm.
-        return false;
-    }
-    if (SurvivingFailRealmIdx && next.SurvivingFailRealmIdx
-            && SurvivingFailRealmIdx != next.SurvivingFailRealmIdx) {
-        return false;
     }
     switch (Mode) {
         case T::NORMAL:
@@ -1061,51 +1093,13 @@ bool TBlobStorageGroupInfo::TMirror3dcState::CanTransitionTo(const TMirror3dcSta
 }
 
 TVector<TBlobStorageGroupInfo::TFailRealmState> TBlobStorageGroupInfo::TMirror3dcState::GetFailRealmStates() const {
-    using T = NKikimrBlobStorage::TMirror3dcGroupState;
-    using S = EFailRealmState;
-    switch (Mode) {
-        case T::NORMAL:
-            return {};
-        case T::DC_FAILURE_PENDING:
-        case T::DC_FAILURE_PENDING_INV_1:
-        case T::DC_FAILURE_PENDING_INV_2:
-            return {{*FailedFailRealmIdx, S::Leaving}};
-        case T::DC_RECOVERY_PENDING:
-        case T::DC_RECOVERY:
-        case T::DC_RECOVERY_PENDING_INV_1:
-            // Writes are allowed; read completeness must not depend on this realm.
-            return {{*FailedFailRealmIdx, S::Joining}};
-        case T::DC_FAILURE:
-        case T::DC_FAILURE_INV_1:
-        case T::DC_FAILURE_INV_2:
-            return {{*FailedFailRealmIdx, S::Excluded}};
-        case T::SOLO_DC_DISASTER:
-        case T::SOLO_DC_RESURECTION_PENDING:
-        case T::SOLO_DC_RESURECTION:
-        case T::SOLO_DC_INV_1:
-        case T::SOLO_DC_INV_2:
-        case T::SOLO_DC_INV_1_PENDING:
-        case T::SOLO_DC_INV_2_PENDING:
-        case T::SOLO_DC_RECOVERY_PENDING_INV_1:
-        case T::SOLO_DC_RECOVERY_PENDING_INV_2:
-        case T::SOLO_DC_RECOVERY_INV_1: {
-            TVector<TFailRealmState> result;
-            for (ui32 realm = 0; realm < 3; ++realm) {
-                if (realm != *SurvivingFailRealmIdx) {
-                    const auto state = realm == *FailedFailRealmIdx ? S::Excluded
-                        : Mode == T::SOLO_DC_RECOVERY_PENDING_INV_1 || Mode == T::SOLO_DC_RECOVERY_PENDING_INV_2
-                            || Mode == T::SOLO_DC_RECOVERY_INV_1 ? S::Joining
-                        : Mode == T::SOLO_DC_INV_1_PENDING || Mode == T::SOLO_DC_INV_2_PENDING
-                            || Mode == T::SOLO_DC_RESURECTION_PENDING || Mode == T::SOLO_DC_RESURECTION ? S::Leaving
-                        : S::Excluded;
-                    result.push_back({realm, state});
-                }
-            }
-            return result;
+    TVector<TFailRealmState> result;
+    for (ui32 index = 0; index < FailRealmStates.size(); ++index) {
+        if (FailRealmStates[index] != EFailRealmState::Included) {
+            result.push_back({index, FailRealmStates[index]});
         }
-        default:
-            Y_ABORT("Invalid mirror-3-dc mode");
     }
+    return result;
 }
 
 TBlobStorageGroupInfo::TWritePolicy TBlobStorageGroupInfo::TMirror3dcState::GetWritePolicy() const {
@@ -1144,10 +1138,6 @@ TBlobStorageGroupInfo::TWritePolicy TBlobStorageGroupInfo::TMirror3dcState::GetW
 }
 
 TVector<std::array<ui32, 3>> TBlobStorageGroupInfo::TMirror3dcState::GetWriteOkLayouts() const {
-    std::array<EFailRealmState, 3> states{}; // Included by default.
-    for (const auto& realm : GetFailRealmStates()) {
-        states[realm.FailRealmIdx] = realm.State;
-    }
     TVector<std::array<ui32, 3>> result;
     for (const auto& layout : GetWritePolicy().WriteOk) {
         std::array<ui32, 3> placement{};
@@ -1158,7 +1148,7 @@ TVector<std::array<ui32, 3>> TBlobStorageGroupInfo::TMirror3dcState::GetWriteOkL
             bool usesJoining = false;
             bool usesAllIncluded = true;
             for (ui32 realm = 0; realm < 3; ++realm) {
-                switch (states[realm]) {
+                switch (FailRealmStates[realm]) {
                     case EFailRealmState::Included:
                         usesAllIncluded &= placement[realm] != 0;
                         break;
@@ -1189,9 +1179,9 @@ bool TBlobStorageGroupInfo::TMirror3dcState::CheckWriteOk(const std::array<ui32,
 bool TBlobStorageGroupInfo::TMirror3dcState::CheckWriteDurability(
         const std::array<ui32, 3>& partsPerFailRealm) const {
     TVector<ui32> writableParts(partsPerFailRealm.begin(), partsPerFailRealm.end());
-    for (const auto& realm : GetFailRealmStates()) {
-        if (realm.State == EFailRealmState::Leaving || realm.State == EFailRealmState::Excluded) {
-            writableParts[realm.FailRealmIdx] = 0;
+    for (ui32 realm = 0; realm < FailRealmStates.size(); ++realm) {
+        if (FailRealmStates[realm] == EFailRealmState::Leaving || FailRealmStates[realm] == EFailRealmState::Excluded) {
+            writableParts[realm] = 0;
         }
     }
     return GetWritePolicy().CheckWriteDurability(std::move(writableParts));

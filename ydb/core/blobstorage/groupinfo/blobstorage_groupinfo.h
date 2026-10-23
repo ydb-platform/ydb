@@ -575,15 +575,14 @@ public:
     struct TMirror3dcState {
         using EMode = NKikimrBlobStorage::TMirror3dcGroupState::EMode;
         EMode Mode = NKikimrBlobStorage::TMirror3dcGroupState::NORMAL;
-        std::optional<ui32> FailedFailRealmIdx;
-        std::optional<ui32> SurvivingFailRealmIdx;
+        // Physical failrealm indices; every realm has an explicit role.
+        std::array<EFailRealmState, 3> FailRealmStates{};
 
         bool operator==(const TMirror3dcState&) const = default;
         static std::optional<TMirror3dcState> Parse(const NKikimrBlobStorage::TMirror3dcGroupState& state,
             const TTopology& topology, IOutputStream* err = nullptr);
         NKikimrBlobStorage::TMirror3dcGroupState ToProto() const;
         bool CanTransitionTo(const TMirror3dcState& next) const;
-        bool RequiresSurvivingRealm() const;
         TVector<TFailRealmState> GetFailRealmStates() const;
         TWritePolicy GetWritePolicy() const;
         // Indexed by FailRealmIdx. Joining can participate only together with all Included realms.
@@ -592,6 +591,10 @@ public:
         bool CheckWriteDurability(const std::array<ui32, 3>& partsPerFailRealm) const;
         // Invariant and recovery milestones may assert stronger guarantees for existing blobs.
         TConfirmedWrites GetConfirmedWrites() const;
+
+    private:
+        bool HasValidFailRealmStates() const;
+        static std::array<EFailRealmState, 3> GetRealmPattern(EMode mode);
     };
     std::optional<TMirror3dcState> Mirror3dcState;
 

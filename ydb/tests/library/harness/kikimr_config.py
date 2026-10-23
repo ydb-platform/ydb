@@ -215,6 +215,7 @@ class KikimrConfigGenerator(object):
             lb_user_database_root=None,
             shutdown_config=None,
             replication_config=None,
+            log_prefix=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -748,6 +749,8 @@ class KikimrConfigGenerator(object):
             security_config.setdefault("administration_allowed_sids", []).append(self.__default_clusteradmin)
             security_config.setdefault("default_access", []).append('+F:{}'.format(self.__default_clusteradmin))
         self.__enable_static_auth = enable_static_auth
+
+        self.log_prefix = "logfile_" if log_prefix is None else log_prefix
 
     @property
     def enable_static_auth(self):

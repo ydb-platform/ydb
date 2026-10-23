@@ -29,6 +29,11 @@ namespace {
 class TTestGetJsonPath: public TGetJsonPath {
 public:
     using TGetJsonPath::ExtractArray;
+
+    std::shared_ptr<NAccessor::IChunkedArray> ExtractArray(
+        const std::shared_ptr<NAccessor::IChunkedArray>& input, const std::string_view path) const {
+        return TGetJsonPath::ExtractArray(input, NAccessor::NSubColumns::ParseJsonPath(path).DetachResult());
+    }
 };
 
 NAccessor::NSubColumns::TSettings BuildSettings(const double dictionaryFraction, const ui32 columnsLimit) {
@@ -191,7 +196,8 @@ void AssertNullConstantWithInput(const NKikimr::NKernels::EOperation operation, 
 Y_UNIT_TEST_SUITE(JsonValue) {
     Y_UNIT_TEST(UsesNativeStringBuffers) {
         auto input = BuildSubColumns({ R"({"s":"x"})", R"({"s":"yy"})", R"({"s":"zzz"})" }, BuildSettings(0, 1024));
-        auto accessor = input->GetPathAccessor("$.s", input->GetRecordsCount()).DetachResult();
+        auto accessor = input->GetPathAccessor(
+            NAccessor::NSubColumns::ParseJsonPath("$.s").DetachResult(), input->GetRecordsCount()).DetachResult();
         const auto& source = accessor->GetChunkedArrayAccessor();
         UNIT_ASSERT(source->GetType() == NAccessor::IChunkedArray::EType::Array);
 
@@ -212,7 +218,8 @@ Y_UNIT_TEST_SUITE(JsonValue) {
             dictionaryDocs.emplace_back(TStringBuilder() << R"({"s":")" << (index % 2 ? "x" : "yy") << R"("})");
         }
         auto dictionaryInput = BuildSubColumns(dictionaryDocs, BuildSettings(1, 1024));
-        auto accessor = dictionaryInput->GetPathAccessor("$.s", dictionaryInput->GetRecordsCount()).DetachResult();
+        auto accessor = dictionaryInput->GetPathAccessor(
+            NAccessor::NSubColumns::ParseJsonPath("$.s").DetachResult(), dictionaryInput->GetRecordsCount()).DetachResult();
         const auto& source = accessor->GetChunkedArrayAccessor();
         UNIT_ASSERT(source->GetType() == NAccessor::IChunkedArray::EType::Dictionary);
         UNIT_ASSERT(source->GetDataType()->id() == arrow::Type::STRING);
@@ -236,6 +243,23 @@ Y_UNIT_TEST_SUITE(JsonValue) {
         UNIT_ASSERT_VALUES_EQUAL(input->GetColumnsData().GetStats().GetColumnsCount(), 0);
         UNIT_ASSERT_VALUES_EQUAL(input->GetOthersData().GetStats().GetColumnsCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(ExtractJsonValue(input, "$.s"), "x;yy;");
+    }
+
+    Y_UNIT_TEST(ExecutesAcrossMultipleDataOwners) {
+        auto first = BuildSubColumns({ R"({"s":"x"})" }, BuildSettings(0, 1024));
+        auto second = BuildSubColumns({ R"({"s":"yy"})" }, BuildSettings(0, 1024));
+        NAccessor::TCompositeChunkedArray::TBuilder builder(first->GetDataType());
+        builder.AddChunk(first);
+        builder.AddChunk(second);
+
+        TAccessorsCollection resources(2);
+        resources.AddVerified(1, builder.Finish(), false);
+        resources.AddConstantVerified(2, std::make_shared<arrow::StringScalar>("$.s"));
+        const auto result = TGetJsonPath().Execute(TColumnChainInfo::BuildVector({1, 2}), TColumnChainInfo::BuildVector({3}), resources);
+        UNIT_ASSERT(result.IsSuccess() && *result);
+        const auto output = arrow::Concatenate(resources.GetAccessorVerified(3)->GetChunkedArray()->chunks()).ValueOrDie();
+        UNIT_ASSERT(output->GetScalar(0).ValueOrDie()->Equals(arrow::StringScalar("x")));
+        UNIT_ASSERT(output->GetScalar(1).ValueOrDie()->Equals(arrow::StringScalar("yy")));
     }
 };
 

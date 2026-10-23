@@ -73,6 +73,7 @@ YQL_LAST_ABI_VERSION()
 END()
 
 RECURSE_FOR_TESTS(
+    ut_attachment_lifecycle
     ut_assign_tx_id
     ut_dst_creator
     ut_replication

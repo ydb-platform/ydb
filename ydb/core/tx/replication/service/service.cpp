@@ -175,9 +175,11 @@ public:
         ActorId = ev->Sender;
         Generation = generation;
         SupportsIndexMetadata = ev->Get()->Record.GetSupportsIndexMetadata();
+        SupportsSourceOffsets = ev->Get()->Record.GetSupportsSourceOffsets();
 
         auto status = MakeHolder<TEvService::TEvStatus>();
         auto& record = status->Record;
+        record.SetSupportsSourceOffsets(true);
 
         for (const auto& [id, _] : Workers) {
             id.Serialize(*record.AddWorkers());
@@ -211,6 +213,22 @@ public:
     }
 
     void SetIndexBuildWorker(const TWorkerId& id) { IndexBuildWorkers.insert(id); }
+    void SetOffsetTrackingWorker(const TWorkerId& id) { OffsetTrackingWorkers.insert(id); }
+
+    void Handle(IActorOps* ops, TEvService::TEvSourceOffsetReport::TPtr& ev) {
+        if (!SupportsSourceOffsets) {
+            return; // old controller: do not authorize further source commits
+        }
+        const auto id = GetWorkerId(ev->Sender);
+        if (!HasWorker(id) || !OffsetTrackingWorkers.contains(id)) {
+            return;
+        }
+        auto& record = ev->Get()->Record;
+        id.Serialize(*record.MutableWorker());
+        record.MutableController()->SetTabletId(ControllerTabletId);
+        record.MutableController()->SetGeneration(Generation);
+        ops->Send(ActorId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
+    }
 
     void Handle(IActorOps* ops, TEvService::TEvIndexBuildProgress::TPtr& ev) {
         const auto id = GetWorkerId(ev->Sender);
@@ -280,6 +298,7 @@ public:
         }
 
         IndexBuildWorkers.erase(id);
+        OffsetTrackingWorkers.erase(id);
         PendingIndexTxIds.erase(id);
         DataEnded.erase(id);
         Workers.erase(it);
@@ -294,6 +313,7 @@ public:
         SendWorkerStatus(ops, it->second, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED, std::forward<Args>(args)...);
 
         IndexBuildWorkers.erase(it->second);
+        OffsetTrackingWorkers.erase(it->second);
         PendingIndexTxIds.erase(it->second);
         DataEnded.erase(it->second);
         Workers.erase(it->second);
@@ -534,12 +554,14 @@ private:
     TActorId ActorId;
     ui64 Generation;
     bool SupportsIndexMetadata = false;
+    bool SupportsSourceOffsets = false;
     const ui64 ControllerTabletId;
     THashMap<TWorkerId, TWorkerInfo> Workers;
     THashMap<TActorId, TWorkerId> ActorIdToWorkerId;
     THashMap<TWorkerId, TMap<ui64, i64>> PendingStatsValues;
 
     THashSet<TWorkerId> IndexBuildWorkers;
+    THashSet<TWorkerId> OffsetTrackingWorkers;
     THashMap<TWorkerId, TSet<TRowVersion>> PendingIndexTxIds;
     THashMap<TWorkerId, NKikimrReplication::TEvWorkerDataEnd> DataEnded;
     TMap<TRowVersion, ui64> TxIds;
@@ -811,12 +833,16 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             CreateWorker(
                 SelfId(),
                 ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit, reportStats),
-                std::move(writerFn)),
+                std::move(writerFn), cmd.GetTrackSourceOffsets(),
+                cmd.HasProcessedSourceOffset() ? TMaybe<ui64>(cmd.GetProcessedSourceOffset()) : Nothing()),
             poolId,
             cmd.GetReplicationLocation(),
             cmd.GetMetricsLevel()
         );
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
+        if (cmd.GetTrackSourceOffsets()) {
+            session.SetOffsetTrackingWorker(id);
+        }
     }
 
     void Handle(TEvService::TEvStopWorker::TPtr& ev) {
@@ -852,6 +878,10 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         YDB_LOG_INFO("Stop worker",
             {"worker", id});
+        if (record.GetDrain()) {
+            Send(session.GetWorkerActorId(id), new TEvWorker::TEvDrain());
+            return;
+        }
         WorkerActorIdToSession.erase(session.GetWorkerActorId(id));
         session.StopWorker(this, id);
     }
@@ -920,6 +950,26 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             {"worker", ev->Sender},
             {"version", TRowVersion::FromProto(ev->Get()->Record.GetVersion())});
         session->Handle(this, ev);
+    }
+
+    void Handle(TEvService::TEvSourceOffsetReport::TPtr& ev) {
+        auto* session = SessionFromWorker(ev->Sender);
+        if (session && session->HasWorker(ev->Sender)) {
+            session->Handle(this, ev);
+        }
+    }
+
+    void Handle(TEvService::TEvSourceOffsetResult::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        const auto session = Sessions.find(record.GetController().GetTabletId());
+        if (record.HasWorker() && record.HasController() && session != Sessions.end()
+            && session->second.GetGeneration() == record.GetController().GetGeneration())
+        {
+            const auto id = TWorkerId::Parse(record.GetWorker());
+            if (session->second.HasWorker(id)) {
+                Send(session->second.GetWorkerActorId(id), ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
+            }
+        }
     }
 
     void Handle(TEvService::TEvIndexBuildProgress::TPtr& ev) {
@@ -1050,7 +1100,12 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto* session = SessionFromWorker(ev->Sender);
         if (session && session->HasWorker(ev->Sender)) {
             const auto& workerId = session->GetWorkerId(ev->Sender);
-            if (ev->Get()->DetailedStats) {
+            if (!ev->Get()->SourceOffsetMismatch.empty()) {
+                session->SendWorkerStatus(this, workerId,
+                    NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING,
+                    NKikimrReplication::TEvWorkerStatus::REASON_SOURCE_OFFSET_MISMATCH,
+                    ev->Get()->SourceOffsetMismatch);
+            } else if (ev->Get()->DetailedStats) {
                 session->ApplyWorkerStats(workerId, std::move(ev->Get()->DetailedStats));
             } else {
                 session->SendWorkerStatus(this, workerId, ev->Get()->Lag);
@@ -1130,6 +1185,8 @@ public:
             hFunc(TEvService::TEvHeartbeat, Handle);
             hFunc(TEvService::TEvSchemaChangeReport, Handle);
             hFunc(TEvService::TEvIndexBuildProgress, Handle);
+            hFunc(TEvService::TEvSourceOffsetReport, Handle);
+            hFunc(TEvService::TEvSourceOffsetResult, Handle);
             hFunc(TEvService::TEvIndexBuildProgressResult, Handle);
             hFunc(TEvService::TEvSchemaChangeResult, Handle);
             hFunc(TEvWorker::TEvDataEnd, Handle);

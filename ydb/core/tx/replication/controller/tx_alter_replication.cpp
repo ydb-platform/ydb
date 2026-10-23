@@ -77,6 +77,7 @@ class TController::TTxAlterReplication: public TTxBase {
     THolder<TEvController::TEvAlterReplicationResult> Result;
     TReplication::TPtr Replication;
     bool ResetFailedSchemaBarriers = false;
+    bool WaitForDrain = false;
     TVector<std::pair<ui64, ui64>> AlterersToStop;
     THashSet<TWorkerId> BarrierWorkersToRestart;
 
@@ -247,6 +248,12 @@ public:
             return true;
         }
 
+        if (Self->DrainStateByReplicationId.contains(Replication->GetId())) {
+            // Keep membership unchanged while admitted writes drain.
+            WaitForDrain = true;
+            return true;
+        }
+
         const auto& oldConfig = Replication->GetConfig();
         auto newConfig = std::move(*record.MutableConfig());
         bool alter = HasRelevantTransferConfigChanges(oldConfig, newConfig);
@@ -296,6 +303,14 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         if (!alter && RetryPausedBootstrap(*Replication, db, ctx)) {
             issue.clear();
+        }
+        if (record.HasSwitchState() && record.GetSwitchState().HasStandBy()
+            && Self->ReplicationsWithSourceOffsetMismatch.erase(Replication->GetId()))
+        {
+            // Resume revalidates the same saved offsets.
+            YDB_LOG_NOTICE_CTX(ctx, "Retry source offset validation", {"replicationId", Replication->GetId()});
+            db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
+                NIceDb::TUpdate<Schema::Replications::SourceOffsetMismatch>(false));
         }
         if (ResetFailedSchemaBarriers) {
             RecoverFailedSchemaBarriers(db);
@@ -395,6 +410,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
+        if (WaitForDrain) {
+            ctx.Schedule(DrainCheckInterval, std::unique_ptr<IEventHandle>(Ev.Release()));
+            return;
+        }
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Complete");
 

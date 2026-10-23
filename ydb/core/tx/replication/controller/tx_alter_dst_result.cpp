@@ -61,6 +61,9 @@ public:
             return true;
         }
 
+        const bool preserveMismatch = Replication->GetState() == TReplication::EState::Error
+            && Self->ReplicationsWithSourceOffsetMismatch.contains(rid);
+
         if (Ev->Get()->IsSuccess()) {
             target->SetDstState(NextState(Replication->GetDesiredState()));
             if (Replication->GetDesiredState() == TReplication::EState::Done) {
@@ -72,7 +75,7 @@ public:
                 {"rid", rid},
                 {"tid", tid});
 
-            if (Replication->CheckAlterDone()) {
+            if (!preserveMismatch && Replication->CheckAlterDone()) {
                 YDB_LOG_NOTICE_CTX(ctx, "Replication altered",
                     {"rid", rid},
                     {"state", Replication->GetDesiredState()});
@@ -84,8 +87,10 @@ public:
                 << ": " << NKikimrScheme::EStatus_Name(Ev->Get()->Status)
                 << ", " << Ev->Get()->Error);
 
-            Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
-                << ": " << target->GetIssue());
+            if (!preserveMismatch) {
+                Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
+                    << ": " << target->GetIssue());
+            }
 
             YDB_LOG_ERROR_CTX(ctx, "Alter dst error",
                 {"rid", rid},

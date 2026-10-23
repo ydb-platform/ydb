@@ -82,6 +82,9 @@ public:
             return true;
         }
 
+        const bool preserveMismatch = Replication->GetState() == TReplication::EState::Error
+            && Self->ReplicationsWithSourceOffsetMismatch.contains(rid);
+
         if (Ev->Get()->IsSuccess()) {
             target->SetStreamState(TReplication::EStreamState::Ready);
             target->SetStreamSchemaChanges(Ev->Get()->SchemaChanges);
@@ -97,8 +100,10 @@ public:
                 << ": " << status.GetStatus()
                 << ", " << status.GetIssues().ToOneLineString());
 
-            Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
-                << ": " << target->GetIssue());
+            if (!preserveMismatch) {
+                Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
+                    << ": " << target->GetIssue());
+            }
 
             YDB_LOG_ERROR_CTX(ctx, "Create stream error",
                 {"rid", rid},

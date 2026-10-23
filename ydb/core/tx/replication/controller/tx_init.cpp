@@ -63,6 +63,13 @@ class TController::TTxInit: public TTxBase {
 
             auto replication = Self->Add(rid, pathId, config, database);
             replication->SetState(state, issue);
+            if (const auto deadline = rowset.GetValueOrDefault<Schema::Replications::DrainDeadline>(0)) {
+                const auto commit = rowset.GetValueOrDefault<Schema::Replications::DrainCommitTxId>(0);
+                Self->DrainStateByReplicationId[rid] = {TInstant::MilliSeconds(deadline), commit, commit != 0};
+            }
+            if (rowset.GetValueOrDefault<Schema::Replications::SourceOffsetMismatch>(false)) {
+                Self->ReplicationsWithSourceOffsetMismatch.insert(rid);
+            }
             replication->SetNextTargetId(nextTid);
             replication->SetDesiredState(desiredState);
             Self->CommittedVersions[rid] = TRowVersion(
@@ -223,6 +230,23 @@ class TController::TTxInit: public TTxBase {
         return true;
     }
 
+    bool LoadProcessedSourceOffsets(NIceDb::TNiceDb& db) {
+        auto rowset = db.Table<Schema::ProcessedSourceOffsets>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        while (!rowset.EndOfSet()) {
+            const TWorkerId id(rowset.GetValue<Schema::ProcessedSourceOffsets::ReplicationId>(),
+                rowset.GetValue<Schema::ProcessedSourceOffsets::TargetId>(),
+                rowset.GetValue<Schema::ProcessedSourceOffsets::WorkerId>());
+            Self->ProcessedSourceOffsets[id] = rowset.GetValue<Schema::ProcessedSourceOffsets::NextOffset>();
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool LoadWorkers(NIceDb::TNiceDb& db) {
         auto rowset = db.Table<Schema::Workers>().Select();
         if (!rowset.IsReady()) {
@@ -241,6 +265,7 @@ class TController::TTxInit: public TTxBase {
             );
 
             auto* worker = Self->GetOrCreateWorker(id);
+            worker->DrainPending = rowset.GetValueOrDefault<Schema::Workers::DrainPending>(false);
             // Zero denotes a registered worker that has not reported a
             // heartbeat yet and must not join a recovered heartbeat quorum.
             if (version != TRowVersion::Min() && Self->IsHeartbeatParticipant(id)) {
@@ -322,7 +347,8 @@ class TController::TTxInit: public TTxBase {
             && LoadTxIds(db)
             && LoadWorkers(db)
             && LoadSchemaBarrierWorkers(db)
-            && LoadIndexBuildWorkers(db);
+            && LoadIndexBuildWorkers(db)
+            && LoadProcessedSourceOffsets(db);
     }
 
     inline bool Load(NTable::TDatabase& toughDb) {

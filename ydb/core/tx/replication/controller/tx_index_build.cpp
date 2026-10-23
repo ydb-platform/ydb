@@ -145,7 +145,7 @@ class TController::TTxIndexBuild: public TTxBase {
             const auto& record = ev->Get()->Record;
             const auto id = TWorkerId::Parse(record.GetWorker());
             const auto* target = Self->FindTarget(id);
-            if (!target || !target->IsIndexBuild() || !Self->IsValidWorker(id) || !record.HasProgress()) {
+            if (!target || !target->IsIndexBuild() || (!Self->IsValidWorker(id) && !Self->DrainStateByReplicationId.contains(id.ReplicationId())) || !record.HasProgress()) {
                 continue;
             }
 
@@ -189,7 +189,9 @@ class TController::TTxIndexBuild: public TTxBase {
             auto* target = Self->FindTarget(id);
             const bool activeBuild = buildIt != Self->IndexBuilds.end() && !IsCancelledIndexBuild(buildIt->second);
             const bool activeTarget = target && target->GetDstState() != TReplication::EDstState::Removing;
-            if (!activeBuild || !activeTarget || !Self->HasWorkerSession(id, (*it)->Sender.NodeId())) {
+            if (!activeBuild || !activeTarget || !Self->HasWorkerSession(id, (*it)->Sender.NodeId())
+                || (Self->ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId()) && !Self->DrainStateByReplicationId.contains(id.ReplicationId())))
+            {
                 it = Self->PendingIndexTxIds.erase(it);
                 continue;
             }
@@ -290,7 +292,9 @@ class TController::TTxIndexBuild: public TTxBase {
         for (auto& [key, build] : Self->IndexBuilds) {
             auto replication = Self->Find(key.first);
             auto* target = replication ? replication->FindTarget(key.second) : nullptr;
-            if (!target || target->GetDstState() == TReplication::EDstState::Removing) {
+            if (!target || Self->ReplicationsWithSourceOffsetMismatch.contains(key.first)
+                || target->GetDstState() == TReplication::EDstState::Removing)
+            {
                 continue;
             }
 
@@ -415,6 +419,9 @@ public:
             ctx.Send(MakeTxProxyID(), MakeCommitProposal(txId, paths).Release(), 0, txId);
         }
         for (const auto& [key, build] : Self->IndexBuilds) {
+            if (Self->ReplicationsWithSourceOffsetMismatch.contains(key.first)) {
+                continue;
+            }
             if (build.GetPhase() == TBuild::CANCELLING) {
                 auto replication = Self->Find(key.first);
                 auto* target = replication ? replication->FindTarget(key.second) : nullptr;

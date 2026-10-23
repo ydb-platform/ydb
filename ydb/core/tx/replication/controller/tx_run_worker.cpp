@@ -91,6 +91,9 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        if (Self->DrainStateByReplicationId.contains(Id.ReplicationId())) {
+            return true; // retain every participant until the drain is finished
+        }
         if (!Self->RemoveQueue.contains(Id)) {
             return true;
         }

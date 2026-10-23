@@ -302,10 +302,31 @@ message TEvHandshake {
     optional TControllerIdentity Controller = 1;
     // Older controllers compare complete serialized schema reports.
     optional bool SupportsIndexMetadata = 2 [default = false];
+    optional bool SupportsSourceOffsets = 3 [default = false];
 }
 
 message TEvStatus {
     repeated TWorkerIdentity Workers = 1;
+    optional bool SupportsSourceOffsets = 2 [default = false];
+}
+
+message TEvSourceOffsetReport {
+    optional TControllerIdentity Controller = 1;
+    optional TWorkerIdentity Worker = 2;
+    optional uint64 NextOffset = 3;
+    optional NKikimrProto.TRowVersion Heartbeat = 4;
+    optional bool Drained = 5 [default = false];
+    optional string WorkerInstance = 6;
+    optional uint64 RequestId = 7;
+}
+
+message TEvSourceOffsetResult {
+    optional TControllerIdentity Controller = 1;
+    optional TWorkerIdentity Worker = 2;
+    optional uint64 AuthorizedNextOffset = 3;
+    optional string WorkerInstance = 4;
+    optional uint64 RequestId = 5;
+    optional bool Stop = 6 [default = false];
 }
 
 message TRemoteTopicReaderSettings {
@@ -378,6 +399,8 @@ message TRunWorkerCommand {
     optional string Database = 5;
     optional NKikimrProto.NMetricsConfig.TMetricsConfig.EMetricsLevel MetricsLevel = 6;
     optional TReplicationLocationConfig ReplicationLocation = 7;
+    optional bool TrackSourceOffsets = 8 [default = false];
+    optional uint64 ProcessedSourceOffset = 9;
 }
 
 message TEvRunWorker {
@@ -389,6 +412,7 @@ message TEvRunWorker {
 message TEvStopWorker {
     optional TControllerIdentity Controller = 1;
     optional TWorkerIdentity Worker = 2;
+    optional bool Drain = 3 [default = false];
 }
 
 
@@ -441,6 +465,7 @@ message TEvWorkerStatus {
         REASON_ERROR = 2;
         REASON_INFO = 3;
         REASON_STATS = 4;
+        REASON_SOURCE_OFFSET_MISMATCH = 5;
     }
 
     optional TWorkerIdentity Worker = 1;

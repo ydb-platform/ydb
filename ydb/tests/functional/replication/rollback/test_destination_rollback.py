@@ -1,4 +1,4 @@
-"""KIKIMR-27431: characterize skipped changes after destination disk rollback."""
+"""KIKIMR-27431: stop GLOBAL replication after destination disk rollback."""
 
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
@@ -170,7 +170,7 @@ def copy_disk(source, destination):
         writer.truncate(reader.tell())
 
 
-def test_destination_disk_rollback_skips_committed_rows():
+def test_destination_disk_rollback_stops_replication():
     with ExitStack() as cleanup:
         source = cleanup.enter_context(database("source"))
         destination = cleanup.enter_context(database("destination"))
@@ -186,6 +186,11 @@ def test_destination_disk_rollback_skips_committed_rows():
         assert replication.WhichOneof("state") == "running", replication
         topic = "/Root/t/" + replication.items[0].source_changefeed_name
 
+        # Source acknowledgement proves the initial destination processed source offset is durable.
+        _, initial_end = source.consumer(topic)
+        assert initial_end > 0
+        wait_for("initial source acknowledgement", lambda: source.consumer(topic)[0] >= initial_end)
+
         destination.stop_nodes()
         snapshot_offset, _ = wait_for("consumer at snapshot", lambda: source.consumer(topic))
         snapshots = []
@@ -196,6 +201,12 @@ def test_destination_disk_rollback_skips_committed_rows():
             snapshots.append((path, snapshot))
         destination.start_nodes()
         wait_for("first ordinary restart", lambda: destination.rows() == [1])
+
+        # Pause/resume must retain the processed offset.
+        destination.query('ALTER ASYNC REPLICATION r SET (STATE="Paused");')
+        wait_for("ordinary pause", lambda: destination.replication().WhichOneof("state") == "paused")
+        destination.query('ALTER ASYNC REPLICATION r SET (STATE="StandBy");')
+        wait_for("ordinary resume", lambda: destination.replication().WhichOneof("state") == "running")
 
         batch = list(range(2, 32))
         source.query("UPSERT INTO t (id, value) VALUES " + ",".join(
@@ -220,12 +231,33 @@ def test_destination_disk_rollback_skips_committed_rows():
         destination.start_nodes()
         assert wait_for("consumer after rollback", lambda: source.consumer(topic))[0] >= acknowledged_offset
         source.query('UPSERT INTO t (id, value) VALUES (32u, "after-return");')
-        wait_for("new row after rollback", lambda: 32 in destination.rows())
 
-        # Characterize the existing bug: new input arrives while acknowledged rows stay missing.
+        def stopped():
+            result = destination.replication()
+            return result if result.WhichOneof("state") == "error" else None
+
+        error = wait_for("rollback detection and GLOBAL drain", stopped)
+        assert "Source consumer committed next offset" in str(error), error
+        assert "destination processed source offset" in str(error), error
+        stopped_offset, _ = source.consumer(topic)
+
         expected = delivered + [32]
         actual = destination.rows()
         assert source.rows() == expected
-        assert actual == [1, 32]
+        assert actual == [1]
         assert actual != expected
-        assert destination.replication().WhichOneof("state") == "running"
+
+        # The error and the source-consumer fence must survive another restart.
+        destination.stop_nodes()
+        destination.start_nodes()
+        wait_for("durable replication error after restart", stopped)
+        assert destination.rows() == actual
+        assert source.consumer(topic)[0] == stopped_offset
+
+        # A manual retry must revalidate, not erase the rollback evidence.
+        destination.query('ALTER ASYNC REPLICATION r SET (STATE="Paused");')
+        wait_for("pause after rollback error", lambda: destination.replication().WhichOneof("state") == "paused")
+        destination.query('ALTER ASYNC REPLICATION r SET (STATE="StandBy");')
+        wait_for("rollback detected again after explicit resume", stopped)
+        assert destination.rows() == actual
+        assert source.consumer(topic)[0] == stopped_offset

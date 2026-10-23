@@ -71,6 +71,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         Self->DeferredAlters.erase(Replication->GetId());
+        Self->DrainStateByReplicationId.erase(Replication->GetId());
         for (auto it = Self->SchemaBarriers.begin(); it != Self->SchemaBarriers.end();) {
             if (it->first.first != Replication->GetId()) {
                 ++it;
@@ -98,7 +99,8 @@ public:
         Replication->SetState(TReplication::EState::Removing);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
             NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
-            NIceDb::TUpdate<Schema::Replications::DeferredAlter>(false)
+            NIceDb::TUpdate<Schema::Replications::DeferredAlter>(false),
+            NIceDb::TUpdate<Schema::Replications::DrainDeadline>(0)
         );
 
         THashSet<TString> retainedTables;

@@ -7,13 +7,16 @@ namespace NKikimr::NReplication::NController {
 class TController::TTxWorkerError: public TTxBase {
     const TWorkerId WorkerId;
     const TString Error;
+    const bool SourceOffsetMismatch;
+    bool DrainStarted = false;
     bool RemoveStoppedWorker = false;
 
 public:
-    explicit TTxWorkerError(TController* self, const TWorkerId& id, const TString& error)
+    explicit TTxWorkerError(TController* self, const TWorkerId& id, const TString& error, bool sourceOffsetMismatch)
         : TTxBase("TxWorkerError", self)
         , WorkerId(id)
         , Error(error)
+        , SourceOffsetMismatch(sourceOffsetMismatch)
     {
     }
 
@@ -34,7 +37,9 @@ public:
             return true;
         }
 
-        if (replication->GetState() == TReplication::EState::Removing) {
+        if (Self->ReplicationsWithSourceOffsetMismatch.contains(WorkerId.ReplicationId())
+            || replication->GetState() == TReplication::EState::Removing)
+        {
             YDB_LOG_WARN_CTX(ctx, "Replication is being removed",
                 {"rid", WorkerId.ReplicationId()});
             return true;
@@ -57,6 +62,13 @@ public:
             // Removal may not have reached RemoveQueue when this error was
             // received. Check the durable build phase when the transaction runs.
             RemoveStoppedWorker = true;
+            return true;
+        }
+
+        if (SourceOffsetMismatch && Self->TracksSourceOffsets(WorkerId)) {
+            NIceDb::TNiceDb db(txc.DB);
+            Self->StartMismatchDrain(WorkerId, TStringBuilder() << Error << " Worker " << WorkerId << ".", db, ctx);
+            DrainStarted = true;
             return true;
         }
 
@@ -88,6 +100,10 @@ public:
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
+        if (DrainStarted) {
+            Self->StopWorkersForMismatch(WorkerId.ReplicationId(), true, ctx);
+            return;
+        }
         if (RemoveStoppedWorker) {
             const auto worker = Self->Workers.find(WorkerId);
             if (worker != Self->Workers.end() && worker->second.HasSession()) {
@@ -108,8 +124,8 @@ public:
 
 }; // TTxWorkerError
 
-void TController::RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx) {
-    Execute(new TTxWorkerError(this, id, error), ctx);
+void TController::RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx, bool sourceOffsetMismatch) {
+    Execute(new TTxWorkerError(this, id, error, sourceOffsetMismatch), ctx);
 }
 
 }

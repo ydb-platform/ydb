@@ -1,5 +1,7 @@
 #include "controller_impl.h"
 
+#include <util/generic/mapfindptr.h>
+
 #include <variant>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
@@ -73,6 +75,14 @@ public:
             {"pending", Self->PendingTxId.size()},
             {"assigned", Self->AssignedTxIds.size()},
             {"allocated", Self->AllocatedTxIds.size()});
+
+        const auto replication = Self->GetSingle();
+        if (replication && Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())
+            && !Self->DrainStateByReplicationId.contains(replication->GetId()))
+        {
+            Self->PendingTxId.clear();
+            return true;
+        }
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -186,6 +196,14 @@ public:
 }; // TTxAssignTxId
 
 void TController::AllocateTxIds(const TActorContext& ctx) {
+    const auto replication = GetSingle();
+    if (replication && ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
+        const auto* drain = MapFindPtr(DrainStateByReplicationId, replication->GetId());
+        // Only refill when admitted writers are waiting during the drain.
+        if (!drain || ctx.Now() >= drain->Deadline || (PendingTxId.empty() && PendingIndexTxIds.empty())) {
+            return;
+        }
+    }
     if (AllocateTxIdInFlight || AllocatedTxIds.size() >= MinAllocatedTxIds) {
         return;
     }

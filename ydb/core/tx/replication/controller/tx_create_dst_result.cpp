@@ -167,6 +167,9 @@ public:
             return true;
         }
 
+        const bool preserveMismatch = Replication->GetState() == TReplication::EState::Error
+            && Self->ReplicationsWithSourceOffsetMismatch.contains(rid);
+
         if (Ev->Get()->IsSuccess()) {
             const bool wasAltering = dstState == TReplication::EDstState::Alter
                 || dstState == TReplication::EDstState::Attaching;
@@ -180,7 +183,7 @@ public:
                 target->SetDstState(Replication->GetDesiredState() == TReplication::EState::Paused
                     ? TReplication::EDstState::Paused
                     : TReplication::EDstState::Ready);
-                if (wasAltering && Replication->CheckAlterDone()) {
+                if (!preserveMismatch && wasAltering && Replication->CheckAlterDone()) {
                     Replication->SetState(Replication->GetDesiredState());
                 }
             }
@@ -199,8 +202,10 @@ public:
                 << ": " << NKikimrScheme::EStatus_Name(Ev->Get()->Status)
                 << ", " << Ev->Get()->Error);
 
-            Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
-                << ": " << target->GetIssue());
+            if (!preserveMismatch) {
+                Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
+                    << ": " << target->GetIssue());
+            }
 
             YDB_LOG_ERROR_CTX(ctx, "Create dst error",
                 {"rid", rid},

@@ -30,6 +30,8 @@ struct TEvService {
         EvSchemaChangeResult,
         EvIndexBuildProgress,
         EvIndexBuildProgressResult,
+        EvSourceOffsetReport,
+        EvSourceOffsetResult,
 
         EvEnd,
     };
@@ -141,6 +143,9 @@ struct TEvService {
     struct TEvIndexBuildProgressResult: public TEventPB<TEvIndexBuildProgressResult, NKikimrReplication::TEvIndexBuildProgress, EvIndexBuildProgressResult> {
         TEvIndexBuildProgressResult() = default;
     };
+
+    struct TEvSourceOffsetReport: public TEventPB<TEvSourceOffsetReport, NKikimrReplication::TEvSourceOffsetReport, EvSourceOffsetReport> {};
+    struct TEvSourceOffsetResult: public TEventPB<TEvSourceOffsetResult, NKikimrReplication::TEvSourceOffsetResult, EvSourceOffsetResult> {};
 
     struct TEvSchemaChangeReport: public TEventPB<TEvSchemaChangeReport, NKikimrReplication::TEvSchemaChangeReport, EvSchemaChangeReport> {
         TEvSchemaChangeReport() = default;

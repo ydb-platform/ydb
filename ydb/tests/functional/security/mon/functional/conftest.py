@@ -194,6 +194,25 @@ def ydb_cluster_with_extra_sids_controls(certificates):
     cluster.stop()
 
 
+@pytest.fixture(scope='module')
+def ydb_cluster_without_token_enforcement(certificates):
+    # administration_allowed_sids is non-empty (default_clusteradmin), while neither
+    # enforce_user_token_requirement nor enforce_user_token_check_requirement is set
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=False,
+    )
+    cluster = KiKiMR(configurator)
+    cluster.start()
+    yield cluster
+    cluster.stop()
+
+
+@pytest.fixture
+def mon_base_url_without_token_enforcement(ydb_cluster_without_token_enforcement):
+    return get_mon_base_url(ydb_cluster_without_token_enforcement)
+
+
 TENANT_DATABASE = '/Root/Tenant'
 
 

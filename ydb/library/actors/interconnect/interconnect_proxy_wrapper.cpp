@@ -4,7 +4,7 @@
 namespace NActors {
 
     static IActor* CreateIcProxy(const ui32 nodeId, TInterconnectProxyCommon::TPtr common, IActor** self) {
-        return new TInterconnectProxyTCP(nodeId, common, self);
+        return new TInterconnectProxyTCP(nodeId, std::move(common), self);
     }
 
     class TInterconnectProxyWrapper : public IActorCallback {
@@ -18,7 +18,7 @@ namespace NActors {
             : IActorCallback(static_cast<TReceiveFunc>(&TInterconnectProxyWrapper::StateFunc), EActivityType::INTERCONNECT_PROXY_WRAPPER)
             , Common(std::move(common))
             , NodeId(nodeId)
-            , Creator(creator)
+            , Creator(std::move(creator))
         {}
 
         STFUNC(StateFunc) {

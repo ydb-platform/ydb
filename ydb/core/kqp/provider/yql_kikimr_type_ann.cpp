@@ -911,7 +911,7 @@ namespace {
                 }
                 if (!allowStoredAlter) {
                     ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                        "Column addition with a GENERATED ALWAYS AS expression is not supported: adding STORED generated columns requires EnableAddGeneratedStoredColumn, EnableGeneratedStored and EnableIndexStreamWrite"));
+                        "Column addition with a GENERATED ALWAYS AS expression is not supported: adding STORED generated columns requires EnableAddColumnGeneratedStored, EnableGeneratedStored and EnableIndexStreamWrite"));
                     return false;
                 }
             }
@@ -2339,7 +2339,7 @@ private:
                         for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                             bool needEval = false;
                             if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval, true,
-                                SessionCtx->Config().FeatureFlags.GetEnableAddGeneratedStoredColumn()
+                                SessionCtx->Config().FeatureFlags.GetEnableAddColumnGeneratedStored()
                                     && SessionCtx->Config().FeatureFlags.GetEnableGeneratedStored()
                                     && SessionCtx->Config().GetEnableIndexStreamWrite())) {
                                 return TStatus::Error;

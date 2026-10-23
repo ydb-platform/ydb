@@ -459,5 +459,5 @@ message TFeatureFlags {
     optional bool EnableCompileCacheV2 = 369 [default = false];
     // Enable only after all KQP, SchemeShard and DataShard binaries support
     // generated descriptors, strict write admission and conditional fills.
-    optional bool EnableAddGeneratedStoredColumn = 370 [default = false];
+    optional bool EnableAddColumnGeneratedStored = 370 [default = false];
 }

@@ -290,7 +290,7 @@ public:
             }
             // Stream-write configuration belongs to TableService/KQP, which
             // validates it before submitting the compiled descriptor.
-            if (hasGenerated && (!Self->EnableAddGeneratedStoredColumn
+            if (hasGenerated && (!Self->EnableAddColumnGeneratedStored
                 || !AppData()->FeatureFlags.GetEnableGeneratedStored())) {
                 return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Adding STORED generated columns is disabled");
             }

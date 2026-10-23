@@ -45,7 +45,7 @@ Tests::TServer::TPtr CreateGeneratedAlterServer(TPortManager& ports) {
     Tests::TServerSettings settings(ports.GetPort(2134));
     settings.SetDomainName("Root").SetUseRealThreads(false);
     settings.FeatureFlags.SetEnableGeneratedStored(true);
-    settings.FeatureFlags.SetEnableAddGeneratedStoredColumn(true);
+    settings.FeatureFlags.SetEnableAddColumnGeneratedStored(true);
     settings.AppConfig->MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
     return new Tests::TServer(settings);
 }

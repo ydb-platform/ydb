@@ -2130,11 +2130,11 @@ public:
                                             "Column addition with a GENERATED ALWAYS AS expression is not supported"));
                                         return SyncError();
                                     }
-                                    if (!SessionCtx->Config().FeatureFlags.GetEnableAddGeneratedStoredColumn()
+                                    if (!SessionCtx->Config().FeatureFlags.GetEnableAddColumnGeneratedStored()
                                         || !SessionCtx->Config().FeatureFlags.GetEnableGeneratedStored()
                                         || !SessionCtx->Config().GetEnableIndexStreamWrite()) {
                                         ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                                            "Column addition with a GENERATED ALWAYS AS expression is not supported: adding STORED generated columns requires EnableAddGeneratedStoredColumn, EnableGeneratedStored and EnableIndexStreamWrite"));
+                                            "Column addition with a GENERATED ALWAYS AS expression is not supported: adding STORED generated columns requires EnableAddColumnGeneratedStored, EnableGeneratedStored and EnableIndexStreamWrite"));
                                         return SyncError();
                                     }
                                     if (maybeAlter.Cast().Actions().Size() != 1 || listNode.Size() != 1

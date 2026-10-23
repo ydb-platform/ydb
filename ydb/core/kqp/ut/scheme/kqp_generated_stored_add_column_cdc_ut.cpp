@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(GeneratedStoredAddColumnCdc) {
     Y_UNIT_TEST(ExistingIndexAndChangefeedDuringBackfill) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableGeneratedStored(true);
-        config.MutableFeatureFlags()->SetEnableAddGeneratedStoredColumn(true);
+        config.MutableFeatureFlags()->SetEnableAddColumnGeneratedStored(true);
         config.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
 
         NKikimrPQ::TPQConfig pqConfig;

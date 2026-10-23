@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
             TTestBasicRuntime runtime;
             TTestEnv env(runtime);
             runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(false);
-            runtime.GetAppData().FeatureFlags.SetEnableAddGeneratedStoredColumn(true);
+            runtime.GetAppData().FeatureFlags.SetEnableAddColumnGeneratedStored(true);
             runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
             RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
             ui64 txId = 100;
@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(false);
-        runtime.GetAppData().FeatureFlags.SetEnableAddGeneratedStoredColumn(true);
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumnGeneratedStored(true);
         runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         ui64 txId = 100;
@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
             UNIT_ASSERT(!settings.column(0).has_default_from_literal());
         };
         checkDescriptor();
-        runtime.GetAppData().FeatureFlags.SetEnableAddGeneratedStoredColumn(false);
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumnGeneratedStored(false);
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         checkDescriptor();
         lock.Stop().Unblock();

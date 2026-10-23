@@ -16,7 +16,7 @@ namespace {
 
 void EnableGeneratedBuild(TTestActorRuntime& runtime) {
     runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(false);
-    runtime.GetAppData().FeatureFlags.SetEnableAddGeneratedStoredColumn(true);
+    runtime.GetAppData().FeatureFlags.SetEnableAddColumnGeneratedStored(true);
     runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
     RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 }
@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableAddColumsWithDefaults(false);
-        runtime.GetAppData().FeatureFlags.SetEnableAddGeneratedStoredColumn(true);
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumnGeneratedStored(true);
         runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         ui64 txId = 100;
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::CheckColumns("Table", {"key", "value"}, {}, {"key"}, true)});
         }
         for (ui32 disabledFlag = 0; disabledFlag < 2; ++disabledFlag) {
-            runtime.GetAppData().FeatureFlags.SetEnableAddGeneratedStoredColumn(disabledFlag != 0);
+            runtime.GetAppData().FeatureFlags.SetEnableAddColumnGeneratedStored(disabledFlag != 0);
             runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(disabledFlag != 1);
             RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
             auto request = CreateGeneratedBuildColumnRequest(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table");

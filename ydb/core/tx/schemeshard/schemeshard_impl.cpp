@@ -5903,7 +5903,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableWasmCompileController = appData->FeatureFlags.GetEnableWasmCompileController();
     EnableServerlessExclusiveDynamicNodes = appData->FeatureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = appData->FeatureFlags.GetEnableAddColumsWithDefaults();
-    EnableAddGeneratedStoredColumn = appData->FeatureFlags.GetEnableAddGeneratedStoredColumn();
+    EnableAddColumnGeneratedStored = appData->FeatureFlags.GetEnableAddColumnGeneratedStored();
     EnableReplaceIfExistsForExternalEntities = appData->FeatureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
     EnableInitialUniqueIndex = appData->FeatureFlags.GetEnableUniqConstraint();
@@ -8999,7 +8999,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableWasmCompileController = featureFlags.GetEnableWasmCompileController();
     EnableServerlessExclusiveDynamicNodes = featureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = featureFlags.GetEnableAddColumsWithDefaults();
-    EnableAddGeneratedStoredColumn = featureFlags.GetEnableAddGeneratedStoredColumn();
+    EnableAddColumnGeneratedStored = featureFlags.GetEnableAddColumnGeneratedStored();
     EnableTempTables = featureFlags.GetEnableTempTables();
     EnableReplaceIfExistsForExternalEntities = featureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();

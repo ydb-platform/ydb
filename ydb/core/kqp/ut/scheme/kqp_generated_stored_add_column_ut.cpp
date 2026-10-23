@@ -14,7 +14,7 @@ namespace {
 NKikimrConfig::TAppConfig AddGeneratedConfig() {
     NKikimrConfig::TAppConfig config;
     config.MutableFeatureFlags()->SetEnableGeneratedStored(true);
-    config.MutableFeatureFlags()->SetEnableAddGeneratedStoredColumn(true);
+    config.MutableFeatureFlags()->SetEnableAddColumnGeneratedStored(true);
     config.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
     return config;
 }
@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(GeneratedStoredAddColumn) {
     Y_UNIT_TEST(FeatureFlagDisabled) {
         for (ui32 missing = 0; missing < 3; ++missing) {
             auto config = AddGeneratedConfig();
-            if (missing == 0) config.MutableFeatureFlags()->SetEnableAddGeneratedStoredColumn(false);
+            if (missing == 0) config.MutableFeatureFlags()->SetEnableAddColumnGeneratedStored(false);
             if (missing == 1) config.MutableFeatureFlags()->SetEnableGeneratedStored(false);
             if (missing == 2) config.MutableTableServiceConfig()->SetEnableIndexStreamWrite(false);
             TAddGeneratedFixture fixture(config);

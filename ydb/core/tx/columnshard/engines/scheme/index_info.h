@@ -18,6 +18,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/column_ids.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 
+#include <ydb/library/formats/arrow/switch/compare.h>
 #include <ydb/library/formats/arrow/transformer/abstract.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
@@ -99,6 +100,7 @@ private:
     std::vector<ui32> PKColumnIds;
     std::vector<TNameTypeInfo> PKColumns;
     std::vector<NScheme::TTypeInfo> PrimaryKeyTypes;
+    NArrow::TComparator Comparator;
     THashMap<ui32, TNameTypeInfo> Columns;
 
     std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;
@@ -120,10 +122,7 @@ private:
     std::shared_ptr<arrow::Schema> PrimaryKey;
     NArrow::NSerialization::TSerializerContainer DefaultSerializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 
-    TIndexInfo(const ui64 presetId)
-        : PresetId(presetId)
-    {
-    }
+    TIndexInfo(const ui64 presetId);
 
     static std::shared_ptr<arrow::Field> BuildArrowField(const NTable::TColumn& column, const std::shared_ptr<TSchemaObjectsCache>& cache) {
         std::shared_ptr<arrow::DataType> arrowType;
@@ -469,6 +468,10 @@ public:
 
     const std::vector<NScheme::TTypeInfo>& GetPrimaryKeyTypes() const {
         return PrimaryKeyTypes;
+    }
+
+    const NArrow::TComparator& GetComparator() const {
+        return Comparator;
     }
 
     const THashMap<ui32, TNameTypeInfo>& GetColumns() const {

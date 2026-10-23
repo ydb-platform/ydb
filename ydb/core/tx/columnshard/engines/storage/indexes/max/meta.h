@@ -23,8 +23,8 @@ protected:
         return TConclusionStatus::Fail("max index not modifiable");
     }
 
-    virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
-        TChunkedBatchReader& reader, const ui32 recordsCount, const NScheme::TTypeInfo& logicalType) const override;
+    virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount,
+        const NScheme::TTypeInfo& logicalType, const NArrow::TComparator& comparator) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
         AFL_VERIFY(TBase::DoDeserializeFromProto(proto));
@@ -76,8 +76,8 @@ public:
         return GetClassNameStatic();
     }
 
-    std::shared_ptr<arrow::Scalar> GetMaxScalarVerified(
-        const std::vector<TString>& data, const std::shared_ptr<arrow::DataType>& type, const NScheme::TTypeInfo& logicalType) const;
+    std::shared_ptr<arrow::Scalar> GetMaxScalarVerified(const std::vector<TString>& data, const std::shared_ptr<arrow::DataType>& type,
+        const NScheme::TTypeInfo& logicalType, const NArrow::TComparator& comparator) const;
 };
 
 }   // namespace NKikimr::NOlap::NIndexes::NMax

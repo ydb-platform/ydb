@@ -81,7 +81,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
                 // detect active reads which the given noTxWrite has conflicts with
                 const auto& indexInfo = Self->GetIndexOptional()->GetVersionedIndex().GetLastSchema()->GetIndexInfo();
                 auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(writeMeta.GetPathId().InternalPathId,
-                    writeResult.GetPKBatchVerified(), indexInfo.GetPrimaryKey(), indexInfo.GetPrimaryKeyTypes());
+                    writeResult.GetPKBatchVerified(), indexInfo.GetPrimaryKey(), indexInfo.GetPrimaryKeyTypes(), indexInfo.GetComparator());
                 Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
                 // No tx writes (bulk upsert) must break decent/proper txs.
                 // Decent/proper txs asked for isolation, so we have to give them isolation.
@@ -133,7 +133,7 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
             // detect active reads which the given tx has conflicts with
             const auto& indexInfo = Self->GetIndexOptional()->GetVersionedIndex().GetLastSchema()->GetIndexInfo();
             auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(writeMeta.GetPathId().InternalPathId,
-                writeResult.GetPKBatchVerified(), indexInfo.GetPrimaryKey(), indexInfo.GetPrimaryKeyTypes());
+                writeResult.GetPKBatchVerified(), indexInfo.GetPrimaryKey(), indexInfo.GetPrimaryKeyTypes(), indexInfo.GetComparator());
             Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
         }
     }

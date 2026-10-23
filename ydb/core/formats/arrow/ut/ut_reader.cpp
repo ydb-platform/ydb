@@ -13,6 +13,9 @@ namespace {
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeInfo = NScheme::TTypeInfo;
 
+constexpr TComparator LegacyComparator(EDecimalComparisonMode::Legacy);
+constexpr TComparator NumericComparator(EDecimalComparisonMode::Numeric);
+
 std::shared_ptr<arrow::RecordBatch> ExtractBatch(std::shared_ptr<arrow::Table> table) {
     std::shared_ptr<arrow::RecordBatch> batch;
 
@@ -180,19 +183,22 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
 
         auto cursor = [&]() {
             std::vector<TTypeInfo> types = { decimalType, uuidType };
-            NMerger::TSortableBatchPosition position(batch, 0, false, types);
+            NMerger::TSortableBatchPosition position(batch, 0, false, types, NumericComparator);
             auto copy = position.BuildRWPosition(false, true);
             auto prefix = copy.TrimSortingKeys(1);
+            UNIT_ASSERT(prefix.GetComparator() == NumericComparator);
             UNIT_ASSERT(prefix.GetSorting()->GetLogicalTypes() == std::vector<TTypeInfo>{ decimalType });
             UNIT_ASSERT(prefix.ComparePartial(position) == std::partial_ordering::equivalent);
+            const NMerger::TSortableBatchPosition next(batch, 1, false, types, NumericComparator);
+            UNIT_ASSERT(prefix.ComparePartial(next) == std::partial_ordering::greater);
             UNIT_ASSERT(copy.GetSorting()->GetLogicalTypes() == types);
             return copy.BuildSortingCursor();
         }();
 
+        UNIT_ASSERT(cursor.GetComparator() == NumericComparator);
         UNIT_ASSERT(cursor.GetLogicalTypes() == (std::vector<TTypeInfo>{ decimalType, uuidType }));
-        NMerger::TSortableBatchPosition one(batch, 1, false, { decimalType, uuidType });
-        // The logical type is retained, while Decimal still uses its existing byte order.
-        UNIT_ASSERT(cursor.Compare(*one.GetSorting(), 1) == std::partial_ordering::less);
+        NMerger::TSortableBatchPosition one(batch, 1, false, { decimalType, uuidType }, NumericComparator);
+        UNIT_ASSERT(cursor.Compare(*one.GetSorting(), 1) == std::partial_ordering::greater);
     }
 
     Y_UNIT_TEST(LogicalTypesAcrossChunkBoundaries) {
@@ -205,18 +211,50 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         auto first = std::make_shared<arrow::ChunkedArray>(arrow::ArrayVector{ values->Slice(0, 2), values->Slice(2, 2) });
         auto second = std::make_shared<arrow::ChunkedArray>(arrow::ArrayVector{ values->Slice(0, 1), values->Slice(1, 3) });
         auto table = arrow::Table::Make(schema, { first, second });
-        NMerger::TSortableScanData atZero(0, table, schema->field_names(), types);
-        NMerger::TSortableScanData atOne(1, table, schema->field_names(), types);
+        NMerger::TSortableScanData atZero(0, table, schema->field_names(), types, NumericComparator);
+        NMerger::TSortableScanData atOne(1, table, schema->field_names(), types, NumericComparator);
 
         UNIT_ASSERT(atZero.Compare(0, atOne, 1) == std::partial_ordering::less);
         UNIT_ASSERT(atZero.Compare(0, atOne, 2) == std::partial_ordering::less);
         UNIT_ASSERT(atZero.Compare(2, atOne, 1) == std::partial_ordering::greater);
         UNIT_ASSERT(atZero.Compare(1, atOne, 1) == std::partial_ordering::equivalent);
         auto cursor = atZero.BuildCursor(2);
+        UNIT_ASSERT(cursor.GetComparator() == NumericComparator);
         UNIT_ASSERT(cursor.GetLogicalTypes() == types);
         UNIT_ASSERT(cursor.Compare(atOne, 1) == std::partial_ordering::greater);
         auto copy = atOne.BuildCopy();
         UNIT_ASSERT(copy->Compare(1, atOne, 1) == std::partial_ordering::equivalent);
+    }
+
+    Y_UNIT_TEST(DecimalModeAcrossChunkBoundaries) {
+        const std::vector<TTypeInfo> types = { TTypeInfo(NScheme::TDecimalType(22, 9)), TTypeInfo(NTypeIds::Uuid) };
+        arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(16));
+        for (const ui16 value : { 0, 1, 256, 257 }) {
+            std::string bytes(16, '\0');
+            bytes[0] = value & 0xff;
+            bytes[1] = value >> 8;
+            UNIT_ASSERT(builder.Append(bytes).ok());
+        }
+
+        std::shared_ptr<arrow::Array> values;
+        UNIT_ASSERT(builder.Finish(&values).ok());
+        const auto schema = arrow::schema({ arrow::field("decimal", values->type()), arrow::field("uuid", values->type()) });
+        const auto first = std::make_shared<arrow::ChunkedArray>(arrow::ArrayVector{ values->Slice(0, 2), values->Slice(2, 2) });
+        const auto second = std::make_shared<arrow::ChunkedArray>(arrow::ArrayVector{ values->Slice(0, 1), values->Slice(1, 3) });
+        const auto table = arrow::Table::Make(schema, { first, second });
+        for (const auto mode : { EDecimalComparisonMode::Legacy, EDecimalComparisonMode::Numeric }) {
+            const TComparator comparator(mode);
+            const auto expected = mode == EDecimalComparisonMode::Numeric ? std::partial_ordering::greater : std::partial_ordering::less;
+            NMerger::TSortableScanData atZero(0, table, schema->field_names(), types, comparator);
+            NMerger::TSortableScanData atOne(1, table, schema->field_names(), types, comparator);
+            UNIT_ASSERT(atZero.Compare(2, atOne, 1) == expected);
+            const auto cursor = atZero.BuildCursor(2);
+            UNIT_ASSERT(cursor.GetComparator() == comparator);
+            UNIT_ASSERT(cursor.Compare(atOne, 1) == expected);
+            const auto copy = atOne.BuildCopy();
+            UNIT_ASSERT(copy->GetComparator() == comparator);
+            UNIT_ASSERT(copy->Compare(2, atOne, 1) == expected);
+        }
     }
 
     Y_UNIT_TEST(FindPosition) {
@@ -254,7 +292,8 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
             UNIT_ASSERT(batchBuilder->Flush(&search).ok());
         }
 
-        NMerger::TSortableBatchPosition searchPosition(search, 0, false, { TTypeInfo(NTypeIds::Utf8), TTypeInfo(NTypeIds::Utf8) });
+        NMerger::TSortableBatchPosition searchPosition(
+            search, 0, false, { TTypeInfo(NTypeIds::Utf8), TTypeInfo(NTypeIds::Utf8) }, LegacyComparator);
         {
             auto findPosition = NMerger::TSortableBatchPosition::FindBound(data, searchPosition, false, std::nullopt);
             UNIT_ASSERT(!!findPosition);
@@ -267,7 +306,8 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
             UNIT_ASSERT_VALUES_EQUAL(findPosition->GetPosition(), 4);
         }
 
-        NMerger::TSortableBatchPosition searchPositionReverse(search, 0, true, { TTypeInfo(NTypeIds::Utf8), TTypeInfo(NTypeIds::Utf8) });
+        NMerger::TSortableBatchPosition searchPositionReverse(
+            search, 0, true, { TTypeInfo(NTypeIds::Utf8), TTypeInfo(NTypeIds::Utf8) }, LegacyComparator);
         {
             auto findPosition = NMerger::TSortableBatchPosition::FindBound(data, searchPositionReverse, false, std::nullopt);
             UNIT_ASSERT(!!findPosition);
@@ -302,14 +342,16 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
 
         auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(TDataRow::MakeSortingSchema(), TDataRow::MakeDataSchema(),
             isReverse, vColumns, std::nullopt, std::nullopt, std::vector<TTypeInfo>{ TTypeInfo(NTypeIds::Int32) },
-            std::vector<TTypeInfo>{ TTypeInfo(NTypeIds::Int32) });
+            std::vector<TTypeInfo>{ TTypeInfo(NTypeIds::Int32) }, LegacyComparator);
 
         merger->AddSource(batch1, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));
         merger->AddSource(batch2, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));
         merger->AddSource(batch3, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));
         // Range to include in result batch
-        NArrow::NMerger::TSortableBatchPosition startingPoint(batch1, 0, sColumns, {}, isReverse, { TTypeInfo(NTypeIds::Int32) });
-        NArrow::NMerger::TSortableBatchPosition finishPoint(batch1, 0, sColumns, {}, isReverse, { TTypeInfo(NTypeIds::Int32) });
+        NArrow::NMerger::TSortableBatchPosition startingPoint(
+            batch1, 0, sColumns, {}, isReverse, { TTypeInfo(NTypeIds::Int32) }, LegacyComparator);
+        NArrow::NMerger::TSortableBatchPosition finishPoint(
+            batch1, 0, sColumns, {}, isReverse, { TTypeInfo(NTypeIds::Int32) }, LegacyComparator);
 
         merger->PutControlPoint(finishPoint, deepCopy);
         merger->SkipToBound(startingPoint, includeStart);
@@ -366,7 +408,7 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
 
         auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(TDataRow::MakeSortingSchema(), TDataRow::MakeDataSchema(),
             isReverse, vColumns, std::nullopt, std::nullopt, std::vector<TTypeInfo>{ TTypeInfo(NTypeIds::Int32) },
-            std::vector<TTypeInfo>{ TTypeInfo(NTypeIds::Int32) });
+            std::vector<TTypeInfo>{ TTypeInfo(NTypeIds::Int32) }, LegacyComparator);
 
         merger->AddSource(batch1, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));
         merger->AddSource(batch2, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));
@@ -375,8 +417,9 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         std::shared_ptr<arrow::RecordBatch> p2sp = TDataRowTableBuilder::buildBatch({{p2, oldValue}}, v0);
         std::shared_ptr<arrow::RecordBatch> p3sp = TDataRowTableBuilder::buildBatch({{p3, oldValue}}, v0);
         NArrow::NMerger::TSortableBatchPosition startingPoint(
-            isReverse ? p3sp : p2sp, 0, sColumns, {}, isReverse, { TTypeInfo(NTypeIds::Int32) });
-        NArrow::NMerger::TSortableBatchPosition finishPoint(isReverse ? p2sp : p3sp, 0, sColumns, {}, isReverse, { TTypeInfo(NTypeIds::Int32) });
+            isReverse ? p3sp : p2sp, 0, sColumns, {}, isReverse, { TTypeInfo(NTypeIds::Int32) }, LegacyComparator);
+        NArrow::NMerger::TSortableBatchPosition finishPoint(
+            isReverse ? p2sp : p3sp, 0, sColumns, {}, isReverse, { TTypeInfo(NTypeIds::Int32) }, LegacyComparator);
 
         merger->PutControlPoint(finishPoint, deepCopy);
         merger->SkipToBound(startingPoint, includeStart);

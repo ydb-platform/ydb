@@ -4,15 +4,54 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
+#include <util/system/unaligned_mem.h>
 #include <util/system/yassert.h>
+
+#include <vector>
 
 namespace NKikimr::NArrow {
 
+enum class EDecimalComparisonMode {
+    Legacy,
+    Numeric,
+};
+
 class TComparator {
+private:
+    EDecimalComparisonMode DecimalComparisonMode;
+
 public:
+    explicit constexpr TComparator(const EDecimalComparisonMode decimalComparisonMode)
+        : DecimalComparisonMode(decimalComparisonMode) {
+    }
+
+    constexpr EDecimalComparisonMode GetDecimalComparisonMode() const {
+        return DecimalComparisonMode;
+    }
+
+    constexpr bool operator==(const TComparator&) const = default;
+
+    bool IsCompatibleWith(const TComparator& other, const NScheme::TTypeInfo& logicalType) const {
+        return *this == other || logicalType.GetTypeId() != NScheme::NTypeIds::Decimal;
+    }
+
+    bool IsCompatibleWith(const TComparator& other, const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
+        if (*this == other) {
+            return true;
+        }
+
+        for (const auto& type : logicalTypes) {
+            if (type.GetTypeId() == NScheme::NTypeIds::Decimal) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     template <bool notNull>
-    static std::partial_ordering ConcreteTypedCompare(const arrow::Type::type typeId, const arrow::Array& lhs, const int lpos,
-        const arrow::Array& rhs, const int rpos, const NScheme::TTypeInfo& logicalType) {
+    std::partial_ordering ConcreteTypedCompare(const arrow::Type::type typeId, const arrow::Array& lhs, const int lpos, const arrow::Array& rhs,
+        const int rpos, const NScheme::TTypeInfo& logicalType) const {
         switch (typeId) {
             case arrow::Type::NA:
             case arrow::Type::BOOL:
@@ -78,19 +117,20 @@ public:
                 Y_ABORT("not implemented");
                 break;
         }
+
         return std::partial_ordering::equivalent;
     }
 
     template <bool notNull>
-    static std::partial_ordering TypedCompare(
-        const arrow::Array& lhs, const int lpos, const arrow::Array& rhs, const int rpos, const NScheme::TTypeInfo& logicalType) {
+    std::partial_ordering TypedCompare(
+        const arrow::Array& lhs, const int lpos, const arrow::Array& rhs, const int rpos, const NScheme::TTypeInfo& logicalType) const {
         AFL_VERIFY(lhs.type_id() == rhs.type_id())("lhs", lhs.type()->ToString())("rhs", rhs.type()->ToString());
         return ConcreteTypedCompare<notNull>(lhs.type_id(), lhs, lpos, rhs, rpos, logicalType);
     }
 
     template <typename T, bool notNull>
-    static std::partial_ordering CompareView(
-        const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos, const NScheme::TTypeInfo& logicalType) {
+    std::partial_ordering CompareView(
+        const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos, const NScheme::TTypeInfo& logicalType) const {
         auto& left = static_cast<const T&>(lhs);
         auto& right = static_cast<const T&>(rhs);
         if constexpr (notNull) {
@@ -103,23 +143,35 @@ public:
     }
 
     template <typename T>
-    static std::partial_ordering CompareValue(const T& x, const T& y, bool xIsNull, bool yIsNull, const NScheme::TTypeInfo& logicalType) {
+    std::partial_ordering CompareValue(const T& x, const T& y, bool xIsNull, bool yIsNull, const NScheme::TTypeInfo& logicalType) const {
         if (xIsNull && yIsNull) {
             return std::partial_ordering::equivalent;
         }
+
         if (xIsNull) {
             return std::partial_ordering::less;
         }
+
         if (yIsNull) {
             return std::partial_ordering::greater;
         }
+
         return CompareValueNotNull(x, y, logicalType);
     }
 
     template <typename T>
-    static std::partial_ordering CompareValueNotNull(const T& x, const T& y, const NScheme::TTypeInfo& logicalType) {
-        Y_UNUSED(logicalType);
+    std::partial_ordering CompareValueNotNull(const T& x, const T& y, [[maybe_unused]] const NScheme::TTypeInfo& logicalType) const {
         if constexpr (std::is_same_v<T, arrow::util::string_view>) {
+            if (DecimalComparisonMode == EDecimalComparisonMode::Numeric && logicalType.GetTypeId() == NScheme::NTypeIds::Decimal) {
+                AFL_VERIFY(x.size() == 16 && y.size() == 16);
+                const auto highComparison = ReadUnaligned<i64>(x.data() + sizeof(ui64)) <=> ReadUnaligned<i64>(y.data() + sizeof(ui64));
+                if (highComparison != 0) {
+                    return highComparison;
+                }
+
+                return ReadUnaligned<ui64>(x.data()) <=> ReadUnaligned<ui64>(y.data());
+            }
+
             size_t minSize = (x.size() < y.size()) ? x.size() : y.size();
             int cmp = minSize ? memcmp(x.data(), y.data(), minSize) : 0;
             if (cmp < 0) {
@@ -127,10 +179,11 @@ public:
             } else if (cmp > 0) {
                 return std::partial_ordering::greater;
             }
+
             return x.size() <=> y.size();
         } else {
             return x <=> y;
         }
     }
 };
-}
+}   // namespace NKikimr::NArrow

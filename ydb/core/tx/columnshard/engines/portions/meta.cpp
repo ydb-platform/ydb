@@ -213,12 +213,13 @@ ui64 TPortionMetaBase::GetMetadataDataSize() const {
     return GetBlobIds().size() * sizeof(TUnifiedBlobId);
 }
 
-TPortionMeta::TPortionMeta(
-    NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max, const std::vector<NScheme::TTypeInfo>& pkTypes)
+TPortionMeta::TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max,
+    const std::vector<NScheme::TTypeInfo>& pkTypes, const NArrow::TComparator& comparator)
     : PKSchema(pk.GetSchema())
     , PKTypes(pkTypes)
-    , FirstPKRow(pk.GetFirst(pkTypes).GetContent())
-    , LastPKRow(pk.GetLast(pkTypes).GetContent())
+    , Comparator(comparator)
+    , FirstPKRow(pk.GetFirst(pkTypes, comparator).GetContent())
+    , LastPKRow(pk.GetLast(pkTypes, comparator).GetContent())
     , RecordSnapshotMin(min)
     , RecordSnapshotMax(max)
 {
@@ -233,19 +234,19 @@ void TPortionMeta::FullValidation() const {
 }
 
 NArrow::TSimpleRow TPortionMeta::IndexKeyStart() const {
-    return FirstPKRow.Build(PKSchema, PKTypes);
+    return FirstPKRow.Build(PKSchema, PKTypes, Comparator);
 }
 
 NArrow::TSimpleRow TPortionMeta::IndexKeyEnd() const {
-    return LastPKRow.Build(PKSchema, PKTypes);
+    return LastPKRow.Build(PKSchema, PKTypes, Comparator);
 }
 
 NArrow::TSimpleRowRef TPortionMeta::IndexKeyStartRef() const {
-    return NArrow::TSimpleRowRef(IndexKeyViewStart(), *PKSchema, PKTypes);
+    return NArrow::TSimpleRowRef(IndexKeyViewStart(), *PKSchema, PKTypes, Comparator);
 }
 
 NArrow::TSimpleRowRef TPortionMeta::IndexKeyEndRef() const {
-    return NArrow::TSimpleRowRef(IndexKeyViewEnd(), *PKSchema, PKTypes);
+    return NArrow::TSimpleRowRef(IndexKeyViewEnd(), *PKSchema, PKTypes, Comparator);
 }
 
 NArrow::TSimpleRowViewV0 TPortionMeta::IndexKeyViewStart() const {

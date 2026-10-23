@@ -173,8 +173,9 @@ public:
 
     NPortion::TPortionInfoForCompaction GetCompactionInfo() const {
         const auto& meta = PortionInfo->GetMeta();
-        return NPortion::TPortionInfoForCompaction(
-            GetTotalBlobsSize(), meta.GetFirstAndLastPK().GetFirst(meta.GetPKTypes()), meta.GetFirstAndLastPK().GetLast(meta.GetPKTypes()));
+        return NPortion::TPortionInfoForCompaction(GetTotalBlobsSize(),
+            meta.GetFirstAndLastPK().GetFirst(meta.GetPKTypes(), meta.GetComparator()),
+            meta.GetFirstAndLastPK().GetLast(meta.GetPKTypes(), meta.GetComparator()));
     }
 
     ui64 GetColumnBlobBytes() const {

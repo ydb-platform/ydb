@@ -35,6 +35,7 @@ protected:
     TArrayVecPtr Columns = nullptr;
     ui64 Position = 0;
     TLogicalTypesPtr LogicalTypes = nullptr;
+    TComparator Comparator{ EDecimalComparisonMode::Legacy };
 
     static TLogicalTypesPtr StoreLogicalTypes(const TLogicalTypes& logicalTypes) {
         if constexpr (IsOwning) {
@@ -85,24 +86,26 @@ public:
     }
     TReplaceKeyTemplate() = default;
 
-    TReplaceKeyTemplate(TArrayVecPtr columns, const ui64 position, const TLogicalTypes& logicalTypes)
+    TReplaceKeyTemplate(TArrayVecPtr columns, const ui64 position, const TLogicalTypes& logicalTypes, const TComparator& comparator)
         : Columns(columns)
         , Position(position)
-        , LogicalTypes(StoreLogicalTypes(logicalTypes)) {
+        , LogicalTypes(StoreLogicalTypes(logicalTypes))
+        , Comparator(comparator) {
         Y_ABORT_UNLESS(GetColumnsCount() > 0 && Position < (ui64)Column(0).length());
         AFL_VERIFY(GetColumnsCount() == GetLogicalTypes().size());
     }
 
-    TReplaceKeyTemplate(TArrayVecPtr, ui64, const TLogicalTypes&&)
+    TReplaceKeyTemplate(TArrayVecPtr, ui64, const TLogicalTypes&&, const TComparator&)
         requires(!IsOwning)
     = delete;
 
     template <typename T = TArrayVecPtr>
         requires IsOwning
-    TReplaceKeyTemplate(TArrayVec&& columns, const ui64 position, const TLogicalTypes& logicalTypes)
+    TReplaceKeyTemplate(TArrayVec&& columns, const ui64 position, const TLogicalTypes& logicalTypes, const TComparator& comparator)
         : Columns(std::make_shared<TArrayVec>(std::move(columns)))
         , Position(position)
-        , LogicalTypes(StoreLogicalTypes(logicalTypes)) {
+        , LogicalTypes(StoreLogicalTypes(logicalTypes))
+        , Comparator(comparator) {
         Y_ABORT_UNLESS(GetColumnsCount() > 0 && Position < (ui64)Column(0).length());
         AFL_VERIFY(GetColumnsCount() == GetLogicalTypes().size());
     }
@@ -146,7 +149,8 @@ public:
     std::partial_ordering CompareColumnValue(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
         Y_DEBUG_ABORT_UNLESS(Column(column).type_id() == key.Column(keyColumn).type_id());
         Y_DEBUG_ABORT_UNLESS(GetLogicalTypes()[column] == key.GetLogicalTypes()[keyColumn]);
-        return TComparator::TypedCompare<notNull>(Column(column), Position, key.Column(keyColumn), key.GetPosition(), GetLogicalTypes()[column]);
+        Y_DEBUG_ABORT_UNLESS(Comparator.IsCompatibleWith(key.GetComparator(), GetLogicalTypes()[column]));
+        return Comparator.TypedCompare<notNull>(Column(column), Position, key.Column(keyColumn), key.GetPosition(), GetLogicalTypes()[column]);
     }
 
     ui64 GetColumnsCount() const {
@@ -173,7 +177,7 @@ public:
 
     TReplaceKeyTemplate<const TArrayVec*> ToRaw() const {
         if constexpr (IsOwning) {
-            return TReplaceKeyTemplate<const TArrayVec*>(Columns.get(), Position, GetLogicalTypes());
+            return TReplaceKeyTemplate<const TArrayVec*>(Columns.get(), Position, GetLogicalTypes(), Comparator);
         } else {
             return *this;
         }
@@ -203,7 +207,7 @@ public:
     template <typename T = TArrayVecPtr>
         requires IsOwning
     static TReplaceKeyTemplate<TArrayVecPtr> FromBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
-        const std::shared_ptr<arrow::Schema>& key, int row, const TLogicalTypes& logicalTypes) {
+        const std::shared_ptr<arrow::Schema>& key, int row, const TLogicalTypes& logicalTypes, const TComparator& comparator) {
         Y_ABORT_UNLESS(key->num_fields() <= batch->num_columns());
 
         TArrayVec columns;
@@ -216,24 +220,25 @@ public:
             columns.push_back(array);
         }
 
-        return TReplaceKeyTemplate<TArrayVecPtr>(std::move(columns), row, logicalTypes);
+        return TReplaceKeyTemplate<TArrayVecPtr>(std::move(columns), row, logicalTypes, comparator);
     }
 
     template <typename T = TArrayVecPtr>
         requires IsOwning
     static TReplaceKeyTemplate<TArrayVecPtr> FromBatch(
-        const std::shared_ptr<arrow::RecordBatch>& batch, int row, const TLogicalTypes& logicalTypes) {
+        const std::shared_ptr<arrow::RecordBatch>& batch, int row, const TLogicalTypes& logicalTypes, const TComparator& comparator) {
         auto columns = std::make_shared<TArrayVec>(batch->columns());
-        return TReplaceKeyTemplate<TArrayVecPtr>(columns, row, logicalTypes);
+        return TReplaceKeyTemplate<TArrayVecPtr>(columns, row, logicalTypes, comparator);
     }
 
-    static TReplaceKeyTemplate<TArrayVecPtr> FromScalar(const std::shared_ptr<arrow::Scalar>& s, const NScheme::TTypeInfo& logicalType)
+    static TReplaceKeyTemplate<TArrayVecPtr> FromScalar(
+        const std::shared_ptr<arrow::Scalar>& s, const NScheme::TTypeInfo& logicalType, const TComparator& comparator)
         requires IsOwning
     {
         Y_DEBUG_ABORT_UNLESS(IsGoodScalar(s));
         auto res = MakeArrayFromScalar(*s, 1);
         Y_ABORT_UNLESS(res.status().ok(), "%s", res.status().ToString().c_str());
-        return TReplaceKeyTemplate<TArrayVecPtr>(std::make_shared<TArrayVec>(1, *res), 0, { logicalType });
+        return TReplaceKeyTemplate<TArrayVecPtr>(std::make_shared<TArrayVec>(1, *res), 0, { logicalType }, comparator);
     }
 
     static std::shared_ptr<arrow::Scalar> ToScalar(const TReplaceKeyTemplate<TArrayVecPtr>& key, int colNumber = 0) {
@@ -252,6 +257,10 @@ public:
     const TLogicalTypes& GetLogicalTypes() const {
         AFL_VERIFY(LogicalTypes);
         return *LogicalTypes;
+    }
+
+    const TComparator& GetComparator() const {
+        return Comparator;
     }
 };
 
@@ -281,14 +290,16 @@ private:
 public:
     using TBase::TBase;
 
-    TReplaceKeyView(const std::vector<std::shared_ptr<arrow::Array>>& columns, const ui64 position, const TLogicalTypes& logicalTypes)
-        : TBase(&columns, position, logicalTypes) {
+    TReplaceKeyView(const std::vector<std::shared_ptr<arrow::Array>>& columns, const ui64 position, const TLogicalTypes& logicalTypes,
+        const TComparator& comparator)
+        : TBase(&columns, position, logicalTypes, comparator) {
     }
 
-    TReplaceKeyView(const TArrayVec&, ui64, const TLogicalTypes&&) = delete;
+    TReplaceKeyView(const TArrayVec&, ui64, const TLogicalTypes&&, const TComparator&) = delete;
 
     TReplaceKey GetToStore() const {
-        return TReplaceKey(std::make_shared<std::vector<std::shared_ptr<arrow::Array>>>(*GetColumns()), GetPosition(), GetLogicalTypes());
+        return TReplaceKey(
+            std::make_shared<std::vector<std::shared_ptr<arrow::Array>>>(*GetColumns()), GetPosition(), GetLogicalTypes(), GetComparator());
     }
 };
 
@@ -397,6 +408,7 @@ private:
     std::vector<std::shared_ptr<arrow::Array>> Arrays;
     std::vector<ui32> Positions;
     std::vector<NScheme::TTypeInfo> LogicalTypes;
+    TComparator Comparator;
 
 public:
     ui32 GetMonoPosition() const {
@@ -420,20 +432,28 @@ public:
         return LogicalTypes;
     }
 
+    const TComparator& GetComparator() const {
+        return Comparator;
+    }
+
     TComparablePosition(const TReplaceKey& key)
         : Arrays(*key.GetColumns())
         , Positions(Arrays.size(), key.GetPosition())
-        , LogicalTypes(key.GetLogicalTypes()) {
+        , LogicalTypes(key.GetLogicalTypes())
+        , Comparator(key.GetComparator()) {
     }
 
     TComparablePosition(const TReplaceKeyView& key)
         : Arrays(*key.GetColumns())
         , Positions(Arrays.size(), key.GetPosition())
-        , LogicalTypes(key.GetLogicalTypes()) {
+        , LogicalTypes(key.GetLogicalTypes())
+        , Comparator(key.GetComparator()) {
     }
 
-    TComparablePosition(const std::shared_ptr<arrow::Table>& table, const ui32 position, const std::vector<NScheme::TTypeInfo>& logicalTypes)
-        : LogicalTypes(logicalTypes) {
+    TComparablePosition(const std::shared_ptr<arrow::Table>& table, const ui32 position, const std::vector<NScheme::TTypeInfo>& logicalTypes,
+        const TComparator& comparator)
+        : LogicalTypes(logicalTypes)
+        , Comparator(comparator) {
         AFL_VERIFY(LogicalTypes.size() == (size_t)table->num_columns());
         AFL_VERIFY(position < table->num_rows());
         for (auto&& col : table->columns()) {
@@ -454,8 +474,9 @@ public:
     }
 
     TComparablePosition(const std::vector<std::shared_ptr<arrow::ChunkedArray>>& tableColumns, const ui32 position,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes)
-        : LogicalTypes(logicalTypes) {
+        const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator)
+        : LogicalTypes(logicalTypes)
+        , Comparator(comparator) {
         AFL_VERIFY(LogicalTypes.size() == tableColumns.size());
         for (auto&& col : tableColumns) {
             ui32 pos = 0;
@@ -474,8 +495,10 @@ public:
         }
     }
 
-    TComparablePosition(const std::shared_ptr<arrow::RecordBatch>& rb, const ui32 position, const std::vector<NScheme::TTypeInfo>& logicalTypes)
-        : LogicalTypes(logicalTypes) {
+    TComparablePosition(const std::shared_ptr<arrow::RecordBatch>& rb, const ui32 position, const std::vector<NScheme::TTypeInfo>& logicalTypes,
+        const TComparator& comparator)
+        : LogicalTypes(logicalTypes)
+        , Comparator(comparator) {
         AFL_VERIFY(LogicalTypes.size() == (size_t)rb->num_columns());
         AFL_VERIFY(position < rb->num_rows());
         for (auto&& col : rb->columns()) {
@@ -503,8 +526,9 @@ public:
         for (ui32 i = 0; i < Positions.size(); ++i) {
             AFL_VERIFY(Arrays[i]->type()->id() == pos.Arrays[i]->type()->id());
             Y_DEBUG_ABORT_UNLESS(LogicalTypes[i] == pos.LogicalTypes[i]);
+            Y_DEBUG_ABORT_UNLESS(Comparator.IsCompatibleWith(pos.Comparator, LogicalTypes[i]));
             const std::partial_ordering cmpResult =
-                TComparator::TypedCompare<NotNull>(*Arrays[i], Positions[i], *pos.Arrays[i], pos.Positions[i], LogicalTypes[i]);
+                Comparator.TypedCompare<NotNull>(*Arrays[i], Positions[i], *pos.Arrays[i], pos.Positions[i], LogicalTypes[i]);
             if (cmpResult != std::partial_ordering::equivalent) {
                 return cmpResult;
             }
@@ -517,8 +541,9 @@ public:
         for (ui32 i = 0; i < std::min<ui32>(Positions.size(), pos.Positions.size()); ++i) {
             AFL_VERIFY(Arrays[i]->type()->id() == pos.Arrays[i]->type()->id());
             Y_DEBUG_ABORT_UNLESS(LogicalTypes[i] == pos.LogicalTypes[i]);
+            Y_DEBUG_ABORT_UNLESS(Comparator.IsCompatibleWith(pos.Comparator, LogicalTypes[i]));
             const std::partial_ordering cmpResult =
-                TComparator::TypedCompare<NotNull>(*Arrays[i], Positions[i], *pos.Arrays[i], pos.Positions[i], LogicalTypes[i]);
+                Comparator.TypedCompare<NotNull>(*Arrays[i], Positions[i], *pos.Arrays[i], pos.Positions[i], LogicalTypes[i]);
             if (cmpResult != std::partial_ordering::equivalent) {
                 return cmpResult;
             }
@@ -583,7 +608,8 @@ public:
 };
 
 template <bool desc, bool uniq>
-static bool IsSelfSorted(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+static bool IsSelfSorted(
+    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator) {
     AFL_VERIFY(logicalTypes.size() == (size_t)batch->num_columns());
     if (batch->num_rows() < 2) {
         return true;
@@ -591,8 +617,8 @@ static bool IsSelfSorted(const std::shared_ptr<arrow::RecordBatch>& batch, const
     auto& columns = batch->columns();
 
     for (int i = 1; i < batch->num_rows(); ++i) {
-        TRawReplaceKey prev(&columns, i - 1, logicalTypes);
-        TRawReplaceKey current(&columns, i, logicalTypes);
+        TRawReplaceKey prev(&columns, i - 1, logicalTypes, comparator);
+        TRawReplaceKey current(&columns, i, logicalTypes, comparator);
         if constexpr (desc) {
             if (prev < current) {
                 YDB_LOG_DEBUG_COMP(NKikimrServices::ARROW_HELPER, "",

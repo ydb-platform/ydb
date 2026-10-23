@@ -166,7 +166,8 @@ TConclusionStatus TTxScan::InitPKRangesFilter(TReadDescription& read) const {
     const TVersionedPresetSchemas& schemas = GetPresetSchemas();
     auto ydbKey = read.GetTableMetadataAccessor()->GetPrimaryKeyInfo(schemas);
     auto arrowKey = read.GetTableMetadataAccessor()->GetPrimaryKeyScheme(schemas);
-    auto filterConclusion = NOlap::TPKRangesFilter::BuildFromProto(request, ydbKey, arrowKey);
+    auto filterConclusion = NOlap::TPKRangesFilter::BuildFromProto(request, ydbKey, arrowKey,
+        read.GetTableMetadataAccessor()->GetSnapshotSchemaVerified(schemas, TSnapshot::Max())->GetIndexInfo().GetComparator());
     if (filterConclusion.IsFail()) {
         return TConclusionStatus::Fail(filterConclusion.GetErrorMessage());
     }

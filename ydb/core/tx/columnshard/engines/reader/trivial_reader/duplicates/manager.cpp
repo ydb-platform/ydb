@@ -47,10 +47,12 @@ public:
 
 }   // namespace
 
-NArrow::NMerger::TCursor TDuplicateManager::GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId) {
+NArrow::NMerger::TCursor TDuplicateManager::GetVersionBatch(
+    const TSnapshot& snapshot, const ui64 writeId, const NArrow::TComparator& comparator) {
     NArrow::TGeneralContainer batch(1);
     IIndexInfo::AddSnapshotColumns(batch, snapshot, writeId);
-    return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames(), IIndexInfo::GetSnapshotColumnTypes());
+    return NArrow::NMerger::TCursor(
+        batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames(), IIndexInfo::GetSnapshotColumnTypes(), comparator);
 }
 
 std::shared_ptr<TPortionStore> TDuplicateManager::MakePortionsIndex(const std::deque<std::shared_ptr<TPortionInfo>>& portions) {
@@ -107,10 +109,12 @@ TDuplicateManager::TDuplicateManager(
           std::make_shared<TMergeContext>(
               std::make_unique<NArrow::NMerger::TMergePartialStream>(PKSchema, nullptr,
                   context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), IIndexInfo::GetSnapshotColumnNames(),
-                  GetVersionBatch(context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot(), std::numeric_limits<ui64>::max()),
-                  GetVersionBatch(TSnapshot::Max(), 0), LastSchema->GetIndexInfo().GetPrimaryKeyTypes(), IIndexInfo::GetSnapshotColumnTypes()),
-              Counters, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Portions, GetFetchingColumns()), portions,
-          context.GetCommonContext()->GetReadMetadata(), Counters)
+                  GetVersionBatch(context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot(), std::numeric_limits<ui64>::max(),
+                      LastSchema->GetIndexInfo().GetComparator()),
+                  GetVersionBatch(TSnapshot::Max(), 0, LastSchema->GetIndexInfo().GetComparator()),
+                  LastSchema->GetIndexInfo().GetPrimaryKeyTypes(), IIndexInfo::GetSnapshotColumnTypes(),
+                  LastSchema->GetIndexInfo().GetComparator()), Counters, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Portions,
+              GetFetchingColumns()), portions, context.GetCommonContext()->GetReadMetadata(), Counters)
     , FiltersStore(context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Counters)
     , AbortionFlag(context.GetDuplicatesAbortionFlag())
     , HangTracker(inflightTimeout)

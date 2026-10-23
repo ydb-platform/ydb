@@ -244,7 +244,7 @@ private:
             auto builders = NArrow::MakeBuilders(schemaTrimmed);
             point.AppendPointTo(builders);
             PrimaryKey = NArrow::TSimpleRow(arrow::RecordBatch::Make(schemaTrimmed, 1, NArrow::Finish(std::move(builders))), 0,
-                point.GetSortableBatchPosition().GetSorting()->GetLogicalTypes());
+                point.GetSortableBatchPosition().GetSorting()->GetLogicalTypes(), point.GetSortableBatchPosition().GetComparator());
         }
     }
 
@@ -371,8 +371,8 @@ public:
         }
     }
 
-    THashSet<ui64> GetAffectedTxIds(
-        const std::shared_ptr<arrow::RecordBatch>& writtenPrimaryKeys, const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
+    THashSet<ui64> GetAffectedTxIds(const std::shared_ptr<arrow::RecordBatch>& writtenPrimaryKeys,
+        const std::vector<NScheme::TTypeInfo>& logicalTypes, const NArrow::TComparator& comparator) const {
         AFL_VERIFY(writtenPrimaryKeys);
         auto it = IntervalsInfo.begin();
         THashSet<ui64> affectedTxIds;
@@ -383,7 +383,8 @@ public:
             if (it == IntervalsInfo.end()) {
                 return affectedTxIds;
             }
-            NArrow::TSimpleRow rKey(writtenPrimaryKeys, i, logicalTypes);
+
+            NArrow::TSimpleRow rKey(writtenPrimaryKeys, i, logicalTypes, comparator);
             auto pkIntervalPoint = TIntervalPoint::Equal(rKey);
             while (it != IntervalsInfo.end() && it->first < pkIntervalPoint) {
                 ++it;
@@ -411,7 +412,7 @@ public:
                 return affectedTxIds;
             }
             while (i < writtenPrimaryKeys->num_rows()) {
-                NArrow::TSimpleRow rKey(writtenPrimaryKeys, i, logicalTypes);
+                NArrow::TSimpleRow rKey(writtenPrimaryKeys, i, logicalTypes, comparator);
                 if (TIntervalPoint::Equal(rKey) < it->first) {
                     ++i;
                 } else {
@@ -441,12 +442,13 @@ public:
     }
 
     THashSet<ui64> GetAffectedLockIds(const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& batch,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
+        const std::vector<NScheme::TTypeInfo>& logicalTypes, const NArrow::TComparator& comparator) const {
         auto it = ReadIntervalsByPathId.find(pathId);
         if (it == ReadIntervalsByPathId.end()) {
             return {};
         }
-        return it->second.GetAffectedTxIds(batch, logicalTypes);
+
+        return it->second.GetAffectedTxIds(batch, logicalTypes, comparator);
     }
 
     void AddInterval(const ui64 lockId, const TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {

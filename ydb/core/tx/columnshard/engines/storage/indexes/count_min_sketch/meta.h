@@ -25,8 +25,8 @@ protected:
         return TBase::CheckSameColumnsForModification(newMeta);
     }
 
-    virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
-        TChunkedBatchReader& reader, const ui32 recordsCount, const NScheme::TTypeInfo& logicalType) const override;
+    virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount,
+        const NScheme::TTypeInfo& logicalType, const NArrow::TComparator& comparator) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
         AFL_VERIFY(TBase::DoDeserializeFromProto(proto));

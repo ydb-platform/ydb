@@ -6,6 +6,7 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/scheme_types
     ydb/library/arrow_kernels
+    yql/essentials/public/decimal
 
     # for NYql::NUdf alloc stuff used in binary_json
     yql/essentials/public/udf/service/exception_policy

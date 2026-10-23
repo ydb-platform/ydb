@@ -26,17 +26,20 @@ private:
     YDB_READONLY(ui64, Position, 0);
     std::vector<NAccessor::IChunkedArray::TFullDataAddress> PositionAddress;
     YDB_READONLY_DEF(std::vector<NScheme::TTypeInfo>, LogicalTypes);
+    YDB_READONLY(TComparator, Comparator, TComparator(EDecimalComparisonMode::Legacy));
 
 public:
     TCursor() = default;
     TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::string>& columns,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes);
+        const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator);
 
     TCursor(const ui64 position, const std::vector<NAccessor::IChunkedArray::TFullDataAddress>& addresses,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes)
+        const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator)
         : Position(position)
         , PositionAddress(addresses)
-        , LogicalTypes(logicalTypes) {
+        , LogicalTypes(logicalTypes)
+        , Comparator(comparator)
+    {
         AFL_VERIFY(LogicalTypes.empty() || LogicalTypes.size() == PositionAddress.size());
     }
 
@@ -76,6 +79,7 @@ private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Field>>, Fields);
     // Empty only for payload data, which is never compared.
     YDB_READONLY_DEF(std::vector<NScheme::TTypeInfo>, LogicalTypes);
+    YDB_READONLY(TComparator, Comparator, TComparator(EDecimalComparisonMode::Legacy));
     ui64 StartPosition = 0;
     ui64 FinishPosition = 0;
     void BuildPosition(const ui64 position);
@@ -92,10 +96,13 @@ private:
         AFL_VERIFY(item.LogicalTypes.size() == item.PositionAddress.size());
         for (ui32 idx = 0; idx < size; ++idx) {
             AFL_VERIFY_DEBUG(LogicalTypes[idx] == item.LogicalTypes[idx]);
+            AFL_VERIFY_DEBUG(Comparator.IsCompatibleWith(item.Comparator, LogicalTypes[idx]));
         }
+
         if (Contains(position) && item.Contains(itemPosition)) {
             for (ui32 idx = 0; idx < size; ++idx) {
-                std::partial_ordering cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition, LogicalTypes[idx]);
+                std::partial_ordering cmp =
+                    PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition, LogicalTypes[idx], Comparator);
                 if (cmp != std::partial_ordering::equivalent) {
                     return cmp;
                 }
@@ -106,16 +113,17 @@ private:
                 const bool containsSelf = PositionAddress[idx].GetAddress().Contains(position);
                 const bool containsItem = item.PositionAddress[idx].GetAddress().Contains(itemPosition);
                 if (containsSelf && containsItem) {
-                    cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition, LogicalTypes[idx]);
+                    cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition, LogicalTypes[idx], Comparator);
                 } else if (containsSelf) {
                     auto temporaryAddress = item.Columns[idx]->GetChunk(item.PositionAddress[idx].GetAddress(), itemPosition);
-                    cmp = PositionAddress[idx].Compare(position, temporaryAddress, itemPosition, LogicalTypes[idx]);
+                    cmp = PositionAddress[idx].Compare(position, temporaryAddress, itemPosition, LogicalTypes[idx], Comparator);
                 } else if (containsItem) {
                     auto temporaryAddress = Columns[idx]->GetChunk(PositionAddress[idx].GetAddress(), position);
-                    cmp = temporaryAddress.Compare(position, item.PositionAddress[idx], itemPosition, LogicalTypes[idx]);
+                    cmp = temporaryAddress.Compare(position, item.PositionAddress[idx], itemPosition, LogicalTypes[idx], Comparator);
                 } else {
                     AFL_VERIFY(false);
                 }
+
                 if (cmp != std::partial_ordering::equivalent) {
                     return cmp;
                 }
@@ -125,27 +133,32 @@ private:
         return std::partial_ordering::equivalent;
     }
 public:
-    TSortableScanData(
-        const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes);
+    TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes,
+        const TComparator& comparator);
     TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes);
+        const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator);
     TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes);
+        const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator);
     TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes);
-    TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes);
+        const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator);
+    TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes,
+        const TComparator& comparator);
 
     TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<NAccessor::IChunkedArray>>& columns,
-        const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<NScheme::TTypeInfo>& logicalTypes)
+        const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<NScheme::TTypeInfo>& logicalTypes,
+        const TComparator& comparator)
         : RecordsCount(recordsCount)
         , Columns(columns)
         , Fields(fields)
-        , LogicalTypes(logicalTypes) {
+        , LogicalTypes(logicalTypes)
+        , Comparator(comparator)
+    {
         BuildPosition(position);
     }
 
     TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<arrow::Array>>& columns,
-        const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<NScheme::TTypeInfo>& logicalTypes);
+        const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<NScheme::TTypeInfo>& logicalTypes,
+        const TComparator& comparator);
 
     const NAccessor::IChunkedArray::TFullDataAddress& GetPositionAddress(const ui32 colIdx) const {
         AFL_VERIFY(colIdx < PositionAddress.size());
@@ -175,8 +188,9 @@ public:
 
     TCursor BuildCursor(const ui64 position) const {
         if (Contains(position)) {
-            return TCursor(position, PositionAddress, LogicalTypes);
+            return TCursor(position, PositionAddress, LogicalTypes, Comparator);
         }
+
         auto addresses = PositionAddress;
         ui32 idx = 0;
         for (auto&& i : addresses) {
@@ -185,7 +199,8 @@ public:
             }
             ++idx;
         }
-        return TCursor(position, addresses, LogicalTypes);
+
+        return TCursor(position, addresses, LogicalTypes, Comparator);
     }
 
     std::partial_ordering Compare(const ui64 position, const TSortableScanData& item, const ui64 itemPosition) const {
@@ -284,6 +299,10 @@ protected:
     }
 
 public:
+    const TComparator& GetComparator() const {
+        return Sorting->GetComparator();
+    }
+
     TSortableBatchPosition() = default;
 
     i64 GetPosition() const {
@@ -425,9 +444,11 @@ public:
 
     template <class TRecords>
     TSortableBatchPosition(const std::shared_ptr<TRecords>& batch, const ui32 position, const std::vector<std::string>& sortingColumns,
-        const std::vector<std::string>& dataColumns, const bool reverseSort, const std::vector<NScheme::TTypeInfo>& logicalTypes)
+        const std::vector<std::string>& dataColumns, const bool reverseSort, const std::vector<NScheme::TTypeInfo>& logicalTypes,
+        const TComparator& comparator)
         : Position(position)
-        , ReverseSort(reverseSort) {
+        , ReverseSort(reverseSort)
+    {
         AFL_VERIFY(logicalTypes.size() == sortingColumns.size());
         Y_ABORT_UNLESS(batch);
         Y_ABORT_UNLESS(batch->num_rows());
@@ -435,32 +456,35 @@ public:
         AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
 
         if (dataColumns.size()) {
-            Data = std::make_shared<TSortableScanData>(Position, batch, dataColumns, std::vector<NScheme::TTypeInfo>{});
+            Data = std::make_shared<TSortableScanData>(Position, batch, dataColumns, std::vector<NScheme::TTypeInfo>{}, comparator);
         }
-        Sorting = std::make_shared<TSortableScanData>(Position, batch, sortingColumns, logicalTypes);
+
+        Sorting = std::make_shared<TSortableScanData>(Position, batch, sortingColumns, logicalTypes, comparator);
         Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
 
     template <class TRecords>
-    TSortableBatchPosition(
-        const std::shared_ptr<TRecords>& batch, const ui32 position, const bool reverseSort, const std::vector<NScheme::TTypeInfo>& logicalTypes)
+    TSortableBatchPosition(const std::shared_ptr<TRecords>& batch, const ui32 position, const bool reverseSort,
+        const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator)
         : Position(position)
-        , ReverseSort(reverseSort) {
+        , ReverseSort(reverseSort)
+    {
         Y_ABORT_UNLESS(batch);
         Y_ABORT_UNLESS(batch->num_rows());
         RecordsCount = batch->num_rows();
         AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
-        Sorting = std::make_shared<TSortableScanData>(Position, batch, logicalTypes);
+        Sorting = std::make_shared<TSortableScanData>(Position, batch, logicalTypes, comparator);
         AFL_VERIFY(logicalTypes.size() == Sorting->GetFields().size());
         Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
 
     TSortableBatchPosition(const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<std::shared_ptr<arrow::Array>>& columns,
-        const ui32 position, const bool reverseSort, const std::vector<NScheme::TTypeInfo>& logicalTypes)
+        const ui32 position, const bool reverseSort, const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator)
         : Position(position)
-        , ReverseSort(reverseSort) {
+        , ReverseSort(reverseSort)
+    {
         AFL_VERIFY(logicalTypes.size() == fields.size());
         Y_ABORT_UNLESS(columns.size());
         Y_ABORT_UNLESS(columns.front()->length());
@@ -469,7 +493,7 @@ public:
         }
         RecordsCount = columns.front()->length();
         AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
-        Sorting = std::make_shared<TSortableScanData>(Position, RecordsCount, columns, fields, logicalTypes);
+        Sorting = std::make_shared<TSortableScanData>(Position, RecordsCount, columns, fields, logicalTypes, comparator);
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
 
@@ -744,7 +768,8 @@ public:
     //  (-inf, it1), [it1, it2), [it2, it3), ..., [itLast, +inf)
     template <class TBordersIterator>
     static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBorders(const std::shared_ptr<arrow::RecordBatch>& batch,
-        const std::vector<std::string>& columnNames, TBordersIterator& it, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+        const std::vector<std::string>& columnNames, TBordersIterator& it, const std::vector<NScheme::TTypeInfo>& logicalTypes,
+        const TComparator& comparator) {
         std::vector<std::shared_ptr<arrow::RecordBatch>> result;
         if (!batch || batch->num_rows() == 0) {
             while (it.IsValid()) {
@@ -757,7 +782,8 @@ public:
         if (!it.IsValid()) {
             return { batch };
         }
-        TRWSortableBatchPosition pos(batch, 0, columnNames, {}, false, logicalTypes);
+
+        TRWSortableBatchPosition pos(batch, 0, columnNames, {}, false, logicalTypes, comparator);
         it.SkipToUpper(pos);
         bool batchFinished = false;
         i64 recordsCountSplitted = 0;
@@ -824,9 +850,9 @@ public:
     template <class TContainer>
     static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInAssociativeContainer(
         const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columnNames, const TContainer& container,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+        const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator) {
         TAssociatedContainerIterator<TContainer> it(container);
-        return SplitByBorders(batch, columnNames, it, logicalTypes);
+        return SplitByBorders(batch, columnNames, it, logicalTypes, comparator);
     }
 
     template <class TContainer>
@@ -860,9 +886,10 @@ public:
 
     template <class TContainer>
     static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInSequentialContainer(const std::shared_ptr<arrow::RecordBatch>& batch,
-        const std::vector<std::string>& columnNames, const TContainer& container, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+        const std::vector<std::string>& columnNames, const TContainer& container, const std::vector<NScheme::TTypeInfo>& logicalTypes,
+        const TComparator& comparator) {
         TSequentialContainerIterator<TContainer> it(container);
-        return SplitByBorders(batch, columnNames, it, logicalTypes);
+        return SplitByBorders(batch, columnNames, it, logicalTypes, comparator);
     }
 
     class TIntervalPointsIterator {
@@ -903,9 +930,10 @@ public:
     };
 
     static std::vector<std::shared_ptr<arrow::RecordBatch>> SplitByBordersInIntervalPositions(const std::shared_ptr<arrow::RecordBatch>& batch,
-        const std::vector<std::string>& columnNames, const TIntervalPositions& container, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+        const std::vector<std::string>& columnNames, const TIntervalPositions& container, const std::vector<NScheme::TTypeInfo>& logicalTypes,
+        const TComparator& comparator) {
         TIntervalPointsIterator it(container);
-        return SplitByBorders(batch, columnNames, it, logicalTypes);
+        return SplitByBorders(batch, columnNames, it, logicalTypes, comparator);
     }
 };
 

@@ -216,8 +216,8 @@ void VisitAllChunksWithBuilder(
 
 }   // namespace
 
-std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
-    TChunkedBatchReader& reader, const ui32 recordsCount, const NScheme::TTypeInfo& /*logicalType*/) const {
+std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount,
+    const NScheme::TTypeInfo& /*logicalType*/, const NArrow::TComparator& /*comparator*/) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     const ui32 hashesCount = Request.ResolvedHashesCount();
     const bool caseSensitive = Request.ResolvedCaseSensitive();

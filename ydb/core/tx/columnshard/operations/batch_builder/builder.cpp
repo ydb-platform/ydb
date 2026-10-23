@@ -100,8 +100,9 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
                 for (const auto& field : batchDefault->schema()->fields()) {
                     defaultTypes.emplace_back(indexInfo.GetColumnFeaturesVerified(indexInfo.GetColumnIdVerified(field->name())).GetTypeInfo());
                 }
-                NArrow::NMerger::TSortableBatchPosition pos(
-                    batchDefault, 0, batchDefault->schema()->field_names(), batchDefault->schema()->field_names(), false, defaultTypes);
+
+                NArrow::NMerger::TSortableBatchPosition pos(batchDefault, 0, batchDefault->schema()->field_names(),
+                    batchDefault->schema()->field_names(), false, defaultTypes, indexInfo.GetComparator());
                 merger = std::make_shared<TUpdateMerger>(
                     batch, Context.GetActualSchema(), insertionConclusion.IsSuccess() ? "" : insertionConclusion.GetErrorMessage(), pos);
                 break;

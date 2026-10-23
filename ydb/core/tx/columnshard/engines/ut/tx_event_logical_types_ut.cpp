@@ -2,26 +2,32 @@
 #include <ydb/core/tx/columnshard/transactions/locks/write.h>
 #include <ydb/core/tx/columnshard/transactions/protos/tx_event.pb.h>
 
+#include <ydb/library/testlib/helpers.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
 
 Y_UNIT_TEST_SUITE(TxEventLogicalTypes) {
-    Y_UNIT_TEST(RangeOperationEncodingsPreserveBoundaries) {
+    Y_UNIT_TEST_TWIN(RangeOperationEncodingsPreserveBoundaries, NumericComparison) {
+        const NArrow::TComparator comparator(
+            NumericComparison ? NArrow::EDecimalComparisonMode::Numeric : NArrow::EDecimalComparisonMode::Legacy);
         const std::vector<NScheme::TTypeInfo> logicalTypes = { NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)) };
+        std::string lowerValue(16, '\0');
         std::string upperValue(16, '\0');
-        upperValue.front() = 2;
+        lowerValue[NumericComparison ? 0 : 1] = 1;
+        upperValue[NumericComparison ? 1 : 0] = 1;
         arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(16));
-        UNIT_ASSERT(builder.Append(std::string(16, '\0')).ok());
+        UNIT_ASSERT(builder.Append(lowerValue).ok());
         UNIT_ASSERT(builder.Append(upperValue).ok());
         const auto values = NArrow::TStatusValidator::GetValid(builder.Finish());
         const auto schema = arrow::schema({ arrow::field("decimal", values->type()) });
         const auto fullSchema =
             NArrow::TStatusValidator::GetValid(schema->AddField(schema->num_fields(), arrow::field(".ydb_operation_type", arrow::uint32())));
         const auto keyBatch = arrow::RecordBatch::Make(schema, 2, { values });
-        const NArrow::NMerger::TSortableBatchPosition lowerBound(keyBatch, 0, false, logicalTypes);
-        const NArrow::NMerger::TSortableBatchPosition upperBound(keyBatch, 1, false, logicalTypes);
+        const NArrow::NMerger::TSortableBatchPosition lowerBound(keyBatch, 0, false, logicalTypes, comparator);
+        const NArrow::NMerger::TSortableBatchPosition upperBound(keyBatch, 1, false, logicalTypes, comparator);
         for (const bool serializedEncoding : { false, true }) {
             for (const bool includeFrom : { false, true }) {
                 for (const bool includeTo : { false, true }) {
@@ -38,14 +44,16 @@ Y_UNIT_TEST_SUITE(TxEventLogicalTypes) {
                     UNIT_ASSERT(operationsBuilder.Append(toOperation).ok());
                     const auto operations = NArrow::TStatusValidator::GetValid(operationsBuilder.Finish());
                     const auto filter = TPKRangesFilter::BuildFromRecordBatchFull(
-                        arrow::RecordBatch::Make(fullSchema, 2, { values, operations }), schema, logicalTypes);
+                        arrow::RecordBatch::Make(fullSchema, 2, { values, operations }), schema, logicalTypes, comparator);
                     const auto serialized = filter->SerializeToRecordBatch(schema);
                     const auto& storedOperations = static_cast<const arrow::UInt32Array&>(*serialized->column(1));
                     UNIT_ASSERT_VALUES_EQUAL(storedOperations.Value(0), static_cast<ui32>(serializedFrom));
                     UNIT_ASSERT_VALUES_EQUAL(storedOperations.Value(1), static_cast<ui32>(serializedTo));
-                    const auto restored = TPKRangesFilter::BuildFromString(filter->SerializeToString(schema), schema, logicalTypes);
+                    const auto restored = TPKRangesFilter::BuildFromString(filter->SerializeToString(schema), schema, logicalTypes, comparator);
                     for (const auto& candidate : { filter, restored }) {
                         UNIT_ASSERT_VALUES_EQUAL(candidate->Size(), 1);
+                        UNIT_ASSERT(candidate->begin()->GetPredicateFrom().GetSortableBatchPosition().GetComparator() == comparator);
+                        UNIT_ASSERT(candidate->begin()->GetPredicateTo().GetSortableBatchPosition().GetComparator() == comparator);
                         UNIT_ASSERT_VALUES_EQUAL(candidate->begin()->GetPredicateFrom().IsInclude(), includeFrom);
                         UNIT_ASSERT_VALUES_EQUAL(candidate->begin()->GetPredicateTo().IsInclude(), includeTo);
                         UNIT_ASSERT_VALUES_EQUAL(candidate->CheckPoint(lowerBound), includeFrom);
@@ -56,7 +64,9 @@ Y_UNIT_TEST_SUITE(TxEventLogicalTypes) {
         }
     }
 
-    Y_UNIT_TEST(PrefixRangeRoundTrip) {
+    Y_UNIT_TEST_TWIN(PrefixRangeRoundTrip, NumericComparison) {
+        const NArrow::TComparator comparator(
+            NumericComparison ? NArrow::EDecimalComparisonMode::Numeric : NArrow::EDecimalComparisonMode::Legacy);
         const std::vector<NScheme::TTypeInfo> logicalTypes = { NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)),
             NScheme::TTypeInfo(NScheme::NTypeIds::Uuid) };
         arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(16));
@@ -65,25 +75,29 @@ Y_UNIT_TEST_SUITE(TxEventLogicalTypes) {
         const auto schema = arrow::schema({ arrow::field("decimal", values->type()), arrow::field("uuid", values->type()) });
         const auto prefixSchema = arrow::schema({ schema->field(0) });
         const auto prefixBatch = arrow::RecordBatch::Make(prefixSchema, 1, { values });
-        const auto filter = TPKRangesFilter::BuildFromRecordBatchLines(prefixBatch, { logicalTypes.front() });
+        const auto filter = TPKRangesFilter::BuildFromRecordBatchLines(prefixBatch, { logicalTypes.front() }, comparator);
         const auto serialized = filter->SerializeToRecordBatch(schema);
         UNIT_ASSERT_VALUES_EQUAL(serialized->num_columns(), 3);
         UNIT_ASSERT_VALUES_EQUAL(serialized->num_rows(), 2);
         UNIT_ASSERT_VALUES_EQUAL(serialized->column(1)->null_count(), 2);
-        const auto restored = TPKRangesFilter::BuildFromString(filter->SerializeToString(schema), schema, logicalTypes);
+        const auto restored = TPKRangesFilter::BuildFromString(filter->SerializeToString(schema), schema, logicalTypes, comparator);
         UNIT_ASSERT_VALUES_EQUAL(restored->Size(), 1);
         const auto& range = *restored->begin();
         for (const auto* predicate : { &range.GetPredicateFrom(), &range.GetPredicateTo() }) {
             UNIT_ASSERT_VALUES_EQUAL(predicate->NumColumns(), 1);
+            UNIT_ASSERT(predicate->GetSortableBatchPosition().GetComparator() == comparator);
             const auto& restoredTypes = predicate->GetSortableBatchPosition().GetSorting()->GetLogicalTypes();
             UNIT_ASSERT_VALUES_EQUAL(restoredTypes.size(), 1);
             UNIT_ASSERT(restoredTypes.front() == logicalTypes.front());
         }
+
         UNIT_ASSERT(range.GetPredicateFrom().IsEqualPointTo(filter->begin()->GetPredicateFrom()));
         UNIT_ASSERT(range.GetPredicateTo().IsEqualPointTo(filter->begin()->GetPredicateTo()));
     }
 
-    Y_UNIT_TEST(ReadStartRoundTripAndWriteConflicts) {
+    Y_UNIT_TEST_TWIN(ReadStartRoundTripAndWriteConflicts, NumericComparison) {
+        const NArrow::TComparator comparator(
+            NumericComparison ? NArrow::EDecimalComparisonMode::Numeric : NArrow::EDecimalComparisonMode::Legacy);
         const std::vector<NScheme::TTypeInfo> logicalTypes = { NScheme::TTypeInfo(NScheme::TDecimalType(22, 9)),
             NScheme::TTypeInfo(NScheme::TDecimalType(35, 2)), NScheme::TTypeInfo(NScheme::NTypeIds::Uuid) };
         arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(16));
@@ -92,7 +106,7 @@ Y_UNIT_TEST_SUITE(TxEventLogicalTypes) {
         const auto schema = arrow::schema(
             { arrow::field("decimal1", values->type()), arrow::field("decimal2", values->type()), arrow::field("uuid", values->type()) });
         const auto batch = arrow::RecordBatch::Make(schema, 1, { values, values, values });
-        const auto filter = TPKRangesFilter::BuildFromRecordBatchLines(batch, logicalTypes);
+        const auto filter = TPKRangesFilter::BuildFromRecordBatchLines(batch, logicalTypes, comparator);
 
         arrow::UInt32Builder operationBuilder;
         UNIT_ASSERT(operationBuilder.Append(static_cast<ui32>(NKernels::EOperation::Equal)).ok());
@@ -101,7 +115,7 @@ Y_UNIT_TEST_SUITE(TxEventLogicalTypes) {
         const auto fullSchema =
             NArrow::TStatusValidator::GetValid(schema->AddField(schema->num_fields(), arrow::field(".ydb_operation_type", arrow::uint32())));
         const auto equalFilter =
-            TPKRangesFilter::BuildFromRecordBatchFull(arrow::RecordBatch::Make(fullSchema, 1, equalColumns), schema, logicalTypes);
+            TPKRangesFilter::BuildFromRecordBatchFull(arrow::RecordBatch::Make(fullSchema, 1, equalColumns), schema, logicalTypes, comparator);
         UNIT_ASSERT_VALUES_EQUAL(equalFilter->Size(), 1);
         UNIT_ASSERT(equalFilter->begin()->GetPredicateFrom().IsEqualPointTo(filter->begin()->GetPredicateFrom()));
         UNIT_ASSERT(equalFilter->begin()->GetPredicateTo().IsEqualPointTo(filter->begin()->GetPredicateTo()));
@@ -113,10 +127,10 @@ Y_UNIT_TEST_SUITE(TxEventLogicalTypes) {
         TTxEventContainer original(ReadLockId, std::make_shared<TEvReadStart>(pathId, schema, filter));
 
         TTxEventContainer restoredFromProto(ReadLockId);
-        UNIT_ASSERT(restoredFromProto.DeserializeFromProto(original.SerializeToProto(), logicalTypes));
+        UNIT_ASSERT(restoredFromProto.DeserializeFromProto(original.SerializeToProto(), logicalTypes, comparator));
         TTxEventContainer restoredFromString(ReadLockId);
         auto inputTypes = logicalTypes;
-        const auto status = restoredFromString.DeserializeFromString(original.SerializeToString(), inputTypes);
+        const auto status = restoredFromString.DeserializeFromString(original.SerializeToString(), inputTypes, comparator);
         UNIT_ASSERT_C(status.IsSuccess(), status.GetErrorMessage());
         inputTypes.clear();
 
@@ -128,12 +142,14 @@ Y_UNIT_TEST_SUITE(TxEventLogicalTypes) {
             for (const auto* predicate : { &range.GetPredicateFrom(), &range.GetPredicateTo() }) {
                 const auto& restoredTypes = predicate->GetSortableBatchPosition().GetSorting()->GetLogicalTypes();
                 UNIT_ASSERT(restoredTypes == logicalTypes);
+                UNIT_ASSERT(predicate->GetSortableBatchPosition().GetComparator() == comparator);
                 UNIT_ASSERT_VALUES_EQUAL(restoredTypes[0].GetDecimalType().GetPrecision(), 22);
                 UNIT_ASSERT_VALUES_EQUAL(restoredTypes[0].GetDecimalType().GetScale(), 9);
                 UNIT_ASSERT_VALUES_EQUAL(restoredTypes[1].GetDecimalType().GetPrecision(), 35);
                 UNIT_ASSERT_VALUES_EQUAL(restoredTypes[1].GetDecimalType().GetScale(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(restoredTypes[2].GetTypeId(), NScheme::NTypeIds::Uuid);
             }
+
             UNIT_ASSERT(range.GetPredicateFrom().IsEqualPointTo(filter->begin()->GetPredicateFrom()));
             UNIT_ASSERT(range.GetPredicateTo().IsEqualPointTo(filter->begin()->GetPredicateTo()));
         }
@@ -142,7 +158,7 @@ Y_UNIT_TEST_SUITE(TxEventLogicalTypes) {
         original.AddToInteraction(context);
         TTxConflicts conflicts;
         TTxConflicts notifications;
-        TEvWriteWriter writer(pathId.InternalPathId, batch, schema, logicalTypes);
+        TEvWriteWriter writer(pathId.InternalPathId, batch, schema, logicalTypes, comparator);
         UNIT_ASSERT(writer.CheckInteraction(WriteLockId, context, conflicts, notifications));
         const auto brokenLockIds = conflicts.GetBrokenTxIds(WriteLockId);
         UNIT_ASSERT_VALUES_EQUAL(brokenLockIds.size(), 1);

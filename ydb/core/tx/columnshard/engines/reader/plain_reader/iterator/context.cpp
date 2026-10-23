@@ -10,7 +10,8 @@ namespace NKikimr::NOlap::NReader::NPlain {
 std::unique_ptr<NArrow::NMerger::TMergePartialStream> TSpecialReadContext::BuildMerger() const {
     return std::make_unique<NArrow::NMerger::TMergePartialStream>(GetReadMetadata()->GetReplaceKey(), GetProgramInputColumns()->GetSchema(),
         GetCommonContext()->IsReverse(), IIndexInfo::GetSnapshotColumnNames(), std::nullopt, std::nullopt,
-        GetReadMetadata()->GetResultSchema()->GetIndexInfo().GetPrimaryKeyTypes(), IIndexInfo::GetSnapshotColumnTypes());
+        GetReadMetadata()->GetResultSchema()->GetIndexInfo().GetPrimaryKeyTypes(), IIndexInfo::GetSnapshotColumnTypes(),
+        GetReadMetadata()->GetResultSchema()->GetIndexInfo().GetComparator());
 }
 
 ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_ptr<const IDataSource>>& sources) {

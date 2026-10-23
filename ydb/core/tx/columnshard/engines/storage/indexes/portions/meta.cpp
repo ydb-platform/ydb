@@ -30,7 +30,7 @@ TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> TIndexByC
         columnReaders.emplace_back(it->second, indexInfo.GetColumnLoaderVerified(i));
     }
     TChunkedBatchReader reader(std::move(columnReaders));
-    return DoBuildIndexImpl(reader, recordsCount, indexInfo.GetColumnFeaturesVerified(GetColumnId()).GetTypeInfo());
+    return DoBuildIndexImpl(reader, recordsCount, indexInfo.GetColumnFeaturesVerified(GetColumnId()).GetTypeInfo(), indexInfo.GetComparator());
 }
 
 bool TIndexByColumns::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& /*proto*/) {

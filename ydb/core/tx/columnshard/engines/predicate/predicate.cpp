@@ -21,7 +21,7 @@ std::vector<TString> TPredicate::ColumnNames() const {
 }
 
 NArrow::NMerger::TSortableBatchPosition TPredicate::CutNulls(const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 rowIdx,
-    const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+    const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<NScheme::TTypeInfo>& logicalTypes, const NArrow::TComparator& comparator) {
     AFL_VERIFY(logicalTypes.size() == (size_t)pkSchema->num_fields());
     AFL_VERIFY((i64)rowIdx < batch->num_rows())("idx", rowIdx)("count", batch->num_rows());
     std::vector<std::string> colsNotNull;
@@ -33,7 +33,7 @@ NArrow::NMerger::TSortableBatchPosition TPredicate::CutNulls(const std::shared_p
     }
     AFL_VERIFY(colsNotNull.size());
     return NArrow::NMerger::TSortableBatchPosition(batch, rowIdx, colsNotNull, std::vector<std::string>(), false,
-        std::vector<NScheme::TTypeInfo>(logicalTypes.begin(), logicalTypes.begin() + colsNotNull.size()));
+        std::vector<NScheme::TTypeInfo>(logicalTypes.begin(), logicalTypes.begin() + colsNotNull.size()), comparator);
 }
 
 bool TPredicate::IsEqualSchema(const std::shared_ptr<arrow::Schema>& schema) const {

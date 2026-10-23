@@ -75,7 +75,7 @@ private:
     void HandleWakeup();
 
 private:
-    static NArrow::NMerger::TCursor GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId);
+    static NArrow::NMerger::TCursor GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId, const NArrow::TComparator& comparator);
     static std::shared_ptr<TPortionStore> MakePortionsIndex(const std::deque<std::shared_ptr<TPortionInfo>>& portions);
     bool IsExclusiveInterval(const ui64 portionId) const;
 

@@ -2,6 +2,7 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/conclusion/result.h>
+#include <ydb/library/formats/arrow/switch/compare.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
@@ -166,7 +167,7 @@ public:
     [[nodiscard]] TConclusionStatus AddToBuilders(
         const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const std::shared_ptr<arrow::Schema>& schema) const;
     [[nodiscard]] TConclusion<std::partial_ordering> Compare(const TSimpleRowViewV0& item, const arrow::Schema& schema,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes, const std::optional<ui32> columnsCount = {}) const;
+        const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator, const std::optional<ui32> columnsCount = {}) const;
     [[nodiscard]] TConclusion<TString> DebugString(const std::shared_ptr<arrow::Schema>& schema) const;
 
     template <class T>

@@ -60,7 +60,8 @@ private:
                                                                                  "type", Source->GetType());
             const auto firstPK = Source->GetAs<IDataSource>()->GetFirstPK();
             auto batch = firstPK.ToBatch();
-            SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, 0, Reverse, firstPK.GetLogicalTypes());
+            SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(
+                batch, 0, Reverse, firstPK.GetLogicalTypes(), firstPK.GetComparator());
         }
 
         TSourceIterator(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& arrs,
@@ -78,9 +79,10 @@ private:
             auto prefixSchema = Source->GetSourceSchema()->GetIndexInfo().GetReplaceKeyPrefix(arrs.size());
             auto copyArrs = arrs;
             auto batch = std::make_shared<NArrow::TGeneralContainer>(prefixSchema->fields(), std::move(copyArrs));
-            SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(
-                batch, Start, Reverse, std::vector<NScheme::TTypeInfo>(Source->GetSourceSchema()->GetIndexInfo().GetPrimaryKeyTypes().begin(),
-                                           Source->GetSourceSchema()->GetIndexInfo().GetPrimaryKeyTypes().begin() + arrs.size()));
+            SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, Start, Reverse,
+                std::vector<NScheme::TTypeInfo>(Source->GetSourceSchema()->GetIndexInfo().GetPrimaryKeyTypes().begin(),
+                    Source->GetSourceSchema()->GetIndexInfo().GetPrimaryKeyTypes().begin() + arrs.size()),
+                Source->GetSourceSchema()->GetIndexInfo().GetComparator());
             IsValidFlag = ShiftWithFilter();
         }
 

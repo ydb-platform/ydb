@@ -38,20 +38,22 @@ TConclusion<TString> TRowsCollection::DebugString(const std::shared_ptr<arrow::S
     return TString(str.data(), str.size());
 }
 
-TSimpleRow TRowsCollection::GetFirst(const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
+TSimpleRow TRowsCollection::GetFirst(
+    const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator) const {
     AFL_VERIFY(RawData.size());
-    return TSimpleRow(RawData.front(), schema, logicalTypes);
+    return TSimpleRow(RawData.front(), schema, logicalTypes, comparator);
 }
 
-TSimpleRow TRowsCollection::GetLast(const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
+TSimpleRow TRowsCollection::GetLast(
+    const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator) const {
     AFL_VERIFY(RawData.size());
-    return TSimpleRow(RawData.back(), schema, logicalTypes);
+    return TSimpleRow(RawData.back(), schema, logicalTypes, comparator);
 }
 
-TSimpleRow TRowsCollection::GetRecord(
-    const ui32 recordIndex, const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
+TSimpleRow TRowsCollection::GetRecord(const ui32 recordIndex, const std::shared_ptr<arrow::Schema>& schema,
+    const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator) const {
     AFL_VERIFY(recordIndex < RawData.size());
-    return TSimpleRow(RawData[recordIndex], schema, logicalTypes);
+    return TSimpleRow(RawData[recordIndex], schema, logicalTypes, comparator);
 }
 
 }   // namespace NKikimr::NArrow

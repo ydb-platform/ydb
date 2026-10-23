@@ -22,8 +22,9 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
     auto iteratorAt = [&](const TPredicateContainer& pred, const ui64 atPos) {
         std::vector<std::string> cols = pred.GetColumnNames();
         const auto& logicalTypes = pred.GetSortableBatchPosition().GetSorting()->GetLogicalTypes();
-        auto it = cols.empty() ? NArrow::NMerger::TRWSortableBatchPosition(data, 0, false, logicalTypes)
-                               : NArrow::NMerger::TRWSortableBatchPosition(data, 0, cols, {}, false, logicalTypes);
+        const auto& comparator = pred.GetSortableBatchPosition().GetComparator();
+        auto it = cols.empty() ? NArrow::NMerger::TRWSortableBatchPosition(data, 0, false, logicalTypes, comparator)
+                               : NArrow::NMerger::TRWSortableBatchPosition(data, 0, cols, {}, false, logicalTypes, comparator);
         AFL_VERIFY(it.InitPosition(static_cast<i64>(atPos)))("atPos", atPos)("recordsCount", recordsCount);
         return it;
     };
@@ -188,18 +189,18 @@ std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(cons
     return arrow::RecordBatch::Make(fullSchema, SortedRanges.size() * 2, NArrow::Finish(std::move(builders)));
 }
 
-std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecordBatchLines(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecordBatchLines(const std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::vector<NScheme::TTypeInfo>& logicalTypes, const NArrow::TComparator& comparator) {
     std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>(TPKRangesFilter(batch));
     for (ui32 i = 0; i < batch->num_rows(); ++i) {
-        NArrow::NMerger::TSortableBatchPosition batchRow(batch, i, false, logicalTypes);
+        NArrow::NMerger::TSortableBatchPosition batchRow(batch, i, false, logicalTypes, comparator);
         result->Add(TPredicate(NKernels::EOperation::GreaterEqual, batchRow), TPredicate(NKernels::EOperation::LessEqual, batchRow)).Validate();
     }
     return result;
 }
 
 std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecordBatchFull(const std::shared_ptr<arrow::RecordBatch>& batch,
-    const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+    const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<NScheme::TTypeInfo>& logicalTypes, const NArrow::TComparator& comparator) {
     std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>(TPKRangesFilter(batch));
     auto pkBatch = NArrow::TColumnOperator().Adapt(batch, pkSchema).DetachResult();
     auto c = batch->GetColumnByName(".ydb_operation_type");
@@ -228,7 +229,7 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
     };
     for (ui32 i = 0; i < batch->num_rows();) {
         NOlap::TPredicate pFrom = [&]() {
-            auto batchRow = TPredicate::CutNulls(batch, i, pkSchema, logicalTypes);
+            auto batchRow = TPredicate::CutNulls(batch, i, pkSchema, logicalTypes, comparator);
             const auto op = decodeOperation(cUi32->Value(i));
             if (op != NKernels::EOperation::Equal) {
                 ++i;
@@ -242,7 +243,7 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
             }
         }();
         NOlap::TPredicate pTo = [&]() {
-            auto batchRow = TPredicate::CutNulls(batch, i, pkSchema, logicalTypes);
+            auto batchRow = TPredicate::CutNulls(batch, i, pkSchema, logicalTypes, comparator);
             const auto op = decodeOperation(cUi32->Value(i));
             ++i;
             if (op == NKernels::EOperation::LessEqual || op == NKernels::EOperation::Less) {
@@ -258,19 +259,19 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
     return result;
 }
 
-std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromString(
-    const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<NScheme::TTypeInfo>& logicalTypes) {
+std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromString(const TString& data,
+    const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<NScheme::TTypeInfo>& logicalTypes, const NArrow::TComparator& comparator) {
     auto batch = NArrow::TStatusValidator::GetValid(NArrow::NSerialization::TNativeSerializer().Deserialize(data));
-    return BuildFromRecordBatchFull(batch, pkSchema, logicalTypes);
+    return BuildFromRecordBatchFull(batch, pkSchema, logicalTypes, comparator);
 }
 
 TString TPKRangesFilter::SerializeToString(const std::shared_ptr<arrow::Schema>& pkSchema) const {
     return NArrow::NSerialization::TNativeSerializer().SerializeFull(SerializeToRecordBatch(pkSchema));
 }
 
-TConclusion<TPKRangesFilter> TPKRangesFilter::BuildFromProto(
-    const NKikimrTxDataShard::TEvKqpScan& proto, const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk) {
-    TRangesBuilder builder(ydbPk, arrPk);
+TConclusion<TPKRangesFilter> TPKRangesFilter::BuildFromProto(const NKikimrTxDataShard::TEvKqpScan& proto,
+    const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk, const NArrow::TComparator& comparator) {
+    TRangesBuilder builder(ydbPk, arrPk, comparator);
     for (const auto& range : proto.GetRanges()) {
         builder.AddRange(TSerializedTableRange(range));
     }
@@ -325,7 +326,8 @@ TConclusion<TPKRangesFilter> TRangesBuilder::Finish() {
     TPKRangesFilter result(batch);
     auto fieldNames = ArrPK->field_names();
     for (const auto& range : RangesInfo) {
-        auto status = result.Add(range.first.BuildPredicate(ArrPK, batch, YdbPK), range.second.BuildPredicate(ArrPK, batch, YdbPK));
+        auto status = result.Add(
+            range.first.BuildPredicate(ArrPK, batch, YdbPK, Comparator), range.second.BuildPredicate(ArrPK, batch, YdbPK, Comparator));
         if (status.IsFail()) {
             return status;
         }

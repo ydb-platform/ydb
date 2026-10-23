@@ -82,15 +82,30 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
         }
     };
 
+    auto getComparator = [](const TPositionVariant& pos) -> const NArrow::TComparator& {
+        switch (pos.index()) {
+            case StartPortionInfo:
+                return std::get<StartPortionInfo>(pos)->GetMeta().GetComparator();
+            case EndPortionInfo:
+                return std::get<EndPortionInfo>(pos)->GetMeta().GetComparator();
+            case SimpleRow:
+                return std::get<SimpleRow>(pos).GetComparator();
+            default:
+                AFL_VERIFY(false)("pos.index()", pos.index());
+        }
+    };
+
     const auto& lhsSchema = getSchema(Position);
     const auto& rhsSchema = getSchema(rhs.Position);
 
     const auto& lhsTypes = getLogicalTypes(Position);
     const auto& rhsTypes = getLogicalTypes(rhs.Position);
+    const auto& comparator = getComparator(Position);
     const bool lhsShorter = lhsSchema->num_fields() <= rhsSchema->num_fields();
+    AFL_VERIFY_DEBUG(comparator.IsCompatibleWith(getComparator(rhs.Position), lhsShorter ? lhsTypes : rhsTypes));
     AFL_VERIFY_DEBUG(std::equal(lhsTypes.begin(), lhsTypes.begin() + std::min(lhsTypes.size(), rhsTypes.size()), rhsTypes.begin()));
     return getKeyView(Position)
-        .Compare(getKeyView(rhs.Position), lhsShorter ? *lhsSchema : *rhsSchema, lhsShorter ? lhsTypes : rhsTypes)
+        .Compare(getKeyView(rhs.Position), lhsShorter ? *lhsSchema : *rhsSchema, lhsShorter ? lhsTypes : rhsTypes, comparator)
         .GetResult();
 }
 

@@ -10,7 +10,8 @@ NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(const ui64 tabletId, const ui6
     writer.Append<ui64>(tabletId);
     writer.Append<ui64>(presetId);
     writer.Append<ui64>(schemaVersion);
-    return NArrow::TSimpleRow(writer.Finish(), GetPKSchema(), std::vector<NScheme::TTypeInfo>(3, NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)));
+    return NArrow::TSimpleRow(writer.Finish(), GetPKSchema(), std::vector<NScheme::TTypeInfo>(3, NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)),
+        NArrow::TComparator(NArrow::EDecimalComparisonMode::Legacy));
 }
 
 const std::shared_ptr<arrow::Schema>& TSchemaAdapter::GetPKSchema() {

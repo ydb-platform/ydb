@@ -747,8 +747,8 @@ public:
         , Others(Counters, GetCommonFreshnessCheckDuration())
     {
         if (MainPortion) {
-            NArrow::NMerger::TSortableBatchPosition sBatchPosition(
-                MainPortion->IndexKeyStart().ToBatch(), 0, pkSchema->field_names(), {}, false, MainPortion->GetMeta().GetPKTypes());
+            NArrow::NMerger::TSortableBatchPosition sBatchPosition(MainPortion->IndexKeyStart().ToBatch(), 0, pkSchema->field_names(), {}, false,
+                MainPortion->GetMeta().GetPKTypes(), MainPortion->GetMeta().GetComparator());
             StartPos = std::move(sBatchPosition);
             Counters->PortionsAlone->AddPortion(MainPortion);
         }
@@ -885,18 +885,18 @@ public:
         TSaverContext saverContext(storagesManager);
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         if (MainPortion) {
-            NArrow::NMerger::TSortableBatchPosition pos(
-                MainPortion->IndexKeyStart().ToBatch(), 0, primaryKeysSchema->field_names(), {}, false, MainPortion->GetMeta().GetPKTypes());
+            NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyStart().ToBatch(), 0, primaryKeysSchema->field_names(), {}, false,
+                MainPortion->GetMeta().GetPKTypes(), MainPortion->GetMeta().GetComparator());
             result->AddCheckPoint(pos, false);
         }
         if (!nextBorder && MainPortion && !forceMergeForTests) {
-            NArrow::NMerger::TSortableBatchPosition pos(
-                MainPortion->IndexKeyEnd().ToBatch(), 0, primaryKeysSchema->field_names(), {}, false, MainPortion->GetMeta().GetPKTypes());
+            NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyEnd().ToBatch(), 0, primaryKeysSchema->field_names(), {}, false,
+                MainPortion->GetMeta().GetPKTypes(), MainPortion->GetMeta().GetComparator());
             result->AddCheckPoint(pos, true);
         }
         if (stopPoint) {
             NArrow::NMerger::TSortableBatchPosition pos(
-                stopPoint->ToBatch(), 0, primaryKeysSchema->field_names(), {}, false, stopPoint->GetLogicalTypes());
+                stopPoint->ToBatch(), 0, primaryKeysSchema->field_names(), {}, false, stopPoint->GetLogicalTypes(), stopPoint->GetComparator());
             result->AddCheckPoint(pos, false);
         }
         return { result };

@@ -117,6 +117,7 @@ class TCompareActor {
 private:
     const std::optional<std::string_view> ItemView;
     const NScheme::TTypeInfo& LogicalType;
+    const TComparator& Comparator;
     YDB_READONLY(std::partial_ordering, Result, std::partial_ordering::equivalent);
 
 public:
@@ -135,7 +136,8 @@ public:
             Result = std::partial_ordering::greater;
             return false;
         }
-        Result = TComparator::CompareValueNotNull(
+
+        Result = Comparator.CompareValueNotNull(
             arrow::util::string_view(data, size), arrow::util::string_view(ItemView->data(), ItemView->size()), LogicalType);
         return false;
     }
@@ -146,8 +148,9 @@ public:
             Result = std::partial_ordering::greater;
             return false;
         }
+
         AFL_VERIFY(ItemView->size() == sizeof(CType));
-        Result = TComparator::CompareValueNotNull(value, ReadUnaligned<CType>(ItemView->data()), LogicalType);
+        Result = Comparator.CompareValueNotNull(value, ReadUnaligned<CType>(ItemView->data()), LogicalType);
         // Packed rows historically treat unordered floating-point values as equivalent.
         if (Result == std::partial_ordering::unordered) {
             Result = std::partial_ordering::equivalent;
@@ -155,14 +158,16 @@ public:
         return false;
     }
 
-    TCompareActor(const std::optional<std::string_view>& itemView, const NScheme::TTypeInfo& logicalType)
+    TCompareActor(const std::optional<std::string_view>& itemView, const NScheme::TTypeInfo& logicalType, const TComparator& comparator)
         : ItemView(itemView)
-        , LogicalType(logicalType) {
+        , LogicalType(logicalType)
+        , Comparator(comparator)
+    {
     }
 };
 
 TConclusion<std::partial_ordering> TSimpleRowViewV0::Compare(const TSimpleRowViewV0& item, const arrow::Schema& schema,
-    const std::vector<NScheme::TTypeInfo>& logicalTypes, const std::optional<ui32> columnsCount) const {
+    const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator, const std::optional<ui32> columnsCount) const {
     AFL_VERIFY(logicalTypes.size() == (size_t)schema.num_fields());
     AFL_VERIFY(!columnsCount || *columnsCount <= (ui32)schema.num_fields());
     TIterator itSelf(Values, schema);
@@ -185,7 +190,7 @@ TConclusion<std::partial_ordering> TSimpleRowViewV0::Compare(const TSimpleRowVie
     while (!itSelf.IsFinished()) {
         AFL_VERIFY(!itItem.IsFinished());
 
-        TCompareActor customActor(itItem.GetCurrentValue(), logicalTypes[columnIndex++]);
+        TCompareActor customActor(itItem.GetCurrentValue(), logicalTypes[columnIndex++], comparator);
         TGeneralActor<TCompareActor> actor(std::move(customActor));
         Y_UNUSED(itSelf.ApplyActor(actor));
         if (actor.GetCustomActor().GetResult() != std::partial_ordering::equivalent) {

@@ -188,7 +188,8 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
             const std::vector<TString> data = accessor.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
             if (!data.empty()) {
                 const auto& column = portionSchema->GetIndexInfo().GetColumnFeaturesVerified(*TieringColumnId);
-                max = indexMeta->GetMaxScalarVerified(data, column.GetArrowField()->type(), column.GetTypeInfo());
+                max = indexMeta->GetMaxScalarVerified(
+                    data, column.GetArrowField()->type(), column.GetTypeInfo(), portionSchema->GetIndexInfo().GetComparator());
             }
         }
         if (max == nullptr) {

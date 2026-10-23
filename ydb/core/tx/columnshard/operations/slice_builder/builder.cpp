@@ -160,7 +160,7 @@ void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             NArrow::TColumnOperator().Extract(OriginalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
         auto batches = NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInIntervalPositions(OriginalBatch,
             Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->field_names(), WriteData.GetData()->GetSeparationPoints(),
-            Context.GetActualSchema()->GetIndexInfo().GetPrimaryKeyTypes());
+            Context.GetActualSchema()->GetIndexInfo().GetPrimaryKeyTypes(), Context.GetActualSchema()->GetIndexInfo().GetComparator());
         NColumnShard::TWriteResult wResult(WriteData.GetWriteMetaPtr(), WriteData.GetSize(), pkBatch, false, OriginalBatch->num_rows());
         std::vector<TPortionWriteController::TInsertPortion> portions;
         ISnapshotSchema::TWriteBlobPrepareStats totalStats;

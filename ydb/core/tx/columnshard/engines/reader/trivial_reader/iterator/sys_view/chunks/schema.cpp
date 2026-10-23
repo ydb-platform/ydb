@@ -18,10 +18,10 @@ NArrow::TSimpleRow TSchemaAdapter::GetPKTrivialRow(
     writer.Append<ui64>(portionId);
     writer.Append<ui32>(entityId);
     writer.Append<ui64>(chunkIdx);
-    return NArrow::TSimpleRow(
-        writer.Finish(), GetPKSchema(), { NScheme::TTypeInfo(NScheme::NTypeIds::Uint64), NScheme::TTypeInfo(NScheme::NTypeIds::Uint64),
-                                            NScheme::TTypeInfo(NScheme::NTypeIds::Uint64), NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
-                                            NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) });
+    return NArrow::TSimpleRow(writer.Finish(), GetPKSchema(),
+        { NScheme::TTypeInfo(NScheme::NTypeIds::Uint64), NScheme::TTypeInfo(NScheme::NTypeIds::Uint64),
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uint64), NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) }, NArrow::TComparator(NArrow::EDecimalComparisonMode::Legacy));
 }
 
 const std::shared_ptr<arrow::Schema>& TSchemaAdapter::GetPKSchema() {

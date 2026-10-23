@@ -19,7 +19,7 @@ protected:
 
     bool DeserializeFromString(const TString& data);
 
-    TSimpleRow GetKeyByIndex(const ui32 position, const std::vector<NScheme::TTypeInfo>& logicalTypes) const;
+    TSimpleRow GetKeyByIndex(const ui32 position, const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator) const;
 
     TSpecialKeys() = default;
     TSpecialKeys(const std::shared_ptr<arrow::RecordBatch>& data) {
@@ -42,19 +42,19 @@ public:
         , Rows(rows) {
     }
 
-    TSimpleRow GetFirst(const std::vector<NScheme::TTypeInfo>& logicalTypes, const bool reverse = false) const {
+    TSimpleRow GetFirst(const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator, const bool reverse = false) const {
         if (reverse) {
-            return Rows.GetLast(Schema, logicalTypes);
+            return Rows.GetLast(Schema, logicalTypes, comparator);
         } else {
-            return Rows.GetFirst(Schema, logicalTypes);
+            return Rows.GetFirst(Schema, logicalTypes, comparator);
         }
     }
 
-    TSimpleRow GetLast(const std::vector<NScheme::TTypeInfo>& logicalTypes, const bool reverse = false) const {
+    TSimpleRow GetLast(const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator, const bool reverse = false) const {
         if (reverse) {
-            return Rows.GetFirst(Schema, logicalTypes);
+            return Rows.GetFirst(Schema, logicalTypes, comparator);
         } else {
-            return Rows.GetLast(Schema, logicalTypes);
+            return Rows.GetLast(Schema, logicalTypes, comparator);
         }
     }
 
@@ -112,12 +112,12 @@ protected:
     }
 
 public:
-    TSimpleRow GetMin(const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
-        return GetFirst(logicalTypes);
+    TSimpleRow GetMin(const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator) const {
+        return GetFirst(logicalTypes, comparator);
     }
 
-    TSimpleRow GetMax(const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
-        return GetLast(logicalTypes);
+    TSimpleRow GetMax(const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator) const {
+        return GetLast(logicalTypes, comparator);
     }
 
     explicit TMinMaxSpecialKeys(const TString& data);
@@ -126,7 +126,7 @@ public:
     }
 
     explicit TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::shared_ptr<arrow::Schema>& schema,
-        const std::vector<NScheme::TTypeInfo>& logicalTypes);
+        const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator);
 };
 
 }   // namespace NKikimr::NArrow

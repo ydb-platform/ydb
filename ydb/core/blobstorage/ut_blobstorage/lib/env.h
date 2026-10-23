@@ -72,6 +72,8 @@ struct TEnvironmentSetup {
         const ui64 PDiskChunkSize = 0;
         const bool TrackSharedQuotaInPDiskMock = false;
         const bool ReportVDiskMetricsInPDiskMock = false;
+        // Mock PDisks lay data chunks out in encrypted sectors and hand out the format context, as a real PDisk does.
+        const bool SectorFormatInPDiskMock = false;
         const bool SelfManagementConfig = false;
         const bool EnableDeepScrubbing = false;
         const ui32 NumPiles = 0;
@@ -303,7 +305,8 @@ struct TEnvironmentSetup {
                         metadata = std::make_shared<TPDiskMockState::TMetadata>();
                     }
                     auto state = MakeIntrusive<TPDiskMockState>(nodeId, pdiskId, cfg.PDiskGuid,
-                        Settings.PDiskSize, chunkSize, cfg.ReadOnly, Settings.DiskType, policy, metadata);
+                        Settings.PDiskSize, chunkSize, cfg.ReadOnly, Settings.DiskType, policy, metadata,
+                        Settings.SectorFormatInPDiskMock);
                     state->SetReportVDiskMetrics(Settings.ReportVDiskMetricsInPDiskMock);
                     return state;
                 },

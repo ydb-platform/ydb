@@ -1078,6 +1078,52 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
     }
 
+    // After an ALTER replaces the object key prefixes of the tiers of one external data source, data evicted under the
+    // old prefix stays there while its tier still matches; once the data is due for a later tier of the same source,
+    // it must move there.
+    Y_UNIT_TEST(PrefixChangeThenLaterTierOfSameSource) {
+        TTieringTestHelper tieringHelper{true, [](TKikimrSettings& settings) {
+            settings.FeatureFlags.SetEnableTieringObjectKeyTree(true);
+        }};
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        auto countKeys = [](const TString& prefix) {
+            ui32 result = 0;
+            for (const auto& [key, _] : Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-" + DEFAULT_TIER_NAME)) {
+                result += key.StartsWith(prefix) ? 1 : 0;
+            }
+            return result;
+        };
+        auto alterTtl = [&](const TString& tiers) {
+            const auto result = testHelper.GetSession().ExecuteSchemeQuery(TStringBuilder()
+                << "ALTER TABLE `" << DEFAULT_TABLE_PATH << "` SET TTL " << tiers << " ON " << DEFAULT_COLUMN_NAME << ";").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+
+        olapHelper.CreateTestOlapTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        // The sample data is from 1970, so it is due for every tier below.
+        tieringHelper.WriteSampleData();
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        alterTtl(TStringBuilder() << "Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "`.`old`");
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+        UNIT_ASSERT_GT(countKeys("old/"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(countKeys("cold/"), 0);
+
+        alterTtl(TStringBuilder() << "Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "`.`new`, "
+                                  << "Interval(\"P20D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "`.`cold`");
+        csController->WaitActualization(TDuration::Seconds(5));
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(60);
+        while (!countKeys("cold/") && TInstant::Now() < deadline) {
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_GT_C(countKeys("cold/"), 0, "data due for the `cold` tier stayed under the old prefix");
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+    }
+
     Y_UNIT_TEST(TieringViaIndex, ELocalIndexAsSchemeObject) {
         const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         TTieringTestHelper tieringHelper{localIndexAsSchemeObject};

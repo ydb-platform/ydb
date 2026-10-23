@@ -6913,6 +6913,10 @@ FROM (
         RunTPCH_YqlSingleQueryTest(9, true);
     }
 
+    Y_UNIT_TEST(TPCH_20) {
+        RunTPCH_YqlSingleQueryTest(20, true);
+    }
+
     void RunPerf_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore, const bool newRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);

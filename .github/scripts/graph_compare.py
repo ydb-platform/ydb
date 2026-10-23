@@ -29,7 +29,6 @@ def main(ya_make_command: str, graph_path: str, context_path: str, base_commit: 
         # Prefer job TMP_DIR (cleaned after test_ya) over system /tmp.
         parent = os.getenv('TMP_DIR')
         if parent:
-            os.makedirs(parent, exist_ok=True)
             workdir = tempfile.mkdtemp(prefix='graph_compare_', dir=parent)
         else:
             workdir = tempfile.mkdtemp()

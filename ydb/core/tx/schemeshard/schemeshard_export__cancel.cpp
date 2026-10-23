@@ -176,7 +176,8 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
                 continue;
             }
 
-            if (item.WaitTxId != InvalidTxId) {
+            // A proposed backup can still be accepted after another item's cancellation
+            if (item.WaitTxId != InvalidTxId || item.SubState == TExportInfo::TItem::ESubState::Proposed) {
                 ++cancellableItems;
             }
 

@@ -7,6 +7,13 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+TString ComputeIndexItemSuffix(
+    const NKikimrSchemeOp::TBackupTask* snapshot,
+    const NKikimrSchemeOp::TPathDescription& sourceDescription,
+    const TString& indexImplTablePath,
+    bool encrypted
+);
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
     TSchemeShard* ss,
     TTxId txId,
@@ -23,7 +30,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo,
-    ui32 itemIdx
+    ui32 itemIdx,
+    TString& error
 );
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(

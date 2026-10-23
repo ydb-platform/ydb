@@ -1,4 +1,5 @@
 #include "schemeshard_path_describer.h"
+#include "schemeshard_backup_scheme_snapshot.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/public/api/protos/annotations/sensitive.pb.h>
@@ -1523,6 +1524,90 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     NKikimrSchemeOp::TDescribeOptions options;
     options.SetShowPrivateTable(true);
     return DescribePath(self, ctx, path, options);
+}
+
+bool MakeBackupTableSchemeSnapshot(
+    TSchemeShard* self,
+    const TActorContext& ctx,
+    const TPathId& sourcePathId,
+    NKikimrSchemeOp::TBackupTask& snapshot,
+    TString& error
+) {
+    snapshot.Clear();
+    error.clear();
+
+    NKikimrSchemeOp::TDescribeOptions options;
+    options.SetReturnPartitioningInfo(false);
+    options.SetReturnPartitionConfig(true);
+    options.SetReturnBoundaries(true);
+    options.SetReturnIndexTableBoundaries(true);
+    options.SetShowPrivateTable(true);
+
+    const TPath sourcePath = TPath::Init(sourcePathId, self);
+    if (!sourcePath.IsResolved() || sourcePath.IsDeleted()) {
+        error = TStringBuilder() << "Cannot capture backup scheme snapshot: source path is not resolved, pathId: " << sourcePathId;
+        return false;
+    }
+
+    auto describe = [&](const TPathId& pathId, TStringBuf object, NKikimrSchemeOp::TPathDescription& description) {
+        auto result = DescribePath(self, ctx, pathId, options);
+        const auto& record = result->GetRecord();
+        if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
+            error = TStringBuilder() << "Cannot capture backup scheme snapshot: failed to describe " << object
+                << ", pathId: " << pathId
+                << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
+                << ", reason: " << record.GetReason();
+            return false;
+        }
+
+        description.CopyFrom(record.GetPathDescription());
+        return true;
+    };
+
+    NKikimrSchemeOp::TPathDescription sourceDescription;
+    if (!describe(sourcePathId, "source table", sourceDescription)) {
+        return false;
+    }
+    if (!sourceDescription.HasTable() && !sourceDescription.HasColumnTableDescription()) {
+        error = "Cannot capture backup scheme snapshot: source description does not contain a table";
+        return false;
+    }
+
+    snapshot.SetTableName(sourcePath.LeafName());
+
+    if (sourceDescription.HasTable()) {
+        for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
+            const int topicCount = snapshot.GetChangefeedUnderlyingTopics().size();
+            NKikimrSchemeOp::TPathDescription cdcDescription;
+            if (!describe(TPathId::FromProto(cdcStream.GetPathId()), "changefeed", cdcDescription)) {
+                return false;
+            }
+
+            for (const auto& child : cdcDescription.GetChildren()) {
+                if (child.GetPathType() != NKikimrSchemeOp::EPathTypePersQueueGroup) {
+                    continue;
+                }
+
+                NKikimrSchemeOp::TPathDescription topicDescription;
+                if (!describe(TPathId(child.GetSchemeshardId(), child.GetPathId()), "changefeed topic", topicDescription)) {
+                    return false;
+                }
+                if (!topicDescription.HasPersQueueGroup()) {
+                    error = "Cannot capture backup scheme snapshot: changefeed topic description is missing";
+                    return false;
+                }
+
+                snapshot.AddChangefeedUnderlyingTopics()->Swap(&topicDescription);
+            }
+            if (snapshot.GetChangefeedUnderlyingTopics().size() != topicCount + 1) {
+                error = TStringBuilder() << "Cannot capture backup scheme snapshot: expected one topic for changefeed " << cdcStream.GetName();
+                return false;
+            }
+        }
+    }
+
+    snapshot.MutableTable()->Swap(&sourceDescription);
+    return true;
 }
 
 void TSchemeShard::DescribeTable(

@@ -1,7 +1,5 @@
 #include "controller_impl.h"
 
-#include <util/generic/mapfindptr.h>
-
 #include <variant>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
@@ -77,9 +75,7 @@ public:
             {"allocated", Self->AllocatedTxIds.size()});
 
         const auto replication = Self->GetSingle();
-        if (replication && Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())
-            && !Self->DrainStateByReplicationId.contains(replication->GetId()))
-        {
+        if (replication && Self->IsStoppedAfterSourceOffsetMismatch(replication->GetId())) {
             Self->PendingTxId.clear();
             return true;
         }
@@ -198,7 +194,7 @@ public:
 void TController::AllocateTxIds(const TActorContext& ctx) {
     const auto replication = GetSingle();
     if (replication && ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
-        const auto* drain = MapFindPtr(DrainStateByReplicationId, replication->GetId());
+        const auto* drain = DrainStateByReplicationId.FindPtr(replication->GetId());
         // Only refill when admitted writers are waiting during the drain.
         if (!drain || ctx.Now() >= drain->Deadline || (PendingTxId.empty() && PendingIndexTxIds.empty())) {
             return;

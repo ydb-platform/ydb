@@ -229,16 +229,14 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     THolder<NKikimrReplication::TEvSourceOffsetReport> MakeSourceOffsetReport() {
-        auto request = MakeHolder<NKikimrReplication::TEvSourceOffsetReport>();
-        request->SetWorkerInstance(ToString(SelfId()));
-        request->SetRequestId(++SourceOffsetReportId);
-        return request;
+        ++SourceOffsetReportId;
+        return MakeHolder<NKikimrReplication::TEvSourceOffsetReport>();
     }
 
     void SendSourceOffsetReport(const NKikimrReplication::TEvSourceOffsetReport& request) {
         auto ev = MakeHolder<TEvService::TEvSourceOffsetReport>();
         ev->Record.CopyFrom(request);
-        Send(Parent, std::move(ev));
+        Send(Parent, std::move(ev), 0, SourceOffsetReportId);
     }
 
     void ProcessSourceActions() {
@@ -265,9 +263,13 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
     }
 
+    void AdvanceProcessedSourceOffset(ui64 offset) {
+        ProcessedSourceOffset = Max(ProcessedSourceOffset.GetOrElse(0), offset);
+    }
+
     void AuthorizeSource(TMaybe<ui64> offset, THolder<IEventBase> event) {
-        if (offset && (!ProcessedSourceOffset || *offset > *ProcessedSourceOffset)) {
-            ProcessedSourceOffset = offset;
+        if (offset) {
+            AdvanceProcessedSourceOffset(*offset);
         }
         SourceActions.push_back({offset, std::move(event)});
         ProcessSourceActions();
@@ -281,6 +283,22 @@ class TWorker: public TActorBootstrapped<TWorker> {
         AuthorizeSource(offset, MakeHolder<TEvWorker::TEvCommit>(offset));
     }
 
+    bool CommitPendingSourceOffset() {
+        if (!ReaderSessionStarted) {
+            return false;
+        }
+        if (PendingSchemaChange && !SchemaReportCommitted) {
+            CommitSource(PendingSchemaChange->Offset);
+        } else if (PendingSchemaChange && SchemaAdvanceInFlight) {
+            CommitSource(PendingSchemaChange->Offset + 1);
+        } else if (PendingWriterCheckpoint) {
+            CommitSource(*PendingWriterCheckpoint);
+        } else {
+            return false;
+        }
+        return true;
+    }
+
     void StartValidatedReader() {
         if (!Reader || !ReaderValidated || Draining) {
             return;
@@ -290,13 +308,10 @@ class TWorker: public TActorBootstrapped<TWorker> {
         {
             ReportRecoveredCompletion();
         }
-        if (PendingSchemaChange && !SchemaReportCommitted) {
-            CommitSource(PendingSchemaChange->Offset);
-        } else if (PendingSchemaChange && SchemaAdvanceInFlight) {
-            CommitSource(PendingSchemaChange->Offset + 1);
-        } else if (PendingWriterCheckpoint) {
-            CommitSource(*PendingWriterCheckpoint);
-        } else if (!InFlightData && !TerminateWriter && !ReadRequested && SourceActions.empty()) {
+        if (CommitPendingSourceOffset()) {
+            return;
+        }
+        if (!InFlightData && !TerminateWriter && !ReadRequested && SourceActions.empty()) {
             PollSource();
         } else {
             ProcessSourceActions();
@@ -305,17 +320,14 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
     void Handle(TEvService::TEvSourceOffsetResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
-        if (record.GetWorkerInstance() != ToString(SelfId())) {
-            return;
-        }
-        if (!SourceOffsetReport || SourceOffsetReport->GetRequestId() != record.GetRequestId()) {
+        if (!SourceOffsetReport || ev->Cookie != SourceOffsetReportId) {
             return;
         }
         const bool drained = SourceOffsetReport->GetDrained();
-        SourceOffsetReport.Reset();
-        if (record.HasAuthorizedNextOffset()) {
-            AuthorizedSourceOffset = record.GetAuthorizedNextOffset();
+        if (!record.GetStop() && SourceOffsetReport->HasNextOffset()) {
+            AuthorizedSourceOffset = SourceOffsetReport->GetNextOffset();
         }
+        SourceOffsetReport.Reset();
         if (drained) {
             return PassAway();
         }
@@ -381,20 +393,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             if (TrackSourceOffsets) {
                 return StartValidatedReader();
             }
-            if (ReaderSessionStarted && PendingSchemaChange && !SchemaReportCommitted) {
-                // The reader may have been recreated after receiving the
-                // explicit checkpoint request but before its completion
-                // notification. Reissue the idempotent offset commit only
-                // after its partition session is ready.
-                CommitSource(PendingSchemaChange->Offset);
-            } else if (ReaderSessionStarted && PendingSchemaChange && SchemaAdvanceInFlight) {
-                // The post-ack checkpoint may have been interrupted while
-                // recreating the reader. It is idempotent and must complete
-                // before the controller may retire this barrier.
-                CommitSource(PendingSchemaChange->Offset + 1);
-            } else if (ReaderSessionStarted && PendingWriterCheckpoint) {
-                CommitSource(*PendingWriterCheckpoint);
-            } else if (!InFlightData && !TerminateWriter) {
+            if (!CommitPendingSourceOffset() && !InFlightData && !TerminateWriter) {
                 PollSource();
             }
         } else if (ev->Sender == Writer) {
@@ -457,7 +456,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         Send(ev->Forward(Writer));
         const auto offset = LastBuildProgress->GetOffset();
         if (Draining) {
-            ProcessedSourceOffset = Max(ProcessedSourceOffset.GetOrElse(0), offset);
+            AdvanceProcessedSourceOffset(offset);
             InFlightData.Reset();
             Send(Writer, new TEvents::TEvPoison());
             return MaybeDrained();
@@ -536,7 +535,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             // Drain only the prefix before the schema record.
             InFlightData.Reset();
             PendingSchemaChange.Reset();
-            ProcessedSourceOffset = Max(ProcessedSourceOffset.GetOrElse(0), offset);
+            AdvanceProcessedSourceOffset(offset);
             Send(Writer, new TEvents::TEvPoison());
             return MaybeDrained();
         }
@@ -911,13 +910,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             ReportRecoveredCompletion();
         }
 
-        if (PendingSchemaChange && !SchemaReportCommitted) {
-            CommitSource(PendingSchemaChange->Offset);
-        } else if (PendingSchemaChange && SchemaAdvanceInFlight) {
-            CommitSource(PendingSchemaChange->Offset + 1);
-        } else if (PendingWriterCheckpoint) {
-            CommitSource(*PendingWriterCheckpoint);
-        }
+        CommitPendingSourceOffset();
     }
 
     void Handle(TEvWorker::TEvTerminateWriter::TPtr& ev) {

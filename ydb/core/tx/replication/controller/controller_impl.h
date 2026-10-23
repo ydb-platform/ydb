@@ -172,6 +172,10 @@ private:
     void Handle(TEvService::TEvSourceOffsetReport::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCheckDrain::TPtr& ev, const TActorContext& ctx);
     bool TracksSourceOffsets(const TWorkerId& id) const;
+    bool HasSourceOffsetMismatchError(const TReplication& replication) const;
+    bool IsStoppedAfterSourceOffsetMismatch(ui64 replicationId) const;
+    bool IsMismatchBlockingCommit(ui64 replicationId, TInstant now) const;
+    void QueueReplicationWorkerStops(ui64 replicationId);
     void SaveHeartbeat(const TWorkerId& id, const TRowVersion& version, NIceDb::TNiceDb& db);
     void SaveDrainCommit(NIceDb::TNiceDb& db);
     void CheckDrains(const TActorContext&);

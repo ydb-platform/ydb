@@ -190,7 +190,7 @@ class TController::TTxIndexBuild: public TTxBase {
             const bool activeBuild = buildIt != Self->IndexBuilds.end() && !IsCancelledIndexBuild(buildIt->second);
             const bool activeTarget = target && target->GetDstState() != TReplication::EDstState::Removing;
             if (!activeBuild || !activeTarget || !Self->HasWorkerSession(id, (*it)->Sender.NodeId())
-                || (Self->ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId()) && !Self->DrainStateByReplicationId.contains(id.ReplicationId())))
+                || Self->IsStoppedAfterSourceOffsetMismatch(id.ReplicationId()))
             {
                 it = Self->PendingIndexTxIds.erase(it);
                 continue;

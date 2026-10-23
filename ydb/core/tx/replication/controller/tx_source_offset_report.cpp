@@ -1,7 +1,6 @@
 #include "controller_impl.h"
 
 #include <util/generic/algorithm.h>
-#include <util/generic/mapfindptr.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -13,6 +12,24 @@ bool TController::TracksSourceOffsets(const TWorkerId& id) const {
     return replication && target
         && replication->GetConfig().GetConsistencySettings().HasGlobal()
         && target->GetKind() != TReplication::ETargetKind::Transfer;
+}
+
+bool TController::HasSourceOffsetMismatchError(const TReplication& replication) const {
+    return replication.GetState() == TReplication::EState::Error
+        && ReplicationsWithSourceOffsetMismatch.contains(replication.GetId());
+}
+
+bool TController::IsStoppedAfterSourceOffsetMismatch(ui64 replicationId) const {
+    return ReplicationsWithSourceOffsetMismatch.contains(replicationId)
+        && !DrainStateByReplicationId.contains(replicationId);
+}
+
+bool TController::IsMismatchBlockingCommit(ui64 replicationId, TInstant now) const {
+    if (!ReplicationsWithSourceOffsetMismatch.contains(replicationId)) {
+        return false;
+    }
+    const auto* drain = DrainStateByReplicationId.FindPtr(replicationId);
+    return !drain || drain->UnknownCommit || now >= drain->Deadline;
 }
 
 void TController::DeleteProcessedSourceOffsets(ui64 replicationId, ui64 targetId, NIceDb::TNiceDb& db) {
@@ -28,13 +45,12 @@ void TController::DeleteProcessedSourceOffsets(ui64 replicationId, ui64 targetId
 }
 
 void TController::SaveHeartbeat(const TWorkerId& id, const TRowVersion& version, NIceDb::TNiceDb& db) {
-    const auto it = Workers.find(id);
-    if (it == Workers.end() || !IsHeartbeatParticipant(id)) {
+    auto* worker = Workers.FindPtr(id);
+    if (!worker || !IsHeartbeatParticipant(id)) {
         return;
     }
-    auto& worker = it->second;
-    if (worker.HasHeartbeat()) {
-        const auto previous = worker.GetHeartbeat();
+    if (worker->HasHeartbeat()) {
+        const auto previous = worker->GetHeartbeat();
         if (version <= previous) {
             return;
         }
@@ -45,7 +61,7 @@ void TController::SaveHeartbeat(const TWorkerId& id, const TRowVersion& version,
             }
         }
     }
-    worker.SetHeartbeat(version);
+    worker->SetHeartbeat(version);
     WorkersWithHeartbeat.insert(id);
     WorkersByHeartbeat[version].insert(id);
     db.Table<Schema::Workers>().Key(id.ReplicationId(), id.TargetId(), id.WorkerId()).Update(
@@ -55,7 +71,7 @@ void TController::SaveHeartbeat(const TWorkerId& id, const TRowVersion& version,
 
 void TController::SaveDrainCommit(NIceDb::TNiceDb& db) {
     for (const auto rid : ReplicationsWithSourceOffsetMismatch) {
-        if (auto* drain = MapFindPtr(DrainStateByReplicationId, rid)) {
+        if (auto* drain = DrainStateByReplicationId.FindPtr(rid)) {
             drain->CommitTxId = CommittingTxId;
             drain->UnknownCommit = false;
         }
@@ -124,16 +140,12 @@ public:
         }
         auto& worker = Self->Workers.at(Id);
         NIceDb::TNiceDb db(txc.DB);
-        TMaybe<ui64> savedOffset;
-        if (const auto saved = Self->ProcessedSourceOffsets.find(Id); saved != Self->ProcessedSourceOffsets.end()) {
-            savedOffset = saved->second;
-        }
         if (!Self->ReplicationsWithSourceOffsetMismatch.contains(Id.ReplicationId()) || worker.DrainPending) {
+            const auto* savedOffset = Self->ProcessedSourceOffsets.FindPtr(Id);
             if (request.HasNextOffset() && (!savedOffset || request.GetNextOffset() > *savedOffset)) {
-                savedOffset = request.GetNextOffset();
-                Self->ProcessedSourceOffsets[Id] = *savedOffset;
+                Self->ProcessedSourceOffsets[Id] = request.GetNextOffset();
                 db.Table<Schema::ProcessedSourceOffsets>().Key(Id.ReplicationId(), Id.TargetId(), Id.WorkerId()).Update(
-                    NIceDb::TUpdate<Schema::ProcessedSourceOffsets::NextOffset>(*savedOffset));
+                    NIceDb::TUpdate<Schema::ProcessedSourceOffsets::NextOffset>(request.GetNextOffset()));
             }
             if (request.GetDrained() && Self->DrainStateByReplicationId.contains(Id.ReplicationId())) {
                 if (request.HasHeartbeat()) {
@@ -149,13 +161,6 @@ public:
         }
         Stopping = Self->ReplicationsWithSourceOffsetMismatch.contains(Id.ReplicationId());
         Result = MakeHolder<TEvService::TEvSourceOffsetResult>();
-        Result->Record.MutableController()->CopyFrom(request.GetController());
-        Result->Record.MutableWorker()->CopyFrom(request.GetWorker());
-        Result->Record.SetWorkerInstance(request.GetWorkerInstance());
-        Result->Record.SetRequestId(request.GetRequestId());
-        if (savedOffset) {
-            Result->Record.SetAuthorizedNextOffset(*savedOffset);
-        }
         Result->Record.SetStop(Stopping);
         return true;
     }
@@ -165,13 +170,22 @@ public:
             return;
         }
         // Only this post-commit acknowledgement authorizes a source commit.
-        ctx.Send(Event->Sender, Result.Release());
+        ctx.Send(Event->Sender, Result.Release(), 0, Event->Cookie);
         if (Stopping) {
             Self->StopWorkersForMismatch(Id.ReplicationId(), false, ctx);
         }
     }
 
 };
+
+void TController::QueueReplicationWorkerStops(ui64 replicationId) {
+    for (const auto& [id, worker] : Workers) {
+        if (id.ReplicationId() == replicationId && worker.HasSession()) {
+            StopQueue.emplace(id, worker.GetSession());
+        }
+    }
+    ScheduleProcessQueues();
+}
 
 void TController::StopWorkersForMismatch(ui64 replicationId, bool drainStarted, const TActorContext& ctx) {
     if (drainStarted) {
@@ -189,12 +203,7 @@ void TController::StopWorkersForMismatch(ui64 replicationId, bool drainStarted, 
             }
         }
     }
-    for (const auto& [id, worker] : Workers) {
-        if (id.ReplicationId() == replicationId && worker.HasSession()) {
-            StopQueue.emplace(id, worker.GetSession());
-        }
-    }
-    ScheduleProcessQueues();
+    QueueReplicationWorkerStops(replicationId);
     RunTxHeartbeat(ctx);
     if (drainStarted) {
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvCheckDrain(replicationId));
@@ -260,12 +269,7 @@ public:
         if (!Self->DrainStateByReplicationId.contains(ReplicationId) && !Finished) {
             return;
         }
-        for (const auto& [id, worker] : Self->Workers) {
-            if (id.ReplicationId() == ReplicationId && worker.HasSession()) {
-                Self->StopQueue.emplace(id, worker.GetSession());
-            }
-        }
-        Self->ScheduleProcessQueues();
+        Self->QueueReplicationWorkerStops(ReplicationId);
     }
 };
 

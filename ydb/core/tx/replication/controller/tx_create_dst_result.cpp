@@ -167,9 +167,6 @@ public:
             return true;
         }
 
-        const bool preserveMismatch = Replication->GetState() == TReplication::EState::Error
-            && Self->ReplicationsWithSourceOffsetMismatch.contains(rid);
-
         if (Ev->Get()->IsSuccess()) {
             const bool wasAltering = dstState == TReplication::EDstState::Alter
                 || dstState == TReplication::EDstState::Attaching;
@@ -183,7 +180,7 @@ public:
                 target->SetDstState(Replication->GetDesiredState() == TReplication::EState::Paused
                     ? TReplication::EDstState::Paused
                     : TReplication::EDstState::Ready);
-                if (!preserveMismatch && wasAltering && Replication->CheckAlterDone()) {
+                if (!Self->HasSourceOffsetMismatchError(*Replication) && wasAltering && Replication->CheckAlterDone()) {
                     Replication->SetState(Replication->GetDesiredState());
                 }
             }
@@ -202,7 +199,7 @@ public:
                 << ": " << NKikimrScheme::EStatus_Name(Ev->Get()->Status)
                 << ", " << Ev->Get()->Error);
 
-            if (!preserveMismatch) {
+            if (!Self->HasSourceOffsetMismatchError(*Replication)) {
                 Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
                     << ": " << target->GetIssue());
             }

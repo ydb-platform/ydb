@@ -3,7 +3,6 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/mapfindptr.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -118,7 +117,7 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        if (Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId()) && !Self->DrainStateByReplicationId.contains(replication->GetId())) {
+        if (Self->IsStoppedAfterSourceOffsetMismatch(replication->GetId())) {
             Self->PendingHeartbeats.clear();
             return true;
         }
@@ -139,11 +138,8 @@ public:
             Self->PendingHeartbeats.erase(it);
         }
 
-        if (Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
-            const auto* drain = MapFindPtr(Self->DrainStateByReplicationId, replication->GetId());
-            if (!drain || drain->UnknownCommit || ctx.Now() >= drain->Deadline) {
-                return true;
-            }
+        if (Self->IsMismatchBlockingCommit(replication->GetId(), ctx.Now())) {
+            return true;
         }
 
         const auto participants = Self->CountHeartbeatParticipants();
@@ -264,7 +260,7 @@ public:
 
             if (!Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
                 CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
-            } else if (auto* drain = MapFindPtr(Self->DrainStateByReplicationId, replication->GetId())) {
+            } else if (auto* drain = Self->DrainStateByReplicationId.FindPtr(replication->GetId())) {
                 // Failure does not prove cancellation; retain the proposal until timeout.
                 drain->UnknownCommit = true;
             }
@@ -290,11 +286,8 @@ public:
         it = Self->AssignedTxIds.erase(it);
         Self->CommittingTxId = 0;
         Self->SaveDrainCommit(db);
-        if (Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
-            const auto* drain = MapFindPtr(Self->DrainStateByReplicationId, replication->GetId());
-            if (!drain || drain->UnknownCommit || ctx.Now() >= drain->Deadline) {
-                return true;
-            }
+        if (Self->IsMismatchBlockingCommit(replication->GetId(), ctx.Now())) {
+            return true;
         }
 
         Self->AdvanceVerifyingSchemaBarriers(db);

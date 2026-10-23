@@ -82,9 +82,6 @@ public:
             return true;
         }
 
-        const bool preserveMismatch = Replication->GetState() == TReplication::EState::Error
-            && Self->ReplicationsWithSourceOffsetMismatch.contains(rid);
-
         if (Ev->Get()->IsSuccess()) {
             target->SetStreamState(TReplication::EStreamState::Ready);
             target->SetStreamSchemaChanges(Ev->Get()->SchemaChanges);
@@ -100,7 +97,7 @@ public:
                 << ": " << status.GetStatus()
                 << ", " << status.GetIssues().ToOneLineString());
 
-            if (!preserveMismatch) {
+            if (!Self->HasSourceOffsetMismatchError(*Replication)) {
                 Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
                     << ": " << target->GetIssue());
             }

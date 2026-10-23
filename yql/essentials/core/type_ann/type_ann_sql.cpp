@@ -1520,7 +1520,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
                     const auto& column = usedInUsing.at(key);
                     const auto offset = Min(column.Order, aliasedRightUsingOrder.size());
                     aliasedRightUsingOrder.insert(aliasedRightUsingOrder.begin() + offset,
-                        TStarColumn{{}, column.Name, column.PhysicalName, &column});
+                        TStarColumn{.Alias = {}, .Name = column.Name, .PhysicalName = column.PhysicalName, .Using = &column});
                 }
             }
             aliased = std::move(aliasedRightUsingOrder);

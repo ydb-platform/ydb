@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/services/udf_store
     library/cpp/protobuf/json
     ydb/core/client/server
     ydb/core/grpc_services

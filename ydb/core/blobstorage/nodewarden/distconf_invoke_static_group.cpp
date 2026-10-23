@@ -38,14 +38,10 @@ namespace NKikimr::NStorage {
                     // The proxy may still contain the original pile's VDisks. Reassigning another pile bumps
                     // this physical group's generation too, including its self-reference and live VDisks.
                     const auto proxyId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
-                    if (group.RingsSize() && proxyId != groupId) {
+                    if (auto *inlinePile = NBridge::FindGroupPileByGroupId(group.MutableBridgeGroupState(), proxyId);
+                            inlinePile && proxyId != groupId) {
+                        inlinePile->SetGroupGeneration(group.GetGroupGeneration());
                         bumpedInlineGroups.emplace(proxyId, group.GetGroupGeneration());
-                        NBridge::ForEachGroupPile(group.MutableBridgeGroupState(), [&](TBridgePileId,
-                                NKikimrBridge::TGroupState::TPile& pile) {
-                            if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == proxyId) {
-                                pile.SetGroupGeneration(group.GetGroupGeneration());
-                            }
-                        });
                     }
                 }
             }

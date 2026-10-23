@@ -1625,6 +1625,27 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         const auto regexp = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message REGEXP 'aaa.*bbb')");
         UNIT_ASSERT_C(!regexp.Contains("PatternHint"), regexp);
+        // LIKE is a plain Bool (false for NULL), so YQL folds COALESCE(match, true) to the bare match,
+        // which keeps its hint. If LIKE ever becomes optional, the COALESCE reaches the parser and gets no hint.
+        const auto coalesceTrue = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE COALESCE(message LIKE '%aaa%bbb%', true))");
+        UNIT_ASSERT_C(coalesceTrue.Contains("PatternHint"), coalesceTrue);
+        // The matched argument must be a column. A concatenation or a cast from a non-string type is not.
+        const auto concatenated = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE (message || 'x') LIKE '%aaa%bbb%')");
+        UNIT_ASSERT_C(!concatenated.Contains("PatternHint"), concatenated);
+        const auto castFromInt = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE CAST(id AS String) LIKE '%aaa%bbb%')");
+        UNIT_ASSERT_C(!castFromInt.Contains("PatternHint"), castFromInt);
+        // Positional Re2::Options with only CaseSensitive (10th argument) set still gets a hint.
+        const auto positionalCase = ssaOf(R"(
+            $pattern = Udf(Re2::PatternFromLike)("aaa%bbb");
+            SELECT id FROM `/Root/likeHint`
+            WHERE Re2::Match($pattern, Re2::Options(
+                CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?),
+                CAST(NULL AS Uint64?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?),
+                CAST(NULL AS Bool?), true
+            ))(message);
+        )");
+        UNIT_ASSERT_C(positionalCase.Contains("PatternHint"), positionalCase);
+        UNIT_ASSERT_C(positionalCase.Contains("\"CaseSensitive\":true") || positionalCase.Contains("\"CaseSensitive\": true"), positionalCase);
 
         auto explainNoHint = [&](const TString& query, const TParams& params) {
             TStreamExecScanQuerySettings settings;

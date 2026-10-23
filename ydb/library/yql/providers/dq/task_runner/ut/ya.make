@@ -12,6 +12,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    tasks_runner_pipe_cleanup_ut.cpp
     tasks_runner_pipe_constructor_ut.cpp
     tasks_runner_pipe_metrics_ut.cpp
     tasks_runner_pipe_process_ut.cpp

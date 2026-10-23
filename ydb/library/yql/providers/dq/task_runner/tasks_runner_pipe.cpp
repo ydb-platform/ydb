@@ -2319,8 +2319,9 @@ private:
         if (!result) {
             result = StartOne(exePath, portoSettings);
         }
-        ProcessJobs(exePath, portoSettings);
+        // Retire incompatible idle runners before replenishing their replacement pool.
         StopJobs(std::move(stopList));
+        ProcessJobs(exePath, portoSettings);
         return result;
     }
 

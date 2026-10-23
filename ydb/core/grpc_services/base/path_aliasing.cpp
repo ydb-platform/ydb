@@ -29,8 +29,9 @@ namespace NKikimr::NGRpcService {
 
     TString IRequestCtxBaseMtSafe::NormalizePath(TStringBuf path) const {
         TString normalized = PathNormalizer_ ? PathNormalizer_->NormalizePath(path) : TString(path);
-        if (normalized != path && PathAliasCounter_ && !PathAliasCounted_.exchange(true, std::memory_order_relaxed)) {
+        if (normalized != path && PathAliasCounter_ && !PathAliasCounted_) {
             PathAliasCounter_->Inc();
+            PathAliasCounted_ = true;
         }
         return normalized;
     }

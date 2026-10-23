@@ -5,7 +5,6 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-#include <atomic>
 #include <memory>
 
 namespace google::protobuf {
@@ -75,7 +74,7 @@ private:
     std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer_;
     NMonitoring::TDynamicCounters::TCounterPtr PathAliasCounter_;
     bool PathNormalizationEnabled_ = false;
-    mutable std::atomic<bool> PathAliasCounted_ = false;
+    mutable bool PathAliasCounted_ = false;
 };
 
 

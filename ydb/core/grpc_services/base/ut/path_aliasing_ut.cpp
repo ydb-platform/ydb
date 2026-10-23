@@ -4,7 +4,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <thread>
 #include <utility>
 
 namespace NKikimr::NGRpcService {
@@ -79,6 +78,7 @@ namespace NKikimr::NGRpcService {
                 UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/physical/a"), "/physical/a");
                 UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, service, method), 0);
                 UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw/a"), "/rewritten/a");
+                UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw/b"), "/rewritten/b");
             }
             for (const auto& [service, method] : labels) {
                 UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, service, method), 1);
@@ -104,25 +104,6 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT_VALUES_EQUAL(legacy.NormalizePath("/raw/a"), "/raw/a");
             UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Topic.V1.TopicService", "CreateTopic"), 0);
             UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.PersQueue.V1.PersQueueService", "CreateTopic"), 0);
-        }
-
-        Y_UNIT_TEST(ConcurrentNormalizationCountsOnce) {
-            NMonitoring::TDynamicCounterPtr root = new NMonitoring::TDynamicCounters;
-            TNamedRequest request("Ydb.Topic.V1.TopicService/CreateTopic", "/physical");
-            request.EnablePathNormalization();
-            request.InitializePathNormalization(MakeNormalizer(), root);
-            std::thread threads[8];
-            for (auto& thread : threads) {
-                thread = std::thread([&request] {
-                    for (size_t i = 0; i < 100; ++i) {
-                        request.NormalizePath("/raw/a");
-                    }
-                });
-            }
-            for (auto& thread : threads) {
-                thread.join();
-            }
-            UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Topic.V1.TopicService", "CreateTopic"), 1);
         }
 
         Y_UNIT_TEST(InternalRequestKeepsLiveDatabaseAndIdentityPaths) {

@@ -176,6 +176,8 @@ namespace NKikimr::NStorage {
 
         struct TPDiskInfo {
             NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk Record;
+            std::optional<ui32> ReportedSlotCount;
+            ui32 ReportedSlotSizeInUnits = 0;
             ui32 UsedSlots = 0;
             bool Usable = true;
             TString WhyUnusable;
@@ -257,6 +259,10 @@ namespace NKikimr::NStorage {
                         pdisk.GetKind()).GetRaw());
                     if (pdisk.HasPDiskConfig()) {
                         r.MutablePDiskConfig()->CopyFrom(pdisk.GetPDiskConfig());
+                    }
+                    if (const auto& metrics = pdisk.GetPDiskMetrics(); metrics.HasSlotCount()) {
+                        pdiskInfo.ReportedSlotCount = metrics.GetSlotCount();
+                        pdiskInfo.ReportedSlotSizeInUnits = metrics.GetSlotSizeInUnits();
                     }
 
                     // this 'usable' logic repeats the one in BS_CONTROLLER
@@ -459,10 +465,15 @@ namespace NKikimr::NStorage {
             ui32 slotSizeInUnits = 0;
             if (item.Record.HasPDiskConfig()) {
                 const auto& pdiskConfig = item.Record.GetPDiskConfig();
-                if (pdiskConfig.HasExpectedSlotCount()) {
+                // A zero configured count is unspecified; retain the default fallback.
+                if (pdiskConfig.GetExpectedSlotCount()) {
                     maxSlots = pdiskConfig.GetExpectedSlotCount();
                 }
                 slotSizeInUnits = pdiskConfig.GetSlotSizeInUnits();
+            }
+            if (item.ReportedSlotCount) {
+                maxSlots = *item.ReportedSlotCount;
+                slotSizeInUnits = item.ReportedSlotSizeInUnits;
             }
 
             const bool pileFilter = !bridgePileId || allowedNodeIds.contains(pdiskId.NodeId);

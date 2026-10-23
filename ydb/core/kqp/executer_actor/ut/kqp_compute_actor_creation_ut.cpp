@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(KqpComputeActorCreation) {
                     .BlockTrackingMode = {},
                     .ArrayBufferMinFillPercentage = {},
                     .BufferPageAllocSize = {},
-                    .CheckpointCoordinator = {},
+                    .EnableCheckpoints = false,
                     .EnableWatermarks = false,
                 });
                 auto error = planner.PlanExecution();

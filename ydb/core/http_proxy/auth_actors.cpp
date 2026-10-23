@@ -140,7 +140,11 @@ namespace NKikimr::NHttpProxy {
             }
             ctx.Send(Sender, new TEvServerlessProxy::TEvToken(userToken.GetUserSID(), "", userToken.GetSerializedToken(), {"", DatabaseId, DatabasePath, CloudId, FolderId}));
 
-            LOG_D("Authorized successfully");
+            if (!ev->Get()->Error.has_value() && ev->Get()->Token) {
+                LOG_D("Authorized successfully");
+            } else {
+                LOG_D("Proceeding without authorization because token enforcement is disabled");
+            }
 
             TBase::Die(ctx);
         }

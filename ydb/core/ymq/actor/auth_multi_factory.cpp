@@ -254,7 +254,7 @@ void TBaseCloudAuthRequestProxy::ProcessAuthorizationResult(const TEvTicketParse
     ChangeCounters([this, &result](){
         Counters_.IncAuthorizeCounter(
             (AccessKeySignature_ ? NCloudAuth::ECredentialType::Signature : NCloudAuth::ECredentialType::IamToken),
-            result.Error.has_value()
+            result.Error.has_value() || !result.Token
         );
         Counters_.AuthorizeDuration->Collect((TActivationContext::Now() - AuthorizeRequestStartTimestamp_).MilliSeconds());
     });
@@ -274,6 +274,11 @@ void TBaseCloudAuthRequestProxy::ProcessAuthorizationResult(const TEvTicketParse
                 return;
             }
         }
+    } else if (!result.Token) {
+        RLOG_SQS_INFO("Authorize failed: ticket parser returned an empty user token");
+        SetError(NErrors::ACCESS_DENIED, "Authorization error.");
+        SendReplyAndDie();
+        return;
     } else {
         UserSID_ = result.Token->GetUserSID();
     }

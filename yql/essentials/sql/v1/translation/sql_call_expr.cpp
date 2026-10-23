@@ -438,16 +438,16 @@ TSQLStatus TSqlCallExpr::Init(const TRule_invoke_expr& node) {
                     return std::unexpected(ESQLError::Basic);
                 }
 
-                TWindowSpecificationPtr spec = WindowSpecification(
+                auto spec = WindowSpecification(
                     winRule.GetAlt_window_name_or_specification2().GetRule_window_specification1().GetRule_window_specification_details2());
                 if (!spec) {
-                    return std::unexpected(ESQLError::Basic);
+                    return std::unexpected(spec.error());
                 }
 
                 WindowName_ = Ctx_.MakeName("_yql_anonymous_window");
                 TWinSpecs& specs = Ctx_.WinSpecsScopes.back();
                 YQL_ENSURE(!specs.contains(WindowName_));
-                specs[WindowName_] = spec;
+                specs[WindowName_] = std::move(*spec);
                 break;
             }
             case TRule_window_name_or_specification::ALT_NOT_SET:

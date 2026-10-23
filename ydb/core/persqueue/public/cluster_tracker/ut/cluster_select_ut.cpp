@@ -160,12 +160,10 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains(cluster));
         UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains("kikimrHost Utf8"));
         UNIT_ASSERT(!MakeCreateClusterQuery(cluster).Contains("fnx"));
-        UNIT_ASSERT(MakeAlterAddFnxQuery(cluster).Contains("ADD COLUMN fnx"));
         UNIT_ASSERT(MakeCreateBalancerQuery(balancer).Contains("CREATE TABLE IF NOT EXISTS"));
         UNIT_ASSERT(MakeCreateVersionsQuery(versions).Contains("CREATE TABLE IF NOT EXISTS"));
         UNIT_ASSERT(MakeCreateVersionsQuery(versions).Contains(versions));
         UNIT_ASSERT(MakeCreateVersionsQuery(versions).Contains("version Int64"));
-        UNIT_ASSERT(MakeBackfillFnxQuery(cluster).Contains("fnx IS NULL"));
     }
 
     Y_UNIT_TEST(IssuesMatchers) {

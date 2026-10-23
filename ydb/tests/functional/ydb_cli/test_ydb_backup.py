@@ -1486,7 +1486,7 @@ class TestRestoreNoData(BaseTestBackupInFiles):
 class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
     @classmethod
     def setup_class(cls):
-        cls.cluster = cls._start_cluster(KikimrConfigGenerator(
+        cfg = KikimrConfigGenerator(
             extra_feature_flags=[
                 "enable_strict_acl_check",
                 "enable_strict_user_management",
@@ -1495,7 +1495,9 @@ class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
             domain_login_only=False,
             enforce_user_token_requirement=True,
             default_clusteradmin="root@builtin",
-        ))
+        )
+        cfg.yaml_config.setdefault("auth_config", {})["staff_api_user_token"] = cfg.default_clusteradmin
+        cls.cluster = cls._start_cluster(cfg)
 
         cls.database = os.path.join(cls.root_dir, "db1")
 
@@ -1721,6 +1723,8 @@ class BaseTestMultipleClusterBackupInFiles(BaseTestClusterBackupInFiles):
             enforce_user_token_requirement=True,
             default_clusteradmin="root@builtin",
         )
+
+        cfg.yaml_config.setdefault("auth_config", {})["staff_api_user_token"] = cfg.default_clusteradmin
 
         cls.restore_cluster = KiKiMR(
             cfg,

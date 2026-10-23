@@ -2,43 +2,17 @@
 
 #include "summary.h"
 
-#include <library/cpp/yt/system/tscp.h>
-
-#ifdef __linux__
-#include <sched.h>
-#endif
+#include <library/cpp/yt/cpu_clock/clock.h>
+#include <library/cpp/yt/system/access_spreader.h>
 
 namespace NYT::NProfiling {
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-int GetCurrentCpuShardIndex()
-{
-#ifdef __linux__
-    // Avoid rseq-backed CPU lookup: profiling may live in a late-loaded DSO whose
-    // legacy rseq TLS offset is not process-wide.
-    int cpuId = ::sched_getcpu();
-    if (cpuId < 0) {
-        return 0;
-    }
-#else
-    int cpuId = TTscp::Get().ProcessorId;
-#endif
-
-    return cpuId & (TTscp::MaxProcessorId - 1);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void TPerCpuCounter::Increment(i64 delta)
 {
-    int processorId = GetCurrentCpuShardIndex();
-    Shards_[processorId].Value.fetch_add(delta, std::memory_order::relaxed);
+    int stripeIndex = GetCurrentAccessStripe(PerCpuShardCount);
+    Shards_[stripeIndex].Value.fetch_add(delta, std::memory_order::relaxed);
 }
 
 i64 TPerCpuCounter::GetValue()
@@ -54,8 +28,8 @@ i64 TPerCpuCounter::GetValue()
 
 void TPerCpuTimeCounter::Add(TDuration delta)
 {
-    int processorId = GetCurrentCpuShardIndex();
-    Shards_[processorId].Value.fetch_add(delta.GetValue(), std::memory_order::relaxed);
+    int stripeIndex = GetCurrentAccessStripe(PerCpuShardCount);
+    Shards_[stripeIndex].Value.fetch_add(delta.GetValue(), std::memory_order::relaxed);
 }
 
 TDuration TPerCpuTimeCounter::GetValue()
@@ -87,21 +61,15 @@ TPerCpuGauge::TWrite TPerCpuGauge::TWrite::Unpack(__int128 i)
 
 void TPerCpuGauge::Update(double value)
 {
-#ifdef __linux__
-    int processorId = GetCurrentCpuShardIndex();
+    int stripeIndex = GetCurrentAccessStripe(PerCpuShardCount);
     TCpuInstant timestamp = GetApproximateCpuInstant();
-#else
-    auto tscp = TTscp::Get();
-    int processorId = tscp.ProcessorId;
-    TCpuInstant timestamp = tscp.Instant;
-#endif
 
     TWrite write{value, timestamp};
 #ifdef __clang__
-    Shards_[processorId].Value.store(write.Pack(), std::memory_order::relaxed);
+    Shards_[stripeIndex].Value.store(write.Pack(), std::memory_order::relaxed);
 #else
-    auto guard = Guard(Shards_[processorId].Lock);
-    Shards_[processorId].Value = write;
+    auto guard = Guard(Shards_[stripeIndex].Lock);
+    Shards_[stripeIndex].Value = write;
 #endif
 }
 
@@ -132,7 +100,7 @@ double TPerCpuGauge::GetValue()
 template <class T>
 void TPerCpuSummary<T>::Record(T value)
 {
-    auto& shard = Shards_[GetCurrentCpuShardIndex()];
+    auto& shard = Shards_[GetCurrentAccessStripe(PerCpuShardCount)];
     auto guard = Guard(shard.Lock);
     shard.Value.Record(value);
     shard.Empty.store(false, std::memory_order::release);

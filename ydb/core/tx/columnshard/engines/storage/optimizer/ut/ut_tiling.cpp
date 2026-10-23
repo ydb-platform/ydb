@@ -24,6 +24,8 @@ namespace {
 struct TTestPortion {
     using TPtr = std::shared_ptr<TTestPortion>;
     using TConstPtr = std::shared_ptr<const TTestPortion>;
+    using TKey = ui64;
+    using TKeyRef = ui64;
 
     ui64 PortionId;
     ui64 Start;
@@ -55,6 +57,14 @@ struct TTestPortion {
         return Finish;
     }
 
+    ui64 IndexKeyStartRef() const {
+        return Start;
+    }
+
+    ui64 IndexKeyEndRef() const {
+        return Finish;
+    }
+
     ui64 GetPortionId() const {
         return PortionId;
     }
@@ -82,10 +92,10 @@ struct TTestPortion {
     void AddRuntimeFeature(const TPortionInfo::ERuntimeFeature /*feature*/) {};
 };
 
-using TTestAccumulator = Accumulator<ui64, TTestPortion>;
-using TTestLastLevel = LastLevel<ui64, TTestPortion>;
-using TTestMiddleLevel = MiddleLevel<ui64, TTestPortion>;
-using TTestTiling = Tiling<ui64, TTestPortion>;
+using TTestAccumulator = Accumulator<TTestPortion>;
+using TTestLastLevel = LastLevel<TTestPortion>;
+using TTestMiddleLevel = MiddleLevel<TTestPortion>;
+using TTestTiling = Tiling<TTestPortion>;
 
 TTestPortion::TPtr MakePortion(const ui64 id, const ui64 start, const ui64 finish, const ui64 blobBytes) {
     return std::make_shared<TTestPortion>(id, start, finish, blobBytes);

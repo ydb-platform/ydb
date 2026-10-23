@@ -11,6 +11,7 @@
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/workload_manager/actors/actors.h>
+#include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
 #include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/fetcher.h>
 #include <ydb/services/workload_manager/service/service.h>
 #include <ydb/services/workload_manager/tables/table_queries.h>
@@ -881,8 +882,8 @@ void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex) {
     const auto response = runtime.GrabEdgeEvent<NMetadata::NProvider::TEvRefreshSubscriberData>(edgeActor, FUTURE_WAIT_TIMEOUT);
     UNIT_ASSERT_C(response, "Timed out waiting for resource pool classifier snapshot refresh");
 
-    runtime.Send(
-        NKqp::MakeKqpProxyID(nodeId), edgeActor, new NMetadata::NProvider::TEvRefreshSubscriberData(response->Get()->GetSnapshot()), nodeIndex);
+    runtime.Send(MakeWorkloadManagerStateActorId(nodeId), edgeActor,
+        new NMetadata::NProvider::TEvRefreshSubscriberData(response->Get()->GetSnapshot()), nodeIndex);
 }
 
 }   // namespace NKikimr::NWorkloadManager

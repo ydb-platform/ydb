@@ -1145,7 +1145,8 @@ namespace NKikimr::NBsController {
                     : StoragePools;
                 const auto spIt = storagePools.find(groupInfo->StoragePoolId);
                 Y_ABORT_UNLESS(spIt != storagePools.end());
-                group->Geometry = std::make_unique<TGroupGeometryInfo>(group->Type, spIt->second.GetGroupGeometry());
+                group->Geometry = std::make_unique<TGroupGeometryInfo>(
+                    TGroupGeometryInfo::FromStoragePool(group->Type, spIt->second));
                 geomCache.emplace(groupInfo->StoragePoolId, group->Geometry);
             }
 

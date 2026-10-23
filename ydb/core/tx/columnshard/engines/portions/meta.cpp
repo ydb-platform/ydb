@@ -238,6 +238,14 @@ NArrow::TSimpleRow TPortionMeta::IndexKeyEnd() const {
     return LastPKRow.Build(PKSchema);
 }
 
+NArrow::TSimpleRowRef TPortionMeta::IndexKeyStartRef() const {
+    return NArrow::TSimpleRowRef(IndexKeyViewStart(), *PKSchema);
+}
+
+NArrow::TSimpleRowRef TPortionMeta::IndexKeyEndRef() const {
+    return NArrow::TSimpleRowRef(IndexKeyViewEnd(), *PKSchema);
+}
+
 NArrow::TSimpleRowViewV0 TPortionMeta::IndexKeyViewStart() const {
     return NArrow::TSimpleRowViewV0(FirstPKRow.GetData());
 }

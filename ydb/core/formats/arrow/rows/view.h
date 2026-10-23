@@ -119,4 +119,26 @@ public:
     bool operator==(const TSimpleRow& item) const;
 };
 
+// does not own: valid while the bytes and the schema it points to live
+class TSimpleRowRef {
+private:
+    TSimpleRowViewV0 Row;
+    const arrow::Schema& Schema;
+
+public:
+    TSimpleRowRef(const TSimpleRowViewV0 row, const arrow::Schema& schema)
+        : Row(row)
+        , Schema(schema) {
+    }
+
+    std::partial_ordering operator<=>(const TSimpleRowRef& item) const {
+        AFL_VERIFY_DEBUG(Schema.Equals(item.Schema));
+        return Row.Compare(item.Row, Schema).GetResult();
+    }
+
+    bool operator==(const TSimpleRowRef& item) const {
+        return (*this <=> item) == std::partial_ordering::equivalent;
+    }
+};
+
 }   // namespace NKikimr::NArrow

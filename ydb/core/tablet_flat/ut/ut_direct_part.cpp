@@ -590,19 +590,51 @@ Y_UNIT_TEST_SUITE(TDirectPartWrite) {
 
         env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }) });
 
-        // Finalize with zero rows: the commit advances the epoch but attaches no part.
+        // Finalize with zero rows: no table part switch should be persisted.
         env.SendAsync(new TEvStartDirectWrite(101, { }, ModeCommit));
         auto done = env.GrabEdgeEvent<TEvDirectWriteDone>();
         UNIT_ASSERT_C(done->Get()->Ok, done->Get()->Error);
 
         UNIT_ASSERT_VALUES_EQUAL(env.ReadAll(101).size(), 0u);
 
+        env.RestartWriteTablet();
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadAll(101).size(), 0u);
+
         // The table is still usable afterwards.
         env.Upsert(101, { {1, "one"}, {2, "two"} });
+        env.RestartWriteTablet();
         auto read = env.ReadAll(101);
         UNIT_ASSERT_VALUES_EQUAL(read.size(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(read[0].second, "one");
         UNIT_ASSERT_VALUES_EQUAL(read[1].second, "two");
+    }
+
+    Y_UNIT_TEST(EmptyInputPreservesExistingRows) {
+        TDirectWriteEnv env;
+        env.FireWriteTablet();
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101, 102 }) });
+        env.Upsert(101, { {1, "one"} });
+
+        // Ignoring an empty attachment must preserve the target's redo log and
+        // still commit other writes made by the same transaction.
+        auto* start = new TEvStartDirectWrite(101, { }, ModeCommit);
+        start->HasCross = true;
+        start->CrossTableId = 102;
+        start->CrossKey = 2;
+        start->CrossValue = "two";
+        env.SendAsync(start);
+        auto done = env.GrabEdgeEvent<TEvDirectWriteDone>();
+        UNIT_ASSERT_C(done->Get()->Ok, done->Get()->Error);
+
+        env.RestartWriteTablet();
+        auto original = env.ReadAll(101);
+        UNIT_ASSERT_VALUES_EQUAL(original.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(original[0].first, 1);
+        UNIT_ASSERT_VALUES_EQUAL(original[0].second, "one");
+        auto other = env.ReadAll(102);
+        UNIT_ASSERT_VALUES_EQUAL(other.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(other[0].first, 2);
+        UNIT_ASSERT_VALUES_EQUAL(other[0].second, "two");
     }
 
     Y_UNIT_TEST(BackpressureThrottlesFeeding) {

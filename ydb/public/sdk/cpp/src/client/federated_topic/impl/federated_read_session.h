@@ -115,6 +115,28 @@ public:
         }
     }
 
+    // Drops cached partition sessions for a read source that is no longer polled.
+    // Callers that already hold a TFederatedPartitionSession::TPtr keep it; only the cache entry is released.
+    void ForgetReadSource(const std::shared_ptr<TDbInfo>& db) {
+        if (!db) {
+            return;
+        }
+        with_lock(Lock) {
+            for (auto it = FederatedPartitionSessions.begin(); it != FederatedPartitionSessions.end();) {
+                const auto& partitionSession = it->second;
+                if (partitionSession &&
+                    partitionSession->GetReadSourceDatabaseId() == db->id() &&
+                    partitionSession->GetReadSourceDatabasePath() == db->path() &&
+                    AsciiEqualsIgnoreCase(partitionSession->GetReadSourceDatabaseName(), db->name()))
+                {
+                    it = FederatedPartitionSessions.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+    }
+
 private:
     TAdaptiveLock Lock;
     std::unordered_map<NTopic::TPartitionSession*, TFederatedPartitionSession::TPtr> FederatedPartitionSessions;
@@ -182,10 +204,27 @@ private:
     bool IsDatabaseEligibleForRead(const std::shared_ptr<TDbInfo>& db);
     static bool SameReadTarget(const TDbInfo& current, const TDbInfo& desired);
 
+    struct TClosingSubsession {
+        std::shared_ptr<NTopic::IReadSession> Session;
+        std::shared_ptr<TDbInfo> DbInfo;
+    };
+
+    struct TWakeup {
+        ui64 Id = 0;
+        NThreading::TPromise<void> Promise;
+    };
+
     // Requires Lock.
-    void ScheduleFederationStateUpdateImpl();
-    NThreading::TPromise<void> TakeWakeupPromise();
-    void DetachSubsessions(std::vector<std::shared_ptr<NTopic::IReadSession>>& toClose);
+    bool ScheduleFederationStateUpdateImpl();
+    std::vector<TWakeup> TakeWakeups();
+    void ForgetWakeup(ui64 id);
+    static void SignalWakeups(std::vector<TWakeup> wakeups);
+    // retire=true swallows subsession close callbacks. Used when one database leaves.
+    // Whole-session shutdown leaves retire=false so the existing handlers still run.
+    void DetachSubsessions(std::vector<TClosingSubsession>& toClose, bool retire);
+    // Closes subsessions, then drops their cached partition sessions. Outside Lock.
+    void CloseSubsessions(std::vector<TClosingSubsession>& toClose, TDuration timeout, bool& lastCloseResult);
+    void NotifySessionClosed() const;
 
     NTopic::TSessionClosedEvent MakeSessionClosedEvent() const;
 
@@ -222,10 +261,11 @@ private:
     bool SawEligibleDatabase = false;
 
     NYdbGrpc::IQueueClientContextPtr UpdateStateDelayContext;
-    // Signalled when SubSessions changes or the session starts closing.
-    // Waiters rebuild their subsession wait list. SetValue happens outside Lock:
-    // a subscriber may take Lock.
-    NThreading::TPromise<void> SubsessionsChanged;
+    // One promise per blocked WaitEvent. Completed waits drop their promise so a
+    // stable federation does not keep a WaitAny subscription alive forever.
+    // SetValue happens outside Lock: a subscriber may take Lock.
+    std::vector<TWakeup> Wakeups;
+    ui64 NextWakeupId = 1;
 
     // Exiting.
     bool Closing = false;

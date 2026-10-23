@@ -278,7 +278,7 @@ namespace NKikimr {
             }
 
             bool IsLeftInclusive() const {
-                return !GetLeftPartitionKey().IsLeftInclusive();
+                return GetLeftPartitionKey().IsLeftInclusive();
             }
 
             bool HasRightKey() const {
@@ -333,7 +333,7 @@ namespace NKikimr {
                     return TFoundRange();
                 }
                 const TNode* newRight = LeftBorder;
-                i32 newRightCount = RightCount;
+                i32 newRightCount = LeftCount;
                 auto [newLeft, newLeftCount] = Predecessor(newRight, newRightCount);
                 if (newRight->Left) {
                     return TFoundRange(newLeft, newRight, newLeftCount, newRightCount, false);
@@ -373,7 +373,7 @@ namespace NKikimr {
                             return {parent, count};
                         }
                         Y_DEBUG_ABORT_UNLESS(parent->Left.get() == node);
-                        count -= parent->RightDelta;
+                        count -= parent->LeftDelta;
                         node = parent;
                     }
                     return {nullptr, count};

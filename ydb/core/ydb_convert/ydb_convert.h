@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
@@ -43,6 +44,7 @@ struct TACLAttrs {
 };
 
 TACLAttrs ConvertYdbPermissionNameToACLAttrs(const TString& name);
+void RevokeYdbPermission(const TString& name, const TString& sid, NACLib::TDiffACL& acl);
 
 TVector<TString> ConvertACLMaskToYdbPermissionNames(ui32);
 TString ConvertShortYdbPermissionNameToFullYdbPermissionName(const TString& name);

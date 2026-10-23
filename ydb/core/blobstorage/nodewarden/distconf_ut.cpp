@@ -6010,6 +6010,144 @@ selector_config: []
         CheckDurableConfigConverges(fixture, advanced);
     }
 
+    void CheckBindingLivenessPeerCapability(bool selfManagement, bool legacyParent, bool pauseParent = false,
+                                           bool disabledMetadata = false) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.UseMirror3dcGroup();
+        fixture.State.RequiredRootNodeId = 1;
+        if (!selfManagement) {
+            if (disabledMetadata) {
+                auto disabled = MakeNextConfig(fixture.Config);
+                disabled.MutableSelfManagementConfig()->SetEnabled(false);
+                NStorage::TDistributedConfigKeeper::UpdateFingerprint(&disabled);
+                for (ui32 nodeId : {1, 2, 3}) {
+                    fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(disabled);
+                }
+            } else {
+                fixture.Config.SetGeneration(0);
+                fixture.Config.MutableSelfManagementConfig()->SetEnabled(false);
+                NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+                fixture.State.Metadata.clear();
+            }
+        }
+        auto& runtime = fixture.Runtime;
+        ui32 heartbeatRequests = 0;
+        ui32 sessionPoisons = 0;
+        ui32 disconnections = 0;
+        bool trackDisconnects = false;
+        bool pauseRoot = false;
+        TActorId parentSession;
+        std::vector<std::unique_ptr<IEventHandle>> pausedEvents;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (pauseRoot && ev->GetRecipientRewrite() == fixture.Keepers.front()) {
+                pausedEvents.push_back(std::move(ev));
+                return false;
+            }
+            const ui32 type = ev->GetTypeRewrite();
+            if (ev->InterconnectSession && type == NStorage::TEvNodeConfigReversePush::EventType
+                && nodeId == 2 && ev->Sender.NodeId() == 1) {
+                auto& record = ev->Get<NStorage::TEvNodeConfigReversePush>()->Record;
+                if (!record.GetRejected()) {
+                    parentSession = ev->InterconnectSession;
+                    if (legacyParent) {
+                        // An old binary has neither this capability field nor QueryWorkingRoot.
+                        record.ClearSupportsDirectRootQueries();
+                    } else {
+                        UNIT_ASSERT(record.GetSupportsDirectRootQueries());
+                    }
+                }
+            }
+            if (ev->InterconnectSession && type == NStorage::TEvNodeConfigInvokeOnRoot::EventType
+                && ev->Sender.NodeId() == 2 && ev->Sender != fixture.Keepers[1]
+                && ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasQueryWorkingRoot()) {
+                ++heartbeatRequests;
+                if (legacyParent) {
+                    // Model the exact response produced by the pre-QueryWorkingRoot protocol.
+                    auto reply = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+                    reply->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+                    reply->Record.SetErrorReason("Request field not set");
+                    auto handle = std::make_unique<IEventHandle>(ev->Sender, fixture.Keepers.front(),
+                        reply.release(), 0, ev->Cookie);
+                    handle->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
+                    runtime.Send(handle.release(), nodeId);
+                    return false;
+                }
+            }
+            if (parentSession && type == TEvents::TSystem::Poison
+                && ev->GetRecipientRewrite() == parentSession) {
+                ++sessionPoisons;
+            }
+            if (trackDisconnects && type == TEvInterconnect::TEvNodeDisconnected::EventType
+                && ((nodeId == 1 && ev->Get<TEvInterconnect::TEvNodeDisconnected>()->NodeId == 2)
+                    || (nodeId == 2 && ev->Get<TEvInterconnect::TEvNodeDisconnected>()->NodeId == 1))) {
+                ++disconnections;
+            }
+            return true;
+        };
+        fixture.Start();
+        UNIT_ASSERT(parentSession);
+        UNIT_ASSERT(runtime.WrapInActorContext(fixture.Keepers[1], [&](IActor*) {
+            UNIT_ASSERT(!AppData()->FeatureFlags.GetSwitchToConfigV2());
+            UNIT_ASSERT(!AppData()->FeatureFlags.GetForceDistconfDisable());
+        }));
+        const auto scepter = QueryKeeper(runtime, fixture.Keepers.front(), true).GetScepter();
+        const auto current = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(current.GetSelfManagementConfig().GetEnabled(), selfManagement);
+        if (disabledMetadata) {
+            UNIT_ASSERT(fixture.Config.GetSelfManagementConfig().GetEnabled());
+            UNIT_ASSERT(current.GetGeneration() > fixture.Config.GetGeneration());
+        }
+        trackDisconnects = true;
+        if (pauseParent) {
+            pauseRoot = true;
+            const auto requester = runtime.Register(new TIgnoreActor, 1);
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            request->Record.MutableQueryWorkingRoot();
+            runtime.Send(new IEventHandle(fixture.Keepers.front(), requester, request.release()), 1);
+        }
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(180));
+        UNIT_ASSERT_VALUES_EQUAL(sessionPoisons, 0);
+        UNIT_ASSERT_VALUES_EQUAL(disconnections, 0);
+        if (legacyParent || !selfManagement) {
+            UNIT_ASSERT_VALUES_EQUAL(heartbeatRequests, 0);
+        } else {
+            UNIT_ASSERT_C(heartbeatRequests >= 3, "capable parents must retain the liveness watchdog");
+        }
+        UNIT_ASSERT(FindConvergedRoot(runtime, fixture.Keepers) == 1);
+        if (pauseParent) {
+            UNIT_ASSERT(!pausedEvents.empty());
+            pauseRoot = false;
+            ReplayDelayedEvents(runtime, pausedEvents);
+        }
+        const auto after = QueryKeeper(runtime, fixture.Keepers.front(), true);
+        UNIT_ASSERT(after.HasScepter());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetScepter().GetId(), scepter.GetId());
+    }
+
+    Y_UNIT_TEST(BindingToLegacyParentWithDistconfDisabled) {
+        CheckBindingLivenessPeerCapability(false, true);
+    }
+
+    Y_UNIT_TEST(BindingToLegacyParentWithDistconfEnabled) {
+        CheckBindingLivenessPeerCapability(true, true);
+    }
+
+    Y_UNIT_TEST(BindingToCapableParentWithDistconfDisabled) {
+        CheckBindingLivenessPeerCapability(false, false);
+    }
+
+    Y_UNIT_TEST(BindingToCapableParentWithDistconfEnabled) {
+        CheckBindingLivenessPeerCapability(true, false);
+    }
+
+    Y_UNIT_TEST(PausedCapableParentWithDistconfDisabledKeepsInterconnectSession) {
+        CheckBindingLivenessPeerCapability(false, false, true);
+    }
+
+    Y_UNIT_TEST(CommittedDisableWithEnabledBaseKeepsInterconnectSession) {
+        CheckBindingLivenessPeerCapability(false, false, true, true);
+    }
+
     void CheckBindingLivenessIgnoresRetiredEvents(bool rebind) {
         TCommitConfirmationFixture fixture(true);
         fixture.UseMirror3dcGroup();
@@ -6021,6 +6159,7 @@ selector_config: []
         TActorId newSession;
         bool captureOld = false;
         bool observePoison = false;
+        bool parentAdvertisedDirectRootQueries = false;
         ui32 heartbeatRequests = 0;
         ui32 sessionPoisons = 0;
         TActorId replaceEdge;
@@ -6030,6 +6169,15 @@ selector_config: []
         runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             if (HandleReplaceEvent(runtime, nodeId, *ev, replaceEdge, response)) {
                 return false;
+            }
+            if (ev->InterconnectSession && nodeId == 2
+                && ev->GetTypeRewrite() == NStorage::TEvNodeConfigReversePush::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigReversePush>()->Record;
+                if (!record.GetRejected()) {
+                    UNIT_ASSERT_C(record.GetSupportsDirectRootQueries(),
+                        "the parent did not advertise direct root query support to its child");
+                    parentAdvertisedDirectRootQueries = true;
+                }
             }
             if (ev->InterconnectSession && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType
                 && ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasQueryWorkingRoot()
@@ -6065,6 +6213,7 @@ selector_config: []
         };
         fixture.Start();
         CheckDurableConfigConverges(fixture, fixture.Config);
+        UNIT_ASSERT(parentAdvertisedDirectRootQueries);
         const auto rootBefore = QueryKeeper(runtime, fixture.Keepers.front(), true).GetScepter();
         captureOld = true;
         UNIT_ASSERT_C(SimUntil(runtime, [&] { return oldReply && !oldTimers.empty(); }, TDuration::Seconds(60)),

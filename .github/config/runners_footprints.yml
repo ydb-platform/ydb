@@ -1,6 +1,10 @@
 # Runner VM footprints (provisioned maximum resources per GitHub Actions label).
 # Used by the tests resource dashboard for recommendation ceilings and limit lines.
 # Actual usage during a run comes from resources_monitor.jsonl (/proc); it may be lower.
+# Run-tests shard sizing reads footprints below and live Compute quota for this cloud
+# via yc, authenticated with CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS.
+
+quota_cloud_id: b1ggceeul2pkher8vhb6
 
 quotas:
   instances: 140

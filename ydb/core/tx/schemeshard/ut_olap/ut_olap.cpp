@@ -2455,6 +2455,46 @@ Y_UNIT_TEST_SUITE(TOlap) {
         CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
     }
 
+    Y_UNIT_TEST_TWIN(DescribeColumnTableBackupFlag, Standalone) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        ui64 txId = 100;
+
+        if (!Standalone) {
+            TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
+            env.TestWaitNotification(runtime, txId);
+        }
+        const TString parent = Standalone ? "/MyRoot" : "/MyRoot/OlapStore";
+        const TString source = parent + "/ColumnTable";
+        TestCreateColumnTable(runtime, ++txId, parent, defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        const auto checkBackupFlag = [&](const TString& path, bool expected) {
+            TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, path), {
+                [expected](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+                    const auto& description = record.GetPathDescription().GetColumnTableDescription();
+                    UNIT_ASSERT(description.HasIsBackup());
+                    UNIT_ASSERT_VALUES_EQUAL(description.GetIsBackup(), expected);
+                }
+            });
+        };
+        checkBackupFlag(source, false);
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "export-42");
+        env.TestWaitNotification(runtime, txId);
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/export-42", "0", source);
+        env.TestWaitNotification(runtime, txId);
+        checkBackupFlag(source, false);
+        checkBackupFlag("/MyRoot/export-42/0", true);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        checkBackupFlag(source, false);
+        checkBackupFlag("/MyRoot/export-42/0", true);
+    }
+
     Y_UNIT_TEST(ReadOnlyCopyColumnTableDiskQuota) {
         TTestBasicRuntime runtime;
 

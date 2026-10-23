@@ -89,7 +89,7 @@ namespace NKikimr::NKqp {
         const TString BrokenVec = "\xff\xff\xff";
 
         // One cell of a fake read row: Uint64 keys, String embeddings, or a null embedding.
-        using TFakeCell = std::variant<ui64, TString, std::monostate>;
+        using TFakeCell = std::variant<ui64, TString, float, std::monostate>;
         using TFakeRow = TVector<TFakeCell>;
 
         // A null cell: an unranked row, which AddCandidate scores as distance = max().
@@ -98,6 +98,9 @@ namespace NKikimr::NKqp {
         NUdf::TUnboxedValuePod MakeCellValue(const TFakeCell& cell) {
             if (const ui64* number = std::get_if<ui64>(&cell)) {
                 return NUdf::TUnboxedValuePod(*number);
+            }
+            if (const float* score = std::get_if<float>(&cell)) {
+                return NUdf::TUnboxedValuePod(*score);
             }
             if (const TString* text = std::get_if<TString>(&cell)) {
                 return MakeString(*text);
@@ -758,6 +761,8 @@ namespace NKikimr::NKqp {
                             NUdf::TUnboxedValue element = row.GetElement(i);
                             if (OutputTypes[i].GetTypeId() == NScheme::NTypeIds::String) {
                                 decoded.push_back(TString(element.AsStringRef()));
+                            } else if (OutputTypes[i].GetTypeId() == NScheme::NTypeIds::Float) {
+                                decoded.push_back(ToString(element.Get<float>()));
                             } else {
                                 decoded.push_back(ToString(element.Get<ui64>()));
                             }
@@ -1520,6 +1525,67 @@ namespace NKikimr::NKqp {
         }
 
         // ---- posting and main ----
+
+        Y_UNIT_TEST(CoveredScoresPreserveProjectedEmbedding) {
+            auto settings = TSettingsBuilder().Covered().EuclideanMetric().FullRangeHnsw().TopK(2).Build();
+            settings.SetScoreColumnIndex(2);
+            FillColumn(*settings.AddOutputColumns(), 0, "score", NScheme::NTypeIds::Float);
+            settings.AddPostingOutputColumnIds(0);
+            settings.SetPostingEmbeddingColumnId(PostingEmbColumnId);
+            FillColumn(*settings.MutableEmbeddingColumn(), MainEmbColumnId, "emb", NScheme::NTypeIds::String);
+            TSearchEnv env(settings);
+            env.Poll();
+            auto& posting = env.Read(EReadKind::Posting);
+            UNIT_ASSERT(env.ObservedRead(EReadKind::Posting)->Settings.GetVectorTopK().GetReturnScores());
+            UNIT_ASSERT(!env.ObservedRead(EReadKind::Posting)->Settings.GetVectorTopK().GetOmitVectorPayload());
+            // Deliberately contradict the vectors: the merge must use the score
+            // calculated on the shard, while returning projected vectors intact.
+            posting.Push({{ui64(7), NearVec, 5.0f}, {ui64(8), FarVec, 1.0f}}, true);
+            env.Wake(posting);
+            UNIT_ASSERT_VALUES_EQUAL(env.RowKeys(), (TVector<TString>{"8", "7"}));
+            UNIT_ASSERT_VALUES_EQUAL(env.Rows()[0][1], FarVec);
+            UNIT_ASSERT_VALUES_EQUAL(env.Rows()[0][2], "1");
+        }
+
+        Y_UNIT_TEST(CoveredScoresOmitUnprojectedEmbedding) {
+            auto settings = TSettingsBuilder().Covered().EuclideanMetric().FullRangeHnsw().TopK(2).Build();
+            settings.MutableOutputColumns()->RemoveLast();
+            settings.MutablePostingOutputColumnIds()->RemoveLast();
+            settings.SetScoreColumnIndex(1);
+            FillColumn(*settings.AddOutputColumns(), 0, "score", NScheme::NTypeIds::Float);
+            settings.AddPostingOutputColumnIds(0);
+            settings.SetPostingEmbeddingColumnId(PostingEmbColumnId);
+            FillColumn(*settings.MutableEmbeddingColumn(), MainEmbColumnId, "emb", NScheme::NTypeIds::String);
+            TSearchEnv env(settings);
+            env.Poll();
+            auto& posting = env.Read(EReadKind::Posting);
+            UNIT_ASSERT(env.ObservedRead(EReadKind::Posting)->Settings.GetVectorTopK().GetOmitVectorPayload());
+            UNIT_ASSERT_VALUES_EQUAL(env.ObservedRead(EReadKind::Posting)->Settings.GetVectorTopK().GetColumn(), 1);
+            posting.Push({{ui64(7), NullCell, 5.0f}, {ui64(8), NullCell, 1.0f}}, true);
+            env.Wake(posting);
+            UNIT_ASSERT_VALUES_EQUAL(env.RowKeys(), (TVector<TString>{"8", "7"}));
+            UNIT_ASSERT_VALUES_EQUAL(env.Rows()[0].size(), 2);
+        }
+
+        Y_UNIT_TEST(CoveredScoreFirstUsesCanonicalOutputPositions) {
+            auto settings = TSettingsBuilder().Covered().EuclideanMetric().FullRangeHnsw().TopK(2).Build();
+            settings.ClearOutputColumns();
+            settings.ClearPostingOutputColumnIds();
+            settings.SetScoreColumnIndex(0);
+            FillColumn(*settings.AddOutputColumns(), 0, "__ydb_vector_score", NScheme::NTypeIds::Float);
+            FillColumn(*settings.AddOutputColumns(), MainPkColumnId, "pk", NScheme::NTypeIds::Uint64);
+            settings.AddPostingOutputColumnIds(0);
+            settings.AddPostingOutputColumnIds(PostingPkColumnId);
+            settings.SetPostingEmbeddingColumnId(PostingEmbColumnId);
+            FillColumn(*settings.MutableEmbeddingColumn(), MainEmbColumnId, "emb", NScheme::NTypeIds::String);
+            TSearchEnv env(settings);
+            env.Poll();
+            auto& posting = env.Read(EReadKind::Posting);
+            posting.Push({{ui64(7), NullCell, 5.0f}, {ui64(8), NullCell, 1.0f}}, true);
+            env.Wake(posting);
+            UNIT_ASSERT_VALUES_EQUAL(env.Rows()[0], (TVector<TString>{"1", "8"}));
+            UNIT_ASSERT_VALUES_EQUAL(env.Rows()[1], (TVector<TString>{"5", "7"}));
+        }
 
         Y_UNIT_TEST(CoveredIndexSkipsMainRead) {
             TSearchEnv env(TSettingsBuilder().Covered().Build());

@@ -932,7 +932,8 @@ TExprBase DoRewriteTopSortOverKMeansTree(
 
 TExprBase DoRewriteTopSortOverKMeansTreeToVectorSearch(
     const TReadMatch& match, const TMaybeNode<TCoFlatMap>& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
-    TExprContext& ctx, const TIndexDescription& indexDesc)
+    TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, const TIndexDescription& indexDesc,
+    const TKikimrTableMetadata& postingTable)
 {
     YQL_ENSURE(TIndexDescription::IsVectorIndex(indexDesc.Type), "expected a distributed vector index");
 
@@ -967,14 +968,83 @@ TExprBase DoRewriteTopSortOverKMeansTreeToVectorSearch(
         .TargetVector(TExprBase{targetVector})
         .Done().Ptr();
 
-    if (flatMap) {
+    const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription).settings().settings();
+    const TString scoreColumn = "__ydb_vector_score";
+    const bool covered = AllOf(columns, [&](const auto& column) {
+        return postingTable.Columns.contains(column.Value());
+    });
+    const bool distanceInProjection = flatMap && lambdaArgs.Raw() == flatMap.Cast().Lambda().Args().Raw();
+    const auto projection = flatMap.Lambda().Body().Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
+    const bool passthroughProjection = projection && AnyOf(projection.Cast().Args(), [&](const auto& item) {
+        const auto field = TCoNameValueTuple{item};
+        const auto member = field.Value().Maybe<TCoMember>();
+        return field.Name().Value() == embeddingColumn && member
+            && member.Cast().Name().Value() == embeddingColumn
+            && member.Cast().Struct().Raw() == flatMap.Cast().Lambda().Args().Arg(0).Raw();
+    }) && AllOf(projection.Cast().Args(), [&](const auto& item) {
+        return TCoNameValueTuple{item}.Name().Value() != scoreColumn;
+    });
+    const bool simpleProjection = !flatMap || (flatMap.Cast().Lambda().Body().Maybe<TCoJust>()
+        && (distanceInProjection || passthroughProjection));
+    const bool ranked = kqpCtx.Config->HNSWReturnScores.Get().GetOrElse(false)
+        && indexDesc.Type == TIndexDescription::EType::GlobalSyncHnsw
+        && settings.metric() == Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN
+        && settings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
+        && covered && simpleProjection
+        && !kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, match.Table().Path()).Metadata->Columns.contains(scoreColumn)
+        && !postingTable.Columns.contains(scoreColumn)
+        && AllOf(columns, [&](const auto& c) { return c.Value() != scoreColumn; });
+    auto topNode = top.Ptr();
+    TVector<TCoAtom> projectedColumns;
+    if (ranked) {
+        columns.push_back(Build<TCoAtom>(ctx, pos).Value(scoreColumn).Done());
+        read = Build<TKqlReadTableVectorIndex>(ctx, pos)
+            .Table(match.Table()).Index(ctx.NewAtom(pos, indexDesc.Name))
+            .Columns<TCoAtomList>().Add(columns).Build()
+            .TopK(top.Count()).TargetVector(TExprBase{targetVector})
+            .PrefixRows<TCoVoid>().Build().ScoreColumn().Build(scoreColumn)
+            .Done().Ptr();
+        const auto score = Build<TCoMember>(ctx, pos)
+            .Struct(TExprBase{lambdaArgs.Ref().ChildPtr(0)}).Name().Build(scoreColumn).Done();
+        if (flatMap && distanceInProjection) {
+            read = ctx.NewCallable(flatMap.Cast().Pos(), "FlatMap", {
+                read, ctx.ReplaceNode(flatMap.Cast().Lambda().Ptr(), lambdaBody.Ref(), score.Ptr())});
+        } else if (flatMap) {
+            // Carry the shard score through a projection such as an ID cast.
+            // Require the embedding to pass through unchanged, since the outer
+            // sort was matched against that projected embedding.
+            auto fields = projection.Cast().Ref().ChildrenList();
+            for (const auto& field : projection.Cast().Args()) {
+                projectedColumns.push_back(TCoNameValueTuple{field}.Name());
+            }
+            fields.push_back(Build<TCoNameValueTuple>(ctx, pos).Name().Build(scoreColumn)
+                .Value<TCoMember>().Struct(flatMap.Cast().Lambda().Args().Arg(0))
+                    .Name().Build(scoreColumn).Build().Done().Ptr());
+            auto extended = ctx.ChangeChildren(projection.Cast().Ref(), std::move(fields));
+            read = ctx.NewCallable(flatMap.Cast().Pos(), "FlatMap", {
+                read, ctx.ReplaceNode(flatMap.Cast().Lambda().Ptr(), projection.Cast().Ref(), extended)});
+            topNode = ctx.ReplaceNode(std::move(topNode), lambdaBody.Ref(), score.Ptr());
+        } else {
+            topNode = ctx.ReplaceNode(std::move(topNode), lambdaBody.Ref(), score.Ptr());
+        }
+    } else if (flatMap) {
         read = Build<TCoFlatMap>(ctx, flatMap.Cast().Pos())
             .Input(read)
             .Lambda(ctx.DeepCopyLambda(flatMap.Cast().Lambda().Ref()))
         .Done().Ptr();
     }
 
-    VectorTopMain(ctx, top, read);
+    VectorTopMain(ctx, TCoTopBase{topNode}, read);
+    if (ranked && flatMap && !distanceInProjection) {
+        read = Build<TCoExtractMembers>(ctx, pos).Input(read)
+            .Members<TCoAtomList>().Add(projectedColumns).Build().Done().Ptr();
+    } else if (ranked && !flatMap) {
+        // The score belongs to the internal search/sort, not the SQL result.
+        // In particular SELECT * must retain exactly the original row schema.
+        columns.pop_back();
+        read = Build<TCoExtractMembers>(ctx, pos).Input(read)
+            .Members<TCoAtomList>().Add(columns).Build().Done().Ptr();
+    }
 
     return TExprBase{read};
 }
@@ -3938,7 +4008,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
         if (kqpCtx.Config->GetEnableVectorSearchActor()
                 || indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw) {
             return DoRewriteTopSortOverKMeansTreeToVectorSearch(readTableIndex, maybeFlatMap, lambdaArgs, lambdaBody, topBase,
-                                                                ctx, *indexDesc);
+                                                                ctx, kqpCtx, *indexDesc, *implTable->Next);
         }
         return DoRewriteTopSortOverKMeansTree(readTableIndex, maybeFlatMap, lambdaArgs, lambdaBody, topBase,
                                               ctx, kqpCtx, tableDesc, *indexDesc, *implTable);

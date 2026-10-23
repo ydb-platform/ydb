@@ -377,6 +377,9 @@ message TKqpPhyCnVectorSearch {
     // Zero disables the policy. It requires precise whole-shard routing.
     double HnswAdaptiveProbeRatio = 18;
     uint32 HnswAdaptiveOneProbeEfSearch = 19;
+    // Internal SQL-compatible float score, separate from the projected embedding.
+    optional string ScoreColumnName = 20;
+    optional string EmbeddingColumnName = 21;
 }
 
 message TKqpPhyCnSequencer {

@@ -463,6 +463,8 @@ message TKqpVectorSearchSettings {
     optional bool HnswPreciseShardRouting = 32 [default = false];
     optional double HnswAdaptiveProbeRatio = 33 [default = 0];
     optional uint32 HnswAdaptiveOneProbeEfSearch = 34 [default = 0];
+    optional uint32 ScoreColumnIndex = 35;
+    optional TKqpTransaction.TColumnMeta EmbeddingColumn = 36;
 }
 
 message TKqpTaskInfo {
@@ -2667,6 +2669,11 @@ message TEvReadResult {
     optional uint64 ThrottleDelayMs = 17;
 
     optional TReadSamplingStats SamplingStats = 18;
+
+    // Negotiated by VectorTopK.ReturnScores. Parallel to the rows in this result;
+    // values use the SQL-compatible ranking calculation, not HNSW's float score.
+    repeated double VectorScores = 19 [packed = true];
+    optional bool HasVectorScores = 20 [default = false];
 
     // Data for the possibly partial result
     oneof ReadResult {

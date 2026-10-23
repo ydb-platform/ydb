@@ -1,5 +1,7 @@
 #include "kqp_read_actor.h"
 
+#include <ydb/core/base/kmeans_clusters.h>
+
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/kqp/tracing/kqp_shard_rendering.h>
 #include <ydb/core/kqp/tracing/kqp_task_rendering.h>
@@ -1381,6 +1383,9 @@ public:
         if (ResultColumns.empty()) {
             rowStats.AddStatistics({sizeof(ui64), sizeof(ui64)});
         }
+        if (Settings->HasVectorTopK() && Settings->GetVectorTopK().GetReturnScores()) {
+            rowStats.AddStatistics({sizeof(float), sizeof(NUdf::TUnboxedValue)});
+        }
         return rowStats;
     }
 
@@ -1484,7 +1489,7 @@ public:
         for (size_t rowIndex = packed; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
             const auto& row = result->Get()->GetCells(rowIndex);
             NUdf::TUnboxedValue* rowItems = nullptr;
-            batch->emplace_back(HolderFactory.CreateDirectArrayHolder(Settings->ColumnsSize(), rowItems));
+            batch->emplace_back(HolderFactory.CreateDirectArrayHolder(Settings->ColumnsSize() + (Settings->HasVectorTopK() && Settings->GetVectorTopK().GetReturnScores() ? 1 : 0), rowItems));
 
             i64 rowSize = 0;
             size_t columnIndex = 0;
@@ -1503,7 +1508,10 @@ public:
                 if (column.IsSystem) {
                     NMiniKQL::FillSystemColumn(rowItems[resultColumnIndex], shardId, column.Tag, column.TypeInfo);
                 } else {
-                    if (column.NotNull && row[columnIndex].IsNull()) {
+                    const bool omittedVector = Settings->HasVectorTopK() && Settings->GetVectorTopK().GetReturnScores()
+                        && Settings->GetVectorTopK().GetOmitVectorPayload() && result->Get()->Record.GetHasVectorScores()
+                        && resultColumnIndex == Settings->GetVectorTopK().GetColumn();
+                    if (column.NotNull && row[columnIndex].IsNull() && !omittedVector) {
                         ReportNullValue(result, columnIndex);
                         return stats;
                     }
@@ -1512,6 +1520,25 @@ public:
                 }
             }
 
+            if (Settings->HasVectorTopK() && Settings->GetVectorTopK().GetReturnScores()) {
+                const auto& record = result->Get()->Record;
+                double score;
+                if (record.GetHasVectorScores()) {
+                    YQL_ENSURE(record.VectorScoresSize() == result->Get()->GetRowsCount(), "Invalid vector score count");
+                    score = record.GetVectorScores(rowIndex);
+                } else {
+                    const auto& top = Settings->GetVectorTopK();
+                    if (!VectorScoreClusters) {
+                        TString error;
+                        VectorScoreClusters = NKMeans::CreateClustersAutoDetect(top.GetSettings(), top.GetTargetVector(), 0, error);
+                        YQL_ENSURE(VectorScoreClusters, "Invalid vector score settings: " << error);
+                    }
+                    const auto embedding = rowItems[top.GetColumn()];
+                    score = embedding ? VectorScoreClusters->CalcDistance(top.GetTargetVector(), embedding.AsStringRef()) : Max<double>();
+                }
+                rowItems[Settings->ColumnsSize()] = NUdf::TUnboxedValuePod(static_cast<float>(score));
+                rowSize += sizeof(double);
+            }
             stats.DataBytes += rowSize;
             stats.AllocatedBytes += GetRowSize(rowItems).AllocatedBytes;
             freeSpace -= rowSize;
@@ -1815,6 +1842,7 @@ private:
 
     NMiniKQL::TBytesStatistics BytesStats;
     ui64 ReceivedRowCount = 0;
+    std::unique_ptr<NKMeans::IClusters> VectorScoreClusters;
     ui64 ScannedRowCount = 0;  // Actual rows scanned (for VectorTopK, may differ from ReceivedRowCount)
     ui64 ScannedBytesCount = 0;
     ui64 ProcessedRowCount = 0;

@@ -677,6 +677,10 @@ private:
             TVector<TString> readColumns;
             readColumns.reserve(vectorSearch.Columns().Size());
             for (const auto& column : vectorSearch.Columns()) {
+                if (vectorSearch.ScoreColumn().IsValid() && column.Value() == vectorSearch.ScoreColumn().Cast().Value()) {
+                    planNode.NodeInfo["VectorScores"] = true;
+                    continue;
+                }
                 columns.AppendValue(column.Value());
                 readColumns.push_back(TString(column.Value()));
                 if (postingMeta && !postingMeta->Columns.contains(readColumns.back())) {

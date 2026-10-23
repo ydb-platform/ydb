@@ -80,6 +80,8 @@ struct TReadIteratorVectorTop {
     ui32 Column = 0;
     ui32 Limit = 0;
     ui32 HnswEfSearch = 15;
+    bool ReturnScores = false;
+    bool OmitVectorPayload = false;
     TString Target;
     std::unique_ptr<NKMeans::IClusters> KMeans;
     std::vector<ui32> DistinctColumns;
@@ -91,6 +93,7 @@ struct TReadIteratorVectorTop {
 
     std::unordered_set<TString> UniqueKeys;
     std::vector<TReadIteratorVectorTopItem> Rows;
+    TVector<TCell> CompactRowScratch;
     ui64 TotalReadRows = 0;
     ui64 TotalReadBytes = 0;
 
@@ -113,6 +116,13 @@ struct TReadIteratorVectorTop {
             return;
         }
         double distance = KMeans->CalcDistance(embedding, Target);
+        if (OmitVectorPayload) {
+            // Keep the ranking score and keys, without retaining another copy
+            // of each embedding. Logical read-byte accounting above is unchanged.
+            CompactRowScratch.assign(cells.begin(), cells.end());
+            CompactRowScratch[Column] = TCell();
+            cells = TConstArrayRef<TCell>(CompactRowScratch);
+        }
         if (Rows.size() < Limit) {
             if (DistinctColumns.size()) {
                 UniqueKeys.insert(serializedKey);
@@ -134,12 +144,19 @@ struct TReadIteratorVectorTop {
     }
 
     // Move all rows to BlockBuilder in sorted order
-    size_t ToBlockBuilder(IBlockBuilder& blockBuilder, const NScheme::TTypeInfo* columnTypes) {
+    size_t ToBlockBuilder(IBlockBuilder& blockBuilder, const NScheme::TTypeInfo* columnTypes,
+            NKikimrTxDataShard::TEvReadResult& record) {
         size_t n = Rows.size();
         for (auto it = Rows.end(); it != Rows.begin(); it--) {
             std::pop_heap(Rows.begin(), it);
         }
+        if (ReturnScores) {
+            record.SetHasVectorScores(true);
+        }
         for (auto& item: Rows) {
+            if (ReturnScores) {
+                record.AddVectorScores(item.Distance);
+            }
             blockBuilder.AddRow(TDbTupleRef(), TDbTupleRef(columnTypes, item.Row.data(), item.Row.size()));
         }
         Rows.clear();
@@ -1016,7 +1033,7 @@ public:
             if (State.VectorTopK) {
                 record.MutableStats()->SetRows(State.VectorTopK->TotalReadRows);
                 record.MutableStats()->SetBytes(State.VectorTopK->TotalReadBytes);
-                RowsRead += State.VectorTopK->ToBlockBuilder(BlockBuilder, ColumnTypes.data());
+                RowsRead += State.VectorTopK->ToBlockBuilder(BlockBuilder, ColumnTypes.data(), record);
             }
         }
 
@@ -2126,7 +2143,7 @@ private:
         if (last && VectorTopK) {
             record.MutableStats()->SetRows(VectorTopK->TotalReadRows);
             record.MutableStats()->SetBytes(VectorTopK->TotalReadBytes);
-            auto topRows = VectorTopK->ToBlockBuilder(*BlockBuilder, ColumnTypes.data());
+            auto topRows = VectorTopK->ToBlockBuilder(*BlockBuilder, ColumnTypes.data(), record);
             BlockRows += topRows;
             TotalRows += topRows;
         }
@@ -3023,6 +3040,11 @@ public:
             topState->Column = topK.GetColumn();
             topState->Limit = topK.GetLimit();
             topState->HnswEfSearch = topK.GetHnswEfSearch();
+            // CellVec score transport is explicitly negotiated. Arrow and older
+            // consumers retain the original row representation.
+            topState->ReturnScores = topK.GetReturnScores()
+                && record.GetResultFormat() == NKikimrDataEvents::FORMAT_CELLVEC;
+            topState->OmitVectorPayload = topState->ReturnScores && topK.GetOmitVectorPayload();
             topState->Target = topK.GetTargetVector();
 
             // Prefer the index built at vector-index finalization. If it is

@@ -143,19 +143,35 @@ namespace NKikimr {
             void BuildCoveredPostingColumns() {
                 YQL_ENSURE(Settings.PostingOutputColumnIdsSize() == Settings.OutputColumnsSize());
                 THashMap<ui32, ui32> idToPos;
-                for (size_t i = 0; i < Settings.PostingOutputColumnIdsSize(); ++i) {
-                    idToPos.emplace(Settings.GetPostingOutputColumnIds(i), i);
+                CoveredOutputPositions.resize(Settings.OutputColumnsSize());
+                ui32 nextPos = 0;
+                for (ui32 i = 0; i < Settings.OutputColumnsSize(); ++i) {
+                    if (Settings.HasScoreColumnIndex() && i == Settings.GetScoreColumnIndex()) {
+                        continue;
+                    }
+                    idToPos.emplace(Settings.GetPostingOutputColumnIds(i), nextPos);
+                    CoveredOutputPositions[i] = nextPos++;
+                }
+                if (Settings.HasScoreColumnIndex()) {
+                    const auto [it, inserted] = idToPos.emplace(Settings.GetPostingEmbeddingColumnId(), nextPos);
+                    CoveredNeedsEmbedding = inserted;
+                    if (inserted) {
+                        ++nextPos;
+                    }
+                    CoveredEmbeddingPosition = it->second;
                 }
                 CoveredPkPositions.resize(Settings.MainTableKeyColumnsSize());
-                ui32 nextPos = Settings.OutputColumnsSize();
-                for (size_t j = 0; j < Settings.MainTableKeyColumnsSize(); ++j) {
-                    ui32 id = Settings.GetPostingTableKeyColumnIds(j + 1);
-                    auto [it, inserted] = idToPos.emplace(id, nextPos);
+                for (ui32 j = 0; j < Settings.MainTableKeyColumnsSize(); ++j) {
+                    const auto [it, inserted] = idToPos.emplace(Settings.GetPostingTableKeyColumnIds(j + 1), nextPos);
                     if (inserted) {
                         CoveredExtraPkIndices.push_back(j);
                         ++nextPos;
                     }
                     CoveredPkPositions[j] = it->second;
+                }
+                CoveredScorePosition = nextPos;
+                if (Settings.HasScoreColumnIndex()) {
+                    CoveredOutputPositions[Settings.GetScoreColumnIndex()] = CoveredScorePosition;
                 }
             }
 
@@ -779,8 +795,13 @@ namespace NKikimr {
                     // Covered index: read output columns (with their posting-table ids)
                     // plus any PK columns not already among them for per-row dedup; see
                     // BuildCoveredPostingColumns.
-                    for (size_t i = 0; i < Settings.OutputColumnsSize(); ++i) {
-                        AddColumnMeta(src, Settings.GetPostingOutputColumnIds(i), Settings.GetOutputColumns(i));
+                    for (ui32 i = 0; i < Settings.OutputColumnsSize(); ++i) {
+                        if (!Settings.HasScoreColumnIndex() || i != Settings.GetScoreColumnIndex()) {
+                            AddColumnMeta(src, Settings.GetPostingOutputColumnIds(i), Settings.GetOutputColumns(i));
+                        }
+                    }
+                    if (CoveredNeedsEmbedding) {
+                        AddColumnMeta(src, Settings.GetPostingEmbeddingColumnId(), Settings.GetEmbeddingColumn());
                     }
                     for (ui32 j : CoveredExtraPkIndices) {
                         AddColumnMeta(src, Settings.GetPostingTableKeyColumnIds(j + 1), Settings.GetMainTableKeyColumns(j));
@@ -790,7 +811,12 @@ namespace NKikimr {
                     // leaf clusters, and with overlap the same row can appear under multiple
                     // clusters; dedup by PK inside the pushed-down top-K so duplicates don't
                     // crowd out distinct nearest rows (the actor still dedups across shards).
-                    auto* topK = SetVectorTopK(src, Settings.GetVectorColumnIndex(), TopK);
+                    auto* topK = SetVectorTopK(src, Settings.HasScoreColumnIndex() ? CoveredEmbeddingPosition : Settings.GetVectorColumnIndex(), TopK);
+                    if (Settings.HasScoreColumnIndex()) {
+                        topK->SetReturnScores(true);
+                        topK->SetOmitVectorPayload(CoveredNeedsEmbedding
+                            && Find(CoveredPkPositions.begin(), CoveredPkPositions.end(), CoveredEmbeddingPosition) == CoveredPkPositions.end());
+                    }
                     if ((!Settings.GetFullRangeHnsw() && !Settings.GetHnswShardRouting()) || OverlapClusters > 1) {
                         for (ui32 pos : CoveredPkPositions) {
                             topK->AddDistinctColumns(pos);
@@ -1188,10 +1214,14 @@ namespace NKikimr {
             // Build a candidate (output row + distance to the target) from a read row
             // whose first OutputColumns elements are the output columns in order.
             void AddCandidate(NUdf::TUnboxedValue& value) {
-                auto embedding = value.GetElement(Settings.GetVectorColumnIndex());
                 double distance = std::numeric_limits<double>::max();
-                if (embedding.IsString() || embedding.IsEmbedded()) {
-                    distance = RankClusters->CalcDistance(TargetVector, embedding.AsStringRef());
+                if (Settings.HasScoreColumnIndex()) {
+                    distance = value.GetElement(CoveredScorePosition).Get<float>();
+                } else {
+                    auto embedding = value.GetElement(Settings.GetVectorColumnIndex());
+                    if (embedding.IsString() || embedding.IsEmbedded()) {
+                        distance = RankClusters->CalcDistance(TargetVector, embedding.AsStringRef());
+                    }
                 }
                 // Bounded max-heap of the TopK nearest (worst distance at the top). Once full,
                 // a row no nearer than the current worst is dropped before its output holder
@@ -1206,7 +1236,7 @@ namespace NKikimr {
                 NUdf::TUnboxedValue* items = nullptr;
                 auto row = HolderFactory.CreateDirectArrayHolder(Settings.OutputColumnsSize(), items);
                 for (ui32 i = 0; i < Settings.OutputColumnsSize(); ++i) {
-                    items[i] = value.GetElement(i);
+                    items[i] = value.GetElement(Settings.HasScoreColumnIndex() ? CoveredOutputPositions[i] : i);
                 }
                 // The early-out above guarantees this row belongs (heap below TopK, or nearer
                 // than the current worst), so hand it to the bounded-heap insert.
@@ -1350,6 +1380,10 @@ namespace NKikimr {
 
             // Reusable scratch for extracting a posting row's PK cells (dedup key, and
             // the main-read key in the non-covered path). See PostingPkCells.
+            TVector<ui32> CoveredOutputPositions;
+            ui32 CoveredEmbeddingPosition = 0;
+            ui32 CoveredScorePosition = 0;
+            bool CoveredNeedsEmbedding = false;
             TVector<TCell> PkCellsScratch;
             // Backing storage for those cells when MakeCell cannot reference the row.
             NMiniKQL::TStringProviderBackend PkCellsPool;

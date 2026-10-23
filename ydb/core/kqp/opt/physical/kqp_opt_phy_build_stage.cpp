@@ -297,7 +297,7 @@ TExprBase KqpBuildReadTableVectorIndexStage(TExprBase node, TExprContext& ctx, c
     Y_UNUSED(implTable);
     const auto& embeddingColumn = indexDesc->KeyColumns.back();
 
-    const bool hasPrefix = read.PrefixRows().IsValid();
+    const bool hasPrefix = read.PrefixRows().IsValid() && !read.PrefixRows().Maybe<TCoVoid>();
 
     TMaybeNode<TDqStage> inputStageMaybe;
     const TTypeAnnotationNode* inputType = nullptr;
@@ -381,6 +381,11 @@ TExprBase KqpBuildReadTableVectorIndexStage(TExprBase node, TExprContext& ctx, c
         .TopK(topK)
         .HasPrefix(ctx.NewAtom(pos, hasPrefix ? "true" : "false"))
         .Done();
+    if (read.ScoreColumn().IsValid()) {
+        auto children = connection.Ref().ChildrenList();
+        children.push_back(read.ScoreColumn().Cast().Ptr());
+        connection = TKqpCnVectorSearch{ctx.ChangeChildren(connection.Ref(), std::move(children))};
+    }
 
     TDqStageSettings searchStageSettings;
     if (!hasPrefix && indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw

@@ -3711,6 +3711,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     void TestHnswFallback(ui64 cacheBytes, ui64 minRows) {
         NKikimrConfig::TAppConfig appConfig;
+        // This fixture deliberately prevents graph construction; test the
+        // generic read fallback without the production readiness wait.
+        appConfig.MutableSchemeShardConfig()->SetHnswIndexBuildWaitTimeoutSeconds(1);
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(cacheBytes);
         appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(cacheBytes);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true)};
@@ -4255,6 +4258,110 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         checkFailure();
         RebootTablet(runtime, owner, sender);
         checkFailure();
+    }
+
+    Y_UNIT_TEST(HnswRankedScoreTransportMatchesGenericReads) {
+        auto settings = TKikimrSettings().SetEnableHnswIndex(true).SetNeedsStatsCollectors(true)
+            .SetEnableForceFollowers(true).SetUseRealThreads(false);
+        TKikimrRunner kikimr(settings);
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto scheme = [&](const TString& query) {
+            auto result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(query).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme("CREATE TABLE `/Root/RankedVectors` (pk Int64 NOT NULL, emb String, payload String, PRIMARY KEY (pk));");
+        auto write = [&](const TString& query) {
+            auto result = kikimr.RunCall([&] { return ExecuteDataQuery(session, query); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        write(R"(
+            UPSERT INTO `/Root/RankedVectors` (pk, emb, payload) VALUES
+            (1, Untag(Knn::ToBinaryStringFloat([0.0f, 0.0f]), "FloatVector"), "one"),
+            (2, Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), "FloatVector"), "two"),
+            (3, Untag(Knn::ToBinaryStringFloat([3.0f, 0.0f]), "FloatVector"), "three"),
+            (4, Untag(Knn::ToBinaryStringFloat([4.0f, 0.0f]), "FloatVector"), "four");
+        )");
+        // Stale scalar lookup also needs a follower when this fixture forces
+        // follower reads for every table, including the query-vector source.
+        scheme(R"(ALTER TABLE `/Root/RankedVectors` SET (READ_REPLICAS_SETTINGS = "PER_AZ:1");)");
+        scheme(R"(ALTER TABLE `/Root/RankedVectors` ADD INDEX idx GLOBAL USING hnsw ON (emb)
+            WITH (distance=euclidean, vector_type="float", vector_dimension=2, levels=1, clusters=1, min_rows=1);)");
+        scheme(R"(ALTER TABLE `/Root/RankedVectors` ADD INDEX covered_idx GLOBAL USING hnsw ON (emb) COVER (payload)
+            WITH (distance=euclidean, vector_type="float", vector_dimension=2, levels=1, clusters=1, min_rows=1);)");
+        const TString posting = "/Root/RankedVectors/idx/indexImplPostingTable";
+        WaitForCompaction(&kikimr.GetTestServer(), posting);
+        scheme("ALTER TABLE `" + posting + "` SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\");");
+        scheme("ALTER TABLE `/Root/RankedVectors/covered_idx/indexImplPostingTable` SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\");");
+        bool emulateLegacyShard = false;
+        ui64 scoredResults = 0;
+        ui64 omittedVectors = 0;
+        auto observer = runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (emulateLegacyShard && ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
+                auto* read = ev->Get<TEvDataShard::TEvRead>();
+                if (read->Record.HasVectorTopK()) {
+                    read->Record.MutableVectorTopK()->ClearReturnScores();
+                    read->Record.MutableVectorTopK()->ClearOmitVectorPayload();
+                }
+            }
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvReadResult::EventType) {
+                const auto* result = ev->Get<TEvDataShard::TEvReadResult>();
+                if (result->Record.GetHasVectorScores()) {
+                    ++scoredResults;
+                    UNIT_ASSERT_VALUES_EQUAL(result->Record.VectorScoresSize(), result->GetRowsCount());
+                    for (ui32 i = 0; i < result->GetRowsCount(); ++i) {
+                        for (const auto& cell : result->GetCells(i)) {
+                            omittedVectors += cell.IsNull();
+                        }
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(observer); };
+        auto compare = [&] {
+            for (const TString indexName : {"idx", "covered_idx"}) {
+                for (bool stale : {false, true}) {
+                    for (const TString projection : {"UNWRAP(CAST(pk AS String)) AS id", "pk", "pk, emb", "pk, Knn::EuclideanDistance(emb,$q) AS d", "pk, payload", "*"}) {
+                        TString expected;
+                        for (bool ranked : {false, true}) {
+                            const TString sql = TStringBuilder() << "PRAGMA ydb.HNSWReturnScores=\"" << (ranked ? "true" : "false")
+                                << "\"; PRAGMA ydb.HNSWUseClusterRouting=\"true\"; PRAGMA ydb.HNSWPreciseShardRouting=\"true\"; "
+                                << "$q=(SELECT emb FROM `/Root/RankedVectors` WHERE pk=1); SELECT " << projection
+                                << " FROM `/Root/RankedVectors` VIEW " << indexName << " ORDER BY Knn::EuclideanDistance(emb,$q) LIMIT 4;";
+                            const auto scoredBeforeQuery = scoredResults;
+                            const auto omittedBeforeQuery = omittedVectors;
+                            auto result = kikimr.RunCall([&] { return session.ExecuteDataQuery(sql,
+                                TTxControl::BeginTx(stale ? TTxSettings::StaleRO() : TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); });
+                            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                            if (ranked && !emulateLegacyShard && projection == "UNWRAP(CAST(pk AS String)) AS id") {
+                                UNIT_ASSERT_C(scoredResults > scoredBeforeQuery, "ID conversion did not use score transport");
+                                UNIT_ASSERT_C(omittedVectors > omittedBeforeQuery, "ID conversion retained the unprojected vector");
+                            }
+                            const auto actual = NYdb::FormatResultSetYson(result.GetResultSet(0));
+                            if (!ranked) {
+                                expected = actual;
+                            } else {
+                                UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        compare();
+        const auto scoredBeforeLegacy = scoredResults;
+        emulateLegacyShard = true;
+        compare();
+        UNIT_ASSERT_VALUES_EQUAL(scoredResults, scoredBeforeLegacy);
+        emulateLegacyShard = false;
+        write("DELETE FROM `/Root/RankedVectors` WHERE pk=2;");
+        write(R"(UPSERT INTO `/Root/RankedVectors` (pk,emb) VALUES
+            (3,Untag(Knn::ToBinaryStringFloat([1.0f,0.0f]),"FloatVector"));)");
+        compare();
+        UNIT_ASSERT_C(scoredResults > 0, "No reads exercised ranked score transport");
+        UNIT_ASSERT_C(omittedVectors > 0, "No reads exercised vector payload omission");
     }
 
     Y_UNIT_TEST(HnswFollowerCoveredRowsDoNotFetchDataPages) {

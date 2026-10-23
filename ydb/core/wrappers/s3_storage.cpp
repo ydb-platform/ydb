@@ -369,8 +369,6 @@ NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetSuccessR
 TS3ExternalStorage::~TS3ExternalStorage() {
     if (Client) {
         Client->DisableRequestProcessing();
-        std::unique_lock guard(RunningQueriesMutex);
-        RunningQueriesNotifier.wait(guard, [&] { return RunningQueriesCount == 0; });
     }
 }
 

@@ -652,7 +652,7 @@ namespace NKikimr::NBsController {
             PendingCommitState->YamlConfig = std::move(yamlConfig);
             if (storageConfig) {
                 if (auto error = Self.ValidateStoragePoolPileOverrides(*storageConfig)) {
-                    throw TExError() << *error;
+                    throw TExError(*error);
                 }
             }
             PendingCommitState->StorageConfig = std::move(storageConfig);

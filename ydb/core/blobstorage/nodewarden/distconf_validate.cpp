@@ -548,12 +548,14 @@ namespace NKikimr::NStorage {
             }
             const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
             for (const auto& rule : config.GetBlobStorageConfig().GetStoragePoolPileOverrides()) {
-                bool found = false;
-                for (const auto& pile : registry.GetPiles()) {
-                    found |= pile.HasName() && pile.GetName() == rule.GetPileName();
-                }
-                if (!found) {
-                    return TStringBuilder() << "unknown pile in storage pool pile override: " << rule.GetPileName();
+                for (const auto& name : rule.GetPileName()) {
+                    bool found = false;
+                    for (const auto& pile : registry.GetPiles()) {
+                        found |= pile.HasName() && pile.GetName() == name;
+                    }
+                    if (!found) {
+                        return TStringBuilder() << "unknown pile in storage pool pile override: " << name;
+                    }
                 }
             }
             if (auto error = ValidateStaticPileOverrides(config)) {

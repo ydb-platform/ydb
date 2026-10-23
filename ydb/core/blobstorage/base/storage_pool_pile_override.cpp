@@ -10,7 +10,7 @@ namespace NKikimr {
 const NKikimrBlobStorage::TStoragePoolPileOverride* FindStoragePoolPileOverride(
         const NKikimrConfig::TBlobStorageConfig& config, TStringBuf pileName, std::optional<TStringBuf> kind) {
     for (const auto& rule : config.GetStoragePoolPileOverrides()) {
-        if (rule.GetPileName() == pileName && (kind
+        if (std::find(rule.GetPileName().begin(), rule.GetPileName().end(), pileName) != rule.GetPileName().end() && (kind
                 ? rule.GetAllKinds() || std::find(rule.GetKind().begin(), rule.GetKind().end(), *kind) != rule.GetKind().end()
                 : rule.GetStaticGroupOverride())) {
             return &rule;
@@ -23,7 +23,9 @@ std::optional<TString> ValidateStoragePoolPileOverrides(const NKikimrConfig::TBl
     THashSet<TString> allKinds, dynamicPiles, staticPiles;
     THashSet<std::pair<TString, TString>> kinds;
     for (const auto& rule : config.GetStoragePoolPileOverrides()) {
-        const auto& pile = rule.GetPileName();
+        if (!rule.PileNameSize()) {
+            return "storage pool pile override has no piles";
+        }
         if (!rule.GetAllKinds() && !rule.KindSize() && !rule.GetStaticGroupOverride()) {
             return "storage pool pile override has no targets";
         }
@@ -42,23 +44,29 @@ std::optional<TString> ValidateStoragePoolPileOverrides(const NKikimrConfig::TBl
         if (!rule.HasErasureSpecies() && !rule.HasGeometry() && !rule.HasPDiskFilters()) {
             return "storage pool pile override has no settings";
         }
-        if (rule.GetStaticGroupOverride() && !staticPiles.insert(pile).second) {
-            return "overlapping static group pile overrides";
-        }
-        if (rule.GetAllKinds()) {
-            if (dynamicPiles.contains(pile) || !allKinds.insert(pile).second) {
-                return "overlapping storage pool pile overrides";
+        THashSet<TString> rulePiles;
+        for (const auto& pile : rule.GetPileName()) {
+            if (!rulePiles.insert(pile).second) {
+                return "duplicate pile name in storage pool pile override";
             }
-        } else if (rule.KindSize()) {
-            if (allKinds.contains(pile)) {
-                return "overlapping storage pool pile overrides";
+            if (rule.GetStaticGroupOverride() && !staticPiles.insert(pile).second) {
+                return "overlapping static group pile overrides";
             }
-            for (const auto& kind : rule.GetKind()) {
-                if (!kinds.emplace(pile, kind).second) {
+            if (rule.GetAllKinds()) {
+                if (dynamicPiles.contains(pile) || !allKinds.insert(pile).second) {
                     return "overlapping storage pool pile overrides";
                 }
+            } else if (rule.KindSize()) {
+                if (allKinds.contains(pile)) {
+                    return "overlapping storage pool pile overrides";
+                }
+                for (const auto& kind : rule.GetKind()) {
+                    if (!kinds.emplace(pile, kind).second) {
+                        return "overlapping storage pool pile overrides";
+                    }
+                }
+                dynamicPiles.insert(pile);
             }
-            dynamicPiles.insert(pile);
         }
         for (const auto& filter : rule.GetPDiskFilters().GetPDiskFilter()) {
             THashSet<int> properties;

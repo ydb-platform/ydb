@@ -24,6 +24,10 @@ CFLAGS(
     -DPy_BUILD_CORE
 )
 
+IF (OS_WINDOWS)
+    LDFLAGS(/INCLUDE:wmain)
+ENDIF()
+
 SRCS(
     main.c
     get_py_main.cpp

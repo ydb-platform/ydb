@@ -67,8 +67,6 @@ struct TTestEnv {
         , Runtime(*Server->GetRuntime())
         , Sender(Runtime.AllocateEdgeActor())
     {
-        // The S3 mock uses real HTTP threads; allow replies to arrive before simulated deadlines expire.
-        Runtime.SetFastSimulatedTime(false);
         Runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(true);
         Runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         Runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NLog::PRI_TRACE);

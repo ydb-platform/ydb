@@ -16,12 +16,12 @@ Y_UNIT_TEST_SUITE(YamlConfigParser) {
         const auto json = Yaml2Json(YAML::Load(R"(
 blob_storage_config:
   storage_pool_pile_overrides:
-    - pile_name: dc2
+    - pile_name: [dc2, dc3]
       all_kinds: true
       erasure_species: block-4-2
       geometry: {}
       pdisk_filters: {}
-    - pile_name: dc3
+    - pile_name: [dc4]
       all_kinds: true
       erasure_species: block-4-2
 )"), true);
@@ -29,6 +29,11 @@ blob_storage_config:
         Parse(json, GetJsonToProtoConfig(false), config, false);
         const auto& rules = config.GetBlobStorageConfig().GetStoragePoolPileOverrides();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(rules[0].PileNameSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(rules[0].GetPileName(0), "dc2");
+        UNIT_ASSERT_VALUES_EQUAL(rules[0].GetPileName(1), "dc3");
+        UNIT_ASSERT_VALUES_EQUAL(rules[1].PileNameSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rules[1].GetPileName(0), "dc4");
         UNIT_ASSERT(rules[0].HasGeometry());
         UNIT_ASSERT(rules[0].HasPDiskFilters());
         UNIT_ASSERT_VALUES_EQUAL(rules[0].GetPDiskFilters().PDiskFilterSize(), 0);

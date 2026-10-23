@@ -4,9 +4,11 @@ using namespace NBridgeTest;
 
 namespace {
 
-    void AddOverride(YAML::Node& config, const TString& pileName, bool staticGroup = true) {
+    void AddOverride(YAML::Node& config, std::initializer_list<TString> pileNames, bool staticGroup = true) {
         YAML::Node rule;
-        rule["pile_name"] = pileName;
+        for (const auto& pileName : pileNames) {
+            rule["pile_name"].push_back(pileName);
+        }
         rule["kind"].push_back("test");
         rule["static_group_override"] = staticGroup;
         rule["erasure_species"] = "block-4-2";
@@ -30,11 +32,14 @@ Y_UNIT_TEST_SUITE(BridgePileOverrides) {
     Y_UNIT_TEST(ConvertAddGrowAndRepair) {
         const auto named = std::make_shared<bool>(false);
         TEnvironmentSetup env({
-            .NodeCount = 18,
+            .NodeCount = 27,
             .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
             .LocationGenerator = [named](ui32 nodeId) {
                 if (nodeId > 9) {
-                    return GetConvertedClusterLocation(nodeId, true);
+                    NActorsInterconnect::TNodeLocation location;
+                    GetConvertedClusterLocation(nodeId, true).Serialize(&location, false);
+                    location.SetBridgePileName(nodeId <= 18 ? "pile_2" : "pile_3");
+                    return TNodeLocation(location);
                 }
                 NActorsInterconnect::TNodeLocation location;
                 GetUnbridgedLocation(nodeId).Serialize(&location, false);
@@ -53,24 +58,35 @@ Y_UNIT_TEST_SUITE(BridgePileOverrides) {
         checker.Write(0); // static data must also cross the erasure boundary
         NameConvertedClusterNodes(env, *named);
         auto result = ReplaceMainConfig(env, [&](YAML::Node& config) {
-            YAML::Node pile;
-            pile["name"] = "pile_2";
-            config["bridge_config"]["piles"].push_back(pile);
+            for (const auto *name : {"pile_2", "pile_3"}) {
+                YAML::Node pile;
+                pile["name"] = name;
+                config["bridge_config"]["piles"].push_back(pile);
+            }
             AddPileHosts(config, "pile_2", 10, 18);
-            AddOverride(config, "pile_2");
+            AddPileHosts(config, "pile_3", 19, 27);
+            AddOverride(config, {"pile_2", "pile_3"});
         });
         UNIT_ASSERT_EQUAL_C(result.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
             result.GetErrorReason());
+        ExpectError(ReplaceMainConfig(env, [](YAML::Node& config) {
+            config["blob_storage_config"]["storage_pool_pile_overrides"][0]["pile_name"].push_back("unknown_pile");
+        }), "unknown pile in storage pool pile override: unknown_pile");
         env.Sim(TDuration::Seconds(10));
         StartPileNodes(env, "pile_2", 10, 18);
         AddPileAndWait(env, "pile_2");
         RejoinPile(env, 1);
+        StartPileNodes(env, "pile_3", 19, 27);
+        AddPileAndWait(env, "pile_3");
+        RejoinPile(env, 2);
         for (ui32 logical : {0u, groupId}) {
             CheckErasure(env, logical, 0, TBlobStorageGroupType::ErasureMirror3dc);
             CheckErasure(env, logical, 1, TBlobStorageGroupType::Erasure4Plus2Block);
+            CheckErasure(env, logical, 2, TBlobStorageGroupType::Erasure4Plus2Block);
         }
         checker.CheckAll();
         CheckPileData(env, checker, 1, 10);
+        CheckPileData(env, checker, 2, 19);
 
         // Resend the original base definition, as Console does when growing a pool.
         auto pool = ReadStoragePool(env, 1);
@@ -86,6 +102,7 @@ Y_UNIT_TEST_SUITE(BridgePileOverrides) {
             if (group.GetStoragePoolId() == 1 && GetGroupInfo(env, group.GetGroupId()).HasBridgeGroupState()) {
                 CheckErasure(env, group.GetGroupId(), 0, TBlobStorageGroupType::ErasureMirror3dc);
                 CheckErasure(env, group.GetGroupId(), 1, TBlobStorageGroupType::Erasure4Plus2Block);
+                CheckErasure(env, group.GetGroupId(), 2, TBlobStorageGroupType::Erasure4Plus2Block);
                 checker.Write(group.GetGroupId());
             }
         }
@@ -111,6 +128,7 @@ Y_UNIT_TEST_SUITE(BridgePileOverrides) {
         env.Sim(TDuration::Seconds(60));
         checker.CheckAll();
         CheckPileData(env, checker, 1, 10);
+        CheckPileData(env, checker, 2, 19);
 
         // Removing the rules must not silently reinterpret live block-4-2 groups as mirror-3-dc.
         ExpectError(ReplaceMainConfig(env, [](YAML::Node& config) {
@@ -139,7 +157,7 @@ Y_UNIT_TEST_SUITE(BridgePileOverrides) {
         WaitPileOperationFinished(env, 10);
         checker.CheckAll(10);
         result = ReplaceMainConfig(env, [](YAML::Node& config) {
-            AddOverride(config, "pile_1");
+            AddOverride(config, {"pile_1"});
             // The original pile still spans three DCs, with only three nodes in each. For its replacement,
             // use racks as fail domains without constraining the single fail realm to one datacenter.
             auto geometry = config["blob_storage_config"]["storage_pool_pile_overrides"][1]["geometry"];
@@ -160,6 +178,7 @@ Y_UNIT_TEST_SUITE(BridgePileOverrides) {
         for (ui32 logical : {0u, groupId}) {
             CheckErasure(env, logical, 0, TBlobStorageGroupType::Erasure4Plus2Block);
             CheckErasure(env, logical, 1, TBlobStorageGroupType::Erasure4Plus2Block);
+            CheckErasure(env, logical, 2, TBlobStorageGroupType::Erasure4Plus2Block);
         }
         checker.CheckAll();
         CheckPileData(env, checker, 0, 1);

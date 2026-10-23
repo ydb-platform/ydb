@@ -7,7 +7,8 @@ namespace {
 TEST(StoragePoolPileOverrides, SelectorsAndConflicts) {
     NKikimrConfig::TBlobStorageConfig config;
     auto *rule = config.AddStoragePoolPileOverrides();
-    rule->SetPileName("dc2");
+    rule->AddPileName("dc2");
+    rule->AddPileName("dc3");
     rule->AddKind("ssd");
     rule->AddKind("hdd");
     rule->SetStaticGroupOverride(true);
@@ -17,6 +18,9 @@ TEST(StoragePoolPileOverrides, SelectorsAndConflicts) {
     EXPECT_EQ(FindStoragePoolPileOverride(config, "dc2", "ssd"), rule);
     EXPECT_EQ(FindStoragePoolPileOverride(config, "dc2", "hdd"), rule);
     EXPECT_EQ(FindStoragePoolPileOverride(config, "dc2", std::nullopt), rule);
+    EXPECT_EQ(FindStoragePoolPileOverride(config, "dc3", "ssd"), rule);
+    EXPECT_EQ(FindStoragePoolPileOverride(config, "dc3", "hdd"), rule);
+    EXPECT_EQ(FindStoragePoolPileOverride(config, "dc3", std::nullopt), rule);
     EXPECT_EQ(FindStoragePoolPileOverride(config, "dc1", "ssd"), nullptr);
     EXPECT_EQ(FindStoragePoolPileOverride(config, "dc2", "other"), nullptr);
 
@@ -36,17 +40,61 @@ TEST(StoragePoolPileOverrides, SelectorsAndConflicts) {
 TEST(StoragePoolPileOverrides, StaticOnlyAndAllKinds) {
     NKikimrConfig::TBlobStorageConfig config;
     auto *rule = config.AddStoragePoolPileOverrides();
-    rule->SetPileName("dc2");
+    rule->AddPileName("dc2");
+    rule->AddPileName("dc3");
     rule->SetStaticGroupOverride(true);
     rule->MutableGeometry();
     EXPECT_FALSE(ValidateStoragePoolPileOverrides(config));
     EXPECT_EQ(FindStoragePoolPileOverride(config, "dc2", "static"), nullptr);
     EXPECT_EQ(FindStoragePoolPileOverride(config, "dc2", ""), nullptr);
     EXPECT_EQ(FindStoragePoolPileOverride(config, "dc2", std::nullopt), rule);
+    EXPECT_EQ(FindStoragePoolPileOverride(config, "dc3", std::nullopt), rule);
+    EXPECT_EQ(FindStoragePoolPileOverride(config, "dc3", "ssd"), nullptr);
     rule->SetAllKinds(true);
     EXPECT_FALSE(ValidateStoragePoolPileOverrides(config));
     EXPECT_EQ(FindStoragePoolPileOverride(config, "dc2", ""), rule);
     EXPECT_EQ(FindStoragePoolPileOverride(config, "dc2", "future-kind"), rule);
+    EXPECT_EQ(FindStoragePoolPileOverride(config, "dc3", "future-kind"), rule);
+}
+
+TEST(StoragePoolPileOverrides, MissingOrDuplicatePiles) {
+    NKikimrConfig::TBlobStorageConfig config;
+    auto *rule = config.AddStoragePoolPileOverrides();
+    rule->SetAllKinds(true);
+    rule->MutableGeometry();
+    EXPECT_TRUE(ValidateStoragePoolPileOverrides(config));
+    rule->AddPileName("dc2");
+    EXPECT_FALSE(ValidateStoragePoolPileOverrides(config));
+    rule->AddPileName("dc2");
+    EXPECT_TRUE(ValidateStoragePoolPileOverrides(config));
+}
+
+TEST(StoragePoolPileOverrides, PartiallyOverlappingPileSelectors) {
+    NKikimrConfig::TBlobStorageConfig config;
+    auto *first = config.AddStoragePoolPileOverrides();
+    first->AddPileName("dc1");
+    first->AddPileName("dc2");
+    first->AddKind("ssd");
+    first->MutableGeometry();
+    auto *second = config.AddStoragePoolPileOverrides();
+    second->AddPileName("dc2");
+    second->AddPileName("dc3");
+    second->AddKind("hdd");
+    second->MutableGeometry();
+    EXPECT_FALSE(ValidateStoragePoolPileOverrides(config));
+    second->AddKind("ssd");
+    EXPECT_TRUE(ValidateStoragePoolPileOverrides(config));
+    second->ClearKind();
+    second->SetStaticGroupOverride(true);
+    EXPECT_FALSE(ValidateStoragePoolPileOverrides(config));
+    first->SetStaticGroupOverride(true);
+    EXPECT_TRUE(ValidateStoragePoolPileOverrides(config));
+    first->SetStaticGroupOverride(false);
+    second->SetStaticGroupOverride(false);
+    second->SetAllKinds(true);
+    EXPECT_TRUE(ValidateStoragePoolPileOverrides(config));
+    config.MutableStoragePoolPileOverrides()->SwapElements(0, 1);
+    EXPECT_TRUE(ValidateStoragePoolPileOverrides(config));
 }
 
 TEST(StoragePoolPileOverrides, ReplaceAndInherit) {
@@ -87,6 +135,7 @@ TEST(StoragePoolPileOverrides, ReplaceAndInherit) {
 TEST(StoragePoolPileOverrides, ErasureRequiresExplicitGeometry) {
     NKikimrConfig::TBlobStorageConfig config;
     auto *rule = config.AddStoragePoolPileOverrides();
+    rule->AddPileName("dc2");
     rule->SetAllKinds(true);
     rule->SetErasureSpecies("block-4-2");
     EXPECT_TRUE(ValidateStoragePoolPileOverrides(config));

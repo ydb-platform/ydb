@@ -7,6 +7,7 @@
 #include <ydb/core/kafka_proxy/actors/kafka_balancer_actor.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include "actors/actors.h"
 #include "actors/kafka_api_versions_actor.h"
@@ -20,6 +21,7 @@
 #include "kafka_metrics.h"
 
 #include <util/generic/guid.h>
+#include <util/generic/hash_set.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -81,6 +83,15 @@ public:
     TEvPollerReady::TPtr PollerEventSaved = nullptr;
 
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
+
+    struct TReleasedGroupMemberCounter {
+        ui64 Generation;
+        TVector<std::pair<TString, TString>> Labels;
+    };
+
+    THashMap<TString, NMonitoring::TDynamicCounters::TCounterPtr> GroupMemberCounters;
+    THashMap<TString, ui64> GroupMemberCounterGenerations;
+    THashMap<TString, TReleasedGroupMemberCounter> ReleasedGroupMemberCounters;
 
     std::shared_ptr<Msg> Request;
     Msg::TPtr PendingRequest;
@@ -145,6 +156,23 @@ public:
             {LogPrefix()});
 
         ConnectionEstablished = false;
+        THashSet<TString> groupIds;
+        for (const auto& entry : GroupMemberCounters) {
+            groupIds.insert(entry.first);
+        }
+        for (const auto& entry : ReleasedGroupMemberCounters) {
+            groupIds.insert(entry.first);
+        }
+        if (!Context->GroupId.empty()) {
+            groupIds.insert(Context->GroupId);
+        }
+        GroupMemberCounters.clear();
+        GroupMemberCounterGenerations.clear();
+        ReleasedGroupMemberCounters.clear();
+        for (const auto& groupId : groupIds) {
+            auto labels = BuildGroupLabels(Context, groupId, "api.kafka.consumer_group.members_count");
+            Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvCleanupGroupMemberCounter(std::move(labels)));
+        }
         if (ProduceActorId) {
             Send(ProduceActorId, new TEvents::TEvPoison());
         }
@@ -622,6 +650,39 @@ protected:
             {LogPrefix()},
             {"groupId", r->GroupId});
         Context->GroupId = r->GroupId;
+    }
+
+
+    void Handle(TEvKafka::TEvSaveGroupMemberCounter::TPtr ev, const TActorContext& /*ctx*/) {
+        const auto& groupId = ev->Get()->GroupId;
+        const ui64 generation = ev->Get()->Generation;
+        auto released = ReleasedGroupMemberCounters.find(groupId);
+        // The metrics actor may reply after the connection has left this generation.
+        if (released != ReleasedGroupMemberCounters.end() && released->second.Generation >= generation) {
+            Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvCleanupGroupMemberCounter(released->second.Labels));
+            return;
+        }
+        GroupMemberCounters[groupId] = std::move(ev->Get()->Counter);
+        GroupMemberCounterGenerations[groupId] = generation;
+        if (released != ReleasedGroupMemberCounters.end()) {
+            ReleasedGroupMemberCounters.erase(released);
+        }
+    }
+
+    void Handle(TEvKafka::TEvReleaseGroupMemberCounter::TPtr ev, const TActorContext& /*ctx*/) {
+        const auto& groupId = ev->Get()->GroupId;
+        const ui64 generation = ev->Get()->Generation;
+        auto released = ReleasedGroupMemberCounters.find(groupId);
+        if (released == ReleasedGroupMemberCounters.end() || released->second.Generation < generation) {
+            ReleasedGroupMemberCounters[groupId] = {generation, std::move(ev->Get()->Labels)};
+            released = ReleasedGroupMemberCounters.find(groupId);
+        }
+        auto counterGeneration = GroupMemberCounterGenerations.find(groupId);
+        if (counterGeneration != GroupMemberCounterGenerations.end() && counterGeneration->second <= generation) {
+            GroupMemberCounters.erase(groupId);
+            GroupMemberCounterGenerations.erase(counterGeneration);
+            Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvCleanupGroupMemberCounter(released->second.Labels));
+        }
     }
 
     void Handle(TEvKafka::TEvAuthResult::TPtr ev, const TActorContext& ctx) {
@@ -1253,6 +1314,8 @@ protected:
             HFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
             HFunc(TEvKafka::TEvReadSessionInfo, Handle);
             HFunc(TEvKafka::TEvHandshakeResult, Handle);
+            HFunc(TEvKafka::TEvSaveGroupMemberCounter, Handle);
+            HFunc(TEvKafka::TEvReleaseGroupMemberCounter, Handle);
             sFunc(TEvKafka::TEvKillReadSession, HandleKillReadSession);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:

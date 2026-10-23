@@ -114,6 +114,7 @@ def alter(fixture, topic_path, *, endpoint=None, expected=StatusIds.SUCCESS, **k
 
 def ordinary_old_alters(workload, original, endpoint=None):
     fixture = workload.fixture
+    # The same-default speed request exercises an idempotent old API roundtrip.
     for kwargs in (
         {'set_partition_write_speed_bytes_per_second': 1048576},
         {'add_consumers': [ydb_topic_pb2.Consumer(name='ordinary')]},
@@ -196,7 +197,6 @@ async def read_range(driver, topic_path, consumer, begin, end):
 class RetentionWorkload(CdcReplicationWorkload):
     def __init__(self, fixture, name, consistency='ROW'):
         super().__init__(fixture, name, consistency)
-        self.expected = {}
         self.next_key = 1
 
     def batch(self, label, count=24):
@@ -210,11 +210,10 @@ class RetentionWorkload(CdcReplicationWorkload):
             value = label + ':' + str(key) + payload
             binary = b'\x00\xffA'
             self.upsert(key, value, binary=binary, optional=None)
-            self.expected[key] = (key, value, binary, None)
         poll('batch reaches CDC topic', self.topic_end, lambda end: end >= before + count)
 
     def exact(self):
-        self.wait_rows([self.expected[key] for key in sorted(self.expected)])
+        self.wait_rows(self.expected_rows())
         end = self.topic_end()
         self.wait_checkpoint(end)
         return assert_contract(self)
@@ -222,22 +221,28 @@ class RetentionWorkload(CdcReplicationWorkload):
     def update_delete(self, label):
         key = min(self.expected)
         self.upsert(key, label, binary=b'\x00\xffA', optional=None)
-        self.expected[key] = (key, label, b'\x00\xffA', None)
         key = max(self.expected)
         self.erase(key)
 
-    def unread(self):
+    def unread(self, captured=None):
         state = snapshot(self)
         assert state['end'] > state['commit'], state
+        begin, end = state['commit'], state['end']
+        if captured is not None:
+            # GLOBAL keeps appending resolved heartbeats during a version switch.
+            # Preserve exactly the original durable range, including its lower bound.
+            begin, end = captured[0][0], captured[-1][0] + 1
+            assert state['commit'] == begin, (begin, state)
+            assert state['start'] <= begin < end <= state['end'], (begin, end, state)
         audit = 'audit_' + str(time.monotonic_ns())
         alter(self.fixture, self.topic_path, add_consumers=[ydb_topic_pb2.Consumer(name=audit)])
         try:
             messages = asyncio.run(read_range(
                 self.fixture.source_driver, self.topic_path, audit,
-                state['commit'], state['end']))
+                begin, end))
         finally:
             alter(self.fixture, self.topic_path, drop_consumers=[audit])
-        assert [record[0] for record in messages] == list(range(state['commit'], state['end']))
+        assert [record[0] for record in messages] == list(range(begin, end))
         assert snapshot(self)['commit'] == state['commit'], 'Audit read must not acknowledge replication'
         return messages
 
@@ -254,7 +259,7 @@ class TestAcknowledgedRetentionCompatibility(CdcReplicationCompatibilityFixture)
                     ids=[f'ack_{current_name}_{inter_stable_name}'])
     def base_setup(self, request):
         if current_name != 'current':
-            pytest.skip('ACK retention requires patched current target; run with -DYDB_COMPAT_TARGET_REF=current')
+            pytest.skip('ACK retention acceptance requires patched target: -DYDB_COMPAT_TARGET_REF=current')
         self.all_binary_paths = request.param
         self.current_binary_paths_index = 0
 
@@ -294,11 +299,11 @@ class TestAcknowledgedRetentionCompatibility(CdcReplicationCompatibilityFixture)
         source_fallback.discover_changefeed()
         assert_contract(source_fallback, acknowledged=False)
         source_fallback.batch('old-source', count=2)
-        source_fallback.wait_rows(list(source_fallback.expected.values()))
+        source_fallback.wait_rows(source_fallback.expected_rows())
         self.switch_source(current_binary_path)
         assert_contract(source_fallback, acknowledged=False)
         source_fallback.update_delete('source-upgraded')
-        source_fallback.wait_rows(list(source_fallback.expected.values()))
+        source_fallback.wait_rows(source_fallback.expected_rows())
 
         self.stop_destination()
         self.restart_destination(inter_stable_binary_path)
@@ -308,12 +313,12 @@ class TestAcknowledgedRetentionCompatibility(CdcReplicationCompatibilityFixture)
         destination_fallback.discover_changefeed()
         assert_contract(destination_fallback, acknowledged=False)
         destination_fallback.batch('old-destination', count=2)
-        destination_fallback.wait_rows(list(destination_fallback.expected.values()))
+        destination_fallback.wait_rows(destination_fallback.expected_rows())
         self.stop_destination()
         self.restart_destination(current_binary_path)
         assert_contract(destination_fallback, acknowledged=False)
         destination_fallback.update_delete('destination-upgraded')
-        destination_fallback.wait_rows(list(destination_fallback.expected.values()))
+        destination_fallback.wait_rows(destination_fallback.expected_rows())
 
         active = RetentionWorkload(self, 'active_' + consistency, consistency)
         active.create_source_table()
@@ -342,11 +347,11 @@ class TestAcknowledgedRetentionCompatibility(CdcReplicationCompatibilityFixture)
         self.switch_source(inter_stable_binary_path)
         assert_contract(active, original)
         assert active.checkpoint() == checkpoint
-        assert active.unread() == suffix
+        assert active.unread(captured=suffix) == suffix
         ordinary_old_alters(active, original)
         restart_source_tablets(self)
         assert_contract(active, original)
-        assert active.unread() == suffix
+        assert active.unread(captured=suffix) == suffix
         self.restart_destination(inter_stable_binary_path)
         active.exact()
         active.update_delete('both-old-update')
@@ -367,7 +372,7 @@ class TestAcknowledgedRetentionCompatibility(CdcReplicationCompatibilityFixture)
         suffix = active.unread()
         self.switch_source(current_binary_path)
         assert_contract(active, original)
-        assert active.unread() == suffix
+        assert active.unread(captured=suffix) == suffix
         self.restart_destination(current_binary_path)
         active.exact()
         before = snapshot(active)['start']
@@ -474,7 +479,7 @@ class TestAcknowledgedRetentionCompatibility(CdcReplicationCompatibilityFixture)
                 active.batch('all-old-unread')
                 suffix = active.unread()
                 restart_source_tablets(self)
-                assert active.unread() == suffix
+                assert active.unread(captured=suffix) == suffix
                 ordinary_old_alters(active, original, endpoint=old_nodes[0].endpoint)
                 self.restart_destination(current_binary_path)
                 active.exact()

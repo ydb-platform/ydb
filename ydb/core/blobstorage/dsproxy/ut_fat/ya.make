@@ -8,9 +8,9 @@ REQUIREMENTS(cpu:2)
 SIZE(MEDIUM)
 
 PEERDIR(
+    ydb/library/actors/interconnect/mock
     ydb/library/actors/protos
     ydb/library/actors/util
-     ydb/library/actors/interconnect/mock
     library/cpp/getopt
     library/cpp/svnversion
     ydb/apps/version

@@ -235,26 +235,29 @@ void TStorageTransportMock::WriteToManyPBuffers(
 
     TEvWriteToManyPersistentBuffersResult result;
     auto addResult = [&](const NKikimrBlobStorage::NDDisk::TDDiskId& ddiskId,
-                         TReplyStatusE status)
+                         TReplyStatusE status,
+                         TStringBuf reason)
     {
         auto& r = *result.AddResult();
         r.MutableResult()->SetStatus(status);
+        if (reason) {
+            r.MutableResult()->SetErrorReason(TString(reason));
+        }
         r.MutablePersistentBufferId()->SetNodeId(ddiskId.GetNodeId());
         r.MutablePersistentBufferId()->SetPDiskId(ddiskId.GetPDiskId());
         r.MutablePersistentBufferId()->SetDDiskSlotId(ddiskId.GetDDiskSlotId());
     };
 
-    if (WriteToManyPBufferCoordinatorOnlyStatus) {
-        // Emulate the node-disconnection / undelivery path: the actor replies
-        // only for the coordinator (first DDisk in the request).
-        if (!persistentBufferIds.empty()) {
+    if (WriteToManyPBuffersUndeliveredStatus) {
+        for (const auto& ddiskId: persistentBufferIds) {
             addResult(
-                persistentBufferIds.front(),
-                *WriteToManyPBufferCoordinatorOnlyStatus);
+                ddiskId,
+                *WriteToManyPBuffersUndeliveredStatus,
+                UndeliveryErrorMessage);
         }
     } else {
         for (const auto& ddiskId: persistentBufferIds) {
-            addResult(ddiskId, WriteToManyPBufferStatus);
+            addResult(ddiskId, WriteToManyPBufferStatus, {});
         }
     }
 

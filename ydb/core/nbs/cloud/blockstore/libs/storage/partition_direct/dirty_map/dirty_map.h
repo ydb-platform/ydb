@@ -33,12 +33,6 @@ class TBlocksDirtyMap
     , public std::enable_shared_from_this<TBlocksDirtyMap>
 {
 public:
-    enum class EEraseType
-    {
-        Standard,
-        Belated
-    };
-
     TBlocksDirtyMap(
         TArenaAllocatorPoolPtr arenaAllocatorPool,
         const TVChunkConfig& vChunkConfig,
@@ -57,12 +51,15 @@ public:
         TBlockRange16 range,
         THostIndex host);
 
+    // After a complete restore list. A record still below quorum becomes
+    // discarded: found copies are erased, and the restore barrier finishes it.
+    void FinishPBufferRestore();
+
     // MakeReadHint can work with multiple locations and returns multiple
     // RangeHints
     [[nodiscard]] TReadHint MakeReadHint(TBlockRange16 range);
     [[nodiscard]] TFlushHints MakeFlushHint(size_t batchSize);
     [[nodiscard]] TEraseHints MakeEraseHint(size_t batchSize);
-    [[nodiscard]] TEraseHints MakeEraseBelatedHint();
 
     // Registers a write as pending (lsn generated, data not in any PBuffer
     // yet) so that the cleanup bound covers it from the moment of generation.
@@ -72,7 +69,18 @@ public:
         TPBufferKey pBufferKey,
         TBlockRange16 range,
         THostMask requested,
+        THostMask confirmed,
+        THostMask answered);
+    // Every requested host has already answered.
+    void WriteFinished(
+        TPBufferKey pBufferKey,
+        TBlockRange16 range,
+        THostMask requested,
         THostMask confirmed);
+    void OnBelatedWrite(
+        TPBufferKey pBufferKey,
+        THostMask completed,
+        THostMask failed);
     void FlushFinished(
         THostRoute route,
         const TVector<TPBufferKey>& flushOk,
@@ -81,10 +89,6 @@ public:
         THostIndex host,
         const TVector<TPBufferKey>& eraseOk,
         const TVector<TPBufferKey>& eraseFailed);
-
-    void UpdateBelatedEraseQueue(
-        THostMask completedWrites,
-        TPBufferKey pBufferKey);
 
     // Sets the readable prefix of one DDisk for tests.
     void SetReadablePrefixDebugOnly(THostIndex host, ui64 bytesOffset);
@@ -106,7 +110,6 @@ public:
     [[nodiscard]] size_t GetInflightCount() const;
     [[nodiscard]] size_t GetFlushPendingCount() const;
     [[nodiscard]] size_t GetErasePendingCount() const;
-    [[nodiscard]] size_t GetEraseBelatedCount() const;
     [[nodiscard]] ui64 GetMinFlushPendingLsn() const;
     [[nodiscard]] ui64 GetMinErasePendingLsn() const;
     [[nodiscard]] std::optional<TPBufferKey> GetSafeBarrierForErase() const;
@@ -194,16 +197,6 @@ private:
         THostMask,
         TBlockRange16>;
 
-    struct TInfoEraseBelated
-    {
-        TPBufferKey PBufferKey;
-        THostMask Hosts;
-
-        bool operator<(const TInfoEraseBelated& other) const;
-    };
-
-    using TInfoEraseBelatedSet = TArenaSet<TInfoEraseBelated>;
-
     struct TInflightDDiskSync
     {
         THostIndex DestinationHost = InvalidHostIndex;
@@ -246,9 +239,15 @@ private:
         TInflightInfo& inflightInfo);
 
     void RemovePBuffer(TPBufferKey pBufferKey);
+    // Drops the record once it is erased, or once the persisted restore
+    // barrier covers it.
+    [[nodiscard]] bool RemoveIfErased(
+        TPBufferKey pBufferKey,
+        TInflightInfo& inflight);
     // Raises the restore barrier target, keeping it below unflushed records.
     void MaybeAdvanceRestoreBarrier();
-    // Returns whether the persisted restore barrier covers the record.
+    // True when the persisted barrier is already at or above this key and
+    // no confirmed copy still needs an address erase. Marks the record erased.
     [[nodiscard]] bool MaybeCoverByRestoreBarrier(
         TPBufferKey pBufferKey,
         TInflightInfo& inflight);
@@ -278,8 +277,6 @@ private:
     // Ranges that are fully transferred to DDisk and can be erased.
     // Using TSet for O(1) min LSN access.
     TPBufferKeySet ReadyToErase{ArenaAllocatorPool.get()};
-
-    TInfoEraseBelatedSet ReadyToEraseBelated{ArenaAllocatorPool.get()};
 
     // In-flight reads and the locks they create.
     ILockableRanges::TLockRangeHandle InflightDDiskReadsGenerator = 0;

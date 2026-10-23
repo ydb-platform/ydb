@@ -173,6 +173,98 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         onStop.GetValue(TDuration::Seconds(10));
     }
 
+    Y_UNIT_TEST_F(ShouldEraseCopiesOfWriteWithoutQuorum, TBaseFixture)
+    {
+        Init();
+
+        const auto range = TBlockRange16::WithLength(10, 1);
+        ExpectedRange = range;
+        RangeData = GenerateRandomString(BlockSize * range.Size());
+
+        // Force the next generated lsn to be 123 (LsnGenerator pre-increments).
+        PartitionDirectService->LsnGenerator = 122;
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            PartitionDirectService.get(),
+            DiskDescription,
+            VChunkConfig,
+            false,
+            DirtyMapStateProto,
+            DirectBlockGroup,
+            3,   // syncRequestsBatchSize
+            DefaultBlockSize,
+            DefaultVChunkSize);
+        vchunk->Start();
+
+        auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
+        auto request =
+            std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+                .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
+                .RequestId = 1,
+                .Range = ConvertRangeSafe<TBlockRange64>(range)});
+        request->Sglist = MakeSgList();
+
+        auto future =
+            vchunk->WriteBlocksLocal(callContext, request, NWilson::TTraceId());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            WaitWriteRequests(3, TDuration::Seconds(10)));
+
+        // Every PBuffer answers with an error: the quorum is unreachable and
+        // the client gets an error.
+        SetWriteResult(
+            TDBGWriteBlocksResponse{.Error = MakeError(E_IO, "disk error")},
+            true);
+
+        const auto& result = future.GetValue(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(E_IO, result.Error.GetCode());
+
+        // The record is still in the dirty map: it holds the cleanup barrier.
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(123).Print(),
+            GetSafeBarrierOnExecutor(DirectBlockGroup->GetExecutor(), *vchunk)
+                ->Print());
+
+        // Nobody confirmed the write, so no host is erased by address. The
+        // scheduled cleanup persists the restore barrier instead.
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            WaitScheduledTasks(1, TDuration::Seconds(10)));
+        RunScheduledTasks().GetValue(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            WaitEraseRequests(1, TDuration::MilliSeconds(100)));
+
+        // The handoffs answer with an error. That still does not prove that
+        // nothing landed, and it does not start an erase.
+        SetWriteResult(
+            TDBGWriteBlocksResponse{.Error = MakeError(E_IO, "disk error")},
+            true);
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            WaitEraseRequests(1, TDuration::MilliSeconds(100)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(123).Print(),
+            GetSafeBarrierOnExecutor(DirectBlockGroup->GetExecutor(), *vchunk)
+                ->Print());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            PartitionDirectService->UpdateDirtyMapStateRequests.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateDirtyMapStateRequests());
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+
+        UNIT_ASSERT(
+            !GetSafeBarrierOnExecutor(DirectBlockGroup->GetExecutor(), *vchunk)
+                 .has_value());
+
+        vchunk->Stop().GetValue(TDuration::Seconds(10));
+    }
+
     Y_UNIT_TEST_F(ShouldPersistTouchedBeforeFirstFlush, TBaseFixture)
     {
         Init();

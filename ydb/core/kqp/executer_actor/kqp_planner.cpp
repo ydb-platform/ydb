@@ -856,7 +856,9 @@ TMaybe<ui64> TKqpPlanner::GetActualNodeIdForTask(ui64 taskId) const {
 }
 
 void TKqpPlanner::TaskNotStarted(ui64 taskId) {
-    // NOTE: should be invoked only while shutting down - when node is disconnected.
+    // NOTE: should be invoked only for a task which is not expected to report - when its node is disconnected,
+    // has refused to start it or has not got the request. If its compute actor reports after all,
+    // it is acknowledged again.
 
     auto& task = TasksGraph.GetTask(taskId);
 
@@ -864,6 +866,17 @@ void TKqpPlanner::TaskNotStarted(ui64 taskId) {
     YQL_ENSURE(!task.Meta.Completed);
 
     PendingComputeTasks.erase(taskId);
+}
+
+void TKqpPlanner::RequestNotStarted(ui32 requestId) {
+    YQL_ENSURE(requestId < Requests.size());
+    for (ui64 taskId : Requests[requestId].TaskIds) {
+        const auto& task = TasksGraph.GetTask(taskId);
+        // The request might have reached the node after all
+        if (!task.ComputeActorId && !task.Meta.Completed) {
+            TaskNotStarted(taskId);
+        }
+    }
 }
 
 TProgressStat::TEntry TKqpPlanner::CalculateConsumptionUpdate() {

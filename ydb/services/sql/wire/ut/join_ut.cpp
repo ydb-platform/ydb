@@ -1,0 +1,147 @@
+#include "sql_client.h"
+
+#include <library/cpp/testing/unittest/registar.h>
+
+using namespace NKikimr;
+using namespace NKikimr::Tests;
+using namespace NKikimr::NSql;
+
+Y_UNIT_TEST_SUITE(Join) {
+    Y_UNIT_TEST(InnerJoinReturnsOnlyMatchingRows) {
+        TPortManager ports;
+        TServerSettings settings(ports.GetTcpPort());
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        TSqlClient sql(server, "/" + settings.DomainName);
+
+        UNIT_ASSERT_C(sql.Exec("CREATE TABLE lefts (id int8 PRIMARY KEY, note text)").Ok, "left");
+        UNIT_ASSERT_C(sql.Exec("CREATE TABLE rights (id int8 PRIMARY KEY, extra text)").Ok, "right");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO lefts (id, note) VALUES (1, 'one')").Ok, "insert 1");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO lefts (id, note) VALUES (2, 'two')").Ok, "insert 2");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO rights (id, extra) VALUES (1, 'body')").Ok, "insert right");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO rights (id, extra) VALUES (3, 'no')").Ok, "insert other");
+
+        const auto joined = sql.Exec("SELECT lefts.note, rights.extra FROM lefts INNER JOIN rights ON lefts.id = rights.id");
+        UNIT_ASSERT_C(joined.Ok, joined.SqlState + " " + joined.Message);
+        UNIT_ASSERT_VALUES_EQUAL(joined.CommandTag, "SELECT 1");
+        UNIT_ASSERT_VALUES_EQUAL(joined.AccessPath, "HashJoin 1");
+        UNIT_ASSERT_VALUES_EQUAL(joined.Rows.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(joined.Rows[0][0].Text, "one");
+        UNIT_ASSERT_VALUES_EQUAL(joined.Rows[0][1].Text, "body");
+
+        const auto plain = sql.Exec("SELECT a FROM t JOIN u ON t.id = u.id");
+        UNIT_ASSERT(!plain.Ok);
+        UNIT_ASSERT_VALUES_EQUAL(plain.SqlState, "42P01");
+    }
+
+    Y_UNIT_TEST(LeftJoinKeepsUnmatchedLeftRows) {
+        TPortManager ports;
+        TServerSettings settings(ports.GetTcpPort());
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        TSqlClient sql(server, "/" + settings.DomainName);
+
+        UNIT_ASSERT_C(sql.Exec("CREATE TABLE lefts (id int8 PRIMARY KEY, note text)").Ok, "left");
+        UNIT_ASSERT_C(sql.Exec("CREATE TABLE rights (id int8 PRIMARY KEY, extra text)").Ok, "right");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO lefts (id, note) VALUES (1, 'one')").Ok, "insert 1");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO lefts (id, note) VALUES (2, 'two')").Ok, "insert 2");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO rights (id, extra) VALUES (1, 'body')").Ok, "insert right");
+
+        const auto left = sql.Exec("SELECT lefts.note, rights.extra FROM lefts LEFT JOIN rights ON lefts.id = rights.id");
+        UNIT_ASSERT_C(left.Ok, left.SqlState + " " + left.Message);
+        UNIT_ASSERT_VALUES_EQUAL(left.CommandTag, "SELECT 2");
+        UNIT_ASSERT_VALUES_EQUAL(left.Rows.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(left.Rows[0][0].Text, "one");
+        UNIT_ASSERT(!left.Rows[0][1].Null);
+        UNIT_ASSERT_VALUES_EQUAL(left.Rows[0][1].Text, "body");
+        UNIT_ASSERT_VALUES_EQUAL(left.Rows[1][0].Text, "two");
+        UNIT_ASSERT(left.Rows[1][1].Null);
+    }
+
+    Y_UNIT_TEST(RightJoinKeepsUnmatchedRightRows) {
+        TPortManager ports;
+        TServerSettings settings(ports.GetTcpPort());
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        TSqlClient sql(server, "/" + settings.DomainName);
+
+        UNIT_ASSERT_C(sql.Exec("CREATE TABLE lefts (id int8 PRIMARY KEY, note text)").Ok, "left");
+        UNIT_ASSERT_C(sql.Exec("CREATE TABLE rights (id int8 PRIMARY KEY, extra text)").Ok, "right");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO lefts (id, note) VALUES (1, 'one')").Ok, "insert left");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO rights (id, extra) VALUES (1, 'body')").Ok, "insert 1");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO rights (id, extra) VALUES (3, 'other')").Ok, "insert 3");
+
+        const auto right = sql.Exec("SELECT lefts.note, rights.extra FROM lefts RIGHT JOIN rights ON lefts.id = rights.id");
+        UNIT_ASSERT_C(right.Ok, right.SqlState + " " + right.Message);
+        UNIT_ASSERT_VALUES_EQUAL(right.CommandTag, "SELECT 2");
+        UNIT_ASSERT_VALUES_EQUAL(right.Rows.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(right.Rows[0][0].Text, "one");
+        UNIT_ASSERT_VALUES_EQUAL(right.Rows[0][1].Text, "body");
+        UNIT_ASSERT(right.Rows[1][0].Null);
+        UNIT_ASSERT_VALUES_EQUAL(right.Rows[1][1].Text, "other");
+    }
+
+    Y_UNIT_TEST(CrossJoinReturnsTheProduct) {
+        TPortManager ports;
+        TServerSettings settings(ports.GetTcpPort());
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        TSqlClient sql(server, "/" + settings.DomainName);
+
+        UNIT_ASSERT_C(sql.Exec("CREATE TABLE lefts (id int8 PRIMARY KEY, note text)").Ok, "left");
+        UNIT_ASSERT_C(sql.Exec("CREATE TABLE rights (id int8 PRIMARY KEY, extra text)").Ok, "right");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO lefts (id, note) VALUES (1, 'one')").Ok, "insert 1");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO lefts (id, note) VALUES (2, 'two')").Ok, "insert 2");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO rights (id, extra) VALUES (1, 'body')").Ok, "insert body");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO rights (id, extra) VALUES (3, 'other')").Ok, "insert other");
+
+        const auto cross = sql.Exec("SELECT lefts.note, rights.extra FROM lefts CROSS JOIN rights");
+        UNIT_ASSERT_C(cross.Ok, cross.SqlState + " " + cross.Message);
+        UNIT_ASSERT_VALUES_EQUAL(cross.CommandTag, "SELECT 4");
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows.size(), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows[0][0].Text, "one");
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows[0][1].Text, "body");
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows[1][0].Text, "one");
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows[1][1].Text, "other");
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows[2][0].Text, "two");
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows[2][1].Text, "body");
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows[3][0].Text, "two");
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows[3][1].Text, "other");
+
+        const auto comma = sql.Exec("SELECT lefts.note, rights.extra FROM lefts, rights");
+        UNIT_ASSERT_C(comma.Ok, comma.SqlState + " " + comma.Message);
+        UNIT_ASSERT_VALUES_EQUAL(comma.CommandTag, "SELECT 4");
+        UNIT_ASSERT_VALUES_EQUAL(comma.Rows.size(), cross.Rows.size());
+    }
+
+    Y_UNIT_TEST(FullJoinKeepsUnmatchedRowsFromBothSides) {
+        TPortManager ports;
+        TServerSettings settings(ports.GetTcpPort());
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        TSqlClient sql(server, "/" + settings.DomainName);
+
+        UNIT_ASSERT_C(sql.Exec("CREATE TABLE lefts (id int8 PRIMARY KEY, note text)").Ok, "left");
+        UNIT_ASSERT_C(sql.Exec("CREATE TABLE rights (id int8 PRIMARY KEY, extra text)").Ok, "right");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO lefts (id, note) VALUES (1, 'one')").Ok, "insert 1");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO lefts (id, note) VALUES (2, 'two')").Ok, "insert 2");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO rights (id, extra) VALUES (1, 'body')").Ok, "insert body");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO rights (id, extra) VALUES (3, 'other')").Ok, "insert other");
+
+        const auto full = sql.Exec("SELECT lefts.note, rights.extra FROM lefts FULL JOIN rights ON lefts.id = rights.id");
+        UNIT_ASSERT_C(full.Ok, full.SqlState + " " + full.Message);
+        UNIT_ASSERT_VALUES_EQUAL(full.CommandTag, "SELECT 3");
+        UNIT_ASSERT_VALUES_EQUAL(full.Rows.size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(full.Rows[0][0].Text, "one");
+        UNIT_ASSERT_VALUES_EQUAL(full.Rows[0][1].Text, "body");
+        UNIT_ASSERT_VALUES_EQUAL(full.Rows[1][0].Text, "two");
+        UNIT_ASSERT(full.Rows[1][1].Null);
+        UNIT_ASSERT(full.Rows[2][0].Null);
+        UNIT_ASSERT_VALUES_EQUAL(full.Rows[2][1].Text, "other");
+    }
+}

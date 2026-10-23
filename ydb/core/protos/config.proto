@@ -3447,6 +3447,15 @@ message TKafkaProxyConfig {
     optional uint32 TokenRecheckIntervalMs = 21 [default = 300000];
 }
 
+message TSqlConfig {
+    optional bool Enable = 1 [default = false];
+    optional int32 ListeningPort = 2 [default = 5432];
+    optional string ListeningAddress = 3 [default = "::"];
+    optional uint32 InternalErrorRetries = 4 [default = 3];
+    // Steps of WITH RECURSIVE before the query is failed instead of running on.
+    optional uint32 RecursionLimit = 5 [default = 100];
+}
+
 message TAwsCompatibilityConfig {
     optional string AwsRegion = 1;
 }
@@ -3785,6 +3794,7 @@ message TAppConfig {
     optional TLongTxServiceConfig LongTxServiceConfig = 121;
     optional TSmallBlobsQuotaConfig SmallBlobsQuotaConfig = 122;
     optional TPathRewriteConfig ResourcePathPrefixMapping = 124;
+    optional TSqlConfig SqlConfig = 123;
 }
 
 message TYdbVersion {

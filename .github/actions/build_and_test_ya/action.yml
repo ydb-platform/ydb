@@ -80,6 +80,7 @@ runs:
         # per-user pipe budget, preventing pipe growth. With a small buffer,
         # test_tool's 100 ms polling sleep can block chatty tests on stderr writes
         # and cause timeouts. Raise the soft budget to 8 GiB per user.
+        sysctl fs.pipe-user-pages-soft fs.pipe-user-pages-hard fs.pipe-max-size
         pipe_soft_pages=$((8 * 1024 * 1024 * 1024 / $(getconf PAGESIZE)))
         current_soft_pages=$(sysctl -n fs.pipe-user-pages-soft)
         # Zero means unlimited; preserve it and any higher existing limit.

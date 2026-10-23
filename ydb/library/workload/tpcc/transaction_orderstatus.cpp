@@ -73,7 +73,7 @@ TAsyncExecuteQueryResult GetOrderByCustomer(
 
 TAsyncExecuteQueryResult GetOrderLines(
     TSession& session, const TTransaction& tx, TTransactionContext& context,
-    int warehouseID, int districtID, int orderID)
+    int warehouseID, int districtID, int orderID, bool commit = false)
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
@@ -98,7 +98,7 @@ TAsyncExecuteQueryResult GetOrderLines(
 
     auto result = session.ExecuteQuery(
         query,
-        TTxControl::Tx(tx),
+        TxControl(tx, commit),
         std::move(params));
 
     LOG_T("Terminal " << context.TerminalID << " waiting for order lines result");
@@ -218,7 +218,7 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(
 
     // Get the order lines for this order
 
-    auto orderLinesFuture = GetOrderLines(session, *tx, context, warehouseID, districtID, orderID);
+    auto orderLinesFuture = GetOrderLines(session, *tx, context, warehouseID, districtID, orderID, /*commit=*/true);
     auto orderLinesResult = co_await TSuspendWithFuture(orderLinesFuture, context.TaskQueue, context.TerminalID);
     if (!orderLinesResult.IsSuccess()) {
         if (ShouldExit(orderLinesResult)) {
@@ -232,17 +232,10 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(
         co_return orderLinesResult;
     }
 
-    LOG_T("Terminal " << context.TerminalID << " is committing OrderStatus transaction: "
-        << "customer " << customer.c_id << ", order " << orderID
-        << ", lines " << orderLinesResult.GetResultSet(0).RowsCount() << ", session: " << session.GetId());
-
-    auto commitFuture = tx->Commit();
-    auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
-
     TMonotonic endTs = TMonotonic::Now();
     latency = endTs - startTs;
 
-    co_return commitResult;
+    co_return orderLinesResult;
 }
 
 } // namespace NYdb::NTPCC

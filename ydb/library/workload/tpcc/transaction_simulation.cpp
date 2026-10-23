@@ -25,7 +25,8 @@ using namespace NYdb::NQuery;
 NYdb::NQuery::TAsyncExecuteQueryResult Select1(
     NQuery::TSession& session,
     const std::optional<NYdb::NQuery::TTransaction>& tx,
-    TTransactionContext& context)
+    TTransactionContext& context,
+    bool commit = false)
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
@@ -40,7 +41,7 @@ NYdb::NQuery::TAsyncExecuteQueryResult Select1(
         .AddParam("$count").Int32(1).Build()
         .Build();
 
-    auto txControl = tx ? TTxControl::Tx(*tx) : TTxControl::BeginTx(context.TxMode);
+    auto txControl = tx ? TxControl(*tx, commit) : TTxControl::BeginTx(context.TxMode);
     auto result = session.ExecuteQuery(
         query,
         txControl,
@@ -84,8 +85,10 @@ NThreading::TFuture<TStatus> GetSimulationTask(
     // sleep 1 sumulation
 
     std::optional<TTransaction> tx;
+    TStatus lastResult(EStatus::SUCCESS, NIssue::TIssues());
     for (int i = 0; i < context.SimulateTransactionSelect1; ++i) {
-        auto future = Select1(session, tx, context);
+        const bool commit = (i + 1 == context.SimulateTransactionSelect1);
+        auto future = Select1(session, tx, context, commit);
         auto result = co_await TSuspendWithFuture(future, context.TaskQueue, context.TerminalID);
         if (!result.IsSuccess()) {
             co_return result;
@@ -95,15 +98,14 @@ NThreading::TFuture<TStatus> GetSimulationTask(
             tx = *result.GetTransaction();
             LOG_T("Terminal " << context.TerminalID << " simulated transaction txId " << tx->GetId());
         }
-    }
 
-    auto commitFuture = tx->Commit();
-    auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
+        lastResult = result;
+    }
 
     TMonotonic endTs = TMonotonic::Now();
     latency = endTs - startTs;
 
-    co_return commitResult;
+    co_return lastResult;
 }
 
 } // namespace NYdb::NTPCC

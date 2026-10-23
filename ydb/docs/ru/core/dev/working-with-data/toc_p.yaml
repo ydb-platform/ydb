@@ -1,0 +1,6 @@
+items:
+- name: Моделирование данных
+  href: data-modeling/index.md
+  include:
+    mode: link
+    path: data-modeling/toc_p.yaml

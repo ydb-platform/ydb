@@ -8,6 +8,7 @@
 - [{#T}](example-app/index.md)
 - [{#T}](sqlc-ydb.md)
 - [{#T}](yql-tutorial/index.md)
+- [{#T}](working-with-data/index.md)
 - Выбор первичного ключа для:
   - [Строчных таблиц](primary-key/row-oriented.md)
   - [Колоночных таблиц](primary-key/column-oriented.md)

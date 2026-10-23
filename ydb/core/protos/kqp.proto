@@ -1010,6 +1010,11 @@ message TReadVectorTopK {
     optional uint32 Limit = 4;
     repeated uint32 DistinctColumns = 5;
     optional uint32 HnswEfSearch = 6 [default = 15];
+    // Internal read consumers only. Append a float ranking score to each row.
+    optional bool ReturnScores = 7 [default = false];
+    // The vector is used only for ranking, not projected. CellVec results may
+    // replace that column with NULL; HasVectorScores confirms this contract.
+    optional bool OmitVectorPayload = 8 [default = false];
 }
 
 message TKqpStreamLookupSettings {

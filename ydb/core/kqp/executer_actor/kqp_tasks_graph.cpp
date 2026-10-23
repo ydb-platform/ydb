@@ -1268,14 +1268,28 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
         fillColumnMeta(settings->AddMainTableKeyColumns(), keyColumn, mainTableInfo->Columns.at(keyColumn));
     }
     for (const auto& column : vectorSearch.GetColumns()) {
-        fillColumnMeta(settings->AddOutputColumns(), column, mainTableInfo->Columns.at(column));
+        if (vectorSearch.HasScoreColumnName() && column == vectorSearch.GetScoreColumnName()) {
+            settings->SetScoreColumnIndex(settings->OutputColumnsSize());
+            auto* meta = settings->AddOutputColumns();
+            meta->SetName(column);
+            meta->SetType(NScheme::NTypeIds::Float);
+        } else {
+            fillColumnMeta(settings->AddOutputColumns(), column, mainTableInfo->Columns.at(column));
+        }
+    }
+
+    if (vectorSearch.HasScoreColumnName()) {
+        fillColumnMeta(settings->MutableEmbeddingColumn(), vectorSearch.GetEmbeddingColumnName(),
+            mainTableInfo->Columns.at(vectorSearch.GetEmbeddingColumnName()));
+        settings->SetPostingEmbeddingColumnId(postingTableInfo->Columns.at(vectorSearch.GetEmbeddingColumnName()).Id);
     }
 
     // Covered index: if the posting table holds every output column, the actor
     // can build results straight from the posting scan and skip the main read.
     bool postingCovers = true;
     for (const auto& column : vectorSearch.GetColumns()) {
-        if (!postingTableInfo->Columns.contains(column)) {
+        if ((!vectorSearch.HasScoreColumnName() || column != vectorSearch.GetScoreColumnName())
+                && !postingTableInfo->Columns.contains(column)) {
             postingCovers = false;
             break;
         }
@@ -1283,7 +1297,8 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
     if (postingCovers) {
         settings->SetPostingCovers(true);
         for (const auto& column : vectorSearch.GetColumns()) {
-            settings->AddPostingOutputColumnIds(postingTableInfo->Columns.at(column).Id);
+            settings->AddPostingOutputColumnIds(vectorSearch.HasScoreColumnName() && column == vectorSearch.GetScoreColumnName()
+                ? 0 : postingTableInfo->Columns.at(column).Id);
         }
     } else {
         // Partially-covered index: the output is not fully in the posting table

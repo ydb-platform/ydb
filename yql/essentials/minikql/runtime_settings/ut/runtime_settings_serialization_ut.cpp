@@ -3,9 +3,102 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <future>
+#include <vector>
+
 namespace NYql {
 
 Y_UNIT_TEST_SUITE(TRuntimeSettingsSerializationTest) {
+
+Y_UNIT_TEST(ResolvedMetadataIsImmutableAndReused) {
+    auto settings = MakeRuntimeSettingsMutable();
+    settings->DatumValidation.Set(EDatumValidationMode::Cheap);
+    settings->SetUdfSetting("Module", "Option", "value");
+    const auto proto = SerializeRuntimeSettingsToProto(*settings);
+    const auto first = ResolveRuntimeSettings(proto);
+    const auto second = ResolveRuntimeSettings(proto);
+    UNIT_ASSERT(first == second);
+    UNIT_ASSERT_VALUES_EQUAL(first->StableHash, StableHashRuntimeSettings(*first->Settings));
+    settings->DatumValidation.Set(EDatumValidationMode::Expensive);
+    settings->SetUdfSetting("Module", "Option", "changed");
+    UNIT_ASSERT_VALUES_EQUAL(first->Settings->DatumValidation.Get(), EDatumValidationMode::Cheap);
+    UNIT_ASSERT_VALUES_EQUAL(first->Settings->GetUdfSetting("Module", "Option"), "value");
+    const auto changed = ResolveRuntimeSettings(SerializeRuntimeSettingsToProto(*settings));
+    UNIT_ASSERT_VALUES_UNEQUAL(first->StableHash, changed->StableHash);
+}
+
+Y_UNIT_TEST(ResolvedHashPreservesEncodingSemantics) {
+    const auto defaults = ResolveRuntimeSettings(NProto::TRuntimeSettings{});
+    UNIT_ASSERT_VALUES_EQUAL(defaults->StableHash, StableHashRuntimeSettings(*MakeRuntimeSettings()));
+    NProto::TRuntimeSettings explicitDefault;
+    auto* setting = explicitDefault.AddHostSettings();
+    setting->SetName("TestHostSetting");
+    setting->SetValue("false");
+    const auto explicitSettings = ResolveRuntimeSettings(explicitDefault);
+    // Explicit defaults have historically differed from absent settings in the
+    // stable hash. Keep exactly the existing deserializer/hash behavior.
+    UNIT_ASSERT_VALUES_EQUAL(explicitSettings->StableHash,
+                             StableHashRuntimeSettings(*DeserializeRuntimeSettingsFromProto(explicitDefault)));
+    UNIT_ASSERT_VALUES_EQUAL(explicitSettings->Settings->TestHostSetting.Get(), false);
+}
+
+Y_UNIT_TEST(ResolvedMetadataDoesNotCacheActivationDecisions) {
+    NProto::TRuntimeSettings proto;
+    auto* setting = proto.AddHostSettings();
+    setting->SetName("TestHostSetting");
+    setting->SetValue("true");
+    setting->MutableActivation()->SetPercentage(0);
+    const auto first = ResolveRuntimeSettings(proto);
+    const auto second = ResolveRuntimeSettings(proto);
+    UNIT_ASSERT(first != second);
+    UNIT_ASSERT(!first->Settings->TestHostSetting.Get());
+    setting->ClearActivation();
+    const auto activated = ResolveRuntimeSettings(proto);
+    UNIT_ASSERT(activated->Settings->TestHostSetting.Get());
+    UNIT_ASSERT(activated == ResolveRuntimeSettings(proto));
+    setting->SetValue("not-a-bool");
+    UNIT_ASSERT_EXCEPTION(ResolveRuntimeSettings(proto), yexception);
+}
+
+Y_UNIT_TEST(ResolvedMetadataConcurrentIsolation) {
+    std::vector<std::future<void>> threads;
+    for (ui32 thread = 0; thread < 8; ++thread) {
+        threads.push_back(std::async(std::launch::async, [thread] {
+            for (ui32 i = 0; i < 200; ++i) {
+                auto settings = MakeRuntimeSettingsMutable();
+                settings->SetUdfSetting("Concurrent", "Key", ToString((i + thread) % 7));
+                const auto proto = SerializeRuntimeSettingsToProto(*settings);
+                const auto metadata = ResolveRuntimeSettings(proto);
+                UNIT_ASSERT_VALUES_EQUAL(metadata->Settings->GetUdfSetting("Concurrent", "Key"),
+                                         ToString((i + thread) % 7));
+                UNIT_ASSERT_VALUES_EQUAL(metadata->StableHash, StableHashRuntimeSettings(*settings));
+            }
+        }));
+    }
+    for (auto& thread : threads) {
+        thread.get();
+    }
+}
+
+Y_UNIT_TEST(ResolvedMetadataOutlivesEvictionAndLargeSettingsBypass) {
+    NProto::TRuntimeSettings proto;
+    auto* udf = proto.AddUdfSettings();
+    udf->SetModule("Eviction");
+    auto* setting = udf->AddRuntimeSettings();
+    setting->SetName("Key");
+    setting->SetValue("original");
+    const auto retained = ResolveRuntimeSettings(proto);
+    for (ui32 i = 0; i < 1200; ++i) {
+        setting->SetValue(ToString(i));
+        ResolveRuntimeSettings(proto);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(retained->Settings->GetUdfSetting("Eviction", "Key"), "original");
+    setting->SetValue(TString(20000, 'x'));
+    const auto large = ResolveRuntimeSettings(proto);
+    UNIT_ASSERT_VALUES_EQUAL(large->Settings->GetUdfSetting("Eviction", "Key").size(), 20000);
+    UNIT_ASSERT_VALUES_EQUAL(large->StableHash,
+                             StableHashRuntimeSettings(*DeserializeRuntimeSettingsFromProto(proto)));
+}
 
 Y_UNIT_TEST(Serialization) {
     auto config = MakeRuntimeSettingsMutable();

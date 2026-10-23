@@ -3207,12 +3207,20 @@ private:
             // the actor emits rows matching OutputType. The embedding column must be present
             // (the logical optimizer includes it) so the actor can rank rows by distance.
             const auto& embeddingColumn = indexDesc->KeyColumns.back();
+            if (vectorSearch.ScoreColumn().IsValid()) {
+                proto.SetScoreColumnName(TString(vectorSearch.ScoreColumn().Cast().Value()));
+                proto.SetEmbeddingColumnName(embeddingColumn);
+            }
             ui32 vectorColumnIndex = 0;
             bool hasEmbedding = false;
             ui32 columnIndex = 0;
             for (const auto& item : outputItemType->Cast<TStructExprType>()->GetItems()) {
                 const auto name = TString(item->GetName());
                 proto.AddColumns(name);
+                if (proto.HasScoreColumnName() && name == proto.GetScoreColumnName()) {
+                    ++columnIndex;
+                    continue;
+                }
                 tablesMap[vectorSearch.Table().Path()].emplace(name);
                 // Covered index: the actor reads output columns straight from the
                 // posting table, so register them there too (not just main table).
@@ -3225,8 +3233,13 @@ private:
                 }
                 ++columnIndex;
             }
-            YQL_ENSURE(hasEmbedding, "Vector search output columns must contain the embedding column: " << embeddingColumn);
+            YQL_ENSURE(hasEmbedding || proto.HasScoreColumnName(), "Vector search output columns must contain the embedding column: " << embeddingColumn);
             proto.SetVectorColumnIndex(vectorColumnIndex);
+
+            if (proto.HasScoreColumnName()) {
+                tablesMap[postingTablePath].emplace(embeddingColumn);
+                tablesMap[vectorSearch.Table().Path()].emplace(embeddingColumn);
+            }
 
             // Search parameters. TopK (LIMIT) may be a literal or a query parameter;
             // a parameter is resolved to an actual value at execution time.

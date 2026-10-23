@@ -1,24 +1,22 @@
 #include "pq_topic_resolver.h"
 
+#include <ydb/core/kqp/common/kqp_streaming_query_controller.h>
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
-
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
-#include <ydb/core/kqp/common/kqp_streaming_query_controller.h>
-#include <ydb/core/protos/kqp.pb.h>
-#include <ydb/core/protos/kqp_physical.pb.h>
-
+#include <util/generic/guid.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
-
-#include <util/generic/guid.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
@@ -47,9 +45,7 @@ enum EPqResolverPrivateEv {
     EvTopicDescribeResult = EventSpaceBegin(TEvents::ES_PRIVATE),
 };
 
-struct TEvTopicDescribeResult
-    : public TEventLocal<TEvTopicDescribeResult, EvTopicDescribeResult>
-{
+struct TEvTopicDescribeResult: public TEventLocal<TEvTopicDescribeResult, EvTopicDescribeResult> {
     // On success: topic key (Endpoint + "|" + TopicPath) and per-cluster data.
     TString TopicKey;
     TTopicClusterPartitions ClusterPartitions;
@@ -58,9 +54,14 @@ struct TEvTopicDescribeResult
 
     TEvTopicDescribeResult(TString topicKey, TTopicClusterPartitions clusterPartitions)
         : TopicKey(std::move(topicKey))
-        , ClusterPartitions(std::move(clusterPartitions)) {}
+        , ClusterPartitions(std::move(clusterPartitions))
+    {
+    }
+
     explicit TEvTopicDescribeResult(TString errorMessage)
-        : ErrorMessage(std::move(errorMessage)) {}
+        : ErrorMessage(std::move(errorMessage))
+    {
+    }
 };
 
 // Description of a single PQ topic source that needs to be resolved.
@@ -68,19 +69,17 @@ struct TEvTopicDescribeResult
 struct TPqTopicResolverSource {
     TString Cluster;
     TString Endpoint;
-    TString Database;     // real YDB database path for the describe RPC
+    TString Database;   // real YDB database path for the describe RPC
     TString TopicPath;
-    TString TokenName;    // key in SecureParams to look up the auth token
-    bool    UseSsl = false;
-    TString DatabaseForClusterConfig; // raw "database" field from the proto (may be cluster alias)
+    TString TokenName;   // key in SecureParams to look up the auth token
+    bool UseSsl = false;
+    TString DatabaseForClusterConfig;   // raw "database" field from the proto (may be cluster alias)
 };
 
 // Collect all PQ sources from a physical query.
 // Topics whose partition list was already fixed at compile time by a
 // __ydb_partition_id predicate are skipped — their ReadRanges are authoritative.
-TVector<TPqTopicResolverSource> CollectPqSources(
-    const NKqpProto::TKqpPhyQuery& query,
-    const TString& database)
+TVector<TPqTopicResolverSource> CollectPqSources(const NKqpProto::TKqpPhyQuery& query, const TString& database)
 {
     TVector<TPqTopicResolverSource> result;
     for (const auto& tx : query.GetTransactions()) {
@@ -101,9 +100,7 @@ TVector<TPqTopicResolverSource> CollectPqSources(
             // __ydb_partition_id predicate, the ReadRanges are authoritative
             // and must not be overwritten with the current total partition count.
             NYql::NPq::NProto::TDqPqTopicSource topicSourceProto;
-            const bool usedPartitionPredicate =
-                extSrc.GetSettings().UnpackTo(&topicSourceProto)
-                && topicSourceProto.GetUsedPartitionPredicate();
+            const bool usedPartitionPredicate = extSrc.GetSettings().UnpackTo(&topicSourceProto) && topicSourceProto.GetUsedPartitionPredicate();
             if (usedPartitionPredicate) {
                 continue;
             }
@@ -112,12 +109,12 @@ TVector<TPqTopicResolverSource> CollectPqSources(
             extSrc.GetSettings().UnpackTo(&ts);
 
             TPqTopicResolverSource resolverSrc;
-            resolverSrc.Cluster   = extSrc.GetSourceName();
-            resolverSrc.Endpoint  = ts.GetEndpoint();
-            resolverSrc.Database  = ts.GetEndpoint().empty() ? database : ts.GetDatabase();
+            resolverSrc.Cluster = extSrc.GetSourceName();
+            resolverSrc.Endpoint = ts.GetEndpoint();
+            resolverSrc.Database = ts.GetEndpoint().empty() ? database : ts.GetDatabase();
             resolverSrc.TopicPath = ts.GetTopicPath();
             resolverSrc.TokenName = ts.GetToken().GetName();
-            resolverSrc.UseSsl    = ts.GetUseSsl();
+            resolverSrc.UseSsl = ts.GetUseSsl();
             resolverSrc.DatabaseForClusterConfig = ts.GetDatabase();
             result.push_back(std::move(resolverSrc));
         }
@@ -128,26 +125,22 @@ TVector<TPqTopicResolverSource> CollectPqSources(
 // ---------------------------------------------------------------------------
 // Actor
 // ---------------------------------------------------------------------------
-class TKqpPqTopicResolver : public TActorBootstrapped<TKqpPqTopicResolver> {
+class TKqpPqTopicResolver: public TActorBootstrapped<TKqpPqTopicResolver> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::KQP_TABLE_RESOLVER; // reuse closest existing type
+        return NKikimrServices::TActivity::KQP_TABLE_RESOLVER;   // reuse closest existing type
     }
 
-    TKqpPqTopicResolver(
-        const TActorId& owner,
-        ui64 txId,
-        TVector<TPqTopicResolverSource> sources,
-        THashMap<TString, TString> secureParams,
-        NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
-        std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph)
+    TKqpPqTopicResolver(const TActorId& owner, ui64 txId, TVector<TPqTopicResolverSource> sources, THashMap<TString, TString> secureParams,
+        NYql::IPqGatewayFactory::TPtr pqGatewayFactory, std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph)
         : Owner(owner)
         , TxId(txId)
         , Sources(std::move(sources))
         , SecureParams(std::move(secureParams))
         , PqGatewayFactory(std::move(pqGatewayFactory))
         , QueryPhysicalGraph(std::move(queryPhysicalGraph))
-    {}
+    {
+    }
 
     void Bootstrap() {
         if (Sources.empty()) {
@@ -230,27 +223,18 @@ private:
 
         gateway->DescribeFederatedTopic(sessionId, src.Cluster, src.Database, src.TopicPath, token)
             .Subscribe(
-                [actorSystem = TActivationContext::ActorSystem(),
-                 selfId = SelfId(),
-                 gateway = gateway,
-                 topicKey = topicKey](const auto& future)
+                [actorSystem = TActivationContext::ActorSystem(), selfId = SelfId(), gateway = gateway, topicKey = topicKey](const auto& future)
                 {
                     try {
                         const auto& result = future.GetValue();
                         TTopicClusterPartitions clusterPartitions;
                         for (const auto& clusterInfo : result) {
-                            clusterPartitions.ByClusterName[TString(clusterInfo.Info.Name)] =
-                                clusterInfo.PartitionsCount;
-                            clusterPartitions.MaxPartitionsCount =
-                                Max(clusterPartitions.MaxPartitionsCount,
-                                    clusterInfo.PartitionsCount);
+                            clusterPartitions.ByClusterName[TString(clusterInfo.Info.Name)] = clusterInfo.PartitionsCount;
+                            clusterPartitions.MaxPartitionsCount = Max(clusterPartitions.MaxPartitionsCount, clusterInfo.PartitionsCount);
                         }
-                        actorSystem->Send(selfId,
-                            new TEvTopicDescribeResult(topicKey,
-                                std::move(clusterPartitions)));
+                        actorSystem->Send(selfId, new TEvTopicDescribeResult(topicKey, std::move(clusterPartitions)));
                     } catch (const std::exception& ex) {
-                        actorSystem->Send(selfId,
-                            new TEvTopicDescribeResult(TString(ex.what())));
+                        actorSystem->Send(selfId, new TEvTopicDescribeResult(TString(ex.what())));
                     }
                 });
     }
@@ -264,9 +248,7 @@ private:
     //      uses TopicPartitionsCount from the params directly).
     void PatchAndDie() {
         if (QueryPhysicalGraph && !TopicClusterPartitions.empty()) {
-            for (int taskIdx = 0;
-                 taskIdx < static_cast<int>(QueryPhysicalGraph->TasksSize());
-                 ++taskIdx)
+            for (int taskIdx = 0; taskIdx < static_cast<int>(QueryPhysicalGraph->TasksSize()); ++taskIdx)
             {
                 auto* task = QueryPhysicalGraph->MutableTasks(taskIdx);
                 auto* dqTask = task->MutableDqTask();
@@ -289,8 +271,7 @@ private:
                         continue;
                     }
 
-                    TString topicKey =
-                        topicSource.GetEndpoint() + "|" + topicSource.GetTopicPath();
+                    TString topicKey = topicSource.GetEndpoint() + "|" + topicSource.GetTopicPath();
                     auto it = TopicClusterPartitions.find(topicKey);
                     if (it == TopicClusterPartitions.end()) {
                         break;
@@ -304,9 +285,7 @@ private:
                     // used by the read actor (static discovery path) to limit
                     // which partition IDs belong to each cluster.
                     bool sourceModified = false;
-                    for (int ci = 0;
-                         ci < static_cast<int>(topicSource.FederatedClustersSize());
-                         ++ci)
+                    for (int ci = 0; ci < static_cast<int>(topicSource.FederatedClustersSize()); ++ci)
                     {
                         auto* fc = topicSource.MutableFederatedClusters(ci);
                         auto cit = clusterPartitions.ByClusterName.find(fc->GetName());
@@ -331,8 +310,7 @@ private:
                     // that TPqDqTaskTransform can use the current per-cluster PartitionsCount
                     // from FederatedClusters instead of the compile-time values baked into
                     // the MiniKQL program bytes.
-                    (*dqTask->MutableTaskParams())["pq_topic_source"] =
-                        topicSource.SerializeAsString();
+                    (*dqTask->MutableTaskParams())["pq_topic_source"] = topicSource.SerializeAsString();
                     break;
                 }
 
@@ -344,9 +322,7 @@ private:
                 // This value is used by dq_pq_rd_read_actor to determine the
                 // full partition range, and serves as a fallback in dq_pq_read_actor
                 // when FederatedClusters.PartitionsCount is zero.
-                for (int rangeIdx = 0;
-                     rangeIdx < static_cast<int>(dqTask->ReadRangesSize());
-                     ++rangeIdx)
+                for (int rangeIdx = 0; rangeIdx < static_cast<int>(dqTask->ReadRangesSize()); ++rangeIdx)
                 {
                     NYql::NPq::NProto::TDqReadTaskParams params;
                     if (!params.ParseFromString(dqTask->GetReadRanges(rangeIdx))) {
@@ -356,9 +332,7 @@ private:
                         continue;
                     }
                     bool rangeModified = false;
-                    for (int ppIdx = 0;
-                         ppIdx < static_cast<int>(params.PartitioningParamsSize());
-                         ++ppIdx)
+                    for (int ppIdx = 0; ppIdx < static_cast<int>(params.PartitioningParamsSize()); ++ppIdx)
                     {
                         auto* pp = params.MutablePartitioningParams(ppIdx);
                         const ui32 oldTotal = pp->GetTopicPartitionsCount();
@@ -387,10 +361,8 @@ private:
     void ReplyErrorAndDie(const TString& errorMessage) {
         auto* ev = new TEvStreamingQueryPrepared();
         ev->Status = Ydb::StatusIds::SCHEME_ERROR;
-        ev->Issues.AddIssue(NYql::YqlIssue(
-            {}, NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
-            TStringBuilder() << "Failed to describe topic for partition count refresh: "
-                             << errorMessage));
+        ev->Issues.AddIssue(NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
+            TStringBuilder() << "Failed to describe topic for partition count refresh: " << errorMessage));
         Send(Owner, ev);
         PassAway();
     }
@@ -409,23 +381,15 @@ private:
     THashMap<TString, TTopicClusterPartitions> TopicClusterPartitions;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-NActors::IActor* CreateKqpPqTopicResolver(
-    const NActors::TActorId& owner,
-    ui64 txId,
-    const TString& database,
-    THashMap<TString, TString> secureParams,
-    NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
+NActors::IActor* CreateKqpPqTopicResolver(const NActors::TActorId& owner, ui64 txId, const TString& database,
+    THashMap<TString, TString> secureParams, NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
     std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph)
 {
     auto sources = CollectPqSources(queryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery(), database);
     return new TKqpPqTopicResolver(
-        owner, txId,
-        std::move(sources),
-        std::move(secureParams),
-        std::move(pqGatewayFactory),
-        std::move(queryPhysicalGraph));
+        owner, txId, std::move(sources), std::move(secureParams), std::move(pqGatewayFactory), std::move(queryPhysicalGraph));
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

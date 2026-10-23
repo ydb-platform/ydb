@@ -21,7 +21,8 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
-void PatchQueryPhysicalGraphForRescaling(NKikimrKqp::TQueryPhysicalGraph& graph, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 usableThreadsPerNode)
+void PatchQueryPhysicalGraphForRescaling(
+    NKikimrKqp::TQueryPhysicalGraph& graph, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 usableThreadsPerNode)
 {
     YDB_LOG_INFO("Starting PQ source rescaling",
         {"resourceCount", resourceSnapshot.size()}, {"taskCount", graph.TasksSize()});

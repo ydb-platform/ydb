@@ -1,6 +1,6 @@
-#include "streaming_query_controller.h"
 #include "physical_graph_rescaling.h"
 #include "pq_topic_resolver.h"
+#include "streaming_query_controller.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
@@ -8,14 +8,14 @@
 #include <ydb/core/kqp/federated_query/actors/streaming_query_nodes_manager.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
+
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
-#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
-
-#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
@@ -25,7 +25,8 @@ namespace {
 
 using TSettings = IKqpStreamingQueryControllerFactory::TSettings;
 
-FederatedQuery::StreamingDisposition MakeStreamingDisposition(const TUserRequestContext& context, NFq::TCheckpointCoordinatorSettings& settings) {
+FederatedQuery::StreamingDisposition MakeStreamingDisposition(
+    const TUserRequestContext& context, NFq::TCheckpointCoordinatorSettings& settings) {
     FederatedQuery::StreamingDisposition result;
     const auto& disposition = context.StreamingDisposition;
     if (!disposition) {
@@ -59,35 +60,28 @@ FederatedQuery::StreamingDisposition MakeStreamingDisposition(const TUserRequest
     return result;
 }
 
-class TStreamingQueryController : public IKqpStreamingQueryController {
+class TStreamingQueryController: public IKqpStreamingQueryController {
 public:
-    TStreamingQueryController(TSettings settings, NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
-        NFq::TCheckpointProviderIntegrations checkpointProviderIntegrations)
+    TStreamingQueryController(
+        TSettings settings, NYql::IPqGatewayFactory::TPtr pqGatewayFactory, NFq::TCheckpointProviderIntegrations checkpointProviderIntegrations)
         : Settings(std::move(settings))
         , PqGatewayFactory(std::move(pqGatewayFactory))
         , CheckpointProviderIntegrations(std::move(checkpointProviderIntegrations))
-    {}
+    {
+    }
 
     bool NeedsPrepare() const override {
-        return AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart()
-            && Settings.HasPqSources
-            && Settings.Graph
-            && PqGatewayFactory;
+        return AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart() && Settings.HasPqSources && Settings.Graph &&
+               PqGatewayFactory;
     }
 
     void StartPrepare(THashMap<TString, TString> secureParams) override {
-        TActivationContext::RegisterWithSameMailbox(CreateKqpPqTopicResolver(
-            Settings.ExecuterId,
-            Settings.TxId,
-            Settings.Database,
-            std::move(secureParams),
-            PqGatewayFactory,
-            MutableGraph()), Settings.ExecuterId);
+        TActivationContext::RegisterWithSameMailbox(CreateKqpPqTopicResolver(Settings.ExecuterId, Settings.TxId, Settings.Database,
+                                                        std::move(secureParams), PqGatewayFactory, MutableGraph()), Settings.ExecuterId);
     }
 
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> GetGraphToRestore(
-        const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, ui32 usableThreadsPerNode) override
-    {
+        const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, ui32 usableThreadsPerNode) override {
         if (!Settings.Graph) {
             return nullptr;
         }
@@ -104,8 +98,7 @@ public:
 
     TStartedActors Start(std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> graph) override {
         const auto& context = Settings.UserRequestContext;
-        const bool enabled = AppData()->FeatureFlags.GetEnableStreamingQueries()
-            && graph && context && context->CheckpointId;
+        const bool enabled = AppData()->FeatureFlags.GetEnableStreamingQueries() && graph && context && context->CheckpointId;
         if (!enabled) {
             return {};
         }
@@ -113,14 +106,10 @@ public:
         const auto graphParams = MakeGraphParams(*graph);
 
         if (Settings.HasPqSources) {
-            Actors.NodesManager = TActivationContext::Register(CreateStreamingQueryNodesManager(
-                Settings.ExecuterId,
-                Settings.Database,
-                context->StreamingQueryPath,
-                graphParams.GetTasks(),
-                TDuration::Seconds(300),
-                TDuration::Seconds(120),
-                graph->GetPreparedQuery().GetPhysicalQuery().GetMaxTasksPerStage()), Settings.ExecuterId);
+            Actors.NodesManager = TActivationContext::Register(
+                CreateStreamingQueryNodesManager(Settings.ExecuterId, Settings.Database, context->StreamingQueryPath, graphParams.GetTasks(),
+                    TDuration::Seconds(300), TDuration::Seconds(120), graph->GetPreparedQuery().GetPhysicalQuery().GetMaxTasksPerStage()),
+                Settings.ExecuterId);
         }
 
         if (graph->GetPreparedQuery().GetPhysicalQuery().GetDisableCheckpoints()) {
@@ -134,12 +123,10 @@ public:
         }
 
         const auto streamingDisposition = MakeStreamingDisposition(*context, coordinatorSettings);
-        const auto stateLoadMode = graph->GetZeroCheckpointSaved()
-            ? FederatedQuery::FROM_LAST_CHECKPOINT
-            : FederatedQuery::EMPTY;
+        const auto stateLoadMode = graph->GetZeroCheckpointSaved() ? FederatedQuery::FROM_LAST_CHECKPOINT : FederatedQuery::EMPTY;
         const bool restoreOffsetsFromForeignCheckpoint =
-            (stateLoadMode == FederatedQuery::StateLoadMode::EMPTY && streamingDisposition.has_from_last_checkpoint())
-            || RescalingChangedTaskCount;
+            (stateLoadMode == FederatedQuery::StateLoadMode::EMPTY && streamingDisposition.has_from_last_checkpoint()) ||
+            RescalingChangedTaskCount;
 
         auto counters = Settings.KqpCounters;
         if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && !context->StreamingQueryPath.empty()) {
@@ -149,17 +136,11 @@ public:
         const auto generation = context->CurrentExecutionGeneration;
         Y_VALIDATE(generation, "Missing current execution generation");
 
-        Actors.CheckpointCoordinator = TActivationContext::Register(MakeCheckpointCoordinator(
-            NFq::TCoordinatorId(context->CheckpointId, generation),
-            NYql::NDq::MakeCheckpointStorageID(),
-            Settings.ExecuterId,
-            coordinatorSettings,
-            counters,
-            graphParams,
-            stateLoadMode,
-            streamingDisposition,
-            restoreOffsetsFromForeignCheckpoint
-        ).Release(), Settings.ExecuterId);
+        Actors.CheckpointCoordinator =
+            TActivationContext::Register(MakeCheckpointCoordinator(NFq::TCoordinatorId(context->CheckpointId, generation),
+                                             NYql::NDq::MakeCheckpointStorageID(), Settings.ExecuterId, coordinatorSettings, counters,
+                                             graphParams, stateLoadMode, streamingDisposition, restoreOffsetsFromForeignCheckpoint)
+                                             .Release(), Settings.ExecuterId);
 
         YDB_LOG_DEBUG("Created new CheckpointCoordinator",
             {"txId", Settings.TxId},
@@ -283,15 +264,18 @@ private:
                 const auto& externalSource = input.GetExternalSource();
                 NYql::NPq::NProto::TDqPqTopicSource source;
                 if (externalSource.GetType() == "PqSource" && externalSource.GetSettings().UnpackTo(&source)) {
-                    (*checkpointTask.MutableSecureParams())[source.GetToken().GetName()] = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().RemoveSecrets().ToJson();
+                    (*checkpointTask.MutableSecureParams())[source.GetToken().GetName()] =
+                        NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().RemoveSecrets().ToJson();
                 }
             }
 
             for (const auto& output : stage.GetSinks()) {
                 const auto& externalSink = output.GetExternalSink();
                 NYql::NPq::NProto::TDqPqTopicSink sink;
-                if (externalSink.GetType() == "PqSink" && externalSink.GetSettings().UnpackTo(&sink) && sink.GetDeferredPublicationExtIdPrefix()) {
-                    (*checkpointTask.MutableSecureParams())[sink.GetToken().GetName()] = NYql::CreateStructuredTokenParser(externalSink.GetAuthInfo()).ToBuilder().RemoveSecrets().ToJson();
+                if (externalSink.GetType() == "PqSink" && externalSink.GetSettings().UnpackTo(&sink) &&
+                    sink.GetDeferredPublicationExtIdPrefix()) {
+                    (*checkpointTask.MutableSecureParams())[sink.GetToken().GetName()] =
+                        NYql::CreateStructuredTokenParser(externalSink.GetAuthInfo()).ToBuilder().RemoveSecrets().ToJson();
                 }
             }
         }
@@ -309,13 +293,14 @@ private:
     TStartedActors Actors;
 };
 
-class TStreamingQueryControllerFactory : public IKqpStreamingQueryControllerFactory {
+class TStreamingQueryControllerFactory: public IKqpStreamingQueryControllerFactory {
 public:
-    TStreamingQueryControllerFactory(NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
-        NFq::TCheckpointProviderIntegrations checkpointProviderIntegrations)
+    TStreamingQueryControllerFactory(
+        NYql::IPqGatewayFactory::TPtr pqGatewayFactory, NFq::TCheckpointProviderIntegrations checkpointProviderIntegrations)
         : PqGatewayFactory(std::move(pqGatewayFactory))
         , CheckpointProviderIntegrations(std::move(checkpointProviderIntegrations))
-    {}
+    {
+    }
 
     std::unique_ptr<IKqpStreamingQueryController> Create(TSettings settings) const override {
         if (!settings.Graph && !settings.SaveGraph) {
@@ -329,13 +314,12 @@ private:
     const NFq::TCheckpointProviderIntegrations CheckpointProviderIntegrations;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 IKqpStreamingQueryControllerFactory::TPtr CreateStreamingQueryControllerFactory(
-    NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
-    NFq::TCheckpointProviderIntegrations checkpointProviderIntegrations)
+    NYql::IPqGatewayFactory::TPtr pqGatewayFactory, NFq::TCheckpointProviderIntegrations checkpointProviderIntegrations)
 {
     return std::make_shared<TStreamingQueryControllerFactory>(std::move(pqGatewayFactory), std::move(checkpointProviderIntegrations));
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

@@ -30,12 +30,8 @@ namespace NKikimr::NKqp {
 //   secureParams        – populated SecureParams (source name → token value)
 //   pqGatewayFactory    – used to create the gateway that does DescribeFederatedTopic
 //   queryPhysicalGraph  – will be patched in-place with new partition counts
-NActors::IActor* CreateKqpPqTopicResolver(
-    const NActors::TActorId& owner,
-    ui64 txId,
-    const TString& database,
-    THashMap<TString, TString> secureParams,
-    NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
+NActors::IActor* CreateKqpPqTopicResolver(const NActors::TActorId& owner, ui64 txId, const TString& database,
+    THashMap<TString, TString> secureParams, NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
     std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph);
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

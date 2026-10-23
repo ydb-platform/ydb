@@ -114,6 +114,20 @@ Y_UNIT_TEST_SUITE(BridgePileOverrides) {
         bool reassigned = false;
         for (const auto& vdisk : staticConfig.GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
             if (vdisk.GetVDiskID().GetGroupID() == staticPartId) {
+                // A cleanup report can reach a root whose config still lists this generation as live.
+                // It must be retried without changing the configuration or crashing the root.
+                const auto report = InvokeDistconf(env, [&](auto& record) {
+                    auto *cmd = record.MutableStaticVDiskSlain();
+                    cmd->MutableVDiskId()->CopyFrom(vdisk.GetVDiskID());
+                    const auto& location = vdisk.GetVDiskLocation();
+                    auto *slot = cmd->MutableVSlotId();
+                    slot->SetNodeId(location.GetNodeID());
+                    slot->SetPDiskId(location.GetPDiskID());
+                    slot->SetVSlotId(location.GetVDiskSlotID());
+                });
+                UNIT_ASSERT_EQUAL_C(report.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE,
+                    report.GetErrorReason());
+                UNIT_ASSERT_VALUES_EQUAL(QueryStorageConfig(env).GetGeneration(), staticConfig.GetGeneration());
                 const auto result = InvokeDistconf(env, [&](auto& record) {
                     record.MutableReassignGroupDisk()->MutableVDiskId()->CopyFrom(vdisk.GetVDiskID());
                 });

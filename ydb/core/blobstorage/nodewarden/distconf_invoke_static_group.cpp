@@ -392,9 +392,12 @@ namespace NKikimr::NStorage {
         if (groupRemoved && isDropDonor) {
             throw TExError() << "Group not found";
         }
-        Y_VERIFY_S(groupRemoved || vdiskId.GroupGeneration < actualGroupGeneration,
-            "VDiskId# " << vdiskId << " ActualGroupGeneration# " << actualGroupGeneration
-            << " ConfigGeneration# " << config.GetGeneration() << " IsDropDonor# " << isDropDonor);
+        if (!groupRemoved && vdiskId.GroupGeneration >= actualGroupGeneration) {
+            // A node may have applied the replacement config before the newly elected root has recovered it.
+            // Keep the slot intact and let the sender retry after the root catches up.
+            throw TExRace() << "Static VDisk report is ahead of current group configuration VDiskId# " << vdiskId
+                << " ActualGroupGeneration# " << actualGroupGeneration;
+        }
 
         for (size_t i = 0; i < ss->VDisksSize(); ++i) {
             if (const auto& vdisk = ss->GetVDisks(i); vdisk.HasVDiskID() && vdisk.HasVDiskLocation()) {

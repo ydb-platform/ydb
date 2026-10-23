@@ -299,8 +299,6 @@ Y_UNIT_TEST_SUITE(TDecimalIndexComparisonTests) {
         actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(true);
         const auto numericSchema = MakeTestSchema(1, { .WithMinMaxIndex = true, .DecimalValue = true });
-        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(false);
-        const auto legacySchema = MakeTestSchema(2, { .WithMinMaxIndex = true, .DecimalValue = true });
         const auto index = std::static_pointer_cast<NIndexes::NMinMax::TIndexMeta>(
             numericSchema->GetIndexInfo().GetIndexVerified(MinMaxIndexId).GetObjectPtr());
         const auto values = MakeDecimalArray({ 256, 1, 255 });
@@ -311,7 +309,9 @@ Y_UNIT_TEST_SUITE(TDecimalIndexComparisonTests) {
         const auto request = values->GetScalar(2).ValueOrDie();
         const NArrow::NSSA::TIndexCheckOperation operation(NArrow::NSSA::TIndexCheckOperation::EOperation::Greater, true);
 
-        UNIT_ASSERT(!index->CheckValue(payload, std::nullopt, request, operation, legacySchema->GetIndexInfo()));
+        const NArrow::TComparator legacyComparator(NArrow::EDecimalComparisonMode::Legacy);
+        UNIT_ASSERT(NArrow::ScalarCompare(bounds.Max(), request,
+                        numericSchema->GetIndexInfo().GetColumnFeaturesVerified(ValueColumnId).GetTypeInfo(), legacyComparator) < 0);
         UNIT_ASSERT(index->CheckValue(payload, std::nullopt, request, operation, numericSchema->GetIndexInfo()));
     }
 }

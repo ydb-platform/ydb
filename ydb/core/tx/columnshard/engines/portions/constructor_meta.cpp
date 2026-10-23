@@ -23,7 +23,7 @@ void TPortionMetaConstructor::FillMetaInfo(const NArrow::TFirstLastSpecialKeys& 
     AFL_VERIFY(!RecordSnapshotMax);
     DeletionsCount = deletionsCount;
     if (snapshotKeys) {
-        const std::vector<NScheme::TTypeInfo> snapshotTypes(2, NScheme::TTypeInfo(NScheme::NTypeIds::Uint64));
+        const auto& snapshotTypes = IIndexInfo::GetSnapshotColumnTypes();
         RecordSnapshotMin = TSnapshot(snapshotKeys->GetFirst(snapshotTypes, Comparator).GetValueVerified<ui64>(TIndexInfo::SPEC_COL_PLAN_STEP),
             snapshotKeys->GetFirst(snapshotTypes, Comparator).GetValueVerified<ui64>(TIndexInfo::SPEC_COL_TX_ID));
         RecordSnapshotMax = TSnapshot(snapshotKeys->GetLast(snapshotTypes, Comparator).GetValueVerified<ui64>(TIndexInfo::SPEC_COL_PLAN_STEP),

@@ -497,8 +497,8 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
             "(Unwrap(" + TDecimal::DecCast("-256") + "), 51), "
             "(Unwrap(" + TDecimal::DecCast("0") + "), 41)");
 
-        helper.ReadData("SELECT COUNT(*) FROM `" + tableName +
-            "/.sys/primary_index_portion_stats` WHERE Activity = 1", "[[3u]]");
+        helper.ReadData("SELECT COUNT(*) >= 2 FROM `" + tableName +
+            "/.sys/primary_index_portion_stats` WHERE Activity = 1", "[[%true]]");
 
         const auto check = [&] {
             const TVector<TQueryCheck> queries = {

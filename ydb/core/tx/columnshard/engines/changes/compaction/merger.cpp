@@ -367,9 +367,8 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
                 SaverContext.GetStoragesManager(), EPortionType::Compacted, resultFiltered->GetIndexInfo());
 
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultFiltered->GetIndexInfo().GetReplaceKey()));
-            NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot(),
-                std::vector<NScheme::TTypeInfo>(2, NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)),
-                resultFiltered->GetIndexInfo().GetComparator());
+            NArrow::TMinMaxSpecialKeys snapshotKeys(
+                b, TIndexInfo::ArrowSchemaSnapshot(), IIndexInfo::GetSnapshotColumnTypes(), resultFiltered->GetIndexInfo().GetComparator());
             constructor.GetPortionConstructor().MutablePortionConstructor().AddMetadata(
                 *resultFiltered, deletionsCount, primaryKeys, snapshotKeys);
             constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);

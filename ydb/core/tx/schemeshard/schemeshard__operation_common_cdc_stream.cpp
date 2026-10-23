@@ -88,10 +88,13 @@ bool TConfigurePartsAtTable::ProgressState(TOperationContext& context) {
     txState->ClearShardsInProgress();
     Y_ABORT_UNLESS(txState->Shards.size());
 
+    // The body is identical for all shards of the table: serialize once and share.
+    const TString txBody = tx.SerializeAsString();
+
     for (ui32 i = 0; i < txState->Shards.size(); ++i) {
         const auto& idx = txState->Shards[i].Idx;
         const auto datashardId = context.SS->ShardInfos[idx].TabletID;
-        auto ev = context.SS->MakeDataShardProposal(pathId, OperationId, tx.SerializeAsString(), context.Ctx);
+        auto ev = context.SS->MakeDataShardProposal(pathId, OperationId, txBody, context.Ctx);
         context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, ev.Release());
     }
 

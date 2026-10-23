@@ -123,7 +123,12 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
 
             context.SS->PersistTxState(db, OperationId);
 
-            // Send ALTER TABLE transactions to all datashards
+            // Send ALTER TABLE transactions to all datashards. The seqNo and the
+            // invariant part of each table's alter body are shared by all its shards
+            // in this round; only the per-shard PartitionConfig delta differs.
+            const auto seqNo = context.SS->StartRound(*txState);
+            THashMap<TPathId, TString> txBodyCommonByTable;
+
             for (const auto& shard : txState->Shards) {
                 auto shardIdx = shard.Idx;
                 auto datashardId = context.SS->ShardInfos[shardIdx].TabletID;
@@ -133,8 +138,6 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     {"shardIdx", shardIdx},
                     {"txId", OperationId},
                 );
-
-                const auto seqNo = context.SS->StartRound(*txState);
 
                 // Find which table this shard belongs to
                 TPathId tablePathId;
@@ -156,8 +159,15 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     continue;
                 }
 
-                const auto txBody = context.SS->FillAlterTableTxBody(tablePathId, shardIdx, seqNo);
-                auto event = context.SS->MakeDataShardProposal(tablePathId, OperationId, txBody, context.Ctx);
+                auto& txBodyCommon = txBodyCommonByTable[tablePathId];
+                if (txBodyCommon.empty()) {
+                    txBodyCommon = context.SS->FillAlterTableTxBodyCommon(tablePathId, seqNo);
+                }
+
+                auto event = context.SS->MakeDataShardProposal(tablePathId, OperationId, context.Ctx);
+                TString& txBody = *event->Record.MutableTxBody();
+                txBody.append(txBodyCommon);
+                context.SS->AppendAlterTableTxBodyDelta(tablePathId, shardIdx, txBody);
                 context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx, event.Release());
             }
 

@@ -163,8 +163,11 @@ private:
         const std::shared_ptr<TSchemaObjectsCache>& cache) const;
 
     void Validate() const;
-    void Precalculate();
+    void BuildUsedStorageIds();
     void BuildColumnIndexByName();
+    void EraseColumn(const ui32 position);
+    void InsertColumn(const NKikimrSchemeOp::TOlapColumnDescription& columnProto, const std::optional<ui32> keyOrder,
+        const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
 
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators,
         const std::shared_ptr<TSchemaObjectsCache>& cache);

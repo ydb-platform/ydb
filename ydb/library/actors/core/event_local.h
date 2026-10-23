@@ -6,6 +6,10 @@
 #include <util/system/type_name.h>
 
 namespace NActors {
+    namespace NDetail {
+        [[noreturn]] void AbortLocalEventSerialization(const std::type_info& eventTypeInfo, ui32 eventType);
+    }
+
     template <typename TEv, ui32 TEventType>
     class TEventLocal: public TEventBase<TEv, TEventType> {
     public:
@@ -14,7 +18,7 @@ namespace NActors {
         }
 
         bool SerializeToArcadiaStream(TChunkSerializer* /*serializer*/) const override {
-            Y_ABORT("Serialization of local event %s type %" PRIu32, TypeName<TEv>().data(), TEventType);
+            NDetail::AbortLocalEventSerialization(typeid(TEv), TEventType);
         }
 
         bool IsSerializable() const override {

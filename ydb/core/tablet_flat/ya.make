@@ -10,6 +10,7 @@ SRCS(
     flat_comp.cpp
     flat_comp_create.cpp
     flat_comp_gen.cpp
+    flat_cxx_database.cpp
     flat_cxx_database.h
     flat_database.cpp
     flat_database.h

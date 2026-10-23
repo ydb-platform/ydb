@@ -1,3 +1,7 @@
+* Added `TBridgeClient::RemovePile()` to remove a DISCONNECTED pile from a bridged cluster along with its data.
+
+* Added `TBridgeClient::AddPile()` to add an INACTIVE pile to a bridged cluster, and `TGetClusterStateResult::GetPendingPileOperation()`.
+
 * Added `TBridgeClient::ConvertToBridge()` to convert a non-bridged cluster into a bridged one with a single pile, and `TGetClusterStateResult::IsConversionInProgress()`.
 
 * Driver now supports async credentials initialisation: the first request is delayed until they are ready.

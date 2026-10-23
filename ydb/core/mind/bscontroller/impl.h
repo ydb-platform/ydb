@@ -81,6 +81,9 @@ public:
     class TTxUpdateShred;
     class TTxCheckUnsynced;
     class TTxConvertToBridge;
+    class TTxBridgePileOperation;
+    class TTxAddBridgePile;
+    class TTxRemoveBridgePile;
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
     class TTxCleanupStaleStorageEntries;
@@ -380,7 +383,7 @@ public:
         TString ExpectedSerial;
         TString LastSeenSerial;
         TString LastSeenPath;
-        const ui32 StaticSlotUsage = 0;
+        ui32 StaticSlotUsage = 0; // number of static VDisks on this PDisk, kept in sync with storage config
 
         bool ShredInProgress = false; // set to true when shredding is started for this disk
 
@@ -1626,6 +1629,7 @@ private:
             EvUpdateShredState,
             EvCheckSyncerDisconnectedNodes,
             EvRetryBridgeConversion,
+            EvRetryBridgePileOperation,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -1669,9 +1673,10 @@ private:
     bool ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
             TString* errorDescription, NKikimrBlobStorage::TConfigResponse* response = nullptr);
 
+    // dryRun validates the updates and rolls them back in any case
     std::optional<TString> ValidateAndCommitConfigUpdate(std::optional<TConfigState>& state,
         TConfigTxFlags flags, TTransactionContext& txc,
-        NKikimrBlobStorage::TConfigResponse *response = nullptr);
+        NKikimrBlobStorage::TConfigResponse *response = nullptr, bool dryRun = false);
 
     void RollbackConfigUpdate(std::optional<TConfigState>& state);
 
@@ -1687,6 +1692,7 @@ private:
     void InitializeSelfHealState();
     void FillInSelfHealGroups(TEvControllerUpdateSelfHealInfo& msg, TConfigState *state);
     void PushStaticGroupsToSelfHeal();
+    THashSet<TGroupId> StaticGroupsInSelfHeal; // the ones last pushed, to delete them when they go away
     void ProcessVDiskStatus(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus>& s);
 
     void UpdateSelfHealCounters();
@@ -2024,6 +2030,11 @@ private:
     ITransaction* CreateTxUpdateEnableConfigV2(bool value);
     ITransaction* CreateTxUpdateSeenOperational(TVector<TGroupId> groups);
     ITransaction* CreateTxCleanupStaleStorageEntries();
+    // validate addition of the pile against the storage config being proposed, then send the response
+    ITransaction* CreateTxValidateAddBridgePile(TBridgePileId pileId, NKikimrBlobStorage::TStorageConfig&& storageConfig,
+        std::unique_ptr<IEventHandle> response);
+    // validate removal of the pile, then send the response
+    ITransaction* CreateTxValidateRemoveBridgePile(TBridgePileId pileId, std::unique_ptr<IEventHandle> response);
 
     struct TAuditLogInfo {
         TString PeerName;
@@ -2113,14 +2124,54 @@ private:
 
     void CheckUnsyncedBridgePiles();
 
-    bool ConvertingToBridge = false;
-    bool RecheckBridgeConversion = false;
-    bool BridgeConversionRetryScheduled = false;
-    TBackoffTimer BridgeConversionRetryBackoff{100, 30000};
+    // BSC part of an operation driven by distconf state, performed until it succeeds: it is checked again when the state
+    // changes while the step is running, and retried after a while when it fails
+    struct TRetriableStep {
+        const ui32 RetryEventType;
+        bool Running = false;
+        bool Recheck = false;
+        bool RetryScheduled = false;
+        TBackoffTimer RetryBackoff{100, 30000};
+    };
+
+    // returns true when the step has to be started now
+    bool StartRetriableStep(TRetriableStep& step);
+    // returns true when the step has to be checked again right away
+    bool FinishRetriableStep(TRetriableStep& step, bool failed);
+    void OnRetriableStepRetry(TRetriableStep& step);
+
+    TRetriableStep BridgeConversionStep{TEvPrivate::EvRetryBridgeConversion};
 
     void CheckBridgeConversion();
     void OnBridgeConversionStepDone(bool failed);
     void HandleRetryBridgeConversion();
+
+    TRetriableStep BridgePileOperationStep{TEvPrivate::EvRetryBridgePileOperation};
+
+    // perform BSC part of the pending pile operation from ClusterStateDetails, if there is one
+    void CheckBridgePileOperation();
+    void OnBridgePileOperationStepDone(TBridgePileId pileId,
+        NKikimrBridge::TClusterStateDetails::TPendingPileOperation::EKind kind, ui64 operationId,
+        std::optional<TString> error);
+    void HandleRetryBridgePileOperation();
+
+    // add the part in the pile to every bridged group lacking it; added gets (bridge proxy group, new part) pairs
+    void AddBridgePileGroups(TConfigState& state, TBridgePileId pileId, ui64 becameUnsyncedGeneration,
+        std::vector<std::tuple<TGroupId, TGroupId>> *added);
+
+    // delete the part in the pile of every bridged group (inline pile keeps serving as bridge proxy group only); every
+    // group having VDisks in the pile has to be such part, as its data is lost otherwise; returns the number of bridged
+    // groups that have lost their part
+    size_t RemoveBridgePileGroups(TConfigState& state, TBridgePileId pileId);
+
+    // pile with pending operation, which BSC has not finished yet; such pile is not synced in any case
+    TBridgePileId GetPendingOperationPileId() const;
+
+    // sync state of the unsynced pile from the cluster state details, nullptr if the pile is not unsynced
+    const NKikimrBridge::TClusterStateDetails::TPileSyncState *FindPileSyncState(TBridgePileId pileId) const;
+
+    // the pile is being removed, so new groups get no parts there
+    bool IsBridgePileBeingRemoved(TBridgePileId pileId) const;
 
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
         TSet<TGroupId>& groupIdsToRead, bool comprehensive);
@@ -2330,6 +2381,14 @@ public:
         LoadedAt = TActivationContext::Monotonic();
         ApplyStorageConfig();
 
+        // configs handled while loading (the first one at least) didn't make BSC check parts of its groups in unsynced
+        // piles: the ones not reset for the current sync of the pile yet are reset now, and if everything is synced
+        // already (e.g. the notification got lost with the restart), distconf gets notified
+        if (StorageConfig && BridgeInfo) {
+            RecheckUnsyncedBridgePiles = true;
+            CheckUnsyncedBridgePiles();
+        }
+
         for (const auto& [id, info] : GroupMap) {
             if (info->VirtualGroupState) {
                 StartVirtualGroupSetupMachine(info.Get());
@@ -2352,6 +2411,7 @@ public:
         ShredState.Initialize();
         CheckSyncerDisconnectedNodes();
         CheckBridgeConversion();
+        CheckBridgePileOperation();
     }
 
     void UpdatePDisksCounters() {

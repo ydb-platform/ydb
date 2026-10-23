@@ -1876,7 +1876,9 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         if (!piles.empty()) {
             // pile name may be omitted only for single-pile configuration (cluster converted from non-bridged one)
             if (!bridgePileName && piles.size() != 1) {
-                *errorReason = TStringBuilder() << "mandatory pile name is missing for node " << r->GetNodeId();
+                *errorReason = TStringBuilder() << "mandatory pile name is missing for node " << r->GetNodeId()
+                    << " (nodes of the cluster converted from non-bridged one have to get the name of its pile before"
+                    " other piles are added)";
                 return false;
             } else if (bridgePileName && !piles.contains(*bridgePileName)) {
                 *errorReason = TStringBuilder() << "unknown pile name '" << *bridgePileName << "' for node "

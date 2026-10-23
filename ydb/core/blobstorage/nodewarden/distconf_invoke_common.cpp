@@ -222,6 +222,15 @@ namespace NKikimr::NStorage {
                     case TQuery::kNotifyBscConversionFinished:
                         return NotifyBscConversionFinished(op.Command.GetNotifyBscConversionFinished());
 
+                    case TQuery::kAddBridgePile:
+                        return AddBridgePile(op.Command.GetAddBridgePile());
+
+                    case TQuery::kNotifyBridgePileOperation:
+                        return NotifyBridgePileOperation(op.Command.GetNotifyBridgePileOperation());
+
+                    case TQuery::kRemoveBridgePile:
+                        return RemoveBridgePile(op.Command.GetRemoveBridgePile());
+
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
 

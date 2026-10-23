@@ -230,6 +230,34 @@ Y_UNIT_TEST_SUITE(BridgePileRegistry) {
         UNIT_ASSERT_VALUES_EQUAL(state.GetPile(2).GetGroupGeneration(), 7);
     }
 
+    // removed part leaves a hole, absent parts at the end are trimmed; adding and removing parts keeps the list bounded
+    Y_UNIT_TEST(RemoveGroupPile) {
+        NKikimrBridge::TGroupState state;
+        for (ui32 groupId : {10u, 11u, 12u}) {
+            state.AddPile()->SetGroupId(groupId);
+        }
+        auto piles = [&] {
+            TStringBuilder res;
+            for (const auto& pile : state.GetPile()) {
+                res << (pile.GetAbsent() ? TString("-") : ToString(pile.GetGroupId())) << ' ';
+            }
+            return res;
+        };
+
+        NBridge::RemoveGroupPile(&state, TBridgePileId::FromPileIndex(1));
+        UNIT_ASSERT_VALUES_EQUAL(piles(), "10 - 12 ");
+        NBridge::RemoveGroupPile(&state, TBridgePileId::FromPileIndex(2));
+        UNIT_ASSERT_VALUES_EQUAL(piles(), "10 ");
+        for (ui32 i = 0; i < 3; ++i) {
+            NBridge::AddGroupPile(&state, TBridgePileId::FromPileIndex(2))->SetGroupId(20 + i);
+            UNIT_ASSERT_VALUES_EQUAL(piles(), TStringBuilder() << "10 - " << 20 + i << ' ');
+            NBridge::RemoveGroupPile(&state, TBridgePileId::FromPileIndex(2));
+            UNIT_ASSERT_VALUES_EQUAL(piles(), "10 ");
+        }
+        NBridge::RemoveGroupPile(&state, TBridgePileId::FromPileIndex(0));
+        UNIT_ASSERT_VALUES_EQUAL(state.PileSize(), 0);
+    }
+
     Y_UNIT_TEST(AssignPileIds) {
         const auto registry = NBridge::MakeImpliedPileRegistry(MakeBridgeConfig({"a", "b", "c"}));
         auto assign = [](const NKikimrBridge::TPileRegistry& registry, std::initializer_list<TString> names) {

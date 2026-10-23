@@ -329,6 +329,17 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     auto prevStaticGroups = std::exchange(StaticGroups, {});
     StaticVDiskMap.clear();
 
+    // static entities may go away (e.g. along with the pile removed), so that they are deleted from system views
+    for (const auto& [pdiskId, _] : prevStaticPDisks) {
+        SysViewChangedPDisks.insert(pdiskId);
+    }
+    for (const auto& [vslotId, _] : prevStaticVSlots) {
+        SysViewChangedVSlots.insert(vslotId);
+    }
+    for (const auto& [groupId, _] : prevStaticGroups) {
+        SysViewChangedGroups.insert(groupId);
+    }
+
     const TMonotonic mono = TActivationContext::Monotonic();
 
     if (StorageConfig->HasBlobStorageConfig()) {
@@ -356,6 +367,17 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
                 const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
                 StaticGroups.try_emplace(groupId, group, prevStaticGroups);
                 SysViewChangedGroups.insert(groupId);
+            }
+
+            // static VDisks may be placed on (or moved away from) PDisks managed by BSC too, as it happens when static
+            // group gets its part in the pile being added or its disk reassigned
+            for (const auto& [pdiskId, pdisk] : PDisks) {
+                const auto it = StaticPDisks.find(pdiskId);
+                const ui32 staticSlotUsage = it != StaticPDisks.end() ? it->second.StaticSlotUsage : 0;
+                if (pdisk->StaticSlotUsage != staticSlotUsage) {
+                    pdisk->StaticSlotUsage = staticSlotUsage;
+                    SysViewChangedPDisks.insert(pdiskId);
+                }
             }
         } else {
             Y_FAIL("no storage configuration provided");
@@ -424,6 +446,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     }
 
     CheckBridgeConversion();
+    CheckBridgePileOperation();
 }
 
 void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
@@ -799,6 +822,37 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
             break;
         }
 
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateAddBridgePile: {
+            const auto pileId = TBridgePileId::FromProto(&record,
+                &NKikimrBlobStorage::TEvControllerDistconfRequest::GetBridgePileId);
+            NKikimrBlobStorage::TStorageConfig storageConfig;
+            if (!BridgeInfo || !BridgeInfo->FindPile(pileId)) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("unknown pile");
+                break;
+            } else if (!record.HasStorageConfig() || !record.GetStorageConfig().UnpackTo(&storageConfig)) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("missing proposed storage config");
+                break;
+            }
+            // the transaction replies when it is done
+            Execute(CreateTxValidateAddBridgePile(pileId, std::move(storageConfig), std::exchange(h, {})));
+            return;
+        }
+
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateRemoveBridgePile: {
+            const auto pileId = TBridgePileId::FromProto(&record,
+                &NKikimrBlobStorage::TEvControllerDistconfRequest::GetBridgePileId);
+            if (!BridgeInfo || !BridgeInfo->FindPile(pileId)) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("unknown pile");
+                break;
+            }
+            // the transaction replies when it is done
+            Execute(CreateTxValidateRemoveBridgePile(pileId, std::exchange(h, {})));
+            return;
+        }
+
         case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateConfig: {
             if (!mainYaml) {
                 rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
@@ -1035,6 +1089,7 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
         cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
         cFunc(TEvPrivate::EvRetryBridgeConversion, HandleRetryBridgeConversion);
+        cFunc(TEvPrivate::EvRetryBridgePileOperation, HandleRetryBridgePileOperation);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
         default:

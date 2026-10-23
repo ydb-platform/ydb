@@ -150,7 +150,7 @@ namespace NKikimr::NStorage {
             std::optional<NKikimrBlobStorage::EPDiskType> pdiskType,
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid, i64 requiredSpace,
-            NKikimrBlobStorage::TBaseConfig *baseConfig, bool convertToDonor, bool ignoreVSlotQuotaCheck,
+            const NKikimrBlobStorage::TBaseConfig *baseConfig, bool convertToDonor, bool ignoreVSlotQuotaCheck,
             bool isSelfHealReasonDecommit, TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId,
             const NProtoBuf::RepeatedField<ui32>& selfHealAllowedNodes, bool applyNodeAllowList) {
         using TPDiskId = NBsController::TPDiskId;
@@ -225,6 +225,7 @@ namespace NKikimr::NStorage {
 
         ui32 defaultMaxSlots = 16;
 
+        THashMap<TPDiskId, ui32> maxVSlotId;
         if (baseConfig) {
             std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> pdiskSpaceColorBorder;
             ui32 pdiskSpaceMarginPromille = 150;
@@ -301,6 +302,7 @@ namespace NKikimr::NStorage {
             for (const auto& vslot : baseConfig->GetVSlot()) {
                 const auto& vslotId = vslot.GetVSlotId();
                 const TPDiskId pdiskId(vslotId.GetNodeId(), vslotId.GetPDiskId());
+                maxVSlotId[pdiskId] = Max(maxVSlotId[pdiskId], vslotId.GetVSlotId());
                 if (const auto it = pdisks.find(pdiskId); it != pdisks.end()) {
                     TPDiskInfo& pdiskInfo = it->second;
                     ++pdiskInfo.UsedSlots; // TODO(ydynnikov): account GroupSizeInUnits
@@ -316,7 +318,6 @@ namespace NKikimr::NStorage {
         // then all existing drives from the current storage config; also extract group definition, if it exists
         NBsController::TGroupMapper::TGroupDefinition groupDefinition;
         THashMap<ui32, ui32> maxPDiskId;
-        THashMap<TPDiskId, ui32> maxVSlotId;
         THashSet<TPDiskId> addedPDisks;
         THashMap<TVDiskIdShort, NKikimrBlobStorage::TVDiskLocation> vdiskLocations;
 
@@ -414,6 +415,28 @@ namespace NKikimr::NStorage {
                 m = Max(m, loc.GetVDiskSlotID());
             }
         }
+
+        // static VDisks take slot ids below the ones BSC allocates from (its PDisks start with NextVSlotId of 1000), as
+        // BSC (of older versions) doesn't check VSlots of static VDisks, and VSlots of BSC being deleted are not even
+        // listed in base config; ids of the destroyed static VDisks are kept until they are slain; when static ids have
+        // already reached BSC's range, new ones go above every VSlot listed
+        static constexpr ui32 MinBscVSlotId = 1000;
+        THashMap<TPDiskId, ui32> maxStaticVSlotId;
+        if (bsConfig->HasServiceSet()) {
+            for (const auto& vdisk : bsConfig->GetServiceSet().GetVDisks()) {
+                const auto& location = vdisk.GetVDiskLocation();
+                auto& maxId = maxStaticVSlotId[TPDiskId(location.GetNodeID(), location.GetPDiskID())];
+                maxId = Max(maxId, location.GetVDiskSlotID());
+            }
+        }
+        auto allocateVSlotId = [&](TPDiskId pdiskId) {
+            ui32& id = maxStaticVSlotId[pdiskId];
+            if (++id >= MinBscVSlotId) {
+                id = Max(id, maxVSlotId[pdiskId] + 1);
+            }
+            maxVSlotId[pdiskId] = Max(maxVSlotId[pdiskId], id);
+            return id;
+        };
 
         // build PDisk locator map (nodeId:path -> pdiskId)
         THashSet<std::tuple<ui32, TString>> pdiskLocations;
@@ -599,7 +622,7 @@ namespace NKikimr::NStorage {
             } else {
                 sLoc->SetNodeID(pdiskId.NodeId);
                 sLoc->SetPDiskID(pdiskId.PDiskId);
-                sLoc->SetVDiskSlotID(++maxVSlotId[pdiskId]); // keep VDiskSlotID for unchanged items
+                sLoc->SetVDiskSlotID(allocateVSlotId(pdiskId)); // keep VDiskSlotID for unchanged items
                 sLoc->SetPDiskGuid(pdisk.GetPDiskGuid());
 
                 auto *sDisk = sSet->AddVDisks();

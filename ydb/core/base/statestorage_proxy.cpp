@@ -786,33 +786,18 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     TMap<TActorId, TEvStateStorage::TEvInfo::TFollowerInfo> Followers;
 
     bool Replied = false;
+    bool IsLookup = false;
+    std::optional<NKikimrProto::EReplyStatus> MergedStatus; // empty until a readable ring group replies
 
     TEvStateStorage::TSignature Signature;
 
-
-    void HandleInit(TEvStateStorage::TEvLookup::TPtr &ev) {
-        TEvStateStorage::TEvLookup *msg = ev->Get();
-        Source = ev->Sender;
-        SourceCookie = ev->Cookie;
-        YDB_LOG_DEBUG("RingGroupProxyRequest::HandleInit",
-            {"ev", msg->ToString()});
-        for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
-            const auto &ringGroup = Info->RingGroups[ringGroupIndex];
-            if (ringGroup.State == ERingGroupState::DISCONNECTED || ringGroup.State == ERingGroupState::NOT_SYNCHRONIZED) {
-                continue;
-            }
-            auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
-            RingGroupActors[actorId] = ringGroupIndex;
-            RingGroupActorsByIndex[ringGroupIndex] = actorId;
-            Send(actorId, new TEvStateStorage::TEvLookup(*msg));
-        }
-    }
 
     template<class T>
     void HandleInit(T::TPtr &ev) {
         T *msg = ev->Get();
         Source = ev->Sender;
         SourceCookie = ev->Cookie;
+        IsLookup = std::is_same_v<T, TEvStateStorage::TEvLookup>;
         YDB_LOG_DEBUG("RingGroupProxyRequest::HandleInit",
             {"ev", msg->ToString()});
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
@@ -827,22 +812,57 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         }
     }
 
-    void ProcessEvInfo(ui32 ringGroupIdx, TEvStateStorage::TEvInfo *msg) {
-        if (!Info->RingGroups[ringGroupIdx].WriteOnly && Info->RingGroups[ringGroupIdx].State == ERingGroupState::PRIMARY) {
-            // TODO: if ringGroups return different results? Y_ABORT("StateStorage ring groups are not synchronized");
-            TabletID = msg->TabletID;
-            Cookie = msg->Cookie;
-            CurrentLeader = msg->CurrentLeader;
-            CurrentLeaderTablet = msg->CurrentLeaderTablet;
-            CurrentGeneration = msg->CurrentGeneration;
-            CurrentStep = msg->CurrentStep;
-            Locked = msg->Locked;
-            LockedFor = msg->LockedFor;
-            for (const auto& followerInfo : msg->Followers) {
-                Followers.insert_or_assign(followerInfo.Follower, followerInfo);
-            }
+    // How much a reply tells about the tablet: NODATA tells the least
+    static ui32 StatusRank(NKikimrProto::EReplyStatus status) {
+        switch (status) {
+            case NKikimrProto::OK: return 4;
+            case NKikimrProto::RACE: return 3;
+            case NKikimrProto::ERROR: return 2;
+            case NKikimrProto::TIMEOUT: return 1;
+            default: return 0;
         }
+    }
+
+    void TakeEntry(const TEvStateStorage::TEvInfo *msg) {
+        CurrentLeader = msg->CurrentLeader;
+        CurrentLeaderTablet = msg->CurrentLeaderTablet;
+        CurrentGeneration = msg->CurrentGeneration;
+        CurrentStep = msg->CurrentStep;
+        Locked = msg->Locked;
+        LockedFor = msg->LockedFor;
+        Followers.clear();
+        for (const auto& followerInfo : msg->Followers) {
+            Followers.insert_or_assign(followerInfo.Follower, followerInfo);
+        }
+    }
+
+    void ProcessEvInfo(ui32 ringGroupIdx, TEvStateStorage::TEvInfo *msg) {
+        TabletID = msg->TabletID;
+        Cookie = msg->Cookie;
         Signature.Merge(msg->Signature);
+        if (Info->RingGroups[ringGroupIdx].WriteOnly) {
+            return;
+        }
+
+        // Readable ring groups can diverge (e.g. a restarted pile is empty): take the freshest entry
+        const bool first = !MergedStatus;
+        if (IsLookup) {
+            // On a tie, the most telling status together with its entry
+            if (first || std::tuple(msg->CurrentGeneration, msg->CurrentStep, StatusRank(msg->Status))
+                    > std::tuple(CurrentGeneration, CurrentStep, StatusRank(*MergedStatus))) {
+                MergedStatus = msg->Status;
+                TakeEntry(msg);
+            }
+            return;
+        }
+        // Lock and update need every readable ring group; failures by priority: RACE, ERROR, TIMEOUT
+        if (first || std::pair(msg->Status != NKikimrProto::OK, StatusRank(msg->Status))
+                > std::pair(*MergedStatus != NKikimrProto::OK, StatusRank(*MergedStatus))) {
+            MergedStatus = msg->Status;
+        }
+        if (first || std::tie(msg->CurrentGeneration, msg->CurrentStep) > std::tie(CurrentGeneration, CurrentStep)) {
+            TakeEntry(msg);
+        }
     }
 
     bool ShouldReply() {
@@ -876,7 +896,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         Replied = true;
     }
 
-    void MaybeReply(NKikimrProto::EReplyStatus status) {
+    void MaybeReply() {
         if (!ShouldReply()) {
             return;
         }
@@ -886,7 +906,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
                 {"ev", msg->ToString()});
             Send(Source, msg, 0, SourceCookie);
         } else {
-            Reply(status);
+            Reply(MergedStatus.value_or(NKikimrProto::ERROR));
         }
     }
 
@@ -896,13 +916,13 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         ProcessEvInfo(RingGroupActors[ev->Sender], msg);
         YDB_LOG_DEBUG("RingGroupProxyRequest::HandleTEvInfo",
             {"ev", msg->ToString()});
-        MaybeReply(msg->Status);
+        MaybeReply();
     }
 
     void HandleResult(TEvStateStorage::TEvUpdateSignature::TPtr &ev) {
         TEvStateStorage::TEvUpdateSignature *msg = ev->Get();
         Signature.Merge(msg->Signature);
-        MaybeReply(NKikimrProto::OK);
+        MaybeReply();
     }
 
     void HandleConfigVersion(TEvStateStorage::TEvConfigVersionInfo::TPtr &ev) {
@@ -948,7 +968,7 @@ public:
     }
 
     STRICT_STFUNC(StateInit,
-        hFunc(TEvStateStorage::TEvLookup, HandleInit);
+        hFunc(TEvStateStorage::TEvLookup, HandleInit<TEvStateStorage::TEvLookup>);
         hFunc(TEvStateStorage::TEvUpdate, HandleInit<TEvStateStorage::TEvUpdate>);
         hFunc(TEvStateStorage::TEvLock, HandleInit<TEvStateStorage::TEvLock>);
 

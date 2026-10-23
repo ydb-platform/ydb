@@ -960,27 +960,29 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto json = NJson::ReadJsonTree(&response, true);
         UNIT_ASSERT_VALUES_EQUAL(json["TenantInfo"][0]["Name"].GetString(), "/alias");
 
+        NJson::TJsonReaderConfig describeJsonConfig;
+        describeJsonConfig.DontValidateUtf8 = true; // Describe includes binary ACL fields.
         for (const auto* cache : {"never", "only"}) {
             TStringStream describeResponse;
             const auto describeStatus = httpClient.DoGet(TStringBuilder() << "/viewer/describe?database=/alias&path=/alias&direct=true&ask_scheme_cache=" << cache, &describeResponse, headers);
             UNIT_ASSERT_VALUES_EQUAL(describeStatus, HTTP_OK);
-            const auto describeJson = NJson::ReadJsonTree(&describeResponse, true);
+            const auto describeJson = NJson::ReadJsonTree(&describeResponse, &describeJsonConfig, true);
             UNIT_ASSERT_VALUES_EQUAL(describeJson["Path"].GetString(), "/alias");
         }
 
         TStringStream relativeResponse;
         UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/describe?database=alias&path=/alias&direct=true", &relativeResponse, headers), HTTP_OK);
-        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&relativeResponse, true)["Path"].GetString(), "/alias");
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&relativeResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
 
         headers["Content-Type"] = "application/json";
         TStringStream postResponse;
         UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", R"({"database":"/alias","path":"/alias"})", &postResponse, headers), HTTP_OK);
-        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&postResponse, true)["Path"].GetString(), "/alias");
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&postResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
 
         headers["Content-Type"] = "application/x-www-form-urlencoded";
         TStringStream formResponse;
         UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", "database=alias&path=/alias", &formResponse, headers), HTTP_OK);
-        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&formResponse, true)["Path"].GetString(), "/alias");
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&formResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
 
         TStringStream directoryResponse;
         UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/scheme/directory?database=/alias&path=/alias&direct=true", &directoryResponse, headers), HTTP_OK);

@@ -4,7 +4,7 @@
 
 namespace NKikimr::NSchemeShard {
 
-bool MakeBackupTableSchemeSnapshot(
+bool MakeTableSchemeSnapshot(
     TSchemeShard* self,
     const TActorContext& ctx,
     const TPathId& sourcePathId,

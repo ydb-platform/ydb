@@ -920,25 +920,25 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    using TBackupSchemeSnapshotRec = std::tuple<TPathId, TString, TString, TString>;
-    using TBackupSchemeSnapshotRows = TDeque<TBackupSchemeSnapshotRec>;
+    using TTableSchemeSnapshotRec = std::tuple<TPathId, TString, TString, TString>;
+    using TTableSchemeSnapshotRows = TDeque<TTableSchemeSnapshotRec>;
 
-    bool LoadBackupSchemeSnapshots(NIceDb::TNiceDb& db, TBackupSchemeSnapshotRows& snapshots) const {
-        auto rowSet = db.Table<Schema::BackupSchemeSnapshots>().Range().Select();
+    bool LoadTableSchemeSnapshots(NIceDb::TNiceDb& db, TTableSchemeSnapshotRows& snapshots) const {
+        auto rowSet = db.Table<Schema::TableSchemeSnapshots>().Range().Select();
         if (!rowSet.IsReady()) {
             return false;
         }
 
         while (!rowSet.EndOfSet()) {
             const TPathId pathId(
-                rowSet.GetValue<Schema::BackupSchemeSnapshots::OwnerPathId>(),
-                rowSet.GetValue<Schema::BackupSchemeSnapshots::LocalPathId>());
+                rowSet.GetValue<Schema::TableSchemeSnapshots::OwnerPathId>(),
+                rowSet.GetValue<Schema::TableSchemeSnapshots::LocalPathId>());
 
             snapshots.emplace_back(
                 pathId,
-                rowSet.GetValue<Schema::BackupSchemeSnapshots::TableName>(),
-                rowSet.GetValue<Schema::BackupSchemeSnapshots::TableDescription>(),
-                rowSet.GetValueOrDefault<Schema::BackupSchemeSnapshots::ChangefeedUnderlyingTopics>(""));
+                rowSet.GetValue<Schema::TableSchemeSnapshots::TableName>(),
+                rowSet.GetValue<Schema::TableSchemeSnapshots::TableDescription>(),
+                rowSet.GetValueOrDefault<Schema::TableSchemeSnapshots::ChangefeedUnderlyingTopics>(""));
 
             if (!rowSet.Next()) {
                 return false;
@@ -4652,20 +4652,20 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        // Read structural scheme snapshots captured together with backup copies
+        // Read structural table scheme snapshots captured together with table copies
         {
-            TBackupSchemeSnapshotRows snapshots;
-            if (!LoadBackupSchemeSnapshots(db, snapshots)) {
+            TTableSchemeSnapshotRows snapshots;
+            if (!LoadTableSchemeSnapshots(db, snapshots)) {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for BackupSchemeSnapshots"
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for TableSchemeSnapshots"
                 << ", read records: " << snapshots.size()
                 << ", at schemeshard: " << Self->TabletID());
 
             for (auto& [pathId, tableName, tableDesc, changefeedUnderlyingTopics] : snapshots) {
                 bool restored = false;
-                auto fillSchemeSnapshot = [&](auto& tableInfo) {
+                auto fillTableSchemeSnapshot = [&](auto& tableInfo) {
                     if (tableInfo->BackupSettings.HasTable()) {
                         return;
                     }
@@ -4687,23 +4687,23 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 bool found = false;
                 if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
                     found = true;
-                    fillSchemeSnapshot(it->second);
+                    fillTableSchemeSnapshot(it->second);
                 } else if (Self->ColumnTables.contains(pathId)) {
                     found = true;
                     auto tableInfo = Self->ColumnTables.at(pathId).GetPtr();
-                    fillSchemeSnapshot(tableInfo);
+                    fillTableSchemeSnapshot(tableInfo);
                 }
 
                 if (!found) {
                     // Old binaries ignore this additive table and may remove the private copy
                     // while leaving its snapshot behind
-                    Self->PersistRemoveBackupSchemeSnapshot(db, pathId);
-                    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Removed obsolete backup scheme snapshot"
+                    Self->RemoveTableSchemeSnapshot(db, pathId);
+                    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Removed obsolete table scheme snapshot"
                         << ", pathId: " << pathId);
                     continue;
                 }
 
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, (restored ? "Loaded backup scheme snapshot" : "Retained backup scheme snapshot")
+                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, (restored ? "Loaded table scheme snapshot" : "Retained table scheme snapshot")
                     << ", pathId: " << pathId
                     << ", tablename: " << tableName);
             }

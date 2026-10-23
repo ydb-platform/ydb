@@ -1,6 +1,6 @@
 #include "schemeshard_export_flow_proposals.h"
 
-#include "schemeshard_backup_scheme_snapshot.h"
+#include "schemeshard_table_scheme_snapshot.h"
 #include "schemeshard_path_describer.h"
 #include "schemeshard_xxport__helpers.h"
 
@@ -68,7 +68,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
         desc.SetOmitIndexes(!exportInfo.IncludeIndexData);
         desc.SetOmitFollowers(true);
         desc.SetIsBackup(true);
-        desc.SetCaptureBackupSchemeSnapshot(exportInfo.Kind == TExportInfo::EKind::S3 || exportInfo.Kind == TExportInfo::EKind::FS);
+        desc.SetCaptureTableSchemeSnapshot(exportInfo.Kind == TExportInfo::EKind::S3 || exportInfo.Kind == TExportInfo::EKind::FS);
     }
 
     return propose;
@@ -95,7 +95,7 @@ static bool GetDescription(TSchemeShard* ss, const TPathId& pathId,
     return true;
 }
 
-static const NKikimrSchemeOp::TBackupTask* FindBackupSchemeSnapshot(TSchemeShard* ss, const TPath& path) {
+static const NKikimrSchemeOp::TBackupTask* FindTableSchemeSnapshot(TSchemeShard* ss, const TPath& path) {
     if (!path.IsResolved() || path.IsDeleted()) {
         return nullptr;
     }
@@ -174,7 +174,7 @@ static TString ComputeIndexItemSuffix(
     const auto& parentItem = exportInfo.Items[item.ParentIdx];
 
     const auto copiedParentPath = TPath::Resolve(ExportItemPathName(ss, exportInfo, item.ParentIdx), ss);
-    const auto* snapshot = FindBackupSchemeSnapshot(ss, copiedParentPath);
+    const auto* snapshot = FindTableSchemeSnapshot(ss, copiedParentPath);
     NKikimrSchemeOp::TPathDescription sourceDescription;
     if (!snapshot || !snapshot->HasTable()) {
         // Copies created before scheme capture was introduced use the live source.
@@ -292,7 +292,7 @@ static bool FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescriptio
 static bool FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task,
         const TPath& sourcePath, const TPath& exportItemPath, bool allowMissingSource, TString& error) {
     error.clear();
-    const auto* snapshot = FindBackupSchemeSnapshot(ss, exportItemPath);
+    const auto* snapshot = FindTableSchemeSnapshot(ss, exportItemPath);
     NKikimrSchemeOp::TBackupTask legacySnapshot;
     if (!snapshot || !snapshot->HasTable()) {
         // Preserve recovery of exports whose copies predate scheme snapshots.
@@ -300,10 +300,10 @@ static bool FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask&
             return true;
         }
         if (!sourcePath.IsResolved() || sourcePath.IsDeleted()) {
-            error = "Source table is not available and the backup scheme snapshot is missing";
+            error = "Source table is not available and the table scheme snapshot is missing";
             return false;
         }
-        if (!MakeBackupTableSchemeSnapshot(ss, TlsActivationContext->AsActorContext(),
+        if (!MakeTableSchemeSnapshot(ss, TlsActivationContext->AsActorContext(),
                 sourcePath.Base()->PathId, legacySnapshot, error)) {
             return false;
         }
@@ -317,11 +317,11 @@ static bool FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask&
     auto description = snapshot->GetTable();
     if (exportItemPath->IsTable()) {
         if (!description.HasTable() || !description.GetTable().ColumnsSize()) {
-            error = "Backup scheme snapshot does not contain a row table description";
+            error = "Table scheme snapshot does not contain a row table description";
             return false;
         }
         if (description.GetTable().GetCdcStreams().size() != snapshot->GetChangefeedUnderlyingTopics().size()) {
-            error = "Backup scheme snapshot does not contain all changefeed topics";
+            error = "Table scheme snapshot does not contain all changefeed topics";
             return false;
         }
         if (!FillSetValForSequences(ss, *description.MutableTable(), exportItemPath.Base()->PathId, error)
@@ -330,7 +330,7 @@ static bool FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask&
         }
     } else if (!description.HasColumnTableDescription()
         || !description.GetColumnTableDescription().GetSchema().ColumnsSize()) {
-        error = "Backup scheme snapshot does not contain a column table description";
+        error = "Table scheme snapshot does not contain a column table description";
         return false;
     }
 

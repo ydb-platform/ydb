@@ -507,7 +507,7 @@ private:
             item.State = EState::Cancelled;
             item.Issue = error;
             Self->PersistExportItemState(db, *exportInfo, itemIdx);
-            CancelAndPersistExport(exportInfo, itemIdx, "failed to prepare backup scheme snapshot", db);
+            CancelAndPersistExport(exportInfo, itemIdx, "failed to prepare table scheme snapshot", db);
             return false;
         }
 

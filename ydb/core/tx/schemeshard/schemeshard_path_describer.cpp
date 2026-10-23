@@ -1,5 +1,5 @@
 #include "schemeshard_path_describer.h"
-#include "schemeshard_backup_scheme_snapshot.h"
+#include "schemeshard_table_scheme_snapshot.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/public/api/protos/annotations/sensitive.pb.h>
@@ -1526,7 +1526,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     return DescribePath(self, ctx, path, options);
 }
 
-bool MakeBackupTableSchemeSnapshot(
+bool MakeTableSchemeSnapshot(
     TSchemeShard* self,
     const TActorContext& ctx,
     const TPathId& sourcePathId,
@@ -1545,7 +1545,7 @@ bool MakeBackupTableSchemeSnapshot(
 
     const TPath sourcePath = TPath::Init(sourcePathId, self);
     if (!sourcePath.IsResolved() || sourcePath.IsDeleted()) {
-        error = TStringBuilder() << "Cannot capture backup scheme snapshot: source path is not resolved, pathId: " << sourcePathId;
+        error = TStringBuilder() << "Cannot capture table scheme snapshot: source path is not resolved, pathId: " << sourcePathId;
         return false;
     }
 
@@ -1553,7 +1553,7 @@ bool MakeBackupTableSchemeSnapshot(
         auto result = DescribePath(self, ctx, pathId, options);
         const auto& record = result->GetRecord();
         if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
-            error = TStringBuilder() << "Cannot capture backup scheme snapshot: failed to describe " << object
+            error = TStringBuilder() << "Cannot capture table scheme snapshot: failed to describe " << object
                 << ", pathId: " << pathId
                 << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
                 << ", reason: " << record.GetReason();
@@ -1569,7 +1569,7 @@ bool MakeBackupTableSchemeSnapshot(
         return false;
     }
     if (!sourceDescription.HasTable() && !sourceDescription.HasColumnTableDescription()) {
-        error = "Cannot capture backup scheme snapshot: source description does not contain a table";
+        error = "Cannot capture table scheme snapshot: source description does not contain a table";
         return false;
     }
 
@@ -1593,14 +1593,14 @@ bool MakeBackupTableSchemeSnapshot(
                     return false;
                 }
                 if (!topicDescription.HasPersQueueGroup()) {
-                    error = "Cannot capture backup scheme snapshot: changefeed topic description is missing";
+                    error = "Cannot capture table scheme snapshot: changefeed topic description is missing";
                     return false;
                 }
 
                 snapshot.AddChangefeedUnderlyingTopics()->Swap(&topicDescription);
             }
             if (snapshot.GetChangefeedUnderlyingTopics().size() != topicCount + 1) {
-                error = TStringBuilder() << "Cannot capture backup scheme snapshot: expected one topic for changefeed " << cdcStream.GetName();
+                error = TStringBuilder() << "Cannot capture table scheme snapshot: expected one topic for changefeed " << cdcStream.GetName();
                 return false;
             }
         }

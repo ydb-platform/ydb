@@ -2726,7 +2726,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, TestShards, CmdInitialize>;
     };
 
-    struct BackupSchemeSnapshots : Table<141> {
+    struct TableSchemeSnapshots : Table<141> {
         struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct TableName : Column<3, NScheme::NTypeIds::Utf8> {};
@@ -2882,7 +2882,7 @@ struct Schema : NIceDb::Schema {
         SetColumnConstraint,
         SetColumnConstraintShardStatus,
         TestShardSet,
-        BackupSchemeSnapshots
+        TableSchemeSnapshots
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

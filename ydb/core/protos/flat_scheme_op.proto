@@ -1488,8 +1488,8 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     optional TDropCdcStream DropSrcCdcStream = 10;
     map<string, TDropCdcStream> IndexImplTableDropCdcStreams = 11;
 
-    // Captures the immutable source scheme for backup copies.
-    optional bool CaptureBackupSchemeSnapshot = 12 [default = false];
+    // Captures the immutable source table scheme
+    optional bool CaptureTableSchemeSnapshot = 12 [default = false];
 }
 
 message TConsistentTableCopyingConfig {
@@ -2153,8 +2153,8 @@ message TModifyScheme {
 
     optional TCreateTestShardSet CreateTestShardSet = 96;
 
-    // Captures the immutable source scheme for backup copies.
-    optional bool CaptureBackupSchemeSnapshot = 97 [default = false];
+    // Captures the immutable source table scheme
+    optional bool CaptureTableSchemeSnapshot = 97 [default = false];
 
     // Some entries are grouped by semantics, so are out of order
 }

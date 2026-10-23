@@ -1,6 +1,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
-#include <ydb/core/tx/schemeshard/schemeshard_backup_scheme_snapshot.h>
+#include <ydb/core/tx/schemeshard/schemeshard_table_scheme_snapshot.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/base/subdomain.h>
@@ -505,9 +505,9 @@ public:
             return result;
         }
 
-        NKikimrSchemeOp::TBackupTask backupSchemeSnapshot;
-        if (Transaction.GetCaptureBackupSchemeSnapshot() && !MakeBackupTableSchemeSnapshot(
-                context.SS, context.Ctx, srcPath.Base()->PathId, backupSchemeSnapshot, errStr))
+        NKikimrSchemeOp::TBackupTask tableSchemeSnapshot;
+        if (Transaction.GetCaptureTableSchemeSnapshot() && !MakeTableSchemeSnapshot(
+                context.SS, context.Ctx, srcPath.Base()->PathId, tableSchemeSnapshot, errStr))
         {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
@@ -561,13 +561,13 @@ public:
             tableInfo->AlterVersion += 1;
             tableInfo->IsReadOnly = true;
             tableInfo->Stats = {};
-            if (Transaction.GetCaptureBackupSchemeSnapshot()) {
-                tableInfo->BackupSettings.Swap(&backupSchemeSnapshot);
+            if (Transaction.GetCaptureTableSchemeSnapshot()) {
+                tableInfo->BackupSettings.Swap(&tableSchemeSnapshot);
             }
             context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());
         }
-        if (Transaction.GetCaptureBackupSchemeSnapshot()) {
-            context.DbChanges.PersistBackupSchemeSnapshot(dstPath.Base()->PathId);
+        if (Transaction.GetCaptureTableSchemeSnapshot()) {
+            context.DbChanges.CreateTableSchemeSnapshot(dstPath.Base()->PathId);
         }
         context.SS->AcquireOwnDbRef(dstPath.Base()->PathId, "copy table info");
 

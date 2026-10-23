@@ -2,7 +2,10 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
+#include <ydb/library/formats/arrow/switch/compare.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
+
+#include <util/system/unaligned_mem.h>
 
 namespace NKikimr::NArrow {
 
@@ -29,7 +32,7 @@ public:
         }
         if constexpr (arrow::has_c_type<typename TWrap::T>() && !std::is_base_of<arrow::HalfFloatType, typename TWrap::T>()) {
             using CType = typename arrow::TypeTraits<typename TWrap::T>::CType;
-            return CustomActor.template OnValue<TWrap>(fieldIndex, *(CType*)(data));
+            return CustomActor.template OnValue<TWrap>(fieldIndex, ReadUnaligned<CType>(data));
         }
         AFL_VERIFY(false);
         return false;
@@ -131,12 +134,8 @@ public:
             Result = std::partial_ordering::greater;
             return false;
         }
-        const int cmp = std::string_view(data, size).compare(*ItemView);
-        if (cmp < 0) {
-            Result = std::partial_ordering::less;
-        } else if (cmp > 0) {
-            Result = std::partial_ordering::greater;
-        }
+        Result = TComparator::CompareValueNotNull(
+            arrow::util::string_view(data, size), arrow::util::string_view(ItemView->data(), ItemView->size()));
         return false;
     }
 
@@ -147,11 +146,10 @@ public:
             return false;
         }
         AFL_VERIFY(ItemView->size() == sizeof(CType));
-        const CType itemValue = *(CType*)(ItemView->data());
-        if (value < itemValue) {
-            Result = std::partial_ordering::less;
-        } else if (itemValue < value) {
-            Result = std::partial_ordering::greater;
+        Result = TComparator::CompareValueNotNull(value, ReadUnaligned<CType>(ItemView->data()));
+        // Packed rows historically treat unordered floating-point values as equivalent.
+        if (Result == std::partial_ordering::unordered) {
+            Result = std::partial_ordering::equivalent;
         }
         return false;
     }

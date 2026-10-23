@@ -392,7 +392,9 @@ namespace NKikimr::NStorage {
         if (groupRemoved && isDropDonor) {
             throw TExError() << "Group not found";
         }
-        Y_ABORT_UNLESS(groupRemoved || vdiskId.GroupGeneration < actualGroupGeneration);
+        Y_VERIFY_S(groupRemoved || vdiskId.GroupGeneration < actualGroupGeneration,
+            "VDiskId# " << vdiskId << " ActualGroupGeneration# " << actualGroupGeneration
+            << " ConfigGeneration# " << config.GetGeneration() << " IsDropDonor# " << isDropDonor);
 
         for (size_t i = 0; i < ss->VDisksSize(); ++i) {
             if (const auto& vdisk = ss->GetVDisks(i); vdisk.HasVDiskID() && vdisk.HasVDiskLocation()) {

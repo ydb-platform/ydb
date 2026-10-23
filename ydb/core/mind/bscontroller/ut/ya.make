@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/mind/bscontroller)
 
 SRCS(
+    bridge_sync_counters_ut.cpp
     grouper_ut.cpp
     group_mapper_ut.cpp
     mv_object_map_ut.cpp

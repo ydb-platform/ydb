@@ -3,6 +3,7 @@
 #include <memory_controller.h>
 #include <memory_controller_config.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -19,6 +20,8 @@
 #ifdef _linux_
 #include <sys/resource.h>
 #endif
+
+#include <tcmalloc/malloc_extension.h>
 
 namespace NKikimr::NMemory {
 
@@ -43,7 +46,7 @@ struct TFixedProcessMemoryInfoProvider : public IProcessMemoryInfoProvider {
         return ProcessMemoryInfo;
     }
 
-    TProcessMemoryInfo ProcessMemoryInfo{0_MB, 0_MB, {}, {}, {}, {}};
+    TProcessMemoryInfo ProcessMemoryInfo{0_MB, 0_MB, 0_MB, {}, {}, {}, {}};
 };
 
 // A memory controller on a bare runtime, driven through the provider and edge actors
@@ -362,6 +365,532 @@ Y_UNIT_TEST(Config_ConsumerLimits) {
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/LimitMin")->Val(), 10_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/LimitMax")->Val(), 20_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 15_MB);
+}
+
+Y_UNIT_TEST(RssAwareBudget) {
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetHardLimitBytes(200_MB); // soft 150, target 100, shared cache 40..100
+    memoryControllerConfig->SetRssAwareBudget(true);
+    memoryControllerConfig->SetRssBudgetSlackBytes(10_MB);
+    memoryControllerConfig->SetReleaseAllocatorCachesOnPressure(true);
+    memoryControllerConfig->SetMinAllocatorCachesReleaseBytes(0);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    auto& runtime = *server->GetRuntime();
+    auto sharedCacheLimit = server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/Limit");
+    auto rssExcess = server->MemoryControllerCounters->GetCounter("Stats/RssExcess");
+    auto releaseRequested = server->MemoryControllerCounters->GetCounter("Stats/AllocatorCachesReleaseRequested");
+
+    // no rss info: budget from allocated memory only
+    server->ProcessMemoryInfo->AllocatedMemory = 30_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_DOUBLES_EQUAL(sharedCacheLimit->Val(), static_cast<i64>(66_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_VALUES_EQUAL(rssExcess->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 0);
+
+    // rss above allocated + slack: the excess is budgeted as other consumption
+    server->ProcessMemoryInfo->AnonRss = 50_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_DOUBLES_EQUAL(sharedCacheLimit->Val(), static_cast<i64>(57_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_VALUES_EQUAL(rssExcess->Val(), 10_MB);
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 0);
+
+    // rss within slack: back to the allocated-memory budget
+    server->ProcessMemoryInfo->AnonRss = 35_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_DOUBLES_EQUAL(sharedCacheLimit->Val(), static_cast<i64>(66_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_VALUES_EQUAL(rssExcess->Val(), 0);
+
+    // Reclaimable pages remain reusable, but non-reclaimable RSS still cuts caches.
+    // Measured RSS above the soft limit also triggers an allocator release.
+    server->ProcessMemoryInfo->AnonRss = 180_MB;
+    server->ProcessMemoryInfo->AllocatorCachesMemory = 50_MB;
+    server->ProcessMemoryInfo->AllocatorCachesReclaimable = 50_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_DOUBLES_EQUAL(sharedCacheLimit->Val(), static_cast<i64>(28_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_VALUES_EQUAL(rssExcess->Val(), 90_MB);
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 30_MB);
+
+    // Below the soft limit, retained free pages do not displace useful caches.
+    server->ProcessMemoryInfo->AnonRss = 110_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(rssExcess->Val(), 20_MB);
+    UNIT_ASSERT_DOUBLES_EQUAL(sharedCacheLimit->Val(), static_cast<i64>(48_MB), static_cast<i64>(1_MB));
+}
+
+Y_UNIT_TEST(RssAwareBudget_DoesNotRecutRetainedPages) {
+    for (bool releaseEnabled : {false, true}) {
+        NKikimrConfig::TMemoryControllerConfig config;
+        config.SetHardLimitBytes(200_MB);
+        config.SetRssAwareBudget(true);
+        config.SetRssBudgetSlackBytes(0);
+        config.SetReleaseAllocatorCachesOnPressure(releaseEnabled);
+        config.SetMinAllocatorCachesReleaseBytes(0);
+        TControllerFixture fixture(config);
+        auto& info = fixture.Provider->ProcessMemoryInfo;
+        info.AnonRss = 120_MB;
+        info.AllocatedMemory = 120_MB;
+        auto consumer = fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
+        ui64 used = 80_MB;
+        std::optional<ui64> firstLimit;
+        for (ui32 tick = 0; tick != 5; ++tick) {
+            consumer->SetConsumption(used);
+            fixture.Tick();
+            const ui64 limit = fixture.Counter("Consumer/SharedCache/Limit");
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/OtherConsumption"), 40_MB);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/AllocatorCachesReleaseRequested"), 0);
+            if (firstLimit) {
+                UNIT_ASSERT_VALUES_EQUAL(limit, *firstLimit);
+            } else {
+                UNIT_ASSERT_GT(limit, 40_MB);
+                UNIT_ASSERT_LT(limit, used);
+                firstLimit = limit;
+            }
+            // Eviction returns pages to the allocator, but not to the OS.
+            if (used > limit) {
+                const ui64 freed = used - limit;
+                used = limit;
+                info.AllocatedMemory -= freed;
+                info.AllocatorCachesMemory += freed;
+                info.AllocatorCachesReclaimable += freed;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(*info.AnonRss, 120_MB);
+        UNIT_ASSERT_VALUES_EQUAL(info.AllocatorCachesReclaimable, 80_MB - *firstLimit);
+    }
+}
+
+Y_UNIT_TEST(RssAwareBudget_RemainsStableAcrossAllocatorRelease) {
+    for (ui32 releasedPercent : {0u, 50u, 100u}) {
+        NKikimrConfig::TMemoryControllerConfig config;
+        config.SetHardLimitBytes(200_MB);
+        config.SetRssAwareBudget(true);
+        config.SetRssBudgetSlackBytes(0);
+        config.SetReleaseAllocatorCachesOnPressure(true);
+        config.SetMinAllocatorCachesReleaseBytes(0);
+        config.SetMaxAllocatorCachesReleaseBytes(10_MB);
+        TControllerFixture fixture(config);
+        auto& info = fixture.Provider->ProcessMemoryInfo;
+        info.AnonRss = 180_MB;
+        info.AllocatedMemory = 120_MB;
+        info.AllocatorCachesMemory = 60_MB;
+        info.AllocatorCachesReclaimable = 60_MB;
+        auto consumer = fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
+        ui64 used = 80_MB;
+        std::optional<ui64> firstLimit;
+        for (ui32 tick = 0; tick != 5; ++tick) {
+            consumer->SetConsumption(used);
+            fixture.Tick();
+            const ui64 limit = fixture.Counter("Consumer/SharedCache/Limit");
+            const ui64 requested = fixture.Counter("Stats/AllocatorCachesReleaseRequested");
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/OtherConsumption"), 40_MB);
+            UNIT_ASSERT_VALUES_EQUAL(requested, Min<ui64>(10_MB, *info.AnonRss - 150_MB));
+            if (firstLimit) {
+                UNIT_ASSERT_VALUES_EQUAL(limit, *firstLimit);
+            } else {
+                UNIT_ASSERT_GT(limit, 40_MB);
+                UNIT_ASSERT_LT(limit, used);
+                firstLimit = limit;
+            }
+            if (used > limit) {
+                const ui64 freed = used - limit;
+                used = limit;
+                info.AllocatedMemory -= freed;
+                info.AllocatorCachesMemory += freed;
+                info.AllocatorCachesReclaimable += freed;
+            }
+            // Model the next measured sample, including partial or ineffective releases.
+            // A release request itself must never be treated as a measured RSS reduction.
+            const ui64 released = requested * releasedPercent / 100;
+            *info.AnonRss -= released;
+            info.AllocatorCachesMemory -= released;
+            info.AllocatorCachesReclaimable -= released;
+        }
+    }
+}
+
+Y_UNIT_TEST(RssAwareBudget_ReclaimablePagesDoNotHideAllocatedMemory) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    config.SetRssAwareBudget(true);
+    config.SetRssBudgetSlackBytes(10_MB);
+    TControllerFixture fixture(config);
+    auto& info = fixture.Provider->ProcessMemoryInfo;
+    info.AllocatedMemory = 180_MB;
+    info.AnonRss = 200_MB;
+    info.AllocatorCachesMemory = 100_MB;
+    info.AllocatorCachesReclaimable = 100_MB;
+    fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/OtherConsumption"), 180_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 0);
+
+    // Inconsistent samples must neither underflow nor reduce the allocated-memory floor.
+    info.AnonRss = 5_MB;
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/OtherConsumption"), 180_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/RssExcess"), 0);
+}
+
+Y_UNIT_TEST(RssAwareBudget_Disabled) {
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetHardLimitBytes(200_MB);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    auto& runtime = *server->GetRuntime();
+
+    server->ProcessMemoryInfo->AllocatedMemory = 30_MB;
+    server->ProcessMemoryInfo->AnonRss = 180_MB;
+    server->ProcessMemoryInfo->AllocatorCachesMemory = 50_MB;
+    server->ProcessMemoryInfo->AllocatorCachesReclaimable = 50_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_DOUBLES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/Limit")->Val(), static_cast<i64>(66_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/RssExcess")->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/AllocatorCachesReleaseRequested")->Val(), 0);
+}
+
+Y_UNIT_TEST(RssAwareBudget_BudgetOnly) {
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetHardLimitBytes(200_MB);
+    memoryControllerConfig->SetRssAwareBudget(true);
+    memoryControllerConfig->SetRssBudgetSlackBytes(10_MB);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    auto& runtime = *server->GetRuntime();
+
+    server->ProcessMemoryInfo->AllocatedMemory = 30_MB;
+    server->ProcessMemoryInfo->AnonRss = 180_MB;
+    server->ProcessMemoryInfo->AllocatorCachesMemory = 50_MB;
+    server->ProcessMemoryInfo->AllocatorCachesReclaimable = 50_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_DOUBLES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/Limit")->Val(),
+        static_cast<i64>(28_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/RssExcess")->Val(), 90_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/AllocatorCachesReleaseRequested")->Val(), 0);
+}
+
+Y_UNIT_TEST(RssAwareBudget_ReleaseOnly) {
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetHardLimitBytes(200_MB);
+    memoryControllerConfig->SetReleaseAllocatorCachesOnPressure(true);
+    memoryControllerConfig->SetMinAllocatorCachesReleaseBytes(0);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    auto& runtime = *server->GetRuntime();
+
+    server->ProcessMemoryInfo->AllocatedMemory = 30_MB;
+    server->ProcessMemoryInfo->AnonRss = 180_MB;
+    server->ProcessMemoryInfo->AllocatorCachesMemory = 50_MB;
+    server->ProcessMemoryInfo->AllocatorCachesReclaimable = 50_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_DOUBLES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/Limit")->Val(), static_cast<i64>(66_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/RssExcess")->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/AllocatorCachesReleaseRequested")->Val(), 30_MB);
+}
+
+Y_UNIT_TEST(RssAwareBudget_Bounds) {
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetHardLimitBytes(200_MB);
+    memoryControllerConfig->SetRssAwareBudget(true);
+    memoryControllerConfig->SetRssBudgetSlackBytes(10_MB);
+    memoryControllerConfig->SetReleaseAllocatorCachesOnPressure(true);
+    memoryControllerConfig->SetMinAllocatorCachesReleaseBytes(0);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    auto& runtime = *server->GetRuntime();
+    auto sharedCacheLimit = server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/Limit");
+    auto rssExcess = server->MemoryControllerCounters->GetCounter("Stats/RssExcess");
+    auto releaseRequested = server->MemoryControllerCounters->GetCounter("Stats/AllocatorCachesReleaseRequested");
+
+    // rss smaller than slack: no underflow, plain allocated-memory budget
+    server->ProcessMemoryInfo->AllocatedMemory = 30_MB;
+    server->ProcessMemoryInfo->AnonRss = 5_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_DOUBLES_EQUAL(sharedCacheLimit->Val(), static_cast<i64>(66_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_VALUES_EQUAL(rssExcess->Val(), 0);
+
+    // release is capped by what the allocator actually holds
+    server->ProcessMemoryInfo->AnonRss = 250_MB;
+    server->ProcessMemoryInfo->AllocatorCachesMemory = 20_MB;
+    server->ProcessMemoryInfo->AllocatorCachesReclaimable = 20_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 20_MB);
+
+    // nothing cached by the allocator: nothing to release even under pressure
+    server->ProcessMemoryInfo->AllocatorCachesMemory = 0;
+    server->ProcessMemoryInfo->AllocatorCachesReclaimable = 0;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 0);
+
+    // exactly at the soft limit: no release (strict comparison)
+    server->ProcessMemoryInfo->AnonRss = 150_MB;
+    server->ProcessMemoryInfo->AllocatorCachesMemory = 50_MB;
+    server->ProcessMemoryInfo->AllocatorCachesReclaimable = 50_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 0);
+    server->ProcessMemoryInfo->AnonRss = 150_MB + 1;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 1);
+}
+
+Y_UNIT_TEST(ReleaseIsCappedByReclaimablePart) {
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetHardLimitBytes(200_MB);
+    memoryControllerConfig->SetReleaseAllocatorCachesOnPressure(true);
+    memoryControllerConfig->SetMinAllocatorCachesReleaseBytes(0);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    auto& runtime = *server->GetRuntime();
+    auto reclaimable = server->MemoryControllerCounters->GetCounter("Stats/AllocatorCachesReclaimable");
+    auto releaseRequested = server->MemoryControllerCounters->GetCounter("Stats/AllocatorCachesReleaseRequested");
+
+    // per-CPU and central caches never come back, so the request follows the reclaimable part
+    server->ProcessMemoryInfo->AllocatedMemory = 30_MB;
+    server->ProcessMemoryInfo->AnonRss = 180_MB;
+    server->ProcessMemoryInfo->AllocatorCachesMemory = 50_MB;
+    server->ProcessMemoryInfo->AllocatorCachesReclaimable = 10_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(reclaimable->Val(), 10_MB);
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 10_MB);
+
+    // nothing reclaimable: no request at all, however large the caches are
+    server->ProcessMemoryInfo->AllocatorCachesReclaimable = 0;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(reclaimable->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 0);
+}
+
+Y_UNIT_TEST(ReleaseRequestReachesPastTheHugePageCache) {
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetHardLimitBytes(200_MB);
+    memoryControllerConfig->SetReleaseAllocatorCachesOnPressure(true);
+    memoryControllerConfig->SetMinAllocatorCachesReleaseBytes(64_MB);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    auto& runtime = *server->GetRuntime();
+    auto releaseRequested = server->MemoryControllerCounters->GetCounter("Stats/AllocatorCachesReleaseRequested");
+
+    // 1 MB over the soft limit: too small to reach past the huge page cache, so raised to the floor
+    server->ProcessMemoryInfo->AllocatedMemory = 30_MB;
+    server->ProcessMemoryInfo->AnonRss = 151_MB;
+    server->ProcessMemoryInfo->AllocatorCachesMemory = 90_MB;
+    server->ProcessMemoryInfo->AllocatorCachesReclaimable = 90_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 64_MB);
+
+    // a need above the floor is passed through unchanged
+    server->ProcessMemoryInfo->AnonRss = 230_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 80_MB);
+}
+
+Y_UNIT_TEST(ReleaseFloorNeverExceedsTheCachedBytes) {
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetHardLimitBytes(200_MB);
+    memoryControllerConfig->SetReleaseAllocatorCachesOnPressure(true);
+    memoryControllerConfig->SetMinAllocatorCachesReleaseBytes(64_MB);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    auto& runtime = *server->GetRuntime();
+    auto releaseRequested = server->MemoryControllerCounters->GetCounter("Stats/AllocatorCachesReleaseRequested");
+
+    // less is cached than the floor: the floor must not inflate the request above what exists
+    server->ProcessMemoryInfo->AllocatedMemory = 30_MB;
+    server->ProcessMemoryInfo->AnonRss = 180_MB;
+    server->ProcessMemoryInfo->AllocatorCachesMemory = 50_MB;
+    server->ProcessMemoryInfo->AllocatorCachesReclaimable = 10_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 10_MB);
+}
+
+Y_UNIT_TEST(ReleaseIsBoundedPerTick) {
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetHardLimitBytes(200_MB);
+    memoryControllerConfig->SetReleaseAllocatorCachesOnPressure(true);
+    memoryControllerConfig->SetMinAllocatorCachesReleaseBytes(0);
+    memoryControllerConfig->SetMaxAllocatorCachesReleaseBytes(32_MB);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    auto& runtime = *server->GetRuntime();
+    auto releaseRequested = server->MemoryControllerCounters->GetCounter("Stats/AllocatorCachesReleaseRequested");
+
+    // the allocator releases synchronously, so one tick never asks for more than its bound
+    server->ProcessMemoryInfo->AllocatedMemory = 30_MB;
+    server->ProcessMemoryInfo->AnonRss = 230_MB;
+    server->ProcessMemoryInfo->AllocatorCachesMemory = 90_MB;
+    server->ProcessMemoryInfo->AllocatorCachesReclaimable = 90_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 32_MB);
+}
+
+Y_UNIT_TEST(RssAwareBudget_WithExternalConsumption) {
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    // no hard limit and no cgroup: it comes from MemTotal, external consumption is tracked
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetRssAwareBudget(true);
+    memoryControllerConfig->SetRssBudgetSlackBytes(10_MB);
+    memoryControllerConfig->SetReleaseAllocatorCachesOnPressure(true);
+    memoryControllerConfig->SetMinAllocatorCachesReleaseBytes(0);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    auto& runtime = *server->GetRuntime();
+
+    server->ProcessMemoryInfo->MemTotal = 200_MB;
+    server->ProcessMemoryInfo->MemAvailable = 100_MB;
+    server->ProcessMemoryInfo->AnonRss = 60_MB;   // external = 200 - 60 - 100 = 40
+    server->ProcessMemoryInfo->AllocatedMemory = 10_MB; // rss budget = 50, excess = 40
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/HardLimit")->Val(), 200_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ExternalConsumption")->Val(), 40_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/RssExcess")->Val(), 40_MB);
+    // other 50 + external 40 leave 10 MB for consumers: caches at their minimums, still under soft
+    UNIT_ASSERT_DOUBLES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/Limit")->Val(), static_cast<i64>(40_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/AllocatorCachesReleaseRequested")->Val(), 0);
+}
+
+Y_UNIT_TEST(RssAwareBudget_ConfigHotReload) {
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetHardLimitBytes(200_MB);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    auto& runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+    auto sharedCacheLimit = server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/Limit");
+    auto releaseRequested = server->MemoryControllerCounters->GetCounter("Stats/AllocatorCachesReleaseRequested");
+
+    server->ProcessMemoryInfo->AllocatedMemory = 30_MB;
+    server->ProcessMemoryInfo->AnonRss = 180_MB;
+    server->ProcessMemoryInfo->AllocatorCachesMemory = 50_MB;
+    server->ProcessMemoryInfo->AllocatorCachesReclaimable = 50_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_DOUBLES_EQUAL(sharedCacheLimit->Val(), static_cast<i64>(66_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 0);
+
+    auto updateConfig = [&](bool enabled) {
+        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto* config = request->Record.MutableConfig()->MutableMemoryControllerConfig();
+        config->SetHardLimitBytes(200_MB);
+        config->SetRssAwareBudget(enabled);
+        config->SetRssBudgetSlackBytes(10_MB);
+        config->SetReleaseAllocatorCachesOnPressure(enabled);
+        config->SetMinAllocatorCachesReleaseBytes(0);
+        runtime.Send(new IEventHandle(MakeMemoryControllerId(0), sender, request.Release()));
+        runtime.SimulateSleep(TDuration::Seconds(2));
+    };
+
+    updateConfig(true);
+    // The live server's own memtable usage adds a small offset to the cache ceiling.
+    UNIT_ASSERT_DOUBLES_EQUAL(sharedCacheLimit->Val(), static_cast<i64>(28_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/RssExcess")->Val(), 90_MB);
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 30_MB);
+
+    updateConfig(false);
+    UNIT_ASSERT_DOUBLES_EQUAL(sharedCacheLimit->Val(), static_cast<i64>(66_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 0);
+}
+
+Y_UNIT_TEST(RssAwareBudget_ReleasesPageHeap) {
+    auto pageHeapFree = [] {
+        return tcmalloc::MallocExtension::GetNumericProperty("tcmalloc.page_heap_free");
+    };
+    if (!pageHeapFree().has_value()) {
+        Cerr << "tcmalloc is not the allocator of this binary, skipping" << Endl;
+        return;
+    }
+
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetHardLimitBytes(200_MB);
+    memoryControllerConfig->SetReleaseAllocatorCachesOnPressure(true);
+    memoryControllerConfig->SetMinAllocatorCachesReleaseBytes(0);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    auto& runtime = *server->GetRuntime();
+
+    // park 64 MB in the page heap: allocate, touch, free
+    const ui64 beforeAlloc = *pageHeapFree();
+    {
+        TVector<TString> chunks;
+        for (ui32 i = 0; i < 64; ++i) {
+            chunks.emplace_back(1_MB, 'x');
+        }
+    }
+    const ui64 parked = *pageHeapFree();
+    Cerr << "page_heap_free before alloc = " << beforeAlloc << ", after free = " << parked
+        << ", heap_size = " << tcmalloc::MallocExtension::GetNumericProperty("generic.heap_size").value_or(0)
+        << ", physical = " << tcmalloc::MallocExtension::GetNumericProperty("generic.physical_memory_used").value_or(0) << Endl;
+    // tcmalloc keeps only part of the freed spans in the page heap, so check the delta
+    const ui64 delta = parked - Min(parked, beforeAlloc);
+    UNIT_ASSERT_C(delta >= 8_MB, "parked=" << parked << " beforeAlloc=" << beforeAlloc);
+
+    server->ProcessMemoryInfo->AllocatedMemory = 30_MB;
+    server->ProcessMemoryInfo->AnonRss = 150_MB + parked;
+    server->ProcessMemoryInfo->AllocatorCachesMemory = parked;
+    server->ProcessMemoryInfo->AllocatorCachesReclaimable = parked;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/AllocatorCachesReleaseRequested")->Val(), parked);
+    const ui64 afterRelease = *pageHeapFree();
+    Cerr << "page_heap_free after release = " << afterRelease << Endl;
+    UNIT_ASSERT_C(afterRelease + delta / 2 <= parked, "afterRelease=" << afterRelease << " parked=" << parked);
 }
 
 Y_UNIT_TEST(SharedCache) {

@@ -617,7 +617,17 @@ private:
             }
 
             if (!allowUpdate) {
-                return TConclusionStatus::Fail("Only async-indexed tables are supported by BulkUpsert");
+                TStringBuilder error;
+                if (indexType == NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+                    error << "BulkUpsert to tables with asynchronous indexes is disabled"
+                        << " by the EnableBulkUpsertToAsyncIndexedTables feature flag";
+                } else {
+                    error << "Only async-indexed tables are supported by BulkUpsert";
+                }
+                error << ": table has index \"" << index.GetName() << "\""
+                    << " of type " << NKikimrSchemeOp::EIndexType_Name(indexType)
+                    << ". Write the data using a YQL UPSERT query instead";
+                return TConclusionStatus::Fail(error);
             }
         }
 
@@ -658,7 +668,23 @@ private:
         }
 
         if (!notNullColumnsLeft.empty()) {
-            return TConclusionStatus::Fail(Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str()));
+            TStringBuilder error;
+            error << "Missing not null columns: " << JoinSeq(", ", notNullColumnsLeft)
+                << ". BulkUpsert requires explicit values for all NOT NULL columns";
+
+            // A NOT NULL column may also have a DEFAULT, which users expect to be applied.
+            TVector<TString> notNullColumnsWithDefault;
+            for (const auto& column : notNullColumnsLeft) {
+                if (defaultColumnsLeft.contains(column)) {
+                    notNullColumnsWithDefault.push_back(column);
+                }
+            }
+            if (!notNullColumnsWithDefault.empty()) {
+                error << " and does not apply column DEFAULT values (columns with DEFAULT: "
+                    << JoinSeq(", ", notNullColumnsWithDefault)
+                    << "). Set these columns explicitly or write the data using a YQL UPSERT query";
+            }
+            return TConclusionStatus::Fail(error);
         }
 
         if (!setNotNullInProgressColumnsLeft.empty() && UpsertIfExists) {
@@ -676,7 +702,10 @@ private:
         }
 
         if (!defaultColumnsLeft.empty()) {
-            return TConclusionStatus::Fail(Sprintf("Missing default columns: %s", JoinSeq(", ", defaultColumnsLeft).c_str()));
+            return TConclusionStatus::Fail(TStringBuilder()
+                << "Missing default columns: " << JoinSeq(", ", defaultColumnsLeft)
+                << ". BulkUpsert does not apply column DEFAULT values."
+                << " Set these columns explicitly or write the data using a YQL UPSERT query");
         }
 
         TConclusionStatus res = TConclusionStatus::Success();

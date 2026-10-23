@@ -2864,6 +2864,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             auto result = tableClient.BulkUpsert("/Root/SetDropDefaultBulkUpsert", rowsBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: DefaultCol");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "BulkUpsert does not apply column DEFAULT values");
         }
 
         {
@@ -2889,6 +2890,68 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
             auto result = tableClient.BulkUpsert("/Root/SetDropDefaultBulkUpsert", rowsBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(BulkUpsertMissingNotNullColumnsMessage) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/BulkUpsertNotNullWithDefault` (
+                    Key Uint32 NOT NULL,
+                    Marker Utf8 NOT NULL DEFAULT "",
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/BulkUpsertNotNullWithoutDefault` (
+                    Key Uint32 NOT NULL,
+                    Required Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto makeKeyOnlyRows = [] {
+            auto rowsBuilder = NYdb::TValueBuilder();
+            rowsBuilder.BeginList();
+            for (ui32 i = 1; i <= 3; ++i) {
+                rowsBuilder.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Key").Uint32(i)
+                    .EndStruct();
+            }
+            rowsBuilder.EndList();
+            return rowsBuilder.Build();
+        };
+
+        {
+            // The column has a DEFAULT, but BulkUpsert does not apply it: the message must say so
+            auto result = tableClient.BulkUpsert("/Root/BulkUpsertNotNullWithDefault", makeKeyOnlyRows()).ExtractValueSync();
+            const auto issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Missing not null columns: Marker");
+            UNIT_ASSERT_STRING_CONTAINS(issues, "does not apply column DEFAULT values (columns with DEFAULT: Marker)");
+        }
+
+        {
+            // The column has no DEFAULT: the message must not mention DEFAULT values
+            auto result = tableClient.BulkUpsert("/Root/BulkUpsertNotNullWithoutDefault", makeKeyOnlyRows()).ExtractValueSync();
+            const auto issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Missing not null columns: Required");
+            UNIT_ASSERT_C(issues.find("DEFAULT") == std::string::npos, issues);
         }
     }
 

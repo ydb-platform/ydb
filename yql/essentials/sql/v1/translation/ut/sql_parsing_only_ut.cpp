@@ -5942,6 +5942,40 @@ Y_UNIT_TEST(AlterAsyncReplicationInitialScan) {
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "INITIAL_SCAN is not supported in ALTER");
 }
 
+Y_UNIT_TEST(CreateAsyncReplicationFormat) {
+    for (const auto& value : {"BINARY", "binary", "JSON"}) {
+        const auto res = SqlToYql(TStringBuilder()
+                                  << "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+                                  << "WITH (FORMAT = \"" << value << "\");");
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder()
+                                                      << "'('\"format\" (String '\"" << value << "\"))");
+            }
+        };
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationInvalidFormat) {
+    const auto res = SqlToYql(
+        "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+        "WITH (FORMAT = TRUE);");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Literal of String type is expected for FORMAT");
+}
+
+Y_UNIT_TEST(AlterAsyncReplicationFormat) {
+    const auto res = SqlToYql(
+        "USE plato; ALTER ASYNC REPLICATION MyReplication SET (FORMAT = \"BINARY\");");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "FORMAT is not supported in ALTER");
+}
+
 Y_UNIT_TEST(CreateAsyncReplicationUnsupportedSettings) {
     const auto settings = THashMap<TString, TString>{
         {"STATE", "DONE"},

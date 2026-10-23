@@ -473,7 +473,23 @@ public:
             }
         }
 
-        dstPath.MaterializeLeaf(owner);
+        auto guard = context.DbGuard();
+        TPathId allocatedPathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, allocatedPathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.MemChanges.GrabPath(context.SS, domainPathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabNewSequence(context.SS, allocatedPathId);
+        context.MemChanges.GrabDomain(context.SS, domainPathId);
+
+        context.DbChanges.PersistPath(allocatedPathId);
+        context.DbChanges.PersistPath(parentPath.Base()->PathId);
+        context.DbChanges.PersistPath(domainPathId);
+        context.DbChanges.PersistSequence(allocatedPathId);
+        context.DbChanges.PersistAlterSequence(allocatedPathId);
+        context.DbChanges.PersistTxState(OperationId);
+
+        dstPath.MaterializeLeaf(owner, allocatedPathId);
         result->SetPathId(dstPath->PathId.LocalPathId);
         context.SS->TabletCounters->Simple()[COUNTER_SEQUENCE_COUNT].Add(1);
 
@@ -507,6 +523,8 @@ public:
             sequenceShard = context.SS->RegisterShardInfo(
                 TShardInfo::SequenceShardInfo(OperationId.GetTxId(), domainPathId)
                     .WithBindedChannels(channelsBindings));
+            context.MemChanges.GrabNewShard(context.SS, sequenceShard);
+            context.DbChanges.PersistShard(sequenceShard);
             context.SS->TabletCounters->Simple()[COUNTER_SEQUENCESHARD_COUNT].Add(1);
             txState.Shards.emplace_back(sequenceShard, ETabletType::SequenceShard, TTxState::CreateParts);
             txState.State = TTxState::CreateParts;
@@ -527,50 +545,25 @@ public:
             p->SetLocalId(ui64(sequenceShard.GetLocalId()));
         }
 
-        NIceDb::TNiceDb db(context.GetDB());
-
-        context.SS->ChangeTxState(db, OperationId, txState.State);
         context.OnComplete.ActivateTx(OperationId);
 
         if (!acl.empty()) {
             dstPath->ApplyACL(acl);
         }
-        context.SS->PersistPath(db, dstPath->PathId);
 
         context.SS->Sequences.Set(pathId, sequenceInfo);
-        context.SS->PersistSequence(db, pathId, *sequenceInfo);
-        context.SS->PersistSequenceAlter(db, pathId, *alterData);
 
-        context.SS->PersistTxState(db, OperationId);
-        context.SS->PersistUpdateNextPathId(db);
-        if (shardsToCreate) {
-            context.SS->PersistUpdateNextShardIdx(db);
-        }
-
-        for (auto shard : txState.Shards) {
-            if (shard.Operation == TTxState::CreateParts) {
-                context.SS->PersistChannelsBinding(db, shard.Idx, context.SS->ShardInfos.at(shard.Idx).BindedChannels);
-                context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, domainPathId, OperationId.GetTxId(), shard.TabletType);
-            }
-        }
-
-        ++parentPath->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, parentPath.Base());
-        context.SS->ClearDescribePathCaches(parentPath.Base());
-        context.OnComplete.PublishToSchemeBoard(OperationId, parentPath->PathId);
-
-        context.SS->ClearDescribePathCaches(dstPath.Base());
-        context.OnComplete.PublishToSchemeBoard(OperationId, dstPath->PathId);
+        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
         domainInfo->IncPathsInside(context.SS);
-        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;
     }
 
-    void AbortPropose(TProposeContext&) override {
-        Y_ABORT("no AbortPropose for TCreateSequence");
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

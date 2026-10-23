@@ -3033,6 +3033,53 @@ Y_UNIT_TEST(TestWritePQ) {
     TestWritePQImpl(false);
 }
 
+Y_UNIT_TEST(TestWriteWithMinOffset) {
+    for (const size_t messageSize : {size_t(100), size_t(1_MB)}) {
+        TTestContext tc;
+        TFinalizer finalizer(tc);
+        tc.Prepare();
+        tc.Runtime->SetScheduledLimit(5000);
+        auto& config = tc.Runtime->GetAppData(0).PQConfig;
+        config.SetMinOffset(100);
+        PQTabletPrepare({.partitions = 1}, {{"user", true}}, tc);
+
+        const TString data(messageSize, 'x');
+        CmdWrite(0, "sourceid", {{1, data}, {2, data}}, tc);
+        CmdWrite(0, "sourceid", {{3, data}}, tc);
+        PQGetPartInfo(100, 103, tc);
+        CmdRead(0, 0, Max<i32>(), Max<i32>(), 3, false, tc, {100, 101, 102});
+
+        // Raising the minimum introduces a gap in an existing partition.
+        config.SetMinOffset(200);
+        CmdWrite(0, "sourceid", {{4, data}}, tc);
+        PQGetPartInfo(100, 201, tc);
+        CmdRead(0, 103, Max<i32>(), Max<i32>(), 1, false, tc, {200});
+
+        // A lower minimum must not move the next offset backwards, including after restart.
+        config.SetMinOffset(50);
+        PQTabletRestart(tc);
+        CmdWrite(0, "sourceid", {{5, data}}, tc);
+        PQGetPartInfo(100, 202, tc);
+        CmdRead(0, 201, Max<i32>(), Max<i32>(), 1, false, tc, {201});
+    }
+}
+
+Y_UNIT_TEST(TestWriteWithMinOffsetPreservesExplicitOffset) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->GetAppData(0).PQConfig.SetMinOffset(100);
+    PQTabletPrepare({.partitions = 1}, {{"user", true}}, tc);
+
+    CmdWrite({.Partition = 0, .SourceId = "sourceid", .Data = {{1, "data"}}, .TestContext = tc, .Offset = 10});
+    PQGetPartInfo(10, 11, tc);
+    CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {10});
+
+    CmdWrite(0, "sourceid", {{2, "data"}}, tc);
+    PQGetPartInfo(10, 101, tc);
+    CmdRead(0, 11, Max<i32>(), Max<i32>(), 1, false, tc, {100});
+}
+
 Y_UNIT_TEST(Read_From_Different_Zones_What_Was_Written_With_Gaps)
 {
     // The test creates messages in different zones. There are gaps in the offsets between the zones.

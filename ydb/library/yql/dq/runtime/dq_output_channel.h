@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/library/yql/dq/task_scheduler/task_trace.h>
 #include "dq_output.h"
 #include "dq_channel_settings.h"
 
@@ -10,6 +11,8 @@
 #include <memory>
 
 namespace NYql::NDq {
+
+class TTaskSchedulingHandle;
 
 // Moves when an output channel of one owner (a compute actor) may have finished: a channel which opts in increments
 // it when it becomes finished, before it wakes the owner up, so that the owner calls IsFinished only once it has
@@ -35,6 +38,8 @@ public:
     using TPtr = TIntrusivePtr<IDqOutputChannel>;
 
     virtual ui64 GetChannelId() const = 0;
+    // Diagnostic read: must not arm notifications or report scheduler waits.
+    virtual TTaskChannelSnapshot GetTraceSnapshot() const { return {}; }
     virtual ui64 GetValuesCount() const = 0;
     virtual const TDqOutputChannelStats& GetPopStats() const = 0;
 
@@ -63,6 +68,7 @@ public:
 
     virtual void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) = 0;
     virtual bool IsLocal() const = 0;
+    virtual void BindTaskScheduling(std::shared_ptr<TTaskSchedulingHandle>) {}
 
     // Opt in to TDqOutputFinishEpoch: an output which returns true increments `epoch` whenever it becomes finished,
     // and once on binding, as it may be finished already. An output which returns false is checked as before.

@@ -12,6 +12,7 @@ PEERDIR(
     ydb/library/actors/helpers
     ydb/library/mkql_proto
     ydb/library/query_actor
+    ydb/library/yql/dq/task_scheduler
     ydb/library/yverify_stream
     ydb/public/sdk/cpp/src/client/params
     ydb/public/sdk/cpp/src/client/proto

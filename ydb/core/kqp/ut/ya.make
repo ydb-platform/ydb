@@ -25,6 +25,7 @@ RECURSE_FOR_TESTS(
     stream_lookup
     runtime
     sysview
+    task_scheduler
     tli
     topics
     tx

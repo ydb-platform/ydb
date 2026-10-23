@@ -33,6 +33,17 @@ struct IDqSchedulableWork {
     // quota is likely available again, e.g. WaitForEvent(now + *delay).
     virtual std::optional<TDuration> TryStartExecution(TMonotonic now) = 0;
 
+    struct TSliceGrant {
+        ui64 CpuUs = 0;
+        std::optional<TDuration> RetryAfter;
+    };
+    // A cooperative CPU allowance, admitted and accounted in this work's query.
+    // A rejected grant still needs StopExecution() to leave the throttle state.
+    virtual TSliceGrant TryAcquireSlice(TMonotonic now, ui64 maximumCpuUs) {
+        auto retry = TryStartExecution(now);
+        return {retry ? 0 : maximumCpuUs, retry};
+    }
+
     // Called after the unit finishes; releases the quota.
     virtual void StopExecution() = 0;
 
@@ -47,6 +58,7 @@ struct IDqSchedulableWork {
     virtual void RegisterForResume(const NActors::TActorId& actorId) = 0;
 
     virtual TWorkScope GetWorkScope() const = 0;
+    virtual double GetSchedulingWeight() const { return 1; }
 };
 
 // Produces schedulable work for one fixed scope.

@@ -12,6 +12,7 @@ namespace NYql::NDq {
 using TDqInputStats = TDqAsyncStats;
 
 class TDqInputReadySet;
+class TTaskSchedulingHandle;
 
 class IDqInput : public TSimpleRefCount<IDqInput> {
 public:
@@ -59,6 +60,10 @@ public:
         Y_UNUSED(set, slot);
         return false;
     }
+
+    virtual void BindTaskScheduling(std::shared_ptr<TTaskSchedulingHandle>) {}
+    // Re-publish the last empty probe when a ready set skips this input.
+    virtual void ReportSchedulingWait() const {}
 };
 
 } // namespace NYql::NDq

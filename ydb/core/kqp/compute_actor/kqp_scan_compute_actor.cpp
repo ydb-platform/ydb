@@ -342,8 +342,12 @@ void TKqpScanComputeActor::DoBootstrap() {
     TBase::SetTaskRunner(taskRunner);
 
     auto selfId = this->SelfId();
-    auto wakeupCallback = [actorSystem, selfId]() {
-        actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+    auto wakeupCallback = [actorSystem, selfId, scheduling = this->TaskScheduling]() {
+        if (scheduling && !scheduling->ObserveOnly) {
+            scheduling->RequestExecution();
+        } else {
+            actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+        }
     };
     ComputeCtx.SetWakeupCallback(wakeupCallback);
     auto errorCallback = [actorSystem, selfId](const TString& error) {

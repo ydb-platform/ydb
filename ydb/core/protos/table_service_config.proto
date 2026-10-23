@@ -573,6 +573,24 @@ message TTableServiceConfig {
         // finish only once one of them has. Kill switch: off, the channels are polled as before
         optional bool EnableChannelNotifications = 10 [default = true];
         optional uint64 UnboundWaitPeriodMs = 11 [default = 600000];
+        // Experimental local task dispatch and per-run progress metrics. Channels v2 only.
+        optional bool EnableTaskScheduling = 12 [default = false];
+        optional uint32 TaskSchedulerShards = 13 [default = 4];
+        optional uint32 TaskSchedulerMaxInFlightPerShard = 14 [default = 2];
+        // Zero disables cooperative runner yields by rows, CPU and activation deadline.
+        optional uint64 TaskSchedulerMaxRowsPerRun = 15 [default = 0];
+        // Collect the same metrics while retaining the original wakeup and execution path.
+        optional bool TaskSchedulerObserveOnly = 16 [default = false];
+        optional bool TaskSchedulerUseWorkerPool = 17 [default = true];
+        optional uint64 TaskSchedulerWorkerSliceCpuUs = 18 [default = 1000];
+        optional uint64 TaskSchedulerWorkerActivationUs = 19 [default = 2000];
+        // Diagnostic capture, independent of queue activation. Download from
+        // /actors/kqp_channels?task_traces=1 and &query=<executer actor id>.
+        optional bool EnableTaskExecutionTrace = 20 [default = false];
+        optional uint32 TaskExecutionTraceMaxQueries = 21 [default = 16];
+        optional uint32 TaskExecutionTraceMaxEvents = 22 [default = 100000];
+        optional uint64 TaskExecutionTraceMaxBytes = 23 [default = 8388608];
+        optional uint64 TaskExecutionTraceRetentionMs = 24 [default = 600000];
     }
 
     optional TDqChannelConfig DqChannelConfig = 133 [(InvalidateCompileCache) = false];

@@ -4,12 +4,15 @@
 
 namespace NYql::NDq {
 
+class TTaskSchedulingHandle;
+
 class TDqComputeContextBase : private TNonCopyable {
 public:
     virtual ~TDqComputeContextBase() = default;
 
     ui64* InputsConsumed = nullptr;
     TInstant* StartTs = nullptr;
+    std::shared_ptr<TTaskSchedulingHandle> Scheduling;
 };
 
 NKikimr::NMiniKQL::TComputationNodeFactory GetDqBaseComputeFactory(const TDqComputeContextBase* computeCtx);

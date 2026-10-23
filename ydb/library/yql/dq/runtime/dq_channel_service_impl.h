@@ -197,6 +197,7 @@ public:
 
     ~TLocalBuffer() override;
 
+    TTaskChannelSnapshot GetTraceSnapshot() const override;
     EDqFillLevel GetFillLevel() const override;
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override;
     void Push(TDataChunk&& data) override;
@@ -266,7 +267,7 @@ public:
 
     // written under Mutex only, atomic to be readable from the mon page
     std::atomic<bool> MemoryPressure = false;
-    bool FinishPushed = false;
+    std::atomic<bool> FinishPushed = false;
     std::atomic<TInstant> LastOutputNotificationTime;
     std::atomic<TInstant> LastInputNotificationTime;
     TInstant FinishTime;
@@ -289,6 +290,7 @@ class TNodeState;
 
 class TOutputDescriptor {
 public:
+    std::shared_ptr<TTaskSchedulingHandle> OutputTask;
     TOutputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, NActors::TActorSystem* actorSystem, ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferBytes,
         ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferChunks, ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferThrottledCount,
         ui64 maxInflightBytes, ui64 minInflightBytes, ui64 coldInflightBytes)
@@ -513,6 +515,7 @@ public:
     }
 
     ~TOutputBuffer() override;
+    TTaskChannelSnapshot GetTraceSnapshot() const override;
     EDqFillLevel GetFillLevel() const override;
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator>aggregator) override;
     void Push(TDataChunk&& data) override;
@@ -525,6 +528,11 @@ public:
     void ExportPopStats(TDqAsyncStats& stats) override;
     void SetFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch) override {
         Descriptor->SetFinishEpoch(epoch);
+    }
+
+    void BindTaskScheduling(std::shared_ptr<TTaskSchedulingHandle> task, bool input) override {
+        IChannelBuffer::BindTaskScheduling(task, input);
+        std::atomic_store(&Descriptor->OutputTask, std::move(task));
     }
 
     std::shared_ptr<TNodeState> NodeState;
@@ -543,6 +551,7 @@ public:
 
 class TInputDescriptor {
 public:
+    std::shared_ptr<TTaskSchedulingHandle> InputTask;
 
     TInputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, NActors::TActorSystem* actorSystem,
         ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferBytes,
@@ -643,6 +652,7 @@ public:
     ~TInputBuffer() override;
 
 
+    TTaskChannelSnapshot GetTraceSnapshot() const override;
     EDqFillLevel GetFillLevel() const override {
         return EDqFillLevel::NoLimit;
     }
@@ -660,6 +670,11 @@ public:
     void ExportPopStats(TDqAsyncStats& stats) override;
     void SetReadyHook(const TDqInputReadyHook& hook) override {
         Descriptor->SetReadyHook(hook);
+    }
+
+    void BindTaskScheduling(std::shared_ptr<TTaskSchedulingHandle> task, bool input) override {
+        IChannelBuffer::BindTaskScheduling(task, input);
+        std::atomic_store(&Descriptor->InputTask, std::move(task));
     }
 
     std::shared_ptr<TNodeState> NodeState;
@@ -1015,6 +1030,11 @@ public:
         , Counters(counters)
         , Limits(limits)
         , PoolId(poolId) {
+        if (Limits.EnableTaskScheduling || Limits.TaskScheduling.Trace.Enabled) {
+            auto scheduling = Limits.TaskScheduling;
+            scheduling.ObserveOnly |= !Limits.EnableTaskScheduling;
+            TaskScheduler = CreateDqTaskScheduler(actorSystem, poolId, counters, scheduling);
+        }
         LocalBufferRegistry = std::make_shared<TLocalBufferRegistry>(actorSystem, counters,
             Limits.LocalChannelInflightBytes, Limits.LocalChannelInflightBytes * 8 / 10, Limits.LocalChannelColdInflightBytes,
             Limits.EnableSpillingChannelBackpressure);
@@ -1044,6 +1064,8 @@ public:
     bool IsChannelNotificationsEnabled() const final {
         return Limits.EnableChannelNotifications;
     }
+    std::shared_ptr<IDqTaskScheduler> GetTaskScheduler() const override { return TaskScheduler; }
+    std::shared_ptr<IDqTaskScheduler> TaskScheduler;
     // extras
     void NotifyCleanup();
 
@@ -1081,9 +1103,25 @@ public:
         return PushStats;
     }
 
-    EDqFillLevel GetFillLevel() const override {
-        return Serializer->Buffer->GetFillLevel();
+    TTaskChannelSnapshot GetTraceSnapshot() const override {
+        return Serializer->Buffer->GetTraceSnapshot();
     }
+
+    EDqFillLevel GetFillLevel() const override {
+        const auto dependency = OutputDependency(GetChannelId());
+        const ui64 version = Scheduling ? Scheduling->Observe(dependency) : 0;
+        auto level = Serializer->Buffer->GetFillLevel();
+        if (Scheduling && level != NoLimit) {
+            Scheduling->Await(dependency, version);
+        }
+        return level;
+    }
+
+    void BindTaskScheduling(std::shared_ptr<TTaskSchedulingHandle> task) override {
+        Scheduling = std::move(task);
+        Serializer->Buffer->BindTaskScheduling(Scheduling, false);
+    }
+    std::shared_ptr<TTaskSchedulingHandle> Scheduling;
 
     EDqFillLevel UpdateFillLevel() override {
         return GetFillLevel();
@@ -1257,12 +1295,37 @@ public:
         return PopStats;
     }
 
+    TTaskChannelSnapshot GetTraceSnapshot() const override {
+        auto snapshot = Buffer->GetTraceSnapshot();
+        snapshot.Paused = PausedByCheckpoint;
+        return snapshot;
+    }
+
     bool Empty() const override {
         if (PausedByCheckpoint) {
             return true;
         }
-        return Buffer->IsEmpty();
+        const auto dependency = InputDependency(GetChannelId());
+        const ui64 version = Scheduling ? Scheduling->Observe(dependency) : 0;
+        const bool empty = Buffer->IsEmpty();
+        if (Scheduling && empty) {
+            LastEmptySchedulingVersion = version;
+            Scheduling->Await(dependency, version);
+        }
+        return empty;
     }
+
+    void BindTaskScheduling(std::shared_ptr<TTaskSchedulingHandle> task) override {
+        Scheduling = std::move(task);
+        Buffer->BindTaskScheduling(Scheduling, true);
+    }
+    void ReportSchedulingWait() const override {
+        if (Scheduling) {
+            Scheduling->Await(InputDependency(GetChannelId()), LastEmptySchedulingVersion);
+        }
+    }
+    std::shared_ptr<TTaskSchedulingHandle> Scheduling;
+    mutable ui64 LastEmptySchedulingVersion = 0;
 
     bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override;
 

@@ -11,6 +11,7 @@
 #include <util/generic/set.h>
 
 #include <ydb/core/kqp/compute_actor/kqp_pure_compute_actor.h>
+#include <ydb/core/kqp/compute_actor/kqp_task_graph.h>
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
 #include <ydb/core/kqp/common/control.h>
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
@@ -257,6 +258,40 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
     return true;
 }
 
+std::shared_ptr<const NDq::TQueryTaskGraph> TKqpPlanner::GetSchedulingGraph() {
+    if (!CaFactory_ || !CaFactory_->IsTaskSchedulingEnabled() || TasksGraph.GetMeta().DqChannelVersion < 2) {
+        return {};
+    }
+    if (!SchedulingGraph) {
+        TVector<NDq::TTaskGraphNode> tasks;
+        TVector<NDq::TTaskGraphChannel> channels;
+        for (const auto& task : TasksGraph.GetTasks()) {
+            NDq::TTaskGraphNode node;
+            node.TaskId = task.Id;
+            node.StageId = task.StageId.StageId;
+            node.PlannedNodeId = task.Meta.ExpectedNodeId.value_or(0);
+            node.InputsCount = task.Inputs.size();
+            node.OutputsCount = task.Outputs.size();
+            node.HasSource = task.Inputs.empty() || task.Meta.ScanTask;
+            for (const auto& input : task.Inputs) {
+                node.HasSource |= input.Type() == NDq::TTaskInputType::Source;
+            }
+            for (const auto& output : task.Outputs) {
+                node.HasSink |= output.Type == NDq::TTaskOutputType::Sink;
+                node.HasEffects |= output.Type == NDq::TTaskOutputType::Effects;
+            }
+            tasks.push_back(node);
+        }
+        for (const auto& channel : TasksGraph.GetChannels()) {
+            const auto& source = TasksGraph.GetTask(channel.SrcTask);
+            channels.push_back({channel.Id, channel.SrcTask, channel.DstTask, channel.SrcOutputIndex,
+                                channel.DstInputIndex, source.Outputs[channel.SrcOutputIndex].Type});
+        }
+        SchedulingGraph = std::make_shared<const NDq::TQueryTaskGraph>(std::move(tasks), std::move(channels));
+    }
+    return SchedulingGraph;
+}
+
 std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeRequest(const TRequestData& requestData) {
     auto result = std::make_unique<TEvKqpNode::TEvStartKqpTasksRequest>(TasksGraph.GetMeta().GetArenaIntrusivePtr());
     auto& request = result->Record;
@@ -273,6 +308,9 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetLockMode(*TasksGraph.GetMeta().LockMode);
     }
     ActorIdToProto(ExecuterId, request.MutableExecuterActorId());
+    if (const auto graph = GetSchedulingGraph()) {
+        SerializeSchedulingGraph(*graph, *request.MutableSchedulingGraph());
+    }
 
     if (Deadline) {
         TDuration timeout = Deadline - TAppData::TimeProvider->Now();
@@ -603,6 +641,9 @@ std::unique_ptr<IEventHandle> TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, u
 
     TActorId actorId;
     try {
+        if (auto graph = GetSchedulingGraph()) {
+            SchedulingGraphRegistration = CaFactory_->RegisterSchedulingGraph(ExecuterId, std::move(graph), {taskId});
+        }
         actorId = CaFactory_->CreateKqpComputeActor({
             .ExecuterId = ExecuterId,
             .TxId = TxId,
@@ -635,6 +676,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, u
             .Database = Database,
             .Query = Query,
             .UseBatchPool = UserRequestContext->UseBatchPool,
+            .SchedulingGraphRegistration = SchedulingGraphRegistration,
         });
     } catch (...) {
         const TString message = TStringBuilder() << "Failed to create compute actor for task " << taskId

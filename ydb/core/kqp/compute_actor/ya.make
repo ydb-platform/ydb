@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     kqp_compute_actor_factory.cpp
+    kqp_task_graph.cpp
     kqp_compute_actor.cpp
     kqp_compute_actor_helpers.cpp
     kqp_compute_events.cpp
@@ -17,6 +18,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/protos
+    ydb/library/yql/dq/task_scheduler
     ydb/core/kqp/tracing
     ydb/core/actorlib_impl
     ydb/core/base

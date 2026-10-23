@@ -54,6 +54,14 @@ void TSchedulableBase::RegisterForResume(const NActors::TActorId& actorId) {
     }
 }
 
+double TSchedulableBase::GetSchedulingWeight() const {
+    if (!SchedulableTask) {
+        return 1;
+    }
+    const auto snapshot = SchedulableTask->Query->GetSnapshot();
+    return snapshot ? Max<double>(1e-9, snapshot->FairShare) : 1;
+}
+
 std::optional<TDuration> TSchedulableBase::TryStartExecution(TMonotonic now) {
     if (StartExecution(now)) {
         return std::nullopt;

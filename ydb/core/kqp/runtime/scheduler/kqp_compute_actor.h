@@ -16,7 +16,7 @@ namespace NKikimr::NKqp::NScheduler {
         template<typename ... TArgs>
         TSchedulableComputeActorBase(const TSchedulableOptions& options, TArgs&& ... args)
             : TBase(std::forward<TArgs>(args) ...)
-            , Schedulable(options)
+            , Schedulable(UsesWorkerPool() ? TSchedulableOptions{.Query = {}, .IsSchedulable = false} : options)
             , WorkFactory(options.Query
                 ? std::make_shared<TSchedulableWorkFactory>(options.Query, options.IsSchedulable)
                 : nullptr)
@@ -24,6 +24,13 @@ namespace NKikimr::NKqp::NScheduler {
         }
 
     protected:
+        bool UsesWorkerPool() const {
+            return this->RuntimeSettings.TaskScheduler
+                && this->RuntimeSettings.TaskScheduler->GetSettings().UseWorkerPool
+                && !this->RuntimeSettings.TaskScheduler->GetSettings().ObserveOnly
+                && this->CheckpointingMode == NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
+        }
+
         NYql::NDq::IDqSchedulableWorkFactoryPtr GetSchedulableWorkFactory() const override {
             return WorkFactory;
         }
@@ -77,6 +84,7 @@ namespace NKikimr::NKqp::NScheduler {
             // TODO: account waiting on mailbox?
 
             if (const auto delay = Schedulable.TryStartExecution(TMonotonic::Now())) {
+                this->ScheduledRunProgress.QuotaRejected = true;
                 this->Schedule(*delay, TSchedulableTask::GetResumeEvent().release());
                 return;
             }

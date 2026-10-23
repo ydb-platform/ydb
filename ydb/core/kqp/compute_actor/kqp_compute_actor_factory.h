@@ -147,9 +147,13 @@ public:
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
 
         bool UseBatchPool = false;
+        std::shared_ptr<const NYql::NDq::TQueryGraphRegistration> SchedulingGraphRegistration;
     };
 
     virtual TActorId CreateKqpComputeActor(TCreateArgs&& args) = 0;
+    virtual bool IsTaskSchedulingEnabled() const { return false; }
+    virtual std::shared_ptr<const NYql::NDq::TQueryGraphRegistration> RegisterSchedulingGraph(
+        NActors::TActorId, std::shared_ptr<const NYql::NDq::TQueryTaskGraph>, TVector<ui64>) { return {}; }
 
     virtual void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) = 0;
     virtual bool GetVerboseMemoryLimitException() = 0;

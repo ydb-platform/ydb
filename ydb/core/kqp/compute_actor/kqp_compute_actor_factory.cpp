@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 #include <ydb/core/kqp/tracing/kqp_task_rendering.h>
+#include <ydb/services/udf_store/wasm/query_compartment_scope.h>
 
 #include <atomic>
 
@@ -80,6 +81,18 @@ public:
     TShardsScanningPolicy GetShardsScanningPolicy() override {
         return TShardsScanningPolicy(AggregationGroupByLimit.load(), AggregationNoGroupLimit.load(), ScanLimit.load(),
             IsParallelScanningAvailable.load(), ShardSplitFactor.load(), CriticalTotalRetriesCount.load(), ReaskShardRetriesCount.load());
+    }
+
+    bool IsTaskSchedulingEnabled() const override {
+        const auto scheduler = ChannelService ? ChannelService->GetTaskScheduler() : nullptr;
+        return scheduler && (!scheduler->GetSettings().ObserveOnly || scheduler->GetSettings().Trace.Enabled);
+    }
+
+    std::shared_ptr<const NYql::NDq::TQueryGraphRegistration> RegisterSchedulingGraph(NActors::TActorId query,
+        std::shared_ptr<const NYql::NDq::TQueryTaskGraph> graph, TVector<ui64> localTasks) override
+    {
+        return IsTaskSchedulingEnabled()
+            ? ChannelService->GetTaskScheduler()->RegisterGraph(query, std::move(graph), std::move(localTasks)) : nullptr;
     }
 
     TActorId CreateKqpComputeActor(TCreateArgs&& args) override {
@@ -162,6 +175,38 @@ public:
             };
 
         runtimeSettings.ChannelService = ChannelService;
+        if (ChannelService && args.Task->GetDqChannelVersion() >= 2u) {
+            runtimeSettings.TaskScheduler = ChannelService->GetTaskScheduler();
+            if (runtimeSettings.TaskScheduler && runtimeSettings.TaskScheduler->GetSettings().Trace.Enabled) {
+                runtimeSettings.TaskTraceScheduler = runtimeSettings.TaskScheduler;
+            }
+            runtimeSettings.TaskGraphRegistration = std::move(args.SchedulingGraphRegistration);
+            if (runtimeSettings.TaskScheduler && runtimeSettings.TaskScheduler->GetSettings().UseWorkerPool
+                && !runtimeSettings.TaskScheduler->GetSettings().ObserveOnly) {
+                // The initial detached-runner path supports pure channel tasks.
+                // Source/sink actors, scan contexts and WASM TLS retain the
+                // original task-bound execution envelope until adapted.
+                bool eligible = !args.Task->HasMeta() && !args.Task->GetCreateSuspended()
+                    && (!args.UseBatchPool || AppData()->BatchPoolId == AppData()->UserPoolId)
+                    && !args.Task->GetProgram().GetSettings().GetHasWatermarkGenerator()
+                    && args.Task->GetTaskParams().find(TString(NUdfStore::NWasm::WasmUdfModulesTaskParam)) == args.Task->GetTaskParams().end();
+                for (const auto& input : args.Task->GetInputs()) {
+                    eligible &= !input.HasSource() && !input.HasTransform();
+                    for (const auto& channel : input.GetChannels()) {
+                        eligible &= channel.GetWatermarksMode() == NYql::NDqProto::WATERMARKS_MODE_DISABLED;
+                    }
+                }
+                for (const auto& output : args.Task->GetOutputs()) {
+                    eligible &= !output.HasSink() && !output.HasTransform() && !output.HasEffects();
+                    for (const auto& channel : output.GetChannels()) {
+                        eligible &= channel.GetWatermarksMode() == NYql::NDqProto::WATERMARKS_MODE_DISABLED;
+                    }
+                }
+                if (!eligible) {
+                    runtimeSettings.TaskScheduler.reset();
+                }
+            }
+        }
 
         NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta meta;
         const auto tableKindExtract = [](const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta) {

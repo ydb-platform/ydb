@@ -716,6 +716,30 @@ message TEvCancelComputeTasks {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// KQP Node Events ////////////////////////////////////////////////////////////////////////////////////////////////////
+// Scheduling metadata only: no programs, parameters, credentials or source settings.
+message TTaskSchedulingGraph {
+    message TTask {
+        optional uint64 TaskId = 1;
+        optional uint32 StageId = 2;
+        optional uint32 PlannedNodeId = 3;
+        optional uint32 InputsCount = 4;
+        optional uint32 OutputsCount = 5;
+        optional bool HasSource = 6;
+        optional bool HasSink = 7;
+        optional bool HasEffects = 8;
+    }
+    message TChannel {
+        optional uint64 ChannelId = 1;
+        optional uint64 SrcTaskId = 2;
+        optional uint64 DstTaskId = 3; // zero denotes an external result endpoint
+        optional uint32 SrcOutputIndex = 4;
+        optional uint32 DstInputIndex = 5;
+        optional uint32 RoutingKind = 6;
+    }
+    repeated TTask Tasks = 1;
+    repeated TChannel Channels = 2;
+}
+
 message TEvStartKqpTasksRequest {
     optional uint64 TxId = 1;
     repeated NYql.NDqProto.TDqTask Tasks = 2;
@@ -737,6 +761,7 @@ message TEvStartKqpTasksRequest {
     optional bool SupportShuttingDown = 21 [default = true];
     optional bool EnableWatermarks = 22 [default = false];
     optional bool UseBatchPool = 23 [default = false];
+    optional TTaskSchedulingGraph SchedulingGraph = 24;
 
     reserved 15;
     reserved 16;

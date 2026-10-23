@@ -48,7 +48,8 @@ NKikimr::NUdf::TUnboxedValue CreateInputUnionValue(
     ui64& inputsConsumed,
     NKikimr::NMiniKQL::TWatermark* watermark,
     TDqComputeActorWatermarks* watermarksTracker,
-    bool useReadySet = false
+    bool useReadySet = false,
+    bool reportSchedulingWait = false
 );
 
 NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(

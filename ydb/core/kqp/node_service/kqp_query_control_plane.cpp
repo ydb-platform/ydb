@@ -1,5 +1,6 @@
 #include "kqp_node_service.h"
 #include "kqp_query_control_plane.h"
+#include <ydb/core/kqp/compute_actor/kqp_task_graph.h>
 
 #include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
 
@@ -484,6 +485,7 @@ public:
         }
 
         auto reportStatsSettings = ReportStatsSettingsFromProto(runtimeSettings);
+        bool schedulingGraphRegistered = false;
 
         for (auto& dqTask: *msg.MutableTasks()) {
 
@@ -529,6 +531,16 @@ public:
 
             TActorId actorId;
             try {
+                if (!schedulingGraphRegistered && msg.HasSchedulingGraph() && CaFactory_->IsTaskSchedulingEnabled()) {
+                    auto graph = DeserializeSchedulingGraph(msg.GetSchedulingGraph());
+                    TVector<ui64> localTasks;
+                    for (const auto& task : msg.GetTasks()) {
+                        localTasks.push_back(task.GetId());
+                    }
+                    SchedulingGraphRegistration = CaFactory_->RegisterSchedulingGraph(executerId, std::move(graph), std::move(localTasks));
+                    schedulingGraphRegistered = true;
+                }
+                createArgs.SchedulingGraphRegistration = SchedulingGraphRegistration;
                 actorId = CaFactory_->CreateKqpComputeActor(std::move(createArgs));
             } catch (...) {
                 const TString message = TStringBuilder() << "Failed to create compute actor for task " << taskId
@@ -664,6 +676,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters_;
     std::shared_ptr<TNodeState> State_;
     TQueryQuotaManagerPtr QueryQuotaManager;
+    std::shared_ptr<const NYql::NDq::TQueryGraphRegistration> SchedulingGraphRegistration;
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     TActorId ExecuterId;

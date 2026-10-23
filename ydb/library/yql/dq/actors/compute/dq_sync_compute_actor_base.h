@@ -29,11 +29,49 @@ public:
     }
 protected:
 
+    void InitializeWorkerExecution() override {
+        if (this->TaskScheduling && !this->TaskScheduling->ObserveOnly
+            && this->RuntimeSettings.TaskScheduler->GetSettings().UseWorkerPool) {
+            Y_ENSURE(this->SourcesMap.empty() && this->InputTransformsMap.empty()
+                && this->SinksMap.empty() && this->OutputTransformsMap.empty() && !this->Checkpoints);
+            this->WorkerExecution = std::make_shared<TDqTaskExecution>(TaskRunner, this->MemoryQuota.Get(),
+                this->RuntimeSettings.TaskScheduler, this->TaskScheduling, this->GetSchedulableWorkFactory(),
+                NActors::TActivationContext::ActorSystem(), this->SelfId());
+            Y_ABORT_UNLESS(this->WorkerExecution->TryAcquireEndpoint());
+            this->WorkerBootstrapLease = true;
+            this->RuntimeSettings.TaskScheduler->BindExecution(this->ExecuterId, this->SelfId(), this->WorkerExecution);
+        }
+    }
+
+    void CompleteWorkerSlice(TTaskSliceResult result) override {
+        this->ScheduledRunProgress = result.Progress;
+        Y_DEFER { this->TaskScheduling->Complete(this->ScheduledRunProgress); };
+        if (result.Error) {
+            std::rethrow_exception(result.Error);
+        }
+        if (result.Progress.QuotaRejected) {
+            return;
+        }
+        auto guard = TBase::BindAllocator();
+        TDqOperatorMemoryQuotaScope quotaScope(this->MemoryQuota ? this->MemoryQuota->GetOperatorQuota() : nullptr);
+        TBase::ProcessOutputsImpl(static_cast<ERunStatus>(result.Status));
+        if (this->MemoryQuota) {
+            this->MemoryQuota->TryShrinkMemory();
+        }
+        TBase::ReportStats();
+    }
+
     void DoExecuteImpl() override{
         auto sourcesState = static_cast<TDerived*>(this)->GetSourcesState();
 
         auto lastPollResult = TBase::PollAsyncInput();
-        ERunStatus status = TaskRunner->Run();
+        ERunStatus status;
+        {
+            Y_DEFER {
+                this->ScheduledRunProgress = TaskRunner->LastRunProgress;
+            };
+            status = TaskRunner->Run();
+        }
 
         CA_LOG_T("Resume execution, run status: " << status);
 
@@ -392,7 +430,12 @@ protected:
         }
 
         if (this->Task.GetEnableSpilling()) {
-            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));
+            auto wakeup = execCtx.GetWakeupCallback();
+            if (this->TaskScheduling && !this->TaskScheduling->ObserveOnly) {
+                wakeup = [task = this->TaskScheduling] { task->Signal(SpillingDependency); };
+            }
+            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(),
+                std::move(wakeup), execCtx.GetErrorCallback()));
         }
 
         this->WatermarksTracker.SetNotifyHandler([this]() {
@@ -403,10 +446,18 @@ protected:
             this->ScheduleSourceIdlenessCheck(checkTime);
         });
 
+        if (this->TaskScheduling) {
+            const auto scheduler = this->RuntimeSettings.TaskScheduler
+                ? this->RuntimeSettings.TaskScheduler : this->RuntimeSettings.TaskTraceScheduler;
+            TaskRunner->ConfigureScheduling(this->TaskScheduling, scheduler->GetSettings().MaxRowsPerRun);
+        }
         TaskRunner->Prepare(this->Task, limits, execCtx, &this->WatermarksTracker, &this->WatermarkGeneratorTracker);
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {
             channel.Channel = TaskRunner->GetInputChannel(channelId);
+            if (this->TaskScheduling) {
+                channel.Channel->BindTaskScheduling(this->TaskScheduling);
+            }
             channel.Channel->SetCallback(this);
         }
 
@@ -424,6 +475,9 @@ protected:
             && this->RuntimeSettings.ChannelService->IsChannelNotificationsEnabled();
         for (auto& [channelId, channel] : this->OutputChannelsMap) {
             channel.Channel = TaskRunner->GetOutputChannel(channelId);
+            if (this->TaskScheduling) {
+                channel.Channel->BindTaskScheduling(this->TaskScheduling);
+            }
             channel.FinishEpochBound = useFinishEpoch && channel.Channel->BindFinishEpoch(this->OutputFinishEpoch);
             if (this->Task.GetDqChannelVersion() >= 2u && channel.HasPeer) {
                 channel.Channel->Bind(this->SelfId(), channel.PeerId);

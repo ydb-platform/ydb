@@ -1,24 +1,19 @@
 YQL_UDF_CONTRIB(url_udf)
-    
-    YQL_ABI_VERSION(
-        2
-        46
-        0
-    )
 
-    SRCS(
-        url_base.cpp
-    )
-    
-    PEERDIR(
-        yql/essentials/public/udf
-        yql/essentials/udfs/common/url_base/lib
-    )
-    
-    END()
+IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
+    # Base and full UDFs share the library name but use separate resources.
+    SET(URL_UDF_RESOURCE_DEFAULT ${URL_BASE_UDF_RESOURCE_DEFAULT})
+    SET(URL_UDF_RESOURCE_ASAN ${URL_BASE_UDF_RESOURCE_ASAN})
+    SET(URL_UDF_RESOURCE_MSAN ${URL_BASE_UDF_RESOURCE_MSAN})
+    SET(URL_UDF_RESOURCE_TSAN ${URL_BASE_UDF_RESOURCE_TSAN})
+    SET(URL_UDF_RESOURCE_UBSAN ${URL_BASE_UDF_RESOURCE_UBSAN})
+ENDIF()
+
+INCLUDE(ya.make.inc)
+
+END()
 
 RECURSE_FOR_TESTS(
     test
 )
-
-

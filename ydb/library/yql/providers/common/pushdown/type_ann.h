@@ -8,10 +8,6 @@
 namespace NYql::NPushdown {
 
 IGraphTransformer::TStatus AnnotateFilterPredicate(
-    const TExprNode::TPtr& input,
-    size_t childIndex,
-    const TStructExprType* itemType,
-    TExprContext& ctx);
+    const TExprNode::TPtr& input, size_t childIndex, const TStructExprType* itemType, TExprContext& ctx);
 
-
-} // namespace NYql::NPushdown
+}   // namespace NYql::NPushdown

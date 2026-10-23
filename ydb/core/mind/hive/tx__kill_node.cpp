@@ -58,7 +58,7 @@ public:
                 if (node->IsAlive() && node->StartTime) {
                     details << " uptime=" << (now - node->StartTime);
                 }
-                Self->RecordNodeEvent(*node, EHiveEventType::Killed, Reason, details);
+                Self->RecordNodeEvent(*node, EHiveEventType::Killed, Reason, std::move(details));
             }
             node->BecomeDisconnected();
             if (node->LocationAcquired) {

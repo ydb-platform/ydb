@@ -2,6 +2,7 @@
 """Format tracked C/C++ files in folders opted in through Ya autoincludes."""
 
 import argparse
+import difflib
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -102,9 +103,49 @@ def skip_style(root, file):
     )
 
 
+def unconditional_no_lint(makefile):
+    # Only a literal, unconditional NO_LINT() disables C++ lint here.
+    # Conditional settings remain Ya's responsibility; NO_LINT(ktlint) does
+    # not disable the native C++ checker either.
+    text = re.sub(r'#[^\n]*', '', makefile.read_text())
+    depth = 0
+    for match in re.finditer(r'(?m)^[ \t]*(IF|ENDIF|NO_LINT)\s*\(', text):
+        macro = match.group(1)
+        if macro == 'IF':
+            depth += 1
+        elif macro == 'ENDIF':
+            depth -= 1
+        elif depth == 0 and re.match(r'\s*\)', text[match.end() :]):
+            return True
+    return False
+
+
+def module_no_lint(root, directory, cache):
+    # A parent module can own sources in subdirectories without ya.make.
+    # A child with its own ya.make starts a separate module, not an inherited
+    # NO_LINT scope. Cache the result for every visited source directory.
+    pending = []
+    while directory not in cache:
+        pending.append(directory)
+        makefile = directory / 'ya.make'
+        if makefile.is_file():
+            disabled = unconditional_no_lint(makefile)
+            break
+        if directory == root:
+            disabled = False
+            break
+        directory = directory.parent
+    else:
+        disabled = cache[directory]
+    for directory in pending:
+        cache[directory] = disabled
+    return disabled
+
+
 def selected_files(root, configs):
     output = subprocess.check_output(['git', '-C', str(root), 'ls-files', '-z'])
     groups = {folder: [] for folder in sorted(configs)}
+    no_lint_cache = {}
     for path in sorted({os.fsdecode(path) for path in output.split(b'\0') if path}):
         if PurePosixPath(path).suffix not in EXTENSIONS:
             continue
@@ -116,7 +157,7 @@ def selected_files(root, configs):
             if file.is_symlink() or not file.is_file():
                 break
             file.resolve().relative_to(root.resolve())
-            if not skip_style(root, file):
+            if not module_no_lint(root, file.parent, no_lint_cache) and not skip_style(root, file):
                 groups[folder].append(path)
             break
 
@@ -146,13 +187,74 @@ def resolve_formatter(root):
     return binary
 
 
-def format_files(root, files, style, binary, fix):
+def check_files(root, files, style, binary, clear_progress=None):
+    command = [binary, '--style=file:' + str(style)]
+    result = subprocess.run(
+        command + ['--dry-run', '--Werror', '--ferror-limit=1'] + [str(path) for path in files],
+        cwd=root,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if result.returncode == 0:
+        return 0
+
+    # Match the native checker: clang-format can report replacements that leave
+    # the bytes unchanged. A failed dry run needs an actual output comparison.
+    failed = False
+    for path in files:
+        original = path.read_bytes()
+        result = subprocess.run(
+            command + ['--assume-filename=' + str(path)], cwd=root, input=original, capture_output=True
+        )
+        diagnostics = result.stderr.decode(errors='replace')
+        if result.returncode != 0:
+            failed = True
+            if not diagnostics:
+                diagnostics = f'{path}: clang-format failed with exit status {result.returncode}\n'
+        elif result.stdout != original:
+            failed = True
+            diagnostics += f'{path}: error: code should be clang-formatted\n'
+            diagnostics += ''.join(
+                difflib.unified_diff(
+                    original.decode(errors='replace').splitlines(keepends=True),
+                    result.stdout.decode(errors='replace').splitlines(keepends=True),
+                    fromfile=str(path),
+                    tofile=str(path) + ' (formatted)',
+                )
+            )
+        if diagnostics:
+            if clear_progress is not None:
+                clear_progress()
+            print(diagnostics, end='' if diagnostics.endswith('\n') else '\n', file=sys.stderr, flush=True)
+    return int(failed)
+
+
+def format_files(root, files, style, binary, fix, progress=None, clear_progress=None):
     failed = False
     for start in range(0, len(files), 32):
-        command = [binary, '--style=file:' + str(style)]
-        command += ['-i'] if fix else ['--dry-run', '--Werror', '--ferror-limit=1']
-        command += [str(root / path) for path in files[start : start + 32]]
-        failed |= subprocess.run(command, cwd=root).returncode != 0
+        batch = [root / path for path in files[start : start + 32]]
+        if not fix:
+            failed |= check_files(root, batch, style, binary, clear_progress) != 0
+            if progress is not None:
+                progress(len(batch), 0)
+            continue
+
+        before = [path.read_bytes() for path in batch]
+        command = [binary, '--style=file:' + str(style), '-i'] + [str(path) for path in batch]
+        if clear_progress is None:
+            result = subprocess.run(command, cwd=root)
+        else:
+            # Keep formatter diagnostics separate from the live progress row.
+            result = subprocess.run(command, cwd=root, capture_output=True, text=True, errors='replace')
+            if result.stdout or result.stderr:
+                clear_progress()
+                for output, stream in ((result.stdout, sys.stdout), (result.stderr, sys.stderr)):
+                    if output:
+                        print(output, end='' if output.endswith('\n') else '\n', file=stream, flush=True)
+        failed |= result.returncode != 0
+        changed = sum(path.read_bytes() != content for path, content in zip(batch, before))
+        if progress is not None:
+            progress(len(batch), changed)
     return int(failed)
 
 
@@ -199,6 +301,10 @@ def main(argv=None):
 
     binary = resolve_formatter(ROOT)
     failed = False
+    total = sum(len(files) for files in groups.values())
+    checked = formatted = 0
+    folder_summaries = []
+    interactive = sys.stdout.isatty()
     for folder, files in groups.items():
         if not files:
             continue
@@ -209,7 +315,50 @@ def main(argv=None):
             f'with {style.relative_to(ROOT)}',
             flush=True,
         )
-        failed |= format_files(ROOT, files, style, binary, args.fix) != 0
+        folder_checked = folder_formatted = 0
+
+        def clear_progress():
+            print('\r\033[2K', end='', flush=True)
+
+        def report_progress(batch_checked, batch_formatted):
+            nonlocal checked, formatted, folder_checked, folder_formatted
+            checked += batch_checked
+            formatted += batch_formatted
+            folder_checked += batch_checked
+            folder_formatted += batch_formatted
+            message = f'Checked {folder_checked} / {len(files)} files'
+            if not interactive:
+                message += f' in {folder}'
+            overall = f'overall {checked} / {total} checked'
+            if args.fix:
+                message += f'. Formatted {folder_formatted}'
+                overall += f', {formatted} formatted'
+            message = f'{message} ({overall})'
+            if interactive:
+                # The heading identifies the folder. Keep the live row within
+                # the terminal width so a redraw cannot leave wrapped lines.
+                width = max(1, shutil.get_terminal_size().columns - 1)
+                if len(message) > width:
+                    message = message[: max(0, width - 1)] + '…'
+                clear_progress()
+            print(message, end='' if interactive else '\n', flush=True)
+
+        try:
+            failed |= format_files(
+                ROOT, files, style, binary, args.fix, report_progress, clear_progress if interactive else None
+            ) != 0
+        finally:
+            if interactive:
+                print(flush=True)
+        if folder_formatted:
+            folder_summaries.append((folder, folder_formatted, folder_checked))
+
+    status = 'Finished with errors' if failed else 'Finished'
+    counts = f'{formatted} formatted / {checked} checked files' if args.fix else f'{checked} / {total} files checked'
+    summary_heading = ' Per folder summary:' if folder_summaries else ''
+    print(f'{status}: {counts}.{summary_heading}', flush=True)
+    for folder, folder_formatted, folder_checked in sorted(folder_summaries, key=lambda row: (-row[1], row[0])):
+        print(f'  - {folder}: {folder_formatted} / {folder_checked}', flush=True)
 
     return int(failed)
 

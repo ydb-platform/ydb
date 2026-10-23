@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/kqp/script_executions/proto/result_set_meta.pb.h>
 #include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -17,13 +18,12 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <yql/essentials/public/issue/yql_issue.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-
 #include <util/generic/size_literals.h>
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 #include <util/system/types.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <algorithm>
 #include <exception>
@@ -39,7 +39,7 @@ namespace {
 
 using namespace NActors;
 
-class TScriptResultHandlerActor final : public TActorBootstrapped<TScriptResultHandlerActor>, IActorExceptionHandler {
+class TScriptResultHandlerActor final: public TActorBootstrapped<TScriptResultHandlerActor>, IActorExceptionHandler {
     using TBase = TActorBootstrapped<TScriptResultHandlerActor>;
 
     static constexpr ui64 RUN_SCRIPT_ACTOR_BUFFER_SIZE = 40_MB;
@@ -48,7 +48,7 @@ class TScriptResultHandlerActor final : public TActorBootstrapped<TScriptResultH
 
     struct TSaveProgressState {
         bool WaitSave = false;
-        bool QueryStatsChanged = true; // We should update status once execution was started
+        bool QueryStatsChanged = true;   // We should update status once execution was started
         bool AstSaved = false;
         TInstant SuspendUntil;
 
@@ -69,7 +69,7 @@ class TScriptResultHandlerActor final : public TActorBootstrapped<TScriptResultH
     struct TSavePhysicalGraphState {
         bool WaitSave = false;
         TActorId Sender;
-        std::queue<std::pair<bool, NKikimrKqp::TQueryPhysicalGraph>> GraphsToSave; // (send response, graph)
+        std::queue<std::pair<bool, NKikimrKqp::TQueryPhysicalGraph>> GraphsToSave;   // (send response, graph)
     };
 
     class TSaveResultsState {
@@ -123,7 +123,8 @@ class TScriptResultHandlerActor final : public TActorBootstrapped<TScriptResultH
 
             bool ShouldSaveResult() const {
                 const auto rowsCount = PendingResult.rows_size();
-                return rowsCount && (Truncated || rowsCount >= MIN_SAVE_RESULT_BATCH_ROWS || ByteCount - AccumulatedSize >= MIN_SAVE_RESULT_BATCH_SIZE);
+                return rowsCount &&
+                       (Truncated || rowsCount >= MIN_SAVE_RESULT_BATCH_ROWS || ByteCount - AccumulatedSize >= MIN_SAVE_RESULT_BATCH_SIZE);
             }
 
             // Persist finished/truncated into meta when there is nothing left to drain.
@@ -148,7 +149,8 @@ class TScriptResultHandlerActor final : public TActorBootstrapped<TScriptResultH
         bool WaitSaveMeta = false;
 
         i64 GetFreeSpaceBytes() const {
-            return static_cast<i64>(RUN_SCRIPT_ACTOR_BUFFER_SIZE) - static_cast<i64>(PendingResultSetsSize) - static_cast<i64>(SaveResultInflightBytes);
+            return static_cast<i64>(RUN_SCRIPT_ACTOR_BUFFER_SIZE) - static_cast<i64>(PendingResultSetsSize) -
+                   static_cast<i64>(SaveResultInflightBytes);
         }
 
         bool HasMetaToSave() const {
@@ -202,7 +204,8 @@ class TScriptResultHandlerActor final : public TActorBootstrapped<TScriptResultH
 public:
     static constexpr char ActorName[] = "KQP_SCRIPT_RESULT_HANDLER_ACTOR";
 
-    TScriptResultHandlerActor(TScriptExecutionContext::TPtr ctx, std::optional<NKikimrKqp::TQueryPhysicalGraph> physicalGraph, NKikimrConfig::TQueryServiceConfig queryServiceConfig)
+    TScriptResultHandlerActor(TScriptExecutionContext::TPtr ctx, std::optional<NKikimrKqp::TQueryPhysicalGraph> physicalGraph,
+        NKikimrConfig::TQueryServiceConfig queryServiceConfig)
         : Ctx(std::move(ctx))
         , QueryServiceConfig(std::move(queryServiceConfig))
         , PhysicalGraph(std::move(physicalGraph))
@@ -302,7 +305,9 @@ private:
             {"sender", ev->Sender});
 
         if (SavePhysicalGraphState.Sender) {
-            Send(ev->Sender, new TEvSaveScriptPhysicalGraphResponse(Ydb::StatusIds::INTERNAL_ERROR, {NYql::TIssue(TStringBuilder() << "Cannot save graph twice, previous sender was: " << SavePhysicalGraphState.Sender << ", got graph from: " << ev->Sender)}));
+            Send(ev->Sender, new TEvSaveScriptPhysicalGraphResponse(Ydb::StatusIds::INTERNAL_ERROR,
+                                 { NYql::TIssue(TStringBuilder() << "Cannot save graph twice, previous sender was: "
+                                                                 << SavePhysicalGraphState.Sender << ", got graph from: " << ev->Sender) }));
             return;
         }
 
@@ -475,7 +480,9 @@ private:
 
                     if (const auto& issues = NFq::ValidateResultSetColumns(meta.columns())) {
                         meta.clear_columns();
-                        Finish(Ydb::StatusIds::INTERNAL_ERROR, AddRootIssue(TStringBuilder() << "Invalid result set " << resultSetIndex << " columns, please contact internal support", issues));
+                        Finish(Ydb::StatusIds::INTERNAL_ERROR,
+                            AddRootIssue(TStringBuilder()
+                                             << "Invalid result set " << resultSetIndex << " columns, please contact internal support", issues));
                         return;
                     }
                 }
@@ -640,7 +647,8 @@ private:
     }
 
     bool HasMetadataOperationInflight() const {
-        return SaveProgressState.WaitSave || SaveExternalEffectsState.WaitSave || SavePhysicalGraphState.WaitSave || SaveResultsState.WaitSaveMeta;
+        return SaveProgressState.WaitSave || SaveExternalEffectsState.WaitSave || SavePhysicalGraphState.WaitSave ||
+               SaveResultsState.WaitSaveMeta;
     }
 
     bool HasOperationInflight() const {
@@ -734,7 +742,9 @@ private:
 
         if (resultToSave) {
             auto& info = SaveResultsState.ResultSetInfos[*resultToSave];
-            const auto& saverId = Register(CreateSaveScriptExecutionResultActor(SelfId(), Ctx->UserRequestContext->Database, Ctx->UserRequestContext->CurrentExecutionId, *resultToSave, SaveResultsState.GetExpireAt(*Ctx), info.FirstRowId, info.AccumulatedSize, std::move(info.PendingResult)));
+            const auto& saverId = Register(
+                CreateSaveScriptExecutionResultActor(SelfId(), Ctx->UserRequestContext->Database, Ctx->UserRequestContext->CurrentExecutionId,
+                    *resultToSave, SaveResultsState.GetExpireAt(*Ctx), info.FirstRowId, info.AccumulatedSize, std::move(info.PendingResult)));
             YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Saving result set part",
                 {"logPrefix", LogPrefix()},
                 {"resultSetId", *resultToSave},
@@ -753,7 +763,8 @@ private:
     void SaveExternalEffects() {
         Y_VALIDATE(!SaveExternalEffectsState.Requests.empty() && !SaveExternalEffectsState.WaitSave, "Unexpected call");
 
-        const auto& saverId = Register(CreateSaveScriptExternalEffectActor(SelfId(), Ctx->UserRequestContext->Database, Ctx->UserRequestContext->CurrentExecutionId, std::move(SaveExternalEffectsState.Requests.front().second), Ctx->LeaseGeneration));
+        const auto& saverId = Register(CreateSaveScriptExternalEffectActor(SelfId(), Ctx->UserRequestContext->Database,
+            Ctx->UserRequestContext->CurrentExecutionId, std::move(SaveExternalEffectsState.Requests.front().second), Ctx->LeaseGeneration));
         YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Save external effect",
             {"logPrefix", LogPrefix()},
             {"saverId", saverId});
@@ -763,7 +774,9 @@ private:
     void SavePhysicalGraph() {
         Y_VALIDATE(!SavePhysicalGraphState.GraphsToSave.empty() && !SavePhysicalGraphState.WaitSave, "Unexpected call");
 
-        const auto& saverId = Register(CreateSaveScriptExecutionPhysicalGraphActor(SelfId(), Ctx->UserRequestContext->Database, Ctx->UserRequestContext->CurrentExecutionId, std::move(SavePhysicalGraphState.GraphsToSave.front().second), Ctx->LeaseGeneration, QueryServiceConfig));
+        const auto& saverId = Register(
+            CreateSaveScriptExecutionPhysicalGraphActor(SelfId(), Ctx->UserRequestContext->Database, Ctx->UserRequestContext->CurrentExecutionId,
+                std::move(SavePhysicalGraphState.GraphsToSave.front().second), Ctx->LeaseGeneration, QueryServiceConfig));
         YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Save script physical graph",
             {"logPrefix", LogPrefix()},
             {"saverId", saverId});
@@ -778,7 +791,8 @@ private:
             value = infos->at(i).Meta.SaveJsonMeta();
         });
 
-        const auto& saverId = Register(CreateSaveScriptExecutionResultMetaActor(SelfId(), Ctx->UserRequestContext->Database, Ctx->UserRequestContext->CurrentExecutionId, std::move(metas), Ctx->LeaseGeneration));
+        const auto& saverId = Register(CreateSaveScriptExecutionResultMetaActor(
+            SelfId(), Ctx->UserRequestContext->Database, Ctx->UserRequestContext->CurrentExecutionId, std::move(metas), Ctx->LeaseGeneration));
         YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Save result meta for result sets",
             {"logPrefix", LogPrefix()},
             {"resultsCount", resultsCount},
@@ -798,14 +812,9 @@ private:
         Y_VALIDATE(SaveProgressState.QueryStatsChanged && !SaveProgressState.WaitSave, "Unexpected call");
         SaveProgressState.QueryStatsChanged = false;
 
-        const auto& updaterId = Register(CreateScriptProgressActor(
-            Ctx->UserRequestContext->Database,
-            Ctx->UserRequestContext->CurrentExecutionId,
-            ExecutionInfo.QueryPlan,
-            SaveProgressState.AstSaved ? std::nullopt : ExecutionInfo.QueryAst,
-            Ctx->LeaseGeneration,
-            QueryServiceConfig
-        ));
+        const auto& updaterId = Register(
+            CreateScriptProgressActor(Ctx->UserRequestContext->Database, Ctx->UserRequestContext->CurrentExecutionId, ExecutionInfo.QueryPlan,
+                SaveProgressState.AstSaved ? std::nullopt : ExecutionInfo.QueryAst, Ctx->LeaseGeneration, QueryServiceConfig));
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Start TScriptProgressActor",
             {"logPrefix", LogPrefix()},
             {"updaterId", updaterId});
@@ -817,7 +826,7 @@ private:
     }
 
     void Finish(const Ydb::StatusIds::StatusCode status, const TString& message) {
-        Finish(status, {NYql::TIssue(message)});
+        Finish(status, { NYql::TIssue(message) });
     }
 
     void Finish(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
@@ -835,7 +844,7 @@ private:
 
         if (QueryIsRunning) {
             // We should abort query before finish
-            FinishInfo.Update(Ydb::StatusIds::CANCELLED, {NYql::TIssue("Query was cancelled")});
+            FinishInfo.Update(Ydb::StatusIds::CANCELLED, { NYql::TIssue("Query was cancelled") });
             YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Wait for query finish",
                 {"logPrefix", LogPrefix()},
                 {"queryIsCancelling", QueryIsCancelling});
@@ -883,7 +892,8 @@ private:
             {"issues", FinishInfo.Issues.ToOneLineString()},
             {"transientIssues", FinishInfo.TransientIssues.ToOneLineString()});
 
-        Send(Owner, new TEvRunScriptPrivate::TEvScriptResultHandlerFinished(*FinishInfo.Status, std::move(ExecutionInfo), std::move(FinishInfo.Issues)));
+        Send(Owner,
+            new TEvRunScriptPrivate::TEvScriptResultHandlerFinished(*FinishInfo.Status, std::move(ExecutionInfo), std::move(FinishInfo.Issues)));
         PassAway();
     }
 
@@ -906,10 +916,11 @@ private:
     bool QueryIsCancelling = false;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-IActor* CreateScriptResultHandlerActor(TScriptExecutionContext::TPtr ctx, std::optional<NKikimrKqp::TQueryPhysicalGraph> physicalGraph, NKikimrConfig::TQueryServiceConfig queryServiceConfig) {
+IActor* CreateScriptResultHandlerActor(TScriptExecutionContext::TPtr ctx, std::optional<NKikimrKqp::TQueryPhysicalGraph> physicalGraph,
+    NKikimrConfig::TQueryServiceConfig queryServiceConfig) {
     return new TScriptResultHandlerActor(std::move(ctx), std::move(physicalGraph), std::move(queryServiceConfig));
 }
 
-} // namespace NKikimr::NKqp::NPrivate
+}   // namespace NKikimr::NKqp::NPrivate

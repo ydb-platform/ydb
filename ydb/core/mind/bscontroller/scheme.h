@@ -344,13 +344,15 @@ struct Schema : NIceDb::Schema {
         // TStoragePoolSettings.VDiskHeapAllocatorNumLeadingDisks; null inherits the global value, 0 is explicit
         struct VDiskHeapAllocatorNumLeadingDisks : Column<29, NScheme::NTypeIds::Uint32> {};
 
+        struct PersistentBufferAllocationMode : Column<30, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
+
         using TKey = TableKey<BoxId, StoragePoolId>;
 
         using TColumns = TableColumns<BoxId, StoragePoolId, Name, ErasureSpecies, RealmLevelBegin, RealmLevelEnd,
             DomainLevelBegin, DomainLevelEnd, NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain,
             VDiskKind, SpaceBytes, WriteIOPS, WriteBytesPerSecond, ReadIOPS, ReadBytesPerSecond, InMemCacheBytes,
             Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping,
-            DefaultGroupSizeInUnits, BridgeMode, DDisk, VDiskHeapAllocatorNumLeadingDisks>;
+            DefaultGroupSizeInUnits, BridgeMode, DDisk, VDiskHeapAllocatorNumLeadingDisks, PersistentBufferAllocationMode>;
     };
 
     struct BoxStoragePoolUser : Table<121> {

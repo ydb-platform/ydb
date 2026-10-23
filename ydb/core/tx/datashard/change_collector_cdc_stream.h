@@ -11,6 +11,15 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TCdcStreamChangeCollector: public TBaseChangeCollector {
+    struct TValueSchema {
+        TUserTable::TCPtr Table;
+        ui64 Version = 0;
+        TVector<NTable::TTag> Tags;
+        TVector<NScheme::TTypeInfo> Types;
+    };
+
+    const TValueSchema& GetValueSchema(const TUserTable::TCPtr& table);
+
     TMaybe<NTable::TRowState> GetState(const TTableId& tableId, TArrayRef<const TRawTypeValue> key,
         TArrayRef<const NTable::TTag> valueTags, NTable::TSelectStats& stats, const TMaybe<TRowVersion>& snapshot = {});
     TMaybe<NTable::TRowState> GetState(const TTableId& tableId, TArrayRef<const TRawTypeValue> key,
@@ -31,6 +40,7 @@ public:
 
     void OnRestart() override;
     bool NeedToReadKeys() const override;
+    bool NeedHistoricalPrecharge(const TTableId& tableId, TArrayRef<const TRawTypeValue> key) const override;
 
     bool Collect(const TTableId& tableId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,
@@ -38,6 +48,7 @@ public:
 
 private:
     mutable TMaybe<bool> CachedNeedToReadKeys;
+    TMaybe<TValueSchema> CachedValueSchema;
 
 }; // TCdcStreamChangeCollector
 

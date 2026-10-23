@@ -14,6 +14,12 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 
+// MiniKQL filters the true twin under sanitizers because that variant normally enables LLVM.
+// BlockJoin is not an LLVM toggle, so use the generic YDB helper that registers both variants.
+#undef Y_UNIT_TEST_TWIN
+#undef Y_UNIT_TEST_QUAD
+#include <ydb/library/testlib/helpers.h>
+
 #include <arrow/util/bit_util.h>
 
 #include <bit>
@@ -2631,11 +2637,91 @@ void TestWithSlowSpiller(TJoinTestData testData, bool blockJoin) {
     }
 }
 
+struct TDispatchedPhysicalJoin {
+    virtual ~TDispatchedPhysicalJoin() = default;
+    virtual TPhysicalJoin GetPhysicalJoin() const = 0;
+};
+
+template <TPhysicalJoin Join>
+struct TDispatchedPhysicalJoinImpl : TDispatchedPhysicalJoin {
+    TPhysicalJoin GetPhysicalJoin() const override {
+        return Join;
+    }
+};
+
+TPhysicalJoin DispatchPhysicalJoin(EJoinKind kind, ESide preservedSide, bool isGrid) {
+    std::unique_ptr<TDispatchedPhysicalJoin> dispatched(
+        DispatchHashJoinByKind<TDispatchedPhysicalJoinImpl, TDispatchedPhysicalJoin>(
+            kind, preservedSide, isGrid, "unsupported test join kind"));
+    return dispatched->GetPhysicalJoin();
+}
+
+// Records the OutputRows counter the join registers with the task counters provider.
+class TJoinOutputRowsCounters: public NYql::NUdf::ICountersProvider {
+public:
+    NYql::NUdf::TCounter GetCounter(const NYql::NUdf::TStringRef& module, const NYql::NUdf::TStringRef& name, bool) override {
+        Module = TString(module);
+        Name = TString(name);
+        ++Requests;
+        return NYql::NUdf::TCounter(&Rows);
+    }
+
+    NYql::NUdf::TScopedProbe GetScopedProbe(const NYql::NUdf::TStringRef&, const NYql::NUdf::TStringRef&) override {
+        return NYql::NUdf::TScopedProbe();
+    }
+
+    i64 Rows = 0;
+    int Requests = 0;
+    TString Module;
+    TString Name;
+};
+
+void TestOutputRowsOperatorStat(TJoinTestData td, bool blockJoin) {
+    const i64 expectedRows = static_cast<i64>(td.Result.Value.GetListLength());
+    TJoinOutputRowsCounters counters;
+    td.Setup->CountersProvider = &counters;
+
+    // Keep td in place: its memory-limit callback captures this.
+    auto descr = MakeJoinDescription(td);
+    descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    THolder<IComputationGraph> got = ConstructJoinGraphStream(
+        td.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr, true, td.JoinSettings);
+    if (blockJoin) {
+        CompareListAndBlockStreamIgnoringOrder(td.Result, *got);
+    } else {
+        CompareListAndStreamIgnoringOrder(td.Result, *got);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(counters.Requests, 1);
+    UNIT_ASSERT_VALUES_EQUAL(counters.Rows, expectedRows);
+    UNIT_ASSERT_VALUES_EQUAL(counters.Module, TString(Operator_Join) + "0");
+    UNIT_ASSERT_VALUES_EQUAL(counters.Name, TString(Counter_OutputRows));
+}
+
 } // namespace
+
+Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
+    Y_UNIT_TEST(InnerAndCrossKeepPreservedSide) {
+        const auto inner = DispatchPhysicalJoin(EJoinKind::Inner, ESide::Build, false);
+        UNIT_ASSERT(inner.Kind == EJoinKind::Inner);
+        UNIT_ASSERT(inner.Preserved == ESide::Build);
+        UNIT_ASSERT(!inner.IsGrid);
+
+        const auto cross = DispatchPhysicalJoin(EJoinKind::Cross, ESide::Build, true);
+        UNIT_ASSERT(cross.Kind == EJoinKind::Cross);
+        UNIT_ASSERT(cross.Preserved == ESide::Build);
+        UNIT_ASSERT(cross.IsGrid);
+    }
+}
 
 Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     Y_UNIT_TEST_TWIN(TestBasicPassthrough, BlockJoin) {
         Test(BasicInnerJoinTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestOutputRowsOperatorStat, BlockJoin) {
+        TestOutputRowsOperatorStat(BasicInnerJoinTestData(), BlockJoin);
+        TestOutputRowsOperatorStat(EmptyInnerJoinTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestCrossPassthrough, BlockJoin) {
@@ -2654,12 +2740,12 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(InnerJoinEqualNullsTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestInnerJoinEqualNullsAfterTupleKey) {
-        Test(InnerJoinEqualNullsAfterTupleKeyTestData(), /*blockJoin=*/false);
+    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsAfterTupleKey, BlockJoin) {
+        Test(InnerJoinEqualNullsAfterTupleKeyTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestInnerJoinEqualNullsAfterTupleKeyLeftIsBuild) {
-        Test(InnerJoinEqualNullsAfterTupleKeyLeftIsBuildTestData(), /*blockJoin=*/false);
+    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsAfterTupleKeyLeftIsBuild, BlockJoin) {
+        Test(InnerJoinEqualNullsAfterTupleKeyLeftIsBuildTestData(), BlockJoin);
     }
 
     // arrow builders zero null slotsPoison

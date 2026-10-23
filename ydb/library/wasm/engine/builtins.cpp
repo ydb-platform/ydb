@@ -42,7 +42,7 @@ TModuleBytecode GetBuiltinMinimalRuntimeSdk()
             .Data = bytecode,
             .ObjectCode = TSharedRef(),
         };
-    } ();
+    }();
 
     return sdk;
 }
@@ -50,16 +50,15 @@ TModuleBytecode GetBuiltinMinimalRuntimeSdk()
 TModuleBytecode GetBuiltinYtQlUdfs()
 {
     static auto udfs = [] {
-        auto bytecode = ::NResource::Has(BuiltinYtQlUdfsResource)
-            ? TSharedRef::FromString(::NResource::Find(BuiltinYtQlUdfsResource))
-            : TSharedRef();
+        auto bytecode =
+            ::NResource::Has(BuiltinYtQlUdfsResource) ? TSharedRef::FromString(::NResource::Find(BuiltinYtQlUdfsResource)) : TSharedRef();
 
         return TModuleBytecode{
             .Format = EBytecodeFormat::Binary,
             .Data = bytecode,
             .ObjectCode = TSharedRef(),
         };
-    } ();
+    }();
 
     return udfs;
 }
@@ -68,23 +67,23 @@ TModuleBytecode GetBuiltinSdk()
 {
     static auto sdk = [] {
         auto bytecode = ::NResource::Has(BuiltinEmscriptenSystemLibrariesResource)
-            ? TSharedRef::FromString(::NResource::Find(BuiltinEmscriptenSystemLibrariesResource))
-            : TSharedRef();
+                            ? TSharedRef::FromString(::NResource::Find(BuiltinEmscriptenSystemLibrariesResource))
+                            : TSharedRef();
 
         auto objectCode = ::NResource::Has(BuiltinEmscriptenSystemLibrariesObjectCodeResource)
-            ? TSharedRef::FromString(::NResource::Find(BuiltinEmscriptenSystemLibrariesObjectCodeResource))
-            : TSharedRef();
+                              ? TSharedRef::FromString(::NResource::Find(BuiltinEmscriptenSystemLibrariesObjectCodeResource))
+                              : TSharedRef();
 
         return TModuleBytecode{
             .Format = EBytecodeFormat::Binary,
             .Data = bytecode,
             .ObjectCode = objectCode,
         };
-    } ();
+    }();
 
     return sdk;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYdb::NWasm
+}   // namespace NYdb::NWasm

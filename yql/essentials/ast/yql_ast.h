@@ -83,21 +83,12 @@ struct TAstNode {
         return Type_ == List && ListCount_ == len;
     }
 
-    inline TPosition GetPosition() const {
-        return TPosition(Column_, Row_, TString(File_));
+    inline const TPosition& GetPosition() const {
+        return Position_;
     }
 
-    inline void SetPosition(const TPosition& position, TMemoryPool& pool) {
-        Column_ = position.Column;
-        Row_ = position.Row;
-        File_ = InternFile(position, pool);
-    }
-
-    // file is not copied: it must outlive the node (e.g. content of an atom from the same pool)
-    inline void SetPosition(ui32 column, ui32 row, TStringBuf file) {
-        Column_ = column;
-        Row_ = row;
-        File_ = file;
+    inline void SetPosition(TPosition position) {
+        Position_ = std::move(position);
     }
 
     inline TStringBuf GetContent() const {
@@ -158,21 +149,21 @@ struct TAstNode {
         return {ListCount_ <= SmallListCount ? Data_.S.Children.data() : Data_.L.Children, ListCount_};
     }
 
-    static inline TAstNode* NewAtom(const TPosition& position, TStringBuf content, TMemoryPool& pool, ui32 flags = TNodeFlags::Default) {
+    static inline TAstNode* NewAtom(TPosition position, TStringBuf content, TMemoryPool& pool, ui32 flags = TNodeFlags::Default) {
         auto poolContent = pool.AppendString(content);
         auto ret = pool.Allocate<TAstNode>();
-        ::new (ret) TAstNode(position.Column, position.Row, InternFile(position, pool), poolContent, flags);
+        ::new (ret) TAstNode(std::move(position), poolContent, flags);
         return ret;
     }
 
     // atom with non-owning content, useful for literal strings
-    static inline TAstNode* NewLiteralAtom(const TPosition& position, TStringBuf content, TMemoryPool& pool, ui32 flags = TNodeFlags::Default) {
+    static inline TAstNode* NewLiteralAtom(TPosition position, TStringBuf content, TMemoryPool& pool, ui32 flags = TNodeFlags::Default) {
         auto ret = pool.Allocate<TAstNode>();
-        ::new (ret) TAstNode(position.Column, position.Row, InternFile(position, pool), content, flags);
+        ::new (ret) TAstNode(std::move(position), content, flags);
         return ret;
     }
 
-    static inline TAstNode* NewList(const TPosition& position, TAstNode** children, ui32 childrenCount, TMemoryPool& pool) {
+    static inline TAstNode* NewList(TPosition position, TAstNode** children, ui32 childrenCount, TMemoryPool& pool) {
         TAstNode** poolChildren = nullptr;
         if (childrenCount) {
             if (childrenCount > SmallListCount) {
@@ -188,43 +179,35 @@ struct TAstNode {
         }
 
         auto ret = pool.Allocate<TAstNode>();
-        ::new (ret) TAstNode(position.Column, position.Row, InternFile(position, pool), poolChildren, childrenCount);
+        ::new (ret) TAstNode(std::move(position), poolChildren, childrenCount);
         return ret;
     }
 
     template <typename... TNodes>
-    static inline TAstNode* NewList(const TPosition& position, TMemoryPool& pool, TNodes... nodes) {
+    static inline TAstNode* NewList(TPosition position, TMemoryPool& pool, TNodes... nodes) {
         std::array<TAstNode*, sizeof...(TNodes)> children = {nodes...};
-        return NewList(position, children.data(), sizeof...(nodes), pool);
+        return NewList(std::move(position), children.data(), sizeof...(nodes), pool);
     }
 
-    static inline TAstNode* NewList(const TPosition& position, TMemoryPool& pool) {
-        return NewList(position, /*children=*/nullptr, 0, pool);
+    static inline TAstNode* NewList(TPosition position, TMemoryPool& pool) {
+        return NewList(std::move(position), /*children=*/nullptr, 0, pool);
     }
 
     static TAstNode QuoteAtom;
 
-    static inline TAstNode* Quote(const TPosition& position, TMemoryPool& pool, TAstNode* node) {
-        return NewList(position, pool, &QuoteAtom, node);
+    static inline TAstNode* Quote(TPosition position, TMemoryPool& pool, TAstNode* node) {
+        return NewList(std::move(position), pool, &QuoteAtom, node);
     }
 
     inline ~TAstNode() = default;
 
-private:
-    // Nodes live in a TMemoryPool and are never destructed, so they must not own
-    // heap memory: the file name of the position is interned into the pool.
-    static inline TStringBuf InternFile(const TPosition& position, TMemoryPool& pool) {
-        if (position.File.empty()) {
-            return {};
-        }
-
-        return pool.AppendString(TStringBuf(position.File));
+    void Destroy() {
+        TString().swap(Position_.File);
     }
 
-    inline TAstNode(ui32 column, ui32 row, TStringBuf file, TStringBuf content, ui32 flags)
-        : Column_(column)
-        , Row_(row)
-        , File_(file)
+private:
+    inline TAstNode(TPosition position, TStringBuf content, ui32 flags)
+        : Position_(std::move(position))
         , Type_(Atom)
         , ListCount_(0)
     {
@@ -233,10 +216,8 @@ private:
         Data_.A.Flags = flags;
     }
 
-    inline TAstNode(ui32 column, ui32 row, TStringBuf file, TAstNode** children, ui32 childrenCount)
-        : Column_(column)
-        , Row_(row)
-        , File_(file)
+    inline TAstNode(TPosition position, TAstNode** children, ui32 childrenCount)
+        : Position_(std::move(position))
         , Type_(List)
         , ListCount_(childrenCount)
     {
@@ -249,9 +230,7 @@ private:
         }
     }
 
-    ui32 Column_;
-    ui32 Row_;
-    TStringBuf File_;
+    TPosition Position_;
     const EType Type_;
     const ui32 ListCount_;
 

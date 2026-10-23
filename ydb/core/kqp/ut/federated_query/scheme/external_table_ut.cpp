@@ -22,16 +22,19 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
         TString externalTableName = "/Root/ExternalTable";
         {
             auto query = TStringBuilder() << R"(
-                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                CREATE EXTERNAL DATA SOURCE `)"
+                                          << externalDataSourceName << R"(` WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket",
                     AUTH_METHOD="NONE"
                 );
-                CREATE EXTERNAL TABLE `)" << externalTableName << R"(` (
+                CREATE EXTERNAL TABLE `)" << externalTableName
+                                          << R"(` (
                     Key Uint64,
                     Value String
                 ) WITH (
-                    DATA_SOURCE=")" << externalDataSourceName << R"(",
+                    DATA_SOURCE=")" << externalDataSourceName
+                                          << R"(",
                     LOCATION="/"
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -40,7 +43,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         {
-            auto externalTableDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalTableName, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            auto externalTableDesc =
+                Navigate(runtime, runtime.AllocateEdgeActor(), externalTableName, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& externalTable = externalTableDesc->ResultSet.at(/* pos */ 0);
             UNIT_ASSERT_EQUAL(externalTable.Kind, NKikimr::NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalTable);
             UNIT_ASSERT(externalTable.ExternalTableInfo);
@@ -53,11 +57,13 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
         auto queryClient = kikimr.GetQueryClient();
         {
             auto query = TStringBuilder() << R"(
-                CREATE OR REPLACE EXTERNAL TABLE `)" << externalTableName << R"(` (
+                CREATE OR REPLACE EXTERNAL TABLE `)"
+                                          << externalTableName << R"(` (
                     Key Uint64,
                     Value String
                 ) WITH (
-                    DATA_SOURCE=")" << externalDataSourceName << R"(",
+                    DATA_SOURCE=")" << externalDataSourceName
+                                          << R"(",
                     LOCATION="/other/location/"
                 );)";
             auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
@@ -65,20 +71,21 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
         }
 
         {
-            auto externalTableDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalTableName, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            auto externalTableDesc =
+                Navigate(runtime, runtime.AllocateEdgeActor(), externalTableName, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& externalTable = externalTableDesc->ResultSet.at(/* pos */ 0);
             UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/other/location/");
         }
 
         {
-            const auto result = queryClient.ExecuteQuery(fmt::format(R"(
+            const auto result = queryClient
+                                    .ExecuteQuery(fmt::format(R"(
                 CREATE OR REPLACE EXTERNAL DATA SOURCE `{external_source}` WITH (
                     SOURCE_TYPE="YT",
                     LOCATION="other-bucket",
                     AUTH_METHOD="NONE"
-                );)",
-                "external_source"_a = externalDataSourceName
-            ), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                );)", "external_source"_a = externalDataSourceName), NYdb::NQuery::TTxControl::NoTx())
+                                    .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Changing external data source type is not allowed");
         }
@@ -101,7 +108,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External tables are disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+            "External tables are disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(DisableCreateExternalTableByAvailableFlag) {
@@ -122,7 +130,9 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Check failed: path: '/Root/ExternalDataSource', error: path hasn't been resolved, nearest resolved path: '/Root'", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+            "Check failed: path: '/Root/ExternalDataSource', error: path hasn't been resolved, nearest resolved path: '/Root'",
+            result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateExternalTableCheckPrimaryKey) {
@@ -140,7 +150,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "PRIMARY KEY is not supported for external table", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            result.GetIssues().ToString(), "PRIMARY KEY is not supported for external table", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateExternalTableValidation) {
@@ -174,16 +185,19 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
         TString externalTableName = "/Root/ExternalTable";
         {
             auto query = TStringBuilder() << R"(
-                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                CREATE EXTERNAL DATA SOURCE `)"
+                                          << externalDataSourceName << R"(` WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket",
                     AUTH_METHOD="NONE"
                 );
-                CREATE EXTERNAL TABLE `)" << externalTableName << R"(` (
+                CREATE EXTERNAL TABLE `)" << externalTableName
+                                          << R"(` (
                     Key Uint64,
                     Value String
                 ) WITH (
-                    DATA_SOURCE=")" << externalDataSourceName << R"(",
+                    DATA_SOURCE=")" << externalDataSourceName
+                                          << R"(",
                     LOCATION="/"
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -195,7 +209,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             auto& runtime = *kikimr.GetTestServer().GetRuntime();
-            auto externalTableDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalTableName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            auto externalTableDesc =
+                Navigate(runtime, runtime.AllocateEdgeActor(), externalTableName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& externalTable = externalTableDesc->ResultSet.at(/* pos */ 0);
             UNIT_ASSERT_EQUAL(externalTableDesc->ErrorCount, 1);
             UNIT_ASSERT_EQUAL(externalTable.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
@@ -206,7 +221,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             auto& runtime = *kikimr.GetTestServer().GetRuntime();
-            auto externalDataSourceDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalDataSourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            auto externalDataSourceDesc =
+                Navigate(runtime, runtime.AllocateEdgeActor(), externalDataSourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(/* pos */ 0);
             UNIT_ASSERT_EQUAL(externalDataSourceDesc->ErrorCount, 1);
             UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
@@ -222,7 +238,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto query = TStringBuilder() << R"( DROP EXTERNAL TABLE `/Root/ExternalDataSource`)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External table are disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+            "External table are disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateExternalTableWithSettings) {
@@ -237,18 +254,21 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
         TString externalDataSourceName = "/Root/ExternalDataSource";
         TString externalTableName = "/Root/ExternalTable";
         auto query = TStringBuilder() << R"(
-            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+            CREATE EXTERNAL DATA SOURCE `)"
+                                      << externalDataSourceName << R"(` WITH (
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="my-bucket",
                 AUTH_METHOD="NONE"
             );
-            CREATE EXTERNAL TABLE `)" << externalTableName << R"(` (
+            CREATE EXTERNAL TABLE `)" << externalTableName
+                                      << R"(` (
                 Key Uint64,
                 Value String,
                 year Int64 NOT NULL,
                 month Int64 NOT NULL
             ) WITH (
-                DATA_SOURCE=")" << externalDataSourceName << R"(",
+                DATA_SOURCE=")" << externalDataSourceName
+                                      << R"(",
                 LOCATION="/folder1/",
                 FORMAT="json_as_string",
                 `projection.enabled`="true",
@@ -268,7 +288,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        auto externalTableDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalTableName, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        auto externalTableDesc =
+            Navigate(runtime, runtime.AllocateEdgeActor(), externalTableName, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
         const auto& externalTable = externalTableDesc->ResultSet.at(/* pos */ 0);
         UNIT_ASSERT_EQUAL(externalTable.Kind, NKikimr::NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalTable);
         UNIT_ASSERT(externalTable.ExternalTableInfo);
@@ -289,18 +310,21 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
         TString externalDataSourceName = "/Root/ExternalDataSource";
         TString externalTableName = "/Root/ExternalTable";
         auto query = TStringBuilder() << R"(
-            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+            CREATE EXTERNAL DATA SOURCE `)"
+                                      << externalDataSourceName << R"(` WITH (
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="my-bucket",
                 AUTH_METHOD="NONE"
             );
-            CREATE EXTERNAL TABLE `)" << externalTableName << R"(` (
+            CREATE EXTERNAL TABLE `)" << externalTableName
+                                      << R"(` (
                 Key Uint64,
                 Value String,
                 Year Int64 NOT NULL,
                 Month Int64 NOT NULL
             ) WITH (
-                DATA_SOURCE=")" << externalDataSourceName << R"(",
+                DATA_SOURCE=")" << externalDataSourceName
+                                      << R"(",
                 LOCATION="/folder1/",
                 FORMAT="json_as_string",
                 `projection.enabled`="true",
@@ -320,7 +344,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        auto externalTableDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalTableName, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        auto externalTableDesc =
+            Navigate(runtime, runtime.AllocateEdgeActor(), externalTableName, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
         const auto& externalTable = externalTableDesc->ResultSet.at(/* pos */ 0);
         UNIT_ASSERT_EQUAL(externalTable.Kind, NKikimr::NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalTable);
         UNIT_ASSERT(externalTable.ExternalTableInfo);
@@ -342,23 +367,27 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
         TString externalTableName = "/Root/ExternalTable";
         {
             auto query = TStringBuilder() << R"(
-                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                CREATE EXTERNAL DATA SOURCE `)"
+                                          << externalDataSourceName << R"(` WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket",
                     AUTH_METHOD="NONE"
                 );
-                CREATE EXTERNAL TABLE `)" << externalTableName << R"(` (
+                CREATE EXTERNAL TABLE `)" << externalTableName
+                                          << R"(` (
                     Key Uint64,
                     Value String
                 ) WITH (
-                    DATA_SOURCE=")" << externalDataSourceName << R"(",
+                    DATA_SOURCE=")" << externalDataSourceName
+                                          << R"(",
                     LOCATION="/"
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto& runtime = *kikimr.GetTestServer().GetRuntime();
-            auto externalTableDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalTableName, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            auto externalTableDesc =
+                Navigate(runtime, runtime.AllocateEdgeActor(), externalTableName, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& externalTable = externalTableDesc->ResultSet.at(/* pos */ 0);
             UNIT_ASSERT_EQUAL(externalTable.Kind, NKikimr::NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalTable);
             UNIT_ASSERT(externalTable.ExternalTableInfo);
@@ -370,18 +399,21 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
 
         {
             auto query = TStringBuilder() << R"(
-                CREATE EXTERNAL TABLE `)" << externalTableName << R"(` (
+                CREATE EXTERNAL TABLE `)" << externalTableName
+                                          << R"(` (
                     Key Uint64,
                     Value String
                 ) WITH (
-                    DATA_SOURCE=")" << externalDataSourceName << R"(",
+                    DATA_SOURCE=")" << externalDataSourceName
+                                          << R"(",
                     LOCATION="/"
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Check failed: path: '/Root/ExternalTable', error: path exist", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(
+                result.GetIssues().ToString(), "Check failed: path: '/Root/ExternalTable', error: path exist", result.GetIssues().ToString());
         }
     }
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

@@ -17,7 +17,7 @@ using EStreamState = TReplication::EStreamState;
 namespace {
 
 bool ShouldWaitForAttachment(const TReplication* replication) {
-    return replication->GetConfig().GetSkipInitialScan()
+    return !replication->GetConfig().GetInitialScan()
         && replication->GetDesiredState() == TReplication::EState::Paused;
 }
 

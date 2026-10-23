@@ -104,25 +104,23 @@ Y_UNIT_TEST(CreateLayout) {
     UNIT_ASSERT(tl->TotalRowSize == 45);
 }
 
-// A row of 4-byte and 1-byte columns that is short enough for the small-tuple
-// SIMD path, but has more packable columns than PackTupleOr is instantiated for.
-Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
+template <size_t ColsNum>
+static void TestPackFixedColumnsRoundTrip(
+    THolder<TTupleLayout> (*createLayout)(const std::vector<TColumnDesc>&),
+    const std::array<size_t, ColsNum>& colSizes, size_t expectedRowSize) {
 
     TScopedAlloc alloc(__LOCATION__);
-
-    constexpr size_t ColsNum = 6;
-    constexpr size_t ColSizes[ColsNum] = {4, 1, 4, 1, 4, 1};
 
     std::vector<TColumnDesc> columns;
     for (size_t col = 0; col != ColsNum; ++col) {
         TColumnDesc desc;
         desc.Role = col == 0 ? EColumnRole::Key : EColumnRole::Payload;
-        desc.DataSize = ColSizes[col];
+        desc.DataSize = colSizes[col];
         columns.push_back(desc);
     }
 
-    auto tl = TTupleLayout::Create(columns);
-    UNIT_ASSERT_VALUES_EQUAL(tl->TotalRowSize, 20);
+    auto tl = createLayout(columns);
+    UNIT_ASSERT_VALUES_EQUAL(tl->TotalRowSize, expectedRowSize);
 
     constexpr ui32 NTuples = 1000;
 
@@ -133,9 +131,9 @@ Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
     const ui8* colsValid[ColsNum];
     ui8* mutableColsValid[ColsNum];
     for (size_t col = 0; col != ColsNum; ++col) {
-        colsData[col].resize(ColSizes[col] * NTuples);
+        colsData[col].resize(colSizes[col] * NTuples);
         for (ui32 row = 0; row != NTuples; ++row) {
-            colsData[col][row * ColSizes[col]] = row + col;
+            colsData[col][row * colSizes[col]] = row + col;
         }
         cols[col] = colsData[col].data();
 
@@ -159,6 +157,44 @@ Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
 
     for (size_t col = 0; col != ColsNum; ++col) {
         UNIT_ASSERT_VALUES_EQUAL_C(unpackedData[col], colsData[col], "column " << col);
+    }
+}
+
+// A row of 4-byte and 1-byte columns that is short enough for the AVX2
+// small-tuple path, but has more packable columns than PackTupleOr supports.
+static void TestPackNarrowRowWithManySmallColumns(
+    THolder<TTupleLayout> (*createLayout)(const std::vector<TColumnDesc>&)) {
+    TestPackFixedColumnsRoundTrip(createLayout, std::array<size_t, 6>{4, 1, 4, 1, 4, 1}, 20);
+}
+
+Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
+    TestPackNarrowRowWithManySmallColumns(TTupleLayout::Create);
+}
+
+Y_UNIT_TEST(PackNarrowRowFallback) {
+    TestPackNarrowRowWithManySmallColumns(
+        [](const std::vector<TColumnDesc>& columns) -> THolder<TTupleLayout> {
+            return MakeHolder<TTupleLayoutFallback>(columns);
+        });
+}
+
+Y_UNIT_TEST(PackNarrowRowSSE42) {
+    if (NX86::HaveSSE42()) {
+        TestPackNarrowRowWithManySmallColumns(CreateSSE42TupleLayout);
+    }
+}
+
+Y_UNIT_TEST(PackSmallRowSSE42) {
+    if (NX86::HaveSSE42()) {
+        // Three data bytes, four hash bytes and one null-mask byte: the
+        // 8-byte row fits the SSE small-tuple path with a 16-byte register.
+        TestPackFixedColumnsRoundTrip(CreateSSE42TupleLayout, std::array<size_t, 3>{1, 1, 1}, 8);
+    }
+}
+
+Y_UNIT_TEST(PackNarrowRowAVX2) {
+    if (NX86::HaveAVX2()) {
+        TestPackNarrowRowWithManySmallColumns(CreateAVX2TupleLayout);
     }
 }
 

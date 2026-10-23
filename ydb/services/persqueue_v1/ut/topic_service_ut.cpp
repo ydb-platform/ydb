@@ -1,3 +1,4 @@
+#include <ydb/core/base/appdata.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
@@ -146,7 +147,7 @@ protected:
                            , NKikimrServices::KQP_EXECUTER
                            , NKikimrServices::KQP_SESSION}, NActors::NLog::PRI_DEBUG);
 
-        server->AnnoyingClient->GrantConnect(AUTH_TOKEN);   
+        server->AnnoyingClient->GrantConnect(AUTH_TOKEN);
 
         auto partsCount = 5u;
         server->AnnoyingClient->CreateTopicNoLegacy(VALID_TOPIC_PATH, partsCount,
@@ -215,6 +216,23 @@ protected:
         UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
     }
 };
+
+Y_UNIT_TEST_F(ClientModificationsTransactionalOffsets, TUpdateOffsetsInTransactionFixture) {
+    const TVector<TTopic> topics = {
+        TTopic{.Path=VALID_TOPIC_PATH, .Partitions={
+            TPartition{.Id=1, .Offsets={TOffsetRange{.Begin=0, .End=1}}}
+        }}
+    };
+
+    server->CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableClientModifications(false);
+    auto response = Call_UpdateOffsetsInTransaction(topics);
+    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::PRECONDITION_FAILED);
+    UNIT_ASSERT_STRING_CONTAINS(response.ShortDebugString(), "Consumer offset commits are disabled");
+
+    server->CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableClientModifications(true);
+    response = Call_UpdateOffsetsInTransaction(topics);
+    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+}
 
 Y_UNIT_TEST_F(OneConsumer_TheRangesDoNotOverlap, TUpdateOffsetsInTransactionFixture) {
     Ydb::Topic::UpdateOffsetsInTransactionResponse response = Call_UpdateOffsetsInTransaction({

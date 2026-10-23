@@ -1,31 +1,27 @@
 #include "bridge_node_table.h"
 #include "bridge_resident.h"
 #include "bridge_types.h"
-
-#include <yql/essentials/public/udf/udf_type_inspection.h>
 #include "compartment_manager.h"
 #include "host.h"
 #include "host_intrinsic.h"
 #include "invocation_context.h"
 #include "registry_helpers.h"
 
-#include <ydb/services/udf_store/wasm/abi/bridge_abi.h>
-
 #include <ydb/library/wasm/api/compartment.h>
 #include <ydb/library/wasm/api/pointer.h>
-
-#include <yql/essentials/public/udf/udf_value.h>
-#include <yql/essentials/minikql/mkql_terminator.h>
-#include <yql/essentials/public/issue/yql_issue.h>
+#include <ydb/services/udf_store/wasm/abi/bridge_abi.h>
 
 #include <util/generic/array_ref.h>
 #include <util/generic/scope.h>
+#include <util/generic/utility.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 #include <util/system/types.h>
-
-#include <util/generic/utility.h>
+#include <yql/essentials/minikql/mkql_terminator.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/udf/udf_type_inspection.h>
+#include <yql/essentials/public/udf/udf_value.h>
 
 #include <bit>
 #include <cstring>
@@ -81,18 +77,9 @@ const IValueBuilder* CurrentValueBuilderOrThrow() {
 }
 
 ui64 RegisterOwned(
-    EBridgeNodeKind kind,
-    EBridgeValueKind valueKind,
-    TUnboxedValue&& value,
-    const TType* type = nullptr,
-    const TType* auxType = nullptr)
+    EBridgeNodeKind kind, EBridgeValueKind valueKind, TUnboxedValue&& value, const TType* type = nullptr, const TType* auxType = nullptr)
 {
-    return CurrentBridgeTable().Register(
-        kind,
-        valueKind,
-        type,
-        std::move(value),
-        auxType);
+    return CurrentBridgeTable().Register(kind, valueKind, type, std::move(value), auxType);
 }
 
 const ITypeInfoHelper* CurrentTypeHelper() {
@@ -207,12 +194,7 @@ constexpr ui32 MaxResultTypeSearchNodes = 256;
 //! sees only the result type of the whole call. A match does not stop the
 //! walk: List<List<T>> and same-arity sibling Tuples all have to be candidates.
 template <class TAccept>
-void CollectTypesIn(
-    const TType* type,
-    const TAccept& accept,
-    ui32 depth,
-    ui32& budget,
-    TVector<const TType*>& out)
+void CollectTypesIn(const TType* type, const TAccept& accept, ui32 depth, ui32& budget, TVector<const TType*>& out)
 {
     const auto* helper = CurrentTypeHelper();
     if (!type || !helper || depth > MaxResultTypeSearchDepth || budget == 0) {
@@ -276,19 +258,15 @@ TVector<const TType*> CollectListTypesIn(const TType* type) {
     });
 }
 
-TVector<const TType*> CollectMemberedTypesIn(
-    const TType* type,
-    bool wantStruct,
-    std::optional<ui32> arity)
+TVector<const TType*> CollectMemberedTypesIn(const TType* type, bool wantStruct, std::optional<ui32> arity)
 {
     const auto* helper = CurrentTypeHelper();
     if (!helper) {
         return {};
     }
     return CollectTypesIn(type, [helper, wantStruct, arity](const TType* candidate) {
-        const bool membered = wantStruct
-            ? static_cast<bool>(TStructTypeInspector(*helper, candidate))
-            : static_cast<bool>(TTupleTypeInspector(*helper, candidate));
+        const bool membered = wantStruct ? static_cast<bool>(TStructTypeInspector(*helper, candidate))
+                                         : static_cast<bool>(TTupleTypeInspector(*helper, candidate));
         if (!membered) {
             return false;
         }
@@ -298,10 +276,8 @@ TVector<const TType*> CollectMemberedTypesIn(
 
 void EnsureKind(const TWasmBridgeNodeTable::TNode& node, EBridgeValueKind expected, const char* what) {
     if (node.ValueKind != expected) {
-        ythrow yexception()
-            << "Bridge: " << what << " expected kind "
-            << static_cast<int>(expected)
-            << ", got " << static_cast<int>(node.ValueKind);
+        ythrow yexception() << "Bridge: " << what << " expected kind " << static_cast<int>(expected) << ", got "
+                            << static_cast<int>(node.ValueKind);
     }
     // An iterator is registered with the value kind of the container it walks,
     // so it satisfies the comparison above wherever that container is expected.
@@ -309,18 +285,13 @@ void EnsureKind(const TWasmBridgeNodeTable::TNode& node, EBridgeValueKind expect
     // iterator by throwing, and a dict iterator's Type is its key type, which
     // leaves DictKeyTypeOf() empty and turns the key check into nothing.
     if (IsBridgeIteratorKind(node.Kind)) {
-        ythrow yexception()
-            << "Bridge: " << what << " got an iterator over kind "
-            << static_cast<int>(expected)
-            << ", not a value of it";
+        ythrow yexception() << "Bridge: " << what << " got an iterator over kind " << static_cast<int>(expected) << ", not a value of it";
     }
 }
 
 void EnsureStringKind(const TWasmBridgeNodeTable::TNode& node, const char* what) {
     if (!IsBridgeStringKind(node.ValueKind)) {
-        ythrow yexception()
-            << "Bridge: " << what << " expected a string-like kind, got "
-            << static_cast<int>(node.ValueKind);
+        ythrow yexception() << "Bridge: " << what << " expected a string-like kind, got " << static_cast<int>(node.ValueKind);
     }
 }
 
@@ -351,7 +322,6 @@ bool NullValueMatchesType(TUnboxedValuePod value, const TType* type, const IType
     return false;
 }
 
-
 //! Guard for a guest handle the host is about to hand to MiniKQL as a value of
 //! `expected`. MiniKQL reads it as the declared type without re-checking, and
 //! the mismatch does not surface as an exception but as a Y_ABORT inside the
@@ -363,31 +333,26 @@ bool NullValueMatchesType(TUnboxedValuePod value, const TType* type, const IType
 //! type or from the intrinsic the guest built the value with, both of which
 //! know more than the representation does: every boxed value looks alike in
 //! the pod, and so do a string and an eight-byte integer once embedded.
-void EnsureNodeMatchesType(
-    const TWasmBridgeNodeTable::TNode& node,
-    const TType* expected,
-    const char* what)
+void EnsureNodeMatchesType(const TWasmBridgeNodeTable::TNode& node, const TType* expected, const char* what)
 {
     if (IsBridgeIteratorKind(node.Kind)) {
         // Registered with the value kind of the container it walks, so it
         // answers for that container's family here. Checked before the slot is
         // even looked at: no declaration accepts an iterator.
-        ythrow yexception()
-            << "Bridge: " << what << " got an iterator, not a value";
+        ythrow yexception() << "Bridge: " << what << " got an iterator, not a value";
     }
     const auto* helper = CurrentTypeHelper();
     if (!expected || !helper) {
         // Untyped slot: nothing declared to check against.
         return;
     }
-    const auto expectedFamily =
-        BridgeKindFamily(BridgeKindsFromType(PeelOptional(expected), helper).Value);
+    const auto expectedFamily = BridgeKindFamily(BridgeKindsFromType(PeelOptional(expected), helper).Value);
     if (expectedFamily == EBridgeKindFamily::Null) {
         return;
     }
     if (!node.Value.HasValue()) {
-        Y_ENSURE(NullValueMatchesType(node.Value, expected, helper),
-            "Bridge: " << what << " null value does not match the declared Optional layers");
+        Y_ENSURE(
+            NullValueMatchesType(node.Value, expected, helper), "Bridge: " << what << " null value does not match the declared Optional layers");
         return;
     }
     const auto family = NodeValueFamily(node);
@@ -395,9 +360,8 @@ void EnsureNodeMatchesType(
         // An unnamed payload leaves nothing to compare.
         return;
     }
-    ythrow yexception()
-        << "Bridge: " << what << " expected a " << BridgeKindFamilyAsStr(expectedFamily)
-        << " value, got " << BridgeKindFamilyAsStr(*family);
+    ythrow yexception() << "Bridge: " << what << " expected a " << BridgeKindFamilyAsStr(expectedFamily) << " value, got "
+                        << BridgeKindFamilyAsStr(*family);
 }
 
 //! Same family comparison EnsureNodeMatchesType uses, without throwing. Used
@@ -416,8 +380,7 @@ bool HandleMatchesExpectedType(ui64 handle, const TType* expected) {
     if (!expected || !helper) {
         return true;
     }
-    const auto expectedFamily =
-        BridgeKindFamily(BridgeKindsFromType(PeelOptional(expected), helper).Value);
+    const auto expectedFamily = BridgeKindFamily(BridgeKindsFromType(PeelOptional(expected), helper).Value);
     if (expectedFamily == EBridgeKindFamily::Null) {
         return true;
     }
@@ -455,10 +418,7 @@ const ui64* PeekHandles(ui64 handlesOff, i32 n, const char* what) {
     if (n == 0) {
         return nullptr;
     }
-    return PtrFromVM(
-        CurrentCompartmentOrThrow(),
-        std::bit_cast<ui64*>(static_cast<uintptr_t>(handlesOff)),
-        static_cast<size_t>(n));
+    return PtrFromVM(CurrentCompartmentOrThrow(), std::bit_cast<ui64*>(static_cast<uintptr_t>(handlesOff)), static_cast<size_t>(n));
 }
 
 //! What one declared candidate makes of the handles the guest passed.
@@ -507,11 +467,7 @@ TCandidateFit FitHandles(const TType* candidate, const ui64* handles, i32 n, con
 //! as the sibling Tuple<Int32,Int32>, which accepts two Int64 handles because
 //! Int32 and Int64 share a family.
 template <class TSlotOf>
-const TType* NarrowCandidates(
-    const TVector<const TType*>& candidates,
-    const ui64* handles,
-    i32 n,
-    const TSlotOf& slotOf)
+const TType* NarrowCandidates(const TVector<const TType*>& candidates, const ui64* handles, i32 n, const TSlotOf& slotOf)
 {
     const TType* match = nullptr;
     i32 matchExact = -1;
@@ -561,20 +517,13 @@ const TType* InferListType(const TType* resultType, ui64 itemsOff, i32 n, const 
 //! Same narrowing for Struct / Tuple. An arity the declaration never names is
 //! still refused when any container of that kind is present -- a wrong width
 //! used to drop the type and every per-member check with it.
-const TType* InferMemberedType(
-    const TType* resultType,
-    bool wantStruct,
-    i32 n,
-    ui64 elemsOff,
-    const char* what)
+const TType* InferMemberedType(const TType* resultType, bool wantStruct, i32 n, ui64 elemsOff, const char* what)
 {
     auto candidates = CollectMemberedTypesIn(resultType, wantStruct, static_cast<ui32>(n));
     if (candidates.empty()) {
         if (!CollectMemberedTypesIn(resultType, wantStruct, std::nullopt).empty()) {
-            ythrow yexception()
-                << "Bridge: " << what << " builds " << n
-                << " members, which matches no " << (wantStruct ? "Struct" : "Tuple")
-                << " in the declared result type";
+            ythrow yexception() << "Bridge: " << what << " builds " << n << " members, which matches no " << (wantStruct ? "Struct" : "Tuple")
+                                << " in the declared result type";
         }
         return nullptr;
     }
@@ -588,11 +537,7 @@ const TType* InferMemberedType(
 }
 
 ui64 RegisterTypeRef(const TType* type) {
-    return CurrentBridgeTable().Register(
-        EBridgeNodeKind::TypeRef,
-        EBridgeValueKind::Null,
-        type,
-        {});
+    return CurrentBridgeTable().Register(EBridgeNodeKind::TypeRef, EBridgeValueKind::Null, type, {});
 }
 
 const TType* TypeFromHandle(ui64 typeHandle, const char* what) {
@@ -644,9 +589,7 @@ i64 ReadSigned(const TWasmBridgeNodeTable::TNode& node, const char* what) {
         case EBridgeValueKind::Interval:
             return node.Value.Get<i64>();
         default:
-            ythrow yexception()
-                << "Bridge: " << what << " expected a signed integer kind, got "
-                << static_cast<int>(node.ValueKind);
+            ythrow yexception() << "Bridge: " << what << " expected a signed integer kind, got " << static_cast<int>(node.ValueKind);
     }
 }
 
@@ -664,9 +607,7 @@ ui64 ReadUnsigned(const TWasmBridgeNodeTable::TNode& node, const char* what) {
         case EBridgeValueKind::Timestamp:
             return node.Value.Get<ui64>();
         default:
-            ythrow yexception()
-                << "Bridge: " << what << " expected an unsigned integer kind, got "
-                << static_cast<int>(node.ValueKind);
+            ythrow yexception() << "Bridge: " << what << " expected an unsigned integer kind, got " << static_cast<int>(node.ValueKind);
     }
 }
 
@@ -677,9 +618,7 @@ double ReadFloating(const TWasmBridgeNodeTable::TNode& node, const char* what) {
         case EBridgeValueKind::Double:
             return node.Value.Get<double>();
         default:
-            ythrow yexception()
-                << "Bridge: " << what << " expected a floating point kind, got "
-                << static_cast<int>(node.ValueKind);
+            ythrow yexception() << "Bridge: " << what << " expected a floating point kind, got " << static_cast<int>(node.ValueKind);
     }
 }
 
@@ -723,9 +662,7 @@ i32 BridgeGetInt32Host(ui64 handle) {
 ui32 BridgeGetUint32Host(ui64 handle) {
     const auto& node = CurrentBridgeTable().Resolve(handle);
     if (node.ValueKind != EBridgeValueKind::Uint32 && node.ValueKind != EBridgeValueKind::Datetime) {
-        ythrow yexception()
-            << "Bridge: BridgeGetUint32 expected Uint32/Datetime, got "
-            << static_cast<int>(node.ValueKind);
+        ythrow yexception() << "Bridge: BridgeGetUint32 expected Uint32/Datetime, got " << static_cast<int>(node.ValueKind);
     }
     return node.Value.Get<ui32>();
 }
@@ -746,10 +683,7 @@ void BridgeCopyDecimalHost(ui64 handle, ui64 dstOff) {
     EnsureKind(node, EBridgeValueKind::Decimal, "BridgeCopyDecimal");
     const auto value = node.Value.GetInt128();
     auto* compartment = CurrentCompartmentOrThrow();
-    char* dst = PtrFromVM(
-        compartment,
-        std::bit_cast<char*>(static_cast<uintptr_t>(dstOff)),
-        sizeof(value));
+    char* dst = PtrFromVM(compartment, std::bit_cast<char*>(static_cast<uintptr_t>(dstOff)), sizeof(value));
     std::memcpy(dst, &value, sizeof(value));
 }
 
@@ -770,9 +704,7 @@ i64 BridgeCopyStringHost(ui64 handle, ui64 dstOff, i64 cap) {
     EnsureStringKind(node, "BridgeCopyString");
     const TStringRef ref = node.Value.AsStringRef();
     if (cap < 0 || static_cast<ui64>(cap) < ref.Size()) {
-        ythrow yexception()
-            << "Bridge: BridgeCopyString capacity " << cap
-            << " is less than string length " << ref.Size();
+        ythrow yexception() << "Bridge: BridgeCopyString capacity " << cap << " is less than string length " << ref.Size();
     }
     auto* compartment = CurrentCompartmentOrThrow();
     if (ref.Size() == 0) {
@@ -822,12 +754,9 @@ ui64 BridgeGetOptionalHost(ui64 handle) {
 
 ui64 BridgeGetElementHost(ui64 handle, i32 index) {
     const auto& node = CurrentBridgeTable().Resolve(handle);
-    if (node.ValueKind != EBridgeValueKind::Tuple
-        && node.ValueKind != EBridgeValueKind::Struct)
+    if (node.ValueKind != EBridgeValueKind::Tuple && node.ValueKind != EBridgeValueKind::Struct)
     {
-        ythrow yexception()
-            << "Bridge: BridgeGetElement expected Tuple/Struct, got "
-            << static_cast<int>(node.ValueKind);
+        ythrow yexception() << "Bridge: BridgeGetElement expected Tuple/Struct, got " << static_cast<int>(node.ValueKind);
     }
     // The element array is host memory: an unchecked index would read past it.
     const auto arity = MemberCountOfType(node.Type);
@@ -835,9 +764,7 @@ ui64 BridgeGetElementHost(ui64 handle, i32 index) {
         ythrow yexception() << "Bridge: BridgeGetElement needs a typed Struct/Tuple node";
     }
     if (index < 0 || static_cast<ui32>(index) >= *arity) {
-        ythrow yexception()
-            << "Bridge: BridgeGetElement index " << index
-            << " is out of range [0, " << *arity << ")";
+        ythrow yexception() << "Bridge: BridgeGetElement index " << index << " is out of range [0, " << *arity << ")";
     }
     auto elem = node.Value.GetElement(static_cast<ui32>(index));
     return RegisterChild(elem, ElementTypeOf(node.Type, static_cast<ui32>(index)));
@@ -863,14 +790,9 @@ i32 BridgeGetMemberIndexHost(ui64 handle, ui64 nameOff, i64 nameLen) {
         ythrow yexception() << "Bridge: BridgeGetMemberIndex expected Struct";
     }
     auto* compartment = CurrentCompartmentOrThrow();
-    const char* name = nameLen == 0
-        ? nullptr
-        : PtrFromVM(
-            compartment,
-            std::bit_cast<char*>(static_cast<uintptr_t>(nameOff)),
-            static_cast<size_t>(nameLen));
-    const ui32 index = members.GetMemberIndex(
-        TStringRef(name, CheckedAbiLength(static_cast<size_t>(nameLen), "BridgeGetMemberIndex")));
+    const char* name =
+        nameLen == 0 ? nullptr : PtrFromVM(compartment, std::bit_cast<char*>(static_cast<uintptr_t>(nameOff)), static_cast<size_t>(nameLen));
+    const ui32 index = members.GetMemberIndex(TStringRef(name, CheckedAbiLength(static_cast<size_t>(nameLen), "BridgeGetMemberIndex")));
     return index == Max<ui32>() ? -1 : static_cast<i32>(index);
 }
 
@@ -913,12 +835,7 @@ ui64 BridgeListMakeIteratorHost(ui64 handle) {
     auto iter = node.Value.GetListIterator();
     // Iterator nodes keep the type of what they yield: AuxType is the item
     // type (payload type for a dict pair iterator, see below).
-    return RegisterOwned(
-        EBridgeNodeKind::ListIterator,
-        EBridgeValueKind::List,
-        std::move(iter),
-        /*type*/ nullptr,
-        ListItemTypeOf(node.Type));
+    return RegisterOwned(EBridgeNodeKind::ListIterator, EBridgeValueKind::List, std::move(iter), /*type*/ nullptr, ListItemTypeOf(node.Type));
 }
 
 i32 BridgeListIterNextHost(ui64 iterHandle, ui64* outItem) {
@@ -983,35 +900,21 @@ ui64 BridgeDictMakeIteratorHost(ui64 handle) {
     auto iter = node.Value.GetDictIterator();
     // Pair iterator: Type is the key type, AuxType the payload type.
     return RegisterOwned(
-        EBridgeNodeKind::DictIterator,
-        EBridgeValueKind::Dict,
-        std::move(iter),
-        DictKeyTypeOf(node.Type),
-        DictPayloadTypeOf(node.Type));
+        EBridgeNodeKind::DictIterator, EBridgeValueKind::Dict, std::move(iter), DictKeyTypeOf(node.Type), DictPayloadTypeOf(node.Type));
 }
 
 ui64 BridgeDictMakeKeysIteratorHost(ui64 handle) {
     const auto& node = CurrentBridgeTable().Resolve(handle);
     EnsureKind(node, EBridgeValueKind::Dict, "BridgeDictMakeKeysIterator");
     auto iter = node.Value.GetKeysIterator();
-    return RegisterOwned(
-        EBridgeNodeKind::ListIterator,
-        EBridgeValueKind::List,
-        std::move(iter),
-        /*type*/ nullptr,
-        DictKeyTypeOf(node.Type));
+    return RegisterOwned(EBridgeNodeKind::ListIterator, EBridgeValueKind::List, std::move(iter), /*type*/ nullptr, DictKeyTypeOf(node.Type));
 }
 
 ui64 BridgeDictMakePayloadsIteratorHost(ui64 handle) {
     const auto& node = CurrentBridgeTable().Resolve(handle);
     EnsureKind(node, EBridgeValueKind::Dict, "BridgeDictMakePayloadsIterator");
     auto iter = node.Value.GetPayloadsIterator();
-    return RegisterOwned(
-        EBridgeNodeKind::ListIterator,
-        EBridgeValueKind::List,
-        std::move(iter),
-        /*type*/ nullptr,
-        DictPayloadTypeOf(node.Type));
+    return RegisterOwned(EBridgeNodeKind::ListIterator, EBridgeValueKind::List, std::move(iter), /*type*/ nullptr, DictPayloadTypeOf(node.Type));
 }
 
 i32 BridgeDictIterNextHost(ui64 iterHandle, ui64* outKey, ui64* outPayload) {
@@ -1045,52 +948,31 @@ ui64 BridgeMakeNullHost() {
 }
 
 ui64 BridgeMakeInt64Host(i64 value) {
-    return RegisterOwned(
-        EBridgeNodeKind::Scalar,
-        EBridgeValueKind::Int64,
-        TUnboxedValuePod(value));
+    return RegisterOwned(EBridgeNodeKind::Scalar, EBridgeValueKind::Int64, TUnboxedValuePod(value));
 }
 
 ui64 BridgeMakeUint64Host(ui64 value) {
-    return RegisterOwned(
-        EBridgeNodeKind::Scalar,
-        EBridgeValueKind::Uint64,
-        TUnboxedValuePod(value));
+    return RegisterOwned(EBridgeNodeKind::Scalar, EBridgeValueKind::Uint64, TUnboxedValuePod(value));
 }
 
 ui64 BridgeMakeInt32Host(i32 value) {
-    return RegisterOwned(
-        EBridgeNodeKind::Scalar,
-        EBridgeValueKind::Int32,
-        TUnboxedValuePod(value));
+    return RegisterOwned(EBridgeNodeKind::Scalar, EBridgeValueKind::Int32, TUnboxedValuePod(value));
 }
 
 ui64 BridgeMakeUint32Host(ui32 value) {
-    return RegisterOwned(
-        EBridgeNodeKind::Scalar,
-        EBridgeValueKind::Uint32,
-        TUnboxedValuePod(value));
+    return RegisterOwned(EBridgeNodeKind::Scalar, EBridgeValueKind::Uint32, TUnboxedValuePod(value));
 }
 
 ui64 BridgeMakeFloatHost(float value) {
-    return RegisterOwned(
-        EBridgeNodeKind::Scalar,
-        EBridgeValueKind::Float,
-        TUnboxedValuePod(value));
+    return RegisterOwned(EBridgeNodeKind::Scalar, EBridgeValueKind::Float, TUnboxedValuePod(value));
 }
 
 ui64 BridgeMakeDoubleHost(double value) {
-    return RegisterOwned(
-        EBridgeNodeKind::Scalar,
-        EBridgeValueKind::Double,
-        TUnboxedValuePod(value));
+    return RegisterOwned(EBridgeNodeKind::Scalar, EBridgeValueKind::Double, TUnboxedValuePod(value));
 }
 
 ui64 BridgeMakeBoolHost(i32 value) {
-    return RegisterOwned(
-        EBridgeNodeKind::Scalar,
-        EBridgeValueKind::Boolean,
-        TUnboxedValuePod(value != 0));
+    return RegisterOwned(EBridgeNodeKind::Scalar, EBridgeValueKind::Boolean, TUnboxedValuePod(value != 0));
 }
 
 ui64 BridgeMakeStringHost(ui64 srcOff, i64 len) {
@@ -1099,11 +981,9 @@ ui64 BridgeMakeStringHost(ui64 srcOff, i64 len) {
     }
     auto* builder = CurrentValueBuilderOrThrow();
     auto* compartment = CurrentCompartmentOrThrow();
-    const char* src = len == 0
-        ? nullptr
-        : PtrFromVM(compartment, std::bit_cast<char*>(static_cast<uintptr_t>(srcOff)), static_cast<size_t>(len));
-    auto value = builder->NewString(
-        TStringRef(src, CheckedAbiLength(static_cast<size_t>(len), "BridgeMakeString")));
+    const char* src =
+        len == 0 ? nullptr : PtrFromVM(compartment, std::bit_cast<char*>(static_cast<uintptr_t>(srcOff)), static_cast<size_t>(len));
+    auto value = builder->NewString(TStringRef(src, CheckedAbiLength(static_cast<size_t>(len), "BridgeMakeString")));
     return RegisterOwned(EBridgeNodeKind::String, EBridgeValueKind::String, std::move(value));
 }
 
@@ -1114,9 +994,7 @@ ui64 BridgeMakeOptionalHost(ui64 innerHandle) {
     auto& table = CurrentBridgeTable();
     const auto& inner = table.Resolve(innerHandle);
     const TType* innerType = inner.GuestOptionalDepth ? inner.AuxType : inner.Type;
-    const auto innerKind = inner.Value
-        ? BridgeNodeValueKind(inner, table.GetTypeInfoHelper())
-        : std::make_optional(EBridgeValueKind::Null);
+    const auto innerKind = inner.Value ? BridgeNodeValueKind(inner, table.GetTypeInfoHelper()) : std::make_optional(EBridgeValueKind::Null);
     const ui32 optionalDepth = inner.GuestOptionalDepth + 1;
     const TUnboxedValuePod optional = inner.Value.MakeOptional();
     // MiniKQL represents Optional over a boxed value or a refcounted string as
@@ -1126,12 +1004,8 @@ ui64 BridgeMakeOptionalHost(ui64 innerHandle) {
         const auto& node = table.Resolve(existing);
         return table.RegisterOrReuse(node.Kind, node.ValueKind, node.Type, optional, node.AuxType);
     }
-    const ui64 handle = table.Register(
-        EBridgeNodeKind::Optional,
-        EBridgeValueKind::Optional,
-        /*type*/ nullptr,
-        TUnboxedValue(optional),
-        innerType);
+    const ui64 handle =
+        table.Register(EBridgeNodeKind::Optional, EBridgeValueKind::Optional, /*type*/ nullptr, TUnboxedValue(optional), innerType);
     table.Resolve(handle).InnerValueKind = innerKind;
     table.Resolve(handle).GuestOptionalDepth = optionalDepth;
     return handle;
@@ -1142,35 +1016,23 @@ ui64 BridgeMakeOptionalHost(ui64 innerHandle) {
 //! wrapping first. `expectedTypes`, when given, is the declared type of every
 //! slot repeated over the array (key, payload, key, ... for dict pairs), and
 //! each handle is checked against the slot it lands in.
-TVector<TUnboxedValue> ResolveHandleArray(
-    ui64 handlesOff,
-    i64 n,
-    const char* what,
-    TArrayRef<const TType* const> expectedTypes = {})
+TVector<TUnboxedValue> ResolveHandleArray(ui64 handlesOff, i64 n, const char* what, TArrayRef<const TType* const> expectedTypes = {})
 {
     if (n < 0) {
         ythrow yexception() << "Bridge: " << what << " negative count";
     }
     auto* compartment = CurrentCompartmentOrThrow();
-    const ui64* handles = n == 0
-        ? nullptr
-        // Element count, not bytes: PtrFromVM scales by sizeof(T) itself.
-        : PtrFromVM(
-            compartment,
-            std::bit_cast<ui64*>(static_cast<uintptr_t>(handlesOff)),
-            static_cast<size_t>(n));
+    const ui64* handles = n == 0 ? nullptr
+                                 // Element count, not bytes: PtrFromVM scales by sizeof(T) itself.
+                                 : PtrFromVM(compartment, std::bit_cast<ui64*>(static_cast<uintptr_t>(handlesOff)), static_cast<size_t>(n));
     TVector<TUnboxedValue> values(static_cast<size_t>(n));
     for (i64 i = 0; i < n; ++i) {
-        const TType* expected = expectedTypes.empty()
-            ? nullptr
-            : expectedTypes[static_cast<size_t>(i) % expectedTypes.size()];
+        const TType* expected = expectedTypes.empty() ? nullptr : expectedTypes[static_cast<size_t>(i) % expectedTypes.size()];
         if (handles[i] == NullBridgeHandle) {
             // Checked like any other handle: a null is a value the slot either
             // declares room for or does not.
             if (!SlotAcceptsNull(expected)) {
-                ythrow yexception()
-                    << "Bridge: " << what << " slot " << i
-                    << " is null, but the declared type is mandatory";
+                ythrow yexception() << "Bridge: " << what << " slot " << i << " is null, but the declared type is mandatory";
             }
             continue;
         }
@@ -1181,13 +1043,7 @@ TVector<TUnboxedValue> ResolveHandleArray(
     return values;
 }
 
-ui64 MakeArrayLike(
-    ui64 elemsOff,
-    i32 n,
-    EBridgeNodeKind kind,
-    EBridgeValueKind valueKind,
-    const char* what,
-    ui64 typeHandle = NullBridgeHandle)
+ui64 MakeArrayLike(ui64 elemsOff, i32 n, EBridgeNodeKind kind, EBridgeValueKind valueKind, const char* what, ui64 typeHandle = NullBridgeHandle)
 {
     if (n < 0) {
         ythrow yexception() << "Bridge: " << what << " negative count";
@@ -1205,19 +1061,14 @@ ui64 MakeArrayLike(
         if (!helper) {
             ythrow yexception() << "Bridge: " << what << " needs a type info helper";
         }
-        const bool membered = wantStruct
-            ? static_cast<bool>(TStructTypeInspector(*helper, type))
-            : static_cast<bool>(TTupleTypeInspector(*helper, type));
+        const bool membered =
+            wantStruct ? static_cast<bool>(TStructTypeInspector(*helper, type)) : static_cast<bool>(TTupleTypeInspector(*helper, type));
         if (!membered) {
-            ythrow yexception()
-                << "Bridge: " << what << " expected a "
-                << (wantStruct ? "Struct" : "Tuple") << " type";
+            ythrow yexception() << "Bridge: " << what << " expected a " << (wantStruct ? "Struct" : "Tuple") << " type";
         }
         if (MemberCountOfType(type) != static_cast<ui32>(n)) {
-            ythrow yexception()
-                << "Bridge: " << what << " builds " << n
-                << " members, but the named type has "
-                << MemberCountOfType(type).value_or(0);
+            ythrow yexception() << "Bridge: " << what << " builds " << n << " members, but the named type has "
+                                << MemberCountOfType(type).value_or(0);
         }
     } else {
         auto* invocation = GetCurrentInvocationContext();
@@ -1264,7 +1115,7 @@ ui64 MakeListLike(ui64 itemsOff, i32 n, const char* what, ui64 typeHandle = Null
         const TType* resultType = invocation ? invocation->ResultType : nullptr;
         listType = InferListType(resultType, itemsOff, n, what);
     }
-    const TType* const itemTypes[] = {ListItemTypeOf(listType)};
+    const TType* const itemTypes[] = { ListItemTypeOf(listType) };
     auto values = ResolveHandleArray(itemsOff, n, what, itemTypes);
     auto* builder = CurrentValueBuilderOrThrow();
     auto result = builder->NewList(values.data(), static_cast<ui64>(n));
@@ -1289,23 +1140,11 @@ ui64 BridgeMakeListHost(ui64 itemsOff, i32 n) {
 }
 
 ui64 BridgeMakeArrayTypedHost(ui64 typeHandle, ui64 elemsOff, i32 n) {
-    return MakeArrayLike(
-        elemsOff,
-        n,
-        EBridgeNodeKind::Tuple,
-        EBridgeValueKind::Tuple,
-        "BridgeMakeArrayTyped",
-        typeHandle);
+    return MakeArrayLike(elemsOff, n, EBridgeNodeKind::Tuple, EBridgeValueKind::Tuple, "BridgeMakeArrayTyped", typeHandle);
 }
 
 ui64 BridgeMakeStructTypedHost(ui64 typeHandle, ui64 membersOff, i32 n) {
-    return MakeArrayLike(
-        membersOff,
-        n,
-        EBridgeNodeKind::Struct,
-        EBridgeValueKind::Struct,
-        "BridgeMakeStructTyped",
-        typeHandle);
+    return MakeArrayLike(membersOff, n, EBridgeNodeKind::Struct, EBridgeValueKind::Struct, "BridgeMakeStructTyped", typeHandle);
 }
 
 ui64 BridgeMakeListTypedHost(ui64 typeHandle, ui64 itemsOff, i32 n) {
@@ -1319,21 +1158,16 @@ ui64 BridgeMakeVariantHost(i32 index, ui64 itemHandle) {
     // Nothing validates the alternative index later on: MiniKQL stores it as
     // given and indexes the underlying type with it when reading the value.
     auto* invocation = GetCurrentInvocationContext();
-    const TType* variantType = invocation
-        ? FindVariantTypeIn(invocation->ResultType)
-        : nullptr;
+    const TType* variantType = invocation ? FindVariantTypeIn(invocation->ResultType) : nullptr;
     if (!variantType) {
-        ythrow yexception()
-            << "Bridge: BridgeMakeVariant needs a Variant in the declared result type";
+        ythrow yexception() << "Bridge: BridgeMakeVariant needs a Variant in the declared result type";
     }
     const auto* helper = CurrentTypeHelper();
     const TVariantTypeInspector variant(*helper, variantType);
     const auto arity = MemberCountOfType(variant.GetUnderlyingType());
     if (!arity || static_cast<ui32>(index) >= *arity) {
-        ythrow yexception()
-            << "Bridge: BridgeMakeVariant index " << index
-            << " is out of range for the declared Variant with "
-            << arity.value_or(0) << " alternatives";
+        ythrow yexception() << "Bridge: BridgeMakeVariant index " << index << " is out of range for the declared Variant with "
+                            << arity.value_or(0) << " alternatives";
     }
     auto& table = CurrentBridgeTable();
     auto* builder = CurrentValueBuilderOrThrow();
@@ -1342,20 +1176,13 @@ ui64 BridgeMakeVariantHost(i32 index, ui64 itemHandle) {
         const auto& itemNode = table.Resolve(itemHandle);
         // The alternative is read back as the type the underlying Tuple or
         // Struct declares at this index.
-        EnsureNodeMatchesType(
-            itemNode,
-            ElementTypeOf(variant.GetUnderlyingType(), static_cast<ui32>(index)),
-            "BridgeMakeVariant item");
+        EnsureNodeMatchesType(itemNode, ElementTypeOf(variant.GetUnderlyingType(), static_cast<ui32>(index)), "BridgeMakeVariant item");
         // Not consumed: the copy takes its own MiniKQL ref and the guest keeps
         // the handle it passed in, same as every other Make*.
         item = itemNode.Value;
     }
     auto result = builder->NewVariant(static_cast<ui32>(index), std::move(item));
-    return RegisterOwned(
-        EBridgeNodeKind::Variant,
-        EBridgeValueKind::Variant,
-        std::move(result),
-        variantType);
+    return RegisterOwned(EBridgeNodeKind::Variant, EBridgeValueKind::Variant, std::move(result), variantType);
 }
 
 //! Type of the value the running UDF has to return, as a value-less node.
@@ -1392,10 +1219,8 @@ ui64 BridgeTypeMemberHost(ui64 typeHandle, i32 index) {
     const TType* type = PeelOptional(TypeFromHandle(typeHandle, "BridgeTypeMember"));
     const TType* member = ElementTypeOf(type, static_cast<ui32>(index));
     if (!member) {
-        ythrow yexception()
-            << "Bridge: BridgeTypeMember index " << index
-            << " is out of range for the named type with "
-            << MemberCountOfType(type).value_or(0) << " members";
+        ythrow yexception() << "Bridge: BridgeTypeMember index " << index << " is out of range for the named type with "
+                            << MemberCountOfType(type).value_or(0) << " members";
     }
     return RegisterTypeRef(member);
 }
@@ -1419,7 +1244,7 @@ ui64 BridgeMakeDictHost(ui64 typeHandle, ui64 pairsOff, i32 n) {
     }
 
     // Keys reach the dict hasher, which reads them as the declared key type.
-    const TType* const pairTypes[] = {DictKeyTypeOf(dictType), DictPayloadTypeOf(dictType)};
+    const TType* const pairTypes[] = { DictKeyTypeOf(dictType), DictPayloadTypeOf(dictType) };
     auto values = ResolveHandleArray(pairsOff, static_cast<i64>(n) * 2, "BridgeMakeDict", pairTypes);
     auto* builder = CurrentValueBuilderOrThrow();
     auto dictBuilder = builder->NewDict(dictType, /*flags*/ 0);
@@ -1430,11 +1255,7 @@ ui64 BridgeMakeDictHost(ui64 typeHandle, ui64 pairsOff, i32 n) {
     // Typed: a dict the guest built is looked into later on -- by itself
     // through DictLookup, or by the host as a result -- and the key check
     // there has nothing to compare against without the type.
-    return RegisterOwned(
-        EBridgeNodeKind::Dict,
-        EBridgeValueKind::Dict,
-        dictBuilder->Build(),
-        dictType);
+    return RegisterOwned(EBridgeNodeKind::Dict, EBridgeValueKind::Dict, dictBuilder->Build(), dictType);
 }
 
 ui64 BridgeRunHost(ui64 callableHandle, ui64 argsOff, i32 n) {
@@ -1443,8 +1264,7 @@ ui64 BridgeRunHost(ui64 callableHandle, ui64 argsOff, i32 n) {
     }
     auto& query = CurrentQueryOrThrow();
     if (query.BridgeRunDepth >= MaxBridgeRunDepth) {
-        ythrow yexception()
-            << "Bridge: BridgeRun recursion limit exceeded (" << MaxBridgeRunDepth << ")";
+        ythrow yexception() << "Bridge: BridgeRun recursion limit exceeded (" << MaxBridgeRunDepth << ")";
     }
 
     const auto& callableNode = CurrentBridgeTable().Resolve(callableHandle);
@@ -1469,39 +1289,29 @@ ui64 BridgeRunHost(ui64 callableHandle, ui64 argsOff, i32 n) {
     const ui32 declared = inspector.GetArgsCount();
     const ui32 required = declared - Min(declared, inspector.GetOptionalArgsCount());
     if (static_cast<ui32>(n) < required || static_cast<ui32>(n) > declared) {
-        ythrow yexception()
-            << "Bridge: BridgeRun got " << n << " arguments, callable takes "
-            << required << ".." << declared;
+        ythrow yexception() << "Bridge: BridgeRun got " << n << " arguments, callable takes " << required << ".." << declared;
     }
 
     // Sized by the declaration, not by the guest: omitted optional arguments
     // stay empty in the slots the callee still reads.
     TVector<TUnboxedValue> argsStorage(declared);
     TVector<TUnboxedValuePod> argsPod(declared);
-    const ui64* handles = n == 0
-        ? nullptr
-        : PtrFromVM(compartment, std::bit_cast<ui64*>(static_cast<uintptr_t>(argsOff)), static_cast<size_t>(n));
+    const ui64* handles =
+        n == 0 ? nullptr : PtrFromVM(compartment, std::bit_cast<ui64*>(static_cast<uintptr_t>(argsOff)), static_cast<size_t>(n));
     for (i32 i = 0; i < n; ++i) {
         const ui64 h = handles[i];
         if (h != NullBridgeHandle) {
             const auto& argNode = CurrentBridgeTable().Resolve(h);
-            EnsureNodeMatchesType(
-                argNode,
-                inspector.GetArgType(static_cast<ui32>(i)),
-                "BridgeRun argument");
+            EnsureNodeMatchesType(argNode, inspector.GetArgType(static_cast<ui32>(i)), "BridgeRun argument");
             argsStorage[i] = argNode.Value;
         }
-        if (!argsStorage[i]
-            && static_cast<ui32>(i) < required
-            && !OptionalItemTypeOf(inspector.GetArgType(static_cast<ui32>(i))))
+        if (!argsStorage[i] && static_cast<ui32>(i) < required && !OptionalItemTypeOf(inspector.GetArgType(static_cast<ui32>(i))))
         {
             // An empty slot is how an argument is left out, and the callee
             // only tolerates that where the declaration lets it: a mandatory
             // argument is read without a check, and reading an absent value
             // as a string or a container aborts inside the accessor.
-            ythrow yexception()
-                << "Bridge: BridgeRun argument " << i
-                << " is null, but the callable declares it mandatory";
+            ythrow yexception() << "Bridge: BridgeRun argument " << i << " is null, but the callable declares it mandatory";
         }
         argsPod[i] = argsStorage[i];
     }
@@ -1526,9 +1336,7 @@ i64 BridgeCopyResourceTagHost(ui64 handle, ui64 dstOff, i64 cap) {
     EnsureKind(node, EBridgeValueKind::Resource, "BridgeCopyResourceTag");
     const TStringRef tag = node.Value.GetResourceTag();
     if (cap < 0 || static_cast<ui64>(cap) < tag.Size()) {
-        ythrow yexception()
-            << "Bridge: BridgeCopyResourceTag capacity " << cap
-            << " is less than tag length " << tag.Size();
+        ythrow yexception() << "Bridge: BridgeCopyResourceTag capacity " << cap << " is less than tag length " << tag.Size();
     }
     auto* compartment = CurrentCompartmentOrThrow();
     if (tag.Size() == 0) {
@@ -1552,9 +1360,9 @@ void BridgeSetUserDataHost(ui64 handle, ui64 value) {
     const auto& node = CurrentBridgeTable().Resolve(handle);
     const TBridgeIdentity key = BridgeIdentityKey(node.Value);
     if (!key) {
-        ythrow yexception()
-            << "Bridge: BridgeSetUserData needs a value with identity"
-               " (string or boxed), got kind " << static_cast<int>(node.ValueKind);
+        ythrow yexception() << "Bridge: BridgeSetUserData needs a value with identity"
+                               " (string or boxed), got kind "
+                            << static_cast<int>(node.ValueKind);
     }
     CurrentResidentCache().SetUserData(key, node.Value, value);
 }
@@ -1573,10 +1381,7 @@ i32 BridgeTakeReleasedUserDataHost(ui64 dstOff, i32 cap) {
     }
     auto& cache = CurrentResidentCache();
     auto* compartment = CurrentCompartmentOrThrow();
-    ui64* out = PtrFromVM(
-        compartment,
-        std::bit_cast<ui64*>(static_cast<uintptr_t>(dstOff)),
-        static_cast<size_t>(cap));
+    ui64* out = PtrFromVM(compartment, std::bit_cast<ui64*>(static_cast<uintptr_t>(dstOff)), static_cast<size_t>(cap));
     i32 count = 0;
     ui64 value = 0;
     while (count < cap && cache.PopReleasedUserData(value)) {
@@ -1597,77 +1402,75 @@ void BridgeUnrefHost(ui64 handle) {
 //! registration static WAVM picks up; BridgeIntrinsicAnchors turns the same
 //! line into a reference that keeps that static in the binary. Adding an
 //! intrinsic means adding one line here.
-#define BRIDGE_INTRINSICS(X) \
-    X(BridgeGetKind, BridgeGetKindHost, i32(ui64)) \
-    X(BridgeIsNull, BridgeIsNullHost, i32(ui64)) \
-    X(BridgeGetInt64, BridgeGetInt64Host, i64(ui64)) \
-    X(BridgeGetUint64, BridgeGetUint64Host, ui64(ui64)) \
-    X(BridgeGetInt32, BridgeGetInt32Host, i32(ui64)) \
-    X(BridgeGetUint32, BridgeGetUint32Host, ui32(ui64)) \
-    X(BridgeGetFloat, BridgeGetFloatHost, float(ui64)) \
-    X(BridgeGetDouble, BridgeGetDoubleHost, double(ui64)) \
-    X(BridgeCopyDecimal, BridgeCopyDecimalHost, void(ui64, ui64)) \
-    X(BridgeGetBool, BridgeGetBoolHost, i32(ui64)) \
-    X(BridgeGetStringLen, BridgeGetStringLenHost, i64(ui64)) \
-    X(BridgeCopyString, BridgeCopyStringHost, i64(ui64, ui64, i64)) \
-    X(BridgeEnsureString, BridgeEnsureStringHost, ui64(ui64)) \
-    X(BridgeGetOptional, BridgeGetOptionalHost, ui64(ui64)) \
-    X(BridgeGetElement, BridgeGetElementHost, ui64(ui64, i32)) \
-    X(BridgeGetMemberCount, BridgeGetMemberCountHost, i32(ui64)) \
-    X(BridgeGetMemberIndex, BridgeGetMemberIndexHost, i32(ui64, ui64, i64)) \
-    X(BridgeGetVariantIndex, BridgeGetVariantIndexHost, i32(ui64)) \
-    X(BridgeGetVariantItem, BridgeGetVariantItemHost, ui64(ui64)) \
-    X(BridgeListLength, BridgeListLengthHost, i64(ui64)) \
-    X(BridgeListHasItems, BridgeListHasItemsHost, i32(ui64)) \
-    X(BridgeListMakeIterator, BridgeListMakeIteratorHost, ui64(ui64)) \
-    X(BridgeListIterNext, BridgeListIterNextHost, i32(ui64, ui64*)) \
-    X(BridgeDictLength, BridgeDictLengthHost, i64(ui64)) \
-    X(BridgeDictHasItems, BridgeDictHasItemsHost, i32(ui64)) \
-    X(BridgeDictContains, BridgeDictContainsHost, i32(ui64, ui64)) \
-    X(BridgeDictLookup, BridgeDictLookupHost, ui64(ui64, ui64)) \
-    X(BridgeDictMakeIterator, BridgeDictMakeIteratorHost, ui64(ui64)) \
-    X(BridgeDictMakeKeysIterator, BridgeDictMakeKeysIteratorHost, ui64(ui64)) \
+#define BRIDGE_INTRINSICS(X)                                                          \
+    X(BridgeGetKind, BridgeGetKindHost, i32(ui64))                                    \
+    X(BridgeIsNull, BridgeIsNullHost, i32(ui64))                                      \
+    X(BridgeGetInt64, BridgeGetInt64Host, i64(ui64))                                  \
+    X(BridgeGetUint64, BridgeGetUint64Host, ui64(ui64))                               \
+    X(BridgeGetInt32, BridgeGetInt32Host, i32(ui64))                                  \
+    X(BridgeGetUint32, BridgeGetUint32Host, ui32(ui64))                               \
+    X(BridgeGetFloat, BridgeGetFloatHost, float(ui64))                                \
+    X(BridgeGetDouble, BridgeGetDoubleHost, double(ui64))                             \
+    X(BridgeCopyDecimal, BridgeCopyDecimalHost, void(ui64, ui64))                     \
+    X(BridgeGetBool, BridgeGetBoolHost, i32(ui64))                                    \
+    X(BridgeGetStringLen, BridgeGetStringLenHost, i64(ui64))                          \
+    X(BridgeCopyString, BridgeCopyStringHost, i64(ui64, ui64, i64))                   \
+    X(BridgeEnsureString, BridgeEnsureStringHost, ui64(ui64))                         \
+    X(BridgeGetOptional, BridgeGetOptionalHost, ui64(ui64))                           \
+    X(BridgeGetElement, BridgeGetElementHost, ui64(ui64, i32))                        \
+    X(BridgeGetMemberCount, BridgeGetMemberCountHost, i32(ui64))                      \
+    X(BridgeGetMemberIndex, BridgeGetMemberIndexHost, i32(ui64, ui64, i64))           \
+    X(BridgeGetVariantIndex, BridgeGetVariantIndexHost, i32(ui64))                    \
+    X(BridgeGetVariantItem, BridgeGetVariantItemHost, ui64(ui64))                     \
+    X(BridgeListLength, BridgeListLengthHost, i64(ui64))                              \
+    X(BridgeListHasItems, BridgeListHasItemsHost, i32(ui64))                          \
+    X(BridgeListMakeIterator, BridgeListMakeIteratorHost, ui64(ui64))                 \
+    X(BridgeListIterNext, BridgeListIterNextHost, i32(ui64, ui64*))                   \
+    X(BridgeDictLength, BridgeDictLengthHost, i64(ui64))                              \
+    X(BridgeDictHasItems, BridgeDictHasItemsHost, i32(ui64))                          \
+    X(BridgeDictContains, BridgeDictContainsHost, i32(ui64, ui64))                    \
+    X(BridgeDictLookup, BridgeDictLookupHost, ui64(ui64, ui64))                       \
+    X(BridgeDictMakeIterator, BridgeDictMakeIteratorHost, ui64(ui64))                 \
+    X(BridgeDictMakeKeysIterator, BridgeDictMakeKeysIteratorHost, ui64(ui64))         \
     X(BridgeDictMakePayloadsIterator, BridgeDictMakePayloadsIteratorHost, ui64(ui64)) \
-    X(BridgeDictIterNext, BridgeDictIterNextHost, i32(ui64, ui64*, ui64*)) \
-    X(BridgeMakeNull, BridgeMakeNullHost, ui64()) \
-    X(BridgeMakeInt64, BridgeMakeInt64Host, ui64(i64)) \
-    X(BridgeMakeUint64, BridgeMakeUint64Host, ui64(ui64)) \
-    X(BridgeMakeInt32, BridgeMakeInt32Host, ui64(i32)) \
-    X(BridgeMakeUint32, BridgeMakeUint32Host, ui64(ui32)) \
-    X(BridgeMakeFloat, BridgeMakeFloatHost, ui64(float)) \
-    X(BridgeMakeDouble, BridgeMakeDoubleHost, ui64(double)) \
-    X(BridgeMakeBool, BridgeMakeBoolHost, ui64(i32)) \
-    X(BridgeMakeString, BridgeMakeStringHost, ui64(ui64, i64)) \
-    X(BridgeMakeOptional, BridgeMakeOptionalHost, ui64(ui64)) \
-    X(BridgeMakeArray, BridgeMakeArrayHost, ui64(ui64, i32)) \
-    X(BridgeMakeStruct, BridgeMakeStructHost, ui64(ui64, i32)) \
-    X(BridgeMakeList, BridgeMakeListHost, ui64(ui64, i32)) \
-    X(BridgeMakeVariant, BridgeMakeVariantHost, ui64(i32, ui64)) \
-    X(BridgeGetResultType, BridgeGetResultTypeHost, ui64()) \
-    X(BridgeTypeOptionalItem, BridgeTypeOptionalItemHost, ui64(ui64)) \
-    X(BridgeTypeListItem, BridgeTypeListItemHost, ui64(ui64)) \
-    X(BridgeTypeMember, BridgeTypeMemberHost, ui64(ui64, i32)) \
-    X(BridgeMakeArrayTyped, BridgeMakeArrayTypedHost, ui64(ui64, ui64, i32)) \
-    X(BridgeMakeStructTyped, BridgeMakeStructTypedHost, ui64(ui64, ui64, i32)) \
-    X(BridgeMakeListTyped, BridgeMakeListTypedHost, ui64(ui64, ui64, i32)) \
-    X(BridgeMakeDict, BridgeMakeDictHost, ui64(ui64, ui64, i32)) \
-    X(BridgeRun, BridgeRunHost, ui64(ui64, ui64, i32)) \
-    X(BridgeGetResourceTagLen, BridgeGetResourceTagLenHost, i64(ui64)) \
-    X(BridgeCopyResourceTag, BridgeCopyResourceTagHost, i64(ui64, ui64, i64)) \
-    X(BridgeGetUserData, BridgeGetUserDataHost, ui64(ui64)) \
-    X(BridgeSetUserData, BridgeSetUserDataHost, void(ui64, ui64)) \
-    X(BridgeAllocResident, BridgeAllocResidentHost, ui64(ui64)) \
-    X(BridgeFreeResident, BridgeFreeResidentHost, void(ui64)) \
-    X(BridgeTakeReleasedUserData, BridgeTakeReleasedUserDataHost, i32(ui64, i32)) \
-    X(BridgeRef, BridgeRefHost, void(ui64)) \
+    X(BridgeDictIterNext, BridgeDictIterNextHost, i32(ui64, ui64*, ui64*))            \
+    X(BridgeMakeNull, BridgeMakeNullHost, ui64())                                     \
+    X(BridgeMakeInt64, BridgeMakeInt64Host, ui64(i64))                                \
+    X(BridgeMakeUint64, BridgeMakeUint64Host, ui64(ui64))                             \
+    X(BridgeMakeInt32, BridgeMakeInt32Host, ui64(i32))                                \
+    X(BridgeMakeUint32, BridgeMakeUint32Host, ui64(ui32))                             \
+    X(BridgeMakeFloat, BridgeMakeFloatHost, ui64(float))                              \
+    X(BridgeMakeDouble, BridgeMakeDoubleHost, ui64(double))                           \
+    X(BridgeMakeBool, BridgeMakeBoolHost, ui64(i32))                                  \
+    X(BridgeMakeString, BridgeMakeStringHost, ui64(ui64, i64))                        \
+    X(BridgeMakeOptional, BridgeMakeOptionalHost, ui64(ui64))                         \
+    X(BridgeMakeArray, BridgeMakeArrayHost, ui64(ui64, i32))                          \
+    X(BridgeMakeStruct, BridgeMakeStructHost, ui64(ui64, i32))                        \
+    X(BridgeMakeList, BridgeMakeListHost, ui64(ui64, i32))                            \
+    X(BridgeMakeVariant, BridgeMakeVariantHost, ui64(i32, ui64))                      \
+    X(BridgeGetResultType, BridgeGetResultTypeHost, ui64())                           \
+    X(BridgeTypeOptionalItem, BridgeTypeOptionalItemHost, ui64(ui64))                 \
+    X(BridgeTypeListItem, BridgeTypeListItemHost, ui64(ui64))                         \
+    X(BridgeTypeMember, BridgeTypeMemberHost, ui64(ui64, i32))                        \
+    X(BridgeMakeArrayTyped, BridgeMakeArrayTypedHost, ui64(ui64, ui64, i32))          \
+    X(BridgeMakeStructTyped, BridgeMakeStructTypedHost, ui64(ui64, ui64, i32))        \
+    X(BridgeMakeListTyped, BridgeMakeListTypedHost, ui64(ui64, ui64, i32))            \
+    X(BridgeMakeDict, BridgeMakeDictHost, ui64(ui64, ui64, i32))                      \
+    X(BridgeRun, BridgeRunHost, ui64(ui64, ui64, i32))                                \
+    X(BridgeGetResourceTagLen, BridgeGetResourceTagLenHost, i64(ui64))                \
+    X(BridgeCopyResourceTag, BridgeCopyResourceTagHost, i64(ui64, ui64, i64))         \
+    X(BridgeGetUserData, BridgeGetUserDataHost, ui64(ui64))                           \
+    X(BridgeSetUserData, BridgeSetUserDataHost, void(ui64, ui64))                     \
+    X(BridgeAllocResident, BridgeAllocResidentHost, ui64(ui64))                       \
+    X(BridgeFreeResident, BridgeFreeResidentHost, void(ui64))                         \
+    X(BridgeTakeReleasedUserData, BridgeTakeReleasedUserDataHost, i32(ui64, i32))     \
+    X(BridgeRef, BridgeRefHost, void(ui64))                                           \
     X(BridgeUnref, BridgeUnrefHost, void(ui64))
 
 BRIDGE_INTRINSICS(WASM_INTRINSIC)
 
 #define BRIDGE_INTRINSIC_ADDRESS(ExportName, Fn, Signature) &IntrinsicFunction##ExportName,
-WAVM::Intrinsics::Function* const BridgeIntrinsicAnchors[] = {
-    BRIDGE_INTRINSICS(BRIDGE_INTRINSIC_ADDRESS)
-};
+WAVM::Intrinsics::Function* const BridgeIntrinsicAnchors[] = { BRIDGE_INTRINSICS(BRIDGE_INTRINSIC_ADDRESS) };
 #undef BRIDGE_INTRINSIC_ADDRESS
 
 #undef BRIDGE_INTRINSICS
@@ -1682,10 +1485,10 @@ void KeepBridgeIntrinsicsLinked() {
     [[maybe_unused]] WAVM::Intrinsics::Function* volatile anchor = BridgeIntrinsicAnchors[0];
 }
 
-} // namespace
+}   // namespace
 
 void KeepBridgeHostIntrinsicsLinked() {
     KeepBridgeIntrinsicsLinked();
 }
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

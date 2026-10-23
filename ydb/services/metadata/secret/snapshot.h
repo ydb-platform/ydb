@@ -1,10 +1,10 @@
 #pragma once
-#include "secret.h"
 #include "access.h"
+#include "secret.h"
 
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/secret/accessor/snapshot.h>
-#include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NMetadata::NSecret {
 
@@ -16,11 +16,14 @@ private:
     YDB_READONLY_DEF(TSecrets, Secrets);
     YDB_READONLY_DEF(std::vector<TAccess>, Access);
     YDB_READONLY_DEF(TIdsByName, IndexByName);
+
 private:
     void BuildIndex();
+
 protected:
     virtual bool DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) override;
     virtual TString DoSerializeToString() const override;
+
 public:
     using TBase::TBase;
     bool CheckSecretAccess(const TSecretIdOrValue& sIdOrValue, const NACLib::TUserToken& userToken) const override;
@@ -29,4 +32,4 @@ public:
     std::vector<TSecretId> GetSecretIds(const std::optional<NACLib::TUserToken>& userToken, const TString& secretId) const override;
 };
 
-}
+}   // namespace NKikimr::NMetadata::NSecret

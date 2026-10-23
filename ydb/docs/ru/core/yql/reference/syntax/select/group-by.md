@@ -1,5 +1,3 @@
-{% if select_command != "SELECT STREAM" %}
-
 ## GROUP BY
 
 Группирует результаты `SELECT` по значениям указанных столбцов или выражений. Вместе с `GROUP BY` часто применяются [агрегатные функции](../../builtins/aggregation.md) (`COUNT`, `MAX`, `MIN`, `SUM`, `AVG`) для выполнения вычислений в каждой группе.
@@ -266,8 +264,6 @@ GROUP /*+ COMPACT() */ BY key
 ORDER BY count DESC
 LIMIT 3;
 ```
-
-{% endif %}
 
 ## GROUP BY ... HOP {#group-by-hop}
 

@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "dst_alterer.h"
 #include "dst_creator.h"
 #include "dst_schema_changer.h"
 
@@ -15,8 +16,10 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/executor_pool_base.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
+#include <ydb/library/testlib/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/scope.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
@@ -494,20 +497,25 @@ TReplicationTestInfo StartReplication(
         int targetCount = 1,
         const TString& token = "root@builtin",
         bool globalConsistency = false, bool withIndex = false,
-        NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool mockService = true)
+        NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool mockService = true,
+        TMaybe<bool> initialScan = Nothing())
 {
     NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
         .DiscoveryEndpoint(env.GetEndpoint())
         .Database(env.GetDatabase()));
-    auto session = client.CreateSession().GetValueSync().GetSession();
+    auto session = env.RunCall([&] {
+        return client.CreateSession().GetValueSync().GetSession();
+    });
     for (int i = 1; i <= targetCount; ++i) {
         if (withIndex) {
-            const auto status = session.ExecuteSchemeQuery(Sprintf(R"(
-                CREATE TABLE `/Root/table%i` (
-                    key Uint32, value Utf8, PRIMARY KEY (key),
-                    INDEX by_value GLOBAL %s ON (value)
-                );
-            )", i, indexType == NKikimrSchemeOp::EIndexTypeGlobalAsync ? "ASYNC" : "SYNC")).GetValueSync();
+            const auto status = env.RunCall([&] {
+                return session.ExecuteSchemeQuery(Sprintf(R"(
+                    CREATE TABLE `/Root/table%i` (
+                        key Uint32, value Utf8, PRIMARY KEY (key),
+                        INDEX by_value GLOBAL %s ON (value)
+                    );
+                )", i, indexType == NKikimrSchemeOp::EIndexTypeGlobalAsync ? "ASYNC" : "SYNC")).GetValueSync();
+            });
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         } else {
             CreateSourceTable(env, Sprintf("table%i", i));
@@ -532,10 +540,15 @@ TReplicationTestInfo StartReplication(
         params.push_back(R"(CONSISTENCY_LEVEL = "GLOBAL")");
         params.push_back(R"(COMMIT_INTERVAL = Interval("PT10S"))");
     }
+    if (initialScan) {
+        params.push_back(TStringBuilder() << "INITIAL_SCAN = " << (*initialScan ? "TRUE" : "FALSE"));
+    }
 
-    const auto status = session.ExecuteSchemeQuery(Sprintf(R"(
-        CREATE ASYNC REPLICATION `replication` FOR %s WITH (%s);
-    )", JoinSeq(", ", targets).c_str(), JoinSeq(", ", params).c_str())).GetValueSync();
+    const auto status = env.RunCall([&] {
+        return session.ExecuteSchemeQuery(Sprintf(R"(
+            CREATE ASYNC REPLICATION `replication` FOR %s WITH (%s);
+        )", JoinSeq(", ", targets).c_str(), JoinSeq(", ", params).c_str())).GetValueSync();
+    });
     UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), NYdb::EStatus::SUCCESS, status.GetIssues().ToString());
 
     const auto desc = env.GetDescription("/Root/replication").GetPathDescription().GetReplicationDescription();
@@ -893,10 +906,10 @@ struct TPendingAttachment {
 };
 
 TPendingAttachment StartPendingAttachment(TTestEnv& env) {
-    env.GetRuntime().GetAppData().ReplicationConfig.SetSkipInitialScan(true);
+    env.GetRuntime().GetAppData().ReplicationConfig.SetInitialScan(false);
     CreateSourceTable(env, "replica1");
     const auto info = StartReplication(env);
-    UNIT_ASSERT(info.Config.GetSkipInitialScan());
+    UNIT_ASSERT(!info.Config.GetInitialScan());
 
     ui64 targetId = 0;
     bool foundTarget = false;
@@ -921,7 +934,7 @@ TPendingAttachment StartPendingAttachment(TTestEnv& env) {
         env.GetSender(), env.GetSchemeshardId("/Root/table1"), env.GetYdbProxy(),
         "/Root", info.PathId, 1, targetId, TReplication::ETargetKind::Table,
         "/Root/table1", "/Root/replica1", EReplicationMode::ReadOnly,
-        EConsistencyLevel::Row, true));
+        EConsistencyLevel::Row, false));
 
     auto prepare = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDst>(env.GetSender());
     const auto dstPathId = prepare->Get()->DstPathId;
@@ -952,6 +965,79 @@ void AssertDestinationWritable(TTestEnv& env) {
         NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
 }
 
+void AssertAttachmentPaths(TTestEnv& env, const TPendingAttachment& attachment, const TPathId& pendingPathId) {
+    NKikimrMiniKQL::TResult result;
+    const auto status = LocalQuery(env.GetRuntime(), attachment.Info.ControllerId, Sprintf(R"((
+        (let key '('('ReplicationId (Uint64 '1)) '('Id (Uint64 '%lu))))
+        (return (AsList (SetResult 'Paths (SelectRow 'Targets key
+            '('DstPathLocalId 'DstPathOwnerId 'PendingDstPathLocalId 'PendingDstPathOwnerId)))))
+    ))", attachment.TargetId), result);
+    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
+    const auto& row = result.GetValue().GetStruct(0).GetOptional();
+    UNIT_ASSERT_C(row.HasOptional(), result.DebugString());
+    const auto& paths = row.GetOptional();
+    for (ui32 i = 0; i < 4; ++i) {
+        UNIT_ASSERT_C(paths.GetStruct(i).HasOptional(), result.DebugString());
+    }
+    UNIT_ASSERT_VALUES_EQUAL(TPathId(paths.GetStruct(1).GetOptional().GetUint64(),
+        paths.GetStruct(0).GetOptional().GetUint64()), TPathId());
+    UNIT_ASSERT_VALUES_EQUAL(TPathId(paths.GetStruct(3).GetOptional().GetUint64(),
+        paths.GetStruct(2).GetOptional().GetUint64()), pendingPathId);
+}
+
+void CheckDoneAfterAttachmentError(bool restart, bool doneBeforeError = false) {
+    TTestEnv env;
+    const auto pending = StartPendingAttachment(env);
+    const auto& info = pending.Info;
+    auto& runtime = env.GetRuntime();
+    const auto pipeService = MakePipePerNodeCacheID(false);
+    const auto pipeCache = runtime.GetLocalServiceId(pipeService);
+    TActorId gate;
+
+    const auto requestDone = [&] {
+        const auto result = env.Send<TEvController::TEvAlterReplicationResult>(
+            info.ControllerId, MakeDoneRequest(info, 105));
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(),
+            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+    };
+    if (doneBeforeError) {
+        // Hold the recovery creator's description so it cannot replace the
+        // validation error with a successful result while DONE is waiting.
+        gate = runtime.Register(new TSchemaDescribeGate(pipeCache, env.GetSender(), pending.DstPathId));
+        runtime.RegisterService(pipeService, gate);
+        requestDone();
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
+            TSchemaDescribeGate::Blocked);
+        UNIT_ASSERT(!DescribeReplication(env, info)->Get()->Record.GetState().HasDone());
+    }
+
+    // The attachment ALTER has committed, but its post-ALTER description failed
+    // validation. The controller has only the persisted pending path to detach.
+    env.SendAsync(info.ControllerId, new TEvPrivate::TEvCreateDstResult(1, pending.TargetId,
+        NKikimrScheme::StatusSchemeError, "Replication consistency level mismatch"));
+    if (!doneBeforeError) {
+        UNIT_ASSERT(WaitFor([&] {
+            return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
+        }));
+        AssertAttachmentPaths(env, pending, pending.DstPathId);
+
+        if (restart) {
+            RestartController(env, info.ControllerId);
+            UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasError());
+            AssertAttachmentPaths(env, pending, pending.DstPathId);
+        }
+        requestDone();
+    }
+
+    AssertEventuallyDone(env, info);
+    AssertDestinationWritable(env);
+    AssertAttachmentPaths(env, pending, {});
+    if (gate) {
+        runtime.RegisterService(pipeService, pipeCache);
+        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaDescribeGate::Release));
+    }
+}
+
 void AssertIndexCancellationCleanedUp(TIndexBuildTestEnv& env) {
     AssertDestinationWritable(env);
     UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription()
@@ -964,7 +1050,176 @@ void AssertIndexCancellationCleanedUp(TIndexBuildTestEnv& env) {
 
 } // anonymous namespace
 
+Y_UNIT_TEST_SUITE(ReplicationCreation) {
+    Y_UNIT_TEST(InitialScanDisabledDoesNotTouchMissingDestination) {
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        const TString destination = "/Root/replica1";
+        const auto missingDestinationStatus = static_cast<int>(NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetSchemeStatus(), missingDestinationStatus);
+
+        ui32 destinationCreators = 0;
+        TTestActorRuntimeBase::TRegistrationObserver previousRegistrationObserver;
+        previousRegistrationObserver = runtime.SetRegistrationObserverFunc(
+            [&](TTestActorRuntimeBase& actorRuntime, const TActorId& parent, const TActorId& actorId) {
+                previousRegistrationObserver(actorRuntime, parent, actorId);
+                if (actorRuntime.FindActor(actorId)->GetActivityType()
+                    == NKikimrServices::TActivity::REPLICATION_CONTROLLER_DST_CREATOR)
+                {
+                    ++destinationCreators;
+                }
+            });
+        Y_DEFER {
+            runtime.SetRegistrationObserverFunc(std::move(previousRegistrationObserver));
+        };
+
+        bool streamCreated = false;
+        auto streamObserver = runtime.AddObserver(
+            [&](IEventHandle::TPtr& ev) {
+                if (ev->GetTypeRewrite() != TEvPrivate::EvCreateStreamResult || !ev->HasEvent()) {
+                    return;
+                }
+                // Private event numbers are shared by unrelated actors.
+                if (const auto* result = dynamic_cast<TEvPrivate::TEvCreateStreamResult*>(ev->GetBase())) {
+                    UNIT_ASSERT_C(result->IsSuccess(), result->Status.GetIssues().ToString());
+                    streamCreated = true;
+                }
+            });
+
+        const auto info = StartReplication(env, 1, "root@builtin", false, false,
+            NKikimrSchemeOp::EIndexTypeGlobal, true, false);
+        UNIT_ASSERT(!info.Config.GetInitialScan());
+        runtime.WaitFor("source stream creation", [&] { return streamCreated; }, TDuration::Seconds(60));
+
+        const auto state = DescribeReplication(env, info);
+        UNIT_ASSERT_C(state->Get()->Record.GetStatus() == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS,
+            state->Get()->Record.DebugString());
+        UNIT_ASSERT_C(state->Get()->Record.GetState().HasPaused(), state->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(state->Get()->Record.TargetsSize(), 1);
+        const auto targetId = state->Get()->Record.GetTargets(0).GetId();
+        // The committed stream capability proves source setup has completed.
+        UNIT_ASSERT(ReadStreamSchemaChanges(env, info.ControllerId, TWorkerId(1, targetId, 0)).has_value());
+        UNIT_ASSERT_VALUES_EQUAL(destinationCreators, 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetSchemeStatus(), missingDestinationStatus);
+
+        // Reloading the ready source stream also exercises target progress during startup.
+        RestartController(env, info.ControllerId);
+        const auto restarted = DescribeReplication(env, info);
+        UNIT_ASSERT_C(restarted->Get()->Record.GetState().HasPaused(), restarted->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(restarted->Get()->Record.TargetsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(destinationCreators, 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetSchemeStatus(), missingDestinationStatus);
+    }
+
+    Y_UNIT_TEST_TWIN(InitialScan, ConfigInitialScan) {
+        for (const auto initialScan : TVector<TMaybe<bool>>{Nothing(), false, true}) {
+            TTestEnv env;
+            env.GetRuntime().GetAppData().ReplicationConfig.SetInitialScan(ConfigInitialScan);
+            const bool expectedInitialScan = initialScan.GetOrElse(ConfigInitialScan);
+            if (!expectedInitialScan) {
+                CreateSourceTable(env, "replica1");
+            }
+
+            const auto info = StartReplication(env, 1, "root@builtin", false, false,
+                NKikimrSchemeOp::EIndexTypeGlobal, true, initialScan);
+            UNIT_ASSERT_VALUES_EQUAL(info.Config.GetInitialScan(), expectedInitialScan);
+
+            const auto desc = env.GetDescription("/Root/replication").GetPathDescription().GetReplicationDescription();
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetState().HasPaused(), !expectedInitialScan);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetState().HasStandBy(), expectedInitialScan);
+        }
+    }
+}
+
 Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
+    Y_UNIT_TEST(DoneAfterDestinationNameConflict) {
+        for (const auto status : {NKikimrScheme::StatusPathDoesNotExist,
+                NKikimrScheme::StatusSuccess, NKikimrScheme::StatusSchemeError}) {
+            TTestActorRuntime runtime;
+            runtime.Initialize(TAppPrepare().Unwrap());
+            const auto parent = runtime.AllocateEdgeActor();
+            const auto allocator = runtime.AllocateEdgeActor();
+            const auto pipeCache = runtime.AllocateEdgeActor();
+            runtime.RegisterService(MakeTxProxyID(), allocator);
+            const TPathId pathId(1, 2);
+            const auto alterer = runtime.Register(CreateDstAlterer(parent, pathId.OwnerId,
+                1, 1, TReplication::ETargetKind::Table, pathId, TReplication::EState::Done));
+
+            runtime.GrabEdgeEvent<TEvTxUserProxy::TEvAllocateTxId>(allocator);
+            NTxProxy::TTxProxyServices services;
+            services.LeaderPipeCache = pipeCache;
+            runtime.Send(alterer, allocator,
+                new TEvTxUserProxy::TEvAllocateTxIdResult(100, services, {}));
+            const auto alter = runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(pipeCache);
+            UNIT_ASSERT_VALUES_EQUAL(alter->Get()->Ev->Type(),
+                NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType);
+            const TString error = "path is empty";
+            runtime.Send(alterer, pipeCache,
+                new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(
+                    NKikimrScheme::StatusNameConflict, 100, pathId.OwnerId, error));
+
+            const auto describe = runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(pipeCache);
+            UNIT_ASSERT_VALUES_EQUAL(describe->Get()->Ev->Type(),
+                NSchemeShard::TEvSchemeShard::TEvDescribeScheme::EventType);
+            const auto& request = static_cast<NSchemeShard::TEvSchemeShard::TEvDescribeScheme*>(
+                describe->Get()->Ev.Get())->Record;
+            UNIT_ASSERT_VALUES_EQUAL(request.GetSchemeshardId(), pathId.OwnerId);
+            UNIT_ASSERT_VALUES_EQUAL(request.GetPathId(), pathId.LocalPathId);
+            auto description = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+            description->Record.SetStatus(status);
+            runtime.Send(alterer, pipeCache, description.Release());
+
+            const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvAlterDstResult>(parent);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->IsSuccess(),
+                status == NKikimrScheme::StatusPathDoesNotExist);
+            if (!result->Get()->IsSuccess()) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusNameConflict);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Error, error);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(DoneAfterAttachmentValidationError) {
+        CheckDoneAfterAttachmentError(false);
+    }
+
+    Y_UNIT_TEST(DoneAfterAttachmentValidationErrorAndRestartWithoutSource) {
+        CheckDoneAfterAttachmentError(true);
+    }
+
+    Y_UNIT_TEST(DoneBeforeAttachmentValidationError) {
+        CheckDoneAfterAttachmentError(false, true);
+    }
+
+    Y_UNIT_TEST(DoneAfterPendingDestinationDeleted) {
+        TTestEnv env;
+        const auto pending = StartPendingAttachment(env);
+        const auto& info = pending.Info;
+
+        env.SendAsync(info.ControllerId, new TEvPrivate::TEvCreateDstResult(1, pending.TargetId,
+            NKikimrScheme::StatusSchemeError, "Cannot validate attached destination"));
+        UNIT_ASSERT(WaitFor([&] {
+            return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
+        }));
+        AssertAttachmentPaths(env, pending, pending.DstPathId);
+
+        NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
+            .DiscoveryEndpoint(env.GetEndpoint())
+            .Database(env.GetDatabase()));
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        const auto drop = session.ExecuteSchemeQuery("DROP TABLE `/Root/replica1`;").GetValueSync();
+        UNIT_ASSERT_C(drop.IsSuccess(), drop.GetIssues().ToString());
+
+        const auto result = env.Send<TEvController::TEvAlterReplicationResult>(
+            info.ControllerId, MakeDoneRequest(info, 106));
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(),
+            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+        AssertEventuallyDone(env, info);
+        AssertAttachmentPaths(env, pending, {});
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetSchemeStatus(),
+            NKikimrScheme::StatusPathDoesNotExist);
+    }
+
     Y_UNIT_TEST(DoneAfterAttachAlterBeforeResult) {
         TTestEnv env;
         const auto pending = StartPendingAttachment(env);
@@ -1044,7 +1299,7 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
     Y_UNIT_TEST(DropWaitsForDelayedAttachAllocation) {
         TTestEnv env;
         auto& runtime = env.GetRuntime();
-        runtime.GetAppData().ReplicationConfig.SetSkipInitialScan(true);
+        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
         CreateSourceTable(env, "replica1");
         const auto info = StartReplication(env);
 
@@ -1789,11 +2044,21 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
             .Database(env.GetDatabase()));
         auto session = client.CreateSession().GetValueSync().GetSession();
         const auto upsert = [&](ui32 key) {
-            const auto result = session.ExecuteDataQuery(Sprintf(
-                "UPSERT INTO `/Root/table1` (key, value) VALUES (%u, 'value');", key),
-                NYdb::NTable::TTxControl::BeginTx()
-                        .CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            for (ui32 attempt = 0; attempt < 50; ++attempt) {
+                const auto result = session.ExecuteDataQuery(Sprintf(
+                    "UPSERT INTO `/Root/table1` (key, value) VALUES (%u, 'value');", key),
+                    NYdb::NTable::TTxControl::BeginTx()
+                            .CommitTx()).GetValueSync();
+                if (result.IsSuccess()) {
+                    return;
+                }
+
+                const auto status = result.GetStatus();
+                UNIT_ASSERT_C(attempt + 1 < 50 &&
+                    (status == NYdb::EStatus::ABORTED || status == NYdb::EStatus::SCHEME_ERROR),
+                    result.GetIssues().ToString());
+                Sleep(TDuration::MilliSeconds(100));
+            }
         };
         const auto waitForRow = [&](ui32 key) {
             for (ui32 attempt = 0; attempt < 600; ++attempt) {

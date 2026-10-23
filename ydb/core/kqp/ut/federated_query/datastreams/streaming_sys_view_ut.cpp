@@ -29,37 +29,21 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         StartQuery("E");
         Sleep(STATS_WAIT_DURATION);
 
-        CheckSysView({
-            {"A"}, {"B"}, {"C"}, {"D"}, {"E"}
-        });
+        CheckSysView({ { "A" }, { "B" }, { "C" }, { "D" }, { "E" } });
 
-        CheckSysView({
-            {"B"}, {"C"}, {"D"}
-        }, "Path > '/Root/A' AND Path < '/Root/E'");
+        CheckSysView({ { "B" }, { "C" }, { "D" } }, "Path > '/Root/A' AND Path < '/Root/E'");
 
-        CheckSysView({
-            {"C"}, {"D"}, {"E"}
-        }, "Path > '/Root/B'");
+        CheckSysView({ { "C" }, { "D" }, { "E" } }, "Path > '/Root/B'");
 
-        CheckSysView({
-            {"A"}, {"B"}
-        }, "Path < '/Root/C'");
+        CheckSysView({ { "A" }, { "B" } }, "Path < '/Root/C'");
 
-        CheckSysView({
-            {"C"}, {"D"}, {"E"}
-        }, "Path >= '/Root/C' AND Path <= '/Root/E'");
+        CheckSysView({ { "C" }, { "D" }, { "E" } }, "Path >= '/Root/C' AND Path <= '/Root/E'");
 
-        CheckSysView({
-            {"D"}, {"E"}
-        }, "Path >= '/Root/D'");
+        CheckSysView({ { "D" }, { "E" } }, "Path >= '/Root/D'");
 
-        CheckSysView({
-            {"A"}, {"B"}
-        }, "Path <= '/Root/B'");
+        CheckSysView({ { "A" }, { "B" } }, "Path <= '/Root/B'");
 
-        CheckSysView({
-            {"C"}
-        }, "Path = '/Root/C'");
+        CheckSysView({ { "C" } }, "Path = '/Root/C'");
     }
 
     Y_UNIT_TEST_F(ReadWithoutAuth, TStreamingSysViewTestFixture) {
@@ -71,9 +55,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         StartQuery("C");
         Sleep(STATS_WAIT_DURATION);
 
-        CheckSysView({
-            {"A"}, {"B"}, {"C"}
-        });
+        CheckSysView({ { "A" }, { "B" }, { "C" } });
     }
 
     Y_UNIT_TEST_F(SortOrderForSysView, TStreamingSysViewTestFixture) {
@@ -85,21 +67,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         StartQuery("D");
         Sleep(STATS_WAIT_DURATION);
 
-        CheckSysView({
-            {"A"}, {"B"}, {"C"}, {"D"}
-        }, "", "Path ASC");
+        CheckSysView({ { "A" }, { "B" }, { "C" }, { "D" } }, "", "Path ASC");
 
-        CheckSysView({
-            {"C"}, {"D"}
-        }, "Path >= '/Root/C'", "Path ASC");
+        CheckSysView({ { "C" }, { "D" } }, "Path >= '/Root/C'", "Path ASC");
 
-        CheckSysView({
-            {"D"}, {"C"}, {"B"}, {"A"}
-        }, "", "Path DESC");
+        CheckSysView({ { "D" }, { "C" }, { "B" }, { "A" } }, "", "Path DESC");
 
-        CheckSysView({
-            {"D"}, {"C"}
-        }, "Path >= '/Root/C'", "Path DESC");
+        CheckSysView({ { "D" }, { "C" } }, "Path >= '/Root/C'", "Path DESC");
     }
 
     Y_UNIT_TEST_F(SysViewColumnsValues, TStreamingSysViewTestFixture) {
@@ -113,52 +87,47 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             CREATE STREAMING QUERY `{query_name}` WITH (
                 RUN = FALSE,
                 RESOURCE_POOL = "MyResourcePool"
-            ) AS DO BEGIN{text}END DO)",
-            "query_name"_a = queryName,
-            "text"_a = GetQueryText(queryName)
-        ));
+            ) AS DO BEGIN{text}END DO)", "query_name"_a = queryName, "text"_a = GetQueryText(queryName)));
 
-        CheckSysView({{
+        CheckSysView({ {
             .Name = queryName,
             .Status = "CREATED",
             .Run = false,
             .Pool = "MyResourcePool",
-        }});
+        } });
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
-            ))",
-            "query_name"_a = queryName
-        ));
+            ))", "query_name"_a = queryName));
 
-        auto readSession = pqGateway->WaitReadSession(TString{InputTopic});
+        auto readSession = pqGateway->WaitReadSession(TString{ InputTopic });
         readSession->AddDataReceivedEvent(0, "test0");
-        pqGateway->WaitWriteSession(TString{OutputTopic})->ExpectMessage("test0");
+        pqGateway->WaitWriteSession(TString{ OutputTopic })->ExpectMessage("test0");
 
         {
             Sleep(STATS_WAIT_DURATION);
-            const auto result = CheckSysView({{
+            const auto result = CheckSysView({ {
                 .Name = queryName,
                 .Status = "RUNNING",
                 .Run = true,
                 .Pool = "MyResourcePool",
-            }})[0];
+            } })[0];
 
             UNIT_ASSERT_VALUES_EQUAL(result.PreviousExecutionIds.size(), 0);
-            const auto operation = GetScriptExecutionOperation(OperationIdFromExecutionId(TString{result.ExecutionId}));
+            const auto operation = GetScriptExecutionOperation(OperationIdFromExecutionId(TString{ result.ExecutionId }));
             UNIT_ASSERT_VALUES_EQUAL(operation.Metadata().ExecStatus, EExecStatus::Running);
         }
 
         auto failAt = TInstant::Now();
-        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
-        readSession = pqGateway->WaitReadSession(TString{InputTopic});
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, { NIssue::TIssue("Test pq session failure") });
+        readSession = pqGateway->WaitReadSession(TString{ InputTopic });
         readSession->AddDataReceivedEvent(0, "test0");
-        pqGateway->WaitWriteSession(TString{OutputTopic})->ExpectMessage("test0");
+        pqGateway->WaitWriteSession(TString{ OutputTopic })->ExpectMessage("test0");
 
         {
             Sleep(TDuration::Seconds(1));
-            const auto result = CheckSysView({{
+            const auto result = CheckSysView({ {
                 .Name = queryName,
                 .Status = "RUNNING",
                 .Issues = "Test pq session failure",
@@ -166,22 +135,20 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
                 .Pool = "MyResourcePool",
                 .RetryCount = 1,
                 .LastFailAt = failAt,
-            }})[0];
+            } })[0];
 
             UNIT_ASSERT_VALUES_EQUAL(result.PreviousExecutionIds.size(), 0);
-            const auto operation = GetScriptExecutionOperation(OperationIdFromExecutionId(TString{result.ExecutionId}));
+            const auto operation = GetScriptExecutionOperation(OperationIdFromExecutionId(TString{ result.ExecutionId }));
             UNIT_ASSERT_VALUES_EQUAL(operation.Metadata().ExecStatus, EExecStatus::Running);
         }
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
-            ))",
-            "query_name"_a = queryName
-        ));
+            ))", "query_name"_a = queryName));
 
         {
-            const auto result = CheckSysView({{
+            const auto result = CheckSysView({ {
                 .Name = queryName,
                 .Status = "STOPPED",
                 .Issues = "Request was canceled by user",
@@ -190,11 +157,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
                 .RetryCount = 1,
                 .LastFailAt = failAt,
                 .CheckPlan = true,
-            }})[0];
+            } })[0];
 
             UNIT_ASSERT_VALUES_EQUAL(result.PreviousExecutionIds.size(), 1);
             UNIT_ASSERT(result.ExecutionId.empty());
-            const auto operation = GetScriptExecutionOperation(OperationIdFromExecutionId(TString{result.PreviousExecutionIds[0]}), /* checkStatus */ false);
+            const auto operation =
+                GetScriptExecutionOperation(OperationIdFromExecutionId(TString{ result.PreviousExecutionIds[0] }), /* checkStatus */ false);
             const auto& status = operation.Status();
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CANCELLED, status.GetIssues().ToOneLineString());
             UNIT_ASSERT_VALUES_EQUAL(operation.Metadata().ExecStatus, EExecStatus::Canceled);
@@ -204,54 +172,43 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
     Y_UNIT_TEST_F(SysViewForFinishedStreamingQueries, TStreamingSysViewTestFixture) {
         Setup();
 
-        const std::vector<std::string> texts = {
-            fmt::format(R"(
+        const std::vector<std::string> texts = { fmt::format(R"(
                 ;PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";INSERT INTO `{pq_source}`.`{output_topic}`
                 /* A */
                 SELECT * FROM `{pq_source}`.`{input_topic}`
-                LIMIT 1;)",
-                "pq_source"_a = PQ_SOURCE,
-                "output_topic"_a = OutputTopic,
-                "input_topic"_a = InputTopic
-            ), fmt::format(R"(
+                LIMIT 1;)", "pq_source"_a = PQ_SOURCE, "output_topic"_a = OutputTopic, "input_topic"_a = InputTopic),
+            fmt::format(R"(
                 ;PRAGMA ydb.OverridePlanner = @@ [
                     {{ "tx": 0, "stage": 10, "tasks": 1 }}
                 ] @@;
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 /* B */
-                SELECT * FROM `{pq_source}`.`{input_topic}`;)",
-                "pq_source"_a = PQ_SOURCE,
-                "output_topic"_a = OutputTopic,
-                "input_topic"_a = InputTopic
-            )
-        };
+                SELECT * FROM `{pq_source}`.`{input_topic}`;)", "pq_source"_a = PQ_SOURCE, "output_topic"_a = OutputTopic,
+                "input_topic"_a = InputTopic) };
 
         ExecQuery(fmt::format(R"(
-            CREATE STREAMING QUERY A AS DO BEGIN{text}END DO)",
-            "text"_a = texts[0]
-        ));
+            CREATE STREAMING QUERY A AS DO BEGIN{text}END DO)", "text"_a = texts[0]));
 
         ExecQuery(fmt::format(R"(
-            CREATE STREAMING QUERY B AS DO BEGIN{text}END DO)",
-            "text"_a = texts[1]
-        ), EStatus::GENERIC_ERROR);
+            CREATE STREAMING QUERY B AS DO BEGIN{text}END DO)", "text"_a = texts[1]), EStatus::GENERIC_ERROR);
 
         Sleep(TDuration::Seconds(1));
         WriteTopicMessage(InputTopic, "test0");
         ReadTopicMessage(OutputTopic, "test0");
         Sleep(TDuration::Seconds(1));
 
-        CheckSysView({{
-            .Name = "A",
-            .Status = "COMPLETED",
-            .Text = texts[0],
-            .CheckPlan = true,
-        }, {
-            .Name = "B",
-            .Status = "FAILED",
-            .Issues = "Invalid override planner settings",
-            .Text = texts[1],
-        }});
+        CheckSysView({ {
+                           .Name = "A",
+                           .Status = "COMPLETED",
+                           .Text = texts[0],
+                           .CheckPlan = true,
+                       },
+            {
+                .Name = "B",
+                .Status = "FAILED",
+                .Issues = "Invalid override planner settings",
+                .Text = texts[1],
+            } });
     }
 
     Y_UNIT_TEST_F(SysViewForSuspendedStreamingQueries, TStreamingSysViewTestFixture) {
@@ -260,16 +217,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         const std::string text = fmt::format(R"(
             PRAGMA pq.Consumer = "test_consumer";
             INSERT INTO `{pq_source}`.`{output_topic}`
-            SELECT * FROM `{pq_source}`.`{input_topic}`;)",
-            "pq_source"_a = PQ_SOURCE,
-            "output_topic"_a = OutputTopic,
-            "input_topic"_a = InputTopic
-        );
+            SELECT * FROM `{pq_source}`.`{input_topic}`;)", "pq_source"_a = PQ_SOURCE, "output_topic"_a = OutputTopic,
+            "input_topic"_a = InputTopic);
 
         ExecQuery(fmt::format(R"(
-            CREATE STREAMING QUERY A AS DO BEGIN{text}END DO)",
-            "text"_a = text
-        ));
+            CREATE STREAMING QUERY A AS DO BEGIN{text}END DO)", "text"_a = text));
 
         WaitFor(TDuration::Seconds(10), "Wait query running", [&](TString& error) {
             const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
@@ -350,10 +302,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` WITH (
                 RUN = FALSE
-            ) AS DO BEGIN{text}END DO)",
-            "query_name"_a = queryName,
-            "text"_a = GetQueryText(queryName)
-        ));
+            ) AS DO BEGIN{text}END DO)", "query_name"_a = queryName, "text"_a = GetQueryText(queryName)));
 
         // Service finalization must preserve the user who last modified the query.
         // After CREATE: created_by, modified_by, created_at, modified_at must be set; started_by, stopped_by must be null
@@ -377,9 +326,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         execAsModifier(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = TRUE
-            ))",
-            "query_name"_a = queryName
-        ));
+            ))", "query_name"_a = queryName));
 
         // After start ALTER: started_by must be set; stopped_by must still be null; created_by preserved
         {
@@ -400,9 +347,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
-            ))",
-            "query_name"_a = queryName
-        ));
+            ))", "query_name"_a = queryName));
 
         // After stop ALTER: stopped_by must be set; created_by must be unchanged
         {
@@ -420,15 +365,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         }
 
         // Replacing the query must preserve the counterpart of each run transition.
-        for (bool run : {true, false}) {
+        for (bool run : { true, false }) {
             execAsModifier(fmt::format(R"(
                 CREATE OR REPLACE STREAMING QUERY `{query_name}` WITH (
                     RUN = {run}
-                ) AS DO BEGIN{text}END DO)",
-                "query_name"_a = queryName,
-                "run"_a = run ? "TRUE" : "FALSE",
-                "text"_a = GetQueryText(queryName)
-            ));
+                ) AS DO BEGIN{text}END DO)", "query_name"_a = queryName, "run"_a = run ? "TRUE" : "FALSE", "text"_a = GetQueryText(queryName)));
             const auto& queryResult = ExecQuery(fmt::format(R"(
                 SELECT CreatedBy, ModifiedBy, StartedBy, StoppedBy
                 FROM `.sys/streaming_queries`
@@ -446,10 +387,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` WITH (
                 RUN = TRUE
-            ) AS DO BEGIN{text}END DO)",
-            "query_name"_a = runningQueryName,
-            "text"_a = GetQueryText(runningQueryName)
-        ));
+            ) AS DO BEGIN{text}END DO)", "query_name"_a = runningQueryName, "text"_a = GetQueryText(runningQueryName)));
 
         // CREATE with RUN=TRUE starts the query and records the user who started it.
         {
@@ -474,7 +412,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         // Wait for the query to actually start: CREATE completion does not guarantee
         // that the script execution entry has already been created.
         StartQuery("tsQuery");
-        pqGateway->WaitWriteSession(TString{OutputTopic});
+        pqGateway->WaitWriteSession(TString{ OutputTopic });
 
         // Both timestamps come from the current script execution. A running query
         // must have been submitted and started.
@@ -483,13 +421,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             FROM `.sys/streaming_queries`
             WHERE Path = '/Root/tsQuery'
         )");
-            CheckScriptResult(queryResult[0], 2, 1, [&](TResultSetParser& rs) {
-                const auto submittedAt = rs.ColumnParser("SubmittedAt").GetOptionalTimestamp();
-                const auto startedAt = rs.ColumnParser("StartedAt").GetOptionalTimestamp();
-                UNIT_ASSERT_C(submittedAt.has_value(), "SubmittedAt must be set for a running query");
-                UNIT_ASSERT_C(startedAt.has_value(), "StartedAt must be set for a running query");
-                UNIT_ASSERT_VALUES_EQUAL(*startedAt, *submittedAt);
-            });
+        CheckScriptResult(queryResult[0], 2, 1, [&](TResultSetParser& rs) {
+            const auto submittedAt = rs.ColumnParser("SubmittedAt").GetOptionalTimestamp();
+            const auto startedAt = rs.ColumnParser("StartedAt").GetOptionalTimestamp();
+            UNIT_ASSERT_C(submittedAt.has_value(), "SubmittedAt must be set for a running query");
+            UNIT_ASSERT_C(startedAt.has_value(), "StartedAt must be set for a running query");
+            UNIT_ASSERT_VALUES_EQUAL(*startedAt, *submittedAt);
+        });
     }
 
     Y_UNIT_TEST_F(ReadSysViewWithRowCountBackPressure, TStreamingSysViewTestFixture) {
@@ -506,10 +444,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             ExecQuery(fmt::format(R"(
                 CREATE STREAMING QUERY `{name}` WITH (
                     RUN = FALSE
-                ) AS DO BEGIN{text}END DO)",
-                "name"_a = name,
-                "text"_a = GetQueryText(name)
-            ));
+                ) AS DO BEGIN{text}END DO)", "name"_a = name, "text"_a = GetQueryText(name)));
             rows.push_back({
                 .Name = name,
                 .Status = "CREATED",
@@ -536,10 +471,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             ExecQuery(fmt::format(R"(
                 CREATE STREAMING QUERY `{name}` WITH (
                     RUN = FALSE
-                ) AS DO BEGIN{text}END DO)",
-                "name"_a = name,
-                "text"_a = text
-            ));
+                ) AS DO BEGIN{text}END DO)", "name"_a = name, "text"_a = text));
             rows.push_back({
                 .Name = name,
                 .Status = "CREATED",
@@ -568,18 +500,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             const std::string text = fmt::format(R"(
                 ;PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT Data || "{payload}" FROM `{pq_source}`.`{input_topic}`
-                LIMIT 1;)",
-                "payload"_a = payload,
-                "pq_source"_a = PQ_SOURCE,
-                "input_topic"_a = InputTopic,
-                "output_topic"_a = OutputTopic
-            );
+                LIMIT 1;)", "payload"_a = payload, "pq_source"_a = PQ_SOURCE, "input_topic"_a = InputTopic, "output_topic"_a = OutputTopic);
             ExecQuery(fmt::format(R"(
                 CREATE STREAMING QUERY `{name}`
-                AS DO BEGIN{text}END DO)",
-                "name"_a = name,
-                "text"_a = text
-            ));
+                AS DO BEGIN{text}END DO)", "name"_a = name, "text"_a = text));
             rows.push_back({
                 .Name = name,
                 .Status = "COMPLETED",
@@ -616,7 +540,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         StartQuery("A");
         Sleep(STATS_WAIT_DURATION);
 
-        CheckSysView({{.Name = "A", .CheckPlan = true}});
+        CheckSysView({ { .Name = "A", .CheckPlan = true } });
 
         auto settings = TExecuteQuerySettings();
         settings.RetrySettings(NYdb::NRetry::TRetryOperationSettings().MaxRetries(0));
@@ -658,4 +582,4 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
     }
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

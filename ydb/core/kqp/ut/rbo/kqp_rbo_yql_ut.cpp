@@ -82,14 +82,6 @@ std::pair<ui32, ui32> GetNewRBOCompileCounters(TKikimrRunner& kikimr) {
             counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Failed")->Val()};
 }
 
-// Keeps every log record on its own line.
-class TLineLogStream : public TStringStream {
-    void DoWrite(const void* data, size_t size) override {
-        TStringStream::DoWrite(data, size);
-        TStringStream::DoWrite("\n", 1);
-    }
-};
-
 // Returns the `request` object of the [REQ_JSON] completed record whose query text contains `marker`.
 std::optional<NJson::TJsonValue> FindReqJsonCompleted(TStringBuf logs, TStringBuf marker) {
     constexpr TStringBuf fieldPrefix = "requestJson=";
@@ -1808,6 +1800,40 @@ FROM (
         auto plan = ExecuteExplainAnalyze(session, R"(
             SELECT * from `/Root/t1`; SELECT * from `/Root/t1`;
         )");
+        plan = ExecuteExplainAnalyze(session, R"(
+            SELECT 1; SELECT 1;
+        )");
+    }
+
+    Y_UNIT_TEST_TWIN(ExplainAnalyzeMultipleResultContainers, ConcurrentResults) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(CreateExplainPlanTestAppConfig()).SetWithSampleTables(false));
+        auto session = CreateQuerySession(kikimr);
+        // ExecuteQuery enables concurrent results internally. Use streaming to
+        // exercise separate query blocks as well as a shared result container.
+        auto stream = session.StreamExecuteQuery("SELECT 1 AS x; SELECT 2 AS y, 3 AS z;",
+            NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()
+                .ConcurrentResultSets(ConcurrentResults).StatsMode(NYdb::NQuery::EStatsMode::Full)).ExtractValueSync();
+        UNIT_ASSERT_C(stream.IsSuccess(), stream.GetIssues().ToString());
+
+        TMap<ui64, TString> results;
+        bool hasPlan = false;
+        for (;;) {
+            auto part = stream.ReadNext().ExtractValueSync();
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                break;
+            }
+            if (part.HasResultSet()) {
+                results[part.GetResultSetIndex()] += FormatResultSetYson(part.ExtractResultSet());
+            }
+            if (part.GetStats() && part.GetStats()->GetPlan()) {
+                hasPlan = true;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(results.at(0), "[[1]]");
+        UNIT_ASSERT_VALUES_EQUAL(results.at(1), "[[2;3]]");
+        UNIT_ASSERT(hasPlan);
     }
 
     Y_UNIT_TEST(Explain) {
@@ -2381,10 +2407,8 @@ FROM (
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
 
-        TLineLogStream logs;
-        auto logsMutex = std::make_shared<TMutex>();
-        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false).SetLogStream(&logs);
-        settings.LogStreamMutex = logsMutex;
+        TCapturedLog logs(/* appendNewline */ true);
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false).SetLogCapture(logs);
         // Successful queries are logged to [REQ_JSON] at DEBUG.
         settings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_REQUEST, NActors::NLog::PRI_DEBUG);
         settings.LogSettings->DefaultLogPriority = NActors::NLog::PRI_CRIT;
@@ -2406,11 +2430,7 @@ FROM (
         const auto getCompletedRequest = [&](TStringBuf marker) -> NJson::TJsonValue {
             const TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
             while (true) {
-                TString text;
-                {
-                    TGuard<TMutex> guard(*logsMutex);
-                    text = logs.Str();
-                }
+                const TString text = logs.Snapshot();
 
                 if (auto request = FindReqJsonCompleted(text, marker)) {
                     UNIT_ASSERT_C(request->Has("used_new_rbo"), request->GetStringRobust());
@@ -7988,6 +8008,42 @@ FROM (
                         // Still explain these queries, but do not require the CBO stats invariant when CBO is explicitly disabled
                         // in the query or until the known gaps are fixed.
                         /*queriesWithoutCboCheck=*/{});
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeMultipleSelectTPCDS23) {
+        auto appConfig = CreateExplainPlanTestAppConfig();
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(tableSession, BenchmarkSchemaPathPrefix[EBenchType::TPCDS],
+            BenchmarkSchemaPath[EBenchType::TPCDS], true);
+        auto session = CreateQuerySession(kikimr);
+        const TString query = R"(
+            $round = ($x, $y) -> { return $x; };
+            $to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };
+            $to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };
+        )" + GetFullPath(BenchmarkQueryPath[EBenchType::TPCDS], "23.yql");
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full)).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).ColumnsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[[#]]");
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(1).ColumnsCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(1).RowsCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(1).GetColumnsMeta()[0].Name, "c_last_name");
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(1).GetColumnsMeta()[1].Name, "c_first_name");
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(1).GetColumnsMeta()[2].Name, "sales");
+        UNIT_ASSERT(result.GetStats());
+        UNIT_ASSERT(result.GetStats()->GetPlan());
+        PrintPlan(TString(*result.GetStats()->GetPlan()), /*analyzeMode=*/true);
+
+        auto stream = session.StreamExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ConcurrentResultSets(false)
+                .StatsMode(NYdb::NQuery::EStatsMode::Full)).ExtractValueSync();
+        UNIT_ASSERT_C(stream.IsSuccess(), stream.GetIssues().ToString());
+        const auto sequential = CollectStreamResult(stream);
+        CompareYson("[[#]]", sequential.ResultSetYson);
+        UNIT_ASSERT(sequential.PlanJson);
     }
 
     Y_UNIT_TEST(ClickBench_YQL) {

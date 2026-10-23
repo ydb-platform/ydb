@@ -1242,13 +1242,23 @@ public:
         TActorBootstrapped::PassAway();
     }
 
-    void HandlePoison() {
+    void HandlePoison(TEvents::TEvPoison::TPtr& ev) {
+        if (FormattingThread) {
+            FormattingThread->Join();
+            FormattingThread.Reset();
+        }
         if (NeedToStopOnPoison && PDisk) {
             PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TStopDevice>());
         }
         RealtimeFlag.RemoveSources();
         DeviceFlag.RemoveSources();
-        PDisk.Reset();
+        if (PDisk) {
+            PDisk->Stop();
+            PDisk.Reset();
+        }
+        if (ev->Sender && ev->Cookie) {
+            Send(ev->Sender, new TEvents::TEvPoisonTaken, 0, ev->Cookie);
+        }
         PassAway();
         YDB_LOG_P_LOG(PRI_NOTICE, "HandlePoison, PDiskThread stopped",
             {"marker", "BSP01"});
@@ -1594,7 +1604,7 @@ public:
             hFunc(NPDisk::TEvPDiskMetadataLoaded, InitHandle);
             hFunc(TEvReadFormatResult, InitHandle);
             hFunc(NPDisk::TEvReadLogResult, InitHandle);
-            cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
+            hFunc(TEvents::TEvPoison, HandlePoison);
             hFunc(NMon::TEvHttpInfo, InitHandle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             hFunc(NPDisk::TEvDeviceError, Handle);
@@ -1646,7 +1656,7 @@ public:
             hFunc(NPDisk::TEvChangeExpectedSlotCount, Handle);
             hFunc(NPDisk::TEvCompactionBidder, Handle);
 
-            cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
+            hFunc(TEvents::TEvPoison, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             hFunc(NPDisk::TEvDeviceError, Handle);
@@ -1688,7 +1698,7 @@ public:
             IgnoreFunc(NPDisk::TEvCompactionBidder); // nothing is written to a PDisk in error
             hFunc(NPDisk::TEvConfigureScheduler, ErrorHandle);
 
-            cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
+            hFunc(TEvents::TEvPoison, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             hFunc(NPDisk::TEvDeviceError, Handle);

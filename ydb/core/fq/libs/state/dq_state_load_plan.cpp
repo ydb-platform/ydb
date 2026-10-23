@@ -10,18 +10,17 @@
 #include <ydb/library/yql/providers/pq/task_meta/task_meta.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
-#include <yql/essentials/minikql/mkql_node_cast.h>
-#include <yql/essentials/minikql/mkql_node_printer.h>
-#include <yql/essentials/public/issue/protos/issue_id.pb.h>
-#include <yql/essentials/utils/yql_panic.h>
-
 #include <util/digest/multi.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_multi_map.h>
 #include <util/generic/hash_set.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node_printer.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <algorithm>
 #include <limits>
@@ -41,7 +40,8 @@ struct TTopic {
     TString Cluster;
 
     bool operator==(const TTopic& t) const {
-        return DatabaseId == t.DatabaseId && Database == t.Database && TopicPath == t.TopicPath && Endpoint == t.Endpoint && Cluster == t.Cluster;
+        return DatabaseId == t.DatabaseId && Database == t.Database && TopicPath == t.TopicPath && Endpoint == t.Endpoint &&
+               Cluster == t.Cluster;
     }
 
     struct THash {
@@ -63,31 +63,29 @@ bool IsTopicInput(const NYql::NDqProto::TTaskInput& taskInput) {
     return taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource && taskInput.GetSource().GetType() == NYql::PqSource;
 }
 
-bool ParseTopicInput(
-    const NYql::NDqProto::TDqTask& task,
-    const NYql::NDqProto::TTaskInput& taskInput,
-    ui64 inputIndex,
-    bool force,
-    bool isSourceGraph,
-    NYql::NPq::NProto::TDqPqTopicSource& srcDesc,
-    std::vector<NYql::NPq::TTopicPartitionsSet>& partitionsSets,
+bool ParseTopicInput(const NYql::NDqProto::TDqTask& task, const NYql::NDqProto::TTaskInput& taskInput, ui64 inputIndex, bool force,
+    bool isSourceGraph, NYql::NPq::NProto::TDqPqTopicSource& srcDesc, std::vector<NYql::NPq::TTopicPartitionsSet>& partitionsSets,
     NYql::TIssues& issues)
 {
     const char* queryKindStr = isSourceGraph ? "source" : "destination";
     const google::protobuf::Any& settingsAny = taskInput.GetSource().GetSettings();
     if (!settingsAny.Is<NYql::NPq::NProto::TDqPqTopicSource>()) {
-        AddForceWarningOrError(TStringBuilder() << "Can't read " << queryKindStr << " query params: input " << inputIndex << " of task " << task.GetId() << " has incorrect type", issues, force);
+        AddForceWarningOrError(TStringBuilder() << "Can't read " << queryKindStr << " query params: input " << inputIndex << " of task "
+                                                << task.GetId() << " has incorrect type", issues, force);
         return false;
     }
 
     if (!settingsAny.UnpackTo(&srcDesc)) {
-        AddForceWarningOrError(TStringBuilder() << "Can't read " << queryKindStr << " query params: failed to unpack input " << inputIndex << " of task " << task.GetId(), issues, force);
+        AddForceWarningOrError(TStringBuilder() << "Can't read " << queryKindStr << " query params: failed to unpack input " << inputIndex
+                                                << " of task " << task.GetId(), issues, force);
         return false;
     }
 
     partitionsSets = NYql::NPq::GetTopicPartitionsSets(task);
     if (partitionsSets.empty()) {
-        AddForceWarningOrError(TStringBuilder() << "Can't read " << queryKindStr << " query params: failed to load partitions of topic `" << srcDesc.GetTopicPath() << "` from input " << inputIndex << " of task " << task.GetId(), issues, force);
+        AddForceWarningOrError(TStringBuilder() << "Can't read " << queryKindStr << " query params: failed to load partitions of topic `"
+                                                << srcDesc.GetTopicPath() << "` from input " << inputIndex << " of task "
+                                                << task.GetId(), issues, force);
         return false;
     }
 
@@ -95,9 +93,10 @@ bool ParseTopicInput(
 }
 
 template <typename TCallback>
-void ForEachTopicPartition(const NYql::NPq::NProto::TDqPqTopicSource& source, const std::vector<NYql::NPq::TTopicPartitionsSet>& sets, TCallback callback) {
+void ForEachTopicPartition(
+    const NYql::NPq::NProto::TDqPqTopicSource& source, const std::vector<NYql::NPq::TTopicPartitionsSet>& sets, TCallback callback) {
     const auto add = [&](const TString& cluster, const TString& endpoint, const TString& database, const ui64 partitionsCount) {
-        const TTopic topic{source.GetDatabaseId(), database, source.GetTopicPath(), endpoint, cluster};
+        const TTopic topic{ source.GetDatabaseId(), database, source.GetTopicPath(), endpoint, cluster };
         for (const auto& set : sets) {
             YQL_ENSURE(set.DqPartitionsCount, "Invalid topic partition mapping");
             const auto count = partitionsCount ? partitionsCount : set.TopicPartitionsCount;
@@ -114,7 +113,8 @@ void ForEachTopicPartition(const NYql::NPq::NProto::TDqPqTopicSource& source, co
         for (const auto& cluster : source.GetFederatedClusters()) {
             const auto& name = cluster.GetName();
             YQL_ENSURE(clusters.insert(name).second, "Duplicate federated topic cluster " << name);
-            add(name, name ? cluster.GetEndpoint() : source.GetEndpoint(), name ? cluster.GetDatabase() : source.GetDatabase(), cluster.GetPartitionsCount());
+            add(name, name ? cluster.GetEndpoint() : source.GetEndpoint(), name ? cluster.GetDatabase() : source.GetDatabase(),
+                cluster.GetPartitionsCount());
         }
     }
 }
@@ -168,7 +168,7 @@ class TContinuationPlanBuilder {
         };
     };
 
-    using TPartitionsMapping = THashMultiMap<ui64, TTaskSource>; // Task can have multiple sources for one partition, so multimap.
+    using TPartitionsMapping = THashMultiMap<ui64, TTaskSource>;   // Task can have multiple sources for one partition, so multimap.
 
     struct TTopicMappingInfo {
         TPartitionsMapping PartitionsMapping;
@@ -221,7 +221,7 @@ private:
         producers.reserve(std::max(aggregation.Tasks.size(), graph.GetStages().size()));
         for (const auto& stage : graph.GetStages()) {
             for (const auto* task : stage.Tasks) {
-                producers.emplace(task->GetId(), TProducer{task, &stage, {}});
+                producers.emplace(task->GetId(), TProducer{ task, &stage, {} });
             }
         }
 
@@ -231,7 +231,8 @@ private:
 
             const auto& target = *aggregation.Tasks[taskIndex];
             for (const auto& input : target.GetInputs()) {
-                YQL_ENSURE(!input.HasSource() || !NYql::NDq::IsInfiniteSourceType(input.GetSource().GetType()), "Unsupported aggregation input routing, expected direct hash shuffle");
+                YQL_ENSURE(!input.HasSource() || !NYql::NDq::IsInfiniteSourceType(input.GetSource().GetType()),
+                    "Unsupported aggregation input routing, expected direct hash shuffle");
                 for (const auto& channel : input.GetChannels()) {
                     if (channel.GetCheckpointingMode() == NYql::NDqProto::CHECKPOINTING_MODE_DISABLED) {
                         continue;
@@ -245,7 +246,8 @@ private:
                         for (size_t outputIndex = 0; outputIndex < producer->Task->OutputsSize(); ++outputIndex) {
                             const auto& output = producer->Task->GetOutputs(outputIndex);
                             for (size_t slot = 0; slot < output.ChannelsSize(); ++slot) {
-                                YQL_ENSURE(outputChannels.emplace(output.GetChannels(slot).GetId(), TOutputChannel{outputIndex, slot}).second, "Unexpected aggregation hash shuffle routing: duplicate output channel");
+                                YQL_ENSURE(outputChannels.emplace(output.GetChannels(slot).GetId(), TOutputChannel{ outputIndex, slot }).second,
+                                    "Unexpected aggregation hash shuffle routing: duplicate output channel");
                             }
                         }
                     }
@@ -255,13 +257,17 @@ private:
                     const auto& output = producer->Task->GetOutputs(sourceChannel->OutputIndex);
                     const auto& outgoing = output.GetChannels(sourceChannel->Slot);
 
-                    YQL_ENSURE(output.HasHashPartition() && !output.HasTransform(), "Unsupported aggregation input routing, expected direct hash shuffle without output transforms");
-                    YQL_ENSURE(outgoing.GetDstTaskId() == target.GetId() && sourceChannel->Slot == taskIndex, "Unexpected aggregation hash shuffle routing");
+                    YQL_ENSURE(output.HasHashPartition() && !output.HasTransform(),
+                        "Unsupported aggregation input routing, expected direct hash shuffle without output transforms");
+                    YQL_ENSURE(outgoing.GetDstTaskId() == target.GetId() && sourceChannel->Slot == taskIndex,
+                        "Unexpected aggregation hash shuffle routing");
 
                     auto settings = output.GetHashPartition();
-                    YQL_ENSURE(static_cast<size_t>(output.ChannelsSize()) == aggregation.Tasks.size() && settings.GetPartitionsCount() == output.ChannelsSize() && settings.KeyColumnsSize(), "Invalid aggregation hash shuffle settings");
+                    YQL_ENSURE(static_cast<size_t>(output.ChannelsSize()) == aggregation.Tasks.size() &&
+                                   settings.GetPartitionsCount() == output.ChannelsSize() &&
+                                   settings.KeyColumnsSize(), "Invalid aggregation hash shuffle settings");
                     if (settings.GetHashKindCase() == NYql::NDqProto::TTaskOutputHashPartition::HASHKIND_NOT_SET) {
-                        settings.MutableHashV1(); // Runtime default.
+                        settings.MutableHashV1();   // Runtime default.
                     }
 
                     const auto& types = producer->Stage->OutputTypes;
@@ -308,16 +314,22 @@ private:
 
                         const TString table(AS_VALUE(NKikimr::NMiniKQL::TDataLiteral, path)->AsValue().AsStringRef());
                         YQL_ENSURE(!table.empty(), "Empty streaming aggregation output table path");
-                        YQL_ENSURE(result.emplace(table, TAggregation{
-                            .Stage = &stage,
-                            .KeyType = callable->GetInput(3).GetStaticType(),
-                            .SavedStateType = callable->GetInput(9).GetStaticType(),
-                        }).second, "Ambiguous streaming aggregation output table binding: " << table);
+                        YQL_ENSURE(result
+                                       .emplace(table,
+                                           TAggregation{
+                                               .Stage = &stage,
+                                               .KeyType = callable->GetInput(3).GetStaticType(),
+                                               .SavedStateType = callable->GetInput(9).GetStaticType(),
+                                           })
+                                       .second, "Ambiguous streaming aggregation output table binding: " << table);
                     } else if (previous) {
-                        StateLossError(TStringBuilder() << "Unsupported checkpointed streaming aggregation setup for offset recovery in stage " << stage.StageId << ", recovery allowed only for streaming aggregation with table binding");
+                        StateLossError(TStringBuilder()
+                                       << "Unsupported checkpointed streaming aggregation setup for offset recovery in stage " << stage.StageId
+                                       << ", recovery allowed only for streaming aggregation with table binding");
                     }
                 } else if (previous) {
-                    StateLossError(TStringBuilder() << "Unsupported checkpointed operator for offset recovery: " << name << " in stage " << stage.StageId);
+                    StateLossError(
+                        TStringBuilder() << "Unsupported checkpointed operator for offset recovery: " << name << " in stage " << stage.StageId);
                 }
             }
 
@@ -343,11 +355,13 @@ private:
                     YQL_ENSURE(sink.GetSettings().UnpackTo(&settings), "Invalid PQ sink settings for offset recovery");
 
                     if (settings.GetEnableDeduplication()) {
-                        StateLossError("Offset recovery does not support PQ sinks with deduplication: producer sequence numbers cannot be transferred");
+                        StateLossError(
+                            "Offset recovery does not support PQ sinks with deduplication: producer sequence numbers cannot be transferred");
                     }
 
                     if (!settings.GetDeferredPublicationExtIdPrefix().empty()) {
-                        StateLossError("Offset recovery does not support PQ sinks with exactly-once delivery: deferred publications cannot be transferred");
+                        StateLossError(
+                            "Offset recovery does not support PQ sinks with exactly-once delivery: deferred publications cannot be transferred");
                     }
                 }
             }
@@ -370,28 +384,31 @@ private:
                 }
 
                 std::sort(availableTables.begin(), availableTables.end());
-                StateLossError(TStringBuilder() << "Streaming aggregation output table is missing in the new query: " << table
-                    << ", available output tables: " << (availableTables.empty() ? "none" : JoinSeq(", ", availableTables)));
+                StateLossError(
+                    TStringBuilder() << "Streaming aggregation output table is missing in the new query: " << table
+                                     << ", available output tables: " << (availableTables.empty() ? "none" : JoinSeq(", ", availableTables)));
                 continue;
             }
 
             const auto& target = it->second;
             if (!old.KeyType->IsSameType(*target.KeyType)) {
                 StateLossError(TStringBuilder() << "Streaming aggregation key type changed for output table " << table
-                    << ", previous: " << NKikimr::NMiniKQL::PrintNode(old.KeyType, /* singleLine */ true)
-                    << ", new: " << NKikimr::NMiniKQL::PrintNode(target.KeyType, /* singleLine */ true));
+                                                << ", previous: " << NKikimr::NMiniKQL::PrintNode(old.KeyType, /* singleLine */ true)
+                                                << ", new: " << NKikimr::NMiniKQL::PrintNode(target.KeyType, /* singleLine */ true));
                 continue;
             }
 
             if (!old.SavedStateType->IsSameType(*target.SavedStateType)) {
                 StateLossError(TStringBuilder() << "Streaming aggregation saved state type changed for output table " << table
-                    << ", previous: " << NKikimr::NMiniKQL::PrintNode(old.SavedStateType, /* singleLine */ true)
-                    << ", new: " << NKikimr::NMiniKQL::PrintNode(target.SavedStateType, /* singleLine */ true));
+                                                << ", previous: " << NKikimr::NMiniKQL::PrintNode(old.SavedStateType, /* singleLine */ true)
+                                                << ", new: " << NKikimr::NMiniKQL::PrintNode(target.SavedStateType, /* singleLine */ true));
                 continue;
             }
 
             if (old.Stage->Tasks.size() != target.Stage->Tasks.size()) {
-                StateLossError(TStringBuilder() << "Streaming aggregation task count changed for output table " << table << ": " << old.Stage->Tasks.size() << " -> " << target.Stage->Tasks.size() << " on stage " << target.Stage->StageId);
+                StateLossError(TStringBuilder() << "Streaming aggregation task count changed for output table " << table << ": "
+                                                << old.Stage->Tasks.size() << " -> " << target.Stage->Tasks.size() << " on stage "
+                                                << target.Stage->StageId);
                 continue;
             }
 
@@ -401,7 +418,8 @@ private:
                     continue;
                 }
             } catch (const std::exception& e) {
-                StateLossError(TStringBuilder() << "Cannot validate streaming aggregation shuffle routing for output table " << table << ": " << e.what());
+                StateLossError(
+                    TStringBuilder() << "Cannot validate streaming aggregation shuffle routing for output table " << table << ": " << e.what());
                 continue;
             }
 
@@ -427,7 +445,8 @@ private:
 
     //// Sources recovery
 
-    static NYql::NDqProto::NDqStateLoadPlan::TSourcePlan& FindSourcePlan(NYql::NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan, const ui64 inputIndex) {
+    static NYql::NDqProto::NDqStateLoadPlan::TSourcePlan& FindSourcePlan(
+        NYql::NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan, const ui64 inputIndex) {
         for (auto& plan : *taskPlan.MutableSources()) {
             if (plan.GetInputIndex() == inputIndex) {
                 return plan;
@@ -455,7 +474,7 @@ private:
 
                     ForEachTopicPartition(srcDesc, partitionsSets, [&, taskId = task.GetId()](const TTopic& topic, const ui64 partition) {
                         auto& topicInfo = srcMapping[topic];
-                        topicInfo.PartitionsMapping.emplace(partition, TTaskSource{taskId, inputIndex, consumer});
+                        topicInfo.PartitionsMapping.emplace(partition, TTaskSource{ taskId, inputIndex, consumer });
                     });
                 }
             }
@@ -469,7 +488,7 @@ private:
 
         for (const auto& task : dst.GetGraph()->GetTasks()) {
             auto& taskPlan = Plan[task.GetId()];
-            taskPlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY); // Default if no topic sources or stateful operators
+            taskPlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY);   // Default if no topic sources or stateful operators
 
             bool foreignStatePlanInitted = false;
             for (size_t inputIndex = 0; inputIndex < task.InputsSize(); ++inputIndex) {
@@ -489,7 +508,8 @@ private:
                     ForEachTopicPartition(srcDesc, partitionsSets, [&](const TTopic& topic, ui64 partition) {
                         const auto mappingInfoIt = srcMapping.find(topic);
                         if (mappingInfoIt == srcMapping.end()) {
-                            SourceError(TStringBuilder() << "Topic `" << srcDesc.GetTopicPath() << "` is not found in previous query", "Query will use fresh offsets for its partitions");
+                            SourceError(TStringBuilder() << "Topic `" << srcDesc.GetTopicPath() << "` is not found in previous query",
+                                "Query will use fresh offsets for its partitions");
                             return;
                         }
 
@@ -498,10 +518,13 @@ private:
 
                         auto [taskBegin, taskEnd] = mappingInfo.PartitionsMapping.equal_range(partition);
                         if (taskBegin == taskEnd) {
-                            SourceError(TStringBuilder() << "Topic `" << srcDesc.GetTopicPath() << "` partition " << partition << " is not found in previous query", "Query will use fresh offsets for it");
+                            SourceError(TStringBuilder() << "Topic `" << srcDesc.GetTopicPath() << "` partition " << partition
+                                                         << " is not found in previous query", "Query will use fresh offsets for it");
                         } else {
                             if (std::distance(taskBegin, taskEnd) > 1) {
-                                SourceError(TStringBuilder() << "Topic `" << srcDesc.GetTopicPath() << "` partition " << partition << " has ambiguous offsets source in previous query checkpoint", "Query will use minimum offset to avoid skipping data");
+                                SourceError(TStringBuilder() << "Topic `" << srcDesc.GetTopicPath() << "` partition " << partition
+                                                             << " has ambiguous offsets source in previous query checkpoint",
+                                    "Query will use minimum offset to avoid skipping data");
                             }
                             for (; taskBegin != taskEnd; ++taskBegin) {
                                 if (consumer != taskBegin->second.Consumer) {
@@ -532,7 +555,8 @@ private:
 
         for (const auto& [topic, mappingInfo] : srcMapping) {
             if (!mappingInfo.Used) {
-                SourceError(TStringBuilder() << "Topic `" << topic.TopicPath << "` is read in previous query but is not read in new query", "Reading offsets will be lost in next checkpoint");
+                SourceError(TStringBuilder() << "Topic `" << topic.TopicPath << "` is read in previous query but is not read in new query",
+                    "Reading offsets will be lost in next checkpoint");
             }
         }
     }
@@ -577,9 +601,10 @@ private:
     TSourceRecoverySet ChangedConsumers;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-bool MakeContinueFromStreamingOffsetsPlan(const TGraphStateInfo& src, const TGraphStateInfo& dst, const bool force, TStateLoadPlan& plan, TSourceRecoverySet& sourcesToPrepare, NYql::TIssues& issues) {
+bool MakeContinueFromStreamingOffsetsPlan(const TGraphStateInfo& src, const TGraphStateInfo& dst, const bool force, TStateLoadPlan& plan,
+    TSourceRecoverySet& sourcesToPrepare, NYql::TIssues& issues) {
     plan.clear();
     sourcesToPrepare.clear();
 
@@ -620,7 +645,7 @@ public:
     struct TPartitionProgress {
         // Information from last query checkpoint, not set in case of restoring without previous checkpoint
         std::optional<ui64> StartingMessageTimestampMs;
-        std::optional<ui64> Offset; // Set only after partition session start
+        std::optional<ui64> Offset;   // Set only after partition session start
 
         // Minimal event time boundary for stateful operators replay, not set if there is no stateful dependencies for this partition
         std::optional<ui64> EventTime;
@@ -642,14 +667,14 @@ private:
     };
 
     class TTask {
-        YDB_READONLY_OPT(ui64, InputBound); // Measured in event time us
+        YDB_READONLY_OPT(ui64, InputBound);   // Measured in event time us
 
     public:
         const NYql::NDqProto::TDqTask* Task = nullptr;
         TStageStateRecoveryInfo Info;
         TVector<ui64> Parents;
         TVector<TSource> Sources;
-        bool WatermarkAvailable = false; // All dependent source stages have a watermark generator.
+        bool WatermarkAvailable = false;   // All dependent source stages have a watermark generator.
 
         void SetInputBound(const ui64 bound) {
             InputBound = std::min(InputBound.value_or(bound), bound);
@@ -691,13 +716,14 @@ public:
                     }
                     YQL_ENSURE(IsTopicInput(input), "History replay requires topic inputs");
 
-                    TSource source{.InputIndex = inputIndex};
+                    TSource source{ .InputIndex = inputIndex };
                     std::vector<NYql::NPq::TTopicPartitionsSet> partitionSets;
                     NYql::TIssues issues;
-                    Y_VALIDATE(ParseTopicInput(task, input, inputIndex, /* force */ false, /* isSourceGraph */ true, source.Description, partitionSets, issues), "Invalid topic input: " << issues.ToOneLineString());
+                    Y_VALIDATE(ParseTopicInput(task, input, inputIndex, /* force */ false, /* isSourceGraph */ true, source.Description,
+                                   partitionSets, issues), "Invalid topic input: " << issues.ToOneLineString());
 
                     ForEachTopicPartition(source.Description, partitionSets, [&](const TTopic& topic, const ui64 partition) {
-                        source.Partitions.push_back({topic, partition});
+                        source.Partitions.push_back({ topic, partition });
                     });
 
                     info.Sources.push_back(std::move(source));
@@ -748,7 +774,7 @@ public:
                 YQL_ENSURE(sourceIt != stateSourcesMap.end() && sourceIt->second, "Missing topic source checkpoint for history replay");
 
                 std::optional<ui64> StartingMessageTimestampMs;
-                THashMap<std::pair<TString, ui64>, ui64> partitions; // (cluster, partition) -> offset
+                THashMap<std::pair<TString, ui64>, ui64> partitions;   // (cluster, partition) -> offset
                 for (const auto& data : sourceIt->second->Data) {
                     NYql::NPq::NProto::TDqPqTopicSourceState saved;
                     YQL_ENSURE(data.Version == 1, "Unsupported topic checkpoint version");
@@ -758,7 +784,9 @@ public:
                     StartingMessageTimestampMs = std::min(StartingMessageTimestampMs.value_or(startTs), startTs);
 
                     for (const auto& partition : saved.GetPartitions()) {
-                        YQL_ENSURE(partitions.emplace(std::make_pair(partition.GetCluster(), partition.GetPartition()), partition.GetOffset()).second, "Ambiguous topic partition checkpoint");
+                        YQL_ENSURE(
+                            partitions.emplace(std::make_pair(partition.GetCluster(), partition.GetPartition()), partition.GetOffset()).second,
+                            "Ambiguous topic partition checkpoint");
                     }
                 }
 
@@ -766,11 +794,14 @@ public:
 
                 for (const auto& partition : source.Partitions) {
                     const auto* progress = partitions.FindPtr(std::make_pair(partition.Topic.Cluster, partition.Id));
-                    YQL_ENSURE(result.emplace(partition, TPartitionProgress{
-                        .StartingMessageTimestampMs = StartingMessageTimestampMs,
-                        .Offset = progress ? std::optional(*progress) : std::nullopt,
-                        .EventTime = task.GetInputBoundOptional(),
-                    }).second, "History replay requires unique inputs in the previous query");
+                    YQL_ENSURE(result
+                                   .emplace(partition,
+                                       TPartitionProgress{
+                                           .StartingMessageTimestampMs = StartingMessageTimestampMs,
+                                           .Offset = progress ? std::optional(*progress) : std::nullopt,
+                                           .EventTime = task.GetInputBoundOptional(),
+                                       })
+                                   .second, "History replay requires unique inputs in the previous query");
                 }
             }
         }
@@ -781,7 +812,7 @@ public:
     // Forward propagation of replay progress time from another graph
     void ApplyReplayProgress(const TProgress& progress) {
         THashSet<TPartition, TPartition::THash> used;
-        THashMap<ui64, ui64> boundaries; // Boundary for task = minimal boundary across restored parent
+        THashMap<ui64, ui64> boundaries;   // Boundary for task = minimal boundary across restored parent
         boundaries.reserve(Tasks.size());
         for (ui64 taskId : TaskOrder) {
             auto& task = Tasks.at(taskId);
@@ -915,11 +946,13 @@ private:
                 if (output.HasSink() && output.GetSink().GetType() == "PqSink") {
                     NYql::NPq::NProto::TDqPqTopicSink settings;
                     Y_VALIDATE(output.GetSink().GetSettings().UnpackTo(&settings), "Invalid PQ sink settings for history replay");
-                    YQL_ENSURE(!settings.GetEnableDeduplication(), "History replay does not support PQ sinks with deduplication: producer sequence numbers cannot be replayed");
+                    YQL_ENSURE(!settings.GetEnableDeduplication(),
+                        "History replay does not support PQ sinks with deduplication: producer sequence numbers cannot be replayed");
 
                     NYql::NPq::NProto::TDqPqTopicSinkState saved;
                     YQL_ENSURE(sink.Data.Version == 1 && saved.ParseFromString(sink.Data.Blob), "Invalid PQ sink checkpoint for history replay");
-                    YQL_ENSURE(!saved.GetDeferredPublicationIntId(), "History replay does not support PQ sinks with exactly-once delivery: deferred publications cannot be replayed");
+                    YQL_ENSURE(!saved.GetDeferredPublicationIntId(),
+                        "History replay does not support PQ sinks with exactly-once delivery: deferred publications cannot be replayed");
                     continue;
                 }
 
@@ -946,7 +979,8 @@ private:
                 YQL_ENSURE(info.GetMinWindowStartIndex() <= Max<ui64>() / hopTimeUs, "Hopping recovery time overflow");
                 task.SetInputBound(minWindowStartIndex * hopTimeUs);
             } else {
-                YQL_ENSURE(!info.GetKeysCount(), "Cannot determine hopping recovery input bound, there was no successful watermarks for task " << taskId);
+                YQL_ENSURE(!info.GetKeysCount(),
+                    "Cannot determine hopping recovery input bound, there was no successful watermarks for task " << taskId);
             }
         }
 
@@ -1011,7 +1045,8 @@ private:
                 task.WatermarkAvailable &= task.Info.HasWatermarkGenerator;
             }
 
-            YQL_ENSURE(!task.Info.Hopping || task.WatermarkAvailable, "History replay requires a watermark generator before each hopping operator");
+            YQL_ENSURE(
+                !task.Info.Hopping || task.WatermarkAvailable, "History replay requires a watermark generator before each hopping operator");
 
             for (ui64 childId : dependencies.at(taskId).Children) {
                 if (--dependencies.at(childId).PendingParents == 0) {
@@ -1024,12 +1059,13 @@ private:
     }
 
     THashMap<ui64, TTask> Tasks;
-    TVector<ui64> TaskOrder; // Tasks graph topological order
+    TVector<ui64> TaskOrder;   // Tasks graph topological order
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-bool MakeHistoryReplayPlan(const TGraphStateInfo& src, const TGraphStateInfo& dst, const TCheckpointTaskStates& states, TStateLoadPlan& plan, NYql::TIssues& issues) {
+bool MakeHistoryReplayPlan(
+    const TGraphStateInfo& src, const TGraphStateInfo& dst, const TCheckpointTaskStates& states, TStateLoadPlan& plan, NYql::TIssues& issues) {
     try {
         YQL_ENSURE(!src.GetStages().empty() && !dst.GetStages().empty(), "History replay requires both query graphs");
 
@@ -1044,7 +1080,8 @@ bool MakeHistoryReplayPlan(const TGraphStateInfo& src, const TGraphStateInfo& ds
     }
 }
 
-bool MakeOutputStartTimeReplayPlan(const TGraphStateInfo& tasks, ui64 outputStartTimeUs, bool useSourceDisposition, TStateLoadPlan& plan, NYql::TIssues& issues) {
+bool MakeOutputStartTimeReplayPlan(
+    const TGraphStateInfo& tasks, ui64 outputStartTimeUs, bool useSourceDisposition, TStateLoadPlan& plan, NYql::TIssues& issues) {
     try {
         YQL_ENSURE(!tasks.GetStages().empty(), "Replay from OUTPUT_FROM requires a query graph");
 
@@ -1058,4 +1095,4 @@ bool MakeOutputStartTimeReplayPlan(const TGraphStateInfo& tasks, ui64 outputStar
     }
 }
 
-} // namespace NFq
+}   // namespace NFq

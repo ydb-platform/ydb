@@ -6,4 +6,4 @@ bool EnableSystemLibraries() {
     return true;
 }
 
-} // namespace NYdb::NWasm
+}   // namespace NYdb::NWasm

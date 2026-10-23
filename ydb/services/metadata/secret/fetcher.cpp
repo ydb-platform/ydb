@@ -4,10 +4,7 @@
 namespace NKikimr::NMetadata::NSecret {
 
 std::vector<IClassBehaviour::TPtr> TSnapshotsFetcher::DoGetManagers() const {
-    return {
-        TSecret::GetBehaviour(),
-        TAccess::GetBehaviour()
-    };
+    return { TSecret::GetBehaviour(), TAccess::GetBehaviour() };
 }
 
-}
+}   // namespace NKikimr::NMetadata::NSecret

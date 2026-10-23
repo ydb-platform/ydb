@@ -54,4 +54,4 @@ Y_WEAK void SetCurrentCompartment(IWebAssemblyCompartment*)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYdb::NWasm
+}   // namespace NYdb::NWasm

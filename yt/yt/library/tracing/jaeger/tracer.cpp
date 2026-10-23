@@ -217,6 +217,7 @@ TJaegerChannelManager::TJaegerChannelManager(
     const ITvmServicePtr& tvmService)
     : TvmService_(tvmService)
     , Endpoint_(endpoint)
+    , CollectorHeaders_(config->CollectorHeaders)
     , ReopenTime_(TInstant::Now() + config->ReconnectPeriod + RandomDuration(config->ReconnectPeriod))
     , RpcTimeout_(config->RpcTimeout)
     , PushedBytes_(Profiler().WithTag("endpoint", endpoint).Counter("/pushed_bytes"))
@@ -242,8 +243,16 @@ bool TJaegerChannelManager::Push(const std::vector<TSharedRef>& batches, int spa
 
         if (TvmService_) {
             auto* ticketExt = req->Header().MutableExtension(NRpc::NProto::TCustomMetadataExt::custom_metadata_ext);
-            ticketExt->mutable_entries()->insert(
-                {ServiceTicketMetadataName, TvmService_->GetServiceTicket(TracingServiceAlias)});
+            ticketExt->mutable_entries()->emplace(
+                ServiceTicketMetadataName,
+                TvmService_->GetServiceTicket(TracingServiceAlias));
+        }
+
+        if (!CollectorHeaders_.empty()) {
+            auto* metadataExt = req->Header().MutableExtension(NRpc::NProto::TCustomMetadataExt::custom_metadata_ext);
+            for (const auto& [key, value] : CollectorHeaders_) {
+                metadataExt->mutable_entries()->emplace(NYT::ToProto(key), NYT::ToProto(value));
+            }
         }
 
         YT_TLOG_DEBUG("Sending spans")

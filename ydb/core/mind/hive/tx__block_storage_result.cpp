@@ -42,7 +42,7 @@ public:
                             {"tabletId", tablet->Id});
                     }
                     for (TFollowerTabletInfo& follower : tablet->Followers) {
-                        follower.InitiateStop(SideEffects);
+                        follower.InitiateStop(SideEffects, EHiveEventReason::Deleting);
                     }
                     SideEffects.Send(Self->SelfId(), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
                 } else {

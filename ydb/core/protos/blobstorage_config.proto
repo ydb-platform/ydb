@@ -139,6 +139,9 @@ message TPDiskFilter {
             bool SharedWithOs = 2; // require certain SharedWithOs property
             bool ReadCentric = 3; // require certain ReadCentric property
             uint64 Kind = 4; // require certain kind
+            // Exact match on supplied string fields; omitted fields are unconstrained.
+            // Deprecated numeric location fields are not accepted.
+            NActorsInterconnect.TNodeLocation Location = 5;
         }
     }
     repeated TRequiredProperty Property = 1; // conjunction of required properties; the same properties must not repeat

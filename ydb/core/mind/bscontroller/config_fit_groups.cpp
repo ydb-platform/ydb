@@ -696,7 +696,7 @@ namespace NKikimr {
                     if (usable) {
                         usable = false;
                         for (const auto& filter : StoragePool.PDiskFilters) {
-                            if (filter.MatchPDisk(info)) {
+                            if (filter.MatchPDisk(info, State.HostRecords->GetLocation(id.NodeId))) {
                                 usable = true;
                                 break;
                             }
@@ -915,6 +915,9 @@ namespace NKikimr {
                     for (const auto& filter : storagePool.PDiskFilters) {
                         identifier << " Filter# " << filter.Type << "," << filter.SharedWithOs
                             << "," << filter.ReadCentric << "," << filter.Kind;
+                        if (filter.Location) {
+                            identifier << " Location# " << filter.Location->size() << ":" << *filter.Location;
+                        }
                     }
                     auto& [numGroups, id] = filterMap[identifier];
                     numGroups += storagePool.NumGroups;

@@ -331,9 +331,9 @@ private:
         return ConflictingConstructors.empty() && Constructors.IsEmpty();
     }
 
-    virtual std::shared_ptr<IDataSource> DoExtractNextImpl(const std::shared_ptr<TSpecialReadContext>& context) = 0;
+    virtual std::unique_ptr<TDataSourceLease> DoExtractNextImpl(const std::shared_ptr<TSpecialReadContext>& context) = 0;
 
-    virtual std::shared_ptr<IDataSource> DoTryExtractNext(
+    virtual std::unique_ptr<TDataSourceLease> DoTryExtractNext(
         const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) override final {
         if (!Accessors.GetSize() && Accessors.HasRequest()) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",

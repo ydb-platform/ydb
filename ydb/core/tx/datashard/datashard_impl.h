@@ -1609,7 +1609,7 @@ public:
     void SendResult(const TActorContext &ctx, TOutputOpData::TResultPtr &result, const TActorId &target, ui64 step, ui64 txId,
         NWilson::TTraceId traceId);
     void SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result, const TActorId& target, ui64 step, ui64 txId,
-        NWilson::TTraceId traceId);
+        NWilson::TTraceId traceId, ui64 cookie);
 
     void FillSplitTrajectory(ui64 origin, NKikimrTx::TBalanceTrackList& tracks);
 
@@ -3100,7 +3100,7 @@ private:
         }
 
         explicit TEnqueuedRecord(const TChangeRecord& record)
-            : TEnqueuedRecord(record.GetBody().size(), record.GetTableId(), record.GetSchemaVersion(),
+            : TEnqueuedRecord(record.GetBodySize(), record.GetTableId(), record.GetSchemaVersion(),
                 record.GetApproximateCreationDateTime(), record.GetLockId(), record.GetLockOffset())
         {
         }

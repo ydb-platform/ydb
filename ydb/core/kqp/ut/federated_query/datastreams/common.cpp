@@ -396,6 +396,21 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
     return received;
 }
 
+void TStreamingTestFixture::EnsureTopicEndOffset(const TString& topicName, ui64 endOffset, bool local) {
+    EnsureTopicEndOffset(topicName, endOffset, *GetTopicClient(local));
+}
+
+void TStreamingTestFixture::EnsureTopicEndOffset(const TString& topicName, ui64 endOffset, NYdb::NTopic::TTopicClient& topicClient) {
+    const auto result = topicClient.DescribeTopic(topicName, NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true)).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+    const auto& partitions = result.GetTopicDescription().GetPartitions();
+    UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+    const auto& stats = partitions[0].GetPartitionStats();
+    UNIT_ASSERT(stats);
+    UNIT_ASSERT_VALUES_EQUAL(stats->GetStartOffset(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(stats->GetEndOffset(), endOffset);
+}
+
 void TStreamingTestFixture::TestReadTopicBasic(const std::string& testSuffix) {
     const std::string sourceName = "sourceName" + testSuffix;
     const std::string topicName = "topicName" + testSuffix;

@@ -147,6 +147,10 @@ public:
         bool sort = false,
         bool checkResult = true);
 
+    void EnsureTopicEndOffset(const TString& topicName, ui64 endOffset = 0, bool local = false);
+
+    void EnsureTopicEndOffset(const TString& topicName, ui64 endOffset, NYdb::NTopic::TTopicClient& topicClient);
+
     void TestReadTopicBasic(const std::string& testSuffix);
 
     // Table client SDK

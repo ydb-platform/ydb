@@ -104,6 +104,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    hooks/abstract
     ut_rw
     ut_schema
     backup

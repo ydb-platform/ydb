@@ -181,7 +181,8 @@ protected:
                 false,
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
                 KqpCtx.Config->GetEnableWatermarks(),
-                defaultLatePolicy
+                defaultLatePolicy,
+                KqpCtx.Config->FeatureFlags.GetEnableHoppingWindowStartCheck()
             );
         } else {
             NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());

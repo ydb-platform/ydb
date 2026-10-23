@@ -1344,6 +1344,155 @@ Y_UNIT_TEST_SUITE(Viewer) {
         CheckPDiskControllerStatuses(true, false);
     }
 
+    void TestNodesAliveFilter(bool offloadMerge) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        THashMap<TActorId, TNodeId> whiteboardNodes;
+        // TServer registers viewers by node index; offload requests address them by node ID.
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(nodeIndex), nodeIndex);
+            const TNodeId nodeId = runtime.GetNodeId(nodeIndex);
+            runtime.RegisterService(MakeViewerID(nodeId), viewerId, nodeIndex);
+            const TActorId whiteboardId = runtime.GetLocalServiceId(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), nodeIndex);
+            whiteboardNodes.emplace(whiteboardId, nodeId);
+        }
+        const TNodeId disconnectedNodeId = runtime.GetNodeId(1);
+        bool disconnected = true;
+        bool disconnectAll = false;
+        EFlag otherConnectedNodeState = EFlag::Red;
+        size_t offloadedResponses = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvWhiteboard::EvSystemStateResponse) {
+                const auto itNode = whiteboardNodes.find(ev->Sender);
+                if (itNode == whiteboardNodes.end() || ev->Cookie != itNode->second) {
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+                if (disconnectAll || (disconnected && ev->Cookie == disconnectedNodeId)) {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                auto* response = ev->Get<TEvWhiteboard::TEvSystemStateResponse>();
+                for (auto& info : *response->Record.MutableSystemStateInfo()) {
+                    info.SetSystemState(ev->Cookie == runtime.GetNodeId(0) ? EFlag::Yellow : otherConnectedNodeState);
+                }
+            } else if (ev->GetTypeRewrite() == TEvViewer::EvViewerResponse) {
+                ++offloadedResponses;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto requestPage = [&](const TString& path) {
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET " << path << " HTTP/1.1\r\n\r\n", endpoint, {});
+            TActorId sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
+            return json;
+        };
+        auto makeRequest = [&](const TString& query, const TString& fields = "NodeId") {
+            return requestPage(TStringBuilder() << "/viewer/json/nodes?type=static&fields_required=" << fields
+                << "&offload_merge=" << (offloadMerge ? "true" : "false") << "&offload_merge_attempts=1&timeout=1000&enums=true" << query);
+        };
+        auto assertCounts = [](const NJson::TJsonValue& json, size_t total, size_t found) {
+            UNIT_ASSERT_VALUES_EQUAL_C(json["TotalNodes"].GetString(), ToString(total), NJson::WriteJson(json, false));
+            UNIT_ASSERT_VALUES_EQUAL_C(json["FoundNodes"].GetString(), ToString(found), NJson::WriteJson(json, false));
+            UNIT_ASSERT_C(!json["NeedFilter"].GetBoolean(), NJson::WriteJson(json, false));
+        };
+
+        const auto capabilities = requestPage("/viewer/capabilities");
+        UNIT_ASSERT_VALUES_EQUAL(capabilities["Capabilities"]["/viewer/nodes/alive"].GetInteger(), 1);
+
+        for (const TString& query : {TString(""), TString("&alive=false")}) {
+            const auto json = makeRequest(query + "&sort=NodeId", "NodeId,SystemState");
+            assertCounts(json, 3, 3);
+            UNIT_ASSERT_VALUES_EQUAL(json["Nodes"].GetArray().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(json["Nodes"][1]["NodeId"].GetUInteger(), disconnectedNodeId);
+            UNIT_ASSERT(json["Nodes"][1]["Disconnected"].GetBoolean());
+        }
+
+        const auto minimal = makeRequest("&alive=true&sort=NodeId");
+        assertCounts(minimal, 3, 2);
+        UNIT_ASSERT_VALUES_EQUAL(minimal["Nodes"].GetArray().size(), 2);
+        for (const auto& node : minimal["Nodes"].GetArray()) {
+            UNIT_ASSERT(!node.Has("SystemState"));
+        }
+
+        const auto defaults = makeRequest("&alive=true", "");
+        assertCounts(defaults, 3, 2);
+        for (const auto& node : defaults["Nodes"].GetArray()) {
+            UNIT_ASSERT(node.Has("SystemState"));
+        }
+
+        const auto alive = makeRequest("&alive=true&sort=NodeId", "NodeId,SystemState");
+        assertCounts(alive, 3, 2);
+        UNIT_ASSERT_VALUES_EQUAL(alive["Nodes"].GetArray().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(alive["Nodes"][0]["NodeId"].GetUInteger(), runtime.GetNodeId(0));
+        UNIT_ASSERT_VALUES_EQUAL(alive["Nodes"][1]["NodeId"].GetUInteger(), runtime.GetNodeId(2));
+        UNIT_ASSERT_VALUES_EQUAL(alive["Nodes"][0]["SystemState"]["SystemState"].GetString(), "Yellow");
+        UNIT_ASSERT_VALUES_EQUAL(alive["Nodes"][1]["SystemState"]["SystemState"].GetString(), "Red");
+
+        const auto page = makeRequest("&alive=true&sort=NodeId&offset=1&limit=1");
+        assertCounts(page, 3, 2);
+        UNIT_ASSERT_VALUES_EQUAL(page["Nodes"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(page["Nodes"][0]["NodeId"].GetUInteger(), runtime.GetNodeId(2));
+
+        const auto emptyPage = makeRequest("&alive=true&sort=NodeId&offset=2&limit=1");
+        assertCounts(emptyPage, 3, 2);
+        UNIT_ASSERT(emptyPage["Nodes"].GetArray().empty());
+
+        const auto grouped = makeRequest("&alive=true&group=SystemState");
+        assertCounts(grouped, 3, 2);
+        UNIT_ASSERT_VALUES_EQUAL(grouped["NodeGroups"].GetArray().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(grouped["NodeGroups"][0]["GroupName"].GetString(), "Red");
+        UNIT_ASSERT_VALUES_EQUAL(grouped["NodeGroups"][1]["GroupName"].GetString(), "Yellow");
+        for (const auto& group : grouped["NodeGroups"].GetArray()) {
+            UNIT_ASSERT_VALUES_EQUAL(group["NodeCount"].GetString(), "1");
+        }
+
+        otherConnectedNodeState = EFlag::Green;
+        const auto problems = makeRequest("&alive=true&problems_only=true");
+        assertCounts(problems, 3, 1);
+        UNIT_ASSERT_VALUES_EQUAL(problems["Nodes"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(problems["Nodes"][0]["NodeId"].GetUInteger(), runtime.GetNodeId(0));
+        otherConnectedNodeState = EFlag::Red;
+
+        const auto selected = makeRequest(TStringBuilder() << "&alive=true&node_id=" << disconnectedNodeId);
+        assertCounts(selected, 1, 0);
+        UNIT_ASSERT(selected["Nodes"].GetArray().empty());
+
+        disconnected = false;
+        const auto recovered = makeRequest("&alive=true&sort=NodeId");
+        assertCounts(recovered, 3, 3);
+        UNIT_ASSERT_VALUES_EQUAL(recovered["Nodes"].GetArray().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(recovered["Nodes"][1]["NodeId"].GetUInteger(), disconnectedNodeId);
+        UNIT_ASSERT(!recovered["Nodes"][1]["Disconnected"].GetBoolean());
+
+        disconnectAll = true;
+        const auto empty = makeRequest("&alive=true&group=SystemState");
+        assertCounts(empty, 3, 0);
+        UNIT_ASSERT(empty["NodeGroups"].GetArray().empty());
+        UNIT_ASSERT_VALUES_EQUAL(offloadedResponses > 0, offloadMerge);
+    }
+
+    Y_UNIT_TEST(NodesPageAliveFilterDirect) {
+        TestNodesAliveFilter(false);
+    }
+
+    Y_UNIT_TEST(NodesPageAliveFilterOffloaded) {
+        TestNodesAliveFilter(true);
+    }
+
     Y_UNIT_TEST(NodesPageKeepsPDisksForDisconnectedNode)
     {
         TPortManager tp;

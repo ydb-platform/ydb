@@ -785,13 +785,14 @@ public:
             TDataShard* self, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> writeResult,
             const TActorId& target,
             ui64 step, ui64 txId,
-            NWilson::TSpan&& span)
+            NWilson::TSpan&& span, ui64 cookie)
         : Self(self)
         , WriteResult(std::move(writeResult))
         , Target(target)
         , Step(step)
         , TxId(txId)
         , Span(std::move(span))
+        , Cookie(cookie)
     {
     }
 
@@ -813,7 +814,7 @@ public:
         }
 
         LWTRACK(ProposeTransactionSendResult, WriteResult->GetOrbit());
-        Self->Send(Target, WriteResult.release(), 0, 0, Span.GetTraceId());
+        Self->Send(Target, WriteResult.release(), 0, Cookie, Span.GetTraceId());
         Span.End();
     }
 
@@ -832,6 +833,7 @@ private:
     ui64 Step;
     ui64 TxId;
     NWilson::TSpan Span;
+    ui64 Cookie;
 };
 
 void TDataShard::SendResult(const TActorContext &ctx,
@@ -871,7 +873,7 @@ void TDataShard::SendResult(const TActorContext &ctx,
 
 void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result,
         const TActorId& target, ui64 step, ui64 txId,
-        NWilson::TTraceId traceId)
+        NWilson::TTraceId traceId, ui64 cookie)
 {
     Y_ENSURE(txId == result->Record.GetTxId(), " Result for txId " << txId << " has txId " << result->Record.GetTxId());
 
@@ -881,7 +883,7 @@ void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEven
         // This is a volatile transaction, and we need to wait until it is resolved
         bool ok = VolatileTxManager.AttachVolatileTxCallback(txId,
             new TSendVolatileWriteResult(this, std::move(result), target, step, txId,
-                std::move(span)));
+                std::move(span), cookie));
         Y_ENSURE(ok);
         return;
     }
@@ -894,7 +896,7 @@ void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEven
         {"target", target});
 
     LWTRACK(ProposeTransactionSendResult, result->GetOrbit());
-    ctx.Send(target, result.release(), 0, 0, span.GetTraceId());
+    ctx.Send(target, result.release(), 0, cookie, span.GetTraceId());
 }
 
 void TDataShard::FillExecutionStats(const TExecutionProfile& execProfile, NKikimrQueryStats::TTxStats& txStats) const {
@@ -963,7 +965,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::ChangeRecords::TxId>(record.GetTxId()),
             NIceDb::TUpdate<Schema::ChangeRecords::PathOwnerId>(record.GetPathId().OwnerId),
             NIceDb::TUpdate<Schema::ChangeRecords::LocalPathId>(record.GetPathId().LocalPathId),
-            NIceDb::TUpdate<Schema::ChangeRecords::BodySize>(record.GetBody().size()),
+            NIceDb::TUpdate<Schema::ChangeRecords::BodySize>(record.GetBodySize()),
             NIceDb::TUpdate<Schema::ChangeRecords::SchemaVersion>(record.GetSchemaVersion()),
             NIceDb::TUpdate<Schema::ChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
             NIceDb::TUpdate<Schema::ChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
@@ -1042,7 +1044,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             .Step = record.GetStep(),
             .TxId = record.GetTxId(),
             .PathId = record.GetPathId(),
-            .BodySize = record.GetBody().size(),
+            .BodySize = record.GetBodySize(),
             .TableId = record.GetTableId(),
             .SchemaVersion = record.GetSchemaVersion(),
             .LockId = record.GetLockId(),
@@ -1052,7 +1054,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
         db.Table<Schema::LockChangeRecords>().Key(record.GetLockId(), record.GetLockOffset()).Update(
             NIceDb::TUpdate<Schema::LockChangeRecords::PathOwnerId>(record.GetPathId().OwnerId),
             NIceDb::TUpdate<Schema::LockChangeRecords::LocalPathId>(record.GetPathId().LocalPathId),
-            NIceDb::TUpdate<Schema::LockChangeRecords::BodySize>(record.GetBody().size()),
+            NIceDb::TUpdate<Schema::LockChangeRecords::BodySize>(record.GetBodySize()),
             NIceDb::TUpdate<Schema::LockChangeRecords::SchemaVersion>(record.GetSchemaVersion()),
             NIceDb::TUpdate<Schema::LockChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
             NIceDb::TUpdate<Schema::LockChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
@@ -3288,7 +3290,7 @@ bool TDataShard::CheckDataTxRejectAndReply(const NEvents::TDataEvents::TEvWrite:
             SetOverloadSubscribed(overloadSubscribe, ev->Recipient, ev->Sender, rejectReasons, result->Record);
         }
 
-        ctx.Send(ev->Sender, result.release());
+        ctx.Send(ev->Sender, result.release(), 0, ev->Cookie);
         IncCounter(COUNTER_WRITE_OVERLOADED);
         IncCounter(COUNTER_WRITE_COMPLETE);
         return true;
@@ -4677,7 +4679,7 @@ void TDataShard::Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TA
     Execute(new TTxStoreS3DownloadInfo(this, ev), ctx);
 }
 
-void TDataShard::ScanComplete(NTable::EStatus,
+void TDataShard::ScanComplete(NTable::EStatus status,
                                      TAutoPtr<IDestructable> prod,
                                      ui64 cookie,
                                      const TActorContext &ctx)
@@ -4714,7 +4716,12 @@ void TDataShard::ScanComplete(NTable::EStatus,
                     {"cookie", cookie},
                     {"tabletId", TabletID()});
 
-                CdcStreamScanManager.Complete(cookie);
+                if (status == NTable::EStatus::Done) {
+                    CdcStreamScanManager.Complete(cookie);
+                } else {
+                    // keep the progress, so the retry resumes from the last key
+                    CdcStreamScanManager.Fail(cookie);
+                }
             } else if (!Pipeline.FinishStreamingTx(cookie)) {
                 YDB_LOG_ERROR_CTX(ctx, "Scan complete for unknown tx",
                     {"tabletId", TabletID()},

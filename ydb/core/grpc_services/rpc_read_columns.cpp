@@ -159,7 +159,7 @@ private:
             request->DatabaseName = Request->GetDatabaseName().GetOrElse("");
 
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-            entry.Path = std::move(path);
+            entry.Path = ::NKikimr::SplitPath(Request->NormalizePath(table));
             if (entry.Path.empty()) {
                 return ReplyWithError(Ydb::StatusIds::NOT_FOUND, "Invalid table path specified", ctx);
             }

@@ -127,6 +127,12 @@ TVChunk::~TVChunk()
 void TVChunk::Start()
 {
     // ActorSystem thread
+<<<<<<< HEAD
+=======
+
+    LogTitle.SetDiskId(PartitionDirectService->GetVolumeConfig()->DiskId);
+
+>>>>>>> nbs-26-3-1
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this()]() mutable
         {

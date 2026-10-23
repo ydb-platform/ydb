@@ -15,9 +15,10 @@ private:
     std::shared_ptr<IStepFunction> Function;
 
     virtual NJson::TJsonValue DoDebugJson() const override;
-    virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
+    virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
     TConclusion<bool> AddMonoValue(
         const bool monoValue, const std::shared_ptr<IChunkedArray>& accResult, const TProcessorContext& context) const;
+    TConclusion<bool> CombineInput(const ui32 inputId, const TProcessorContext& context) const;
 
     virtual bool IsAggregation() const override {
         return false;

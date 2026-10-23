@@ -14,18 +14,17 @@ private:
     const NCommon::TReplaceKeyAdapter Start;
     const NCommon::TReplaceKeyAdapter Finish;
 
-    virtual TConclusion<bool> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
+    virtual TConclusion<NReader::NCommon::TExecutionResult> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NReader::NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
-        return false;
+        return NReader::NCommon::TExecutionResult::Done();
     }
 
     virtual bool NeedPortionData() const override {
         return false;
     }
 
-    virtual bool DoStartFetchingAccessor(
-        const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const NReader::NCommon::TFetchingScriptCursor& /*step*/) override {
-        return false;
+    virtual NReader::NCommon::TExecutionResult DoStartFetchingAccessor(const NReader::NCommon::TFetchingScriptCursor& /*step*/) override {
+        return NReader::NCommon::TExecutionResult::Done();
     }
 
     virtual std::shared_ptr<arrow::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const = 0;
@@ -45,9 +44,9 @@ private:
         }
     }
 
-    virtual bool DoStartFetchingColumns(const std::shared_ptr<NReader::NCommon::IDataSource>& /*sourcePtr*/,
+    virtual NReader::NCommon::TExecutionResult DoStartFetchingColumns(
         const NReader::NCommon::TFetchingScriptCursor& /*step*/, const NReader::NCommon::TColumnsSetIds& /*columns*/) override {
-        return false;
+        return NReader::NCommon::TExecutionResult::Done();
     }
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(

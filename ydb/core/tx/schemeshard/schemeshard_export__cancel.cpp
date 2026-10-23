@@ -8,6 +8,7 @@
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/ptr.h>
 #include <util/generic/xrange.h>
 
@@ -54,7 +55,11 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
 
         cancel.SetStatus(Ydb::StatusIds::SUCCESS);
 
-        if (exportInfo->IsFinished() || exportInfo->IsDropping()) {
+        const bool allItemsDone = AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone);
+        const bool publishingCompletion = exportInfo->IsWorking() && allItemsDone;
+        const bool committingS3Export = exportInfo->Kind == TExportInfo::EKind::S3
+            && (exportInfo->IsAutoDropping() || publishingCompletion);
+        if (exportInfo->IsFinished() || exportInfo->IsDropping() || committingS3Export) {
             Send(Request->Sender, std::move(response), 0, Request->Cookie);
             return true;
         }
@@ -64,6 +69,25 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         );
 
         exportInfo->Issue = "Cancelled manually";
+
+        NIceDb::TNiceDb db(txc.DB);
+        if (auto uploader = std::exchange(exportInfo->ExportMetadataUploader, {})) {
+            Send(uploader, new TEvents::TEvPoisonPill());
+            Self->RunningExportSchemeUploaders.erase(uploader);
+        }
+        for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
+            auto& item = exportInfo->Items[itemIdx];
+            if (auto uploader = std::exchange(item.SchemeUploader, {})) {
+                Send(uploader, new TEvents::TEvPoisonPill());
+                Self->RunningExportSchemeUploaders.erase(uploader);
+                // A retained tx id belongs to an already completed backup whose
+                // marker was being published; there is no backup left to cancel.
+                Self->TxIdToExport.erase(item.WaitTxId);
+                item.WaitTxId = InvalidTxId;
+                item.State = TExportInfo::EState::Cancelled;
+                Self->PersistExportItemState(db, *exportInfo, itemIdx);
+            }
+        }
 
         if (exportInfo->State < TExportInfo::EState::Transferring) {
             exportInfo->State = TExportInfo::EState::Cancelled;
@@ -89,7 +113,6 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
             exportInfo->EndTime = TAppData::TimeProvider->Now();
         }
 
-        NIceDb::TNiceDb db(txc.DB);
         Self->PersistExportState(db, *exportInfo);
         Self->EraseEncryptionKey(db, *exportInfo);
 

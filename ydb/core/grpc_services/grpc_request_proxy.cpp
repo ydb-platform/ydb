@@ -138,10 +138,7 @@ private:
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
-        requestBaseCtx->InitRootPath(AppData(ctx));
-        requestBaseCtx->InitializePathNormalization(AppData(ctx)->PathNormalizer);
-        // Fill the lazy cache on the owning actor before handing the request to other consumers.
-        const auto maybeDatabaseName = requestBaseCtx->GetDatabaseName();
+        requestBaseCtx->InitializePathNormalization(AppData(ctx)->PathNormalizer, AppData(ctx));
         requestBaseCtx->CountRequestPaths();
         LogRequest(event);
         if (!SchemeCache) {
@@ -191,6 +188,7 @@ private:
                 HandleBootstrapClusterEvent(event);
                 return;
             }
+            const auto maybeDatabaseName = requestBaseCtx->GetDatabaseName();
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
                 databaseName = CanonizePath(maybeDatabaseName.GetRef());
             } else {

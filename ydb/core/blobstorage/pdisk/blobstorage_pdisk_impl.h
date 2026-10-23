@@ -236,8 +236,9 @@ public:
     TVector<TOwner> QuarantineOwners;
 
 
-    TSysLogRecord SysLogRecord; // Current sys log record state, part 1 of 2
-    TSysLogFirstNoncesToKeep SysLogFirstNoncesToKeep; // Current sys log record state, part 2 of 2
+    TSysLogRecord SysLogRecord;
+    TSysLogFirstNoncesToKeep SysLogFirstNoncesToKeep;
+    TSysLogDiskState SysLogDiskState;
     ui64 SysLogLsn = 0;
     TNonceSet LoggedNonces; // Latest on-disk Nonce set
     ui64 CostLimitNs;
@@ -292,6 +293,7 @@ public:
     // stats
     TAtomic NonRealTimeMs = 0;
     TAtomic SlowDeviceMs = 0;
+    TDeviceSlowdownDetector DeviceSlowdownDetector;
 
     const bool UseHugePages;
 
@@ -425,6 +427,8 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Whiteboard and HTTP reports creation
     void WhiteboardReport(TWhiteboardReport &whiteboardReport); // Called by actor
+    bool UpdateSlowDiskState(ui64 nowMs);
+    bool SetSlowDiskState(bool slow);
     void RenderState(IOutputStream &str, THttpInfo &httpInfo);
     void OutputHtmlOwners(TStringStream &str);
     void OutputHtmlLogChunksDetails(TStringStream &str);

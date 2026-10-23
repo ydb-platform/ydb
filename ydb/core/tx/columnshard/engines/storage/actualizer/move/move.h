@@ -56,9 +56,7 @@ private:
         for (size_t i = 0; i < count; ++i) {
             if (position == Portions.end()) {
                 position = Portions.begin();
-                if (position == Portions.end()) {
-                    return;
-                }
+                AFL_VERIFY(position != Portions.end());
             }
             const auto current = position++;
             const bool keepScanning = visitor(current->first, current->second);

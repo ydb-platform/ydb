@@ -6,7 +6,6 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/size_literals.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
@@ -151,7 +150,8 @@ bool TMoveDataDriver::CanCompleteMigration(const NOlap::NActualizer::TMoveDataQu
     const auto& defaultOperator = Self->GetStoragesManager()->GetDefaultOperator();
     // A shared or borrowed link is not ours to collect, so it gets its own sensor.
     const auto& sharedBlobs = defaultOperator->GetSharedBlobs();
-    if (sharedBlobs && sharedBlobs->HasBlobsForGroups(State.TargetGroups)) {
+    AFL_VERIFY(sharedBlobs);
+    if (sharedBlobs->HasBlobsForGroups(State.TargetGroups)) {
         Self->Counters.GetCSCounters().OnMoveDataGateBlockedByShared();
         YDB_LOG_INFO("MoveData gate waits for shared blobs", {"tabletId", Self->TabletID()});
         return false;
@@ -172,7 +172,7 @@ void TMoveDataDriver::FinishMigration(const TActorContext& ctx) {
 }
 
 void TMoveDataDriver::SetupMetadata() {
-    if (!Self->HasIndex() || MetadataSubscribersInFlight->Val()) {
+    if (MetadataSubscribersInFlight->Val()) {
         return;
     }
     NOlap::NActualizer::TMoveDataMetadataBudget budget(NYDBTest::TControllers::GetColumnShardController()->GetMetadataRequestSoftMemoryLimit());
@@ -191,10 +191,7 @@ void TMoveDataDriver::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, con
 }
 
 void TMoveDataDriver::StartPortionRewrites() {
-    if (!Self->HasIndex()) {
-        return;
-    }
-    const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : 512_MB;
+    const ui64 memoryUsageLimit = AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit();
     std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>> indexChanges = Self->TablesManager.MutablePrimaryIndex().StartTtl(
         {}, Self->DataLocksManager, memoryUsageLimit, NOlap::NActualizer::EActualizationScope::MoveDataOnly);
     if (indexChanges.empty()) {

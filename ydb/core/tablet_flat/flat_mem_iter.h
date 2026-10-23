@@ -229,7 +229,9 @@ namespace NTable {
 
             for (;;) {
                 const bool isDelta = update->RowVersion.Step == Max<ui64>();
-                if (update->Rop != ERowOp::Absent) {
+                if (isDelta && committedTransactions.IsSkippedSavepointSeqNum(update->RowVersion.TxId, update->SavepointSeqNum)) {
+                    // Skipped deltas are ignored as if they don't exist
+                } else if (update->Rop != ERowOp::Absent) {
                     const TRowVersion* commitVersion;
                     if (!isDelta || (commitVersion = committedTransactions.Find(update->RowVersion.TxId))) {
                         if (!isDelta) {
@@ -288,9 +290,10 @@ namespace NTable {
             auto* chain = GetCurrentVersion();
             Y_DEBUG_ABORT_UNLESS(chain, "Unexpected empty chain");
 
-            // Skip uncommitted and lock only deltas
+            // Skip uncommitted, lock only and skipped deltas
             while (chain->RowVersion.Step == Max<ui64>()) {
-                bool isCommitted = bool(committedTransactions.Find(chain->RowVersion.TxId));
+                const bool isSkipped = committedTransactions.IsSkippedSavepointSeqNum(chain->RowVersion.TxId, chain->SavepointSeqNum);
+                bool isCommitted = !isSkipped && bool(committedTransactions.Find(chain->RowVersion.TxId));
                 if (isCommitted && chain->Rop != ERowOp::Absent) {
                     break;
                 }
@@ -298,8 +301,8 @@ namespace NTable {
                 // We cannot cache when there are uncompacted deltas (including lock only)
                 stats.UncertainErase = true;
 
-                // Lock only deltas are not observed (whether committed or not)
-                if (chain->Rop != ERowOp::Absent) {
+                // Lock only and skipped deltas are not observed (whether committed or not)
+                if (chain->Rop != ERowOp::Absent && !isSkipped) {
                     transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
                 }
 
@@ -360,6 +363,11 @@ namespace NTable {
                         continue;
                     }
 
+                    if (committedTransactions.IsSkippedSavepointSeqNum(chain->RowVersion.TxId, chain->SavepointSeqNum)) {
+                        // Skipped deltas are ignored as if they don't exist
+                        continue;
+                    }
+
                     auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
                     if (commitVersion && *commitVersion <= rowVersion) {
                         CurrentVersion = chain;
@@ -398,7 +406,9 @@ namespace NTable {
                     lockMode = chain->Lock;
                     lockTxId = chain->RowVersion.TxId;
                 }
-                if (chain->Rop != ERowOp::Absent) {
+                if (chain->Rop != ERowOp::Absent &&
+                    !committedTransactions.IsSkippedSavepointSeqNum(chain->RowVersion.TxId, chain->SavepointSeqNum))
+                {
                     auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
                     if (commitVersion) {
                         return { *commitVersion, chain->RowVersion.TxId, chain->Rop };

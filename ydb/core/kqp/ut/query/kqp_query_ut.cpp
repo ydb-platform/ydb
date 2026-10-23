@@ -1,6 +1,7 @@
 #include <fmt/format.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/testlib/common_helper.h>
@@ -421,12 +422,21 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST(QueryCache) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+        auto* alias = appConfig.MutableResourcePathPrefixMapping()->AddRules();
+        alias->SetSrc("/alias");
+        alias->SetDst("/Root");
+        TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        auto counters = GetServiceCounters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters, "ydb");
+        auto counter = counters->GetSubgroup("api_service", "Ydb.Table.V1.TableService")
+            ->GetSubgroup("method", "ExecuteDataQuery")->GetSubgroup("database", "/Root")
+            ->GetNamedCounter("name", "api.grpc.request.path_alias_count", true);
 
         auto query = Q_(R"(
-            SELECT * FROM `/Root/Test`;
+            SELECT * FROM `/alias/Test`;
         )");
 
         auto txControl = TTxControl::BeginTx().CommitTx();
@@ -435,16 +445,50 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         execSettings.KeepInQueryCache(true);
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
+        auto physical = session.ExecuteDataQuery("SELECT * FROM `/Root/Test`;", txControl).ExtractValueSync();
+        UNIT_ASSERT_C(physical.IsSuccess(), physical.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0);
+
         auto result = session.ExecuteDataQuery(query, txControl, execSettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 1);
         auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
 
         result = session.ExecuteDataQuery(query, txControl, execSettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 2);
 
         stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+
+        result = session.ExecuteDataQuery(query + "\n-- AST cache hit\n", txControl, execSettings).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT(NYdb::TProtoAccessor::GetProto(*result.GetStats()).compilation().from_cache());
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 3);
+
+        auto prepared = session.PrepareDataQuery(query).ExtractValueSync();
+        UNIT_ASSERT_C(prepared.IsSuccess(), prepared.GetIssues().ToString());
+        result = prepared.GetQuery().Execute(txControl, execSettings).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 4);
+
+        auto failed = session.ExecuteDataQuery("SELECT * FROM `/alias/Missing`;", txControl).ExtractValueSync();
+        UNIT_ASSERT(!failed.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 5);
+        physical = session.ExecuteDataQuery("SELECT * FROM `/Root/Test`;", txControl).ExtractValueSync();
+        UNIT_ASSERT_C(physical.IsSuccess(), physical.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 5);
+
+        auto queryCounter = counters->GetSubgroup("api_service", "Ydb.Query.V1.QueryService")
+            ->GetSubgroup("method", "ExecuteQuery")->GetSubgroup("database", "/Root")
+            ->GetNamedCounter("name", "api.grpc.request.path_alias_count", true);
+        auto queryClient = kikimr.GetQueryClient();
+        for (ui64 count = 1; count <= 2; ++count) {
+            auto response = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(response.IsSuccess(), response.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(queryCounter->Val(), count);
+        }
     }
 
     Y_UNIT_TEST(QueryCacheTtl) {

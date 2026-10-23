@@ -37,6 +37,7 @@ public:
     void EnablePathNormalization() noexcept;
     void DisablePathNormalization() noexcept;
     TString NormalizePath(TStringBuf path) const;
+    void RecordPathAliasUsage(bool used) const;
 
     virtual TMaybe<TString> GetTraceId() const = 0;
     virtual NWilson::TTraceId GetWilsonTraceId() const = 0;
@@ -67,13 +68,15 @@ public:
 
 protected:
     bool IsPathNormalizationEnabled() const noexcept;
-    void SetPathNormalizer(std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer,
-        NMonitoring::TDynamicCounters::TCounterPtr pathAliasCounter = {}) noexcept;
+    bool CanInitializePathAliasCounter() const noexcept;
+    void SetPathNormalizer(std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer) noexcept;
+    void SetPathAliasCounter(NMonitoring::TDynamicCounters::TCounterPtr counter);
 
 private:
     std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer_;
     NMonitoring::TDynamicCounters::TCounterPtr PathAliasCounter_;
     bool PathNormalizationEnabled_ = false;
+    mutable bool PathAliasUsed_ = false;
     mutable bool PathAliasCounted_ = false;
 };
 

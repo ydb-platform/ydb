@@ -250,6 +250,7 @@ public:
         , CommandTagName(commandTagName) {}
 
     void FillResult(TResult& validateResult) const override {
+        validateResult.UsesPathAliases = SessionCtx->Query().UsesPathAliases;
         if (!validateResult.Success()) {
             return;
         }
@@ -290,6 +291,7 @@ public:
         , UseDqExplain(useDqExplain) {}
 
     void FillResult(TResult& queryResult) const override {
+        queryResult.UsesPathAliases = SessionCtx->Query().UsesPathAliases;
         if (!queryResult.Success()) {
             return;
         }
@@ -342,6 +344,7 @@ public:
         , CommandTagName(commandTagName) {}
 
     void FillResult(TResult& queryResult) const override {
+        queryResult.UsesPathAliases = SessionCtx->Query().UsesPathAliases;
         if (!queryResult.Success()) {
             return;
         }
@@ -353,6 +356,7 @@ public:
 
             if (!result->ParseFromArray(resultStr.data(), resultStr.size())) {
                 queryResult = ResultFromError<TResult>("Failed to parse run result.");
+                queryResult.UsesPathAliases = SessionCtx->Query().UsesPathAliases;
                 return;
             }
         }
@@ -397,12 +401,14 @@ public:
         , ExecuteCtx(executeCtx) {}
 
     void FillResult(TResult& queryResult) const override {
+        queryResult.UsesPathAliases = SessionCtx->Query().UsesPathAliases;
         if (!queryResult.Success()) {
             return;
         }
 
         YQL_ENSURE(ExecuteCtx.QueryResults.size() == 1);
         queryResult = std::move(ExecuteCtx.QueryResults[0]);
+        queryResult.UsesPathAliases |= SessionCtx->Query().UsesPathAliases;
         queryResult.QueryPlan = queryResult.PreparingQuery->GetPhysicalQuery().GetQueryPlan();
 
         FillColumnMeta(queryResult.PreparingQuery->GetPhysicalQuery(), queryResult);
@@ -433,6 +439,7 @@ public:
         , CommandTagName(commandTagName) {}
 
     void FillResult(TResult& prepareResult) const override {
+        prepareResult.UsesPathAliases = QueryCtx->UsesPathAliases;
         if (!prepareResult.Success()) {
             auto exprRoot = GetExprRoot();
             if (TransformCtx && TransformCtx->ExplainTransformerInput) {
@@ -1626,6 +1633,7 @@ private:
                 }
 
                 TQueryResult explainResult;
+                explainResult.UsesPathAliases = prepared.UsesPathAliases;
                 explainResult.SetSuccess();
                 YQL_ENSURE(prepared.PreparingQuery->GetVersion() == NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
 

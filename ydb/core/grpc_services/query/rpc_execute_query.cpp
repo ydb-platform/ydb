@@ -439,6 +439,7 @@ private:
         NDataIntegrity::LogIntegrityTrails(Request_->GetTraceId(), *Request_->GetProtoRequest(), ev, ctx);
 
         auto& record = ev->Get()->Record;
+        Request_->RecordPathAliasUsage(record.GetUsesPathAliases());
 
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
 

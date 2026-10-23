@@ -472,6 +472,7 @@ private:
 
     void Reply() {
         Y_ENSURE(KqpCompileResult);
+        KqpCompileResult->UsesPathAliases = UsesPathAliases;
         YDB_LOG_DEBUG("Send response",
             {"self", SelfId()},
             {"owner", Owner},
@@ -576,6 +577,7 @@ private:
 
     void FillCompileResult(std::unique_ptr<NKikimrKqp::TPreparedQuery> preparingQuery, NKikimrKqp::EQueryType queryType,
             bool allowCache, bool success) {
+        preparingQuery->SetUsesPathAliases(UsesPathAliases);
         auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
             preparingQuery.release(), AppData()->FunctionRegistry, !success);
         preparedQueryHolder->SetUseKqpTasksGraphV2(Config->GetUseKqpTasksGraphV2());
@@ -596,6 +598,7 @@ private:
         }
 
         auto kqpResult = std::move(AsyncCompileResult->GetResult());
+        UsesPathAliases |= kqpResult.UsesPathAliases;
         auto status = GetYdbStatus(kqpResult);
         auto meta = CollectMeta();
 
@@ -795,6 +798,7 @@ private:
     ECompileActorAction CompileAction;
     TMaybe<TQueryAst> QueryAst;
     bool EnableNewRBO;
+    bool UsesPathAliases = false;
     TMaybe<NYql::TIssue> FallbackToYqlOptimizerIssue;
     bool EnableFallbackToYqlOptimizer;
     bool UsePessimisticLocks;

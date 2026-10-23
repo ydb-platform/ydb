@@ -149,6 +149,7 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TKqpCompileResult::TConstPtr comp
     CompilationRunning = false;
     CompileResult = compileResult;
     YQL_ENSURE(CompileResult);
+    UsesPathAliases |= CompileResult->UsesPathAliases;
     MaxReadType = CompileResult->MaxReadType;
 
     if (CompileResult->Status != Ydb::StatusIds::SUCCESS) {
@@ -213,6 +214,7 @@ bool TKqpQueryState::TryGetFromCache(
 
         auto preparedQuery = std::make_unique<NKikimrKqp::TPreparedQuery>(QueryPhysicalGraph->GetPreparedQuery());
         const auto compileResult = TKqpCompileResult::Make("", Ydb::StatusIds::SUCCESS, {}, ExtractMostHeavyReadType(preparedQuery->GetPhysicalQuery().GetQueryPlan()));
+        compileResult->UsesPathAliases = preparedQuery->GetUsesPathAliases();
         compileResult->PreparedQuery = std::make_shared<TPreparedQueryHolder>(preparedQuery.release(), AppData()->FunctionRegistry);
         YQL_ENSURE(SaveAndCheckCompileResult(compileResult));
 

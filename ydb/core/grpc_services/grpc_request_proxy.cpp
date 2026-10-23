@@ -138,7 +138,7 @@ private:
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
-        requestBaseCtx->InitializePathNormalization(AppData(ctx)->PathNormalizer, AppData(ctx)->Counters);
+        requestBaseCtx->InitializePathNormalization(AppData(ctx)->PathNormalizer);
         requestBaseCtx->CountRequestPaths();
 
         LogRequest(event);
@@ -153,6 +153,15 @@ private:
         }
 
         MaybeStartTracing(event);
+
+        if (AppData(ctx)->PathNormalizer) {
+            const auto aliasDatabase = requestBaseCtx->GetDatabaseName();
+            auto databaseIt = Databases.find(aliasDatabase ? CanonizePath(*aliasDatabase) : RootDatabase);
+            if (databaseIt != Databases.end() && databaseIt->second.IsDatabaseReady()) {
+                requestBaseCtx->InitializePathAliasCounter(AppData(ctx)->Counters,
+                    databaseIt->second.SchemeBoardResult->DescribeSchemeResult);
+            }
+        }
 
         if (IsAuthStateOK(*requestBaseCtx)) {
             Handle(event, ctx);

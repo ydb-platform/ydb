@@ -156,6 +156,7 @@ struct TKikimrQueryContext : TThrRefBase {
     // full mode can be enabled explicitly.
     bool DocumentApiRestricted = true;
     bool IsInternalCall = false;
+    bool UsesPathAliases = false;
     bool ConcurrentResults = true;
     bool IsolateEffects = false;
     i32 RuntimeParameterSizeLimit = 0;

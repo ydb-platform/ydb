@@ -58,6 +58,7 @@ struct TKqpCompileResult {
     ETableReadType MaxReadType;
     bool AllowCache = true;
     bool UsedNewRbo = false;
+    bool UsesPathAliases = false;
     TMaybe<TQueryAst> QueryAst;
     bool NeedToSplit = false;
     TMaybe<TString> CommandTagName = {};

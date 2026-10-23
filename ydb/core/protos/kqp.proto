@@ -301,6 +301,7 @@ message TPreparedQuery {
     repeated TParameterDescription Parameters = 4;
     optional string Text = 5;
     optional NKqpProto.TKqpPhyQuery PhysicalQuery = 6;
+    optional bool UsesPathAliases = 7 [default = false];
 };
 
 message TQueryResponsePgInfo {
@@ -361,6 +362,7 @@ message TEvQueryResponse {
     optional uint64 ConsumedRu = 6;
     optional bool WorkerIsClosing = 7 [default = false];
     optional ERejectionStage RejectionStage = 9;
+    optional bool UsesPathAliases = 10 [default = false];
 }
 
 message TCloseSessionRequest {

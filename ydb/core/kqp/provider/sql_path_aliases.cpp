@@ -173,9 +173,10 @@ public:
     {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
-        input = RewriteSqlPathAliases(input, ctx, SessionCtx->GetCluster(),
+        auto rewritten = RewriteSqlPathAliases(input, ctx, SessionCtx->GetCluster(),
             SessionCtx->Config().NormalizePath);
-        return Intents->Transform(input, output, ctx);
+        SessionCtx->Query().UsesPathAliases |= rewritten != input;
+        return Intents->Transform(std::move(rewritten), output, ctx);
     }
 
     void Rewind() override {

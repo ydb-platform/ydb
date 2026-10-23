@@ -170,6 +170,7 @@ public:
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TString QueryTextForLogging;
     TKqpCompileResult::TConstPtr CompileResult;
+    bool UsesPathAliases = false;
     TVector<NKikimrKqp::TParameterDescription> ResultParams;
     TKqpStatsCompile CompileStats;
     TIntrusivePtr<TKqpTransactionContext> TxCtx;

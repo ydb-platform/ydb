@@ -945,6 +945,7 @@ private:
 
         auto& queryResult = QueryState->QueryResult;
         auto& ev = record;
+        ev.SetUsesPathAliases(queryResult.UsesPathAliases);
 
         bool replyResults = IsExecuteAction(QueryState->RequestEv->GetAction());
         bool replyPlan = true;

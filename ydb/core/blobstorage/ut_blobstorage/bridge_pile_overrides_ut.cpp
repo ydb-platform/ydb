@@ -29,22 +29,25 @@ namespace {
 Y_UNIT_TEST_SUITE(BridgePileOverrides) {
     Y_UNIT_TEST(ConvertAddGrowAndRepair) {
         const auto named = std::make_shared<bool>(false);
-        auto settings = MakeConvertedClusterSettings(named);
-        settings.Erasure = TBlobStorageGroupType::ErasureMirror3dc;
-        settings.NodeCount = 18;
-        settings.LocationGenerator = [named](ui32 nodeId) {
-            if (nodeId > 9) {
-                return GetConvertedClusterLocation(nodeId, true);
-            }
-            NActorsInterconnect::TNodeLocation location;
-            GetUnbridgedLocation(nodeId).Serialize(&location, false);
-            location.SetDataCenter(TStringBuilder() << "dc_" << (nodeId - 1) / 3);
-            if (*named) {
-                location.SetBridgePileName("pile_1");
-            }
-            return TNodeLocation(location);
-        };
-        TEnvironmentSetup env(settings);
+        TEnvironmentSetup env({
+            .NodeCount = 18,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+            .LocationGenerator = [named](ui32 nodeId) {
+                if (nodeId > 9) {
+                    return GetConvertedClusterLocation(nodeId, true);
+                }
+                NActorsInterconnect::TNodeLocation location;
+                GetUnbridgedLocation(nodeId).Serialize(&location, false);
+                location.SetDataCenter(TStringBuilder() << "dc_" << (nodeId - 1) / 3);
+                if (*named) {
+                    location.SetBridgePileName("pile_1");
+                }
+                return TNodeLocation(location);
+            },
+            .SelfManagementConfig = true,
+            .AutomaticBootstrap = true,
+            .InitialConfiguredNodeCount = 9,
+        });
         TDataChecker checker(env);
         const ui32 groupId = ConvertCluster(env, checker);
         checker.Write(0); // static data must also cross the erasure boundary

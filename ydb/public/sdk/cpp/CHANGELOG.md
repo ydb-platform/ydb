@@ -1,3 +1,5 @@
+* Federated topic read sessions now follow federation membership. After the initial discovery, databases that join the federation are read and databases that leave it (or are no longer readable) are dropped. The refresh period is `TFederatedTopicClientSettings::FederationDiscoveryInterval` (30 seconds by default).
+
 * Added `TExecuteQueryIterator::Cancel()` to explicitly cancel a query response stream, including a pending read.
 
 * Added `TBridgeClient::RemovePile()` to remove a DISCONNECTED pile from a bridged cluster along with its data.

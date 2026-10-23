@@ -7,6 +7,9 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/string_utils/helpers/helpers.h>
 
+#include <atomic>
+#include <memory>
+
 namespace NYdb::inline Dev::NFederatedTopic {
 
 class TEventFederator {
@@ -124,13 +127,19 @@ class TFederatedReadSessionImpl : public NTopic::TEnableSelfContext<TFederatedRe
 
 private:
     struct TSubSession {
-        TSubSession(std::shared_ptr<NTopic::IReadSession> session = {}, std::shared_ptr<TDbInfo> dbInfo = {})
+        TSubSession(std::shared_ptr<NTopic::IReadSession> session = {},
+                    std::shared_ptr<TDbInfo> dbInfo = {},
+                    std::shared_ptr<std::atomic<bool>> retired = {})
             : Session(std::move(session))
             , DbInfo(std::move(dbInfo))
+            , Retired(std::move(retired))
             {}
 
         std::shared_ptr<NTopic::IReadSession> Session;
         std::shared_ptr<TDbInfo> DbInfo;
+        // Set before an intentional close so a subsession SessionClosedEvent is not
+        // reported as the end of the whole federated session.
+        std::shared_ptr<std::atomic<bool>> Retired;
     };
 
 public:
@@ -160,13 +169,25 @@ private:
 
     void Start();
     bool ValidateSettings();
-    void OpenSubSessionsImpl(const std::vector<std::shared_ptr<TDbInfo>>& dbInfos);
 
-    std::vector<std::string> GetAllFederationDatabaseNames();
+    // Re-reads federation membership, opens subsessions for new readable databases
+    // and returns sessions that must be closed outside the lock.
+    void UpdateFederationState();
+
+    std::vector<TSubSession> OpenSubSessions(const std::vector<std::shared_ptr<TDbInfo>>& dbInfos);
+
+    void RefreshMirroredTopics();
+    std::string CurrentTopicSetKey() const;
 
     bool IsDatabaseEligibleForRead(const std::shared_ptr<TDbInfo>& db);
+    static bool SameReadTarget(const TDbInfo& current, const TDbInfo& desired);
 
-    void OnFederatedStateUpdateImpl();
+    // Requires Lock.
+    void ScheduleFederationStateUpdateImpl();
+    NThreading::TPromise<void> TakeWakeupPromise();
+    void DetachSubsessions(std::vector<std::shared_ptr<NTopic::IReadSession>>& toClose);
+
+    NTopic::TSessionClosedEvent MakeSessionClosedEvent() const;
 
     void CloseImpl();
 
@@ -187,11 +208,24 @@ private:
 
     const std::string SessionId;
     const TInstant StartSessionTime = TInstant::Now();
+    const TDuration FederationDiscoveryInterval;
+    const std::vector<NTopic::TTopicReadSettings> OriginalTopics;
 
     TAdaptiveLock Lock;
 
     std::vector<TSubSession> SubSessions;
     size_t SubsessionIndex = 0;
+    std::string AppliedTopicSetKey;
+    // True after at least one readable database was observed. A later empty
+    // membership drops subsessions but keeps the session, so a database that
+    // comes back is read again. An empty first snapshot still fails the session.
+    bool SawEligibleDatabase = false;
+
+    NYdbGrpc::IQueueClientContextPtr UpdateStateDelayContext;
+    // Signalled when SubSessions changes or the session starts closing.
+    // Waiters rebuild their subsession wait list. SetValue happens outside Lock:
+    // a subscriber may take Lock.
+    NThreading::TPromise<void> SubsessionsChanged;
 
     // Exiting.
     bool Closing = false;

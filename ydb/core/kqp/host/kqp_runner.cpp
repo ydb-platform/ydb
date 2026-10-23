@@ -321,7 +321,7 @@ private:
 
         const bool sysColumnsEnabled = TransformCtx->Config->SystemColumnsEnabled();
         auto kqlQueryBlocks = [&] {
-            TCompileTraceScope traceScope(queryCtx->CompileTrace.Get(), TCompileTraceLevels::Phase, "Build KQL query", "KqpRunner");
+            TCompileTraceScope traceScope(queryCtx->CompileTrace.Get(), TCompileTraceLevels::Phase, "Build KQL query");
             auto result = BuildKqlQuery(dataQueryBlocks, *TransformCtx->Tables, ctx, sysColumnsEnabled, OptimizeCtx, TypesCtx);
             traceScope.SetSuccess(result.Defined());
             return result;
@@ -356,7 +356,7 @@ private:
         const NMiniKQL::IFunctionRegistry& funcRegistry)
     {
         TCompileTraceScope traceScope(sessionCtx->QueryPtr()->CompileTrace.Get(), TCompileTraceLevels::Step,
-            "Create graph transformer", "KqpRunner");
+            "Create graph transformer");
         auto preparedExplainTransformer = CreateKqpExplainPreparedTransformer(
             Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx);
 
@@ -453,7 +453,7 @@ private:
         // Create a NewRBO composite transformer only if the special flag is enabled.
         if (Config->GetEnableNewRBO()) {
             const auto traced = [queryCtx = sessionCtx->QueryPtr()](TAutoPtr<IGraphTransformer>&& transformer, const TString& name) {
-                return CreateCompileTraceTransformer(std::move(transformer), queryCtx, TCompileTraceLevels::Phase, name, "KqpRunner");
+                return CreateCompileTraceTransformer(std::move(transformer), queryCtx, TCompileTraceLevels::Phase, name);
             };
             
             auto newRBOPreparedExplainTransformer = traced(CreateKqpRBOExplainPreparedTransformer(
@@ -477,7 +477,7 @@ private:
             auto newRBOPhysicalOptimizeTransformer = TTransformationPipeline(typesCtx)
                 .AddServiceTransformers()
                 .Add(Log("NewRBOPhysicalOptimize"), "LogNewRBOPhysicalOptimize")
-                .Add(CreateCompileTraceBegin(sessionCtx->QueryPtr(), TCompileTraceLevels::Phase, "Annotate KQL query", "KqpRunner",
+                .Add(CreateCompileTraceBegin(sessionCtx->QueryPtr(), TCompileTraceLevels::Phase, "Annotate KQL query",
                     &NewRBOTransformer), "TraceBeginAnnotateKqlQuery")
                 .AddPreTypeAnnotation()
                 //.AddExpressionEvaluation(funcRegistry)

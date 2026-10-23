@@ -1453,7 +1453,7 @@ private:
                 .SetApplicationName(ApplicationName)
                 .SetFromConfig(SessionCtx->Config());
             TCompileTraceScope traceScope(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Phase,
-                "Parse query", "KqpHost");
+                "Parse query");
             NSQLTranslation::TTranslationSettings effectiveSettings;
             auto astRes = ParseQuery(
                 query.Text,
@@ -2356,7 +2356,7 @@ private:
         // Compilation spans of the pipeline phases.
         const auto queryCtx = SessionCtx->QueryPtr();
         const auto beginTrace = [&](const TString& name) {
-            return CreateCompileTraceBegin(queryCtx, TCompileTraceLevels::Phase, name, "KqpHost", &YqlTransformerNewRBO);
+            return CreateCompileTraceBegin(queryCtx, TCompileTraceLevels::Phase, name, &YqlTransformerNewRBO);
         };
         const auto endTrace = [&](const TString& name) {
             return CreateCompileTraceEnd(queryCtx, name);

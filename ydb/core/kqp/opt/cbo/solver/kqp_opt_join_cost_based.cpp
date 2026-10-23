@@ -10,7 +10,6 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <chrono>
-#include <util/generic/scope.h>
 
 namespace NKikimr::NKqp {
 
@@ -331,9 +330,6 @@ public:
         TCBOOptimizerStats* stats = nullptr
     ) override {
         auto relsCount = joinTree->Labels().size();
-        if (stats && stats->CollectSearchStats) {
-            stats->Algorithm = "None";
-        }
 
         if (EnableShuffleElimination && relsCount <= OptimizerSettings_.ShuffleEliminationJoinNumCutoff) {
             return JoinSearchImpl<TNodeSet64, TDPHypSolverShuffleElimination<TNodeSet64>>(joinTree, false, hints, stats);
@@ -384,24 +380,11 @@ private:
     ) {
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
         TDPHypImpl solver = GetDPHypImpl<TNodeSet, TDPHypImpl>(hypergraph);
-        solver.CollectStats = stats && stats->CollectSearchStats;
-        if (solver.CollectStats) {
-            stats->Algorithm = solver.Type();
-        }
-        Y_DEFER {
-            if (solver.CollectStats) {
-                stats->EmittedPairs += solver.EmittedPairs;
-                stats->DpTableEntries += solver.DpTable_.size();
-            }
-        };
         YQL_CLOG(TRACE, CoreDq) << "Enumeration algorithm chosen: " << solver.Type();
 
         // Use fast ML model to predict approximately how long it would take to run full CBO
         // on this query and find the optimal plan
         ui64 approxNanosToOptimize = PredictCBOTime(hypergraph);
-        if (solver.CollectStats) {
-            stats->PredictedTimeUs += approxNanosToOptimize / 1'000;
-        }
         ui64 approxMillisToOptimize = static_cast<ui64>(std::ceil(approxNanosToOptimize / 1'000'000.0));
         ui64 timeBudgetNanos = OptimizerSettings_.CBOTimeout /* Millis */ * 1'000'000ULL;
 
@@ -412,9 +395,6 @@ private:
                                 << " (" << approxNanosToOptimize << ")";
 
         if (approxNanosToOptimize > timeBudgetNanos) {
-            if (solver.CollectStats) {
-                ++stats->BudgetExceeded;
-            }
             YQL_CLOG(TRACE, CoreDq) << "CBO time budget exceeded: "
                                     << predictedCBOTimeStr << " > " << timeBudgetStr
                                     << " - CBO disabled for this query";
@@ -440,10 +420,6 @@ private:
         try {
             bestJoinOrder = solver.Solve(hints);
         } catch (const std::exception& e) {
-            if (solver.CollectStats) {
-                ++stats->SearchFailures;
-                stats->HardTimeouts += solver.HardTimeoutReached;
-            }
             YQL_CLOG(WARN, CoreDq) << "CBO hard timeout exceeded, falling back to default join order: " << e.what();
             ExprCtx.AddWarning(YqlIssue(
                 {}, TIssuesIds::CBO_ENUM_LIMIT_REACHED,

@@ -66,10 +66,6 @@ public:
     // Calculate the size of a dynamic programming table with a budget
     ui32 CountCC(ui32 budget);
 
-    bool CollectStats = false;
-    ui64 EmittedPairs = 0;
-    bool HardTimeoutReached = false;
-
 private:
     void EnumerateCsgRec(const TNodeSet& s1, const TNodeSet& x);
 
@@ -136,7 +132,6 @@ protected:
     void CheckTimeout() {
         if (++TimeoutCheckThrottleCounter_ % 128 == 0) {
             if (HasTimedOut()) {
-                HardTimeoutReached = true;
                 ythrow yexception() << "CBO timed out";
             }
         }
@@ -645,9 +640,6 @@ template <typename TNodeSet, typename TDerived> void TDPHypSolverBase<TNodeSet, 
             s2[i] = 1;
 
             if (auto* edge = Graph_.FindEdgeBetween(s1, s2)) {
-                if (CollectStats) {
-                    ++EmittedPairs;
-                }
                 Derived.EmitCsgCmp(s1, s2, edge, &Graph_.GetEdge(edge->ReversedEdgeId));
             }
 
@@ -680,9 +672,6 @@ template <typename TNodeSet, typename TDerived> void TDPHypSolverBase<TNodeSet, 
 
         if (Derived.DpTable_.contains(s2 | next)) {
             if (auto* edge = Graph_.FindEdgeBetween(s1, s2 | next)) {
-                if (CollectStats) {
-                    ++EmittedPairs;
-                }
                 Derived.EmitCsgCmp(s1, s2 | next, edge, &Graph_.GetEdge(edge->ReversedEdgeId));
             }
         }

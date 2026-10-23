@@ -7989,24 +7989,6 @@ FROM (
             return to_lower(HexEncode(bytes));
         }
 
-        template <class T>
-        static NJson::TJsonValue AttributesToJson(const T& source) {
-            NJson::TJsonValue attrs(NJson::JSON_MAP);
-            for (const auto& kv : source.attributes()) {
-                const auto& value = kv.value();
-                if (value.has_string_value()) {
-                    attrs[kv.key()] = value.string_value();
-                } else if (value.has_int_value()) {
-                    attrs[kv.key()] = static_cast<i64>(value.int_value());
-                } else if (value.has_bool_value()) {
-                    attrs[kv.key()] = value.bool_value();
-                } else if (value.has_double_value()) {
-                    attrs[kv.key()] = value.double_value();
-                }
-            }
-            return attrs;
-        }
-
         void Handle(NWilson::TEvWilson::TPtr& ev) {
             const auto& span = ev->Get()->Span;
             NJson::TJsonValue json;
@@ -8019,21 +8001,6 @@ FROM (
             json["end_ns"] = static_cast<ui64>(span.end_time_unix_nano());
             json["status"] = static_cast<int>(span.status().code());
             json["status_message"] = span.status().message();
-            json["attrs"] = AttributesToJson(span);
-            for (const auto& event : span.events()) {
-                NJson::TJsonValue entry;
-                entry["name"] = event.name();
-                entry["time_ns"] = static_cast<ui64>(event.time_unix_nano());
-                entry["attrs"] = AttributesToJson(event);
-                json["events"].AppendValue(std::move(entry));
-            }
-            for (const auto& link : span.links()) {
-                NJson::TJsonValue entry;
-                entry["trace_id"] = Hex(link.trace_id());
-                entry["span_id"] = Hex(link.span_id());
-                entry["attrs"] = AttributesToJson(link);
-                json["links"].AppendValue(std::move(entry));
-            }
             {
                 TGuard guard(State->Lock);
                 State->Spans.push_back(std::move(json));
@@ -8142,10 +8109,6 @@ FROM (
                     if (level) {
                         root = NWilson::TSpan(level, NWilson::TTraceId::NewTraceId(level, Max<ui32>()),
                             TStringBuilder() << benchName << " Q" << queryId, NWilson::EFlags::NONE, runtime.GetActorSystem(0));
-                        root.Attribute("ydb.bench", benchName)
-                            .Attribute("ydb.bench.query", static_cast<i64>(queryId))
-                            .Attribute("ydb.bench.repeat", static_cast<i64>(repeat))
-                            .Attribute("ydb.trace.level", static_cast<i64>(level));
                         const auto rootId = root.GetTraceId();
                         traceParent = TStringBuilder() << "00-"
                             << to_lower(HexEncode(rootId.GetTraceIdPtr(), rootId.GetTraceIdSize())) << "-"

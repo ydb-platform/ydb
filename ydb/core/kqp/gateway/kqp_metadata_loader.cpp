@@ -109,18 +109,11 @@ template<typename TRequest, typename TResponse, typename TResult, typename TTrac
 TFuture<TResult> SendActorRequest(TActorSystem* actorSystem, const TActorId& actorId, TRequest* request,
     typename TActorRequestHandler<TRequest, TResponse, TResult>::TCallbackFunc callback,
     const NWilson::TTraceId& traceId, EMetadataTraceOperation operation, const TString& table,
-    const char* purpose, TTraceStatus traceStatus, NWilson::TTraceId* emittedSpan = nullptr,
-    const NWilson::TTraceId& followsFrom = {})
+    const char* purpose, TTraceStatus traceStatus)
 {
     auto promise = NewPromise<TResult>();
     auto span = MakeMetadataTraceSpan(traceId, actorSystem, operation, table, purpose);
     auto requestTraceId = span.GetTraceId();
-    if (emittedSpan) {
-        *emittedSpan = NWilson::TTraceId(requestTraceId);
-    }
-    if (followsFrom) {
-        span.Link(followsFrom, {{"ydb.compile.relation", TString("follows_from")}});
-    }
     // Release the consumer only after recording completion, including when
     // the request finishes before its consumer attaches a callback.
     auto future = TraceCompileDependencyWith(promise.GetFuture(), std::move(span),
@@ -1033,7 +1026,6 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     const bool enableOnlineAddUniqueIndex = Config && Config->FeatureFlags.GetEnableOnlineAddUniqueIndex();
 
     auto ptr = weak_from_base();
-    NWilson::TTraceId metadataRequest;
     auto future = SendActorRequest<TRequest, TResponse, TResult>(
         ActorSystem,
         schemeCacheId,
@@ -1353,7 +1345,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
         [](const TResult& result) {
             return result.Success() && result.Metadata && result.Metadata->DoesExist
                 ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::SCHEME_ERROR;
-        }, &metadataRequest
+        }
     );
 
     // Create an apply for the future that will fetch table statistics and save it in the metadata
@@ -1366,7 +1358,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     TActorSystem* actorSystem = ActorSystem;
 
     return future.Apply([actorSystem, database, table, purpose, traceParent = NWilson::TTraceId(traceParent),
-            metadataRequest = std::move(metadataRequest), loader = shared_from_this()](const TFuture<TTableMetadataResult>& f) {
+            loader = shared_from_this()](const TFuture<TTableMetadataResult>& f) {
         // Keep the loader alive through the same request chain as before.
         Y_UNUSED(loader);
         auto result = f.GetValue();
@@ -1410,7 +1402,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
         [](const TResult& result) {
             return result.Success() && result.Metadata && result.Metadata->DoesExist && result.Metadata->StatsLoaded
                 ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::UNAVAILABLE;
-        }, nullptr, metadataRequest);
+        });
     });
 }
 

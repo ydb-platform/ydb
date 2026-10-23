@@ -14,7 +14,6 @@
 #include <chrono>
 #include <memory>
 #include <optional>
-#include <util/generic/scope.h>
 
 namespace NKikimr::NKqp {
 
@@ -72,7 +71,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
 
     auto* trace = ctx.GetCompileTrace();
     std::optional<TCompileTraceScope> prepareScope(std::in_place, trace, TCompileTraceLevels::Detail,
-        "Prepare CBO join tree", "NewRBO");
+        "Prepare CBO join tree");
     ++cboStats.TreesTotal;
     const auto leaves = BuildCBOLeaves(*cboTree);
 
@@ -90,7 +89,6 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
 
     TVector<std::shared_ptr<TRelOptimizerNode>> rels;
     auto joinTree = ConvertJoinTree(cboTree, ctx.TypeCtx, props.ColumnLineage, rels, leaves);
-    ctx.AddRuleTraceAttribute("ydb.cbo.relations", static_cast<i64>(rels.size()));
 
     bool allRowStorage = std::any_of(
         rels.begin(),
@@ -110,7 +108,6 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
 
     const bool canBuildShuffleCtx = rels.size() <= MaxShuffleEliminationRelationCount;
-    ctx.AddRuleTraceAttribute("ydb.cbo.shuffle_elimination", enableShuffleElimination && canBuildShuffleCtx);
     std::optional<TShuffleEliminationContext> shuffleCtx;
     if (enableShuffleElimination && canBuildShuffleCtx) {
         shuffleCtx.emplace(BuildShuffleEliminationContext(joinTree, rels, leaves));
@@ -147,10 +144,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     prepareScope.reset();
 
     {
-        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "CBO join search", "NewRBO");
-        const auto before = cboStats;
-        cboStats.CollectSearchStats = static_cast<bool>(scope.Span());
-        Y_DEFER { cboStats.CollectSearchStats = before.CollectSearchStats; };
+        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "CBO join search");
         YQL_PROFILE_SCOPE(TRACE, "CBO");
         if (cboRunTiming) {
             const auto startedAt = std::chrono::steady_clock::now();
@@ -161,23 +155,11 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
         } else {
             joinTree = opt->JoinSearch(joinTree, hints, &cboStats);
         }
-        scope.Span()
-            .Attribute("ydb.cbo.relations", static_cast<i64>(rels.size()))
-            .Attribute("ydb.cbo.algorithm", cboStats.Algorithm)
-            .Attribute("ydb.cbo.emitted_pairs", static_cast<i64>(cboStats.EmittedPairs - before.EmittedPairs))
-            .Attribute("ydb.cbo.dp_table_entries", static_cast<i64>(cboStats.DpTableEntries - before.DpTableEntries))
-            .Attribute("ydb.cbo.predicted_us", static_cast<i64>(cboStats.PredictedTimeUs - before.PredictedTimeUs))
-            .Attribute("ydb.cbo.budget_ms", static_cast<i64>(settings.CBOTimeout))
-            .Attribute("ydb.cbo.hard_timeout_ms", static_cast<i64>(settings.CBOHardTimeout))
-            .Attribute("ydb.cbo.budget_exceeded", cboStats.BudgetExceeded != before.BudgetExceeded)
-            .Attribute("ydb.cbo.search_failed", cboStats.SearchFailures != before.SearchFailures)
-            .Attribute("ydb.cbo.hard_timeout", cboStats.HardTimeouts != before.HardTimeouts)
-            .Attribute("ydb.cbo.optimized", cboStats.TreesOptimized != before.TreesOptimized);
     }
 
     LogAndTraceJoinTree(ctx, "Optimized join tree", joinTree);
 
-    TCompileTraceScope rebuildScope(trace, TCompileTraceLevels::Detail, "Rebuild CBO plan", "NewRBO");
+    TCompileTraceScope rebuildScope(trace, TCompileTraceLevels::Detail, "Rebuild CBO plan");
     return ConvertOptimizedTree(joinTree, leaves, cboTree->Pos);
 }
 

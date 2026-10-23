@@ -65,39 +65,6 @@ public:
     bool EmptyPreamble = false;
 
     TRBOTraceLog TraceLog;
-
-    // Rule attempts of the running rule-based stage, reported in its compilation span.
-    struct TRuleStageTraceStats {
-        struct TRuleStats {
-            TString Name;
-            ui64 QuickChecks = 0;
-            ui64 QuickRejected = 0;
-            ui64 QuickMatchCycles = 0;
-            ui64 Attempts = 0;
-            ui64 Applied = 0;
-            TDuration UnappliedTime;
-            ui64 UnappliedCpuUs = 0;
-        };
-
-        ui64 QuickChecks = 0;
-        ui64 QuickRejected = 0;
-        ui64 Attempts = 0;
-        ui64 Applied = 0;
-        TDuration UnappliedTime;
-        TVector<TRuleStats> Rules;
-    };
-    TRuleStageTraceStats RuleStageTraceStats;
-
-    // Attributes a rule reports for the compilation span of its application,
-    // e.g. the size of its input. Collected only while rules are traced.
-    TVector<std::pair<const char*, i64>> RuleTraceAttributes;
-    bool TraceRules = false;
-
-    void AddRuleTraceAttribute(const char* name, i64 value) {
-        if (TraceRules) {
-            RuleTraceAttributes.emplace_back(name, value);
-        }
-    }
 };
 
 } // namespace NKikimr::NKqp

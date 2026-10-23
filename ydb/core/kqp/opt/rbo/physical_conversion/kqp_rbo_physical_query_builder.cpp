@@ -12,13 +12,11 @@
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
-#include <ydb/core/kqp/tracing/kqp_compile_trace_expr.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
 #include <cctype>
 #include <optional>
-#include <type_traits>
 #include <sstream>
 
 namespace NKikimr::NKqp {
@@ -134,12 +132,8 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery() {
 
     auto* trace = RBOCtx.GetCompileTrace();
     const auto traced = [&](const char* name, auto&& func) {
-        TCompileTraceScope traceScope(trace, TCompileTraceLevels::Step, name, "NewRBO");
-        auto result = func();
-        if constexpr (std::is_same_v<decltype(result), TVector<TExprNode::TPtr>>) {
-            traceScope.Span().Attribute("ydb.rbo.physical_stages", static_cast<i64>(result.size()));
-        }
-        return result;
+        TCompileTraceScope traceScope(trace, TCompileTraceLevels::Step, name);
+        return func();
     };
 
     for (size_t i=0; i<Roots.size(); i++) {
@@ -951,17 +945,9 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
         }
 
         {
-            TCompileTraceScope traceScope(RBOCtx.GetCompileTrace(), TCompileTraceLevels::Detail, "Peephole stage", "NewRBO");
-            auto& span = traceScope.Span();
-            if (span) {
-                span.Attribute("ydb.rbo.stage_index", static_cast<i64>(&stage - physicalStages.data()));
-                span.Attribute("ydb.expr.nodes", CountExprNodes(*newProgram));
-            }
+            TCompileTraceScope traceScope(RBOCtx.GetCompileTrace(), TCompileTraceLevels::Detail, "Peephole stage");
             newProgram = PeepHoleOptimize(newProgram, argsType);
             traceScope.SetSuccess(newProgram != nullptr);
-            if (span && newProgram) {
-                span.Attribute("ydb.expr.nodes_after", CountExprNodes(*newProgram));
-            }
         }
         Y_ENSURE(newProgram);
         // Collect program after peephole.
@@ -1069,16 +1055,13 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
 
 void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
     TCompileTraceScope traceScope(RBOCtx.GetCompileTrace(), TCompileTraceLevels::Detail,
-        "Annotate physical stage", "NewRBO");
+        "Annotate physical stage");
     RBOCtx.TypeAnnTransformer.Rewind();
     TExprNode::TPtr output;
     IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
-    i64 iterations = 0;
     do {
-        ++iterations;
         status = RBOCtx.TypeAnnTransformer.Transform(input, output, RBOCtx.ExprCtx);
     } while (status == IGraphTransformer::TStatus::Repeat);
-    traceScope.Span().Attribute("ydb.compile.iterations", iterations);
 
     if (status != IGraphTransformer::TStatus::Ok) {
         RBOCtx.ExprCtx.AddError(TIssue(RBOCtx.ExprCtx.GetPosition(input->Pos()), "Type inference failed for stage in NEW RBO"));

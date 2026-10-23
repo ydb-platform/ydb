@@ -1240,22 +1240,22 @@ void CompileOlapProgram(const TCoLambda& lambda, const TKikimrTableMetadata& tab
 
     std::optional<TKqpOlapCompileContext> ctx;
     {
-        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Create OLAP compile context", "KqpQueryCompiler");
+        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Create OLAP compile context");
         ctx.emplace(lambda.Args().Arg(0), tableMeta, readProto, resultColNames, exprCtx, typesCtx);
     }
     Y_DEFER {
         // The registry is owned by the context: time its actual destruction,
         // including when program compilation or serialization throws.
-        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Destroy OLAP compile context", "KqpQueryCompiler");
+        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Destroy OLAP compile context");
         ctx.reset();
     };
     {
-        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Build OLAP program", "KqpQueryCompiler");
+        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Build OLAP program");
         CompileOlapProgramImpl(lambda.Body(), *ctx);
         CompileFinalProjection(*ctx);
     }
     {
-        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Serialize OLAP program", "KqpQueryCompiler");
+        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Serialize OLAP program");
         ctx->SerializeToProto();
     }
 }

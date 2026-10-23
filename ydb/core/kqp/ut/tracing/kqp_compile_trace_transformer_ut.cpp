@@ -48,22 +48,16 @@ Y_UNIT_TEST_SUITE(TKqpCompileTraceTransformer) {
             NWilson::TTraceId::NewTraceId(15, 4095), runtime.GetActorSystem(0));
         const auto parent = queryCtx->CompileTrace->GetCurrentParent();
         auto transformer = CreateCompileTraceTransformer(TAutoPtr<IGraphTransformer>(new TThrowingTransformer()),
-            queryCtx, TCompileTraceLevels::Phase, "Failing optimizer", "Test");
+            queryCtx, TCompileTraceLevels::Phase, "Failing optimizer");
         TExprContext ctx;
         auto input = ctx.NewAtom(TPositionHandle(), "input");
         TExprNode::TPtr output;
         if constexpr (Async) {
-            TCompileTraceRunScope running(queryCtx->CompileTrace.Get());
             UNIT_ASSERT_VALUES_EQUAL(transformer->Transform(input, output, ctx).Level, IGraphTransformer::TStatus::Async);
             transformer->GetAsyncFuture(*input).GetValueSync();
-        }
-        {
-            TCompileTraceRunScope running(queryCtx->CompileTrace.Get());
-            if constexpr (Async) {
-                UNIT_ASSERT_EXCEPTION(transformer->ApplyAsyncChanges(input, output, ctx), yexception);
-            } else {
-                UNIT_ASSERT_EXCEPTION(transformer->Transform(input, output, ctx), yexception);
-            }
+            UNIT_ASSERT_EXCEPTION(transformer->ApplyAsyncChanges(input, output, ctx), yexception);
+        } else {
+            UNIT_ASSERT_EXCEPTION(transformer->Transform(input, output, ctx), yexception);
         }
         queryCtx->CompileTrace->Finish(false);
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
@@ -74,7 +68,6 @@ Y_UNIT_TEST_SUITE(TKqpCompileTraceTransformer) {
         const auto& span = *failing;
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(span.status().code()),
             static_cast<int>(NWilson::NTraceProto::Status::STATUS_CODE_ERROR));
-        UNIT_ASSERT(FindAttribute(span, "ydb.cpu_us"));
         transformer->Rewind();
         transformer.Destroy();
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
@@ -100,13 +93,12 @@ Y_UNIT_TEST_SUITE(TKqpCompileTraceTransformer) {
             return status;
         });
         auto transformer = CreateCompileTraceTransformer(TAutoPtr<IGraphTransformer>(inner.Release()),
-            queryCtx, TCompileTraceLevels::Phase, "Test phase", "Test");
+            queryCtx, TCompileTraceLevels::Phase, "Test phase");
         TExprContext ctx;
         auto input = ctx.NewAtom(TPositionHandle(), "input");
         TExprNode::TPtr output;
 
         transformer->Rewind(); // No span has started yet.
-        ui32 iteration = 0;
         for (auto nextStatus : {TStatus::Ok, TStatus::Error, TStatus::Repeat, TStatus::Ok}) {
             status = nextStatus;
             UNIT_ASSERT_VALUES_EQUAL(transformer->Transform(input, output, ctx).Level, status);
@@ -119,7 +111,6 @@ Y_UNIT_TEST_SUITE(TKqpCompileTraceTransformer) {
             const auto expectedStatus = status == TStatus::Ok
                 ? NWilson::NTraceProto::Status::STATUS_CODE_OK : NWilson::NTraceProto::Status::STATUS_CODE_ERROR;
             UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(span.status().code()), static_cast<int>(expectedStatus));
-            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(span, "ydb.compile.iteration")->value().int_value(), ++iteration);
             ClearUploader(*uploader);
         }
     }

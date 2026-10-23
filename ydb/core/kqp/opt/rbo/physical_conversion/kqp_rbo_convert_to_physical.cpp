@@ -65,9 +65,9 @@ TVector<ui32> GetUnionAllInputArgumentOrder(TOpUnionAll& unionAll) {
 TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, TRBOContext& rboCtx) {
     TExprContext& ctx = rboCtx.ExprCtx;
     ui32 stageInputCounter = 0;
-    TCompileTraceScope traceScope(rboCtx.GetCompileTrace(), TCompileTraceLevels::Phase, "Convert to physical plan", "NewRBO");
+    TCompileTraceScope traceScope(rboCtx.GetCompileTrace(), TCompileTraceLevels::Phase, "Convert to physical plan");
     std::optional<TCompileTraceScope> convertOperatorsTraceScope(std::in_place, rboCtx.GetCompileTrace(),
-        TCompileTraceLevels::Step, "Convert operators", "NewRBO");
+        TCompileTraceLevels::Step, "Convert operators");
 
     if (rboCtx.NeedToLog()) {
         rboCtx.TraceLog.stage("Physical AST generation");

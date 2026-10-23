@@ -232,24 +232,19 @@ public:
 
             if (trace && !dependencyJoin) {
                 dependencyJoin = trace->StartSpan(NKikimr::NKqp::TCompileTraceLevels::Step,
-                    "Await table metadata", "KikimrSource", "async");
-                dependencyJoin.Attribute("ydb.compile.join", TString("all_or_error"));
+                    "Await table metadata");
             }
-            auto dependency = dependencyJoin.CreateChild(NKikimr::NKqp::TCompileTraceLevels::Step,
-                "Resolve table metadata");
-            dependency.Attribute("ydb.compile.kind", TString("async"));
-            dependency.Attribute("ydb.table", tableName);
-            if (dependency) {
-                dependencyJoin.Link(dependency.GetTraceId(), {{"ydb.compile.relation", TString("depends_on")}});
+            if (dependencyJoin) {
                 dependencyResults.push_back(result);
             }
+            // The metadata requests of the gateway are parented by the wait.
             auto future = [&] {
                 if (trace) {
-                    trace->Push(dependency);
+                    trace->Push(dependencyJoin);
                 }
                 Y_DEFER {
                     if (trace) {
-                        trace->Pop(dependency);
+                        trace->Pop(dependencyJoin);
                     }
                 };
                 return Gateway->LoadTableMetadata(clusterName, tableName,
@@ -265,7 +260,7 @@ public:
                 );
             }();
 
-            futures.push_back(NKikimr::NKqp::TraceCompileDependencyWith(future.Apply([result, queryType]
+            futures.push_back(future.Apply([result, queryType]
                 (const NThreading::TFuture<IKikimrGateway::TTableMetadataResult>& future) {
                     YQL_ENSURE(!future.HasException());
                     const auto& value = future.GetValue();
@@ -285,13 +280,6 @@ public:
                         break;
                     }
                     *result = value;
-                }), std::move(dependency), [result](NWilson::TSpan& span, bool loaded) {
-                    // A missing table is a valid outcome, e.g. for CREATE TABLE:
-                    // whether the query needs the table is checked later.
-                    if (loaded && result->Metadata) {
-                        span.Attribute("ydb.table.exists", result->Metadata->DoesExist);
-                    }
-                    NKikimr::NKqp::FinishCompileDependency(span, loaded, loaded && result->Success());
                 }));
         }
 
@@ -299,7 +287,8 @@ public:
             return TStatus::Ok;
         }
 
-        dependencyJoin.Attribute("ydb.compile.dependencies", static_cast<i64>(futures.size()));
+        // A missing table is a valid outcome, e.g. for CREATE TABLE: whether the
+        // query needs the table is checked later.
         AsyncFuture = NKikimr::NKqp::TraceCompileDependency(
             NThreading::WaitExceptionOrAll(futures), std::move(dependencyJoin),
             [results = std::move(dependencyResults)] {

@@ -25,7 +25,6 @@
 #include <library/cpp/digest/md5/md5.h>
 
 #include <util/string/escape.h>
-#include <util/system/datetime.h>
 
 #include <ydb/core/base/cputime.h>
 
@@ -178,21 +177,14 @@ public:
         // executor deletes the actor (which may happen during shutdown).
         // Die calls PassAway, so this covers both.
         FinishCompileTrace(CompileStatus);
-        TCompileTrace cleanupTrace(CompileActorSpan.GetTraceId(), CompileActorSpan.GetActorSystem());
-        {
-            TCompileTraceRunScope running(CompileActorSpan ? &cleanupTrace : nullptr);
-            TCompileTraceScope scope(&cleanupTrace, TCompileTraceLevels::Step, "Cleanup compiler", "KqpCompileActor");
-            scope.Span().Attribute("ydb.compile.cleanup", true);
-            AsyncSplitResult.Drop();
-            AsyncCompileResult.Drop();
-            KqpHost.Drop();
-            Gateway.Drop();
-            SplitExpr.Reset();
-            SplitCtx.reset();
-        }
-        if (CompileAction == ECompileActorAction::COMPILE) {
-            CompileActorSpan.Attribute("ydb.cpu_us", static_cast<i64>(TraceCpuTime + cleanupTrace.GetCpuTime()));
-        }
+        auto cleanup = CompileActorSpan.CreateChild(TCompileTraceLevels::Step, "Cleanup compiler");
+        AsyncSplitResult.Drop();
+        AsyncCompileResult.Drop();
+        KqpHost.Drop();
+        Gateway.Drop();
+        SplitExpr.Reset();
+        SplitCtx.reset();
+        cleanup.EndOk();
         EndQueryTraceSpan(CompileActorSpan, CompileStatus);
 
         TBase::PassAway();
@@ -237,11 +229,7 @@ private:
             .SetFromConfig(*Config);
 
         auto span = CompileActorSpan.CreateChild(TCompileTraceLevels::Phase, "Parse query");
-        const ui64 cpuStart = span ? ThreadCPUTime() : 0;
         auto statements = ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult);
-        if (span) {
-            span.Attribute("ydb.cpu_us", static_cast<i64>(ThreadCPUTime() - cpuStart));
-        }
         const bool success = !statements.empty() && std::all_of(statements.begin(), statements.end(), [](const auto& statement) {
             return statement.Ast && statement.Ast->IsOk() && statement.Ast->Root;
         });
@@ -362,7 +350,6 @@ private:
 
     void StartCompilationWithSettings(IKqpHost::TPrepareSettings& prepareSettings) {
         NCpuTime::TCpuTimer timer(CompileCpuTime);
-        TCompileTraceRunScope traceRun(CompileTrace.Get());
 
         switch (QueryId.Settings.QueryType) {
             case NKikimrKqp::QUERY_TYPE_SQL_DML:
@@ -402,9 +389,6 @@ private:
         TActorSystem* actorSystem = ctx.ActorSystem();
         TActorId selfId = ctx.SelfID;
 
-        // Continue runs the compilation until its next asynchronous wait.
-        NCpuTime::TCpuTimer timer(CompileCpuTime);
-        TCompileTraceRunScope traceRun(CompileTrace.Get());
         auto callback = [actorSystem, selfId](const TFuture<bool>& future) {
             bool finished = future.GetValue();
             auto processEv = MakeHolder<TEvKqp::TEvContinueProcess>(0, finished);
@@ -469,7 +453,6 @@ private:
     void FinishCompileTrace(Ydb::StatusIds::StatusCode status) {
         if (CompileTrace) {
             CompileTrace->Finish(status == Ydb::StatusIds::SUCCESS);
-            TraceCpuTime += CompileTrace->GetCpuTime();
             CompileTrace.Reset();
         }
     }
@@ -554,13 +537,10 @@ private:
         stats.CpuTimeUs = CompileCpuTime.MicroSeconds();
         Send(Owner, responseEv.Release());
 
-        // Enqueued for the owner, not delivered/processed by the owner yet.
-        CompileActorSpan.Event("Compilation reply sent");
-
         Counters->ReportCompileFinish(DbCounters);
 
         CompileActorSpan.Attribute("ydb.actor.type", TString("TKqpCompileActor"));
-        CompileActorSpan.Attribute("ydb.compile.new_rbo", EnableNewRBO);
+        CompileActorSpan.Attribute("ydb.cpu_us", static_cast<i64>(CompileCpuTime.MicroSeconds()));
         FinishCompileTrace(KqpCompileResult->Status);
         CompileStatus = KqpCompileResult->Status;
 
@@ -653,13 +633,10 @@ private:
     void HandleCompile(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
         Y_ENSURE(!ev->Get()->QueryId);
 
-        // Keep the trace alive if completion/fallback replaces CompileTrace.
-        const auto trace = CompileTrace;
-        TCompileTraceRunScope running(trace.Get());
-
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, UserRequestContext->TraceId);
 
         if (!ev->Get()->Finished) {
+            NCpuTime::TCpuTimer timer(CompileCpuTime);
             Continue(ctx);
             return;
         }
@@ -684,7 +661,6 @@ private:
                                                        << kqpResult.Issues().ToOneLineString());
             FallbackToYqlOptimizerIssue->SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
             TString logMessage = "Compilation with new RBO failed, retrying with YQL optimizer";
-            CompileActorSpan.Event("Fallback to YQL optimizer");
             RebuildConfigAndStartCompilation(ctx, std::move(logMessage), status, kqpResult.Issues());
             return;
         } else if (IsSuitableToReportSuccessOnNewRBO(status)) {
@@ -859,7 +835,6 @@ private:
     NWilson::TSpan CompileActorSpan;
     Ydb::StatusIds::StatusCode CompileStatus = Ydb::StatusIds::ABORTED;
     TCompileTrace::TPtr CompileTrace;
-    ui64 TraceCpuTime = 0;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
     bool CollectFullDiagnostics;

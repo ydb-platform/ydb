@@ -128,10 +128,6 @@ void DispatchStatRequests(TActorSystem* actorSystem, TVector<NThreading::TFuture
     NWilson::TSpan dependency;
     if (dependencyJoin && *dependencyJoin) {
         dependency = dependencyJoin->CreateChild(TCompileTraceLevels::Step, "Request column statistics");
-        dependency.Attribute("ydb.compile.kind", TString("async"));
-        dependency.Attribute("ydb.statistics.type", static_cast<i64>(type));
-        dependency.Attribute("ydb.statistics.requests", static_cast<i64>(request->StatRequests.size()));
-        dependencyJoin->Link(dependency.GetTraceId(), {{"ydb.compile.relation", TString("depends_on")}});
     }
     auto statServiceId = NStat::MakeStatServiceID(actorSystem->NodeId);
     IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TColumnStatisticsResponse>(statServiceId, request.Release(), promise, callback, dependency.GetTraceId());

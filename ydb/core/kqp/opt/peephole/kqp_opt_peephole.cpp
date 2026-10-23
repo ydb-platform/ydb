@@ -51,22 +51,16 @@ using TStatus = IGraphTransformer::TStatus;
 // restarts do not leave spans open across other transformers of the pipeline.
 class TPeepholeTraceTransformer : public TSyncTransformerBase {
 public:
-    TPeepholeTraceTransformer(TAutoPtr<IGraphTransformer> transformer, const TString& stageName,
-            TCompileTrace* trace, const char* pipeline)
+    TPeepholeTraceTransformer(TAutoPtr<IGraphTransformer> transformer, const TString& stageName, TCompileTrace* trace)
         : Transformer(std::move(transformer))
         , StageName(stageName)
         , Trace(trace)
-        , Pipeline(pipeline)
     {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        TCompileTraceScope scope(Trace, TCompileTraceLevels::Detail, "Peephole: " + StageName, "KqpPeephole");
-        scope.Span().Attribute("ydb.peephole.pipeline", TString(Pipeline));
-        scope.Span().Attribute("ydb.compile.iteration", static_cast<i64>(++Iteration));
+        TCompileTraceScope scope(Trace, TCompileTraceLevels::Detail, "Peephole: " + StageName);
         const auto status = Transformer->Transform(input, output, ctx);
         scope.SetSuccess(status != TStatus::Error);
-        scope.Span().Attribute("ydb.compile.repeat", status == TStatus::Repeat);
-        scope.Span().Attribute("ydb.compile.restarted", static_cast<bool>(status.HasRestart));
         return status;
     }
 
@@ -82,15 +76,13 @@ private:
     const TAutoPtr<IGraphTransformer> Transformer;
     const TString StageName;
     TCompileTrace* const Trace;
-    const char* const Pipeline;
-    ui64 Iteration = 0;
 };
 
 void AddTracedPeepholeTransformer(TTransformationPipeline* pipeline, TAutoPtr<IGraphTransformer> transformer,
-    const TString& stageName, TCompileTrace* trace, const char* name)
+    const TString& stageName, TCompileTrace* trace)
 {
     if (trace && trace->IsEnabled(TCompileTraceLevels::Detail)) {
-        transformer = new TPeepholeTraceTransformer(std::move(transformer), stageName, trace, name);
+        transformer = new TPeepholeTraceTransformer(std::move(transformer), stageName, trace);
     }
     pipeline->Add(transformer, stageName);
 }
@@ -256,7 +248,7 @@ struct TKqpPeepholePipelineConfigurator : IPipelineConfigurator {
     void AfterOptimize(TTransformationPipeline* pipeline) const override {
         AddTracedPeepholeTransformer(pipeline,
             new TKqpPeepholeTransformer(*pipeline->GetTypeAnnotationContext(), DisabledOpts),
-            "KqpPeephole", Trace, "common");
+            "KqpPeephole", Trace);
     }
 
 private:
@@ -353,18 +345,18 @@ struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
     void AfterTypeAnnotation(TTransformationPipeline* pipeline) const override {
         AddTracedPeepholeTransformer(pipeline,
             new TKqpPeepholeFinalTransformer(*pipeline->GetTypeAnnotationContext(), Config),
-            "KqpPeepholeFinal", Trace, "final");
+            "KqpPeepholeFinal", Trace);
     }
 
     void AfterOptimize(TTransformationPipeline* pipeline) const override {
         if (WithFinalStageRules) {
             AddTracedPeepholeTransformer(pipeline,
                 new TKqpPeepholeNewOperatorTransformer(*pipeline->GetTypeAnnotationContext(), Config),
-                "KqpPeepholeNewOperator", Trace, "final");
+                "KqpPeepholeNewOperator", Trace);
         }
         AddTracedPeepholeTransformer(pipeline,
             new TKqpPeepholeBlockPackUnpackTransformer(*pipeline->GetTypeAnnotationContext()),
-            "KqpPeepholeBlockPackUnpack", Trace, "final");
+            "KqpPeepholeBlockPackUnpack", Trace);
     }
 
 private:

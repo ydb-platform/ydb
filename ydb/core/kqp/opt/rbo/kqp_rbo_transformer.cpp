@@ -152,7 +152,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
 
     // At first step convert KqpOps to RBO Ops.
     std::optional<TCompileTraceScope> traceScope(std::in_place, KqpCtx.GetCompileTrace(), TCompileTraceLevels::Step,
-        "Convert to RBO plan", "NewRBO");
+        "Convert to RBO plan");
     auto status = OptimizeExpr(
         output, output,
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
@@ -407,12 +407,10 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(TExprContext& ctx) {
 
 IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprContext& ctx) {
     if (auto* trace = KqpCtx.GetCompileTrace()) {
-        ColumnStatisticsSpan = trace->StartSpan(TCompileTraceLevels::Phase, "Load column statistics", "NewRBO", "async");
+        ColumnStatisticsSpan = trace->StartSpan(TCompileTraceLevels::Phase, "Load column statistics");
     }
     CollectTablesAndColumnsNames(ctx);
     auto dependencyJoin = ColumnStatisticsSpan.CreateChild(TCompileTraceLevels::Step, "Await column statistics");
-    dependencyJoin.Attribute("ydb.compile.kind", TString("async"));
-    dependencyJoin.Attribute("ydb.compile.join", TString("all"));
 
     TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
@@ -422,14 +420,12 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_HEIGHT_HISTOGRAM, EqHeightHistTuplesByTableName,
                    [](const NYql::TMultiColumnStatistics& stats) { return !!stats.EqHeightHistogram; }, &dependencyJoin);
 
-    ColumnStatisticsSpan.Attribute("ydb.statistics.requests", static_cast<i64>(futures.size()));
     if (futures.empty()) {
         dependencyJoin.EndOk();
         ColumnStatisticsSpan.EndOk();
         return TStatus::Ok;
     }
 
-    dependencyJoin.Attribute("ydb.compile.dependencies", static_cast<i64>(futures.size()));
     // Only tracing needs the issues of all responses: the merged response keeps
     // the issues of the first one. Preserve the existing result merge and the
     // future's value/exception semantics.

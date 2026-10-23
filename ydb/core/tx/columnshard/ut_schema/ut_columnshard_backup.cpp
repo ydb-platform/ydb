@@ -687,3 +687,4 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
 }
 
 }   // namespace NKikimr
+// ci: widen increment graph, 2026-10-05

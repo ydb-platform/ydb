@@ -9,3 +9,4 @@ Y_UNIT_TEST(TestIfEnvVariableSet) {
 }
 
 } // Y_UNIT_TEST_SUITE(TestHttpProxy)
+// ci: widen increment graph, 2026-10-05

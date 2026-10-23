@@ -2020,3 +2020,4 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 }
 
 } // namespace NKikimr
+// ci: widen increment graph, 2026-10-05

@@ -1,3 +1,4 @@
+// ci: widen the increment graph so auto sharding exceeds one hour, 2026-10-05
 #include "ut_helpers/ut_backup_restore_common.h"
 
 #include <ydb/public/api/protos/ydb_import.pb.h>

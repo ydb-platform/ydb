@@ -19,6 +19,7 @@
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/pdisk_io/wcache.h>
 
+// ci: force a dist-cache miss for the sharded PR-check debug run, 2026-10-05
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/stream/null.h>
 #include <util/system/tempfile.h>

@@ -40,6 +40,10 @@ def update_pr_comment_text(pr: PullRequest, build_preset: str, run_number: int, 
 
 
 def main():
+    if os.environ.get("SKIP_PR_COMMENT") == "1":
+        print("SKIP_PR_COMMENT=1; not posting")
+        return
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--rewrite", dest="rewrite", action="store_true")
     parser.add_argument("--color", dest="color", default="white")

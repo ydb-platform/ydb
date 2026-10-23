@@ -32,6 +32,7 @@ feature_flags:
 | `enable_strict_acl_check`                                | Запрет на выдачу прав несуществующим пользователям и на удаление пользователей, которым выданы права |
 | `enable_strict_user_management`                          | Строгие правила администрирования локальных пользователей (т.е. администрировать локальных пользователей может только администратор кластера или базы данных)|
 | `enable_database_admin`                                  | Добавление роли администратора базы данных |
+| `enable_kill_session`                                    | Принудительное завершение сессий через [KILL SESSION](../../yql/reference/syntax/kill-session.md) |
 | `enable_kafka_native_balancing`                          | Клиентская балансировка партиций при чтении по [протоколу Kafka](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
 | `enable_topic_compactification_by_key`                   | Включение компактификации топиков в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
 | `enable_kafka_transactions`                              | Включение транзакций в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|

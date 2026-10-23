@@ -89,6 +89,23 @@ meta:
         UNIT_ASSERT(appConfig.HasMeta());
         UNIT_ASSERT_VALUES_EQUAL(appConfig.GetMeta().GetMetaApiEndpoint(), "grpc://meta.ydb.example.net:2135");
         UNIT_ASSERT_VALUES_EQUAL(appConfig.GetMeta().GetMetaDatabase(), "/Root/meta");
+        UNIT_ASSERT(mvp.MetaSettings.ServiceEndpoint.empty());
+    }
+
+    Y_UNIT_TEST(ServiceEndpointIsLoadedSeparatelyFromDatabaseEndpoint) {
+        auto mvp = MakeTestMvp();
+        const TString yaml = R"(
+meta:
+  service_endpoint: "https://meta.eu-north1.example.net"
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+  meta_database: "/Root/meta"
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        mvp.TryGetMetaOptionsFromConfig(appConfig);
+        UNIT_ASSERT_VALUES_EQUAL(mvp.MetaSettings.ServiceEndpoint, "https://meta.eu-north1.example.net");
+        UNIT_ASSERT_VALUES_EQUAL(mvp.MetaSettings.MetaApiEndpoint, "grpc://meta.ydb.example.net:2135");
+        UNIT_ASSERT_VALUES_EQUAL(mvp.MetaApiEndpoint, "grpc://meta.ydb.example.net:2135");
+        UNIT_ASSERT_VALUES_EQUAL(mvp.MetaSettings.MetaDatabase, "/Root/meta");
     }
 
     Y_UNIT_TEST(WithoutMetaBlockThrows) {

@@ -1295,7 +1295,8 @@ public:
     }
 
     TFuture<TGenericResult> PrepareAlterTable(const TString&, Ydb::Table::AlterTableRequest&& req,
-        const TMaybe<TString>&, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings)
+        const TMaybe<TString>&, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings,
+        TVector<NKikimrSchemeOp::TColumnDescription>&& generatedColumns)
     {
         YQL_ENSURE(SessionCtx->Query().PreparingQuery);
         auto promise = NewPromise<TGenericResult>();
@@ -1413,7 +1414,8 @@ public:
         auto profilesFuture = Gateway->GetTableProfiles();
         auto sessionCtx = SessionCtx;
         profilesFuture.Subscribe(
-            [tablePromise, sessionCtx, alterReq = std::move(req), buildSettings = std::move(buildSettings)](
+            [tablePromise, sessionCtx, alterReq = std::move(req), buildSettings = std::move(buildSettings),
+                generatedColumns = std::move(generatedColumns)](
                 const TFuture<IKqpGateway::TKqpTableProfilesResult> &future) mutable {
                 auto profilesResult = future.GetValue();
                 if (!profilesResult.Success()) {
@@ -1441,6 +1443,18 @@ public:
                     return;
                 }
 
+                for (const auto& generated : generatedColumns) {
+                    bool found = false;
+                    for (auto& column : *modifyScheme.MutableAlterTable()->MutableColumns()) {
+                        if (column.GetName() == generated.GetName()) {
+                            column.MergeFrom(generated);
+                            found = true;
+                            break;
+                        }
+                    }
+                    YQL_ENSURE(found, "Generated column is missing from ALTER TABLE request");
+                }
+
                 if (buildSettings.has_column_build_operation()) {
                     buildSettings.MutableAlterMainTablePayload()->PackFrom(modifyScheme);
                     phyTx.MutableSchemeOperation()->MutableBuildOperation()->CopyFrom(buildSettings);
@@ -1463,7 +1477,8 @@ public:
     }
 
     TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
-        const TMaybe<TString>& requestType, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings) override
+        const TMaybe<TString>& requestType, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings,
+        TVector<NKikimrSchemeOp::TColumnDescription>&& generatedColumns) override
     {
         CHECK_PREPARED_DDL(AlterTable);
 
@@ -1486,7 +1501,8 @@ public:
             }
         }
 
-        auto prepareFuture = PrepareAlterTable(cluster, std::move(req), requestType, flags, std::move(buildSettings));
+        auto prepareFuture = PrepareAlterTable(cluster, std::move(req), requestType, flags, std::move(buildSettings),
+            std::move(generatedColumns));
         if (IsPrepare())
             return prepareFuture;
 

@@ -437,16 +437,26 @@ def _as_pull_ref(pull: Dict[str, Any], run: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _first_pull(pulls: Any) -> Optional[Dict[str, Any]]:
+def _pick_pull(pulls: Any, number: Any = None, sha: Any = None) -> Optional[Dict[str, Any]]:
     for pull in pulls or []:
-        if isinstance(pull, dict) and pull.get("number") is not None:
-            return pull
+        if not isinstance(pull, dict) or pull.get("number") is None:
+            continue
+        if number is not None and pull.get("number") != number:
+            continue
+        if sha:
+            head = pull.get("head") if isinstance(pull.get("head"), dict) else {}
+            got = head.get("sha")
+            if got and got != sha:
+                continue
+        return pull
     return None
 
 
 def _get_list(get, url: str, params: Optional[Dict[str, Any]] = None) -> list:
     try:
         payload = get(url, params=params)
+    except RateLimitExhausted:
+        raise
     except Exception as exc:  # noqa: BLE001 — keep exporting the run
         print("Warning: %s: %s" % (url, exc))
         return []
@@ -465,21 +475,32 @@ def attach_pull_requests(
         return run
     if pull_requests_have_target(run.get("pull_requests")):
         return run
+    number = None
+    existing = _pick_pull(run.get("pull_requests"))
+    if existing is not None:
+        number = existing.get("number")
+    sha = run.get("head_sha")
     owner = _head_owner(run) or org
     branch = run.get("head_branch") or ""
     chosen = None
     if owner and branch:
-        chosen = _first_pull(_get_list(
-            get,
-            "https://api.github.com/repos/%s/%s/pulls" % (org, repo),
-            {"head": "%s:%s" % (owner, branch), "state": "open", "per_page": 10},
-        ))
-    sha = run.get("head_sha")
+        chosen = _pick_pull(
+            _get_list(
+                get,
+                "https://api.github.com/repos/%s/%s/pulls" % (org, repo),
+                {"head": "%s:%s" % (owner, branch), "state": "open", "per_page": 10},
+            ),
+            number=number,
+            sha=None if number is not None else sha,
+        )
     if chosen is None and sha:
-        chosen = _first_pull(_get_list(
-            get,
-            "https://api.github.com/repos/%s/%s/commits/%s/pulls" % (org, repo, quote(str(sha))),
-        ))
+        chosen = _pick_pull(
+            _get_list(
+                get,
+                "https://api.github.com/repos/%s/%s/commits/%s/pulls" % (org, repo, quote(str(sha))),
+            ),
+            number=number,
+        )
     if chosen is None:
         return run
     enriched = dict(run)

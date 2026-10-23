@@ -274,6 +274,7 @@ public:
         YDB_LOG_INFO("New kikimr provider lookup actor",
                     COMMON_LOG,
                     {"database", LookupSource.GetDatabase()},
+                    {"poolId",  LookupSource.GetPoolId()},
                     {"parentId", ParentId});
         Become(&TDqSourceKikimrLookupActor::StateFunc);
     }
@@ -1009,7 +1010,9 @@ private:
         request.mutable_arrow_format_settings()->mutable_compression_codec()->set_type(
             Ydb::Formats::ArrowFormatSettings::CompressionCodec::TYPE_NONE);   // local RPC, avoid compression
         request.set_response_part_limit_bytes(ChannelBufferSize);
-        // request.set_pool_id(...); // TODO: pass workload manager pool from caller
+        if (auto poolId = LookupSource.GetPoolId()) {
+            request.set_pool_id(poolId);
+        }
         request.set_schema_inclusion_mode(Ydb::Query::SCHEMA_INCLUSION_MODE_FIRST_ONLY);
         {
             auto& tx_control = *request.mutable_tx_control();

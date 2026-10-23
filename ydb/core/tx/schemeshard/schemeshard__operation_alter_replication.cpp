@@ -1,6 +1,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_replication_helpers.h"
 
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
@@ -437,6 +438,12 @@ public:
         }
 
         if (!Strategy->Validate(*result, op, context)) {
+            return result;
+        }
+
+        if (path.Base()->IsReplication() && op.HasState() && op.GetState().HasStandBy()
+            && !ValidateReplicationDestinations(*result, replication->Description.GetConfig(), context, path.Base()->PathId))
+        {
             return result;
         }
 

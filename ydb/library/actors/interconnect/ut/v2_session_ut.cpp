@@ -17,6 +17,7 @@
 #include <util/system/mutex.h>
 
 #include <atomic>
+#include <optional>
 
 using namespace NActors;
 
@@ -392,12 +393,16 @@ namespace {
 
     std::unique_ptr<TTestICCluster> MakeV2Cluster(ui32 tcpSocketBufferSize = 0,
             TTestICCluster::TTrafficInterrupterSettings *tiSettings = nullptr,
-            TDuration deadPeerTimeout = TDuration::Seconds(2)) {
-        auto customizer = [tcpSocketBufferSize](ui32, TInterconnectSettings& settings) {
+            TDuration deadPeerTimeout = TDuration::Seconds(2),
+            std::optional<bool> enableXdc = std::nullopt) {
+        auto customizer = [tcpSocketBufferSize, enableXdc](ui32, TInterconnectSettings& settings) {
             settings.V2.Enable = true;
             settings.V2.ChecksumEvents = true;
             if (tcpSocketBufferSize) {
                 settings.TCPSocketBufferSize = tcpSocketBufferSize;
+            }
+            if (enableXdc) {
+                settings.EnableExternalDataChannel = *enableXdc;
             }
         };
         return std::make_unique<TTestICCluster>(
@@ -1092,7 +1097,8 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
             Cerr << "io_uring not available; skipping" << Endl;
             return;
         }
-        auto cluster = MakeV2Cluster();
+        // nbs-26-3-1 defaults EnableExternalDataChannel to false; this test checks XDC.
+        auto cluster = MakeV2Cluster(0, nullptr, TDuration::Seconds(2), /*enableXdc=*/true);
         // Establish the session before sending an untracked, single-shot payload.
         UNIT_ASSERT(GrabDirectSession(*cluster, 1, 2));
         auto* collector = new TPayloadCollectorActor;

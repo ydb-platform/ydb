@@ -46,3 +46,4 @@ ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
+ydb/tests/stress/statistics_workload/tests test_workload.py.TestStatisticsWorkload.test

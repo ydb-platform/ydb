@@ -987,6 +987,7 @@ public:
     TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
     NJson::TJsonValue ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) override;
     TString GetExplainName() const override { return "Window"; }
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
 
     const TWindowIUs& GetWindowFuncs() const Y_LIFETIME_BOUND { return WindowFuncs; }
     const TOrderedIUs<>& GetPartitionKeys() const Y_LIFETIME_BOUND { return PartitionKeys; }

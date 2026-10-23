@@ -320,8 +320,9 @@ Y_UNIT_TEST_SUITE(TStateStorageProxyLookup) {
         UNIT_ASSERT(!f.ReplyLocked);
     }
 
-    Y_UNIT_TEST(StaleRingGroupFollowersAreDropped) {
+    Y_UNIT_TEST(FollowersOfEveryRingGroupAreReported) {
         TLookupFixture f(TEvStateStorage::TProxyOptions::SigNone, BridgeRingGroups);
+        // The synchronized group is behind but knows a follower
         for (ui32 i = 0; i < 3; ++i) {
             auto reply = MakeHolder<TEvStateStorage::TEvReplicaInfo>(TLookupFixture::TabletId, f.Leader, TActorId(), 99, 0, false, 0, 0, 0);
             ActorIdToProto(f.Edge, reply->Record.AddFollowerInfo()->MutableFollower());
@@ -331,7 +332,7 @@ Y_UNIT_TEST_SUITE(TStateStorageProxyLookup) {
         f.LeaderQuorum(PrimaryGroup);
         f.ExpectReply(NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(f.ReplyGeneration, 100);
-        UNIT_ASSERT_VALUES_EQUAL(f.ReplyFollowers, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReplyFollowers, 1);
     }
 
     Y_UNIT_TEST(LockRaceInAnyRingGroupWins) {

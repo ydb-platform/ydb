@@ -830,10 +830,6 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         CurrentStep = msg->CurrentStep;
         Locked = msg->Locked;
         LockedFor = msg->LockedFor;
-        Followers.clear();
-        for (const auto& followerInfo : msg->Followers) {
-            Followers.insert_or_assign(followerInfo.Follower, followerInfo);
-        }
     }
 
     void ProcessEvInfo(ui32 ringGroupIdx, TEvStateStorage::TEvInfo *msg) {
@@ -844,11 +840,20 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
             return;
         }
 
+        // Followers register in every ring group independently of the generation: report them all
+        for (const auto& followerInfo : msg->Followers) {
+            Followers.insert_or_assign(followerInfo.Follower, followerInfo);
+        }
+        if (!MergedStatus) {
+            MergedStatus = msg->Status;
+            TakeEntry(msg);
+            return;
+        }
+
         // Readable ring groups can diverge (e.g. a restarted pile is empty): take the freshest entry
-        const bool first = !MergedStatus;
         if (IsLookup) {
             // On a tie, the most telling status together with its entry
-            if (first || std::tuple(msg->CurrentGeneration, msg->CurrentStep, StatusRank(msg->Status))
+            if (std::tuple(msg->CurrentGeneration, msg->CurrentStep, StatusRank(msg->Status))
                     > std::tuple(CurrentGeneration, CurrentStep, StatusRank(*MergedStatus))) {
                 MergedStatus = msg->Status;
                 TakeEntry(msg);
@@ -856,11 +861,11 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
             return;
         }
         // Lock and update need every readable ring group; failures by priority: RACE, ERROR, TIMEOUT
-        if (first || std::pair(msg->Status != NKikimrProto::OK, StatusRank(msg->Status))
+        if (std::pair(msg->Status != NKikimrProto::OK, StatusRank(msg->Status))
                 > std::pair(*MergedStatus != NKikimrProto::OK, StatusRank(*MergedStatus))) {
             MergedStatus = msg->Status;
         }
-        if (first || std::tie(msg->CurrentGeneration, msg->CurrentStep) > std::tie(CurrentGeneration, CurrentStep)) {
+        if (std::tie(msg->CurrentGeneration, msg->CurrentStep) > std::tie(CurrentGeneration, CurrentStep)) {
             TakeEntry(msg);
         }
     }

@@ -603,6 +603,10 @@ def collect_report_chunk_tests(
     chunks: dict[tuple[str, Optional[str], int], dict[str, Any]],
 ) -> dict[tuple[str, Optional[str], int], list[dict[str, Any]]]:
     """Individual tests (chunk=false) grouped by the report chunk they ran in."""
+    try:
+        from ..resources_loader import normalize_report_links
+    except ImportError:
+        from resources_loader import normalize_report_links  # type: ignore[no-redef]
     results = report_obj.get("results", []) if isinstance(report_obj, dict) else report_obj
     hid_to_chunk_key: dict[Any, tuple[str, Optional[str], int]] = {}
     for key, meta in chunks.items():
@@ -638,6 +642,8 @@ def collect_report_chunk_tests(
                 "name": str(item.get("subtest_name") or item.get("name") or "").strip() or "test",
                 "duration_sec": float(item.get("duration") or 0.0),
                 "status": str(item.get("status") or ""),
+                "error_type": str(item.get("error_type") or ""),
+                "links": normalize_report_links(item.get("links")),
             }
         )
     return dict(out)

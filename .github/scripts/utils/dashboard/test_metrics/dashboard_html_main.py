@@ -101,13 +101,32 @@ def build_html_dashboard(
     .measured-tree .mt-name {{ font-weight: 600; }}
     .measured-tree .mt-chunk .mt-name {{ font-weight: 400; }}
     .measured-tree .stats {{ display: block; color: #6b7280; font-weight: 400; font-variant-numeric: tabular-nums; }}
+    .measured-tree .stat-max {{ color: #9a3412; font-weight: 700; background: #ffedd5; padding: 0 3px; border-radius: 3px; }}
     .measured-charts {{ flex: 1; min-width: 0; }}
     .measured-test-list {{ margin: 0 0 10px 0; padding: 0; list-style: none; font-size: 12px; line-height: 1.45; }}
-    .measured-test-list li {{ display: flex; gap: 8px; align-items: baseline; padding: 3px 6px; border-radius: 4px; }}
+    .measured-test-list li {{ display: flex; gap: 8px; align-items: flex-start; padding: 3px 6px; border-radius: 4px; }}
     .measured-test-list li.on {{ background: #e7f3ff; }}
-    .measured-test-list .swatch {{ flex: 0 0 10px; width: 10px; height: 10px; border-radius: 2px; }}
-    .measured-test-list .tname {{ flex: 1; min-width: 0; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
+    .measured-test-list .swatch {{ flex: 0 0 10px; width: 10px; height: 10px; margin-top: 5px; border-radius: 2px; }}
+    .measured-test-list .tbody {{ flex: 1; min-width: 0; }}
+    .measured-test-list .tline {{ display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }}
+    .measured-test-list .tname {{ min-width: 0; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
     .measured-test-list .tmeta {{ flex: 0 0 auto; color: #6b7280; font-variant-numeric: tabular-nums; white-space: nowrap; }}
+    .measured-test-list .tlogs {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }}
+    .measured-test-list .tlogs a {{ color: #0969da; text-decoration: none; }}
+    .measured-test-list .tlogs a:hover {{ text-decoration: underline; }}
+    .measured-test-list .st, .measured-test-list .ebadge {{ display: inline-block; padding: 0 6px; border-radius: 10px; font-size: 10px; font-weight: 700; letter-spacing: 0.02em; }}
+    .measured-test-list .st-pass {{ color: #166534; background: #dcfce7; }}
+    .measured-test-list .st-fail {{ color: #fff; background: #dc2626; }}
+    .measured-test-list .st-mute {{ color: #fff; background: #7c3aed; }}
+    .measured-test-list .st-skip {{ color: #fff; background: #6b7280; }}
+    .measured-test-list .st-other {{ color: #374151; background: #e5e7eb; }}
+    .measured-test-list .eb-TIMEOUT {{ color: #fff; background: #ff8c00; }}
+    .measured-test-list .eb-VERIFY {{ color: #fff; background: #b22222; }}
+    .measured-test-list .eb-SANITIZER {{ color: #fff; background: #ff4500; }}
+    .measured-test-list .eb-XFAILED {{ color: #fff; background: #6f42c1; }}
+    .measured-test-list .eb-POSSIBLE_OOM {{ color: #fff; background: #d63384; }}
+    .measured-test-list .eb-NOT_LAUNCHED {{ color: #fff; background: #6c757d; }}
+    .measured-test-list .eb-other {{ color: #fff; background: #475569; }}
     .row1 {{ display: grid; grid-template-columns: 1fr; gap: 16px; }}
     .chart {{ width: 100%; height: 420px; min-width: 0; }}
     .wide {{ width: 100%; height: 520px; }}
@@ -2410,11 +2429,64 @@ def build_html_dashboard(
         li.classList.toggle('on', Boolean(name) && li.dataset.name === name);
       }});
     }}
+    function measuredStatusLabel(status) {{
+      const u = String(status || '').toUpperCase();
+      if (u === 'OK' || u === 'PASS' || u === 'PASSED' || u === 'GOOD') return 'PASS';
+      if (u === 'FAILED' || u === 'FAIL' || u === 'ERROR') return 'FAIL';
+      if (u === 'MUTE' || u === 'MUTED') return 'MUTE';
+      if (u === 'SKIP' || u === 'SKIPPED') return 'SKIP';
+      return u;
+    }}
+    function measuredStatusClass(label) {{
+      if (label === 'PASS') return 'st-pass';
+      if (label === 'FAIL') return 'st-fail';
+      if (label === 'MUTE') return 'st-mute';
+      if (label === 'SKIP') return 'st-skip';
+      return 'st-other';
+    }}
+    function measuredErrorTags(errorType) {{
+      return String(errorType || '').split(',').map(s => s.trim()).filter(Boolean);
+    }}
+    function measuredErrorBadgeClass(tag) {{
+      const u = String(tag || '').toUpperCase().replace(/\\s+/g, '_');
+      if (u === 'TIMEOUT' || u === 'VERIFY' || u === 'SANITIZER' || u === 'XFAILED' || u === 'POSSIBLE_OOM' || u === 'NOT_LAUNCHED') return 'eb-' + u;
+      return 'eb-other';
+    }}
+    function measuredErrorBadgeLabel(tag) {{
+      const u = String(tag || '').toUpperCase().replace(/\\s+/g, '_');
+      if (u === 'POSSIBLE_OOM') return 'possible OOM';
+      if (u === 'NOT_LAUNCHED') return 'NOT LAUNCHED';
+      return String(tag || '').toUpperCase();
+    }}
+    function resolveArtifactUrl(url) {{
+      const raw = String(url || '').trim();
+      if (!raw) return '';
+      if (/^https?:\\/\\//i.test(raw)) return raw;
+      const base = String((data.config && data.config.artifacts_url) || '').trim();
+      if (!base) return raw;
+      return base.replace(/\\/?$/, '/') + raw.replace(/^\\//, '');
+    }}
+    function measuredLogEntries(links) {{
+      const src = links && typeof links === 'object' ? links : {{}};
+      const preferred = ['stderr', 'stdout', 'log', 'Log', 'logsdir'];
+      const skip = new Set(['core', 'binary']);
+      const names = [];
+      preferred.forEach(name => {{ if (src[name] && !names.includes(name)) names.push(name); }});
+      Object.keys(src).sort().forEach(name => {{
+        const kind = String(name).toLowerCase().replace(/\\d+$/, '').trim();
+        if (skip.has(kind) || kind.endsWith(' core') || kind.endsWith(' binary')) return;
+        if (src[name] && !names.includes(name)) names.push(name);
+      }});
+      return names.map(name => ({{ name: name, url: resolveArtifactUrl(src[name]) }})).filter(x => x.url);
+    }}
     function measuredTestHoverLine(point) {{
       const test = testAtSec(sourceSecFromPoint(point));
       highlightMeasuredTest(test && test.name);
       if (!test) return '';
-      return test.name + ' (' + Number(test.duration_sec || 0).toFixed(1) + 's)';
+      const status = measuredStatusLabel(test.status);
+      const tags = measuredErrorTags(test.error_type).map(measuredErrorBadgeLabel);
+      const extra = [status, ...tags].filter(Boolean).join(' · ');
+      return test.name + ' (' + Number(test.duration_sec || 0).toFixed(1) + 's' + (extra ? ', ' + extra : '') + ')';
     }}
     function attachMeasuredHover(plotId, panelId, unit) {{
       const plot = document.getElementById(plotId);
@@ -2474,7 +2546,10 @@ def build_html_dashboard(
           y: [1, 1],
           line: {{ width: 18, color: color }},
           name: t.name,
-          hovertemplate: t.name + '<br>' + Number(t.duration_sec || 0).toFixed(1) + 's<extra></extra>',
+          hovertemplate: t.name + '<br>' + Number(t.duration_sec || 0).toFixed(1) + 's' +
+            (measuredStatusLabel(t.status) ? '<br>' + measuredStatusLabel(t.status) : '') +
+            (measuredErrorTags(t.error_type).length ? '<br>' + measuredErrorTags(t.error_type).map(measuredErrorBadgeLabel).join(', ') : '') +
+            '<extra></extra>',
           showlegend: false,
         }};
       }});
@@ -2503,8 +2578,17 @@ def build_html_dashboard(
           const color = MEASURED_PALETTE[i % MEASURED_PALETTE.length];
           const from = formatTimeLabel(xToDisplay(t.start_sec));
           const to = formatTimeLabel(xToDisplay(t.end_sec));
+          const status = measuredStatusLabel(t.status);
+          const badges = (status ? '<span class="st ' + measuredStatusClass(status) + '">' + escapeHtml(status) + '</span>' : '') +
+            measuredErrorTags(t.error_type).map(tag =>
+              '<span class="ebadge ' + measuredErrorBadgeClass(tag) + '">' + escapeHtml(measuredErrorBadgeLabel(tag)) + '</span>'
+            ).join('');
+          const logs = measuredLogEntries(t.links).map(link =>
+            '<a href="' + escapeHtml(link.url) + '" target="_blank" rel="noopener">' + escapeHtml(link.name) + '</a>'
+          ).join('');
           return '<li data-name="' + escapeHtml(t.name) + '"><span class="swatch" style="background:' + color + '"></span>' +
-            '<span class="tname">' + escapeHtml(t.name) + '</span>' +
+            '<span class="tbody"><span class="tline"><span class="tname">' + escapeHtml(t.name) + '</span>' + badges + '</span>' +
+            (logs ? '<span class="tlogs">' + logs + '</span>' : '') + '</span>' +
             '<span class="tmeta">' + escapeHtml(from) + ' – ' + escapeHtml(to) +
             ' · ' + Number(t.duration_sec || 0).toFixed(1) + 's</span></li>';
         }}).join('');
@@ -2546,6 +2630,32 @@ def build_html_dashboard(
         agg.write_mbps.toFixed(1) + ' r' + agg.read_mbps.toFixed(1);
       if (hideCount) return body;
       return agg.n + (agg.n > 1 ? ' · Σ ' : ' · ') + body;
+    }}
+    function suiteChunkExtremes(rows) {{
+      const ext = {{ cpu: 0, ram_gb: 0, write_mbps: 0 }};
+      (rows || []).forEach(row => {{
+        ext.cpu = Math.max(ext.cpu, Number(row.max_cpu) || 0);
+        ext.ram_gb = Math.max(ext.ram_gb, Number(row.max_ram_gb) || 0);
+        ext.write_mbps = Math.max(ext.write_mbps, Number(row.max_write_mbps) || 0);
+      }});
+      return ext;
+    }}
+    function measuredStatMark(text, isMax) {{
+      return isMax ? ('<span class="stat-max">' + text + '</span>') : text;
+    }}
+    function measuredChunkStatsHtml(row, extremes, chunkCount) {{
+      const cpu = Number(row.max_cpu) || 0;
+      const ram = Number(row.max_ram_gb) || 0;
+      const write = Number(row.max_write_mbps) || 0;
+      const read = Number(row.max_read_mbps) || 0;
+      const canMark = chunkCount > 1;
+      const cpuTxt = cpu.toFixed(2);
+      const ramTxt = ram.toFixed(2);
+      const writeTxt = write.toFixed(1);
+      return measuredStatMark(cpuTxt + 'c', canMark && extremes.cpu > 0 && cpuTxt === extremes.cpu.toFixed(2)) +
+        ' · ' + measuredStatMark(ramTxt + 'G', canMark && extremes.ram_gb > 0 && ramTxt === extremes.ram_gb.toFixed(2)) +
+        ' · ' + measuredStatMark('w' + writeTxt, canMark && extremes.write_mbps > 0 && writeTxt === extremes.write_mbps.toFixed(1)) +
+        ' r' + read.toFixed(1);
     }}
     function buildMeasuredForest() {{
       const root = {{ name: 'all', path: '', children: {{}}, rows: [] }};
@@ -2626,13 +2736,14 @@ def build_html_dashboard(
         '<span class="stats">' + measuredStatsText(measuredAgg(node.rows)) + '</span></button></div>';
       if (open && hasKids) {{
         childNames.forEach(name => {{ html += renderMeasuredNode(node.children[name], depth + 1, sel); }});
+        const extremes = suiteChunkExtremes(chunks);
         chunks.forEach(row => {{
           const on = sel && sel.kind === 'chunk' && sel.key === row.key;
           html += '<div class="mt-row mt-chunk" style="padding-left:' + ((depth + 1) * 12) + 'px">' +
             '<span class="mt-spacer"></span>' +
             '<button type="button" class="mt-pick' + (on ? ' on' : '') + '" data-kind="chunk" data-key="' + escapeHtml(row.key) + '" data-path="' + escapeHtml(node.path) + '">' +
             '<span class="mt-name">' + escapeHtml(row.chunk == null ? row.label : '[' + row.chunk + ']') + '</span>' +
-            '<span class="stats">' + measuredStatsText(measuredAgg([row]), true) + '</span></button></div>';
+            '<span class="stats">' + measuredChunkStatsHtml(row, extremes, chunks.length) + '</span></button></div>';
         }});
       }}
       return html;

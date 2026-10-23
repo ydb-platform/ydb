@@ -198,6 +198,29 @@ def build_measured_layers(
     }
 
 
+def first_link_url(value: Any) -> str:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, list):
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                return item.strip()
+    return ""
+
+
+def normalize_report_links(links: Any) -> dict[str, str]:
+    """Keep report log URLs as name → url (stderr/stdout/log/logsdir)."""
+    if not isinstance(links, dict):
+        return {}
+    out: dict[str, str] = {}
+    for key, value in links.items():
+        name = str(key or "").strip()
+        url = first_link_url(value)
+        if name and url:
+            out[name] = url
+    return out
+
+
 def place_chunk_tests(
     tests: list[dict[str, Any]],
     start_sec: float,
@@ -213,6 +236,8 @@ def place_chunk_tests(
             {
                 "name": name,
                 "status": str(test.get("status") or ""),
+                "error_type": str(test.get("error_type") or ""),
+                "links": normalize_report_links(test.get("links")),
                 "duration_sec": round(duration, 3),
                 "start_sec": round(cursor, 3),
                 "end_sec": round(cursor + duration, 3),

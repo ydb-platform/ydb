@@ -16,6 +16,7 @@ from resources_loader import (
     build_measured_layers,
     match_measured_to_runs,
     measured_test_label,
+    normalize_report_links,
     place_chunk_tests,
 )
 
@@ -101,6 +102,28 @@ class MeasuredLabelTest(unittest.TestCase):
         self.assertEqual(placed[1]["name"], "Bar")
         self.assertEqual(placed[1]["start_sec"], 110)
         self.assertEqual(placed[1]["end_sec"], 122)
+
+    def test_keeps_status_error_and_log_links(self):
+        self.assertEqual(
+            normalize_report_links({"stderr": ["https://s3/stderr"], "log": "https://s3/log", "empty": []}),
+            {"stderr": "https://s3/stderr", "log": "https://s3/log"},
+        )
+        placed = place_chunk_tests(
+            [
+                {
+                    "name": "Boom",
+                    "duration_sec": 4,
+                    "status": "FAILED",
+                    "error_type": "VERIFY, TIMEOUT",
+                    "links": {"stderr": ["https://s3/stderr"], "logsdir": ["https://s3/dir"]},
+                }
+            ],
+            start_sec=10,
+        )
+        self.assertEqual(placed[0]["status"], "FAILED")
+        self.assertEqual(placed[0]["error_type"], "VERIFY, TIMEOUT")
+        self.assertEqual(placed[0]["links"]["stderr"], "https://s3/stderr")
+        self.assertEqual(placed[0]["links"]["logsdir"], "https://s3/dir")
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ resources:
   style:
     - _assets/tags.css
     - _assets/badge.css
+    - _assets/nested-tabs.css
   csp:
     - "img-src":
         - "https://github.ydb.tech"

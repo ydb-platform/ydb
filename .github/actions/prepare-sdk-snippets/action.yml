@@ -1,0 +1,54 @@
+name: Prepare SDK snippets
+description: Download locked source files and validate documentation regions
+
+inputs:
+  isolated-python:
+    description: Install preparation dependencies separately without changing the runner's Python
+    default: 'false'
+  docs-root:
+    description: Documentation input root containing manifest and lock
+    default: ydb/docs
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      if: inputs.isolated-python != 'true'
+      with:
+        python-version: '3.12'
+    - name: Install preparation dependencies
+      shell: bash
+      env:
+        DOCS_ROOT: ${{ inputs.docs-root }}
+        ISOLATED_PYTHON: ${{ inputs.isolated-python }}
+      run: |
+        if [[ "$ISOLATED_PYTHON" == 'true' ]]; then
+          snippet_site="$RUNNER_TEMP/sdk-snippets-site"
+          python3 -m pip install --target "$snippet_site" -r "$DOCS_ROOT/tools/sdk_snippets/requirements.txt"
+          snippet_python="$RUNNER_TEMP/sdk-snippets-python"
+          cat > "$snippet_python" <<'PYTHON_WRAPPER'
+        #!/usr/bin/env bash
+        set -euo pipefail
+        exec env PYTHONPATH="$SDK_SNIPPETS_SITE${PYTHONPATH:+:$PYTHONPATH}" python3 "$@"
+        PYTHON_WRAPPER
+          chmod +x "$snippet_python"
+          echo "SDK_SNIPPETS_SITE=$snippet_site" >> "$GITHUB_ENV"
+        else
+          snippet_python="$(command -v python)"
+          "$snippet_python" -m pip install -r "$DOCS_ROOT/tools/sdk_snippets/requirements.txt"
+        fi
+        echo "SDK_SNIPPETS_PYTHON=$snippet_python" >> "$GITHUB_ENV"
+    - uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/sdk-snippets-cache
+        key: sdk-snippets-v1-${{ hashFiles(format('{0}/sdk-snippets.lock.yaml', inputs.docs-root)) }}
+        restore-keys: sdk-snippets-v1-
+    - name: Download and validate locked snippets
+      shell: bash
+      env:
+        DOCS_ROOT: ${{ inputs.docs-root }}
+        SDK_SNIPPETS_CACHE: ${{ runner.temp }}/sdk-snippets-cache
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        "$SDK_SNIPPETS_PYTHON" "$DOCS_ROOT/tools/sdk-snippets" --manifest "$DOCS_ROOT/sdk-snippets.yaml" prepare
+        echo "SDK_SNIPPETS_CACHE=$SDK_SNIPPETS_CACHE" >> "$GITHUB_ENV"

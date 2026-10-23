@@ -22,6 +22,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <array>
@@ -251,6 +252,7 @@ bool IsMemoryTierAvailable() {
 Y_UNIT_TEST_SUITE(TDecimalIndexComparisonTests) {
     Y_UNIT_TEST(MaxIndexUsesNumericOrder) {
         TActorSystemStub actorSystem;
+        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(true);
         const auto schema = MakeTestSchema(1, { .WithMaxIndex = true, .DecimalValue = true });
         const auto& indexInfo = schema->GetIndexInfo();
@@ -273,6 +275,7 @@ Y_UNIT_TEST_SUITE(TDecimalIndexComparisonTests) {
 
     Y_UNIT_TEST(MaxIndexPreservesLegacyOrder) {
         TActorSystemStub actorSystem;
+        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(false);
         const auto schema = MakeTestSchema(1, { .WithMaxIndex = true, .DecimalValue = true });
         const auto& indexInfo = schema->GetIndexInfo();
@@ -293,6 +296,7 @@ Y_UNIT_TEST_SUITE(TDecimalIndexComparisonTests) {
 
     Y_UNIT_TEST(NumericDecimalDoesNotPruneLegacyMinMaxPayload) {
         TActorSystemStub actorSystem;
+        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(true);
         const auto numericSchema = MakeTestSchema(1, { .WithMinMaxIndex = true, .DecimalValue = true });
         actorSystem.AppData.ColumnShardConfig.SetEnableDecimalNumericComparison(false);

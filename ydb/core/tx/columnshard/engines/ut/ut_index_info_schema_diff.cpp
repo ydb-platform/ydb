@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/schema_diff.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NOlap::NTest {
@@ -49,6 +50,7 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         UNIT_ASSERT(!defaultConfig.GetEnableDecimalNumericComparison());
 
         TActorSystemStub actorSystem;
+        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto storages = TTestStoragesManager::GetInstance();
         auto cache = std::make_shared<TSchemaObjectsCache>();
         const auto schemaV1 = MakeSchemaV1();

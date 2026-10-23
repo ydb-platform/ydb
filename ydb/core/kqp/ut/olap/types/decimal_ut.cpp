@@ -493,9 +493,9 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         write({ { "257", 60 }, { "-257", 70 }, { "255", 80 }, { "1", 11 }, { "-1", 21 } });
         helper.ExecuteQuery(
             "UPSERT INTO `" + tableName + "` (dec, val) VALUES "
-            "(" + TDecimal::DecCast("256") + ", 31), "
-            "(" + TDecimal::DecCast("-256") + ", 51), "
-            "(" + TDecimal::DecCast("0") + ", 41)");
+            "(Unwrap(" + TDecimal::DecCast("256") + "), 31), "
+            "(Unwrap(" + TDecimal::DecCast("-256") + "), 51), "
+            "(Unwrap(" + TDecimal::DecCast("0") + "), 41)");
 
         helper.ReadData("SELECT COUNT(*) FROM `" + tableName +
             "/.sys/primary_index_portion_stats` WHERE Activity = 1", "[[3u]]");

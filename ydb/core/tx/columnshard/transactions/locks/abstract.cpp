@@ -24,6 +24,7 @@ bool TTxEventContainer::DeserializeFromProto(
             {"typeName", typeid(ITxEvent).name()});
         return false;
     }
+
     Object = std::move(object);
     return true;
 }

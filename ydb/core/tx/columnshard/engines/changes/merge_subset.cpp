@@ -16,6 +16,7 @@ NArrow::TColumnFilter BuildKeyIntervalsFilter(
     if (!recordsCount || intervals.empty()) {
         return result;
     }
+
     NArrow::NMerger::TRWSortableBatchPosition position(batch, 0, intervals.front().first.GetSchema()->field_names(), {}, false,
         intervals.front().first.GetLogicalTypes(), intervals.front().first.GetComparator());
     ui32 current = 0;

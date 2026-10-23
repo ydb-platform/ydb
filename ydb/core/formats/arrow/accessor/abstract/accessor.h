@@ -1,4 +1,5 @@
 #pragma once
+
 #include "common.h"
 #include "minmax_utils.h"
 

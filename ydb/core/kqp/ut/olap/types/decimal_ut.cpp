@@ -440,7 +440,9 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
     Y_UNIT_TEST_PK_SCENARIO(TestDecimalAsPrimaryKey, PkLookupScenario);
     Y_UNIT_TEST_CSV_SCENARIO(TestCsv, CsvScenario);
 
-    Y_UNIT_TEST_TWIN(TestDecimalPrimaryKeyNumericOrder, UseIntervalTree) {
+    Y_UNIT_TEST(TestDecimalPrimaryKeyNumericOrder, EQueryMode, EIntervalTreeMode) {
+        const auto Scan = Arg<0>();
+        const auto UseIntervalTree = Arg<1>() == EIntervalTreeMode::INTERVAL_TREE_ENABLED;
         using TDecimal = TDecimalTraits<22, 0>;
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
@@ -518,10 +520,8 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
                 { "SELECT COUNT(*) FROM `" + tableName + "`", "[[8u]]" },
             };
 
-            for (const auto mode : { EQueryMode::SCAN_QUERY, EQueryMode::EXECUTE_QUERY }) {
-                for (const auto& query : queries) {
-                    CheckOrExec(helper, query.Query, query.Expected, mode);
-                }
+            for (const auto& query : queries) {
+                CheckOrExec(helper, query.Query, query.Expected, Scan);
             }
         };
 

@@ -1,4 +1,5 @@
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
@@ -260,6 +261,7 @@ Y_UNIT_TEST_SUITE(TDecimalIndexComparisonTests) {
             { ValueColumnId,
                 { BuildColumnChunkFromArray(*schema, ValueColumnId, first), BuildColumnChunkFromArray(*schema, ValueColumnId, second) } },
         };
+
         auto index = maxMeta->BuildIndexOptional(chunks, first->length() + second->length(), indexInfo);
         UNIT_ASSERT_C(index.IsSuccess(), index.GetErrorMessage());
         UNIT_ASSERT_VALUES_EQUAL(index.GetResult().size(), 1);
@@ -279,6 +281,7 @@ Y_UNIT_TEST_SUITE(TDecimalIndexComparisonTests) {
         const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunks = {
             { ValueColumnId, { BuildColumnChunkFromArray(*schema, ValueColumnId, values) } },
         };
+
         auto index = maxMeta->BuildIndexOptional(chunks, values->length(), indexInfo);
         UNIT_ASSERT_C(index.IsSuccess(), index.GetErrorMessage());
         UNIT_ASSERT_VALUES_EQUAL(index.GetResult().size(), 1);

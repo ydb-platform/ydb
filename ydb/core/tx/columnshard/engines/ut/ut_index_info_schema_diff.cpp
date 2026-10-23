@@ -1,3 +1,4 @@
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>

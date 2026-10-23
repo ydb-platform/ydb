@@ -131,6 +131,7 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
             UNIT_ASSERT(decimalBuilder.Append(value).ok());
             UNIT_ASSERT(uuidBuilder.Append(zero).ok());
         }
+
         const auto decimals = Finish(decimalBuilder);
         const auto uuids = Finish(uuidBuilder);
         const auto ids = MakeArray<arrow::UInt32Builder, ui32>({ 0, 1, 2, 3, 4 });
@@ -156,6 +157,7 @@ Y_UNIT_TEST_SUITE(ArrowComparison) {
                 { withDuplicates->Slice(0, duplicateOffset + 2), sorted->Slice(0, duplicateOffset + 1) },
                 { withDuplicates->Slice(duplicateOffset, 2), sorted->Slice(duplicateOffset, 1) },
             };
+
             for (const auto& [input, expected] : cases) {
                 std::vector<std::shared_ptr<arrow::RecordBatch>> deduplicated;
                 DedupSortedBatch(input, keySchema, logicalTypes, comparator, deduplicated);

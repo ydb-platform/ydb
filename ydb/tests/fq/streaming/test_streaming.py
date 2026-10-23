@@ -1372,6 +1372,9 @@ FROM `{table_name}`"""
         self.wait_completed_checkpoints(kikimr, query_name)
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, query_name)
+        kikimr.ydb_client.query(f"""
+            DROP STREAMING QUERY `{query_name}`;
+        """)
 
     # SchemeShard counters cover the database, so each case needs a fresh cluster.
     @pytest.mark.parametrize(
@@ -1650,6 +1653,9 @@ FROM `{table_name}`"""
         ]
 
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+        kikimr.ydb_client.query(f"""
+            DROP STREAMING QUERY `{name}`;
+        """)
 
     @pytest.mark.parametrize(
         "use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"]
@@ -2231,6 +2237,9 @@ FROM `{table_name}`"""
         # After restart the newly written records can reach the table while the
         # delayed records expected below are being validated.
         validate_table(expected_data2, allow_extra_rows=True)
+        kikimr.ydb_client.query(f"""
+            DROP STREAMING QUERY `{query_name}`;
+        """)
 
     @link_test_case("#46139")
     @pytest.mark.parametrize("local_topics", [True, False])
@@ -2588,6 +2597,9 @@ FROM `{table_name}`"""
             ALTER STREAMING QUERY `{path}` SET (RUN = TRUE);
         """)
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        second_ydb_client.query(f"""
+            DROP STREAMING QUERY `{path}`;
+        """)
 
     @link_test_case("#47255")
     @pytest.mark.parametrize("local_topics", [True, False])
@@ -2772,6 +2784,9 @@ FROM `{table_name}`"""
         # After restart, records written before the query was stopped can be
         # persisted while the expected delayed records are being validated.
         validate_table(expected_data2, allow_extra_rows=True)
+        kikimr.ydb_client.query(f"""
+            DROP STREAMING QUERY `{query_name}`;
+        """)
 
     @link_test_case("#47257")
     @pytest.mark.parametrize("local_topics", [True, False])
@@ -3021,6 +3036,9 @@ FROM `{table_name}`"""
             enable_discovery=False,
         )
         check_issues(get_issues(client=second_ydb_client), "Lease expired")
+        kikimr.ydb_client.query(f"""
+            DROP STREAMING QUERY `{path}`;
+        """)
 
     @pytest.mark.parametrize(
         argnames="table_role,table_store,kikimr",

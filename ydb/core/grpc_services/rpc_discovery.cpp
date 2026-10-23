@@ -46,7 +46,7 @@ public:
     void Bootstrap() {
         const TString database = Request->NormalizePath(Request->GetProtoRequest()->database());
         const auto& userToken = Request->GetInternalToken();
-        YDB_LOG_DEBUG_COMP(NKikimrServices::RPC_REQUEST, "ListEndpoints request",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::DISCOVERY, "ListEndpoints request",
             {"database", database},
             {"endpoint", Request->GetAuthority()},
             {"peer", Request->GetPeerName()},

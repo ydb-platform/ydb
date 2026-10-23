@@ -11,7 +11,7 @@ from _paths import DASHBOARD, add_product_paths
 
 add_product_paths(DASHBOARD)
 
-from resources_loader import match_measured_to_runs, measured_test_label
+from resources_loader import align_series, build_measured_layers, match_measured_to_runs, measured_test_label
 
 
 class MeasuredLabelTest(unittest.TestCase):
@@ -55,6 +55,33 @@ class MeasuredLabelTest(unittest.TestCase):
         self.assertEqual(grouped["ya-test-1"]["label"], "ydb/core/foo [0]")
         self.assertEqual(grouped["ya-test-2"]["chunk"], 1)
         self.assertEqual(grouped["ya-test-2"]["suite"], "ydb/core/foo")
+
+    def test_align_is_zero_outside_window(self):
+        self.assertEqual(align_series([1, 2, 3, 4], [2, 3], [10, 20]), [0.0, 10.0, 20.0, 0.0])
+
+    def test_layers_share_axis(self):
+        grouped = {
+            "a": {
+                "label": "s [0]",
+                "xs": [1.0, 2.0],
+                "cpu_cores": [1.0, 1.0],
+                "ram_gb": [0.2, 0.3],
+                "disk_write_mbps": [4.0, 0.0],
+                "disk_read_mbps": [0.0, 1.0],
+            },
+            "b": {
+                "label": "s [1]",
+                "xs": [2.0, 3.0],
+                "cpu_cores": [0.5, 0.5],
+                "ram_gb": [0.1, 0.1],
+                "disk_write_mbps": [8.0, 8.0],
+                "disk_read_mbps": [0.0, 0.0],
+            },
+        }
+        layers = build_measured_layers(grouped)
+        self.assertEqual(layers["xs_evlog_sec"], [1.0, 2.0, 3.0])
+        self.assertEqual(layers["cpu_tracks"]["s [0]"], [1.0, 1.0, 0.0])
+        self.assertEqual(layers["write_tracks"]["s [1]"], [0.0, 8.0, 8.0])
 
 
 if __name__ == "__main__":

@@ -133,3 +133,66 @@ def match_measured_to_runs(
         bucket["suite"] = suite
         bucket["chunk"] = chunk
         bucket["label"] = measured_test_label({"suite": suite, "chunk": chunk})
+
+
+def downsample_xs(xs: list[float], max_points: int) -> list[float]:
+    if max_points <= 0 or len(xs) <= max_points:
+        return list(xs)
+    last = len(xs) - 1
+    return [xs[int(i * last / (max_points - 1))] for i in range(max_points)]
+
+
+def align_series(xs_out: list[float], xs_src: list[float], ys_src: list[float]) -> list[float]:
+    """Step-hold ys_src onto xs_out; 0 outside the source window."""
+    if not xs_out:
+        return []
+    if not xs_src or not ys_src:
+        return [0.0] * len(xs_out)
+    out: list[float] = []
+    j = 0
+    t0 = float(xs_src[0])
+    t1 = float(xs_src[-1])
+    for raw in xs_out:
+        t = float(raw)
+        if t < t0 or t > t1:
+            out.append(0.0)
+            continue
+        while j + 1 < len(xs_src) and float(xs_src[j + 1]) <= t:
+            j += 1
+        out.append(float(ys_src[j] or 0.0))
+    return out
+
+
+def build_measured_layers(
+    grouped: dict[str, dict[str, Any]],
+    max_points: int = 400,
+) -> dict[str, Any]:
+    """Common-axis stacked tracks for measured cgroup series."""
+    xs: list[float] = sorted({float(x) for bucket in grouped.values() for x in (bucket.get("xs") or [])})
+    xs = downsample_xs(xs, max_points)
+    cpu_tracks: dict[str, list[float]] = {}
+    ram_tracks: dict[str, list[float]] = {}
+    write_tracks: dict[str, list[float]] = {}
+    read_tracks: dict[str, list[float]] = {}
+    by_label: dict[str, dict[str, Any]] = {}
+    for key, bucket in grouped.items():
+        label = str(bucket.get("label") or key)
+        src_xs = [float(x) for x in (bucket.get("xs") or [])]
+        cpu_tracks[label] = align_series(xs, src_xs, bucket.get("cpu_cores") or [])
+        ram_tracks[label] = align_series(xs, src_xs, bucket.get("ram_gb") or [])
+        write_tracks[label] = align_series(xs, src_xs, bucket.get("disk_write_mbps") or [])
+        read_tracks[label] = align_series(xs, src_xs, bucket.get("disk_read_mbps") or [])
+        by_label[label] = {
+            "key": key,
+            "suite": bucket.get("suite"),
+            "chunk": bucket.get("chunk"),
+            "cgroup": bucket.get("cgroup"),
+        }
+    return {
+        "xs_evlog_sec": xs,
+        "cpu_tracks": cpu_tracks,
+        "ram_tracks": ram_tracks,
+        "write_tracks": write_tracks,
+        "read_tracks": read_tracks,
+        "by_label": by_label,
+    }

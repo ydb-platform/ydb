@@ -1110,6 +1110,7 @@ def _build_measured_tests(
     """Per-cgroup ticks from monitor_resources.py kind=test records."""
     try:
         from ..resources_loader import (
+            build_measured_layers,
             is_host_record,
             match_measured_to_runs,
             measured_test_key,
@@ -1117,6 +1118,7 @@ def _build_measured_tests(
         )
     except ImportError:
         from resources_loader import (  # type: ignore[no-redef]
+            build_measured_layers,
             is_host_record,
             match_measured_to_runs,
             measured_test_key,
@@ -1159,6 +1161,7 @@ def _build_measured_tests(
         bucket["disk_read_mbps"].append(float(rec.get("disk_read_mbps", rec.get("disk_read_mb_delta", 0)) or 0))
         bucket["disk_write_mbps"].append(float(rec.get("disk_write_mbps", rec.get("disk_write_mb_delta", 0)) or 0))
     match_measured_to_runs(grouped, runs or [])
+    overlay["measured_layers"] = build_measured_layers(grouped)
     summary: list[dict[str, Any]] = []
     series_out: dict[str, Any] = {}
     for key, bucket in grouped.items():

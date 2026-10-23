@@ -83,6 +83,18 @@ def build_html_dashboard(
     .tab {{ display: none; }}
     .tab.active {{ display: block; }}
     .row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }}
+    .measured-body {{ display: flex; gap: 16px; align-items: flex-start; }}
+    .measured-tree {{ flex: 0 0 420px; max-height: 720px; overflow: auto; border: 1px solid #d0d7de; border-radius: 8px; background: #fafbfc; font-size: 12px; }}
+    .measured-tree button {{ border: 0; background: transparent; cursor: pointer; font: inherit; text-align: left; }}
+    .measured-tree .mt-row {{ display: flex; align-items: flex-start; gap: 2px; }}
+    .measured-tree .mt-twist, .measured-tree .mt-spacer {{ flex: 0 0 16px; width: 16px; padding: 4px 0; color: #57606a; }}
+    .measured-tree .mt-pick {{ flex: 1; min-width: 0; padding: 3px 6px; border-radius: 4px; }}
+    .measured-tree .mt-pick:hover {{ background: #eef2f6; }}
+    .measured-tree .mt-pick.on {{ background: #e7f3ff; }}
+    .measured-tree .mt-name {{ font-weight: 600; }}
+    .measured-tree .mt-chunk .mt-name {{ font-weight: 400; }}
+    .measured-tree .stats {{ display: block; color: #6b7280; font-weight: 400; font-variant-numeric: tabular-nums; }}
+    .measured-charts {{ flex: 1; min-width: 0; }}
     .row1 {{ display: grid; grid-template-columns: 1fr; gap: 16px; }}
     .chart {{ width: 100%; height: 420px; min-width: 0; }}
     .wide {{ width: 100%; height: 520px; }}
@@ -369,7 +381,7 @@ def build_html_dashboard(
       <ul>
         <li><b>By suites (stacked):</b> At time <code>t</code> we sum each active chunk contribution. For CPU it is <code>cpu_sec_report / duration_used_sec</code> (average cores for that run); for RAM it is the chunk memory metric from report converted to GB. This is a model by chunks, not an instantaneous per-process sample.</li>
         <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code> during the run (actual usage).</li>
-        <li><b>Measured per test:</b> when tests run under <code>--limit-test-cpu</code>, each <code>ya-test-*</code> cgroup is sampled every 3s (CPU from <code>cpu.stat</code>, RAM from <code>memory.current</code> or RSS, disk from <code>io.stat</code> or <code>/proc/pid/io</code>). The selector lists <code>suite [chunk]</code>. Ticks are in <code>resources_monitor.jsonl</code> (<code>kind=test</code>) and <code>resources_tests.json</code>.</li>
+        <li><b>Measured per test:</b> stacked layers from <code>ya-test-*</code> cgroups (CPU/RAM/disk every 3s). The tree picks a suite (all its chunks) or one chunk. Each chart stacks its own top consumers, so RAM/disk are not hidden behind a CPU sort. Ticks: <code>resources_monitor.jsonl</code> (<code>kind=test</code>).</li>
         <li><b>Limits (purple dashed):</b> Provisioned runner maximum from <code>runners_footprints.yml</code> for this build preset. Optional dotted line: ya.make cgroup RAM cap (~{rf_ya_mem} GB).</li>
         <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
         <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics (seconds).</li>
@@ -410,13 +422,22 @@ def build_html_dashboard(
   </details>
   <div id="measuredWrap" style="display:none;margin:12px 0 16px 0;padding:10px 12px;border:1px solid #d0d7de;border-radius:8px;background:#fff;">
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
-      <b>Measured per test (cgroup)</b>
-      <label>Suite <select id="measuredSelect" style="min-width:360px;padding:6px 8px;border:1px solid #d0d7de;border-radius:6px;"></select></label>
+      <b>Measured per test (cgroup layers)</b>
       <span id="measuredMeta" class="muted"></span>
     </div>
-    <div id="measuredCpu" class="wide" style="height:220px;"></div>
-    <div id="measuredRam" class="wide" style="height:220px;"></div>
-    <div id="measuredDisk" class="wide" style="height:220px;"></div>
+    <div class="measured-body">
+      <div id="measuredTree" class="measured-tree"></div>
+      <div class="measured-charts">
+        <div id="measuredCpu" class="wide" style="height:280px;"></div>
+        <div id="measuredCpuHover" class="hoverbox">Hover CPU layers to see sorted contributors</div>
+        <div id="measuredRam" class="wide" style="height:280px;"></div>
+        <div id="measuredRamHover" class="hoverbox">Hover RAM layers to see sorted contributors</div>
+        <div id="measuredWrite" class="wide" style="height:280px;"></div>
+        <div id="measuredWriteHover" class="hoverbox">Hover write layers to see sorted contributors</div>
+        <div id="measuredRead" class="wide" style="height:280px;"></div>
+        <div id="measuredReadHover" class="hoverbox">Hover read layers to see sorted contributors</div>
+      </div>
+    </div>
   </div>
   <div id="activeChunks" class="wide"></div>
   <div id="activeChunksClick" class="clickbox">Click chart to see how many tests (chunks) were running at that time</div>
@@ -1821,6 +1842,7 @@ def build_html_dashboard(
       if (unit === 'active') return String(Math.round(y));
       if (unit === 'tests') return String(Math.round(y));
       if (unit === 'GB') return y.toFixed(3);
+      if (unit === 'MB/s') return y.toFixed(2);
       return y.toFixed(3);
     }}
 
@@ -1829,6 +1851,7 @@ def build_html_dashboard(
       if (unit === 'tests') return 0.5;
       if (unit === 'GB') return 0.001;   // ~1 MB
       if (unit === 'cores') return 0.01; // suppress tiny CPU noise shown as 0.000
+      if (unit === 'MB/s') return 0.01;
       return 0.0;
     }}
 
@@ -2302,69 +2325,213 @@ def build_html_dashboard(
     }}
     window.applyLayerToggles = applyLayerToggles;
 
-    let _measuredSeries = null;
     const measuredList = (data.resources_overlay && data.resources_overlay.measured_tests) || [];
+    const measuredLayers = (data.resources_overlay && data.resources_overlay.measured_layers) || {{}};
     const measuredWrap = document.getElementById('measuredWrap');
-    const measuredSelect = document.getElementById('measuredSelect');
-    function plotMeasured(series) {{
-      if (!series || !window.Plotly) return;
-      const xDisp = (series.xs_evlog_sec || []).map(x => xToDisplay(x));
-      const layout = (title, ytitle) => ({{
-        title,
-        xaxis: axisLayout(xDisp),
-        yaxis: {{ title: ytitle }},
-        hovermode: 'x unified',
-        margin: {{ t: 40, r: 20, b: 40, l: 50 }},
-      }});
-      Plotly.newPlot('measuredCpu', [{{
-        x: xDisp, y: series.cpu_cores || [], mode: 'lines', name: 'CPU',
-        line: {{ color: '#d97706' }}, hovertemplate: 'CPU: %{{y:.3f}} cores<extra></extra>'
-      }}], layout('Measured CPU (cgroup)', 'cores'), {{ responsive: true }});
-      Plotly.newPlot('measuredRam', [{{
-        x: xDisp, y: series.ram_gb || [], mode: 'lines', name: 'RAM',
-        line: {{ color: '#7c3aed' }}, hovertemplate: 'RAM: %{{y:.3f}} GB<extra></extra>'
-      }}], layout('Measured RAM (cgroup)', 'GB'), {{ responsive: true }});
-      Plotly.newPlot('measuredDisk', [
-        {{ x: xDisp, y: (series.disk_write_mbps || []).map(v => Number(v) || 0), mode: 'lines', name: 'Write', line: {{ color: '#65a30d' }}, hovertemplate: 'Write: %{{y:.2f}} MB/s<extra></extra>' }},
-        {{ x: xDisp, y: (series.disk_read_mbps || []).map(v => -(Number(v) || 0)), mode: 'lines', name: 'Read', line: {{ color: '#0284c7' }}, hovertemplate: 'Read: %{{y:.2f}} MB/s<extra></extra>' }},
-      ], layout('Measured disk (+write / -read)', 'MB/s'), {{ responsive: true }});
+    const MEASURED_PALETTE = ['#d97706','#7c3aed','#0284c7','#65a30d','#dc2626','#0f766e','#c026d3','#1d4ed8','#b45309','#15803d','#be123c','#4338ca'];
+    const _measuredColors = {{}};
+    const _origColorForTrack = colorForTrack;
+    colorForTrack = function(trackName) {{
+      if (_measuredColors[trackName]) return _measuredColors[trackName];
+      return _origColorForTrack(trackName);
+    }};
+    function measuredPeak(track) {{
+      return (track || []).reduce((m, v) => Math.max(m, Number(v) || 0), 0);
     }}
-    async function showMeasured(key) {{
-      if (!key) return;
-      if (!_measuredSeries) {{
-        try {{
-          const resp = await fetch('resources_tests.json');
-          if (!resp.ok) throw new Error(String(resp.status));
-          _measuredSeries = await resp.json();
-        }} catch (err) {{
-          document.getElementById('measuredMeta').textContent = 'resources_tests.json is missing';
+    function filterMeasuredTracks(allTracks, labels) {{
+      const out = {{}};
+      (labels || []).forEach(lb => {{
+        if (allTracks && allTracks[lb]) out[lb] = allTracks[lb];
+      }});
+      return out;
+    }}
+    function topMeasuredTracks(tracks, limit) {{
+      const names = Object.keys(tracks || {{}}).sort((a, b) => measuredPeak(tracks[b]) - measuredPeak(tracks[a]));
+      const ordered = {{}};
+      if (names.length <= limit) {{
+        names.slice().reverse().forEach(n => {{ ordered[n] = tracks[n]; }});
+        return ordered;
+      }}
+      const top = names.slice(0, limit);
+      const rest = names.slice(limit);
+      const other = tracks[rest[0]].map((_, i) => rest.reduce((s, n) => s + (Number(tracks[n][i]) || 0), 0));
+      ordered.other = other;
+      top.slice().reverse().forEach(n => {{ ordered[n] = tracks[n]; }});
+      return ordered;
+    }}
+    function plotMeasuredLayers(labels, titleSuffix) {{
+      if (!window.Plotly || !measuredLayers.xs_evlog_sec) return;
+      const charts = [
+        ['measuredCpu', measuredLayers.cpu_tracks, 'Layered measured CPU' + titleSuffix, 'cores'],
+        ['measuredRam', measuredLayers.ram_tracks, 'Layered measured RAM' + titleSuffix, 'GB'],
+        ['measuredWrite', measuredLayers.write_tracks, 'Layered measured disk write' + titleSuffix, 'MB/s'],
+        ['measuredRead', measuredLayers.read_tracks, 'Layered measured disk read' + titleSuffix, 'MB/s'],
+      ];
+      charts.forEach(([divId, allTracks, title, unit]) => {{
+        const tracks = topMeasuredTracks(filterMeasuredTracks(allTracks, labels), 50);
+        Object.keys(tracks).forEach((name, i) => {{
+          _measuredColors[name] = name === 'other' ? '#bdbdbd' : MEASURED_PALETTE[i % MEASURED_PALETTE.length];
+        }});
+        stackedArea(divId, measuredLayers.xs_evlog_sec, tracks, title, unit);
+      }});
+      attachSortedHover('measuredCpu', 'measuredCpuHover', 'cores');
+      attachSortedHover('measuredRam', 'measuredRamHover', 'GB');
+      attachSortedHover('measuredWrite', 'measuredWriteHover', 'MB/s');
+      attachSortedHover('measuredRead', 'measuredReadHover', 'MB/s');
+    }}
+    function measuredAgg(rows) {{
+      let maxCpu = 0, maxRam = 0, maxWrite = 0, maxRead = 0;
+      (rows || []).forEach(row => {{
+        maxCpu = Math.max(maxCpu, Number(row.max_cpu) || 0);
+        maxRam = Math.max(maxRam, Number(row.max_ram_gb) || 0);
+        maxWrite = Math.max(maxWrite, Number(row.max_write_mbps) || 0);
+        maxRead = Math.max(maxRead, Number(row.max_read_mbps) || 0);
+      }});
+      return {{ n: (rows || []).length, max_cpu: maxCpu, max_ram_gb: maxRam, max_write_mbps: maxWrite, max_read_mbps: maxRead }};
+    }}
+    function measuredStatsText(agg, hideCount) {{
+      const body = agg.max_cpu.toFixed(2) + 'c · ' + agg.max_ram_gb.toFixed(2) + 'G · w' +
+        agg.max_write_mbps.toFixed(1) + ' r' + agg.max_read_mbps.toFixed(1);
+      return hideCount ? body : (agg.n + ' · ' + body);
+    }}
+    function buildMeasuredForest() {{
+      const root = {{ name: 'all', path: '', children: {{}}, rows: [] }};
+      measuredList.forEach(row => {{
+        const parts = String(row.suite || 'unknown').split('/').filter(Boolean);
+        let node = root;
+        node.rows.push(row);
+        let path = '';
+        parts.forEach(part => {{
+          path = path ? (path + '/' + part) : part;
+          if (!node.children[part]) node.children[part] = {{ name: part, path: path, children: {{}}, rows: [] }};
+          node = node.children[part];
+          node.rows.push(row);
+        }});
+      }});
+      return root;
+    }}
+    const measuredForest = buildMeasuredForest();
+    const measuredOpen = new Set();
+    function measuredAncestorPaths(path) {{
+      const parts = String(path || '').split('/').filter(Boolean);
+      const out = [];
+      let cur = '';
+      parts.forEach(part => {{
+        cur = cur ? (cur + '/' + part) : part;
+        out.push(cur);
+      }});
+      return out;
+    }}
+    function openMeasuredPath(path, includeSelf) {{
+      measuredAncestorPaths(path).forEach((p, i, arr) => {{
+        if (includeSelf || i < arr.length - 1) measuredOpen.add(p);
+      }});
+    }}
+    function measuredRowsForSelection(sel) {{
+      if (!sel || sel.kind === 'all') return measuredList;
+      if (sel.kind === 'chunk') return measuredList.filter(row => row.key === sel.key);
+      const path = sel.path || sel.suite || '';
+      return measuredList.filter(row => row.suite === path || String(row.suite || '').startsWith(path + '/'));
+    }}
+    function measuredLabelsForSelection(sel) {{
+      return measuredRowsForSelection(sel).map(row => row.label);
+    }}
+    function selectMeasured(sel) {{
+      const rows = measuredRowsForSelection(sel);
+      const labels = rows.map(row => row.label);
+      const agg = measuredAgg(rows);
+      const meta = document.getElementById('measuredMeta');
+      const title = (!sel || sel.kind === 'all')
+        ? 'all suites'
+        : (sel.kind === 'chunk' ? ((measuredList.find(r => r.key === sel.key) || {{}}).label || sel.key) : (sel.path || sel.suite));
+      meta.textContent = title + ': ' + measuredStatsText(agg);
+      const suffix = (!sel || sel.kind === 'all') ? ' (all)' : (sel.kind === 'chunk' ? ' (one chunk)' : ' / ' + (sel.path || sel.suite));
+      plotMeasuredLayers(labels, suffix);
+      if (sel && (sel.path || sel.suite)) openMeasuredPath(sel.path || sel.suite, false);
+      if (sel && sel.kind === 'chunk' && (sel.path || sel.suite)) openMeasuredPath(sel.path || sel.suite, true);
+      renderMeasuredTree(sel);
+    }}
+    function renderMeasuredNode(node, depth, sel) {{
+      const childNames = Object.keys(node.children).sort();
+      const chunks = node.rows.filter(row => row.suite === node.path).slice().sort((a, b) => {{
+        const ca = a.chunk == null ? 1e9 : Number(a.chunk);
+        const cb = b.chunk == null ? 1e9 : Number(b.chunk);
+        return ca - cb;
+      }});
+      const hasKids = childNames.length > 0 || chunks.length > 0;
+      const open = measuredOpen.has(node.path);
+      const selected = sel && sel.kind === 'prefix' && sel.path === node.path;
+      let html = '<div class="mt-row" style="padding-left:' + (depth * 12) + 'px">';
+      html += hasKids
+        ? ('<button type="button" class="mt-twist" data-toggle="' + escapeHtml(node.path) + '">' + (open ? '▼' : '▶') + '</button>')
+        : '<span class="mt-spacer"></span>';
+      html += '<button type="button" class="mt-pick' + (selected ? ' on' : '') + '" data-kind="prefix" data-path="' + escapeHtml(node.path) + '">' +
+        '<span class="mt-name">' + escapeHtml(node.name) + '</span>' +
+        '<span class="stats">' + measuredStatsText(measuredAgg(node.rows)) + '</span></button></div>';
+      if (open && hasKids) {{
+        childNames.forEach(name => {{ html += renderMeasuredNode(node.children[name], depth + 1, sel); }});
+        chunks.forEach(row => {{
+          const on = sel && sel.kind === 'chunk' && sel.key === row.key;
+          html += '<div class="mt-row mt-chunk" style="padding-left:' + ((depth + 1) * 12) + 'px">' +
+            '<span class="mt-spacer"></span>' +
+            '<button type="button" class="mt-pick' + (on ? ' on' : '') + '" data-kind="chunk" data-key="' + escapeHtml(row.key) + '" data-path="' + escapeHtml(node.path) + '">' +
+            '<span class="mt-name">' + escapeHtml(row.chunk == null ? row.label : '[' + row.chunk + ']') + '</span>' +
+            '<span class="stats">' + measuredStatsText(measuredAgg([row]), true) + '</span></button></div>';
+        }});
+      }}
+      return html;
+    }}
+    function renderMeasuredTree(sel) {{
+      const tree = document.getElementById('measuredTree');
+      if (!tree) return;
+      const childNames = Object.keys(measuredForest.children).sort();
+      const allOn = !sel || sel.kind === 'all';
+      let html = '<div class="mt-row"><span class="mt-spacer"></span>' +
+        '<button type="button" class="mt-pick' + (allOn ? ' on' : '') + '" data-kind="all">' +
+        '<span class="mt-name">all</span><span class="stats">' + measuredStatsText(measuredAgg(measuredList)) + '</span></button></div>';
+      childNames.forEach(name => {{ html += renderMeasuredNode(measuredForest.children[name], 1, sel); }});
+      tree.innerHTML = html;
+    }}
+    const measuredTreeEl = document.getElementById('measuredTree');
+    if (measuredTreeEl) {{
+      measuredTreeEl.addEventListener('click', (ev) => {{
+        const twist = ev.target.closest('[data-toggle]');
+        if (twist) {{
+          const path = twist.dataset.toggle;
+          if (measuredOpen.has(path)) measuredOpen.delete(path);
+          else measuredOpen.add(path);
+          renderMeasuredTree(window._measuredSel || {{kind: 'all'}});
           return;
         }}
-      }}
-      const series = _measuredSeries[key];
-      const meta = measuredList.find(row => row.key === key) || {{}};
-      document.getElementById('measuredMeta').textContent = series
-        ? ((meta.label || key) + ': max ' + (meta.max_cpu || 0) + ' cores, ' + (meta.max_ram_gb || 0) + ' GB, r/w ' + (meta.max_read_mbps || 0) + '/' + (meta.max_write_mbps || 0) + ' MB/s, ' + (meta.samples || 0) + ' ticks')
-        : 'no series';
-      if (series) plotMeasured(series);
+        const pick = ev.target.closest('.mt-pick');
+        if (!pick) return;
+        if (pick.dataset.kind === 'all') selectMeasured({{kind: 'all'}});
+        else if (pick.dataset.kind === 'chunk') selectMeasured({{kind: 'chunk', key: pick.dataset.key, path: pick.dataset.path, suite: pick.dataset.path}});
+        else selectMeasured({{kind: 'prefix', path: pick.dataset.path, suite: pick.dataset.path}});
+      }});
     }}
-    if (measuredWrap && measuredSelect && measuredList.length) {{
+    const _selectMeasured = selectMeasured;
+    selectMeasured = function(sel) {{
+      window._measuredSel = sel || {{kind: 'all'}};
+      _selectMeasured(sel || {{kind: 'all'}});
+    }};
+    if (measuredWrap && measuredList.length && measuredLayers.xs_evlog_sec) {{
       measuredWrap.style.display = '';
-      measuredSelect.innerHTML = measuredList.map(row =>
-        '<option value="' + escapeHtml(row.key) + '">' + escapeHtml(row.label) +
-        ' — ' + Number(row.max_cpu || 0).toFixed(2) + ' cores</option>'
-      ).join('');
-      measuredSelect.addEventListener('change', () => showMeasured(measuredSelect.value));
-      showMeasured(measuredSelect.value);
+      const suites = [...new Set(measuredList.map(row => row.suite).filter(Boolean))];
+      if (suites.length === 1) {{
+        openMeasuredPath(suites[0], false);
+        selectMeasured({{kind: 'prefix', path: suites[0], suite: suites[0]}});
+      }} else {{
+        selectMeasured({{kind: 'all'}});
+      }}
     }}
     const _toggleSuiteMarkersOrig = toggleSuiteMarkers;
     toggleSuiteMarkers = function(suitePath, enabled) {{
       _toggleSuiteMarkersOrig(suitePath, enabled);
-      if (!enabled || !measuredSelect) return;
-      const match = measuredList.find(row => row.suite === suitePath);
-      if (match) {{
-        measuredSelect.value = match.key;
-        showMeasured(match.key);
+      if (!enabled || !measuredList.length) return;
+      if (measuredList.some(row => row.suite === suitePath || String(row.suite || '').startsWith(suitePath + '/'))) {{
+        openMeasuredPath(suitePath, false);
+        selectMeasured({{kind: 'prefix', path: suitePath, suite: suitePath}});
       }}
     }};
 

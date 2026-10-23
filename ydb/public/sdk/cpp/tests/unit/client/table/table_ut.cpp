@@ -977,6 +977,19 @@ TEST(TableTest, AlterTableSetMetricsSettings) {
     );
 }
 
+TEST(KMeansTreeSettings, AutoUpdateDefaultsInAggregate) {
+    const NYdb::NTable::TKMeansTreeSettings settings{
+        {NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
+         NYdb::NTable::TVectorIndexSettings::EVectorType::Float, 1024},
+        10,
+        3};
+    EXPECT_FALSE(settings.AutoUpdate.has_value());
+
+    Ydb::Table::KMeansTreeSettings proto;
+    settings.SerializeTo(proto);
+    EXPECT_FALSE(proto.has_autoupdate());
+}
+
 TEST(KMeansTreeSettings, AutoUpdateRoundTrip) {
     for (const auto autoUpdate : {std::optional<bool>(), std::make_optional(true), std::make_optional(false)}) {
         NYdb::NTable::TKMeansTreeSettings original;

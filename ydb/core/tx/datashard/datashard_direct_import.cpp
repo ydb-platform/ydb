@@ -145,9 +145,12 @@ void TDataShard::Handle(TEvDataShard::TEvS3DirectWriteFinish::TPtr& ev, const TA
 
 void TDataShard::Handle(TEvDataShard::TEvS3DirectWriteAbort::TPtr& ev, const TActorContext&) {
     auto* msg = ev->Get();
+    // Channel health outlives the reservation: cancellation may have released it
+    // before the writer's final report arrives. Only reservation cleanup needs
+    // a matching active owner and step.
+    Executor()->OnYellowChannels(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels));
     auto it = DirectImports.find(msg->TxId);
     if (it != DirectImports.end() && it->second.Actor == ev->Sender && it->second.Step == msg->Step) {
-        Executor()->OnYellowChannels(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels));
         CancelS3DirectWrite(msg->TxId);
     }
 }

@@ -1113,6 +1113,102 @@ Y_UNIT_TEST_TWIN(RejectDiskQuotaExceeded, beforeBegin) {
     UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), EmptyTableState);
 }
 
+Y_UNIT_TEST(YellowStopReportSurvivesCancellation) {
+    TTestEnv env;
+    auto [shards, tableId] = env.CreateUtf8Table();
+    const auto desc = env.TableDescription(shards[0], tableId);
+    env.StartS3(MakeCsv(1));
+
+    TActorId downloader;
+    auto begin = env.Runtime.AddObserver<TEvDataShard::TEvS3DirectWriteBeginResult>(
+        [&](auto& ev) { downloader = ev->Recipient; });
+    TBlockEvents<TEvTablet::TEvCheckBlobstorageStatusResult> statusChecks(env.Runtime);
+    auto yellow = env.Runtime.AddObserver<TEvBlobStorage::TEvPutResult>([&](auto& ev) {
+        if (ev->Recipient == downloader) {
+            const_cast<TStorageStatusFlags&>(ev->Get()->StatusFlags) = TStorageStatusFlags(
+                NKikimrBlobStorage::StatusIsValid | NKikimrBlobStorage::StatusDiskSpaceYellowStop);
+        }
+    });
+    TBlockEvents<TEvDataShard::TEvS3DirectWriteAbort> abort(env.Runtime);
+    TBlockEvents<TEvDataShard::TEvAsyncJobComplete> complete(env.Runtime,
+        [&](const auto& ev) { return ev->Sender == downloader; });
+    const ui64 txId = env.AllocateTxId();
+    env.StartRestore(shards[0], tableId.PathId.OwnerId, txId,
+        env.BuildRestoreBody(tableId, desc, 0, 128, txId));
+    env.Runtime.WaitFor("writer yellow-stop report", [&] { return !abort.empty(); });
+    UNIT_ASSERT(!abort.front()->Get()->YellowStopChannels.empty());
+    yellow.Remove();
+
+    // Cancellation releases the reservation before its owner's health report arrives.
+    env.CancelRestore(shards[0], tableId, txId);
+    abort.Unblock().Stop();
+    complete.Stop();
+    const auto result = env.ProposeAndPlanRestore(shards[0], tableId, desc);
+    UNIT_ASSERT_C(!result.GetSuccess(), "Cancellation discarded the writer's yellow-stop report");
+    UNIT_ASSERT_STRING_CONTAINS(result.GetExplain(), "out of disk space");
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), EmptyTableState);
+    RebootTablet(env.Runtime, shards[0], env.Runtime.AllocateEdgeActor());
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), EmptyTableState);
+}
+
+Y_UNIT_TEST(YellowStopFromUnrelatedCommitAbortsDirectImport) {
+    TTestEnv env;
+    auto [shards, tableId] = env.CreateUtf8Table();
+    const auto desc = env.TableDescription(shards[0], tableId);
+    env.StartS3(MakeCsv(1));
+
+    TActorId downloader;
+    auto begin = env.Runtime.AddObserver<TEvDataShard::TEvS3DirectWriteBeginResult>(
+        [&](auto& ev) { downloader = ev->Recipient; });
+    TBlockEvents<TEvBlobStorage::TEvPutResult> puts(env.Runtime,
+        [&](const auto& ev) { return ev->Recipient == downloader; });
+    TBlockEvents<TEvTablet::TEvCheckBlobstorageStatusResult> statusChecks(env.Runtime);
+    const ui64 txId = env.AllocateTxId();
+    TMaybe<NKikimrTxDataShard::TShardOpResult> result;
+    auto done = env.Runtime.AddObserver<TEvDataShard::TEvSchemaChanged>([&](auto& ev) {
+        const auto& record = ev->Get()->Record;
+        if (record.GetTxId() == txId && record.HasOpResult()) {
+            result = record.GetOpResult();
+        }
+    });
+    env.StartRestore(shards[0], tableId.PathId.OwnerId, txId,
+        env.BuildRestoreBody(tableId, desc, 0, 128, txId));
+    env.Runtime.WaitFor("direct writer with outstanding puts", [&] { return !puts.empty(); });
+
+    // Commit an unrelated system-table update while the direct writer is waiting.
+    // Its own puts never report yellow stop and cannot finish the import yet.
+    bool injected = false;
+    auto yellow = env.Runtime.AddObserver<TEvBlobStorage::TEvPutResult>([&](auto& ev) {
+        if (ev->Get()->Id.TabletID() == shards[0] && ev->Recipient != downloader) {
+            const_cast<TStorageStatusFlags&>(ev->Get()->StatusFlags) = TStorageStatusFlags(
+                NKikimrBlobStorage::StatusIsValid | NKikimrBlobStorage::StatusDiskSpaceYellowStop);
+            injected = true;
+        }
+    });
+    TS3Download info;
+    info.DataETag = "unrelated";
+    const auto sender = env.Runtime.AllocateEdgeActor();
+    env.Runtime.SendToPipe(shards[0], sender,
+        new TEvDataShard::TEvStoreS3DownloadInfo(env.AllocateTxId(), info), 0, GetPipeConfigWithRetries());
+    env.Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvS3DownloadInfo>(sender);
+    UNIT_ASSERT(injected);
+    yellow.Remove();
+
+    // Allow the shard's existing five-second maintenance tick to notice yellow
+    // stop while the direct writer's acknowledgements remain blocked.
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return result.Defined(); };
+    options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+    env.Runtime.DispatchEvents(options, TDuration::Seconds(30));
+    UNIT_ASSERT_C(result, "Yellow stop from a tablet commit did not abort the active import");
+    UNIT_ASSERT_C(!result->GetSuccess(), "The import succeeded while its blob acknowledgements were blocked");
+    UNIT_ASSERT_STRING_CONTAINS(result->GetExplain(), "out of disk space");
+    puts.Unblock().Stop();
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), EmptyTableState);
+    RebootTablet(env.Runtime, shards[0], env.Runtime.AllocateEdgeActor());
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), EmptyTableState);
+}
+
 Y_UNIT_TEST_TWIN(RejectYellowStopDuringBlobWrite, beforeBegin) {
     TTestEnv env;
     auto [shards, tableId] = env.CreateUtf8Table();

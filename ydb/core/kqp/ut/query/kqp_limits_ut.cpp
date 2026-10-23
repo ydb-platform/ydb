@@ -362,7 +362,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_ERROR);
 
         auto db = kikimr.GetQueryClient();
-        NYdb::NQuery::TExecuteQuerySettings querySettings;
+        auto querySettings = NoRetryExecuteQuerySettings();
         querySettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
 
         auto result = db.ExecuteQuery(Q1_(R"(

@@ -3,6 +3,7 @@
 #include <memory_controller.h>
 #include <memory_controller_config.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -557,6 +558,50 @@ Y_UNIT_TEST_TWIN(ResourceBroker, EnableComputeSchedulerMemory) {
     config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(sender);
     UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetCpu(), 3);
     UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 13_MB);
+}
+
+// The query execution is taken out of the activities limit, the rest is the limit of the resource broker: it's never
+// empty by default
+Y_UNIT_TEST(DefaultQueryExecutionLimitIsLessThanActivitiesLimit) {
+    const NKikimrConfig::TMemoryControllerConfig config;
+    UNIT_ASSERT_LT(GetQueryExecutionLimitBytes(config, 1000_MB), GetActivitiesLimitBytes(config, 1000_MB));
+}
+
+// The query execution limit is not less than the activities limit - a misconfiguration: it's not taken out of the
+// activities limit, otherwise the resource broker would get no memory at all
+Y_UNIT_TEST(ResourceBroker_QueryExecutionLimitNotLessThanActivitiesLimit) {
+    using namespace NResourceBroker;
+
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+    serverSettings.AppConfig->MutableFeatureFlags()->SetEnableComputeSchedulerMemory(true);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetActivitiesLimitPercent(30);
+    memoryControllerConfig->SetQueryExecutionLimitPercent(40);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    server->ProcessMemoryInfo->CGroupLimit = 1000_MB;
+    auto& runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    InitRoot(server, sender);
+
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 400_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 300_MB);
+
+    // the misconfiguration is fixed - the query execution is taken out again
+    memoryControllerConfig->SetQueryExecutionLimitPercent(10);
+    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    request->Record.MutableConfig()->MutableMemoryControllerConfig()->CopyFrom(*memoryControllerConfig);
+    runtime.Send(new IEventHandle(MakeMemoryControllerId(), sender, request.Release()));
+
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 100_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 300_MB - 100_MB);
 }
 
 Y_UNIT_TEST_TWIN(ResourceBroker_ConfigLimit, EnableComputeSchedulerMemory) {

@@ -1,4 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data.h>
+#include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_recoverlostdata.h>
 #include <ydb/core/blobstorage/vdisk/syncer/guid_proxyobtain.h>
 #include <ydb/core/blobstorage/vdisk/syncer/guid_recovery.h>
 
@@ -9,7 +11,9 @@ enum class ERestartPoint {
     OsirisWriteReply,
     OsirisDone,
     RecoveryCommitted,
-    GuidFinalBeforeLost,
+    GuidPublicationBeforeLost,
+    GuidPublicationWithLost,
+    GuidPublicationWithFinal,
 };
 
 void TestRestart(ERestartPoint point) {
@@ -45,10 +49,50 @@ void TestRestart(ERestartPoint point) {
     }
     env.Initialize();
 
+    auto waitUntil = [&](auto predicate, const char* phase) {
+        for (ui32 i = 0; i != 600 && !predicate(); ++i) {
+            env.Sim(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(predicate(), phase);
+    };
+    const bool prepareLost = point == ERestartPoint::GuidPublicationWithLost;
+    const bool prepareFinal = point == ERestartPoint::GuidPublicationWithFinal;
+    ui64 dbBirthLsnBeforePublication = 0;
+    if (prepareLost || prepareFinal) {
+        bool prepared = false;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId != recoveringNode) {
+                return true;
+            }
+            const ui32 type = ev->GetTypeRewrite();
+            // Obtain a quorum consisting entirely of healthy peers. This goes straight to Lost,
+            // leaving our own peer-GUID entry Empty for the next startup's publication repair.
+            if (type == TEvBlobStorage::EvVDiskGuidObtained &&
+                    ev->Get<TEvVDiskGuidObtained>()->VDiskId == recoveringDisk) {
+                return false;
+            }
+            if (prepareLost && type == TEvBlobStorage::EvSyncerFullSyncedWithPeer) {
+                prepared = true;
+                return false;
+            }
+            if (prepareFinal && type == TEvBlobStorage::EvSyncerLostDataRecovered) {
+                dbBirthLsnBeforePublication = ev->Get<TEvSyncerLostDataRecovered>()->LocalSyncerState.DbBirthLsn;
+                prepared = true;
+                return false;
+            }
+            return true;
+        };
+        waitUntil([&] { return prepared; }, "Recovery must commit the local state before GUID republication");
+        if (prepareFinal) {
+            UNIT_ASSERT_C(dbBirthLsnBeforePublication, "Completed lost-data recovery must have a nonzero DbBirthLsn");
+        }
+    }
+
     bool stopped = false;
     bool restarted = false;
     ui32 osirisCallsAfterRestart = 0;
     ui32 osirisWrites = 0;
+    std::optional<ui64> dbBirthLsnAfterRestart;
     std::optional<NSyncer::EDecision> decisionAfterRestart;
     env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
         if (nodeId != recoveringNode) {
@@ -60,13 +104,16 @@ void TestRestart(ERestartPoint point) {
                 decisionAfterRestart = ev->Get<TEvVDiskGuidRecovered>()->Outcome.Decision;
             } else if (type == TEvBlobStorage::EvCallOsiris) {
                 ++osirisCallsAfterRestart;
+            } else if (type == TEvBlobStorage::EvSyncGuidRecoveryDone) {
+                dbBirthLsnAfterRestart = ev->Get<TEvSyncGuidRecoveryDone>()->DbBirthLsn;
             }
             return true;
         }
         if (type == TEvBlobStorage::EvAnubisOsirisPut) {
             ++osirisWrites;
         }
-        if (point == ERestartPoint::GuidFinalBeforeLost && type == TEvBlobStorage::EvVDiskGuidObtained) {
+        const bool stopAfterPublication = point == ERestartPoint::GuidPublicationBeforeLost || prepareLost || prepareFinal;
+        if (stopAfterPublication && type == TEvBlobStorage::EvVDiskGuidObtained) {
             // Delay two peers' survey replies, so the first quorum includes the wiped disk's own Empty reply.
             // No reply contents are modified; all peers remain available for GUID publication and data recovery.
             const ui32 order = info->GetOrderNumber(ev->Get<TEvVDiskGuidObtained>()->VDiskId);
@@ -79,19 +126,16 @@ void TestRestart(ERestartPoint point) {
             (point == ERestartPoint::OsirisWriteReply && type == TEvBlobStorage::EvAnubisOsirisPutResult) ||
             (point == ERestartPoint::OsirisDone && type == TEvBlobStorage::EvOsirisDone) ||
             (point == ERestartPoint::RecoveryCommitted && type == TEvBlobStorage::EvSyncerLostDataRecovered) ||
-            (point == ERestartPoint::GuidFinalBeforeLost && type == TEvBlobStorage::EvSyncerGuidFirstRunDone);
+            (stopAfterPublication && type == TEvBlobStorage::EvSyncerGuidFirstRunDone);
         if (stop) {
             stopped = true;
             return false;
         }
         return true;
     };
-    auto waitUntil = [&](auto predicate, const char* phase) {
-        for (ui32 i = 0; i != 600 && !predicate(); ++i) {
-            env.Sim(TDuration::MilliSeconds(100));
-        }
-        UNIT_ASSERT_C(predicate(), phase);
-    };
+    if (prepareLost || prepareFinal) {
+        env.RestartNode(recoveringNode);
+    }
     waitUntil([&] { return stopped; }, "The recovery must reach the requested restart point");
     if (point == ERestartPoint::OsirisWriteReply || point == ERestartPoint::OsirisDone ||
             point == ERestartPoint::RecoveryCommitted) {
@@ -102,11 +146,16 @@ void TestRestart(ERestartPoint point) {
     restarted = true;
     env.RestartNode(recoveringNode);
     waitUntil([&] { return decisionAfterRestart.has_value(); }, "GUID recovery must finish after restart");
-    const auto expectedDecision = point == ERestartPoint::RecoveryCommitted
+    const bool expectGood = point == ERestartPoint::RecoveryCommitted || prepareFinal;
+    const auto expectedDecision = expectGood
         ? NSyncer::EDecision::Good : NSyncer::EDecision::LostData;
     Cerr << "decisionAfterRestart# " << NSyncer::EDecisionToStr(*decisionAfterRestart)
         << " expected# " << NSyncer::EDecisionToStr(expectedDecision) << Endl;
     env.WaitForVDiskRepl(recoveringActor, recoveringDisk);
+    if (prepareFinal) {
+        UNIT_ASSERT(dbBirthLsnAfterRestart);
+        UNIT_ASSERT_VALUES_EQUAL(*dbBirthLsnAfterRestart, dbBirthLsnBeforePublication);
+    }
     env.Runtime->FilterFunction = {};
 
     // Check the wiped disk itself, rather than allowing the group proxy to read surviving peers.
@@ -122,7 +171,7 @@ void TestRestart(ERestartPoint point) {
     Cerr << "osirisCallsAfterRestart# " << osirisCallsAfterRestart << " recoveredPartStatus# "
         << NKikimrProto::EReplyStatus_Name(result->Get()->Record.GetResult(0).GetStatus()) << Endl;
     UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(*decisionAfterRestart), static_cast<int>(expectedDecision));
-    UNIT_ASSERT_VALUES_EQUAL(osirisCallsAfterRestart, point == ERestartPoint::RecoveryCommitted ? 0 : 1);
+    UNIT_ASSERT_VALUES_EQUAL(osirisCallsAfterRestart, expectGood ? 0 : 1);
     UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetResult(0).GetStatus(), NKikimrProto::OK);
 }
 
@@ -133,5 +182,7 @@ Y_UNIT_TEST_SUITE(RecoverLostDataRestart) {
     Y_UNIT_TEST(DuringOsiris) { TestRestart(ERestartPoint::OsirisWriteReply); }
     Y_UNIT_TEST(AfterOsirisBeforeFinalCommit) { TestRestart(ERestartPoint::OsirisDone); }
     Y_UNIT_TEST(AfterFinalCommitBeforeReplication) { TestRestart(ERestartPoint::RecoveryCommitted); }
-    Y_UNIT_TEST(DuringGuidPublicationBeforeLostCommit) { TestRestart(ERestartPoint::GuidFinalBeforeLost); }
+    Y_UNIT_TEST(DuringGuidPublicationBeforeLostCommit) { TestRestart(ERestartPoint::GuidPublicationBeforeLost); }
+    Y_UNIT_TEST(DuringGuidPublicationWithPersistedLost) { TestRestart(ERestartPoint::GuidPublicationWithLost); }
+    Y_UNIT_TEST(GuidPublicationPreservesDbBirthLsn) { TestRestart(ERestartPoint::GuidPublicationWithFinal); }
 }

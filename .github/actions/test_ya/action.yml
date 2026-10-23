@@ -34,10 +34,6 @@ inputs:
   put_build_results_to_cache:
     required: false
     default: "true"
-  use_remote_cache:
-    type: boolean
-    default: true
-    description: "read from and optionally write to the Bazel remote cache"
   bazel_remote_uri:
     required: false
     description: "bazel-remote endpoint"
@@ -333,12 +329,9 @@ runs:
           TEST_RETRY_COUNT=3
         fi
 
-        if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
-          params+=(${{ inputs.additional_ya_make_args }})
-        fi
-
-        if [ "${{ inputs.use_remote_cache }}" != "true" ]; then
-          params+=(--no-bazel-remote-store)
+        additional_params=()
+        if [ -n "${{ inputs.additional_ya_make_args }}" ]; then
+          additional_params+=(${{ inputs.additional_ya_make_args }})
         fi
 
         params+=(
@@ -382,7 +375,7 @@ runs:
         if [ true = ${{ inputs.run_tests }} ]; then
             params+=(-A)
         fi
-        YA_MAKE_COMMAND="./ya make ${params[@]}"
+        YA_MAKE_COMMAND="./ya make ${params[@]} ${additional_params[@]}"
         GRAPH_PATH=$(realpath graph.json)
         CONTEXT_PATH=$(realpath context.json)
         if [ "${{ inputs.increment }}" = "true" ]; then
@@ -429,12 +422,12 @@ runs:
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
         echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
 
-        if [ "${{ inputs.use_remote_cache }}" = "true" ] && [ -n "${{ inputs.bazel_remote_uri }}" ]; then
+        if [ -n "${{ inputs.bazel_remote_uri }}" ]; then
           params+=(--bazel-remote-store)
           params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
         fi
 
-        if [ "${{ inputs.use_remote_cache }}" = "true" ] && [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
           params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
           params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
           params+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)
@@ -530,7 +523,7 @@ runs:
           echo "Launching ./ya make under systemd-run scope=${YA_MAKE_SCOPE_NAME} with MemoryMax=${YA_MAKE_MEM_MAX}"
 
           YA_MAKE_CMD=(
-            ./ya make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
+            ./ya make "${params[@]}" "${additional_params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl"
             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"

@@ -39,10 +39,6 @@ inputs:
   put_build_results_to_cache:
     type: boolean
     default: true
-  use_remote_cache:
-    type: boolean
-    default: true
-    description: "read from and optionally write to the Bazel remote cache"
   additional_ya_make_args:
     type: string
     default: ""
@@ -124,7 +120,6 @@ runs:
         bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
         bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
         bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
-        use_remote_cache: ${{ inputs.use_remote_cache }}
         put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
         test_retry_count: ${{ inputs.test_retry_count }}
         custom_branch_name: ${{ inputs.custom_branch_name }}

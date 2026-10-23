@@ -31,7 +31,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
-bool NSchemeShardUT_Private::TTestEnv::ENABLE_SCHEMESHARD_LOG = true;
+// Reboot tests replay scenarios many times; keep verbose component logs opt-in.
+bool NSchemeShardUT_Private::TTestEnv::ENABLE_SCHEMESHARD_LOG = false;
 static const bool ENABLE_DATASHARD_LOG = false;
 static const bool ENABLE_COORDINATOR_MEDIATOR_LOG = false;
 static const bool ENABLE_SCHEMEBOARD_LOG = false;
@@ -850,7 +851,7 @@ void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) 
     runtime.SetLogPriority(NKikimrServices::PIPE_SERVER, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::TABLET_RESOLVER, NActors::NLog::PRI_ERROR);
-    runtime.SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_NOTICE);
     runtime.SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_POPULATOR, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_ERROR);
@@ -864,6 +865,7 @@ void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) 
         runtime.SetLogPriority(NKikimrServices::SCHEMESHARD_DESCRIBE, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
     }
 
     runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_NOTICE);

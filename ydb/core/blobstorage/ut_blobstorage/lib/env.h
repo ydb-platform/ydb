@@ -29,6 +29,7 @@ struct TEnvironmentSetup {
     const ui32 NumGroups = 1;
     TIntrusivePtr<NFake::TProxyDS> Group0 = MakeIntrusive<NFake::TProxyDS>();
     TPDiskMockStates PDiskMockStates;
+    std::map<std::pair<ui32, TString>, std::shared_ptr<TPDiskMockState::TMetadata>> PDiskMetadataByPath;
     TVector<TActorId> PDiskActors;
     std::set<TActorId> CommencedReplication;
     std::unordered_map<ui32, TString> Cache;
@@ -288,8 +289,13 @@ struct TEnvironmentSetup {
                     const auto policy = Settings.TrackSharedQuotaInPDiskMock
                         ? TPDiskMockState::ESpaceColorPolicy::SharedQuota
                         : TPDiskMockState::ESpaceColorPolicy::None;
+                    // Temporary and configured PDisk ids open the same physical metadata.
+                    auto& metadata = PDiskMetadataByPath[{nodeId, cfg.Path}];
+                    if (!metadata) {
+                        metadata = std::make_shared<TPDiskMockState::TMetadata>();
+                    }
                     auto state = MakeIntrusive<TPDiskMockState>(nodeId, pdiskId, cfg.PDiskGuid,
-                        Settings.PDiskSize, chunkSize, cfg.ReadOnly, Settings.DiskType, policy);
+                        Settings.PDiskSize, chunkSize, cfg.ReadOnly, Settings.DiskType, policy, metadata);
                     state->SetReportVDiskMetrics(Settings.ReportVDiskMetricsInPDiskMock);
                     return state;
                 },

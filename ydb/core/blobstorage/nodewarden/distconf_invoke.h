@@ -14,6 +14,7 @@ namespace NKikimr::NStorage {
         const std::weak_ptr<TLifetimeToken> LifetimeToken;
         const ui64 InvokePipelineGeneration;
         TInvokeQuery Query;
+        const std::shared_ptr<TFreshConfigQueryGroup> FreshConfigQueryGroup;
 
         ui32 WaitingReplyFromNode = 0;
 
@@ -29,6 +30,8 @@ namespace NKikimr::NStorage {
         bool InvokedWithoutScepter = false;
         bool EnablingDistconf = false;
         bool Detached = false;
+        bool AdvancesConflictingGeneration = false;
+        bool RecoveryProposition = false;
 
     public: // Error handling
         struct TExError : yexception {
@@ -49,7 +52,8 @@ namespace NKikimr::NStorage {
         };
 
     public:
-        TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, TInvokeQuery&& query);
+        TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, TInvokeQuery&& query,
+                                  std::shared_ptr<TFreshConfigQueryGroup> freshConfigQueryGroup = {});
         TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, TInvokeExternalOperation&& query, ui32 hopNodeId);
 
         void HandleExecuteQuery();
@@ -137,6 +141,13 @@ namespace NKikimr::NStorage {
         std::optional<ui64> StorageYamlVersion;
         bool IsDryRun = false;
 
+        TStorageConfigPtr ConfigAwaitingCommit;
+        TMonotonic CommitConfirmationDeadline;
+        bool FullCommitConfirmationNeeded = false;
+        static constexpr ui64 ConfigValidationTimeoutCookie = 1;
+        static constexpr ui64 VStatusTimeoutCookie = 2;
+        bool WaitingForConfigValidation = false;
+
         TActorId ControllerPipeId;
 
         enum class EControllerOp {
@@ -149,12 +160,17 @@ namespace NKikimr::NStorage {
         void FetchStorageConfig(const TQuery::TFetchStorageConfig& request);
         void Handle(TEvNodeWardenStorageConfig::TPtr ev);
         void HandleWakeup();
+        void HandleWakeup(STFUNC_SIG);
         void ReplyToFetchStorageConfig(const std::optional<TString>& mainConfigYaml,
             const std::optional<TString>& storageConfigYaml, bool transient);
         void ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request);
+        void ValidateReplaceStorageConfig(const std::optional<TString>& storageConfigYaml, ui64 expectedMainYamlVersion,
+                ui64 expectedStorageYamlVersion);
         void ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml, ui64 expectedMainYamlVersion,
                 ui64 expectedStorageYamlVersion, bool enablingDistconf);
         void ReplaceStorageConfigExecute();
+        void StartCommitConfirmation();
+        void CollectCommittedConfig();
         void TryEnableDistconf();
         void ConnectToController();
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
@@ -183,8 +199,14 @@ namespace NKikimr::NStorage {
         // Configuration proposition
 
         void AdvanceGeneration();
+        void QueryConfig(const TQuery::TQueryConfig& request);
+        void CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback, bool allowConflictingGenerationAdvance = false);
+        void StartRecoveryProposition(TProcessCollectConfigsResult& result);
+        void CollectBridgeConfig(const NKikimrBlobStorage::TStorageConfig& config, std::function<void()> callback);
         void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev = true,
             const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr, bool fromBootstrap = false);
+        void StartPropositionImpl(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev,
+                                  const NKikimrBlobStorage::TStorageConfig *propositionBase, bool fromBootstrap);
         void Handle(TEvPrivate::TEvConfigProposed::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

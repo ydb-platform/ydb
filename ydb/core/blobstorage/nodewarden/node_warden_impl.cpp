@@ -23,6 +23,7 @@
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/mind/bscontroller/yaml_config_helpers.h>
 #include <ydb/core/base/nameservice.h>
+#include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <util/folder/dirut.h>
 
@@ -39,6 +40,8 @@ TNodeWardenConfig::TNodeWardenConfig()
     , AllVDiskKinds(new TAllVDiskKinds)
     , AllDriveModels(new NPDisk::TDriveModelDb)
     , FeatureFlags(std::make_unique<NKikimrConfig::TFeatureFlags>())
+    , SelfHealStateRequestTimeout(TDuration::MicroSeconds(NKikimrCms::TCmsConfig::TSentinelConfig::
+        TStateStorageSelfHealConfig::default_instance().GetSelfHealStateRequestTimeout()))
 {}
 
 TNodeWardenConfig::~TNodeWardenConfig()
@@ -237,6 +240,8 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvNodeWardenReadMetadata, Handle);
         hFunc(TEvNodeWardenWriteMetadata, Handle);
         hFunc(TEvPrivate::TEvDereferencePDisk, Handle);
+        hFunc(TEvPrivate::TEvCleanupTemporaryPDisk, Handle);
+        hFunc(TEvents::TEvPoisonTaken, Handle);
 
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
 
@@ -2028,7 +2033,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
 
             auto updateConfig = [&](bool needMerge, auto *to, const auto& from, const char *entity) {
                 if (needMerge) {
-                    *errorReason = NKikimr::NConfig::ValidateStateStorageConfig(entity, from, *to);
+                    *errorReason = NKikimr::NConfig::ValidateStateStorageConfig(entity, *to, from);
                     if (!errorReason->empty()) {
                         return false;
                     }

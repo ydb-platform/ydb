@@ -977,6 +977,26 @@ TEST(TableTest, AlterTableSetMetricsSettings) {
     );
 }
 
+TEST(KMeansTreeSettings, AutoUpdateRoundTrip) {
+    for (const auto autoUpdate : {std::optional<bool>(), std::make_optional(true), std::make_optional(false)}) {
+        NYdb::NTable::TKMeansTreeSettings original;
+        original.AutoUpdate = autoUpdate;
+        Ydb::Table::KMeansTreeSettings proto;
+        original.SerializeTo(proto);
+        EXPECT_EQ(proto.has_autoupdate(), autoUpdate.has_value());
+        if (autoUpdate.has_value()) {
+            EXPECT_EQ(proto.autoupdate(), *autoUpdate);
+        }
+        const auto restored = NYdb::NTable::TKMeansTreeSettings::FromProto(proto);
+        EXPECT_EQ(restored.AutoUpdate, autoUpdate);
+    }
+
+    Ydb::Table::KMeansTreeSettings proto;
+    proto.set_autoupdate(false);
+    NYdb::NTable::TKMeansTreeSettings().SerializeTo(proto);
+    EXPECT_FALSE(proto.has_autoupdate());
+}
+
 TEST(TtlTierSettings, ObjectKeyPrefixRoundTrip) {
     using namespace NYdb::NTable;
     for (auto&& prefix : {std::optional<std::string>(), std::make_optional(std::string()),

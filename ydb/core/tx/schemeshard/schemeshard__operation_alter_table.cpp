@@ -1225,8 +1225,15 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
 
     // Fence cleanup before creating sub-operations for an index table.
     if (tx.HasExpectedReplicationOwner()) {
+        const auto checks = path.Check().NotUnderOperation();
+        if (!checks) {
+            return {CreateReject(id, checks.GetStatus(), checks.GetError())};
+        }
         const auto table = context.SS->Tables.find(path->PathId);
         if (table != context.SS->Tables.end()) {
+            if (table->second->AlterData) {
+                return {CreateReject(id, NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight")};
+            }
             const auto& config = table->second->ReplicationConfig();
             if (config.HasOwner()
                 && TPathId::FromProto(config.GetOwner()) != TPathId::FromProto(tx.GetExpectedReplicationOwner())) {

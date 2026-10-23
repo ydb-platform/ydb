@@ -1205,6 +1205,231 @@ Y_UNIT_TEST_SUITE(StandbyIdempotency) {
         }, TDuration::Seconds(60));
     }
 
+    enum class EStreamNameSchedule { HeldAssignment, OrderedCommits };
+
+    void CheckPublicStandbyStreamName(EStreamNameSchedule schedule) {
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        TObservation discovery(runtime, EHold::Discovery);
+        const auto info = StartReplication(env);
+        runtime.WaitFor("source discovery held after public CREATE", [&] { return bool(discovery.Held); }, TDuration::Seconds(60));
+        AssertIntent(env, info, TReplication::EState::Ready);
+        NYdb::NTable::TTableClient client(env.GetDriver());
+        const auto sessionResult = env.RunCall([&] { return client.CreateSession().GetValueSync(); });
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+
+        enum class EStage { HoldDiscovery, Discovery, PublicAlter, Replay, Assigned, Complete };
+        EStage stage = EStage::HoldDiscovery;
+        TAutoPtr<IEventHandle> discoveryResult, assignment, discoveryCommit, alterCommit;
+        ui32 discoveryStep = 0, alterStep = 0, generation = 0;
+        ui64 publicTxId = 0;
+        ui32 assignments = 0, streamResults = 0, prematureCreators = 0;
+        THashSet<TActorId> creators;
+        TVector<TString> attemptedNames, dispatchOrder;
+        TStringBuilder trace;
+        TTestActorRuntimeBase::TRegistrationObserver previousRegistration;
+        previousRegistration = runtime.SetRegistrationObserverFunc([&](auto& rt, const auto& parent, const auto& id) {
+            previousRegistration(rt, parent, id);
+            if (rt.FindActor(id)->GetActivityType() == NKikimrServices::TActivity::REPLICATION_CONTROLLER_STREAM_CREATOR) {
+                creators.insert(id);
+                if (stage != EStage::Assigned && stage != EStage::Complete) {
+                    ++prematureCreators;
+                }
+                trace << "creator " << id << " before assignment=" << prematureCreators << "\n";
+            }
+        });
+        Y_DEFER { runtime.SetRegistrationObserverFunc(std::move(previousRegistration)); };
+        auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            const auto type = ev->GetTypeRewrite();
+            if (type == TEvPrivate::TEvDiscoveryTargetsResult::EventType) {
+                auto* result = dynamic_cast<TEvPrivate::TEvDiscoveryTargetsResult*>(ev->GetBase());
+                if (result && result->ReplicationId == 1 && stage == EStage::HoldDiscovery) {
+                    UNIT_ASSERT(result->IsSuccess());
+                    UNIT_ASSERT_VALUES_EQUAL(result->ToAdd.size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(result->ToAdd.front().Config->GetSrcPath(), "/Root/table1");
+                    discoveryResult.Reset(ev.Release());
+                }
+            } else if (type == TEvPrivate::TEvAssignStreamName::EventType) {
+                auto* event = dynamic_cast<TEvPrivate::TEvAssignStreamName*>(ev->GetBase());
+                if (event && event->ReplicationId == 1 && event->TargetId == 1) {
+                    ++assignments;
+                    trace << "AssignName sender=" << ev->Sender << " recipient=" << ev->Recipient << "\n";
+                    if (schedule == EStreamNameSchedule::HeldAssignment && stage != EStage::Replay) {
+                        UNIT_ASSERT_C(!assignment, trace);
+                        assignment.Reset(ev.Release());
+                    } else {
+                        dispatchOrder.push_back("AssignName");
+                        stage = EStage::Assigned;
+                    }
+                }
+            } else if (type == TEvController::TEvAlterReplication::EventType) {
+                const auto& record = ev->Get<TEvController::TEvAlterReplication>()->Record;
+                if (TPathId::FromProto(record.GetPathId()) == info.PathId) {
+                    UNIT_ASSERT(record.GetSwitchState().HasStandBy());
+                    UNIT_ASSERT(record.HasLocation());
+                    publicTxId = record.GetOperationId().GetTxId();
+                    trace << "public StandBy tx=" << publicTxId << " location=" << record.GetLocation().ShortDebugString() << "\n";
+                }
+            } else if (type == TEvTablet::TEvCommit::EventType && schedule == EStreamNameSchedule::OrderedCommits) {
+                const auto* commit = ev->Get<TEvTablet::TEvCommit>();
+                if (commit->TabletID != info.ControllerId) {
+                    return;
+                }
+                trace << "commit step=" << commit->Step << " generation=" << commit->Generation << "\n";
+                if (stage == EStage::Discovery) {
+                    // The typed discovery result is the only released controller
+                    // mutation. Any extra write makes this association ambiguous.
+                    UNIT_ASSERT_VALUES_EQUAL_C(discoveryStep, 0, trace);
+                    discoveryStep = commit->Step;
+                    generation = commit->Generation;
+                } else if (stage == EStage::PublicAlter) {
+                    UNIT_ASSERT_C(publicTxId && !alterStep, trace);
+                    UNIT_ASSERT_VALUES_EQUAL_C(commit->Generation, generation, trace);
+                    alterStep = commit->Step;
+                    UNIT_ASSERT_C(discoveryStep < alterStep, trace);
+                } else if (stage == EStage::HoldDiscovery) {
+                    UNIT_FAIL("Unexpected controller write before staged discovery: " << trace);
+                }
+            } else if (type == TEvTablet::TEvCommitResult::EventType && schedule == EStreamNameSchedule::OrderedCommits) {
+                const auto* result = ev->Get<TEvTablet::TEvCommitResult>();
+                if (result->TabletID != info.ControllerId) {
+                    return;
+                }
+                trace << "result step=" << result->Step << " generation=" << result->Generation << "\n";
+                if (stage == EStage::Discovery || stage == EStage::PublicAlter) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, NKikimrProto::OK, trace);
+                    UNIT_ASSERT_VALUES_EQUAL_C(result->Generation, generation, trace);
+                    if (result->Step == discoveryStep) {
+                        UNIT_ASSERT_C(!discoveryCommit, trace);
+                        discoveryCommit.Reset(ev.Release());
+                    } else {
+                        UNIT_ASSERT_C(alterStep && result->Step == alterStep && !alterCommit, trace);
+                        alterCommit.Reset(ev.Release());
+                    }
+                } else if (stage == EStage::Replay) {
+                    if (result->Step == discoveryStep) {
+                        dispatchOrder.push_back("D");
+                    } else if (result->Step == alterStep) {
+                        dispatchOrder.push_back("A");
+                    }
+                }
+            } else if (type == TEvYdbProxy::TEvAlterTableRequest::EventType && creators.contains(ev->Sender)) {
+                const auto* request = ev->Get<TEvYdbProxy::TEvAlterTableRequest>();
+                const auto& args = request->GetArgs();
+                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(args), "/Root/table1");
+                for (const auto& feed : std::get<1>(args).AddChangefeeds_) {
+                    attemptedNames.emplace_back(feed.GetName());
+                }
+            } else if (type == TEvPrivate::TEvCreateStreamResult::EventType) {
+                auto* result = dynamic_cast<TEvPrivate::TEvCreateStreamResult*>(ev->GetBase());
+                if (result && result->ReplicationId == 1 && result->TargetId == 1) {
+                    trace << result->ToString() << "\n";
+                    if (result->IsSuccess()) {
+                        ++streamResults;
+                    }
+                }
+            }
+        });
+        discovery.Release();
+        runtime.WaitFor("typed target discovery ready", [&] { return bool(discoveryResult); }, TDuration::Seconds(60));
+        stage = EStage::Discovery;
+        runtime.Send(discoveryResult.Release(), 0, true);
+        if (schedule == EStreamNameSchedule::HeldAssignment) {
+            runtime.WaitFor("original stream-name assignment held", [&] { return bool(assignment); }, TDuration::Seconds(60));
+            UNIT_ASSERT_VALUES_EQUAL(creators.size(), 0);
+            AssertIntent(env, info, TReplication::EState::Ready);
+            UNIT_ASSERT_VALUES_EQUAL(DescribeReplication(env, info)->Get()->Record.TargetsSize(), 1);
+        } else {
+            runtime.WaitFor("real discovery write confirmation held", [&] { return bool(discoveryCommit); }, TDuration::Seconds(60));
+            UNIT_ASSERT_VALUES_EQUAL_C(assignments, 0, trace);
+        }
+        stage = EStage::PublicAlter;
+        auto alter = session.ExecuteSchemeQuery("ALTER ASYNC REPLICATION `replication` SET (STATE = \"STANDBY\");");
+        if (schedule == EStreamNameSchedule::OrderedCommits) {
+            runtime.WaitFor("real public-alter write confirmation held", [&] { return bool(alterCommit); }, TDuration::Seconds(60));
+            UNIT_ASSERT_VALUES_EQUAL_C(assignments, 0, trace);
+            UNIT_ASSERT(publicTxId);
+            stage = EStage::Replay;
+            // Queue both original confirmations before resuming dispatch.
+            // Assignment is neither held nor synthesized in this scenario.
+            runtime.Send(discoveryCommit.Release(), 0, true);
+            runtime.Send(alterCommit.Release(), 0, true);
+            runtime.WaitFor("D then A then assignment dispatched", [&] { return stage == EStage::Assigned; }, TDuration::Seconds(60));
+            Cerr << "StreamName commit schedule:\n" << trace << "order=" << JoinSeq(",", dispatchOrder) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(JoinSeq(",", dispatchOrder), "D,A,AssignName", trace);
+            UNIT_ASSERT_VALUES_EQUAL_C(prematureCreators, 0, trace);
+        }
+        const auto status = env.RunCall([&] { return alter.GetValueSync(); });
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        UNIT_ASSERT(publicTxId);
+        if (schedule == EStreamNameSchedule::HeldAssignment) {
+            Cerr << "StreamName controlled assignment hold:\n" << trace << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(creators.size(), 0, "Public repeat created a stream actor before name assignment\n" << trace);
+            UNIT_ASSERT_VALUES_EQUAL(attemptedNames.size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(assignments, 1);
+            AssertIntent(env, info, TReplication::EState::Ready);
+            stage = EStage::Replay;
+            runtime.Send(assignment.Release(), 0, true);
+        }
+        const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender(), TDuration::Seconds(60));
+        const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        AttachWorkers(env, info.ControllerId, {worker});
+        AssertHeartbeat(env, info, worker);
+        AssertIntent(env, info, TReplication::EState::Ready);
+        UNIT_ASSERT_VALUES_EQUAL(ReadRow(env, info.ControllerId, "Targets",
+            "'('('ReplicationId (Uint64 '1)) '('Id (Uint64 '1)))", "'('DstState)").GetStruct(0).GetOptional().GetUint32(),
+            static_cast<ui32>(TReplication::EDstState::Ready));
+        const auto stream = ReadRow(env, info.ControllerId, "SrcStreams",
+            "'('('ReplicationId (Uint64 '1)) '('TargetId (Uint64 '1)))", "'('ConsumerName 'Name 'State)");
+        const auto consumerName = stream.GetStruct(0).GetOptional().GetText();
+        const auto streamName = stream.GetStruct(1).GetOptional().GetText();
+        UNIT_ASSERT(consumerName && streamName);
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetStruct(2).GetOptional().GetUint32(), static_cast<ui32>(TReplication::EStreamState::Ready));
+        UNIT_ASSERT_VALUES_EQUAL(streamResults, 1);
+        UNIT_ASSERT_VALUES_EQUAL(creators.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(attemptedNames.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(attemptedNames.front(), streamName);
+        // The local-hold scenario observes the same original handle twice.
+        UNIT_ASSERT_VALUES_EQUAL(assignments, schedule == EStreamNameSchedule::HeldAssignment ? 2 : 1);
+        const auto verifySource = [&] {
+            const auto source = env.GetDescription("/Root/table1").GetPathDescription().GetTable();
+            UNIT_ASSERT_VALUES_EQUAL(source.CdcStreamsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(source.GetCdcStreams(0).GetName(), streamName);
+            NYdb::NTopic::TTopicClient topics(env.GetDriver());
+            const auto topic = env.RunCall([&] {
+                return topics.DescribeTopic(TStringBuilder() << "/Root/table1/" << streamName).GetValueSync();
+            });
+            UNIT_ASSERT_C(topic.IsSuccess(), topic.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(topic.GetTopicDescription().GetConsumers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(topic.GetTopicDescription().GetConsumers().front().GetConsumerName(), consumerName);
+            UNIT_ASSERT_VALUES_EQUAL(ReadReplication(env, info, "'('Issue)").GetStruct(0).GetOptional().GetText(), "");
+        };
+        verifySource();
+        stage = EStage::Complete;
+        const auto repeated = env.RunCall([&] {
+            return session.ExecuteSchemeQuery("ALTER ASYNC REPLICATION `replication` SET (STATE = \"STANDBY\");").GetValueSync();
+        });
+        UNIT_ASSERT_C(repeated.IsSuccess(), repeated.GetIssues().ToString());
+        AssertIntent(env, info, TReplication::EState::Ready);
+        UNIT_ASSERT_VALUES_EQUAL(creators.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(attemptedNames.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(assignments, schedule == EStreamNameSchedule::HeldAssignment ? 2 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(ReadRow(env, info.ControllerId, "SrcStreams",
+            "'('('ReplicationId (Uint64 '1)) '('TargetId (Uint64 '1)))", "'('ConsumerName 'Name 'State)").SerializeAsString(), stream.SerializeAsString());
+        verifySource();
+        Cerr << "StreamName final stream=" << streamName << " consumer=" << consumerName
+            << " creators=" << creators.size() << " AddChangefeed=" << attemptedNames.size() << " Ready\n";
+    }
+
+    Y_UNIT_TEST(PublicStandbyWaitsForStreamName) {
+        CheckPublicStandbyStreamName(EStreamNameSchedule::HeldAssignment);
+    }
+
+    Y_UNIT_TEST(PublicStandbyStreamNameCommitOrdering) {
+        CheckPublicStandbyStreamName(EStreamNameSchedule::OrderedCommits);
+    }
+
     Y_UNIT_TEST(HealthyStandbyPreservesWorkersAndProxy) {
         TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
         env.GetRuntime().GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);

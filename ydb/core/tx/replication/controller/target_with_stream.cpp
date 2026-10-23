@@ -248,10 +248,14 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
 
     switch (GetStreamState()) {
     case EStreamState::Creating:
-        if (GetStreamName().empty() && !NameAssignmentInProcess) {
-            ctx.Send(ctx.SelfID, new TEvPrivate::TEvAssignStreamName(replication->GetId(), GetId()));
-            NameAssignmentInProcess = true;
-        } else if (!StreamCreator) {
+        if (GetStreamName().empty()) {
+            if (!NameAssignmentInProcess) {
+                ctx.Send(ctx.SelfID, new TEvPrivate::TEvAssignStreamName(replication->GetId(), GetId()));
+                NameAssignmentInProcess = true;
+            }
+            return;
+        }
+        if (!StreamCreator) {
             StreamCreator = ctx.Register(CreateStreamCreator(replication, GetId(), ctx));
         }
         return;

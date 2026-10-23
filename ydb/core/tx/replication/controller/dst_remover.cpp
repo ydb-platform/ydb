@@ -49,6 +49,9 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         auto& tx = *ev->Record.AddTransaction();
         tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
         tx.SetInternal(true);
+        if (ReplicationPathId) {
+            ReplicationPathId.ToProto(tx.MutableExpectedReplicationOwner());
+        }
         PendingDstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
         tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(
             NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
@@ -60,6 +63,10 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
     void DropDst() {
         auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         auto& tx = *ev->Record.AddTransaction();
+        tx.SetInternal(true);
+        if (ReplicationPathId) {
+            ReplicationPathId.ToProto(tx.MutableExpectedReplicationOwner());
+        }
         tx.MutableDrop()->SetId(DstPathId.LocalPathId);
 
         switch (Kind) {
@@ -97,7 +104,7 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
             Y_DEBUG_ABORT_UNLESS(TxId == record.GetTxId());
             return SubscribeTx(record.GetTxId());
         case NKikimrScheme::StatusMultipleModifications:
-            if (PendingDstPathId) {
+            if (PendingDstPathId || ReplicationPathId) {
                 return Retry();
             }
             if (record.HasPathDropTxId()) {
@@ -106,6 +113,9 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
                 return Error(record.GetStatus(), record.GetReason());
             }
             break;
+        case NKikimrScheme::StatusSuccess:
+            // SchemeShard completed the conditional cleanup without changes.
+            return Success();
         case NKikimrScheme::StatusPathDoesNotExist:
             return Success();
         case NKikimrScheme::StatusNameConflict:
@@ -215,7 +225,8 @@ public:
             ui64 tid,
             TReplication::ETargetKind kind,
             const TPathId& dstPathId,
-            const TPathId& pendingDstPathId)
+            const TPathId& pendingDstPathId,
+            const TPathId& replicationPathId)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -223,6 +234,7 @@ public:
         , TargetId(tid)
         , Kind(kind)
         , DstPathId(dstPathId)
+        , ReplicationPathId(replicationPathId)
         , PendingDstPathId(pendingDstPathId)
         , LogPrefix(CreateActorLogPrefix("DstRemover", ReplicationId, TargetId))
     {
@@ -266,6 +278,7 @@ private:
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;
     const TPathId DstPathId;
+    const TPathId ReplicationPathId;
     const TPathId PendingDstPathId;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
@@ -280,14 +293,14 @@ IActor* CreateDstRemover(TReplication* replication, ui64 targetId, const TActorC
     Y_ABORT_UNLESS(target);
     return CreateDstRemover(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(),
-        target->GetPendingDstPathId());
+        target->GetPendingDstPathId(), replication->GetPathId());
 }
 
 IActor* CreateDstRemover(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId,
-        const TPathId& pendingDstPathId)
+        const TPathId& pendingDstPathId, const TPathId& replicationPathId)
 {
-    return new TDstRemover(parent, schemeShardId, proxy, rid, tid, kind, dstPathId, pendingDstPathId);
+    return new TDstRemover(parent, schemeShardId, proxy, rid, tid, kind, dstPathId, pendingDstPathId, replicationPathId);
 }
 
 }

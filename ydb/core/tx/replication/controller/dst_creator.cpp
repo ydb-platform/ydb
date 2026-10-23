@@ -329,6 +329,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) const {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
+        PathId.ToProto(replicationConfig.MutableOwner());
     }
 
     void AllocateTxId() {
@@ -550,10 +551,15 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                     return PrepareDropIndex(index, record);
                 }
             }
-            if (InitialScan || AttachmentComplete) {
+            if (IsOwnedReplica(desc.GetTable()) && (InitialScan || AttachmentComplete)) {
                 return Success();
             }
+            if (InitialScan) {
+                return Error(NKikimrScheme::StatusPreconditionFailed, "Existing table is not owned by this replication");
+            }
 
+            // SchemeShard atomically decides whether a previous owner is gone.
+            // Describing a read-only table alone does not establish ownership.
             // Readonly metadata is published before destination shards finish
             // the ALTER. A recovered/uncertain attachment needs a serialized
             // replacement ALTER and its completion, even if mode already matches.
@@ -605,6 +611,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
+    }
+
+    bool IsOwnedReplica(const NKikimrSchemeOp::TTableDescription& table) const {
+        const auto& config = table.GetReplicationConfig();
+        return IsReplica(table) && config.HasOwner() && TPathId::FromProto(config.GetOwner()) == PathId;
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
@@ -857,6 +868,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return;
         }
 
+        if (Kind == TReplication::ETargetKind::IndexTable && !IsOwnedReplica(desc.GetPathDescription().GetTable())) {
+            return Error(NKikimrScheme::StatusPreconditionFailed, "Index table is not owned by this replication");
+        }
         DstPathId = ev->Get()->PathId;
         return Success();
     }

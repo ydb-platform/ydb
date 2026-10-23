@@ -691,6 +691,9 @@ Y_UNIT_TEST_TWIN(SchemaPathsRespectFeatureFlag, relativePathsEnabled) {
     auto* rule = config.AddRules();
     rule->SetSrc("/Root");
     rule->SetDst("/Alias");
+    auto* resourceRule = config.AddRules();
+    resourceRule->SetSrc("/Other/db/table");
+    resourceRule->SetDst("/Archive/table");
     request.InitializePathNormalization(std::make_shared<const NPathAliasing::TPathNormalizer>(config));
     UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetRef(), "/Alias/db");
     for (const auto& [path, expected] : TVector<std::pair<TString, TString>>{
@@ -706,6 +709,8 @@ Y_UNIT_TEST_TWIN(SchemaPathsRespectFeatureFlag, relativePathsEnabled) {
         relativePathsEnabled ? "/Alias/db/restore/table" : "table");
     UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseRelativePath("/Root/db/table", prefix), "/Alias/db/table");
     UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseRelativePath("", prefix), "");
+    UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseRelativePath("table", "/Other/db"),
+        relativePathsEnabled ? "/Archive/table" : "table");
 }
 
 Y_UNIT_TEST_TWIN(RelativeDatabaseIsResolvedBeforeAliasing, relativePathsEnabled) {

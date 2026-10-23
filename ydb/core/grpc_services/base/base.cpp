@@ -27,11 +27,4 @@ void IRequestProxyCtx::CountResourcePath(TStringBuf path) const {
     }
 }
 
-TString IAuditCtx::GetDatabaseRelativePath(TStringBuf path, TStringBuf base) const {
-    const TString normalizedPath = NormalizePath(path);
-    return AppData()->FeatureFlags.GetEnableRelativePaths()
-        ? ResolvePathToDatabase(base.empty() ? GetDatabaseName().GetOrElse(TString()) : TString(base), normalizedPath)
-        : normalizedPath;
-}
-
 } // namespace NKikimr::NGRpcService

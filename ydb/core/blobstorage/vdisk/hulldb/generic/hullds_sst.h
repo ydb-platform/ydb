@@ -36,149 +36,57 @@ namespace NKikimr {
     struct TRecIndex<TKeyLogoBlob, TMemRecLogoBlob> : public TThrRefBase {
         typedef TIndexRecord<TKeyLogoBlob, TMemRecLogoBlob> TRec;
 
-#pragma pack(push, 4)
-        struct TLogoBlobIdHigh {
-            union {
-                struct {
-                    ui64 TabletId; // 8 bytes
-                    ui64 StepR1 : 24; // 8 bytes
-                    ui64 Generation : 32;
-                    ui64 Channel : 8;
-                } N;
-
-                ui64 X[2];
-            } Raw;
-
-            TLogoBlobIdHigh() {
-                Raw.X[0] = Raw.X[1] = 0;
-            }
-
-            explicit TLogoBlobIdHigh(const TLogoBlobID& id) {
-                Raw.X[0] = id.GetRaw()[0];
-                Raw.X[1] = id.GetRaw()[1];
-            }
-
-            TLogoBlobIdHigh(ui64 tabletId, ui32 generation, ui32 step, ui8 channel) {
-                Raw.N.TabletId = tabletId;
-                Raw.N.Channel = channel;
-                Raw.N.Generation = generation;
-                Raw.N.StepR1 = (step & 0xFFFFFF00ull) >> 8;
-            }
-
-            bool operator == (const TLogoBlobIdHigh& r) const {
-                return Raw.X[0] == r.Raw.X[0] && Raw.X[1] == r.Raw.X[1];
-            }
-
-            bool operator != (const TLogoBlobIdHigh& r) const {
-                return !(operator == (r));
-            }
-
-            bool operator < (const TLogoBlobIdHigh& r) const {
-                return Raw.X[0] != r.Raw.X[0] ? Raw.X[0] < r.Raw.X[0] : Raw.X[1] < r.Raw.X[1];
-            }
-        };
-
-        static_assert(sizeof(TLogoBlobIdHigh) == 16, "expect sizeof(TLogoBlobIdHigh) == 16");
-
-        struct TLogoBlobIdLow {
-            union {
-                struct {
-                    ui64 PartId : 4; // 8 bytes
-                    ui64 BlobSize : 26;
-                    ui64 CrcMode : 2;
-                    ui64 Cookie : 24;
-                    ui64 StepR2 : 8;
-                } N;
-
-                ui64 X;
-            } Raw;
-
-            TLogoBlobIdLow() {
-                Raw.X = 0;
-            }
-
-            explicit TLogoBlobIdLow(const TLogoBlobID& id) {
-                Raw.X = id.GetRaw()[2];
-            }
-
-            TLogoBlobIdLow(ui32 step, ui32 cookie, ui32 crcMode, ui32 blobSize, ui32 partId) {
-                Raw.N.StepR2 = step & 0x000000FFull;
-                Raw.N.Cookie = cookie;
-                Raw.N.CrcMode = crcMode;
-                Raw.N.BlobSize = blobSize;
-                Raw.N.PartId = partId;
-            }
-
-            bool operator == (const TLogoBlobIdLow& r) const {
-                return Raw.X == r.Raw.X;
-            }
-
-            bool operator != (const TLogoBlobIdLow& r) const {
-                return !(operator == (r));
-            }
-
-            bool operator < (const TLogoBlobIdLow& r) const {
-                return Raw.X < r.Raw.X;
-            }
-        };
-
-        static_assert(sizeof(TLogoBlobIdLow) == 8, "expect sizeof(TLogoBlobIdLow) == 8");
-
         struct TRecHigh {
-        private:
-            TLogoBlobIdHigh Key;
-            ui32 LowRangeEndIndex;
+            ui64 TabletId;
+            ui64 ChannelGeneration; // Channel << 32 | Generation, i.e. TLogoBlobID::GetRaw()[1] >> 24
+            ui32 LowRangeEndIndex = 0;
 
-        public:
-            TRecHigh(TLogoBlobIdHigh key)
-                : Key(key)
+            explicit TRecHigh(const TLogoBlobID& id)
+                : TabletId(id.GetRaw()[0])
+                , ChannelGeneration(id.GetRaw()[1] >> 24)
             {}
 
-            TLogoBlobIdHigh GetKey() const {
-                return ReadUnaligned<TLogoBlobIdHigh>(&Key);
+            bool SameKey(const TRecHigh& r) const {
+                return TabletId == r.TabletId && ChannelGeneration == r.ChannelGeneration;
             }
 
-            ui32 GetLowRangeEndIndex() const {
-                return LowRangeEndIndex;
-            }
-
-            void SetLowRangeEndIndex(ui32 i) {
-                LowRangeEndIndex = i;
-            }
-
-            bool operator < (const TLogoBlobIdHigh &key) const {
-                return GetKey() < key;
+            bool operator < (const TRecHigh& r) const {
+                return TabletId != r.TabletId ? TabletId < r.TabletId : ChannelGeneration < r.ChannelGeneration;
             }
         };
 
-        static_assert(sizeof(TRecHigh) == 20, "expect sizeof(TRecHigh) == 20");
+        static_assert(sizeof(TRecHigh) == 24, "expect sizeof(TRecHigh) == 24");
+        static_assert(alignof(TRecHigh) == 8, "expect alignof(TRecHigh) == 8");
 
-        struct TRecLow {
-        private:
-            TLogoBlobIdLow Key;
+        // Field order keeps every field naturally aligned;
+        // 32-byte alignment keeps every record within a cache line.
+        struct alignas(32) TRecLow {
+            ui64 Raw2; // TLogoBlobID::GetRaw()[2]: Step & 0xFF | Cookie | CrcMode | BlobSize | PartId
             TMemRecLogoBlob MemRec;
+            ui32 Step;
 
-        public:
-            TRecLow(TLogoBlobIdLow key, TMemRecLogoBlob memRec)
-                : Key(key)
+            explicit TRecLow(const TLogoBlobID& id, const TMemRecLogoBlob& memRec = {})
+                : Raw2(id.GetRaw()[2])
                 , MemRec(memRec)
+                , Step(id.Step())
             {}
 
-            TLogoBlobIdLow GetKey() const {
-                return ReadUnaligned<TLogoBlobIdLow>(&Key);
+            const TMemRecLogoBlob& GetMemRec() const {
+                return MemRec;
             }
 
-            TMemRecLogoBlob GetMemRec() const {
-                return ReadUnaligned<TMemRecLogoBlob>(&MemRec);
-            }
-
-            bool operator < (const TLogoBlobIdLow &key) const {
-                return GetKey() < key;
+            bool operator < (const TRecLow& r) const {
+                return Step != r.Step ? Step < r.Step : Raw2 < r.Raw2;
             }
         };
 
-        static_assert(sizeof(TRecLow) == 28, "expect sizeof(TRecLow) == 28");
-#pragma pack(pop)
+        static_assert(sizeof(TRecLow) == 32, "expect sizeof(TRecLow) == 32");
+        static_assert(alignof(TRecLow) == 32, "expect alignof(TRecLow) == 32");
+        static_assert(offsetof(TRecLow, MemRec) == 8, "expect offsetof(TRecLow, MemRec) == 8");
+
+        static TLogoBlobID MakeLogoBlobId(const TRecHigh& high, const TRecLow& low) {
+            return TLogoBlobID(high.TabletId, high.ChannelGeneration << 24 | low.Step >> 8, low.Raw2);
+        }
 
         TTrackableVector<TRecHigh> IndexHigh;
         TTrackableVector<TRecLow> IndexLow;
@@ -202,38 +110,36 @@ namespace NKikimr {
                 return;
             }
 
+            // count high records first to allocate IndexHigh exactly
+            size_t highCount = 1;
+            TRecHigh highPrev(linearIndex.begin()->GetKey().LogoBlobID());
+            for (const TRec* rec = linearIndex.begin() + 1; rec != linearIndex.end(); ++rec) {
+                TRecHigh high(rec->GetKey().LogoBlobID());
+                if (!high.SameKey(highPrev)) {
+                    ++highCount;
+                    highPrev = high;
+                }
+            }
+
             IndexHigh.clear();
-            IndexHigh.reserve(linearIndex.size());
+            IndexHigh.reserve(highCount);
             IndexLow.clear();
             IndexLow.reserve(linearIndex.size());
 
-            const TRec* rec = linearIndex.begin();
-
-            auto blobId = rec->GetKey().LogoBlobID();
-            TLogoBlobIdHigh high(blobId);
-            TLogoBlobIdLow low(blobId);
-            TLogoBlobIdHigh highPrev = high;
-
-            IndexHigh.emplace_back(high);
-            IndexLow.emplace_back(low, rec->GetMemRec());
-            ++rec;
-
-            for (; rec != linearIndex.end(); ++rec) {
-                auto blobId = rec->GetKey().LogoBlobID();
-                TLogoBlobIdHigh high(blobId);
-                TLogoBlobIdLow low(blobId);
-
-                if (Y_UNLIKELY(high != highPrev)) {
-                    IndexHigh.back().SetLowRangeEndIndex(IndexLow.size());
-                    IndexHigh.emplace_back(high);
-                    highPrev = high;
+            for (const TRec& rec : linearIndex) {
+                const TLogoBlobID blobId = rec.GetKey().LogoBlobID();
+                TRecHigh high(blobId);
+                if (IndexHigh.empty() || !high.SameKey(IndexHigh.back())) {
+                    if (!IndexHigh.empty()) {
+                        IndexHigh.back().LowRangeEndIndex = IndexLow.size();
+                    }
+                    IndexHigh.push_back(high);
                 }
-
-                IndexLow.emplace_back(low, rec->GetMemRec());
+                IndexLow.emplace_back(blobId, rec.GetMemRec());
             }
 
-            IndexHigh.back().SetLowRangeEndIndex(IndexLow.size());
-            IndexHigh.shrink_to_fit();
+            IndexHigh.back().LowRangeEndIndex = IndexLow.size();
+            Y_DEBUG_ABORT_UNLESS(IndexHigh.size() == highCount);
         }
 
         void SaveLinearIndex(TTrackableVector<TRec>* linearIndex) const {
@@ -246,19 +152,16 @@ namespace NKikimr {
 
             const TRecHigh* high = IndexHigh.begin();
             const TRecLow* low = IndexLow.begin();
-            const TRecLow* lowRangeEnd = low + high->GetLowRangeEndIndex();
+            const TRecLow* lowRangeEnd = low + high->LowRangeEndIndex;
 
             while (low != IndexLow.end()) {
-                auto highKey = high->GetKey();
-                auto lowKey = low->GetKey();
-                TLogoBlobID blobId(highKey.Raw.X[0], highKey.Raw.X[1], lowKey.Raw.X);
-                linearIndex->emplace_back(TKeyLogoBlob(blobId), low->GetMemRec());
+                linearIndex->emplace_back(TKeyLogoBlob(MakeLogoBlobId(*high, *low)), low->GetMemRec());
 
                 ++low;
                 if (Y_UNLIKELY(low == lowRangeEnd)) {
                     ++high;
                     if (high != IndexHigh.end()) {
-                        lowRangeEnd = IndexLow.begin() + high->GetLowRangeEndIndex();
+                        lowRangeEnd = IndexLow.begin() + high->LowRangeEndIndex;
                     }
                 }
             }

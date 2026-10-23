@@ -567,7 +567,7 @@ protected:
         Y_ABORT_UNLESS(outputInfo.AsyncOutput);
         Y_ABORT_UNLESS(outputInfo.Actor);
 
-        const ui32 allowedOvercommit = TBase::AllowedChannelsOvercommit();
+        const ui32 allowedOvercommit = outputInfo.AsyncOutput->AllowFreeSpaceOvercommit() ? TBase::AllowedChannelsOvercommit() : 0;
         const i64 sinkFreeSpaceBeforeSend = outputInfo.AsyncOutput->GetFreeSpace();
 
         i64 toSend = sinkFreeSpaceBeforeSend + allowedOvercommit;

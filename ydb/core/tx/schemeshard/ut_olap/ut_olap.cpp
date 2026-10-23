@@ -13,7 +13,10 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/testlib/helpers.h>
+#include <yql/essentials/ast/yql_ast_escaping.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
@@ -658,6 +661,124 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST_FLAG(InFlightPgColumnAlterSurvivesReboot, EnableTablePgTypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(EnableTablePgTypes));
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+        const ui64 localPathId = DescribePath(runtime, "/MyRoot/ColumnTable").GetPathId();
+
+        TBlockEvents<TEvColumnShard::TEvProposeTransaction> proposals(runtime);
+        const ui64 alterTxId = ++txId;
+        AsyncAlterColumnTable(runtime, alterTxId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "value" Type: "Int32" } }
+        )");
+        runtime.WaitFor("alter proposal blocked", [&]() { return !proposals.empty(); });
+        const ui64 staleGeneration = proposals.front()->Get()->Record.GetSeqNo().GetGeneration();
+
+        const auto selected = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let key '('('PathId (Uint64 '%lu))))
+                (let select '('AlterBody 'Description))
+                (return (AsList
+                    (SetResult 'Result (SelectRow 'ColumnTablesAlters key select))
+                ))
+            )
+        )", localPathId));
+        const auto& row = selected.GetValue().GetStruct(0).GetOptional();
+        UNIT_ASSERT_C(row.HasOptional(), "the in-flight ALTER must be persisted");
+        UNIT_ASSERT(row.GetOptional().GetStruct(0).HasOptional());
+        UNIT_ASSERT(row.GetOptional().GetStruct(1).HasOptional());
+        NKikimrSchemeOp::TAlterColumnTable alterBody;
+        UNIT_ASSERT(alterBody.ParseFromString(row.GetOptional().GetStruct(0).GetOptional().GetBytes()));
+        NKikimrSchemeOp::TColumnTableDescription description;
+        UNIT_ASSERT(description.ParseFromString(row.GetOptional().GetStruct(1).GetOptional().GetBytes()));
+
+        const auto pgType = NScheme::ProtoColumnTypeFromTypeInfoMod(NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgint4")), "");
+        UNIT_ASSERT_VALUES_EQUAL(alterBody.GetAlterSchema().AddColumnsSize(), 1);
+        auto* added = alterBody.MutableAlterSchema()->MutableAddColumns(0);
+        added->SetType("pgint4");
+        added->ClearTypeId();
+        added->ClearTypeInfo();
+        bool described = false;
+        for (auto& column : *description.MutableSchema()->MutableColumns()) {
+            if (column.GetName() == "value") {
+                column.SetType("pgint4");
+                column.SetTypeId(pgType.TypeId);
+                UNIT_ASSERT(pgType.TypeInfo);
+                *column.MutableTypeInfo() = *pgType.TypeInfo;
+                described = true;
+            }
+        }
+        UNIT_ASSERT(described);
+
+        auto escape = [](const google::protobuf::Message& proto) {
+            TString serialized;
+            UNIT_ASSERT(proto.SerializeToString(&serialized));
+            TStringStream escaped;
+            NYql::EscapeArbitraryAtom(serialized, '"', &escaped);
+            return escaped.Str();
+        };
+        LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let key '('('PathId (Uint64 '%lu))))
+                (let row '('('AlterBody (String '%s)) '('Description (String '%s))))
+                (return (AsList (UpdateRow 'ColumnTablesAlters key row)))
+            )
+        )", localPathId, escape(alterBody).c_str(), escape(description).c_str()));
+
+        auto isRestored = [&](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.GetTxId() == alterTxId && record.GetSeqNo().GetGeneration() > staleGeneration;
+        };
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        runtime.WaitFor("proposal after reboot", [&]() { return std::any_of(proposals.begin(), proposals.end(), isRestored); });
+        std::erase_if(proposals, [&](const auto& ev) { return !isRestored(ev); });
+        for (const auto& ev : proposals) {
+            NKikimrTxColumnShard::TSchemaTxBody txBody;
+            UNIT_ASSERT(txBody.ParseFromString(ev->Get()->Record.GetTxBody()));
+            bool proposed = false;
+            for (const auto& column : txBody.GetAlterTable().GetSchema().GetColumns()) {
+                if (column.GetName() == "value") {
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetType(), "pgint4");
+                    proposed = true;
+                }
+            }
+            UNIT_ASSERT(proposed);
+        }
+        proposals.Stop().Unblock();
+
+        env.TestWaitNotification(runtime, alterTxId);
+        const auto checkSchema = [&]() {
+            const auto table = DescribePath(runtime, "/MyRoot/ColumnTable").GetPathDescription().GetColumnTableDescription();
+            UNIT_ASSERT_VALUES_EQUAL(table.GetSchema().ColumnsSize(), 3);
+            bool found = false;
+            for (const auto& column : table.GetSchema().GetColumns()) {
+                if (column.GetName() == "value") {
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetType(), "pgint4");
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetTypeId(), pgType.TypeId);
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetTypeInfo().GetPgTypeId(), pgType.TypeInfo->GetPgTypeId());
+                    found = true;
+                }
+            }
+            UNIT_ASSERT(found);
+        };
+        checkSchema();
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "new_value" Type: "pgint4" } }
+        )", {{NKikimrScheme::StatusSchemeError,
+            "Type 'pgint4' specified for column 'new_value' is not supported for column tables"}});
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        checkSchema();
     }
 
     Y_UNIT_TEST(CreateStore) {
@@ -1471,6 +1592,95 @@ Y_UNIT_TEST_SUITE(TOlap) {
             env.TestWaitNotification(runtime, txId);
             TestCreateColumnTable(runtime, ++txId, "/MyRoot", schema + " TtlSettings { " + ttl + " }");
             env.TestWaitNotification(runtime, txId);
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(InStoreTtlAlterSurvivesReboot, DisableExtendedTtlTypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableTableDatetime64(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(true);
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp64" NotNull: true }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false,
+            NLs::HasColumnTableSchemaPreset("default"));
+
+        const TString alter = R"(
+            Name: "ColumnTable"
+            AlterTtlSettings {
+                Enabled {
+                    ColumnName: "timestamp"
+                    ColumnUnit: UNIT_AUTO
+                    ExpireAfterSeconds: 300
+                }
+            }
+        )";
+        const ui64 alterTxId = ++txId;
+        TBlockEvents<TEvColumnShard::TEvProposeTransaction> proposals(runtime,
+            [alterTxId](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+                return ev->Get()->Record.GetTxId() == alterTxId;
+            });
+        TestAlterColumnTable(runtime, alterTxId, "/MyRoot/OlapStore", alter);
+        runtime.WaitFor("in-store TTL proposal blocked", [&]() { return !proposals.empty(); });
+        const ui64 staleGeneration = proposals.front()->Get()->Record.GetSeqNo().GetGeneration();
+        NKikimrTxColumnShard::TSchemaTxBody originalProposal;
+        UNIT_ASSERT(originalProposal.ParseFromString(proposals.front()->Get()->Record.GetTxBody()));
+        UNIT_ASSERT(originalProposal.GetAlterTable().HasSchemaPreset());
+        UNIT_ASSERT(originalProposal.GetAlterTable().GetTtlSettings().HasEnabled());
+
+        // The ALTER is persisted, but no shard has received it.
+        // Changing the flag must affect new requests, not recovery of this ALTER.
+        runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(!DisableExtendedTtlTypes);
+        const TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        const auto isRestored = [&](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+            return ev->Get()->Record.GetSeqNo().GetGeneration() > staleGeneration;
+        };
+        runtime.WaitFor("in-store TTL proposal after reboot", [&]() {
+            return std::any_of(proposals.begin(), proposals.end(), isRestored);
+        });
+        std::erase_if(proposals, [&](const auto& ev) { return !isRestored(ev); });
+        for (const auto& ev : proposals) {
+            NKikimrTxColumnShard::TSchemaTxBody restoredProposal;
+            UNIT_ASSERT(restoredProposal.ParseFromString(ev->Get()->Record.GetTxBody()));
+            UNIT_ASSERT_VALUES_EQUAL(restoredProposal.GetAlterTable().SerializeAsString(),
+                originalProposal.GetAlterTable().SerializeAsString());
+        }
+        proposals.Stop().Unblock();
+        env.TestWaitNotification(runtime, alterTxId);
+
+        const auto checkTtl = [&]() {
+            TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
+                NLs::HasColumnTableSchemaPreset("default"),
+                NLs::HasColumnTableTtlSettingsVersion(originalProposal.GetAlterTable().GetTtlSettings().GetVersion()),
+                NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
+        };
+        checkTtl();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        checkTtl();
+
+        if (DisableExtendedTtlTypes) {
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", alter,
+                {{NKikimrScheme::StatusSchemeError,
+                    "TTL on DyNumber, Date32, Datetime64 and Timestamp64 in column tables is disabled"}});
         }
     }
 

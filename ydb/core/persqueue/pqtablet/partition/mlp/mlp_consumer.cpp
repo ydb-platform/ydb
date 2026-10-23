@@ -1,10 +1,10 @@
 #include "mlp_consumer.h"
 #include "mlp_storage.h"
 
-#include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
@@ -1178,14 +1178,6 @@ void TConsumerActor::MoveToDLQIfPossible() {
         return;
     }
 
-    auto destinationTopic = [&]() -> TString {
-        const auto& dlq = Config.GetDeadLetterQueue();
-        if (dlq.empty() || dlq.StartsWith("sqs://")) {
-            return dlq;
-        }
-        return NormalizePath(CanonizePath(Database), CanonizePath(dlq));
-    };
-
     auto messages = Storage->GetDLQMessages();
     if (!messages.empty()) {
         LOG_D(
@@ -1199,7 +1191,8 @@ void TConsumerActor::MoveToDLQIfPossible() {
             .PartitionId = PartitionId,
             .ConsumerName = Config.GetName(),
             .ConsumerGeneration = Config.GetGeneration(),
-            .DestinationTopic = destinationTopic(),
+            .DestinationTopic = NormalizeDlqTopicPath(Config.GetDeadLetterQueue(), Database,
+                AppData()->FeatureFlags.GetEnableRelativePaths()),
             .Messages = std::move(messages)
         }));
     }

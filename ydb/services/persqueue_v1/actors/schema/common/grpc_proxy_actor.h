@@ -58,10 +58,14 @@ protected:
         return CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
     }
 
-    TString NormalizeTopicPath(TStringBuf path) const {
+    TString ResolveTopicPath(TStringBuf path) const {
         return AppData()->PQConfig.GetTopicsAreFirstClassCitizen()
-            ? this->Request_->NormalizePath(path)
+            ? this->Request_->GetDatabaseRelativePath(path)
             : TString(path);
+    }
+
+    TString ResolveDeadLetterQueuePath(TStringBuf path) const {
+        return path.StartsWith("sqs://") ? TString(path) : ResolveTopicPath(path);
     }
 
     void ReplyWithError(Ydb::StatusIds::StatusCode status, const TString& messageText) {

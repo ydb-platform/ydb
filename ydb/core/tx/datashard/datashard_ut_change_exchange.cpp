@@ -3567,6 +3567,300 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST_TWIN(InitialScanPrecharge, KeysOnly) {
+        TPortManager portManager;
+        auto settings = TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableDataShardVolatileTransactions(false);
+        settings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(0);
+        TServer::TPtr server = new TServer(settings);
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        InitRoot(server, edgeActor);
+
+        // Each row has its own page. All values are inline in the primary
+        // family, so key precharge is sufficient once scan reads are detected.
+        auto policy = NLocalDb::CreateDefaultTablePolicy();
+        policy->MinDataPageSize = 1;
+        auto opts = SimpleTable()
+            .Policy(policy.Get())
+            .ExecutorCacheSize(1);
+        const auto [shards, tableId] = CreateShardedTable(server, edgeActor, "/Root", "Table", opts);
+        const ui64 shard = shards.at(0);
+
+        constexpr ui32 rowCount = 32;
+        const std::vector<ui32> columnIds = {1, 2};
+        std::vector<TCell> initialCells;
+        std::vector<TCell> updatedCells;
+        TVector<TString> expectedRecords;
+        TStringBuilder expectedTable;
+        for (ui32 key = 1; key <= rowCount; ++key) {
+            initialCells.push_back(TCell::Make(key));
+            initialCells.push_back(TCell::Make(key * 10));
+            updatedCells.push_back(TCell::Make(key));
+            updatedCells.push_back(TCell::Make(key * 100));
+            if constexpr (KeysOnly) {
+                expectedRecords.push_back(TStringBuilder() << "{\"update\":{},\"key\":[" << key << "]}");
+                expectedRecords.push_back(TStringBuilder() << "{\"update\":{},\"key\":[" << key << "]}");
+            } else {
+                expectedRecords.push_back(TStringBuilder()
+                    << "{\"update\":{\"value\":" << key * 10 << "},\"key\":[" << key << "]}");
+                expectedRecords.push_back(TStringBuilder()
+                    << "{\"update\":{\"value\":" << key * 100 << "},\"key\":[" << key << "]}");
+            }
+            expectedTable << "key = " << key << ", value = " << key * 100 << "\n";
+        }
+
+        Upsert(runtime, edgeActor, shard, tableId, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            columnIds, initialCells, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_VALUES_EQUAL(CompactTable(runtime, shard, tableId).GetStatus(),
+            NKikimrTxDataShard::TEvCompactTableResult::OK);
+
+        TBlockEvents<TEvDataShard::TEvCdcStreamScanRequest> blockScanRequest(runtime);
+        const auto stream = TCdcStream{
+            .Name = "Stream",
+            .Mode = KeysOnly ? NKikimrSchemeOp::ECdcStreamModeKeysOnly : NKikimrSchemeOp::ECdcStreamModeUpdate,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatJson,
+            .InitialState = NKikimrSchemeOp::ECdcStreamStateScan,
+        };
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table", stream));
+        runtime.WaitFor("blocked initial scan", [&]{ return !blockScanRequest.empty(); });
+        const auto currentTableId = ResolveTableId(server, edgeActor, "/Root/Table");
+
+        // The scan snapshot sees the only stored version. Reboot with a tiny
+        // executor cache and no shared cache so the batch needs cold data pages.
+        RebootTablet(runtime, shard, edgeActor);
+        const ui64 notReadyBefore = GetCumulativeCounter(runtime, shard, "DataShard/TxTabletNotReady");
+
+        // Neither stream mode normally reads before an upsert. The pending
+        // initial scan must nevertheless cause all batch keys to be precharged.
+        Upsert(runtime, edgeActor, shard, currentTableId, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            columnIds, updatedCells, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        const ui64 pageFaults = GetCumulativeCounter(runtime, shard, "DataShard/TxTabletNotReady") - notReadyBefore;
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, currentTableId), expectedTable);
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", expectedRecords);
+
+        bool scanDone = false;
+        auto observeScanDone = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanResponse>([&](auto& ev) {
+            if (ev->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE) {
+                scanDone = true;
+            }
+        });
+        blockScanRequest.Unblock().Stop();
+        runtime.WaitFor("initial scan completion", [&]{ return scanDone; });
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", expectedRecords);
+
+        UNIT_ASSERT_C(pageFaults > 0, "The write must encounter cold data pages");
+        UNIT_ASSERT_C(pageFaults <= 2, "Initial scan reads must precharge the batch, got " << pageFaults << " retries");
+    }
+
+    Y_UNIT_TEST(InitialScanHistoricalPrecharge) {
+        TPortManager portManager;
+        auto settings = TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableDataShardVolatileTransactions(false);
+        settings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(0);
+        TServer::TPtr server = new TServer(settings);
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        InitRoot(server, edgeActor);
+
+        // Keep both current and historical rows on separate small pages, with
+        // inline values in a single family to isolate history precharge.
+        auto policy = NLocalDb::CreateDefaultTablePolicy();
+        policy->MinDataPageSize = 1;
+        const auto opts = SimpleTable()
+            .Policy(policy.Get())
+            .ExecutorCacheSize(1);
+        const auto [shards, tableId] = CreateShardedTable(server, edgeActor, "/Root", "Table", opts);
+        const ui64 shard = shards.at(0);
+
+        constexpr ui32 rowCount = 32;
+        const std::vector<ui32> columnIds = {1, 2};
+        std::vector<TCell> initialCells;
+        std::vector<TCell> updatedCells;
+        std::vector<TCell> finalCells;
+        TVector<TString> expectedUpdates;
+        TVector<TString> expectedImages;
+        for (ui32 key = 1; key <= rowCount; ++key) {
+            initialCells.push_back(TCell::Make(key));
+            initialCells.push_back(TCell::Make(key * 10));
+            updatedCells.push_back(TCell::Make(key));
+            updatedCells.push_back(TCell::Make(key * 100));
+            finalCells.push_back(TCell::Make(key));
+            finalCells.push_back(TCell::Make(key * 1000));
+            expectedUpdates.push_back(TStringBuilder()
+                << "{\"update\":{\"value\":" << key * 10 << "},\"key\":[" << key << "]}");
+            expectedUpdates.push_back(TStringBuilder()
+                << "{\"update\":{\"value\":" << key * 100 << "},\"key\":[" << key << "]}");
+            expectedImages.push_back(TStringBuilder()
+                << "{\"update\":{},\"newImage\":{\"value\":" << key * 100 << "},\"key\":[" << key << "]}");
+        }
+
+        Upsert(runtime, edgeActor, shard, tableId, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            columnIds, initialCells, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+        // The ready image stream already requires precharge independently of
+        // initial-scan detection, matching the mixed-stream configuration.
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            NewImage(NKikimrSchemeOp::ECdcStreamFormatJson, "Images")));
+        TBlockEvents<TEvDataShard::TEvCdcStreamScanRequest> blockScanRequest(runtime);
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson, "Updates"))));
+        runtime.WaitFor("blocked initial scan", [&]{ return !blockScanRequest.empty(); });
+        const auto currentTableId = ResolveTableId(server, edgeActor, "/Root/Table");
+
+        // Move every row past the protected scan snapshot, then compact both
+        // versions into the same part so snapshot reads need history pages.
+        Upsert(runtime, edgeActor, shard, currentTableId, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            columnIds, updatedCells, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        WaitForContent(server, edgeActor, "/Root/Table/Updates", expectedUpdates);
+        WaitForContent(server, edgeActor, "/Root/Table/Images", expectedImages);
+        UNIT_ASSERT_VALUES_EQUAL(CompactTable(runtime, shard, currentTableId).GetStatus(),
+            NKikimrTxDataShard::TEvCompactTableResult::OK);
+        RebootTablet(runtime, shard, edgeActor);
+
+        TStringBuilder expectedTable;
+        for (ui32 key = 1; key <= rowCount; ++key) {
+            expectedUpdates.push_back(TStringBuilder()
+                << "{\"update\":{\"value\":" << key * 1000 << "},\"key\":[" << key << "]}");
+            expectedImages.push_back(TStringBuilder()
+                << "{\"update\":{},\"newImage\":{\"value\":" << key * 1000 << "},\"key\":[" << key << "]}");
+            expectedTable << "key = " << key << ", value = " << key * 1000 << "\n";
+        }
+
+        const ui64 notReadyBefore = GetCumulativeCounter(runtime, shard, "DataShard/TxTabletNotReady");
+        Upsert(runtime, edgeActor, shard, currentTableId, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            columnIds, finalCells, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        const ui64 pageFaults = GetCumulativeCounter(runtime, shard, "DataShard/TxTabletNotReady") - notReadyBefore;
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, currentTableId), expectedTable);
+        WaitForContent(server, edgeActor, "/Root/Table/Updates", expectedUpdates);
+        WaitForContent(server, edgeActor, "/Root/Table/Images", expectedImages);
+
+        bool scanDone = false;
+        auto observeScanDone = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanResponse>([&](auto& ev) {
+            if (ev->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE) {
+                scanDone = true;
+            }
+        });
+        blockScanRequest.Unblock().Stop();
+        runtime.WaitFor("initial scan completion", [&]{ return scanDone; });
+        WaitForContent(server, edgeActor, "/Root/Table/Updates", expectedUpdates);
+        WaitForContent(server, edgeActor, "/Root/Table/Images", expectedImages);
+
+        UNIT_ASSERT_C(pageFaults > 0, "The write must encounter cold data pages");
+        UNIT_ASSERT_C(pageFaults <= 3, "CDC reads must precharge history for the batch, got " << pageFaults << " retries");
+    }
+
+    Y_UNIT_TEST_TWIN(InitialScanPrechargeCompletedPrefix, Images) {
+        TPortManager portManager;
+        auto settings = TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableDataShardVolatileTransactions(false);
+        settings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(0);
+        TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+        InitRoot(server, edgeActor);
+
+        auto policy = NLocalDb::CreateDefaultTablePolicy();
+        policy->MinDataPageSize = 1;
+        const auto opts = SimpleTable().Policy(policy.Get()).ExecutorCacheSize(1 << 20);
+        const auto [shards, tableId] = CreateShardedTable(server, edgeActor, "/Root", "Table", opts);
+        const ui64 shard = shards.at(0);
+        constexpr ui32 rowCount = 32;
+        constexpr ui32 lastKey = 16;
+        const std::vector<ui32> columnIds = {1, 2};
+        std::vector<TCell> initialCells;
+        std::vector<TCell> updatedCells;
+        std::vector<TCell> finalCells;
+        for (ui32 key = 1; key <= rowCount; ++key) {
+            initialCells.push_back(TCell::Make(key));
+            initialCells.push_back(TCell::Make(key * 10));
+            updatedCells.push_back(TCell::Make(key));
+            updatedCells.push_back(TCell::Make(key * 100));
+            if (key <= lastKey || key == rowCount) {
+                finalCells.push_back(TCell::Make(key));
+                finalCells.push_back(TCell::Make(key * 1000));
+            }
+        }
+        Upsert(runtime, edgeActor, shard, tableId, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            columnIds, initialCells);
+        TBlockEvents<TEvDataShard::TEvCdcStreamScanRequest> blockScanRequest(runtime);
+        const auto stream = TCdcStream{
+            .Name = "Stream",
+            .Mode = Images ? NKikimrSchemeOp::ECdcStreamModeNewAndOldImages : NKikimrSchemeOp::ECdcStreamModeUpdate,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatJson,
+            .InitialState = NKikimrSchemeOp::ECdcStreamStateScan,
+        };
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table", stream));
+        runtime.WaitFor("blocked initial scan", [&]{ return !blockScanRequest.empty(); });
+        const auto currentTableId = ResolveTableId(server, edgeActor, "/Root/Table");
+        Upsert(runtime, edgeActor, shard, currentTableId, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            columnIds, updatedCells);
+        CompactTable(runtime, shard, currentTableId);
+        RebootTablet(runtime, shard, edgeActor);
+
+        // Warm only current pages for the completed prefix. Keep the last
+        // batch key cold so its snapshot read triggers batch precharge.
+        auto warmRequest = MakeHolder<TEvTablet::TEvLocalMKQL>();
+        warmRequest->Record.MutableProgram()->MutableProgram()->SetText(R"((
+            (let range '( '('key (Uint32 '1) (Uint32 '17)) ))
+            (let result (SelectRange '__user__Table range '('key 'value) '()))
+            (return (AsList (SetResult 'Result result)))
+        ))");
+        runtime.SendToPipe(shard, edgeActor, warmRequest.Release(), 0, GetPipeConfigWithRetries());
+        auto warmResult = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(edgeActor);
+        UNIT_ASSERT_VALUES_EQUAL(warmResult->Get()->Record.GetStatus(), NKikimrProto::OK);
+
+        bool progressSet = false;
+        auto setProgress = runtime.AddObserver<NEvents::TDataEvents::TEvWrite>([&](auto& ev) {
+            if (!progressSet) {
+                auto* dataShard = dynamic_cast<TDataShard*>(runtime.FindActor(ev->GetRecipientRewrite()));
+                UNIT_ASSERT(dataShard);
+                const auto& streams = dataShard->GetUserTables().at(currentTableId.PathId.LocalPathId)->CdcStreams;
+                const TVector<TCell> key{TCell::Make(lastKey)};
+                dataShard->GetCdcStreamScanManager().Get(streams.begin()->first)->LastKey = TSerializedCellVec(key);
+                progressSet = true;
+            }
+        });
+        ui32 dataPages = 0;
+        auto observePages = runtime.AddObserver<NSharedCache::TEvRequest>([&](auto& ev) {
+            if (ev->Get()->PageCollection->Label().TabletID() == shard &&
+                ev->Cookie == static_cast<ui64>(NSharedCache::ERequestTypeCookie::Transaction))
+            {
+                for (const auto pageId : ev->Get()->Pages) {
+                    dataPages += NTable::NPage::EPage(ev->Get()->PageCollection->Page(pageId).Type) ==
+                        NTable::NPage::EPage::DataPage;
+                }
+            }
+        });
+        Upsert(runtime, edgeActor, shard, currentTableId, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            columnIds, finalCells);
+        UNIT_ASSERT(progressSet);
+        // The cold key may request its current/history pages across retries.
+        // Completed-prefix keys must not add a history request per warm row,
+        // even when the stream also reads ordinary old/new images.
+        UNIT_ASSERT_C(dataPages > 0 && dataPages <= 3, "Unexpected data page requests: " << dataPages);
+    }
+
     Y_UNIT_TEST(InitialScanAndLimits) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

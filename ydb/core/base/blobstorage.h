@@ -616,6 +616,7 @@ struct TEvBlobStorage {
         EvNodeWardenListLocalDDisksResult,
         EvNodeWardenAcquireBlobDepotS3Router,
         EvNodeWardenReleaseBlobDepotS3Router,
+        EvNodeConfigGetSelfHealState,
 
         // Other
         EvRunActor = EvPut + 15 * 512,

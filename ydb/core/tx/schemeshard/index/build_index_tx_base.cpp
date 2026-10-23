@@ -364,6 +364,10 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     } else if (info.IsBuildColumns()) {
         for (const auto& column : info.BuildColumns) {
             auto* columnProto = settings.mutable_column_build_operation()->add_column();
+            if (column.IsFromExpression()) {
+                column.SerializeToProto(columnProto, {});
+                continue;
+            }
             columnProto->SetColumnName(column.ColumnName);
             columnProto->mutable_default_from_literal()->CopyFrom(column.DefaultFromLiteral);
             if (column.IsFromSequence()) {

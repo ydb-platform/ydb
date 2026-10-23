@@ -277,13 +277,24 @@ public:
             }
         } else if (settings.has_column_build_operation()) {
             bool allFromSequence = settings.column_build_operation().column_size() > 0;
+            bool hasGenerated = false;
             for (int i = 0; i < settings.column_build_operation().column_size(); i++) {
-                if (settings.column_build_operation().column(i).default_from_sequence().empty()) {
+                const auto& column = settings.column_build_operation().column(i);
+                hasGenerated |= column.has_generated_from_expression();
+                if (column.default_from_sequence().empty()) {
                     allFromSequence = false;
-                    break;
                 }
             }
-            if (!Self->EnableAddColumsWithDefaults && !allFromSequence) {
+            if (hasGenerated && settings.column_build_operation().column_size() != 1) {
+                return makeReply("a generated column build must contain exactly one column");
+            }
+            // Stream-write configuration belongs to TableService/KQP, which
+            // validates it before submitting the compiled descriptor.
+            if (hasGenerated && (!Self->EnableAddGeneratedStoredColumn
+                || !AppData()->FeatureFlags.GetEnableGeneratedStored())) {
+                return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Adding STORED generated columns is disabled");
+            }
+            if (!hasGenerated && !Self->EnableAddColumsWithDefaults && !allFromSequence) {
                 return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Adding columns with defaults is disabled");
             }
 
@@ -295,7 +306,25 @@ public:
                 const auto& colInfo = settings.column_build_operation().column(i);
                 bool notNull = colInfo.HasNotNull() && colInfo.GetNotNull();
                 TString familyName = colInfo.HasFamily() ? colInfo.GetFamily() : "";
-                if (!colInfo.default_from_sequence().empty()) {
+                if (colInfo.has_generated_from_expression()) {
+                    if (colInfo.has_default_from_literal() || colInfo.has_default_from_sequence()
+                        || colInfo.has_bit_reverse_sequence_value()) {
+                        return makeReply("generated columns cannot also have literal or sequence initializers");
+                    }
+                    TIndexBuildInfo::TColumnBuildInfo column(
+                        TIndexBuildInfo::TColumnBuildInfo::FromExpressionTag{}, colInfo.GetColumnName(),
+                        colInfo.generated_from_expression(), notNull, familyName);
+                    TString error;
+                    if (!column.ValidateGeneratedBinding(*Self->Tables.at(tablePath.Base()->PathId), tablePath.Base()->PathId, error)) {
+                        return makeReply(error);
+                    }
+                    buildInfo->BuildColumns.push_back(std::move(column));
+                } else if (!colInfo.default_from_sequence().empty()) {
+                    // A legacy sequence descriptor carries only its type in the
+                    // literal field. An actual value would select two sources.
+                    if (colInfo.default_from_literal().has_value()) {
+                        return makeReply("sequence columns cannot also have a literal initializer");
+                    }
                     buildInfo->BuildColumns.push_back(
                         TIndexBuildInfo::TColumnBuildInfo(
                             TIndexBuildInfo::TColumnBuildInfo::FromSequenceTag{},

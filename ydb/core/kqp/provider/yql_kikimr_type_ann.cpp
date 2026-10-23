@@ -1,4 +1,5 @@
 #include "generated_column.h"
+#include "generated_column_backfill.h"
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_settings.h"
 #include "yql_kikimr_type_ann_pg.h"
@@ -840,7 +841,7 @@ namespace {
     }
 
     bool ParseConstraintNode(TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple,
-        TCoNameValueTuple constraint, bool& needEval, bool isAlter = false) {
+        TCoNameValueTuple constraint, bool& needEval, bool isAlter = false, bool allowStoredAlter = false) {
         auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
         auto typeNode = columnTuple.Item(1);
 
@@ -902,9 +903,17 @@ namespace {
             columnMeta.NotNull = true;
         } else if (constraint.Name().Value() == "generated") {
             if (isAlter) {
-                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                    "Column addition with a GENERATED ALWAYS AS expression is not supported"));
-                return false;
+                const auto& value = constraint.Value().Cast().Ref();
+                if (value.ChildrenSize() < 3 || value.Child(2)->Content() != "stored") {
+                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                        "Column addition with a GENERATED ALWAYS AS expression is not supported"));
+                    return false;
+                }
+                if (!allowStoredAlter) {
+                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                        "Column addition with a GENERATED ALWAYS AS expression is not supported: adding STORED generated columns requires EnableAddGeneratedStoredColumn, EnableGeneratedStored and EnableIndexStreamWrite"));
+                    return false;
+                }
             }
 
             if (columnMeta.IsDefaultKindDefined()) {
@@ -2329,7 +2338,10 @@ private:
                         const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                         for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                             bool needEval = false;
-                            if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval, true)) {
+                            if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval, true,
+                                SessionCtx->Config().FeatureFlags.GetEnableAddGeneratedStoredColumn()
+                                    && SessionCtx->Config().FeatureFlags.GetEnableGeneratedStored()
+                                    && SessionCtx->Config().GetEnableIndexStreamWrite())) {
                                 return TStatus::Error;
                             }
 
@@ -2337,6 +2349,27 @@ private:
                                 ctx.Step.Repeat(TExprStep::ExprEval);
                                 return TStatus(TStatus::Repeat, true);
                             }
+                        }
+                    }
+
+                    if (columnMeta.IsDefaultFromExpression()) {
+                        if (node.Actions().Size() != 1 || listNode.Size() != 1) {
+                            ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Pos()),
+                                "A STORED GENERATED column must be the only action in ALTER TABLE"));
+                            return TStatus::Error;
+                        }
+                        if (table->Metadata->IsOlap()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Pos()),
+                                "Adding STORED GENERATED columns is supported only for row tables"));
+                            return TStatus::Error;
+                        }
+                        const auto* outputType = columnType->Cast<TTypeExprType>()->GetType();
+                        if (columnMeta.NotNull && outputType->GetKind() != ETypeAnnotationKind::Pg) {
+                            outputType = &RemoveOptionality(*outputType);
+                        }
+                        if (!PrepareGeneratedColumnBackfill(columnMeta.DefaultExpression->ExprText, name,
+                            *outputType, *table->Metadata, *SessionCtx, ctx, Types)) {
+                            return TStatus::Error;
                         }
                     }
 

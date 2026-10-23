@@ -9,6 +9,14 @@
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tablet_flat/shared_cache_events.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_runtime_version.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 
 namespace NKikimr {
 
@@ -125,9 +133,210 @@ static void DoUploadRows(
     DoWaitUploadRows(runtime, sender, expected);
 }
 
+// Install the internal hidden schema independently of the SQL ALTER compiler.
+// SchemeShard sees an ordinary nullable column, allowing explicit test values.
+static void GeneratedFillTest(bool nullResult, bool compactAndReboot, bool concurrent = false) {
+    TPortManager pm;
+    TServerSettings settings(pm.GetPort(2134));
+    settings.SetDomainName("Root").SetUseRealThreads(false);
+    if (compactAndReboot) {
+        settings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(0);
+    }
+    TServer::TPtr server = new TServer(settings);
+    auto& runtime = *server->GetRuntime();
+    const auto sender = runtime.AllocateEdgeActor();
+    InitRoot(server, sender);
+    auto tableOptions = TShardedTableOptions().Shards(1);
+    if (compactAndReboot) {
+        tableOptions.ExecutorCacheSize(1);
+    }
+    CreateShardedTable(server, sender, "/Root", "table-1", tableOptions);
+    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10), (2, 20), (3, 30), (4, 40);");
+    const auto beforeAlter = ResolveTableId(server, sender, "/Root/table-1");
+    auto schemaObserver = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& event) {
+        auto& record = event->Get()->Record;
+        if (record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) {
+            return;
+        }
+        NKikimrTxDataShard::TFlatSchemeTransaction transaction;
+        UNIT_ASSERT(transaction.ParseFromString(record.GetTxBody()));
+        if (!transaction.HasAlterTable()) {
+            return;
+        }
+        for (auto& column : *transaction.MutableAlterTable()->MutableColumns()) {
+            if (column.GetName() == "g") {
+                column.SetIsBuildInProgress(true);
+                auto* expression = column.MutableDefaultFromExpression();
+                expression->SetStored(true);
+                expression->SetExprText("42");
+            }
+        }
+        record.SetTxBody(transaction.SerializeAsString());
+    });
+    ExecSQL(server, sender, "ALTER TABLE `/Root/table-1` ADD COLUMN g Int64;", false);
+    schemaObserver.Remove();
+    ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, g) VALUES (2, NULL), (3, 99); DELETE FROM `/Root/table-1` WHERE key = 4;");
+    const auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+    const ui64 shard = GetTableShards(server, sender, "/Root/table-1").at(0);
+    const auto snapshot = CreateVolatileSnapshot(server, {"/Root/table-1"});
+    auto request = MakeHolder<TEvDataShard::TEvBuildIndexCreateRequest>();
+    auto& record = request->Record;
+    record.SetId(12345);
+    record.SetTabletId(shard);
+    record.SetOwnerId(tableId.PathId.OwnerId);
+    record.SetPathId(tableId.PathId.LocalPathId);
+    record.SetDatabaseName("/Root");
+    record.SetTargetName("/Root/table-1");
+    record.SetSeqNoGeneration(1);
+    record.SetSeqNoRound(1);
+    record.SetSnapshotStep(snapshot.Step);
+    record.SetSnapshotTxId(snapshot.TxId);
+    record.MutableScanSettings()->SetMaxBatchRows(1);
+    auto* column = record.MutableColumnBuildSettings()->add_column();
+    column->SetColumnName("g");
+    auto* descriptor = column->mutable_generated_from_expression();
+    descriptor->SetExprText("42");
+    descriptor->SetSourceOwnerId(tableId.PathId.OwnerId);
+    descriptor->SetSourcePathId(tableId.PathId.LocalPathId);
+    descriptor->SetSourceSchemaVersion(beforeAlter.SchemaVersion);
+    descriptor->MutableOutputType()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT64);
+    {
+        using namespace NMiniKQL;
+        const auto registry = CreateFunctionRegistry(CreateBuiltinRegistry());
+        TScopedAlloc alloc(__LOCATION__);
+        TTypeEnvironment environment(alloc);
+        TProgramBuilder builder(environment, *registry);
+        const auto value = nullResult ? builder.NewEmptyOptionalDataLiteral(NUdf::TDataType<i64>::Id)
+            : builder.NewOptional(builder.NewDataLiteral<i64>(42));
+        descriptor->SetProgram(SerializeRuntimeNode(value, environment));
+        descriptor->SetProgramFormatVersion(1);
+        descriptor->SetMiniKqlRuntimeVersion(RuntimeVersion.Value());
+        descriptor->SetLanguageVersion(NYql::MinLangVersion);
+        descriptor->SetRuntimeSettings(NYql::SerializeRuntimeSettingsToString(*NYql::MakeRuntimeSettings()));
+    }
+    NKikimrTxDataShard::TEvUploadRowsRequest committedRequest;
+    THolder<IEventHandle> lostAck;
+    THolder<IEventHandle> pendingUpload;
+    TString foregroundState;
+    auto uploadObserver = runtime.AddObserver<TEvDataShard::TEvUploadRowsRequest>([&](auto& event) {
+        if (event->Get()->Record.HasGeneratedColumnFillContext()) {
+            committedRequest = event->Get()->Record;
+            if (concurrent && !pendingUpload) {
+                pendingUpload.Reset(event.Release());
+            }
+        }
+    });
+    auto responseObserver = runtime.AddObserver<TEvDataShard::TEvUploadRowsResponse>([&](auto& event) {
+        if (committedRequest.HasGeneratedColumnFillContext() && !lostAck) {
+            lostAck.Reset(event.Release());
+        }
+    });
+    runtime.SendToPipe(shard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+    if (concurrent) {
+        runtime.WaitFor("generated fill upload paused", [&] { return bool(pendingUpload); });
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, g) VALUES (1, NULL); DELETE FROM `/Root/table-1` WHERE key = 3; UPSERT INTO `/Root/table-1` (key, value, g) VALUES (3, 300, 123);");
+        foregroundState = ReadShardedTable(server, "/Root/table-1");
+        uploadObserver.Remove();
+        runtime.Send(pendingUpload.Release(), 0, true);
+    }
+    runtime.WaitFor("generated fill committed without acknowledgement", [&] { return bool(lostAck); });
+    responseObserver.Remove();
+    if (!concurrent) {
+        uploadObserver.Remove();
+    }
+    const TString stored = ReadShardedTable(server, "/Root/table-1");
+    if (concurrent) {
+        UNIT_ASSERT_VALUES_EQUAL(stored, foregroundState);
+    } else {
+        // This read helper formats nullable cells as an empty Maybe. The
+        // non-NULL duplicate below proves the NULL was physically materialized:
+        // an unwritten target would accept 777 after compaction and reboot.
+        UNIT_ASSERT_STRING_CONTAINS(stored, nullResult ? "g = (empty maybe)" : "g = 42");
+        UNIT_ASSERT_STRING_CONTAINS(stored, "g = 99");
+    }
+    if (compactAndReboot) {
+        CompactTable(runtime, shard, tableId);
+        RebootTablet(runtime, shard, sender);
+    }
+    // Redelivery may contain changed candidate values: it must never overwrite
+    // the committed result, explicit NULL, another value, or resurrect key 4.
+    auto duplicate = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
+    duplicate->Record = committedRequest;
+    duplicate->Record.ClearRows();
+    const i64 candidate = 777;
+    for (ui32 key = 1; key <= 4; ++key) {
+        auto* row = duplicate->Record.AddRows();
+        row->SetKeyColumns(TSerializedCellVec::Serialize({TCell::Make(key)}));
+        row->SetValueColumns(TSerializedCellVec::Serialize({TCell::Make(candidate)}));
+    }
+    THolder<IEventHandle> pageFaultRequest;
+    bool receivedFillResponse = false;
+    auto faultObserver = runtime.AddObserver<NSharedCache::TEvRequest>([&](auto& event) {
+        if (compactAndReboot && !pageFaultRequest &&
+            event->Cookie == static_cast<ui64>(NSharedCache::ERequestTypeCookie::Transaction))
+        {
+            pageFaultRequest.Reset(event.Release());
+        }
+    });
+    auto fillResponseObserver = runtime.AddObserver<TEvDataShard::TEvUploadRowsResponse>([&](auto&) {
+        receivedFillResponse = true;
+    });
+    runtime.SendToPipe(shard, sender, duplicate.Release(), 0, GetPipeConfigWithRetries());
+    if (compactAndReboot) {
+        runtime.WaitFor("conditional fill page fault", [&] { return bool(pageFaultRequest) || receivedFillResponse; });
+        UNIT_ASSERT_C(pageFaultRequest, "Cold conditional target select did not request a page");
+        UNIT_ASSERT(!receivedFillResponse);
+        faultObserver.Remove();
+        runtime.Send(pageFaultRequest.Release(), 0, true);
+    } else {
+        faultObserver.Remove();
+    }
+    auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvUploadRowsResponse>(sender);
+    fillResponseObserver.Remove();
+    UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Record.GetStatus(), ui32(NKikimrTxDataShard::TError::OK), reply->Get()->Record.GetErrorDescription());
+    UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), stored);
+    {
+        auto raw = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
+        raw->Record = committedRequest;
+        raw->Record.ClearGeneratedColumnFillContext();
+        runtime.SendToPipe(shard, sender, raw.Release(), 0, GetPipeConfigWithRetries());
+        auto rejected = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvUploadRowsResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->Record.GetStatus(), ui32(NKikimrTxDataShard::TError::SCHEME_ERROR));
+    }
+    for (int mutation = 0; mutation < 4; ++mutation) {
+        auto forged = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
+        forged->Record = committedRequest;
+        auto* context = forged->Record.MutableGeneratedColumnFillContext();
+        if (mutation == 0) context->SetTargetColumnId(999);
+        if (mutation == 1) context->SetSnapshotTxId(context->GetSnapshotTxId() + 1);
+        if (mutation == 2) context->SetSeqNoRound(0);
+        if (mutation == 3) context->SetProgramFingerprint("replaced");
+        runtime.SendToPipe(shard, sender, forged.Release(), 0, GetPipeConfigWithRetries());
+        auto rejected = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvUploadRowsResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->Record.GetStatus(), ui32(NKikimrTxDataShard::TError::SCHEME_CHANGED));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), stored);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
+    Y_UNIT_TEST(GeneratedFillConcurrentNullAndDeleteReinsert) {
+        GeneratedFillTest(false, false, true);
+    }
+
+    Y_UNIT_TEST(GeneratedFillOnlyUnwritten) {
+        GeneratedFillTest(false, false);
+    }
+
+    Y_UNIT_TEST(GeneratedFillNullSurvivesCompaction) {
+        GeneratedFillTest(true, true);
+    }
+
+    Y_UNIT_TEST(GeneratedFillRetryAfterPageFault) {
+        GeneratedFillTest(false, true);
+    }
+
 
     Y_UNIT_TEST(TestUploadRows) {
         TPortManager pm;

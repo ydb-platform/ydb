@@ -193,6 +193,8 @@ protected:
     bool DisableChangeCollection = false;
     bool DiskQuotaExceeded = false;
     bool UpsertIfExists = false;
+    bool FillGeneratedColumn = false;
+    TMaybe<NKikimrTxDataShard::TGeneratedColumnFillContext> GeneratedFillContext;
 
     TBackoff Backoff = TBackoff(5, TDuration::Seconds(1), TDuration::Seconds(15));
 
@@ -1267,6 +1269,9 @@ private:
                 }
                 if (UpsertIfExists) {
                     ev->Record.SetUpsertIfExists(true);
+                }
+                if (GeneratedFillContext) {
+                    *ev->Record.MutableGeneratedColumnFillContext() = *GeneratedFillContext;
                 }
                 if (DisableChangeCollection) {
                     ev->Record.SetDisableChangeCollection(true);

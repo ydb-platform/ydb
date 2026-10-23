@@ -1130,6 +1130,21 @@ message TSerializedRowToLoad {
     optional bytes ValueColumns = 2;
 }
 
+// Authorization for a particular generated-column scan attempt. This context
+// is checked against the shard's durable build record before filling a cell.
+message TGeneratedColumnFillContext {
+    optional uint64 BuildId = 1;
+    optional uint64 SeqNoGeneration = 2;
+    optional uint64 SeqNoRound = 3;
+    optional uint64 OwnerId = 4;
+    optional uint64 PathId = 5;
+    optional uint64 SchemaVersion = 6;
+    optional uint32 TargetColumnId = 7;
+    optional uint64 SnapshotStep = 8;
+    optional uint64 SnapshotTxId = 9;
+    optional bytes ProgramFingerprint = 10;
+}
+
 message TEvUploadRowsRequest {
     optional uint64 TableId = 1;
     optional TSerializedRowColumnsScheme RowScheme = 2;
@@ -1141,6 +1156,7 @@ message TEvUploadRowsRequest {
     optional uint64 SchemaVersion = 9;
     optional string UserSID = 10;
     optional bool DisableChangeCollection = 11 [ default = false ];
+    optional TGeneratedColumnFillContext GeneratedColumnFillContext = 12;
 }
 
 message TEvUploadRowsResponse {

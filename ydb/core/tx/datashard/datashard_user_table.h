@@ -295,6 +295,12 @@ struct TUserTable : public TThrRefBase {
         ui32 Family = 0;
         bool NotNull = false;
         bool SetNotNullInProgress = false;
+        NKikimrSchemeOp::TDefaultExpressionColumnDescription DefaultFromExpression;
+        bool IsBuildInProgress = false;
+
+        bool IsStoredGenerated() const {
+            return DefaultFromExpression.GetStored();
+        }
 
         TUserColumn(NScheme::TTypeInfo type, TString typeMod, TString name, bool isKey = false)
             : Type(type)
@@ -572,6 +578,9 @@ struct TUserTable : public TThrRefBase {
     ui64 GetTableSchemaVersion() const { return TableSchemaVersion; }
     void SetTableSchemaVersion(ui64 schemaVersion);
     bool ResetTableSchemaVersion();
+    bool HasStoredGeneratedColumns() const;
+    bool HasStoredGeneratedColumnDependency(ui32 columnId) const;
+    void FinishColumnBuild(ui32 columnId);
 
     NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetDetailedMetricsLevel() const {
         return DetailedMetricsLevel;

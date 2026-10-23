@@ -2086,6 +2086,7 @@ struct Schema : NIceDb::Schema {
         struct FamilyName : Column<6, NScheme::NTypeIds::String> {};
         struct DefaultFromSequence : Column<7, NScheme::NTypeIds::Utf8> {};
         struct BitReverseSequenceValue : Column<8, NScheme::NTypeIds::Bool> {};
+        struct GeneratedFromExpression : Column<9, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Id, ColumnNo>;
         using TColumns = TableColumns<
@@ -2096,7 +2097,8 @@ struct Schema : NIceDb::Schema {
             NotNull,
             FamilyName,
             DefaultFromSequence,
-            BitReverseSequenceValue
+            BitReverseSequenceValue,
+            GeneratedFromExpression
         >;
     };
 

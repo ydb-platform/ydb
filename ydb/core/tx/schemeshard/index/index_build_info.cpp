@@ -2,6 +2,7 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/ydb_convert/table_description.h>
 #include <yql/essentials/core/histogram/eq_height_histogram_reader.h>
 #include <yql/essentials/minikql/computation/presort.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
@@ -15,6 +16,78 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 using namespace NKikimr::NSchemeShard;
+
+bool TIndexBuildInfo::TColumnBuildInfo::ValidateGeneratedBinding(
+    const TTableInfo& table, const TPathId& tableId, TString& error) const
+{
+    if (!IsFromExpression()) {
+        return true;
+    }
+    const auto& expression = *GeneratedFromExpression;
+    auto fail = [&](const TString& reason) {
+        error = TStringBuilder() << "Generated column '" << ColumnName << "': " << reason;
+        return false;
+    };
+    if (ColumnName.empty() || table.GetColumnIdByNameSlow(ColumnName) != TTableInfo::InvalidColumnId) {
+        return fail("target column must be new and have a nonempty name");
+    }
+    if (expression.GetExprText().empty() || expression.GetProgram().empty()
+        || expression.GetProgramFormatVersion() != 1
+        || !expression.HasMiniKqlRuntimeVersion() || !expression.GetMiniKqlRuntimeVersion()
+        || !expression.HasLanguageVersion() || !expression.HasRuntimeSettings()
+        || !expression.HasOutputType()) {
+        return fail("incomplete descriptor or unsupported program format");
+    }
+    if (expression.GetSourceOwnerId() != tableId.OwnerId
+        || expression.GetSourcePathId() != tableId.LocalPathId
+        || !expression.GetSourceSchemaVersion()
+        || expression.GetSourceSchemaVersion() != table.AlterVersion) {
+        return fail("source table identity or schema version changed");
+    }
+    NScheme::TTypeInfo outputType;
+    TString outputTypeMod;
+    Ydb::StatusIds::StatusCode status;
+    TString typeError;
+    if (!ExtractColumnTypeInfo(outputType, outputTypeMod, expression.GetOutputType(), status, typeError)) {
+        return fail(TStringBuilder() << "invalid output type: " << typeError);
+    }
+    if (outputType.GetTypeId() != NScheme::NTypeIds::Pg
+        && expression.GetOutputType().has_optional_type() == NotNull) {
+        return fail("output type nullability does not match the target column");
+    }
+    THashSet<ui32> dependencyIds;
+    THashSet<TString> dependencyNames;
+    for (const auto& dependency : expression.GetDependencies()) {
+        const auto it = table.Columns.find(dependency.GetColumnId());
+        if (!dependency.HasType() || dependency.GetName().empty()
+            || dependency.GetName() == ColumnName
+            || !dependencyIds.insert(dependency.GetColumnId()).second
+            || !dependencyNames.insert(dependency.GetName()).second
+            || it == table.Columns.end() || it->second.IsDropped()) {
+            return fail(TStringBuilder() << "invalid or duplicate dependency '" << dependency.GetName() << "'");
+        }
+        const auto& column = it->second;
+        if (column.Name != dependency.GetName() || column.IsBuildInProgress
+            || column.DefaultKind == ETableColumnDefaultKind::FromExpression) {
+            return fail(TStringBuilder() << "dependency '" << dependency.GetName() << "' is not an existing ordinary column");
+        }
+        NScheme::TTypeInfo dependencyType;
+        TString dependencyTypeMod;
+        if (!ExtractColumnTypeInfo(dependencyType, dependencyTypeMod, dependency.GetType(), status, typeError)
+            || dependencyType != column.PType || dependencyTypeMod != column.PTypeMod
+            || (dependencyType.GetTypeId() != NScheme::NTypeIds::Pg
+                && dependency.GetType().has_optional_type() == column.NotNull)) {
+            return fail(TStringBuilder() << "type changed for dependency '" << dependency.GetName() << "'");
+        }
+    }
+    THashSet<TString> requiredFunctions;
+    for (const auto& name : expression.GetRequiredUdfNames()) {
+        if (name.empty() || !requiredFunctions.insert(name).second) {
+            return fail("invalid or duplicate required UDF name");
+        }
+    }
+    return true;
+}
 
 TIndexBuildShardStatus::TIndexBuildShardStatus(TSerializedTableRange range, TString lastKeyAck)
     : Range(std::move(range))

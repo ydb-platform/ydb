@@ -146,6 +146,7 @@ public:
         }
 
         context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);
+        tableInfo->ResetDescriptionCache();
 
         context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
 

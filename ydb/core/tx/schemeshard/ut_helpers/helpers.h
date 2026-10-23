@@ -453,6 +453,7 @@ namespace NSchemeShardUT_Private {
     };
 
     std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal);
+    std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateGeneratedBuildColumnRequest(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString& dbName, const TString& src);
     TEvIndexBuilder::TEvCreateRequest* CreateBuildIndexRequest(ui64 id, const TString& dbName, const TString& src, const Ydb::Table::TableIndex& index);
     TEvIndexBuilder::TEvCreateRequest* CreateBuildIndexRequest(ui64 id, const TString& dbName, const TString& src, const TBuildIndexConfig& cfg);
     void AsyncBuildColumn(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString& columnName, const Ydb::TypedValue& literal);

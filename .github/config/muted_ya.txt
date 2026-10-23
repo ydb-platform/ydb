@@ -20,6 +20,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex+E
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/tracing TKqpQueryTrace.SpillingReportsFollowRequestedStatsMode
 ydb/core/kqp/ut/tx KqpSinkMvcc.ChangeFromTheFuture-IsOlap
+ydb/core/memory_controller/ut TMemoryController.MemTable
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerTests.FetchThrottledAtMinMessages
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.UnlockMultiPartition
 ydb/core/statistics/aggregator/ut AnalyzeSampling.CollectAndPersistStatistics+ColumnShard-SmallHistogramBudget

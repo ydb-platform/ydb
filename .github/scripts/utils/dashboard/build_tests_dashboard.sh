@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds the per-try tests resource dashboard (CPU/RAM/disk overlay).
-# Extracted from test_ya/action.yml: the composite-action run block hit the
+# Extracted from build_and_test_ya/action.yml: the composite-action run block hit the
 # GitHub Actions 21000-char template limit. Best-effort: never fails the job.
 #
 # Expects env: CURRENT_PUBLIC_DIR, CURRENT_REPORT, RESOURCES_JSONL, RETRY,

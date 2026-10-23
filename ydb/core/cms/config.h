@@ -27,6 +27,7 @@ struct TCmsSentinelConfig {
         ui32 NodeGoodStateLimit;
         ui32 NodePrettyGoodStateLimit;
         TDuration WaitForConfigStep;
+        TDuration SelfHealStateRequestTimeout;
         TDuration RelaxTime;
         bool PileupReplicas;
         ui32 OverrideReplicasInRingCount;
@@ -39,6 +40,7 @@ struct TCmsSentinelConfig {
             config.SetNodeGoodStateLimit(NodeGoodStateLimit);
             config.SetNodePrettyGoodStateLimit(NodePrettyGoodStateLimit);
             config.SetWaitForConfigStep(WaitForConfigStep.GetValue());
+            config.SetSelfHealStateRequestTimeout(SelfHealStateRequestTimeout.GetValue());
             config.SetRelaxTime(RelaxTime.GetValue());
             config.SetPileupReplicas(PileupReplicas);
             config.SetOverrideReplicasInRingCount(OverrideReplicasInRingCount);
@@ -52,6 +54,7 @@ struct TCmsSentinelConfig {
             NodeGoodStateLimit = config.GetNodeGoodStateLimit();
             NodePrettyGoodStateLimit = config.GetNodePrettyGoodStateLimit();
             WaitForConfigStep = TDuration::MicroSeconds(config.GetWaitForConfigStep());
+            SelfHealStateRequestTimeout = TDuration::MicroSeconds(config.GetSelfHealStateRequestTimeout());
             RelaxTime = TDuration::MicroSeconds(config.GetRelaxTime());
             PileupReplicas = config.GetPileupReplicas();
             OverrideReplicasInRingCount = config.GetOverrideReplicasInRingCount();

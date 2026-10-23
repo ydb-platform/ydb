@@ -6,6 +6,24 @@
 
 namespace NYql {
 
+TVector<const TItemExprType*> GetSqlStarItems(const TStructExprType& type, const TColumnOrder& order) {
+    TVector<const TItemExprType*> items;
+    items.reserve(type.GetSize());
+    THashSet<ui32> used;
+    for (const auto& column : order) {
+        if (const auto index = type.FindItem(column.PhysicalName); index && used.insert(*index).second) {
+            items.push_back(type.GetItems()[*index]);
+        }
+    }
+    // Preserve struct order for any members not listed in the source column order.
+    for (ui32 index = 0; index < type.GetSize(); ++index) {
+        if (!used.contains(index)) {
+            items.push_back(type.GetItems()[index]);
+        }
+    }
+    return items;
+}
+
 TExprNode::TPtr ExpandYqlTraitsFactory(
     const TExprNode::TPtr& factory,
     TExprNode::TPtr listType,

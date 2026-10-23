@@ -16,7 +16,7 @@ inputs:
     description: "run tests"
   test_threads:
     type: string
-    default: 28
+    default: 64
     description: "Test threads count"
   link_threads:
     type: string

@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/formats/arrow/program
     ydb/core/formats/arrow/program/ascii_contains
     ydb/core/formats/arrow/reader
+    ydb/core/formats/arrow/rows
     ydb/core/formats/arrow/serializer
     ydb/core/base
     ydb/library/formats/arrow
@@ -36,6 +37,7 @@ CFLAGS(
 )
 
 SRCS(
+    comparison_ut.cpp
     ut_arrow.cpp
     ut_buffer_over_string.cpp
     ut_column_filter.cpp

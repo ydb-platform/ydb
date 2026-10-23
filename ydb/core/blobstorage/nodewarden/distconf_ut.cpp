@@ -13,6 +13,7 @@
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 
 #include <ydb/library/pdisk_io/sector_map.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/core/util/random.h>
 
 #include <google/protobuf/text_format.h>
@@ -837,17 +838,20 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
     // dynamic nodes of older versions get no configuration once it requires the bridge features they don't support: the
     // ones taking pile ids from positions in their BridgeConfig once the list of piles has been changed, the ones
     // supporting only changes of the list of piles once a pile has been removed
-    Y_UNIT_TEST(OlderDynamicNodeGetsNoConfig) {
+    Y_UNIT_TEST_TWIN(OlderDynamicNodeGetsNoConfig, nonUniformStorage) {
         auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
         auto *registry = config.MutableClusterStateDetails()->MutablePileRegistry();
         registry->SetPileListChanged(true);
-        registry->SetRequiredFeatureLevel(NStorage::BridgeFeatureLevelPileOps);
+        const ui32 requiredLevel = nonUniformStorage ? NStorage::BridgeFeatureLevelNonUniformStorage
+            : NStorage::BridgeFeatureLevelPileOps;
+        registry->SetRequiredFeatureLevel(requiredLevel);
+        config.MutableClusterStateDetails()->SetNonUniformStorageEnabled(nonUniformStorage);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
 
         TNodeWardenTestState state;
         state.RequiredRootNodeId = 1;
         FillTwoPileBridgedMetadata(state, config);
-        TTestActorSystem runtime(7); // nodes 5-7 are dynamic ones
+        TTestActorSystem runtime(5 + NStorage::BridgeFeatureLevel); // nodes from 5 are dynamic ones
         auto& bridge = runtime.GetAppDataBridgeConfig();
         bridge.AddPiles()->SetName("pile0");
         bridge.AddPiles()->SetName("pile1");
@@ -862,8 +866,35 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         for (ui32 level = 0; level <= NStorage::BridgeFeatureLevel; ++level) {
             std::vector<NKikimrBlobStorage::TEvNodeWardenDynamicConfigPush> pushes;
             SubscribeDynamicNode(runtime, keepers.front(), 5 + level, level, pushes);
-            UNIT_ASSERT_VALUES_EQUAL_C(pushes.front().HasConfig(), level == NStorage::BridgeFeatureLevel, level);
+            UNIT_ASSERT_VALUES_EQUAL_C(pushes.front().HasConfig(), level >= requiredLevel, level);
         }
+    }
+
+    Y_UNIT_TEST(NonUniformStorageActivationValidation) {
+        auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
+        NKikimrConfig::TBridgeConfig bridge;
+        bridge.AddPiles()->SetName("pile0");
+        bridge.AddPiles()->SetName("pile1");
+        bridge.SetEnableNonUniformStorage(true);
+        bool pileListChanged = false;
+        auto pending = config;
+        pending.MutableClusterStateDetails()->SetBscConversionPending(true);
+        auto error = NStorage::UpdatePileRegistry(bridge, &pending, &bridge, &bridge, &pileListChanged);
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_STRING_CONTAINS(*error, "conversion to complete");
+
+        error = NStorage::UpdatePileRegistry(bridge, &config, &bridge, &bridge, &pileListChanged);
+        UNIT_ASSERT_C(!error, error.value_or(TString()));
+        UNIT_ASSERT(!pileListChanged);
+        UNIT_ASSERT(!NStorage::ValidateConfig(config));
+        auto proposed = config;
+        proposed.SetGeneration(config.GetGeneration() + 1);
+        proposed.MutableClusterStateDetails()->SetNonUniformStorageEnabled(false);
+        UNIT_ASSERT(NStorage::ValidateConfigUpdate(config, proposed));
+        proposed = config;
+        proposed.MutableClusterStateDetails()->MutablePileRegistry()->SetRequiredFeatureLevel(
+            NStorage::BridgeFeatureLevelPileOps);
+        UNIT_ASSERT(NStorage::ValidateConfig(proposed));
     }
 
     // the list of piles can't be changed, piles can't be added or removed unless every node supports these bridge
@@ -3625,6 +3656,56 @@ selector_config: []
         UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig().GetGeneration(), 0);
     }
 
+    Y_UNIT_TEST(SelfHealRefreshStartsAfterQuorumRecovery) {
+        TCommitConfirmationFixture fixture(true);
+        ui32 requests = 0;
+        TActorId requester;
+        fixture.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTabletPipe::EvSend
+                    && ev->Type == NStorage::TEvNodeConfigGetSelfHealState::EventType) {
+                ++requests;
+                requester = ev->Sender;
+                return false; // Observe the real outgoing request without running CMS.
+            }
+            return true;
+        };
+        StartZeroGenerationRoot(fixture);
+        const auto scepter = QueryKeeper(fixture.Runtime, fixture.Root()).GetScepter().GetId();
+        UNIT_ASSERT_VALUES_EQUAL(requests, 0);
+
+        auto recovered = MakeNextConfig(fixture.Config, 1);
+        auto *group = recovered.MutableStateStorageConfig()->AddRingGroups();
+        group->SetNToSelect(3);
+        for (ui32 node : {1, 2, 3}) {
+            group->AddRing()->AddNode(node);
+        }
+        recovered.MutableStateStorageBoardConfig()->CopyFrom(recovered.GetStateStorageConfig());
+        recovered.MutableSchemeBoardConfig()->CopyFrom(recovered.GetStateStorageConfig());
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&recovered);
+        auto collected = MakeCollectedConfigs(fixture.Config);
+        AddCollectedConfig(collected, recovered, {1, 2, 3});
+        for (ui32 node : {1, 2, 3}) {
+            fixture.Metadata(node).MutableCommittedStorageConfig()->CopyFrom(recovered);
+        }
+        const auto result = ProcessCollectedConfigs(fixture, collected);
+        UNIT_ASSERT_C(!result.ErrorReason, result.ErrorReason.value_or(""));
+        UNIT_ASSERT(SimUntil(fixture.Runtime, [&] { return requests != 0; }));
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetScepter().GetId(), scepter);
+
+        // A disabled Sentinel completes this refresh. Subsequent configuration
+        // changes in the same tenure must not start another refresh loop.
+        auto disabled = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+        disabled->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+        disabled->Record.SetErrorReason("Sentinel is disabled");
+        fixture.Runtime.Send(new IEventHandle(requester, fixture.Root(), disabled.release()), requester.NodeId());
+        const auto updated = MakeNextConfig(recovered, 2);
+        UNIT_ASSERT(fixture.Runtime.WrapInActorContext(fixture.Root(), [&](IActor *actor) {
+            static_cast<NStorage::TDistributedConfigKeeper*>(actor)->ApplyCommittedStorageConfig(updated);
+        }));
+        UNIT_ASSERT_C(!SimUntil(fixture.Runtime, [&] { return requests > 1; }, TDuration::Seconds(15)),
+            "a completed refresh restarted on an ordinary configuration update");
+    }
+
     Y_UNIT_TEST(PublishedConfigFencesEmptyRecovery) {
         TCommitConfirmationFixture fixture(true);
         StartZeroGenerationRoot(fixture);
@@ -5929,6 +6010,144 @@ selector_config: []
         CheckDurableConfigConverges(fixture, advanced);
     }
 
+    void CheckBindingLivenessPeerCapability(bool selfManagement, bool legacyParent, bool pauseParent = false,
+                                           bool disabledMetadata = false) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.UseMirror3dcGroup();
+        fixture.State.RequiredRootNodeId = 1;
+        if (!selfManagement) {
+            if (disabledMetadata) {
+                auto disabled = MakeNextConfig(fixture.Config);
+                disabled.MutableSelfManagementConfig()->SetEnabled(false);
+                NStorage::TDistributedConfigKeeper::UpdateFingerprint(&disabled);
+                for (ui32 nodeId : {1, 2, 3}) {
+                    fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(disabled);
+                }
+            } else {
+                fixture.Config.SetGeneration(0);
+                fixture.Config.MutableSelfManagementConfig()->SetEnabled(false);
+                NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+                fixture.State.Metadata.clear();
+            }
+        }
+        auto& runtime = fixture.Runtime;
+        ui32 heartbeatRequests = 0;
+        ui32 sessionPoisons = 0;
+        ui32 disconnections = 0;
+        bool trackDisconnects = false;
+        bool pauseRoot = false;
+        TActorId parentSession;
+        std::vector<std::unique_ptr<IEventHandle>> pausedEvents;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (pauseRoot && ev->GetRecipientRewrite() == fixture.Keepers.front()) {
+                pausedEvents.push_back(std::move(ev));
+                return false;
+            }
+            const ui32 type = ev->GetTypeRewrite();
+            if (ev->InterconnectSession && type == NStorage::TEvNodeConfigReversePush::EventType
+                && nodeId == 2 && ev->Sender.NodeId() == 1) {
+                auto& record = ev->Get<NStorage::TEvNodeConfigReversePush>()->Record;
+                if (!record.GetRejected()) {
+                    parentSession = ev->InterconnectSession;
+                    if (legacyParent) {
+                        // An old binary has neither this capability field nor QueryWorkingRoot.
+                        record.ClearSupportsDirectRootQueries();
+                    } else {
+                        UNIT_ASSERT(record.GetSupportsDirectRootQueries());
+                    }
+                }
+            }
+            if (ev->InterconnectSession && type == NStorage::TEvNodeConfigInvokeOnRoot::EventType
+                && ev->Sender.NodeId() == 2 && ev->Sender != fixture.Keepers[1]
+                && ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasQueryWorkingRoot()) {
+                ++heartbeatRequests;
+                if (legacyParent) {
+                    // Model the exact response produced by the pre-QueryWorkingRoot protocol.
+                    auto reply = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+                    reply->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+                    reply->Record.SetErrorReason("Request field not set");
+                    auto handle = std::make_unique<IEventHandle>(ev->Sender, fixture.Keepers.front(),
+                        reply.release(), 0, ev->Cookie);
+                    handle->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
+                    runtime.Send(handle.release(), nodeId);
+                    return false;
+                }
+            }
+            if (parentSession && type == TEvents::TSystem::Poison
+                && ev->GetRecipientRewrite() == parentSession) {
+                ++sessionPoisons;
+            }
+            if (trackDisconnects && type == TEvInterconnect::TEvNodeDisconnected::EventType
+                && ((nodeId == 1 && ev->Get<TEvInterconnect::TEvNodeDisconnected>()->NodeId == 2)
+                    || (nodeId == 2 && ev->Get<TEvInterconnect::TEvNodeDisconnected>()->NodeId == 1))) {
+                ++disconnections;
+            }
+            return true;
+        };
+        fixture.Start();
+        UNIT_ASSERT(parentSession);
+        UNIT_ASSERT(runtime.WrapInActorContext(fixture.Keepers[1], [&](IActor*) {
+            UNIT_ASSERT(!AppData()->FeatureFlags.GetSwitchToConfigV2());
+            UNIT_ASSERT(!AppData()->FeatureFlags.GetForceDistconfDisable());
+        }));
+        const auto scepter = QueryKeeper(runtime, fixture.Keepers.front(), true).GetScepter();
+        const auto current = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(current.GetSelfManagementConfig().GetEnabled(), selfManagement);
+        if (disabledMetadata) {
+            UNIT_ASSERT(fixture.Config.GetSelfManagementConfig().GetEnabled());
+            UNIT_ASSERT(current.GetGeneration() > fixture.Config.GetGeneration());
+        }
+        trackDisconnects = true;
+        if (pauseParent) {
+            pauseRoot = true;
+            const auto requester = runtime.Register(new TIgnoreActor, 1);
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            request->Record.MutableQueryWorkingRoot();
+            runtime.Send(new IEventHandle(fixture.Keepers.front(), requester, request.release()), 1);
+        }
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(180));
+        UNIT_ASSERT_VALUES_EQUAL(sessionPoisons, 0);
+        UNIT_ASSERT_VALUES_EQUAL(disconnections, 0);
+        if (legacyParent || !selfManagement) {
+            UNIT_ASSERT_VALUES_EQUAL(heartbeatRequests, 0);
+        } else {
+            UNIT_ASSERT_C(heartbeatRequests >= 3, "capable parents must retain the liveness watchdog");
+        }
+        UNIT_ASSERT(FindConvergedRoot(runtime, fixture.Keepers) == 1);
+        if (pauseParent) {
+            UNIT_ASSERT(!pausedEvents.empty());
+            pauseRoot = false;
+            ReplayDelayedEvents(runtime, pausedEvents);
+        }
+        const auto after = QueryKeeper(runtime, fixture.Keepers.front(), true);
+        UNIT_ASSERT(after.HasScepter());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetScepter().GetId(), scepter.GetId());
+    }
+
+    Y_UNIT_TEST(BindingToLegacyParentWithDistconfDisabled) {
+        CheckBindingLivenessPeerCapability(false, true);
+    }
+
+    Y_UNIT_TEST(BindingToLegacyParentWithDistconfEnabled) {
+        CheckBindingLivenessPeerCapability(true, true);
+    }
+
+    Y_UNIT_TEST(BindingToCapableParentWithDistconfDisabled) {
+        CheckBindingLivenessPeerCapability(false, false);
+    }
+
+    Y_UNIT_TEST(BindingToCapableParentWithDistconfEnabled) {
+        CheckBindingLivenessPeerCapability(true, false);
+    }
+
+    Y_UNIT_TEST(PausedCapableParentWithDistconfDisabledKeepsInterconnectSession) {
+        CheckBindingLivenessPeerCapability(false, false, true);
+    }
+
+    Y_UNIT_TEST(CommittedDisableWithEnabledBaseKeepsInterconnectSession) {
+        CheckBindingLivenessPeerCapability(false, false, true, true);
+    }
+
     void CheckBindingLivenessIgnoresRetiredEvents(bool rebind) {
         TCommitConfirmationFixture fixture(true);
         fixture.UseMirror3dcGroup();
@@ -5940,6 +6159,7 @@ selector_config: []
         TActorId newSession;
         bool captureOld = false;
         bool observePoison = false;
+        bool parentAdvertisedDirectRootQueries = false;
         ui32 heartbeatRequests = 0;
         ui32 sessionPoisons = 0;
         TActorId replaceEdge;
@@ -5949,6 +6169,15 @@ selector_config: []
         runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             if (HandleReplaceEvent(runtime, nodeId, *ev, replaceEdge, response)) {
                 return false;
+            }
+            if (ev->InterconnectSession && nodeId == 2
+                && ev->GetTypeRewrite() == NStorage::TEvNodeConfigReversePush::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigReversePush>()->Record;
+                if (!record.GetRejected()) {
+                    UNIT_ASSERT_C(record.GetSupportsDirectRootQueries(),
+                        "the parent did not advertise direct root query support to its child");
+                    parentAdvertisedDirectRootQueries = true;
+                }
             }
             if (ev->InterconnectSession && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType
                 && ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasQueryWorkingRoot()
@@ -5984,6 +6213,7 @@ selector_config: []
         };
         fixture.Start();
         CheckDurableConfigConverges(fixture, fixture.Config);
+        UNIT_ASSERT(parentAdvertisedDirectRootQueries);
         const auto rootBefore = QueryKeeper(runtime, fixture.Keepers.front(), true).GetScepter();
         captureOld = true;
         UNIT_ASSERT_C(SimUntil(runtime, [&] { return oldReply && !oldTimers.empty(); }, TDuration::Seconds(60)),
@@ -10860,6 +11090,28 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
                 .TargetPDiskId = NBsController::TPDiskId(2, 1),
             }),
             NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
+    }
+
+    Y_UNIT_TEST(PDiskLocationFilterRestrictsStaticPlacement) {
+        TSetup s = MakeSetup();
+        s.SetNodeRack(3, "selected-rack");
+        auto* settings = s.Config.MutableSelfManagementConfig();
+        settings->MutableGeometry()->CopyFrom(Geometry(1));
+        auto* filter = settings->AddPDiskFilter();
+        filter->AddProperty()->SetType(NKikimrBlobStorage::ROT);
+        filter->AddProperty()->MutableLocation()->SetRack("selected-rack");
+        NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+        keeper.AllocateStaticGroup({
+            .Config = &s.Config,
+            .GroupId = TGroupId::FromValue(0),
+            .GroupGeneration = 2,
+            .GroupType = TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+            .ReplacedDisks = {{TVDiskIdShort(0, 0, 0), NBsController::TPDiskId()}},
+            .BaseConfig = &s.BaseConfig,
+            .IgnoreVSlotQuotaCheck = true,
+            .AllowUnusableDisks = true,
+        });
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskPDisk().NodeId, 3u);
     }
 
     Y_UNIT_TEST(UsesValidExplicitTarget) {

@@ -1001,7 +1001,7 @@ protected:
         HTML(str) {
             PRE() {
                 str << "KQP Executer, SelfId=" << SelfId() << ' ';
-                HREF(TStringBuilder() << "/node/" << SelfId().NodeId() << "/actors/kqp_node?ex=" << SelfId() << "&view=plan")  {
+                HREF(TStringBuilder() << "../../../node/" << SelfId().NodeId() << "/actors/kqp_node?ex=" << SelfId() << "&view=plan")  {
                     str << "Plan";
                 }
                 str << Endl;
@@ -1060,7 +1060,7 @@ protected:
                                 TABLED() {str << task.Meta.ExpectedNodeId.value_or(0);}
                                 TABLED() {
                                     if (task.ComputeActorId) {
-                                        HREF(TStringBuilder() << "/node/" << task.ComputeActorId.NodeId() << "/actors/kqp_node?ca=" << task.ComputeActorId)  {
+                                        HREF(TStringBuilder() << "../../../node/" << task.ComputeActorId.NodeId() << "/actors/kqp_node?ca=" << task.ComputeActorId)  {
                                             str << task.ComputeActorId;
                                         }
                                     } else {

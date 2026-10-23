@@ -89,6 +89,7 @@ int TCommandRemoveDirectory::Run(TConfig& config) {
 
     if (Recursive) {
         const auto settings = TRemoveDirectoryRecursiveSettings()
+            .SkipMode(ERecursiveListSkipMode::System)
             .Prompt(Prompt.GetOrElse(ERecursiveRemovePrompt::Once))
             .CreateProgressBar(true);
         NStatusHelpers::ThrowOnErrorOrPrintIssues(RemoveDirectoryRecursive(driver, Path, settings));

@@ -18,8 +18,7 @@ const THashSet<TStringBuf> SystemReservedNames = {
 }
 
 bool IsSystemName(const TStringBuf name) {
-    return SystemReservedNames.contains(name)
-        || name.StartsWith("~");
+    return SystemReservedNames.contains(name);
 }
 
 bool IsSystemDir(const NScheme::TSchemeEntry& entry) {
@@ -32,6 +31,26 @@ bool IsSystemDir(const NScheme::TSchemeEntry& entry) {
 
 bool IsSystemObject(const NScheme::TSchemeEntry& entry) {
     return IsSystemDir(entry) || entry.Type == NScheme::ESchemeEntryType::SysView;
+}
+
+bool IsBackupName(const TStringBuf name) {
+    return name.StartsWith(TEMPORARY_BACKUP_DIR_PREFIX);
+}
+
+bool IsBackupDir(const NScheme::TSchemeEntry& entry) {
+    return entry.Type == NScheme::ESchemeEntryType::Directory && IsBackupName(entry.Name);
+}
+
+bool IsInternalName(const TStringBuf name) {
+    return IsSystemName(name) || IsBackupName(name);
+}
+
+bool IsInternalDir(const NScheme::TSchemeEntry& entry) {
+    return IsSystemDir(entry) || IsBackupDir(entry);
+}
+
+bool IsInternalObject(const NScheme::TSchemeEntry& entry) {
+    return IsSystemObject(entry) || IsBackupDir(entry);
 }
 
 }

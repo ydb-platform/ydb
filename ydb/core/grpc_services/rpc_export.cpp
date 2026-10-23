@@ -436,7 +436,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                     const NSchemeCache::TSchemeCacheNavigate::EKind kind = child.Kind;
                     if (isRoot && kind == NSchemeCache::TSchemeCacheNavigate::KindPath) {
                         // Skip children that we don't want to export
-                        if (child.Name.StartsWith("~")
+                        if (child.Name.StartsWith("~backup_")
                             || child.Name.StartsWith(".sys")
                             || child.Name.StartsWith(".tmp")
                             || child.Name.StartsWith(".metadata")

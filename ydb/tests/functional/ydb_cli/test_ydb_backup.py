@@ -361,6 +361,8 @@ class BaseTestBackupInFiles(BaseCliTestWithDatabase):
                     has_items("scheme.pb", "permissions.pb")
                 )
 
+        return backup_files_dir
+
     def scheme_listdir(self, path):
         return [
             child.name
@@ -416,6 +418,44 @@ class TestBackupSingleNotNull(BaseTestBackupInFiles):
             [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
             contains_inanyorder("table", ".metadata", ".sys")
         )
+
+
+class TestBackupTildeDirectories(BaseTestBackupInFiles):
+    @pytest.mark.parametrize("consistency_level", ["database", "table"])
+    def test_backup_restore(self, consistency_level):
+        session = self.driver.table_client.session().create()
+        folder = f"folder_{consistency_level}"
+        source_path = f"/Root/{folder}"
+        user_directories = ["~my_directory", "~backup", "user~backup_12345"]
+        backup_directory = "~backup_12345"
+        table_paths = ["table"] + [f"{directory}/table" for directory in user_directories]
+        self.driver.scheme_client.make_directory(source_path)
+        for directory in user_directories + [backup_directory]:
+            self.driver.scheme_client.make_directory(f"{source_path}/{directory}")
+        for path in table_paths + [f"{backup_directory}/table"]:
+            create_table_with_data(session, f"{folder}/{path}")
+        root_entries = [child.name for child in self.driver.scheme_client.list_directory("/Root").children]
+
+        backup_files_dir = self.create_backup(folder, table_paths, True, ["--consistency-level", consistency_level])
+
+        assert_that(fs_recursive_list(backup_files_dir), contains_inanyorder(*(user_directories + table_paths)))
+        assert_that(
+            is_data_the_same(session, f"{source_path}/table", f"{source_path}/{backup_directory}/table"),
+            is_(True)
+        )
+        assert_that(
+            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
+            contains_inanyorder(*root_entries)
+        )
+
+        restored_path = f"/Root/restored_{consistency_level}"
+        self.execute_ydb_cli_command(["tools", "restore", "--path", restored_path, "--input", backup_files_dir])
+        assert_that(self.scheme_listdir(restored_path), contains_inanyorder("table", *user_directories))
+        for path in table_paths:
+            assert_that(
+                are_tables_the_same(session, self.driver.scheme_client, f"{source_path}/{path}", f"{restored_path}/{path}"),
+                is_(True)
+            )
 
 
 class TestBaseSingleFromDifPlaces(BaseTestBackupInFiles):

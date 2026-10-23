@@ -237,12 +237,12 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         Send(YdbProxy, new TEvYdbProxy::TEvListDirectoryRequest(it->second.first, {}), 0, it->first);
     }
 
-    static bool IsSystemObject(const NYdb::NScheme::TSchemeEntry& entry) {
+    static bool IsInternalObject(const NYdb::NScheme::TSchemeEntry& entry) {
         if (entry.Type != NYdb::NScheme::ESchemeEntryType::Directory) {
             return false;
         }
 
-        return entry.Name.starts_with("~")
+        return entry.Name.starts_with("~backup_")
             || entry.Name.starts_with(".sys")
             || entry.Name.starts_with(".tmp")
             || entry.Name.starts_with(".metadata")
@@ -270,7 +270,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 switch (child.Type) {
                 case NYdb::NScheme::ESchemeEntryType::SubDomain:
                 case NYdb::NScheme::ESchemeEntryType::Directory:
-                    if (!IsSystemObject(child)) {
+                    if (!IsInternalObject(child)) {
                         ListDirectory(std::make_pair(
                             path.first  + '/' + child.Name,
                             path.second + '/' + child.Name));

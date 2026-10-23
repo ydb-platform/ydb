@@ -6,12 +6,23 @@
 
 namespace NYdb::NConsoleClient {
 
+enum class ERecursiveListSkipMode {
+    // Apply no system/backup exclusions (e.g. include .sys and ~backup_12345).
+    // Other traversal filters still apply.
+    None,
+    // Skip system directories (.sys, .metadata, .tmp, .backups) and SysView entries.
+    System,
+    // Skip system objects and temporary backup directories starting with ~backup_
+    // (e.g. ~backup_12345). Other ~-prefixed names are traversed.
+    Internal,
+};
+
 struct TRecursiveListSettings {
     using TSelf = TRecursiveListSettings;
     using TFilterOp = std::function<bool(const NScheme::TSchemeEntry&)>;
 
     FLUENT_SETTING_DEFAULT(NScheme::TListDirectorySettings, ListDirectorySettings, {});
-    FLUENT_SETTING_DEFAULT(bool, SkipSys, true);
+    FLUENT_SETTING_DEFAULT(ERecursiveListSkipMode, SkipMode, ERecursiveListSkipMode::Internal);
     FLUENT_SETTING_DEFAULT(bool, SkipOldSecrets, true);
     FLUENT_SETTING_DEFAULT(TFilterOp, Filter, &NopFilter);
 

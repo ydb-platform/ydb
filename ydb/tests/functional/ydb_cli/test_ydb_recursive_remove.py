@@ -94,6 +94,28 @@ class TestRecursiveRemove:
                 only_contains(".metadata", ".sys"),
             )
 
+    @pytest.mark.parametrize(
+        "path", [".", "~root", "~backup_root"], ids=["database_root", "tilde_directory", "backup_directory"]
+    )
+    def test_tilde_names(self, ydb_cluster, ydb_database, ydb_client, ydb_client_session, path):
+        database_path = ydb_database
+        driver = ydb_client(database_path)
+        session_pool = ydb_client_session(database_path)
+        prefix = "" if path == "." else f"{path}/"
+        with session_pool.checkout() as session:
+            create_table(session, f"{prefix}~table")
+            create_table(session, f"{prefix}~dir/~nested/~table")
+            create_table(session, f"{prefix}~backup_12345/~nested/~table")
+            driver.scheme_client.make_directory(f"{database_path}/{prefix}~empty")
+            driver.scheme_client.make_directory(f"{database_path}/{prefix}~backup_empty")
+            execute_ydb_cli_command(
+                ydb_cluster.nodes[1], database_path, ["scheme", "rmdir", "--recursive", "--force", path]
+            )
+            assert_that(
+                [child.name for child in driver.scheme_client.list_directory(database_path).children],
+                only_contains(".metadata", ".sys"),
+            )
+
     def test_various_scheme_objects(self, ydb_cluster, ydb_database, ydb_client, ydb_client_session):
         database_path = ydb_database
         driver = ydb_client(database_path)

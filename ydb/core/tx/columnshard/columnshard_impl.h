@@ -622,7 +622,22 @@ private:
 
     void UpdateIndexCounters();
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);
-    ui64 MemoryUsage() const;
+
+    // Preserve the legacy estimate: container records and transaction/table metadata only.
+    // Payloads, allocator overhead, GLM allocations and dedicated caches are not covered.
+    struct TMetadataMemoryUsage {
+        ui64 TransactionsBytes = 0;
+        ui64 ScanRecordsBytes = 0;
+        ui64 WaitingScanRecordsBytes = 0;
+        ui64 TablesBytes = 0;
+
+        ui64 GetTotalBytes() const {
+            return TransactionsBytes + ScanRecordsBytes + WaitingScanRecordsBytes + TablesBytes;
+        }
+    };
+
+    TMetadataMemoryUsage GetMetadataMemoryUsage() const;
+    void UpdateMetadataMemoryCounters(const TMetadataMemoryUsage& memory);
 
     void SendPeriodicStats(bool);
     void ScheduleBaseStatistics();

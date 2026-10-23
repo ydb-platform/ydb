@@ -52,6 +52,13 @@ enum ESimpleCounters {
     COUNTER_TX_COMPLETE_LAG = 42                            [(CounterOpts) = {Name: "TxCompleteLag"}];
     COUNTER_DATA_BYTES = 43                                 [(CounterOpts) = {Name: "DataBytes"}];
     COUNTER_INDEX_BYTES = 44                                [(CounterOpts) = {Name: "IndexBytes"}];
+
+    // The legacy metadata estimate, not resident memory or the GLM/cache consumers.
+    COUNTER_METADATA_MEMORY_ESTIMATED_BYTES = 45            [(CounterOpts) = {Name: "MetadataMemory/EstimatedBytes"}];
+    COUNTER_METADATA_TX_MEMORY_ESTIMATED_BYTES = 46         [(CounterOpts) = {Name: "MetadataMemory/TransactionsEstimatedBytes"}];
+    COUNTER_METADATA_SCAN_MEMORY_ESTIMATED_BYTES = 47       [(CounterOpts) = {Name: "MetadataMemory/ScanRecordsEstimatedBytes"}];
+    COUNTER_METADATA_WAITING_SCAN_MEMORY_ESTIMATED_BYTES = 48 [(CounterOpts) = {Name: "MetadataMemory/WaitingScanRecordsEstimatedBytes"}];
+    COUNTER_METADATA_TABLE_MEMORY_ESTIMATED_BYTES = 49      [(CounterOpts) = {Name: "MetadataMemory/TablesEstimatedBytes"}];
 }
 
 enum ECumulativeCounters {

@@ -12,6 +12,7 @@ import("//build/gn/protobuf.gni")
 import("//build/gn/python.gni")
 import("//build/gn/resources.gni")
 import("//build/gn/rodata.gni")
+import("//build/gn/pch/groups.gni")
 import("//build/gn/pch/targets.gni")
 
 import("//build/gn/config/${host_os}/deps.gni")
@@ -46,12 +47,10 @@ declare_args() {
   # precompiled headers:
   #   "per_target" -- each target of pch_targets (//build/gn/pch/targets.gni)
   #     has its own, //build/gn/pch/<dir>/<name>.h;
-  #   "global" -- //build/gn/pch:global for every C++ library(), program and
-  #     test but those of global_pch_exclude, //build/gn/pch:contrib (the
-  #     C++ standard library) for every contrib_library() but those of
-  #     contrib_pch_exclude and for contrib_pch_targets, and for the targets
-  #     of pch_targets their own on top of it (chained); the build tools have
-  #     none, see tool_toolchain;
+  #   "global" -- //build/gn/pch:pch_<name> for the C++ targets of each
+  #     group of pch_groups (//build/gn/pch/groups.gni, written by
+  #     build/gn/scripts/pch_update.py), none for the rest; the build tools
+  #     have none, see tool_toolchain;
   #   "none"
   pch_mode = "none"
 

@@ -244,8 +244,7 @@ template("linked_executable") {
     }
 
     # as library() does (//build/gn/base.gni)
-    if ((pch_mode == "per_target" || (pch_mode == "global" && current_toolchain == default_toolchain)) &&
-        label_matches(get_label_info(":$_exe", "label_no_toolchain"), pch_targets)) {
+    if (pch_mode == "per_target" && label_matches(get_label_info(":$_exe", "label_no_toolchain"), pch_targets)) {
       precompiled_header = "pch.h"
       precompiled_source = "//build/gn/pch/" + rebase_path(".", "//") + "/$_exe.h"
       configs += [ "//build/gn/config:pch" ]
@@ -253,12 +252,11 @@ template("linked_executable") {
     if (pch_mode == "global" && current_toolchain == default_toolchain && defined(sources) &&
         filter_include(sources, [ "*.cpp", "*.cc", "*.cxx" ]) != []) {
       _pch_label = get_label_info(":$_exe", "label_no_toolchain")
-      if (label_matches(_pch_label, contrib_pch_targets)) {
-        if (!label_matches(_pch_label, contrib_pch_exclude)) {
-          deps += [ "//build/gn/pch:contrib" ]
+      not_needed([ "_pch_label" ])
+      foreach(_group, pch_groups) {
+        if (label_matches(_pch_label, _group.targets)) {
+          deps += [ "//build/gn/pch:pch_${_group.name}" ]
         }
-      } else if (!label_matches(_pch_label, global_pch_exclude)) {
-        deps += [ "//build/gn/pch:global" ]
       }
     }
   }

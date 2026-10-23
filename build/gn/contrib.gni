@@ -135,13 +135,15 @@ template("contrib_library") {
                                               get_label_info(":$target_name", "label_no_toolchain") ]
         }
 
-        # as library() does (//build/gn/base.gni), but the global
-        # precompiled header: no util here
+        # as library() does (//build/gn/base.gni)
         if (pch_mode == "global" && current_toolchain == default_toolchain && defined(sources) &&
             filter_include(sources, [ "*.cpp", "*.cc", "*.cxx" ]) != []) {
             _pch_label = get_label_info(":$target_name", "label_no_toolchain")
-            if (label_matches(_pch_label, contrib_pch_targets) && !label_matches(_pch_label, contrib_pch_exclude)) {
-                deps += [ "//build/gn/pch:contrib" ]
+            not_needed([ "_pch_label" ])
+            foreach(_group, pch_groups) {
+                if (label_matches(_pch_label, _group.targets)) {
+                    deps += [ "//build/gn/pch:pch_${_group.name}" ]
+                }
             }
         }
     }

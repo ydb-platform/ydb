@@ -10,6 +10,12 @@ template("shared_pch") {
     cflags = [ "-w" ]
   }
 
+  config("${_name}_group_config") {
+    visibility = [ ":*" ]
+    defines = invoker.defines
+    include_dirs = invoker.include_dirs
+  }
+
   source_set(_compile) {
     visibility = [ ":*" ]
     sources = [ invoker.source ]
@@ -18,8 +24,13 @@ template("shared_pch") {
       "c++-header",
       "-fpch-instantiate-templates",
     ]
-    configs -= [ "//build/gn/config:yql_abi" ]
-    configs += [ ":${_name}_private_config" ]
+    if (defined(invoker.cflags)) {
+      cflags = invoker.cflags
+    }
+    configs += [
+      ":${_name}_private_config",
+      ":${_name}_group_config",
+    ]
     deps = []
     deps = platform_deps + [ "//contrib/libs/cxxsupp/libcxx" ]
     if (defined(invoker.deps)) {
@@ -72,28 +83,12 @@ template("shared_pch") {
   }
 }
 
-shared_pch("global") {
-  source = "global/global.cc"
-  deps = [
-    "//contrib/libs/protobuf",
-    "//contrib/restricted/abseil-cpp",
-    "//contrib/restricted/abseil-cpp-tstring",
-    "//library/cpp/lwtrace/protos:protos_codegen",
-    "//ydb/core/base/generated:generated_gen",
-    "//ydb/core/control/lib/generated:generated_gen",
-    "//ydb/core/protos:protos_codegen",
-    "//ydb/core/scheme/protos:protos_codegen",
-    "//ydb/library/aclib/protos:protos_codegen",
-    "//ydb/library/actors/protos:protos_codegen",
-    "//ydb/library/login/protos:protos_codegen",
-    "//ydb/library/mkql_proto/protos:protos_codegen",
-    "//ydb/library/services:services_codegen",
-    "//ydb/public/api/protos:protos_codegen",
-    "//yql/essentials/public/issue/protos:protos_codegen",
-    "//yql/essentials/public/types:types_codegen",
-  ]
-}
-
-shared_pch("contrib") {
-  source = "contrib/contrib.cc"
+foreach(_group, pch_groups) {
+  shared_pch("pch_${_group.name}") {
+    source = "${_group.name}/pch.cc"
+    deps = _group.deps
+    cflags = _group.cflags
+    defines = _group.defines
+    include_dirs = _group.include_dirs
+  }
 }

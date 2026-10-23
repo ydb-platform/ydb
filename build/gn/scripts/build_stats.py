@@ -874,7 +874,7 @@ def report(db, run, low_spans=None, top=30):
         if r["pch_unknown"]:
             w("")
             w("**%d TUs with PCH have no reference** (never compiled without PCH, no ratio of their target): "
-              "their gain is not counted. Record a build without PCH (`pch_mode = "none"`, another build dir) "
+              "their gain is not counted. Record a build without PCH (`pch_mode = \"none\"`, another build dir) "
               "and load it with `baseline`." % r["pch_unknown"])
         w("")
         per = db.c.execute("SELECT target, tus, build_ms, extra_ms, saved_ms FROM pch_targets WHERE run = ?"

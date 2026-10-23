@@ -53,6 +53,12 @@ class Paths(object):
         self.build_dir = os.path.realpath(build_dir)
         self.source_root = os.path.realpath(source_root) if source_root else None
         self.sysroot = os.path.realpath(sysroot) if sysroot else None
+        # the source root as the build names it, e.g. through a symlink
+        self.source_roots = [self.source_root] if source_root else []
+        if source_root:
+            named = os.path.normpath(os.path.join(self.build_dir, source_root))
+            if named != self.source_root:
+                self.source_roots.append(named)
         self._cache = {}
 
     def normalize(self, path):
@@ -62,8 +68,9 @@ class Paths(object):
             return result
         p = path if os.path.isabs(path) else os.path.join(self.build_dir, path)
         p = os.path.normpath(p)
-        if self.source_root and p.startswith(self.source_root + os.sep):
-            result = p[len(self.source_root) + 1:]
+        root = next((r for r in self.source_roots if p.startswith(r + os.sep)), None)
+        if root:
+            result = p[len(root) + 1:]
         elif p.startswith(self.build_dir + os.sep):
             result = "<out>/" + p[len(self.build_dir) + 1:]
         elif self.sysroot and p.startswith(self.sysroot + os.sep):
@@ -153,7 +160,26 @@ def edge_command(edge, rules):
             return expand(rule[name], lookup)
         return edge.scope.lookup(name)
     # only the compiler invocation: post-processing like "&& gzip <trace>" doesn't affect the object
-    return expand(rule.get("command", ""), lookup).split(" && ")[0]
+    return _first_command(expand(rule.get("command", ""), lookup))
+
+
+def _first_command(command):
+    """The command up to the first " && " of the shell -- not one inside
+    quotes, $(...) or {...}, as a cc_wrapper may have."""
+    depth, quote = 0, None
+    for i, c in enumerate(command):
+        if quote:
+            if c == quote:
+                quote = None
+        elif c in "'\"":
+            quote = c
+        elif c in "({":
+            depth += 1
+        elif c in ")}":
+            depth = max(depth - 1, 0)
+        elif depth == 0 and command.startswith(" && ", i):
+            return command[:i]
+    return command
 
 
 def _norm(path):
@@ -415,8 +441,34 @@ def load_trace(job):
     details = collections.defaultdict(lambda: collections.defaultdict(lambda: [0, 0]))
     execute = 0
 
+    def add_source(detail, ts, dur):
+        path = _worker_paths.normalize(detail)
+        idx = header_index.get(path)
+        if idx is None:
+            idx = header_index[path] = len(header_names)
+            header_names.append(path)
+        h_ids.append(idx)
+        h_ts.append(ts)
+        h_dur.append(dur)
+
+    # newer clang writes Source as async begin/end pairs (the end without the
+    # file, all of the same id), each pair as the file is left: an end closes
+    # the latest begin
+    source_begins = []
+    orphan_ends = 0
     for e in events:
-        if e.get("ph") != "X":
+        ph = e.get("ph")
+        if ph == "b" and e.get("name") == "Source":
+            source_begins.append((e["ts"], e.get("args", {}).get("detail", "")))
+            continue
+        if ph == "e" and e.get("name") == "Source":
+            if source_begins:
+                ts, detail = source_begins.pop()
+                add_source(detail, ts, e["ts"] - ts)
+            else:
+                orphan_ends += 1
+            continue
+        if ph != "X":
             continue
         name = e["name"]
         dur = e.get("dur", 0)
@@ -426,14 +478,7 @@ def load_trace(job):
         if name == "ExecuteCompiler":
             execute = max(execute, dur)
         elif name == "Source":
-            path = _worker_paths.normalize(e["args"]["detail"])
-            idx = header_index.get(path)
-            if idx is None:
-                idx = header_index[path] = len(header_names)
-                header_names.append(path)
-            h_ids.append(idx)
-            h_ts.append(e["ts"])
-            h_dur.append(dur)
+            add_source(e["args"]["detail"], e["ts"], dur)
         elif name in TEMPLATE_EVENTS or name in FUNCTION_EVENTS:
             detail = e.get("args", {}).get("detail")
             if not detail:
@@ -459,6 +504,8 @@ def load_trace(job):
         "headers": (header_names, h_ids.tobytes(), h_ts.tobytes(), h_dur.tobytes()),
         "families": dict((k, tuple(v)) for k, v in families.items()),
         "details": top_details,
+        # Source begins without an end and ends without a begin
+        "source_unbalanced": len(source_begins) + orphan_ends,
     }, None
 
 

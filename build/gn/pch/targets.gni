@@ -11,38 +11,9 @@ pch_targets = [
   "//yt/yt/core:core",
 ]
 
-# the precompiled header of contrib (//build/gn/pch:contrib, the C++ standard
-# library) instead of the global one: contrib/, what is contrib by its code,
-# the code bases below ydb that its headers clash with, the targets defining
-# specializations (Out<> ...) the global one instantiates
-contrib_pch_targets = [
-  "//contrib/*",
-  "//ydb/core/protos:protos",
-  "//ydb/library/yql/udfs/common/clickhouse/*",
-  "//util/*",
-  "//yql/essentials/*",
-  "//yt/*",
-]
-
-contrib_pch_exclude = [
-  "//contrib/libs/farmhash:*",
-  "//contrib/libs/jemalloc:*",
-  "//contrib/libs/tbb:*",
-  "//yql/essentials/parser/pg_wrapper/*",
-  "//yt/yt/core:*",
-]
-
-global_pch_exclude = [
-  "//library/cpp/digest/argonish/internal/proxies:avx2",
-  "//ydb/library/arrow_clickhouse/*",
-  "//ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/exec/pack_tuple:*",
-  "//ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/exec/runtime_dispatching:AVX2_algo",
-  "//ydb/library/yql/dq/comp_nodes/hash_join_utils:*",
-]
-
 # targets whose enum serialization (serialize_enum_headers) defines Out<> ... of
-# an enum the global precompiled header instantiates: their <target>_enum_objs
-# are compiled without it
+# an enum the precompiled header of their group (//build/gn/pch/groups.gni)
+# instantiates: their <target>_enum_objs are compiled without it
 enum_serialization_pch_exclude = [
   "//ydb/core/base:base",
   "//ydb/library/actors/core:core",

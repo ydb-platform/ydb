@@ -342,6 +342,12 @@ void TDnsCache::WaitTask(TAtomic& flag) {
                     continue;
                 }
                 TGuard<TMutex> lock(AresMtx);
+                if ((pfd[i].events & POLLIN) && (pfd[i].revents & (POLLHUP | POLLERR))) {
+                    pfd[i].revents |= POLLIN;
+                }
+                if ((pfd[i].events & POLLOUT) && (pfd[i].revents & (POLLHUP | POLLERR))) {
+                    pfd[i].revents |= POLLOUT;
+                }
                 ares_process_fd(chan,
                                 pfd[i].revents & (POLLRDNORM | POLLIN)
                                     ? pfd[i].fd

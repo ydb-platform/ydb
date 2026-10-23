@@ -445,8 +445,6 @@ message TFeatureFlags {
     // Enables memory of table partitions split/merge demands
     optional bool EnableSplitMergeDemandTracking = 360 [default = false];
     optional bool EnableStreamingQuerySchemeOperations = 361 [default = true];
-    // Enables HNSW index creation and in-memory HNSW acceleration.
-    optional bool EnableHnswIndex = 362 [default = false];
     optional bool EnableKeyValueRequestInFlightLimit = 363 [default = false];
     // Use optimized compaction selection strategy.
     optional bool EnableHullCompStorageRatioOptimization = 364 [default = false];
@@ -460,4 +458,6 @@ message TFeatureFlags {
     optional bool EnableClientModifications = 368 [default = true];
     optional bool EnableCompileCacheV2 = 369 [default = false];
     optional bool EnableComputeSchedulerMemory = 370 [default = true, (RequireRestart) = true];
+    // Enables HNSW index creation and in-memory HNSW acceleration.
+    optional bool EnableHnswIndex = 371 [default = false];
 }

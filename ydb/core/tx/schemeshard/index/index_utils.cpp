@@ -1139,7 +1139,8 @@ TVector<NKikimrSchemeOp::TTableDescription> CalcIndexImplTables(
         impl.push_back(CalcImplTableDesc(baseTable, implTableColumns, userIndexDesc, uniqueKeySize));
         break;
     }
-    case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+    case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+    case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
         const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
         NKikimrSchemeOp::TTableDescription levelTableDesc, postingTableDesc, prefixTableDesc;
         if (static_cast<int>(indexDesc.IndexImplTableDescriptionsSize()) == 2 + static_cast<int>(prefixVectorIndex)) {

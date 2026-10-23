@@ -164,7 +164,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, HNSWEfSearch).Lower(1U).Upper(1000U);
     REGISTER_SETTING(*this, HNSWUseClusterRouting);
     REGISTER_SETTING(*this, HNSWPreciseShardRouting);
-    REGISTER_SETTING(*this, HNSWAdaptiveProbeRatio).Validator([](const TString&, double value) {
+    REGISTER_SETTING(*this, HNSWAdaptiveProbeRatio).Validator([](const TKikimrSettings&, const TString&, double value) {
         if (!std::isfinite(value) || (value != 0 && (value < 1 || value > 1000000))) {
             throw yexception() << "HNSWAdaptiveProbeRatio must be 0 or in 1..1000000";
         }

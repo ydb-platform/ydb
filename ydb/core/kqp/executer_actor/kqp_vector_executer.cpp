@@ -234,8 +234,10 @@ bool TKqpVectorExecution::Poll(NYql::NDq::TDqSerializedBatch& result) {
     // sort unless these special values require it.
     NMiniKQL::TUnboxedValueVector ordered;
     batch.ForEachRow([&](const NUdf::TUnboxedValue& row) { ordered.emplace_back(row); });
-    const auto less = [index = Settings.GetScoreColumnIndex()](const auto& left, const auto& right) {
-        return NMiniKQL::CompareValues(NUdf::EDataSlot::Float, true, true,
+    const bool ascending = Settings.GetIndexSettings().metric()
+        != Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
+    const auto less = [index = Settings.GetScoreColumnIndex(), ascending](const auto& left, const auto& right) {
+        return NMiniKQL::CompareValues(NUdf::EDataSlot::Float, ascending, true,
             left.GetElement(index), right.GetElement(index)) < 0;
     };
     if (!std::is_sorted(ordered.begin(), ordered.end(), less)) {

@@ -144,9 +144,11 @@ void TryCompileVectorExecution(const NYql::NNodes::TKqpPhysicalTx& tx, NKqpProto
         return;
     }
     const auto& search = stage.GetInputs(0).GetVectorSearch();
+    const auto metric = search.GetIndexSettings().metric();
+    const bool ascending = metric == Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
     if (search.GetHasPrefix() || !search.HasScoreColumnName()
         || search.GetIndexSettings().vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
-        || search.GetIndexSettings().metric() != Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN) {
+        || (!ascending && metric != Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT)) {
         return;
     }
     const auto sourceProgram = tx.Stages().Item(0).Program();
@@ -186,7 +188,8 @@ void TryCompileVectorExecution(const NYql::NNodes::TKqpPhysicalTx& tx, NKqpProto
     const auto* projection = body->Child(1);
     if (!top->IsCallable("TopSort") || top->ChildrenSize() != 4
         || top->Child(0) != searchProgram.Args().Arg(0).Raw()
-        || !top->Child(2)->IsCallable("Bool") || !top->Child(2)->Child(0)->IsAtom("true")
+        || !top->Child(2)->IsCallable("Bool")
+        || !top->Child(2)->Child(0)->IsAtom(ascending ? "true" : "false")
         || !projection->IsLambda() || projection->Child(0)->ChildrenSize() != 1) {
         return;
     }

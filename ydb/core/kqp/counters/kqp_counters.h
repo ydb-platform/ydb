@@ -455,6 +455,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupIteratorTotalQuotaBytesInFlight;
     ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupIteratorTotalQuotaBytesExceeded;
     ::NMonitoring::TDynamicCounters::TCounterPtr IteratorDeliveryProblems;
+    ::NMonitoring::TDynamicCounters::TCounterPtr VectorScoreRows;
+    ::NMonitoring::TDynamicCounters::TCounterPtr VectorScoreEmbeddingPayloadBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr VectorScoreOmittedRows;
 
     // Lock counters
     ::NMonitoring::TDynamicCounters::TCounterPtr SentLocks;

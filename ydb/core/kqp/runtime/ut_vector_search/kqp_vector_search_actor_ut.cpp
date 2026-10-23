@@ -1567,6 +1567,36 @@ namespace NKikimr::NKqp {
             UNIT_ASSERT_VALUES_EQUAL(env.Rows()[0].size(), 2);
         }
 
+        Y_UNIT_TEST(InnerProductScoresBoundCandidatesAcrossBatches) {
+            auto settings = TSettingsBuilder().Covered().InnerProductMetric().FullRangeHnsw().TopK(2).Build();
+            settings.MutableOutputColumns()->RemoveLast();
+            settings.MutablePostingOutputColumnIds()->RemoveLast();
+            settings.SetScoreColumnIndex(1);
+            FillColumn(*settings.AddOutputColumns(), 0, "score", NScheme::NTypeIds::Float);
+            settings.AddPostingOutputColumnIds(0);
+            settings.SetPostingEmbeddingColumnId(PostingEmbColumnId);
+            FillColumn(*settings.MutableEmbeddingColumn(), MainEmbColumnId, "emb", NScheme::NTypeIds::String);
+            TSearchEnv env(settings);
+            env.Poll();
+            auto& posting = env.Read(EReadKind::Posting);
+            UNIT_ASSERT(env.ObservedRead(EReadKind::Posting)->Settings.GetVectorTopK().GetOmitVectorPayload());
+            // Scores are SQL similarities. Later batches must evict worse
+            // negative similarities even when the bounded heap is already full.
+            posting.Push({{ui64(1), NullCell, -4.0f}, {ui64(2), NullCell, -1.0f}}, false);
+            env.Wake(posting);
+            posting.Push({{ui64(3), NullCell, 3.0f}, {ui64(4), NullCell, 2.0f}}, false);
+            env.Wake(posting);
+            posting.Push({{ui64(5), NullCell, 2.0f}, {ui64(6), NullCell, 0.0f}}, true);
+            env.Wake(posting);
+            UNIT_ASSERT(env.Finished());
+            const auto keys = env.RowKeys();
+            UNIT_ASSERT_VALUES_EQUAL(keys.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(keys[0], "3");
+            UNIT_ASSERT(keys[1] == "4" || keys[1] == "5");
+            UNIT_ASSERT_VALUES_EQUAL(env.Rows()[0][1], "3");
+            UNIT_ASSERT_VALUES_EQUAL(env.Rows()[1][1], "2");
+        }
+
         Y_UNIT_TEST(CoveredScoreFirstUsesCanonicalOutputPositions) {
             auto settings = TSettingsBuilder().Covered().EuclideanMetric().FullRangeHnsw().TopK(2).Build();
             settings.ClearOutputColumns();

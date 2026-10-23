@@ -1224,7 +1224,12 @@ namespace NKikimr {
             void AddCandidate(NUdf::TUnboxedValue& value) {
                 double distance = std::numeric_limits<double>::max();
                 if (Settings.HasScoreColumnIndex()) {
-                    distance = value.GetElement(CoveredScorePosition).Get<float>();
+                    const float score = value.GetElement(CoveredScorePosition).Get<float>();
+                    // Output rows hold SQL similarity, while the candidate
+                    // heap consistently keeps the smallest canonical distance.
+                    distance = Settings.GetIndexSettings().metric()
+                        == Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT
+                        ? -double(score) : double(score);
                 } else {
                     auto embedding = value.GetElement(Settings.GetVectorColumnIndex());
                     if (embedding.IsString() || embedding.IsEmbedded()) {

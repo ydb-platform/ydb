@@ -3,12 +3,17 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
+#include <util/datetime/base.h>
+
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpSpecializedVectorExecution) {
-    Y_UNIT_TEST(MatchesGenericAndFallsBack) {
+    void CheckMatchesGenericAndFallsBack(bool innerProduct) {
         auto settings = TKikimrSettings().SetEnableHnswIndex(true).SetNeedsStatsCollectors(true)
             .SetEnableForceFollowers(true).SetUseRealThreads(false);
+        // The level cache retains 10 MiB reservations under its own transaction.
+        // Exclude it when asserting that per-query allocations return to zero.
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpLevelCacheMaxSizeBytes(0);
         // Force allocator growth so the resource cleanup assertions cover both
         // the initial reservation and memory granted while a query is running.
         settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1_KB);
@@ -34,9 +39,16 @@ Y_UNIT_TEST_SUITE(KqpSpecializedVectorExecution) {
             (0,Untag(Knn::ToBinaryStringFloat([-2.0f,0.0f]),"FloatVector"),"zero"),
             (UNWRAP(CAST("18446744073709551615" AS Uint64)),Untag(Knn::ToBinaryStringFloat([4.0f,0.0f]),"FloatVector"),"max");
         )");
+        if (innerProduct) {
+            // Nonzero, fractional targets and signed documents keep rankings
+            // distinct while exercising both signs of the similarity score.
+            write(R"(UPSERT INTO Vectors (id,emb) VALUES
+                (1,Untag(Knn::ToBinaryStringFloat([0.5f,0.25f]),"FloatVector"));)");
+        }
         scheme(R"(ALTER TABLE Vectors SET (READ_REPLICAS_SETTINGS="PER_AZ:1"))");
-        scheme(R"(ALTER TABLE Vectors ADD INDEX idx GLOBAL USING hnsw ON(emb)
-            WITH(distance=euclidean,vector_type="float",vector_dimension=2,levels=1,clusters=1,min_rows=1))");
+        scheme(TStringBuilder() << "ALTER TABLE Vectors ADD INDEX idx GLOBAL USING hnsw ON(emb) WITH ("
+            << (innerProduct ? "similarity=inner_product" : "distance=euclidean")
+            << ",vector_type=\"float\",vector_dimension=2,levels=1,clusters=1,min_rows=1)");
         const TString posting = "/Root/Vectors/idx/indexImplPostingTable";
         WaitForCompaction(&kikimr.GetTestServer(), posting);
         scheme("ALTER TABLE `" + posting + "` SET (READ_REPLICAS_SETTINGS=\"PER_AZ:1\")");
@@ -45,14 +57,37 @@ Y_UNIT_TEST_SUITE(KqpSpecializedVectorExecution) {
         auto started = group->GetCounter("Vector/SpecializedStarted", true);
         auto completed = group->GetCounter("Vector/SpecializedCompleted", true);
         auto fallback = group->GetCounter("Vector/SpecializedFallback", true);
+        auto waitForResources = [&](i64 memoryLimit, bool allResources) {
+            // gRPC cancellation and deferred destruction also run on real
+            // threads, so a simulated-time timeout can expire before they run.
+            const auto released = [&] {
+                return group->GetCounter("RM/Memory", false)->Val() <= memoryLimit
+                    && (!allResources || (group->GetCounter("IteratorReads/ReadActorCount", false)->Val() == 0
+                        && group->GetCounter("RM/ComputeActors", false)->Val() == 0
+                        && group->GetCounter("RM/ExternalMemory", false)->Val() == 0));
+            };
+            const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+            while (!released() && TInstant::Now() < deadline) {
+                runtime->SimulateSleep(TDuration::MilliSeconds(1));
+                Sleep(TDuration::MilliSeconds(1));
+            }
+            UNIT_ASSERT_C(released(), TStringBuilder() << "Resource cleanup timed out: reads="
+                << group->GetCounter("IteratorReads/ReadActorCount", false)->Val()
+                << " compute=" << group->GetCounter("RM/ComputeActors", false)->Val()
+                << " external=" << group->GetCounter("RM/ExternalMemory", false)->Val()
+                << " memory=" << group->GetCounter("RM/Memory", false)->Val()
+                << " limit=" << memoryLimit);
+        };
         auto client = kikimr.GetQueryClient();
-        auto sql = [](bool specialized, const TString& projection, const TString& tail) {
+        const TString metricFunction = innerProduct ? "Knn::InnerProductSimilarity" : "Knn::EuclideanDistance";
+        auto sql = [innerProduct, metricFunction](bool specialized, const TString& projection, const TString& tail) {
             return TStringBuilder() << "PRAGMA ydb.HNSWReturnScores='true'; "
                 << "PRAGMA ydb.HNSWSpecializedExecution='" << (specialized ? "true" : "false") << "'; "
                 << "PRAGMA ydb.HNSWFuseTopSort='true'; PRAGMA ydb.HNSWUseClusterRouting='true'; PRAGMA ydb.HNSWPreciseShardRouting='true'; "
                 << "DECLARE $key AS Uint64; DECLARE $limit AS Uint64; "
                 << "$q=(SELECT emb FROM Vectors WHERE id=$key); SELECT " << projection
-                << " FROM Vectors VIEW idx " << tail << " ORDER BY Knn::EuclideanDistance(emb,$q) LIMIT $limit;";
+                << " FROM Vectors VIEW idx " << tail << " ORDER BY " << metricFunction << "(emb,$q)"
+                << (innerProduct ? " DESC" : " ASC") << " LIMIT $limit;";
         };
         auto query = [&](bool specialized, ui64 key, ui64 limit, const TString& projection = "UNWRAP(CAST(id AS String)) AS id",
                          const TString& tail = "", bool stale = true,
@@ -72,8 +107,7 @@ Y_UNIT_TEST_SUITE(KqpSpecializedVectorExecution) {
             return result;
         };
         UNIT_ASSERT(query(false, 1, 3).IsSuccess());
-        // Table/index setup leaves background reservations. Compare to the
-        // warmed generic control rather than treating them as a query leak.
+        waitForResources(0, true);
         const auto retainedMemory = group->GetCounter("RM/Memory", false)->Val();
         for (ui64 key : TVector<ui64>{1, 2, 99, 0, Max<ui64>()}) {
             for (ui64 limit : {0u, 1u, 3u, 1025u}) {
@@ -92,7 +126,7 @@ Y_UNIT_TEST_SUITE(KqpSpecializedVectorExecution) {
                     NYdb::FormatResultSetYson(expected.GetResultSet(0)));
                 if (limit <= 1024) {
                     UNIT_ASSERT_VALUES_EQUAL_C(started->Val(), before + 1, "Eligible query did not use specialized execution");
-                    UNIT_ASSERT_VALUES_EQUAL(group->GetCounter("RM/Memory", false)->Val(), memoryBefore);
+                    waitForResources(memoryBefore, false);
                     if (key == 1 && limit == 3) {
                         Cerr << "Task admissions: generic=" << genericAllocations
                             << " specialized=" << allocations->Val() - nativeBefore << Endl;
@@ -116,7 +150,8 @@ Y_UNIT_TEST_SUITE(KqpSpecializedVectorExecution) {
         }
         // Non-total projections, filters and locking isolation must execute the
         // original SQL program, even when the pragma is enabled.
-        for (const TString projection : {"id,emb", "id,payload", "id+1 AS id", "id, Knn::EuclideanDistance(emb,$q) AS distance"}) {
+        for (const TString& projection : TVector<TString>{"id,emb", "id,payload", "id+1 AS id",
+                TStringBuilder() << "id, " << metricFunction << "(emb,$q) AS distance"}) {
             const auto before = started->Val();
             auto actual = query(true, 1, 3, projection);
             auto expected = query(false, 1, 3, projection);
@@ -194,6 +229,7 @@ Y_UNIT_TEST_SUITE(KqpSpecializedVectorExecution) {
             blocked.Stop().Unblock();
         }
         UNIT_ASSERT(query(true, 1, 3).IsSuccess());
+        waitForResources(retainedMemory, true);
         UNIT_ASSERT_VALUES_EQUAL(group->GetCounter("IteratorReads/ReadActorCount", false)->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(group->GetCounter("RM/ComputeActors", false)->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(group->GetCounter("RM/ExternalMemory", false)->Val(), 0);
@@ -204,6 +240,14 @@ Y_UNIT_TEST_SUITE(KqpSpecializedVectorExecution) {
         const auto schemaBefore = started->Val();
         UNIT_ASSERT(query(true, 1, 3).IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(started->Val(), schemaBefore + 1);
+    }
+
+    Y_UNIT_TEST(MatchesGenericAndFallsBack) {
+        CheckMatchesGenericAndFallsBack(false);
+    }
+
+    Y_UNIT_TEST(InnerProductMatchesGenericAndFallsBack) {
+        CheckMatchesGenericAndFallsBack(true);
     }
 }
 

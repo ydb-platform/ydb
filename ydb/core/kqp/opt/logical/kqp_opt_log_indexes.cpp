@@ -988,7 +988,8 @@ TExprBase DoRewriteTopSortOverKMeansTreeToVectorSearch(
         && (distanceInProjection || passthroughProjection));
     const bool ranked = kqpCtx.Config->HNSWReturnScores.Get().GetOrElse(false)
         && indexDesc.Type == TIndexDescription::EType::GlobalSyncHnsw
-        && settings.metric() == Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN
+        && (settings.metric() == Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN
+            || settings.metric() == Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT)
         && settings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
         && covered && simpleProjection
         && !kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, match.Table().Path()).Metadata->Columns.contains(scoreColumn)

@@ -51,6 +51,7 @@ namespace {
             case TableIndex::kGlobalAsyncIndex:
             case TableIndex::kGlobalUniqueIndex:
             case TableIndex::kGlobalVectorKmeansTreeIndex:
+            case TableIndex::kGlobalHnswIndex:
             case TableIndex::kGlobalFulltextPlainIndex:
             case TableIndex::kGlobalFulltextRelevanceIndex:
             case TableIndex::kGlobalJsonIndex:

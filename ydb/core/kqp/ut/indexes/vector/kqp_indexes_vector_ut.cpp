@@ -4260,7 +4260,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         checkFailure();
     }
 
-    Y_UNIT_TEST(HnswRankedScoreTransportMatchesGenericReads) {
+    void CheckRankedScoreTransport(bool innerProduct) {
         auto settings = TKikimrSettings().SetEnableHnswIndex(true).SetNeedsStatsCollectors(true)
             .SetEnableForceFollowers(true).SetUseRealThreads(false);
         TKikimrRunner kikimr(settings);
@@ -4283,13 +4283,22 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             (3, Untag(Knn::ToBinaryStringFloat([3.0f, 0.0f]), "FloatVector"), "three"),
             (4, Untag(Knn::ToBinaryStringFloat([4.0f, 0.0f]), "FloatVector"), "four");
         )");
+        if (innerProduct) {
+            write(R"(UPSERT INTO `/Root/RankedVectors` (pk,emb,payload) VALUES
+                (1,Untag(Knn::ToBinaryStringFloat([1.0f,-0.5f]),"FloatVector"),"one"),
+                (5,Untag(Knn::ToBinaryStringFloat([-2.0f,1.0f]),"FloatVector"),"five"),
+                (6,Untag(Knn::ToBinaryStringFloat([-3.0f,-0.5f]),"FloatVector"),"six"),
+                (7,NULL,"null-vector");)");
+        }
+        const TString metricDDL = innerProduct ? "similarity=inner_product" : "distance=euclidean";
+        const TString metricFunction = innerProduct ? "Knn::InnerProductSimilarity" : "Knn::EuclideanDistance";
         // Stale scalar lookup also needs a follower when this fixture forces
         // follower reads for every table, including the query-vector source.
         scheme(R"(ALTER TABLE `/Root/RankedVectors` SET (READ_REPLICAS_SETTINGS = "PER_AZ:1");)");
-        scheme(R"(ALTER TABLE `/Root/RankedVectors` ADD INDEX idx GLOBAL USING hnsw ON (emb)
-            WITH (distance=euclidean, vector_type="float", vector_dimension=2, levels=1, clusters=1, min_rows=1);)");
-        scheme(R"(ALTER TABLE `/Root/RankedVectors` ADD INDEX covered_idx GLOBAL USING hnsw ON (emb) COVER (payload)
-            WITH (distance=euclidean, vector_type="float", vector_dimension=2, levels=1, clusters=1, min_rows=1);)");
+        scheme(TStringBuilder() << "ALTER TABLE `/Root/RankedVectors` ADD INDEX idx GLOBAL USING hnsw ON (emb) WITH ("
+            << metricDDL << ",vector_type=\"float\",vector_dimension=2,levels=1,clusters=1,min_rows=1)");
+        scheme(TStringBuilder() << "ALTER TABLE `/Root/RankedVectors` ADD INDEX covered_idx GLOBAL USING hnsw ON (emb) COVER (payload) WITH ("
+            << metricDDL << ",vector_type=\"float\",vector_dimension=2,levels=1,clusters=1,min_rows=1)");
         const TString posting = "/Root/RankedVectors/idx/indexImplPostingTable";
         WaitForCompaction(&kikimr.GetTestServer(), posting);
         scheme("ALTER TABLE `" + posting + "` SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\");");
@@ -4297,6 +4306,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         bool emulateLegacyShard = false;
         ui64 scoredResults = 0;
         ui64 omittedVectors = 0;
+        bool sawPositiveDistance = false;
+        bool sawNegativeDistance = false;
         auto observer = runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (emulateLegacyShard && ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
                 auto* read = ev->Get<TEvDataShard::TEvRead>();
@@ -4310,6 +4321,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 if (result->Record.GetHasVectorScores()) {
                     ++scoredResults;
                     UNIT_ASSERT_VALUES_EQUAL(result->Record.VectorScoresSize(), result->GetRowsCount());
+                    for (double distance : result->Record.GetVectorScores()) {
+                        sawPositiveDistance |= distance > 0;
+                        sawNegativeDistance |= distance < 0;
+                    }
                     for (ui32 i = 0; i < result->GetRowsCount(); ++i) {
                         for (const auto& cell : result->GetCells(i)) {
                             omittedVectors += cell.IsNull();
@@ -4321,15 +4336,18 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         });
         Y_DEFER { runtime->SetObserverFunc(observer); };
         auto compare = [&] {
+            const ui64 queryKey = innerProduct ? 5 : 1;
             for (const TString indexName : {"idx", "covered_idx"}) {
                 for (bool stale : {false, true}) {
-                    for (const TString projection : {"UNWRAP(CAST(pk AS String)) AS id", "pk", "pk, emb", "pk, Knn::EuclideanDistance(emb,$q) AS d", "pk, payload", "*"}) {
+                    for (const TString& projection : TVector<TString>{"UNWRAP(CAST(pk AS String)) AS id", "pk", "pk, emb",
+                            TStringBuilder() << "pk, " << metricFunction << "(emb,$q) AS d", "pk, payload", "*"}) {
                         TString expected;
                         for (bool ranked : {false, true}) {
                             const TString sql = TStringBuilder() << "PRAGMA ydb.HNSWReturnScores=\"" << (ranked ? "true" : "false")
                                 << "\"; PRAGMA ydb.HNSWUseClusterRouting=\"true\"; PRAGMA ydb.HNSWPreciseShardRouting=\"true\"; "
-                                << "$q=(SELECT emb FROM `/Root/RankedVectors` WHERE pk=1); SELECT " << projection
-                                << " FROM `/Root/RankedVectors` VIEW " << indexName << " ORDER BY Knn::EuclideanDistance(emb,$q) LIMIT 4;";
+                                << "$q=(SELECT emb FROM `/Root/RankedVectors` WHERE pk=" << queryKey << "); SELECT " << projection
+                                << " FROM `/Root/RankedVectors` VIEW " << indexName << " ORDER BY " << metricFunction
+                                << "(emb,$q)" << (innerProduct ? " DESC" : " ASC") << " LIMIT 4;";
                             const auto scoredBeforeQuery = scoredResults;
                             const auto omittedBeforeQuery = omittedVectors;
                             auto result = kikimr.RunCall([&] { return session.ExecuteDataQuery(sql,
@@ -4362,6 +4380,61 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         compare();
         UNIT_ASSERT_C(scoredResults > 0, "No reads exercised ranked score transport");
         UNIT_ASSERT_C(omittedVectors > 0, "No reads exercised vector payload omission");
+        if (innerProduct) {
+            UNIT_ASSERT_C(sawPositiveDistance && sawNegativeDistance,
+                "Inner-product transport did not exercise both signs of canonical distance");
+            // Malformed stored vectors are rejected during index creation.
+            // Exercise nullable and malformed query vectors against a valid index.
+            for (const TString& target : TVector<TString>{
+                    "(SELECT emb FROM `/Root/RankedVectors` WHERE pk=7)", "\"invalid-vector\""}) {
+                NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS;
+                for (bool ranked : {false, true}) {
+                    // Internal query errors may invalidate a table session.
+                    auto targetSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+                    auto result = kikimr.RunCall([&] { return targetSession.ExecuteDataQuery(
+                        TStringBuilder() << "PRAGMA ydb.HNSWReturnScores='" << (ranked ? "true" : "false")
+                            << "'; PRAGMA ydb.HNSWUseClusterRouting='true'; PRAGMA ydb.HNSWPreciseShardRouting='true'; "
+                            << "$q=" << target << "; SELECT pk FROM `/Root/RankedVectors` VIEW idx "
+                            << "ORDER BY Knn::InnerProductSimilarity(emb,$q) DESC LIMIT 4;",
+                        TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync(); });
+                    if (!ranked) {
+                        expectedStatus = result.GetStatus();
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), expectedStatus);
+                    if (result.IsSuccess()) {
+                        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 0);
+                    }
+                }
+            }
+            // Compare score-only projections at a tie boundary without imposing
+            // an SQL order on keys with equal similarity.
+            write(R"(UPSERT INTO `/Root/RankedVectors` (pk,emb) VALUES
+                (6,Untag(Knn::ToBinaryStringFloat([2.0f,0.0f]),"FloatVector"));)");
+            TString expected;
+            for (bool ranked : {false,true}) {
+                auto result = kikimr.RunCall([&] { return session.ExecuteDataQuery(
+                    TStringBuilder() << "PRAGMA ydb.HNSWReturnScores='" << (ranked ? "true" : "false")
+                        << "'; PRAGMA ydb.HNSWUseClusterRouting='true'; PRAGMA ydb.HNSWPreciseShardRouting='true'; "
+                        << "$q=Knn::ToBinaryStringFloat([1.0f,0.0f]); SELECT Knn::InnerProductSimilarity(emb,$q) AS score "
+                        << "FROM `/Root/RankedVectors` VIEW idx ORDER BY Knn::InnerProductSimilarity(emb,$q) DESC LIMIT 4;",
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); });
+                UNIT_ASSERT_C(result.IsSuccess(),result.GetIssues().ToString());
+                auto actual = NYdb::FormatResultSetYson(result.GetResultSet(0));
+                if (!ranked) {
+                    expected = actual;
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(actual,expected);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(HnswRankedScoreTransportMatchesGenericReads) {
+        CheckRankedScoreTransport(false);
+    }
+
+    Y_UNIT_TEST(HnswRankedInnerProductScoreTransportMatchesGenericReads) {
+        CheckRankedScoreTransport(true);
     }
 
     Y_UNIT_TEST(HnswFollowerCoveredRowsDoNotFetchDataPages) {

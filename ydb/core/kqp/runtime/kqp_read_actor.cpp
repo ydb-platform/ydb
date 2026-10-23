@@ -27,6 +27,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/generic/intrlist.h>
+#include <util/generic/scope.h>
 #include <util/string/vector.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
@@ -1478,6 +1479,16 @@ public:
     NMiniKQL::TBytesStatistics PackCells(TResult& handle, i64& freeSpace) {
         auto& [shardId, result, batch, processedRows, packed, readId, seqNo] = handle;
         NMiniKQL::TBytesStatistics stats;
+        ui64 scoreRows = 0;
+        ui64 scoreVectorBytes = 0;
+        ui64 omittedScoreRows = 0;
+        Y_DEFER {
+            if (scoreRows) {
+                Counters->VectorScoreRows->Add(scoreRows);
+                Counters->VectorScoreEmbeddingPayloadBytes->Add(scoreVectorBytes);
+                Counters->VectorScoreOmittedRows->Add(omittedScoreRows);
+            }
+        };
         batch->reserve(batch->size());
         YDB_LOG_DEBUG("Entering PackCells for read result",
             {"logPrefix", this->LogPrefix},
@@ -1511,6 +1522,11 @@ public:
                     const bool omittedVector = Settings->HasVectorTopK() && Settings->GetVectorTopK().GetReturnScores()
                         && Settings->GetVectorTopK().GetOmitVectorPayload() && result->Get()->Record.GetHasVectorScores()
                         && resultColumnIndex == Settings->GetVectorTopK().GetColumn();
+                    if (Settings->HasVectorTopK() && Settings->GetVectorTopK().GetReturnScores()
+                            && resultColumnIndex == Settings->GetVectorTopK().GetColumn()) {
+                        scoreVectorBytes += row[columnIndex].Size();
+                        omittedScoreRows += omittedVector && row[columnIndex].IsNull();
+                    }
                     if (column.NotNull && row[columnIndex].IsNull() && !omittedVector) {
                         ReportNullValue(result, columnIndex);
                         return stats;
@@ -1521,6 +1537,7 @@ public:
             }
 
             if (Settings->HasVectorTopK() && Settings->GetVectorTopK().GetReturnScores()) {
+                ++scoreRows;
                 const auto& record = result->Get()->Record;
                 double score;
                 if (record.GetHasVectorScores()) {
@@ -1535,6 +1552,12 @@ public:
                     }
                     const auto embedding = rowItems[top.GetColumn()];
                     score = embedding ? VectorScoreClusters->CalcDistance(top.GetTargetVector(), embedding.AsStringRef()) : Max<double>();
+                }
+                // Shards transport canonical lower-is-better distances. SQL
+                // inner-product similarity exposes the opposite sign.
+                if (Settings->GetVectorTopK().GetSettings().metric()
+                        == Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT) {
+                    score = -score;
                 }
                 rowItems[Settings->ColumnsSize()] = NUdf::TUnboxedValuePod(static_cast<float>(score));
                 rowSize += sizeof(double);

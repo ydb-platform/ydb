@@ -20,18 +20,36 @@ namespace NKikimr::NStorage {
             }
             Y_ABORT_UNLESS(generation);
 
+            THashMap<TGroupId, ui32> bumpedInlineGroups;
             for (auto& group : *ss->MutableGroups()) {
                 if (!group.HasBridgeGroupState()) {
                     continue;
                 }
+                bool updated = false;
                 NBridge::ForEachGroupPile(group.MutableBridgeGroupState(), [&](TBridgePileId,
                         NKikimrBridge::TGroupState::TPile& pile) {
                     if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == groupId) {
                         pile.SetGroupGeneration(*generation);
-                        BumpBridgeProxyGeneration(&group, [&](TGroupId id) { return id == groupId; });
+                        updated = true;
                     }
                 });
+                if (updated) {
+                    BumpBridgeProxyGeneration(&group, [&](TGroupId id) { return id == groupId; });
+                    // The proxy may still contain the original pile's VDisks. Reassigning another pile bumps
+                    // this physical group's generation too, including its self-reference and live VDisks.
+                    const auto proxyId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+                    if (group.RingsSize() && proxyId != groupId) {
+                        bumpedInlineGroups.emplace(proxyId, group.GetGroupGeneration());
+                        NBridge::ForEachGroupPile(group.MutableBridgeGroupState(), [&](TBridgePileId,
+                                NKikimrBridge::TGroupState::TPile& pile) {
+                            if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == proxyId) {
+                                pile.SetGroupGeneration(group.GetGroupGeneration());
+                            }
+                        });
+                    }
+                }
             }
+            UpdateStaticVDiskGenerations(ss, bumpedInlineGroups);
         }
 
     }

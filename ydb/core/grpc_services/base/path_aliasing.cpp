@@ -51,16 +51,17 @@ namespace NKikimr::NGRpcService {
             return;
         }
 
+        auto database = GetDatabaseNameFromRequest();
         NMonitoring::TDynamicCounters::TCounterPtr pathAliasCounter;
         if (normalizer && counters) {
             const TStringBuf rpcMethod(method);
             pathAliasCounter = GetServiceCounters(counters, "ydb")
                 ->GetSubgroup("api_service", TString(rpcMethod.Before('/')))
                 ->GetSubgroup("method", TString(rpcMethod.After('/')))
+                ->GetSubgroup("database", database.GetOrElse(""))
                 ->GetNamedCounter("name", "api.grpc.request.path_alias_count", true);
         }
 
-        auto database = GetDatabaseNameFromRequest();
         SetPathNormalizer(std::move(normalizer), std::move(pathAliasCounter));
         if (database) {
             database = NormalizePath(*database);

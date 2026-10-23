@@ -38,10 +38,12 @@ namespace NKikimr::NGRpcService {
             TString Method_;
         };
 
-        ui64 GetPathAliasCount(const NMonitoring::TDynamicCounterPtr& root, const char* service, const char* method) {
+        ui64 GetPathAliasCount(const NMonitoring::TDynamicCounterPtr& root, const char* service, const char* method,
+            const char* database = "/raw") {
             auto counter = root->GetSubgroup("counters", "ydb")
                 ->GetSubgroup("api_service", service)
                 ->GetSubgroup("method", method)
+                ->GetSubgroup("database", database)
                 ->FindNamedCounter("name", "api.grpc.request.path_alias_count");
             return counter ? counter->Val() : 0;
         }
@@ -59,9 +61,30 @@ namespace NKikimr::NGRpcService {
 
                 UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw/a"), "/rewritten/a");
                 UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw/b"), "/rewritten/b");
+                request.UseDatabase("/resolved");
                 request.InitializePathNormalization(MakeNormalizer(), root);
                 UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Topic.V1.TopicService", "CreateTopic"), count);
             }
+        }
+
+        Y_UNIT_TEST(DatabaseLabelKeepsAliasesSeparate) {
+            NMonitoring::TDynamicCounterPtr root = new NMonitoring::TDynamicCounters;
+            NKikimrConfig::TPathRewriteConfig config;
+            for (const auto* database : {"/first", "/second"}) {
+                auto* rule = config.AddRules();
+                rule->SetSrc(database);
+                rule->SetDst("/rewritten");
+            }
+            auto normalizer = std::make_shared<const NPathAliasing::TPathNormalizer>(config);
+            for (const auto* database : {"/first", "/second"}) {
+                TNamedRequest request("Ydb.Topic.V1.TopicService/CreateTopic", database);
+                request.EnablePathNormalization();
+                request.InitializePathNormalization(normalizer, root);
+                UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/rewritten");
+            }
+            UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Topic.V1.TopicService", "CreateTopic", "/first"), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Topic.V1.TopicService", "CreateTopic", "/second"), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Topic.V1.TopicService", "CreateTopic", "/rewritten"), 0);
         }
 
         Y_UNIT_TEST(ResourceAliasCountsWithServiceAndMethodLabels) {
@@ -76,12 +99,12 @@ namespace NKikimr::NGRpcService {
                 request.EnablePathNormalization();
                 request.InitializePathNormalization(MakeNormalizer(), root);
                 UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/physical/a"), "/physical/a");
-                UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, service, method), 0);
+                UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, service, method, "/physical"), 0);
                 UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw/a"), "/rewritten/a");
                 UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw/b"), "/rewritten/b");
             }
             for (const auto& [service, method] : labels) {
-                UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, service, method), 1);
+                UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, service, method, "/physical"), 1);
             }
         }
 

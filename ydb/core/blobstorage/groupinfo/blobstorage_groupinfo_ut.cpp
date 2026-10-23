@@ -370,6 +370,13 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                         UNIT_ASSERT(roles(resurrection)[excluded] == R::Leaving);
                         UNIT_ASSERT(roles(resurrection)[joining] == R::Excluded);
                         UNIT_ASSERT(!disaster.CanTransitionTo({resurrection.Mode, excluded, survivor}));
+                        if (emergencyMode == T::DC_FAILURE) {
+                            // The shortcut has the same physical roles as passing through DISASTER.
+                            UNIT_ASSERT(emergencySource.CanTransitionTo(resurrection));
+                            UNIT_ASSERT(!emergencySource.CanTransitionTo({resurrection.Mode, excluded, survivor}));
+                            UNIT_ASSERT(roles(resurrection)[survivor] == R::Included);
+                            UNIT_ASSERT(resurrection.GetConfirmedWrites().Layouts == TInfo::TWritePolicy::TLayouts{{}});
+                        }
                     }
                 }
             }

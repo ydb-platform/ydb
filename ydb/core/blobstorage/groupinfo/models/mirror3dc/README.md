@@ -31,6 +31,11 @@ exclude one of the Included realms:
 - `DC_FAILURE_PENDING_INV_1 -> SOLO_DC_INV_1_PENDING`;
 - `DC_FAILURE_PENDING_INV_2 -> SOLO_DC_INV_2_PENDING`.
 
+`DC_FAILURE -> SOLO_DC_RESURECTION_PENDING` is a direct `IIE -> ILE` shortcut
+without an intermediate `SOLO_DC_DISASTER`. The existing Excluded realm remains
+Excluded (`FailedFailRealmIdx` is unchanged); one Included realm is selected as
+the survivor and the other becomes Leaving. The target has CW 0.
+
 ## Run
 
 The `PY3_PROGRAM(mirror3dc-verify)` target bundles the Python runtime, graph and

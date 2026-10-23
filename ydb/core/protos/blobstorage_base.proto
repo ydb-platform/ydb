@@ -145,6 +145,7 @@ message TMirror3dcGroupState {
     // Matching parenthesized labels connect distant arrows; they are not additional states.
     // RECOVERY INV2 is one-way into DC_RECOVERY; RECOVERY and RECOVERY INV1 are bidirectional.
     // SOLO 0/1/2 connect failure-pending shortcuts while preserving the physical Leaving realm.
+    // DC_FAILURE -> (SOLO 0) keeps E and changes the non-surviving I to L, with CW 0.
     // Identical-state requests are idempotent; self-loops are omitted.
     // Arrowheads (>, <, v, ^) sit just before destinations; + marks turns and junctions.
     //
@@ -173,7 +174,7 @@ message TMirror3dcGroupState {
     // | DC_FAILURE                |---->| DC_FAILURE_INV_1          |---->| DC_FAILURE_INV_2          |
     // | I/I/E        CW: 1+1 OR 2 |     | I/I/E             CW: 1+1 |     | I/I/E             CW: 2+2 |
     // +--------+------------------+     +-------------+----------+--+     +-------------+---------+---+
-    //          |                              ^       |          |                      |         |
+    //          +--> (SOLO 0)                   ^       |          |                      |         |
     //          |                              |       |          v                      |         v
     //          |    (DISASTER)                |       |   (DISASTER INV1)               |  (DISASTER INV2)
     //          |         |                    |       |    (SOLO 1)                     |(SOLO 2)

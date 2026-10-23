@@ -1015,7 +1015,7 @@ bool TBlobStorageGroupInfo::TMirror3dcState::CanTransitionTo(const TMirror3dcSta
                 || next.Mode == T::SOLO_DC_INV_2_PENDING;
         case T::DC_FAILURE:
             return next.Mode == T::DC_FAILURE_INV_1 || next.Mode == T::DC_RECOVERY_PENDING
-                || next.Mode == T::SOLO_DC_DISASTER;
+                || next.Mode == T::SOLO_DC_DISASTER || next.Mode == T::SOLO_DC_RESURECTION_PENDING;
         case T::DC_FAILURE_INV_1:
             return next.Mode == T::DC_FAILURE_INV_2 || next.Mode == T::SOLO_DC_INV_1_PENDING
                 || next.Mode == T::SOLO_DC_INV_1

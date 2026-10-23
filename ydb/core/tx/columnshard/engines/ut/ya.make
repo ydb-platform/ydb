@@ -54,6 +54,7 @@ SRCS(
     ut_index_blob_size_limit.cpp
     ut_predicate_ranges_builder.cpp
     ut_index_info_schema_diff.cpp
+    ut_bloom_ngram_size.cpp
     helper.cpp
 )
 

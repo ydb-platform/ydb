@@ -473,12 +473,16 @@ public:
         return ECalculationHardness::StringMatching;
     }
 
-    virtual TString GetClassName() const override {
+    static TString GetClassNameStatic() {
         return "PATTERN_MATCH";
     }
 
+    virtual TString GetClassName() const override {
+        return GetClassNameStatic();
+    }
+
     virtual TString SignalDescription() const override {
-        return "PATTERN_MATCH";
+        return GetClassNameStatic();
     }
 
     virtual bool IsBoolInResult() const override {

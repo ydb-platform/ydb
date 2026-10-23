@@ -1,6 +1,7 @@
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/formats/arrow/program/aggr_common.h>
 #include <ydb/core/formats/arrow/program/collection.h>
+#include <ydb/core/formats/arrow/program/kernel_logic.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/resolver.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
@@ -10,6 +11,7 @@
 #include <ydb/core/tx/program/program.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/cast.h>
 #include <yql/essentials/core/arrow_kernels/registry/registry.h>
 #include <yql/essentials/core/arrow_kernels/request/request.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
@@ -861,119 +863,150 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         }
     };
 
-    // PatternHint adds bloom checks next to the original kernel. With no index blobs the checks allow
-    // every row, so the kernel result is unchanged. No reported ngram size means no checks are built.
+    struct TPatternSetup {
+        TIndexInfo IndexInfo;
+        TFixedNgramResolver Resolver;
+
+        explicit TPatternSetup(const std::optional<ui32> ngramSize)
+            : IndexInfo(BuildTableInfo(testColumns, testKey))
+            , Resolver(IndexInfo)
+        {
+            Resolver.NgramSize = ngramSize;
+        }
+    };
+
+    NKikimrSSA::TProgram MakePatternProgram(const NReader::NCommon::TIndexColumnResolver& columnResolver, const TString& pattern,
+        const bool caseSensitive, const std::optional<ui32> argumentIndex, const bool asFilter = true) {
+        NKikimrSSA::TProgram programProto;
+        {
+            auto* command = programProto.AddCommand();
+            command->MutableAssign()->MutableConstant()->SetBytes("Lorem");
+            command->MutableAssign()->MutableColumn()->SetId(15);
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* functionProto = command->MutableAssign()->MutableFunction();
+            functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL);
+            functionProto->SetKernelIdx(0);
+            functionProto->AddArguments()->SetId(columnResolver.GetColumnIdVerified("string"));
+            functionProto->AddArguments()->SetId(15);
+            if (argumentIndex) {
+                auto* hint = functionProto->MutablePatternHint();
+                hint->SetArgumentIndex(*argumentIndex);
+                hint->MutableLike()->SetPattern(pattern);
+                hint->SetCaseSensitive(caseSensitive);
+            }
+            command->MutableAssign()->MutableColumn()->SetId(16);
+        }
+        if (asFilter) {
+            auto* filter = programProto.AddCommand();
+            filter->MutableFilter()->MutablePredicate()->SetId(16);
+            auto* project = programProto.AddCommand();
+            project->MutableProjection()->AddColumns()->SetId(columnResolver.GetColumnIdVerified("string"));
+        } else {
+            auto* project = programProto.AddCommand();
+            project->MutableProjection()->AddColumns()->SetId(16);
+        }
+        TKernelsWrapper kernels;
+        kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith, true);
+        programProto.SetKernels(kernels.Serialize());
+        return programProto;
+    }
+
+    // With no index blobs the checks allow every row, so the kernel result is unchanged.
+    std::pair<TString, std::shared_ptr<arrow::RecordBatch>> ApplyPatternProgram(
+        TFixedNgramResolver & columnResolver, const NKikimrSSA::TProgram& programProto, const bool hintsEnabled) {
+        TProgramContainer program;
+        program.SetPatternIndexHintsEnabled(hintsEnabled);
+        program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, SerializeProgram(programProto))
+            .Validate();
+        TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({ { "string", TTypeInfo(NTypeIds::Utf8) } }));
+        updates.AddRow().Add<std::string>("Lorem ipsum");
+        updates.AddRow().Add<std::string>("ipsum");
+        auto batch = program.ApplyProgram(updates.BuildArrow(), columnResolver).DetachResult();
+        return { program.GetChainVerified()->DebugDOT(), batch };
+    }
+
+    ui32 CountIndexChecks(const TString& dot) {
+        const TString marker = ::ToString(NArrow::NSSA::EProcessorType::CheckIndexData);
+        ui32 count = 0;
+        for (size_t pos = 0; (pos = dot.find(marker, pos)) != TString::npos; pos += marker.size()) {
+            ++count;
+        }
+        return count;
+    }
+
+    static std::pair<ui8, ui8> Uint8Pair(const std::shared_ptr<arrow::RecordBatch>& batch) {
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 2);
+        auto column = std::static_pointer_cast<arrow::UInt8Array>(batch->column(0));
+        UNIT_ASSERT(column);
+        return { column->Value(0), column->Value(1) };
+    }
+
+    Y_UNIT_TEST(PatternHintProjection) {
+        TPatternSetup setup(3);
+        const auto projected = ApplyPatternProgram(setup.Resolver, MakePatternProgram(setup.Resolver, "%aaa%bbb%", true, 0, false), true);
+        UNIT_ASSERT_C(!projected.first.Contains(::ToString(NArrow::NSSA::EProcessorType::CheckIndexData)), projected.first);
+        UNIT_ASSERT_VALUES_EQUAL(Uint8Pair(projected.second), (std::pair<ui8, ui8>(1, 0)));
+    }
+
     Y_UNIT_TEST(PatternHintBuildsCheckers) {
-        TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
-        TFixedNgramResolver columnResolver(indexInfo);
-        columnResolver.NgramSize = 3;
-
-        auto makeProgram = [&](const TString& pattern, const bool caseSensitive, const std::optional<ui32> argumentIndex,
-                               const bool asFilter = true) {
-            NKikimrSSA::TProgram programProto;
-            {
-                auto* command = programProto.AddCommand();
-                command->MutableAssign()->MutableConstant()->SetBytes("Lorem");
-                command->MutableAssign()->MutableColumn()->SetId(15);
-            }
-            {
-                auto* command = programProto.AddCommand();
-                auto* functionProto = command->MutableAssign()->MutableFunction();
-                functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL);
-                functionProto->SetKernelIdx(0);
-                functionProto->AddArguments()->SetId(columnResolver.GetColumnIdVerified("string"));
-                functionProto->AddArguments()->SetId(15);
-                if (argumentIndex) {
-                    auto* hint = functionProto->MutablePatternHint();
-                    hint->SetArgumentIndex(*argumentIndex);
-                    hint->MutableLike()->SetPattern(pattern);
-                    hint->SetCaseSensitive(caseSensitive);
-                }
-                command->MutableAssign()->MutableColumn()->SetId(16);
-            }
-            if (asFilter) {
-                auto* filter = programProto.AddCommand();
-                filter->MutableFilter()->MutablePredicate()->SetId(16);
-                auto* project = programProto.AddCommand();
-                project->MutableProjection()->AddColumns()->SetId(columnResolver.GetColumnIdVerified("string"));
-            } else {
-                auto* project = programProto.AddCommand();
-                project->MutableProjection()->AddColumns()->SetId(16);
-            }
-            TKernelsWrapper kernels;
-            kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith, true);
-            programProto.SetKernels(kernels.Serialize());
-            return programProto;
-        };
-
-        auto apply = [&](NKikimrSSA::TProgram programProto, const bool hintsEnabled) {
-            TProgramContainer program;
-            program.SetPatternIndexHintsEnabled(hintsEnabled);
-            program
-                .Init(
-                    columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, SerializeProgram(programProto))
-                .Validate();
-            TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({ { "string", TTypeInfo(NTypeIds::Utf8) } }));
-            updates.AddRow().Add<std::string>("Lorem ipsum");
-            updates.AddRow().Add<std::string>("ipsum");
-            auto batch = program.ApplyProgram(updates.BuildArrow(), columnResolver).DetachResult();
-            return std::make_pair(program.GetChainVerified()->DebugDOT(), batch);
-        };
-
-        auto uint8Pair = [](const std::shared_ptr<arrow::RecordBatch>& batch) {
-            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 2);
-            auto column = std::static_pointer_cast<arrow::UInt8Array>(batch->column(0));
-            UNIT_ASSERT(column);
-            return std::make_pair(column->Value(0), column->Value(1));
-        };
-
-        const auto projected = apply(makeProgram("%aaa%bbb%", true, 0, false), true);
-        UNIT_ASSERT_C(!projected.first.Contains("CheckIndexData"), projected.first);
-        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(projected.second), (std::pair<ui8, ui8>(1, 0)));
-
-        const auto withHints = apply(makeProgram("%aaa%bbb%", true, 0), true);
-        UNIT_ASSERT_C(withHints.first.Contains("PATTERN_MATCH"), withHints.first);
+        TPatternSetup setup(3);
+        const auto withHints = ApplyPatternProgram(setup.Resolver, MakePatternProgram(setup.Resolver, "%aaa%bbb%", true, 0), true);
+        const auto patternMatch = NArrow::NSSA::TLogicPatternMatch::GetClassNameStatic();
+        UNIT_ASSERT_C(withHints.first.Contains(patternMatch), withHints.first);
         UNIT_ASSERT_C(withHints.first.Contains("aaa") && withHints.first.Contains("bbb"), withHints.first);
         UNIT_ASSERT_VALUES_EQUAL(withHints.second->num_rows(), 1);
-        const auto checkerCount = [&](const TString& dot) {
-            ui32 count = 0;
-            for (size_t pos = 0; (pos = dot.find("CheckIndexData", pos)) != TString::npos; pos += 14) {
-                ++count;
-            }
-            return count;
-        };
-        UNIT_ASSERT_VALUES_EQUAL(checkerCount(withHints.first), 2);
+        UNIT_ASSERT_VALUES_EQUAL(CountIndexChecks(withHints.first), 2);
+    }
 
-        const auto flagOff = apply(makeProgram("%aaa%bbb%", true, 0), false);
-        UNIT_ASSERT_C(!flagOff.first.Contains("PATTERN_MATCH"), flagOff.first);
+    Y_UNIT_TEST(PatternHintFlagOff) {
+        TPatternSetup setup(3);
+        const auto flagOff = ApplyPatternProgram(setup.Resolver, MakePatternProgram(setup.Resolver, "%aaa%bbb%", true, 0), false);
+        UNIT_ASSERT_C(!flagOff.first.Contains(NArrow::NSSA::TLogicPatternMatch::GetClassNameStatic()), flagOff.first);
         UNIT_ASSERT_VALUES_EQUAL(flagOff.second->num_rows(), 1);
+    }
 
-        const auto ignored = apply(makeProgram("%aaa%bbb%", true, 5), true);
-        UNIT_ASSERT_C(!ignored.first.Contains("PATTERN_MATCH"), ignored.first);
-        UNIT_ASSERT_VALUES_EQUAL(ignored.second->num_rows(), 1);
+    Y_UNIT_TEST(PatternHintArgumentIndex) {
+        TPatternSetup setup(3);
+        TProgramContainer program;
+        program.SetPatternIndexHintsEnabled(true);
+        const auto status = program.Init(setup.Resolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS,
+            SerializeProgram(MakePatternProgram(setup.Resolver, "%aaa%bbb%", true, 5)));
+        UNIT_ASSERT(status.IsFail());
+    }
 
-        const auto ilike = apply(makeProgram("%Err%Ошибка%", false, 0), true);
-        UNIT_ASSERT_C(ilike.first.Contains("PATTERN_MATCH"), ilike.first);
+    Y_UNIT_TEST(PatternHintIlike) {
+        TPatternSetup setup(3);
+        const auto ilike = ApplyPatternProgram(setup.Resolver, MakePatternProgram(setup.Resolver, "%Err%Ошибка%", false, 0), true);
+        UNIT_ASSERT_C(ilike.first.Contains(NArrow::NSSA::TLogicPatternMatch::GetClassNameStatic()), ilike.first);
         UNIT_ASSERT_C(ilike.first.Contains("Err"), ilike.first);
         UNIT_ASSERT_C(!ilike.first.Contains("Ошибка"), ilike.first);
-        UNIT_ASSERT_VALUES_EQUAL(checkerCount(ilike.first), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountIndexChecks(ilike.first), 1);
         UNIT_ASSERT_VALUES_EQUAL(ilike.second->num_rows(), 1);
+    }
 
-        columnResolver.NgramSize.reset();
-        const auto noIndex = apply(makeProgram("%aaa%bbb%", true, 0), true);
-        UNIT_ASSERT_C(!noIndex.first.Contains("PATTERN_MATCH"), noIndex.first);
+    Y_UNIT_TEST(PatternHintNoIndex) {
+        TPatternSetup setup(std::nullopt);
+        const auto noIndex = ApplyPatternProgram(setup.Resolver, MakePatternProgram(setup.Resolver, "%aaa%bbb%", true, 0), true);
+        UNIT_ASSERT_C(!noIndex.first.Contains(NArrow::NSSA::TLogicPatternMatch::GetClassNameStatic()), noIndex.first);
         UNIT_ASSERT_VALUES_EQUAL(noIndex.second->num_rows(), 1);
+    }
 
-        columnResolver.NgramSize = 3;
-        const auto noField = apply(makeProgram("%aaa%bbb%", true, std::nullopt), true);
-        UNIT_ASSERT_C(!noField.first.Contains("PATTERN_MATCH"), noField.first);
+    Y_UNIT_TEST(PatternHintNoField) {
+        TPatternSetup setup(3);
+        const auto noField = ApplyPatternProgram(setup.Resolver, MakePatternProgram(setup.Resolver, "%aaa%bbb%", true, std::nullopt), true);
+        UNIT_ASSERT_C(!noField.first.Contains(NArrow::NSSA::TLogicPatternMatch::GetClassNameStatic()), noField.first);
         UNIT_ASSERT_VALUES_EQUAL(noField.second->num_rows(), 1);
+    }
 
-        // EndsWith("b") does not match the stored suffix window, so only the "aaa" check is built.
-        const auto shortSuffix = apply(makeProgram("%aaa%b", true, 0), true);
-        UNIT_ASSERT_C(shortSuffix.first.Contains("PATTERN_MATCH"), shortSuffix.first);
-        UNIT_ASSERT_VALUES_EQUAL(checkerCount(shortSuffix.first), 1);
+    // A one-byte suffix is not a probe. Only the "aaa" check is built.
+    Y_UNIT_TEST(PatternHintShortSuffix) {
+        TPatternSetup setup(3);
+        const auto shortSuffix = ApplyPatternProgram(setup.Resolver, MakePatternProgram(setup.Resolver, "%aaa%b", true, 0), true);
+        UNIT_ASSERT_C(shortSuffix.first.Contains(NArrow::NSSA::TLogicPatternMatch::GetClassNameStatic()), shortSuffix.first);
+        UNIT_ASSERT_VALUES_EQUAL(CountIndexChecks(shortSuffix.first), 1);
         UNIT_ASSERT_VALUES_EQUAL(shortSuffix.second->num_rows(), 1);
     }
 }

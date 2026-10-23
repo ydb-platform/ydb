@@ -66,7 +66,13 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
         }
         if (PatternIndexHintsEnabled && func.HasPatternHint() && func.GetPatternHint().HasLike()) {
             const auto& hint = func.GetPatternHint();
-            if (hint.HasArgumentIndex() && hint.GetArgumentIndex() < arguments.size()) {
+            // An unset index reads as 0 and would bind the hint to the wrong column, so it is ignored.
+            // An index past the kernel arguments is a broken program.
+            if (hint.HasArgumentIndex()) {
+                if (hint.GetArgumentIndex() >= arguments.size()) {
+                    return TConclusionStatus::Fail(TStringBuilder() << "Pattern hint argument index " << hint.GetArgumentIndex()
+                                                                    << " is out of range, kernel has " << arguments.size() << " arguments");
+                }
                 const auto ngramSize = ColumnResolver.GetBloomNgramSize(arguments[hint.GetArgumentIndex()].GetColumnId(), hint.GetCaseSensitive());
                 if (ngramSize) {
                     TPatternHintPolicy policy;

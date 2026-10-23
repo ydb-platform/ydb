@@ -84,7 +84,7 @@ def build_html_dashboard(
     .tab.active {{ display: block; }}
     .row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }}
     .measured-body {{ display: flex; gap: 16px; align-items: flex-start; }}
-    .measured-nav {{ flex: 0 0 420px; min-width: 0; }}
+    .measured-nav {{ flex: 0 0 460px; min-width: 0; }}
     .measured-nav input[type="search"] {{ width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 6px 8px; border: 1px solid #d0d7de; border-radius: 6px; }}
     .measured-test-hits {{ max-height: 180px; overflow: auto; margin: 0 0 8px 0; padding: 0; list-style: none; font-size: 12px; border: 1px solid #d0d7de; border-radius: 6px; background: #fff; }}
     .measured-test-hits li {{ padding: 6px 8px; cursor: pointer; border-bottom: 1px solid #f0f2f4; }}
@@ -101,7 +101,16 @@ def build_html_dashboard(
     .measured-tree .mt-name {{ font-weight: 600; }}
     .measured-tree .mt-chunk .mt-name {{ font-weight: 400; }}
     .measured-tree .stats {{ display: block; color: #6b7280; font-weight: 400; font-variant-numeric: tabular-nums; }}
+    .measured-tree .outcomes {{ margin-top: 1px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }}
     .measured-tree .stat-max {{ color: #9a3412; font-weight: 700; background: #ffedd5; padding: 0 3px; border-radius: 3px; }}
+    .measured-tree .st, #measuredMeta .st {{ display: inline-block; padding: 0 5px; border-radius: 10px; font-size: 10px; font-weight: 700; letter-spacing: 0.02em; }}
+    .measured-tree .st-pass, #measuredMeta .st-pass {{ color: #166534; background: #dcfce7; }}
+    .measured-tree .st-fail, #measuredMeta .st-fail {{ color: #fff; background: #dc2626; }}
+    .measured-tree .st-mute, #measuredMeta .st-mute {{ color: #fff; background: #7c3aed; }}
+    .measured-tree .st-skip, #measuredMeta .st-skip {{ color: #fff; background: #6b7280; }}
+    .measured-tree .st-nl, #measuredMeta .st-nl {{ color: #fff; background: #6c757d; }}
+    .measured-tree .st-other, #measuredMeta .st-other {{ color: #374151; background: #e5e7eb; }}
+    .measured-tree .odur, #measuredMeta .odur {{ color: #6b7280; font-variant-numeric: tabular-nums; }}
     .measured-charts {{ flex: 1; min-width: 0; }}
     .measured-test-list {{ margin: 0 0 10px 0; padding: 0; list-style: none; font-size: 12px; line-height: 1.45; }}
     .measured-test-list li {{ display: flex; gap: 8px; align-items: flex-start; padding: 3px 6px; border-radius: 4px; }}
@@ -132,7 +141,7 @@ def build_html_dashboard(
     .wide {{ width: 100%; height: 520px; }}
     .tz-hover .hoverlayer g.legend {{ display: none !important; }}
     #chartTip {{ position: fixed; z-index: 40; display: none; pointer-events: none; background: #fff; border: 1px solid #444; padding: 6px 8px; font: 12px Arial, sans-serif; line-height: 1.35; white-space: pre; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }}
-    .hoverbox {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 16px 0; max-height: 220px; overflow: auto; font-size: 12px; }}
+    .hoverbox {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 16px 0; max-height: 220px; overflow: auto; font-size: 12px; white-space: pre-wrap; font-variant-numeric: tabular-nums; }}
     .clickbox {{ background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 20px 0; max-height: 320px; overflow: auto; font-size: 12px; }}
     .clickbox table {{ width: 100%; border-collapse: collapse; }}
     .clickbox th, .clickbox td {{ border-bottom: 1px solid #eee; padding: 4px 6px; text-align: left; vertical-align: top; }}
@@ -1920,13 +1929,28 @@ def build_html_dashboard(
       tip.style.left = Math.max(8, x) + 'px';
       tip.style.top = Math.max(8, y) + 'px';
     }}
-    function showChartTip(ev) {{
+    function hoverContributionRows(ev, unit) {{
+      const rows = (ev.points || []).map(p => ({{
+        name: p && p.data ? p.data.name : '',
+        y: Number(p && p.y || 0),
+      }})).filter(p => isSuiteContribution(p.name));
+      const total = rows.reduce((sum, row) => sum + row.y, 0);
+      const eps = minVisibleValue(unit);
+      const top = rows.filter(row => row.y > eps).sort((a, b) => b.y - a.y).slice(0, 40);
+      return {{ total: total, top: top }};
+    }}
+    function hoverTotalLine(total, unit) {{
+      return 'Total: ' + formatValue(Number(total) || 0, unit) + ' ' + unit;
+    }}
+    function showChartTip(ev, unit) {{
       const tip = document.getElementById('chartTip');
       if (!tip || !ev || !ev.points || !ev.points.length) return;
       clearTimeout(chartTipHideTimer);
       const label = formatPointTime(ev.points[0]);
       const seen = new Set();
       const lines = [];
+      const contrib = unit ? hoverContributionRows(ev, unit) : null;
+      if (contrib) lines.push(hoverTotalLine(contrib.total, unit));
       for (const p of ev.points) {{
         const line = hoverPointLine(p);
         if (!line || seen.has(line)) continue;
@@ -1982,15 +2006,12 @@ def build_html_dashboard(
         if (!ev || !ev.points || !ev.points.length) return;
         const point = ev.points[0];
         const label = formatPointTime(point);
-        const eps = minVisibleValue(unit);
-        const rows = ev.points
-          .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
-          .filter(p => p.y > eps && isSuiteContribution(p.name))
-          .sort((a, b) => b.y - a.y);
-        const top = rows.slice(0, 40);
-        const lines = top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`);
+        const contrib = hoverContributionRows(ev, unit);
+        const lines = [hoverTotalLine(contrib.total, unit)].concat(
+          contrib.top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`)
+        );
         panel.textContent = `t=${{label}}\\n` + lines.join('\\n');
-        showChartTip(ev);
+        showChartTip(ev, unit);
       }});
       plot.on('plotly_unhover', () => {{
         panel.textContent = 'Move cursor over chart to see sorted contributors';
@@ -2430,11 +2451,12 @@ def build_html_dashboard(
       }});
     }}
     function measuredStatusLabel(status) {{
-      const u = String(status || '').toUpperCase();
+      const u = String(status || '').toUpperCase().replace(/\\s+/g, '_');
       if (u === 'OK' || u === 'PASS' || u === 'PASSED' || u === 'GOOD') return 'PASS';
       if (u === 'FAILED' || u === 'FAIL' || u === 'ERROR') return 'FAIL';
       if (u === 'MUTE' || u === 'MUTED') return 'MUTE';
       if (u === 'SKIP' || u === 'SKIPPED') return 'SKIP';
+      if (u === 'NOT_LAUNCHED' || u === 'NOTLAUNCHED') return 'NOT LAUNCHED';
       return u;
     }}
     function measuredStatusClass(label) {{
@@ -2442,6 +2464,7 @@ def build_html_dashboard(
       if (label === 'FAIL') return 'st-fail';
       if (label === 'MUTE') return 'st-mute';
       if (label === 'SKIP') return 'st-skip';
+      if (label === 'NOT LAUNCHED') return 'st-nl';
       return 'st-other';
     }}
     function measuredErrorTags(errorType) {{
@@ -2498,15 +2521,12 @@ def build_html_dashboard(
         const point = ev.points[0];
         const label = formatPointTime(point);
         const testLine = measuredTestHoverLine(point);
-        const eps = minVisibleValue(unit);
-        const rows = ev.points
-          .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
-          .filter(p => p.y > eps && isSuiteContribution(p.name))
-          .sort((a, b) => b.y - a.y);
-        const top = rows.slice(0, 40);
-        const lines = top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`);
+        const contrib = hoverContributionRows(ev, unit);
+        const lines = [hoverTotalLine(contrib.total, unit)].concat(
+          contrib.top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`)
+        );
         panel.textContent = (testLine ? testLine + '\\n' : '') + `t=${{label}}\\n` + lines.join('\\n');
-        showChartTip(ev);
+        showChartTip(ev, unit);
         const tip = document.getElementById('chartTip');
         if (tip && testLine && tip.style.display !== 'none' && !(tip.textContent || '').includes(testLine)) {{
           tip.textContent = testLine + '\\n' + (tip.textContent || '');
@@ -2522,6 +2542,72 @@ def build_html_dashboard(
       if (!sel || sel.kind !== 'chunk') return [];
       const row = measuredList.find(r => r.key === sel.key) || {{}};
       return measuredChunkTests[row.label] || measuredChunkTests[sel.key] || [];
+    }}
+    function testsForMeasuredRow(row) {{
+      if (!row) return [];
+      return measuredChunkTests[row.label] || measuredChunkTests[row.key] || [];
+    }}
+    function emptyMeasuredOutcomes() {{
+      return {{ pass: 0, fail: 0, mute: 0, skip: 0, nl: 0, other: 0, duration: 0, n: 0 }};
+    }}
+    function measuredOutcomeKey(test) {{
+      const tags = measuredErrorTags(test && test.error_type).map(tag => String(tag).toUpperCase().replace(/\\s+/g, '_'));
+      const label = measuredStatusLabel(test && test.status);
+      if (label === 'NOT LAUNCHED' || tags.includes('NOT_LAUNCHED')) return 'nl';
+      if (label === 'MUTE') return 'mute';
+      if (label === 'SKIP') return 'skip';
+      if (label === 'FAIL') return 'fail';
+      if (label === 'PASS') return 'pass';
+      return 'other';
+    }}
+    function addMeasuredOutcomes(dst, src) {{
+      dst.pass += src.pass;
+      dst.fail += src.fail;
+      dst.mute += src.mute;
+      dst.skip += src.skip;
+      dst.nl += src.nl;
+      dst.other += src.other;
+      dst.duration += src.duration;
+      dst.n += src.n;
+      return dst;
+    }}
+    function outcomesForTests(tests) {{
+      const out = emptyMeasuredOutcomes();
+      (tests || []).forEach(test => {{
+        out[measuredOutcomeKey(test)] += 1;
+        out.duration += Number(test.duration_sec) || 0;
+        out.n += 1;
+      }});
+      return out;
+    }}
+    function outcomesForRows(rows) {{
+      const out = emptyMeasuredOutcomes();
+      (rows || []).forEach(row => {{
+        if (!row._outcomes) row._outcomes = outcomesForTests(testsForMeasuredRow(row));
+        addMeasuredOutcomes(out, row._outcomes);
+      }});
+      return out;
+    }}
+    function measuredDurText(sec) {{
+      const s = Number(sec) || 0;
+      if (s >= 3600) return (s / 3600).toFixed(1) + 'h';
+      if (s >= 90) return (s / 60).toFixed(1) + 'm';
+      return s.toFixed(1) + 's';
+    }}
+    function measuredOutcomesHtml(out) {{
+      const parts = [];
+      const add = (n, cls, label) => {{
+        if (!n) return;
+        parts.push('<span class="st ' + cls + '">' + n + ' ' + label + '</span>');
+      }};
+      add(out.pass, 'st-pass', 'pass');
+      add(out.fail, 'st-fail', 'fail');
+      add(out.mute, 'st-mute', 'mute');
+      add(out.skip, 'st-skip', 'skip');
+      add(out.nl, 'st-nl', 'nl');
+      add(out.other, 'st-other', '?');
+      parts.push('<span class="odur">' + measuredDurText(out.duration) + '</span>');
+      return parts.join('');
     }}
     function plotMeasuredTestLane(tests) {{
       const el = document.getElementById('measuredTestsLane');
@@ -2631,31 +2717,45 @@ def build_html_dashboard(
       if (hideCount) return body;
       return agg.n + (agg.n > 1 ? ' · Σ ' : ' · ') + body;
     }}
-    function suiteChunkExtremes(rows) {{
-      const ext = {{ cpu: 0, ram_gb: 0, write_mbps: 0 }};
-      (rows || []).forEach(row => {{
-        ext.cpu = Math.max(ext.cpu, Number(row.max_cpu) || 0);
-        ext.ram_gb = Math.max(ext.ram_gb, Number(row.max_ram_gb) || 0);
-        ext.write_mbps = Math.max(ext.write_mbps, Number(row.max_write_mbps) || 0);
+    function measuredAggExtremes(aggs) {{
+      const ext = {{ cpu: 0, ram_gb: 0, write_mbps: 0, read_mbps: 0 }};
+      (aggs || []).forEach(agg => {{
+        ext.cpu = Math.max(ext.cpu, Number(agg.cpu) || 0);
+        ext.ram_gb = Math.max(ext.ram_gb, Number(agg.ram_gb) || 0);
+        ext.write_mbps = Math.max(ext.write_mbps, Number(agg.write_mbps) || 0);
+        ext.read_mbps = Math.max(ext.read_mbps, Number(agg.read_mbps) || 0);
       }});
       return ext;
+    }}
+    function suiteChunkExtremes(rows) {{
+      return measuredAggExtremes((rows || []).map(row => ({{
+        cpu: Number(row.max_cpu) || 0,
+        ram_gb: Number(row.max_ram_gb) || 0,
+        write_mbps: Number(row.max_write_mbps) || 0,
+        read_mbps: Number(row.max_read_mbps) || 0,
+      }})));
     }}
     function measuredStatMark(text, isMax) {{
       return isMax ? ('<span class="stat-max">' + text + '</span>') : text;
     }}
-    function measuredChunkStatsHtml(row, extremes, chunkCount) {{
-      const cpu = Number(row.max_cpu) || 0;
-      const ram = Number(row.max_ram_gb) || 0;
-      const write = Number(row.max_write_mbps) || 0;
-      const read = Number(row.max_read_mbps) || 0;
-      const canMark = chunkCount > 1;
-      const cpuTxt = cpu.toFixed(2);
-      const ramTxt = ram.toFixed(2);
-      const writeTxt = write.toFixed(1);
+    function measuredStatPartsHtml(cpu, ram, write, read, extremes, siblingCount) {{
+      const cpuTxt = Number(cpu || 0).toFixed(2);
+      const ramTxt = Number(ram || 0).toFixed(2);
+      const writeTxt = Number(write || 0).toFixed(1);
+      const readTxt = Number(read || 0).toFixed(1);
+      const canMark = siblingCount > 1 && extremes;
       return measuredStatMark(cpuTxt + 'c', canMark && extremes.cpu > 0 && cpuTxt === extremes.cpu.toFixed(2)) +
         ' · ' + measuredStatMark(ramTxt + 'G', canMark && extremes.ram_gb > 0 && ramTxt === extremes.ram_gb.toFixed(2)) +
         ' · ' + measuredStatMark('w' + writeTxt, canMark && extremes.write_mbps > 0 && writeTxt === extremes.write_mbps.toFixed(1)) +
-        ' r' + read.toFixed(1);
+        ' ' + measuredStatMark('r' + readTxt, canMark && extremes.read_mbps > 0 && readTxt === extremes.read_mbps.toFixed(1));
+    }}
+    function measuredStatsHtml(agg, extremes, siblingCount, hideCount) {{
+      const body = measuredStatPartsHtml(agg.cpu, agg.ram_gb, agg.write_mbps, agg.read_mbps, extremes, siblingCount);
+      if (hideCount) return body;
+      return agg.n + (agg.n > 1 ? ' · Σ ' : ' · ') + body;
+    }}
+    function measuredChunkStatsHtml(row, extremes, chunkCount) {{
+      return measuredStatPartsHtml(row.max_cpu, row.max_ram_gb, row.max_write_mbps, row.max_read_mbps, extremes, chunkCount);
     }}
     function buildMeasuredForest() {{
       const root = {{ name: 'all', path: '', children: {{}}, rows: [] }};
@@ -2707,7 +2807,11 @@ def build_html_dashboard(
       const title = (!sel || sel.kind === 'all')
         ? 'all suites'
         : (sel.kind === 'chunk' ? ((measuredList.find(r => r.key === sel.key) || {{}}).label || sel.key) : (sel.path || sel.suite));
-      meta.textContent = title + ': ' + measuredStatsText(agg);
+      const outcomes = outcomesForRows(rows);
+      if (meta) {{
+        meta.innerHTML = escapeHtml(title + ': ' + measuredStatsText(agg)) +
+          ' · ' + measuredOutcomesHtml(outcomes);
+      }}
       const suffix = (!sel || sel.kind === 'all') ? ' (all)' : (sel.kind === 'chunk' ? ' (one chunk)' : ' / ' + (sel.path || sel.suite));
       plotMeasuredLayers(labels, suffix);
       const chunkTests = testsForMeasuredSelection(sel);
@@ -2717,7 +2821,7 @@ def build_html_dashboard(
       if (sel && sel.kind === 'chunk' && (sel.path || sel.suite)) openMeasuredPath(sel.path || sel.suite, true);
       renderMeasuredTree(sel);
     }}
-    function renderMeasuredNode(node, depth, sel) {{
+    function renderMeasuredNode(node, depth, sel, siblingExtremes, siblingCount) {{
       const childNames = Object.keys(node.children).sort();
       const chunks = node.rows.filter(row => row.suite === node.path).slice().sort((a, b) => {{
         const ca = a.chunk == null ? 1e9 : Number(a.chunk);
@@ -2733,9 +2837,12 @@ def build_html_dashboard(
         : '<span class="mt-spacer"></span>';
       html += '<button type="button" class="mt-pick' + (selected ? ' on' : '') + '" data-kind="prefix" data-path="' + escapeHtml(node.path) + '">' +
         '<span class="mt-name">' + escapeHtml(node.name) + '</span>' +
-        '<span class="stats">' + measuredStatsText(measuredAgg(node.rows)) + '</span></button></div>';
+        '<span class="stats">' + measuredStatsHtml(measuredAgg(node.rows), siblingExtremes, siblingCount) + '</span>' +
+        '<span class="stats outcomes">' + measuredOutcomesHtml(outcomesForRows(node.rows)) + '</span></button></div>';
       if (open && hasKids) {{
-        childNames.forEach(name => {{ html += renderMeasuredNode(node.children[name], depth + 1, sel); }});
+        const kids = childNames.map(name => node.children[name]);
+        const kidExt = measuredAggExtremes(kids.map(k => measuredAgg(k.rows)));
+        kids.forEach(child => {{ html += renderMeasuredNode(child, depth + 1, sel, kidExt, kids.length); }});
         const extremes = suiteChunkExtremes(chunks);
         chunks.forEach(row => {{
           const on = sel && sel.kind === 'chunk' && sel.key === row.key;
@@ -2743,7 +2850,8 @@ def build_html_dashboard(
             '<span class="mt-spacer"></span>' +
             '<button type="button" class="mt-pick' + (on ? ' on' : '') + '" data-kind="chunk" data-key="' + escapeHtml(row.key) + '" data-path="' + escapeHtml(node.path) + '">' +
             '<span class="mt-name">' + escapeHtml(row.chunk == null ? row.label : '[' + row.chunk + ']') + '</span>' +
-            '<span class="stats">' + measuredChunkStatsHtml(row, extremes, chunks.length) + '</span></button></div>';
+            '<span class="stats">' + measuredChunkStatsHtml(row, extremes, chunks.length) + '</span>' +
+            '<span class="stats outcomes">' + measuredOutcomesHtml(outcomesForRows([row])) + '</span></button></div>';
         }});
       }}
       return html;
@@ -2755,8 +2863,11 @@ def build_html_dashboard(
       const allOn = !sel || sel.kind === 'all';
       let html = '<div class="mt-row"><span class="mt-spacer"></span>' +
         '<button type="button" class="mt-pick' + (allOn ? ' on' : '') + '" data-kind="all">' +
-        '<span class="mt-name">all</span><span class="stats">' + measuredStatsText(measuredAgg(measuredList)) + '</span></button></div>';
-      childNames.forEach(name => {{ html += renderMeasuredNode(measuredForest.children[name], 1, sel); }});
+        '<span class="mt-name">all</span><span class="stats">' + measuredStatsText(measuredAgg(measuredList)) + '</span>' +
+        '<span class="stats outcomes">' + measuredOutcomesHtml(outcomesForRows(measuredList)) + '</span></button></div>';
+      const topKids = childNames.map(name => measuredForest.children[name]);
+      const topExt = measuredAggExtremes(topKids.map(k => measuredAgg(k.rows)));
+      topKids.forEach(child => {{ html += renderMeasuredNode(child, 1, sel, topExt, topKids.length); }});
       tree.innerHTML = html;
     }}
     const measuredTreeEl = document.getElementById('measuredTree');

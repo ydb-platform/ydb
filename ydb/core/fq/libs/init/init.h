@@ -15,7 +15,13 @@
 
 #include <util/generic/ptr.h>
 
+#include <memory>
+
 namespace NFq {
+
+namespace NWasmServices {
+class ITvmTicketProvider;
+}
 
 using TActorRegistrator = std::function<void(NActors::TActorId, NActors::IActor*)>;
 
@@ -26,6 +32,6 @@ void Init(const NFq::NConfig::TConfig& config, ui32 nodeId, const TActorRegistra
     const TString& tenant, ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections, const IYqSharedResources::TPtr& yqSharedResources,
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory, ui32 icPort,
     const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories,
-    NYql::IPqGatewayFactory::TPtr pqGatewayFactory = nullptr);
+    NYql::IPqGatewayFactory::TPtr pqGatewayFactory = nullptr, std::shared_ptr<NWasmServices::ITvmTicketProvider> tvmProvider = {});
 
 }   // namespace NFq

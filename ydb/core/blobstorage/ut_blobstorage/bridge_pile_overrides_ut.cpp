@@ -135,7 +135,14 @@ Y_UNIT_TEST_SUITE(BridgePileOverrides) {
         invoke([](auto& record) { record.MutableRemoveBridgePile()->SetPileName("pile_1"); });
         WaitPileOperationFinished(env, 10);
         checker.CheckAll(10);
-        result = ReplaceMainConfig(env, [](YAML::Node& config) { AddOverride(config, "pile_1"); }, 10);
+        result = ReplaceMainConfig(env, [](YAML::Node& config) {
+            AddOverride(config, "pile_1");
+            // The original pile still spans three DCs, with only three nodes in each. For its replacement,
+            // use racks as fail domains without constraining the single fail realm to one datacenter.
+            auto geometry = config["blob_storage_config"]["storage_pool_pile_overrides"][1]["geometry"];
+            geometry["domain_level_begin"] = 10;
+            geometry["domain_level_end"] = 40;
+        }, 10);
         UNIT_ASSERT_EQUAL_C(result.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
             result.GetErrorReason());
         invoke([](auto& record) { record.MutableAddBridgePile()->SetPileName("pile_1"); });

@@ -34,7 +34,7 @@ namespace NKikimr::NStorage {
         // the payload is sent with the key of the bridge feature level the config requires; older versions don't know the
         // keys of the levels they don't support, so they treat such peer as not bridge-capable one and neither connect,
         // nor take its configuration
-        static constexpr std::array<TStringBuf, 4> DistconfKeys{
+        static constexpr std::array<TStringBuf, 5> DistconfKeys{
             "distconf",
             "distconf-pile-list-changed", // BridgeFeatureLevelPileList
             "distconf-pile-ops", // BridgeFeatureLevelPileOps

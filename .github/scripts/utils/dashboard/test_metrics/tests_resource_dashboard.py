@@ -1105,12 +1105,23 @@ def _build_measured_tests(
     records: list[dict[str, Any]],
     overlay: dict[str, Any],
     out_json: Optional[Path] = None,
+    runs: Optional[list[dict[str, Any]]] = None,
 ) -> list[dict[str, Any]]:
     """Per-cgroup ticks from monitor_resources.py kind=test records."""
     try:
-        from ..resources_loader import is_host_record, measured_test_key, measured_test_label
+        from ..resources_loader import (
+            is_host_record,
+            match_measured_to_runs,
+            measured_test_key,
+            measured_test_label,
+        )
     except ImportError:
-        from resources_loader import is_host_record, measured_test_key, measured_test_label  # type: ignore[no-redef]
+        from resources_loader import (  # type: ignore[no-redef]
+            is_host_record,
+            match_measured_to_runs,
+            measured_test_key,
+            measured_test_label,
+        )
     ref_start_ev = overlay.get("ref_start_ev")
     ref_report_ts = overlay.get("ref_report_ts")
     evlog_range = overlay.get("evlog_range_sec") or []
@@ -1147,6 +1158,7 @@ def _build_measured_tests(
         bucket["ram_gb"].append(float(rec.get("ram_kb", 0) or 0) / (1024 * 1024))
         bucket["disk_read_mbps"].append(float(rec.get("disk_read_mbps", rec.get("disk_read_mb_delta", 0)) or 0))
         bucket["disk_write_mbps"].append(float(rec.get("disk_write_mbps", rec.get("disk_write_mb_delta", 0)) or 0))
+    match_measured_to_runs(grouped, runs or [])
     summary: list[dict[str, Any]] = []
     series_out: dict[str, Any] = {}
     for key, bucket in grouped.items():
@@ -1603,7 +1615,7 @@ def main() -> None:
     if resources_overlay and resources_records:
         measured_path = args.out_html.with_name("resources_tests.json") if args.out_html else None
         resources_overlay["measured_tests"] = _build_measured_tests(
-            resources_records, resources_overlay, measured_path
+            resources_records, resources_overlay, measured_path, enriched_runs
         )
 
     # Runner CPU-utilization series (evlog_sec, cpu_pct) for saturation-aware recommendations.

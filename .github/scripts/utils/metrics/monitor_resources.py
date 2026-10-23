@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -28,6 +29,13 @@ def _read_cmdline(pid: int) -> str:
     try:
         return (Path("/proc") / str(pid) / "cmdline").read_text().replace("\x00", " ")
     except (OSError, ValueError):
+        return ""
+
+
+def _read_cwd(pid: int) -> str:
+    try:
+        return os.readlink(f"/proc/{pid}/cwd")
+    except OSError:
         return ""
 
 
@@ -195,6 +203,86 @@ def get_process_io(pid: int) -> tuple[int, int] | None:
 
 
 TEST_CGROUP_PREFIX = "ya-test-"
+SUITE_ROOTS = ("ydb/", "library/", "contrib/", "devtools/", "kikimr/")
+GENERIC_SUITE_NAMES = frozenset(
+    {
+        "unittest",
+        "py3test",
+        "pytest",
+        "gtest",
+        "exectest",
+        "fuzz",
+        "go_test",
+        "java",
+        "playwright",
+        "unknown",
+    }
+)
+CHUNK_IN_PATH_RE = re.compile(r"(?:^|/)chunk(\d+)(?:/|$)")
+
+
+def is_generic_suite(name: str | None) -> bool:
+    text = str(name or "").strip()
+    if not text:
+        return True
+    lower = text.lower()
+    return lower in GENERIC_SUITE_NAMES or lower.startswith(TEST_CGROUP_PREFIX)
+
+
+def identity_quality(ident: dict) -> int:
+    quality = 0
+    if not is_generic_suite(ident.get("suite")):
+        quality += 2
+    if ident.get("chunk") is not None:
+        quality += 1
+    return quality
+
+
+def chunk_from_text(text: str) -> int | None:
+    if not text:
+        return None
+    match = CHUNK_IN_PATH_RE.search(text)
+    return int(match.group(1)) if match else None
+
+
+def _suite_after_root(text: str, drop_last: bool) -> str | None:
+    if not text:
+        return None
+    best_pos = -1
+    used_root: str | None = None
+    for root in SUITE_ROOTS:
+        pos = text.rfind("/" + root)
+        if pos != -1 and pos > best_pos:
+            best_pos = pos
+            used_root = root
+        elif pos == -1 and text.startswith(root) and best_pos < 0:
+            best_pos = 0
+            used_root = root
+    if used_root is None:
+        return None
+    candidate = text if best_pos == 0 and text.startswith(used_root) else text[best_pos + 1 :]
+    parts = [part for part in candidate.split("/") if part]
+    if drop_last and len(parts) >= 2:
+        parts = parts[:-1]
+    if len(parts) < 2:
+        return None
+    return "/".join(parts)
+
+
+def suite_from_workdir(path: str) -> str | None:
+    if not path:
+        return None
+    marker = path.find("/test-results/")
+    if marker == -1:
+        marker = path.find("/test-results")
+    search = path[:marker] if marker != -1 else path
+    return _suite_after_root(search, drop_last=False)
+
+
+def suite_from_exe(path: str) -> str | None:
+    if not path:
+        return None
+    return _suite_after_root(path.split()[0], drop_last=True)
 
 
 def parse_cmdline_flag(cmdline: str, flag: str) -> str | None:
@@ -304,7 +392,7 @@ def discover_test_cgroups(extra_root: Path | None = None) -> list[Path]:
 
 
 def identify_test_cgroup(cgroup: Path) -> dict:
-    """Resolve suite/chunk from test_tool cmdline or TEST_NAME in the cgroup."""
+    """Resolve suite/chunk from test_tool flags, cwd, or the unittest binary path."""
     identity = {
         "cgroup": cgroup.name,
         "suite": cgroup.name,
@@ -315,21 +403,29 @@ def identify_test_cgroup(cgroup: Path) -> dict:
     for pid in read_cgroup_procs(cgroup):
         cmdline = _read_cmdline(pid)
         env = read_environ(pid)
+        cwd = _read_cwd(pid)
         project = parse_cmdline_flag(cmdline, "--project-path")
         split = parse_cmdline_flag(cmdline, "--split-index")
         suite_name = parse_cmdline_flag(cmdline, "--test-suite-name") or env.get("TEST_NAME")
         uid = env.get("TEST_NODE_SUITE_UID")
-        if project:
+        if project and not is_generic_suite(project):
             identity["suite"] = project
+        elif is_generic_suite(identity.get("suite")):
+            path_suite = suite_from_workdir(cwd) or suite_from_exe(cmdline)
+            if path_suite:
+                identity["suite"] = path_suite
+        if split is not None and split.lstrip("-").isdigit():
+            identity["chunk"] = int(split)
+        elif identity.get("chunk") is None:
+            path_chunk = chunk_from_text(cwd) or chunk_from_text(cmdline)
+            if path_chunk is not None:
+                identity["chunk"] = path_chunk
+        if suite_name:
             identity["test_name"] = suite_name
+        if uid:
             identity["uid"] = uid
-            if split is not None and split.isdigit():
-                identity["chunk"] = int(split)
+        if identity_quality(identity) >= 3:
             return identity
-        if suite_name and identity["suite"] == cgroup.name:
-            identity["suite"] = suite_name
-            identity["test_name"] = suite_name
-            identity["uid"] = uid
     return identity
 
 
@@ -375,9 +471,9 @@ class TestCgroupSampler:
     ) -> dict | None:
         key = str(cgroup)
         ident = self.identity.get(key)
-        if ident is None or ident.get("suite") == cgroup.name:
+        if ident is None or identity_quality(ident) < 3:
             fresh = identify_test_cgroup(cgroup)
-            if ident is None or fresh.get("suite") != cgroup.name:
+            if ident is None or identity_quality(fresh) > identity_quality(ident):
                 self.identity[key] = fresh
                 ident = fresh
         pids = read_cgroup_procs(cgroup)

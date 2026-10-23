@@ -16,14 +16,19 @@ add_product_paths(METRICS)
 from monitor_resources import (
     TestCgroupSampler,
     apply_io_sample,
+    chunk_from_text,
     cpu_delta_jiffies,
     discover_test_cgroups,
+    identity_quality,
     io_delta_bytes,
+    is_generic_suite,
     parse_cmdline_flag,
     process_identity,
     read_cpu_usage_usec,
     read_io_bytes,
     read_memory_current_bytes,
+    suite_from_exe,
+    suite_from_workdir,
 )
 
 
@@ -114,6 +119,30 @@ class TestCgroupSampleTest(unittest.TestCase):
         self.assertAlmostEqual(rows[0]["cpu_used_cores"], 2.0)
         self.assertEqual(rows[0]["ram_kb"], 1024)
         self.assertAlmostEqual(rows[0]["disk_read_mbps"], 1.0)
+
+
+class TestIdentityFromPaths(unittest.TestCase):
+    def test_workdir_uses_test_results_parent(self):
+        path = (
+            "/home/runner/work/ydb/ydb/ydb/core/tx/schemeshard/ut_olap_reboots/"
+            "test-results/unittest/testing_out_stuff/chunk5"
+        )
+        self.assertEqual(suite_from_workdir(path), "ydb/core/tx/schemeshard/ut_olap_reboots")
+        self.assertEqual(chunk_from_text(path), 5)
+
+    def test_exe_drops_binary_name(self):
+        path = "/home/runner/work/ydb/ydb/ydb/core/tx/schemeshard/ut_olap_reboots/ut_olap_reboots"
+        self.assertEqual(suite_from_exe(path), "ydb/core/tx/schemeshard/ut_olap_reboots")
+
+    def test_generic_unittest_is_not_a_suite(self):
+        self.assertTrue(is_generic_suite("unittest"))
+        self.assertTrue(is_generic_suite("ya-test-802992-609"))
+        self.assertFalse(is_generic_suite("ydb/core/tx/schemeshard/ut_olap_reboots"))
+        self.assertEqual(identity_quality({"suite": "unittest", "chunk": None}), 0)
+        self.assertEqual(
+            identity_quality({"suite": "ydb/core/tx/schemeshard/ut_olap_reboots", "chunk": 5}),
+            3,
+        )
 
 
 if __name__ == "__main__":

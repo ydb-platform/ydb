@@ -369,7 +369,7 @@ def build_html_dashboard(
       <ul>
         <li><b>By suites (stacked):</b> At time <code>t</code> we sum each active chunk contribution. For CPU it is <code>cpu_sec_report / duration_used_sec</code> (average cores for that run); for RAM it is the chunk memory metric from report converted to GB. This is a model by chunks, not an instantaneous per-process sample.</li>
         <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code> during the run (actual usage).</li>
-        <li><b>Measured per test:</b> when tests run under <code>--limit-test-cpu</code>, each <code>ya-test-*</code> cgroup is sampled every 3s (CPU from <code>cpu.stat</code>, RAM from <code>memory.current</code> or RSS, disk from <code>io.stat</code> or <code>/proc/pid/io</code>). Pick a suite in the selector below. Ticks are in <code>resources_monitor.jsonl</code> (<code>kind=test</code>) and <code>resources_tests.json</code>.</li>
+        <li><b>Measured per test:</b> when tests run under <code>--limit-test-cpu</code>, each <code>ya-test-*</code> cgroup is sampled every 3s (CPU from <code>cpu.stat</code>, RAM from <code>memory.current</code> or RSS, disk from <code>io.stat</code> or <code>/proc/pid/io</code>). The selector lists <code>suite [chunk]</code>. Ticks are in <code>resources_monitor.jsonl</code> (<code>kind=test</code>) and <code>resources_tests.json</code>.</li>
         <li><b>Limits (purple dashed):</b> Provisioned runner maximum from <code>runners_footprints.yml</code> for this build preset. Optional dotted line: ya.make cgroup RAM cap (~{rf_ya_mem} GB).</li>
         <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
         <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics (seconds).</li>
@@ -2344,7 +2344,7 @@ def build_html_dashboard(
       const series = _measuredSeries[key];
       const meta = measuredList.find(row => row.key === key) || {{}};
       document.getElementById('measuredMeta').textContent = series
-        ? ('max ' + (meta.max_cpu || 0) + ' cores, ' + (meta.max_ram_gb || 0) + ' GB, r/w ' + (meta.max_read_mbps || 0) + '/' + (meta.max_write_mbps || 0) + ' MB/s, ' + (meta.samples || 0) + ' ticks')
+        ? ((meta.label || key) + ': max ' + (meta.max_cpu || 0) + ' cores, ' + (meta.max_ram_gb || 0) + ' GB, r/w ' + (meta.max_read_mbps || 0) + '/' + (meta.max_write_mbps || 0) + ' MB/s, ' + (meta.samples || 0) + ' ticks')
         : 'no series';
       if (series) plotMeasured(series);
     }}

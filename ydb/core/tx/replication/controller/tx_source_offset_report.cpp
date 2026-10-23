@@ -117,6 +117,7 @@ class TController::TTxSourceOffsetReport: public TTxBase {
     TEvService::TEvSourceOffsetReport::TPtr Event;
     THolder<TEvService::TEvSourceOffsetResult> Result;
     TWorkerId Id;
+    TMaybe<ui64> PersistedNextOffset;
     bool Stopping = false;
 
 public:
@@ -142,8 +143,9 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         if (!Self->ReplicationsWithSourceOffsetMismatch.contains(Id.ReplicationId()) || worker.DrainPending) {
             const auto* savedOffset = Self->ProcessedSourceOffsets.FindPtr(Id);
-            if (request.HasNextOffset() && (!savedOffset || request.GetNextOffset() > *savedOffset)) {
-                Self->ProcessedSourceOffsets[Id] = request.GetNextOffset();
+            if (request.HasNextOffset() && (!savedOffset || request.GetNextOffset() > savedOffset->NextOffset)) {
+                PersistedNextOffset = request.GetNextOffset();
+                Self->ProcessedSourceOffsets[Id].NextOffset = *PersistedNextOffset;
                 db.Table<Schema::ProcessedSourceOffsets>().Key(Id.ReplicationId(), Id.TargetId(), Id.WorkerId()).Update(
                     NIceDb::TUpdate<Schema::ProcessedSourceOffsets::NextOffset>(request.GetNextOffset()));
             }
@@ -168,6 +170,11 @@ public:
     void Complete(const TActorContext& ctx) override {
         if (!Result) {
             return;
+        }
+        if (PersistedNextOffset) {
+            if (auto* savedOffset = Self->ProcessedSourceOffsets.FindPtr(Id)) {
+                savedOffset->PersistedNextOffset = Max(savedOffset->PersistedNextOffset.GetOrElse(0), *PersistedNextOffset);
+            }
         }
         // Only this post-commit acknowledgement authorizes a source commit.
         ctx.Send(Event->Sender, Result.Release(), 0, Event->Cookie);

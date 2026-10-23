@@ -239,7 +239,8 @@ class TController::TTxInit: public TTxBase {
             const TWorkerId id(rowset.GetValue<Schema::ProcessedSourceOffsets::ReplicationId>(),
                 rowset.GetValue<Schema::ProcessedSourceOffsets::TargetId>(),
                 rowset.GetValue<Schema::ProcessedSourceOffsets::WorkerId>());
-            Self->ProcessedSourceOffsets[id] = rowset.GetValue<Schema::ProcessedSourceOffsets::NextOffset>();
+            const auto nextOffset = rowset.GetValue<Schema::ProcessedSourceOffsets::NextOffset>();
+            Self->ProcessedSourceOffsets[id] = {nextOffset, nextOffset};
             if (!rowset.Next()) {
                 return false;
             }

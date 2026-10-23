@@ -340,7 +340,11 @@ private:
         ui64 CommitTxId = 0;
         bool UnknownCommit = false;
     };
-    THashMap<TWorkerId, ui64> ProcessedSourceOffsets;
+    struct TProcessedSourceOffset {
+        ui64 NextOffset = 0;
+        TMaybe<ui64> PersistedNextOffset;
+    };
+    THashMap<TWorkerId, TProcessedSourceOffset> ProcessedSourceOffsets;
     THashMap<ui64, TDrainState> DrainStateByReplicationId;
     THashSet<ui64> ReplicationsWithSourceOffsetMismatch;
     THashSet<std::pair<ui64, ui64>> CompleteWorkerSets;

@@ -907,10 +907,11 @@ void TController::BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrRepl
     controller.SetGeneration(Executor()->Generation());
     id.Serialize(*record.MutableWorker());
     record.MutableCommand()->CopyFrom(cmd);
-    record.MutableCommand()->SetTrackSourceOffsets(TracksSourceOffsets(id) && session.SupportsSourceOffsets);
+    record.MutableCommand()->SetTrackSourceOffsets(TracksSourceOffsets(id) && session.SupportsSourceOffsets
+        && (AppData()->FeatureFlags.GetEnableAsyncReplicationSourceOffsets() || ProcessedSourceOffsets.contains(id)));
     record.MutableCommand()->ClearProcessedSourceOffset();
-    if (const auto* saved = ProcessedSourceOffsets.FindPtr(id)) {
-        record.MutableCommand()->SetProcessedSourceOffset(*saved);
+    if (const auto* saved = ProcessedSourceOffsets.FindPtr(id); saved && saved->PersistedNextOffset) {
+        record.MutableCommand()->SetProcessedSourceOffset(*saved->PersistedNextOffset);
     }
 
     if (const auto build = IndexBuilds.find({id.ReplicationId(), id.TargetId()}); build != IndexBuilds.end()) {

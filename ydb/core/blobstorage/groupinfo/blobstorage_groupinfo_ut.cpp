@@ -367,6 +367,13 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                         const TState resurrection{T::SOLO_DC_RESURECTION_PENDING, joining, survivor};
                         UNIT_ASSERT(emergencySource.CanTransitionTo(disaster));
                         UNIT_ASSERT(disaster.CanTransitionTo(resurrection));
+                        UNIT_ASSERT(resurrection.CanTransitionTo(disaster));
+                        UNIT_ASSERT(!resurrection.CanTransitionTo({disaster.Mode, excluded, survivor}));
+                        UNIT_ASSERT(!resurrection.CanTransitionTo({disaster.Mode, joining, excluded}));
+                        UNIT_ASSERT(roles(disaster)[survivor] == R::Included);
+                        UNIT_ASSERT(roles(disaster)[excluded] == R::Excluded);
+                        UNIT_ASSERT(roles(disaster)[joining] == R::Excluded);
+                        UNIT_ASSERT(disaster.GetConfirmedWrites() == resurrection.GetConfirmedWrites());
                         UNIT_ASSERT(roles(resurrection)[excluded] == R::Leaving);
                         UNIT_ASSERT(roles(resurrection)[joining] == R::Excluded);
                         UNIT_ASSERT(!disaster.CanTransitionTo({resurrection.Mode, excluded, survivor}));

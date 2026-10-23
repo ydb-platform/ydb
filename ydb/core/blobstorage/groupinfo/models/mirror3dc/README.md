@@ -20,7 +20,8 @@ A successful model run does not prove the C++ implementation correct.
 The model preserves the existing Joining realm on `IIJ -> IJE`, excluding an
 Included realm instead. It also includes the direct `DC_RECOVERY` transitions to
 `DC_FAILURE_PENDING_INV_1` and `DC_FAILURE_INV_1`. Its `last` variable records the
-most recent `I -> E` realm; only that realm may return through `E -> L`. For the
+most recent `I -> E` realm, or the `L -> E` realm when recovery is aborted back
+to `SOLO_DC_DISASTER`; only that realm may return through `E -> L`. For the
 C++ disaster path, this is the realm distinct from both `FailedFailRealmIdx` and
 `SurvivingFailRealmIdx`.
 
@@ -35,6 +36,12 @@ exclude one of the Included realms:
 without an intermediate `SOLO_DC_DISASTER`. The existing Excluded realm remains
 Excluded (`FailedFailRealmIdx` is unchanged); one Included realm is selected as
 the survivor and the other becomes Leaving. The target has CW 0.
+
+The reverse `SOLO_DC_RESURECTION_PENDING -> SOLO_DC_DISASTER` transition changes
+`ILE -> IEE`, keeps both realm indices and retains CW 0. Recording its `L -> E`
+realm allows a subsequent `SOLO_DC_DISASTER -> SOLO_DC_RESURECTION_PENDING` retry
+to restore the same Leaving realm. This also applies after the direct `IIE` or
+`IIL` shortcuts, where that realm need not have previously undergone `I -> E`.
 
 ## Run
 

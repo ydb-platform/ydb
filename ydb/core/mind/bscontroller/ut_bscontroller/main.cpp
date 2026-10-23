@@ -657,11 +657,13 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         };
         const TVector<TState> path = {
             {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE, 0, {}},
+            {T::SOLO_DC_RESURECTION_PENDING, 0, 2}, {T::SOLO_DC_DISASTER, 0, 2},
             {T::SOLO_DC_RESURECTION_PENDING, 0, 2}, {T::SOLO_DC_RESURECTION, 0, 2},
             {T::SOLO_DC_RECOVERY_PENDING_INV_1, 0, 2}, {T::SOLO_DC_RECOVERY_INV_1, 0, 2},
             {T::DC_FAILURE_INV_1, 0, {}}, {T::DC_RECOVERY_PENDING_INV_1, 0, {}},
             {T::DC_RECOVERY, 0, {}}, {},
             {T::DC_FAILURE_PENDING, 0, {}}, {T::SOLO_DC_RESURECTION_PENDING, 1, 2},
+            {T::SOLO_DC_DISASTER, 1, 2}, {T::SOLO_DC_RESURECTION_PENDING, 1, 2},
             {T::SOLO_DC_RESURECTION, 1, 2}, {T::SOLO_DC_RECOVERY_PENDING_INV_1, 1, 2},
             {T::SOLO_DC_RECOVERY_INV_1, 1, 2}, {T::DC_FAILURE_INV_1, 1, {}},
             {T::DC_RECOVERY_PENDING_INV_1, 1, {}}, {T::DC_RECOVERY, 1, {}}, {},

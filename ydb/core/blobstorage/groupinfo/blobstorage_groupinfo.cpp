@@ -1052,7 +1052,7 @@ bool TBlobStorageGroupInfo::TMirror3dcState::CanTransitionTo(const TMirror3dcSta
         case T::SOLO_DC_DISASTER:
             return next.Mode == T::SOLO_DC_RESURECTION_PENDING;
         case T::SOLO_DC_RESURECTION_PENDING:
-            return next.Mode == T::SOLO_DC_RESURECTION;
+            return next.Mode == T::SOLO_DC_RESURECTION || next.Mode == T::SOLO_DC_DISASTER;
         case T::SOLO_DC_RESURECTION:
             return next.Mode == T::SOLO_DC_INV_1_PENDING || next.Mode == T::SOLO_DC_RECOVERY_PENDING_INV_1;
         default:

@@ -57,9 +57,19 @@ def generate(out):
     def returning_realms(a, b):
         return [i for i, (old, new) in enumerate(zip(configs[a][1], configs[b][1])) if old == 'E' and new == 'L']
 
-    def memory_after(a, b, last):
-        departed = [i for i, (old, new) in enumerate(zip(configs[a][1], configs[b][1])) if old == 'I' and new == 'E']
+    def departed_realms(a, b):
+        # On a cancelled resurrection, a retry must return the same Leaving realm.
+        disaster = S[configs[b][0]]['name'] == 'SOLO_DC_DISASTER'
+        departed = [
+            i
+            for i, (old, new) in enumerate(zip(configs[a][1], configs[b][1]))
+            if new == 'E' and (old == 'I' or (old == 'L' and disaster))
+        ]
         assert len(departed) <= 1
+        return departed
+
+    def memory_after(a, b, last):
+        departed = departed_realms(a, b)
         return departed[0] if departed else last
 
     def can_return(a, b, last):
@@ -117,7 +127,7 @@ def generate(out):
                     'mode': S[configs[ci][0]]['name'],
                     'roles': configs[ci][1],
                     'copies': p,
-                    'last_left_I': last if last != 3 else None,
+                    'last_recovery_realm': last if last != 3 else None,
                     'action': prev[1] if prev else 'confirmed WriteOk write',
                 }
             )
@@ -203,7 +213,7 @@ def generate(out):
                     + ''.join(f'            :: c[{i}] >= {n} ->\n                c[{i}] = {n}\n' for n in range(3))
                     + '            fi;\n'
                 )
-        departed = [i for i, (old, new) in enumerate(zip(configs[a][1], configs[b][1])) if old == 'I' and new == 'E']
+        departed = departed_realms(a, b)
         if departed:
             t += f'            last = {departed[0]};\n'
         t += f'            state = {b};\n            assert({expr(cw(b))});\n            lock = NO_EDGE;\n        }}\n'

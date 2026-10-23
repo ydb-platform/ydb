@@ -1795,7 +1795,7 @@ void WithDictionaryDistinctPortion(
     check(runtime, table, tableId, snapshot);
 }
 
-// Program with filter not eligible for dictionry-only
+// Program with filter not eligible for dictionary-only
 NKikimrSSA::TProgram BuildDictionaryDistinctFilterProgram(const TestTableDescription& table) {
     const ui32 messageId = table.GetColumnIds({ "message" }).front();
     const ui32 requestId = table.GetColumnIds({ "request_id" }).front();

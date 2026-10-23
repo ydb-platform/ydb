@@ -12,8 +12,10 @@ SRCS(
 PEERDIR(
     library/cpp/colorizer
     library/cpp/getopt
+    library/cpp/time_provider
     library/cpp/lfalloc/alloc_profiler
     ydb/core/blob_depot
+    ydb/core/fq/libs/compute/common
     ydb/library/testlib/common
     ydb/library/yql/providers/pq/gateway/dummy
     ydb/tests/tools/fqrun/src
@@ -36,3 +38,5 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(tests)

@@ -954,7 +954,17 @@ TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& o
 TExprNode::TPtr DqBuildPushableStage(const NNodes::TDqConnection& connection, TExprContext& ctx) {
     auto stage = connection.Output().Stage().Cast<TDqStage>();
     auto program = stage.Program();
-    if (GetStageOutputsCount(stage) < 2 || program.Body().Maybe<TDqReplicate>()) {
+    // A transform runs after the stage program, possibly changing the schema.
+    // Downstream projections/filters must not be fused into its input program.
+    bool transformedOutput = false;
+    if (stage.Outputs()) {
+        for (const auto& output : stage.Outputs().Ref().Children()) {
+            if (auto transform = TMaybeNode<TDqTransform>(output)) {
+                transformedOutput |= transform.Cast().Index().Value() == connection.Output().Index().Value();
+            }
+        }
+    }
+    if (!transformedOutput && (GetStageOutputsCount(stage) < 2 || program.Body().Maybe<TDqReplicate>())) {
         return {};
     }
 

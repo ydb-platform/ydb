@@ -1,0 +1,261 @@
+syntax = "proto2";
+
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/mount.proto";
+
+import "ydb/core/nbs/cloud/storage/core/compat/config/iam.proto";
+
+import "ydb/core/nbs/cloud/storage/core/compat/protos/trace.proto";
+
+package NCloud.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/blockstore/config";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TClientMediaKindThrottlingConfig
+{
+    // Per cpu unit.
+    optional uint32 ReadBandwidthPerCpuUnit = 1;    // in MB/s
+    optional uint32 ReadIopsPerCpuUnit = 2;
+    optional uint32 WriteBandwidthPerCpuUnit = 3;   // in MB/s
+    optional uint32 WriteIopsPerCpuUnit = 4;
+    // Max limits independent of VM size.
+    optional uint32 MaxReadBandwidth = 5;           // in MB/s
+    optional uint32 MaxReadIops = 6;
+    optional uint32 MaxWriteBandwidth = 7;          // in MB/s
+    optional uint32 MaxWriteIops = 8;
+    // Overcommit for host limits.
+    optional uint32 HostOvercommitPercentage = 9;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TClientThrottlingConfig
+{
+    // Legacy settings
+
+    // In MBs per second.
+    optional uint32 BandwidthPerCpuUnit = 1;
+    // IO operation count per second.
+    optional uint32 IopsPerCpuUnit = 2;
+    // Use BurstPercentage instead.
+    optional uint32 BurstDivisor = 3;
+    // Max burst equals {MaxIops, MaxBandwidth} * BurstPercentage / 100.
+    optional uint32 BurstPercentage = 4;
+    // Multiplier for nonreplicated disks.
+    optional uint32 NonreplicatedMultiplier = 5;
+
+    // Actual settings (these ones override legacy settings)
+    optional TClientMediaKindThrottlingConfig HDDThrottlingConfig = 6;
+    optional TClientMediaKindThrottlingConfig SSDThrottlingConfig = 7;
+    optional TClientMediaKindThrottlingConfig NonreplThrottlingConfig = 8;
+    optional TClientMediaKindThrottlingConfig Mirror2ThrottlingConfig = 9;
+    optional TClientMediaKindThrottlingConfig Mirror3ThrottlingConfig = 10;
+
+    // Host limits.
+    optional uint64 MaxIopsPerHost = 11;
+    optional uint64 MaxBandwidthPerHost = 12;
+    optional string InfraThrottlingConfigPath = 13;
+    optional uint32 NetworkThroughputPercentage = 14;
+    optional uint32 DefaultHostCpuCount = 15;
+    optional uint32 DefaultNetworkMbitThroughput = 16;
+
+    // Actual settings (these ones override legacy settings)
+    optional TClientMediaKindThrottlingConfig HddNonreplThrottlingConfig = 17;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TClientTracingConfig
+{
+    optional uint32 SamplingRate = 1;
+    optional uint32 SlowRequestSamplingRate = 2;
+    optional string TracesUnifiedAgentEndpoint = 3;
+    optional string TracesSyslogIdentifier = 4;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TClientConfig
+{
+    // Remote host name or address.
+    optional string Host = 1;
+
+    // Remote host data port.
+    // TODO: Rename to DataPort.
+    optional uint32 Port = 2;
+
+    // Request timeout (in milliseconds).
+    optional uint32 RequestTimeout = 3;
+
+    // Request retry timeout (in milliseconds).
+    optional uint32 RetryTimeout = 4;
+
+    // Request retry timeout increment (in milliseconds).
+    optional uint32 RetryTimeoutIncrement = 5;
+
+    // Maximum size of gRPC message.
+    optional uint32 MaxMessageSize = 6;
+
+    // Number of gRPC threads.
+    optional uint32 ThreadsCount = 7;
+
+    // Memory quota for gRPC request processing.
+    optional uint32 MemoryQuotaBytes = 8;
+
+    // Remote host secure control port (with TLS).
+    // If set, client will ignore InsecurePort and connect via SecurePort.
+    optional uint32 SecurePort = 9;
+
+    // TLS details.
+    optional string RootCertsFile = 10;
+    optional string CertFile = 11;
+    optional string CertPrivateKeyFile = 12;
+
+    // Token to use for authentication.
+    optional string AuthToken = 13;
+
+    // Parameters for TClientPerformanceProfile generation
+    optional TClientThrottlingConfig ThrottlingConfig = 15;
+
+    // Tracing config
+    optional TClientTracingConfig TracingConfig = 16;
+
+    // Unix-socket path.
+    optional string UnixSocketPath = 17;
+
+    // Limit of grpc threads count
+    optional uint32 GrpcThreadsLimit = 18;
+
+    // Remote host insecure control port.
+    optional uint32 InsecurePort = 19;
+
+    // VM instance id.
+    optional string InstanceId = 20;
+
+    // This value is shown to our clients - they should not use request sizes
+    // larger than MaxRequestSize
+    optional uint32 MaxRequestSize = 21;
+
+    // Client id.
+    optional string ClientId = 22;
+
+    // IPC type used by client.
+    optional EClientIpcType IpcType = 23;
+
+    // NBD client details.
+    optional uint32 NbdThreadsCount = 24;
+    optional string NbdSocketSuffix = 25;
+    optional bool NbdStructuredReply = 28;
+    optional bool NbdUseNbsErrors = 31;
+
+    // Remount deadline (in milliseconds).
+    optional uint32 RemountDeadline = 26;
+
+    // Max retry timeout for connection errors.
+    optional uint32 ConnectionErrorMaxRetryTimeout = 27;
+
+    // Time between connection attempts (in milliseconds).
+    optional uint32 GrpcReconnectBackoff = 29;
+
+    // NVMe client details.
+    optional string NvmeDeviceTransportId = 32;
+    optional string NvmeDeviceNqn = 33;
+
+    // SCSI client details.
+    optional string ScsiDeviceUrl = 34;
+    optional string ScsiInitiatorIqn = 35;
+
+    // RDMA client details.
+    optional string RdmaDeviceAddress = 36;
+    optional uint32 RdmaDevicePort = 37;
+
+    // Disable durable client for local ssd.
+    optional bool LocalNonreplDisableDurableClient = 38;
+
+    // The tracks of the requests whose processing time in ms exceeds
+    // corresponding values have a chance to be logged.
+    repeated NCloud.NProto.TLWTraceThreshold RequestThresholds = 39;
+
+    // Skip server certificate verification
+    optional bool SkipCertVerification = 40;
+
+    // Request timeout increment on every retry (in milliseconds).
+    optional uint32 RequestTimeoutIncrementOnRetry = 41;
+
+    // Max request timeout (in milliseconds)
+    optional uint32 RequestTimeoutMax = 42;
+
+    // First retry timeout for Disk Registry based disks (in milliseconds).
+    optional uint32 DiskRegistryBasedDiskInitialRetryTimeout = 43;
+
+    // First retry timeout for YDB based disks (in milliseconds).
+    optional uint32 YDBBasedDiskInitialRetryTimeout = 44;
+
+    // Enable list-based retry rules in TDurableClient.
+    // If disabled (default),
+    //     "EErrorKind::ErrorRetriable"-based predicate is used.
+    // If enabled, TDurableClient will additionally retry all error except:
+    //   For all media:
+    //     - cloud/blockstore/libs/client/durable.cpp::NeverRetriableErrors[]
+    //   For reliable media:
+    //     - NonRetriableErrorsForReliableMedia[]
+    //   For non-reliable media:
+    //     - NonRetriableErrorsForUnreliableMedia[].
+    optional bool EnableListBasedRetryRules = 45;
+
+    // List of non-retriable errors that will not be retried
+    //     even if EnableListBasedRetryRules is set.
+    // Applied for disks with IsReliableMediaKind == true.
+    repeated uint32 NonRetriableErrorsForReliableMedia = 46;
+
+    // List of non-retriable errors that will not be retried
+    //     even if EnableListBasedRetryRules is set.
+    // Applied for disks with IsReliableMediaKind == false.
+    repeated uint32 NonRetriableErrorsForUnreliableMedia = 47;
+
+    // Enable non-blocking remount in TSession:
+    //   dataplane requests aren't blocked during remount
+    //   if current mount state is OK
+    optional bool EnableNonBlockingRemount = 48;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TLogConfig
+{
+    // SysLog service
+    optional string SysLogService = 1;
+
+    // Log level
+    optional uint32 LogLevel = 2;
+
+    // GRPC tracing at trace level
+    optional bool EnableGrpcTracing = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TMonitoringConfig
+{
+    // HTTP port to listen on.
+    optional uint32 Port = 1;
+
+    // HTTP server threads.
+    optional uint32 ThreadsCount = 2;
+
+    // HTTP address to bind.
+    optional string Address = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TClientAppConfig
+{
+    reserved 4;
+
+    optional TClientConfig ClientConfig = 1;
+    optional TLogConfig LogConfig = 2;
+    optional TMonitoringConfig MonitoringConfig = 3;
+    optional NCloud.NProto.TIamClientConfig IamConfig = 5;
+}

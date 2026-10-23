@@ -82,7 +82,8 @@ namespace NKikimr::NGRpcService {
             return;
         }
         const auto effectiveDatabase = GetDatabaseName();
-        if (effectiveDatabase && CanonizePath(*effectiveDatabase) != CanonizePath(database.GetPath())) {
+        if (effectiveDatabase && !effectiveDatabase->empty()
+            && CanonizePath(*effectiveDatabase) != CanonizePath(database.GetPath())) {
             return;
         }
         const TString method = GetRpcMethodName();

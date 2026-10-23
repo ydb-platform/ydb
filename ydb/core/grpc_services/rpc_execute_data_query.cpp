@@ -194,7 +194,6 @@ public:
         NDataIntegrity::LogIntegrityTrails(Request_->GetTraceId(), *GetProtoRequest(), ev, ctx);
 
         auto& record = ev->Get()->Record;
-        Request_->RecordPathAliasUsage(record.GetUsesPathAliases());
         SetCost(record.GetConsumedRu());
         AddServerHintsIfAny(record);
 

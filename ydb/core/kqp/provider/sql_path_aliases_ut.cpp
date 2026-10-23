@@ -296,7 +296,6 @@ Y_UNIT_TEST_SUITE(SqlPathAliases) {
             const auto original = query.Get();
             fixture.Rewrite(query);
             const auto rewritten = KqpExprToPrettyString(*query, fixture.Ctx);
-            UNIT_ASSERT_VALUES_EQUAL(fixture.Session->Query().UsesPathAliases, withAliases);
             if (withAliases) {
                 UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/input");
                 UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/output");
@@ -309,10 +308,6 @@ Y_UNIT_TEST_SUITE(SqlPathAliases) {
             const auto rewrittenRoot = query.Get();
             fixture.Rewrite(query);
             UNIT_ASSERT_VALUES_EQUAL(query.Get(), rewrittenRoot);
-            UNIT_ASSERT_VALUES_EQUAL(fixture.Session->Query().UsesPathAliases, withAliases);
-            fixture.Session->Query().Reset();
-            fixture.Rewrite(query);
-            UNIT_ASSERT(!fixture.Session->Query().UsesPathAliases);
         }
     }
 

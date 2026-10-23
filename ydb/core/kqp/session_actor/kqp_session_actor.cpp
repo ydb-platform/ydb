@@ -3665,7 +3665,6 @@ public:
         YQL_ENSURE(Counters);
 
         auto& record = QueryResponse->Record;
-        record.SetUsesPathAliases(record.GetUsesPathAliases() || QueryState->UsesPathAliases);
         auto& response = *record.MutableResponse();
         const auto& status = record.GetYdbStatus();
 

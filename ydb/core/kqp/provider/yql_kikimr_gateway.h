@@ -1722,7 +1722,6 @@ public:
         google::protobuf::RepeatedPtrField<NKqpProto::TResultSetMeta> ResultSetsMeta;
         bool NeedToSplit = false;
         bool AllowCache = true;
-        bool UsesPathAliases = false;
         TMaybe<TString> CommandTagName = {};
     };
 

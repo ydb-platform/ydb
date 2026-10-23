@@ -955,7 +955,6 @@ private:
             false, {}, compileResult->ReplayMessageUserView);
         newCompileResult->AllowCache = compileResult->AllowCache;
         newCompileResult->UsedNewRbo = compileResult->UsedNewRbo;
-        newCompileResult->UsesPathAliases = compileResult->UsesPathAliases;
         newCompileResult->PreparedQuery = compileResult->PreparedQuery;
         YDB_LOG_DEBUG_CTX(ctx, "Insert preparing query with params",
             {"queryId", compileResult->Query->SerializeToString()});

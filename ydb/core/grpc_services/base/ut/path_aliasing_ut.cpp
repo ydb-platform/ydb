@@ -31,7 +31,7 @@ namespace NKikimr::NGRpcService {
             return database;
         }
 
-        class TNamedRequest final : public TEvHttpRequestAuthAndCheck {
+        class TNamedRequest : public TEvHttpRequestAuthAndCheck {
         public:
             explicit TNamedRequest(TString method, TString database = "/raw")
                 : TEvHttpRequestAuthAndCheck(
@@ -81,7 +81,6 @@ namespace NKikimr::NGRpcService {
                 request.UseDatabase("/resolved");
                 request.InitializePathNormalization(MakeNormalizer());
                 request.InitializePathAliasCounter(root, MakeDatabase("/rewritten"));
-                request.RecordPathAliasUsage(true);
                 UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Topic.V1.TopicService", "CreateTopic"), count);
             }
         }
@@ -112,6 +111,9 @@ namespace NKikimr::NGRpcService {
             const std::pair<const char*, const char*> labels[] = {
                 {"Ydb.Topic.V1.TopicService", "CreateTopic"},
                 {"Ydb.Topic.V1.TopicService", "DescribeTopic"},
+                {"Ydb.Topic.V1.TopicService", "StreamRead"},
+                {"Ydb.Topic.V1.TopicService", "StreamWrite"},
+                {"Ydb.Topic.V1.TopicService", "StreamDirectRead"},
                 {"Ydb.Scheme.V1.SchemeService", "DescribePath"},
             };
             for (const auto& [service, method] : labels) {
@@ -123,7 +125,6 @@ namespace NKikimr::NGRpcService {
                 UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, service, method, "/physical"), 0);
                 UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw/a"), "/rewritten/a");
                 UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw/b"), "/rewritten/b");
-                request.RecordPathAliasUsage(true);
             }
             for (const auto& [service, method] : labels) {
                 UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, service, method, "/physical"), 1);
@@ -170,22 +171,49 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT(!root->FindSubgroup("counters", "ydb"));
         }
 
-        Y_UNIT_TEST(CanonicalOriginalDatabaseAndSqlUsage) {
+        Y_UNIT_TEST(CanonicalOriginalDatabaseAndDeferredResourceUsage) {
             NMonitoring::TDynamicCounterPtr root = new NMonitoring::TDynamicCounters;
             ui64 count = 0;
             for (const auto* database : {"/physical", "//physical", "/physical/"}) {
-                TNamedRequest request("Ydb.Query.V1.QueryService/ExecuteQuery", database);
+                TNamedRequest request("Ydb.Scheme.V1.SchemeService/DescribePath", database);
                 request.EnablePathNormalization();
                 request.InitializePathNormalization(MakeNormalizer());
-                request.RecordPathAliasUsage(true);
-                UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Query.V1.QueryService", "ExecuteQuery", "/physical"), count);
+                UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw/a"), "/rewritten/a");
+                UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Scheme.V1.SchemeService", "DescribePath", "/physical"), count);
                 request.InitializePathAliasCounter(root, MakeDatabase("/physical"));
-                request.RecordPathAliasUsage(true);
-                UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Query.V1.QueryService", "ExecuteQuery", "/physical"), ++count);
+                UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw/b"), "/rewritten/b");
+                UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Scheme.V1.SchemeService", "DescribePath", "/physical"), ++count);
             }
-            UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Query.V1.QueryService", "ExecuteQuery", "/physical"), 3);
-            UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Query.V1.QueryService", "ExecuteQuery", "//physical"), 0);
-            UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Query.V1.QueryService", "ExecuteQuery", "/physical/"), 0);
+            UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Scheme.V1.SchemeService", "DescribePath", "/physical"), 3);
+            UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Scheme.V1.SchemeService", "DescribePath", "//physical"), 0);
+            UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Scheme.V1.SchemeService", "DescribePath", "/physical/"), 0);
+        }
+
+        Y_UNIT_TEST(MissingAndEmptyDatabaseUseRootForResourceAliases) {
+            class TEmptyHeaderRequest final : public TNamedRequest {
+            public:
+                using TNamedRequest::TNamedRequest;
+
+                const TMaybe<TString> GetDatabaseNameFromRequest() const override {
+                    return TString{};
+                }
+            };
+
+            auto check = [](IRequestProxyCtx& request) {
+                NMonitoring::TDynamicCounterPtr root = new NMonitoring::TDynamicCounters;
+                request.EnablePathNormalization();
+                request.InitializePathNormalization(MakeNormalizer());
+                request.InitializePathAliasCounter(root, MakeDatabase("/Root"));
+                UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw"), "/rewritten");
+                UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw/a"), "/rewritten/a");
+                request.InitializePathNormalization(MakeNormalizer());
+                request.InitializePathAliasCounter(root, MakeDatabase("/Root"));
+                UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Discovery.V1.DiscoveryService", "ListEndpoints", ""), 1);
+            };
+            TNamedRequest missing("Ydb.Discovery.V1.DiscoveryService/ListEndpoints", "");
+            TEmptyHeaderRequest empty("Ydb.Discovery.V1.DiscoveryService/ListEndpoints", "");
+            check(missing);
+            check(empty);
         }
 
         Y_UNIT_TEST(InternalRequestKeepsLiveDatabaseAndIdentityPaths) {

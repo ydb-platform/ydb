@@ -301,7 +301,6 @@ private:
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
         auto& record = ev->Get()->Record;
-        Request_->RecordPathAliasUsage(record.GetUsesPathAliases());
 
         NYql::TIssues issues;
         const auto& issueMessage = record.GetResponse().GetQueryIssues();

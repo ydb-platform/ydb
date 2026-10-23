@@ -36,8 +36,10 @@ struct TKqpProxyRequest {
     ui32 RemoteNodeId = 0;
     // the interconnect session the query went through to RemoteNodeId, known from its TEvNodeConnected
     TActorId RemoteSession;
-    // that session broke, or none could be set up for the query
+    // that session broke
     bool RemoteNodeDisconnected = false;
+    // the forwarded query can't change data, so it may be retried when its response is lost
+    bool RemoteReadOnly = false;
     // the interconnect session the request came through from another node; the response goes only through it
     TActorId ReplySession;
 

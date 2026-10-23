@@ -60,7 +60,8 @@ public:
         SendQuery(sessionId, query, chunkSize, Rpc);
     }
 
-    void SendQuery(const TString& sessionId, const TString& query, ui64 chunkSize, TActorId rpc) {
+    // readOnlyTx: the query runs in a snapshot read-only transaction instead of an implicit one
+    void SendQuery(const TString& sessionId, const TString& query, ui64 chunkSize, TActorId rpc, bool readOnlyTx = false) {
         auto request = MakeHolder<TEvKqp::TEvQueryRequest>();
         auto& record = *request->Record.MutableRequest();
         record.SetSessionId(sessionId);
@@ -69,12 +70,30 @@ public:
         record.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
         record.SetQuery(query);
         record.SetOutputChunkMaxSize(chunkSize);
+        if (readOnlyTx) {
+            record.MutableTxControl()->mutable_begin_tx()->mutable_snapshot_read_only();
+            record.MutableTxControl()->set_commit_tx(true);
+        }
         ActorIdToProto(rpc, request->Record.MutableRequestActorId());
         Runtime->Send(new IEventHandle(Proxy(A), rpc, request.Release()), A);
     }
 
-    // runs a query in an implicit session on node B and waits for its result
-    void Exec(const TString& query) {
+    // runs a query in an implicit session on node B and returns the first column of its rows
+    // afterBreak: right after a break, node B may not reach the scheme of node A yet, so UNAVAILABLE is retried
+    std::vector<ui64> Exec(const TString& query, bool afterBreak = false) {
+        for (ui32 attempt = 0; afterBreak && attempt < 100; ++attempt) {
+            if (auto rows = TryExec(query)) {
+                return *rows;
+            }
+            Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        auto rows = TryExec(query, false);
+        return rows ? *rows : std::vector<ui64>{};
+    }
+
+    // nullopt on UNAVAILABLE if allowUnavailable, otherwise any status but SUCCESS fails the test
+    std::optional<std::vector<ui64>> TryExec(const TString& query, bool allowUnavailable = true) {
+        std::vector<ui64> rows;
         const TActorId edge = Runtime->AllocateEdgeActor(B);
         auto request = MakeHolder<TEvKqp::TEvQueryRequest>();
         auto& record = *request->Record.MutableRequest();
@@ -88,11 +107,17 @@ public:
             TAutoPtr<IEventHandle> handle;
             auto events = Runtime->GrabEdgeEventsRethrow<TEvKqp::TEvQueryResponse, TEvKqpExecuter::TEvStreamData>(handle);
             if (auto* response = std::get<TEvKqp::TEvQueryResponse*>(events)) {
+                if (allowUnavailable && response->Record.GetYdbStatus() == Ydb::StatusIds::UNAVAILABLE) {
+                    return std::nullopt;
+                }
                 UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS,
                     response->Record.ShortDebugString());
-                return;
+                return rows;
             }
             auto* data = std::get<TEvKqpExecuter::TEvStreamData*>(events);
+            for (const auto& row : data->Record.GetResultSet().rows()) {
+                rows.push_back(row.items(0).uint64_value());
+            }
             auto ack = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>(data->Record.GetSeqNo(), data->Record.GetChannelId());
             ack->Record.SetFreeSpace(1 << 20);
             Runtime->Send(new IEventHandle(handle->Sender, edge, ack.Release()), B);
@@ -179,7 +204,12 @@ Y_UNIT_TEST_SUITE(KqpStreamSessionLoss) {
     // through the new session waits in its mailbox together with the news of the break
     // newQuery: with slowProxy, another query comes to the proxy of node A before the news of the break, so it goes
     // through the new session; the news about the old one must not fail it
-    void CheckLostPart(ui32 a, ui32 b, bool lostTail, bool slowProxy = false, bool newQuery = false) {
+    // readOnlyTx: the query runs in a read-only transaction, so it may be retried and fails with UNAVAILABLE; a query
+    // in an implicit transaction may write, so it fails with UNDETERMINED
+    // emptyLink: nothing waits in the network at the break, the parts sent so far have all reached the RPC
+    void CheckLostPart(ui32 a, ui32 b, bool lostTail, bool slowProxy = false, bool newQuery = false,
+        bool readOnlyTx = false, bool emptyLink = false)
+    {
         TRemoteSessionFixture fixture(a, b);
         auto& runtime = *fixture.Runtime;
         runtime.SetDispatchedEventsLimit(10'000'000);
@@ -202,8 +232,8 @@ Y_UNIT_TEST_SUITE(KqpStreamSessionLoss) {
             SetDefaultReadAckSettings(savedReadAck->Record);
         };
         {
+            // only fields the defaults set, so that restoring them puts back the same settings
             NKikimrTxDataShard::TEvRead read;
-            read.SetMaxRowsInResult(100);
             read.SetMaxRows(100);
             SetDefaultReadSettings(read);
             NKikimrTxDataShard::TEvReadAck ack;
@@ -286,7 +316,7 @@ Y_UNIT_TEST_SUITE(KqpStreamSessionLoss) {
         // The shard is slow, it takes one event at a time, so the query reads the table for a long time. The link
         // works until the RPC has a few parts, then it stalls as a whole, and the next parts wait in it.
         shardsPaused = true;
-        fixture.SendQuery(sessionId, "SELECT k FROM `/Root/T`;", 512);
+        fixture.SendQuery(sessionId, "SELECT k FROM `/Root/T`;", 512, fixture.Rpc, readOnlyTx);
         for (ui32 i = 0; i < 100000 && partsReceived < 3; ++i) {
             if (!heldShards.empty()) {
                 releaseShardEvent();
@@ -295,7 +325,7 @@ Y_UNIT_TEST_SUITE(KqpStreamSessionLoss) {
             takeParts();
         }
         UNIT_ASSERT_C(partsReceived >= 3, "the RPC got too few parts");
-        linkPaused = true;
+        linkPaused = !emptyLink;
         const ui32 partsAtStall = partsFromExecuter;
         if (lostTail) {
             // the shard reads to the end, so the rest of the result and the final response wait in the link
@@ -318,7 +348,7 @@ Y_UNIT_TEST_SUITE(KqpStreamSessionLoss) {
             }
         }
         takeParts();
-        UNIT_ASSERT_C(!heldLink.empty(), "nothing waits in the stalled link");
+        UNIT_ASSERT_C(emptyLink == heldLink.empty(), "the link must hold parts exactly when it is stalled");
         if (lostTail) {
             UNIT_ASSERT_C(heldShards.empty(), "the shard must have read the whole table before the break");
         } else {
@@ -373,15 +403,16 @@ Y_UNIT_TEST_SUITE(KqpStreamSessionLoss) {
                 response->Get()->Record.ShortDebugString());
         }
 
-        // much shorter than the default query timeout, 2 hours: the RPC must learn about the break, not wait it out
-        const auto rest = ReceiveStream(runtime, fixture.Rpc, TDuration::Minutes(10), fixture.A);
+        // The error comes right after the break. The wait is much shorter than the default query timeout, 2 hours,
+        // and short enough that a regression fails on the status below rather than on the time limit of the test.
+        const auto rest = ReceiveStream(runtime, fixture.Rpc, TDuration::Minutes(1), fixture.A);
         result.Rows.insert(result.Rows.end(), rest.Rows.begin(), rest.Rows.end());
         result.Status = rest.Status;
         const std::set<ui64> distinct(result.Rows.begin(), result.Rows.end());
-        if (result.Status == Ydb::StatusIds::SUCCESS) {
-            UNIT_ASSERT_VALUES_EQUAL_C(distinct.size(), numRows, "a successful result lost rows");
-        }
         UNIT_ASSERT_C(result.Status != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, "the RPC got no final response");
+        UNIT_ASSERT_C(result.Status != Ydb::StatusIds::SUCCESS || distinct.size() == numRows,
+            "a successful result lost rows");
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, readOnlyTx ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::UNDETERMINED);
     }
 
     // parts in the middle of the result are lost while the query still reads the table, so it has later parts to send
@@ -411,6 +442,57 @@ Y_UNIT_TEST_SUITE(KqpStreamSessionLoss) {
 
     Y_UNIT_TEST(LostTailOnSessionBreakIsErrorSessionOnFirstNode) {
         CheckLostPart(1, 0, true);
+    }
+
+    // a query that can't change data may be retried
+    Y_UNIT_TEST(LostPartOfReadOnlyTxIsUnavailable) {
+        CheckLostPart(0, 1, false, false, false, true);
+    }
+
+    // The session breaks while the query still runs, but nothing is lost in the network yet. Main completes this
+    // query with SUCCESS through the new session; here node B can send the rest only through the broken one, so the
+    // query fails. The proxy of node A can't tell this from a lost part.
+    Y_UNIT_TEST(SessionBreakWithEmptyLinkFailsQuery) {
+        CheckLostPart(0, 1, false, false, false, false, true);
+    }
+
+    // The response to a write that has committed is lost. The client must not get a status that invites a retry:
+    // retrying the increment would apply it twice.
+    Y_UNIT_TEST(LostResponseOfCommittedWriteIsUndetermined) {
+        TRemoteSessionFixture fixture;
+        auto& runtime = *fixture.Runtime;
+        fixture.Exec("CREATE TABLE `/Root/W` (k Uint64, v Uint64, PRIMARY KEY (k));");
+        fixture.Exec("UPSERT INTO `/Root/W` (k, v) VALUES (1ul, 0ul);");
+        const TString sessionId = fixture.CreateAttachedSession();
+
+        // The query compiles and commits on node B, which needs the network to node A, so the network works until the
+        // response leaves for node A. The response goes to the network only after the commit; it is lost there.
+        const ui32 nodeA = runtime.GetNodeId(fixture.A);
+        const ui32 nodeB = runtime.GetNodeId(fixture.B);
+        bool responseLost = false;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!responseLost && ev->Type == TEvKqp::TEvQueryResponse::EventType && ev->Sender.NodeId() == nodeB
+                && ev->Recipient.NodeId() == nodeA)
+            {
+                responseLost = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc); };
+
+        fixture.SendQuery(sessionId, "UPDATE `/Root/W` SET v = v + 1 WHERE k = 1ul;", 512);
+        for (ui32 i = 0; i < 1000 && !responseLost; ++i) {
+            runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        }
+        UNIT_ASSERT_C(responseLost, "the response of the committed query must leave node B");
+
+        // the session breaks before anything else comes through it
+        runtime.Send(new IEventHandle(runtime.GetInterconnectProxy(fixture.B, fixture.A), {}, new TEvInterconnect::TEvDisconnect()), fixture.B, true);
+        const auto result = ReceiveStream(runtime, fixture.Rpc, TDuration::Minutes(1), fixture.A);
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNDETERMINED);
+        // the write was applied once
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Exec("SELECT v FROM `/Root/W` WHERE k = 1ul;", true), std::vector<ui64>{1});
     }
 
 }

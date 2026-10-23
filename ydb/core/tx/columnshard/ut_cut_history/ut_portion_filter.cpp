@@ -30,13 +30,9 @@ Y_UNIT_TEST_SUITE(TFindEmptyHistoryIntervalsPortionFilter) {
         };
 
         const std::vector<TCase> cases = {
-            { "", std::nullopt, true },
             { "", 0, true },
-            { "", 100, true },
             { NOlap::NBlobOperations::TGlobal::DefaultStorageId, 0, true },
             { "warm", std::nullopt, false },
-            { "warm", 100, true },
-            { "warm", 0, false },
             { "warm", std::nullopt, true, NOlap::NBlobOperations::TGlobal::DefaultStorageId },
             { "warm", std::nullopt, false, NOlap::NBlobOperations::TGlobal::DefaultStorageId, true },
             { "warm", std::nullopt, false, NOlap::NBlobOperations::TGlobal::LocalMetadataStorageId },

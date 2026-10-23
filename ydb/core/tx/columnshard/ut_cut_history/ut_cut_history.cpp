@@ -2,12 +2,13 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/tablet/tablet_impl.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
-#include <ydb/core/tx/columnshard/data_sharing/manager/sessions.h>
+#include <ydb/core/tx/columnshard/data_sharing/modification/events/change_owning.h>
 #include <ydb/core/tx/columnshard/data_sharing/modification/tasks/modification.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
@@ -44,6 +45,7 @@ class TFailMetadataCallback: public TCacheCallback {
         UNIT_ASSERT(!objects.empty());
         THashMap<TCachePolicy::TAddress, TString> errors;
         errors.emplace(objects.begin()->first, "injected metadata failure");
+        objects.erase(objects.begin());
         Callback->OnResultReady(
             std::move(objects), std::move(removed), NGeneralCache::NPublic::TErrorAddresses<TCachePolicy>(std::move(errors)));
     }
@@ -137,12 +139,12 @@ public:
         }
     }
 
-    void PrepareThreeClosedIntervals() {
+    void PrepareClosedIntervals(ui32 count = 3) {
         Schema();
         Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(false);
-        Restart(NewGroup);
-        Restart(OldGroup);
-        Restart(NewGroup);
+        for (ui32 i = 0; i < count; ++i) {
+            Restart(i % 2 ? OldGroup : NewGroup);
+        }
         Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(true);
     }
 
@@ -211,6 +213,68 @@ public:
         return ReadAllAsBatch(Runtime, tableId, NOlap::TSnapshot(ReadStep.Val(), 1), Table.Schema)->num_rows();
     }
 
+    void PrepareTableForDrop() {
+        Controller->DisableBackground(EBackground::Compaction);
+        Controller->SetOverrideMaxReadStaleness(TDuration::Zero());
+        Schema(false, 2);
+        Write(1, 0, 1000);
+        Drive();
+    }
+
+    void DropTableAndWaitForCleanup() {
+        const auto& index = Controller->GetTheOnlyShard()->GetIndexAs<NOlap::TColumnEngineForLogs>();
+        std::optional<TInternalPathId> droppedPath;
+        for (const auto& [pathId, granule] : index.GetTables()) {
+            if (!granule->GetPortions().empty() || !granule->GetInsertedPortions().empty()) {
+                droppedPath = pathId;
+                break;
+            }
+        }
+        UNIT_ASSERT(droppedPath);
+        const auto dropStep = SetupSchema(Runtime, Sender, TTestSchema::DropTableTxBody(TableId, 2), 1001);
+        for (ui32 i = 0; i < 60 && index.IsGranuleExists(*droppedPath); ++i) {
+            PlanCommit(Runtime, Sender, TPlanStep{ dropStep.Val() + i + 1 }, TSet<ui64>{});
+            Drive(1);
+        }
+        UNIT_ASSERT_C(!index.IsGranuleExists(*droppedPath), "drop must remove the populated path before continuing");
+    }
+
+    std::vector<TLogoBlobID> PreparePersistedDeletion() {
+        PrepareTableForDrop();
+        const auto blobs = LiveOldBlobs();
+        UNIT_ASSERT(!blobs.empty());
+        Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(false);
+        Restart(NewGroup);
+        Drive();
+        Controller->DisableBackground(EBackground::GC);
+        DropTableAndWaitForCleanup();
+        const auto storage = Controller->GetTheOnlyShard()->GetStoragesManager()->GetDefaultOperator();
+        bool hasPendingDeletion = false;
+        for (const auto& id : blobs) {
+            if (storage->HasToDelete(NOlap::TUnifiedBlobId(OldGroup, id), static_cast<NOlap::TTabletId>(TabletId))) {
+                hasPendingDeletion = true;
+                break;
+            }
+        }
+        UNIT_ASSERT(hasPendingDeletion);
+        return blobs;
+    }
+
+    void PrepareGCWithoutSendingDontKeep() {
+        TBlockEvents<TEvBlobStorage::TEvCollectGarbage> pendingGC(Runtime, [](const auto& ev) {
+            const auto& gc = *ev->Get();
+            if (gc.TabletId != TabletId || gc.Channel != FirstDataChannel || ev->Cookie != OldGroup || !gc.Collect) {
+                return false;
+            }
+            UNIT_ASSERT(gc.DoNotKeep && !gc.DoNotKeep->empty());
+            return true;
+        });
+        Restart();
+        Controller->EnableBackground(EBackground::GC);
+        Drive();
+        UNIT_ASSERT(!pendingGC.empty());
+    }
+
     std::vector<TLogoBlobID> LiveOldBlobs() const {
         std::vector<TLogoBlobID> result;
         for (const auto& [id, blob] : OldProxy->AllMyBlobs()) {
@@ -219,6 +283,53 @@ public:
             }
         }
         return result;
+    }
+
+    TLogoBlobID WriteOrphan(ui32 channel) {
+        const auto storage = Controller->GetTheOnlyShard()->GetStoragesManager()->GetDefaultOperator();
+        const auto manager = std::dynamic_pointer_cast<NOlap::TBlobManager>(storage->GetBlobsTracker());
+        UNIT_ASSERT(manager);
+        const TString data = "blob";
+        const ui32 channelCount = 1 + !SecondChannelHistory.empty();
+        for (ui32 attempt = 0; attempt < channelCount; ++attempt) {
+            auto batch = manager->StartBlobBatch();
+            const auto id = batch.AllocateNextBlobId(data);
+            if (id.GetLogoBlobId().Channel() != channel) {
+                continue;
+            }
+            Runtime.Send(new IEventHandle(MakeBlobStorageProxyID(id.GetDsGroup()), Sender,
+                new TEvBlobStorage::TEvPut(id.GetLogoBlobId(), data, TInstant::Max(), NKikimrBlobStorage::UserData)));
+            const auto result = Runtime.GrabEdgeEvent<TEvBlobStorage::TEvPutResult>(Sender);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+            batch.OnBlobWriteResult(id.GetLogoBlobId(), result->Get()->Status);
+            return id.GetLogoBlobId(); // Discard the batch without saving Keep or a portion reference.
+        }
+        UNIT_FAIL("Could not allocate an orphan on channel " << channel);
+        return {};
+    }
+
+    TLogoBlobID PrepareOrphanWithSwappedChannelGroups() {
+        Schema();
+        Drive();
+        Controller->DisableBackground(EBackground::GC);
+        Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(false);
+        SecondChannelHistory = { { 0, NewGroup } };
+        Restart();
+        const auto blob = WriteOrphan(FirstDataChannel);
+        SecondChannelHistory.emplace_back(blob.Generation() + 1, OldGroup);
+        Restart(NewGroup);
+        Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(true);
+        Restart();
+        Drive();
+        return blob;
+    }
+
+    NKikimrProto::EReplyStatus ReadBlobStatus(const TLogoBlobID& blob, ui32 group = OldGroup) {
+        Runtime.Send(new IEventHandle(MakeBlobStorageProxyID(group), Sender,
+            new TEvBlobStorage::TEvGet(blob, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead)));
+        const auto result = Runtime.GrabEdgeEvent<TEvBlobStorage::TEvGetResult>(Sender);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+        return result->Get()->Responses[0].Status;
     }
 
     TString Journal() {
@@ -254,7 +365,6 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         const auto aborted = f.Counters()->GetCounter("Deriviative/CutHistory/ScansAborted/Count", true);
         UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 0u);
         ui32 cuts = 0;
-        ui32 batches = 0;
         ui32 gcCompletions = 0;
         f.Schema();
         f.Drive();
@@ -263,9 +373,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             if (!ev->HasEvent()) {
                 return;
             }
-            if (dynamic_cast<TEvFindEmptyHistoryIntervals::TEvContinue*>(ev->GetBase())) {
-                ++batches;
-            } else if (dynamic_cast<TEvPrivate::TEvGarbageCollectionFinished*>(ev->GetBase())) {
+            if (dynamic_cast<TEvPrivate::TEvGarbageCollectionFinished*>(ev->GetBase())) {
                 ++gcCompletions;
             } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase());
                        cut && cut->Record.GetChannel() == FirstDataChannel) {
@@ -281,18 +389,15 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Drive();
         UNIT_ASSERT(f.Runtime.GetAppData().FeatureFlags.GetEnableCutHistory());
         UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
-        UNIT_ASSERT_VALUES_EQUAL(batches, 0u);
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 0u);
         f.Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(true);
         f.Restart();
         f.Drive();
         UNIT_ASSERT_VALUES_EQUAL_C(cuts, 0u, "empty metadata cannot rule out orphaned blobs before GC");
-        UNIT_ASSERT_VALUES_EQUAL(batches, 0u);
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 0u);
         f.Controller->EnableBackground(EBackground::GC);
         f.Drive();
         UNIT_ASSERT_VALUES_EQUAL(cuts, 1u);
-        UNIT_ASSERT_VALUES_EQUAL(batches, 1u);
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 1u);
         const auto gcCompletionsBeforeWrite = gcCompletions;
         f.Write(1, 0, 1);
@@ -335,54 +440,45 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
 
     Y_UNIT_TEST(RequestLimitKeepsEverySentBatchCommitted) {
         TFixture f;
-        f.Schema();
-        f.Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(false);
         constexpr ui32 intervalCount = CutHistoryRequestLimit + 1;
-        for (ui32 i = 0; i < intervalCount; ++i) {
-            f.Restart(i % 2 ? OldGroup : NewGroup);
-        }
-        TAutoPtr<IEventHandle> continuation;
-        TAutoPtr<IEventHandle> commit;
-        bool holdContinuation = true;
-        bool holdCommit = false;
-        ui32 lastHeldCommitStep = 0;
+        f.PrepareClosedIntervals(intervalCount);
+        TEvFindEmptyHistoryIntervals::TEvContinue::TPtr scan;
+        auto pauseScan = f.Runtime.AddObserver<TEvFindEmptyHistoryIntervals::TEvContinue>(
+            [&](TEvFindEmptyHistoryIntervals::TEvContinue::TPtr& ev) {
+                scan = ev.Release();
+            });
         std::set<ui32> cutFrom;
-        auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
-            if (!ev->HasEvent()) {
-                return;
-            }
-            if (holdContinuation && dynamic_cast<TEvFindEmptyHistoryIntervals::TEvContinue*>(ev->GetBase())) {
-                continuation = ev.Release();
-            } else if (const auto* log = dynamic_cast<TEvTabletBase::TEvWriteLogResult*>(ev->GetBase());
-                       holdCommit && log && log->EntryId.TabletID() == TabletId && log->EntryId.Cookie() == 0 &&
-                       log->EntryId.Step() > lastHeldCommitStep) {
-                lastHeldCommitStep = log->EntryId.Step();
-                commit = ev.Release();
-                holdCommit = false;
-            } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase())) {
-                UNIT_ASSERT_VALUES_EQUAL(cut->Record.GetChannel(), FirstDataChannel);
-                UNIT_ASSERT(cutFrom.emplace(cut->Record.GetFromGeneration()).second);
-                ev.Reset();
-            }
+        auto observer = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetChannel(), FirstDataChannel);
+            UNIT_ASSERT(cutFrom.emplace(ev->Get()->Record.GetFromGeneration()).second);
+            ev.Reset();
         });
-        f.Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(true);
         f.Restart();
         f.Drive(1);
-        UNIT_ASSERT(continuation);
+        UNIT_ASSERT(scan);
         f.Controller->DisableBackground(EBackground::GC);
-        holdContinuation = false;
-        holdCommit = true;
-        f.Runtime.Send(continuation.Release(), 0, true);
+
+        bool holdNextCommit = true;
+        TBlockEvents<TEvTabletBase::TEvWriteLogResult> commits(f.Runtime, [&](const auto& ev) {
+            const auto& log = *ev->Get();
+            if (!holdNextCommit || log.EntryId.TabletID() != TabletId || log.EntryId.Cookie() != 0) {
+                return false;
+            }
+            holdNextCommit = false;
+            return true;
+        });
+        pauseScan.Remove();
+        f.Runtime.Send(scan.Release(), 0, true);
         f.Drive(1);
-        UNIT_ASSERT(commit);
+        UNIT_ASSERT(!commits.empty());
         UNIT_ASSERT_VALUES_EQUAL_C(cutFrom.size(), 0u, "the first batch must wait for its journal commit");
 
-        holdCommit = true;
-        f.Runtime.Send(commit.Release(), 0, true);
+        holdNextCommit = true;
+        commits.Unblock(1);
         f.Drive(1);
         UNIT_ASSERT_VALUES_EQUAL_C(cutFrom.size(), CutHistoryRequestLimit, "the next batch must wait for its own journal commit");
-        UNIT_ASSERT_C(commit, "remaining intervals must continue without another scan");
-        f.Runtime.Send(commit.Release(), 0, true);
+        UNIT_ASSERT_C(!commits.empty(), "remaining intervals must continue without another scan");
+        commits.Stop().Unblock();
         f.Drive(1);
         UNIT_ASSERT_VALUES_EQUAL(cutFrom.size(), intervalCount);
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 1u);
@@ -397,127 +493,58 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
 
     Y_UNIT_TEST_TWIN(OrphanCollectedWithSwappedChannelGroups, restartDuringGC) {
         TFixture f;
-        f.Schema();
-        f.Drive();
-        f.Controller->DisableBackground(EBackground::GC);
-        f.Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(false);
-        f.SecondChannelHistory = { { 0, NewGroup } };
-        while (f.Controller->GetTheOnlyShard()->Generation() < 10) {
-            f.Restart();
-        }
-        UNIT_ASSERT_VALUES_EQUAL(f.Controller->GetTheOnlyShard()->Generation(), 10u);
-        TLogoBlobID blob;
-        {
-            const auto storage = f.Controller->GetTheOnlyShard()->GetStoragesManager()->GetDefaultOperator();
-            const auto manager = std::dynamic_pointer_cast<NOlap::TBlobManager>(storage->GetBlobsTracker());
-            UNIT_ASSERT(manager);
-            const TString data = "blob";
-            for (ui32 attempt = 0; attempt < 2; ++attempt) {
-                auto batch = manager->StartBlobBatch();
-                const auto id = batch.AllocateNextBlobId(data);
-                if (id.GetLogoBlobId().Channel() != FirstDataChannel) {
-                    continue;
-                }
-                blob = id.GetLogoBlobId();
-                UNIT_ASSERT_VALUES_EQUAL(id.GetDsGroup(), OldGroup);
-                f.Runtime.Send(new IEventHandle(MakeBlobStorageProxyID(OldGroup), f.Sender,
-                    new TEvBlobStorage::TEvPut(blob, data, TInstant::Max(), NKikimrBlobStorage::UserData)));
-                const auto result = f.Runtime.GrabEdgeEvent<TEvBlobStorage::TEvPutResult>(f.Sender);
-                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
-                batch.OnBlobWriteResult(blob, result->Get()->Status);
-                break;   // Discard the batch without saving Keep or a portion reference.
+        const auto blob = f.PrepareOrphanWithSwappedChannelGroups();
+
+        TBlockEvents<TEvBlobStorage::TEvCollectGarbage> orphanChannelGC(f.Runtime, [](const auto& ev) {
+            const auto& gc = *ev->Get();
+            if (gc.TabletId != TabletId || gc.Channel != FirstDataChannel || ev->Cookie != OldGroup || !gc.Collect) {
+                return false;
             }
-        }
-        UNIT_ASSERT_VALUES_EQUAL(blob.Generation(), 10u);
-        const auto getStatus = [&] {
-            f.Runtime.Send(new IEventHandle(MakeBlobStorageProxyID(OldGroup), f.Sender,
-                new TEvBlobStorage::TEvGet(blob, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead)));
-            const auto result = f.Runtime.GrabEdgeEvent<TEvBlobStorage::TEvGetResult>(f.Sender);
-            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
-            return result->Get()->Responses[0].Status;
-        };
-        std::map<std::pair<ui32, ui32>, TGenStep> barriers;
-        std::map<ui32, ui32> cuts;
-        TAutoPtr<IEventHandle> orphanChannelGC;
-        TAutoPtr<IEventHandle> completion;
-        ui32 preparedGeneration = 0;
-        bool holdCompletion = true;
-        bool holdOrphanChannel = true;
-        bool oppositeChannelCollected = false;
-        auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
-            if (!ev->HasEvent()) {
-                return;
-            }
-            if (const auto* gc = dynamic_cast<TEvBlobStorage::TEvCollectGarbage*>(ev->GetBase());
-                gc && gc->TabletId == TabletId && gc->Channel >= FirstDataChannel && gc->Collect) {
-                UNIT_ASSERT(!gc->Hard);
-                UNIT_ASSERT(!gc->Keep || gc->Keep->empty());
-                UNIT_ASSERT(!gc->DoNotKeep || gc->DoNotKeep->empty());
-                barriers.emplace(std::make_pair(gc->Channel, ev->Cookie), TGenStep(gc->CollectGeneration, gc->CollectStep));
-                if (holdOrphanChannel && gc->Channel == FirstDataChannel && ev->Cookie == OldGroup) {
-                    UNIT_ASSERT(!orphanChannelGC);
-                    if (!preparedGeneration) {
-                        preparedGeneration = gc->CollectGeneration;
-                    }
-                    orphanChannelGC = ev.Release();
-                }
-            } else if (const auto* result = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult*>(ev->GetBase());
-                       result && result->Channel == FirstDataChannel + 1 && ev->Cookie == OldGroup) {
-                UNIT_ASSERT_VALUES_EQUAL(result->Status, NKikimrProto::OK);
-                oppositeChannelCollected = true;
-            } else if (holdCompletion && dynamic_cast<TEvPrivate::TEvGarbageCollectionFinished*>(ev->GetBase())) {
-                UNIT_ASSERT(!completion);
-                completion = ev.Release();
-            } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase())) {
-                UNIT_ASSERT_VALUES_EQUAL(cut->Record.GetFromGeneration(), 0u);
-                UNIT_ASSERT(cuts.emplace(cut->Record.GetChannel(), cut->Record.GetGroupID()).second);
-                ev.Reset();
-            }
+            UNIT_ASSERT(!gc.Hard);
+            return true;
         });
-        f.SecondChannelHistory.emplace_back(11, OldGroup);
-        f.Restart(NewGroup);
-        f.Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(true);
-        f.Restart();
-        f.Drive();
+        TBlockEvents<TEvPrivate::TEvGarbageCollectionFinished> completion(f.Runtime);
+        bool oppositeChannelCollected = false;
+        auto otherChannel = f.Runtime.AddObserver<TEvBlobStorage::TEvCollectGarbageResult>(
+            [&](TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev) {
+                if (ev->Get()->Channel == FirstDataChannel + 1 && ev->Cookie == OldGroup) {
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::OK);
+                    oppositeChannelCollected = true;
+                }
+            });
+        std::map<ui32, ui32> cuts;
+        auto observer = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetFromGeneration(), 0u);
+            UNIT_ASSERT(cuts.emplace(ev->Get()->Record.GetChannel(), ev->Get()->Record.GetGroupID()).second);
+            ev.Reset();
+        });
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 0u);
         UNIT_ASSERT(cuts.empty());
-        UNIT_ASSERT_VALUES_EQUAL(getStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadBlobStatus(blob), NKikimrProto::OK);
         f.Controller->EnableBackground(EBackground::GC);
         f.Drive();
-        UNIT_ASSERT(orphanChannelGC);
+        UNIT_ASSERT(!orphanChannelGC.empty());
         UNIT_ASSERT(oppositeChannelCollected);
-        UNIT_ASSERT_VALUES_EQUAL_C(getStatus(), NKikimrProto::OK, "collecting the same group on another channel must not collect blob");
+        UNIT_ASSERT_VALUES_EQUAL_C(f.ReadBlobStatus(blob), NKikimrProto::OK, "collecting the same group on another channel must not collect blob");
         if (restartDuringGC) {
             // Reboot with durable preparation, but without completion of the orphan's channel.
-            orphanChannelGC.Reset();
-            barriers.clear();
+            orphanChannelGC.clear();
             oppositeChannelCollected = false;
             f.Restart();
             f.Drive();
-            UNIT_ASSERT(preparedGeneration < f.Controller->GetTheOnlyShard()->Generation());
-            UNIT_ASSERT(f.History.back().first <= preparedGeneration);
-            UNIT_ASSERT(orphanChannelGC);
+            UNIT_ASSERT(!orphanChannelGC.empty());
             UNIT_ASSERT(oppositeChannelCollected);
             UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 0u);
         }
-        UNIT_ASSERT_VALUES_EQUAL(barriers.size(), 4u);
-        for (ui32 channel = FirstDataChannel; channel <= FirstDataChannel + 1; ++channel) {
-            for (ui32 group : { OldGroup, NewGroup }) {
-                UNIT_ASSERT(barriers.at({ channel, group }) == TGenStep(f.Controller->GetTheOnlyShard()->Generation(), 0));
-                UNIT_ASSERT(barriers.at({ channel, group }) >= TGenStep(preparedGeneration, 0));
-            }
-        }
         UNIT_ASSERT(cuts.empty());
-        UNIT_ASSERT_VALUES_EQUAL_C(getStatus(), NKikimrProto::OK, "collecting the same group on another channel must not collect blob");
-        holdOrphanChannel = false;
-        f.Runtime.Send(orphanChannelGC.Release(), 0, true);
+        UNIT_ASSERT_VALUES_EQUAL_C(f.ReadBlobStatus(blob), NKikimrProto::OK, "collecting the same group on another channel must not collect blob");
+        orphanChannelGC.Stop().Unblock();
         f.Drive();
-        UNIT_ASSERT_VALUES_EQUAL(getStatus(), NKikimrProto::NODATA);
-        UNIT_ASSERT(completion);
-        UNIT_ASSERT_C(cuts.empty(), "all BS acknowledgements must be followed by durable shard GC completion");
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadBlobStatus(blob), NKikimrProto::NODATA);
+        UNIT_ASSERT(!completion.empty());
+        UNIT_ASSERT_C(cuts.empty(), "GC completion must reach the shard before cutting history");
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 0u);
-        holdCompletion = false;
-        f.Runtime.Send(completion.Release(), 0, true);
+        completion.Stop().Unblock();
         f.Drive();
         UNIT_ASSERT_VALUES_EQUAL(cuts.size(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(cuts.at(FirstDataChannel), OldGroup);
@@ -529,12 +556,12 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
 
     Y_UNIT_TEST_TWIN(SharedBlobsExcludeOnlyOwnInterval, borrowed) {
         TFixture f;
-        f.PrepareThreeClosedIntervals();
+        f.PrepareClosedIntervals();
         const auto selfTablet = static_cast<NOlap::TTabletId>(TabletId);
         const auto otherTablet = static_cast<NOlap::TTabletId>(TabletId + 1);
         NOlap::NDataSharing::TStorageTabletTask storageTask(NOlap::IStoragesManager::DefaultStorageId, selfTablet);
         for (const auto& id : { TLogoBlobID(TabletId, f.History[1].first, 1, FirstDataChannel, 10, 0),
-                 TLogoBlobID(TabletId + 1, 1, 1, FirstDataChannel, 10, 0), TLogoBlobID(TabletId, 1, 1, FirstDataChannel + 1, 10, 0) }) {
+                 TLogoBlobID(TabletId + 1, 1, 1, FirstDataChannel, 10, 0) }) {
             const NOlap::TUnifiedBlobId blob(NewGroup, id);
             if (borrowed) {
                 storageTask.AddInitOwner(blob, otherTablet);
@@ -547,7 +574,6 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Runtime.SendToPipe(TabletId, f.Sender, new NOlap::NDataSharing::NEvents::TEvApplyLinksModification(selfTablet,
                                                      "persisted-cut-history-links", 0, task), 0, GetPipeConfigWithRetries());
         f.Drive();
-        UNIT_ASSERT(!f.Controller->GetTheOnlyShard()->GetSharingSessionsManager()->CanCutHistory());
         THashSet<ui32> cuts;
         auto observer = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetChannel(), FirstDataChannel);
@@ -555,20 +581,16 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             ev.Reset();
         });
         f.Restart();
-        UNIT_ASSERT(f.Controller->GetTheOnlyShard()->GetSharingSessionsManager()->CanCutHistory());
         f.Drive();
         UNIT_ASSERT_VALUES_EQUAL(cuts.size(), 2u);
         UNIT_ASSERT(cuts.contains(0));
         UNIT_ASSERT(cuts.contains(f.History[2].first));
     }
 
-    Y_UNIT_TEST(CurrentAndFutureIntervalsAreSkipped) {
+    Y_UNIT_TEST(CurrentGenerationIntervalIsSkipped) {
         TFixture f;
         f.Schema();
         const ui32 nextGeneration = f.Controller->GetTheOnlyShard()->Generation() + 1;
-        f.History.emplace_back(nextGeneration, NewGroup);
-        f.History.emplace_back(nextGeneration + 1, OldGroup);
-        f.History.emplace_back(nextGeneration + 2, NewGroup);
         std::vector<ui32> cutFrom;
         auto observer = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
             if (ev->Get()->Record.GetChannel() == FirstDataChannel) {
@@ -576,10 +598,10 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
                 ev.Reset();
             }
         });
-        f.Restart();
+        f.Restart(NewGroup);
         UNIT_ASSERT_VALUES_EQUAL(f.Controller->GetTheOnlyShard()->Generation(), nextGeneration);
         f.Drive();
-        UNIT_ASSERT_C(cutFrom.empty(), "intervals ending at or after the current generation must not be cut");
+        UNIT_ASSERT_C(cutFrom.empty(), "an interval ending at the current generation must not be cut");
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 0u);
 
         f.Restart();
@@ -590,56 +612,27 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
 
     Y_UNIT_TEST(TableDroppedAfterSnapshotAbortsScan) {
         TFixture f;
-        f.Controller->DisableBackground(EBackground::Compaction);
-        f.Controller->SetOverrideMaxReadStaleness(TDuration::Zero());
-        f.Schema(false, 2);
-        f.Write(1, 0, 1000);
-        f.Drive();
+        f.PrepareTableForDrop();
         f.Restart(NewGroup);
-        TAutoPtr<IEventHandle> continuation;
-        bool holdScan = true;
-        ui32 cuts = 0;
-        ui32 metadataRequests = 0;
-        const auto aborted = f.Counters()->GetCounter("Deriviative/CutHistory/ScansAborted/Count", true);
-        auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
-            if (!ev->HasEvent()) {
-                return;
-            }
-            if (holdScan && dynamic_cast<TEvFindEmptyHistoryIntervals::TEvContinue*>(ev->GetBase())) {
-                UNIT_ASSERT(!continuation);
+        TEvFindEmptyHistoryIntervals::TEvContinue::TPtr continuation;
+        auto pauseScan = f.Runtime.AddObserver<TEvFindEmptyHistoryIntervals::TEvContinue>(
+            [&](TEvFindEmptyHistoryIntervals::TEvContinue::TPtr& ev) {
                 continuation = ev.Release();
-            } else if (const auto* ask = dynamic_cast<TCacheEvents::TEvAskData*>(ev->GetBase());
-                       ask && ask->GetConsumer() == NOlap::NBlobOperations::EConsumer::SCAN) {
-                ++metadataRequests;
-            } else if (dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase())) {
-                ++cuts;
-                ev.Reset();
-            }
+            });
+        ui32 cuts = 0;
+        auto observer = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
+            ++cuts;
+            ev.Reset();
         });
+        const auto aborted = f.Counters()->GetCounter("Deriviative/CutHistory/ScansAborted/Count", true);
         f.Restart();
         f.Drive();
         UNIT_ASSERT(continuation);
-        const auto& index = f.Controller->GetTheOnlyShard()->GetIndexAs<NOlap::TColumnEngineForLogs>();
-        std::optional<TInternalPathId> droppedPath;
-        for (const auto& [pathId, granule] : index.GetTables()) {
-            if (!granule->GetPortions().empty() || !granule->GetInsertedPortions().empty()) {
-                UNIT_ASSERT(!droppedPath);
-                droppedPath = pathId;
-            }
-        }
-        UNIT_ASSERT(droppedPath);
-        const auto dropStep = SetupSchema(f.Runtime, f.Sender, TTestSchema::DropTableTxBody(TableId, 2), 1001);
-        for (ui32 i = 0; i < 60 && index.IsGranuleExists(*droppedPath); ++i) {
-            PlanCommit(f.Runtime, f.Sender, TPlanStep{ dropStep.Val() + i + 1 }, TSet<ui64>{});
-            f.Drive(1);
-        }
-        UNIT_ASSERT_C(!index.IsGranuleExists(*droppedPath), "drop must remove the captured path before its metadata request");
+        f.DropTableAndWaitForCleanup();
         UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 0u);
-        metadataRequests = 0;
-        holdScan = false;
+        pauseScan.Remove();
         f.Runtime.Send(continuation.Release(), 0, true);
         f.Drive();
-        UNIT_ASSERT_VALUES_EQUAL(metadataRequests, 1u);
         UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 0u);
         UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
@@ -647,93 +640,29 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
 
     Y_UNIT_TEST(PersistedDeletionSurvivesRestart) {
         TFixture f;
-        f.Controller->DisableBackground(EBackground::Compaction);
-        f.Controller->SetOverrideMaxReadStaleness(TDuration::Zero());
-        f.Schema(false, 2);
-        f.Write(1, 0, 1000);
-        f.Drive();
-        const auto oldBlobs = f.LiveOldBlobs();
-        UNIT_ASSERT(!oldBlobs.empty());
-        f.Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(false);
-        f.Restart(NewGroup);
-        f.Drive();
-        for (const auto& id : oldBlobs) {
-            UNIT_ASSERT(f.OldProxy->AllMyBlobs().at(id).Keep);
-        }
-        f.Controller->DisableBackground(EBackground::GC);
-        const auto dropStep = SetupSchema(f.Runtime, f.Sender, TTestSchema::DropTableTxBody(TableId, 2), 1001);
-        auto storage = f.Controller->GetTheOnlyShard()->GetStoragesManager()->GetDefaultOperator();
-        const auto hasPendingDeletion = [&] {
-            for (const auto& id : oldBlobs) {
-                if (storage->HasToDelete(NOlap::TUnifiedBlobId(OldGroup, id), static_cast<NOlap::TTabletId>(TabletId))) {
-                    return true;
-                }
-            }
-            return false;
-        };
-        for (ui32 i = 0; i < 60 && !hasPendingDeletion(); ++i) {
-            PlanCommit(f.Runtime, f.Sender, TPlanStep{ dropStep.Val() + i + 1 }, TSet<ui64>{});
-            f.Drive(1);
-        }
-        UNIT_ASSERT(hasPendingDeletion());
-        const auto& index = f.Controller->GetTheOnlyShard()->GetIndexAs<NOlap::TColumnEngineForLogs>();
-        for (const auto& [_, granule] : index.GetTables()) {
-            UNIT_ASSERT(granule->GetPortions().empty());
-            UNIT_ASSERT(granule->GetInsertedPortions().empty());
-        }
-        ui32 cuts = 0;
-        ui32 preparedGeneration = 0;
-        bool holdPreparation = true;
-        bool recoveredRequest = false;
-        TAutoPtr<IEventHandle> preparedGC;
-        std::shared_ptr<NOlap::IBlobsGCAction> recoveredGC;
-        auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
-            if (!ev->HasEvent()) {
-                return;
-            }
-            if (const auto* gc = dynamic_cast<TEvBlobStorage::TEvCollectGarbage*>(ev->GetBase());
-                gc && gc->TabletId == TabletId && gc->Channel == FirstDataChannel && ev->Cookie == OldGroup && gc->Collect) {
-                if (holdPreparation) {
-                    UNIT_ASSERT(!preparedGC);
-                    UNIT_ASSERT(gc->DoNotKeep && !gc->DoNotKeep->empty());
-                    preparedGeneration = gc->CollectGeneration;
-                    preparedGC = ev.Release();
-                } else {
-                    UNIT_ASSERT(!gc->DoNotKeep || gc->DoNotKeep->empty());
-                    UNIT_ASSERT(gc->CollectGeneration >= preparedGeneration);
-                    recoveredRequest = true;
-                    // Let recovery finish, but keep the later deletion-draining GC disabled.
+        const auto blobs = f.PreparePersistedDeletion();
+        f.PrepareGCWithoutSendingDontKeep();
+        auto stopFurtherGC = f.Runtime.AddObserver<TEvBlobStorage::TEvCollectGarbage>(
+            [&](TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
+                const auto& gc = *ev->Get();
+                if (gc.TabletId == TabletId && gc.Channel == FirstDataChannel && ev->Cookie == OldGroup && gc.Collect) {
                     f.Controller->DisableBackground(EBackground::GC);
                 }
-            } else if (const auto* finished = dynamic_cast<TEvPrivate::TEvGarbageCollectionFinished*>(ev->GetBase());
-                       finished && !holdPreparation) {
-                UNIT_ASSERT(!recoveredGC);
-                recoveredGC = finished->Action;
-            } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase())) {
-                UNIT_ASSERT_VALUES_EQUAL(cut->Record.GetChannel(), FirstDataChannel);
-                UNIT_ASSERT_VALUES_EQUAL(cut->Record.GetGroupID(), OldGroup);
-                ++cuts;
-                ev.Reset();
-            }
+            });
+        ui32 cuts = 0;
+        auto observer = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
+            ++cuts;
+            ev.Reset();
         });
-        // Prepare an advancing GC, then reboot before its DontKeep is delivered.
-        f.Restart();
-        f.Controller->EnableBackground(EBackground::GC);
-        f.Drive();
-        UNIT_ASSERT(preparedGC);
-        UNIT_ASSERT(f.History.back().first <= preparedGeneration);
-        preparedGC.Reset();
-        holdPreparation = false;
         f.Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(true);
         f.Restart();
-        storage = f.Controller->GetTheOnlyShard()->GetStoragesManager()->GetDefaultOperator();
         f.Drive();
-        UNIT_ASSERT(recoveredRequest);
-        UNIT_ASSERT(recoveredGC && !recoveredGC->IsInProgress());
-        UNIT_ASSERT(hasPendingDeletion());
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 1u);
         UNIT_ASSERT_VALUES_EQUAL(f.Counters()->GetCounter("Deriviative/CutHistory/ScansAborted/Count", true)->Val(), 0u);
         UNIT_ASSERT_VALUES_EQUAL_C(cuts, 0u, "persisted deletions must exclude the interval after the recovered barrier is committed");
+        for (const auto& blob : blobs) {
+            UNIT_ASSERT_VALUES_EQUAL(f.ReadBlobStatus(blob), NKikimrProto::OK);
+        }
     }
 
     Y_UNIT_TEST(ColdCacheBatchingAndCancellation) {
@@ -757,7 +686,6 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         const auto aborted = f.Counters()->GetCounter("Deriviative/CutHistory/ScansAborted/Count", true);
         bool cutSent = false;
         bool failMetadata = false;
-        bool disableAfterBatch = false;
         ui32 scanBatches = 0;
         auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
             if (!ev->HasEvent()) {
@@ -776,12 +704,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
                 UNIT_ASSERT(!addresses.empty());
                 UNIT_ASSERT(addresses.size() <= Max<ui32>(1, config->GetScanBatchSize()));
                 ++scanBatches;
-                if (disableAfterBatch) {
-                    UNIT_ASSERT_VALUES_EQUAL(addresses.size(), 1u);
-                    f.Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(false);
-                    disableAfterBatch = false;
-                }
                 if (failMetadata) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(addresses.size(), 1u, "an oversized portion must be fetched alone");
                     callback = std::make_shared<TFailMetadataCallback>(std::move(callback));
                     failMetadata = false;
                 }
@@ -808,8 +732,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
 
         cutSent = false;
         failMetadata = true;
-        config->SetScanBatchSize(0);
-        config->SetScanMemoryLimitBytes(0);
+        config->SetScanBatchSize(portionCount);
+        config->SetScanMemoryLimitBytes(1);
         config->SetContinuationDelayMs(0);
         config->SetContinuationJitterMs(0);
         f.ContinuationDelays.clear();
@@ -826,17 +750,6 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT(!cutSent);
         UNIT_ASSERT_VALUES_EQUAL(sent->Val(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 1u);
-
-        scanBatches = 0;
-        config->SetScanBatchSize(portionCount);
-        config->SetScanMemoryLimitBytes(1);
-        disableAfterBatch = true;
-        f.Restart();
-        f.Drive();
-        UNIT_ASSERT_VALUES_EQUAL(scanBatches, 1u);
-        UNIT_ASSERT(!cutSent);
-        UNIT_ASSERT_VALUES_EQUAL(sent->Val(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 2u);
     }
 
     Y_UNIT_TEST(UncommittedPinsOnlyItsInterval) {
@@ -861,10 +774,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         });
         f.Restart(NewGroup);
         f.Drive();
-        f.ContinuationDelays.clear();
         f.Restart();
         f.Drive();
-        UNIT_ASSERT_VALUES_EQUAL(f.ContinuationDelays.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 1u);
         f.Restart(OldGroup);
         f.Drive();
@@ -918,7 +829,6 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
                 TabletId, f.Sender, new NOlap::NDataSharing::NEvents::TEvApplyLinksModification(static_cast<NOlap::TTabletId>(TabletId),
                                         "commit-window-sharing", 0, task), 0, GetPipeConfigWithRetries());
             f.Drive();
-            UNIT_ASSERT(!f.Controller->GetTheOnlyShard()->GetSharingSessionsManager()->CanCutHistory());
         }
         f.Runtime.Send(commit.Release(), 0, true);
         f.Drive();

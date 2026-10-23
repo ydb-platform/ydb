@@ -4,19 +4,19 @@
 
 namespace NKikimr::NColumnShard::NFindEmptyHistoryIntervals {
 
-template <class TVisitor>
-void VisitBlobStorageBlobs(const NOlap::TPortionDataAccessor& accessor, const NOlap::TIndexInfo& index, TVisitor&& visitor) {
+template <class TExcluder>
+void ExcludePortionBlobs(const NOlap::TPortionDataAccessor& accessor, const NOlap::TIndexInfo& index, TExcluder&& excluder) {
     const auto& portion = accessor.GetPortionInfo();
     // External-tier data and independent indexes can use different storages.
     for (const auto& record : accessor.GetRecordsVerified()) {
         if (portion.GetColumnStorageId(record.GetEntityId(), index) == NOlap::NBlobOperations::TGlobal::DefaultStorageId) {
-            visitor(accessor.GetBlobId(record.GetBlobRange().GetBlobIdxVerified()));
+            excluder(accessor.GetBlobId(record.GetBlobRange().GetBlobIdxVerified()));
         }
     }
     for (const auto& indexChunk : accessor.GetIndexesVerified()) {
         if (portion.GetIndexStorageId(indexChunk.GetEntityId(), index) == NOlap::NBlobOperations::TGlobal::DefaultStorageId) {
             if (const auto range = indexChunk.GetBlobRangeOptional()) {
-                visitor(accessor.GetBlobId(range->GetBlobIdxVerified()));
+                excluder(accessor.GetBlobId(range->GetBlobIdxVerified()));
             }
         }
     }

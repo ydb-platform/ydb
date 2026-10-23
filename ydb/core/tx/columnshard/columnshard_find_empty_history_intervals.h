@@ -50,7 +50,7 @@ struct TFindEmptyHistoryIntervalsContext {
 
     ui64 TabletId;
     NActors::TActorId TabletActorId;
-    NFindEmptyHistoryIntervals::TIntervals Intervals;
+    NFindEmptyHistoryIntervals::THistoryIntervals::TIntervals Intervals;
     std::vector<TPortion> Portions;
 };
 
@@ -62,7 +62,7 @@ NActors::IActor* CreateFindEmptyHistoryIntervalsActor(TFindEmptyHistoryIntervals
     const TCSCounters& counters, TInstant started);
 
 struct TEmptyHistoryIntervalsScanResult {
-    NFindEmptyHistoryIntervals::TIntervals Intervals;
+    NFindEmptyHistoryIntervals::THistoryIntervals::TIntervals Intervals;
     TInstant Started;
     TInstant Finished;
     bool Aborted = false;

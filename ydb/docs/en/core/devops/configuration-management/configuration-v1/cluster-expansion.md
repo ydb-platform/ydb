@@ -3,7 +3,7 @@
 
 You can expand a {{ ydb-short-name }} cluster by adding new nodes to its configuration. Below is the list of actions for expanding a {{ ydb-short-name }} cluster installed manually on VM instances or physical servers. In the Kubernetes environment, clusters are expanded by adjusting the {{ ydb-short-name }} controller settings for Kubernetes.
 
-When expanding your {{ ydb-short-name }} cluster, you do not have to pause user access to databases. When the cluster is expanded, its components are restarted to apply the updated configurations. This means that any transactions that were in progress at the time of expansion may need to be executed again on the cluster. The transactions are rerun automatically because the applications leverage the {{ ydb-short-name }} SDK features for error control and transaction rerun.
+Expanding a {{ ydb-short-name }} cluster does not require pausing user access to databases. When adding static nodes, update the configuration of existing nodes through CMS without restarting them.
 
 ## Preparing New Servers {#add-host}
 
@@ -41,15 +41,7 @@ To add static nodes to the cluster, perform the following steps:
 
 3. Copy the updated cluster's configuration file to all the existing and added servers in the cluster, overwriting the old version of the configuration file.
 
-4. Restart all the existing static nodes in the cluster one by one, waiting for each restarted node to initialize and become fully operational.
-
-5. Restart all the existing static nodes in the cluster one by one.
-
-6. Start the processes that serve the new static nodes in the cluster, on the appropriate servers.
-
-7. Make sure that all the new static nodes now show up on the [cluster monitoring page in the {{ ydb-ui-name }}](../../../reference/ydb-ui/ydb-monitoring.md).
-
-8. Issue an authentication token using the {{ ydb-short-name }} CLI, for example:
+1. Issue an authentication token using the {{ ydb-short-name }} CLI, for example:
 
     ```bash
     ydb -e grpcs://<node1.ydb.tech>:2135 -d /Root --ca-file ca.crt \
@@ -66,18 +58,31 @@ To add static nodes to the cluster, perform the following steps:
 
     When you run the above command, {{ ydb-short-name }} CLI will request the password to authenticate the given user.
 
-9. Allow the {{ ydb-short-name }} cluster to use disks to store data on the new static nodes. For this, run the following command on any cluster node:
+1. Update `NameserviceConfig` through CMS. [Load the current configuration](cms.md), add the new static nodes with their IDs, addresses, ports, and locations to the complete `Node` list, then prepare a protobuf request file named `nameservice.txt` using the CMS instructions. Submit the request:
+
+    ```bash
+    /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://<node1.ydb.tech>:2135 \
+        admin console configs update nameservice.txt
+    ```
+
+    Updating only the file on the servers does not update `NameserviceConfig` on running nodes. Existing static and dynamic nodes do not need to be restarted.
+
+1. Start the processes that serve the new static nodes in the cluster, on the appropriate servers.
+
+1. Make sure that all the new static nodes now show up on the [cluster monitoring page in the {{ ydb-ui-name }}](../../../reference/ydb-ui/ydb-monitoring.md).
+
+1. Allow the {{ ydb-short-name }} cluster to use disks to store data on the new static nodes. For this, run the following command on any cluster node:
 
     ```bash
     export LD_LIBRARY_PATH=/opt/ydb/lib
-    /opt/ydb/bin/ydbd -f ydbd-token-file --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
+    /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
         admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
     echo $?
     ```
 
     The command example above uses the following options:
 
-    * `ydbd-token-file`: File name of the previously issued authentication token.
+    * `token-file`: File name of the previously issued authentication token.
     * `2135`: Port number of the gRPCs service for the static nodes.
     * `ca.crt`: Name of the file with the certificate authority certificate.
 
@@ -87,24 +92,24 @@ To add static nodes to the cluster, perform the following steps:
     ErrorDescription: "ItemConfigGeneration mismatch ItemConfigGenerationProvided# 0 ItemConfigGenerationExpected# 1"
     ```
 
-10. Add additional storage groups to one or more databases by running the following commands on any cluster node:
+1. Add additional storage groups to one or more databases by running the following commands on any cluster node:
 
     ```bash
     export LD_LIBRARY_PATH=/opt/ydb/lib
-    /opt/ydb/bin/ydbd -f ydbd-token-file --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
+    /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
         admin database /Root/testdb pools add ssd:1
     echo $?
     ```
 
     The command example above uses the following options:
 
-    * `ydbd-token-file`: File name of the previously issued authentication token.
+    * `token-file`: File name of the previously issued authentication token.
     * `2135`: Port number of the gRPCs service for the static nodes.
     * `ca.crt`: Name of the file with the certificate authority certificate.
     * `/Root/testdb`: Full path to the database.
     * `ssd:1`: Name of the storage pool and the number of storage groups allocated.
 
-11. Make sure that all the new storage groups now show up on the [cluster monitoring page in the {{ ydb-ui-name }}](../../../reference/ydb-ui/ydb-monitoring.md).
+1. Make sure that all the new storage groups now show up on the [cluster monitoring page in the {{ ydb-ui-name }}](../../../reference/ydb-ui/ydb-monitoring.md).
 
 To remove a static node from the {{ ydb-short-name }} cluster, use the [documented decommissioning procedure](../../deployment-options/manual/decommissioning.md).
 

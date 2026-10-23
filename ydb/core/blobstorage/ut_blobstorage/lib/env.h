@@ -73,7 +73,8 @@ struct TEnvironmentSetup {
         const bool TrackSharedQuotaInPDiskMock = false;
         const bool ReportVDiskMetricsInPDiskMock = false;
         // Mock PDisks lay data chunks out in encrypted sectors and hand out the format context, as a real PDisk does.
-        const bool SectorFormatInPDiskMock = false;
+        // Off: plain data chunks with whole-sector append blocks.
+        const bool SectorFormatInPDiskMock = true;
         const bool SelfManagementConfig = false;
         const bool EnableDeepScrubbing = false;
         const ui32 NumPiles = 0;

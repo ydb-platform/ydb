@@ -2,7 +2,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_replication_helpers.h"
 
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
@@ -431,12 +430,6 @@ public:
 
                 return result;
             }
-        }
-
-        if (Strategy->GetPathType() == TPathElement::EPathType::EPathTypeReplication
-            && !ValidateReplicationDestinations(*result, desc.GetConfig(), context))
-        {
-            return result;
         }
 
         TString errStr;

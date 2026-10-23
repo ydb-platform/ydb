@@ -6,7 +6,8 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-// One bloom-ngram probe implied by a LIKE/ILIKE match: the matched input contains (or starts/ends with) Value.
+// One index probe implied by a LIKE/ILIKE match: every matching input contains (or starts with) Value.
+// Value is a literal substring of the pattern, not an ngram; the index decides how to check it.
 struct TPatternIndexHint {
     ui32 InputIndex = 0;
     TIndexCheckOperation Operation;

@@ -335,6 +335,8 @@ runs:
 
         params+=(
           --stat -DCONSISTENT_DEBUG --no-dir-outputs
+          # Keep chunk archives separate and materialize results only in --output.
+          --dont-merge-split-tests --no-src-links
           --test-failure-code 0 --build-all
           --cache-size 2TB --force-build-depends
         )

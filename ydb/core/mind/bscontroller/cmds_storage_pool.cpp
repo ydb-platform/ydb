@@ -47,14 +47,19 @@ namespace NKikimr::NBsController {
             return error;
         }
         try {
+            std::map<std::pair<TBoxStoragePoolId, TBridgePileId>, TGroupGeometryInfo> geometries;
             for (const auto& [groupId, group] : GroupMap) {
                 if (!group->BridgePileId || group->DDisk || group->VDisksInGroup.empty()) {
                     continue;
                 }
-                const auto pool = ResolveStoragePoolForPile(group->StoragePoolId, StoragePools.at(group->StoragePoolId),
-                    group->BridgePileId, BridgeInfo.get(), &config);
-                const TGroupGeometryInfo geometry(TBlobStorageGroupType(pool.ErasureSpecies), pool.GetGroupGeometry());
-                if (group->ErasureSpecies != pool.ErasureSpecies
+                const auto [it, inserted] = geometries.try_emplace(std::make_pair(group->StoragePoolId, group->BridgePileId));
+                if (inserted) {
+                    const auto pool = ResolveStoragePoolForPile(group->StoragePoolId, StoragePools.at(group->StoragePoolId),
+                        group->BridgePileId, BridgeInfo.get(), &config);
+                    it->second = TGroupGeometryInfo(TBlobStorageGroupType(pool.ErasureSpecies), pool.GetGroupGeometry());
+                }
+                const auto& geometry = it->second;
+                if (group->ErasureSpecies != geometry.GetErasure()
                         || group->Topology->GetNumVDisksPerFailDomain() != geometry.GetNumVDisksPerFailDomain()
                         || group->Topology->GetTotalFailRealmsNum() != geometry.GetNumFailRealms()
                         || group->Topology->GetNumFailDomainsPerFailRealm() != geometry.GetNumFailDomainsPerFailRealm()) {
@@ -199,14 +204,20 @@ namespace NKikimr::NBsController {
         }
 
         const auto& spToGroups = StoragePoolGroups.Get();
+        std::map<TBridgePileId, TBlobStorageGroupType::EErasureSpecies> erasures;
         for (auto it = spToGroups.lower_bound({id, Min<TGroupId>()}); it != spToGroups.end() && it->first == id; ++it) {
             const TGroupInfo *group = Groups.Find(it->second);
             Y_ABORT_UNLESS(group);
             // inline pile keeps its own VDisks, so it must match the pool geometry like any physical group
-            const bool physical = !group->BridgeGroupInfo || group->IsInlinePile();
-            const auto effective = Self.ResolveStoragePoolForPile(id, storagePool, group->BridgePileId,
-                BridgeInfo.get(), StorageConfig.get());
-            if (physical && group->ErasureSpecies != effective.ErasureSpecies) {
+            if (group->BridgeGroupInfo && !group->IsInlinePile()) {
+                continue;
+            }
+            const auto [erasure, inserted] = erasures.try_emplace(group->BridgePileId);
+            if (inserted) {
+                erasure->second = Self.ResolveStoragePoolForPile(id, storagePool, group->BridgePileId,
+                    BridgeInfo.get(), StorageConfig.get()).ErasureSpecies;
+            }
+            if (group->ErasureSpecies != erasure->second) {
                 throw TExError() << "GroupId# " << it->second << " has different erasure species";
             }
         }

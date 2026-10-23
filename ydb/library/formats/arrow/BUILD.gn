@@ -15,7 +15,7 @@ library("arrow") {
     # ":scalar",  # peerdir only
     # "//contrib/libs/xxhash",
     # "//library/cpp/containers/stack_vector",
-    # "//ydb/core/scheme_types",
+    "//ydb/core/scheme_types",
     # "//ydb/library/arrow_clickhouse",  # peerdir only
     # "//ydb/library/arrow_kernels",  # peerdir only
     # "//ydb/library/formats/arrow/hash",  # peerdir only

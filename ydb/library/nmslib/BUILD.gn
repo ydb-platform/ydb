@@ -4,7 +4,10 @@
 # included by short paths from include/ (ADDINCL in ya.make).
 config("public_config") {
     include_dirs = [ "include" ]
-    cflags = [ "-Wno-sign-compare" ]
+    cflags = [
+        "-Wno-#pragma-messages",
+        "-Wno-sign-compare",
+    ]
 }
 
 config("private_config") {

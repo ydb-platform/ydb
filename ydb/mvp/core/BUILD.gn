@@ -25,7 +25,7 @@ library("core") {
     "//ydb/public/api/client/yc_private/resourcemanager",
     "//ydb/public/api/client/yc_private/ydb/v1",
     "//ydb/public/api/protos",
-    # "//ydb/public/lib/deprecated/client",
+    "//ydb/public/lib/deprecated/client",
     "//ydb/public/sdk/cpp/src/client/datastreams",
     "//ydb/public/sdk/cpp/src/client/draft",
     "//ydb/public/sdk/cpp/src/client/driver",

@@ -30,7 +30,8 @@ namespace {
 
         for (const auto& child : list.GetChildren()) {
             if ((settings.SkipMode_ == ERecursiveListSkipMode::Internal && IsInternalObject(child))
-                || (settings.SkipMode_ == ERecursiveListSkipMode::System && IsSystemObject(child))) {
+                || (settings.SkipMode_ == ERecursiveListSkipMode::System && IsSystemObject(child)))
+            {
                 continue;
             }
 

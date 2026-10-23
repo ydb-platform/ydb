@@ -241,7 +241,9 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
 
         env.CreateTable("/Root", *MakeTableDescription(DummyTable()));
         for (const auto& directory : {
-                 "~my_directory", "~backup", "user~backup", "~backup_12345", ".metadata", ".tmp", "export-100500"}) {
+                 "~my_directory", "~backup", "user~backup", "~backup_12345",
+                 ".sys_health", ".sys_user", ".metadata", ".metadata_user", ".tmp", ".tmp_user",
+                 ".backups", ".backups_user", "export-100500", "export-user"}) {
             env.MkDir("/Root", directory);
             UNIT_ASSERT_VALUES_EQUAL_C(
                 env.CreateTable(TStringBuilder() << "/Root/" << directory, *MakeTableDescription(DummyTable())),

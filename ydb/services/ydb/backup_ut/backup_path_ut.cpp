@@ -545,8 +545,13 @@ void ExportTildeDirectoriesByExplicitRootItemImpl(TBackupTestFixture& f) {
     TBackupTraits<TExportSettings> traits;
     const TString prefix = traits.FilePrefix();
     f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+    // Legacy system-prefixed directories can exist with names protection disabled.
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableSystemNamesProtection(false);
 
-    for (const auto* directory : {"~my_directory", "~backup", "~backup_12345"}) {
+    for (const auto* directory : {
+        "~my_directory", "~backup", "~backup_12345", "export-12345",
+        ".sys_health", ".metadata_user", ".tmp_user", ".backups_user", ".backups",
+    }) {
         auto res = f.YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
             CREATE TABLE `/Root/{}/table` (
                 key Uint32 NOT NULL,

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/library/naming_conventions/scheme_object_names.h>
+
 #include <util/generic/fwd.h>
 #include <util/generic/strbuf.h>
 
@@ -13,25 +15,21 @@ namespace NScheme {
 
 namespace NConsoleClient {
 
-constexpr TStringBuf METADATA_DIR_NAME = ".metadata";
-constexpr TStringBuf SYSVIEWS_DIR_NAME = ".sys";
-constexpr TStringBuf TMP_DIR_NAME = ".tmp";
-constexpr TStringBuf BACKUPS_DIR_NAME = ".backups";
+using NKikimr::NNaming::METADATA_DIR_NAME;
+using NKikimr::NNaming::SYSVIEWS_DIR_NAME;
+using NKikimr::NNaming::TMP_DIR_NAME;
+using NKikimr::NNaming::BACKUPS_DIR_NAME;
 constexpr TStringBuf OLD_SECRETS_DIR_NAME = "secrets";
-constexpr TStringBuf TEMPORARY_BACKUP_DIR_PREFIX = "~backup_";
 
-bool IsSystemName(const TStringBuf name);
+using NKikimr::NNaming::IsSystemName;
+using NKikimr::NNaming::IsTemporaryName;
+using NKikimr::NNaming::IsInternalName;
 
 bool IsSystemDir(const NScheme::TSchemeEntry& entry);
 
 bool IsSystemObject(const NScheme::TSchemeEntry& entry);
 
-bool IsBackupName(const TStringBuf name);
-
-bool IsBackupDir(const NScheme::TSchemeEntry& entry);
-
-// Includes system objects and temporary backup directories with the ~backup_ prefix.
-bool IsInternalName(const TStringBuf name);
+bool IsTemporaryDir(const NScheme::TSchemeEntry& entry);
 
 bool IsInternalDir(const NScheme::TSchemeEntry& entry);
 

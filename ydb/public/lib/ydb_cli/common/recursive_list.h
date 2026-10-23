@@ -10,10 +10,11 @@ enum class ERecursiveListSkipMode {
     // Apply no system/backup exclusions (e.g. include .sys and ~backup_12345).
     // Other traversal filters still apply.
     None,
-    // Skip system directories (.sys, .metadata, .tmp, .backups) and SysView entries.
+    // Skip directories starting with .sys (e.g. .sys_health), .metadata, .tmp,
+    // or .backups, and entries of type SysView.
     System,
-    // Skip system objects and temporary backup directories starting with ~backup_
-    // (e.g. ~backup_12345). Other ~-prefixed names are traversed.
+    // Skip system objects and temporary directories starting with ~backup_ or export-
+    // (e.g. ~backup_12345 or export-12345). Other ~-prefixed names are traversed.
     Internal,
 };
 

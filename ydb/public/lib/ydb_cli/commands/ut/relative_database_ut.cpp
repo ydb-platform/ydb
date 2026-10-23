@@ -25,22 +25,23 @@ TClientSettings MakeClientSettings() {
 
 Y_UNIT_TEST_SUITE(RelativeDatabase) {
     Y_UNIT_TEST(IsPreservedByCliConfiguration) {
-        char arg0[] = "ydb";
-        char arg1[] = "-e";
-        char arg2[] = "localhost:2135";
-        char arg3[] = "-d";
-        char arg4[] = "mydb";
-        char* argv[] = {arg0, arg1, arg2, arg3, arg4};
+        for (TString database : {"/Root/mydb", "Root/mydb", "mydb"}) {
+            char arg0[] = "ydb";
+            char arg1[] = "-e";
+            char arg2[] = "localhost:2135";
+            char arg3[] = "-d";
+            char* argv[] = {arg0, arg1, arg2, arg3, database.begin()};
 
-        TClientCommand::TConfig config(Y_ARRAY_SIZE(argv), argv);
-        const auto settings = MakeClientSettings();
-        TClientCommandRootCommon root("ydb", settings);
+            TClientCommand::TConfig config(Y_ARRAY_SIZE(argv), argv);
+            const auto settings = MakeClientSettings();
+            TClientCommandRootCommon root("ydb", settings);
 
-        root.Prepare(config);
-        root.ExtractParams(config);
+            root.Prepare(config);
+            root.ExtractParams(config);
 
-        UNIT_ASSERT_NO_EXCEPTION(root.Validate(config));
-        UNIT_ASSERT_VALUES_EQUAL(config.Database, "mydb");
-        UNIT_ASSERT_VALUES_EQUAL(config.CreateDriverConfig().GetDatabase(), "mydb");
+            UNIT_ASSERT_NO_EXCEPTION(root.Validate(config));
+            UNIT_ASSERT_VALUES_EQUAL(config.Database, database);
+            UNIT_ASSERT_VALUES_EQUAL(config.CreateDriverConfig().GetDatabase(), database);
+        }
     }
 }

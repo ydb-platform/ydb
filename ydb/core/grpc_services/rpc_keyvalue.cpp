@@ -589,7 +589,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(Request_->GetDatabaseName(), Request_->NormalizePath(req->path()));
+            pathPair = SplitPath(Request_->GetDatabaseName(), Request_->GetDatabaseRelativePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -641,7 +641,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(Request_->NormalizePath(req->path()));
+            pathPair = SplitPath(Request_->GetDatabaseRelativePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -682,7 +682,7 @@ protected:
     const TString& GetNormalizedPath() {
         if (!NormalizedPath) {
             auto* self = static_cast<TDerived*>(this);
-            NormalizedPath = GetRequestCtx(self).NormalizePath(self->GetProtoRequest()->path());
+            NormalizedPath = GetRequestCtx(self).GetDatabaseRelativePath(self->GetProtoRequest()->path());
         }
         return *NormalizedPath;
     }

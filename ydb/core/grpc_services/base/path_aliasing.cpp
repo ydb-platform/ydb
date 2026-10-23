@@ -17,6 +17,12 @@ namespace NKikimr::NGRpcService {
         PathNormalizer_.reset();
     }
 
+    TString IAuditCtx::GetDatabaseRelativePath(TStringBuf path, TStringBuf base) const {
+        return NormalizePath(AppData()->FeatureFlags.GetEnableRelativePaths()
+            ? PrependDomainIfNeeded(base.empty() ? GetDatabaseName().GetOrElse(TString()) : TString(base), path)
+            : TString(path));
+    }
+
     bool IRequestCtxBaseMtSafe::IsPathNormalizationEnabled() const noexcept {
         return PathNormalizationEnabled_;
     }

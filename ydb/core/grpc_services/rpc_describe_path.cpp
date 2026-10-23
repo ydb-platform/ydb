@@ -34,7 +34,7 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
-        Path = this->Request_->NormalizePath(this->GetProtoRequest()->path());
+        Path = this->Request_->GetDatabaseRelativePath(this->GetProtoRequest()->path());
         ResolvePath(ctx);
     }
 

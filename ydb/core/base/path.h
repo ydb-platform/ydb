@@ -34,6 +34,9 @@ TString PrependDomainIfNeeded(TStringBuf domainRoot, TStringBuf databasePath);
  */
 TString NormalizePath(TStringBuf database, TStringBuf path);
 TString NormalizePath(const TString& database, const TString& path);
+// Only paths starting with '/' are absolute; all others are relative to the
+// effective database.
+TString ResolvePathToDatabase(TStringBuf database, TStringBuf path);
 
 TString CreateDatabaseId(const TString& database, bool serverless, TPathId pathId);
 

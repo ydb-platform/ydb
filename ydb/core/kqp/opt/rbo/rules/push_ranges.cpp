@@ -659,9 +659,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             .PointPrefixLen = lookupResult.PointPrefixLen,
             .ExpectedMaxRanges = lookupResult.ExpectedMaxRanges ? TMaybe<size_t>(*lookupResult.ExpectedMaxRanges) : TMaybe<size_t>(),
         };
-        if (GetStorageType(*lookupIndexMeta) == NYql::EStorageType::RowStorage) {
-            rangeInfo.LiteralRange = BuildLiteralRange(lookupResult, lookupKeyColumns, *schemeType, read->Pos, ctx);
-        }
+        rangeInfo.LiteralRange = BuildLiteralRange(lookupResult, lookupKeyColumns, *schemeType, read->Pos, ctx);
 
         TUnorderedIUs indexColumns;
         THashMap<TString, TInfoUnitId> indexIds;
@@ -727,12 +725,10 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     };
     const auto storageType = chosenIndexMeta ? GetStorageType(*chosenIndexMeta) : read->GetTableStorageType();
 
-    // Only the row storage read source takes a literal range.
-    if (storageType == NYql::EStorageType::RowStorage) {
-        rangeInfo.LiteralRange = BuildLiteralRange(chosen, chosenKeyColumns, *schemeType, read->Pos, ctx);
-        if (rangeInfo.LiteralRange) {
-            YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Literal range: " << KqpExprToPrettyString(*rangeInfo.LiteralRange, ctx);
-        }
+    // Only the row storage read source takes a literal range, but explain shows it for any storage.
+    rangeInfo.LiteralRange = BuildLiteralRange(chosen, chosenKeyColumns, *schemeType, read->Pos, ctx);
+    if (rangeInfo.LiteralRange) {
+        YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Literal range: " << KqpExprToPrettyString(*rangeInfo.LiteralRange, ctx);
     }
 
     const auto tableCallable = chosenIndexMeta ? BuildTableCallable(*chosenIndexMeta, read->Pos, ctx) : read->TableCallable;

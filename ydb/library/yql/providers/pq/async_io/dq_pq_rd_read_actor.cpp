@@ -327,6 +327,7 @@ private:
     // Set on Children
     const THolderFactory& HolderFactory;
     const TTypeEnvironment& TypeEnv;
+    TStructType* StructType = nullptr;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     IFederatedTopicClient::TPtr FederatedTopicClient;
@@ -568,7 +569,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(ui64 inputIndex, TCollectStatsLevel statsLeve
     const auto outputItemType = NCommon::ParseTypeFromYson(outputTypeYson, *programBuilder, error);
     YQL_ENSURE(outputItemType, "Failed to parse output type: " << outputTypeYson << ", reason: " << error.Str());
     YQL_ENSURE(outputItemType->IsStruct(), "Output type " << outputTypeYson << " is not struct");
-    const auto structType = static_cast<TStructType*>(outputItemType);
+    StructType = static_cast<TStructType*>(outputItemType);
 
     const TStringBuf format = SourceParams.GetFormat();
     const TStringBuf normalizedFormat = format.empty() ? TStringBuf("raw") : format;
@@ -578,10 +579,10 @@ TDqPqRdReadActor::TDqPqRdReadActor(ui64 inputIndex, TCollectStatsLevel statsLeve
     // Build input schema and unpacker (packed rows from row dispatcher; not raw csv/json strings)
     TVector<TType* const> inputTypeParts;
     inputTypeParts.reserve(SourceParams.ColumnsSize());
-    ColumnIndexes.resize(structType->GetMembersCount());
+    ColumnIndexes.resize(StructType->GetMembersCount());
     for (size_t i = 0; i < SourceParams.ColumnsSize(); ++i) {
-        const auto index = structType->GetMemberIndex(SourceParams.GetColumns().Get(i));
-        inputTypeParts.emplace_back(structType->GetMemberType(index));
+        const auto index = StructType->GetMemberIndex(SourceParams.GetColumns().Get(i));
+        inputTypeParts.emplace_back(StructType->GetMemberType(index));
         ColumnIndexes[index] = i;
     }
     InputDataType = programBuilder->NewMultiType(inputTypeParts);
@@ -1231,14 +1232,24 @@ void TDqPqRdReadActor::AddMessageBatch(TRope&& messageBatch, NKikimr::NMiniKQL::
 
         NUdf::TUnboxedValue* itemPtr;
         NUdf::TUnboxedValuePod item = HolderFactory.CreateDirectArrayHolder(ColumnIndexes.size(), itemPtr);
+        const auto itemHead = itemPtr;
         for (const auto index : ColumnIndexes) {
             if (index) {
                 YQL_ENSURE(*index < parsedData.Width(),
                     "Unexpected data width " << parsedData.Width() << ", failed to extract column by index " << index);
                 *(itemPtr++) = parsedRow[*index];
             } else {
-                // TODO: support metadata fields here
-                *(itemPtr++) = NUdf::TUnboxedValuePod::Zero();
+                // TODO: replace stub metadata implementation (and move inside row_dispatcher/format_handler)
+                const auto itemType = StructType->GetMemberType(itemPtr - itemHead);
+                // must be metadata field, with exactly two cases:
+                if (itemType->IsData()) {
+                    // POD (cluster, create_time, etc)
+                    *(itemPtr++) = NUdf::TUnboxedValuePod::Zero();
+                } else {
+                    // Dict (user_attributes)
+                    YQL_ENSURE(itemType->IsDict());
+                    *(itemPtr++) = HolderFactory.GetEmptyContainerLazy();
+                }
             }
         }
 

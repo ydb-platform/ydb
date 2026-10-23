@@ -706,10 +706,6 @@ public:
         Table::DecommitStatus::Type DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::NONE;
 
         Table::GroupSizeInUnits::Type GroupSizeInUnits;
-        NKikimrBlobStorage::TFailRealmStates FailRealmStates;
-        std::optional<NKikimrBlobStorage::TConfirmedWrites> ConfirmedWrites;
-        std::optional<NKikimrBlobStorage::TGroupWritePolicy> WritePolicy;
-        std::optional<NKikimrBlobStorage::TMirror3dcGroupState> Mirror3dcState;
 
         Table::BridgePileId::Type BridgePileId;
 
@@ -790,10 +786,6 @@ public:
                     Table::SeenOperational,
                     Table::DecommitStatus,
                     Table::GroupSizeInUnits,
-                    Table::FailRealmStates,
-                    Table::WritePolicy,
-                    Table::Mirror3dcState,
-                    Table::ConfirmedWrites,
                     Table::BridgePileId,
                     Table::VirtualGroupName,
                     Table::VirtualGroupState,
@@ -819,10 +811,6 @@ public:
                     &TGroupInfo::SeenOperational,
                     &TGroupInfo::DecommitStatus,
                     &TGroupInfo::GroupSizeInUnits,
-                    &TGroupInfo::FailRealmStates,
-                    &TGroupInfo::WritePolicy,
-                    &TGroupInfo::Mirror3dcState,
-                    &TGroupInfo::ConfirmedWrites,
                     &TGroupInfo::BridgePileId,
                     &TGroupInfo::VirtualGroupName,
                     &TGroupInfo::VirtualGroupState,
@@ -2719,11 +2707,8 @@ public:
         TStaticGroupInfo(const NKikimrBlobStorage::TGroupInfo& group, const std::map<TGroupId, TStaticGroupInfo>& prev) {
             TStringStream err;
             Info = TBlobStorageGroupInfo::Parse(group, nullptr, &err);
+            Y_VERIFY_DEBUG_S(Info, "failed to parse static group, error# " << err.Str());
             if (!Info) {
-                YDB_LOG_ERROR_COMP(BS_CONTROLLER, "Rejected invalid static group configuration",
-                    {"marker", "BSCInvalidStaticGroup"},
-                    {"groupId", group.GetGroupID()},
-                    {"err", err.Str()});
                 return;
             }
             if (const auto it = prev.find(Info->GroupID); it != prev.end()) {

@@ -96,190 +96,18 @@ message TVDiskLocation {
     optional uint64 PDiskGuid = 4;
 }
 
-// Participation of a whole logical failrealm, independent of physical placement.
-message TFailRealmStates {
-    enum EState {
-        Included = 0; // Reads and acknowledged writes.
-        Excluded = 1; // No client operations or quorum participation.
-        Joining = 2; // WriteOk may use this realm only together with all Included realms; no reliable absence.
-        Leaving = 3; // Read/replication source only; no client or replication writes; excluded from CW.
-    }
-    message TFailRealm {
-        optional uint32 FailRealmIdx = 1;
-        optional EState State = 2 [default = Included];
-    }
-    // Omitted failrealms are Included.
-    repeated TFailRealm FailRealm = 1;
-}
-
-// Administrative mirror-3-dc state machine (RFC 179/180).
-// Each transition asserts the target state's old-blob guarantee; BSC does not verify replicas.
-message TMirror3dcGroupState {
-    // Realm columns below show role patterns, not fixed physical IDs.
-    // FailRealmStates explicitly assigns a role to each physical failrealm.
-    // Transitions preserve as many existing roles as the target pattern permits:
-    // IIJ -> SOLO recovery keeps J; IIL -> SOLO pending keeps L.
-    // I = Included, E = Excluded, J = Joining, L = Leaving. Layouts use interchangeable realms.
-    // WriteOk alternatives are OR-ed; WriteDurability is the background replication target.
-    // CW describes old-blob guarantees; stronger WriteOk alone affects only new blobs.
-    // CW 0 permits missing recoverable copies: recovery may never complete. A transition
-    // to positive CW still requires the administrator to confirm that target guarantee.
-    // If a Joining realm is present and a CW layout fits entirely in Included realms,
-    // that layout is guaranteed within Included realms alone, without relying on Joining.
-    // Additional copies may exist in Joining realms. For example, with I/I/J, CW 1+1
-    // guarantees a copy in each Included realm; with I/J/E, CW 2 guarantees two copies in I.
-    // Leaving copies never count toward CW. E -> L preserves physical data; J -> L preserves
-    // surviving data. E -> J and L -> J may lose old data and must not establish new guarantees.
-    // A WriteOk layout using Joining must also use every Included realm. In I/I/J, 2+2 uses
-    // the two Included realms; 1+1+1 uses all three. CW and new-write ACK rules are distinct.
-    // Ordinary S -> T transitions recover using WriteDurability(S) while still in S, then
-    // assert CW(T) with T's realm roles. BSC accepts the administrator's confirmation;
-    // it does not perform replication or verify completion.
-    // DISASTER -> RESURECTION_PENDING lets the administrator select either E as L, with CW 0.
-    // RESURECTION_PENDING -> DISASTER excludes L again. No recovery-target history is stored.
-    // The model assumes that the administrator returns a realm holding data when possible;
-    // BSC neither checks data availability nor restricts the choice to a previously used realm.
-    // Recover from I/L into I using durability 2 before asserting CW 1 in RESURECTION.
-    // A readable source is required.
-    // Mode transitions; physical-role checks in CanTransitionTo still apply.
-    // Matching parenthesized labels connect distant arrows; they are not additional states.
-    // RECOVERY INV2 is one-way into DC_RECOVERY; RECOVERY and RECOVERY INV1 are bidirectional.
-    // SOLO 0/1/2 connect arrows into the corresponding SOLO pending states.
-    // DC_FAILURE -> (SOLO 0) keeps E and changes the non-surviving I to L, with CW 0.
-    // Identical-state requests are idempotent; self-loops are omitted.
-    // Arrowheads (>, <, v, ^) sit just before destinations; + marks turns and junctions.
-    //
-    // +---------------------------+     +---------------------------+                           +---------------------------+
-    // | NORMAL                    |<----| DC_RECOVERY               |<----(RECOVERY INV2)       | DC_RECOVERY_PENDING_INV_1 |<--->(RECOVERY INV1)
-    // | I/I/I    CW: 1+1+1 OR 2+2 |     | I/I/J    CW: 1+1+1 OR 2+2 |<--------+-----------------| I/I/J             CW: 1+1 |---->(DISASTER JOIN)
-    // +-------------+-------------+     +-----+----------------+----+         |                 +---------------------------+
-    //               |                         |                |              |
-    //               |                         v                v              |                 +---------------------------+
-    //               |                  (RECOVERY INV1)  (DISASTER JOIN)       +-----------------| DC_RECOVERY_PENDING       |<--->(RECOVERY)
-    //               |                                                                           | I/I/J        CW: 1+1 OR 2 |---->(DISASTER)
-    //               |                                                                           +---------------------------+
-    //               v
-    // +---------------------------+     +---------------------------+     +---------------------------+
-    // | DC_FAILURE_PENDING        |---->| DC_FAILURE_PENDING_INV_1  |---->| DC_FAILURE_PENDING_INV_2  |
-    // | I/I/L        CW: 1+1 OR 2 |     | I/I/L             CW: 1+1 |     | I/I/L             CW: 2+2 |
-    // +---+----+------------------+     +---+----+------------------+     +---+----+------------------+
-    //     |    |           ^                |    |           ^                |    |           |
-    //     v    |           |                v    |           |                v    |           |
-    // (SOLO 0) |           v            (SOLO 1) |           v            (SOLO 2) |           v
-    //          |      (RECOVERY)                 |    (RECOVERY INV1)              |    (RECOVERY INV2)
-    //          |           ^                     |           ^                     |           ^
-    //          |           |                     |           |                     |           |
-    //          v           v                     v           v                     v           |
-    // +---------------------------+     +---------------------------+     +---------------------------+
-    // | DC_FAILURE                |---->| DC_FAILURE_INV_1          |---->| DC_FAILURE_INV_2          |
-    // | I/I/E        CW: 1+1 OR 2 |     | I/I/E             CW: 1+1 |     | I/I/E             CW: 2+2 |
-    // +-----+------------+--------+     +-------------+----------+--+     +-------------+---------+---+
-    //       |            |                    ^       |          |                      |         |
-    //       v            v                    |       |          v                      |         v
-    //    (SOLO 0)   (DISASTER)                |       |   (DISASTER INV1)               |  (DISASTER INV2)
-    //                    |                    |       |                                 |
-    //                    v                    |       +-----------------+   (SOLO 1)    +--------+--------+   (SOLO 2)
-    // +---------------------------+           |                         v       v                v        v       v
-    // | SOLO_DC_DISASTER          |           |           +---------------------------+     +---------------------------+
-    // | I/E/E               CW: 0 |           |  +------->| SOLO_DC_INV_1_PENDING     |---->| SOLO_DC_INV_2_PENDING     |<--------+
-    // +--------+------------------+           |  |    +---| I/L/E               CW: 1 |     | I/L/E               CW: 2 |---+     |
-    //          ^                              |  |    |   +-------------+-------------+     +-------------+-------------+   |     |
-    //          |           (SOLO 0)           |  |    |                 |                                 |                 |     |
-    //          v              v               |  |    |                 |                                 |                 |     |
-    // +---------------------------------+     |  |    |                 |                                 |                 |     |
-    // | SOLO_DC_RESURECTION_PENDING     |     |  |    | (DISASTER INV1) |                 (DISASTER INV2) |                 |     |
-    // | I/L/E                     CW: 0 |     |  |    |        v        v                        v        v                 |     |
-    // +----------------+----------------+     |  |    |   +---------------------------+     +---------------------------+   |     |
-    //                  |                      |  |    |   | SOLO_DC_INV_1             |---->| SOLO_DC_INV_2             |   |     |
-    //                  v                      |  |    |   | I/E/E               CW: 1 |     | I/E/E               CW: 2 |   |     |
-    // +---------------------------------+     |  |    |   +---------------------------+     +---------------------------+   |     |
-    // | SOLO_DC_RESURECTION             |     |  |    |                   ^                               ^                 |     |
-    // | I/L/E                     CW: 1 |     |  |    |                   |                               |                 |     |
-    // +----------------+----------------+     |  |    | (DISASTER JOIN)   |                               |                 |     |
-    //                  |                      |  |    v        v          v                               v                 v     |
-    //                  +--> (SOLO 1)          |  |  +---------------------------------+     +---------------------------------+   |
-    //                  +--> (DISASTER JOIN)   |  +--| SOLO_DC_RECOVERY_PENDING_INV_1  |     | SOLO_DC_RECOVERY_PENDING_INV_2  |---+
-    //                                         |     | I/J/E                     CW: 1 |     | I/J/E                     CW: 2 |
-    //                                         |     +----------------+----------------+     +----------------+----------------+
-    //                                         |                      |                                       |
-    //                                         |                      +---------------------------------------+
-    //                                         |                      |
-    //                                         |                      v
-    //                                         |     +---------------------------------+
-    //                                         +-----| SOLO_DC_RECOVERY_INV_1          |
-    //                                               | I/J/E                   CW: 1+1 |
-    //                                               +---------------------------------+
-    //
-    enum EMode {
-        // Realms I/I/I; WriteOk = 1+1+1 OR 2+2; WriteDurability = 1+1+1; CW = 1+1+1 OR 2+2.
-        NORMAL = 0;
-        // Realms I/I/L; WriteOk = 2+2; WriteDurability = 1+1; CW = 1+1 OR 2.
-        DC_FAILURE_PENDING = 1;
-        // Realms I/I/L; WriteOk = WriteDurability = 2+2; CW = 1+1 (invariant I).
-        DC_FAILURE_PENDING_INV_1 = 2;
-        // Realms I/I/L; WriteOk = WriteDurability = CW = 2+2 (invariant II).
-        DC_FAILURE_PENDING_INV_2 = 3;
-        // Realms I/I/E; WriteOk = WriteDurability = 2+2; CW = 1+1 OR 2.
-        DC_FAILURE = 4;
-        // Realms I/I/E; WriteOk = WriteDurability = 2+2; CW = 1+1 (invariant I).
-        DC_FAILURE_INV_1 = 5;
-        // Realms I/I/E; WriteOk = WriteDurability = CW = 2+2 (invariant II).
-        DC_FAILURE_INV_2 = 6;
-        // Realms I/I/J; WriteOk = 2+2; WriteDurability = 1+1+1; CW = 1+1 OR 2.
-        DC_RECOVERY_PENDING = 7;
-        // Realms I/I/J; WriteOk = 1+1+1 OR 2+2; WriteDurability = 1+1+1; CW = 1+1.
-        DC_RECOVERY_PENDING_INV_1 = 8;
-        // Realms I/I/J; WriteOk = 1+1+1 OR 2+2; WriteDurability = 1+1+1; CW = 1+1+1 OR 2+2.
-        DC_RECOVERY = 9;
-        // Realms I/L/E; WriteOk = WriteDurability = 2; CW = 1.
-        SOLO_DC_INV_1_PENDING = 10;
-        // Realms I/L/E; WriteOk = WriteDurability = 2; CW = 2; prepare to exclude B.
-        SOLO_DC_INV_2_PENDING = 11;
-        // Realms I/E/E; WriteOk = WriteDurability = 2; CW = 1 (invariant I).
-        SOLO_DC_INV_1 = 12;
-        // Realms I/E/E; WriteOk = WriteDurability = 2; CW = 2 (invariant II).
-        SOLO_DC_INV_2 = 13;
-        // Realms I/J/E; WriteOk = 2+2; WriteDurability = 1+1; CW = 1.
-        SOLO_DC_RECOVERY_PENDING_INV_1 = 14;
-        // Realms I/J/E; WriteOk = 2+2; WriteDurability = 1+1; CW = 2.
-        SOLO_DC_RECOVERY_PENDING_INV_2 = 15;
-        // Realms I/J/E; WriteOk = 2+2; WriteDurability = 1+1; CW = 1+1.
-        SOLO_DC_RECOVERY_INV_1 = 16;
-        // Realms I/E/E; WriteOk = WriteDurability = 2; CW = 0: no surviving copy is guaranteed.
-        SOLO_DC_DISASTER = 17;
-        // Realms I/L/E; WriteOk = WriteDurability = 2; CW = 1.
-        // The administrator confirms that a surviving copy has been recovered.
-        SOLO_DC_RESURECTION = 18;
-        // Realms I/L/E; WriteOk = WriteDurability = 2; CW = 0: no surviving-copy guarantee yet.
-        SOLO_DC_RESURECTION_PENDING = 19;
-    }
-    optional EMode Mode = 1;
-    // All three physical failrealms must be present with explicit indices and states,
-    // including Included. Their role counts must match Mode; entry order is irrelevant.
-    optional TFailRealmStates FailRealmStates = 2;
-}
-
-// Each entry is a minimum number of written parts in a distinct failrealm.
-// Realm identities are interchangeable: [1, 2] means one realm with >=1 part
-// and another realm with >=2 parts.
-message TGroupWriteLayout {
-    repeated uint32 PartsPerFailRealm = 1;
-}
-
-// Minimal guaranteed layouts for all confirmed blobs, including old data.
-// One empty Layout represents CW 0 (no surviving-copy guarantee); an absent Layout list is invalid.
-message TConfirmedWrites {
-    repeated TGroupWriteLayout Layout = 1;
-}
-
-message TGroupWritePolicy {
-    // Alternatives are OR-ed; requirements inside a layout are AND-ed.
-    repeated TGroupWriteLayout WriteOk = 1;
-    repeated TGroupWriteLayout WriteDurability = 2;
-}
-
 message TGroupInfo {
     message TFailRealm {
+        // Internal state; N states describe minimum copies of every confirmed blob.
+        // N0 makes no per-realm copy guarantee and does not imply an empty realm.
+        enum EState {
+            N0 = 0;
+            N1 = 1;
+            N2 = 2;
+            F = 3; // Failure.
+            R = 4; // Recovery.
+        }
+        optional EState State = 2 [default = N0];
         message TFailDomain {
             repeated TVDiskLocation VDiskLocations = 1;
         }
@@ -307,10 +135,6 @@ message TGroupInfo {
     optional uint32 BridgeProxyGroupId = 19; // proxy group when running in Bridge mode
     optional uint32 BridgePileId = 20;
     optional bool DDisk = 21; // is this a Direct Block Group?
-    optional TFailRealmStates FailRealmStates = 26;
-    optional TGroupWritePolicy WritePolicy = 25;
-    optional TMirror3dcGroupState Mirror3dcState = 27;
-    optional TConfirmedWrites ConfirmedWrites = 28;
 }
 
 // VDiskStatus ordering is assumed to be lower for bad statuses and higher for good ones

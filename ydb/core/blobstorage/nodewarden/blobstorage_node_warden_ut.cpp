@@ -3547,51 +3547,6 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         }
     };
 
-    Y_UNIT_TEST(TestInvalidGroupConfigurationCanBeCorrected) {
-        TStaticGroupProxyTestSetup setup(100);
-        setup.Bootstrap();
-        setup.SimulateForwardedRequest();
-
-        setup.Runtime.WrapInActorContext(setup.NodeWardenId, [&](IActor* actor) {
-            auto& warden = *static_cast<NStorage::TNodeWarden*>(actor);
-            auto& group = warden.Groups.at(setup.StaticGroupId);
-            UNIT_ASSERT(group.Info);
-            const auto proxyId = group.ProxyId;
-            auto valid = *group.Group;
-
-            for (bool invalidPolicy : {false, true}) {
-                valid.SetGroupGeneration(valid.GetGroupGeneration() + 1);
-                auto invalid = valid;
-                if (invalidPolicy) {
-                    invalid.MutableWritePolicy(); // Both lists of layouts are missing.
-                } else {
-                    auto* realmState = invalid.MutableFailRealmStates()->AddFailRealm();
-                    realmState->SetFailRealmIdx(1); // Only failrealm 0 exists.
-                    realmState->SetState(NKikimrBlobStorage::TFailRealmStates::Excluded);
-                }
-                const auto resolverId = setup.Runtime.AllocateEdgeActor(setup.NodeId);
-                group.GroupResolver = resolverId;
-                group.GetGroupRequestPending = true;
-                warden.ApplyGroupInfo(setup.StaticGroupId, invalid.GetGroupGeneration(), &invalid, true, false);
-                UNIT_ASSERT_VALUES_EQUAL(group.GroupResolver, resolverId);
-                UNIT_ASSERT(group.GetGroupRequestPending);
-                UNIT_ASSERT(!group.Info);
-                UNIT_ASSERT(!group.Group);
-                UNIT_ASSERT(!group.NodeLayoutInfo);
-                UNIT_ASSERT_VALUES_EQUAL(group.MaxKnownGeneration, invalid.GetGroupGeneration());
-                UNIT_ASSERT_VALUES_EQUAL(group.ProxyId, proxyId);
-
-                // A corrected configuration must be accepted even without another generation bump.
-                warden.ApplyGroupInfo(setup.StaticGroupId, valid.GetGroupGeneration(), &valid, true, false);
-                UNIT_ASSERT(group.Info);
-                UNIT_ASSERT_VALUES_EQUAL(group.Info->GroupGeneration, valid.GetGroupGeneration());
-                UNIT_ASSERT_VALUES_EQUAL(group.ProxyId, proxyId);
-                UNIT_ASSERT(!group.GroupResolver);
-                UNIT_ASSERT(!group.GetGroupRequestPending);
-            }
-        });
-    }
-
     Y_UNIT_TEST(TestDynamicNodeLazyStaticGroupProxyCreation) {
         // MaxStaticNodeId = 0 means node 1 is a dynamic node
         TStaticGroupProxyTestSetup setup(0);

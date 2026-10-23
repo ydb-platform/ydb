@@ -643,13 +643,6 @@ message TUpdateBridgeGroupInfo {
     NKikimrBlobStorage.TGroupInfo BridgeGroupInfo = 3; // new value for bridge group info
 }
 
-// One manual state-machine step; successful changes increment the group generation.
-message TSetMirror3DcGroupState {
-    uint32 GroupId = 1;
-    uint32 GroupGeneration = 2;
-    NKikimrBlobStorage.TMirror3dcGroupState State = 3;
-}
-
 message TReconfigureVirtualGroup {
     string Name = 1;
     optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 2;
@@ -743,7 +736,6 @@ message TConfigRequest {
             TPopulatePDisk PopulatePDisk = 61;
             TDeleteSpecificGroups DeleteSpecificGroups = 62;
             TUpdateStoragePoolSettings UpdateStoragePoolSettings = 63;
-            TSetMirror3DcGroupState SetMirror3DcGroupState = 68;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -879,10 +871,6 @@ message TBaseConfig {
         uint32 GroupSizeInUnits = 11;
         bool IsProxyGroup = 12;
         string StoragePoolName = 13;
-        NKikimrBlobStorage.TFailRealmStates FailRealmStates = 18;
-        NKikimrBlobStorage.TGroupWritePolicy WritePolicy = 17;
-        NKikimrBlobStorage.TMirror3dcGroupState Mirror3dcState = 19;
-        NKikimrBlobStorage.TConfirmedWrites ConfirmedWrites = 20;
     }
     message TNode {
         uint32 NodeId = 1;

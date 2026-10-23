@@ -17,6 +17,7 @@ SRCS(
     blobstorage_groupinfo.h
     blobstorage_groupinfo_data_check.h
     blobstorage_groupinfo_iter.h
+    blobstorage_groupinfo_mirror3dc_state.h
     blobstorage_groupinfo_partlayout.cpp
     blobstorage_groupinfo_partlayout.h
     blobstorage_groupinfo_sets.h
@@ -26,6 +27,5 @@ SRCS(
 END()
 
 RECURSE_FOR_TESTS(
-    models/mirror3dc
     ut
 )

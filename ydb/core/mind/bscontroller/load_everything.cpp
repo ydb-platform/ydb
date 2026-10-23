@@ -244,16 +244,6 @@ public:
                                                    std::get<2>(geom),
                                                    false /* ddisk, will fill in later */);
 
-                group.FailRealmStates = groups.GetValueOrDefault<T::FailRealmStates>();
-                if (groups.HaveValue<T::Mirror3dcState>()) {
-                    group.Mirror3dcState = groups.GetValue<T::Mirror3dcState>();
-                }
-                if (groups.HaveValue<T::ConfirmedWrites>()) {
-                    group.ConfirmedWrites = groups.GetValue<T::ConfirmedWrites>();
-                }
-                if (groups.HaveValue<T::WritePolicy>()) {
-                    group.WritePolicy = groups.GetValue<T::WritePolicy>();
-                }
                 group.DecommitStatus = groups.GetValueOrDefault<T::DecommitStatus>();
                 if (group.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
                     group.VDisksInGroup.clear();

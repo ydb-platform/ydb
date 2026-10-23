@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/blobstorage/crypto/crypto.h>
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/blobstorage_common.h>
@@ -15,10 +16,6 @@
 #include <util/str_stl.h>
 #include <util/digest/numeric.h>
 #include <util/generic/hash_set.h>
-#include <util/generic/vector.h>
-
-#include <algorithm>
-#include <array>
 
 namespace NKikimrBlobStorage {
     class TGroupInfo;
@@ -342,12 +339,16 @@ public:
     // DYNAMIC INFO
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     struct TDynamicInfo {
+        using EFailRealmState = NKikimrBlobStorage::TGroupInfo::TFailRealm::EState;
+
         // blobstorage group id
         const TGroupId GroupId;
         // blobstorage group generation
         const ui32 GroupGeneration;
         // map to quickly get Service id (TActorId) from its order number inside TTopology
         TVector<TActorId> ServiceIdForOrderNumber;
+        // Indexed by physical failrealm. Kept with this generation, not in cached Topology.
+        TVector<EFailRealmState> FailRealmStates;
 
         TDynamicInfo(TGroupId groupId, ui32 groupGen);
         TDynamicInfo(const TDynamicInfo&) = default;
@@ -363,6 +364,9 @@ public:
     const IQuorumChecker& GetQuorumChecker() const;
     const TTopology &GetTopology() const { return *Topology; }
     const TDynamicInfo &GetDynamicInfo() const { return Dynamic; }
+    TDynamicInfo::EFailRealmState GetFailRealmState(ui32 failRealmIdx) const {
+        return Dynamic.FailRealmStates.at(failRealmIdx);
+    }
     EEncryptionMode GetEncryptionMode() const { return EncryptionMode; }
     ELifeCyclePhase GetLifeCyclePhase() const { return LifeCyclePhase; }
     ui64 GetGroupKeyNonce() const { return GroupKeyNonce; }
@@ -514,95 +518,6 @@ public:
     const TBlobStorageGroupType Type;
     // the size to match PDisk.SlotSizeInUnits
     ui32 GroupSizeInUnits;
-    struct TWritePolicy {
-        using TLayouts = TVector<TVector<ui32>>;
-        TLayouts WriteOk;
-        TLayouts WriteDurability;
-
-        bool operator==(const TWritePolicy&) const = default;
-
-        static std::optional<TWritePolicy> Parse(const NKikimrBlobStorage::TGroupWritePolicy& policy,
-            const TTopology& topology, IOutputStream* err = nullptr);
-        NKikimrBlobStorage::TGroupWritePolicy ToProto() const;
-        // Geometry-only checks: counts have no realm identities or roles here. Managed mirror-3-dc
-        // callers use TMirror3dcState::CheckWriteOk/CheckWriteDurability for participation rules.
-        bool CheckWriteOk(TVector<ui32> partsPerFailRealm) const;
-        bool CheckWriteDurability(TVector<ui32> partsPerFailRealm) const;
-
-    private:
-        static bool CheckLayouts(const TLayouts& layouts, TVector<ui32> partsPerFailRealm);
-    };
-
-    struct TConfirmedWrites {
-        // One empty layout means CW 0; an empty list is not a valid guarantee.
-        TWritePolicy::TLayouts Layouts;
-        bool operator==(const TConfirmedWrites&) const = default;
-        static std::optional<TConfirmedWrites> Parse(const NKikimrBlobStorage::TConfirmedWrites& proto,
-            const TTopology& topology, IOutputStream* err = nullptr);
-        NKikimrBlobStorage::TConfirmedWrites ToProto() const;
-        // Remove duplicates and alternatives implied by a weaker layout.
-        static TConfirmedWrites Minimize(TWritePolicy::TLayouts layouts);
-        bool Covers(const TWritePolicy::TLayouts& layouts) const;
-    };
-
-    std::optional<TWritePolicy> WritePolicy;
-    std::optional<TConfirmedWrites> ConfirmedWrites;
-    enum class EFailRealmState : ui32 {
-        Included = 0,
-        Excluded = 1,
-        Joining = 2,
-        Leaving = 3,
-    };
-    struct TFailRealmState {
-        ui32 FailRealmIdx;
-        EFailRealmState State;
-        bool operator==(const TFailRealmState&) const = default;
-    };
-    TVector<TFailRealmState> FailRealmStates;
-
-    static std::optional<TVector<TFailRealmState>> ParseFailRealmStates(const NKikimrBlobStorage::TFailRealmStates& states,
-        const TTopology& topology, IOutputStream* err = nullptr);
-
-    EFailRealmState GetFailRealmState(ui32 failRealmIdx) const {
-        for (const auto& item : FailRealmStates) {
-            if (item.FailRealmIdx == failRealmIdx) {
-                return item.State;
-            }
-        }
-        return EFailRealmState::Included;
-    }
-
-    struct TMirror3dcState {
-        using EMode = NKikimrBlobStorage::TMirror3dcGroupState::EMode;
-        EMode Mode = NKikimrBlobStorage::TMirror3dcGroupState::NORMAL;
-        // Physical failrealm indices; every realm has an explicit role.
-        std::array<EFailRealmState, 3> FailRealmStates{};
-
-        bool operator==(const TMirror3dcState&) const = default;
-        static std::optional<TMirror3dcState> Parse(const NKikimrBlobStorage::TMirror3dcGroupState& state,
-            const TTopology& topology, IOutputStream* err = nullptr);
-        NKikimrBlobStorage::TMirror3dcGroupState ToProto() const;
-        bool CanTransitionTo(const TMirror3dcState& next) const;
-        TVector<TFailRealmState> GetFailRealmStates() const;
-        TWritePolicy GetWritePolicy() const;
-        // Indexed by FailRealmIdx. Joining can participate only together with all Included realms.
-        TVector<std::array<ui32, 3>> GetWriteOkLayouts() const;
-        bool CheckWriteOk(const std::array<ui32, 3>& partsPerFailRealm) const;
-        bool CheckWriteDurability(const std::array<ui32, 3>& partsPerFailRealm) const;
-        // Invariant and recovery milestones may assert stronger guarantees for existing blobs.
-        TConfirmedWrites GetConfirmedWrites() const;
-
-    private:
-        bool HasValidFailRealmStates() const;
-        static std::array<EFailRealmState, 3> GetRealmPattern(EMode mode);
-    };
-    std::optional<TMirror3dcState> Mirror3dcState;
-
-    bool HasStoragePolicyChanged(const TBlobStorageGroupInfo& previous) const {
-        return FailRealmStates != previous.FailRealmStates || WritePolicy != previous.WritePolicy
-            || Mirror3dcState != previous.Mirror3dcState || ConfirmedWrites != previous.ConfirmedWrites;
-    }
-
     // virtual group BlobDepot tablet id
     std::optional<ui64> BlobDepotId;
     // assimilating group id

@@ -26,5 +26,6 @@ SRCS(
 END()
 
 RECURSE_FOR_TESTS(
+    models/mirror3dc
     ut
 )

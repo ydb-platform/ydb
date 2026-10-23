@@ -550,6 +550,131 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
     }
 
+    Y_UNIT_TEST(Mirror3dcRecoveryRealmIdentity) {
+        using T = NKikimrBlobStorage::TMirror3dcGroupState;
+        using TInfo = TBlobStorageGroupInfo;
+        using TState = TInfo::TMirror3dcState;
+        using R = TInfo::EFailRealmState;
+        TEnvironmentSetup env(9, 3);
+        bool active = false;
+        env.Prepare("mirror3dc-recovery-realms", [](TTestActorRuntime&) {}, active);
+        NKikimrBlobStorage::TConfigRequest setup;
+        env.DefineBox(1, "box", {{"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0}}, env.GetNodes(), setup);
+        env.DefineStoragePool(1, 1, "pool", 1, NKikimrBlobStorage::ROT, {}, setup, "mirror-3-dc");
+        UNIT_ASSERT(env.Invoke(setup).GetSuccess());
+        auto query = [&] { return FetchBaseConfig(&env).GetGroup(0); };
+        auto group = query();
+        auto request = [&](const TState& state) {
+            NKikimrBlobStorage::TConfigRequest req;
+            auto* cmd = req.AddCommand()->MutableSetMirror3DcGroupState();
+            cmd->SetGroupId(group.GetGroupId());
+            cmd->SetGroupGeneration(group.GetGroupGeneration());
+            cmd->MutableState()->CopyFrom(state.ToProto());
+            return req;
+        };
+        auto transition = [&](const TState& state) {
+            const ui32 generation = group.GetGroupGeneration();
+            const auto response = env.Invoke(request(state));
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            group = query();
+            UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), generation + 1);
+            UNIT_ASSERT_VALUES_EQUAL(group.GetMirror3dcState().SerializeAsString(), state.ToProto().SerializeAsString());
+        };
+        for (const auto mode : {T::DC_RECOVERY_PENDING_INV_1, T::DC_RECOVERY}) {
+            for (ui32 joining = 0; joining != 3; ++joining) {
+                for (ui32 survivor = 0; survivor != 3; ++survivor) {
+                    if (survivor == joining) {
+                        continue;
+                    }
+                    const ui32 excluded = 3 - joining - survivor;
+                    transition({T::DC_FAILURE_PENDING, joining, {}});
+                    transition({T::DC_FAILURE_PENDING_INV_1, joining, {}});
+                    transition({T::DC_RECOVERY_PENDING_INV_1, joining, {}});
+                    if (mode == T::DC_RECOVERY) {
+                        transition({mode, joining, {}});
+                        // Direct RECOVERY INV1 paths from the diagram.
+                        transition({T::DC_FAILURE_PENDING_INV_1, joining, {}});
+                        transition({T::DC_RECOVERY_PENDING_INV_1, joining, {}});
+                        transition({mode, joining, {}});
+                        transition({T::DC_FAILURE_INV_1, joining, {}});
+                        transition({T::DC_RECOVERY_PENDING_INV_1, joining, {}});
+                        transition({mode, joining, {}});
+                    }
+                    UNIT_ASSERT(!env.Invoke(request({T::SOLO_DC_RECOVERY_PENDING_INV_1, joining, survivor})).GetSuccess());
+                    UNIT_ASSERT_VALUES_EQUAL(query().SerializeAsString(), group.SerializeAsString());
+                    transition({T::SOLO_DC_RECOVERY_PENDING_INV_1, excluded, survivor});
+                    RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+                    const auto restored = query();
+                    UNIT_ASSERT_VALUES_EQUAL(restored.GetMirror3dcState().SerializeAsString(),
+                        group.GetMirror3dcState().SerializeAsString());
+                    std::array<R, 3> roles{R::Included, R::Included, R::Included};
+                    for (const auto& realm : restored.GetFailRealmStates().GetFailRealm()) {
+                        roles[realm.GetFailRealmIdx()] = static_cast<R>(realm.GetState());
+                    }
+                    UNIT_ASSERT(roles[survivor] == R::Included);
+                    UNIT_ASSERT(roles[joining] == R::Joining);
+                    UNIT_ASSERT(roles[excluded] == R::Excluded);
+                    transition({T::SOLO_DC_INV_1_PENDING, excluded, survivor});
+                    transition({T::SOLO_DC_INV_1, excluded, survivor});
+                    transition({T::SOLO_DC_RECOVERY_PENDING_INV_1, excluded, survivor});
+                    transition({T::SOLO_DC_RECOVERY_INV_1, excluded, survivor});
+                    transition({T::DC_FAILURE_INV_1, excluded, {}});
+                    transition({T::DC_RECOVERY_PENDING_INV_1, excluded, {}});
+                    transition({T::DC_RECOVERY, excluded, {}});
+                    transition({});
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(Mirror3dcPendingToSolo) {
+        using T = NKikimrBlobStorage::TMirror3dcGroupState;
+        using TState = TBlobStorageGroupInfo::TMirror3dcState;
+        TEnvironmentSetup env(9, 3);
+        bool active = false;
+        env.Prepare("mirror3dc-pending-to-solo", [](TTestActorRuntime&) {}, active);
+        NKikimrBlobStorage::TConfigRequest setup;
+        env.DefineBox(1, "box", {{"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0}}, env.GetNodes(), setup);
+        env.DefineStoragePool(1, 1, "pool", 1, NKikimrBlobStorage::ROT, {}, setup, "mirror-3-dc");
+        UNIT_ASSERT(env.Invoke(setup).GetSuccess());
+        auto query = [&] { return FetchBaseConfig(&env).GetGroup(0); };
+        auto group = query();
+        auto transition = [&](const TState& state) {
+            NKikimrBlobStorage::TConfigRequest req;
+            auto* cmd = req.AddCommand()->MutableSetMirror3DcGroupState();
+            cmd->SetGroupId(group.GetGroupId());
+            cmd->SetGroupGeneration(group.GetGroupGeneration());
+            cmd->MutableState()->CopyFrom(state.ToProto());
+            const ui32 generation = group.GetGroupGeneration();
+            const auto response = env.Invoke(req);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+            RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+            group = query();
+            UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), generation + 1);
+            UNIT_ASSERT_VALUES_EQUAL(group.GetMirror3dcState().SerializeAsString(), state.ToProto().SerializeAsString());
+            UNIT_ASSERT_VALUES_EQUAL(group.GetConfirmedWrites().SerializeAsString(),
+                state.GetConfirmedWrites().ToProto().SerializeAsString());
+        };
+        const TVector<TState> path = {
+            {T::DC_FAILURE_PENDING, 0, {}}, {T::SOLO_DC_RESURECTION_PENDING, 1, 2},
+            {T::SOLO_DC_RESURECTION, 1, 2}, {T::SOLO_DC_RECOVERY_PENDING_INV_1, 1, 2},
+            {T::SOLO_DC_RECOVERY_INV_1, 1, 2}, {T::DC_FAILURE_INV_1, 1, {}},
+            {T::DC_RECOVERY_PENDING_INV_1, 1, {}}, {T::DC_RECOVERY, 1, {}}, {},
+            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE_PENDING_INV_1, 0, {}},
+            {T::SOLO_DC_INV_1_PENDING, 1, 2}, {T::SOLO_DC_INV_1, 1, 2},
+            {T::SOLO_DC_RECOVERY_PENDING_INV_1, 1, 2}, {T::SOLO_DC_RECOVERY_INV_1, 1, 2},
+            {T::DC_FAILURE_INV_1, 1, {}}, {T::DC_RECOVERY_PENDING_INV_1, 1, {}}, {T::DC_RECOVERY, 1, {}}, {},
+            {T::DC_FAILURE_PENDING, 0, {}}, {T::DC_FAILURE_PENDING_INV_1, 0, {}},
+            {T::DC_FAILURE_PENDING_INV_2, 0, {}}, {T::SOLO_DC_INV_2_PENDING, 1, 2},
+            {T::SOLO_DC_INV_2, 1, 2}, {T::SOLO_DC_RECOVERY_PENDING_INV_2, 1, 2},
+            {T::SOLO_DC_RECOVERY_INV_1, 1, 2}, {T::DC_FAILURE_INV_1, 1, {}},
+            {T::DC_RECOVERY_PENDING_INV_1, 1, {}}, {T::DC_RECOVERY, 1, {}}, {},
+        };
+        for (const auto& state : path) {
+            transition(state);
+        }
+    }
+
     Y_UNIT_TEST(Mirror3dcStateRejectsBlock42) {
         TEnvironmentSetup env(8, 1);
         bool active = false;

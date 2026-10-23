@@ -113,14 +113,19 @@ message TFailRealmStates {
 }
 
 // Administrative mirror-3-dc state machine (RFC 179/180).
-// Entering NORMAL, INV, DC_FAILURE_PENDING_INV, or DC_RECOVERY states
-// asserts the stated old-blob guarantee; BSC does not verify replicas.
+// Each transition asserts the target state's old-blob guarantee; BSC does not verify replicas.
 message TMirror3dcGroupState {
     // Realm order below is A/B/C, not numeric indices: C is FailedFailRealmIdx;
     // in SOLO modes A is SurvivingFailRealmIdx and B is the other non-failed realm.
+    // These columns describe roles, not fixed physical IDs. IIJ -> SOLO recovery keeps J:
+    // with physical roles I/I/J and A surviving, the new roles are I/E/J. FailedFailRealmIdx
+    // changes from the old J to the newly excluded I; subsequent SOLO transitions retain it.
+    // Similarly, IIL -> SOLO pending keeps L and excludes one I, updating FailedFailRealmIdx.
     // I = Included, E = Excluded, J = Joining, L = Leaving. Layouts use interchangeable realms.
     // WriteOk alternatives are OR-ed; WriteDurability is the background replication target.
     // CW describes old-blob guarantees; stronger WriteOk alone affects only new blobs.
+    // CW 0 permits missing recoverable copies: recovery may never complete. A transition
+    // to positive CW still requires the administrator to confirm that target guarantee.
     // If a Joining realm is present and a CW layout fits entirely in Included realms,
     // that layout is guaranteed within Included realms alone, without relying on Joining.
     // Additional copies may exist in Joining realms. For example, with I/I/J, CW 1+1
@@ -132,67 +137,74 @@ message TMirror3dcGroupState {
     // Ordinary S -> T transitions recover using WriteDurability(S) while still in S, then
     // assert CW(T) with T's realm roles. BSC accepts the administrator's confirmation;
     // it does not perform replication or verify completion.
-    // DISASTER -> RESURECTION_PENDING returns E as L with CW 0; recover from I/L into I
-    // using durability 2 before asserting CW 1 in RESURECTION. A readable source is required.
+    // DISASTER -> RESURECTION_PENDING returns the last direct I -> E realm as L with CW 0.
+    // In DISASTER this is the realm other than FailedFailRealmIdx and SurvivingFailRealmIdx.
+    // Recover from I/L into I using durability 2 before asserting CW 1 in RESURECTION.
+    // A readable source is required.
     // Mode transitions; realm-index checks in CanTransitionTo still apply.
-    // Matching RECOVERY, RECOVERY INV1, and RECOVERY INV2 labels connect distant arrows.
+    // Matching parenthesized labels connect distant arrows; they are not additional states.
+    // RECOVERY INV2 is one-way into DC_RECOVERY; RECOVERY and RECOVERY INV1 are bidirectional.
+    // SOLO 0/1/2 connect failure-pending shortcuts while preserving the physical Leaving realm.
     // Identical-state requests are idempotent; self-loops are omitted.
+    // Arrowheads (>, <, v, ^) sit just before destinations; + marks turns and junctions.
     //
     // +---------------------------+     +---------------------------+                           +---------------------------+
-    // | NORMAL                    |<----| DC_RECOVERY        (INV 1)|<----(RECOVERY INV2)       | DC_RECOVERY_PENDING_INV_1 |<--->(RECOVERY INV1)
+    // | NORMAL                    |<----| DC_RECOVERY               |<----(RECOVERY INV2)       | DC_RECOVERY_PENDING_INV_1 |<--->(RECOVERY INV1)
     // | I/I/I    CW: 1+1+1 OR 2+2 |     | I/I/J    CW: 1+1+1 OR 2+2 |<--------+-----------------| I/I/J             CW: 1+1 |---->(DISASTER JOIN)
     // +-------------+-------------+     +-----+----------------+----+         |                 +---------------------------+
     //               |                         |                |              |
     //               |                         v                v              |                 +---------------------------+
-    //               |                   (RECOVERY INV1) (DISASTER JOIN)       +-----------------| DC_RECOVERY_PENDING       |<--->(RECOVERY)
+    //               |                  (RECOVERY INV1)  (DISASTER JOIN)       +-----------------| DC_RECOVERY_PENDING       |<--->(RECOVERY)
     //               |                                                                           | I/I/J        CW: 1+1 OR 2 |---->(DISASTER)
     //               |                                                                           +---------------------------+
     //               v
-    // +-------------+-------------+     +---------------------------+     +---------------------------+
+    // +---------------------------+     +---------------------------+     +---------------------------+
     // | DC_FAILURE_PENDING        |---->| DC_FAILURE_PENDING_INV_1  |---->| DC_FAILURE_PENDING_INV_2  |
     // | I/I/L        CW: 1+1 OR 2 |     | I/I/L             CW: 1+1 |     | I/I/L             CW: 2+2 |
-    // +--------+-----------^------+     +--------+-----------^------+     +--------+-----------^------+
-    //          |           |                     |           |                     |           |
-    //          |           v                     |           v                     |           v
+    // +---+----+------------------+     +---+----+------------------+     +---+----+------------------+
+    //     |    |           ^                |    |           ^                |    |           |
+    //     v    |           |                v    |           |                v    |           |
+    // (SOLO 0) |           v            (SOLO 1) |           v            (SOLO 2) |           v
     //          |      (RECOVERY)                 |    (RECOVERY INV1)              |    (RECOVERY INV2)
     //          |           ^                     |           ^                     |           ^
     //          |           |                     |           |                     |           |
-    // +--------v-----------v------+     +--------v-----------v------+     +--------v-----------v------+
+    //          v           v                     v           v                     v           |
+    // +---------------------------+     +---------------------------+     +---------------------------+
     // | DC_FAILURE                |---->| DC_FAILURE_INV_1          |---->| DC_FAILURE_INV_2          |
     // | I/I/E        CW: 1+1 OR 2 |     | I/I/E             CW: 1+1 |     | I/I/E             CW: 2+2 |
-    // +--------+------------------+     +-----^-------+----------+--+     +-------------+---------+---+
-    //          |                              |       |          |                      |         |
+    // +--------+------------------+     +-------------+----------+--+     +-------------+---------+---+
+    //          |                              ^       |          |                      |         |
     //          |                              |       |          v                      |         v
-    //          |                              |       |   (DISASTER INV1)               |   (DISASTER INV2)
-    //          |     (DISASTER)               |       |                                 |
-    //          |         |                    |       +-----------------+    (RES L)    +-----------------+
-    // +--------v---------v--------+           |                         v       |                         v
-    // | SOLO_DC_DISASTER          |           |           +---------------------v-----+     +---------------------------+
+    //          |    (DISASTER)                |       |   (DISASTER INV1)               |  (DISASTER INV2)
+    //          |         |                    |       |    (SOLO 1)                     |(SOLO 2)
+    //          v         v                    |       +--------+--------+    (RES L)    +--------+--------+
+    // +---------------------------+           |                v        v       v                v        v
+    // | SOLO_DC_DISASTER          |           |           +---------------------------+     +---------------------------+
     // | I/E/E               CW: 0 |           |  +------->| SOLO_DC_INV_1_PENDING     |---->| SOLO_DC_INV_2_PENDING     |<--------+
-    // +---------------------------+           |  |    +---| I/L/E               CW: 1 |     | I/L/E               CW: 2 |---+     |
-    //          |                              |  |    |   +-------------+-------------+     +-------------+-------------+   |     |
-    //          v                              |  |    |                 |                                 |                 |     |
-    // +---------------------------------+     ^  ^    v                 |                                 |                 v     ^
+    // +--------+------------------+           |  |    +---| I/L/E               CW: 1 |     | I/L/E               CW: 2 |---+     |
+    //          |          (SOLO 0)            |  |    |   +-------------+-------------+     +-------------+-------------+   |     |
+    //          v              v               |  |    |                 |                                 |                 |     |
+    // +---------------------------------+     |  |    |                 |                                 |                 |     |
     // | SOLO_DC_RESURECTION_PENDING     |     |  |    | (DISASTER INV1) |                 (DISASTER INV2) |                 |     |
-    // | I/L/E                     CW: 0 |     |  |    |        |        v                        |        v                 |     |
-    // +----------------+----------------+     |  |    |   +----v----------------------+     +----v----------------------+   |     |
+    // | I/L/E                     CW: 0 |     |  |    |        v        v                        v        v                 |     |
+    // +----------------+----------------+     |  |    |   +---------------------------+     +---------------------------+   |     |
     //                  |                      |  |    |   | SOLO_DC_INV_1             |---->| SOLO_DC_INV_2             |   |     |
     //                  v                      |  |    |   | I/E/E               CW: 1 |     | I/E/E               CW: 2 |   |     |
-    // +---------------------------------+     |  |    |   +---------------^-----------+     +-------------^-------------+   |     |
-    // | SOLO_DC_RESURECTION             |     |  |    |                   |                               |                 |     |
+    // +---------------------------------+     |  |    |   +---------------------------+     +---------------------------+   |     |
+    // | SOLO_DC_RESURECTION             |     |  |    |                   ^                               ^                 |     |
     // | I/L/E                     CW: 1 |     |  |    |                   |                               |                 |     |
-    // +----------------+----------------+     |  |    |  (DISASTER JOIN)  |    (RES J)                    |                 |     |
-    //                  |                      |  |    |        |          |       |                       |                 |     |
-    //                  +--> (RES L)           |  |  +-v--------v----------v-------v---+     +-------------v-----------------v-+   |
+    // +----------------+----------------+     |  |    | (DISASTER JOIN)   |  (RES J)                      |                 |     |
+    //                  |                      |  |    v        v          v     v                         v                 v     |
+    //                  +--> (RES L)           |  |  +---------------------------------+     +---------------------------------+   |
     //                  +--> (RES J)           |  +--| SOLO_DC_RECOVERY_PENDING_INV_1  |     | SOLO_DC_RECOVERY_PENDING_INV_2  |---+
     //                                         |     | I/J/E                     CW: 1 |     | I/J/E                     CW: 2 |
     //                                         |     +----------------+----------------+     +----------------+----------------+
     //                                         |                      |                                       |
-    //                                         |                      +<--------------------------------------+
+    //                                         |                      +---------------------------------------+
     //                                         |                      |
-    //                                         ^                      |
-    //                                         |     +----------------v----------------+
-    //                                         +<----| SOLO_DC_RECOVERY_INV_1          |
+    //                                         |                      v
+    //                                         |     +---------------------------------+
+    //                                         +-----| SOLO_DC_RECOVERY_INV_1          |
     //                                               | I/J/E                   CW: 1+1 |
     //                                               +---------------------------------+
     //
@@ -240,7 +252,8 @@ message TMirror3dcGroupState {
         SOLO_DC_RESURECTION_PENDING = 19;
     }
     optional EMode Mode = 1;
-    // Excluded/returning realm for the three-to-two-DC transition.
+    // Excluded/returning realm. On IIJ/IIL -> SOLO it changes to the newly excluded I,
+    // preserving the old J/L. Other non-NORMAL transitions preserve it.
     optional uint32 FailedFailRealmIdx = 2;
     // Required in SOLO states; the other non-failed realm is the recovery target.
     optional uint32 SurvivingFailRealmIdx = 3;

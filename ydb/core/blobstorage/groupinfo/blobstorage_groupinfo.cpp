@@ -979,8 +979,22 @@ bool TBlobStorageGroupInfo::TMirror3dcState::CanTransitionTo(const TMirror3dcSta
     if (next.Mode == T::NORMAL) {
         return Mode == T::DC_RECOVERY;
     }
-    // Changing the identity of an excluded DC requires completing the recovery first.
-    if (Mode != T::NORMAL && FailedFailRealmIdx != next.FailedFailRealmIdx) {
+    const bool enteringSoloWithJoining = (Mode == T::DC_RECOVERY_PENDING_INV_1 || Mode == T::DC_RECOVERY)
+        && next.Mode == T::SOLO_DC_RECOVERY_PENDING_INV_1;
+    const bool enteringSoloWithLeaving = (Mode == T::DC_FAILURE_PENDING && next.Mode == T::SOLO_DC_RESURECTION_PENDING)
+        || (Mode == T::DC_FAILURE_PENDING_INV_1 && next.Mode == T::SOLO_DC_INV_1_PENDING)
+        || (Mode == T::DC_FAILURE_PENDING_INV_2 && next.Mode == T::SOLO_DC_INV_2_PENDING);
+    if (enteringSoloWithJoining || enteringSoloWithLeaving) {
+        // Keep the existing Joining/Leaving realm. FailedFailRealmIdx now identifies the Included
+        // realm being excluded; the other Included realm must remain the survivor.
+        if (!FailedFailRealmIdx || !next.FailedFailRealmIdx || !next.SurvivingFailRealmIdx
+                || next.FailedFailRealmIdx == FailedFailRealmIdx
+                || next.SurvivingFailRealmIdx == FailedFailRealmIdx
+                || next.FailedFailRealmIdx == next.SurvivingFailRealmIdx) {
+            return false;
+        }
+    } else if (Mode != T::NORMAL && FailedFailRealmIdx != next.FailedFailRealmIdx) {
+        // Other transitions preserve the identity of the excluded/returning realm.
         return false;
     }
     if (SurvivingFailRealmIdx && next.SurvivingFailRealmIdx
@@ -992,12 +1006,13 @@ bool TBlobStorageGroupInfo::TMirror3dcState::CanTransitionTo(const TMirror3dcSta
             return next.Mode == T::DC_FAILURE_PENDING;
         case T::DC_FAILURE_PENDING:
             return next.Mode == T::DC_FAILURE || next.Mode == T::DC_FAILURE_PENDING_INV_1
-                || next.Mode == T::DC_RECOVERY_PENDING;
+                || next.Mode == T::DC_RECOVERY_PENDING || next.Mode == T::SOLO_DC_RESURECTION_PENDING;
         case T::DC_FAILURE_PENDING_INV_1:
             return next.Mode == T::DC_FAILURE_INV_1 || next.Mode == T::DC_FAILURE_PENDING_INV_2
-                || next.Mode == T::DC_RECOVERY_PENDING_INV_1;
+                || next.Mode == T::DC_RECOVERY_PENDING_INV_1 || next.Mode == T::SOLO_DC_INV_1_PENDING;
         case T::DC_FAILURE_PENDING_INV_2:
-            return next.Mode == T::DC_FAILURE_INV_2 || next.Mode == T::DC_RECOVERY;
+            return next.Mode == T::DC_FAILURE_INV_2 || next.Mode == T::DC_RECOVERY
+                || next.Mode == T::SOLO_DC_INV_2_PENDING;
         case T::DC_FAILURE:
             return next.Mode == T::DC_FAILURE_INV_1 || next.Mode == T::DC_RECOVERY_PENDING
                 || next.Mode == T::SOLO_DC_DISASTER;
@@ -1015,7 +1030,8 @@ bool TBlobStorageGroupInfo::TMirror3dcState::CanTransitionTo(const TMirror3dcSta
             return next.Mode == T::DC_RECOVERY || next.Mode == T::DC_FAILURE_PENDING_INV_1
                 || next.Mode == T::DC_FAILURE_INV_1 || next.Mode == T::SOLO_DC_RECOVERY_PENDING_INV_1;
         case T::DC_RECOVERY:
-            return next.Mode == T::DC_RECOVERY_PENDING_INV_1 || next.Mode == T::SOLO_DC_RECOVERY_PENDING_INV_1;
+            return next.Mode == T::DC_RECOVERY_PENDING_INV_1 || next.Mode == T::SOLO_DC_RECOVERY_PENDING_INV_1
+                || next.Mode == T::DC_FAILURE_PENDING_INV_1 || next.Mode == T::DC_FAILURE_INV_1;
         case T::SOLO_DC_INV_1_PENDING:
             return next.Mode == T::SOLO_DC_INV_1 || next.Mode == T::SOLO_DC_INV_2_PENDING
                 || next.Mode == T::SOLO_DC_RECOVERY_PENDING_INV_1;

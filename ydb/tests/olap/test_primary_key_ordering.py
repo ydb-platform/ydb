@@ -90,10 +90,11 @@ class TestPrimaryKeyOrdering(unittest.TestCase):
             + "\n".join(statements), parameters,
         )
         self.assertEqual(len(result_sets), 2, context)
-        expected, actual = [[(row["id"], row["revision"]) for row in result.rows] for result in result_sets]
-        if actual != expected:
+        row_result, column_result = [[(row["id"], row["revision"]) for row in result.rows] for result in result_sets]
+        if column_result != row_result:
             raise PrimaryKeyOrderMismatch(
-                f"{context}; pushdown={pushdown}; {suffix}; {parameters}; expected={expected}; actual={actual}"
+                f"{context}; pushdown={pushdown}; {suffix}; {parameters}; "
+                f"row_result={row_result}; column_result={column_result}"
             )
 
     def check_reads(self, tables, sdk_type, values, composite, expected, phase):

@@ -60,14 +60,14 @@ public:
 
 Y_UNIT_TEST_SUITE(TNameResolverTest) {
 
-Y_UNIT_TEST_F(FederationRootDbConvertsLegacyRt3, TNameResolverFixture) {
+Y_UNIT_TEST_F(FederationRootDbRejectsRt3, TNameResolverFixture) {
     SetFcc(false);
-    UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName("", "rt3.dc1--account--topic", "dc1")),
-        "/Root/LbCommunal/account/topic");
-    UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName("", "rt3.dc2--account--topic", "dc1")),
-        "/Root/LbCommunal/account/topic-mirrored-from-dc2");
+    ExpectError(
+        ResolveName("", "rt3.dc1--account--topic", "dc1"),
+        "Topic names with 'rt3.' prefix are not supported.");
+    ExpectError(
+        ResolveName("", "rt3.dc2--account--topic", "dc1"),
+        "Topic names with 'rt3.' prefix are not supported.");
 }
 
 Y_UNIT_TEST_F(FederationRootDbAccountTopic, TNameResolverFixture) {
@@ -161,9 +161,9 @@ Y_UNIT_TEST_F(FederationRootDbViaDatabasePrefix, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("/Root", "/Root/account/topic", "dc1")),
         "/Root/LbCommunal/account/topic");
-    UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName("/Root", "/Root/rt3.dc1--account--topic", "dc1")),
-        "/Root/LbCommunal/account/topic");
+    ExpectError(
+        ResolveName("/Root", "/Root/rt3.dc1--account--topic", "dc1"),
+        "Topic names with 'rt3.' prefix are not supported.");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("/Root", "Root/account--topic", "dc1")),
         "/Root/LbCommunal/account/topic");
@@ -184,10 +184,10 @@ Y_UNIT_TEST_F(FederationUserDatabaseRelativePath, TNameResolverFixture) {
 
 Y_UNIT_TEST_F(FederationUserDatabaseExplicitLegacy, TNameResolverFixture) {
     SetFcc(false);
-    // Explicit legacy inside a user account DB still resolves via LbRoot.
-    UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName("/Root/LbCommunal/account", "rt3.dc1--other--topic", "dc1")),
-        "/Root/LbCommunal/other/topic");
+    // rt3. inside a user account DB is rejected; short legacy still resolves via LbRoot.
+    ExpectError(
+        ResolveName("/Root/LbCommunal/account", "rt3.dc1--other--topic", "dc1"),
+        "Topic names with 'rt3.' prefix are not supported.");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("/Root/LbCommunal/account", "other--topic", "dc1")),
         "/Root/LbCommunal/other/topic");
@@ -381,9 +381,9 @@ Y_UNIT_TEST_F(IsPathPrefixExactMatch, TNameResolverFixture) {
 
 Y_UNIT_TEST_F(TopicPathStartsWithPqRoot, TNameResolverFixture) {
     SetFcc(false);
-    UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName("", "/Root/PQ/rt3.dc1--account--topic", "dc1")),
-        "/Root/LbCommunal/account/topic");
+    ExpectError(
+        ResolveName("", "/Root/PQ/rt3.dc1--account--topic", "dc1"),
+        "Topic names with 'rt3.' prefix are not supported.");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("", "/Root/PQ/account/topic", "dc1")),
         "/Root/LbCommunal/account/topic");
@@ -393,23 +393,22 @@ Y_UNIT_TEST_F(AbsolutePathWithDoubleSlashCanonized, TNameResolverFixture) {
     SetFcc(false);
     // JoinPath({"/Root/PQ/", name}) produces '//'; accept and resolve like SplitPath.
     UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName("", "/Root/PQ//rt3.dc1--account--topic", "dc1")),
+        Ok(ResolveName("", "/Root/PQ//account/topic", "dc1")),
         "/Root/LbCommunal/account/topic");
-    UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName("/Root", "/Root/PQ//rt3.dc1--topic-x", "dc1")),
-        "/Root/LbCommunal/topic-x");
+    ExpectError(
+        ResolveName("/Root", "/Root/PQ//rt3.dc1--topic-x", "dc1"),
+        "Topic names with 'rt3.' prefix are not supported.");
 }
 
-Y_UNIT_TEST_F(AbsolutePqLegacyKeptWhenNoLbRoot, TNameResolverFixture) {
+Y_UNIT_TEST_F(AbsolutePqRt3RejectedWhenNoLbRoot, TNameResolverFixture) {
     SetFcc(false);
     SetLbRoot("");
-    // Classic discovery PrimaryPath: PQ root + full legacy leaf (describes_ut topics).
-    UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName("/Root", "/Root/PQ/rt3.dc1--topic-x")),
-        "/Root/PQ/rt3.dc1--topic-x");
-    UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName("", "/Root/PQ//rt3.dc1--topic-x")),
-        "/Root/PQ/rt3.dc1--topic-x");
+    ExpectError(
+        ResolveName("/Root", "/Root/PQ/rt3.dc1--topic-x"),
+        "Topic names with 'rt3.' prefix are not supported.");
+    ExpectError(
+        ResolveName("", "/Root/PQ//rt3.dc1--topic-x"),
+        "Topic names with 'rt3.' prefix are not supported.");
 }
 
 Y_UNIT_TEST_F(FederationModernPathBadName, TNameResolverFixture) {
@@ -423,15 +422,15 @@ Y_UNIT_TEST_F(FederationExplicitLegacyWithEmptyPqRoot, TNameResolverFixture) {
     SetFcc(false);
     ActorSystemStub.AppData.PQConfig.SetRoot("");
     // /Root prefixes LbRoot → root-like DB even when PQ Root is empty.
-    UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName("/Root", "rt3.dc1--account--topic", "dc1")),
-        "/Root/LbCommunal/account/topic");
+    ExpectError(
+        ResolveName("/Root", "rt3.dc1--account--topic", "dc1"),
+        "Topic names with 'rt3.' prefix are not supported.");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("/Root", "account--topic", "dc1")),
         "/Root/LbCommunal/account/topic");
-    UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName("/Root", "/Root/rt3.dc1--account--topic", "dc1")),
-        "/Root/LbCommunal/account/topic");
+    ExpectError(
+        ResolveName("/Root", "/Root/rt3.dc1--account--topic", "dc1"),
+        "Topic names with 'rt3.' prefix are not supported.");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName("/Root", "/Root/account/topic", "", "")),
         "/Root/LbCommunal/account/topic");
@@ -537,7 +536,7 @@ Y_UNIT_TEST_F(FederationLegacyParseFailure, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
         ResolveName("", "rt3.bad", "dc1"),
-        "Malformed legacy style topic name: contains 'rt3.', but no '--'.");
+        "Topic names with 'rt3.' prefix are not supported.");
 }
 
 Y_UNIT_TEST_F(FederationAccountTopicWithoutLbRoot, TNameResolverFixture) {
@@ -650,7 +649,7 @@ Y_UNIT_TEST_F(FederationUserDatabaseLegacyParseFailure, TNameResolverFixture) {
     SetFcc(false);
     ExpectError(
         ResolveName("/Root/LbCommunal/account", "rt3.bad", "dc1"),
-        "Malformed legacy style topic name: contains 'rt3.', but no '--'.");
+        "Topic names with 'rt3.' prefix are not supported.");
 }
 
 Y_UNIT_TEST_F(FederationBareWithEmptyDatabase, TNameResolverFixture) {
@@ -667,12 +666,11 @@ Y_UNIT_TEST_F(FederationRootMirroredMalformedRejected, TNameResolverFixture) {
         "Federation topics cannot contain 'mirrored-from' in name unless this is a mirrored topic.");
 }
 
-Y_UNIT_TEST_F(NavigateDatabaseEmptyWhenNoAccountTopicShape, TNameResolverFixture) {
+Y_UNIT_TEST_F(FederationRt3EmptyShortRejected, TNameResolverFixture) {
     SetFcc(false);
-    // Path under LbRoot without account/topic shape → keep request database.
-    const auto resolved = OkFull(ResolveName(TString{Database}, "rt3.dc1--", "dc1"));
-    UNIT_ASSERT_VALUES_EQUAL(resolved.Path, "/Root/LbCommunal");
-    UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Root/Db");
+    ExpectError(
+        ResolveName(TString{Database}, "rt3.dc1--", "dc1"),
+        "Topic names with 'rt3.' prefix are not supported.");
 }
 
 Y_UNIT_TEST_F(TryFederationAccountTargetCanonizesUncleanPath, TNameResolverFixture) {
@@ -683,12 +681,11 @@ Y_UNIT_TEST_F(TryFederationAccountTargetCanonizesUncleanPath, TNameResolverFixtu
     UNIT_ASSERT_VALUES_EQUAL(target->AccountDatabase, "/Root/Federation/account");
 }
 
-Y_UNIT_TEST_F(CorrectNameFalseUsesConvertOldTopicName, TNameResolverFixture) {
+Y_UNIT_TEST_F(FederationRt3EmptyProducerRejected, TNameResolverFixture) {
     SetFcc(false);
-    // CorrectName rejects empty producer between '--'; shortLegacy still converts.
-    UNIT_ASSERT_VALUES_EQUAL(
-        Ok(ResolveName(TString{Database}, "rt3.dc1----topic", "dc1", "")),
-        "/Root/LbCommunal/topic");
+    ExpectError(
+        ResolveName(TString{Database}, "rt3.dc1----topic", "dc1", ""),
+        "Topic names with 'rt3.' prefix are not supported.");
 }
 
 } // Y_UNIT_TEST_SUITE(TNameResolverTest)

@@ -321,7 +321,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         if (MirrorTopicDescriberActorId) {
             ctx.Send(MirrorTopicDescriberActorId, new TEvPQ::TEvChangePartitionConfig(nullptr, TabletConfig));
         } else {
-            MirrorTopicDescriberActorId = ctx.Register(CreateMirrorDescriber(TabletID(), SelfId(), Topic, TabletConfig.GetPartitionConfig().GetMirrorFrom()));
+            MirrorTopicDescriberActorId = ctx.Register(CreateMirrorDescriber(TabletID(), SelfId(), Path, TabletConfig.GetPartitionConfig().GetMirrorFrom()));
         }
     } else {
         if (MirrorTopicDescriberActorId) {
@@ -421,7 +421,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
 TStructuredMessage TPersQueueReadBalancer::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"topic", Topic});
+        {"topic", Path});
 }
 
 

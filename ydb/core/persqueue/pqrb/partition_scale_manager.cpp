@@ -33,7 +33,7 @@ TPartitionScaleManager::TPartitionScaleManager(
 TStructuredMessage TPartitionScaleManager::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"className", "TPartitionScaleManager"},
-        {"topic", TopicName});
+        {"topic", TopicPath});
 }
 
 void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKikimrPQ::EScaleStatus scaleStatus,

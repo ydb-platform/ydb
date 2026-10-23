@@ -35,6 +35,7 @@ SRCS(
     ut_columnshard_schema.cpp
     ut_columnshard_move_table.cpp
     ut_columnshard_copy_table.cpp
+    ut_columnshard_truncate_table.cpp
     ut_columnshard_backup.cpp
 )
 

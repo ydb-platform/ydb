@@ -7,6 +7,7 @@
 #include <google/protobuf/reflection.h>
 
 #include <util/generic/strbuf.h>
+#include <util/stream/str.h>
 
 namespace NKikimr {
 namespace {
@@ -112,6 +113,20 @@ void SecureProto2JsonImpl(const NProtoBuf::Message& proto,
 }
 
 } // anonymous namespace
+
+void SecureProto2Json(const NProtoBuf::Message& proto,
+                      NJson::TJsonValue& json,
+                      const NProtobufJson::TProto2JsonConfig& config) {
+    auto output = NProtobufJson::CreateJsonMapOutput(json);
+    SecureProto2JsonImpl(proto, *output, config);
+}
+
+void SecureProto2Json(const NProtoBuf::Message& proto,
+                      TStringStream& json,
+                      const NProtobufJson::TProto2JsonConfig& config) {
+    auto output = NProtobufJson::CreateJsonMapOutput(static_cast<IOutputStream&>(json), config);
+    SecureProto2JsonImpl(proto, *output, config);
+}
 
 void SecureProto2Json(const NProtoBuf::Message& proto,
                       NJson::TJsonWriter& writer,

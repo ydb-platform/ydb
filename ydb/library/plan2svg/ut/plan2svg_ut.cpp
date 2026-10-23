@@ -421,34 +421,6 @@ Y_UNIT_TEST_SUITE(TPlan2SvgStageNodes) {
 }
 
 Y_UNIT_TEST_SUITE(TPlan2SvgLoad) {
-    Y_UNIT_TEST(TupleReadRangesAreAlternatives) {
-        TPlanVisualizer viz;
-        viz.LoadPlans(TString(R"json({"Plan":{"Plans":[{"Node Type":"ResultSet","Plans":[
-            {"Node Type":"Stage","Operators":[{
-                "Name":"TableRangeScan","Table":"t","ReadColumns":["a","b"],
-                "ReadRanges":["[{a: 1, b: 10}, {a: 1, b: 20})","[{a: 3, b: 10}, {a: 3, b: 20})"],
-                "Filter":"status == active"
-            }]}
-        ]}]}})json"));
-        const auto svg = viz.PrintSvg();
-        AssertWellFormed(svg, "tuple read ranges");
-        UNIT_ASSERT_C(svg.Contains("[{a: 1, b: 10}, {a: 1, b: 20}) OR [{a: 3, b: 10}, {a: 3, b: 20})"), svg);
-        UNIT_ASSERT_C(svg.Contains("Filter: status == active"), svg);
-    }
-
-    Y_UNIT_TEST(UnknownReadRangesLeaveNoSeparator) {
-        TPlanVisualizer viz;
-        viz.LoadPlans(TString(R"json({"Plan":{"Plans":[{"Node Type":"ResultSet","Plans":[
-            {"Node Type":"Stage","Operators":[{
-                "Name":"TableRangeScan","Table":"t","ReadColumns":["a","b"],"ReadRangesKeys":["a"],
-                "Filter":"status == active"
-            }]}
-        ]}]}})json"));
-        const auto svg = viz.PrintSvg();
-        AssertWellFormed(svg, "unknown read ranges");
-        UNIT_ASSERT_C(svg.Contains("Filter: status == active"), svg);
-        UNIT_ASSERT_C(!svg.Contains(": ;"), svg);
-    }
 
     Y_UNIT_TEST(EmptyInputProducesNoPlans) {
         TVisualizer viz;

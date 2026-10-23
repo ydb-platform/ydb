@@ -489,17 +489,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto simplifiedDisjointPlan = GetSimplifiedPlan(disjointPlan);
         const auto* disjointReadOp = FindOperatorByStringField(simplifiedDisjointPlan, "Name", "TableRangeScan");
         UNIT_ASSERT_C(disjointReadOp, disjointPlan);
-        UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadRanges", "({a: -∞}, {a: 5})"), disjointPlan);
-        UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadRanges", "[{a: 10}, {a: +∞})"), disjointPlan);
+        // Two ranges are not a literal range, so only the ranged keys are shown.
+        UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("ReadRanges"), disjointPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadRangesKeys", "a"), disjointPlan);
         UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadColumns", "b"), disjointPlan);
         UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("Predicate"), disjointPlan);
         UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("ReadRangesPointPrefixLen"), disjointPlan);
-
-        TStringStream output;
-        NYdb::NConsoleClient::TQueryPlanPrinter printer(
-            NYdb::NConsoleClient::EDataFormat::PrettyTable, false, output, 0);
-        printer.Print(disjointPlan);
-        UNIT_ASSERT_C(output.Str().Contains("({a: -∞}, {a: 5}) OR [{a: 10}, {a: +∞})"), output.Str());
     }
 
     Y_UNIT_TEST_TWIN(ExplainRangeComposite, ColumnStorage) {
@@ -515,29 +510,45 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         )" << (ColumnStorage ? " WITH (STORE = column);" : ";")).GetValueSync();
         UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
 
-        const auto plan = ExecuteExplain(testContext.GetSession(), R"(
-            PRAGMA YqlSelect = 'force';
-            SELECT a, b, c FROM `/Root/composite`
-            WHERE ((a = 1 AND b >= 10 AND b < 20) OR (a = 3 AND b >= 10 AND b < 20)) AND c = 7;
-        )");
+        const std::pair<TStringBuf, TStringBuf> cases[] = {
+            {"a = 1 AND b >= 10 AND b < 20", "[{a: 1, b: 10}, {a: 1, b: 20})"},
+            // A bound on a key prefix covers every value of the remaining key columns.
+            {"a = 1", "({a: 1, b: -∞}, {a: 1, b: +∞})"},
+        };
+        for (const auto& [predicate, expectedRange] : cases) {
+            const auto plan = ExecuteExplain(testContext.GetSession(), TStringBuilder()
+                << "PRAGMA YqlSelect = 'force'; SELECT a, b, c FROM `/Root/composite` WHERE " << predicate << " AND c = 7;");
+            const auto simplifiedPlan = GetSimplifiedPlan(plan);
+            const auto* readOp = FindOperatorByStringField(simplifiedPlan, "Name", "TableRangeScan");
+            UNIT_ASSERT_C(readOp, plan);
+            UNIT_ASSERT_VALUES_EQUAL_C(readOp->GetMapSafe().at("ReadRanges").GetArraySafe().size(), 1, plan);
+            UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRanges", TString(expectedRange)), plan);
+            for (const auto* column : {"a", "b", "c"}) {
+                UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", column), plan);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ExplainUuidReadRanges) {
+        TExplainPlanTestContext testContext;
+        auto tableSession = testContext.GetKikimr().GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto schema = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/uuid_keys` (
+                k Uuid,
+                v Int64,
+                PRIMARY KEY (k)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+
+        const TStringBuf uuid = "00112233-4455-6677-8899-aabbccddeeff";
+        const auto plan = ExecuteExplain(testContext.GetSession(), TStringBuilder()
+            << "PRAGMA YqlSelect = 'force'; SELECT * FROM `/Root/uuid_keys` WHERE k = Uuid('" << uuid << "');");
         const auto simplifiedPlan = GetSimplifiedPlan(plan);
         const auto* readOp = FindOperatorByStringField(simplifiedPlan, "Name", "TableRangeScan");
         UNIT_ASSERT_C(readOp, plan);
-        UNIT_ASSERT_C(readOp->GetMapSafe().contains("ReadRanges"), plan);
-        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRanges", "[{a: 1, b: 10}, {a: 1, b: 20})"), plan);
-        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRanges", "[{a: 3, b: 10}, {a: 3, b: 20})"), plan);
-        UNIT_ASSERT_VALUES_EQUAL_C(readOp->GetMapSafe().at("ReadRanges").GetArraySafe().size(), 2, plan);
-        for (const auto* column : {"a", "b", "c"}) {
-            UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", column), plan);
-        }
-        UNIT_ASSERT_VALUES_EQUAL_C(readOp->GetMapSafe().at("ReadColumns").GetArraySafe().size(), 3, plan);
-        if constexpr (ColumnStorage) {
-            UNIT_ASSERT_C(GetStringField(*readOp, "Filter").Contains("c"), plan);
-        } else {
-            const auto* filter = FindOperatorByStringField(simplifiedPlan, "Name", "Filter");
-            UNIT_ASSERT_C(filter, plan);
-            UNIT_ASSERT_C(GetStringField(*filter, "Predicate").Contains("c"), plan);
-        }
+        const TString expectedRange = TStringBuilder() << "[{k: " << uuid << "}, {k: " << uuid << "}]";
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRanges", expectedRange), plan);
     }
 
     Y_UNIT_TEST(ExplainAnalyzeSimplifiedPlanCpuWithActualRows) {

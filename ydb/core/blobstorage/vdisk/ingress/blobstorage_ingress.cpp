@@ -5,6 +5,8 @@
 
 #include <util/generic/bitops.h>
 
+#include <bit>
+
 namespace NKikimr {
 
     using namespace NMatrix;
@@ -13,7 +15,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // TIngressCache -- precalculate some common parts to operate faster
     ////////////////////////////////////////////////////////////////////////////
-    TIngressCachePtr TIngressCache::Create(std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, const TVDiskIdShort &vdisk) {
+    TIngressCachePtr TIngressCache::Create(std::shared_ptr<TBlobStorageGroupInfo::TTopology> top, const TVDiskIdShort &vdisk, std::optional<ui32> survivingRealm) {
         // vdiskOrderNum
         ui32 vdiskOrderNum = top->GetOrderNumber(vdisk);
         Y_ABORT_UNLESS(vdiskOrderNum < MaxVDisksInGroup);
@@ -40,13 +42,23 @@ namespace NKikimr {
         // barrierIngressDomainMask
         ui32 barrierIngressDomainMask = (1ull << disksInDomain) - 1;
 
+        ui32 survivingRealmMask = 0;
+        if (survivingRealm) {
+            Y_ABORT_UNLESS(top->GType.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc);
+            for (ui32 i = 0; i < totalVDisks; ++i) {
+                if (top->GetVDiskId(i).FailRealm == *survivingRealm) {
+                    survivingRealmMask |= 1u << i;
+                }
+            }
+            Y_ABORT_UNLESS(std::popcount(survivingRealmMask) == 3);
+        }
         return new TIngressCache(vdiskOrderNum, totalVDisks, domainsNum, disksInDomain, handoff,
-                                 barrierIngressValueMask, barrierIngressDomainMask, std::move(top));
+                                 barrierIngressValueMask, barrierIngressDomainMask, survivingRealmMask, std::move(top));
     }
 
     TIngressCache::TIngressCache(ui32 vdiskOrderNum, ui32 totalVDisks, ui32 domainsNum,
                                  ui32 disksInDomain, ui32 handoff, ui32 barrierIngressValueMask,
-                                 ui32 barrierIngressDomainMask, std::shared_ptr<TBlobStorageGroupInfo::TTopology> topology)
+                                 ui32 barrierIngressDomainMask, ui32 survivingRealmMask, std::shared_ptr<TBlobStorageGroupInfo::TTopology> topology)
         : VDiskOrderNum(vdiskOrderNum)
         , TotalVDisks(totalVDisks)
         , DomainsNum(domainsNum)
@@ -54,6 +66,7 @@ namespace NKikimr {
         , Handoff(handoff)
         , BarrierIngressValueMask(barrierIngressValueMask)
         , BarrierIngressDomainMask(barrierIngressDomainMask)
+        , SurvivingRealmMask(survivingRealmMask)
         , Topology(std::move(topology))
     {}
 
@@ -222,8 +235,15 @@ namespace NKikimr {
 
     TVectorType TIngress::PartsWeMustHaveLocally(const TBlobStorageGroupInfo::TTopology *top,
                                                  const TVDiskIdShort &vdisk,
-                                                 const TLogoBlobID &id) const {
-        return KnownParts(top->GType, top->GetIdxInSubgroup(vdisk, id.Hash()));
+                                                 const TLogoBlobID &id,
+                                                 bool restoreMirror3dcPlacement) const {
+        const ui8 nodeId = top->GetIdxInSubgroup(vdisk, id.Hash());
+        if (restoreMirror3dcPlacement && top->GType.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+                && nodeId < top->GType.TotalPartCount() && !PartsWeKnowAbout(top->GType).Empty()) {
+            // Plan missing main replicas without claiming that they already hold data.
+            return NMatrix::TVectorType::MakeOneHot(nodeId, top->GType.TotalPartCount());
+        }
+        return KnownParts(top->GType, nodeId);
     }
 
     TIngress::TPairOfVectors TIngress::HandoffParts(const TBlobStorageGroupInfo::TTopology *top,
@@ -522,6 +542,9 @@ namespace NKikimr {
            synced racks minus handoff parts.
          */
 
+        if (cache->SurvivingRealmMask) {
+            return std::popcount(Data & cache->SurvivingRealmMask) >= 2;
+        }
         auto& topology = *cache->Topology;
         auto synced = TBlobStorageGroupInfo::TGroupVDisks::CreateFromMask(&topology, Data & cache->BarrierIngressValueMask);
         return topology.GetQuorumChecker().CheckQuorumForGroup(synced);

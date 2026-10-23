@@ -163,7 +163,10 @@ public:
             << " RestartCounter# " << RestartCounter);
 
         for (const auto& vdisk : Info->GetVDisks()) {
-            SendBlockRequest(Info->GetVDiskId(vdisk.OrderNumber));
+            const auto vdiskId = Info->GetVDiskId(vdisk.OrderNumber);
+            if (Info->IsVDiskInActiveRealm(vdiskId)) {
+                SendBlockRequest(vdiskId);
+            }
         }
 
         Become(&TBlobStorageGroupBlockRequest::StateWait);

@@ -32,7 +32,7 @@ namespace NKikimr {
             , VDiskLogPrefix(settings.HullCtx->VCtx->VDiskLogPrefix)
             , CollectByCompleteDeletionBlock(settings.HullCtx->CollectByCompleteDeletionBlock)
             , MemView(std::make_unique<TMemView>(
-                TIngressCache::Create(settings.HullCtx->VCtx->Top, settings.HullCtx->VCtx->ShortSelfVDisk),
+                settings.HullCtx->IngressCache,
                 settings.HullCtx->VCtx->VDiskLogPrefix,
                 settings.HullCtx->GCOnlySynced))
         {}
@@ -46,7 +46,7 @@ namespace NKikimr {
             , VDiskLogPrefix(settings.HullCtx->VCtx->VDiskLogPrefix)
             , CollectByCompleteDeletionBlock(settings.HullCtx->CollectByCompleteDeletionBlock)
             , MemView(std::make_unique<TMemView>(
-                TIngressCache::Create(settings.HullCtx->VCtx->Top, settings.HullCtx->VCtx->ShortSelfVDisk),
+                settings.HullCtx->IngressCache,
                 settings.HullCtx->VCtx->VDiskLogPrefix,
                 settings.HullCtx->GCOnlySynced))
         {}

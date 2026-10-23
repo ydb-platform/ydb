@@ -196,6 +196,9 @@ namespace NKikimr {
         }
 
         void RunAnubis(const TActorContext &ctx) {
+            if (GInfo->EnableSingleDcMode) {
+                return;
+            }
             QuorumTracker.Clear();
             AnubisId = ctx.Register(CreateAnubis(AnubisCtx->HullCtx, GInfo, ctx.SelfID, AnubisCtx->SkeletonId,
                 AnubisCtx->ReplInterconnectChannel, AnubisCtx->AnubisOsirisMaxInFly));

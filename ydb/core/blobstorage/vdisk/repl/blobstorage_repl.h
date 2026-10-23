@@ -4,6 +4,7 @@
 #include "blobstorage_replctx.h"
 #include <ydb/core/blobstorage/base/vdisk_sync_common.h>
 #include <util/generic/fwd.h>
+#include <vector>
 
 namespace NKikimr {
 
@@ -92,6 +93,19 @@ namespace NKikimr {
     };
 
     using TBlobIdQueuePtr = std::shared_ptr<TBlobIdQueue>;
+
+    // Limit exact index lookups to one bounded classification quantum.
+    constexpr size_t ReplSyncLogBatchSize = 1024;
+
+    struct TEvReplSyncLogUpdate : TEventLocal<TEvReplSyncLogUpdate, TEvBlobStorage::EvReplSyncLogUpdate> {
+        THullDsSnap Snapshot;
+        std::vector<TLogoBlobID> Blobs;
+        std::unique_ptr<IEventHandle> Reply;
+
+        explicit TEvReplSyncLogUpdate(THullDsSnap snapshot)
+            : Snapshot(std::move(snapshot))
+        {}
+    };
 
     struct TUnreplicatedBlobRecord { // for monitoring purposes
         TIngress Ingress; // merged ingress from all the peers

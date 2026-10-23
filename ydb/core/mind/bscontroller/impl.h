@@ -707,6 +707,8 @@ public:
         Table::DecommitStatus::Type DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::NONE;
 
         Table::GroupSizeInUnits::Type GroupSizeInUnits;
+        bool EnableSingleDcMode = false;
+        TMaybe<ui32> SurvivingDc;
 
         Table::BridgePileId::Type BridgePileId;
 
@@ -787,6 +789,8 @@ public:
                     Table::SeenOperational,
                     Table::DecommitStatus,
                     Table::GroupSizeInUnits,
+                    Table::EnableSingleDcMode,
+                    Table::SurvivingDc,
                     Table::BridgePileId,
                     Table::VirtualGroupName,
                     Table::VirtualGroupState,
@@ -812,6 +816,8 @@ public:
                     &TGroupInfo::SeenOperational,
                     &TGroupInfo::DecommitStatus,
                     &TGroupInfo::GroupSizeInUnits,
+                    &TGroupInfo::EnableSingleDcMode,
+                    &TGroupInfo::SurvivingDc,
                     &TGroupInfo::BridgePileId,
                     &TGroupInfo::VirtualGroupName,
                     &TGroupInfo::VirtualGroupState,

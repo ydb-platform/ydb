@@ -43,6 +43,8 @@ namespace NKikimr {
         const TActorId CommitterId;
         const TActorId NotifyId;
         TActiveActors ActiveActors;
+        bool CommitInFlight = false;
+        bool Cancelled = false;
         std::shared_ptr<TSjCtx> JobCtx;
         // Target VDiskId and ActorId are reconfigurable
         TVDiskID TargetVDiskId;
@@ -84,6 +86,7 @@ namespace NKikimr {
 
         STRICT_STFUNC(WaitForSyncStateFunc,
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            HFunc(TEvCancelSyncerRecovery, HandleCancel)
             HFunc(TEvSyncerJobDone, Handle)
             HFunc(TEvVGenerationChange, Handle)
         )
@@ -106,6 +109,7 @@ namespace NKikimr {
 
         STRICT_STFUNC(WaitForTimeoutStateFunc,
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            HFunc(TEvCancelSyncerRecovery, HandleCancel)
             HFunc(TEvSyncerRLDWakeup, Handle)
             IgnoreFunc(TEvSyncerJobDone)
             HFunc(TEvVGenerationChange, Handle)
@@ -117,6 +121,7 @@ namespace NKikimr {
         void Commit(const TActorContext &ctx, std::unique_ptr<TSyncerJobTask> task) {
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): Commit", TargetVDiskId.ToString().data()));
             auto msg = TEvSyncerCommit::Remote(task->VDiskId, task->GetCurrent());
+            CommitInFlight = true;
             ctx.Send(CommitterId, msg.release());
             Become(&TThis::WaitForCommitStateFunc);
         }
@@ -124,12 +129,16 @@ namespace NKikimr {
         void Handle(TEvSyncerCommitDone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): FINISH", TargetVDiskId.ToString().data()));
-            ctx.Send(NotifyId, new TEvSyncerFullSyncedWithPeer(TargetVDiskId));
+            CommitInFlight = false;
+            if (!Cancelled) {
+                ctx.Send(NotifyId, new TEvSyncerFullSyncedWithPeer(TargetVDiskId));
+            }
             Die(ctx);
         }
 
         STRICT_STFUNC(WaitForCommitStateFunc,
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            HFunc(TEvCancelSyncerRecovery, HandleCancel)
             HFunc(TEvSyncerCommitDone, Handle)
             HFunc(TEvVGenerationChange, Handle)
         )
@@ -142,6 +151,15 @@ namespace NKikimr {
             Y_UNUSED(ev);
             ActiveActors.KillAndClear(ctx);
             Die(ctx);
+        }
+
+        void HandleCancel(TEvCancelSyncerRecovery::TPtr& ev, const TActorContext& ctx) {
+            Y_UNUSED(ev);
+            ActiveActors.KillAndClear(ctx);
+            Cancelled = true;
+            if (!CommitInFlight) {
+                Die(ctx);
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////

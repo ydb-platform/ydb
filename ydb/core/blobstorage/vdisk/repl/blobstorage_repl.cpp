@@ -138,8 +138,10 @@ namespace NKikimr {
     class TReplScheduler : public TActorBootstrapped<TReplScheduler> {
         enum {
             EvResumeForce = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvProcessSyncLogUpdates,
         };
         struct TEvResumeForce : TEventLocal<TEvResumeForce, EvResumeForce> {};
+        struct TEvProcessSyncLogUpdates : TEventLocal<TEvProcessSyncLogUpdates, EvProcessSyncLogUpdates> {};
 
         typedef TCircleBuf<TEvReplFinished::TInfoPtr> THistory;
         enum EState {
@@ -291,7 +293,130 @@ namespace NKikimr {
             NextMinHugeBlobInBytes = ev->Get()->MinHugeBlobInBytes;
         }
 
+        // Only records that actually lack local parts survive classification. The
+        // pending input is bounded by Syncer's unacknowledged chunks, independently
+        // of whether data replication is waiting for a token or a remote disk.
+        std::set<TLogoBlobID> UpdatedBlobs;
+        std::deque<std::unique_ptr<TEvReplSyncLogUpdate>> PendingSyncLogUpdates;
+        size_t SyncLogUpdateOffset = 0;
+        bool ReplWakeupScheduled = false;
+        ui64 ReplWakeupGeneration = 0;
+
+        bool HasUnclassifiedUpdates() const {
+            return !PendingSyncLogUpdates.empty() || !UpdatedBlobs.empty();
+        }
+
+        void ScheduleReplicationWakeup() {
+            if (!ReplWakeupScheduled) {
+                ReplWakeupScheduled = true;
+                Schedule(ReplCtx->VDiskCfg->ReplTimeInterval,
+                    new TEvents::TEvWakeup(++ReplWakeupGeneration));
+            }
+        }
+
+        void HandleReplicationWakeup(TEvents::TEvWakeup::TPtr ev) {
+            if (ev->Get()->Tag != ReplWakeupGeneration || !ReplWakeupScheduled) {
+                return;
+            }
+            ReplWakeupScheduled = false;
+            if (State == Relaxation || State == Finished) {
+                StartReplication();
+            }
+        }
+
+
+        void ReplySyncLogUpdate(TEvReplSyncLogUpdate& update) {
+            if (auto reply = std::move(update.Reply)) {
+                auto* result = dynamic_cast<TEvVResultBase*>(reply->GetBase());
+                Y_ABORT_UNLESS(result);
+                result->FinalizeAndSend(ActorContext(), std::move(reply));
+            }
+        }
+
+        void Handle(TEvReplSyncLogUpdate::TPtr ev) {
+            if (State == Relaxation && !BlobsToReplicatePtr) {
+                // Replication is paused before its initial scan, which will see these updates.
+                ReplySyncLogUpdate(*ev->Get());
+                return;
+            }
+            PendingSyncLogUpdates.emplace_back(ev->Release().Release());
+            if (PendingSyncLogUpdates.size() == 1) {
+                Send(SelfId(), new TEvProcessSyncLogUpdates);
+            }
+        }
+
+        void ProcessSyncLogUpdates() {
+            auto& update = *PendingSyncLogUpdates.front();
+            {
+                const auto& snap = update.Snapshot;
+                const auto& topology = *ReplCtx->VCtx->Top;
+                auto barriers = snap.BarriersSnap.CreateEssence(snap.HullCtx);
+                TLogoBlobsSnapshot::TIndexForwardIterator it(snap.HullCtx, &snap.LogoBlobsSnap);
+                const size_t end = Min(update.Blobs.size(), SyncLogUpdateOffset + ReplSyncLogBatchSize);
+                for (; SyncLogUpdateOffset != end; ++SyncLogUpdateOffset) {
+                    const TLogoBlobID& id = update.Blobs[SyncLogUpdateOffset];
+                    it.Seek(id);
+                    if (!it.Valid() || it.GetCurKey().LogoBlobID() != id) {
+                        continue;
+                    }
+                    const auto& memRec = it.GetMemRec();
+                    const auto& ingress = memRec.GetIngress();
+                    const auto parts = ingress.PartsWeMustHaveLocally(&topology,
+                        ReplCtx->VCtx->ShortSelfVDisk, id, true) - ingress.LocalParts(topology.GType);
+                    if (!parts.Empty() && barriers->Keep(id, memRec, {}, snap.HullCtx->AllowKeepFlags,
+                            true /*allowGarbageCollection*/).KeepData) {
+                        UpdatedBlobs.insert(id);
+                    }
+                }
+            }
+            if (SyncLogUpdateOffset == update.Blobs.size()) {
+                ReplySyncLogUpdate(update);
+                PendingSyncLogUpdates.pop_front();
+                SyncLogUpdateOffset = 0;
+            }
+            if (!PendingSyncLogUpdates.empty()) {
+                Send(SelfId(), new TEvProcessSyncLogUpdates);
+            }
+            if (State == Relaxation || State == Finished) {
+                if (!UpdatedBlobs.empty()) {
+                    ScheduleReplicationWakeup();
+                } else if (State == Relaxation && !HasUnclassifiedUpdates()) {
+                    CheckReplicationDone();
+                }
+            }
+        }
+
         void StartReplication() {
+            ReplWakeupScheduled = false;
+            ++ReplWakeupGeneration;
+            if (!UpdatedBlobs.empty() && BlobsToReplicatePtr) {
+                // Merge only actual recovery candidates. Drain the old retry queue
+                // while building the new one, rather than duplicating its contents.
+                auto blobs = std::make_shared<TBlobIdQueue>();
+                auto it = UpdatedBlobs.begin();
+                while (!BlobsToReplicatePtr->IsEmpty()) {
+                    const TLogoBlobID id = BlobsToReplicatePtr->Front();
+                    while (it != UpdatedBlobs.end() && *it < id) {
+                        blobs->Push(*it++);
+                    }
+                    blobs->Push(id);
+                    BlobsToReplicatePtr->PopFront();
+                    if (it != UpdatedBlobs.end() && *it == id) {
+                        ++it;
+                    }
+                }
+                for (; it != UpdatedBlobs.end(); ++it) {
+                    blobs->Push(*it);
+                }
+                BlobsToReplicatePtr = std::move(blobs);
+            }
+            UpdatedBlobs.clear();
+            if (DonorQueue.empty()) {
+                DonorQueue.emplace_back(std::nullopt);
+            }
+            if (State == Finished) {
+                Transition(Finished, Relaxation);
+            }
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "REPL START"),
                 {"marker", "BSVR14"});
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM START"),
@@ -323,6 +448,9 @@ namespace NKikimr {
 
             switch (State) {
                 case Plan:
+                    // The planner found actual recovery work. Healthy SyncLog updates
+                    // never reach this event and must not revoke VDisk readiness.
+                    Send(ReplCtx->SkeletonId, new TEvReplStarted);
                     // this is a first quantum of replication, so we have to register it in the broker
                     State = AwaitToken;
                     Y_VERIFY_S(!RequestedReplicationToken, ReplCtx->VCtx->VDiskLogPrefix);
@@ -504,29 +632,8 @@ namespace NKikimr {
                 ResetReplProgressTimer(true);
 
                 Become(&TThis::StateRelax);
-                if (!BlobsToReplicatePtr->IsEmpty()) {
-                    // try again for unreplicated blobs in some future
-                    State = Relaxation;
-                    Schedule(ReplCtx->VDiskCfg->ReplTimeInterval, new TEvents::TEvWakeup);
-                    if (!UnrecoveredNonphantomBlobs) {
-                        // semi-finished replication -- we have only phantom-like unreplicated blobs
-                        TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
-                            SelfId(), nullptr, 1));
-                    }
-                } else {
-                    // no more blobs to replicate; replication will not resume
-                    State = Finished;
-                    ReplCtx->MonGroup.ReplUnreplicatedVDisks() = 0;
-                    ReplCtx->MonGroup.ReplUnreplicatedPhantoms() = 0;
-                    ReplCtx->MonGroup.ReplUnreplicatedNonPhantoms() = 0;
-                    ReplCtx->MonGroup.ReplWorkUnitsRemaining() = 0;
-                    ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
-                    ReplCtx->MonGroup.ReplItemsRemaining() = 0;
-                    ReplCtx->MonGroup.ReplItemsDone() = 0;
-                    ReplCtx->MonGroup.ReplIsHoldingToken() = false;
-                    TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
-                        SelfId(), nullptr, 0));
-                }
+                State = Relaxation;
+                CheckReplicationDone();
             } else {
                 YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM START"),
                     {"marker", "BSVR18"});
@@ -536,6 +643,33 @@ namespace NKikimr {
 
             ReplCtx->MonGroup.ReplSecondsRemaining() = timeRemaining.Seconds();
             ReplicationEndTime = finished ? TInstant::Zero() : TInstant::Now() + timeRemaining;
+        }
+
+        void CheckReplicationDone() {
+            if (!BlobsToReplicatePtr->IsEmpty() || HasUnclassifiedUpdates()) {
+                if (!BlobsToReplicatePtr->IsEmpty() || !UpdatedBlobs.empty()) {
+                    ScheduleReplicationWakeup();
+                }
+                if (!UnrecoveredNonphantomBlobs && !HasUnclassifiedUpdates()) {
+                    // Only phantom-like unreplicated blobs remain.
+                    TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0,
+                        ReplCtx->SkeletonId, SelfId(), nullptr, 1));
+                }
+            } else {
+                State = Finished;
+                ReplWakeupScheduled = false;
+                ++ReplWakeupGeneration;
+                ReplCtx->MonGroup.ReplUnreplicatedVDisks() = 0;
+                ReplCtx->MonGroup.ReplUnreplicatedPhantoms() = 0;
+                ReplCtx->MonGroup.ReplUnreplicatedNonPhantoms() = 0;
+                ReplCtx->MonGroup.ReplWorkUnitsRemaining() = 0;
+                ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
+                ReplCtx->MonGroup.ReplItemsRemaining() = 0;
+                ReplCtx->MonGroup.ReplItemsDone() = 0;
+                ReplCtx->MonGroup.ReplIsHoldingToken() = false;
+                TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0,
+                    ReplCtx->SkeletonId, SelfId(), nullptr, 0));
+            }
         }
 
         void RunRepl(const TLogoBlobID& from) {
@@ -711,7 +845,7 @@ namespace NKikimr {
         }
 
         STRICT_STFUNC(StateRelax,
-            cFunc(TEvents::TSystem::Wakeup, StartReplication)
+            hFunc(TEvents::TEvWakeup, HandleReplicationWakeup)
             hFunc(NMon::TEvHttpInfo, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)
             hFunc(TEvProxyQueueState, Handle)
@@ -720,6 +854,8 @@ namespace NKikimr {
             hFunc(TEvBlobStorage::TEvEnrichNotYet, Handle)
             hFunc(TEvents::TEvGone, Handle)
             cFunc(TEvBlobStorage::EvCommenceRepl, StartReplication)
+            hFunc(TEvReplSyncLogUpdate, Handle)
+            cFunc(EvProcessSyncLogUpdates, ProcessSyncLogUpdates)
             hFunc(TEvReplInvoke, Handle)
             hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
             hFunc(TEvMinHugeBlobSizeUpdate, Handle)
@@ -764,6 +900,7 @@ namespace NKikimr {
         }
 
         STRICT_STFUNC(StateRepl,
+            hFunc(TEvents::TEvWakeup, HandleReplicationWakeup)
             cFunc(TEvReplToken::EventType, HandleReplToken)
             hFunc(TEvReplStarted, Handle)
             hFunc(TEvReplFinished, Handle)
@@ -775,6 +912,8 @@ namespace NKikimr {
             hFunc(TEvBlobStorage::TEvEnrichNotYet, Handle)
             hFunc(TEvents::TEvGone, Handle)
             cFunc(TEvBlobStorage::EvCommenceRepl, Ignore)
+            hFunc(TEvReplSyncLogUpdate, Handle)
+            cFunc(EvProcessSyncLogUpdates, ProcessSyncLogUpdates)
             hFunc(TEvReplInvoke, Handle)
             hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
             hFunc(TEvMinHugeBlobSizeUpdate, Handle)

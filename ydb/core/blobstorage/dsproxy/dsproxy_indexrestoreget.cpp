@@ -15,6 +15,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
     const ui32 QuerySize;
     TArrayHolder<TEvBlobStorage::TEvGet::TQuery> Queries;
     const TInstant Deadline;
+    const bool MustRestoreFirst;
     const bool IsInternal;
     const bool Decommission;
     const bool DoNotReportIndexRestoreGetMissingBlobs;
@@ -23,6 +24,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
     THashMap<ui64, TGroupQuorumTracker> QuorumTracker;
     TVector<TBlobStatusTracker> BlobStatus;
     ui32 VGetsInFlight;
+    ui32 SingleDcPresentQueries = 0;
 
     NKikimrBlobStorage::EGetHandleClass GetHandleClass;
 
@@ -100,29 +102,46 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
         auto it = QuorumTracker.find(queueId);
         Y_ABORT_UNLESS(it != QuorumTracker.end());
 
-        switch (NKikimrProto::EReplyStatus newStatus = it->second.ProcessReply(vdisk, status)) {
-            case NKikimrProto::ERROR:
-                return ReplyAndDie(NKikimrProto::ERROR);
+        if (!Info->EnableSingleDcMode || (ForceBlockTabletData && ForceBlockTabletData->Generation)) {
+            switch (NKikimrProto::EReplyStatus newStatus = it->second.ProcessReply(vdisk, status)) {
+                case NKikimrProto::ERROR:
+                    return ReplyAndDie(NKikimrProto::ERROR);
 
-            case NKikimrProto::OK:
-            case NKikimrProto::UNKNOWN:
-                break;
+                case NKikimrProto::OK:
+                case NKikimrProto::UNKNOWN:
+                    break;
 
-            default:
-                Y_ABORT("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data());
+                default:
+                    Y_ABORT("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data());
+            }
         }
 
         for (const auto& result : record.GetResult()) {
             const TLogoBlobID& blobId = LogoBlobIDFromLogoBlobID(result.GetBlobID());
             const ui32 queryIdx = result.GetCookie();
             Y_ABORT_UNLESS(queryIdx < QuerySize && blobId == Queries[queryIdx].Id);
-            BlobStatus[queryIdx].UpdateFromResponseData(result, vdisk, Info.Get());
+            auto& tracker = BlobStatus[queryIdx];
+            const bool hadParts = Info->EnableSingleDcMode && tracker.HasPresentParts(Info.Get());
+            tracker.UpdateFromResponseData(result, vdisk, Info.Get());
+            if (Info->EnableSingleDcMode) {
+                const bool hasParts = tracker.HasPresentParts(Info.Get());
+                if (hasParts != hadParts) {
+                    if (hasParts) {
+                        ++SingleDcPresentQueries;
+                    } else {
+                        --SingleDcPresentQueries;
+                    }
+                }
+            }
             auto& [keep, doNotKeep] = KeepFlags[blobId];
             keep |= result.GetKeep();
             doNotKeep |= result.GetDoNotKeep();
         }
 
-        if (!VGetsInFlight) {
+        // Presence needs one copy; absence needs every active reply. A forced block still
+        // waits for the index replies that apply it before completing the request.
+        if (!VGetsInFlight || (Info->EnableSingleDcMode && !ForceBlockTabletData
+                && SingleDcPresentQueries == QuerySize)) {
             OnEnoughVGetResults();
         }
     }
@@ -168,6 +187,9 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
                     blobState == TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY) {
                 // Blob is not full, send EvGet to recover it
                 a.Status = NKikimrProto::OK;
+                if (Info->EnableSingleDcMode && !MustRestoreFirst) {
+                    continue;
+                }
                 std::unique_ptr<TEvBlobStorage::TEvGet> get(new TEvBlobStorage::TEvGet(
                     Queries[idx].Id, 0, 0, Deadline,
                     GetHandleClass, true));
@@ -245,7 +267,7 @@ class TBlobStorageGroupIndexRestoreGetRequest : public TBlobStorageGroupRequestA
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartIndexRestoreGet;
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(Queries, QuerySize, Deadline, GetHandleClass,
-            true /*mustRestoreFirst*/, true /*isIndexOnly*/, std::nullopt /*forceBlockTabletData*/, IsInternal);
+            MustRestoreFirst, true /*isIndexOnly*/, ForceBlockTabletData, IsInternal);
         ev->RestartCounter = counter;
         ev->Decommission = Decommission;
         ev->DoNotReportIndexRestoreGetMissingBlobs = DoNotReportIndexRestoreGetMissingBlobs;
@@ -266,6 +288,7 @@ public:
         , QuerySize(params.Common.Event->QuerySize)
         , Queries(params.Common.Event->Queries.Release())
         , Deadline(params.Common.Event->Deadline)
+        , MustRestoreFirst(params.Common.Event->MustRestoreFirst)
         , IsInternal(params.Common.Event->IsInternal)
         , Decommission(params.Common.Event->Decommission)
         , DoNotReportIndexRestoreGetMissingBlobs(params.Common.Event->DoNotReportIndexRestoreGetMissingBlobs)
@@ -311,8 +334,17 @@ public:
             << " ForceBlockTabletId# " << (ForceBlockTabletData ? ToString(ForceBlockTabletData->Id) : "")
             << " ForceBlockTabletGeneration# " << (ForceBlockTabletData ? ToString(ForceBlockTabletData->Generation) : ""));
 
+        if (Info->EnableSingleDcMode && (Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc
+                || !Info->SurvivingDc || *Info->SurvivingDc >= 3)) {
+            ErrorReason = "Invalid surviving realm for mirror-3-dc";
+            return ReplyAndDie(NKikimrProto::ERROR);
+        }
+
         for (const auto& vdisk : Info->GetVDisks()) {
             auto vd = Info->GetVDiskId(vdisk.OrderNumber);
+            if (!Info->IsVDiskInActiveRealm(vd)) {
+                continue;
+            }
             std::unique_ptr<TEvBlobStorage::TEvVGet> vget;
             ui64 queueId = 1;
 

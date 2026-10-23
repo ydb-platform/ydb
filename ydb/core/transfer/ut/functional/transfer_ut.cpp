@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
-    Y_UNIT_TEST(ConnectionString_BadDNSName)
+    Y_UNIT_TEST(ConnectionString_MissingDNSNameCanBeDropped)
     {
         MainTestCase testCase;
 
@@ -134,9 +134,14 @@ Y_UNIT_TEST_SUITE(Transfer)
                 )
             )", testCase.TransferName.data(), testCase.TopicName.data(), testCase.TableName.data()));
 
-        testCase.CheckTransferStateError("Grpc error response on endpoint domain-not-exists-localhost.com.moc:2135");
+        // A missing DNS name is recoverable. Running does not mean source
+        // discovery completed; DROP must also work while bootstrap is pending.
+        testCase.CheckTransferState(TTransferDescription::EState::Running);
 
         testCase.DropTransfer();
+        const auto description = testCase.DescribeTransfer();
+        UNIT_ASSERT_VALUES_EQUAL_C(description.GetStatus(), EStatus::SCHEME_ERROR,
+            description.GetIssues().ToOneLineString());
         testCase.DropTable();
         testCase.DropTopic();
     }

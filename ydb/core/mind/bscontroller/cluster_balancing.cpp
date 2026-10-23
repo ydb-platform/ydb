@@ -139,7 +139,7 @@ namespace NKikimr::NBsController {
                         }
                         break;
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kLocation:
-                        if (!location || !MatchPDiskLocation(*location, property.GetLocation())) {
+                        if (!location || !MatchPDiskLocation(*location, TNodeLocation(property.GetLocation()))) {
                             return false;
                         }
                         break;

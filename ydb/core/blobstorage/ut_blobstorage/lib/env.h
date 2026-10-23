@@ -498,10 +498,12 @@ struct TEnvironmentSetup {
                                 if (!IsNodeConfigured(nodeId)) {
                                     continue;
                                 }
-                                res << "  - {host: host_" << nodeId << ", location: {data_center: my_dc, rack: rack_"
-                                    << nodeId << ", unit: unit_" << nodeId;
-                                if (Settings.NumPiles) {
-                                    res << ", bridge_pile_name: pile_" << (nodeId - 1) / 8 + 1;
+                                NActorsInterconnect::TNodeLocation location;
+                                Settings.LocationGenerator(nodeId).Serialize(&location, false);
+                                res << "  - {host: host_" << nodeId << ", location: {data_center: " << location.GetDataCenter()
+                                    << ", rack: " << location.GetRack() << ", unit: " << location.GetUnit();
+                                if (location.HasBridgePileName()) {
+                                    res << ", bridge_pile_name: " << location.GetBridgePileName();
                                 }
                                 res << "}}\n";
                             }
@@ -513,6 +515,9 @@ struct TEnvironmentSetup {
                             if (Settings.NumPiles) {
                                 // the test may change the set of piles, then nodes started after that get new one
                                 res << "  bridge_config:\n";
+                                if (Runtime->GetAppDataBridgeConfig().GetEnableNonUniformStorage()) {
+                                    res << "    enable_non_uniform_storage: true\n";
+                                }
                                 res << "    piles:\n";
                                 for (const auto& pile : Runtime->GetAppDataBridgeConfig().GetPiles()) {
                                     res << "    - name: " << pile.GetName() << "\n";

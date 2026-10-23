@@ -636,7 +636,7 @@ namespace NKikimr::NStorage {
         request.ExistingGroup = existingGroup;
         request.TryToRelocateLocallyFirst = params.TryToRelocateBrokenDisksLocallyFirst;
         request.IgnoreGroupLayoutChecks = params.LayoutPolicy.AllowsRelaxedPlacement();
-        request.BridgePileId = NBridge::GetPlacementPileId(params.BridgePileId, BridgeInfo.get());
+        request.PileScope = NBridge::GetPlacementPileId(params.BridgePileId, BridgeInfo.get());
 
         NBsController::TGroupGeometryInfo geometry(params.GroupType.GetErasure(), selfManagementConfig.GetGeometry());
         const NBsController::TGroupMapper::TOptions options{

@@ -163,6 +163,17 @@ namespace NKikimr::NStorage {
         if (*pileListChanged) {
             next.SetPileListChanged(true); // nodes taking pile ids from BridgeConfig positions can't work anymore
         }
+        auto *details = config->MutableClusterStateDetails();
+        if (details->GetNonUniformStorageEnabled() && !bridgeConfig.GetEnableNonUniformStorage()) {
+            return "non-uniform storage activation can't be disabled";
+        }
+        if (bridgeConfig.GetEnableNonUniformStorage()) {
+            if (details->GetBscConversionPending()) {
+                return "non-uniform storage requires BSC conversion to complete";
+            }
+            details->SetNonUniformStorageEnabled(true);
+            next.SetRequiredFeatureLevel(Max<ui32>(next.GetRequiredFeatureLevel(), BridgeFeatureLevelNonUniformStorage));
+        }
         config->MutableClusterStateDetails()->MutablePileRegistry()->Swap(&next);
         return std::nullopt;
     }
@@ -177,6 +188,11 @@ namespace NKikimr::NStorage {
 
         config->MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(cfg.BridgeConfig->PilesSize()));
         *config->MutableClusterStateDetails()->MutablePileRegistry() = NBridge::MakeImpliedPileRegistry(*cfg.BridgeConfig);
+        if (cfg.BridgeConfig->GetEnableNonUniformStorage()) {
+            auto *details = config->MutableClusterStateDetails();
+            details->SetNonUniformStorageEnabled(true);
+            details->MutablePileRegistry()->SetRequiredFeatureLevel(BridgeFeatureLevelNonUniformStorage);
+        }
     }
 
     std::optional<TString> TDistributedConfigKeeper::TransformConfigBeforeCommit(NKikimrBlobStorage::TStorageConfig *config) {
@@ -388,6 +404,8 @@ namespace NKikimr::NStorage {
             return "cluster is already bridged one";
         } else if (bridgeConfig.PilesSize() != 1) {
             return "BridgeConfig must contain exactly one pile to convert cluster to bridged one";
+        } else if (bridgeConfig.GetEnableNonUniformStorage()) {
+            return "enable non-uniform storage only after BSC conversion completes";
         }
 
         // the cluster has the only pile which is the primary one; generation and history are filled in when committing;

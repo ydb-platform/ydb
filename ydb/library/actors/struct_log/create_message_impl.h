@@ -121,7 +121,7 @@ public:
             // By default, Out<T> can't write classes with ToString() method. (see TStateStorageInfo as example)
             // Because of this, OutputParam must be able to process various standard containers, variants, tuples, etc...
             s << value.ToString();
-        } else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
+        }  else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
             // YDB uses several ways to store/pass optional values (see TOptionalTraits<T> below).
             // So, it is required to process optional data using this OutputParam<TValue> (instead of Out<T>).
             if (value) {
@@ -183,9 +183,8 @@ public:
         OutputParam(s, rest...);
     }
 
-    // Native types support
     template <typename T, typename K = TKeyName>
-    TCreateMessageArg(K&& name, const T& value) {
+    static void AddValueToCurrentMessage(K&& name, const T& value) {
         if constexpr (std::is_function<T>::value) {
             static_assert(false, "It is not allowed to pass function into structured message");
         } else if constexpr (std::is_same<T, TStructuredMessage>::value) {
@@ -199,11 +198,27 @@ public:
             }
         } else if constexpr (TNativeTypeSupport<T>::value) {
             TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, value);
+        } else if constexpr (TOptionalTraits<T>::HasOptionalValue) {
+            // YDB uses several ways to store/pass optional values (see TOptionalTraits<T> below).
+            // So, it is required to process optional data using this OutputParam<TValue> (instead of Out<T>).
+            if (value) {
+                AddValueToCurrentMessage(name, *value);
+            } else {
+                TStringStream stream;
+                stream << "<null>";
+                TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, stream.Str());
+            }
         } else {
             TStringStream stream;
             OutputParam(stream, value);
             TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, stream.Str());
         }
+    }
+
+    // Support YDB_LOG_ macro syntax
+    template <typename T, typename K = TKeyName>
+    TCreateMessageArg(K&& name, const T& value) {
+        AddValueToCurrentMessage(std::move(name), value);
     }
 
     TCreateMessageArg(const TStructuredMessage& message);

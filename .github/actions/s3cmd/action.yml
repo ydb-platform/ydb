@@ -19,6 +19,9 @@ inputs:
   build_preset:
     required: false
     description: "build preset like relwithdebinfo"
+  target_platform:
+    required: false
+    description: "target platform name"
 runs:
   using: "composite"
   steps:
@@ -49,10 +52,19 @@ runs:
     - name: export s3 path variables
       shell: bash
       if: inputs.build_preset
+      env:
+        TARGET_PLATFORM: ${{ inputs.target_platform }}
+        BUILD_PRESET: ${{ inputs.build_preset }}
       run: |
-        folder="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
-        
-        BUILD_PRESET="${{ inputs.build_preset }}"
+        if [[ -n "$TARGET_PLATFORM" ]]; then
+          folder="$TARGET_PLATFORM"
+        else
+          case "$RUNNER_ARCH" in
+            X64) folder="x86-64" ;;
+            ARM64) folder="arm64" ;;
+            *) folder="unknown" ;;
+          esac
+        fi
         
         case "$BUILD_PRESET" in
           relwithdebinfo)

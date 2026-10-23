@@ -49,10 +49,11 @@ namespace {
         }
     };
 
-    TEnvironmentSetup::TSettings MakeTwoPileSettings() {
+    TEnvironmentSetup::TSettings MakeTwoPileSettings(TBlobStorageGroupType::EErasureSpecies erasure =
+            TBlobStorageGroupType::Erasure4Plus2Block) {
         return {
             .NodeCount = 16,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .Erasure = erasure,
             .LocationGenerator = GetBridgedLocation,
             .SelfManagementConfig = true,
             .NumPiles = 2,
@@ -232,5 +233,159 @@ Y_UNIT_TEST_SUITE(BridgeStaleParts) {
         env.Sim(TDuration::Seconds(10));
         query();
         UNIT_ASSERT(numSentToPile1);
+    }
+
+    // the re-run of rejoin while the pile still waits for its static groups leaves the parts of dynamic groups at the
+    // SYNCED stage of their previous sync; the pile becomes SYNCHRONIZED, but the parts miss the writes made while it
+    // was NOT_SYNCHRONIZED_1 the second time
+    Y_UNIT_TEST(RejoinReRunDuringNotSynchronized2) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+
+        constexpr ui32 nodeId = 2; // node of the pile staying connected
+
+        TDataChecker checker(env);
+        checker.Write(groupId, nodeId);
+
+        // hold the commits finishing the sync of the static group parts of the pile, so the pile stays
+        // NOT_SYNCHRONIZED_2 after BSC has synced the dynamic group parts and cleared UnsyncedBSC
+        std::vector<std::pair<std::unique_ptr<IEventHandle>, ui32>> heldStaticCommits;
+        bool holdingStaticCommits = true;
+
+        // hold the storage configs reported to the warden of the writing node once it has learned the
+        // NOT_SYNCHRONIZED_1 state of the pile: the node keeps skipping the pile in its writes while the pile switches
+        // back to NOT_SYNCHRONIZED_2 and its dynamic group parts keep the SYNCED stage of their previous sync
+        std::vector<std::pair<std::unique_ptr<IEventHandle>, ui32>> heldConfigs;
+        bool holdingConfigs = false;
+
+        env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& ev) {
+            if (holdingStaticCommits && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record;
+                if (record.HasUpdateBridgeGroupInfo()) {
+                    const auto& cmd = record.GetUpdateBridgeGroupInfo();
+                    const auto *pile = NBridge::GetGroupPile(cmd.GetBridgeGroupInfo().GetBridgeGroupState(),
+                        TBridgePileId::FromPileIndex(1));
+                    if (pile && pile->GetStage() == NKikimrBridge::TGroupState::SYNCED) {
+                        heldStaticCommits.emplace_back(std::move(ev), node);
+                        return false;
+                    }
+                }
+            } else if (holdingConfigs && node == nodeId &&
+                    ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
+                const auto& msg = *ev->Get<TEvNodeWardenStorageConfig>();
+                if (msg.Config && msg.Config->HasClusterState() &&
+                        msg.Config->GetClusterState().GetPerPileState(1) !=
+                            NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1) {
+                    heldConfigs.emplace_back(std::move(ev), node);
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(10));
+        checker.Write(groupId, nodeId); // reaches pile 0 only
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1); // rejoin
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+        checker.Write(groupId, nodeId); // reaches both piles, the part of pile 1 is resynced by BSC
+
+        // wait until BSC has finished the dynamic group parts and reported it; the pile keeps waiting for its static
+        // group part, whose final commit is held
+        NKikimrBlobStorage::TStorageConfig config;
+        WaitUntil(env, [&] {
+            config = QueryStorageConfig(env);
+            for (const auto& pss : config.GetClusterStateDetails().GetPileSyncState()) {
+                if (TBridgePileId::FromProto(&pss,
+                        &NKikimrBridge::TClusterStateDetails::TPileSyncState::GetBridgePileId) ==
+                        TBridgePileId::FromPileIndex(1)) {
+                    return !pss.GetUnsyncedBSC();
+                }
+            }
+            return false;
+        }, "BSC report of the pile sync", [&] { return config.GetClusterStateDetails().DebugString(); });
+        UNIT_ASSERT_EQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+
+        // rejoin is re-run: the pile gets NOT_SYNCHRONIZED_1, which resets nothing, and switches back to
+        // NOT_SYNCHRONIZED_2 right away, which does not reset the dynamic group parts either, as BSC has already
+        // reported them; the warden of the node is held at NOT_SYNCHRONIZED_1, so the writes made meanwhile skip the
+        // pile and their data never reaches its part
+        holdingConfigs = true;
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1); // rejoin re-run
+        env.Sim(TDuration::Seconds(10)); // let the node learn NOT_SYNCHRONIZED_1
+        checker.Write(groupId, nodeId); // reaches pile 0 only
+        checker.Write(groupId, nodeId);
+        UNIT_ASSERT(!heldConfigs.empty());
+        holdingConfigs = false;
+        for (auto& [ev, node] : std::exchange(heldConfigs, {})) {
+            env.Runtime->Send(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender, ev->ReleaseBase().Release(), 0,
+                ev->Cookie), node);
+        }
+
+        // release the held commits of the static group sync: the one of the current generation finishes it, and the
+        // pile becomes SYNCHRONIZED
+        UNIT_ASSERT(!heldStaticCommits.empty());
+        holdingStaticCommits = false;
+        for (auto& [ev, node] : std::exchange(heldStaticCommits, {})) {
+            env.Runtime->Send(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender, ev->ReleaseBase().Release(), 0,
+                ev->Cookie), node);
+        }
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        env.Runtime->FilterFunction = nullptr;
+
+        // the part of the dynamic group has never been reset: it misses the writes made while the pile was
+        // NOT_SYNCHRONIZED_1, so reading it directly must fail until it is resynced
+        UNIT_ASSERT_EQUAL(GetPart(env, groupId, 1).GetStage(), NKikimrBridge::TGroupState::SYNCED);
+        CheckPileData(env, checker, 1, 9);
+    }
+
+    // the forced evict of the VDisk of the erasure none group part puts an empty VDisk in its place; the part cannot
+    // rebuild itself, but it keeps its SYNCED stage, so the pile stays SYNCHRONIZED without the data
+    Y_UNIT_TEST(ForcedEvictWhileSynchronized) {
+        TEnvironmentSetup env(MakeTwoPileSettings(TBlobStorageGroupType::ErasureNone));
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto pileGroups = GetPileGroups(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL(pileGroups.size(), 2);
+
+        TDataChecker checker(env);
+        checker.Write(groupId, 2); // reaches both piles
+        UNIT_ASSERT_EQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::SYNCHRONIZED);
+
+        // find the single VDisk of the pile's part
+        const auto baseConfig = env.FetchBaseConfig();
+        const NKikimrBlobStorage::TBaseConfig::TVSlot *target = nullptr;
+        for (const auto& vslot : baseConfig.GetVSlot()) {
+            if (vslot.GetGroupId() == pileGroups[1]) {
+                UNIT_ASSERT(!target);
+                target = &vslot;
+            }
+        }
+        UNIT_ASSERT(target);
+
+        // evict it the forced way, like the viewer does with force=true: the failure model checks are off and donor
+        // mode is suppressed, so the new VDisk is empty and the part has nothing to rebuild itself from
+        NKikimrBlobStorage::TConfigRequest request;
+        request.SetIgnoreDegradedGroupsChecks(true);
+        request.SetIgnoreDisintegratedGroupsChecks(true);
+        request.SetIgnoreGroupFailModelChecks(true);
+        auto *reassign = request.AddCommand()->MutableReassignGroupDisk();
+        reassign->SetGroupId(pileGroups[1]);
+        reassign->SetGroupGeneration(target->GetGroupGeneration());
+        reassign->SetFailRealmIdx(target->GetFailRealmIdx());
+        reassign->SetFailDomainIdx(target->GetFailDomainIdx());
+        reassign->SetVDiskIdx(target->GetVDiskIdx());
+        reassign->SetSuppressDonorMode(true);
+        const auto response = env.Invoke(request);
+
+        if (!response.GetSuccess()) {
+            Cerr << "*** reassign refused: " << response.GetErrorDescription() << Endl;
+            return; // the reassign is refused: also fine
+        }
+        env.Sim(TDuration::Minutes(1)); // let the new empty VDisk replace the old one
+
+        // the pile keeps its SYNCHRONIZED state, while its part of the group has no data anymore
+        UNIT_ASSERT_EQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::SYNCHRONIZED);
+        CheckPileData(env, checker, 1, 9);
     }
 }

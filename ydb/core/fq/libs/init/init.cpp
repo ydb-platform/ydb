@@ -21,6 +21,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/test_connection/test_connection.h>
+#include <ydb/core/fq/libs/wasm_services/query/query.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/protos/config.pb.h>
 
@@ -61,7 +62,8 @@ using namespace NKikimr;
 void Init(const NFq::NConfig::TConfig& protoConfig, ui32 nodeId, const TActorRegistrator& actorRegistrator, const TAppData* appData,
     const TString& tenant, ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections, const IYqSharedResources::TPtr& iyqSharedResources,
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory, ui32 icPort,
-    const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories, NYql::IPqGatewayFactory::TPtr pqGatewayFactory)
+    const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories, NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
+    std::shared_ptr<NWasmServices::ITvmTicketProvider> tvmProvider)
 {
     Y_ABORT_UNLESS(iyqSharedResources, "No YQ shared resources created");
     TYqSharedResources::TPtr yqSharedResources = TYqSharedResources::Cast(iyqSharedResources);
@@ -145,6 +147,10 @@ void Init(const NFq::NConfig::TConfig& protoConfig, ui32 nodeId, const TActorReg
         NYql::CreateCompositeTaskTransformFactory({ NYql::CreateCommonDqTaskTransformFactory() });
 
     auto asyncIoFactory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
+    if (protoConfig.GetWasmServices().GetEnabled()) {
+        NWasmServices::RegisterServiceTransforms(*asyncIoFactory, protoConfig.GetWasmServices(), std::move(tvmProvider), appData->UserPoolId,
+            yqCounters->GetSubgroup("subsystem", "wasm_services"));
+    }
 
     const auto httpGateway =
         NYql::IHTTPGateway::Make(&protoConfig.GetGateways().GetHttpGateway(), yqCounters->GetSubgroup("subcomponent", "http_gateway"));

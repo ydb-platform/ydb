@@ -1,3 +1,5 @@
+* Added database-relative resource paths for gRPC APIs, the CLI, and C++ SDK. Paths starting with `/` remain absolute.
+
 ## v3.25.0
 
 * Added `TExecuteQueryIterator::Cancel()` to explicitly cancel a query response stream, including a pending read.

@@ -12,6 +12,7 @@ NActors::IActor* CreateDropTopicActor(const NActors::TActorId& parentId, TDropTo
         .UserToken = std::move(settings.UserToken),
         .IfExists = settings.IfExists,
         .Cookie = settings.Cookie,
+        .EnableRelativePaths = settings.EnableRelativePaths,
     });
 }
 

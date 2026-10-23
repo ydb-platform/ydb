@@ -65,6 +65,7 @@ TActorId TPartitionWriterCacheActorFixture::CreatePartitionWriterCacheActor(cons
     NPQ::TPartitionWriterOpts options;
     options.WithDeduplication(params.WithDeduplication);
     options.WithDatabase(params.Database);
+    options.WithTopicPath(params.TopicPath);
     options.WithExpectedGeneration(params.Generation);
     options.WithSourceId(params.SourceId);
 
@@ -114,6 +115,9 @@ void TPartitionWriterCacheActorFixture::SetupEventObserver()
             }
         } else if (auto event = ev->CastAsLocal<NKqp::TEvKqp::TEvQueryRequest>(); event) {
             if (event->GetAction() == NKikimrKqp::QUERY_ACTION_TOPIC) {
+                const auto& request = event->Record.GetRequest();
+                KqpTopicPaths[MakeTxId(request.GetSessionId(), request.GetTxControl().tx_id())] =
+                    request.GetTopicOperations().GetTopics(0).path();
                 //
                 // If a request comes from TPartitionWriter, then we emulate the response from KQP.
                 // TPartitionWriter only needs a couple of fields

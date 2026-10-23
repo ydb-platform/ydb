@@ -1,14 +1,17 @@
 #include <ydb/services/sqs_topic/billing.h>
+#include <ydb/services/sqs_topic/consumer_attributes.h>
 #include <ydb/services/sqs_topic/statuses.h>
 #include <ydb/services/sqs_topic/utils.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -195,6 +198,25 @@ namespace {
     }
 
 } // namespace
+
+Y_UNIT_TEST_SUITE(SqsTopicConsumerAttributes) {
+    Y_UNIT_TEST_TWIN(CompareDeadLetterQueuePaths, enableRelativePaths) {
+        NKikimr::TActorSystemStub actorSystem;
+        actorSystem.AppData.FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
+        NKikimrPQ::TPQTabletConfig config;
+        config.SetYdbDatabasePath("/Root");
+        NKikimrPQ::TPQTabletConfig::TConsumer consumer;
+        V1::TQueueAttributes attributes;
+        attributes.DeadLetterQueue = "dlq";
+
+        consumer.SetDeadLetterQueue("dlq");
+        UNIT_ASSERT(V1::CompareWithExistingQueueAttributes(config, consumer, attributes).has_value());
+        consumer.SetDeadLetterQueue("/Root/dlq");
+        UNIT_ASSERT_VALUES_EQUAL(V1::CompareWithExistingQueueAttributes(config, consumer, attributes).has_value(), enableRelativePaths);
+        consumer.SetDeadLetterQueue("/Other/dlq");
+        UNIT_ASSERT(!V1::CompareWithExistingQueueAttributes(config, consumer, attributes).has_value());
+    }
+}
 
 Y_UNIT_TEST_SUITE(SqsTopicMetricsLabels) {
     Y_UNIT_TEST(ConvertOldConsumerNameForFirstClassCitizen) {

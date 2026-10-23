@@ -14,9 +14,9 @@ namespace {
 
     class TMemoryConsumer : public NMemory::IMemoryConsumer {
     public:
-        void SetReport(NMemory::TConsumerReport report) override {
-            Consumption = report.Used;
-            Peak = Max(Peak.load(), report.Used);
+        void SetConsumption(ui64 value) override {
+            Consumption = value;
+            Peak = Max(Peak.load(), value);
             ++Reports;
         }
 

@@ -62,6 +62,8 @@ struct TTestEnv {
         , Runtime(*Server->GetRuntime())
         , Sender(Runtime.AllocateEdgeActor())
     {
+        // The S3 mock uses real HTTP threads; allow replies to arrive before simulated deadlines expire.
+        Runtime.SetFastSimulatedTime(false);
         Runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(true);
         Runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         Runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NLog::PRI_TRACE);
@@ -275,6 +277,45 @@ Y_UNIT_TEST(ShouldSucceedOnRawCsv) {
     UNIT_ASSERT_VALUES_EQUAL(result.GetRowsProcessed(), 1u);
 
     UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), ExpectedUtf8TableState(1));
+}
+
+Y_UNIT_TEST_QUAD(EmptyZstdRestoreSurvivesRestart, direct, populated) {
+    TTestEnv env;
+    env.Runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(direct);
+    auto [shards, tableId] = env.CreateUint32Table();
+    const auto desc = env.TableDescription(shards[0], tableId);
+    if (populated) {
+        const ui32 key = 1;
+        const TString value = "original";
+        Upsert(env.Runtime, env.Sender, shards[0], tableId, env.AllocateTxId(),
+            NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, {1, 2},
+            {TCell::Make(key), TCell(value.data(), value.size())});
+    }
+    const TString expected = populated ? "key = 1, value = original\n" : TString();
+    ui32 directBegins = 0;
+    auto begin = env.Runtime.AddObserver<TEvDataShard::TEvS3DirectWriteBegin>(
+        [&](auto&) { ++directBegins; });
+    // The compressed object is non-empty, but produces no rows or parts.
+    env.StartS3(ZstdCompress(""), ".csv.zst");
+    const auto result = env.ProposeAndPlanRestore(shards[0], tableId, desc);
+    UNIT_ASSERT_C(result.GetSuccess(), result.GetExplain());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetRowsProcessed(), 0u);
+    if (!populated) {
+        UNIT_ASSERT_VALUES_EQUAL(directBegins, direct ? 1u : 0u);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), expected);
+    RebootTablet(env.Runtime, shards[0], env.Runtime.AllocateEdgeActor());
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), expected);
+
+    // Recovery must leave the table writable, with subsequent writes durable.
+    const ui32 key = 2;
+    const TString value = "after restore";
+    Upsert(env.Runtime, env.Sender, shards[0], tableId, env.AllocateTxId(),
+        NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, {1, 2},
+        {TCell::Make(key), TCell(value.data(), value.size())});
+    RebootTablet(env.Runtime, shards[0], env.Runtime.AllocateEdgeActor());
+    UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId),
+        expected + "key = 2, value = after restore\n");
 }
 
 Y_UNIT_TEST(ShouldSucceedOnZstd) {

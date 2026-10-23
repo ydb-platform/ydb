@@ -4314,47 +4314,45 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         createAndCheck(999, 99);
     }
 
-    Y_UNIT_TEST(CreateTableWithPgColumn) {
+    Y_UNIT_TEST(CreateTableWithPgColumnRejected) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto createAndCheck = [&](const TString& typeName) {
-            TString tableName = TStringBuilder() << "/Root/TableWithPgColumn_" << typeName;
-            auto createQuery = TStringBuilder() << Sprintf(R"(
-            CREATE TABLE `%s` (
-                Key Uint64,
-                Value %s,
-                PRIMARY KEY (Key)
-            );)", tableName.c_str(), typeName.c_str());
-            auto createResult = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        for (const TString type : {"pgbool", "pgint2", "pgint4", "pgint8", "pgnumeric", "pgfloat4", "pgfloat8", "pgtext", "pgjson", "pgtimestamp", "pgvarchar"}) {
+            for (const bool pgKey : {false, true}) {
+                auto result = session.ExecuteSchemeQuery(Sprintf(R"(
+                    CREATE TABLE `/Root/TableWithPgColumn` (
+                        Key %s,
+                        Value %s,
+                        PRIMARY KEY (Key)
+                    );
+                )", pgKey ? type.c_str() : "Uint64", pgKey ? "String" : type.c_str())).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "is not supported for table columns");
+            }
+        }
+    }
 
-            UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::SUCCESS, createResult.GetIssues().ToString());
+    Y_UNIT_TEST(CreateTableWithPgColumnViaApiRejected) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
 
-            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
-            UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
-            auto tableDesc = describe.GetTableDescription();
-            std::vector<TTableColumn> columns = tableDesc.GetTableColumns();
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
-            TType valueType = columns[1].Type;
-            TTypeParser parser(valueType);
-            auto kind = parser.GetKind();
-            UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Pg);
-            const auto& pgType = parser.GetPg();
-            UNIT_ASSERT_VALUES_EQUAL(pgType.TypeName, typeName);
-        };
-
-        createAndCheck("pgbool");
-        createAndCheck("pgint2");
-        createAndCheck("pgint4");
-        createAndCheck("pgint8");
-        createAndCheck("pgnumeric");
-        createAndCheck("pgfloat4");
-        createAndCheck("pgfloat8");
-        createAndCheck("pgtext");
-        createAndCheck("pgjson");
-        createAndCheck("pgtimestamp");
-        createAndCheck("pgvarchar");
+        for (const bool pgKey : {false, true}) {
+            TTableBuilder builder;
+            if (pgKey) {
+                builder.AddNullableColumn("Key", TPgType("pgint4"));
+                builder.AddNullableColumn("Value", EPrimitiveType::String);
+            } else {
+                builder.AddNullableColumn("Key", EPrimitiveType::Uint64);
+                builder.AddNullableColumn("Value", TPgType("pgtext"));
+            }
+            builder.SetPrimaryKeyColumn("Key");
+            auto result = session.CreateTable("/Root/TableWithPgColumn", builder.Build()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "is not supported for table columns");
+        }
     }
 
     void AlterTableAddIndex(EIndexTypeSql type) {
@@ -6834,70 +6832,36 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         checkColumn(6, 22, 20);
     }
 
-    Y_UNIT_TEST(AlterTableWithPgColumn) {
+    Y_UNIT_TEST(AlterTableWithPgColumnRejected) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        TString tableName = "/Root/TableWithPgColumn";
-        {
-            auto query = TStringBuilder() << R"(
-            CREATE TABLE `)" << tableName << R"(` (
+        const TString tableName = "/Root/TableWithPgColumn";
+        auto create = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/TableWithPgColumn` (
                 Key Uint64,
                 Value String,
                 PRIMARY KEY (Key)
-            );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+        for (const TString type : {"pgbool", "pgint2", "pgint4", "pgint8", "pgnumeric", "pgfloat4", "pgfloat8", "pgtext", "pgjson", "pgtimestamp", "pgvarchar"}) {
+            auto result = session.ExecuteSchemeQuery(Sprintf(R"(
+                ALTER TABLE `/Root/TableWithPgColumn` ADD COLUMN Added %s;
+            )", type.c_str())).GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "is not supported for table columns");
         }
 
-        auto addColumn = [&] (const TString& typeName) {
-            TString columnName = TStringBuilder() << "Column_" << typeName;
-            auto query = TStringBuilder() << Sprintf(R"(
-            ALTER TABLE `%s`
-                 ADD COLUMN %s %s
-            )", tableName.c_str(), columnName.c_str(), typeName.c_str());
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        };
+        auto result = session.AlterTable(tableName,
+            TAlterTableSettings().AppendAddColumns(TTableColumn("Added", TTypeBuilder().Pg(TPgType("pgtext")).Build()))).GetValueSync();
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "is not supported for table columns");
 
-        addColumn("pgbool");
-        addColumn("pgint2");
-        addColumn("pgint4");
-        addColumn("pgint8");
-        addColumn("pgnumeric");
-        addColumn("pgfloat4");
-        addColumn("pgfloat8");
-        addColumn("pgtext");
-        addColumn("pgjson");
-        addColumn("pgtimestamp");
-        addColumn("pgvarchar");
-
-        TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
-        UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
-        auto tableDesc = describe.GetTableDescription();
-        std::vector<TTableColumn> columns = tableDesc.GetTableColumns();
-        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 13);
-
-        auto checkColumn = [&] (ui64 columnIdx, const TString& typeName) {
-            TType valueType = columns[columnIdx].Type;
-            TTypeParser parser(valueType);
-            auto kind = parser.GetKind();
-            UNIT_ASSERT_VALUES_EQUAL(kind, TTypeParser::ETypeKind::Pg);
-            const auto& pgType = parser.GetPg();
-            UNIT_ASSERT_VALUES_EQUAL(pgType.TypeName, typeName);
-        };
-
-        checkColumn(2, "pgbool");
-        checkColumn(3, "pgint2");
-        checkColumn(4, "pgint4");
-        checkColumn(5, "pgint8");
-        checkColumn(6, "pgnumeric");
-        checkColumn(7, "pgfloat4");
-        checkColumn(8, "pgfloat8");
-        checkColumn(9, "pgtext");
-        checkColumn(10, "pgjson");
-        checkColumn(11, "pgtimestamp");
-        checkColumn(12, "pgvarchar");
+        auto describe = session.DescribeTable(tableName).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTableDescription().GetTableColumns().size(), 2);
     }
 
     struct ExpectedPermissions {

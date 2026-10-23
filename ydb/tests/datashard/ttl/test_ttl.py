@@ -7,7 +7,6 @@ from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.datashard.lib.create_table import create_ttl_sql_request
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
-from ydb.tests.datashard.lib.test_pg_base import TestPgBase
 from ydb.tests.datashard.lib.types_of_variables import (
     cleanup_type_name,
     format_sql_value,
@@ -17,9 +16,6 @@ from ydb.tests.datashard.lib.types_of_variables import (
     index_second,
     index_first_not_Bool,
     ttl_int_types,
-    pk_pg_types_mixed,
-    pk_pg_types_no_bool_mixed,
-    non_pk_pg_types_mixed
 )
 
 
@@ -337,69 +333,6 @@ class TestTTL(TestTTLBase):
                 {**pk_types, **non_pk_types},
                 index_second,
                 "Date",
-                "UNIQUE",
-                "SYNC",
-            ),
-        ],
-    )
-    def test_ttl(
-        self,
-        table_name: str,
-        pk_types: dict[str, str],
-        all_types: dict[str, str],
-        index: dict[str, str],
-        ttl: str,
-        unique: str,
-        sync: str,
-    ):
-        self.do_test_ttl(table_name, pk_types, all_types, index, ttl, unique, sync)
-
-
-class TestPgTTL(TestPgBase, TestTTLBase):
-    @pytest.mark.parametrize(
-        "table_name, pk_types, all_types, index, ttl, unique, sync",
-        [
-            ("table_pgint4_0__SYNC", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, pk_pg_types_mixed, "pgint4", "", "SYNC"),
-            ("table_pgint4_0__ASYNC", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, pk_pg_types_mixed, "pgint4", "", "ASYNC"),
-            (
-                "table_pgint4_0_UNIQUE_SYNC",
-                pk_pg_types_mixed,
-                {**pk_pg_types_mixed, **non_pk_pg_types_mixed},
-                pk_pg_types_no_bool_mixed,
-                "pgint4",
-                "UNIQUE",
-                "SYNC",
-            ),
-            ("table_pgint8_0__SYNC", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, pk_pg_types_mixed, "pgint8", "", "SYNC"),
-            ("table_pgint8_0__ASYNC", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, pk_pg_types_mixed, "pgint8", "", "ASYNC"),
-            (
-                "table_pgint8_0_UNIQUE_SYNC",
-                pk_pg_types_mixed,
-                {**pk_pg_types_mixed, **non_pk_pg_types_mixed},
-                pk_pg_types_no_bool_mixed,
-                "pgint8",
-                "UNIQUE",
-                "SYNC",
-            ),
-            ("table_pgdate_0__SYNC", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, pk_pg_types_mixed, "pgdate", "", "SYNC"),
-            ("table_pgdate_0__ASYNC", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, pk_pg_types_mixed, "pgdate", "", "ASYNC"),
-            (
-                "table_pgdate_0_UNIQUE_SYNC",
-                pk_pg_types_mixed,
-                {**pk_pg_types_mixed, **non_pk_pg_types_mixed},
-                pk_pg_types_no_bool_mixed,
-                "pgdate",
-                "UNIQUE",
-                "SYNC",
-            ),
-            ("table_pgtimestamp_0__SYNC", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, pk_pg_types_mixed, "pgtimestamp", "", "SYNC"),
-            ("table_pgtimestamp_0__ASYNC", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, pk_pg_types_mixed, "pgtimestamp", "", "ASYNC"),
-            (
-                "table_pgtimestamp_0_UNIQUE_SYNC",
-                pk_pg_types_mixed,
-                {**pk_pg_types_mixed, **non_pk_pg_types_mixed},
-                pk_pg_types_no_bool_mixed,
-                "pgtimestamp",
                 "UNIQUE",
                 "SYNC",
             ),

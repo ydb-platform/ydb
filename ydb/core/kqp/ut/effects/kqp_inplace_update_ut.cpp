@@ -33,29 +33,6 @@ void PrepareTable(TSession& session) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
-void PreparePgTable(TSession& session) {
-    auto ret = session.ExecuteSchemeQuery(R"(
-        --!syntax_v1
-        CREATE TABLE `/Root/InplaceUpdate` (
-            Key Uint64,
-            ValueStr String,
-            ValueInt PgInt2,
-            ValueDbl Double,
-            PRIMARY KEY(Key)
-        ) WITH (
-            PARTITION_AT_KEYS = (10)
-        )
-    )").ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(ret.GetStatus(), EStatus::SUCCESS, ret.GetIssues().ToString());
-
-    auto result = session.ExecuteDataQuery(R"(
-        UPSERT INTO `/Root/InplaceUpdate` (Key, ValueStr, ValueInt, ValueDbl) VALUES
-            (1, "One", PgInt2(100), 101.0),
-            (20, "Two", PgInt2(200), 202.0)
-    )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-}
-
 void Test(
     const TString& query,
     TParams&& params,
@@ -402,29 +379,6 @@ Y_UNIT_TEST(BigRow) {
     ])", FormatResultSetYson(result.GetResultSet(0)));
 }
 
-Y_UNIT_TEST(SingleRowPgNotNull) {
-    Test(
-        R"( DECLARE $key AS Uint64;
-            DECLARE $value AS PgInt2;
-
-            UPDATE `/Root/InplaceUpdate` SET
-                ValueInt = $value
-            WHERE Key = $key
-        )",
-        TParamsBuilder()
-            .AddParam("$key").Uint64(1).Build()
-            .AddParam("$value").Pg(TPgValue(TPgValue::VK_TEXT, "123", TPgType("pgint2"))).Build()
-            .Build(),
-        R"([
-            [[1u];["One"];"123";[101.]];
-            [[20u];["Two"];"200";[202.]]
-           ])",
-        [&](const Ydb::TableStats::QueryStats& stats) {
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
-            ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
-        },
-        &PreparePgTable);
-}
 
 } // suite
 

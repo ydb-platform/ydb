@@ -601,9 +601,9 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
 }}
 
 Y_UNIT_TEST_SUITE(TOlap) {
-    Y_UNIT_TEST_FLAG(PgTypesRejected, EnableTablePgTypes) {
+    Y_UNIT_TEST(PgTypesRejected) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(EnableTablePgTypes));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);

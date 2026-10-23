@@ -1175,7 +1175,6 @@ public:
     }
 
     struct TCreateAlterDataFeatureFlags {
-        bool EnableTablePgTypes;
         bool EnableTableDatetime64;
         bool EnableParameterizedDecimal;
         bool EnableDetailedMetrics;
@@ -4792,7 +4791,7 @@ bool ValidateTableDetailedMetricsSettings(
 TConclusion<TDuration> GetExpireAfter(const NKikimrSchemeOp::TTTLSettings::TEnabled& settings, const bool allowNonDeleteTiers);
 
 std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType,
-    const NKikimr::NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr);
+    const NKikimr::NScheme::TTypeRegistry& typeRegistry, TString& errStr);
 
 NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec);
 

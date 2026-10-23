@@ -168,6 +168,8 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
         ctx.Send(writeMeta.GetSource(), result.release(), 0, operation->GetCookie());
         Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::PutBlob);
         wBuffer.RemoveData(aggr, StoragesManager->GetInsertOperator());
+        OperationsManager->SetOperationFinished(operation->GetWriteId());
+        TransactionToAbort(operation->GetLockId());
     }
     AFL_VERIFY(wBuffer.IsEmpty());
 }
@@ -521,6 +523,12 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     auto schema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaOptional(operation.GetTableId().GetSchemaVersion());
     if (!schema) {
         sendError("unknown schema version", NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, 0, 0, "", operation.GetIsBulk());
+        return;
+    }
+    if (const auto compatibility =
+            TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema()->GetIndexInfo().CheckWriteCompatibility(schema->GetIndexInfo());
+        compatibility.IsFail()) {
+        sendError(compatibility.GetErrorMessage(), NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, 0, 0, "", operation.GetIsBulk());
         return;
     }
 

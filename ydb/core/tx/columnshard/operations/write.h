@@ -66,6 +66,7 @@ private:
     YDB_READONLY_DEF(std::optional<ui32>, GranuleShardingVersionId);
     YDB_READONLY(NEvWrite::EModificationType, ModificationType, NEvWrite::EModificationType::Upsert);
     YDB_READONLY_FLAG(Bulk, false);
+    YDB_ACCESSOR(ui64, SchemaVersion, 0);
     const std::shared_ptr<NOlap::TActivityChecker> Activity = std::make_shared<NOlap::TActivityChecker>();
 
 public:

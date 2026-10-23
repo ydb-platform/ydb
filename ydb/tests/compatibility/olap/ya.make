@@ -12,6 +12,7 @@ TEST_SRCS(
     test_rename_table.py
     test_compression.py
     test_encoding.py
+    test_not_null.py
     test_tiering.py
     test_ttl_types.py
 )

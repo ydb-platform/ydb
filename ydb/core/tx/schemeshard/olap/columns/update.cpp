@@ -27,8 +27,16 @@ bool IsValidColumnNameForColumnTable(const TString& name) {
 
 }
 
-bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
+bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors,
+    bool allowConstraintChanges) {
     Name = columnSchema.GetName();
+    if (!allowConstraintChanges && (columnSchema.GetNotNull() || columnSchema.HasSetNotNullInProgress())) {
+        errors.AddError("SET NOT NULL for column tables requires the validated SetColumnConstraint operation");
+        return false;
+    }
+    if (columnSchema.HasSetNotNullInProgress()) {
+        SetNotNullInProgress = columnSchema.GetSetNotNullInProgress();
+    }
     if (!!columnSchema.GetStorageId()) {
         StorageId = columnSchema.GetStorageId();
     }
@@ -77,6 +85,10 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
 }
 
 bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors) {
+    if (columnSchema.HasSetNotNullInProgress()) {
+        errors.AddError("SetNotNullInProgress is an internal column property");
+        return false;
+    }
     if (!columnSchema.GetName()) {
         errors.AddError("Columns cannot have an empty name");
         return false;
@@ -171,6 +183,7 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
 }
 
 void TOlapColumnBase::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema) {
+    SetNotNullInProgressFlag = columnSchema.GetSetNotNullInProgress();
     Name = columnSchema.GetName();
     TypeName = columnSchema.GetType();
     StorageId = columnSchema.GetStorageId();
@@ -213,6 +226,11 @@ void TOlapColumnBase::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnS
     columnSchema.SetName(Name);
     columnSchema.SetType(TypeName);
     columnSchema.SetNotNull(NotNullFlag);
+    if (SetNotNullInProgressFlag) {
+        columnSchema.SetSetNotNullInProgress(true);
+    } else {
+        columnSchema.ClearSetNotNullInProgress();
+    }
     columnSchema.SetStorageId(StorageId);
     *columnSchema.MutableDefaultValue() = DefaultValue.SerializeToProto();
 
@@ -263,17 +281,15 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
         return false;
     }
     if (diffColumn.GetNotNull().has_value()) {
-        if (*diffColumn.GetNotNull()) {
-            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
-                << "SET NOT NULL is not supported for column tables (column '" << Name << "')");
-            return false;
-        }
-        if (IsKeyColumn()) {
+        if (!*diffColumn.GetNotNull() && IsKeyColumn()) {
             errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
                 << "Cannot drop NOT NULL from primary key column '" << Name << "'");
             return false;
         }
-        NotNullFlag = false;
+        NotNullFlag = *diffColumn.GetNotNull();
+    }
+    if (diffColumn.GetSetNotNullInProgress()) {
+        SetNotNullInProgressFlag = *diffColumn.GetSetNotNullInProgress();
     }
     if (diffColumn.GetSerializer()) {
         if (*diffColumn.GetSerializer()) {
@@ -373,7 +389,8 @@ void TOlapColumnAdd::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescript
     TBase::ParseFromLocalDB(columnSchema);
 }
 
-    bool TOlapColumnsUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
+    bool TOlapColumnsUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors,
+        bool allowConstraintChanges) {
         for (const auto& column : alterRequest.GetDropColumns()) {
             if (!DropColumns.emplace(column.GetName()).second) {
                 errors.AddError(NKikimrScheme::StatusInvalidParameter, "Duplicated column for drop");
@@ -397,7 +414,7 @@ void TOlapColumnAdd::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescript
         TSet<TString> alterColumnNames;
         for (auto& columnSchemaDiff : alterRequest.GetAlterColumns()) {
             TOlapColumnDiff columnDiff;
-            if (!columnDiff.ParseFromRequest(columnSchemaDiff, errors)) {
+            if (!columnDiff.ParseFromRequest(columnSchemaDiff, errors, allowConstraintChanges)) {
                 return false;
             }
             if (addColumnNames.contains(columnDiff.GetName())) {

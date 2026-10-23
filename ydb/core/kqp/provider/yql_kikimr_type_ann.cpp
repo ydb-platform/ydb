@@ -112,6 +112,11 @@ const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tab
             return nullptr;
         }
 
+        // Reads remain nullable during validation, but writes must preserve non-optional input types.
+        const auto* metadata = tableDesc.Metadata->Columns.FindPtr(column);
+        if (metadata && metadata->SetNotNullInProgress && columnType->GetKind() == ETypeAnnotationKind::Optional) {
+            columnType = columnType->Cast<TOptionalExprType>()->GetItemType();
+        }
         expectedRowTypeItems.push_back(ctx.MakeType<TItemExprType>(column, columnType));
     }
 

@@ -288,6 +288,11 @@ public:
         }
 
         TProposeErrorCollector errors(*result);
+        TString lockError;
+        if (!context.SS->CheckLocks(path.Base()->PathId, Transaction, lockError)) {
+            result->SetError(NKikimrScheme::StatusMultipleModifications, lockError);
+            return result;
+        }
         TEntityInitializationContext iContext(&context);
         std::shared_ptr<ISSEntity> originalEntity = ISSEntity::GetEntityVerified(context, path);
 

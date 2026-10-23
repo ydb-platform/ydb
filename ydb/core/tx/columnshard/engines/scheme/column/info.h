@@ -31,6 +31,7 @@ private:
     YDB_READONLY(bool, NeedMinMax, false);
     YDB_READONLY(bool, IsSorted, false);
     YDB_READONLY(bool, IsNullable, false);
+    YDB_READONLY(bool, IsSetNotNullInProgress, false);
     YDB_READONLY_DEF(TColumnDefaultScalarValue, DefaultValue);
     std::shared_ptr<TColumnLoader> Loader;
 

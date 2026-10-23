@@ -93,6 +93,7 @@ struct TEvPrivate {
         EvBackupImportRecordBatchResult,
 
         EvRetryConfigSubscription,
+        EvColumnConstraintValidationFinished,
         EvUpdateChannelApproximateFreeSpace,
 
         EvContinueFindEmptyHistoryIntervals,
@@ -545,6 +546,14 @@ struct TEvPrivate {
     };
 
     struct TEvRetryConfigSubscription: public TEventLocal<TEvRetryConfigSubscription, EvRetryConfigSubscription> {};
+
+    struct TEvColumnConstraintValidationFinished
+        : public TEventLocal<TEvColumnConstraintValidationFinished, EvColumnConstraintValidationFinished> {
+        const ui64 OperationId;
+        explicit TEvColumnConstraintValidationFinished(ui64 operationId)
+            : OperationId(operationId)
+        {}
+    };
 };
 
 }   // namespace NKikimr::NColumnShard

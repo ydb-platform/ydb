@@ -11,7 +11,13 @@ from _paths import DASHBOARD, add_product_paths
 
 add_product_paths(DASHBOARD)
 
-from resources_loader import align_series, build_measured_layers, match_measured_to_runs, measured_test_label
+from resources_loader import (
+    align_series,
+    build_measured_layers,
+    match_measured_to_runs,
+    measured_test_label,
+    place_chunk_tests,
+)
 
 
 class MeasuredLabelTest(unittest.TestCase):
@@ -82,6 +88,19 @@ class MeasuredLabelTest(unittest.TestCase):
         self.assertEqual(layers["xs_evlog_sec"], [1.0, 2.0, 3.0])
         self.assertEqual(layers["cpu_tracks"]["s [0]"], [1.0, 1.0, 0.0])
         self.assertEqual(layers["write_tracks"]["s [1]"], [0.0, 8.0, 8.0])
+
+    def test_places_named_tests_end_to_end(self):
+        placed = place_chunk_tests(
+            [{"name": "Foo", "duration_sec": 8, "status": "PASSED"}, {"name": "Bar", "duration_sec": 12}],
+            start_sec=100,
+            delay_sec=2,
+        )
+        self.assertEqual(placed[0]["name"], "Foo")
+        self.assertEqual(placed[0]["start_sec"], 102)
+        self.assertEqual(placed[0]["end_sec"], 110)
+        self.assertEqual(placed[1]["name"], "Bar")
+        self.assertEqual(placed[1]["start_sec"], 110)
+        self.assertEqual(placed[1]["end_sec"], 122)
 
 
 if __name__ == "__main__":

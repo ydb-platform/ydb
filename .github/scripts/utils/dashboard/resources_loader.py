@@ -196,3 +196,90 @@ def build_measured_layers(
         "read_tracks": read_tracks,
         "by_label": by_label,
     }
+
+
+def place_chunk_tests(
+    tests: list[dict[str, Any]],
+    start_sec: float,
+    delay_sec: float = 0.0,
+) -> list[dict[str, Any]]:
+    """Lay tests end-to-end after chunk start (UNITTEST/gtest run sequentially)."""
+    cursor = float(start_sec) + max(0.0, float(delay_sec or 0.0))
+    placed: list[dict[str, Any]] = []
+    for test in tests or []:
+        duration = max(0.0, float(test.get("duration_sec") or 0.0))
+        name = str(test.get("name") or "").strip() or "test"
+        placed.append(
+            {
+                "name": name,
+                "status": str(test.get("status") or ""),
+                "duration_sec": round(duration, 3),
+                "start_sec": round(cursor, 3),
+                "end_sec": round(cursor + duration, 3),
+            }
+        )
+        cursor += duration
+    return placed
+
+
+def measured_chunk_tests_by_label(
+    grouped: dict[str, dict[str, Any]],
+    runs: list[dict[str, Any]],
+    tests_by_chunk: dict[tuple[Any, ...], list[dict[str, Any]]],
+    chunks: dict[tuple[Any, ...], dict[str, Any]] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    """Map measured series labels to timed tests inside that chunk."""
+    run_start: dict[tuple[str, int], float] = {}
+    for run in runs or []:
+        suite = str(run.get("suite_path") or run.get("suite") or "").strip()
+        chunk = run.get("chunk")
+        if not suite or chunk is None or chunk == "":
+            continue
+        window = _run_window_sec(run)
+        if window is None:
+            continue
+        run_start[(suite, int(chunk))] = window[0]
+
+    def tests_for(suite: str, chunk: int) -> list[dict[str, Any]]:
+        found: list[dict[str, Any]] = []
+        for (raw_suite, _group, idx), rows in (tests_by_chunk or {}).items():
+            if int(idx) != chunk:
+                continue
+            if str(raw_suite) == suite or str(raw_suite).startswith(suite + "/"):
+                found = rows
+                if str(raw_suite) == suite:
+                    return rows
+        return found
+
+    def delay_for(suite: str, chunk: int) -> float:
+        for (raw_suite, _group, idx), meta in (chunks or {}).items():
+            if int(idx) != chunk:
+                continue
+            if str(raw_suite) != suite and not str(raw_suite).startswith(suite + "/"):
+                continue
+            raw = meta.get("suite_delay_until_first_test_secs")
+            try:
+                return max(0.0, float(raw or 0.0))
+            except (TypeError, ValueError):
+                return 0.0
+        return 0.0
+
+    out: dict[str, list[dict[str, Any]]] = {}
+    for key, bucket in grouped.items():
+        suite = str(bucket.get("suite") or "").strip()
+        chunk = bucket.get("chunk")
+        label = str(bucket.get("label") or key)
+        if chunk is None or chunk == "" or not suite:
+            continue
+        chunk_i = int(chunk)
+        start = run_start.get((suite, chunk_i))
+        xs = bucket.get("xs") or []
+        if start is None and xs:
+            start = float(min(xs))
+        if start is None:
+            continue
+        placed = place_chunk_tests(tests_for(suite, chunk_i), start, delay_for(suite, chunk_i))
+        if placed:
+            out[label] = placed
+            out[str(key)] = placed
+    return out

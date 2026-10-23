@@ -389,6 +389,7 @@ def parse_report_chunks(
             "ram_kb": ram_kb(metrics),
             "suite_start_timestamp": metrics.get("suite_start_timestamp"),
             "suite_finish_timestamp": metrics.get("suite_finish_timestamp"),
+            "suite_delay_until_first_test_secs": metrics.get("suite_delay_until_first_test_secs"),
             "hid": item.get("hid"),
             "id": item.get("id"),
         }
@@ -595,6 +596,51 @@ def parse_report_chunks(
             "affected_chunks": int(len(affected_chunk_labels)),
         },
     )
+
+
+def collect_report_chunk_tests(
+    report_obj: dict[str, Any] | list[Any],
+    chunks: dict[tuple[str, Optional[str], int], dict[str, Any]],
+) -> dict[tuple[str, Optional[str], int], list[dict[str, Any]]]:
+    """Individual tests (chunk=false) grouped by the report chunk they ran in."""
+    results = report_obj.get("results", []) if isinstance(report_obj, dict) else report_obj
+    hid_to_chunk_key: dict[Any, tuple[str, Optional[str], int]] = {}
+    for key, meta in chunks.items():
+        if meta.get("_fallback_alias"):
+            continue
+        hid = meta.get("hid")
+        if hid is not None:
+            hid_to_chunk_key[hid] = key
+    out: dict[tuple[str, Optional[str], int], list[dict[str, Any]]] = defaultdict(list)
+    for item in results or []:
+        if not isinstance(item, dict) or item.get("type") != "test" or item.get("chunk"):
+            continue
+        chunk_key = hid_to_chunk_key.get(item.get("chunk_hid"))
+        if chunk_key is None:
+            suite_raw = str(item.get("path", ""))
+            sub = str(item.get("subtest_name", ""))
+            group = chunk_group_from_subtest(sub)
+            idx: Optional[int] = None
+            match = CHUNK_FROM_SUBTEST_RE.search(sub)
+            if match:
+                idx = int(match.group(1))
+            elif CHUNK_SOLE_RE.search(sub) or CHUNK_BRACKET_ONLY_RE.search(sub):
+                idx = 0
+            if suite_raw and idx is not None:
+                if (suite_raw, group, idx) in chunks:
+                    chunk_key = (suite_raw, group, idx)
+                elif (suite_raw, None, idx) in chunks:
+                    chunk_key = (suite_raw, None, idx)
+        if chunk_key is None:
+            continue
+        out[chunk_key].append(
+            {
+                "name": str(item.get("subtest_name") or item.get("name") or "").strip() or "test",
+                "duration_sec": float(item.get("duration") or 0.0),
+                "status": str(item.get("status") or ""),
+            }
+        )
+    return dict(out)
 
 
 def build_test_event_times_direct(
@@ -1106,6 +1152,8 @@ def _build_measured_tests(
     overlay: dict[str, Any],
     out_json: Optional[Path] = None,
     runs: Optional[list[dict[str, Any]]] = None,
+    chunk_tests: Optional[dict[tuple[Any, ...], list[dict[str, Any]]]] = None,
+    chunks: Optional[dict[tuple[Any, ...], dict[str, Any]]] = None,
 ) -> list[dict[str, Any]]:
     """Per-cgroup ticks from monitor_resources.py kind=test records."""
     try:
@@ -1113,6 +1161,7 @@ def _build_measured_tests(
             build_measured_layers,
             is_host_record,
             match_measured_to_runs,
+            measured_chunk_tests_by_label,
             measured_test_key,
             measured_test_label,
         )
@@ -1121,6 +1170,7 @@ def _build_measured_tests(
             build_measured_layers,
             is_host_record,
             match_measured_to_runs,
+            measured_chunk_tests_by_label,
             measured_test_key,
             measured_test_label,
         )
@@ -1162,6 +1212,9 @@ def _build_measured_tests(
         bucket["disk_write_mbps"].append(float(rec.get("disk_write_mbps", rec.get("disk_write_mb_delta", 0)) or 0))
     match_measured_to_runs(grouped, runs or [])
     overlay["measured_layers"] = build_measured_layers(grouped)
+    overlay["measured_chunk_tests"] = measured_chunk_tests_by_label(
+        grouped, runs or [], chunk_tests or {}, chunks
+    )
     summary: list[dict[str, Any]] = []
     series_out: dict[str, Any] = {}
     for key, bucket in grouped.items():
@@ -1618,7 +1671,12 @@ def main() -> None:
     if resources_overlay and resources_records:
         measured_path = args.out_html.with_name("resources_tests.json") if args.out_html else None
         resources_overlay["measured_tests"] = _build_measured_tests(
-            resources_records, resources_overlay, measured_path, enriched_runs
+            resources_records,
+            resources_overlay,
+            measured_path,
+            enriched_runs,
+            collect_report_chunk_tests(report_obj, chunks),
+            chunks,
         )
 
     # Runner CPU-utilization series (evlog_sec, cpu_pct) for saturation-aware recommendations.

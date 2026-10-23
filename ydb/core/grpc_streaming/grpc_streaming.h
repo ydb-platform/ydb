@@ -342,6 +342,15 @@ private:
             return false;
         }
 
+        // Do not issue gRPC operations on a completion queue that is (or is
+        // about to be) shut down. Return false (read not accepted) without a
+        // completion event, matching the FlagFinishCalled contract: a rejected
+        // read produces no TEvReadFinished. The gRPC client is not notified
+        // (the CQ is dead anyway).
+        if (Server->IsShuttingDown()) {
+            return false;
+        }
+
         if (Y_LIKELY(0 == ReadQueue++)) {
             // This is the first read, start reading from the stream
             Y_ABORT_UNLESS(!ReadInProgress);
@@ -432,6 +441,14 @@ private:
                 return false;
             }
 
+            // Do not issue gRPC operations on a completion queue that is (or is
+            // about to be) shut down. Return false (write not accepted) without
+            // a completion event. The gRPC client is
+            // not notified (the CQ is dead anyway).
+            if (Server->IsShuttingDown()) {
+                return false;
+            }
+
             if (Counters) {
                 Counters->CountResponseBytes(message.ByteSize());
             }
@@ -507,12 +524,47 @@ private:
             }
         }
 
+        // Do not issue gRPC operations on a completion queue that is (or is
+        // about to be) shut down. OnFinishDone() is pure bookkeeping (no CQ
+        // operation) and must still run so the limiter token is released, the
+        // request is deregistered and counters are updated.
         if (next && nextStatus) {
-            Stream.WriteAndFinish(next->Message, next->Options, *nextStatus, OnWriteDoneTag.Prepare());
+            if (!Server->IsShuttingDown()) {
+                Stream.WriteAndFinish(next->Message, next->Options, *nextStatus, OnWriteDoneTag.Prepare());
+            } else {
+                // The write chain is being torn down. Drop the pending write and
+                // clear the active flag so OnFinishDone's invariant
+                // (!(flags & FlagWriteActive)) holds.
+                with_lock (WriteLock) {
+                    Flags &= ~FlagWriteActive;
+                }
+                OnFinishDone(status);
+            }
         } else if (next) {
-            Stream.Write(next->Message, next->Options, OnWriteDoneTag.Prepare());
+            if (!Server->IsShuttingDown()) {
+                Stream.Write(next->Message, next->Options, OnWriteDoneTag.Prepare());
+            } else {
+                // The write chain is being torn down. Drop the pending write and
+                // clear the active flag so OnFinishDone's invariant
+                // (!(flags & FlagWriteActive)) holds. If Finish was already
+                // requested, complete the shutdown bookkeeping now; otherwise
+                // leave the stream open so a later Finish() (e.g. from
+                // ~TFacade) can complete it.
+                bool finishCalled;
+                with_lock (WriteLock) {
+                    finishCalled = Flags.load(std::memory_order_acquire) & FlagFinishCalled;
+                    Flags &= ~FlagWriteActive;
+                }
+                if (finishCalled) {
+                    OnFinishDone(status);
+                }
+            }
         } else if (nextStatus) {
-            Stream.Finish(*nextStatus, OnFinishDoneTag.Prepare());
+            if (!Server->IsShuttingDown()) {
+                Stream.Finish(*nextStatus, OnFinishDoneTag.Prepare());
+            } else {
+                OnFinishDone(status);
+            }
         } else if (wasWriteAndFinish) {
             OnFinishDone(status);
         }
@@ -547,8 +599,20 @@ private:
             finish = !(flags & FlagWriteActive);
         } while (!Flags.compare_exchange_weak(flags, flags | FlagFinishCalled, std::memory_order_acq_rel));
 
+        // when the server is shutting down its completion queues are (or are about to be) dead.
+        // Issuing Stream.Finish() on a dead CQ fails with "grpc_cq_begin_op(cq_, notify_tag) failed"
+        // and crashes the process. This happens when an actor holding the IStreamCtx
+        // (TFacade) is force-destroyed after the gRPC server has been stopped
+        // (e.g. ActorSystem::Stop() destroys the request proxy and its deferred
+        // streaming requests). Skip the gRPC finish in that case; the stream is
+        // being torn down anyway. OnFinishDone() is still invoked so the limiter
+        // token is released, the request is deregistered and counters are updated.
         if (finish) {
-            Stream.Finish(status, OnFinishDoneTag.Prepare());
+            if (!Server->IsShuttingDown()) {
+                Stream.Finish(status, OnFinishDoneTag.Prepare());
+            } else {
+                OnFinishDone(NYdbGrpc::EQueueEventStatus::ERROR);
+            }
         }
 
         return true;

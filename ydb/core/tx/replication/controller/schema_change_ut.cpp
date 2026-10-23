@@ -4,6 +4,7 @@
 #include "dst_schema_changer.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -13,6 +14,7 @@
 #include <ydb/core/tx/replication/ut_helpers/mock_service.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/executor_pool_base.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
@@ -498,14 +500,14 @@ TReplicationTestInfo StartReplication(
         const TString& token = "root@builtin",
         bool globalConsistency = false, bool withIndex = false,
         NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool mockService = true,
-        TMaybe<bool> initialScan = Nothing())
+        TMaybe<bool> initialScan = Nothing(), const TString& tokenSecretPath = {})
 {
     NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
         .DiscoveryEndpoint(env.GetEndpoint())
         .Database(env.GetDatabase()));
-    auto session = env.RunCall([&] {
-        return client.CreateSession().GetValueSync().GetSession();
-    });
+    const auto sessionResult = env.RunCall([&] { return client.CreateSession().GetValueSync(); });
+    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetStatus() << ": " << sessionResult.GetIssues().ToString());
+    auto session = sessionResult.GetSession();
     for (int i = 1; i <= targetCount; ++i) {
         if (withIndex) {
             const auto status = env.RunCall([&] {
@@ -533,7 +535,9 @@ TReplicationTestInfo StartReplication(
     }
 
     TVector<TString> params = {Sprintf(R"(CONNECTION_STRING = "grpc://%s/?database=/Root")", env.GetEndpoint().c_str())};
-    if (token) {
+    if (tokenSecretPath) {
+        params.push_back(Sprintf(R"(TOKEN_SECRET_PATH = "%s")", tokenSecretPath.c_str()));
+    } else if (token) {
         params.push_back(Sprintf(R"(TOKEN = "%s")", token.c_str()));
     }
     if (globalConsistency) {
@@ -1049,6 +1053,742 @@ void AssertIndexCancellationCleanedUp(TIndexBuildTestEnv& env) {
 }
 
 } // anonymous namespace
+
+Y_UNIT_TEST_SUITE(StandbyIdempotency) {
+    enum class EHold { None, Discovery, TransferDiscovery, BeforePrepare, AfterPrepare, FailCreator };
+
+    struct TObservation {
+        TTestActorRuntime& Runtime;
+        EHold Hold;
+        THashSet<TActorId> Creators, Discoverers, Proxies;
+        THashMap<TActorId, ui32> Allocations;
+        TAutoPtr<IEventHandle> Held;
+        ui32 Poisons = 0, Runs = 0, Stops = 0, Handshakes = 0, Faults = 0;
+        ui32 ForwardedStandby = 0, SecretResolvers = 0;
+        ui64 Generation = 0;
+        TTestActorRuntimeBase::TRegistrationObserver PreviousRegistration;
+        TTestActorRuntime::TEventObserverHolder Observer;
+
+        TObservation(TTestActorRuntime& runtime, EHold hold = EHold::None)
+            : Runtime(runtime), Hold(hold)
+        {
+            PreviousRegistration = runtime.SetRegistrationObserverFunc([this](auto& rt, const auto& parent, const auto& id) {
+                PreviousRegistration(rt, parent, id);
+                const auto activity = rt.FindActor(id)->GetActivityType();
+                if (activity == NKikimrServices::TActivity::REPLICATION_CONTROLLER_DST_CREATOR) {
+                    Creators.insert(id);
+                } else if (activity == NKikimrServices::TActivity::REPLICATION_CONTROLLER_TARGET_DISCOVERER) {
+                    Discoverers.insert(id);
+                } else if (activity == NKikimrServices::TActivity::REPLICATION_CONTROLLER_SECRET_RESOLVER) {
+                    ++SecretResolvers;
+                }
+            });
+            Observer = runtime.AddObserver([this](IEventHandle::TPtr& ev) {
+                const auto type = ev->GetTypeRewrite();
+                if ((type == TEvYdbProxy::TEvDescribeTableRequest::EventType || type == TEvYdbProxy::TEvDescribePathRequest::EventType)
+                    && (Creators.contains(ev->Sender) || Discoverers.contains(ev->Sender))) {
+                    Proxies.insert(ev->Recipient);
+                }
+                if ((type == TEvents::TEvPoison::EventType || type == TEvents::TEvPoisonPill::EventType)
+                    && (Creators.contains(ev->Recipient) || Discoverers.contains(ev->Recipient) || Proxies.contains(ev->Recipient))) {
+                    ++Poisons;
+                }
+                if (type == TEvService::TEvRunWorker::EventType) ++Runs;
+                if (type == TEvService::TEvStopWorker::EventType) ++Stops;
+                if (type == TEvService::TEvHandshake::EventType) {
+                    ++Handshakes;
+                    Generation = Max(Generation, ev->Get<TEvService::TEvHandshake>()->Record.GetController().GetGeneration());
+                }
+                if (type == TEvController::TEvAlterReplication::EventType
+                    && ev->Get<TEvController::TEvAlterReplication>()->Record.GetSwitchState().HasStandBy()) ++ForwardedStandby;
+                if (type == TEvYdbProxy::TEvDescribePathResponse::EventType && Hold == EHold::TransferDiscovery && Discoverers.contains(ev->Recipient)) {
+                    UNIT_ASSERT(!Held);
+                    Held.Reset(ev.Release());
+                } else if (type == TEvYdbProxy::TEvDescribeTableResponse::EventType) {
+                    const bool creator = Creators.contains(ev->Recipient);
+                    if (Hold == EHold::FailCreator && creator && !Faults) {
+                        ++Faults;
+                        NYdb::NIssue::TIssues issues;
+                        issues.AddIssue(NYdb::NIssue::TIssue("Domain name not found: source.test"));
+                        auto response = MakeHolder<TEvYdbProxy::TEvDescribeTableResponse>(NYdb::NTable::TDescribeTableResult(
+                            NYdb::TStatus(NYdb::EStatus::TRANSPORT_UNAVAILABLE, std::move(issues)),
+                            Ydb::Table::DescribeTableResult(), NYdb::NTable::TDescribeTableSettings()));
+                        ev.Reset(new IEventHandle(ev->Recipient, ev->Sender, response.Release(), 0, ev->Cookie));
+                    } else if ((Hold == EHold::Discovery && Discoverers.contains(ev->Recipient))
+                        || (Hold == EHold::BeforePrepare && creator)) {
+                        UNIT_ASSERT_C(!Held, "Only the original source operation should be outstanding");
+                        Held.Reset(ev.Release());
+                    }
+                } else if (type == TEvTxUserProxy::TEvAllocateTxId::EventType && Creators.contains(ev->Sender)
+                    && Hold == EHold::AfterPrepare && ++Allocations[ev->Sender] == 2) {
+                    UNIT_ASSERT(!Held);
+                    Held.Reset(ev.Release());
+                }
+            });
+        }
+
+        ~TObservation() { Runtime.SetRegistrationObserverFunc(std::move(PreviousRegistration)); }
+        void ResetCounters() { Poisons = Runs = Stops = Handshakes = 0; }
+        void Release() {
+            UNIT_ASSERT(Held);
+            Hold = EHold::None;
+            Runtime.Send(Held.Release(), 0, true);
+        }
+        void AssertPreserved() const {
+            UNIT_ASSERT_VALUES_EQUAL_C(Poisons, 0, "Repeated StandBy poisoned a live source/attachment actor");
+            UNIT_ASSERT_VALUES_EQUAL_C(Stops, 0, "Repeated StandBy stopped a healthy worker");
+            UNIT_ASSERT_VALUES_EQUAL_C(Runs, 0, "Repeated StandBy replaced a healthy worker");
+            UNIT_ASSERT_VALUES_EQUAL_C(Handshakes, 0, "Repeated StandBy changed the controller session");
+        }
+    };
+
+    NKikimrMiniKQL::TValue ReadRow(TTestEnv& env, ui64 controller, const TString& table, const TString& key, const TString& columns) {
+        const TString query = TStringBuilder() << "( (let key " << key
+            << ") (return (AsList (SetResult 'Row (SelectRow '" << table << " key " << columns << ")))))";
+        auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+        request->Record.MutableProgram()->MutableProgram()->SetText(query);
+        const auto edge = env.GetRuntime().AllocateEdgeActor();
+        ForwardToTablet(env.GetRuntime(), controller, edge, request.Release());
+        const auto response = env.GetRuntime().GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT_C(response->Get()->Record.GetStatus() == NKikimrProto::OK,
+            query << "\n" << response->Get()->Record.DebugString());
+        const auto& result = response->Get()->Record.GetExecutionEngineEvaluatedResponse();
+        const auto& row = result.GetValue().GetStruct(0).GetOptional();
+        UNIT_ASSERT_C(row.HasOptional(), result.DebugString());
+        return row.GetOptional();
+    }
+
+    NKikimrMiniKQL::TValue ReadReplication(TTestEnv& env, const TReplicationTestInfo& info, const TString& columns, ui64 id = 1) {
+        return ReadRow(env, info.ControllerId, "Replications", Sprintf("'('('Id (Uint64 '%lu)))", id), columns);
+    }
+
+    NKikimrReplication::TReplicationConfig ReadConfig(TTestEnv& env, const TReplicationTestInfo& info, ui64 id = 1) {
+        const auto row = ReadReplication(env, info, "'('Config)", id);
+        NKikimrReplication::TReplicationConfig config;
+        UNIT_ASSERT(config.ParseFromString(row.GetStruct(0).GetOptional().GetBytes()));
+        return config;
+    }
+
+    void AssertIntent(TTestEnv& env, const TReplicationTestInfo& info, TReplication::EState state, ui64 id = 1) {
+        const auto row = ReadReplication(env, info, "'('DesiredState 'State)", id);
+        UNIT_ASSERT_VALUES_EQUAL(row.GetStruct(0).GetOptional().GetUint32(), static_cast<ui32>(TReplication::EState::Ready));
+        UNIT_ASSERT_VALUES_EQUAL(row.GetStruct(1).GetOptional().GetUint32(), static_cast<ui32>(state));
+    }
+
+    void Reassert(TTestEnv& env, const TReplicationTestInfo& info, ui64 txId, const TString& location = {}) {
+        auto request = MakeAlterReplicationRequest(info, txId);
+        request->Record.MutableSwitchState()->MutableStandBy();
+        if (location) request->Record.MutableLocation()->SetPath(location);
+        const ui64 cookie = txId + 10000;
+        env.GetRuntime().SendToPipe(info.ControllerId, env.GetSender(), request.Release(), 0, {}, {}, cookie);
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvController::TEvAlterReplicationResult>(env.GetSender(), TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetOperationId().GetTxId(), txId);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetOrigin(), info.ControllerId);
+        UNIT_ASSERT_VALUES_EQUAL(result->Cookie, cookie);
+    }
+
+    void Fence(TTestEnv& env, const TReplicationTestInfo& info) {
+        DescribeReplication(env, info);
+        env.GetRuntime().SimulateSleep(TDuration::MilliSeconds(500));
+        DescribeReplication(env, info);
+    }
+
+    void AssertHeartbeat(TTestEnv& env, const TReplicationTestInfo& info, const TWorkerId& worker) {
+        SendHeartbeat(env, info.ControllerId, worker, TRowVersion(987654, 3));
+        env.GetRuntime().WaitFor("preserved worker heartbeat persisted", [&] {
+            const auto row = ReadRow(env, info.ControllerId, "Workers", Sprintf(
+                "'('('ReplicationId (Uint64 '%lu)) '('TargetId (Uint64 '%lu)) '('WorkerId (Uint64 '%lu)))",
+                worker.ReplicationId(), worker.TargetId(), worker.WorkerId()), "'('HeartbeatVersionStep 'HeartbeatVersionTxId)");
+            return row.GetStruct(0).HasOptional() && row.GetStruct(0).GetOptional().GetUint64() == 987654
+                && row.GetStruct(1).GetOptional().GetUint64() == 3;
+        }, TDuration::Seconds(60));
+    }
+
+    enum class EStreamNameSchedule { HeldAssignment, OrderedCommits };
+
+    void CheckPublicStandbyStreamName(EStreamNameSchedule schedule) {
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        TObservation discovery(runtime, EHold::Discovery);
+        const auto info = StartReplication(env);
+        runtime.WaitFor("source discovery held after public CREATE", [&] { return bool(discovery.Held); }, TDuration::Seconds(60));
+        AssertIntent(env, info, TReplication::EState::Ready);
+        NYdb::NTable::TTableClient client(env.GetDriver());
+        const auto sessionResult = env.RunCall([&] { return client.CreateSession().GetValueSync(); });
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+
+        enum class EStage { HoldDiscovery, Discovery, PublicAlter, Replay, Assigned, Complete };
+        EStage stage = EStage::HoldDiscovery;
+        TAutoPtr<IEventHandle> discoveryResult, assignment, discoveryCommit, alterCommit;
+        ui32 discoveryStep = 0, alterStep = 0, generation = 0;
+        ui64 publicTxId = 0;
+        ui32 assignments = 0, streamResults = 0, prematureCreators = 0;
+        THashSet<TActorId> creators;
+        TVector<TString> attemptedNames, dispatchOrder;
+        TStringBuilder trace;
+        TTestActorRuntimeBase::TRegistrationObserver previousRegistration;
+        previousRegistration = runtime.SetRegistrationObserverFunc([&](auto& rt, const auto& parent, const auto& id) {
+            previousRegistration(rt, parent, id);
+            if (rt.FindActor(id)->GetActivityType() == NKikimrServices::TActivity::REPLICATION_CONTROLLER_STREAM_CREATOR) {
+                creators.insert(id);
+                if (stage != EStage::Assigned && stage != EStage::Complete) {
+                    ++prematureCreators;
+                }
+                trace << "creator " << id << " before assignment=" << prematureCreators << "\n";
+            }
+        });
+        Y_DEFER { runtime.SetRegistrationObserverFunc(std::move(previousRegistration)); };
+        auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            const auto type = ev->GetTypeRewrite();
+            if (type == TEvPrivate::TEvDiscoveryTargetsResult::EventType) {
+                auto* result = dynamic_cast<TEvPrivate::TEvDiscoveryTargetsResult*>(ev->GetBase());
+                if (result && result->ReplicationId == 1 && stage == EStage::HoldDiscovery) {
+                    UNIT_ASSERT(result->IsSuccess());
+                    UNIT_ASSERT_VALUES_EQUAL(result->ToAdd.size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(result->ToAdd.front().Config->GetSrcPath(), "/Root/table1");
+                    discoveryResult.Reset(ev.Release());
+                }
+            } else if (type == TEvPrivate::TEvAssignStreamName::EventType) {
+                auto* event = dynamic_cast<TEvPrivate::TEvAssignStreamName*>(ev->GetBase());
+                if (event && event->ReplicationId == 1 && event->TargetId == 1) {
+                    ++assignments;
+                    trace << "AssignName sender=" << ev->Sender << " recipient=" << ev->Recipient << "\n";
+                    if (schedule == EStreamNameSchedule::HeldAssignment && stage != EStage::Replay) {
+                        UNIT_ASSERT_C(!assignment, trace);
+                        assignment.Reset(ev.Release());
+                    } else {
+                        dispatchOrder.push_back("AssignName");
+                        stage = EStage::Assigned;
+                    }
+                }
+            } else if (type == TEvController::TEvAlterReplication::EventType) {
+                const auto& record = ev->Get<TEvController::TEvAlterReplication>()->Record;
+                if (TPathId::FromProto(record.GetPathId()) == info.PathId) {
+                    UNIT_ASSERT(record.GetSwitchState().HasStandBy());
+                    UNIT_ASSERT(record.HasLocation());
+                    publicTxId = record.GetOperationId().GetTxId();
+                    trace << "public StandBy tx=" << publicTxId << " location=" << record.GetLocation().ShortDebugString() << "\n";
+                }
+            } else if (type == TEvTablet::TEvCommit::EventType && schedule == EStreamNameSchedule::OrderedCommits) {
+                const auto* commit = ev->Get<TEvTablet::TEvCommit>();
+                if (commit->TabletID != info.ControllerId) {
+                    return;
+                }
+                trace << "commit step=" << commit->Step << " generation=" << commit->Generation << "\n";
+                if (stage == EStage::Discovery) {
+                    // The typed discovery result is the only released controller
+                    // mutation. Any extra write makes this association ambiguous.
+                    UNIT_ASSERT_VALUES_EQUAL_C(discoveryStep, 0, trace);
+                    discoveryStep = commit->Step;
+                    generation = commit->Generation;
+                } else if (stage == EStage::PublicAlter) {
+                    UNIT_ASSERT_C(publicTxId && !alterStep, trace);
+                    UNIT_ASSERT_VALUES_EQUAL_C(commit->Generation, generation, trace);
+                    alterStep = commit->Step;
+                    UNIT_ASSERT_C(discoveryStep < alterStep, trace);
+                } else if (stage == EStage::HoldDiscovery) {
+                    UNIT_FAIL("Unexpected controller write before staged discovery: " << trace);
+                }
+            } else if (type == TEvTablet::TEvCommitResult::EventType && schedule == EStreamNameSchedule::OrderedCommits) {
+                const auto* result = ev->Get<TEvTablet::TEvCommitResult>();
+                if (result->TabletID != info.ControllerId) {
+                    return;
+                }
+                trace << "result step=" << result->Step << " generation=" << result->Generation << "\n";
+                if (stage == EStage::Discovery || stage == EStage::PublicAlter) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, NKikimrProto::OK, trace);
+                    UNIT_ASSERT_VALUES_EQUAL_C(result->Generation, generation, trace);
+                    if (result->Step == discoveryStep) {
+                        UNIT_ASSERT_C(!discoveryCommit, trace);
+                        discoveryCommit.Reset(ev.Release());
+                    } else {
+                        UNIT_ASSERT_C(alterStep && result->Step == alterStep && !alterCommit, trace);
+                        alterCommit.Reset(ev.Release());
+                    }
+                } else if (stage == EStage::Replay) {
+                    if (result->Step == discoveryStep) {
+                        dispatchOrder.push_back("D");
+                    } else if (result->Step == alterStep) {
+                        dispatchOrder.push_back("A");
+                    }
+                }
+            } else if (type == TEvYdbProxy::TEvAlterTableRequest::EventType && creators.contains(ev->Sender)) {
+                const auto* request = ev->Get<TEvYdbProxy::TEvAlterTableRequest>();
+                const auto& args = request->GetArgs();
+                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(args), "/Root/table1");
+                for (const auto& feed : std::get<1>(args).AddChangefeeds_) {
+                    attemptedNames.emplace_back(feed.GetName());
+                }
+            } else if (type == TEvPrivate::TEvCreateStreamResult::EventType) {
+                auto* result = dynamic_cast<TEvPrivate::TEvCreateStreamResult*>(ev->GetBase());
+                if (result && result->ReplicationId == 1 && result->TargetId == 1) {
+                    trace << result->ToString() << "\n";
+                    if (result->IsSuccess()) {
+                        ++streamResults;
+                    }
+                }
+            }
+        });
+        discovery.Release();
+        runtime.WaitFor("typed target discovery ready", [&] { return bool(discoveryResult); }, TDuration::Seconds(60));
+        stage = EStage::Discovery;
+        runtime.Send(discoveryResult.Release(), 0, true);
+        if (schedule == EStreamNameSchedule::HeldAssignment) {
+            runtime.WaitFor("original stream-name assignment held", [&] { return bool(assignment); }, TDuration::Seconds(60));
+            UNIT_ASSERT_VALUES_EQUAL(creators.size(), 0);
+            AssertIntent(env, info, TReplication::EState::Ready);
+            UNIT_ASSERT_VALUES_EQUAL(DescribeReplication(env, info)->Get()->Record.TargetsSize(), 1);
+        } else {
+            runtime.WaitFor("real discovery write confirmation held", [&] { return bool(discoveryCommit); }, TDuration::Seconds(60));
+            UNIT_ASSERT_VALUES_EQUAL_C(assignments, 0, trace);
+        }
+        stage = EStage::PublicAlter;
+        auto alter = session.ExecuteSchemeQuery("ALTER ASYNC REPLICATION `replication` SET (STATE = \"STANDBY\");");
+        if (schedule == EStreamNameSchedule::OrderedCommits) {
+            runtime.WaitFor("real public-alter write confirmation held", [&] { return bool(alterCommit); }, TDuration::Seconds(60));
+            UNIT_ASSERT_VALUES_EQUAL_C(assignments, 0, trace);
+            UNIT_ASSERT(publicTxId);
+            stage = EStage::Replay;
+            // Queue both original confirmations before resuming dispatch.
+            // Assignment is neither held nor synthesized in this scenario.
+            runtime.Send(discoveryCommit.Release(), 0, true);
+            runtime.Send(alterCommit.Release(), 0, true);
+            runtime.WaitFor("D then A then assignment dispatched", [&] { return stage == EStage::Assigned; }, TDuration::Seconds(60));
+            Cerr << "StreamName commit schedule:\n" << trace << "order=" << JoinSeq(",", dispatchOrder) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(JoinSeq(",", dispatchOrder), "D,A,AssignName", trace);
+            UNIT_ASSERT_VALUES_EQUAL_C(prematureCreators, 0, trace);
+        }
+        const auto status = env.RunCall([&] { return alter.GetValueSync(); });
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        UNIT_ASSERT(publicTxId);
+        if (schedule == EStreamNameSchedule::HeldAssignment) {
+            Cerr << "StreamName controlled assignment hold:\n" << trace << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(creators.size(), 0, "Public repeat created a stream actor before name assignment\n" << trace);
+            UNIT_ASSERT_VALUES_EQUAL(attemptedNames.size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(assignments, 1);
+            AssertIntent(env, info, TReplication::EState::Ready);
+            stage = EStage::Replay;
+            runtime.Send(assignment.Release(), 0, true);
+        }
+        const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender(), TDuration::Seconds(60));
+        const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        AttachWorkers(env, info.ControllerId, {worker});
+        AssertHeartbeat(env, info, worker);
+        AssertIntent(env, info, TReplication::EState::Ready);
+        UNIT_ASSERT_VALUES_EQUAL(ReadRow(env, info.ControllerId, "Targets",
+            "'('('ReplicationId (Uint64 '1)) '('Id (Uint64 '1)))", "'('DstState)").GetStruct(0).GetOptional().GetUint32(),
+            static_cast<ui32>(TReplication::EDstState::Ready));
+        const auto stream = ReadRow(env, info.ControllerId, "SrcStreams",
+            "'('('ReplicationId (Uint64 '1)) '('TargetId (Uint64 '1)))", "'('ConsumerName 'Name 'State)");
+        const auto consumerName = stream.GetStruct(0).GetOptional().GetText();
+        const auto streamName = stream.GetStruct(1).GetOptional().GetText();
+        UNIT_ASSERT(consumerName && streamName);
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetStruct(2).GetOptional().GetUint32(), static_cast<ui32>(TReplication::EStreamState::Ready));
+        UNIT_ASSERT_VALUES_EQUAL(streamResults, 1);
+        UNIT_ASSERT_VALUES_EQUAL(creators.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(attemptedNames.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(attemptedNames.front(), streamName);
+        // The local-hold scenario observes the same original handle twice.
+        UNIT_ASSERT_VALUES_EQUAL(assignments, schedule == EStreamNameSchedule::HeldAssignment ? 2 : 1);
+        const auto verifySource = [&] {
+            const auto source = env.GetDescription("/Root/table1").GetPathDescription().GetTable();
+            UNIT_ASSERT_VALUES_EQUAL(source.CdcStreamsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(source.GetCdcStreams(0).GetName(), streamName);
+            NYdb::NTopic::TTopicClient topics(env.GetDriver());
+            const auto topic = env.RunCall([&] {
+                return topics.DescribeTopic(TStringBuilder() << "/Root/table1/" << streamName).GetValueSync();
+            });
+            UNIT_ASSERT_C(topic.IsSuccess(), topic.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(topic.GetTopicDescription().GetConsumers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(topic.GetTopicDescription().GetConsumers().front().GetConsumerName(), consumerName);
+            UNIT_ASSERT_VALUES_EQUAL(ReadReplication(env, info, "'('Issue)").GetStruct(0).GetOptional().GetText(), "");
+        };
+        verifySource();
+        stage = EStage::Complete;
+        const auto repeated = env.RunCall([&] {
+            return session.ExecuteSchemeQuery("ALTER ASYNC REPLICATION `replication` SET (STATE = \"STANDBY\");").GetValueSync();
+        });
+        UNIT_ASSERT_C(repeated.IsSuccess(), repeated.GetIssues().ToString());
+        AssertIntent(env, info, TReplication::EState::Ready);
+        UNIT_ASSERT_VALUES_EQUAL(creators.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(attemptedNames.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(assignments, schedule == EStreamNameSchedule::HeldAssignment ? 2 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(ReadRow(env, info.ControllerId, "SrcStreams",
+            "'('('ReplicationId (Uint64 '1)) '('TargetId (Uint64 '1)))", "'('ConsumerName 'Name 'State)").SerializeAsString(), stream.SerializeAsString());
+        verifySource();
+        Cerr << "StreamName final stream=" << streamName << " consumer=" << consumerName
+            << " creators=" << creators.size() << " AddChangefeed=" << attemptedNames.size() << " Ready\n";
+    }
+
+    Y_UNIT_TEST(PublicStandbyWaitsForStreamName) {
+        CheckPublicStandbyStreamName(EStreamNameSchedule::HeldAssignment);
+    }
+
+    Y_UNIT_TEST(PublicStandbyStreamNameCommitOrdering) {
+        CheckPublicStandbyStreamName(EStreamNameSchedule::OrderedCommits);
+    }
+
+    Y_UNIT_TEST(HealthyStandbyPreservesWorkersAndProxy) {
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        env.GetRuntime().GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        {
+            NYdb::NTable::TTableClient client(env.GetDriver());
+            const auto sessionResult = env.RunCall([&] { return client.CreateSession().GetValueSync(); });
+            UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+            auto session = sessionResult.GetSession();
+            const auto created = env.RunCall([&] {
+                return session.ExecuteSchemeQuery(R"(CREATE SECRET `/Root/source-token` WITH (value="root@builtin");)").GetValueSync();
+            });
+            UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        }
+        TObservation observation(env.GetRuntime());
+        const auto info = StartReplication(env, 1, "root@builtin", false, false,
+            NKikimrSchemeOp::EIndexTypeGlobal, true, Nothing(), "/Root/source-token");
+        const auto run = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender(), TDuration::Seconds(60));
+        const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        AttachWorkers(env, info.ControllerId, {worker});
+        Fence(env, info);
+        AssertIntent(env, info, TReplication::EState::Ready);
+        auto config = ReadConfig(env, info);
+        // Secret resolution updates runtime config without writing Config.
+        // Location refresh must retain that distinction across a reboot.
+        const auto connection = DescribeReplication(env, info)->Get()->Record.GetConnectionParams();
+        UNIT_ASSERT_VALUES_EQUAL(connection.GetOAuthToken().GetToken(), "root@builtin");
+        UNIT_ASSERT(info.Config.GetSrcConnectionParams().GetOAuthToken().HasTokenSecretName());
+        UNIT_ASSERT(!config.GetSrcConnectionParams().GetOAuthToken().HasToken());
+        const auto readTarget = [&] {
+            return ReadRow(env, info.ControllerId, "Targets", "'('('ReplicationId (Uint64 '1)) '('Id (Uint64 '1)))",
+                "'('DstPathLocalId 'DstPathOwnerId 'DstState 'PendingDstPathLocalId 'PendingDstPathOwnerId)");
+        };
+        const auto target = readTarget();
+        const auto stream = ReadRow(env, info.ControllerId, "SrcStreams",
+            "'('('ReplicationId (Uint64 '1)) '('TargetId (Uint64 '1)))", "'('ConsumerName 'Name)");
+        const auto path = env.GetPathId("/Root/replica1");
+        UNIT_ASSERT(!observation.Proxies.empty());
+        observation.ResetCounters();
+        for (ui64 txId : {1000, 1001, 1002, 1001}) Reassert(env, info, txId, "/Root/refreshed-location");
+        Fence(env, info);
+        observation.AssertPreserved();
+        UNIT_ASSERT_VALUES_EQUAL(observation.Generation, info.Generation);
+        config.MutableLocation()->SetPath("/Root/refreshed-location");
+        UNIT_ASSERT_VALUES_EQUAL(ReadConfig(env, info).SerializeAsString(), config.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(DescribeReplication(env, info)->Get()->Record.GetConnectionParams().SerializeAsString(), connection.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), path);
+        UNIT_ASSERT_VALUES_EQUAL(readTarget().SerializeAsString(), target.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(ReadRow(env, info.ControllerId, "SrcStreams",
+            "'('('ReplicationId (Uint64 '1)) '('TargetId (Uint64 '1)))", "'('ConsumerName 'Name)").SerializeAsString(), stream.SerializeAsString());
+        AssertHeartbeat(env, info, worker);
+
+        // Reboot is outside the preservation window. The durable location
+        // survives, while secret resolution must still happen on startup.
+        const auto resolved = observation.SecretResolvers;
+        env.SendAsync(info.ControllerId, new TEvents::TEvPoisonPill());
+        const auto handshake = env.GetRuntime().GrabEdgeEvent<TEvService::TEvHandshake>(env.GetSender(), TDuration::Seconds(60));
+        UNIT_ASSERT(handshake->Get()->Record.GetController().GetGeneration() > info.Generation);
+        env.SendAsync(info.ControllerId, new TEvService::TEvStatus());
+        env.GetRuntime().WaitFor("secret resolved again after location refresh and reboot", [&] {
+            return observation.SecretResolvers > resolved
+                && DescribeReplication(env, info)->Get()->Record.GetConnectionParams().GetOAuthToken().GetToken() == "root@builtin";
+        }, TDuration::Seconds(60));
+        UNIT_ASSERT_VALUES_EQUAL(ReadConfig(env, info).SerializeAsString(), config.SerializeAsString());
+    }
+
+    Y_UNIT_TEST(StandbyPreservesSourceDiscovery) {
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        TObservation observation(env.GetRuntime(), EHold::Discovery);
+        const auto info = StartReplication(env);
+        env.GetRuntime().WaitFor("original source discovery response", [&] { return bool(observation.Held); }, TDuration::Seconds(60));
+        AssertIntent(env, info, TReplication::EState::Ready);
+        UNIT_ASSERT_VALUES_EQUAL(DescribeReplication(env, info)->Get()->Record.TargetsSize(), 0);
+        const auto discoverers = observation.Discoverers.size();
+        observation.ResetCounters();
+        Reassert(env, info, 1010);
+        Reassert(env, info, 1010);
+        Fence(env, info);
+        observation.AssertPreserved();
+        UNIT_ASSERT_VALUES_EQUAL(observation.Discoverers.size(), discoverers);
+        observation.Release();
+        env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender(), TDuration::Seconds(60));
+        UNIT_ASSERT_VALUES_EQUAL(DescribeReplication(env, info)->Get()->Record.TargetsSize(), 1);
+    }
+
+    Y_UNIT_TEST(StandbyPreservesPausedAttachment) {
+        for (const auto stage : {EHold::BeforePrepare, EHold::AfterPrepare}) {
+            TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+            CreateSourceTable(env, "replica1");
+            const auto path = env.GetPathId("/Root/replica1");
+            TObservation observation(env.GetRuntime(), stage);
+            const auto info = StartReplication(env, 1, "root@builtin", false, false,
+                NKikimrSchemeOp::EIndexTypeGlobal, true, false);
+            env.GetRuntime().WaitFor("source stream ready before resume", [&] {
+                return DescribeReplication(env, info)->Get()->Record.TargetsSize() == 1
+                    && ReadStreamSchemaChanges(env, info.ControllerId, TWorkerId(1, 1, 0)).has_value();
+            }, TDuration::Seconds(60));
+            Reassert(env, info, 1020);
+            env.GetRuntime().WaitFor("controller-owned attachment held", [&] { return bool(observation.Held); }, TDuration::Seconds(60));
+            AssertIntent(env, info, TReplication::EState::Paused);
+            const auto before = ReadRow(env, info.ControllerId, "Targets", "'('('ReplicationId (Uint64 '1)) '('Id (Uint64 '1)))",
+                "'('DstPathLocalId 'DstPathOwnerId 'DstState 'PendingDstPathLocalId 'PendingDstPathOwnerId)");
+            if (stage == EHold::AfterPrepare) {
+                UNIT_ASSERT_VALUES_EQUAL(before.GetStruct(2).GetOptional().GetUint32(), static_cast<ui32>(TReplication::EDstState::Attaching));
+                UNIT_ASSERT_VALUES_EQUAL(before.GetStruct(4).GetOptional().GetUint64(), path.OwnerId);
+                UNIT_ASSERT_VALUES_EQUAL(before.GetStruct(3).GetOptional().GetUint64(), path.LocalPathId);
+            }
+            const auto creators = observation.Creators.size();
+            observation.ResetCounters();
+            for (ui64 txId : {1021, 1022, 1023, 1021}) Reassert(env, info, txId);
+            Fence(env, info);
+            observation.AssertPreserved();
+            UNIT_ASSERT_VALUES_EQUAL(observation.Creators.size(), creators);
+            UNIT_ASSERT_VALUES_EQUAL(ReadRow(env, info.ControllerId, "Targets", "'('('ReplicationId (Uint64 '1)) '('Id (Uint64 '1)))",
+                "'('DstPathLocalId 'DstPathOwnerId 'DstState 'PendingDstPathLocalId 'PendingDstPathOwnerId)").SerializeAsString(), before.SerializeAsString());
+            observation.Release();
+            const auto run = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender(), TDuration::Seconds(60));
+            const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+            AttachWorkers(env, info.ControllerId, {worker});
+            Fence(env, info);
+            AssertIntent(env, info, TReplication::EState::Ready);
+            UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), path);
+            const auto attached = ReadRow(env, info.ControllerId, "Targets", "'('('ReplicationId (Uint64 '1)) '('Id (Uint64 '1)))",
+                "'('DstPathLocalId 'DstPathOwnerId 'DstState 'PendingDstPathLocalId 'PendingDstPathOwnerId)");
+            UNIT_ASSERT_VALUES_EQUAL(attached.GetStruct(0).GetOptional().GetUint64(), path.LocalPathId);
+            UNIT_ASSERT_VALUES_EQUAL(attached.GetStruct(1).GetOptional().GetUint64(), path.OwnerId);
+            UNIT_ASSERT_VALUES_EQUAL(attached.GetStruct(2).GetOptional().GetUint32(), static_cast<ui32>(TReplication::EDstState::Ready));
+            UNIT_ASSERT_VALUES_EQUAL(TPathId(attached.GetStruct(4).GetOptional().GetUint64(),
+                attached.GetStruct(3).GetOptional().GetUint64()), TPathId());
+            AssertHeartbeat(env, info, worker);
+            observation.ResetCounters();
+            Reassert(env, info, 1024);
+            Fence(env, info);
+            observation.AssertPreserved();
+        }
+    }
+
+    Y_UNIT_TEST(StandbyDuringSchemaBarrierDoesNotDeferAlter) {
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        TObservation observation(env.GetRuntime());
+        const auto info = StartReplication(env);
+        const auto run = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender(), TDuration::Seconds(60));
+        const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        AttachWorkers(env, info.ControllerId, {worker});
+        env.SendAsync(info.ControllerId, new TEvPrivate::TEvCompleteWorkerSet(worker.ReplicationId(), worker.TargetId()));
+        const auto schema = MakeSchemaChange();
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(worker, schema));
+        env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender(), TDuration::Seconds(60));
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(worker, schema, true));
+        env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender(), TDuration::Seconds(60));
+        Fence(env, info);
+        const auto barrier = ReadRow(env, info.ControllerId, "Targets", "'('('ReplicationId (Uint64 '1)) '('Id (Uint64 '1)))",
+            "'('SchemaBarrierPhase 'SchemaBarrierChange 'WorkerSetComplete)");
+        constexpr ui32 AppliedSchemaBarrierPhase = 3; // TController::ESchemaBarrierPhase::Applied is private.
+        UNIT_ASSERT_VALUES_EQUAL(barrier.GetStruct(1).GetOptional().GetUint32(), AppliedSchemaBarrierPhase);
+        UNIT_ASSERT(!ReadReplication(env, info, "'('DeferredAlter)").GetStruct(0).GetOptional().GetBool());
+        const auto readMember = [&] {
+            return ReadRow(env, info.ControllerId, "SchemaBarrierWorkers", Sprintf(
+                "'('('ReplicationId (Uint64 '%lu)) '('TargetId (Uint64 '%lu)) '('WorkerId (Uint64 '%lu)))",
+                worker.ReplicationId(), worker.TargetId(), worker.WorkerId()), "'('Applied 'Completed 'Reported)");
+        };
+        const auto member = readMember();
+        observation.ResetCounters();
+        Reassert(env, info, 1030);
+        Reassert(env, info, 1030);
+        Fence(env, info);
+        UNIT_ASSERT_C(!ReadReplication(env, info, "'('DeferredAlter)").GetStruct(0).GetOptional().GetBool(),
+            "Healthy StandBy must not defer a worker restart behind a schema barrier");
+        UNIT_ASSERT_VALUES_EQUAL(ReadRow(env, info.ControllerId, "Targets", "'('('ReplicationId (Uint64 '1)) '('Id (Uint64 '1)))",
+            "'('SchemaBarrierPhase 'SchemaBarrierChange 'WorkerSetComplete)").SerializeAsString(), barrier.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(readMember().SerializeAsString(), member.SerializeAsString());
+        observation.AssertPreserved();
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(worker, schema, false, true));
+        env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender(), TDuration::Seconds(60));
+        Fence(env, info);
+        observation.AssertPreserved();
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable().ColumnsSize(), 3);
+        AssertHeartbeat(env, info, worker);
+    }
+
+    enum class ERestart { No, Yes };
+
+    void CheckPublicRecovery(ERestart restart) {
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        CreateSourceTable(env, "replica1");
+        const auto path = env.GetPathId("/Root/replica1");
+        TObservation observation(env.GetRuntime(), EHold::FailCreator);
+        const auto info = StartReplication(env, 1, "root@builtin", false, false,
+            NKikimrSchemeOp::EIndexTypeGlobal, false, false);
+        NYdb::NTable::TTableClient client(env.GetDriver());
+        const auto sessionResult = env.RunCall([&] { return client.CreateSession().GetValueSync(); });
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetStatus() << ": " << sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto execute = [&](const TString& query) {
+            auto result = env.RunCall([&] {
+                return session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+        const auto resume = [&] {
+            const auto status = env.RunCall([&] {
+                return session.ExecuteSchemeQuery("ALTER ASYNC REPLICATION `replication` SET (STATE = \"STANDBY\");").GetValueSync();
+            });
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        };
+        env.GetRuntime().WaitFor("source setup before public resume", [&] {
+            return DescribeReplication(env, info)->Get()->Record.TargetsSize() == 1
+                && ReadStreamSchemaChanges(env, info.ControllerId, TWorkerId(1, 1, 0)).has_value();
+        }, TDuration::Seconds(60));
+        execute("UPSERT INTO `/Root/table1` (key, value) VALUES (1, 'before-retry'), (2, 'also-before');");
+        const auto stream = ReadRow(env, info.ControllerId, "SrcStreams", "'('('ReplicationId (Uint64 '1)) '('TargetId (Uint64 '1)))", "'('ConsumerName 'Name)");
+        resume();
+        env.GetRuntime().WaitFor("DNS-shaped attachment failure", [&] {
+            return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
+        }, TDuration::Seconds(60));
+        UNIT_ASSERT_VALUES_EQUAL(observation.Faults, 1);
+        const auto issue = DescribeReplication(env, info)->Get()->Record.DebugString();
+        UNIT_ASSERT_C(issue.find("Create dst error: StatusNotAvailable") != TString::npos, issue);
+        UNIT_ASSERT_C(issue.find("Domain name not found") != TString::npos, issue);
+        UNIT_ASSERT(env.GetDescription("/Root/replication").GetPathDescription().GetReplicationDescription().GetState().HasStandBy());
+        AssertIntent(env, info, TReplication::EState::Error);
+        UNIT_ASSERT_VALUES_EQUAL(ReadRow(env, info.ControllerId, "Targets", "'('('ReplicationId (Uint64 '1)) '('Id (Uint64 '1)))",
+            "'('DstState)").GetStruct(0).GetOptional().GetUint32(), static_cast<ui32>(TReplication::EDstState::Error));
+        observation.Hold = EHold::None;
+        Fence(env, info);
+        AssertIntent(env, info, TReplication::EState::Error);
+        if (restart == ERestart::Yes) {
+            const auto lookupEdge = env.GetRuntime().AllocateEdgeActor();
+            const auto generation = [&] {
+                env.GetRuntime().Send(new IEventHandle(MakeStateStorageProxyID(), lookupEdge,
+                    new TEvStateStorage::TEvLookup(info.ControllerId, 0)));
+                const auto result = env.GetRuntime().GrabEdgeEvent<TEvStateStorage::TEvInfo>(lookupEdge, TDuration::Seconds(30));
+                return result->Get()->Status == NKikimrProto::OK ? result->Get()->CurrentGeneration : 0;
+            };
+            const auto previous = generation();
+            env.SendAsync(info.ControllerId, new TEvents::TEvPoisonPill());
+            env.GetRuntime().WaitFor("new controller generation while Error", [&] { return generation() > previous; }, TDuration::Seconds(60));
+            InvalidateTabletResolverCache(env.GetRuntime(), info.ControllerId);
+            AssertIntent(env, info, TReplication::EState::Error);
+        }
+        const auto forwarded = observation.ForwardedStandby;
+        resume();
+        UNIT_ASSERT_C(observation.ForwardedStandby > forwarded, "Public repeated StandBy must reach controller Error recovery");
+        env.GetRuntime().WaitFor("public retry attaches destination", [&] {
+            return DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy();
+        }, TDuration::Seconds(60));
+        execute("UPSERT INTO `/Root/table1` (key, value) VALUES (3, 'after-retry');");
+        ui64 count = 0;
+        const auto deadline = TInstant::Now() + TDuration::Seconds(60);
+        do {
+            const auto rows = execute("SELECT key, value FROM `/Root/replica1` ORDER BY key;");
+            count = rows.GetResultSet(0).RowsCount();
+            if (count == 3) {
+                NYdb::TResultSetParser parser(rows.GetResultSet(0));
+                for (const auto& [key, value] : TVector<std::pair<ui32, TString>>{{1, "before-retry"}, {2, "also-before"}, {3, "after-retry"}}) {
+                    UNIT_ASSERT(parser.TryNextRow());
+                    UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetOptionalUint32().value(), key);
+                    UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetOptionalUtf8().value(), value);
+                }
+                break;
+            }
+            env.GetRuntime().SimulateSleep(TDuration::MilliSeconds(100));
+        } while (TInstant::Now() < deadline);
+        UNIT_ASSERT_VALUES_EQUAL_C(count, 3, "Public Error retry failed to catch up");
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), path);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/table1").GetPathDescription().GetTable().CdcStreamsSize(), 1);
+        NYdb::NTopic::TTopicClient topicClient(env.GetDriver());
+        const auto topic = env.RunCall([&] {
+            return topicClient.DescribeTopic(TStringBuilder() << "/Root/table1/" << stream.GetStruct(1).GetOptional().GetText()).GetValueSync();
+        });
+        UNIT_ASSERT_C(topic.IsSuccess(), topic.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetTopicDescription().GetConsumers().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetTopicDescription().GetConsumers().front().GetConsumerName(), stream.GetStruct(0).GetOptional().GetText());
+        UNIT_ASSERT_VALUES_EQUAL(ReadRow(env, info.ControllerId, "SrcStreams", "'('('ReplicationId (Uint64 '1)) '('TargetId (Uint64 '1)))", "'('ConsumerName 'Name)").SerializeAsString(), stream.SerializeAsString());
+        Fence(env, info);
+        observation.ResetCounters();
+        resume();
+        Fence(env, info);
+        observation.AssertPreserved();
+
+        // Close real topic readers while the simulated runtime can still
+        // dispatch their gRPC cancellation, before TServer starts shutdown.
+        const auto paused = env.RunCall([&] {
+            return session.ExecuteSchemeQuery("ALTER ASYNC REPLICATION `replication` SET (STATE = \"PAUSED\");").GetValueSync();
+        });
+        UNIT_ASSERT_C(paused.IsSuccess(), paused.GetIssues().ToString());
+        env.GetRuntime().WaitFor("real replication readers stopped before teardown", [&] {
+            return DescribeReplication(env, info)->Get()->Record.GetState().HasPaused();
+        }, TDuration::Seconds(60));
+        env.GetRuntime().WaitFor("gRPC read streams drained before teardown", [&] {
+            return env.GetGrpcRequestsInProgress() == 0;
+        }, TDuration::Seconds(60));
+    }
+
+    Y_UNIT_TEST(PublicStandbyRecoversAttachmentError) { CheckPublicRecovery(ERestart::No); }
+    Y_UNIT_TEST(PublicStandbyRecoversAttachmentErrorAfterRestart) { CheckPublicRecovery(ERestart::Yes); }
+
+    Y_UNIT_TEST(ConfigOnlyAlterStillApplies) {
+        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+        const auto info = StartReplication(env);
+        env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender(), TDuration::Seconds(60));
+        RequestConfigUpdate(env, info, 1040);
+        UNIT_ASSERT(ReadConfig(env, info).GetMetricsConfig().GetLevel() == NKikimrProto::NMetricsConfig::TMetricsConfig::LEVEL_DETAILED);
+        AssertIntent(env, info, TReplication::EState::Ready);
+    }
+
+    Y_UNIT_TEST(ChangedTransferConfigWithStandbyStillApplies) {
+        enum class ESetting { Lambda, Directory, Batch, Flush };
+        enum class ERequest { ConfigOnly, Standby };
+        for (const auto kind : {ERequest::ConfigOnly, ERequest::Standby}) {
+            for (const auto setting : {ESetting::Lambda, ESetting::Directory, ESetting::Batch, ESetting::Flush}) {
+                TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
+                const auto info = StartReplication(env);
+                env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender(), TDuration::Seconds(60));
+                TObservation observation(env.GetRuntime(), EHold::TransferDiscovery);
+                auto transfer = info;
+                transfer.PathId = TPathId(info.PathId.OwnerId, 100000);
+                auto* credentials = transfer.Config.MutableSrcConnectionParams()->MutableOAuthToken();
+                credentials->ClearTokenSecretName();
+                credentials->SetToken("root@builtin");
+                transfer.Config.ClearSpecific();
+                auto* specific = transfer.Config.MutableTransferSpecific();
+                specific->MutableTarget()->SetSrcPath("/Root/table1");
+                specific->MutableTarget()->SetDstPath("/Root/replica1");
+                specific->MutableTarget()->SetTransformLambda("($row) -> { RETURN AsList($row); }");
+                transfer.Config.SetInitialScan(true);
+                auto create = MakeHolder<TEvController::TEvCreateReplication>();
+                transfer.PathId.ToProto(create->Record.MutablePathId());
+                create->Record.MutableConfig()->CopyFrom(transfer.Config);
+                create->Record.SetDatabase("/Root");
+                create->Record.MutableOperationId()->SetTxId(1050);
+                env.SendAsync(info.ControllerId, create.Release());
+                const auto created = env.GetRuntime().GrabEdgeEvent<TEvController::TEvCreateReplicationResult>(env.GetSender(), TDuration::Seconds(30));
+                UNIT_ASSERT_C(created->Get()->Record.GetStatus() == NKikimrReplication::TEvCreateReplicationResult::SUCCESS, created->Get()->Record.DebugString());
+                env.GetRuntime().WaitFor("transfer source discovery held", [&] { return bool(observation.Held); }, TDuration::Seconds(60));
+                AssertIntent(env, transfer, TReplication::EState::Ready, 2);
+                auto request = MakeAlterReplicationRequest(transfer, 1051);
+                auto* config = request->Record.MutableConfig()->MutableTransferSpecific();
+                switch (setting) {
+                    case ESetting::Lambda: config->MutableTarget()->SetTransformLambda("($row) -> { RETURN AsList(AsStruct($row.key AS key)); }"); break;
+                    case ESetting::Directory: config->MutableTarget()->SetDirectoryPath("/Root/new-dir"); break;
+                    case ESetting::Batch: config->MutableBatching()->SetBatchSizeBytes(4096); break;
+                    case ESetting::Flush: config->MutableBatching()->SetFlushIntervalMilliSeconds(2000); break;
+                }
+                const auto expected = *config;
+                if (kind == ERequest::Standby) request->Record.MutableSwitchState()->MutableStandBy();
+                observation.Held.Reset();
+                observation.ResetCounters();
+                env.SendAsync(info.ControllerId, request.Release());
+                const auto altered = env.GetRuntime().GrabEdgeEvent<TEvController::TEvAlterReplicationResult>(env.GetSender(), TDuration::Seconds(30));
+                UNIT_ASSERT_VALUES_EQUAL(altered->Get()->Record.GetStatus(), NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+                Fence(env, transfer);
+                UNIT_ASSERT_VALUES_EQUAL(ReadConfig(env, transfer, 2).GetTransferSpecific().SerializeAsString(), expected.SerializeAsString());
+                UNIT_ASSERT_C(observation.Poisons > 0, "Changed transfer config must take the real alter path");
+                AssertIntent(env, transfer, TReplication::EState::Ready, 2);
+            }
+        }
+    }
+}
 
 Y_UNIT_TEST_SUITE(ReplicationCreation) {
     Y_UNIT_TEST(InitialScanDisabledDoesNotTouchMissingDestination) {

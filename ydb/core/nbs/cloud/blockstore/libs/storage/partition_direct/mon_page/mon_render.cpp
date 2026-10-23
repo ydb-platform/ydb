@@ -2,6 +2,7 @@
 
 #include "mon_render_chaos.h"
 #include "mon_render_dbg.h"
+#include "mon_render_deleted_ddisks.h"
 #include "mon_render_local_db.h"
 #include "mon_render_memory.h"
 #include "mon_render_overview.h"
@@ -69,6 +70,7 @@ void RenderMenu(
         EMonPage::VChunkCounters,
         EMonPage::Latency,
         EMonPage::Memory,
+        EMonPage::DeletedDDisks,
     };
     str << "<div class='pd-menu'>";
     for (EMonPage page: pages) {
@@ -1119,6 +1121,9 @@ TString RenderMonPage(
             break;
         case EMonPage::Memory:
             RenderMemory(str, data);
+            break;
+        case EMonPage::DeletedDDisks:
+            RenderDeletedDDisks(str, data);
             break;
     }
     return str.Str();

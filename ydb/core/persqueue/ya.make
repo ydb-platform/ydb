@@ -31,6 +31,7 @@ RECURSE_FOR_TESTS(
     ut
     deferred_publish/ut
     dread_cache_service/ut
+    ut/injection
     ut/slow
     ut/ut_with_sdk
 )

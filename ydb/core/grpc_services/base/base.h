@@ -486,11 +486,12 @@ private:
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
     virtual const TMaybe<TString> GetDatabaseNameFromRequest() const = 0;
 public:
-    IRequestProxyCtx();
     virtual ~IRequestProxyCtx() = default;
 
-    const TMaybe<TString> GetDatabaseName() const final;
-    void InitRootPath(const TAppData* appData);
+    const TMaybe<TString> GetDatabaseName() const final {
+        return PathNormalizationInitialized_ || EffectiveDatabaseName_
+            ? EffectiveDatabaseName_ : GetDatabaseNameFromRequest();
+    }
 
     // auth
     virtual const TMaybe<TString> GetYdbToken() const = 0;
@@ -517,7 +518,8 @@ public:
     // validation
     virtual bool Validate(TString& error) = 0;
 
-    void InitializePathNormalization(std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer);
+    void InitializePathNormalization(std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer,
+        const TAppData* appData = nullptr);
 
     // counters
     void CountRequestPaths() const;
@@ -561,15 +563,12 @@ public:
 protected:
     virtual void CountRequestBodyPaths() const {}
     virtual NYdbGrpc::ICounterBlock* GetRequestCounters() const { return nullptr; }
-    mutable TMaybe<TString> DatabaseName;
-
-private:
-    TString RootPath;
-    bool RelativePathsEnabled_ = false;
-    mutable bool RelativeDatabaseCounted_ = false;
-    mutable bool RelativeResourceCounted_ = false;
     TMaybe<TString> EffectiveDatabaseName_;
     bool PathNormalizationInitialized_ = false;
+
+private:
+    mutable bool RelativeDatabaseCounted_ = false;
+    mutable bool RelativeResourceCounted_ = false;
 };
 
 // Request context
@@ -660,7 +659,7 @@ public:
         , TraceId_(traceId)
         , State_(true)
     {
-        DatabaseName = database;
+        EffectiveDatabaseName_ = database;
     }
 
     const TMaybe<TString> GetYdbToken() const override {
@@ -686,7 +685,7 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseNameFromRequest() const override {
-        return DatabaseName;
+        return EffectiveDatabaseName_;
     }
 
     const NYdbGrpc::TAuthState& GetAuthState() const override {
@@ -2075,7 +2074,9 @@ public:
     }
 
     void UseDatabase(const TString& database) override {
-        DatabaseName = database;
+        if (!PathNormalizationInitialized_ || !IsPathNormalizationEnabled()) {
+            EffectiveDatabaseName_ = database;
+        }
     }
 
     void SetRespHook(TRespHook&& /*hook*/) override {

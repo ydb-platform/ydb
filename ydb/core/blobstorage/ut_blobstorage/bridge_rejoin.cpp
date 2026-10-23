@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         const ui32 groupId = env.GetGroups().front();
         auto& runtime = env.Runtime;
         ui32 configErrors = 0;
-        bool holdSyncers = false;
+        THashSet<TGroupId> targetsToHold;
         std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> heldSyncers;
         THashSet<TGroupId> heldTargets;
         std::optional<TGroupId> injectErrorTarget;
@@ -34,12 +34,14 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
                     UNIT_ASSERT_C(++configErrors < 1000, record.DebugString());
                 }
             }
-            if (holdSyncers && event->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType &&
-                    event->Get<NStorage::TEvNodeWardenNotifySyncerFinished>()->BridgeProxyGroupId.GetRawId() == groupId) {
-                // Keep sync stages from advancing, so the counters can be checked mid-sync.
-                heldTargets.insert(event->Get<NStorage::TEvNodeWardenNotifySyncerFinished>()->TargetGroupId);
-                heldSyncers.emplace_back(nodeId, std::move(event));
-                return false;
+            if (event->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType) {
+                const auto *msg = event->Get<NStorage::TEvNodeWardenNotifySyncerFinished>();
+                if (targetsToHold.contains(msg->TargetGroupId)) {
+                    // Keep sync stages from advancing, so the counters can be checked mid-sync.
+                    heldTargets.insert(msg->TargetGroupId);
+                    heldSyncers.emplace_back(nodeId, std::move(event));
+                    return false;
+                }
             }
             if (injectErrorTarget && event->GetTypeRewrite() == TEvBlobStorage::TEvControllerUpdateSyncerState::EventType) {
                 // NodeWarden reports only its current syncer, so BSC accepts this error
@@ -131,6 +133,16 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             return pileCounters(pile)->GetSubgroup("state", state)->GetCounter("PileInState")->Val();
         };
         const std::array<TString, 2> rejoiningPiles{"pile_2", "pile_3"};
+        auto releaseSyncers = [&] {
+            std::erase_if(heldSyncers, [&](std::pair<ui32, std::unique_ptr<IEventHandle>>& item) {
+                auto& [nodeId, event] = item;
+                if (targetsToHold.contains(event->Get<NStorage::TEvNodeWardenNotifySyncerFinished>()->TargetGroupId)) {
+                    return false;
+                }
+                runtime->Send(event.release(), nodeId);
+                return true;
+            });
+        };
 
         put("before disconnect");
         put(TString(128_KB, 'a'));
@@ -158,7 +170,7 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             checkData(pileGroups[i].GetRawId(), 1 + 8 * i, false);
         }
 
-        holdSyncers = true;
+        targetsToHold.insert(pileGroups.begin() + 1, pileGroups.end());
         SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
         SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
         const auto holdDeadline = runtime->GetClock() + TDuration::Minutes(1);
@@ -176,13 +188,18 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             UNIT_ASSERT_VALUES_EQUAL(pileCounters(pile)->GetCounter("UnsyncedBSC")->Val(), 1);
             UNIT_ASSERT_VALUES_EQUAL(pileInState(pile, "NOT_SYNCHRONIZED_2"), 1);
         }
-        holdSyncers = false;
-        // Fail the next stage of one target: SyncErrors must count it, and BSC must restart the stage.
+        // Fail the next stage of pile_2's target: SyncErrors must count it, and BSC must restart the stage. pile_3 stays
+        // held meanwhile, so its stage commit can't make the failed report stale.
         injectErrorTarget = pileGroups[1];
-        for (auto& [nodeId, event] : heldSyncers) {
-            runtime->Send(event.release(), nodeId);
+        targetsToHold.erase(pileGroups[1]);
+        releaseSyncers();
+        const auto errorDeadline = runtime->GetClock() + TDuration::Minutes(1);
+        while (injectErrorTarget || !poolCounters("pile_2", env.StoragePoolName)->GetCounter("SyncErrors", true)->Val()) {
+            UNIT_ASSERT_C(runtime->GetClock() < errorDeadline, "The injected syncer error was not counted");
+            env.Sim(TDuration::Seconds(1));
         }
-        heldSyncers.clear();
+        targetsToHold.clear();
+        releaseSyncers();
 
         const auto deadline = runtime->GetClock() + TDuration::Minutes(5);
         for (;;) {
@@ -208,9 +225,6 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             UNIT_ASSERT_VALUES_EQUAL(pileInState(pile, "SYNCHRONIZED"), 1);
             UNIT_ASSERT_GT(groupsInStage(poolCounters(pile, "static"), "SYNCED"), 0);
         }
-        // Other errors come from generation races of the two rejoining piles, so only the injected one is certain.
-        UNIT_ASSERT_C(!injectErrorTarget, "No stage finished after the error injection was armed");
-        UNIT_ASSERT_GE(poolCounters("pile_2", env.StoragePoolName)->GetCounter("SyncErrors", true)->Val(), 1);
         // Read the underlying groups directly: the bridge proxy must not mask missing copies.
         for (size_t i = 0; i < pileGroups.size(); ++i) {
             checkData(pileGroups[i].GetRawId(), 1 + 8 * i);

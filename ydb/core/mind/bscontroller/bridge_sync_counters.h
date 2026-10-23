@@ -66,11 +66,16 @@ namespace NKikimr::NBsController {
     public:
         TBridgeSyncCounters(::NMonitoring::TDynamicCounterPtr root)
             : Root(std::move(root))
-            , Counters(Root->GetSubgroup("subsystem", "bsc"))
-        {}
+        {
+            // own tree per instance: a previous BSC instance on this node may still be alive
+            Root->RemoveSubgroup("subsystem", "bsc");
+            Counters = Root->GetSubgroup("subsystem", "bsc");
+        }
 
         ~TBridgeSyncCounters() {
-            Root->RemoveSubgroup("subsystem", "bsc");
+            if (Root->FindSubgroup("subsystem", "bsc") == Counters) { // not taken over by a newer instance
+                Root->RemoveSubgroup("subsystem", "bsc");
+            }
         }
 
         void IncErrors(const TKey& key) {

@@ -11500,6 +11500,27 @@
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_select_yql-yql_21501_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-yql_21612]": [
+        {
+            "checksum": "006117d2e4578f0923bc7c4a0129b082",
+            "size": 1174,
+            "uri": "https://{canondata_backend}/1880306/96acdb63176ddf7a601fdab10f6d6b85796e0c4a/resource.tar.gz#test_sql2yql.test_select_yql-yql_21612_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-yql_21612_having]": [
+        {
+            "checksum": "3318c7f358d01a856508ff69e2226c26",
+            "size": 1220,
+            "uri": "https://{canondata_backend}/22810552/96300232b71d2620dde26f88585310e65e29737c/resource.tar.gz#test_sql2yql.test_select_yql-yql_21612_having_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-yql_21612_optional_universal]": [
+        {
+            "checksum": "5a7c9e35fcf9b7fbf46c1276f04fe7ee",
+            "size": 1021,
+            "uri": "https://{canondata_backend}/22810552/96300232b71d2620dde26f88585310e65e29737c/resource.tar.gz#test_sql2yql.test_select_yql-yql_21612_optional_universal_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql_tpcds-q47]": [
         {
             "checksum": "87d98cc0fc46e1fbf78fbafae97bf41c",
@@ -20145,6 +20166,21 @@
     "test_sql_format.test[select_yql-yql_21501]": [
         {
             "uri": "file://test_sql_format.test_select_yql-yql_21501_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-yql_21612]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-yql_21612_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-yql_21612_having]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-yql_21612_having_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-yql_21612_optional_universal]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-yql_21612_optional_universal_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql_tpcds-q47]": [

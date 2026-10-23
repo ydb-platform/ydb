@@ -4144,7 +4144,19 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                 return IGraphTransformer::TStatus::Error;
                             }
                         }
-                        else if (!isYql) {
+                        else if (isYql) {
+                            if (data.GetTypeAnn()->HasUniversal()) {
+                                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                                return IGraphTransformer::TStatus::Ok;
+                            }
+
+                            if (!IsBoolLike(*data.GetTypeAnn())) {
+                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(data.Pos()), TStringBuilder() <<
+                                    "Expected bool type, but got: " << *data.GetTypeAnn()));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                        }
+                        else {
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(data.Pos()), TStringBuilder() <<
                                 "Expected pg type, but got: " << data.GetTypeAnn()->GetKind()));
                             return IGraphTransformer::TStatus::Error;

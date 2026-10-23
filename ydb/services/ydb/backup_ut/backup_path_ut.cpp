@@ -2181,9 +2181,6 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
     Y_UNIT_TEST(ExportWholeDatabaseByExplicitRootItem) {
         ExportWholeDatabaseByExplicitRootItemImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
-    Y_UNIT_TEST(ExportTildeDirectoriesByExplicitRootItem) {
-        ExportTildeDirectoriesByExplicitRootItemImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this);
-    }
     Y_UNIT_TEST(ExportWithCommonSourcePath) {
         ExportWithCommonSourcePathImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }

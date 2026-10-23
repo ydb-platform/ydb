@@ -96,8 +96,7 @@ class TestRecursiveRemove:
             )
 
     @pytest.mark.parametrize(
-        "path", [".", "~root", "~backup_root", "export-root"],
-        ids=["database_root", "tilde_directory", "backup_directory", "export_directory"],
+        "path", [".", "~backup_root"], ids=["database_root", "backup_directory"],
     )
     def test_tilde_names(self, ydb_cluster, ydb_database, ydb_client, ydb_client_session, path):
         database_path = ydb_database

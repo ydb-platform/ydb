@@ -11,6 +11,7 @@ Y_UNIT_TEST_SUITE(SchemeObjectClassification) {
     Y_UNIT_TEST(EntryTypes) {
         using NScheme::ESchemeEntryType;
 
+        // Name matching is covered by SchemeObjectNames; check only entry-type behavior here.
         const struct {
             TStringBuf Name;
             ESchemeEntryType Type;
@@ -21,28 +22,11 @@ Y_UNIT_TEST_SUITE(SchemeObjectClassification) {
             bool InternalObject;
         } cases[] = {
             {"user", ESchemeEntryType::Directory, false, false, false, false, false},
-            {"user~suffix", ESchemeEntryType::Directory, false, false, false, false, false},
-            {"~my_directory", ESchemeEntryType::Directory, false, false, false, false, false},
-            {"~backup", ESchemeEntryType::Directory, false, false, false, false, false},
-            {"user~backup_12345", ESchemeEntryType::Directory, false, false, false, false, false},
             {"~backup_12345", ESchemeEntryType::Directory, false, true, true, false, true},
-            {"export-12345", ESchemeEntryType::Directory, false, true, true, false, true},
-            {".sys", ESchemeEntryType::Directory, true, false, true, true, true},
-            {".metadata", ESchemeEntryType::Directory, true, false, true, true, true},
-            {".tmp", ESchemeEntryType::Directory, true, false, true, true, true},
-            {".backups", ESchemeEntryType::Directory, true, false, true, true, true},
             {".sys_health", ESchemeEntryType::Directory, true, false, true, true, true},
-            {".metadata_user", ESchemeEntryType::Directory, true, false, true, true, true},
-            {".tmp_user", ESchemeEntryType::Directory, true, false, true, true, true},
-            {".backups_user", ESchemeEntryType::Directory, true, false, true, true, true},
-            {"~table", ESchemeEntryType::Table, false, false, false, false, false},
             {"~backup_table", ESchemeEntryType::Table, false, false, false, false, false},
-            {"export-table", ESchemeEntryType::Table, false, false, false, false, false},
-            {".sys", ESchemeEntryType::Table, false, false, false, false, false},
             {".sys_health", ESchemeEntryType::Table, false, false, false, false, false},
             {"view", ESchemeEntryType::SysView, false, false, false, true, true},
-            {"~view", ESchemeEntryType::SysView, false, false, false, true, true},
-            {"~backup_view", ESchemeEntryType::SysView, false, false, false, true, true},
         };
 
         for (const auto& testCase : cases) {

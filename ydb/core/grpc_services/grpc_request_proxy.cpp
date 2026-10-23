@@ -138,7 +138,7 @@ private:
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
-        requestBaseCtx->InitializePathNormalization(AppData(ctx)->PathNormalizer);
+        requestBaseCtx->InitializePathNormalization(AppData(ctx)->PathNormalizer, AppData(ctx)->Counters);
         requestBaseCtx->CountRequestPaths();
 
         LogRequest(event);

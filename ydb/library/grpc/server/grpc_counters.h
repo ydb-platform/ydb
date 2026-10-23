@@ -20,7 +20,6 @@ struct ICounterBlock : public TThrRefBase {
     virtual void CountRequestWithoutTls() {}
     virtual void CountRelativeDatabase() {}
     virtual void CountRelativeResource() {}
-    virtual void CountPathAlias() {}
 
     virtual TIntrusivePtr<ICounterBlock> Clone() { return this; }
     virtual void UseDatabase(const TString& database) { Y_UNUSED(database); }

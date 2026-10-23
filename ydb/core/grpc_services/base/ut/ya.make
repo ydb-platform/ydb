@@ -5,7 +5,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/grpc_services/counters
     ydb/core/protos
 )
 

@@ -513,7 +513,8 @@ public:
     // validation
     virtual bool Validate(TString& error) = 0;
 
-    void InitializePathNormalization(std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer);
+    void InitializePathNormalization(std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer,
+        NMonitoring::TDynamicCounterPtr counters = {});
 
     const TMaybe<TString> GetDatabaseName() const final {
         return PathNormalizationInitialized_ ? EffectiveDatabaseName_ : GetDatabaseNameFromRequest();
@@ -560,6 +561,7 @@ public:
 
 protected:
     virtual void CountRequestBodyPaths() const {}
+    virtual NYdbGrpc::ICounterBlock* GetRequestCounters() const { return nullptr; }
 
 private:
     mutable bool RelativeDatabaseCounted_ = false;

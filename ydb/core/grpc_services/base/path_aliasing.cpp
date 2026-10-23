@@ -1,5 +1,6 @@
 #include "base.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
 
 #include <utility>
@@ -20,22 +21,23 @@ namespace NKikimr::NGRpcService {
     }
 
     void IRequestCtxBaseMtSafe::SetPathNormalizer(
-        std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer) noexcept {
+        std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer,
+        NMonitoring::TDynamicCounters::TCounterPtr pathAliasCounter) noexcept {
         PathNormalizer_ = std::move(normalizer);
+        PathAliasCounter_ = std::move(pathAliasCounter);
     }
 
     TString IRequestCtxBaseMtSafe::NormalizePath(TStringBuf path) const {
         TString normalized = PathNormalizer_ ? PathNormalizer_->NormalizePath(path) : TString(path);
-        if (normalized != path) {
-            if (auto* counters = GetRequestCounters(); counters && !PathAliasCounted_.exchange(true, std::memory_order_relaxed)) {
-                counters->CountPathAlias();
-            }
+        if (normalized != path && PathAliasCounter_ && !PathAliasCounted_.exchange(true, std::memory_order_relaxed)) {
+            PathAliasCounter_->Inc();
         }
         return normalized;
     }
 
     void IRequestProxyCtx::InitializePathNormalization(
-        std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer)
+        std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer,
+        NMonitoring::TDynamicCounterPtr counters)
     {
         if (PathNormalizationInitialized_ || !IsPathNormalizationEnabled()) {
             return;
@@ -48,8 +50,17 @@ namespace NKikimr::NGRpcService {
             return;
         }
 
+        NMonitoring::TDynamicCounters::TCounterPtr pathAliasCounter;
+        if (normalizer && counters) {
+            const TStringBuf rpcMethod(method);
+            pathAliasCounter = GetServiceCounters(counters, "ydb")
+                ->GetSubgroup("api_service", TString(rpcMethod.Before('/')))
+                ->GetSubgroup("method", TString(rpcMethod.After('/')))
+                ->GetNamedCounter("name", "api.grpc.request.path_alias_count", true);
+        }
+
         auto database = GetDatabaseNameFromRequest();
-        SetPathNormalizer(std::move(normalizer));
+        SetPathNormalizer(std::move(normalizer), std::move(pathAliasCounter));
         if (database) {
             database = NormalizePath(*database);
         }

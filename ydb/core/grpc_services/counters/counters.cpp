@@ -90,7 +90,6 @@ struct TYdbRpcCounters {
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestRpcError;
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestRelativeDatabase;
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestRelativeResource;
-    ::NMonitoring::TDynamicCounters::TCounterPtr RequestPathAlias;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr ResponseBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr ResponseRpcError;
@@ -190,10 +189,6 @@ public:
         YdbCounters.RequestRelativeResource->Inc();
     }
 
-    void CountPathAlias() override {
-        YdbCounters.RequestPathAlias->Inc();
-    }
-
     void CountRequestBytes(ui32 requestSize) override {
         InitOnce();
         *RequestBytes += requestSize;
@@ -275,9 +270,6 @@ TYdbRpcCounters::TYdbRpcCounters(const ::NMonitoring::TDynamicCounterPtr& counte
     RequestRpcError = typeGroup->GetNamedCounter("name", "api.grpc.request.dropped_count", true);
     RequestRelativeDatabase = typeGroup->GetNamedCounter("name", "api.grpc.request.relative_database_count", true);
     RequestRelativeResource = typeGroup->GetNamedCounter("name", "api.grpc.request.relative_resource_count", true);
-    if (!forDatabase) {
-        RequestPathAlias = typeGroup->GetNamedCounter("name", "api.grpc.request.path_alias_count", true);
-    }
 
     ResponseBytes = typeGroup->GetNamedCounter("name", "api.grpc.response.bytes", true);
     ResponseRpcError = typeGroup->GetNamedCounter("name", "api.grpc.response.dropped_count", true);
@@ -655,10 +647,6 @@ public:
     void CountRelativeResource() override {
         Common->CountRelativeResource();
         Db->CountRelativeResource();
-    }
-
-    void CountPathAlias() override {
-        Common->CountPathAlias();
     }
 
     void CountRequestBytes(ui32 requestSize) override {

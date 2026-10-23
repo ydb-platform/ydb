@@ -1,4 +1,5 @@
 #include "external_data_source.h"
+#include "external_service.h"
 #include "validation_functions.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -87,6 +88,10 @@ struct TExternalDataSource: public IExternalSource {
             if (error) {
                 throw TExternalSourceException() << error;
             }
+        }
+
+        if (proto.GetSourceType() == "ExternalService") {
+            ParseServiceConnection(proto);
         }
 
         ValidateHostname(HostnamePatterns, proto.GetLocation());

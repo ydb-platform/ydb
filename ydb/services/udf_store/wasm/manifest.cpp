@@ -441,8 +441,12 @@ TWasmManifest ParseManifest(TStringBuf manifestJson) {
         ExpandObjectsIntoFunctions(manifest);
     }
 
-    if (manifest.Functions.empty()) {
-        ythrow yexception() << "Wasm manifest must declare non-empty functions[] and/or objects[]";
+    if (root.Has("service_methods") || root.Has("service_abi_version")) {
+        manifest.Services =
+            std::make_shared<const NYdb::NWasm::NServices::TServiceManifest>(NYdb::NWasm::NServices::ParseServiceManifest(manifestJson));
+    }
+    if (manifest.Functions.empty() && !manifest.Services) {
+        ythrow yexception() << "Wasm manifest must declare non-empty functions[], objects[] or service_methods[]";
     }
     return manifest;
 }

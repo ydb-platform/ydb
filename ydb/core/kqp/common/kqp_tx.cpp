@@ -414,6 +414,10 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
             }
 
             for (const auto& transform : stage.GetOutputTransforms()) {
+                if (transform.HasExternalTransform()) {
+                    // External calls cannot be postponed as deferred table effects.
+                    return true;
+                }
                 AFL_ENSURE(transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink);
                 AFL_ENSURE(transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
                 NKikimrKqp::TKqpTableSinkSettings settings;

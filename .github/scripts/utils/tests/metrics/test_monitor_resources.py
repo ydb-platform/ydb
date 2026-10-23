@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -12,7 +13,18 @@ from _paths import METRICS, add_product_paths
 
 add_product_paths(METRICS)
 
-from monitor_resources import apply_io_sample, cpu_delta_jiffies, io_delta_bytes, process_identity
+from monitor_resources import (
+    TestCgroupSampler,
+    apply_io_sample,
+    cpu_delta_jiffies,
+    discover_test_cgroups,
+    io_delta_bytes,
+    parse_cmdline_flag,
+    process_identity,
+    read_cpu_usage_usec,
+    read_io_bytes,
+    read_memory_current_bytes,
+)
 
 
 class ProcessAccountingTest(unittest.TestCase):
@@ -53,6 +65,55 @@ class ProcessAccountingTest(unittest.TestCase):
         nxt: dict = {}
         self.assertEqual(apply_io_sample((2, 1), (8, 2), {}, nxt), (8, 2))
         self.assertEqual(nxt[(2, 1)], (8, 2))
+
+
+class TestCgroupSampleTest(unittest.TestCase):
+    def test_parse_project_path_and_chunk(self):
+        cmd = "test_tool --project-path ydb/core/kqp --split-index 3"
+        self.assertEqual(parse_cmdline_flag(cmd, "--project-path"), "ydb/core/kqp")
+        self.assertEqual(parse_cmdline_flag(cmd, "--split-index"), "3")
+        self.assertEqual(parse_cmdline_flag("x --project-path=foo/bar", "--project-path"), "foo/bar")
+
+    def test_reads_cgroup_stat_files(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        (root / "cpu.stat").write_text("usage_usec 2500000\nuser_usec 1\n")
+        (root / "memory.current").write_text("2097152\n")
+        (root / "io.stat").write_text("8:0 rbytes=1048576 wbytes=2097152 rios=1 wios=1\n")
+        self.assertEqual(read_cpu_usage_usec(root), 2500000)
+        self.assertEqual(read_memory_current_bytes(root), 2097152)
+        self.assertEqual(read_io_bytes(root), (1048576, 2097152))
+
+    def test_discovers_ya_test_dirs(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        (root / "ya-runtime").mkdir()
+        (root / "ya-test-1-2").mkdir()
+        self.assertEqual([p.name for p in discover_test_cgroups(root)], ["ya-test-1-2"])
+
+    def test_first_tick_is_baseline_second_emits_cores(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        cgroup = root / "ya-test-9-1"
+        cgroup.mkdir()
+        (cgroup / "cpu.stat").write_text("usage_usec 1000000\n")
+        (cgroup / "memory.current").write_text("1048576\n")
+        (cgroup / "io.stat").write_text("8:0 rbytes=0 wbytes=0\n")
+        (cgroup / "cgroup.procs").write_text("")
+        sampler = TestCgroupSampler()
+        self.assertEqual(sampler.sample(1.0, 10.0, 10_000_000, {}, extra_root=root), [])
+        (cgroup / "cpu.stat").write_text("usage_usec 3000000\n")
+        (cgroup / "io.stat").write_text("8:0 rbytes=1048576 wbytes=0\n")
+        rows = sampler.sample(1.0, 11.0, 11_000_000, {}, extra_root=root)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["kind"], "test")
+        self.assertEqual(rows[0]["cgroup"], "ya-test-9-1")
+        self.assertAlmostEqual(rows[0]["cpu_used_cores"], 2.0)
+        self.assertEqual(rows[0]["ram_kb"], 1024)
+        self.assertAlmostEqual(rows[0]["disk_read_mbps"], 1.0)
 
 
 if __name__ == "__main__":

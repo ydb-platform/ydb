@@ -16,9 +16,11 @@ for _ in 1 2 3 4 5 6 7 8; do
     echo "$pid" > "$dir/ya-runtime/cgroup.procs" 2>/dev/null || true
   done
 done
-if ! grep -qw cpu "$dir/cgroup.subtree_control"; then
-  echo '+cpu' > "$dir/cgroup.subtree_control"
-fi
+for ctrl in cpu memory io; do
+  if ! grep -qw "$ctrl" "$dir/cgroup.subtree_control"; then
+    echo "+${ctrl}" > "$dir/cgroup.subtree_control" 2>/dev/null || true
+  fi
+done
 # Directory ownership is not enough. cgroup v2 only allows a migration when the
 # writer can also write cgroup.procs of the common ancestor, and those files
 # stay root-owned after chown of the directory itself.

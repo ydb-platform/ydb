@@ -369,6 +369,7 @@ def build_html_dashboard(
       <ul>
         <li><b>By suites (stacked):</b> At time <code>t</code> we sum each active chunk contribution. For CPU it is <code>cpu_sec_report / duration_used_sec</code> (average cores for that run); for RAM it is the chunk memory metric from report converted to GB. This is a model by chunks, not an instantaneous per-process sample.</li>
         <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code> during the run (actual usage).</li>
+        <li><b>Measured per test:</b> when tests run under <code>--limit-test-cpu</code>, each <code>ya-test-*</code> cgroup is sampled every 3s (CPU from <code>cpu.stat</code>, RAM from <code>memory.current</code> or RSS, disk from <code>io.stat</code> or <code>/proc/pid/io</code>). Pick a suite in the selector below. Ticks are in <code>resources_monitor.jsonl</code> (<code>kind=test</code>) and <code>resources_tests.json</code>.</li>
         <li><b>Limits (purple dashed):</b> Provisioned runner maximum from <code>runners_footprints.yml</code> for this build preset. Optional dotted line: ya.make cgroup RAM cap (~{rf_ya_mem} GB).</li>
         <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
         <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics (seconds).</li>
@@ -407,6 +408,16 @@ def build_html_dashboard(
       </details>
     </div>
   </details>
+  <div id="measuredWrap" style="display:none;margin:12px 0 16px 0;padding:10px 12px;border:1px solid #d0d7de;border-radius:8px;background:#fff;">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+      <b>Measured per test (cgroup)</b>
+      <label>Suite <select id="measuredSelect" style="min-width:360px;padding:6px 8px;border:1px solid #d0d7de;border-radius:6px;"></select></label>
+      <span id="measuredMeta" class="muted"></span>
+    </div>
+    <div id="measuredCpu" class="wide" style="height:220px;"></div>
+    <div id="measuredRam" class="wide" style="height:220px;"></div>
+    <div id="measuredDisk" class="wide" style="height:220px;"></div>
+  </div>
   <div id="activeChunks" class="wide"></div>
   <div id="activeChunksClick" class="clickbox">Click chart to see how many tests (chunks) were running at that time</div>
   <div class="tabs" id="tabsBar" style="display: none;">
@@ -2290,6 +2301,72 @@ def build_html_dashboard(
       }}
     }}
     window.applyLayerToggles = applyLayerToggles;
+
+    let _measuredSeries = null;
+    const measuredList = (data.resources_overlay && data.resources_overlay.measured_tests) || [];
+    const measuredWrap = document.getElementById('measuredWrap');
+    const measuredSelect = document.getElementById('measuredSelect');
+    function plotMeasured(series) {{
+      if (!series || !window.Plotly) return;
+      const xDisp = (series.xs_evlog_sec || []).map(x => xToDisplay(x));
+      const layout = (title, ytitle) => ({{
+        title,
+        xaxis: axisLayout(xDisp),
+        yaxis: {{ title: ytitle }},
+        hovermode: 'x unified',
+        margin: {{ t: 40, r: 20, b: 40, l: 50 }},
+      }});
+      Plotly.newPlot('measuredCpu', [{{
+        x: xDisp, y: series.cpu_cores || [], mode: 'lines', name: 'CPU',
+        line: {{ color: '#d97706' }}, hovertemplate: 'CPU: %{{y:.3f}} cores<extra></extra>'
+      }}], layout('Measured CPU (cgroup)', 'cores'), {{ responsive: true }});
+      Plotly.newPlot('measuredRam', [{{
+        x: xDisp, y: series.ram_gb || [], mode: 'lines', name: 'RAM',
+        line: {{ color: '#7c3aed' }}, hovertemplate: 'RAM: %{{y:.3f}} GB<extra></extra>'
+      }}], layout('Measured RAM (cgroup)', 'GB'), {{ responsive: true }});
+      Plotly.newPlot('measuredDisk', [
+        {{ x: xDisp, y: (series.disk_write_mbps || []).map(v => Number(v) || 0), mode: 'lines', name: 'Write', line: {{ color: '#65a30d' }}, hovertemplate: 'Write: %{{y:.2f}} MB/s<extra></extra>' }},
+        {{ x: xDisp, y: (series.disk_read_mbps || []).map(v => -(Number(v) || 0)), mode: 'lines', name: 'Read', line: {{ color: '#0284c7' }}, hovertemplate: 'Read: %{{y:.2f}} MB/s<extra></extra>' }},
+      ], layout('Measured disk (+write / -read)', 'MB/s'), {{ responsive: true }});
+    }}
+    async function showMeasured(key) {{
+      if (!key) return;
+      if (!_measuredSeries) {{
+        try {{
+          const resp = await fetch('resources_tests.json');
+          if (!resp.ok) throw new Error(String(resp.status));
+          _measuredSeries = await resp.json();
+        }} catch (err) {{
+          document.getElementById('measuredMeta').textContent = 'resources_tests.json is missing';
+          return;
+        }}
+      }}
+      const series = _measuredSeries[key];
+      const meta = measuredList.find(row => row.key === key) || {{}};
+      document.getElementById('measuredMeta').textContent = series
+        ? ('max ' + (meta.max_cpu || 0) + ' cores, ' + (meta.max_ram_gb || 0) + ' GB, r/w ' + (meta.max_read_mbps || 0) + '/' + (meta.max_write_mbps || 0) + ' MB/s, ' + (meta.samples || 0) + ' ticks')
+        : 'no series';
+      if (series) plotMeasured(series);
+    }}
+    if (measuredWrap && measuredSelect && measuredList.length) {{
+      measuredWrap.style.display = '';
+      measuredSelect.innerHTML = measuredList.map(row =>
+        '<option value="' + escapeHtml(row.key) + '">' + escapeHtml(row.label) +
+        ' — ' + Number(row.max_cpu || 0).toFixed(2) + ' cores</option>'
+      ).join('');
+      measuredSelect.addEventListener('change', () => showMeasured(measuredSelect.value));
+      showMeasured(measuredSelect.value);
+    }}
+    const _toggleSuiteMarkersOrig = toggleSuiteMarkers;
+    toggleSuiteMarkers = function(suitePath, enabled) {{
+      _toggleSuiteMarkersOrig(suitePath, enabled);
+      if (!enabled || !measuredSelect) return;
+      const match = measuredList.find(row => row.suite === suitePath);
+      if (match) {{
+        measuredSelect.value = match.key;
+        showMeasured(match.key);
+      }}
+    }};
 
     const suiteSearchEl = document.getElementById('suiteSearch');
     if (suiteSearchEl) {{

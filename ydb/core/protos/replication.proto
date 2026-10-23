@@ -130,6 +130,9 @@ message TReplicationConfig {
     optional TReplicationLocationConfig Location = 10;
     optional bool InitialScan = 11 [default = true];
 
+    // Controller-internal: persisted at creation, absent on pre-ownership replications.
+    optional bool RequireTargetOwnership = 12 [default = false];
+
     // targets to be replicated
     // Currently, only OLTP tables are supported.
     oneof Target {

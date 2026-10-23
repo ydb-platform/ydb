@@ -17,11 +17,11 @@ Y_UNIT_TEST_SUITE(TReplicationWithRebootsTests) {
               Specific {
                 Targets {
                   SrcPath: "/MyRoot1/Table"
-                  DstPath: "/MyRoot2/Table"
+                  DstPath: "/MyRoot2/%s"
                 }
               }
             }
-        )", name.c_str());
+        )", name.c_str(), name.c_str());
     }
 
     void SetupLogging(TTestActorRuntimeBase& runtime) {

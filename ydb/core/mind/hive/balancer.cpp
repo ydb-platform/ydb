@@ -128,6 +128,10 @@ protected:
     std::vector<TNodeId>::iterator NextNode;
     std::vector<TFullTabletId> Tablets;
     std::vector<TFullTabletId>::iterator NextTablet;
+    TBalancerRunStats RunStats;
+    const ui32 RunId; // see CountTablet
+    using TTabletCounters = TBalancerRunStats::TTabletCounters;
+    using ETabletCounter = TBalancerRunStats::ETabletCounter;
 
     static constexpr ui64 MAX_TABLETS_PROCESSED = 10;
 
@@ -136,12 +140,52 @@ protected:
     }
 
     void PassAway() override {
+        RunStats.EndTime = TActivationContext::Now();
+        RunStats.Movements = Movements;
+        if (RunStats.EndReason.empty()) {
+            RunStats.EndReason = "stopped";
+        }
         YDB_LOG_INFO("Balancer finished",
             {"logPrefix", GetLogPrefix()},
-            {"movements", Movements});
+            {"balancerType", EBalancerTypeName(Settings.Type)},
+            {"resource", EResourceToBalanceName(Settings.ResourceToBalance)},
+            {"trigger", Settings.Trigger},
+            {"movements", Movements},
+            {"maxMovements", Settings.MaxMovements},
+            {"endReason", RunStats.EndReason},
+            {"duration", RunStats.EndTime - RunStats.StartTime},
+            {"passes", RunStats.Passes},
+            {"nodesConsidered", RunStats.NodesConsidered},
+            {"tabletsOnNodes", RunStats.Raw.TabletsOnNodes},
+            {"tabletsEligible", RunStats.Raw.TabletsEligible},
+            {"skippedPolicy", RunStats.Raw.SkippedPolicy},
+            {"skippedCooldown", RunStats.Raw.SkippedCooldown},
+            {"skippedNoMetric", RunStats.Raw.SkippedNoMetric},
+            {"skippedPinned", RunStats.Raw.SkippedPinned},
+            {"skippedObjectFilter", RunStats.Raw.SkippedObjectFilter},
+            {"tabletsExamined", RunStats.Raw.TabletsExamined},
+            {"rejectedNoNode", RunStats.Raw.RejectedNoNode},
+            {"rejectedNotEnoughResources", RunStats.Raw.RejectedNotEnoughResources},
+            {"rejectedTooManyStarting", RunStats.Raw.RejectedTooManyStarting},
+            {"rejectedSameNode", RunStats.Raw.RejectedSameNode},
+            {"rejectedNotExpedient", RunStats.Raw.RejectedNotExpedient},
+            {"uniqueTabletsOnNodes", RunStats.Unique.TabletsOnNodes},
+            {"uniqueTabletsEligible", RunStats.Unique.TabletsEligible},
+            {"uniqueSkippedPolicy", RunStats.Unique.SkippedPolicy},
+            {"uniqueSkippedCooldown", RunStats.Unique.SkippedCooldown},
+            {"uniqueSkippedNoMetric", RunStats.Unique.SkippedNoMetric},
+            {"uniqueSkippedPinned", RunStats.Unique.SkippedPinned},
+            {"uniqueSkippedObjectFilter", RunStats.Unique.SkippedObjectFilter},
+            {"uniqueTabletsExamined", RunStats.Unique.TabletsExamined},
+            {"uniqueRejectedNoNode", RunStats.Unique.RejectedNoNode},
+            {"uniqueRejectedNotEnoughResources", RunStats.Unique.RejectedNotEnoughResources},
+            {"uniqueRejectedTooManyStarting", RunStats.Unique.RejectedTooManyStarting},
+            {"uniqueRejectedSameNode", RunStats.Unique.RejectedSameNode},
+            {"uniqueRejectedNotExpedient", RunStats.Unique.RejectedNotExpedient});
         Stats.TotalRuns++;
         Stats.TotalMovements += Movements;
         Stats.LastRunMovements = Movements;
+        Stats.LastRun = RunStats;
         Stats.IsRunningNow = false;
         Hive->RemoveSubActor(this);
         if (Movements == 0) {
@@ -168,6 +212,12 @@ protected:
     }
 
     void Cleanup() override {
+        RunStats.EndReason = "stopped by hive";
+        PassAway();
+    }
+
+    void HandleTimeout() {
+        RunStats.EndReason = "timeout";
         PassAway();
     }
 
@@ -231,19 +281,38 @@ protected:
         Tablets.clear();
     }
 
-    bool IsTabletSuitableForBalancing(const TTabletInfo* tablet, TInstant now) const {
-        if (!tablet->IsGoodForBalancer(now)) {
+    // Counts the tablet in RunStats.Raw, and in RunStats.Unique unless this run has already counted it there.
+    // The tablet remembers the run that last counted it and the counters it was counted in, so no per-run
+    // map of tablets is needed.
+    void CountTablet(TTabletInfo* tablet, ui64 TTabletCounters::* counter, ETabletCounter bit) {
+        ++(RunStats.Raw.*counter);
+        if (tablet->MarkCountedByBalancerRun(RunId, static_cast<ui8>(bit))) {
+            ++(RunStats.Unique.*counter);
+        }
+    }
+
+    // counts the reason a tablet is not suitable in RunStats
+    bool IsTabletSuitableForBalancing(TTabletInfo* tablet, TInstant now) {
+        if (!tablet->IsAllowedByBalancerPolicy()) {
+            CountTablet(tablet, &TTabletCounters::SkippedPolicy, ETabletCounter::SkippedPolicy);
+            return false;
+        }
+        if (tablet->IsInBalancerCooldown(now)) {
+            CountTablet(tablet, &TTabletCounters::SkippedCooldown, ETabletCounter::SkippedCooldown);
             return false;
         }
         if (Settings.FilterObjectId && tablet->GetObjectId() != *Settings.FilterObjectId) {
+            CountTablet(tablet, &TTabletCounters::SkippedObjectFilter, ETabletCounter::SkippedObjectFilter);
             return false;
         }
         if (!tablet->HasMetric(Settings.ResourceToBalance)) {
+            CountTablet(tablet, &TTabletCounters::SkippedNoMetric, ETabletCounter::SkippedNoMetric);
             return false;
         }
         if (tablet->IsPinnedToNode()) {
             // The tablet accounts for most of its node's usage, so moving it would only relocate the
             // load. Leave it where it is and let the balancer drain the rest of the node instead.
+            CountTablet(tablet, &TTabletCounters::SkippedPinned, ETabletCounter::SkippedPinned);
             return false;
         }
         return true;
@@ -299,8 +368,11 @@ protected:
             const std::unordered_set<TTabletInfo*>& nodeTablets = itTablets->second;
             std::vector<TTabletInfo*> tablets;
             tablets.reserve(nodeTablets.size());
+            ++RunStats.NodesConsidered;
             for (TTabletInfo* tablet : nodeTablets) {
+                CountTablet(tablet, &TTabletCounters::TabletsOnNodes, ETabletCounter::TabletsOnNodes);
                 if (IsTabletSuitableForBalancing(tablet, now)) {
+                    CountTablet(tablet, &TTabletCounters::TabletsEligible, ETabletCounter::TabletsEligible);
                     tablet->UpdateWeight();
                     tablets.emplace_back(tablet);
                 }
@@ -334,6 +406,7 @@ protected:
 
     void KickNextTablet() {
         if (Settings.MaxMovements != 0 && Movements >= Settings.MaxMovements) {
+            RunStats.EndReason = "max movements reached";
             if (KickInFlight > 0) {
                 return;
             } else {
@@ -353,6 +426,7 @@ protected:
             }
             std::optional<TFullTabletId> tabletId = GetNextTablet(now);
             if (!tabletId) {
+                RunStats.EndReason = "all tablets examined";
                 break;
             }
             TTabletInfo* tablet = Hive->FindTablet(*tabletId);
@@ -362,12 +436,27 @@ protected:
             YDB_LOG_TRACE("Balancer selected tablet",
                 {"logPrefix", GetLogPrefix()},
                 {"tablet", tablet->ToString()});
+            CountTablet(tablet, &TTabletCounters::TabletsExamined, ETabletCounter::TabletsExamined);
             THive::TBestNodeResult result = Hive->FindBestNode(*tablet);
+            if (std::holds_alternative<THive::TNotEnoughResources>(result)) {
+                CountTablet(tablet, &TTabletCounters::RejectedNotEnoughResources, ETabletCounter::RejectedNotEnoughResources);
+            } else if (std::holds_alternative<THive::TTooManyTabletsStarting>(result)) {
+                CountTablet(tablet, &TTabletCounters::RejectedTooManyStarting, ETabletCounter::RejectedTooManyStarting);
+            } else if (!std::holds_alternative<TNodeInfo*>(result)) {
+                CountTablet(tablet, &TTabletCounters::RejectedNoNode, ETabletCounter::RejectedNoNode);
+            }
             if (std::holds_alternative<TNodeInfo*>(result)) {
                 TNodeInfo* node = std::get<TNodeInfo*>(result);
-                const THive::TMoveExpediency expediency = node != tablet->Node
-                    ? Hive->CheckTabletMoveExpediency(*tablet, *node)
-                    : THive::TMoveExpediency{.Expedient = false};
+                THive::TMoveExpediency expediency; // not expedient
+                if (node != tablet->Node) {
+                    expediency = Hive->CheckTabletMoveExpediency(*tablet, *node);
+                    if (!expediency.Expedient) {
+                        CountTablet(tablet, &TTabletCounters::RejectedNotExpedient, ETabletCounter::RejectedNotExpedient);
+                    }
+                } else {
+                    CountTablet(tablet, &TTabletCounters::RejectedSameNode, ETabletCounter::RejectedSameNode);
+                }
+
                 if (expediency.Expedient) {
                     tablet->MakeBalancerDecision(now);
                     tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
@@ -416,6 +505,7 @@ protected:
             {"status", ev->Get()->Status},
             {"tabletId", ev->Get()->TabletId});
         --KickInFlight;
+        ++RunStats.Passes;
         BalanceNodes();
         KickNextTablet();
     }
@@ -432,6 +522,7 @@ public:
         , Movements(0)
         , Settings(std::move(settings))
         , Stats(Hive->BalancerStats[static_cast<std::size_t>(Settings.Type)])
+        , RunId(++Hive->NextBalancerRunId)
     {
         Stats.IsRunningNow = true;
         Stats.CurrentMaxMovements = Settings.MaxMovements ? Settings.MaxMovements : Hive->TabletsTotal;
@@ -441,15 +532,29 @@ public:
 
     void Bootstrap() {
         UpdateProgress();
+        RunStats.StartTime = TActivationContext::Now();
         Hive->TabletCounters->Cumulative()[NHive::COUNTER_BALANCER_EXECUTED].Increment(1);
+        YDB_LOG_INFO("Balancer started",
+            {"logPrefix", GetLogPrefix()},
+            {"balancerType", EBalancerTypeName(Settings.Type)},
+            {"resource", EResourceToBalanceName(Settings.ResourceToBalance)},
+            {"trigger", Settings.Trigger},
+            {"triggerDetails", Settings.TriggerDetails},
+            {"maxMovements", Settings.MaxMovements},
+            {"maxInFlight", Settings.MaxInFlight},
+            {"recheckOnFinish", Settings.RecheckOnFinish},
+            {"filterNodes", Settings.FilterNodeIds.size()},
+            {"filterNodeIds", Settings.FilterNodeIds.size() <= 16 ? TStringBuilder() << Settings.FilterNodeIds : TStringBuilder() << "[...]"},
+            {"filterObjectId", Settings.FilterObjectId});
         Become(&THiveBalancer::StateWork, TIMEOUT, new TEvents::TEvPoison());
+        ++RunStats.Passes;
         BalanceNodes();
         KickNextTablet();
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            cFunc(TEvents::TSystem::PoisonPill, PassAway);
+            cFunc(TEvents::TSystem::PoisonPill, HandleTimeout);
             hFunc(TEvPrivate::TEvRestartComplete, Handle);
             cFunc(TEvents::TSystem::Wakeup, KickNextTablet);
         }
@@ -459,6 +564,7 @@ public:
 void THive::StartHiveBalancer(TBalancerSettings&& settings) {
     if (IsItPossibleToStartBalancer(settings.Type)) {
         LastBalancerTrigger = settings.Type;
+        LastBalancerSuppression.reset();
         auto* balancer = new THiveBalancer(this, std::move(settings));
         SubActors.emplace_back(balancer);
         RegisterWithSameMailbox(balancer);

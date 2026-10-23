@@ -115,6 +115,9 @@ Y_UNIT_TEST_SUITE(BridgePileOverrides) {
         // Removing the rules must not silently reinterpret live block-4-2 groups as mirror-3-dc.
         ExpectError(ReplaceMainConfig(env, [](YAML::Node& config) {
             config["blob_storage_config"].remove("storage_pool_pile_overrides");
+        }), "existing GroupId");
+        ExpectError(ReplaceMainConfig(env, [](YAML::Node& config) {
+            config["blob_storage_config"]["storage_pool_pile_overrides"][0]["static_group_override"] = false;
         }), "existing static group");
         ExpectError(ReplaceMainConfig(env, [](YAML::Node& config) {
             config["blob_storage_config"]["storage_pool_pile_overrides"][0]["kind"] = YAML::Node(YAML::NodeType::Sequence);

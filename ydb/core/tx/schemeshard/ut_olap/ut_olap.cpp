@@ -14,6 +14,9 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/library/testlib/helpers.h>
+#include <yql/essentials/ast/yql_ast_escaping.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
@@ -658,6 +661,116 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
+    }
+
+    // An ALTER that adds a PG column, accepted by a version that still allowed PG types in column tables, can be
+    // in flight when SchemeShard restarts on a newer version. Restoring the operation reparses the persisted AlterBody,
+    // which must not stop SchemeShard. The row the previous version persisted for the ALTER is planted into the local
+    // database before the ColumnShard sees any proposal.
+    Y_UNIT_TEST(InFlightPgColumnAlterSurvivesReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(true));
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+        const ui64 localPathId = DescribePath(runtime, "/MyRoot/ColumnTable").GetPathId();
+
+        // Keep the ALTER in ConfigureParts: the ColumnShard receives no proposal.
+        TBlockEvents<TEvColumnShard::TEvProposeTransaction> proposals(runtime);
+        const ui64 alterTxId = ++txId;
+        AsyncAlterColumnTable(runtime, alterTxId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "value" Type: "Int32" } }
+        )");
+        runtime.WaitFor("alter proposal blocked", [&]() { return !proposals.empty(); });
+        const ui64 staleGeneration = proposals.front()->Get()->Record.GetSeqNo().GetGeneration();
+
+        const auto selected = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let key '('('PathId (Uint64 '%lu))))
+                (let select '('AlterBody 'Description))
+                (return (AsList
+                    (SetResult 'Result (SelectRow 'ColumnTablesAlters key select))
+                ))
+            )
+        )", localPathId));
+        const auto& row = selected.GetValue().GetStruct(0).GetOptional();
+        UNIT_ASSERT_C(row.HasOptional(), "the in-flight ALTER must be persisted");
+        UNIT_ASSERT(row.GetOptional().GetStruct(0).HasOptional());
+        UNIT_ASSERT(row.GetOptional().GetStruct(1).HasOptional());
+        NKikimrSchemeOp::TAlterColumnTable alterBody;
+        UNIT_ASSERT(alterBody.ParseFromString(row.GetOptional().GetStruct(0).GetOptional().GetBytes()));
+        NKikimrSchemeOp::TColumnTableDescription description;
+        UNIT_ASSERT(description.ParseFromString(row.GetOptional().GetStruct(1).GetOptional().GetBytes()));
+
+        // The row as the previous version persisted it for `ADD COLUMN value pgint4`.
+        const auto pgType = NScheme::ProtoColumnTypeFromTypeInfoMod(NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgint4")), "");
+        UNIT_ASSERT_VALUES_EQUAL(alterBody.GetAlterSchema().AddColumnsSize(), 1);
+        auto* added = alterBody.MutableAlterSchema()->MutableAddColumns(0);
+        added->SetType("pgint4");
+        added->ClearTypeId();
+        added->ClearTypeInfo();
+        bool described = false;
+        for (auto& column : *description.MutableSchema()->MutableColumns()) {
+            if (column.GetName() == "value") {
+                column.SetType("pgint4");
+                column.SetTypeId(pgType.TypeId);
+                UNIT_ASSERT(pgType.TypeInfo);
+                *column.MutableTypeInfo() = *pgType.TypeInfo;
+                described = true;
+            }
+        }
+        UNIT_ASSERT(described);
+
+        auto escape = [](const google::protobuf::Message& proto) {
+            TString serialized;
+            UNIT_ASSERT(proto.SerializeToString(&serialized));
+            TStringStream escaped;
+            NYql::EscapeArbitraryAtom(serialized, '"', &escaped);
+            return escaped.Str();
+        };
+        LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let key '('('PathId (Uint64 '%lu))))
+                (let row '('('AlterBody (String '%s)) '('Description (String '%s))))
+                (return (AsList (UpdateRow 'ColumnTablesAlters key row)))
+            )
+        )", localPathId, escape(alterBody).c_str(), escape(description).c_str()));
+
+        // Proposals of the previous SchemeShard generation are dropped; the restarted one proposes the PG column again.
+        auto isRestored = [&](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.GetTxId() == alterTxId && record.GetSeqNo().GetGeneration() > staleGeneration;
+        };
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        runtime.WaitFor("proposal after reboot", [&]() { return std::any_of(proposals.begin(), proposals.end(), isRestored); });
+        std::erase_if(proposals, [&](const auto& ev) { return !isRestored(ev); });
+        for (const auto& ev : proposals) {
+            NKikimrTxColumnShard::TSchemaTxBody txBody;
+            UNIT_ASSERT(txBody.ParseFromString(ev->Get()->Record.GetTxBody()));
+            bool proposed = false;
+            for (const auto& column : txBody.GetAlterTable().GetSchema().GetColumns()) {
+                if (column.GetName() == "value") {
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetType(), "pgint4");
+                    proposed = true;
+                }
+            }
+            UNIT_ASSERT(proposed);
+        }
+        proposals.Stop().Unblock();
+
+        env.TestWaitNotification(runtime, alterTxId);
+        const auto table = DescribePath(runtime, "/MyRoot/ColumnTable").GetPathDescription().GetColumnTableDescription();
+        bool found = false;
+        for (const auto& column : table.GetSchema().GetColumns()) {
+            if (column.GetName() == "value") {
+                UNIT_ASSERT_VALUES_EQUAL(column.GetType(), "pgint4");
+                found = true;
+            }
+        }
+        UNIT_ASSERT(found);
     }
 
     Y_UNIT_TEST(CreateStore) {

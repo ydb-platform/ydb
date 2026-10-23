@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_format_context.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/library/pdisk_io/aio.h>
 
@@ -718,5 +719,199 @@ Y_UNIT_TEST_SUITE(PDiskSubsystem) {
         for (const auto& [key, state] : states) {
             UNIT_ASSERT(env.PDiskMockStates.at(key) == state);
         }
+    }
+}
+
+Y_UNIT_TEST_SUITE(PDiskMockInterfaces) {
+
+    // One mock PDisk and one owner of it, driven from an edge actor.
+    struct TMockOwner {
+        static constexpr ui64 Guid = 12345;
+
+        TEnvironmentSetup Env{{.NodeCount = 1}};
+        TPDiskMockState::TPtr State;
+        TActorId PDisk;
+        TActorId Edge;
+        NPDisk::TOwner Owner = 0;
+        const NPDisk::TOwnerRound OwnerRound = 1;
+        ui32 AppendBlockSize = 0;
+        NPDisk::TFormatContextPtr FormatContext;
+
+        explicit TMockOwner(bool sectorFormat, TPDiskMockState::ESpaceColorPolicy policy = {})
+            : State(MakeIntrusive<TPDiskMockState>(1u, 1u, Guid, 32ull << 30, 128u << 20, false, NPDisk::DEVICE_TYPE_NVME,
+                policy, nullptr, sectorFormat))
+        {
+            PDisk = Env.Runtime->Register(CreatePDiskMockActor(State), 1);
+            Edge = Env.Runtime->AllocateEdgeActor(1);
+            Send(new NPDisk::TEvYardInit(OwnerRound, TVDiskID(TGroupId::FromValue(1), 1, 0, 0, 0), Guid, Edge));
+            auto res = Wait<NPDisk::TEvYardInitResult>();
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            Owner = res->Get()->PDiskParams->Owner;
+            AppendBlockSize = res->Get()->PDiskParams->AppendBlockSize;
+            FormatContext = res->Get()->FormatContext;
+        }
+
+        void Send(IEventBase *ev) {
+            Env.Runtime->Send(new IEventHandle(PDisk, Edge, ev), 1);
+        }
+
+        template<typename TEvent>
+        TAutoPtr<TEventHandle<TEvent>> Wait() {
+            return Env.WaitForEdgeActorEvent<TEvent>(Edge, false);
+        }
+
+        std::pair<TChunkIdx, ui64> Reserve() {
+            Send(new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
+            auto res = Wait<NPDisk::TEvChunkReserveResult>();
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->ChunkIds.size(), 1);
+            const ui64 nonce = res->Get()->ChunkNonces.empty() ? 0 : res->Get()->ChunkNonces.front();
+            return {res->Get()->ChunkIds.front(), nonce};
+        }
+
+        ui32 GetFreeChunks() {
+            Send(new NPDisk::TEvCheckSpace(Owner, OwnerRound));
+            return Wait<NPDisk::TEvCheckSpaceResult>()->Get()->FreeChunks;
+        }
+    };
+
+    Y_UNIT_TEST(PlainMockHasNoFormatContext) {
+        TMockOwner mock(false);
+        UNIT_ASSERT(!mock.FormatContext);
+        UNIT_ASSERT_VALUES_EQUAL(mock.AppendBlockSize, 4096);
+        const auto [chunkIdx, nonce] = mock.Reserve();
+        UNIT_ASSERT(chunkIdx);
+        UNIT_ASSERT_VALUES_EQUAL(nonce, 0); // no nonces for plain data chunks
+    }
+
+    Y_UNIT_TEST(PreformattedSectorsAndRawSectorsRead) {
+        TMockOwner mock(true);
+        UNIT_ASSERT(mock.FormatContext);
+        const auto& format = *mock.FormatContext;
+        const ui32 payloadSize = format.GetSectorPayloadSize();
+        const ui32 sectorSize = format.GetSectorSize();
+        UNIT_ASSERT_VALUES_EQUAL(mock.AppendBlockSize, payloadSize);
+        const auto reserved = mock.Reserve(); // not a structured binding: the lambdas below capture these
+        const TChunkIdx chunkIdx = reserved.first;
+        const ui64 chunkNonce = reserved.second;
+        UNIT_ASSERT(chunkNonce);
+
+        // two sectors at sector 3, the second one half full
+        const ui32 firstSector = 3;
+        const TString payload = TString::Join(TString(payloadSize, 'a'), TString(payloadSize / 2, 'b'));
+        auto sealed = [&](ui64 firstSectorNonce) {
+            TRcBuf buf = TRcBuf::UninitializedPageAligned(2 * sectorSize);
+            NPDisk::TFormatContext::TSealer sealer(mock.FormatContext, chunkIdx, chunkNonce, {});
+            ui8 *data = reinterpret_cast<ui8*>(buf.GetDataMut());
+            sealer.Seal(data, payload.data(), payloadSize, firstSector);
+            sealer.Seal(data + sectorSize, payload.data() + payloadSize, payloadSize / 2, firstSector + 1);
+            auto ev = std::make_unique<NPDisk::TEvChunkWrite>(mock.Owner, mock.OwnerRound, chunkIdx,
+                firstSector * payloadSize, new NPDisk::TEvChunkWrite::TRopeAlignedParts(TRope(std::move(buf)),
+                2 * sectorSize), nullptr, true, 0);
+            ev->PreformattedSectors = true;
+            ev->FirstSectorNonce = firstSectorNonce;
+            return ev.release();
+        };
+
+        mock.Send(sealed(chunkNonce + firstSector + 1));
+        UNIT_ASSERT_VALUES_EQUAL(mock.Wait<NPDisk::TEvChunkWriteResult>()->Get()->Status, NKikimrProto::ERROR);
+        mock.Send(sealed(chunkNonce + firstSector));
+        UNIT_ASSERT_VALUES_EQUAL(mock.Wait<NPDisk::TEvChunkWriteResult>()->Get()->Status, NKikimrProto::OK);
+
+        // an ordinary read gets the payload
+        const ui32 offset = firstSector * payloadSize + 100;
+        const ui32 size = payloadSize + 50;
+        mock.Send(new NPDisk::TEvChunkRead(mock.Owner, mock.OwnerRound, chunkIdx, offset, size, 0, nullptr));
+        {
+            auto res = mock.Wait<NPDisk::TEvChunkReadResult>();
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT(!res->Get()->RawSectors);
+            UNIT_ASSERT(res->Get()->Data.IsReadable());
+            const TRcBuf data = res->Get()->Data.ToString();
+            UNIT_ASSERT_VALUES_EQUAL(TString(data.data(), data.size()), payload.substr(100, size));
+        }
+
+        // a raw read gets the whole sectors, which open to the same payload; a sector never written does not open
+        auto readRaw = [&](ui32 from, ui32 len) {
+            auto ev = std::make_unique<NPDisk::TEvChunkRead>(mock.Owner, mock.OwnerRound, chunkIdx, from, len, 0,
+                nullptr);
+            ev->RawSectors = true;
+            mock.Send(ev.release());
+            auto res = mock.Wait<NPDisk::TEvChunkReadResult>();
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT(res->Get()->RawSectors);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->ChunkNonce, chunkNonce);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Offset, from / payloadSize * sectorSize);
+            return res;
+        };
+        {
+            auto res = readRaw(offset, size);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Data.Size(), 2 * sectorSize);
+            ui8 *raw = res->Get()->Data.RawDataPtr(0, 2 * sectorSize);
+            TString opened = TString::Uninitialized(2 * payloadSize);
+            NPDisk::TFormatContext::TOpener opener(mock.FormatContext, chunkIdx, chunkNonce, {});
+            for (ui32 i = 0; i < 2; ++i) {
+                UNIT_ASSERT(opener.Open(reinterpret_cast<ui8*>(opened.Detach()) + i * payloadSize, raw + i * sectorSize,
+                    firstSector + i, 0, payloadSize));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(opened.substr(0, payload.size()), payload);
+            UNIT_ASSERT_VALUES_EQUAL(opened.substr(payload.size()), TString(2 * payloadSize - payload.size(), '\0'));
+        }
+        {
+            auto res = readRaw(10 * payloadSize, payloadSize);
+            TString opened = TString::Uninitialized(payloadSize);
+            NPDisk::TFormatContext::TOpener opener(mock.FormatContext, chunkIdx, chunkNonce, {});
+            UNIT_ASSERT(!opener.Open(reinterpret_cast<ui8*>(opened.Detach()),
+                res->Get()->Data.RawDataPtr(0, sectorSize), 10, 0, payloadSize));
+        }
+
+        // the owner learns the nonces of its chunks again after a restart
+        mock.Send(new NPDisk::TEvLog(mock.Owner, mock.OwnerRound, 0, NPDisk::TCommitRecord{.CommitChunks = {chunkIdx}},
+            TRcBuf(TString("x")), TLsnSeg(1, 1), nullptr));
+        UNIT_ASSERT_VALUES_EQUAL(mock.Wait<NPDisk::TEvLogResult>()->Get()->Status, NKikimrProto::OK);
+        mock.Send(new NPDisk::TEvYardInit(mock.OwnerRound + 1, TVDiskID(TGroupId::FromValue(1), 1, 0, 0, 0),
+            TMockOwner::Guid, mock.Edge));
+        auto init = mock.Wait<NPDisk::TEvYardInitResult>();
+        UNIT_ASSERT_VALUES_EQUAL(init->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT(init->Get()->OwnedChunks == TVector<TChunkIdx>{chunkIdx});
+        UNIT_ASSERT(init->Get()->OwnedChunkNonces == TVector<ui64>{chunkNonce});
+    }
+
+    Y_UNIT_TEST(ChunkLockAndUnlock) {
+        TMockOwner mock(false);
+        const ui32 freeChunks = mock.GetFreeChunks();
+        mock.Send(new NPDisk::TEvChunkLock(NPDisk::TEvChunkLock::LOG, 3, NKikimrBlobStorage::TPDiskSpaceColor::GREEN));
+        {
+            auto res = mock.Wait<NPDisk::TEvChunkLockResult>();
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->LockedChunks.size(), 3);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(mock.GetFreeChunks(), freeChunks - 3);
+        mock.Send(new NPDisk::TEvChunkUnlock(NPDisk::TEvChunkLock::LOG));
+        {
+            auto res = mock.Wait<NPDisk::TEvChunkUnlockResult>();
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->UnlockedChunks, 3);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(mock.GetFreeChunks(), freeChunks);
+    }
+
+    Y_UNIT_TEST(AskForCutLog) {
+        TMockOwner mock(false);
+        mock.Send(new NPDisk::TEvLog(mock.Owner, mock.OwnerRound, 0, TRcBuf(TString("x")), TLsnSeg(5, 5), nullptr));
+        UNIT_ASSERT_VALUES_EQUAL(mock.Wait<NPDisk::TEvLogResult>()->Get()->Status, NKikimrProto::OK);
+        mock.Send(new NPDisk::TEvAskForCutLog(mock.Owner, mock.OwnerRound));
+        auto cut = mock.Wait<NPDisk::TEvCutLog>();
+        UNIT_ASSERT_VALUES_EQUAL(cut->Get()->Owner, mock.Owner);
+        UNIT_ASSERT_VALUES_EQUAL(cut->Get()->FreeUpToLsn, 6);
+    }
+
+    Y_UNIT_TEST(ChangeExpectedSlotCount) {
+        TMockOwner mock(false);
+        mock.Send(new NPDisk::TEvChangeExpectedSlotCount(8, 2));
+        UNIT_ASSERT_VALUES_EQUAL(mock.Wait<NPDisk::TEvChangeExpectedSlotCountResult>()->Get()->Status,
+            NKikimrProto::OK);
+        mock.Send(new NPDisk::TEvCheckSpace(mock.Owner, mock.OwnerRound));
+        UNIT_ASSERT_VALUES_EQUAL(mock.Wait<NPDisk::TEvCheckSpaceResult>()->Get()->ExpectedSlotCount, 8);
     }
 }

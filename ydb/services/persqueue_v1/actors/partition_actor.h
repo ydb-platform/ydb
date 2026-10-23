@@ -171,6 +171,7 @@ private:
     void SendPublishDirectRead(const ui64 directReadId, const TActorContext& ctx);
     void SendForgetDirectRead(const ui64 directReadId, const TActorContext& ctx);
     void SendPartitionReady(const TActorContext& ctx);
+    void SendReadWindowExhausted(const TActorContext& ctx);
     void CommitDone(ui64 cookie, const TActorContext& ctx);
     NKikimrClient::TPersQueueRequest MakeCreateSessionRequest(bool initial, ui64 cookie) const;
     NKikimrClient::TPersQueueRequest MakeReadRequest(ui64 readOffset, ui64 lastOffset, ui64 maxCount,
@@ -291,11 +292,13 @@ private:
 
     bool FirstRead;
     bool ReadingFinishedSent;
+    bool WindowExhaustedSent;
 
     std::unordered_set<ui64> NotCommitedToFinishParents;
 
     inline bool IsPartitionDataReady() const;
     inline bool IsNeedMorePartitionData() const;
+    inline bool IsPartitionExhausted() const;
 };
 
 

@@ -2017,6 +2017,92 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     Y_UNIT_TEST(OrderOfChildrenPartitions_Topic) {
         OrderOfChildrenPartitions(SdkVersion::Topic);
     }
+
+    // Interaction between max_offset and auto-partitioning (split). A single
+    // partition (id 0) holds N messages at offsets 0..N-1 (EndOffset = N) and
+    // is split into children {1, 2}. max_offset is INCLUSIVE: the window is exhausted when
+    // ReadOffset >= max_offset + 1. After reading all N messages ReadOffset = N,
+    // so the window is exhausted iff max_offset <= N-1.
+    //   - max_offset < N  (e.g. N-1): window exhausted -> the client is done
+    //     with the partition, so it gets TEndPartitionSessionEvent WITHOUT
+    //     child ids (no handoff into the children).
+    //   - max_offset == N: window NOT exhausted (ReadOffset = N < N+1) -> the
+    //     client is still reading, so it gets TEndPartitionSessionEvent WITH
+    //     child ids {1, 2} and the session continues into the children.
+    //     (max_offset > N behaves identically: no data exists beyond offset
+    //     N-1, so the window can never be exhausted — covered by the == N
+    //     boundary case.)
+    void MaxOffsetAndSplit(SdkVersion sdk, ui64 maxOffset, bool expectChildIds) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+
+        TTopicClient client = setup.MakeClient();
+
+        const ui64 N = 5;
+        auto writeSession = CreateWriteSession(client, "producer-1");
+        for (ui64 i = 1; i <= N; ++i) {
+            UNIT_ASSERT(writeSession->Write(Msg(TStringBuilder() << "message_" << i, i)));
+        }
+
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk,
+            .ExpectedMessagesCount = Max<size_t>(), .AutoCommit = false, .AutoPartitioningSupport = true,
+            .MaxOffset = maxOffset });
+        readSession->Run();
+
+        // Split partition 0 into children {1, 2}.
+        ui64 txId = 1006;
+        SplitPartition(setup, ++txId, 0, "a");
+
+        // Wait for the partition session to end (either by max_offset exhaustion
+        // or by the split). The ended event carries the child ids only when the
+        // window was not exhausted. When the window IS exhausted the client is
+        // done with the partition and never starts reading the children, so we
+        // must not wait for them.
+        if (expectChildIds) {
+            readSession->WaitAndAssertPartitions({0, 1, 2}, "All partitions (parent + children) are seen");
+        } else {
+            readSession->WaitAndAssertPartitions({0}, "Only the parent partition is seen (window exhausted)");
+        }
+        readSession->Run();
+
+        // Give the ended event time to arrive.
+        Sleep(TDuration::Seconds(2));
+
+        auto events = readSession->GetEndedPartitionEvents();
+        UNIT_ASSERT_VALUES_EQUAL_C(events.size(), 1u, "Exactly one partition session must end");
+        const auto& ev = events.front();
+        UNIT_ASSERT_VALUES_EQUAL_C(std::vector<ui32>{}, ev.AdjacentPartitionIds, "No adjacent partitions after split");
+        if (expectChildIds) {
+            UNIT_ASSERT_VALUES_EQUAL_C(std::vector<ui32>({1, 2}), ev.ChildPartitionIds,
+                "Window not exhausted: the client must receive child ids for the split handoff");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(std::vector<ui32>{}, ev.ChildPartitionIds,
+                "Window exhausted: the client is done, no child handoff expected");
+        }
+
+        // GetEndedPartitionEvents() returns a cumulative (non-draining) snapshot
+        // of all ended-partition events seen so far. Sample it again after a
+        // delay: the size must not grow, i.e. no further events arrive on the
+        // pipe after the ended event. (Waiting on partitions here would hang:
+        // after the ended event the session no longer reads any partition.)
+        Sleep(TDuration::Seconds(2));
+        auto eventsAfter = readSession->GetEndedPartitionEvents();
+        UNIT_ASSERT_VALUES_EQUAL_C(eventsAfter.size(), events.size(),
+            "No new partition-session events must arrive after the ended event");
+
+        writeSession->Close(TDuration::Seconds(1));
+        readSession->Close();
+    }
+
+    Y_UNIT_TEST(MaxOffsetAndSplit_WindowExhaustedBeforeSplit) {
+        // max_offset = N-1 < N: window exhausted before the split -> no child ids.
+        MaxOffsetAndSplit(SdkVersion::Topic, /*maxOffset=*/4, /*expectChildIds=*/false);
+    }
+
+    Y_UNIT_TEST(MaxOffsetAndSplit_WindowNotExhaustedAtSplitPoint) {
+        // max_offset = N == N: window NOT exhausted (ReadOffset = N < N+1) -> child ids.
+        MaxOffsetAndSplit(SdkVersion::Topic, /*maxOffset=*/5, /*expectChildIds=*/true);
+    }
 }
 
 } // namespace NKikimr

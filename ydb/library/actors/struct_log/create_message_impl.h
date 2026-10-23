@@ -189,20 +189,20 @@ public:
         if constexpr (std::is_function<T>::value) {
             static_assert(false, "It is not allowed to pass function into structured message");
         } else if constexpr (std::is_same<T, TStructuredMessage>::value) {
-            TCreateMessageGuard::GetBuildMessage().AppendSubMessage({std::move(name)}, value);
+            TCreateMessageGuard::GetBuildMessage().AppendSubMessage({std::forward<K>(name)}, value);
         } else if constexpr (THasToStructuredMessageMethod<std::decay_t<T>>::value) {
             auto message = value.ToStructuredMessage();
-            TCreateMessageGuard::GetBuildMessage().AppendSubMessage({std::move(name)}, message);
+            TCreateMessageGuard::GetBuildMessage().AppendSubMessage({std::forward<K>(name)}, message);
         } else if constexpr (std::is_same<T, TMaybe<TStructuredMessage>>::value) {
             if (value.Defined()) {
-                TCreateMessageGuard::GetBuildMessage().AppendSubMessage({std::move(name)}, value.GetRef());
+                TCreateMessageGuard::GetBuildMessage().AppendSubMessage({std::forward<K>(name)}, value.GetRef());
             }
         } else if constexpr (TNativeTypeSupport<T>::value) {
-            TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, value);
+            TCreateMessageGuard::GetBuildMessage().AppendValue({std::forward<K>(name)}, value);
         } else {
             TStringStream stream;
             OutputParam(stream, value);
-            TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, stream.Str());
+            TCreateMessageGuard::GetBuildMessage().AppendValue({std::forward<K>(name)}, stream.Str());
         }
     }
 

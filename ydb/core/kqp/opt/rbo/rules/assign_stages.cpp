@@ -249,7 +249,8 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
         if (CanEliminateAggregateShuffle(*aggregate, ctx)) {
             props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TMapConnection>(outputIndex));
         } else if (!aggregate->GetKeyColumns().Items().empty()) {
-            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TShuffleConnection>(aggregate->GetKeyColumns(), outputIndex));
+            props.StageGraph.Connect(inputStageId, newStageId,
+                                     MakeIntrusive<TShuffleConnection>(GetAggregateInputShuffle(*aggregate), outputIndex));
         } else {
             props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
         }

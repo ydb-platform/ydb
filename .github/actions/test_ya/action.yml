@@ -34,6 +34,10 @@ inputs:
   put_build_results_to_cache:
     required: false
     default: "true"
+  use_remote_cache:
+    type: boolean
+    default: true
+    description: "read from and optionally write to the Bazel remote cache"
   bazel_remote_uri:
     required: false
     description: "bazel-remote endpoint"
@@ -333,6 +337,10 @@ runs:
           params+=(${{ inputs.additional_ya_make_args }})
         fi
 
+        if [ "${{ inputs.use_remote_cache }}" != "true" ]; then
+          params+=(--no-bazel-remote-store)
+        fi
+
         params+=(
           --stat -DCONSISTENT_DEBUG --no-dir-outputs
           --test-failure-code 0 --build-all
@@ -421,12 +429,12 @@ runs:
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
         echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
 
-        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
+        if [ "${{ inputs.use_remote_cache }}" = "true" ] && [ -n "${{ inputs.bazel_remote_uri }}" ]; then
           params+=(--bazel-remote-store)
           params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
         fi
 
-        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+        if [ "${{ inputs.use_remote_cache }}" = "true" ] && [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
           params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
           params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
           params+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)

@@ -246,6 +246,34 @@ Y_UNIT_TEST_SUITE(TScheme) {
             UNIT_ASSERT(false);
         }
     }
+
+    Y_UNIT_TEST(MalformedFamilySettings)
+    {
+        using namespace NTable::NPage;
+
+        // Values out of the enum range must not be truncated to valid ones
+        auto apply = [](auto&& malform) {
+            TScheme scheme;
+            TSchemeModifier(scheme).Apply(*TModel().Build().Flush());
+
+            TAlter alter;
+            alter.SetFamily(TModel::TableId, TModel::GroupId1, ECache::None, ECodec::Plain);
+            alter.SetFamilyCacheMode(TModel::TableId, TModel::GroupId1, ECacheMode::Regular);
+            auto changes = alter.Flush();
+            for (size_t i = 0; i < changes->DeltaSize(); ++i) {
+                malform(*changes->MutableDelta(i));
+            }
+            TSchemeModifier(scheme).Apply(*changes);
+        };
+
+        apply([](auto&) { });
+        UNIT_ASSERT_EXCEPTION_CONTAINS(apply([](auto& delta) { delta.SetCodec(256); }),
+            yexception, "Invalid page encoding code value 256");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(apply([](auto& delta) { delta.SetCache(256); }),
+            yexception, "Invalid pages cache policy value 256");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(apply([](auto& delta) { delta.SetCacheMode(65536); }),
+            yexception, "Invalid cache mode value 65536");
+    }
 }
 
 namespace {
@@ -336,6 +364,40 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
             TieringPolicyToProto(policy, proto);
             UNIT_ASSERT(TieringPolicyFromProto(proto) == policy);
         }
+    }
+
+    Y_UNIT_TEST(PolicyProtoReplace) {
+        // Serialization replaces the previous content of the proto
+        NTabletFlatScheme::TTieringPolicySettings proto;
+        TieringPolicyToProto(RelativePolicy(), proto);
+        TieringPolicyToProto(RelativePolicy(), proto);
+        UNIT_ASSERT(TieringPolicyFromProto(proto) == RelativePolicy());
+
+        TieringPolicyToProto(AbsolutePolicy(), proto);
+        UNIT_ASSERT(TieringPolicyFromProto(proto) == AbsolutePolicy());
+    }
+
+    Y_UNIT_TEST(MalformedTierSettings) {
+        // Values out of the enum range must not be truncated to valid ones
+        auto apply = [](auto&& malform) {
+            TScheme scheme = Apply(BuildTiered());
+
+            TAlter alter;
+            alter.SetTier(TableId, HddTier, ColdRoom, ECodec::Plain, ECache::None, ECacheMode::Regular);
+            auto changes = alter.Flush();
+            UNIT_ASSERT_VALUES_EQUAL(changes->DeltaSize(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(changes->GetDelta(0).SetTiersSize(), 1u);
+            malform(*changes->MutableDelta(0)->MutableSetTiers(0));
+            TSchemeModifier(scheme).Apply(*changes);
+        };
+
+        apply([](auto&) { });
+        UNIT_ASSERT_EXCEPTION_CONTAINS(apply([](auto& tier) { tier.SetCodec(256); }),
+            yexception, "Invalid page encoding code value 256");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(apply([](auto& tier) { tier.SetCache(256); }),
+            yexception, "Invalid pages cache policy value 256");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(apply([](auto& tier) { tier.SetCacheMode(65536); }),
+            yexception, "Invalid cache mode value 65536");
     }
 
     Y_UNIT_TEST(TiersAndPolicy) {

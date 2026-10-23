@@ -76,6 +76,7 @@ namespace NTable {
         bool operator==(const TTieringPolicy&) const = default;
     };
 
+    // Replaces the whole content of the proto with the policy
     void TieringPolicyToProto(const TTieringPolicy& policy, NTabletFlatScheme::TTieringPolicySettings& proto);
     TTieringPolicy TieringPolicyFromProto(const NTabletFlatScheme::TTieringPolicySettings& proto);
 

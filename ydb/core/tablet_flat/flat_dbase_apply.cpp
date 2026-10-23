@@ -58,19 +58,33 @@ namespace {
         return false;
     }
 
-    // Validates page settings of a family or a tier
-    void ValidatePageSettings(NPage::ECodec codec, NPage::ECache cache, NPage::ECacheMode cacheMode) {
-        Y_ENSURE(IsValid(codec), "Invalid page encoding code value");
-        Y_ENSURE(IsValid(cache), "Invalid pages cache policy value");
-        Y_ENSURE(IsValid(cacheMode), "Invalid cache mode value");
+    // Page settings of a family or a tier are checked before narrowing a proto value to the enum,
+    // so that an out of range value is not truncated to a valid one
+    template <typename TEnum>
+    TEnum PageSettingFromProto(ui32 value, TStringBuf error) {
+        const TEnum result = static_cast<TEnum>(value);
+        Y_ENSURE(static_cast<ui32>(result) == value && IsValid(result), error << " " << value);
+        return result;
+    }
+
+    NPage::ECodec CodecFromProto(ui32 value) {
+        return PageSettingFromProto<NPage::ECodec>(value, "Invalid page encoding code value");
+    }
+
+    NPage::ECache CacheFromProto(ui32 value) {
+        return PageSettingFromProto<NPage::ECache>(value, "Invalid pages cache policy value");
+    }
+
+    NPage::ECacheMode CacheModeFromProto(ui32 value) {
+        return PageSettingFromProto<NPage::ECacheMode>(value, "Invalid cache mode value");
     }
 
     TScheme::TTier TierFromProto(const NTabletFlatScheme::TTierSettings& proto) {
         TScheme::TTier tier;
         tier.Room = proto.GetRoomId();
-        tier.Codec = NPage::ECodec(proto.GetCodec());
-        tier.Cache = NPage::ECache(proto.GetCache());
-        tier.CacheMode = NPage::ECacheMode(proto.GetCacheMode());
+        tier.Codec = CodecFromProto(proto.GetCodec());
+        tier.Cache = CacheFromProto(proto.GetCache());
+        tier.CacheMode = CacheModeFromProto(proto.GetCacheMode());
         return tier;
     }
 
@@ -95,8 +109,7 @@ namespace {
             Y_ENSURE(tierId != TTierPredicate::DefaultTierId && tierId != Max<ui32>(), "Invalid tier id " << tierId);
             Y_ENSURE(tableInfo.Rooms.contains(tierProto.GetRoomId()),
                 "Room " << tierProto.GetRoomId() << " of tier " << tierId << " does not exist");
-            const auto tier = TierFromProto(tierProto);
-            ValidatePageSettings(tier.Codec, tier.Cache, tier.CacheMode);
+            TierFromProto(tierProto); // validates page settings
             tiers.insert(tierId);
         }
 
@@ -192,18 +205,17 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         }
         auto &family = tableInfo.Families[delta.GetFamilyId()];
 
-        auto codec = delta.HasCodec() ? ECodec(delta.GetCodec()) :family.Codec;
+        auto codec = delta.HasCodec() ? CodecFromProto(delta.GetCodec()) : family.Codec;
 
         // FIXME: for now these changes will affect old parts on boot only (see RequestInMemPagesForPartStore)
         bool ever = delta.HasInMemory() && delta.GetInMemory();
         auto cache = ever ? ECache::Ever : family.Cache;
 
-        cache = delta.HasCache() ? ECache(delta.GetCache()) : cache;
+        cache = delta.HasCache() ? CacheFromProto(delta.GetCache()) : cache;
         ui32 small = delta.HasSmall() ? delta.GetSmall() : family.Small;
         ui32 large = delta.HasLarge() ? delta.GetLarge() : family.Large;
 
-        auto cacheMode = delta.HasCacheMode() ? ECacheMode(delta.GetCacheMode()) : family.CacheMode;
-        ValidatePageSettings(codec, cache, cacheMode);
+        auto cacheMode = delta.HasCacheMode() ? CacheModeFromProto(delta.GetCacheMode()) : family.CacheMode;
         if (family.CacheMode != cacheMode) {
             ChangeTableSetting(table, tableInfo.PendingCacheModeChange, true);
         }

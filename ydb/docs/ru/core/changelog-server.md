@@ -352,6 +352,7 @@
 * [Реализовано](https://github.com/ydb-platform/ydb/pull/12567) сохранение оптимистичных блокировок в памяти при плавном перезапуске даташардов, что должно уменьшить число ошибок ABORTED из-за потери блокировок при балансировке таблиц между узлами.
 * [Реализована](https://github.com/ydb-platform/ydb/pull/12689) отмена волатильных транзакций со статусом ABORTED при плавном перезапуске даташардов.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/6342) возможность удалить `NOT NULL`-ограничения на столбец в таблице с помощью запроса `ALTER TABLE ... ALTER COLUMN ... DROP NOT NULL`.
+* Добавлена поддержка значений по умолчанию при [ADD COLUMN](./yql/reference/syntax/alter_table/columns.md?version=v25.1) в `ALTER TABLE` (`DEFAULT`). Включается установкой флага `enable_add_colums_with_defaults` в конфигурации кластера.
 * [Добавлено](https://github.com/ydb-platform/ydb/pull/9168) ограничение в 100 000 на число одновременных запросов на создание сессий в сервисе координации.
 * [Увеличено](https://github.com/ydb-platform/ydb/pull/14219) максимальное [число столбцов в первичном ключе](./concepts/limits-ydb.md?version=v25.1#schema-object) с 20 до 30.
 * Улучшена диагностика и интроспекция ошибок, связанных с памятью ([#10419](https://github.com/ydb-platform/ydb/pull/10419), [#11968](https://github.com/ydb-platform/ydb/pull/11968)).

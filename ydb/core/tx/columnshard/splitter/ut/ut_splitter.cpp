@@ -288,8 +288,8 @@ Y_UNIT_TEST_SUITE(Splitter) {
 
     NKikimr::NOlap::TSimpleColumnInfo MakeUtf8ColumnInfo() {
         const auto field = std::make_shared<arrow::Field>("message", arrow::utf8(), true);
-        return NKikimr::NOlap::TSimpleColumnInfo(
-            1, field, NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(), false, false, true, nullptr, std::nullopt);
+        return NKikimr::NOlap::TSimpleColumnInfo(1, field, NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(), false,
+            false, true, nullptr, std::nullopt, NKikimr::NScheme::TTypeInfo(NKikimr::NScheme::NTypeIds::Utf8));
     }
 
     std::shared_ptr<NKikimr::NOlap::NChunks::TChunkPreparation> MakeDictionaryChunk(

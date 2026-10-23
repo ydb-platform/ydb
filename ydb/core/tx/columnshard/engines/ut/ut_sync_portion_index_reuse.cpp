@@ -181,7 +181,8 @@ i32 GetMaxIndexValue(const ISnapshotSchema::TPtr& schema, const TString& indexDa
     const auto maxMeta =
         std::static_pointer_cast<NIndexes::NMax::TIndexMeta>(schema->GetIndexInfo().GetIndexVerified(MaxIndexId).GetObjectPtr());
     const auto dataType = schema->GetFieldByColumnIdOptional(ValueColumnId)->type();
-    const auto scalar = maxMeta->GetMaxScalarVerified({ indexData }, dataType);
+    const auto scalar =
+        maxMeta->GetMaxScalarVerified({ indexData }, dataType, schema->GetIndexInfo().GetColumnFeaturesVerified(ValueColumnId).GetTypeInfo());
     return std::static_pointer_cast<arrow::Int32Scalar>(scalar)->value;
 }
 

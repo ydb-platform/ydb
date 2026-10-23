@@ -94,8 +94,14 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
                 auto conclusion = Context.GetActualSchema()->BuildDefaultBatch(Context.GetActualSchema()->GetIndexInfo().ArrowSchema(), 1, true);
                 AFL_VERIFY(!conclusion.IsFail())("error", conclusion.GetErrorMessage());
                 auto batchDefault = conclusion.DetachResult();
+                std::vector<NScheme::TTypeInfo> defaultTypes;
+                defaultTypes.reserve(batchDefault->num_columns());
+                const auto& indexInfo = Context.GetActualSchema()->GetIndexInfo();
+                for (const auto& field : batchDefault->schema()->fields()) {
+                    defaultTypes.emplace_back(indexInfo.GetColumnFeaturesVerified(indexInfo.GetColumnIdVerified(field->name())).GetTypeInfo());
+                }
                 NArrow::NMerger::TSortableBatchPosition pos(
-                    batchDefault, 0, batchDefault->schema()->field_names(), batchDefault->schema()->field_names(), false);
+                    batchDefault, 0, batchDefault->schema()->field_names(), batchDefault->schema()->field_names(), false, defaultTypes);
                 merger = std::make_shared<TUpdateMerger>(
                     batch, Context.GetActualSchema(), insertionConclusion.IsSuccess() ? "" : insertionConclusion.GetErrorMessage(), pos);
                 break;

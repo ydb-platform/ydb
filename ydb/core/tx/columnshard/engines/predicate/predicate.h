@@ -17,8 +17,8 @@ private:
     EOperation Operation{ EOperation::Unspecified };
 
 public:
-    static NArrow::NMerger::TSortableBatchPosition CutNulls(
-        const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 rowIdx, const std::shared_ptr<arrow::Schema>& pkSchema);
+    static NArrow::NMerger::TSortableBatchPosition CutNulls(const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 rowIdx,
+        const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<NScheme::TTypeInfo>& logicalTypes);
 
     NArrow::NMerger::TSortableBatchPosition Batch;
     bool IsEqualSchema(const std::shared_ptr<arrow::Schema>& schema) const;

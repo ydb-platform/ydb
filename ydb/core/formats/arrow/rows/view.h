@@ -1,6 +1,8 @@
 #pragma once
 #include "view_v0.h"
 
+#include <ydb/core/scheme_types/scheme_type_info.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/conclusion/result.h>
@@ -23,7 +25,7 @@ public:
         : Data(data) {
     }
 
-    TSimpleRow Build(const std::shared_ptr<arrow::Schema>& schema) const;
+    TSimpleRow Build(const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes) const;
     ui64 GetMemorySize() const {
         return Data.capacity();
     }
@@ -39,6 +41,7 @@ class TSimpleRow {
 private:
     YDB_READONLY_DEF(TString, Data);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
+    YDB_READONLY_DEF(std::vector<NScheme::TTypeInfo>, LogicalTypes);
 
 public:
     TSimpleRowContent GetContent() const {
@@ -46,7 +49,7 @@ public:
     }
 
     ui32 GetMemorySize() const {
-        return Data.capacity();
+        return Data.capacity() + LogicalTypes.capacity() * sizeof(NScheme::TTypeInfo);
     }
 
     ui32 GetDataSize() const {
@@ -55,8 +58,10 @@ public:
 
     NMerger::TSortableBatchPosition BuildSortablePosition(const bool reverse = false) const;
 
-    TSimpleRow(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 recordIndex) {
+    TSimpleRow(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 recordIndex, const std::vector<NScheme::TTypeInfo>& logicalTypes)
+        : LogicalTypes(logicalTypes) {
         AFL_VERIFY(batch);
+        AFL_VERIFY(logicalTypes.size() == (size_t)batch->num_columns());
         Schema = batch->schema();
         Data = TSimpleRowViewV0::BuildString(batch, recordIndex);
         AFL_VERIFY_DEBUG(TSimpleRowViewV0(Data).DoValidate(Schema));
@@ -101,9 +106,11 @@ public:
         return *result;
     }
 
-    TSimpleRow(const TString& data, const std::shared_ptr<arrow::Schema>& schema)
+    TSimpleRow(const TString& data, const std::shared_ptr<arrow::Schema>& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes)
         : Data(data)
-        , Schema(schema) {
+        , Schema(schema)
+        , LogicalTypes(logicalTypes) {
+        AFL_VERIFY(logicalTypes.size() == (size_t)schema->num_fields());
         AFL_VERIFY_DEBUG(TSimpleRowViewV0(Data).DoValidate(Schema));
     }
 
@@ -119,21 +126,27 @@ public:
     bool operator==(const TSimpleRow& item) const;
 };
 
-// does not own: valid while the bytes and the schema it points to live
+// Does not own: the bytes, schema, and logical types must outlive this view.
 class TSimpleRowRef {
 private:
     TSimpleRowViewV0 Row;
     const arrow::Schema& Schema;
+    const std::vector<NScheme::TTypeInfo>& LogicalTypes;
 
 public:
-    TSimpleRowRef(const TSimpleRowViewV0 row, const arrow::Schema& schema)
+    TSimpleRowRef(const TSimpleRowViewV0 row, const arrow::Schema& schema, const std::vector<NScheme::TTypeInfo>& logicalTypes)
         : Row(row)
-        , Schema(schema) {
+        , Schema(schema)
+        , LogicalTypes(logicalTypes) {
+        AFL_VERIFY(logicalTypes.size() == (size_t)schema.num_fields());
     }
+
+    TSimpleRowRef(TSimpleRowViewV0, const arrow::Schema&, const std::vector<NScheme::TTypeInfo>&&) = delete;
 
     std::partial_ordering operator<=>(const TSimpleRowRef& item) const {
         AFL_VERIFY_DEBUG(Schema.Equals(item.Schema));
-        return Row.Compare(item.Row, Schema).GetResult();
+        AFL_VERIFY_DEBUG(LogicalTypes == item.LogicalTypes);
+        return Row.Compare(item.Row, Schema, LogicalTypes).GetResult();
     }
 
     bool operator==(const TSimpleRowRef& item) const {

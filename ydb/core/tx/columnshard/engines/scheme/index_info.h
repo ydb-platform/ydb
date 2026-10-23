@@ -98,6 +98,7 @@ private:
     std::vector<ui32> ColumnIdxSortedByName;
     std::vector<ui32> PKColumnIds;
     std::vector<TNameTypeInfo> PKColumns;
+    std::vector<NScheme::TTypeInfo> PrimaryKeyTypes;
     THashMap<ui32, TNameTypeInfo> Columns;
 
     std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;
@@ -464,6 +465,10 @@ public:
     /// Traditional Primary Key (includes uniqueness, search and sorting logic)
     const std::vector<TNameTypeInfo>& GetPrimaryKeyColumns() const {
         return PKColumns;
+    }
+
+    const std::vector<NScheme::TTypeInfo>& GetPrimaryKeyTypes() const {
+        return PrimaryKeyTypes;
     }
 
     const THashMap<ui32, TNameTypeInfo>& GetColumns() const {

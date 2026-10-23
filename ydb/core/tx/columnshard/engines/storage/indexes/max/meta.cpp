@@ -12,7 +12,7 @@
 namespace NKikimr::NOlap::NIndexes::NMax {
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
-    TChunkedBatchReader& reader, const ui32 recordsCount) const {
+    TChunkedBatchReader& reader, const ui32 recordsCount, const NScheme::TTypeInfo& logicalType) const {
     std::shared_ptr<arrow::Scalar> result;
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     {
@@ -20,7 +20,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         for (reader.Start(); cReader.IsCorrect(); cReader.ReadNextChunk()) {
             auto currentScalar = cReader.GetCurrentChunk()->GetMaxScalar();
             AFL_VERIFY(currentScalar);
-            if (!result || NArrow::ScalarCompare(*result, *currentScalar) == -1) {
+            if (!result || NArrow::ScalarCompare(*result, *currentScalar, logicalType) == -1) {
                 result = currentScalar;
             }
         }
@@ -30,12 +30,12 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
 }
 
 std::shared_ptr<arrow::Scalar> TIndexMeta::GetMaxScalarVerified(
-    const std::vector<TString>& data, const std::shared_ptr<arrow::DataType>& dataType) const {
+    const std::vector<TString>& data, const std::shared_ptr<arrow::DataType>& dataType, const NScheme::TTypeInfo& logicalType) const {
     AFL_VERIFY(data.size());
     std::shared_ptr<arrow::Scalar> result;
     for (auto&& d : data) {
         std::shared_ptr<arrow::Scalar> current = NArrow::NScalar::TSerializer::DeserializeFromStringWithPayload(d, dataType).DetachResult();
-        if (!result || NArrow::ScalarCompare(*result, *current) == -1) {
+        if (!result || NArrow::ScalarCompare(*result, *current, logicalType) == -1) {
             result = current;
         }
     }
@@ -43,7 +43,8 @@ std::shared_ptr<arrow::Scalar> TIndexMeta::GetMaxScalarVerified(
 }
 
 NJson::TJsonValue TIndexMeta::DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const {
-    auto scalar = GetMaxScalarVerified({ data }, indexInfo.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type());
+    const auto& column = indexInfo.GetColumnFeaturesVerified(GetColumnId());
+    auto scalar = GetMaxScalarVerified({ data }, column.GetArrowField()->type(), column.GetTypeInfo());
     return scalar->ToString();
 }
 

@@ -187,7 +187,8 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
             NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
             const std::vector<TString> data = accessor.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
             if (!data.empty()) {
-                max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
+                const auto& column = portionSchema->GetIndexInfo().GetColumnFeaturesVerified(*TieringColumnId);
+                max = indexMeta->GetMaxScalarVerified(data, column.GetArrowField()->type(), column.GetTypeInfo());
             }
         }
         if (max == nullptr) {

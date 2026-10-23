@@ -117,11 +117,13 @@ public:
 
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;
 
-    static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchLines(const std::shared_ptr<arrow::RecordBatch>& batch);
+    static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchLines(
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<NScheme::TTypeInfo>& logicalTypes);
 
-    static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchFull(
-        const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema);
-    static std::shared_ptr<TPKRangesFilter> BuildFromString(const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema);
+    static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchFull(const std::shared_ptr<arrow::RecordBatch>& batch,
+        const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<NScheme::TTypeInfo>& logicalTypes);
+    static std::shared_ptr<TPKRangesFilter> BuildFromString(
+        const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<NScheme::TTypeInfo>& logicalTypes);
 
     static TPKRangesFilter BuildEmpty() {
         return TPKRangesFilter();
@@ -492,15 +494,16 @@ class TRangesBuilder {
         {
         }
 
-        std::optional<TPredicate> BuildPredicate(
-            const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<arrow::RecordBatch>& batch) const {
+        std::optional<TPredicate> BuildPredicate(const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<arrow::RecordBatch>& batch,
+            const std::vector<NScheme::TTypeInfo>& logicalTypes) const {
             if (!NumColumns) {
                 return std::nullopt;
             }
             auto columns = schema->field_names();
             AFL_VERIFY(columns.size() >= NumColumns)("schema", columns.size())("predicate", NumColumns);
             columns.resize(NumColumns);
-            return TPredicate(Operation, NArrow::NMerger::TSortableBatchPosition(batch, RowIndex, columns, {}, false));
+            return TPredicate(Operation, NArrow::NMerger::TSortableBatchPosition(batch, RowIndex, columns, {}, false,
+                                             std::vector<NScheme::TTypeInfo>(logicalTypes.begin(), logicalTypes.begin() + NumColumns)));
         }
     };
 

@@ -394,14 +394,14 @@ bool IsGoodScalar(const std::shared_ptr<arrow::Scalar>& x) {
     });
 }
 
-bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const NScheme::TTypeInfo& logicalType) {
     Y_ABORT_UNLESS(x);
     Y_ABORT_UNLESS(y);
-    return ScalarLess(*x, *y);
+    return ScalarLess(*x, *y, logicalType);
 }
 
-bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) {
-    return ScalarCompare(x, y) < 0;
+bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y, const NScheme::TTypeInfo& logicalType) {
+    return ScalarCompare(x, y, logicalType) < 0;
 }
 
 bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 position, const std::shared_ptr<arrow::Scalar>& s) {
@@ -435,7 +435,7 @@ bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 posit
     });
 }
 
-int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
+int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y, const NScheme::TTypeInfo& logicalType) {
     Y_VERIFY_S(x.type->Equals(y.type), x.type->ToString() + " vs " + y.type->ToString());
 
     return SwitchTypeImpl<int, 0>(x.type->id(), [&](const auto& type) {
@@ -449,13 +449,12 @@ int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
             const auto& yval = static_cast<const TScalar&>(y).value;
             Y_ABORT_UNLESS(xval);
             Y_ABORT_UNLESS(yval);
-            cmp = TComparator::CompareValueNotNull(
-                arrow::util::string_view(reinterpret_cast<const char*>(xval->data()), xval->size()),
-                arrow::util::string_view(reinterpret_cast<const char*>(yval->data()), yval->size()));
+            cmp = TComparator::CompareValueNotNull(arrow::util::string_view(reinterpret_cast<const char*>(xval->data()), xval->size()),
+                arrow::util::string_view(reinterpret_cast<const char*>(yval->data()), yval->size()), logicalType);
         } else if constexpr (std::is_arithmetic_v<TValue>) {
             const auto& xval = static_cast<const TScalar&>(x).value;
             const auto& yval = static_cast<const TScalar&>(y).value;
-            cmp = TComparator::CompareValueNotNull(xval, yval);
+            cmp = TComparator::CompareValueNotNull(xval, yval, logicalType);
         } else {
             Y_ABORT_UNLESS(false);   // TODO: non primitive types
         }
@@ -464,13 +463,14 @@ int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
     });
 }
 
-int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const NScheme::TTypeInfo& logicalType) {
     Y_ABORT_UNLESS(x);
     Y_ABORT_UNLESS(y);
-    return ScalarCompare(*x, *y);
+    return ScalarCompare(*x, *y, logicalType);
 }
 
-int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+int ScalarCompareNullable(
+    const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y, const NScheme::TTypeInfo& logicalType) {
     if (!x && !!y) {
         return -1;
     }
@@ -480,7 +480,7 @@ int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::sh
     if (!x && !y) {
         return 0;
     }
-    return ScalarCompare(*x, *y);
+    return ScalarCompare(*x, *y, logicalType);
 }
 
 bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shared_ptr<arrow::Array>& rhs) {

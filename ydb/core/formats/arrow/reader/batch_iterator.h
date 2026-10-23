@@ -77,11 +77,11 @@ public:
 
     template <class TDataContainer>
     TBatchIterator(std::shared_ptr<TDataContainer> batch, std::shared_ptr<NArrow::TColumnFilter> filter, const arrow::Schema& keySchema,
-        const arrow::Schema& dataSchema, const std::vector<std::string>& versionColumnNames, const ui64 sourceId,
-        const TIterationOrder& order = TIterationOrder::Forward(0))
+        const arrow::Schema& dataSchema, const std::vector<std::string>& versionColumnNames, const ui64 sourceId, const TIterationOrder& order,
+        const std::vector<NScheme::TTypeInfo>& logicalTypes, const std::vector<NScheme::TTypeInfo>& versionTypes)
         : ControlPointFlag(false)
-        , KeyColumns(batch, 0, keySchema.field_names(), dataSchema.field_names(), order.GetIsReversed())
-        , VersionColumns(batch, 0, versionColumnNames, {}, false)
+        , KeyColumns(batch, 0, keySchema.field_names(), dataSchema.field_names(), order.GetIsReversed(), logicalTypes)
+        , VersionColumns(batch, 0, versionColumnNames, {}, false, versionTypes)
         , RecordsCount(batch->num_rows())
         , ReverseSortKff(order.GetIsReversed() ? -1 : 1)
         , SourceId(sourceId)

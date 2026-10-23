@@ -8,6 +8,10 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <util/generic/string.h>
 
+namespace NKikimr::NScheme {
+class TTypeInfo;
+}
+
 namespace NKikimr::NArrow {
 
 class TSimpleRowViewV0 {
@@ -161,8 +165,8 @@ public:
 
     [[nodiscard]] TConclusionStatus AddToBuilders(
         const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const std::shared_ptr<arrow::Schema>& schema) const;
-    [[nodiscard]] TConclusion<std::partial_ordering> Compare(
-        const TSimpleRowViewV0& item, const arrow::Schema& schema, const std::optional<ui32> columnsCount = {}) const;
+    [[nodiscard]] TConclusion<std::partial_ordering> Compare(const TSimpleRowViewV0& item, const arrow::Schema& schema,
+        const std::vector<NScheme::TTypeInfo>& logicalTypes, const std::optional<ui32> columnsCount = {}) const;
     [[nodiscard]] TConclusion<TString> DebugString(const std::shared_ptr<arrow::Schema>& schema) const;
 
     template <class T>

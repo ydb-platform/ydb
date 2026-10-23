@@ -179,9 +179,10 @@ namespace NKikimr {
             return TBridgePileId::FromPileIndex(0);
         }
 
-        void MakeInlinePileGroupState(NKikimrBridge::TGroupState *state, TGroupId groupId, ui32 generation) {
+        void MakeInlinePileGroupState(NKikimrBridge::TGroupState *state, TGroupId groupId, ui32 generation,
+                TBridgePileId bridgePileId) {
             state->Clear();
-            auto *pile = state->AddPile(); // index of the pile in the state is its pile id, see GetInlinePileId()
+            auto *pile = AddGroupPile(state, bridgePileId); // index of the pile in the state is its pile id
             groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
             pile->SetGroupGeneration(generation);
             pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
@@ -202,6 +203,19 @@ namespace NKikimr {
             TBridgePileId::FromPileIndex(0).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPrimaryPile);
             TBridgePileId::FromPileIndex(0).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPromotedPile);
             return state;
+        }
+
+        TBridgePileId GetAuthorityPileId(const NKikimrBridge::TGroupState& state) {
+            if (const auto pileId = TBridgePileId::FromProto(&state, &NKikimrBridge::TGroupState::GetAuthorityPileId)) {
+                return pileId;
+            }
+            TBridgePileId res;
+            size_t numParts = 0;
+            ForEachGroupPile(state, [&](TBridgePileId pileId, const NKikimrBridge::TGroupState::TPile&) {
+                res = pileId;
+                ++numParts;
+            });
+            return numParts == 1 ? res : TBridgePileId();
         }
 
         NKikimrBridge::TGroupState::TPile *AddGroupPile(NKikimrBridge::TGroupState *state, TBridgePileId bridgePileId) {

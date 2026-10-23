@@ -759,6 +759,24 @@ message TKqpSchemeOperation {
     }
 }
 
+// A checked subset of a vector SQL transaction. The ordinary stages remain in
+// the cached query for runtime fallback and compatibility with older executers.
+message TKqpPhyVectorExecution {
+    uint32 SearchStageIndex = 1;
+    TKqpPhyValue Target = 2;
+    // Member of a (possibly optional) scalar-subquery result parameter.
+    optional uint32 TargetMemberIndex = 3;
+    bool TargetStructOptional = 4;
+    message TProjection {
+        uint32 SourceIndex = 1;
+        // Only total Int64/Uint64 -> String casts are recognized.
+        bool IntegerToString = 2;
+        bool SignedInteger = 3;
+    }
+    // In canonical result struct order, independent of SQL column hints.
+    repeated TProjection Projection = 5;
+}
+
 message TKqpPhyTx {
     enum EType {
         TYPE_UNSPECIFIED = 0;
@@ -781,6 +799,7 @@ message TKqpPhyTx {
     bool EnableShuffleElimination = 10;
     uint32 DqChannelVersion = 11;
     bool HasPqSources = 12; // at least one stage has an external source of type "PqSource"
+    optional TKqpPhyVectorExecution VectorExecution = 13;
 }
 
 message TKqpTableInfo {

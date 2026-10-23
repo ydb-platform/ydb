@@ -41,7 +41,8 @@ namespace NKikimr {
             const NWilson::TTraceId& traceId,
             TIntrusivePtr<TKqpCounters> counters,
             TIntrusivePtr<TVectorIndexLevelsCache> levelsCache,
-            TKqpVectorInnerReadFactory innerReadFactory = {});
+            TKqpVectorInnerReadFactory innerReadFactory = {},
+            bool collectCpuTime = false);
 
         void RegisterKqpVectorSearchActor(NYql::NDq::TDqAsyncIoFactory&, TIntrusivePtr<TKqpCounters>,
                                           TIntrusivePtr<TVectorIndexLevelsCache> levelsCache);

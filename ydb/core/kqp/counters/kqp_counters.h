@@ -270,6 +270,10 @@ private:
         THashMap<TKqpTransactionInfo::EKind, TTxByKindCounters>& txCounters);
 
 public:
+    ::NMonitoring::TDynamicCounters::TCounterPtr VectorSpecializedStarted;
+    ::NMonitoring::TDynamicCounters::TCounterPtr VectorSpecializedCompleted;
+    ::NMonitoring::TDynamicCounters::TCounterPtr VectorSpecializedFallback;
+
     explicit TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const TActorContext* ctx = nullptr);
 
     void ReportProxyForwardedRequest(TKqpDbCountersPtr dbCounters);

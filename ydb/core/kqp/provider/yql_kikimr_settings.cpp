@@ -172,6 +172,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, HNSWAdaptiveOneProbeEfSearch).Upper(1000U);
     REGISTER_SETTING(*this, HNSWFuseTopSort);
     REGISTER_SETTING(*this, HNSWReturnScores);
+    REGISTER_SETTING(*this, HNSWSpecializedExecution);
     REGISTER_SETTING(*this, HybridSearchFactor);
     REGISTER_SETTING(*this, HybridSearchK);
     REGISTER_SETTING(*this, DisableCheckpoints);

@@ -1190,11 +1190,9 @@ void TKqpTasksGraph::BuildVectorResolveChannels(const TStageInfo& stageInfo, ui3
         inputStageInfo, outputIndex, enableSpilling, logFunc);
 }
 
-void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo, ui32 outputIndex,
-    const NKqpProto::TKqpPhyCnVectorSearch& vectorSearch, bool enableSpilling, const TChannelLogFunc& logFunc)
+NKikimrTxDataShard::TKqpVectorSearchSettings* TKqpTasksGraph::CreateVectorSearchSettings(
+    const TStageInfo& stageInfo, const NKqpProto::TKqpPhyCnVectorSearch& vectorSearch)
 {
-    YQL_ENSURE(stageInfo.Tasks.size() == inputStageInfo.Tasks.size());
-
     auto* settings = GetMeta().Allocate<NKikimrTxDataShard::TKqpVectorSearchSettings>();
 
     *settings->MutableIndexSettings() = vectorSearch.GetIndexSettings();
@@ -1312,6 +1310,16 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
             settings->SetPostingEmbeddingColumnId(it->second.Id);
         }
     }
+
+    return settings;
+}
+
+void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo, ui32 outputIndex,
+    const NKqpProto::TKqpPhyCnVectorSearch& vectorSearch, bool enableSpilling, const TChannelLogFunc& logFunc)
+{
+    YQL_ENSURE(stageInfo.Tasks.size() == inputStageInfo.Tasks.size());
+
+    auto* settings = CreateVectorSearchSettings(stageInfo, vectorSearch);
 
     TTransform vectorSearchTransform;
     vectorSearchTransform.Type = "VectorSearchInputTransformer";

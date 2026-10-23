@@ -17,6 +17,7 @@
 #include <util/string/vector.h>
 
 #include <algorithm>
+#include <util/system/hp_timer.h>
 #include <cmath>
 #include <limits>
 
@@ -76,7 +77,7 @@ namespace NKikimr {
                 const NWilson::TTraceId& traceId,
                 TIntrusivePtr<TKqpCounters> counters,
                 TIntrusivePtr<TVectorIndexLevelsCache> levelsCache,
-                TKqpVectorInnerReadFactory innerReadFactory)
+                TKqpVectorInnerReadFactory innerReadFactory, bool collectCpuTime)
                 : Settings(std::move(settings))
                 , TopK(Settings.GetTopK())
                 , LevelTop(std::max<ui32>(1, Settings.GetLevelTop()))
@@ -97,6 +98,7 @@ namespace NKikimr {
                 , TraceId(traceId)
                 , LevelsCache(std::move(levelsCache))
                 , InnerReadFactory(std::move(innerReadFactory))
+                , CollectCpuTime(collectCpuTime)
                 , MySpan(TWilsonKqp::VectorResolveActor, NWilson::TTraceId(traceId), "VectorSearchActor")
             {
                 IngressStats.Level = statsLevel;
@@ -197,13 +199,19 @@ namespace NKikimr {
             }
 
             STFUNC(StateFunc) {
+                const auto started = CollectCpuTime ? GetCycleCountFast() : 0;
                 try {
                     switch (ev->GetTypeRewrite()) {
                         hFunc(TEvNewAsyncInputDataArrived, HandleRead);
                         hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
                     }
+                } catch (const TMemoryLimitExceededException&) {
+                    RuntimeError("Vector search memory limit exceeded", NYql::NDqProto::StatusIds::PRECONDITION_FAILED);
                 } catch (const yexception& e) {
                     RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+                }
+                if (CollectCpuTime) {
+                    CpuTimeUs += NHPTimer::GetSeconds(GetCycleCountFast() - started) * 1'000'000;
                 }
             }
 
@@ -1289,6 +1297,9 @@ namespace NKikimr {
                 if (!last) {
                     return;
                 }
+                if (CollectCpuTime) {
+                    stats->SetCpuTimeUs(stats->GetCpuTimeUs() + static_cast<ui64>(CpuTimeUs));
+                }
                 // Report rows/bytes actually read from each index impl table (level,
                 // posting) and the main table, as accumulated from the inner read actors.
                 for (const auto& [path, readStats] : ReadStatsByTable) {
@@ -1419,6 +1430,8 @@ namespace NKikimr {
             TIntrusivePtr<TVectorIndexLevelsCache> LevelsCache;
             // Launches every inner read; defaults to CreateKqpReadActor, substituted by tests.
             TKqpVectorInnerReadFactory InnerReadFactory;
+            const bool CollectCpuTime;
+            double CpuTimeUs = 0;
             TPathId LevelTablePathId;
             bool UseLevelCache = false;
             // Per-parent accumulators for the round's cache-miss parents; their read rows
@@ -1469,23 +1482,28 @@ namespace NKikimr {
             const NWilson::TTraceId& traceId,
             TIntrusivePtr<TKqpCounters> counters,
             TIntrusivePtr<TVectorIndexLevelsCache> levelsCache,
-            TKqpVectorInnerReadFactory innerReadFactory)
+            TKqpVectorInnerReadFactory innerReadFactory, bool collectCpuTime)
         {
             auto actor = new TKqpVectorSearchActor(std::move(settings), inputIndex, input, statsLevel, txId,
                                                    taskId, computeActorId, typeEnv, holderFactory, alloc, traceId, counters, std::move(levelsCache),
-                                                   std::move(innerReadFactory));
+                                                   std::move(innerReadFactory), collectCpuTime);
             return {actor, actor};
         }
 
         void RegisterKqpVectorSearchActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters,
                                           TIntrusivePtr<TVectorIndexLevelsCache> levelsCache) {
-            factory.RegisterInputTransform<NKikimrTxDataShard::TKqpVectorSearchSettings>(
-                "VectorSearchInputTransformer", [counters, levelsCache](NKikimrTxDataShard::TKqpVectorSearchSettings&& settings,
-                                                                        NYql::NDq::TDqAsyncIoFactory::TInputTransformArguments&& args) -> std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> {
+            auto creator = [counters, levelsCache](bool collectCpuTime) {
+                return [counters, levelsCache, collectCpuTime](NKikimrTxDataShard::TKqpVectorSearchSettings&& settings,
+                    NYql::NDq::TDqAsyncIoFactory::TInputTransformArguments&& args) -> std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> {
                     return CreateKqpVectorSearchActor(std::move(settings),
-                                                      args.InputIndex, args.TransformInput, args.StatsLevel, args.TxId, args.TaskId, args.ComputeActorId,
-                                                      args.TypeEnv, args.HolderFactory, args.Alloc, args.TraceId, counters, levelsCache);
-                });
+                        args.InputIndex, args.TransformInput, args.StatsLevel, args.TxId, args.TaskId, args.ComputeActorId,
+                        args.TypeEnv, args.HolderFactory, args.Alloc, args.TraceId, counters, levelsCache, {}, collectCpuTime);
+                };
+            };
+            factory.RegisterInputTransform<NKikimrTxDataShard::TKqpVectorSearchSettings>(
+                "VectorSearchInputTransformer", creator(false));
+            factory.RegisterInputTransform<NKikimrTxDataShard::TKqpVectorSearchSettings>(
+                "VectorSearchExecution", creator(true));
         }
 
     } // namespace NKqp

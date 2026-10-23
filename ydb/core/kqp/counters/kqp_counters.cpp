@@ -761,6 +761,10 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
         }
     }
 
+    VectorSpecializedStarted = KqpGroup->GetCounter("Vector/SpecializedStarted", true);
+    VectorSpecializedCompleted = KqpGroup->GetCounter("Vector/SpecializedCompleted", true);
+    VectorSpecializedFallback = KqpGroup->GetCounter("Vector/SpecializedFallback", true);
+
     /* Lease updates counters */
     LeaseUpdateLatency = KqpGroup->GetHistogram(
         "LeaseUpdatesLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));

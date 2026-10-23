@@ -1,4 +1,5 @@
 #include "kqp_executer.h"
+#include "kqp_vector_executer.h"
 #include "kqp_executer_impl.h"
 #include "kqp_planner.h"
 #include "kqp_pq_topic_resolver.h"
@@ -428,7 +429,9 @@ private:
 
     TString CurrentStateFuncName() const override {
         const auto& func = CurrentStateFunc();
-        if (func == &TThis::ExecuteState) {
+        if (func == &TThis::VectorExecuteState) {
+            return "VectorExecuteState";
+        } else if (func == &TThis::ExecuteState) {
             return "ExecuteState";
         } else if (func == &TThis::WaitSnapshotState) {
             return "WaitSnapshotState";
@@ -661,6 +664,21 @@ private:
 
     void Execute() {
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
+
+        if (!IsSchedulable()) {
+            VectorExecution = TKqpVectorExecution::Prepare(Request, TasksGraph, GetUserRequestContext(), bool(BufferActorId));
+        }
+        if (VectorExecution) {
+            // Keep the same snapshot decision as the generic vector transform,
+            // whose inner reads discover the affected posting shards at runtime.
+            TasksGraph.GetMeta().UnknownAffectedShardCount = true;
+            ImmediateTx = GetSnapshot().IsValid();
+            OnShardsResolve();
+            return;
+        }
+        if (Request.Transactions.size() == 1 && Request.Transactions.front().Body->GetVectorExecution()) {
+            Counters->Counters->VectorSpecializedFallback->Inc();
+        }
 
         // TODO: move graph restoration outside of executer
         const bool graphRestored = RestoreTasksGraph(RescalingChangedTaskCount);
@@ -950,6 +968,8 @@ private:
                 default:
                     UnexpectedEvent("WaitSnapshotState", ev->GetTypeRewrite());
             }
+        } catch (const TMemoryLimitExceededException&) {
+            RuntimeError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssues({NYql::TIssue(BuildMemoryLimitExceptionMessage())}));
         } catch (const yexception& e) {
             InternalError(e.what());
         }
@@ -982,11 +1002,81 @@ private:
         ContinueExecute();
     }
 
+    void StartVectorExecution() {
+        ResponseEv->InitTxResult(Request.Transactions.front().Body);
+        ExecuterStateSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::DataExecuterRunTasks,
+            ExecuterSpan.GetTraceId(), {
+                .Name = "Vector search",
+                .Phase = "VectorSearch",
+                .Component = "VectorExecution",
+            }, NWilson::EFlags::AUTO_END);
+        if (auto failure = VectorExecution->Start(SelfId(), *AsyncIoFactory, GetSnapshot(),
+                Request.QuerySpanId, ExecuterStateSpan.GetTraceId())) {
+            ReplyErrorAndDie(Ydb::StatusIds::OVERLOADED, NYql::TIssue(*failure));
+            return;
+        }
+        Counters->Counters->VectorSpecializedStarted->Inc();
+        Become(&TKqpDataExecuter::VectorExecuteState);
+        PollVectorExecution();
+    }
+
+    STATEFN(VectorExecuteState) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived, HandleVectorInput);
+                hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, HandleVectorError);
+                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                IgnoreFunc(TEvKqpExecuter::TEvStreamDataAck);
+                default:
+                    UnexpectedEvent("VectorExecuteState", ev->GetTypeRewrite());
+            }
+        } catch (const TMemoryLimitExceededException&) {
+            RuntimeError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssues({NYql::TIssue("Vector execution memory limit exceeded")}));
+        } catch (const yexception& e) {
+            InternalError(e.what());
+        }
+        ReportEventElapsedTime();
+    }
+
+    void HandleVectorInput(IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::TPtr&) {
+        PollVectorExecution();
+    }
+
+    void HandleVectorError(IDqComputeActorAsyncInput::TEvAsyncInputError::TPtr& ev) {
+        RuntimeError(NYql::NDq::DqStatusToYdbStatus(ev->Get()->FatalCode), ev->Get()->Issues);
+    }
+
+    void PollVectorExecution() {
+        NYql::NDq::TDqSerializedBatch result;
+        if (!VectorExecution->Poll(result)) {
+            return;
+        }
+        Stats->ResultRows += result.RowCount();
+        Stats->ResultBytes += result.Size();
+        auto& txResult = ResponseEv->TxResults.front();
+        if (TasksGraph.GetMeta().StreamResult && txResult.IsStream && txResult.QueryResultIndex.Defined()
+                && !Request.IsTrailingResultsAllowed()) {
+            TVector<NYql::NDq::TDqSerializedBatch> batches;
+            batches.emplace_back(std::move(result));
+            SendStreamData(txResult, std::move(batches), Max<ui32>(), 1, true);
+        } else {
+            ResponseEv->TakeResult(0, std::move(result));
+            txResult.HasTrailingResult = TasksGraph.GetMeta().StreamResult && txResult.IsStream
+                && txResult.QueryResultIndex.Defined();
+        }
+        Counters->Counters->VectorSpecializedCompleted->Inc();
+        Finalize();
+    }
+
     using TDatashardTxs = THashMap<ui64, NKikimrTxDataShard::TKqpTransaction*>;
     using TEvWriteTxs = THashMap<ui64, NKikimrDataEvents::TEvWrite*>;
     using TTopicTabletTxs = NTopic::TTopicOperationTransactions;
 
     void ContinueExecute() {
+        if (VectorExecution) {
+            StartVectorExecution();
+            return;
+        }
         OnEmptyResult();
 
         StartStreamingQueriesActors();
@@ -1093,6 +1183,12 @@ private:
     }
 
     void PassAway() override {
+        // Stop same-mailbox reads before the base releases transaction holders
+        // and the cached descriptor referenced by the specialized coordinator.
+        if (VectorExecution) {
+            VectorExecution->FinishStats(*Stats);
+        }
+        VectorExecution.reset();
         auto totalTime = TInstant::Now() - StartTime;
         Counters->Counters->DataTxTotalTimeHistogram->Collect(totalTime.MilliSeconds());
 
@@ -1535,6 +1631,7 @@ private:
     const bool ReadOnlyTx;
     bool ImmediateTx = false;
 
+    std::unique_ptr<TKqpVectorExecution> VectorExecution;
     TInstant FirstPrepareReply;
     TInstant LastPrepareReply;
 

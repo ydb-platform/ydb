@@ -3185,6 +3185,9 @@ public:
             if (const auto& consistency = settings.Settings.GlobalConsistency) {
                 consistency->Serialize(*config.MutableConsistencySettings()->MutableGlobal());
             }
+            if (const auto& initialScan = settings.Settings.InitialScan) {
+                config.SetInitialScan(*initialScan);
+            }
 
             if (params.GetDatabase().empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));

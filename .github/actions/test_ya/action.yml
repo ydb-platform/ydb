@@ -943,7 +943,10 @@ runs:
       shell: bash
       run: |
         set +e
+        set -x
         if [ -n "${TMP_DIR:-}" ]; then
           rm -rf "$TMP_DIR"
         fi
+        # mktemp / graph_compare leftovers; does not match /tmp/systemd-private-*
+        rm -rf /tmp/tmp*
         df -h / || true

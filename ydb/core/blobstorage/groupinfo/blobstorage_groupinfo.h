@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/blobstorage/crypto/crypto.h>
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/blobstorage_common.h>
@@ -338,12 +339,16 @@ public:
     // DYNAMIC INFO
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     struct TDynamicInfo {
+        using EFailRealmState = NKikimrBlobStorage::TGroupInfo::TFailRealm::EState;
+
         // blobstorage group id
         const TGroupId GroupId;
         // blobstorage group generation
         const ui32 GroupGeneration;
         // map to quickly get Service id (TActorId) from its order number inside TTopology
         TVector<TActorId> ServiceIdForOrderNumber;
+        // Indexed by physical failrealm. Kept with this generation, not in cached Topology.
+        TVector<EFailRealmState> FailRealmStates;
 
         TDynamicInfo(TGroupId groupId, ui32 groupGen);
         TDynamicInfo(const TDynamicInfo&) = default;
@@ -359,6 +364,9 @@ public:
     const IQuorumChecker& GetQuorumChecker() const;
     const TTopology &GetTopology() const { return *Topology; }
     const TDynamicInfo &GetDynamicInfo() const { return Dynamic; }
+    TDynamicInfo::EFailRealmState GetFailRealmState(ui32 failRealmIdx) const {
+        return Dynamic.FailRealmStates.at(failRealmIdx);
+    }
     EEncryptionMode GetEncryptionMode() const { return EncryptionMode; }
     ELifeCyclePhase GetLifeCyclePhase() const { return LifeCyclePhase; }
     ui64 GetGroupKeyNonce() const { return GroupKeyNonce; }

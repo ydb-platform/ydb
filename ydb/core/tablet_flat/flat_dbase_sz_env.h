@@ -33,6 +33,8 @@ namespace NTable {
 
         const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
+            Y_ENSURE(!NPage::IsIndexPage(location.Type), "Index page " << location << " is requested as a data page");
+
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
             auto *collection = partStore->PageCollections.at(part->DataSlot(groupId)).Get();
 

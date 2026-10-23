@@ -12,12 +12,6 @@ package NKikimrReplication;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TReplicationDefaults {
-    enum ESourceTopicRetentionPolicy {
-        SOURCE_TOPIC_RETENTION_STANDARD = 0;
-        SOURCE_TOPIC_RETENTION_ACKNOWLEDGED = 1;
-    }
-    optional ESourceTopicRetentionPolicy SourceTopicRetentionPolicy = 5 [default = SOURCE_TOPIC_RETENTION_STANDARD];
-
     message TSchemeOperationLimits {
         optional uint32 InflightCreateStreamLimit = 1 [default = 1];
         optional uint32 InflightDropStreamLimit = 2 [default = 1];

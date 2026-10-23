@@ -426,8 +426,13 @@ void TUserTable::AlterSchema() {
     schema.SetPartitionRangeEnd(Range.To.GetBuffer());
     schema.SetPartitionRangeEndIsInclusive(Range.ToInclusive);
 
-    ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
-    IncrementalBackupConfig.Serialize(*schema.MutableIncrementalBackupConfig());
+    // These settings share IncomingStreamConfig: writing the backup member
+    // after replication would erase the persisted replication mode.
+    if (IsReplicated()) {
+        ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
+    } else {
+        IncrementalBackupConfig.Serialize(*schema.MutableIncrementalBackupConfig());
+    }
 
     // Keep the persisted schema in sync with the parsed level, so that a restart
     // does not resurrect an override, which an alter has just dropped

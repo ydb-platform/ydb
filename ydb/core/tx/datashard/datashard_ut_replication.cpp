@@ -2,6 +2,7 @@
 #include "const.h"
 #include "datashard_active_transaction.h"
 #include "datashard_ut_common_kqp.h"
+#include "datashard_user_table.h"
 
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -16,6 +17,68 @@ using namespace NSchemeShard;
 using namespace Tests;
 
 Y_UNIT_TEST_SUITE(DataShardReplication) {
+
+    Y_UNIT_TEST(AlterSchemaPreservesIncomingStreamConfig) {
+        enum class EIncomingStream { Replication, IncrementalRestore, Detached };
+        for (const auto mode : {EIncomingStream::Replication, EIncomingStream::IncrementalRestore, EIncomingStream::Detached}) {
+            NKikimrSchemeOp::TTableDescription initial;
+            initial.SetName("replica");
+            initial.SetPath("/Root/replica");
+            initial.SetTableSchemaVersion(1);
+            auto* key = initial.AddColumns();
+            key->SetName("key");
+            key->SetId(1);
+            key->SetTypeId(NScheme::NTypeIds::Uint32);
+            initial.AddKeyColumnIds(1);
+            if (mode == EIncomingStream::IncrementalRestore) {
+                auto* config = initial.MutableIncrementalBackupConfig();
+                config->SetMode(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP);
+                config->SetConsistency(NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_STRONG);
+            } else {
+                auto* config = initial.MutableReplicationConfig();
+                config->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+                config->SetConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL);
+            }
+            TUserTable original(100, initial, 0);
+            NKikimrSchemeOp::TTableDescription delta;
+            delta.SetName("replica");
+            delta.SetTableSchemaVersion(2);
+            auto* extra = delta.AddColumns();
+            extra->SetName("extra");
+            extra->SetId(2);
+            extra->SetTypeId(NScheme::NTypeIds::Uint64);
+            if (mode == EIncomingStream::IncrementalRestore) {
+                *delta.MutableIncrementalBackupConfig() = initial.GetIncrementalBackupConfig();
+            } else {
+                *delta.MutableReplicationConfig() = initial.GetReplicationConfig();
+                if (mode == EIncomingStream::Detached) {
+                    delta.MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+                    delta.MutableReplicationConfig()->ClearConsistencyLevel();
+                }
+            }
+            TUserTable altered(original, delta);
+            // ApplyAlter publishes the new schema version after constructing
+            // the updated table; reproduce that step before the restart.
+            altered.SetTableSchemaVersion(delta.GetTableSchemaVersion());
+            NKikimrSchemeOp::TTableDescription persisted;
+            altered.GetSchema(persisted);
+            TUserTable recovered(100, persisted, 0);
+            UNIT_ASSERT_VALUES_EQUAL(recovered.GetTableSchemaVersion(), 2);
+            UNIT_ASSERT(recovered.Columns.contains(1));
+            UNIT_ASSERT(recovered.Columns.contains(2));
+            UNIT_ASSERT_VALUES_EQUAL_C(recovered.IsReplicated(), mode == EIncomingStream::Replication, static_cast<ui32>(mode));
+            UNIT_ASSERT_VALUES_EQUAL_C(recovered.IsIncrementalRestore(), mode == EIncomingStream::IncrementalRestore, static_cast<ui32>(mode));
+            if (mode == EIncomingStream::Replication) {
+                UNIT_ASSERT(persisted.HasReplicationConfig());
+                UNIT_ASSERT(!persisted.HasIncrementalBackupConfig());
+                UNIT_ASSERT(recovered.ReplicationConfig.HasGlobalConsistency());
+            } else if (mode == EIncomingStream::IncrementalRestore) {
+                UNIT_ASSERT(!persisted.HasReplicationConfig());
+                UNIT_ASSERT(persisted.HasIncrementalBackupConfig());
+                UNIT_ASSERT(recovered.IncrementalBackupConfig.HasStrongConsistency());
+            }
+        }
+    }
 
     Y_UNIT_TEST(SimpleApplyChanges) {
         TPortManager pm;

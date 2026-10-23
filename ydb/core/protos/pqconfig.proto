@@ -267,13 +267,6 @@ message TMirrorPartitionConfig {
 }
 
 message TPartitionConfig {
-    enum ERetentionPolicy {
-        RETENTION_POLICY_STANDARD = 0;
-        RETENTION_POLICY_REPLICATION_ACKNOWLEDGED = 1;
-    }
-    optional ERetentionPolicy RetentionPolicy = 32 [default = RETENTION_POLICY_STANDARD];
-    optional string RetentionConsumer = 33;
-
     optional int32 MaxCountInPartition = 1 [default = 10000000];
     optional int64 MaxSizeInPartition = 2 [default = 1099511627776];
     optional int32 LifetimeSeconds = 3 [default = 604800]; //mandatory, must be set

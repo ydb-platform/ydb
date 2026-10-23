@@ -13,6 +13,7 @@ SRCS(
     blobstorage_events.cpp
     blobstorage_events.h
     blobstorage_host_record.h
+    pdisk_filter.h
     blobstorage_oos_defs.h
     blobstorage_vdiskid.cpp
     blobstorage_vdiskid.h

@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/core/blobstorage/base/pdisk_filter.h>
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/mind/bscontroller/types.h>
@@ -112,7 +113,8 @@ namespace NKikimr::NBsController {
 
         static bool MatchPDiskFilter(
             const NKikimrBlobStorage::TPDiskFilter& filter,
-            const NKikimrBlobStorage::TBaseConfig_TPDisk& pdisk
+            const NKikimrBlobStorage::TBaseConfig_TPDisk& pdisk,
+            const TNodeLocation* location
         ) {
             for (const auto& property : filter.GetProperty()) {
                 switch (property.GetPropertyCase()) {
@@ -136,6 +138,11 @@ namespace NKikimr::NBsController {
                             return false;
                         }
                         break;
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kLocation:
+                        if (!location || !MatchPDiskLocation(*location, property.GetLocation())) {
+                            return false;
+                        }
+                        break;
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
                         return false;
                 }
@@ -146,14 +153,15 @@ namespace NKikimr::NBsController {
 
         static bool MatchStoragePool(
             const NKikimrBlobStorage::TDefineStoragePool& pool,
-            const NKikimrBlobStorage::TBaseConfig_TPDisk& pdisk
+            const NKikimrBlobStorage::TBaseConfig_TPDisk& pdisk,
+            const TNodeLocation* location
         ) {
             if (!pool.HasBoxId() || pool.GetBoxId() != pdisk.GetBoxId()) {
                 return false;
             }
 
             for (const auto& filter : pool.GetPDiskFilter()) {
-                if (MatchPDiskFilter(filter, pdisk)) {
+                if (MatchPDiskFilter(filter, pdisk, location)) {
                     return true;
                 }
             }
@@ -167,6 +175,10 @@ namespace NKikimr::NBsController {
             const TStorageInfo& storageInfo
         ) {
             std::map<TPoolKey, TPoolUsageSummary> poolUsageSummaries;
+            std::unordered_map<ui32, TNodeLocation> nodeLocations;
+            for (const auto& node : config.GetNode()) {
+                nodeLocations.emplace(node.GetNodeId(), TNodeLocation(node.GetLocation()));
+            }
 
             std::unordered_map<ui64, std::vector<const NKikimrBlobStorage::TDefineStoragePool*>> storagePoolsByBox;
             for (const auto& pool : storagePoolsStatus.GetStoragePool()) {
@@ -190,8 +202,10 @@ namespace NKikimr::NBsController {
 
                 const TPDiskUsage& usage = usageIt->second;
 
+                const auto nodeIt = nodeLocations.find(pdisk.GetNodeId());
+                const auto* location = nodeIt != nodeLocations.end() ? &nodeIt->second : nullptr;
                 for (const auto* pool : poolsIt->second) {
-                    if (!MatchStoragePool(*pool, pdisk)) {
+                    if (!MatchStoragePool(*pool, pdisk, location)) {
                         continue;
                     }
 

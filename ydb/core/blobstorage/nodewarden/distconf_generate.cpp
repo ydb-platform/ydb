@@ -1,6 +1,7 @@
 #include "distconf.h"
 #include "distconf_statestorage_config_generator.h"
 
+#include <ydb/core/blobstorage/base/pdisk_filter.h>
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
@@ -187,7 +188,7 @@ namespace NKikimr::NStorage {
 
         THashMap<TPDiskId, TPDiskInfo> pdisks;
 
-        auto checkMatch = [&](NKikimrBlobStorage::EPDiskType type, bool sharedWithOs, bool readCentric, ui64 kind) {
+        auto checkMatch = [&](ui32 nodeId, NKikimrBlobStorage::EPDiskType type, bool sharedWithOs, bool readCentric, ui64 kind) {
             if (type == pdiskType) {
                 return true;
             }
@@ -208,6 +209,14 @@ namespace NKikimr::NStorage {
                         case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKind:
                             pMatch = p.GetKind() == kind;
                             break;
+                        case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kLocation: {
+                            if (!IsValidPDiskFilterLocation(p.GetLocation())) {
+                                throw TExConfigError() << "Location requires current string fields";
+                            }
+                            const auto it = nodeLocations.find(nodeId);
+                            pMatch = it != nodeLocations.end() && MatchPDiskLocation(it->second, p.GetLocation());
+                            break;
+                        }
                         case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
                             throw TExConfigError() << "invalid TPDiskFilter record";
                     }
@@ -244,7 +253,7 @@ namespace NKikimr::NStorage {
             }
 
             for (const auto& pdisk : baseConfig->GetPDisk()) {
-                if (!checkMatch(pdisk.GetType(), pdisk.GetSharedWithOs(), pdisk.GetReadCentric(), pdisk.GetKind())) {
+                if (!checkMatch(pdisk.GetNodeId(), pdisk.GetType(), pdisk.GetSharedWithOs(), pdisk.GetReadCentric(), pdisk.GetKind())) {
                     continue;
                 }
 
@@ -450,7 +459,7 @@ namespace NKikimr::NStorage {
             if (pdiskLocations.contains(std::make_tuple(nodeId, drive.GetPath()))) {
                 return;
             }
-            if (checkMatch(drive.GetType(), drive.GetSharedWithOs(), drive.GetReadCentric(), drive.GetKind())) {
+            if (checkMatch(nodeId, drive.GetType(), drive.GetSharedWithOs(), drive.GetReadCentric(), drive.GetKind())) {
                 const TPDiskId pdiskId(nodeId, ++maxPDiskId[nodeId]);
                 if (const auto [it, inserted] = pdisks.try_emplace(pdiskId); inserted) {
                     auto& r = it->second.Record;

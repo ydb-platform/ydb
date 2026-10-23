@@ -10634,6 +10634,29 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         UNIT_ASSERT_NO_EXCEPTION(Reallocate(s, NodeIds({}), /*applyNodeAllowList=*/ true));
     }
 
+    Y_UNIT_TEST(PDiskLocationFilterRestrictsStaticPlacement) {
+        TSetup s = MakeSetup();
+        for (auto& node : *s.Config.MutableAllNodes()) {
+            if (node.GetNodeId() == 3) {
+                node.MutableLocation()->SetRack("selected-rack");
+            }
+        }
+        auto* settings = s.Config.MutableSelfManagementConfig();
+        settings->MutableGeometry()->CopyFrom(Geometry(1));
+        auto* filter = settings->AddPDiskFilter();
+        filter->AddProperty()->SetType(NKikimrBlobStorage::ROT);
+        filter->AddProperty()->MutableLocation()->SetRack("selected-rack");
+        NStorage::TDistributedConfigKeeper keeper(MakeNodeWardenConfig(s.Config), nullptr, true);
+        THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
+        replacedDisks.emplace(TVDiskIdShort(0, 0, 0), NBsController::TPDiskId());
+        NBsController::TGroupMapper::TForbiddenPDisks forbid;
+        keeper.AllocateStaticGroup(&s.Config, TGroupId::FromValue(0), 2,
+            TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone), settings->GetGeometry(),
+            settings->GetPDiskFilter(), std::nullopt, replacedDisks, forbid,
+            0, &s.BaseConfig, false, true, false, TBridgePileId(), std::nullopt);
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskNode(), 3u);
+    }
+
     // static VDisk placed on the PDisk of BSC takes slot id below the range BSC allocates from, as BSC may allocate the
     // next one of its range there (VSlots being deleted are not even listed in base config); only when static ids have
     // reached that range, the slot ids listed are taken into account

@@ -1,5 +1,7 @@
 #include "base.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
 
 #include <utility>
@@ -29,22 +31,28 @@ namespace NKikimr::NGRpcService {
     }
 
     void IRequestProxyCtx::InitializePathNormalization(
-        std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer)
+        std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer, const TAppData* appData)
     {
-        if (PathNormalizationInitialized_ || !IsPathNormalizationEnabled()) {
+        if (PathNormalizationInitialized_) {
             return;
         }
 
-        const TString method = GetRpcMethodName();
-        if (method.StartsWith("Ydb.PersQueue.V1.") ||
-            method.StartsWith("Ydb.Cms.V1.CmsService/")) {
-            DisablePathNormalization();
-            return;
+        if (IsPathNormalizationEnabled()) {
+            const TString method = GetRpcMethodName();
+            if (method.StartsWith("Ydb.PersQueue.V1.") ||
+                method.StartsWith("Ydb.Cms.V1.CmsService/")) {
+                DisablePathNormalization();
+            } else {
+                SetPathNormalizer(std::move(normalizer));
+            }
         }
 
-        auto database = GetDatabaseName();
-        SetPathNormalizer(std::move(normalizer));
+        auto database = EffectiveDatabaseName_ ? EffectiveDatabaseName_ : GetDatabaseNameFromRequest();
         if (database) {
+            if (!EffectiveDatabaseName_ && appData && appData->FeatureFlags.GetEnableRelativePaths()
+                && appData->DomainsInfo && appData->DomainsInfo->Domain) {
+                database = PrependDomainIfNeeded("/" + appData->DomainsInfo->Domain->Name, *database);
+            }
             database = NormalizePath(*database);
         }
 

@@ -2,6 +2,7 @@
 #include "controller.h"
 #include "dst_alterer.h"
 #include "dst_creator.h"
+#include "dst_remover.h"
 #include "dst_schema_changer.h"
 #include "stream_creator.h"
 #include "stream_remover.h"
@@ -3804,6 +3805,131 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, dstPathId);
+    }
+
+    void CheckCleanupStatus(bool success, bool alter, bool detach = false) {
+        TTestActorRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        const auto parent = runtime.AllocateEdgeActor();
+        const auto allocator = runtime.AllocateEdgeActor();
+        const auto pipeCache = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeTxProxyID(), allocator);
+        const TPathId pathId(1, 2);
+        const TPathId owner(1, 3);
+        const auto actor = runtime.Register(alter
+            ? CreateDstAlterer(parent, pathId.OwnerId, 1, 1,
+                TReplication::ETargetKind::Table, pathId, TReplication::EState::Done, owner)
+            : CreateDstRemover(parent, pathId.OwnerId, {}, 1, 1,
+                TReplication::ETargetKind::Table, pathId, detach ? pathId : TPathId(), owner));
+        NTxProxy::TTxProxyServices services;
+        services.LeaderPipeCache = pipeCache;
+        auto allocate = [&](ui64 txId) {
+            runtime.GrabEdgeEvent<TEvTxUserProxy::TEvAllocateTxId>(allocator);
+            runtime.Send(actor, allocator,
+                new TEvTxUserProxy::TEvAllocateTxIdResult(txId, services, {}));
+            const auto proposal = runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(pipeCache);
+            UNIT_ASSERT_VALUES_EQUAL(proposal->Get()->Ev->Type(),
+                NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType);
+        };
+        allocate(100);
+        runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& runtime,
+                TAutoPtr<IEventHandle>&, TDuration delay, TInstant& deadline) {
+            deadline = runtime.GetCurrentTime() + delay;
+            return false;
+        });
+        const TString error = "AlreadyExists unrelated to replication ownership";
+        runtime.Send(actor, pipeCache,
+            new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(
+                success ? NKikimrScheme::StatusSuccess : NKikimrScheme::StatusAlreadyExists,
+                100, pathId.OwnerId, success ? TString() : error));
+        if (!success && detach) {
+            // An unrelated AlreadyExists must retain the previous retry behavior.
+            const auto scheduled = runtime.CaptureScheduledEvents();
+            UNIT_ASSERT_VALUES_EQUAL(scheduled.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(scheduled.begin()->Event->Type, ui32(TEvents::TSystem::Wakeup));
+            runtime.Send(actor, parent, new TEvents::TEvWakeup());
+            allocate(101);
+            runtime.Send(actor, pipeCache,
+                new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(
+                    NKikimrScheme::StatusSuccess, 101, pathId.OwnerId));
+        }
+        if (alter) {
+            const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvAlterDstResult>(parent);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->IsSuccess(), success);
+            if (!success) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusAlreadyExists);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Error, error);
+            }
+        } else {
+            const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvDropDstResult>(parent);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->IsSuccess(), success || detach);
+            if (!success && !detach) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusAlreadyExists);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Error, error);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DoneCleanupStatus, success) {
+        CheckCleanupStatus(success, true);
+    }
+
+    Y_UNIT_TEST_TWIN(DropCleanupStatus, success) {
+        CheckCleanupStatus(success, false);
+    }
+
+    Y_UNIT_TEST_TWIN(DetachCleanupStatus, success) {
+        CheckCleanupStatus(success, false, true);
+    }
+
+    Y_UNIT_TEST_TWIN(StandbyRejectsDestinationOwnedByAnotherReplication, directory) {
+        TTestEnv env;
+        const auto first = StartPendingAttachment(env);
+        env.SendAsync(first.Info.ControllerId,
+            new TEvPrivate::TEvCreateDstResult(1, first.TargetId, first.DstPathId));
+        DescribeReplication(env, first.Info);
+        if (directory) {
+            env.MkDir("/Root", "source");
+            env.CreateTable("/Root/source", *NTestHelpers::MakeTableDescription(NTestHelpers::TTestTableDescription{
+                .Name = "replica1",
+                .KeyColumns = {"key"},
+                .Columns = {{.Name = "key", .Type = "Uint32"}, {.Name = "value", .Type = "Utf8"}},
+                .ReplicationConfig = Nothing(),
+            }));
+        }
+
+        NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
+            .DiscoveryEndpoint(env.GetEndpoint()).Database(env.GetDatabase()));
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(Sprintf(R"(
+            CREATE ASYNC REPLICATION `second` FOR `%s` AS `%s`
+            WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", TOKEN = "root@builtin", INITIAL_SCAN = FALSE);
+        )", directory ? "/Root/source" : "/Root/table1", directory ? "/Root" : "/Root/replica1",
+            env.GetEndpoint().c_str())).GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        const auto desc = env.GetDescription("/Root/second").GetPathDescription().GetReplicationDescription();
+        TReplicationTestInfo second;
+        second.ControllerId = desc.GetControllerId();
+        second.PathId = env.GetPathId("/Root/second");
+        second.Config = desc.GetConfig();
+        UNIT_ASSERT(second.PathId != first.Info.PathId);
+        UNIT_ASSERT(desc.GetState().HasPaused());
+        env.SendAsync(second.ControllerId, new TEvService::TEvStatus());
+        UNIT_ASSERT(WaitFor([&] { return DescribeReplication(env, second)->Get()->Record.TargetsSize() == 1; }));
+        const auto targetId = DescribeReplication(env, second)->Get()->Record.GetTargets(0).GetId();
+        env.SendAsync(second.ControllerId, new TEvPrivate::TEvCreateStreamResult(1, targetId,
+            NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues())));
+        DescribeReplication(env, second);
+
+        const auto resumed = session.ExecuteSchemeQuery(
+            "ALTER ASYNC REPLICATION `second` SET (STATE = \"STANDBY\");").GetValueSync();
+        UNIT_ASSERT_C(resumed.IsSuccess(), resumed.GetIssues().ToString());
+        UNIT_ASSERT(WaitFor([&] { return DescribeReplication(env, second)->Get()->Record.GetState().HasError(); }));
+        const auto state = DescribeReplication(env, second)->Get()->Record.GetState();
+        UNIT_ASSERT_STRING_CONTAINS(state.DebugString(), "another replication");
+        const auto config = env.GetDescription("/Root/replica1").GetPathDescription().GetTable().GetReplicationConfig();
+        UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config.GetOwner()), first.Info.PathId);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
     }
 
     Y_UNIT_TEST(DoneAfterDestinationNameConflict) {

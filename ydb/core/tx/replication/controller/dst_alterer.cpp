@@ -46,6 +46,9 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         auto& tx = *ev->Record.AddTransaction();
         tx.SetInternal(true);
+        if (ReplicationPathId) {
+            ReplicationPathId.ToProto(tx.MutableExpectedReplicationOwner());
+        }
 
         switch (Kind) {
         case TReplication::ETargetKind::Table:
@@ -92,6 +95,9 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         case NKikimrScheme::StatusResourceExhausted:
             // Concurrent DDL and SchemeShard in-flight limits are temporary.
             return Retry();
+        case NKikimrScheme::StatusSuccess:
+            // SchemeShard completed the conditional cleanup without changes.
+            return Success();
         case NKikimrScheme::StatusPathDoesNotExist:
             // A deleted destination has nothing left to detach.
             return Success();
@@ -205,13 +211,15 @@ public:
             ui64 tid,
             TReplication::ETargetKind kind,
             const TPathId& dstPathId,
-            const TReplication::EState desiredState)
+            const TReplication::EState desiredState,
+            const TPathId& replicationPathId)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , ReplicationId(rid)
         , TargetId(tid)
         , Kind(kind)
         , DstPathId(dstPathId)
+        , ReplicationPathId(replicationPathId)
         , DesiredState(desiredState)
         , LogPrefix(CreateActorLogPrefix("DstAlterer", ReplicationId, TargetId))
     {
@@ -257,6 +265,7 @@ private:
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;
     const TPathId DstPathId;
+    const TPathId ReplicationPathId;
     const TReplication::EState DesiredState;
     NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
@@ -277,13 +286,13 @@ IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorC
         ? target->GetDstPathId()
         : target->GetPendingDstPathId();
     return CreateDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
-        replication->GetId(), target->GetId(), target->GetKind(), dstPathId, replication->GetDesiredState());
+        replication->GetId(), target->GetId(), target->GetKind(), dstPathId, replication->GetDesiredState(), replication->GetPathId());
 }
 
 IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,
-        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId, TReplication::EState desiredState)
+        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId, TReplication::EState desiredState, const TPathId& replicationPathId)
 {
-    return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredState);
+    return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredState, replicationPathId);
 }
 
 }

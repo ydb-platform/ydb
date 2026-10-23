@@ -1,58 +1,29 @@
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/library/testlib/helpers.h>
-
-#include <util/string/hex.h>
 
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TReplicationTests) {
-    static TString DefaultScheme(const TString& name, const TVector<TString>& destinations = {}) {
-        NKikimrSchemeOp::TReplicationDescription description;
-        description.SetName(name);
-        auto* config = description.MutableConfig();
-        auto* credentials = config->MutableSrcConnectionParams()->MutableStaticCredentials();
-        credentials->SetUser("user");
-        credentials->SetPassword("pwd");
-
-        const auto paths = destinations.empty() ? TVector<TString>{"/MyRoot2/" + name} : destinations;
-        for (const auto& path : paths) {
-            auto* target = config->MutableSpecific()->AddTargets();
-            target->SetSrcPath("/MyRoot1/Table");
-            target->SetDstPath(path);
-        }
-
-        return description.DebugString();
-    }
-
-    static TString StateScheme(const TString& name, const TString& state) {
-        return Sprintf(R"(Name: "%s" State { %s {} })", name.c_str(), state.c_str());
-    }
-
-    void SetLegacyReplicationDestination(TTestActorRuntime& runtime,
-            const TString& name, const TString& destination)
-    {
-        const auto path = DescribePath(runtime, "/MyRoot/" + name);
-        const auto pathId = path.GetPathDescription().GetSelf().GetPathId();
-        const auto row = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"((
-            (let key '('('PathId (Uint64 '%lu))))
-            (return (AsList (SetResult 'Replication (SelectRow 'Replications key '('Description)))))
-        ))", pathId));
-
-        NKikimrSchemeOp::TReplicationDescription description;
-        UNIT_ASSERT(description.ParseFromString(row.GetValue().GetStruct(0).GetOptional()
-            .GetOptional().GetStruct(0).GetOptional().GetBytes()));
-        auto* targets = description.MutableConfig()->MutableSpecific();
-        UNIT_ASSERT_VALUES_EQUAL(targets->TargetsSize(), 1);
-        targets->MutableTargets(0)->SetDstPath(destination);
-
-        // Emulate metadata written before CREATE rejected conflicting paths.
-        // The caller reboots SchemeShard to load the modified configuration.
-        LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"((
-            (let key '('('PathId (Uint64 '%lu))))
-            (let row '('('Description (String 'x"%s"))))
-            (return (AsList (UpdateRow 'Replications key row)))
-        ))", pathId, HexEncode(description.SerializeAsString()).c_str()));
+    static TString DefaultScheme(const TString& name) {
+        return Sprintf(R"(
+            Name: "%s"
+            Config {
+              SrcConnectionParams {
+                StaticCredentials {
+                  User: "user"
+                  Password: "pwd"
+                }
+              }
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )", name.c_str());
     }
 
     void SetupLogging(TTestActorRuntimeBase& runtime) {
@@ -102,193 +73,6 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             State { StandBy {} }
         )");
         env.TestWaitNotification(runtime, txId);
-    }
-
-    Y_UNIT_TEST(CreateWithoutInitialScanWithSameDestination) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        ui64 txId = 100;
-
-        const auto scheme = [](const TString& name) {
-            return Sprintf(R"(
-                Name: "%s"
-                Config {
-                    SrcConnectionParams {
-                        StaticCredentials { User: "user" Password: "pwd" }
-                    }
-                    ConsistencySettings { Global {} }
-                    Specific {
-                        Targets {
-                            SrcPath: "/MyRoot/Source"
-                            DstPath: "/MyRoot/Replica"
-                        }
-                    }
-                }
-            )", name.c_str());
-        };
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot", scheme("Replication"));
-        env.TestWaitNotification(runtime, txId);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {
-            NLs::PathExist,
-            NLs::ReplicationState(NKikimrReplication::TReplicationState::kPaused),
-        });
-
-        // KIKIMR-27457: the paused replication must reserve its destination
-        // even though the table has not been restored yet.
-        TestCreateReplication(runtime, ++txId, "/MyRoot", scheme("Replication2"),
-            {NKikimrScheme::StatusPreconditionFailed});
-        env.TestWaitNotification(runtime, txId);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication2"), {
-            NLs::PathNotExist,
-        });
-    }
-
-    Y_UNIT_TEST_TWIN(CreateWithSameDestinationInFlight, initialScan) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        runtime.GetAppData().ReplicationConfig.SetInitialScan(initialScan);
-        ui64 txId = 100;
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication", {"/MyRoot/Replica"}));
-        const auto createTxId = txId;
-        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication2", {"/MyRoot/Replica"}),
-            {{NKikimrScheme::StatusPreconditionFailed, "/MyRoot/Replica"}});
-        env.TestWaitNotification(runtime, createTxId);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication2"), {NLs::PathNotExist});
-    }
-
-    Y_UNIT_TEST(CreateWithSameDestinationAfterRestart) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        ui64 txId = 100;
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication", {"/MyRoot//Replica/"}));
-        env.TestWaitNotification(runtime, txId);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication2", {"/MyRoot/Replica"}),
-            {{NKikimrScheme::StatusPreconditionFailed, "/MyRoot/Replication"}});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication2"), {NLs::PathNotExist});
-    }
-
-    Y_UNIT_TEST(CreateWithDuplicateDestinations) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        ui64 txId = 100;
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot",
-            DefaultScheme("Replication", {"/MyRoot/Replica", "/MyRoot//Replica/"}),
-            {{NKikimrScheme::StatusInvalidParameter, "Duplicate replication destination path '/MyRoot/Replica'"}});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
-    }
-
-    Y_UNIT_TEST(CreateWithOverlappingDestinations) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        ui64 txId = 100;
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot",
-            DefaultScheme("Replication", {"/MyRoot/Other", "/MyRoot/Replica"}));
-        env.TestWaitNotification(runtime, txId);
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot",
-            DefaultScheme("Replication2", {"/MyRoot/Fresh", "/MyRoot/Replica"}),
-            {{NKikimrScheme::StatusPreconditionFailed, "/MyRoot/Replica"}});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication2"), {NLs::PathNotExist});
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication3", {"/MyRoot/Fresh"}));
-        env.TestWaitNotification(runtime, txId);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication3"), {NLs::PathExist});
-    }
-
-    Y_UNIT_TEST_QUAD(CreateWithNestedDestinations, parentFirst, initialScan) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        runtime.GetAppData().ReplicationConfig.SetInitialScan(initialScan);
-        ui64 txId = 100;
-
-        const TString parent = "/MyRoot/Dir";
-        const TString child = "/MyRoot//Dir/sub/Table/";
-        TestCreateReplication(runtime, ++txId, "/MyRoot",
-            DefaultScheme("Replication", {parentFirst ? parent : child}));
-        const auto createTxId = txId;
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot",
-            DefaultScheme("Replication2", {parentFirst ? child : parent}),
-            {{NKikimrScheme::StatusPreconditionFailed, "overlaps destination path"}});
-        env.TestWaitNotification(runtime, createTxId);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication2"), {NLs::PathNotExist});
-    }
-
-    Y_UNIT_TEST_TWIN(CreateWithNestedDestinationAfterRestart, parentFirst) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        ui64 txId = 100;
-
-        const TString parent = "/MyRoot/Dir";
-        const TString child = "/MyRoot/Dir/Table";
-        TestCreateReplication(runtime, ++txId, "/MyRoot",
-            DefaultScheme("Replication", {parentFirst ? parent : child}));
-        env.TestWaitNotification(runtime, txId);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot",
-            DefaultScheme("Replication2", {parentFirst ? child : parent}),
-            {{NKikimrScheme::StatusPreconditionFailed, "overlaps destination path"}});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication2"), {NLs::PathNotExist});
-    }
-
-    Y_UNIT_TEST_TWIN(CreateWithNestedTargets, parentFirst) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        ui64 txId = 100;
-
-        const TString parent = "/MyRoot/Dir";
-        const TString child = "/MyRoot//Dir/Table/";
-        TestCreateReplication(runtime, ++txId, "/MyRoot",
-            DefaultScheme("Replication", parentFirst
-                ? TVector<TString>{parent, child} : TVector<TString>{child, parent}),
-            {{NKikimrScheme::StatusInvalidParameter, "Overlapping replication destination paths"}});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
-    }
-
-    Y_UNIT_TEST(CreateWithSiblingDestinations) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        ui64 txId = 100;
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot",
-            DefaultScheme("Replication", {"/MyRoot/Dir", "/MyRoot/Copy2", "/MyRoot/Shared/a"}));
-        env.TestWaitNotification(runtime, txId);
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot",
-            DefaultScheme("Replication2", {"/MyRoot/Dir2", "/MyRoot/Copy", "/MyRoot/Shared/b"}));
-        env.TestWaitNotification(runtime, txId);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication2"), {NLs::PathExist});
-    }
-
-    Y_UNIT_TEST(CreateWithSameDestinationAfterDrop) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        ui64 txId = 100;
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication", {"/MyRoot/Replica"}));
-        env.TestWaitNotification(runtime, txId);
-        TestDropReplication(runtime, ++txId, "/MyRoot", "Replication");
-        env.TestWaitNotification(runtime, txId);
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication2", {"/MyRoot/Replica"}));
-        env.TestWaitNotification(runtime, txId);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication2"), {NLs::PathExist});
     }
 
     Y_UNIT_TEST(Disabled) {
@@ -436,7 +220,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
               Specific {
                 Targets {
                   SrcPath: "/MyRoot1/Table"
-                  DstPath: "/MyRoot2/Table1"
+                  DstPath: "/MyRoot2/Table"
                 }
               }
             }
@@ -454,7 +238,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
               Specific {
                 Targets {
                   SrcPath: "/MyRoot1/Table"
-                  DstPath: "/MyRoot2/Table2"
+                  DstPath: "/MyRoot2/Table"
                 }
               }
               ConsistencySettings {
@@ -475,7 +259,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
               Specific {
                 Targets {
                   SrcPath: "/MyRoot1/Table"
-                  DstPath: "/MyRoot2/Table3"
+                  DstPath: "/MyRoot2/Table"
                 }
               }
               ConsistencySettings {
@@ -507,7 +291,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
               Specific {
                 Targets {
                   SrcPath: "/MyRoot1/Table"
-                  DstPath: "/MyRoot2/Table1"
+                  DstPath: "/MyRoot2/Table"
                 }
               }
               ConsistencySettings {
@@ -529,7 +313,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
               Specific {
                 Targets {
                   SrcPath: "/MyRoot1/Table"
-                  DstPath: "/MyRoot2/Table2"
+                  DstPath: "/MyRoot2/Table"
                 }
               }
               ConsistencySettings {
@@ -596,7 +380,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
               Specific {
                 Targets {
                   SrcPath: "/MyRoot1/Table"
-                  DstPath: "/MyRoot2/Table1"
+                  DstPath: "/MyRoot2/Table"
                 }
               }
             }
@@ -618,7 +402,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
               Specific {
                 Targets {
                   SrcPath: "/MyRoot1/Table"
-                  DstPath: "/MyRoot2/Table2"
+                  DstPath: "/MyRoot2/Table"
                 }
               }
             }
@@ -678,105 +462,6 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         });
     }
 
-    Y_UNIT_TEST(ResumeOwnDestination) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        ui64 txId = 100;
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication", {"/MyRoot/Dir"}));
-        env.TestWaitNotification(runtime, txId);
-        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication2", {"/MyRoot/Dir2"}));
-        env.TestWaitNotification(runtime, txId);
-
-        TestAlterReplication(runtime, ++txId, "/MyRoot", StateScheme("Replication2", "StandBy"));
-        env.TestWaitNotification(runtime, txId);
-        TestAlterReplication(runtime, ++txId, "/MyRoot", StateScheme("Replication", "StandBy"));
-        env.TestWaitNotification(runtime, txId);
-        TestAlterReplication(runtime, ++txId, "/MyRoot", StateScheme("Replication", "Paused"));
-        env.TestWaitNotification(runtime, txId);
-        TestAlterReplication(runtime, ++txId, "/MyRoot", StateScheme("Replication", "StandBy"));
-        env.TestWaitNotification(runtime, txId);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {
-            NLs::ReplicationState(NKikimrReplication::TReplicationState::kStandBy),
-        });
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication2"), {
-            NLs::ReplicationState(NKikimrReplication::TReplicationState::kStandBy),
-        });
-    }
-
-    Y_UNIT_TEST_TWIN(ResumeWithLegacyDuplicate, otherRunning) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        ui64 txId = 100;
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication", {"/MyRoot/Shared"}));
-        env.TestWaitNotification(runtime, txId);
-        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication2", {"/MyRoot/Other"}));
-        env.TestWaitNotification(runtime, txId);
-
-        if (otherRunning) {
-            TestAlterReplication(runtime, ++txId, "/MyRoot", StateScheme("Replication", "StandBy"));
-            env.TestWaitNotification(runtime, txId);
-        }
-
-        SetLegacyReplicationDestination(runtime, "Replication2", "/MyRoot//Shared/");
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-
-        auto expectConflict = [&] {
-            TestAlterReplication(runtime, ++txId, "/MyRoot", StateScheme("Replication2", "StandBy"),
-                {{NKikimrScheme::StatusPreconditionFailed, "used by replication '/MyRoot/Replication'"}});
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication2"), {
-                NLs::ReplicationState(NKikimrReplication::TReplicationState::kPaused),
-            });
-        };
-        expectConflict();
-
-        if (otherRunning) {
-            TestAlterReplication(runtime, ++txId, "/MyRoot", StateScheme("Replication", "Paused"));
-            const auto pauseTxId = txId;
-            // The conflicting configuration must also be found in AlterData.
-            expectConflict();
-            env.TestWaitNotification(runtime, pauseTxId);
-            expectConflict();
-        }
-
-        TestDropReplication(runtime, ++txId, "/MyRoot", "Replication");
-        env.TestWaitNotification(runtime, txId);
-        TestAlterReplication(runtime, ++txId, "/MyRoot", StateScheme("Replication2", "StandBy"));
-        env.TestWaitNotification(runtime, txId);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication2"), {
-            NLs::ReplicationState(NKikimrReplication::TReplicationState::kStandBy),
-        });
-    }
-
-    Y_UNIT_TEST_TWIN(ResumeWithLegacyNestedDestinations, parentFirst) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        ui64 txId = 100;
-
-        const TString parent = "/MyRoot/Dir";
-        const TString child = "/MyRoot/Dir/Table";
-        TestCreateReplication(runtime, ++txId, "/MyRoot",
-            DefaultScheme("Replication", {parentFirst ? parent : child}));
-        env.TestWaitNotification(runtime, txId);
-        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication2", {"/MyRoot/Other"}));
-        env.TestWaitNotification(runtime, txId);
-        TestAlterReplication(runtime, ++txId, "/MyRoot", StateScheme("Replication", "StandBy"));
-        env.TestWaitNotification(runtime, txId);
-
-        SetLegacyReplicationDestination(runtime, "Replication2", parentFirst ? child : parent);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-        TestAlterReplication(runtime, ++txId, "/MyRoot", StateScheme("Replication2", "StandBy"),
-            {{NKikimrScheme::StatusPreconditionFailed, "overlaps destination path"}});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication2"), {
-            NLs::ReplicationState(NKikimrReplication::TReplicationState::kPaused),
-        });
-    }
-
     Y_UNIT_TEST(Describe) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
@@ -822,6 +507,92 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
     Y_UNIT_TEST(CreateReplicatedTable) {
         CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE, {});
         CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY, {{"__async_replica", "true"}});
+    }
+
+    Y_UNIT_TEST(OwnerCanChangeOnlyAfterReplicationDropCompletes) {
+        using NKikimr::TPathId;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        auto createOwner = [&](const TString& name) {
+            TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme(name));
+            env.TestWaitNotification(runtime, txId);
+            const auto desc = DescribePath(runtime, "/MyRoot/" + name);
+            return TPathId(TTestTxConfig::SchemeShard, desc.GetPathDescription().GetSelf().GetPathId());
+        };
+        const auto owner1 = createOwner("First");
+        const auto owner2 = createOwner("Second");
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        auto attach = [&](const TPathId& owner) {
+            auto* request = InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
+                Name: "Table"
+                ReplicationConfig { Mode: REPLICATION_MODE_READ_ONLY ConsistencyLevel: CONSISTENCY_LEVEL_ROW }
+            )"));
+            owner.ToProto(request->Record.MutableTransaction(0)->MutableAlterTable()->MutableReplicationConfig()->MutableOwner());
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+        };
+        auto finish = [&] {
+            TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId);
+        };
+        auto config = [&] {
+            return DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable().GetReplicationConfig();
+        };
+        attach(owner1);
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+        const auto attachingTxId = txId;
+        attach(owner2);
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+        env.TestWaitNotification(runtime, attachingTxId);
+        attach(owner1);
+        finish();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config().GetOwner()), owner1);
+        attach(owner2);
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusPreconditionFailed});
+
+        NActors::TBlockEvents<NKikimr::NReplication::TEvController::TEvDropReplication> drops(runtime);
+        TestDropReplication(runtime, ++txId, "/MyRoot", "First");
+        const auto droppingTxId = txId;
+        runtime.WaitFor("replication controller drop request", [&] { return !drops.empty(); });
+        attach(owner2);
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusPreconditionFailed});
+        drops.Stop().Unblock();
+        env.TestWaitNotification(runtime, droppingTxId);
+        // DROP leaves the table and its old owner intact. The next attachment
+        // reclaims it by checking that the old replication path has been deleted.
+        UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config().GetOwner()), owner1);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        attach(owner2);
+        finish();
+        UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config().GetOwner()), owner2);
+        UNIT_ASSERT_VALUES_EQUAL(config().GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+    }
+
+    Y_UNIT_TEST(CannotClaimLegacyReplicaWithoutOwner) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            ReplicationConfig { Mode: REPLICATION_MODE_READ_ONLY }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
+            Name: "Table"
+            ReplicationConfig {
+                Mode: REPLICATION_MODE_READ_ONLY
+                Owner { OwnerId: 1 LocalId: 1 }
+            }
+        )")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusPreconditionFailed});
     }
 
     Y_UNIT_TEST(CannotAddReplicationConfig) {

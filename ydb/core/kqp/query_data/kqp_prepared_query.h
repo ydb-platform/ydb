@@ -141,6 +141,10 @@ public:
     TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPreparedQuery>& pq, const NKqpProto::TKqpPhyTx* proto,
         const std::shared_ptr<TPreparedQueryAllocHolder>& alloc, TIntrusivePtr<TTableConstInfoMap> tableConstInfoById);
 
+    const NKqpProto::TKqpPhyVectorExecution* GetVectorExecution() const {
+        return Proto->HasVectorExecution() ? &Proto->GetVectorExecution() : nullptr;
+    }
+
     bool IsLiteralTx() const;
 
     std::optional<std::pair<bool, std::pair<TString, TString>>>

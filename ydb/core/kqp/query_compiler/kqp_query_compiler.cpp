@@ -1,4 +1,5 @@
 #include "kqp_query_compiler.h"
+#include "kqp_vector_execution.h"
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -1320,6 +1321,9 @@ private:
 
         for (const auto& secretName : SecretNames) {
             txProto.AddSecretNames(secretName);
+        }
+        if (SecretNames.empty() && Config->HNSWSpecializedExecution.Get().GetOrElse(false)) {
+            TryCompileVectorExecution(tx, txProto);
         }
     }
 

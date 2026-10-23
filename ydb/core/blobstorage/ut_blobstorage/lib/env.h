@@ -533,7 +533,7 @@ metadata:
   cluster: \"\"
   version: 0
 config:
-  erasure: block-4-2
+  erasure: )" << TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()) << R"(
   default_disk_type: NVME
   self_management_config:
     enabled: true

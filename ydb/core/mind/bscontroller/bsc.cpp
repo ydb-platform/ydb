@@ -17,6 +17,7 @@
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
+#include <google/protobuf/util/message_differencer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
@@ -432,6 +433,22 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             ConsoleInteraction->Stop(); // distconf manages the Console
         } else {
             ConsoleInteraction->Start(); // we manage the Console now
+        }
+    }
+
+    if (Loaded && prevStorageConfig) {
+        const auto& previous = prevStorageConfig->GetBlobStorageConfig().GetStoragePoolPileOverrides();
+        const auto& current = StorageConfig->GetBlobStorageConfig().GetStoragePoolPileOverrides();
+        if (!std::equal(previous.begin(), previous.end(), current.begin(), current.end(), [](const auto& a, const auto& b) {
+                return google::protobuf::util::MessageDifferencer::Equals(a, b);
+            })) {
+            for (auto& [groupId, group] : GroupMap) {
+                group->CalculateLayoutStatus(this, group->Topology.get(), [&] {
+                    return TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
+                        GetStoragePoolForPile(group->StoragePoolId, group->BridgePileId));
+                });
+            }
+            InitializeSelfHealState();
         }
     }
 
@@ -892,6 +909,12 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
                     rr.SetErrorReason(TStringBuilder() << "failed to parse YAML: " << ex.what());
                     break;
                 }
+            }
+
+            if (auto error = ValidateStoragePoolPileOverrides(storageConfig)) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason(*error);
+                break;
             }
 
             const ui64 cookie = NextValidationCookie++;

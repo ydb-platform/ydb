@@ -1376,6 +1376,16 @@ public:
         Table::PersistentBufferAllocationMode::Type PersistentBufferAllocationMode = NKikimrBlobStorage::BALANCED;
         TMaybe<Table::VDiskHeapAllocatorNumLeadingDisks::Type> VDiskHeapAllocatorNumLeadingDisks;
 
+        void SetGroupGeometry(const NKikimrBlobStorage::TGroupGeometry& geometry) {
+            RealmLevelBegin = geometry.GetRealmLevelBegin();
+            RealmLevelEnd = geometry.GetRealmLevelEnd();
+            DomainLevelBegin = geometry.GetDomainLevelBegin();
+            DomainLevelEnd = geometry.GetDomainLevelEnd();
+            NumFailRealms = geometry.GetNumFailRealms();
+            NumFailDomainsPerFailRealm = geometry.GetNumFailDomainsPerFailRealm();
+            NumVDisksPerFailDomain = geometry.GetNumVDisksPerFailDomain();
+        }
+
         bool IsSameGeometry(const TStoragePoolInfo& other) const {
             return ErasureSpecies == other.ErasureSpecies
                 && RealmLevelBegin == other.RealmLevelBegin
@@ -2913,6 +2923,11 @@ public:
 
     static void Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id, const THostConfigInfo &hostConfig);
     static void Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box);
+    static TStoragePoolInfo ResolveStoragePoolForPile(const TBoxStoragePoolId& id, const TStoragePoolInfo& pool,
+        TBridgePileId pileId, const TBridgeInfo *bridgeInfo, const NKikimrBlobStorage::TStorageConfig *config);
+    TStoragePoolInfo GetStoragePoolForPile(const TBoxStoragePoolId& id, TBridgePileId pileId) const;
+    std::optional<TString> ValidateStoragePoolPileOverrides(const NKikimrBlobStorage::TStorageConfig& config) const;
+
     static void Serialize(NKikimrBlobStorage::TDefineStoragePool *pb, const TBoxStoragePoolId &id, const TStoragePoolInfo &pool);
     static void Serialize(NKikimrBlobStorage::TStoragePoolSettings *pb, const TStoragePoolInfo &pool);
     static void Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter);

@@ -22,10 +22,12 @@ namespace NKikimr {
             const bool DDisk;
             std::deque<ui64> ExpectedSlotSize;
             const ui32 PDiskSpaceMarginPromille;
-            const TGroupGeometryInfo Geometry;
+            TGroupGeometryInfo Geometry;
             const TBoxStoragePoolId StoragePoolId;
-            const TStoragePoolInfo& StoragePool;
-            std::optional<TGroupMapper> Mapper;
+            TStoragePoolInfo StoragePool;
+            TBridgePileId CurrentPileId;
+            std::map<TBridgePileId, std::unique_ptr<TGroupMapper>> Mappers;
+            TGroupMapper *Mapper = nullptr;
             NKikimrBlobStorage::TConfigResponse::TStatus& Status;
             TVSlotReadyTimestampQ& VSlotReadyTimestampQ;
 
@@ -69,15 +71,40 @@ namespace NKikimr {
                 }
             }
 
+            void SelectPile(TBridgePileId pileId) {
+                if (CurrentPileId != pileId) {
+                    CurrentPileId = pileId;
+                    StoragePool = State.GetStoragePoolForPile(StoragePoolId, pileId);
+                    Geometry = TGroupGeometryInfo::FromStoragePool(TBlobStorageGroupType(StoragePool.ErasureSpecies), StoragePool);
+                    const auto it = Mappers.find(pileId);
+                    Mapper = it == Mappers.end() ? nullptr : it->second.get();
+                }
+            }
+
             void CheckReserve(ui32 total, ui32 min, ui32 part) {
-                // number of reserved groups is min + part * maxGroups in cluster
-                for (ui64 reserve = 0; reserve < min || (reserve - min) * 1000000 / Max<ui64>(1, total) < part; ++reserve, ++total) {
-                    TGroupMapper::TGroupDefinition group;
-                    try {
-                        AllocateNewGroup(TGroupId::Zero(), group, 1u, 0, {});
-                    } catch (const TExFitGroupError&) {
-                        throw TExError() << "group reserve constraint hit";
+                auto check = [&](TBridgePileId pileId) {
+                    SelectPile(pileId);
+                    ui32 numGroups = total;
+                    for (ui64 reserve = 0; reserve < min || (reserve - min) * 1000000 / Max<ui64>(1, numGroups) < part;
+                            ++reserve, ++numGroups) {
+                        TGroupMapper::TGroupDefinition group;
+                        try {
+                            AllocateNewGroup(TGroupId::Zero(), group, 1u, 0, pileId);
+                        } catch (const TExFitGroupError&) {
+                            throw TExError() << "group reserve constraint hit";
+                        }
                     }
+                };
+                if (StoragePool.BridgeMode && State.BridgeInfo) {
+                    State.BridgeInfo->ForEachPile([&](TBridgePileId pileId) {
+                        if (State.BridgeInfo->GetPile(pileId)->State != NKikimrBridge::TClusterState::INACTIVE
+                                && !State.Self.IsBridgePileBeingRemoved(pileId)
+                                && !State.Self.IsBridgePileAwaitingParts(pileId)) {
+                            check(pileId);
+                        }
+                    });
+                } else {
+                    check({});
                 }
             }
 
@@ -214,6 +241,7 @@ namespace NKikimr {
 
             TGroupId CreateGroup(TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId,
                     std::optional<ui32> groupSizeInUnitsOverride = std::nullopt) {
+                SelectPile(bridgePileId);
                 ////////////////////////////////////////////////////////////////////////////////////////////
                 // ALLOCATE GROUP ID FOR THE NEW GROUP
                 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -287,6 +315,14 @@ namespace NKikimr {
                 const TGroupInfo *groupInfo = State.Groups.Find(groupId);
                 if (!groupInfo) {
                     throw TExFitGroupError() << "GroupId# " << groupId << " not found";
+                }
+
+                SelectPile(groupInfo->BridgePileId);
+                if (!groupInfo->VDisksInGroup.empty() && (groupInfo->ErasureSpecies != Geometry.GetErasure()
+                        || groupInfo->Topology->GetTotalFailRealmsNum() != Geometry.GetNumFailRealms()
+                        || groupInfo->Topology->GetNumFailDomainsPerFailRealm() != Geometry.GetNumFailDomainsPerFailRealm()
+                        || groupInfo->Topology->GetNumVDisksPerFailDomain() != Geometry.GetNumVDisksPerFailDomain())) {
+                    throw TExFitGroupError() << "can't change erasure or topology of existing GroupId# " << groupId;
                 }
 
                 if (allocate) {
@@ -649,7 +685,7 @@ namespace NKikimr {
 
             void EnsureGroupMapper() {
                 if (!Mapper) {
-                    Mapper.emplace(Geometry, TGroupMapper::TOptions{
+                    auto mapper = std::make_unique<TGroupMapper>(Geometry, TGroupMapper::TOptions{
                         .Randomize = StoragePool.RandomizeGroupMapping,
                         .PreferLessOccupiedRack = State.Fit.PreferLessOccupiedRack,
                         .WithAttentionToReplication = State.Fit.WithAttentionToReplication,
@@ -659,6 +695,8 @@ namespace NKikimr {
                         .SpaceColorBorder = State.Self.PDiskSpaceColorBorder,
                         .SpaceMarginPromille = PDiskSpaceMarginPromille,
                     });
+                    Mapper = mapper.get();
+                    Mappers.emplace(CurrentPileId, std::move(mapper));
                     PopulateGroupMapper();
                 }
             }
@@ -861,7 +899,8 @@ namespace NKikimr {
                 groupInfo->CalculateLayoutStatus(&State.Self, groupInfo->Topology.get(), [&] {
                     const auto& pools = State.StoragePools.Get();
                     if (const auto it = pools.find(groupInfo->StoragePoolId); it != pools.end()) {
-                        return TGroupGeometryInfo::FromStoragePool(groupInfo->Topology->GType, it->second);
+                        return TGroupGeometryInfo::FromStoragePool(groupInfo->Topology->GType,
+                            State.GetStoragePoolForPile(groupInfo->StoragePoolId, groupInfo->BridgePileId));
                     }
                     Y_DEBUG_ABORT(); // this can't normally happen
                     return TGroupGeometryInfo();
@@ -926,7 +965,8 @@ namespace NKikimr {
 
                 try {
                     TStringBuilder identifier;
-                    identifier << "Erasure# " << storagePool.ErasureSpecies
+                    identifier << "Kind# " << storagePool.Kind.size() << ":" << storagePool.Kind
+                        << " Erasure# " << storagePool.ErasureSpecies
                         << " BridgeMode# " << storagePool.BridgeMode
                         << " Geometry# " << storagePool.RealmLevelBegin << "," << storagePool.RealmLevelEnd
                         << "," << storagePool.DomainLevelBegin << "," << storagePool.DomainLevelEnd

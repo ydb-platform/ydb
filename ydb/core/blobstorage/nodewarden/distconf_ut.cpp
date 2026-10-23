@@ -6129,6 +6129,7 @@ selector_config: []
         TActorId newSession;
         bool captureOld = false;
         bool observePoison = false;
+        bool parentAdvertisedDirectRootQueries = false;
         ui32 heartbeatRequests = 0;
         ui32 sessionPoisons = 0;
         TActorId replaceEdge;
@@ -6138,6 +6139,15 @@ selector_config: []
         runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             if (HandleReplaceEvent(runtime, nodeId, *ev, replaceEdge, response)) {
                 return false;
+            }
+            if (ev->InterconnectSession && nodeId == 2
+                && ev->GetTypeRewrite() == NStorage::TEvNodeConfigReversePush::EventType) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigReversePush>()->Record;
+                if (!record.GetRejected()) {
+                    UNIT_ASSERT_C(record.GetSupportsDirectRootQueries(),
+                        "the parent did not advertise direct root query support to its child");
+                    parentAdvertisedDirectRootQueries = true;
+                }
             }
             if (ev->InterconnectSession && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType
                 && ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasQueryWorkingRoot()
@@ -6173,6 +6183,7 @@ selector_config: []
         };
         fixture.Start();
         CheckDurableConfigConverges(fixture, fixture.Config);
+        UNIT_ASSERT(parentAdvertisedDirectRootQueries);
         const auto rootBefore = QueryKeeper(runtime, fixture.Keepers.front(), true).GetScepter();
         captureOld = true;
         UNIT_ASSERT_C(SimUntil(runtime, [&] { return oldReply && !oldTimers.empty(); }, TDuration::Seconds(60)),

@@ -21,8 +21,24 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         bool promotion = false;
         Y_ENSURE(Self->BridgeInfo);
+        // INACTIVE pile is not a part of the cluster (the free slot of pile registry is INACTIVE too, and trailing free
+        // slots are trimmed); its id may be given to another pile later, which must not inherit anything (like drain)
+        // from this one, so it is forgotten
+        for (auto it = Self->BridgePiles.begin(); it != Self->BridgePiles.end(); ) {
+            const TBridgePileId pileId = it->first;
+            if (const auto *pile = Self->BridgeInfo->FindPile(pileId); !pile ||
+                    pile->State == NKikimrBridge::TClusterState::INACTIVE) {
+                db.Table<Schema::BridgePile>().Key(pileId.GetLocalDb()).Delete();
+                it = Self->BridgePiles.erase(it);
+            } else {
+                ++it;
+            }
+        }
         for (const auto& wardenPileInfo : Self->BridgeInfo->Piles) {
             auto pileId = wardenPileInfo.BridgePileId;
+            if (wardenPileInfo.State == NKikimrBridge::TClusterState::INACTIVE) {
+                continue;
+            }
             auto [it, inserted] = Self->BridgePiles.try_emplace(pileId, wardenPileInfo);
             auto& pileInfo = it->second;
             if (!inserted && pileInfo == wardenPileInfo) {

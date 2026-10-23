@@ -56,6 +56,24 @@ void TestTwoFailedPiles(bool primarySurvives, bool atomic) {
     put("before failure");
     put(TString(128_KB, 'a'));
 
+    // Wait for bootstrap to reach the nodes that may become the new distconf root.
+    // Pool creation alone does not wait for this in the stable test environment.
+    const auto bootstrapDeadline = runtime->GetClock() + TDuration::Seconds(30);
+    for (ui32 id = 1; id <= 24; ++id) {
+        const auto edge = runtime->AllocateEdgeActor(id, __FILE__, __LINE__);
+        runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(id), edge,
+            new TEvNodeWardenQueryStorageConfig(true)), id);
+        for (;;) {
+            auto local = env.WaitForEdgeActorEvent<TEvNodeWardenStorageConfig>(edge, false, bootstrapDeadline);
+            UNIT_ASSERT_C(local && local->Get()->Config, "Timed out waiting for bootstrap on node " << id);
+            if (local->Get()->Config->GetClusterState().GetGeneration() >= state.GetGeneration()) {
+                break;
+            }
+        }
+        runtime->Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0,
+            MakeBlobStorageNodeWardenID(id), edge, nullptr, 0), id);
+    }
+
     // The test bootstrapper retries failed boots without a delay. Pause those
     // retries while distconf converges, then release them after failover.
     std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> pendingDeaths;

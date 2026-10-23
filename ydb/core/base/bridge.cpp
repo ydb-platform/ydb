@@ -73,12 +73,15 @@ namespace NKikimr {
                 configured.insert(pile.GetName());
             }
 
-            NKikimrBridge::TPileRegistry res;
+            // settings of the registry other than the list of piles (like PileListChanged) are kept as they are
+            NKikimrBridge::TPileRegistry res = registry;
+            res.ClearPiles();
+            res.ClearImplicitPileId();
             THashSet<TString> placed;
             for (const auto& pile : registry.GetPiles()) {
                 auto *slot = res.AddPiles();
                 if (pile.HasName() && configured.contains(pile.GetName())) {
-                    slot->SetName(pile.GetName());
+                    slot->CopyFrom(pile); // the pile keeps its slot along with its settings
                     placed.insert(pile.GetName());
                 }
             }
@@ -199,6 +202,26 @@ namespace NKikimr {
             TBridgePileId::FromPileIndex(0).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPrimaryPile);
             TBridgePileId::FromPileIndex(0).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPromotedPile);
             return state;
+        }
+
+        NKikimrBridge::TGroupState::TPile *AddGroupPile(NKikimrBridge::TGroupState *state, TBridgePileId bridgePileId) {
+            Y_ABORT_UNLESS(bridgePileId && !GetGroupPile(*state, bridgePileId));
+            while (state->PileSize() <= bridgePileId.GetPileIndex()) {
+                state->AddPile()->SetAbsent(true);
+            }
+            auto *pile = state->MutablePile(bridgePileId.GetPileIndex());
+            pile->Clear();
+            return pile;
+        }
+
+        void RemoveGroupPile(NKikimrBridge::TGroupState *state, TBridgePileId bridgePileId) {
+            auto *pile = GetGroupPile(state, bridgePileId);
+            Y_ABORT_UNLESS(pile);
+            pile->Clear();
+            pile->SetAbsent(true);
+            while (state->PileSize() && state->GetPile(state->PileSize() - 1).GetAbsent()) {
+                state->MutablePile()->RemoveLast();
+            }
         }
 
     } // NBridge

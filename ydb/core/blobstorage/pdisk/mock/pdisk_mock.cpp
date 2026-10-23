@@ -205,7 +205,14 @@ struct TPDiskMockState::TImpl {
         bool slotIsValid = (slotId != Max<ui32>());
         for (auto& [ownerId, owner] : Owners) {
             if (slotIsValid) {
-                if (slotId == owner.SlotId) {
+                if (slotId == owner.SlotId && owner.Slain && !owner.VDiskId.SameExceptGeneration(vdiskId)) {
+                    // the slot of slain VDisk is given to another one, as real PDisk allows (it tells owners by VDisk id)
+                    owner = TOwner();
+                    owner.VDiskId = vdiskId;
+                    owner.SlotId = slotId;
+                    *created = true;
+                    return std::make_tuple(ownerId, &owner);
+                } else if (slotId == owner.SlotId) {
                     Y_VERIFY(owner.VDiskId.SameExceptGeneration(vdiskId));
                     *created = false;
                     return std::make_tuple(ownerId, &owner);

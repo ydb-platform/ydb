@@ -445,6 +445,7 @@ namespace NKikimr::NBsController {
 
                     // remove the group
                     Groups.erase(it);
+                    UnreassignableGroups.erase(groupId);
 
                     groupsDeleted = true;
                 }
@@ -1142,6 +1143,7 @@ namespace NKikimr::NBsController {
         }
 
         auto sh = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+        auto prevStaticGroups = std::exchange(StaticGroupsInSelfHeal, {});
 
         if (const auto& bsConfig = StorageConfig->GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
             const auto& ss = bsConfig.GetServiceSet();
@@ -1150,7 +1152,10 @@ namespace NKikimr::NBsController {
                 if (!group.RingsSize()) {
                     continue; // bridged group probably
                 }
-                auto& content = sh->GroupsToUpdate[TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID)];
+                const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+                StaticGroupsInSelfHeal.insert(groupId);
+                prevStaticGroups.erase(groupId);
+                auto& content = sh->GroupsToUpdate[groupId];
                 const TBlobStorageGroupType gtype(static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies()));
                 content = TEvControllerUpdateSelfHealInfo::TGroupContent{
                     .Generation = group.GetGroupGeneration(),
@@ -1186,6 +1191,11 @@ namespace NKikimr::NBsController {
                     };
                 }
             }
+        }
+
+        // static groups gone (along with the pile removed) or left without VDisks (inline pile removed) are deleted
+        for (const TGroupId groupId : prevStaticGroups) {
+            sh->GroupsToUpdate[groupId].reset();
         }
 
         Send(SelfHealId, sh.release());

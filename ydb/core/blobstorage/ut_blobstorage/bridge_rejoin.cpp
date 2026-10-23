@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
         const auto deadline = runtime->GetClock() + TDuration::Minutes(5);
         for (;;) {
-            auto config = QueryStorageConfig(env, runtime->GetClock() + TDuration::Seconds(30));
+            auto config = QueryStorageConfig(env, 1, runtime->GetClock() + TDuration::Seconds(30));
             const auto& state = config.GetClusterState();
             if (state.GetPerPileState(1) == NKikimrBridge::TClusterState::SYNCHRONIZED &&
                     state.GetPerPileState(2) == NKikimrBridge::TClusterState::SYNCHRONIZED) {

@@ -277,6 +277,11 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         Finish(NYdb::TStatus(NYdb::EStatus::SCHEME_ERROR, std::move(issues)));
     }
 
+    void Cancel() {
+        Send(Parent, new TEvPrivate::TEvCancelCreateStream());
+        PassAway();
+    }
+
     void Finish(NYdb::TStatus&& status, bool schemaChanges = false) {
         auto result = MakeHolder<TEvPrivate::TEvCreateStreamResult>(ReplicationId, TargetId, std::move(status));
         result->SchemaChanges = schemaChanges;
@@ -339,7 +344,7 @@ public:
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
             {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
-            sFunc(TEvents::TEvPoison, PassAway);
+            sFunc(TEvents::TEvPoison, Cancel);
         }
     }
 

@@ -2,6 +2,8 @@
 #include "controller_impl.h"
 #include "event_util.h"
 
+#include <util/generic/algorithm.h>
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/discovery/discovery.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -99,6 +101,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvResumeDeferredAlter, Handle);
         HFunc(TEvPrivate::TEvDescribeTargetsResult, Handle);
         HFunc(TEvPrivate::TEvRequestCreateStream, Handle);
+        HFunc(TEvPrivate::TEvCancelCreateStream, Handle);
         HFunc(TEvPrivate::TEvRequestDropStream, Handle);
         HFunc(TEvDiscovery::TEvDiscoveryData, Handle);
         HFunc(TEvDiscovery::TEvError, Handle);
@@ -335,6 +338,14 @@ void TController::Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TAc
         {"ev", ev->Get()->ToString()});
 
     RequestedCreateStream.push_back(ev->Sender);
+    ProcessCreateStreamQueue(ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvCancelCreateStream::TPtr& ev, const TActorContext& ctx) {
+    // Poison may arrive before or after the permission grant. Reclaim both
+    // forms of ownership without interpreting cancellation as a target error.
+    Erase(RequestedCreateStream, ev->Sender);
+    InflightCreateStream.erase(ev->Sender);
     ProcessCreateStreamQueue(ctx);
 }
 

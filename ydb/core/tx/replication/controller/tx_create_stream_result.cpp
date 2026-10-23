@@ -42,6 +42,13 @@ public:
             return true;
         }
 
+        if (!target->IsStreamCreator(Ev->Sender)) {
+            YDB_LOG_DEBUG_CTX(ctx, "Ignore stream creation result from replaced creator",
+                {"rid", rid}, {"tid", tid});
+            Replication.Reset();
+            return true;
+        }
+
         const auto build = Self->IndexBuilds.find({rid, tid});
         if (build != Self->IndexBuilds.end() && Self->IsCancelledIndexBuild(build->second)) {
             YDB_LOG_DEBUG_CTX(ctx, "Ignore stream creation result for cancelled index build",

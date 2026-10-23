@@ -106,7 +106,6 @@ private:
     std::shared_ptr<TColumnStatisticsSharedState> SharedState;
     NThreading::TFuture<void> ColumnStatisticsReadiness;
     NWilson::TSpan ColumnStatisticsSpan;
-    NWilson::TTraceId ColumnStatisticsDependency;
     // Issues of all statistics responses, only collected when tracing.
     std::shared_ptr<NYql::TIssues> ColumnStatisticsIssues;
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;

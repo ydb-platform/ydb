@@ -194,26 +194,23 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                     : subplanIU ? root.PlanProps.Subplans.MutablePlan(*subplanIU)
                     : root.MutableChild(0);
                 const TInstant ruleStart = traceRules ? trace->Now() : TInstant::Zero();
-                std::optional<TCompileTraceDeferredScope> ruleScope;
-                if (traceRuleSpans) {
-                    ruleScope.emplace(trace, "Rule: " + rule->RuleName, "NewRBO");
-                }
+                const ui64 ruleCpuStart = traceRuleSpans ? trace->GetCpuTime() : 0;
                 ctx.RuleTraceAttributes.clear();
                 const bool ruleApplied = rule->MatchAndApply(op, ctx, root.PlanProps);
                 Y_ENSURE(op, "Rule left a null plan edge");
                 traceAttempt.CloseRule();
                 if (traceRules) {
                     const TInstant ruleEnd = trace->Now();
-                    if (ruleScope) {
-                        auto span = ruleScope->Finish(ruleApplied);
-                        if (span) {
-                            span.Attribute("ydb.rbo.rule", rule->RuleName);
-                            span.Attribute("ydb.rbo.applied", ruleApplied);
-                            for (const auto& [name, value] : ctx.RuleTraceAttributes) {
-                                span.Attribute(name, value);
-                            }
-                            span.End();
+                    // Only applied rules get a span, recorded once the outcome is known.
+                    if (traceRuleSpans && ruleApplied) {
+                        auto span = trace->RecordSpan(TCompileTraceLevels::Detail, "Rule: " + rule->RuleName, "NewRBO",
+                            ruleStart, ruleCpuStart);
+                        span.Attribute("ydb.rbo.rule", rule->RuleName);
+                        span.Attribute("ydb.rbo.applied", ruleApplied);
+                        for (const auto& [name, value] : ctx.RuleTraceAttributes) {
+                            span.Attribute(name, value);
                         }
+                        span.End();
                     }
                     ++traceStats.Attempts;
                     if (ruleStats) {
@@ -221,7 +218,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                         ruleStats->Applied += ruleApplied;
                         if (!ruleApplied) {
                             ruleStats->UnappliedTime += ruleEnd - ruleStart;
-                            ruleStats->UnappliedCpuUs += ruleScope->GetCpuTime();
+                            ruleStats->UnappliedCpuUs += trace->GetCpuTime() - ruleCpuStart;
                         }
                     }
                     if (!ruleApplied) {

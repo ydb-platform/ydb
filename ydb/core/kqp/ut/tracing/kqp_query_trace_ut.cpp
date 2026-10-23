@@ -578,29 +578,18 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         return {};
     }
 
-    void AssertCompilerExecutionAccounting(const TTraceSnapshot& snapshot, const TTraceSnapshot::TOtelSpan& compile) {
-        TVector<const TTraceSnapshot::TOtelSpan*> executions;
-        i64 cpu = 0;
+    void AssertCompileCpuAccounting(const TTraceSnapshot& snapshot, const TTraceSnapshot::TOtelSpan& compile) {
+        const auto* rootCpu = FindAttribute(compile, "ydb.cpu_us");
+        UNIT_ASSERT(rootCpu && rootCpu->value().int_value() > 0);
+        // Phases count CPU only while the compilation runs on some thread,
+        // also across optimizer fallback: none exceeds the total.
         for (const auto& span : snapshot.Spans) {
-            if (span.name() == "Compiler execution" && span.parent_span_id() == compile.span_id()) {
-                executions.push_back(&span);
-                const auto* elapsed = FindAttribute(span, "ydb.cpu_us");
-                UNIT_ASSERT(elapsed);
-                cpu += elapsed->value().int_value();
+            if (span.parent_span_id() == compile.span_id() && span.name() != "Parse query") {
+                if (const auto* cpu = FindAttribute(span, "ydb.cpu_us")) {
+                    UNIT_ASSERT_LE_C(cpu->value().int_value(), rootCpu->value().int_value(), span.DebugString());
+                }
             }
         }
-        UNIT_ASSERT(!executions.empty());
-        std::ranges::sort(executions, {}, [](const auto* span) { return span->start_time_unix_nano(); });
-        for (size_t i = 1; i < executions.size(); ++i) {
-            // A compiler actor remains serial across worker migrations and
-            // optimizer fallback. Allow Wilson's microsecond clock rounding.
-            UNIT_ASSERT_LE_C(executions[i - 1]->end_time_unix_nano(),
-                executions[i]->start_time_unix_nano() + 1000,
-                executions[i - 1]->DebugString() << executions[i]->DebugString());
-        }
-        const auto* rootCpu = FindAttribute(compile, "ydb.cpu_us");
-        UNIT_ASSERT(rootCpu);
-        UNIT_ASSERT_VALUES_EQUAL(cpu, rootCpu->value().int_value());
     }
 
     Y_UNIT_TEST_TWIN(TransactionTracePropagation, TableService) {
@@ -837,16 +826,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         }
         for (const TStringBuf name : {"Prepare CBO join tree", "CBO join search", "Rebuild CBO plan"}) {
             AssertDescendant(snapshot, name, "RBO stage: Invoke CBO");
-            AssertDescendant(snapshot, name, "Rule: Optimize CBO tree");
         }
-        AssertDescendant(snapshot, "Compiler execution", "Compile query");
-        const auto* continuation = FindSpan(snapshot, "Compiler continuation");
-        UNIT_ASSERT(continuation && continuation->links_size() >= 1 && continuation->events_size() == 1);
-        UNIT_ASSERT_VALUES_EQUAL(continuation->events(0).name(), "Result ready");
-        UNIT_ASSERT(FindAttribute(continuation->events(0), "thread.id"));
-        UNIT_ASSERT(std::ranges::any_of(snapshot.Spans, [](const auto& span) {
-            return span.name() == "Compiler execution" && span.links_size() == 1;
-        }));
+        AssertDescendant(snapshot, "Rule: Optimize CBO tree", "RBO stage: Invoke CBO");
         const auto& search = *FindSpan(snapshot, "CBO join search");
         UNIT_ASSERT(FindAttribute(search, "ydb.cbo.optimized")->value().bool_value());
         UNIT_ASSERT_GT(FindAttribute(search, "ydb.cbo.emitted_pairs")->value().int_value(), 0);
@@ -855,7 +836,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         const auto& cleanup = *FindSpan(snapshot, "Cleanup compiler");
         const auto* compile = FindParent(snapshot, cleanup);
         UNIT_ASSERT(compile && compile->name() == "Compile query");
-        AssertCompilerExecutionAccounting(snapshot, *compile);
+        AssertCompileCpuAccounting(snapshot, *compile);
         const auto reply = std::ranges::find_if(compile->events(), [](const auto& event) {
             return event.name() == "Compilation reply sent";
         });
@@ -863,13 +844,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT_LE(reply->time_unix_nano(), cleanup.start_time_unix_nano() + 1000);
         UNIT_ASSERT(FindAttribute(cleanup, "ydb.compile.cleanup")->value().bool_value());
         const auto* metadata = FindSpan(snapshot, "Await table metadata");
-        UNIT_ASSERT(metadata && metadata->links_size() > 0 && metadata->events_size() == 1);
+        UNIT_ASSERT(metadata && metadata->links_size() > 0);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*metadata, "ydb.compile.join")->value().string_value(), "all_or_error");
-        UNIT_ASSERT(std::ranges::any_of(snapshot.Spans, [&](const auto& span) {
-            return span.name() == "Compiler continuation" && std::ranges::any_of(span.links(), [&](const auto& link) {
-                return link.span_id() == metadata->span_id();
-            });
-        }));
         // Wilson derives end times from each span's cycle clock; allow their
         // small drift relative to the wall-clock starts of later child spans.
         UNIT_ASSERT_LE(cleanup.end_time_unix_nano(), compile->end_time_unix_nano() + TDuration::MilliSeconds(1).NanoSeconds());
@@ -944,7 +920,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         });
         UNIT_ASSERT_C(compile != snapshot.Spans.end(), snapshot.PrintTraces());
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(compile->status().code()), static_cast<int>(NTraceProto::Status::STATUS_CODE_OK));
-        AssertCompilerExecutionAccounting(snapshot, *compile);
+        AssertCompileCpuAccounting(snapshot, *compile);
     }
 
     Y_UNIT_TEST_TWIN(SnapshotManagerTracePropagation, Mvcc) {
@@ -1124,9 +1100,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT_VALUES_EQUAL(stats->links_size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats->links(0).span_id(), metadata->span_id());
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(stats->links(0), "ydb.compile.relation")->value().string_value(), "follows_from");
-        UNIT_ASSERT_VALUES_EQUAL(metadata->events_size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(metadata->events(0).name(), "Dependency ready");
-        UNIT_ASSERT_LE(metadata->events(0).time_unix_nano(), stats->start_time_unix_nano() + 1000);
+        UNIT_ASSERT_LE(metadata->end_time_unix_nano(), stats->start_time_unix_nano() + 1000);
         AssertStatus(*uploader, "Load statistics", NTraceProto::Status::STATUS_CODE_ERROR);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*stats, "ydb.compile.future_outcome")->value().string_value(), "value");
     }

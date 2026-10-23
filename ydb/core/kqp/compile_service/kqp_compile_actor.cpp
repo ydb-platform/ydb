@@ -405,29 +405,13 @@ private:
         // Continue runs the compilation until its next asynchronous wait.
         NCpuTime::TCpuTimer timer(CompileCpuTime);
         TCompileTraceRunScope traceRun(CompileTrace.Get());
-        auto future = AsyncCompileResult->Continue();
-        std::shared_ptr<TCompileTraceContinuation> continuation;
-        if (CompileTrace && CompileTrace->IsEnabled(TCompileTraceLevels::Step)) {
-            continuation = CompileTrace->StartContinuation(!future.IsReady());
-        }
-        auto callback = [actorSystem, selfId, continuation](const TFuture<bool>& future) {
-            bool finished;
-            try {
-                finished = future.GetValue();
-            } catch (...) {
-                if (continuation) {
-                    continuation->Complete(false);
-                }
-                throw;
-            }
-            NWilson::TTraceId readyFrom;
-            if (continuation) {
-                readyFrom = continuation->Complete();
-            }
+        auto callback = [actorSystem, selfId](const TFuture<bool>& future) {
+            bool finished = future.GetValue();
             auto processEv = MakeHolder<TEvKqp::TEvContinueProcess>(0, finished);
-            actorSystem->Send(new IEventHandle(selfId, {}, processEv.Release(), 0, 0, nullptr, std::move(readyFrom)));
+            actorSystem->Send(selfId, processEv.Release());
         };
-        future.Apply(callback);
+
+        AsyncCompileResult->Continue().Apply(callback);
     }
 
     IKqpHost::TPrepareSettings PrepareCompilationSettings(const TActorContext &ctx) {
@@ -671,7 +655,7 @@ private:
 
         // Keep the trace alive if completion/fallback replaces CompileTrace.
         const auto trace = CompileTrace;
-        TCompileTraceRunScope running(trace.Get(), ev->TraceId);
+        TCompileTraceRunScope running(trace.Get());
 
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, UserRequestContext->TraceId);
 

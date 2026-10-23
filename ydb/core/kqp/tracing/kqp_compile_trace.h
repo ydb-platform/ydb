@@ -28,29 +28,10 @@ struct TCompileTraceLevels {
     };
 };
 
-// A compiler wait may be abandoned on the actor thread while its future is
-// completing elsewhere. Both paths share this one-shot span, not actor state.
-class TCompileTraceContinuation {
-public:
-    explicit TCompileTraceContinuation(NWilson::TSpan span);
-
-    NWilson::TTraceId GetTraceId() const;
-    NWilson::TTraceId Complete(bool success = true);
-
-private:
-    friend class TCompileTrace;
-    void Cancel();
-
-    const NWilson::TTraceId Id;
-    TAdaptiveLock Lock;
-    NWilson::TSpan Span;
-    bool Ended = false;
-};
-
 // Spans of a single query compilation. Compiler turns run serially but may
 // migrate between worker threads. Logical phases may stay open across waits;
-// execution spans record individual turns, and scope spans synchronous work.
-// The innermost open logical phase or scope parents new compiler work.
+// scope spans record synchronous work. The innermost open logical phase or
+// scope parents new compiler work.
 //
 // Spans ended by the trace carry the CPU time the compilation spent while they
 // were open (ydb.cpu_us). It is counted only while the compilation runs, see
@@ -85,13 +66,6 @@ public:
     // nest within it.
     TInstant Now() const;
 
-    // Starts the wait for a compiler continuation. Complete it on the future's
-    // callback thread, then pass its ID to Resume when the actor handles it.
-    std::shared_ptr<TCompileTraceContinuation> StartContinuation(bool waiting = false);
-    // Called on the compiler actor's thread by GetAsyncFuture, only for the
-    // futures actually returned to the pipeline. Consumed by StartContinuation.
-    void AwaitDependency(const NWilson::TTraceId& dependency);
-
     // Number of the next run of a span that the compilation may repeat, e.g.
     // after a restart of the pipeline, starting from 1.
     ui32 NextIteration(const TString& name);
@@ -99,7 +73,7 @@ public:
     // CPU time of the compilation in microseconds, counted while it runs.
     ui64 GetCpuTime() const;
     // Called when the compilation starts and stops running on the current thread.
-    void Resume(const NWilson::TTraceId& readyFrom = {});
+    void Resume();
     void Suspend();
 
     // A region is a span opened and closed by separate calls, e.g. by marker
@@ -111,18 +85,19 @@ public:
     // Ends the region together with the regions opened inside it.
     void EndRegion(TStringBuf name);
 
-    // Ends remaining regions, abandons the outstanding wait and freezes CPU
-    // accounting. Existing run scopes may still unwind; this trace cannot resume.
+    // Ends remaining regions and freezes CPU accounting. Existing run scopes
+    // may still unwind; this trace cannot resume.
     void Finish(bool success);
 
+    // Records a span that has already finished under the current parent, e.g.
+    // for an operation that is traced only if it turns out to matter. Spans
+    // started during the operation are not parented by it.
+    NWilson::TSpan RecordSpan(ui8 verbosity, TString name, const char* component,
+        TInstant start, ui64 cpuStart) const;
+
 private:
-    friend class TCompileTraceDeferredScope;
-    NWilson::TTraceId Parent() const;
-    // The innermost parent, without marking it used.
-    NWilson::TTraceId PeekParent() const;
-    void MarkUsed(const NWilson::TTraceId& id);
     void PushId(NWilson::TTraceId id, TInstant start, ui64 cycles);
-    bool PopId(const NWilson::TTraceId& id);
+    void PopId(const NWilson::TTraceId& id);
     void EndRegions(size_t count, bool success);
 
 private:
@@ -133,8 +108,6 @@ private:
         NWilson::TTraceId Id;
         TInstant Start;
         ui64 StartCycles;
-        // A deferred scope must be emitted if another span uses it as parent.
-        mutable bool Used = false;
     };
     TVector<TParent> Parents;
     // Guards Parents for GetCurrentParent.
@@ -156,14 +129,11 @@ private:
     ui32 Running = 0;
     bool CpuCounted = false;
     bool Finished = false;
-    NWilson::TSpan ExecutionSpan;
-    TVector<NWilson::TTraceId> AwaitedDependencies;
-    std::shared_ptr<TCompileTraceContinuation> Continuation;
 };
 
-// Records on its callback thread that a dependency is ready. A fulfilled
-// future may contain an error result. Keep this distinct from an exception:
-// only the latter can short-circuit WaitExceptionOrAll.
+// Records how a dependency's future completed. A fulfilled future may contain
+// an error result. Keep this distinct from an exception: only the latter can
+// short-circuit WaitExceptionOrAll.
 void MarkCompileDependencyReady(NWilson::TSpan& span, bool futureSuccess);
 void FinishCompileDependency(NWilson::TSpan& span, bool futureSuccess, bool operationSuccess = true);
 
@@ -220,29 +190,6 @@ NThreading::TFuture<T> TraceCompileDependency(NThreading::TFuture<T> future, NWi
     return TraceCompileDependency(std::move(future), std::move(span), [](const auto&...) { return true; });
 }
 
-// Reserves a parent ID without constructing an OTLP span for an unsuccessful
-// rule attempt. Finish emits applied attempts and attempts that have children.
-class TCompileTraceDeferredScope {
-public:
-    TCompileTraceDeferredScope(TCompileTrace* trace, TString name, const char* component);
-    ~TCompileTraceDeferredScope();
-    TCompileTraceDeferredScope(const TCompileTraceDeferredScope&) = delete;
-    TCompileTraceDeferredScope& operator=(const TCompileTraceDeferredScope&) = delete;
-
-    NWilson::TSpan Finish(bool keep);
-    ui64 GetCpuTime() const { return CpuTime; }
-
-private:
-    TCompileTrace* Trace;
-    const TString Name;
-    const char* const Component;
-    NWilson::TTraceId Parent;
-    NWilson::TTraceId Id;
-    TInstant Start;
-    ui64 CpuStart = 0;
-    ui64 CpuTime = 0;
-};
-
 // Span that is open for the lifetime of the scope and parents the spans started in it.
 class TCompileTraceScope {
 public:
@@ -272,7 +219,7 @@ private:
 // The compilation runs on the current thread for the lifetime of the scope.
 class TCompileTraceRunScope {
 public:
-    explicit TCompileTraceRunScope(TCompileTrace* trace, const NWilson::TTraceId& readyFrom = {});
+    explicit TCompileTraceRunScope(TCompileTrace* trace);
     ~TCompileTraceRunScope();
 
     TCompileTraceRunScope(const TCompileTraceRunScope&) = delete;

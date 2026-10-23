@@ -205,7 +205,6 @@ public:
         auto* trace = SessionCtx->QueryPtr()->CompileTrace.Get();
         NWilson::TSpan dependencyJoin;
         TVector<std::shared_ptr<IKikimrGateway::TTableMetadataResult>> dependencyResults;
-        MetadataDependency = {};
 
         for (auto& it : SessionCtx->Tables().GetTables()) {
             const TString& clusterName = it.first.first;
@@ -300,7 +299,6 @@ public:
             return TStatus::Ok;
         }
 
-        MetadataDependency = dependencyJoin.GetTraceId();
         dependencyJoin.Attribute("ydb.compile.dependencies", static_cast<i64>(futures.size()));
         AsyncFuture = NKikimr::NKqp::TraceCompileDependency(
             NThreading::WaitExceptionOrAll(futures), std::move(dependencyJoin),
@@ -314,9 +312,6 @@ public:
 
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
         Y_UNUSED(input);
-        if (auto* trace = SessionCtx->QueryPtr()->CompileTrace.Get()) {
-            trace->AwaitDependency(MetadataDependency);
-        }
         return AsyncFuture;
     }
 
@@ -474,7 +469,6 @@ public:
     void Rewind() final {
         LoadResults.clear();
         AsyncFuture = {};
-        MetadataDependency = {};
     }
 
 private:
@@ -486,7 +480,6 @@ private:
 
     THashMap<std::pair<TString, TString>, std::shared_ptr<IKikimrGateway::TTableMetadataResult>> LoadResults;
     NThreading::TFuture<void> AsyncFuture;
-    NWilson::TTraceId MetadataDependency;
 };
 
 class TKikimrConfigurationTransformer : public NCommon::TProviderConfigurationTransformer {

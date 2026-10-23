@@ -1310,6 +1310,7 @@ struct TEvPQ {
 
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
+        TInstant EndWriteTimestamp;
         // Tag -> (SourceId -> metric value) + Keys stats
         NPQ::TWriteStats WriteStats;
 

@@ -44,7 +44,7 @@ namespace NKikimr {
                 , DDisk(storagePool.DDisk)
                 , ExpectedSlotSize(expectedSlotSize)
                 , PDiskSpaceMarginPromille(pdiskSpaceMarginPromille)
-                , Geometry(TBlobStorageGroupType(storagePool.ErasureSpecies), storagePool.GetGroupGeometry())
+                , Geometry(TGroupGeometryInfo::FromStoragePool(TBlobStorageGroupType(storagePool.ErasureSpecies), storagePool))
                 , StoragePoolId(storagePoolId)
                 , StoragePool(storagePool)
                 , Status(status)
@@ -622,7 +622,7 @@ namespace NKikimr {
                 TGroupMapper::TForbiddenPDisks,
                 ui32,
                 i64,
-                TBridgePileId>;
+                TGroupMapper::TPileScope>;
 
             template<typename T>
             TAllocateOrSanitizeGroupResult<T> AllocateOrSanitizeGroup(
@@ -666,7 +666,7 @@ namespace NKikimr {
                 } unregister{*this, removeQ};
                 return std::invoke(func, Geometry, *Mapper, groupId, group, constraints, replacedDisks,
                     std::move(forbid), groupSizeInUnits, requiredSpace,
-                    NBridge::GetPlacementPileId(bridgePileId, State.BridgeInfo.get()));
+                    GetPlacementScope(bridgePileId));
             }
 
             template<typename T>
@@ -683,6 +683,19 @@ namespace NKikimr {
                 TGroupMapper::TGroupConstraintsDefinition emptyConstraints;
                 return AllocateOrSanitizeGroup(groupId, group, emptyConstraints, replacedDisks, forbid, groupSizeInUnits, requiredSpace,
                     addExistingDisks, bridgePileId, func);
+            }
+
+            bool UsesCrossPilePlacement() const {
+                return !StoragePool.BridgeMode && !DDisk && State.Self.StorageConfig
+                    && State.Self.StorageConfig->GetClusterStateDetails().GetNonUniformStorageEnabled();
+            }
+
+            TGroupMapper::TPileScope GetPlacementScope(TBridgePileId groupPileId) const {
+                if (UsesCrossPilePlacement()) {
+                    Y_ABORT_UNLESS(!groupPileId && !StoragePool.BridgeMode);
+                    return TGroupMapper::TPileScope::AcrossPiles();
+                }
+                return NBridge::GetPlacementPileId(groupPileId, State.BridgeInfo.get());
             }
 
             void PopulateGroupMapper() {
@@ -766,6 +779,12 @@ namespace NKikimr {
                             }
                         }
                     }
+                }
+
+                if (UsesCrossPilePlacement() && State.BridgeInfo) {
+                    const auto *pile = State.BridgeInfo->GetPileForNode(id.NodeId);
+                    usable &= pile && NBridge::PileStateTraits(pile->State).AllowsConnection
+                        && pile->State != NKikimrBridge::TClusterState::SUSPENDED;
                 }
 
                 if (!info.AcceptsNewSlots()) {
@@ -892,7 +911,7 @@ namespace NKikimr {
                 groupInfo->CalculateLayoutStatus(&State.Self, groupInfo->Topology.get(), [&] {
                     const auto& pools = State.StoragePools.Get();
                     if (const auto it = pools.find(groupInfo->StoragePoolId); it != pools.end()) {
-                        return TGroupGeometryInfo(groupInfo->Topology->GType, it->second.GetGroupGeometry());
+                        return TGroupGeometryInfo::FromStoragePool(groupInfo->Topology->GType, it->second);
                     }
                     Y_DEBUG_ABORT(); // this can't normally happen
                     return TGroupGeometryInfo();
@@ -953,6 +972,7 @@ namespace NKikimr {
                 try {
                     TStringBuilder identifier;
                     identifier << "Erasure# " << storagePool.ErasureSpecies
+                        << " BridgeMode# " << storagePool.BridgeMode
                         << " Geometry# " << storagePool.RealmLevelBegin << "," << storagePool.RealmLevelEnd
                         << "," << storagePool.DomainLevelBegin << "," << storagePool.DomainLevelEnd
                         << "," << storagePool.NumFailRealms << "," << storagePool.NumFailDomainsPerFailRealm

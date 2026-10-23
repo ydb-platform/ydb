@@ -519,6 +519,7 @@ namespace NKikimr::NStorage {
                 .Operational = true,
                 .Decommitted = false,
                 .WhyUnusable = whyUnusable,
+                .BridgePileId = ResolveNodePileId(pileRegistry, it->second).value_or(TBridgePileId()),
             });
         }
 
@@ -542,7 +543,7 @@ namespace NKikimr::NStorage {
         NBsController::TGroupMapperError error;
         const ui32 groupSizeInUnits = 1; // static groups are always single-unit
         if (!mapper.AllocateGroup(groupId.GetRawId(), groupDefinition, replacedDisks, forbid,
-                groupSizeInUnits, requiredSpace, false, {}, error)) {
+                groupSizeInUnits, requiredSpace, false, placementPileId, error)) {
             throw TExConfigError() << "group allocation failed Error# " << error.ErrorMessage
                 << " groupDefinition# " << dumpGroupDefinition();
         }

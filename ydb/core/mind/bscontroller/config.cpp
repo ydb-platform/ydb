@@ -1168,6 +1168,7 @@ namespace NKikimr::NBsController {
             }
 
             pb->SetKind(pool.Kind);
+            pb->SetBridgeMode(pool.BridgeMode);
             pb->SetNumGroups(pool.NumGroups);
             pb->SetRandomizeGroupMapping(pool.RandomizeGroupMapping);
             if (pool.DefaultGroupSizeInUnits != 0) {

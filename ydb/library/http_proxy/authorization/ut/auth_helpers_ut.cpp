@@ -29,6 +29,7 @@ Y_UNIT_TEST_SUITE(AuthorizationParsingTest) {
 
     Y_UNIT_TEST(LowersKey) {
         CheckParam("type Key=Value", "key", "Value");
+        CheckParam("type CREDENTIAL=MixedCaseValue", "credential", "MixedCaseValue");
     }
 
     Y_UNIT_TEST(FailsOnInvalidStrings) {

@@ -30,6 +30,7 @@ SRCS(
     ddl_identity.cpp
     ddl_resource_pool.cpp
     ddl_session.cpp
+    ddl_streaming_query.cpp
     ddl_symlink.cpp
     ddl_topic.cpp
     ddl_transfer.cpp
@@ -52,6 +53,7 @@ SRCS(
     sql_ddl_identity.cpp
     sql_ddl_resource_pool.cpp
     sql_ddl_session.cpp
+    sql_ddl_streaming_query.cpp
     sql_ddl_symlink.cpp
     sql_ddl_topic.cpp
     sql_ddl_transfer.cpp

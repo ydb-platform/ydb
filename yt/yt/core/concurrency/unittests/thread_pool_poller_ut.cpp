@@ -68,6 +68,9 @@ public:
         return ShutdownPromise_;
     }
 
+    void ResetInvoker() final
+    { }
+
 private:
     const NLogging::TLoggingTagList LoggingTags_;
 

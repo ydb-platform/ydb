@@ -56,13 +56,6 @@ through two old destination starts. It does not certify fresh schema alterations
 applied by the old destination, which has a preexisting schema serialization
 oneof defect, or every historical reader release.
 
-The original compression implementation passed 35 component cases. The integration
-snapshot passed the two decoder restart cases and one schema rollback case above
-(three historical cases total). The standalone delivery snapshot has not been
-separately recompiled, and final post-compatibility independent review remains
-pending. These results establish the stated test scope, not blanket N/N−1
-certification.
-
 Compression reduces eligible payload and envelope bytes. It does not impose an
 end-to-end disk-occupancy limit or remove all storage write amplification.
 Device-I/O improvement requires a separate measured workload.

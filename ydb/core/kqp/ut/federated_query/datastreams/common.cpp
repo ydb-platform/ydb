@@ -193,6 +193,7 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
         }
 
         auto& featureFlags = *AppConfig->MutableFeatureFlags();
+        featureFlags.SetDisableOldSecretCreation(false);
         featureFlags.SetEnableStreamingQueries(true);
         featureFlags.SetEnableSchemaSecrets(true);
 

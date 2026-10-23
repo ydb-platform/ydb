@@ -3046,6 +3046,89 @@ Y_UNIT_TEST(TestReadRequestInFlightLimit) {
     CmdRead({"key-1"}, NKikimrClient::TKeyValueRequest::REALTIME, {"value"}, {false}, {creationUnixTime}, tc);
 }
 
+template <bool LimitEnabled>
+void CheckRequestInFlightLimit() {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &runtime) {
+        if constexpr (LimitEnabled) {
+            runtime.GetAppData().FeatureFlags.SetEnableKeyValueRequestInFlightLimit(true);
+        }
+    }, activeZone);
+    UNIT_ASSERT_VALUES_EQUAL(tc.Runtime->GetAppData().FeatureFlags.GetEnableKeyValueRequestInFlightLimit(), LimitEnabled);
+
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper requestsInFlightLimit(10'000, 1, 1'000'000);
+    TControlBoard::RegisterSharedControl(requestsInFlightLimit,
+        icb->KeyValueVolumeControls.RequestsInFlightLimit);
+    requestsInFlightLimit = 1;
+
+    ExecuteWrite(tc, {{"key", "value"}}, 0, 2,
+        NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+    ExecuteWrite(tc, {{"inline-key", "inline-value"}}, 0, NKeyValue::InlineStorageChannelInPublicApi,
+        NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+
+    TGetBlocker gets(*tc.Runtime);
+    gets.BlockChannel(NKeyValue::BLOB_CHANNEL);
+
+    SendRequestEvent(MakeReadRequest(1, {"key"}), tc);
+    tc.Runtime->WaitFor("blocked read fills the request in-flight limit", [&] {
+        return gets.BlockedCount(NKeyValue::BLOB_CHANNEL) == 1;
+    }, TDuration::Seconds(1));
+
+    constexpr auto expectedStatus = LimitEnabled
+        ? NKikimrKeyValue::Statuses::RSTATUS_BLOCKED
+        : NKikimrKeyValue::Statuses::RSTATUS_OK;
+    ExecuteRead<expectedStatus>(tc, "inline-key", LimitEnabled ? "" : "inline-value", 0, 0, 0);
+    ExecuteReadRange<expectedStatus>(tc,
+        "inline-key", EBorderKind::Include, "inline-key", EBorderKind::Include,
+        {{"inline-key", "inline-value"}}, 0, true, 0);
+    ExecuteWrite<expectedStatus>(tc,
+        {{"another-key", "another-value"}}, 0, 2,
+        NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+
+    TDesiredPair<TEvKeyValue::TEvExecuteTransaction> deleteRequest;
+    deleteRequest.Request.set_tablet_id(tc.TabletId);
+    deleteRequest.Request.set_lock_generation(0);
+    auto *range = deleteRequest.Request.add_commands()->mutable_delete_range()->mutable_range();
+    range->set_from_key_inclusive("another-key");
+    range->set_to_key_inclusive("another-key");
+    ExecuteEvent(deleteRequest, tc);
+    UNIT_ASSERT_C(deleteRequest.Response.status() == expectedStatus,
+        deleteRequest.Response.msg());
+
+    SendRequestEvent(MakeReadRequest(2, {"inline-key"}), tc);
+    const auto response = ReceiveKeyValueResponse(tc);
+    if constexpr (LimitEnabled) {
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_REJECTED);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetErrorReason(), TEvKeyValue::RequestInFlightLimitReached);
+    } else {
+        CheckReadResponse(response, 2, {"inline-value"});
+    }
+
+    tc.Runtime->GetAppData().FeatureFlags.SetEnableKeyValueRequestInFlightLimit(!LimitEnabled);
+    constexpr auto statusAfterToggle = LimitEnabled
+        ? NKikimrKeyValue::Statuses::RSTATUS_OK
+        : NKikimrKeyValue::Statuses::RSTATUS_BLOCKED;
+    ExecuteWrite<statusAfterToggle>(tc, {{"after-toggle", "value"}}, 0, 2,
+        NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+    tc.Runtime->GetAppData().FeatureFlags.SetEnableKeyValueRequestInFlightLimit(true);
+
+    gets.UnblockOne();
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 1, {"value"});
+    ExecuteWrite(tc, {{"after-completion", "value"}}, 0, 2,
+        NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+}
+
+Y_UNIT_TEST(TestRequestInFlightLimitRejectsReadWriteAndDelete) {
+    CheckRequestInFlightLimit<true>();
+}
+
+Y_UNIT_TEST(TestRequestInFlightLimitDisabledByDefault) {
+    CheckRequestInFlightLimit<false>();
+}
+
 Y_UNIT_TEST(TestWriteToNonExistentChannelReturnsError) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {

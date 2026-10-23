@@ -45,6 +45,11 @@ TCommitOffsetActor::~TCommitOffsetActor() = default;
 
 void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
     TBase::Bootstrap(ctx);
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        Reply(Ydb::StatusIds::PRECONDITION_FAILED,
+            NYql::TIssues{NYql::TIssue("Consumer offset commits are disabled")}, ctx);
+        return;
+    }
     Become(&TThis::StateFunc);
 
     auto request = dynamic_cast<const Ydb::Topic::CommitOffsetRequest*>(GetProtoRequest());
@@ -77,7 +82,9 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
         AnswerError("empty topic in commit offset request", PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
-    topicsToResolve.insert(request->path());
+    topicsToResolve.insert(TopicsHandler->GetConverterFactory()->GetNoDCMode()
+        ? Request_->NormalizePath(request->path())
+        : request->path());
 
     auto topicsList = TopicsHandler->GetReadTopicsList(
             topicsToResolve, true, Request().GetDatabaseName().GetOrElse(TString())

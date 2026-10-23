@@ -4,6 +4,7 @@ SRCS(
     yql_kikimr_gateway_ut.cpp
     yql_kikimr_provider_ut.cpp
     read_attributes_utils_ut.cpp
+    sql_path_aliases_ut.cpp
 )
 
 PEERDIR(

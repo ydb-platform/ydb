@@ -1028,6 +1028,12 @@ message TKqpFullTextSourceSettings {
     optional string Mode = 16;
 
     optional NKqpProto.EKqpFullTextIndexType IndexType = 17;
+
+    // Transaction context for table reads
+    optional uint64 LockTxId = 20;
+    optional uint32 LockNodeId = 21;
+    optional NKikimrDataEvents.ELockMode LockMode = 22;
+    optional uint64 QuerySpanId = 23;
 };
 
 message TKqpSysViewSourceSettings {

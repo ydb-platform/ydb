@@ -99,6 +99,10 @@ namespace NKikimr::NSqsTopic::V1 {
             TBase::Bootstrap(ctx);
             NPQ::TRlHelpers::Bootstrap(this->SelfId(), ctx);
 
+            if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+                return this->ReplyWithError(MakeError(NSQS::NErrors::ACCESS_DENIED, "Client data writes are disabled"));
+            }
+
             if (this->Request().queue_url().empty()) {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::MISSING_PARAMETER, "No QueueUrl parameter."));
             }

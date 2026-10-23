@@ -1,6 +1,7 @@
 #pragma once
 
 #include "iface.h"
+#include "request_paths.h"
 
 #include <grpcpp/support/byte_buffer.h>
 #include <grpcpp/support/slice.h>
@@ -12,6 +13,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_common.pb.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
@@ -327,6 +329,7 @@ public:
 
 class IAuditCtx : public virtual IRequestCtxBaseMtSafe {
 public:
+    virtual void CountResourcePath(TStringBuf) const {}
     virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
     virtual const TAuditLogParts& GetAuditLogParts() const = 0;
 };
@@ -468,6 +471,7 @@ class IRequestProxyCtx
     friend class TGRpcRequestProxyHandleMethods;
 private:
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
+    virtual const TMaybe<TString> GetDatabaseNameFromRequest() const = 0;
 public:
     virtual ~IRequestProxyCtx() = default;
 
@@ -496,7 +500,16 @@ public:
     // validation
     virtual bool Validate(TString& error) = 0;
 
+    void InitializePathNormalization(std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer);
+
+    const TMaybe<TString> GetDatabaseName() const final {
+        return PathNormalizationInitialized_ ? EffectiveDatabaseName_ : GetDatabaseNameFromRequest();
+    }
+
     // counters
+    void CountRequestPaths() const;
+    void CountDatabasePath(TStringBuf path) const;
+    void CountResourcePath(TStringBuf path) const override;
     virtual void SetCounters(IGRpcProxyCounters::TPtr counters) = 0;
     virtual IGRpcProxyCounters::TPtr GetCounters() const = 0;
     virtual void UseDatabase(const TString& database) = 0;
@@ -531,6 +544,16 @@ public:
     }
 
     virtual TString GetRpcMethodName() const = 0;
+
+protected:
+    virtual void CountRequestBodyPaths() const {}
+    virtual NYdbGrpc::ICounterBlock* GetRequestCounters() const { return nullptr; }
+
+private:
+    mutable bool RelativeDatabaseCounted_ = false;
+    mutable bool RelativeResourceCounted_ = false;
+    TMaybe<TString> EffectiveDatabaseName_;
+    bool PathNormalizationInitialized_ = false;
 };
 
 // Request context
@@ -644,7 +667,7 @@ public:
         return false;
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return Database_;
     }
 
@@ -885,7 +908,8 @@ public:
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
         , AuxSettings(std::move(auxSettings))
     {
-        if (!TraceId) {
+        this->EnablePathNormalization();
+        if (!TraceId || TraceId->empty()) {
             TraceId = UlidGen.Next().ToString();
         }
     }
@@ -929,7 +953,7 @@ public:
         return ExtractYdbToken(Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
@@ -998,6 +1022,10 @@ public:
 
     void UseDatabase(const TString& database) override {
         Ctx_->UseDatabase(database);
+    }
+
+    NYdbGrpc::ICounterBlock* GetRequestCounters() const override {
+        return Ctx_->GetCounterBlock();
     }
 
     TVector<TStringBuf> FindClientCertPropertyValues() const override {
@@ -1263,7 +1291,8 @@ public:
         : Ctx_(ctx)
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
     {
-        if (!TraceId) {
+        this->EnablePathNormalization();
+        if (!TraceId || TraceId->empty()) {
             TraceId = UlidGen.Next().ToString();
         }
     }
@@ -1276,7 +1305,7 @@ public:
         return FindPtr(Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES), capability);
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
@@ -1359,12 +1388,36 @@ public:
         Counters = counters;
     }
 
+    void CountRequestBodyPaths() const override {
+        if (const auto* request = dynamic_cast<const TRequest*>(GetRequest())) {
+            if constexpr (std::is_same_v<TReq, Ydb::Discovery::ListEndpointsRequest>) {
+                this->CountDatabasePath(request->database());
+            }
+            if constexpr (std::is_same_v<TReq, Ydb::Cms::CreateDatabaseRequest>
+                || std::is_same_v<TReq, Ydb::Cms::AlterDatabaseRequest>
+                || std::is_same_v<TReq, Ydb::Cms::GetDatabaseStatusRequest>
+                || std::is_same_v<TReq, Ydb::Cms::GetScaleRecommendationRequest>
+                || std::is_same_v<TReq, Ydb::Cms::RemoveDatabaseRequest>
+                || std::is_same_v<TReq, Ydb::Discovery::NodeRegistrationRequest>) {
+                this->CountDatabasePath(request->path());
+            }
+            if constexpr (std::is_same_v<TReq, Ydb::Cms::CreateDatabaseRequest>) {
+                this->CountDatabasePath(request->serverless_resources().shared_database_path());
+            }
+            CountSchemaRequestPaths(*this, *request);
+        }
+    }
+
     IGRpcProxyCounters::TPtr GetCounters() const override {
         return Counters;
     }
 
     void UseDatabase(const TString& database) override {
         Ctx_->UseDatabase(database);
+    }
+
+    NYdbGrpc::ICounterBlock* GetRequestCounters() const override {
+        return Ctx_->GetCounterBlock();
     }
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
@@ -2024,7 +2077,7 @@ public:
         return Span.GetTraceId();
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return Database ? TMaybe<TString>(Database) : Nothing();
     }
 

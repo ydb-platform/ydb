@@ -65,7 +65,7 @@ private:
     }
 };
 
-TConclusion<IResourceProcessor::EExecutionResult> TFilterProcessor::DoExecute(
+TConclusion<TExecutionResult> TFilterProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const {
     std::vector<std::shared_ptr<IChunkedArray>> inputColumns;
     if (nodeContext.GetRemoveResourceIds().contains(GetInputColumnIdOnce())) {
@@ -109,7 +109,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TFilterProcessor::DoExecute(
     } else {
         context.MutableResources().AddFilter(filter);
     }
-    return EExecutionResult::Success;
+    return TExecutionResult::Done();
 }
 
 }   // namespace NKikimr::NArrow::NSSA

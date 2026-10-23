@@ -233,12 +233,15 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
         {"LOGPREFIX", LOG_PREFIX},
         {"request", ev->Get()->Request.DebugString()});
 
+    const auto& init = ev->Get()->Request.init_request();
+    for (const auto& topic : init.topics_read_settings()) {
+        Request->CountResourcePath(topic.path());
+    }
+
     if (Initing) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "got second init request");
     }
     Initing = true;
-
-    const auto& init = ev->Get()->Request.init_request();
 
     if (!init.topics_read_settings_size()) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "no topics in init request");
@@ -272,7 +275,9 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
             return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "empty topic in init request");
         }
 
-        TopicsToResolve.insert(path);
+        TopicsToResolve.insert(TopicsHandler.GetConverterFactory()->GetNoDCMode()
+            ? Request->NormalizePath(path)
+            : path);
     }
 
     if (Request->GetSerializedToken().empty()) {

@@ -1,8 +1,32 @@
 #include "common.h"
 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/local_proxy/local_pq_client/local_topic_client.h>
 
 namespace NKikimr::NKqp::NLocalTopicTests {
+
+using NYdb::NTopic::TDeferredCommit;
+
+namespace {
+
+class TPathAliasingLocalTopicClientFixture : public TLocalTopicClientFixture {
+public:
+    void SetUp(NUnitTest::TTestContext&) override {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false)
+            .SetAuthToken(BUILTIN_ACL_ROOT)
+            .SetEnableTopicDeferredPublish(true);
+        auto* rule = settings.AppConfig.MutableResourcePathPrefixMapping()->AddRules();
+        rule->SetSrc("/Root/topic");
+        rule->SetDst("/Root/missing-topic");
+
+        Kikimr = std::make_unique<TKikimrRunner>(settings);
+        TopicClient = std::make_unique<TTopicClient>(Kikimr->GetDriver());
+        CreateTopic("topic");
+    }
+};
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TLocalTopicClient) {
     Y_UNIT_TEST_F(DescribeTopic, TLocalTopicClientFixture) {
@@ -52,6 +76,24 @@ Y_UNIT_TEST_SUITE(TLocalTopicClient) {
         UNIT_ASSERT_VALUES_EQUAL(messages[0].GetOffset(), 0);
         CloseSession(*readSession);
         AssertTopicMessages({"client message"});
+    }
+
+    Y_UNIT_TEST_F(LocalStreamsBypassPhysicalPathAliasing, TPathAliasingLocalTopicClientFixture) {
+        auto client = CreateLocalTopicClient(LocalClientSettings(), ClientSettings());
+        auto writeSession = client->CreateWriteSession(WriteSettings(TOPIC_PATH));
+        TTestWriter writer(writeSession);
+        AssertAck(writer.Write(TWriteMessage("path alias bypass")), 1, 0);
+        CloseSession(*writeSession);
+
+        auto readSession = client->CreateReadSession(ReadSettings(TOPIC_PATH));
+        const auto messages = ReadMessages(*readSession, 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "path alias bypass");
+        TDeferredCommit deferred;
+        deferred.Add(messages[0]);
+        deferred.Commit();
+        const auto ack = WaitForReadEvent<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(*readSession);
+        UNIT_ASSERT_VALUES_EQUAL(ack.GetCommittedOffset(), 1);
+        CloseSession(*readSession);
     }
 }
 

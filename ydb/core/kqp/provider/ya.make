@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     read_attributes_utils.cpp
     rewrite_io_utils.cpp
+    sql_path_aliases.cpp
     yql_kikimr_constraints.cpp
     yql_kikimr_datasink.cpp
     yql_kikimr_datasource.cpp

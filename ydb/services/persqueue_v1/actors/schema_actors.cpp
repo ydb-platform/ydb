@@ -246,7 +246,9 @@ void TPQDescribeTopicActor::Bootstrap(const NActors::TActorContext& ctx)
 }
 
 TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::TEvDescribeTopicRequest* request)
-    : TBase(request, request->GetProtoRequest()->path())
+    : TBase(request, AppData()->PQConfig.GetTopicsAreFirstClassCitizen()
+        ? request->NormalizePath(request->GetProtoRequest()->path())
+        : request->GetProtoRequest()->path())
     , TDescribeTopicActorImpl(TDescribeTopicActorSettings::DescribeTopic(
             request->GetProtoRequest()->include_stats(),
             request->GetProtoRequest()->include_location()))
@@ -256,7 +258,9 @@ TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::TEvDescribeTopic
 }
 
 TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::IRequestOpCtx * ctx)
-    : TBase(ctx, dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(ctx->GetRequest())->path())
+    : TBase(ctx, AppData()->PQConfig.GetTopicsAreFirstClassCitizen()
+        ? ctx->NormalizePath(dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(ctx->GetRequest())->path())
+        : dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(ctx->GetRequest())->path())
     , TDescribeTopicActorImpl(TDescribeTopicActorSettings::DescribeTopic(
             dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(ctx->GetRequest())->include_stats(),
             dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(ctx->GetRequest())->include_location()))

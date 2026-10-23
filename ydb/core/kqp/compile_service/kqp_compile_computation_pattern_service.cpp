@@ -57,7 +57,9 @@ private:
         size_t patternsToCompileSize = PatternsToCompile.size();
         for (; PatternToCompileIndex < patternsToCompileSize && compilationIntervalMs > 0; ++PatternToCompileIndex) {
             auto& patternToCompile = PatternsToCompile[PatternToCompileIndex];
-            if (!patternToCompile.Entry->IsInCache.load() || patternToCompile.Entry->Pattern->IsCompiled()) {
+            if (!patternToCompile.Entry->IsInCache.load() ||
+                patternToCompile.Entry->Pattern->GetCompileStatus() != NMiniKQL::ECompileStatus::NoCompilationStarted)
+            {
                 continue;
             }
 

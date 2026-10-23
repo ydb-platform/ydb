@@ -9,6 +9,7 @@ ENDIF()
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
 
 SRCS(
+    dq_solomon_metrics_queue_ut.cpp
     dq_solomon_write_actor_ut.cpp
     ut_helpers.cpp
 )

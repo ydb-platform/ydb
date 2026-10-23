@@ -313,6 +313,20 @@ TPlanStep ProposeCommit(
     });
 }
 
+std::optional<TPlanStep> TryProposeCommit(
+    TTestBasicRuntime& runtime, TActorId& sender, const ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
+    std::optional<TPlanStep> planStep;
+    const auto result = ProposeCommitCheck(runtime, sender, TTestTxConfig::TxTablet0, txId, writeIds, lockId, [&](auto& res) {
+        if (res.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
+            planStep = TPlanStep(res.GetMinStep());
+        } else {
+            UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+        }
+    });
+    Y_UNUSED(result);
+    return planStep;
+}
+
 void ProposeCommitFail(
     TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
     const auto result = ProposeCommitCheck(runtime, sender, shardId, txId, writeIds, lockId, [&](auto& res) {
@@ -551,6 +565,32 @@ ui64 CountLocalDbTableRows(
     )", rangeSpec.c_str(), fieldsSpec.c_str(), tableName.c_str());
     const auto result = LocalMiniKQL(runtime, tabletId, query);
     return NClient::TValue::Create(result)[0]["List"].Size();
+}
+
+void EraseLocalDbTableRow(TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec) {
+    const TString query = Sprintf(R"(
+        (
+            (let key %s)
+            (return (AsList
+                (EraseRow '%s key)
+            ))
+        )
+    )", keySpec.c_str(), tableName.c_str());
+    Y_UNUSED(LocalMiniKQL(runtime, tabletId, query));
+}
+
+void UpdateLocalDbTableRow(
+    TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec, const TString& valuesSpec) {
+    const TString query = Sprintf(R"(
+        (
+            (let key %s)
+            (let values %s)
+            (return (AsList
+                (UpdateRow '%s key values)
+            ))
+        )
+    )", keySpec.c_str(), valuesSpec.c_str(), tableName.c_str());
+    Y_UNUSED(LocalMiniKQL(runtime, tabletId, query));
 }
 
 ui64 CountTxInfoRows(TTestBasicRuntime& runtime, ui64 tabletId) {

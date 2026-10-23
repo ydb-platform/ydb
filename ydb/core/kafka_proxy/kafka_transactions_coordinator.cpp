@@ -41,6 +41,11 @@ namespace NKafka {
     };
 
     void TTransactionsCoordinator::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext& ctx) {
+        if (!NKikimr::AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+            auto response = NKafkaTransactions::BuildResponse<TTxnOffsetCommitResponseData>(ev->Get()->Request, EKafkaErrors::POLICY_VIOLATION);
+            Send(ev->Get()->ConnectionId, new TEvKafka::TEvResponse(ev->Get()->CorrelationId, response, EKafkaErrors::POLICY_VIOLATION));
+            return;
+        }
         HandleTransactionalRequest<TTxnOffsetCommitResponseData>(ev, ctx);
     };
 

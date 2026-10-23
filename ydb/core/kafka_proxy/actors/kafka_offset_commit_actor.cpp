@@ -374,6 +374,10 @@ void TKafkaOffsetCommitActor::SendAuthRequest(const NActors::TActorContext& ctx)
 }
 
 void TKafkaOffsetCommitActor::Bootstrap(const NActors::TActorContext& ctx) {
+    if (!NKikimr::AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        SendFailedForAllPartitions(EKafkaErrors::POLICY_VIOLATION, ctx);
+        return;
+    }
     SendAuthRequest(ctx);
     Become(&TKafkaOffsetCommitActor::StateWork);
 }

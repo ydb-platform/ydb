@@ -434,9 +434,9 @@ public:
             txLocks << lock.ShortDebugString();
         }
 
-        TStringBuilder borkenTxLocks;
+        TStringBuilder brokenTxLocks;
         for (const auto& lock : record.GetBrokenTxLocks()) {
-            borkenTxLocks << lock.ShortDebugString();
+            brokenTxLocks << lock.ShortDebugString();
         }
 
         YDB_LOG_DEBUG("Received TEvReadResult for buffer lookup",
@@ -450,7 +450,7 @@ public:
             {"finished", record.GetFinished()},
             {"rowCount", record.GetRowCount()},
             {"txLocks", txLocks},
-            {"brokenTxLocks", borkenTxLocks});
+            {"brokenTxLocks", brokenTxLocks});
 
         if (!record.GetBrokenTxLocks().empty()) {
             BrokenLocksCount += record.GetBrokenTxLocks().size();

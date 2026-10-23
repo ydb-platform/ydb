@@ -78,4 +78,5 @@ RECURSE_FOR_TESTS(
     ut_replication
     ut_stream_creator
     ut_target_discoverer
+    ut_worker_lifecycle
 )

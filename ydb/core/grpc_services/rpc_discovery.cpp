@@ -43,9 +43,10 @@ public:
     {}
 
     void Bootstrap() {
+        const TString database = Request->NormalizePath(Request->GetProtoRequest()->database());
         // request endpoints
         Discoverer = Register(CreateDiscoverer(&MakeEndpointsBoardPath,
-            Request->GetProtoRequest()->database(), Request->GetEndpointId().empty() && Request->GetProtoRequest()->Getservice().empty(),
+            database, Request->GetEndpointId().empty() && Request->GetProtoRequest()->Getservice().empty(),
             SelfId(), CacheId));
 
         // request self node info

@@ -288,7 +288,9 @@ public:
         auto grpcRequest = std::make_unique<TGrpcProtoRequestType>();
         if (Parse(*grpcRequest)) {
             TIntrusivePtr<TGrpcRequestContextWrapper> requestContext = new TGrpcRequestContextWrapper(RequestContext, std::move(grpcRequest), &SendReply);
-            ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(requestContext).release());
+            auto event = EventFactory(requestContext);
+            event->DisablePathNormalization();
+            ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), event.release());
         }
 
         this->Die(ctx);
@@ -460,10 +462,14 @@ public:
             );
 
             // new event -> new EventFactory
-            actorSystem->Send(NGRpcService::CreateGRpcRequestProxyId(), NGRpcService::CreateFederatedQueryModifyQueryRequestOperationCall(std::move(requestContextModify)).release());
+            auto event = NGRpcService::CreateFederatedQueryModifyQueryRequestOperationCall(std::move(requestContextModify));
+            event->DisablePathNormalization();
+            actorSystem->Send(NGRpcService::CreateGRpcRequestProxyId(), event.release());
         });
 
-        ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(std::move(requestContext)).release());
+        auto event = EventFactory(std::move(requestContext));
+        event->DisablePathNormalization();
+        ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), event.release());
         this->Die(ctx);
     }
 };

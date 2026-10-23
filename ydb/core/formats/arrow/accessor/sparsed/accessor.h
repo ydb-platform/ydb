@@ -145,7 +145,7 @@ private:
         if (Record.GetNotDefaultRecordsCount()) {
             return false;
         } else {
-            value = DefaultValue;
+            value = DefaultValue ? DefaultValue : arrow::MakeNullScalar(GetDataType());
             return true;
         }
     }

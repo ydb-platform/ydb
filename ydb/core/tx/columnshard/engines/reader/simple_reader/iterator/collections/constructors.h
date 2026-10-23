@@ -82,9 +82,9 @@ private:
 
     virtual std::vector<TPortionInfo::TConstPtr> GetConflictingPortions() const override;
 
-    virtual std::shared_ptr<NCommon::IDataSource> DoExtractNextImpl(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
+    virtual std::unique_ptr<NCommon::TDataSourceLease> DoExtractNextImpl(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
         auto constructor = TBase::PopObjectWithAccessor();
-        return constructor.MutableObject().Construct(context, constructor.DetachAccessor());
+        return std::make_unique<NCommon::TDataSourceLease>(constructor.MutableObject().Construct(context, constructor.DetachAccessor()));
     }
 
 public:

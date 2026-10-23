@@ -314,6 +314,8 @@ TAutoPtr<IGraphTransformer> CreateKiSourceLoadTableMetadataTransformer(TIntrusiv
     const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& sourceFactory,
     bool isInternalCall);
 TAutoPtr<IGraphTransformer> CreateKiSinkIntentDeterminationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
+TAutoPtr<IGraphTransformer> CreateSqlPathAliasesTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    TAutoPtr<IGraphTransformer> intents);
 
 TAutoPtr<IGraphTransformer> CreateKiSourceCallableExecutionTransformer(
     TIntrusivePtr<IKikimrGateway> gateway,

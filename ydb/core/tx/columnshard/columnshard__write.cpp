@@ -335,11 +335,12 @@ private:
     std::shared_ptr<TTxController::ITransactionOperator> TxOperator;
 };
 
-void TColumnShard::ProposeTransaction(std::shared_ptr<TCommitOperation> op, const TActorId source, const ui64 cookie) {
-    if (auto lock = OperationsManager->GetLockOptional(op->GetLockId()); lock) {
-        lock->SetTxId(op->GetTxId());
+bool TColumnShard::ProposeTransaction(std::shared_ptr<TCommitOperation> op, const TActorId source, const ui64 cookie) {
+    if (auto lock = OperationsManager->GetLockOptional(op->GetLockId()); lock && !lock->TryProposeTransaction(op->GetTxId())) {
+        return false;
     }
     Execute(new TProposeWriteTransaction(this, op, source, cookie));
+    return true;
 }
 
 void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {
@@ -468,10 +469,22 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                                 " != " + ::ToString(commitOperation->GetInternalGenerationCounter()),
                             NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
                     } else {
-                        ProposeTransaction(commitOperation, source, cookie);
+                        if (!ProposeTransaction(commitOperation, source, cookie)) {
+                            LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0,
+                                "CommitWriteLock", true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN),
+                                "lock is being aborted: " + ::ToString(commitOperation->GetLockId()));
+                            sendError("lock is being aborted: " + ::ToString(commitOperation->GetLockId()),
+                                NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+                        }
                     }
                 } else {
-                    ProposeTransaction(commitOperation, source, cookie);
+                    if (!ProposeTransaction(commitOperation, source, cookie)) {
+                        LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0,
+                            "CommitWriteLock", true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN),
+                            "lock is being aborted: " + ::ToString(commitOperation->GetLockId()));
+                        sendError("lock is being aborted: " + ::ToString(commitOperation->GetLockId()),
+                            NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+                    }
                 }
             }
         }

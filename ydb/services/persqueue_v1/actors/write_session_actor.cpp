@@ -404,6 +404,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDone::TPtr&
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::CheckACL(const TActorContext& ctx) {
+    if (!Token) {
+        CloseSession("Cannot check ACL without a user token", PersQueue::ErrorCode::ACCESS_DENIED, ctx);
+        return;
+    }
     //AFL_ENSURE(ACLCheckInProgress);
 
     NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;
@@ -440,6 +444,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
     InitSpan = GenerateInitSpan();
     THolder<TEvWriteInit> event(ev->Release());
 
+    if constexpr (!UseMigrationProtocol) {
+        Request->CountResourcePath(event->Request.init_request().path());
+    }
+
     if (State != ES_CREATED) {
         //answer error
         CloseSession("got second init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
@@ -457,6 +465,12 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
     if (topic_path.empty()) {
         CloseSession("no topic in init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
+    }
+    if constexpr (!UseMigrationProtocol) {
+        if (TopicsController.GetConverterFactory()->GetNoDCMode()) {
+            topic_path = Request->NormalizePath(topic_path);
+            InitRequest.set_path(topic_path);
+        }
     }
 
     if constexpr (UseMigrationProtocol) {
@@ -1535,6 +1549,11 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequest
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& ev, const TActorContext& ctx) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        CloseSession("Client data writes are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED, ctx,
+            Ydb::StatusIds::PRECONDITION_FAILED);
+        return;
+    }
     RequestNotChecked = true;
 
     if (State != ES_INITED) {

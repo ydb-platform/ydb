@@ -240,8 +240,8 @@ struct TFakeTicketParserActor: public TActor<TFakeTicketParserActor> {
         Y_ABORT_UNLESS(ev->Get()->Ticket.EndsWith(BUILTIN_SYSTEM_DOMAIN));
         NACLib::TUserToken::TUserTokenInitFields args;
         args.UserSID = ev->Get()->Ticket;
-        TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
-        Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));
+        NACLib::TUserToken userToken(args);
+        Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, std::move(userToken)));
     }
 };
 

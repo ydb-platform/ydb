@@ -19,6 +19,7 @@
 
 #include <util/datetime/base.h>  // for ToInstant
 #include <util/generic/guid.h>
+#include <util/generic/overloaded.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::HTTP
 
@@ -299,15 +300,14 @@ public:
     }
 
     void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
-        const TEvTicketParser::TEvAuthorizeTicketResult& result = *ev->Get();
-        if (result.Error.has_value()) {
-            return ReplyErrorAndPassAway("403", "Forbidden", result.Error->Message);
-        }
-        if (result.Token == nullptr) {
-            return ReplyErrorAndPassAway("403", "Forbidden", "Empty token");
-        }
-
-        ReplyDeleteCookieAndPassAway(result.Token->GetUserSID(), result.Token->GetSanitizedToken());
+        std::visit(TOverloaded{
+            [this](const TEvTicketParser::TError& error) {
+                ReplyErrorAndPassAway("403", "Forbidden", error.Message);
+            },
+            [this](const NACLib::TUserToken& token) {
+                ReplyDeleteCookieAndPassAway(token.GetUserSID(), token.GetSanitizedToken());
+            }
+        }, ev->Get()->Result);
     }
 
     void HandlePoisonPill(TEvents::TEvPoisonPill::TPtr&) {

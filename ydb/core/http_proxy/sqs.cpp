@@ -32,6 +32,8 @@
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#include <util/generic/overloaded.h>
+
 namespace NKikimr::NHttpProxy {
 
     namespace {
@@ -156,25 +158,25 @@ namespace NKikimr::NHttpProxy {
             }
 
             void HandleSecurityTokenAuth(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
-                const auto& token = ev->Get()->Token;
-                const bool isEnforceUserTokenRequirement = AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->EnforceUserTokenCheckRequirement;
-                if (ev->Get()->Error.has_value()) {
-                    if (isEnforceUserTokenRequirement) {
-                        return ReplyWithYdbError(
-                            ctx,
-                            ev->Get()->Error->Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED,
-                            TString{ev->Get()->Error->Message});
+                const bool success = std::visit(TOverloaded{
+                    [this, &ctx](const TEvTicketParser::TError& error) {
+                        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->EnforceUserTokenCheckRequirement) {
+                            ReplyWithYdbError(
+                                ctx,
+                                error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED,
+                                error.Message);
+                            return false;
+                        }
+                        return true;
+                    },
+                    [this](const NACLib::TUserToken& token) {
+                        HttpContext.SerializedUserToken = token.GetSerializedToken();
+                        UserSid_ = token.GetUserSID();
+                        return true;
                     }
-                } else if (!token) {
-                    if (isEnforceUserTokenRequirement) {
-                        return ReplyWithYdbError(
-                            ctx,
-                            NYdb::EStatus::UNAUTHORIZED,
-                            "Access denied");
-                    }
-                } else {
-                    HttpContext.SerializedUserToken = token->GetSerializedToken();
-                    UserSid_ = token->GetUserSID();
+                }, ev->Get()->Result);
+                if (!success) {
+                    return;
                 }
                 SendGrpcRequestNoDriver(ctx);
             }

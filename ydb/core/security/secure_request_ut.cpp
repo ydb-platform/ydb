@@ -104,9 +104,9 @@ struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
         } else {
             args.UserSID = "user";
         }
-        TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
-        userToken->SaveSerializationInfo();
-        Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));
+        NACLib::TUserToken userToken(args);
+        userToken.SaveSerializationInfo();
+        Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, std::move(userToken)));
     }
 
     STFUNC(StateFunc) {

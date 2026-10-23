@@ -6,7 +6,7 @@
 #include <ydb/library/login/login.h>
 #include <util/string/builder.h>
 
-#include <optional>
+#include <variant>
 
 namespace NKikimr {
     struct TEvTicketParser {
@@ -139,21 +139,18 @@ namespace NKikimr {
         };
 
         struct TEvAuthorizeTicketResult : TEventLocal<TEvAuthorizeTicketResult, EvAuthorizeTicketResult> {
-            TString Ticket;
-            std::optional<TError> Error;
-            TIntrusiveConstPtr<NACLib::TUserToken> Token;
-            const TString SerializedToken;
+            const TString Ticket;
+            const std::variant<NACLib::TUserToken, TError> Result;
 
-            TEvAuthorizeTicketResult(const TString& ticket, const TIntrusiveConstPtr<NACLib::TUserToken>& token)
-                : Ticket(ticket)
-                , Token(token)
-                , SerializedToken(token ? token->GetSerializedToken() : "")
+            TEvAuthorizeTicketResult(TString ticket, NACLib::TUserToken token)
+                : Ticket(std::move(ticket))
+                , Result(std::move(token))
             {
             }
 
-            TEvAuthorizeTicketResult(const TString& ticket, const TError& error)
-                : Ticket(ticket)
-                , Error(error)
+            TEvAuthorizeTicketResult(TString ticket, TError error)
+                : Ticket(std::move(ticket))
+                , Result(std::move(error))
             {
             }
         };

@@ -163,6 +163,39 @@ void WaitUntil(TFn&& fn, TDuration timeout = TDuration::Seconds(20)) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
+    Y_UNIT_TEST(SaslRejectsEmptyTicketParserErrorWithoutTokenEnforcement) {
+        TInsecureTestServer testServer("2");
+        auto* runtime = testServer.KikimrServer->GetRuntime();
+        UNIT_ASSERT(!runtime->GetAppData().EnforceUserTokenRequirement);
+        UNIT_ASSERT(!runtime->GetAppData().EnforceUserTokenCheckRequirement);
+
+        const auto ticketParserEdge = runtime->AllocateEdgeActor();
+        runtime->RegisterService(NKikimr::MakeTicketParserID(), ticketParserEdge);
+
+        TKafkaTestClient client(testServer.Port);
+        // A missing SASL response must fail this test instead of blocking on socket input.
+        client.SetSocketTimeout(TDuration::Seconds(10));
+        const auto handshake = client.SaslHandshake("PLAIN");
+        UNIT_ASSERT_VALUES_EQUAL(handshake->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        auto header = client.Header(EApiKey::SASL_AUTHENTICATE, 2);
+        const TString authBytes = TStringBuilder() << "authzid" << '\0' << "/Root" << '\0' << "test-token";
+        TSaslAuthenticateRequestData authRequest;
+        authRequest.AuthBytes = TKafkaRawBytes(authBytes.data(), authBytes.size());
+        client.WriteToSocket(header, authRequest);
+
+        const auto request = runtime->GrabEdgeEvent<NKikimr::TEvTicketParser::TEvAuthorizeTicket>(
+            ticketParserEdge, TDuration::Seconds(10));
+        UNIT_ASSERT_C(request, "SASL authentication must request ticket authorization");
+        runtime->Send(new IEventHandle(request->Sender, ticketParserEdge,
+            new NKikimr::TEvTicketParser::TEvAuthorizeTicketResult(
+                request->Get()->Ticket, NKikimr::TEvTicketParser::TError{.Retryable = false}),
+            0, request->Cookie), 0);
+
+        const auto response = client.ReadResponse<TSaslAuthenticateResponseData>(header);
+        UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::SASL_AUTHENTICATION_FAILED));
+    }
+
     Y_UNIT_TEST(TokenRecheckUsesNewRequestIdForEachRequest) {
         TInsecureTestServer testServer(TTestServerSettings{
             .KafkaApiMode = "2",

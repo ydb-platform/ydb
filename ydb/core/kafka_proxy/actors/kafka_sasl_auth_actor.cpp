@@ -13,6 +13,8 @@
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/overloaded.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
 
@@ -200,19 +202,27 @@ void TKafkaSaslAuthActor::HandleLoginResult(TEvSasl::TEvSaslScramFinalServerResp
 }
 
 void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const NActors::TActorContext& ctx) {
-    if (ev->Get()->Error.has_value()) {
-        if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
-            if (Context->SaslMechanism == "SCRAM-SHA-256") {
-                AuthResponse = NLogin::NSasl::BuildErrorMsg(NLogin::NSasl::EScramServerError::OtherError);
+    const bool success = std::visit(TOverloaded{
+        [this, &ctx](const NKikimr::TEvTicketParser::TError& error) {
+            if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+                if (Context->SaslMechanism == "SCRAM-SHA-256") {
+                    AuthResponse = NLogin::NSasl::BuildErrorMsg(NLogin::NSasl::EScramServerError::OtherError);
+                }
+                SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, Ydb::StatusIds::UNAUTHORIZED, "", error.Message, ctx);
+                return false;
             }
-
-            SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, Ydb::StatusIds::UNAUTHORIZED,
-                                "", TString{ev->Get()->Error->Message}, ctx);
-            return;
+            UserToken = nullptr;
+            return true;
+        },
+        [this](const NACLib::TUserToken& token) {
+            UserToken = MakeIntrusive<NACLib::TUserToken>(token);
+            return true;
         }
+    }, ev->Get()->Result);
+    if (!success) {
+        return;
     }
 
-    UserToken = ev->Get()->Token;
     SendResponseAndDie(EKafkaErrors::NONE_ERROR, Ydb::StatusIds::SUCCESS, "", "", ctx);
 }
 

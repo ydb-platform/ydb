@@ -23,6 +23,10 @@ TKafkaTestClient::TKafkaTestClient(ui16 port, const TString clientName)
     , ClientName(clientName) {
 }
 
+void TKafkaTestClient::SetSocketTimeout(TDuration timeout) {
+    Socket.SetSocketTimeout(timeout.Seconds(), timeout.MilliSeconds() % 1000);
+}
+
 TMessagePtr<TApiVersionsResponseData> TKafkaTestClient::ApiVersions(bool silent) {
     return ApiVersionsAtVersion(2, silent);
 }
@@ -1123,3 +1127,6 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::WriteAndRead<TProduceRespons
 
 template
 TMessagePtr<TProduceResponseData> TKafkaTestClient::Read<TProduceResponseData>(TSocketInput& si, TRequestHeaderData* requestHeader);
+
+template
+TMessagePtr<TSaslAuthenticateResponseData> TKafkaTestClient::Read<TSaslAuthenticateResponseData>(TSocketInput& si, TRequestHeaderData* requestHeader);

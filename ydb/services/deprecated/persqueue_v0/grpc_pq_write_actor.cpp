@@ -13,6 +13,7 @@
 #include <ydb/services/persqueue_v1/actors/helpers.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <util/generic/overloaded.h>
 #include <util/string/hex.h>
 #include <util/string/vector.h>
 #include <util/string/escape.h>
@@ -467,24 +468,29 @@ void TWriteSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr&
     Y_ABORT_UNLESS(ACLCheckInProgress);
     TString ticket = ev->Get()->Ticket;
     TString maskedTicket = ticket.size() > 5 ? (ticket.substr(0, 5) + "***" + ticket.substr(ticket.size() - 5)) : "***";
-    YDB_LOG_INFO_CTX(ctx, "CheckACL ticket got result from TICKET_PARSER response",
-        {"maskedTicket", maskedTicket},
-        {"hasError", ev->Get()->Error.has_value()},
-        {"error", ev->Get()->Error.has_value() ? ev->Get()->Error->Message : TString()},
-        {"user", (!ev->Get()->Error.has_value() && ev->Get()->Token) ? ev->Get()->Token->GetUserSID() : TString()});
-
-    if (ev->Get()->Error.has_value() || !ev->Get()->Token) {
-        if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
-            CloseSession(
-                TStringBuilder() << "Ticket parsing error: " << ev->Get()->Error.has_value() ? ev->Get()->Error->Message : "empty token",
-                NPersQueue::NErrorCode::ACCESS_DENIED,
-                ctx
-            );
-            return;
+    const bool success = std::visit(TOverloaded{
+        [this, &ctx, &maskedTicket](const TEvTicketParser::TError& error) {
+            YDB_LOG_INFO_CTX(ctx, "CheckACL ticket got result from TICKET_PARSER response",
+                {"maskedTicket", maskedTicket},
+                {"error", error.Message});
+            if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+                CloseSession(TStringBuilder() << "Ticket parsing error: " << error.Message, NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
+                return false;
+            }
+            Token = nullptr;
+            return true;
+        },
+        [this, &ctx, &maskedTicket](const NACLib::TUserToken& token) {
+            YDB_LOG_INFO_CTX(ctx, "CheckACL ticket got result from TICKET_PARSER response",
+                {"maskedTicket", maskedTicket},
+                {"user", token.GetUserSID()});
+            Token = MakeIntrusive<NACLib::TUserToken>(token);
+            return true;
         }
+    }, ev->Get()->Result);
+    if (!success) {
+        return;
     }
-    Token = ev->Get()->Token;
-
 
     Y_ABORT_UNLESS(ACLCheckInProgress);
     YDB_LOG_INFO_CTX(ctx, "Session describe result for acl check",

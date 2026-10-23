@@ -15,6 +15,7 @@
 #include <ydb/library/ycloud/impl/iam_token_service.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
+#include <util/generic/overloaded.h>
 #include <util/stream/file.h>
 
 namespace NKikimr::NHttpProxy {
@@ -127,24 +128,27 @@ namespace NKikimr::NHttpProxy {
 
         void HandleTicketParser(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
             NACLib::TUserToken userToken = NACLibProto::TUserToken();
-            if (ev->Get()->Error.has_value()) {
-                if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
-                    return ReplyWithError(ctx, ev->Get()->Error->Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->Error->Message});
-                }
-            } else if (!ev->Get()->Token) {
-                if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
-                    return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED, "Access denied");
-                }
-            } else {
-                userToken = *ev->Get()->Token;
-            }
-            ctx.Send(Sender, new TEvServerlessProxy::TEvToken(userToken.GetUserSID(), "", userToken.GetSerializedToken(), {"", DatabaseId, DatabasePath, CloudId, FolderId}));
 
-            if (!ev->Get()->Error.has_value() && ev->Get()->Token) {
-                LOG_D("Authorized successfully");
-            } else {
-                LOG_D("Proceeding without authorization because token enforcement is disabled");
+            const bool success = std::visit(TOverloaded{
+                [this, &ctx](const TEvTicketParser::TError& error) {
+                    if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+                        ReplyWithError(ctx, error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, error.Message);
+                        return false;
+                    }
+                    LOG_D("Proceeding without authorization because token enforcement is disabled");
+                    return true;
+                },
+                [this, &userToken](const NACLib::TUserToken& token) {
+                    userToken = token;
+                    LOG_D("Authorized successfully");
+                    return true;
+                }
+            }, ev->Get()->Result);
+            if (!success) {
+                return;
             }
+
+            ctx.Send(Sender, new TEvServerlessProxy::TEvToken(userToken.GetUserSID(), "", userToken.GetSerializedToken(), {"", DatabaseId, DatabasePath, CloudId, FolderId}));
 
             TBase::Die(ctx);
         }

@@ -154,14 +154,14 @@ void TFakeTicketParserActor::Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& 
         args.UserSID = "username";
         args.GroupSIDs = GroupSIDs;
     }
-    TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
-    userToken->SetSanitizedToken(NKikimr::SanitizeTicket(ev->Get()->Ticket));
+    NACLib::TUserToken userToken(args);
+    userToken.SetSanitizedToken(NKikimr::SanitizeTicket(ev->Get()->Ticket));
     if (ev->Get()->Ticket != ROOT_TOKEN) {
-        userToken->SetSubjectType(NACLibProto::SUBJECT_TYPE_USER);
+        userToken.SetSubjectType(NACLibProto::SUBJECT_TYPE_USER);
     }
-    userToken->SaveSerializationInfo();
+    userToken.SaveSerializationInfo();
     YDB_LOG_INFO("Send TEvAuthorizeTicketResult success");
-    Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));
+    Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, std::move(userToken)));
 }
 
 } // namespace NMonitoring::NTests

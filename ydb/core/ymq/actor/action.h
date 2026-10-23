@@ -30,6 +30,7 @@
 #include <util/folder/path.h>
 #include <util/generic/guid.h>
 #include <util/generic/is_in.h>
+#include <util/generic/overloaded.h>
 #include <util/string/ascii.h>
 #include <util/string/join.h>
 
@@ -901,21 +902,25 @@ private:
     }
 
     void HandleTicketParserResponse(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
-        const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
-        if (result.Error.has_value()) {
-            if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
-                RLOG_SQS_ERROR("Got ticket parser error: " << *result.Error << ". " << Action_ << " was rejected");
-                MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);
-                SendReplyAndDie();
-                return;
+        const bool success = std::visit(TOverloaded{
+            [this](const TEvTicketParser::TError& error) {
+                if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+                    RLOG_SQS_ERROR("Got ticket parser error: " << error << ". " << Action_ << " was rejected");
+                    MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);
+                    SendReplyAndDie();
+                    return false;
+                }
+                UserToken_ = nullptr;
+                return true;
+            },
+            [this](const NACLib::TUserToken& token) {
+                UserToken_ = MakeIntrusive<NACLib::TUserToken>(token);
+                return true;
             }
-
-            UserToken_ = nullptr;
-        } else {
-            UserToken_ = ev->Get()->Token;
-            Y_ABORT_UNLESS(UserToken_);
+        }, ev->Get()->Result);
+        if (!success) {
+            return;
         }
-
         OnAuthCheckMessage();
     }
 

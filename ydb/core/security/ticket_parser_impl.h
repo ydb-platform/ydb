@@ -1127,7 +1127,7 @@ private:
             if (record.IsTokenReady()) {
                 // token already have built
                 record.AccessTime = now;
-                Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.GetToken()), 0, cookie);
+                Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, *record.GetToken()), 0, cookie);
             } else if (record.Error.has_value()) {
                 // token stores information about previous error
                 record.AccessTime = now;
@@ -1175,7 +1175,7 @@ private:
         }
         if (record.IsTokenReady()) {
             // offline check ready
-            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.GetToken()), 0, cookie);
+            Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, *record.GetToken()), 0, cookie);
             return;
         }
         record.AuthorizeRequests.emplace_back(ev.Release());
@@ -2100,7 +2100,7 @@ protected:
             for (const auto& request : record.AuthorizeRequests) {
                 Send(
                     request->Sender,
-                    new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, record.GetToken()),
+                    new TEvTicketParser::TEvAuthorizeTicketResult(record.Ticket, *record.GetToken()),
                     0,
                     request->Cookie
                 );

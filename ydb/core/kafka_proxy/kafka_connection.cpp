@@ -20,6 +20,7 @@
 #include "kafka_metrics.h"
 
 #include <util/generic/guid.h>
+#include <util/generic/overloaded.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -743,36 +744,40 @@ protected:
             return;
         }
         TokenRecheckInFlight = false;
-        auto* result = ev->Get();
-        if (result->Error.has_value()) {
-            if (result->Error->Retryable) {
-                Context->Token.Status = ETokenCheckStatus::Unavailable;
-                YDB_LOG_WARN("Token recheck unavailable",
+        std::visit(TOverloaded{
+            [this](const TEvTicketParser::TError& error) {
+                if (error.Retryable) {
+                    Context->Token.Status = ETokenCheckStatus::Unavailable;
+                    YDB_LOG_WARN("Token recheck unavailable",
+                        {LogPrefix()},
+                        {"error", error.ToString()});
+                } else {
+                    Context->Token.Status = ETokenCheckStatus::Invalid;
+                    YDB_LOG_ERROR("Token recheck failed",
+                        {LogPrefix()},
+                        {"error", error.ToString()});
+                }
+            },
+            [this](const NACLib::TUserToken& token) {
+                if (token.GetSerializedToken().empty()) {
+                    Context->Token.Status = ETokenCheckStatus::Invalid;
+                    YDB_LOG_ERROR("Token recheck returned empty token",
+                        {LogPrefix()});
+                    return;
+                }
+                Context->Token.Status = ETokenCheckStatus::Ok;
+                Context->Token.UserToken = MakeIntrusive<NACLib::TUserToken>(token);
+                const auto& path = Context->RlContext.GetPath();
+                Context->RlContext = NKikimr::NPQ::TRlContext(
+                    path.CoordinationNode,
+                    path.ResourcePath,
+                    Context->DatabasePath,
+                    token.GetSerializedToken());
+                YDB_LOG_DEBUG("Token recheck successful",
                     {LogPrefix()},
-                    {"error", result->Error->ToString()});
-            } else {
-                Context->Token.Status = ETokenCheckStatus::Invalid;
-                YDB_LOG_ERROR("Token recheck failed",
-                    {LogPrefix()},
-                    {"error", result->Error->ToString()});
+                    {"SID", Context->Token.UserToken->GetUserSID()});
             }
-        } else if (result->Token && !result->Token->GetSerializedToken().empty()) {
-            Context->Token.Status = ETokenCheckStatus::Ok;
-            Context->Token.UserToken = result->Token;
-            const auto& path = Context->RlContext.GetPath();
-            Context->RlContext = NKikimr::NPQ::TRlContext(
-                path.CoordinationNode,
-                path.ResourcePath,
-                Context->DatabasePath,
-                result->Token->GetSerializedToken());
-            YDB_LOG_DEBUG("Token recheck successful",
-                {LogPrefix()},
-                {"SID", Context->Token.UserToken->GetUserSID()});
-        } else {
-            Context->Token.Status = ETokenCheckStatus::Invalid;
-            YDB_LOG_ERROR("Token recheck returned empty token",
-                {LogPrefix()});
-        }
+        }, ev->Get()->Result);
         ScheduleTokenRecheck(ctx);
     }
 

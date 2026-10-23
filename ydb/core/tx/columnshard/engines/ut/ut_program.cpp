@@ -968,13 +968,14 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         UNIT_ASSERT_VALUES_EQUAL(flagOff.second->num_rows(), 1);
     }
 
+    // An out-of-range argument index is ignored: the hint is advisory, so the program still runs
+    // and the original kernel returns the same rows.
     Y_UNIT_TEST(PatternHintArgumentIndex) {
         TPatternSetup setup(3);
-        TProgramContainer program;
-        program.SetPatternIndexHintsEnabled(true);
-        const auto status = program.Init(setup.Resolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS,
-            SerializeProgram(MakePatternProgram(setup.Resolver, "%aaa%bbb%", true, 5)));
-        UNIT_ASSERT(status.IsFail());
+        const auto ignored = ApplyPatternProgram(setup.Resolver, MakePatternProgram(setup.Resolver, "%aaa%bbb%", true, 5), true);
+        UNIT_ASSERT_C(!ignored.first.Contains(NArrow::NSSA::TLogicPatternMatch::GetClassNameStatic()), ignored.first);
+        UNIT_ASSERT_VALUES_EQUAL(CountIndexChecks(ignored.first), 0);
+        UNIT_ASSERT_VALUES_EQUAL(ignored.second->num_rows(), 1);
     }
 
     Y_UNIT_TEST(PatternHintIlike) {

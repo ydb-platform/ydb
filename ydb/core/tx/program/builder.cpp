@@ -16,6 +16,10 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <util/string/join.h>
 
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NArrow::NSSA {
 
 TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const TColumnInfo& name,
@@ -66,13 +70,17 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
         }
         if (PatternIndexHintsEnabled && func.HasPatternHint() && func.GetPatternHint().HasLike()) {
             const auto& hint = func.GetPatternHint();
-            // An unset index reads as 0 and would bind the hint to the wrong column, so it is ignored.
-            // An index past the kernel arguments is a broken program.
-            if (hint.HasArgumentIndex()) {
-                if (hint.GetArgumentIndex() >= arguments.size()) {
-                    return TConclusionStatus::Fail(TStringBuilder() << "Pattern hint argument index " << hint.GetArgumentIndex()
-                                                                    << " is out of range, kernel has " << arguments.size() << " arguments");
-                }
+            // The hint is advisory (ssa.proto): a shard that ignores it must return the same rows.
+            // An unset index reads as 0 and would bind the wrong column. An index past the arguments
+            // is a planner bug or a version skew, so it is ignored too, with a warning.
+            if (hint.HasArgumentIndex() && hint.GetArgumentIndex() >= arguments.size()) {
+                YDB_LOG_WARN("",
+                    {"event", "pattern_hint_ignored"},
+                    {"reason", "argument_index_out_of_range"},
+                    {"argument_index", hint.GetArgumentIndex()},
+                    {"arguments", arguments.size()},
+                    {"column", name.GetColumnName()});
+            } else if (hint.HasArgumentIndex()) {
                 const auto ngramSize = ColumnResolver.GetBloomNgramSize(arguments[hint.GetArgumentIndex()].GetColumnId(), hint.GetCaseSensitive());
                 if (ngramSize) {
                     TPatternHintPolicy policy;

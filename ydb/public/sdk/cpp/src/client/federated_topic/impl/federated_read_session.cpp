@@ -20,11 +20,19 @@ namespace NYdb::inline Dev::NFederatedTopic {
 NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& settings);
 
 template <typename TEvent, typename TFederatedEvent>
-typename std::function<void(TEvent&)> WrapFederatedHandler(std::function<void(TFederatedEvent&)> outerHandler, std::shared_ptr<TDbInfo> db, std::shared_ptr<TEventFederator> federator) {
+typename std::function<void(TEvent&)> WrapFederatedHandler(std::function<void(TFederatedEvent&)> outerHandler,
+                                                           std::shared_ptr<TDbInfo> db,
+                                                           std::shared_ptr<TEventFederator> federator,
+                                                           ui64 readSourceGeneration) {
     if (outerHandler) {
-        return [outerHandler, db = std::move(db), federator = std::move(federator)](TEvent& ev) {
-            auto fev = federator->LocateFederate(ev, std::move(db));
-            return outerHandler(fev);
+        return [outerHandler, db = std::move(db), federator = std::move(federator), readSourceGeneration](TEvent& ev) {
+            // A callback queued by an already retired subsession keeps the old generation.
+            // LocateFederate then returns empty and does not recreate the cached partition session.
+            auto fev = federator->LocateFederate(ev, db, readSourceGeneration);
+            if (!fev) {
+                return;
+            }
+            outerHandler(*fev);
         };
     }
     return {};
@@ -33,7 +41,8 @@ typename std::function<void(TEvent&)> WrapFederatedHandler(std::function<void(TF
 NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& settings,
                                            const std::shared_ptr<TDbInfo>& db,
                                            std::shared_ptr<TEventFederator> federator,
-                                           std::shared_ptr<std::atomic<bool>> retired) {
+                                           std::shared_ptr<std::atomic<bool>> retired,
+                                           ui64 readSourceGeneration) {
     NTopic::TReadSessionSettings SubsessionSettings = settings;
     SubsessionSettings.EventHandlers_.MaxMessagesBytes(settings.EventHandlers_.MaxMessagesBytes_);
     SubsessionSettings.EventHandlers_.HandlersExecutor(settings.EventHandlers_.HandlersExecutor_);
@@ -41,7 +50,7 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
     if (settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler) {
         SubsessionSettings.EventHandlers_.SimpleDataHandlers(
             WrapFederatedHandler<NTopic::TReadSessionEvent::TDataReceivedEvent, TReadSessionEvent::TDataReceivedEvent>(
-                settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler, db, federator),
+                settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler, db, federator, readSourceGeneration),
             settings.FederatedEventHandlers_.SimpleDataHandlers_.CommitDataAfterProcessing,
             settings.FederatedEventHandlers_.SimpleDataHandlers_.GracefulStopAfterCommit);
     }
@@ -49,7 +58,7 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
 #define MAYBE_CONVERT_HANDLER(type, name)                                                                       \
 if (settings.FederatedEventHandlers_.name##_) {                                                             \
     SubsessionSettings.EventHandlers_.name(                                                                 \
-        WrapFederatedHandler<NTopic::type, type>(settings.FederatedEventHandlers_.name##_, db, federator)); \
+        WrapFederatedHandler<NTopic::type, type>(settings.FederatedEventHandlers_.name##_, db, federator, readSourceGeneration)); \
 }
 
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TDataReceivedEvent, DataReceivedHandler);
@@ -157,8 +166,10 @@ std::vector<TFederatedReadSessionImpl::TSubSession> TFederatedReadSessionImpl::O
             .DiscoveryEndpoint(db->endpoint());
         auto subclient = make_shared<NTopic::TTopicClient::TImpl>(Connections, settings);
         auto retired = std::make_shared<std::atomic<bool>>(false);
-        auto subsession = subclient->CreateReadSession(FromFederated(Settings, db, EventFederator, retired));
-        opened.emplace_back(std::move(subsession), db, std::move(retired));
+        // Capture the generation before the read session can queue callbacks.
+        const ui64 generation = EventFederator->CurrentGeneration(db);
+        auto subsession = subclient->CreateReadSession(FromFederated(Settings, db, EventFederator, retired, generation));
+        opened.emplace_back(std::move(subsession), db, std::move(retired), generation);
     }
     return opened;
 }
@@ -219,28 +230,46 @@ void TFederatedReadSessionImpl::DetachSubsessions(std::vector<TClosingSubsession
 }
 
 void TFederatedReadSessionImpl::CloseSubsessions(std::vector<TClosingSubsession>& toClose, TDuration timeout, bool& lastCloseResult) {
+    // Bump the generation before Close queues callbacks. Those callbacks still
+    // hold the old generation and must not recreate the cached partition sessions.
+    for (const auto& sub : toClose) {
+        EventFederator->RetireReadSource(sub.DbInfo);
+    }
     for (auto& sub : toClose) {
         if (sub.Session) {
             // TODO substract from user timeout
             lastCloseResult = sub.Session->Close(timeout);
         }
     }
-    for (const auto& sub : toClose) {
-        EventFederator->ForgetReadSource(sub.DbInfo);
-    }
     toClose.clear();
 }
 
 void TFederatedReadSessionImpl::NotifySessionClosed() const {
     const auto event = MakeSessionClosedEvent();
-    if (Settings.FederatedEventHandlers_.SessionClosedHandler_) {
-        Settings.FederatedEventHandlers_.SessionClosedHandler_(event);
+    auto sessionHandler = Settings.FederatedEventHandlers_.SessionClosedHandler_;
+    auto commonHandler = Settings.FederatedEventHandlers_.CommonHandler_;
+    if (!sessionHandler && !commonHandler) {
         return;
     }
-    if (Settings.FederatedEventHandlers_.CommonHandler_) {
-        TReadSessionEvent::TEvent wrapped = event;
-        Settings.FederatedEventHandlers_.CommonHandler_(wrapped);
+
+    // Discovery runs this method. User callbacks belong on the handlers executor,
+    // the same one subsessions use for their own events.
+    auto executor = Settings.FederatedEventHandlers_.HandlersExecutor_;
+    if (!executor) {
+        executor = SubClientSettings.DefaultHandlersExecutor_;
     }
+    Y_ABORT_UNLESS(executor);
+    executor->Start();
+    executor->Post([sessionHandler = std::move(sessionHandler), commonHandler = std::move(commonHandler), event]() mutable {
+        if (sessionHandler) {
+            sessionHandler(event);
+            return;
+        }
+        if (commonHandler) {
+            TReadSessionEvent::TEvent wrapped = event;
+            commonHandler(wrapped);
+        }
+    });
 }
 
 std::vector<TFederatedReadSessionImpl::TWakeup> TFederatedReadSessionImpl::TakeWakeups() {
@@ -568,7 +597,9 @@ std::vector<TReadSessionEvent::TEvent> TFederatedReadSessionImpl::GetEvents(bool
                     auto sub = SubSessions[SubsessionIndex];
                     if (sub.Session) {
                         for (auto&& ev : sub.Session->GetEvents(false, maxEventsCount, maxByteSize)) {
-                            result.push_back(EventFederator->LocateFederate(std::move(ev), sub.DbInfo));
+                            if (auto federated = EventFederator->LocateFederate(std::move(ev), sub.DbInfo, sub.Generation)) {
+                                result.push_back(std::move(*federated));
+                            }
                         }
                     }
                     SubsessionIndex = (SubsessionIndex + 1) % SubSessions.size();

@@ -9,6 +9,8 @@
 
 #include <atomic>
 #include <memory>
+#include <optional>
+#include <utility>
 
 namespace NYdb::inline Dev::NFederatedTopic {
 
@@ -42,14 +44,21 @@ public:
         return std::make_tuple(topicOriginDbInfo, topicOriginPath);
     }
 
+    // Generation is captured when the subsession is opened. RetireReadSource bumps it,
+    // so a callback still queued for the closed subsession cannot insert that subsession back into the cache.
     template <typename TEvent>
-    auto LocateFederate(TEvent&& event, std::shared_ptr<TDbInfo> db) {
+    auto LocateFederate(TEvent&& event, std::shared_ptr<TDbInfo> db, ui64 readSourceGeneration) {
+        using TResult = std::decay_t<decltype(Federate(std::declval<TEvent>(), TFederatedPartitionSession::TPtr{}))>;
+
         NTopic::TPartitionSession::TPtr psPtr;
         TFederatedPartitionSession::TPtr fps;
 
         using T = std::decay_t<TEvent>;
         if constexpr (std::is_same_v<T, NTopic::TSessionClosedEvent>) {
-            return Federate(std::forward<TEvent>(event), std::move(fps));
+            if (!IsCurrentGeneration(db, readSourceGeneration)) {
+                return std::optional<TResult>{};
+            }
+            return std::optional<TResult>{Federate(std::forward<TEvent>(event), std::move(fps))};
         } else if constexpr (std::is_same_v<T, NTopic::TReadSessionEvent::TEvent>) {
             psPtr = std::visit([](auto&& arg) -> NTopic::TPartitionSession::TPtr {
                 using T = std::decay_t<decltype(arg)>;
@@ -61,16 +70,22 @@ public:
             }, event);
 
             if (!psPtr) {  // TSessionClosedEvent
-                return Federate(std::forward<TEvent>(event), std::move(fps));
+                if (!IsCurrentGeneration(db, readSourceGeneration)) {
+                    return std::optional<TResult>{};
+                }
+                return std::optional<TResult>{Federate(std::forward<TEvent>(event), std::move(fps))};
             }
         } else {
             psPtr = event.GetPartitionSession();
         }
 
         with_lock(Lock) {
+            if (!IsCurrentGenerationLocked(db, readSourceGeneration)) {
+                return std::optional<TResult>{};
+            }
             if (!FederatedPartitionSessions.contains(psPtr.Get())) {
                 auto [topicOriginDbInfo, topicOriginPath] = LocateTopicOrigin(event);
-                FederatedPartitionSessions[psPtr.Get()] = MakeIntrusive<TFederatedPartitionSession>(psPtr, std::move(db), std::move(topicOriginDbInfo), std::move(topicOriginPath));
+                FederatedPartitionSessions[psPtr.Get()] = MakeIntrusive<TFederatedPartitionSession>(psPtr, db, std::move(topicOriginDbInfo), std::move(topicOriginPath));
             }
             fps = FederatedPartitionSessions[psPtr.Get()];
 
@@ -79,7 +94,7 @@ public:
             }
         }
 
-        return Federate(std::forward<TEvent>(event), std::move(fps));
+        return std::optional<TResult>{Federate(std::forward<TEvent>(event), std::move(fps))};
     }
 
     template <typename TEvent>
@@ -115,20 +130,28 @@ public:
         }
     }
 
-    // Drops cached partition sessions for a read source that is no longer polled.
-    // Callers that already hold a TFederatedPartitionSession::TPtr keep it; only the cache entry is released.
-    void ForgetReadSource(const std::shared_ptr<TDbInfo>& db) {
+    ui64 CurrentGeneration(const std::shared_ptr<TDbInfo>& db) {
+        if (!db) {
+            return 0;
+        }
+        with_lock(Lock) {
+            return GenerationOfLocked(*db);
+        }
+    }
+
+    // Drops cached partition sessions for a read source that is no longer polled and
+    // bumps its generation. A callback queued by the closed subsession keeps the old
+    // generation, so LocateFederate will not put that subsession back into the cache.
+    // Callers that already hold a TFederatedPartitionSession::TPtr keep it.
+    void RetireReadSource(const std::shared_ptr<TDbInfo>& db) {
         if (!db) {
             return;
         }
         with_lock(Lock) {
+            ++MutableGenerationLocked(*db);
             for (auto it = FederatedPartitionSessions.begin(); it != FederatedPartitionSessions.end();) {
                 const auto& partitionSession = it->second;
-                if (partitionSession &&
-                    partitionSession->GetReadSourceDatabaseId() == db->id() &&
-                    partitionSession->GetReadSourceDatabasePath() == db->path() &&
-                    AsciiEqualsIgnoreCase(partitionSession->GetReadSourceDatabaseName(), db->name()))
-                {
+                if (SameReadSource(partitionSession, *db)) {
                     it = FederatedPartitionSessions.erase(it);
                 } else {
                     ++it;
@@ -138,8 +161,58 @@ public:
     }
 
 private:
+    struct TReadSourceGeneration {
+        std::string Id;
+        std::string Path;
+        std::string Name;
+        ui64 Generation = 0;
+    };
+
+    static bool SameReadSource(const TFederatedPartitionSession::TPtr& partitionSession, const TDbInfo& db) {
+        return partitionSession &&
+            partitionSession->GetReadSourceDatabaseId() == db.id() &&
+            partitionSession->GetReadSourceDatabasePath() == db.path() &&
+            AsciiEqualsIgnoreCase(partitionSession->GetReadSourceDatabaseName(), db.name());
+    }
+
+    ui64 GenerationOfLocked(const TDbInfo& db) const {
+        for (const auto& source : ReadSourceGenerations) {
+            if (source.Id == db.id() && source.Path == db.path() && AsciiEqualsIgnoreCase(source.Name, db.name())) {
+                return source.Generation;
+            }
+        }
+        return 0;
+    }
+
+    ui64& MutableGenerationLocked(const TDbInfo& db) {
+        for (auto& source : ReadSourceGenerations) {
+            if (source.Id == db.id() && source.Path == db.path() && AsciiEqualsIgnoreCase(source.Name, db.name())) {
+                return source.Generation;
+            }
+        }
+        ReadSourceGenerations.push_back(TReadSourceGeneration{std::string(db.id()), std::string(db.path()), std::string(db.name()), 0});
+        return ReadSourceGenerations.back().Generation;
+    }
+
+    bool IsCurrentGeneration(const std::shared_ptr<TDbInfo>& db, ui64 readSourceGeneration) {
+        if (!db) {
+            return readSourceGeneration == 0;
+        }
+        with_lock(Lock) {
+            return GenerationOfLocked(*db) == readSourceGeneration;
+        }
+    }
+
+    bool IsCurrentGenerationLocked(const std::shared_ptr<TDbInfo>& db, ui64 readSourceGeneration) const {
+        if (!db) {
+            return readSourceGeneration == 0;
+        }
+        return GenerationOfLocked(*db) == readSourceGeneration;
+    }
+
     TAdaptiveLock Lock;
     std::unordered_map<NTopic::TPartitionSession*, TFederatedPartitionSession::TPtr> FederatedPartitionSessions;
+    std::vector<TReadSourceGeneration> ReadSourceGenerations;
     std::shared_ptr<TFederatedDbState> FederationState;
 };
 
@@ -151,14 +224,17 @@ private:
     struct TSubSession {
         TSubSession(std::shared_ptr<NTopic::IReadSession> session = {},
                     std::shared_ptr<TDbInfo> dbInfo = {},
-                    std::shared_ptr<std::atomic<bool>> retired = {})
+                    std::shared_ptr<std::atomic<bool>> retired = {},
+                    ui64 generation = 0)
             : Session(std::move(session))
             , DbInfo(std::move(dbInfo))
+            , Generation(generation)
             , Retired(std::move(retired))
             {}
 
         std::shared_ptr<NTopic::IReadSession> Session;
         std::shared_ptr<TDbInfo> DbInfo;
+        ui64 Generation = 0;
         // Set before an intentional close so a subsession SessionClosedEvent is not
         // reported as the end of the whole federated session.
         std::shared_ptr<std::atomic<bool>> Retired;

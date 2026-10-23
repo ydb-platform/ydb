@@ -22,6 +22,7 @@ std::unique_ptr<TDataSourceLease> ISourcesConstructor::TryExtractNext(
 
 TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, const TReadDescription& read, const EReaderClass readerClass) {
     SetPKRangesFilter(read.PKRangesFilter);
+    SetSystemColumnsFilter(read.SystemColumnsFilter);
     InitShardingInfo(read.GetTableMetadataAccessor());
     TxId = read.TxId;
     LockId = read.LockId;

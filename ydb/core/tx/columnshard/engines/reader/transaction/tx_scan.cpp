@@ -2,7 +2,9 @@
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/description.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
@@ -15,6 +17,29 @@
 namespace NKikimr::NOlap::NReader {
 
 LWTRACE_USING(YDB_CS_SCAN);
+
+bool ReadRequestsColumn(const TReadDescription& read, const ui32 columnId) {
+    for (const ui32 id : read.ColumnIds) {
+        if (id == columnId) {
+            return true;
+        }
+    }
+    if (read.SystemColumnsFilter && read.SystemColumnsFilter->HasConstraint(columnId)) {
+        return true;
+    }
+    const auto& program = read.GetProgram();
+    return program.GetSourceColumns().contains(columnId) || program.GetEarlyFilterColumns().contains(columnId) ||
+        program.GetProcessingColumns().contains(columnId);
+}
+
+bool ReadRequestsPortionId(const TReadDescription& read) {
+    return ReadRequestsColumn(read, static_cast<ui32>(IIndexInfo::ESpecialColumn::PORTION_ID));
+}
+
+bool ReadRequestsOlapSystemColumn(const TReadDescription& read) {
+    return ReadRequestsColumn(read, static_cast<ui32>(IIndexInfo::ESpecialColumn::PORTION_ID)) ||
+        ReadRequestsColumn(read, static_cast<ui32>(IIndexInfo::ESpecialColumn::PARTITION_ID));
+}
 
 void TTxScan::SendError(const TString& problem, const TString& details, const TActorContext& ctx) const {
     const auto& request = Ev->Get()->Record;
@@ -99,6 +124,10 @@ TReadDescription TTxScan::MakeReadDescription(const TSnapshot& snapshot, const E
         request.HasLockTxId() ? Self->GetOperationsManager().GetLockOptional(request.GetLockTxId()) : nullptr, false);
     read.ColumnIds.assign(request.GetColumnTags().begin(), request.GetColumnTags().end());
     read.StatsMode = request.GetStatsMode();
+    if (request.HasSystemColumnsFilter()) {
+        read.SystemColumnsFilter =
+            std::make_shared<NOlap::TSystemColumnsFilter>(NOlap::TSystemColumnsFilter::BuildFromProto(request.GetSystemColumnsFilter()));
+    }
     return read;
 }
 
@@ -276,8 +305,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
         return SendError("cannot build scanner", constructorConclusion.GetErrorMessage(), ctx);
     }
     const std::unique_ptr<IScannerConstructor> scannerConstructor = constructorConclusion.DetachResult();
+    const EReaderClass readerClass = scannerConstructor->GetReaderClass();
 
-    TReadDescription read = MakeReadDescription(snapshot, requestSorting, orbit, scannerConstructor->GetReaderClass(), tableMetadataAccessor);
+    TReadDescription read = MakeReadDescription(snapshot, requestSorting, orbit, readerClass, tableMetadataAccessor);
     const ui64 rawPathId = OnScanStartedForPath(read, *orbit);
 
     if (auto status = InitScanCursor(read, *scannerConstructor); status.IsFail()) {
@@ -285,6 +315,12 @@ void TTxScan::Complete(const TActorContext& ctx) {
     }
     if (auto status = InitProgram(read, *scannerConstructor); status.IsFail()) {
         return SendError("cannot parse program", status.GetErrorMessage(), ctx);
+    }
+    if (!AppDataVerified().ColumnShardConfig.GetEnableSystemColumns() && ReadRequestsOlapSystemColumn(read)) {
+        return SendError("system columns are disabled", "", ctx);
+    }
+    if (readerClass == EReaderClass::Plain && ReadRequestsPortionId(read)) {
+        return SendError("PLAIN reader does not support _yql_portion_id", "", ctx);
     }
     if (auto status = InitPKRangesFilter(read); status.IsFail()) {
         return SendError("cannot build ranges filter", status.GetErrorMessage(), ctx);

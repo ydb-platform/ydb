@@ -3,7 +3,9 @@
 #include <yql/essentials/core/yql_opt_utils.h>
 
 #include <array>
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
@@ -161,7 +163,8 @@ struct TKikimrData {
             TYdbOperation::TruncateTable;
 
         SystemColumns = {
-            {NKikimr::YqlPartitionColumnName, NKikimr::NUdf::EDataSlot::Uint64}
+            {NKikimr::YqlPartitionColumnName, NKikimr::NUdf::EDataSlot::Uint64},
+            {NKikimr::YqlPortionColumnName, NKikimr::NUdf::EDataSlot::Uint64}
         };
     }
 };
@@ -356,6 +359,9 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
 
     if (withSystemColumns) {
         for (const auto& [name, type] : KikimrSystemColumns()) {
+            if (!IsKikimrSystemColumn(name, *Metadata)) {
+                continue;
+            }
             const TOptionalExprType* optType = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(type));
             items.push_back(ctx.MakeType<TItemExprType>(name, optType));
 
@@ -631,6 +637,9 @@ TCoAtomList BuildColumnsList(const TKikimrTableDescription& table, TPositionHand
 
     if (withSystemColumns) {
         for (const auto& pair : KikimrSystemColumns()) {
+            if (!IsKikimrSystemColumn(pair.first, *table.Metadata)) {
+                continue;
+            }
             auto atom = Build<TCoAtom>(ctx, pos)
                 .Value(pair.first)
                 .Done();
@@ -972,8 +981,24 @@ const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns() {
     return Singleton<TKikimrData>()->SystemColumns;
 }
 
-bool IsKikimrSystemColumn(const TStringBuf columnName) {
-    return KikimrSystemColumns().FindPtr(columnName);
+static bool ColumnShardSystemColumnsEnabled() {
+    return NKikimr::HasAppData() && NKikimr::AppData()->ColumnShardConfig.GetEnableSystemColumns();
+}
+
+bool IsKikimrSystemColumn(const TStringBuf columnName, const TKikimrTableMetadata& metadata) {
+    if (!KikimrSystemColumns().FindPtr(columnName)) {
+        return false;
+    }
+    if (metadata.IsOlap() && !metadata.SysView.empty()) {
+        return false;
+    }
+    if (metadata.IsOlap() && !ColumnShardSystemColumnsEnabled()) {
+        return false;
+    }
+    if (columnName == NKikimr::YqlPortionColumnName) {
+        return metadata.IsOlap();
+    }
+    return true;
 }
 
 namespace {

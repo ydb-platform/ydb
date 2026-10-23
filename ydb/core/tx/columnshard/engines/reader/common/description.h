@@ -3,11 +3,16 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/metadata_accessor.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
+#include <ydb/core/tx/columnshard/engines/predicate/system_columns_filter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/operations/manager.h>
 #include <ydb/core/tx/program/program.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+
+#include <util/generic/hash_set.h>
+
+#include <optional>
 
 namespace NLWTrace {
 class TOrbit;
@@ -123,6 +128,7 @@ public:
     std::optional<ui32> LockNodeId;
     std::optional<NKikimrDataEvents::ELockMode> LockMode;
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
+    std::shared_ptr<NOlap::TSystemColumnsFilter> SystemColumnsFilter;
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     EScanGroupedMemoryLimiterOperator GroupedMemoryLimiterOperator = EScanGroupedMemoryLimiterOperator::Scan;
     std::shared_ptr<NLWTrace::TOrbit> Orbit;
@@ -203,6 +209,7 @@ public:
         , SourcesSorting(sourcesSortingFromCursor.value_or(DeriveSourcesSorting()))
         , TabletId(tabletId)
         , PKRangesFilter(std::make_shared<TPKRangesFilter>(TPKRangesFilter::BuildEmpty()))
+        , SystemColumnsFilter(std::make_shared<TSystemColumnsFilter>(TSystemColumnsFilter::BuildEmpty()))
     {
         AFL_VERIFY(TableMetadataAccessor);
     }

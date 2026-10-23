@@ -768,6 +768,9 @@ namespace NTable {
                 for (TPageId page : Current.FlatGroupIndexes) {
                     lay->AddGroupIndexes(page);
                 }
+                for (TPageId page : Current.FlatHistoricIndexes) {
+                    lay->AddHistoricIndexes(page);
+                }
                 if (const auto& layout = Slots.GetLayout(); layout.SeparateDescriptorCollection) {
                     lay->SetSeparateDescriptorCollection(true);
                     if (layout.HotPKIndex) {
@@ -776,9 +779,6 @@ namespace NTable {
                     if (layout.HotFamilyIndexes) {
                         lay->SetHotFamilyIndexes(true);
                     }
-                }
-                for (TPageId page : Current.FlatHistoricIndexes) {
-                    lay->AddHistoricIndexes(page);
                 }
 
                 if (WriteBTreeIndex) {
@@ -1311,7 +1311,6 @@ namespace NTable {
 
             // doesn't include written B-Tree index bytes
             ui64 MainWritten = 0; // see WritePage
-
             ui64 SmallWritten = 0;
 
             ui64 HistoryWritten = 0;

@@ -121,6 +121,7 @@ struct TEvWorker {
             DONE,
             S3_ERROR,
             SCHEME_ERROR,
+            DATA_LOSS,
             UNAVAILABLE,
             OVERLOAD
         };

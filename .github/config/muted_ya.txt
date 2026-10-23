@@ -27,8 +27,6 @@ ydb/core/sys_view/ut_large SystemViewLarge.AuthOwners_DropSubtreeDuringScan
 ydb/core/tx/columnshard/backup/import/ut Restore.RestoreOversizedBatch
 ydb/core/tx/replication/controller/ut_schema_change ReplicationCreation.InitialScanDisabledDoesNotTouchMissingDestination
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropAsyncIndexWithRowConsistency
-ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithSchemaChangesEnabledAfterCreationReportsError
-ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithoutSchemaChangesReportsError
 ydb/core/tx/replication/controller/ut_stream_creator StreamCreator.TerminalSessionAcquisitionFailureReplies
 ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactBaseCase[TabletRebootsBucket2]
 ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactWithIndexCreation[TabletRebootsBucket0]
@@ -96,7 +94,6 @@ ydb/tests/functional/config test_config_migration.py.TestConfigMigrationWithSecu
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationWithStoragePoolTypes.test_storage_pool_types_extracted_during_migration
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_replace_config_unknown_fields[host_config]
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
-ydb/tests/functional/federation_test TFederationWriteReadTest.CreateRemoteMirrorRuleWithGaps
 ydb/tests/functional/federation_test unittest.[*/*] chunk
 ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_basic
@@ -104,7 +101,6 @@ ydb/tests/functional/serverless test_serverless.py.test_connect_permission_not_i
 ydb/tests/functional/serverless test_serverless.py.test_create_table[enable_alter_database_create_hive_first--true-enable_pool_encryption--false]
 ydb/tests/functional/serverless test_serverless.py.test_discovery_with_inner_path[enable_alter_database_create_hive_first--false-enable_pool_encryption--true]
 ydb/tests/functional/serverless test_serverless.py.test_discovery_with_inner_path[enable_alter_database_create_hive_first--true-enable_pool_encryption--false]
-ydb/tests/functional/serverless test_serverless.py.test_fixtures[enable_alter_database_create_hive_first--true-enable_pool_encryption--false]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_message_counters_in_cloud[tables_format_v0-std]
 ydb/tests/functional/tenants test_system_views.py.TestQueryMetricsOneHourRestart.test_case
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]

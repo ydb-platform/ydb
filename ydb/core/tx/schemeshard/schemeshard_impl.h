@@ -450,6 +450,8 @@ public:
     bool EnableExternalSourceSchemaInference = false;
     bool EnableMoveColumnTable = false;
 
+    NKikimrConfig::TSmallBlobsQuotaConfig SmallBlobsQuotaConfig;
+
     TShardDeleter ShardDeleter;
 
     // Counter-strike stuff
@@ -614,6 +616,10 @@ public:
     void SubscribeConsoleConfigs(const TActorContext& ctx);
     void ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfig, const TActorContext& ctx);
     void ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featureFlags, const TActorContext& ctx);
+    void ApplySmallBlobsQuotaConfig(const NKikimrConfig::TSmallBlobsQuotaConfig& config, const TActorContext& ctx);
+    void BindSmallBlobsQuotaConfig(TSubDomainInfo& domain) const {
+        domain.BindSmallBlobsQuotaConfig(&SmallBlobsQuotaConfig);
+    }
     void Handle(TEvPrivate::TEvConsoleConfigsTimeout::TPtr& ev, const TActorContext& ctx);
 
     void ConfigureStatsBatching(

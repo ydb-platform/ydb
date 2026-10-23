@@ -691,7 +691,9 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
     }
 
     if (ActualizationStarted) {
-        NActors::TLogContextGuard logGuard = TLogContextBuilder::Build()("queue", "ttl")("external_count", pathEviction.size());
+        YDB_LOG_CREATE_CONTEXT(
+            {"queue", "ttl"},
+            {"external_count", pathEviction.size()});
         for (auto&& i : GranulesStorage->GetTables()) {
             if (pathEviction.contains(i.first)) {
                 continue;

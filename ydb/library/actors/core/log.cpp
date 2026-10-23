@@ -795,153 +795,51 @@ namespace NActors {
         return new TCompositeLogBackend(std::move(underlyingBackends));
     }
 
-    class TLogContext: TNonCopyable {
-    private:
-        class TStackedContext {
-        private:
-            const TLogContextGuard* Guard;
-            std::optional<NLog::EComponent> Component;
-            mutable std::optional<TString> CurrentHeader;
-        public:
-            TStackedContext(const TLogContextGuard* guard, std::optional<NLog::EComponent>&& component)
-                : Guard(guard)
-                , Component(std::move(component))
-            {
+    void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui16 lineNum) {
+        NActors::NStructuredLog::TStructuredMessage structuredMessage = NActors::NStructuredLog::TLogStack::GetTop();
+        YDB_LOG_UPDATE_MESSAGE(structuredMessage,
+            {"condition", condition},
+            {"file", filename},
+            {"line", lineNum});
 
-            }
-
-            ui64 GetId() const {
-                return Guard->GetId();
-            }
-
-            const std::optional<NLog::EComponent>& GetComponent() const {
-                return Component;
-            }
-
-            TString GetCurrentHeader() const {
-                if (!CurrentHeader) {
-                    CurrentHeader = Guard->GetResult();
-                }
-                return *CurrentHeader;
-            }
-        };
-
-        std::vector<TStackedContext> Stack;
-    public:
-        void Push(const TLogContextGuard& context) {
-            std::optional<NLog::EComponent> component;
-            if (Stack.empty() || context.GetComponent()) {
-                component = context.GetComponent();
-            } else {
-                component = Stack.back().GetComponent();
-            }
-            Stack.emplace_back(&context, std::move(component));
-        }
-
-        void Pop(const TLogContextGuard& context) {
-            Y_ABORT_UNLESS(Stack.size() && Stack.back().GetId() == context.GetId());
-            Stack.pop_back();
-        }
-
-        std::optional<NLog::EComponent> GetCurrentComponent() const {
-            if (Stack.empty()) {
-                return {};
-            }
-            return Stack.back().GetComponent();
-        }
-
-        TString GetCurrentHeader() {
-            TStringBuilder sb;
-            for (auto&& i : Stack) {
-                sb << i.GetCurrentHeader();
-            }
-            return sb;
-        }
-    };
-
-    namespace {
-        Y_POD_THREAD(ui64) GuardId;
-        Y_THREAD(TLogContext) TlsLogContext;
-
+        TStringBuilder textMessage;
+        textMessage << "Verify failed ";
+        NStructuredLog::TTextWriter().Write(textMessage, structuredMessage);
+        Y_ABORT("%s", textMessage.data());
     }
 
-    TLogContextGuard::~TLogContextGuard() {
-        TlsLogContext.Get().Pop(*this);
-    }
+    void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui16 lineNum) {
+        // Construct structured message
+        NActors::NStructuredLog::TStructuredMessage structuredMessage = NActors::NStructuredLog::TLogStack::GetTop();
+        YDB_LOG_UPDATE_MESSAGE(structuredMessage,
+            {"condition", condition});
 
-    TLogContextGuard::TLogContextGuard(const TLogContextBuilder& builder)
-        : TBase(builder.GetResult())
-        , Component(builder.GetComponent())
-        , Id(++GuardId)
-    {
-        TlsLogContext.Get().Push(*this);
-    }
+        // Construct text message
+        TStringBuilder textMessage;
+        textMessage << "Ensure failed ";
+        NStructuredLog::TTextWriter().Write(textMessage, YDB_LOG_CREATE_MESSAGE(structuredMessage,
+            {"file", filename},
+            {"line", lineNum}));
 
-    int TLogContextGuard::GetCurrentComponent(const ::NActors::NLog::EComponent defComponent) {
-        return TlsLogContext.Get().GetCurrentComponent().value_or(defComponent);
-    }
-
-    TLogRecordConstructor::TLogRecordConstructor() {
-        TBase::WriteDirectly(TlsLogContext.Get().GetCurrentHeader());
-    }
-
-    TFormattedRecordWriter::TFormattedRecordWriter(::NActors::NLog::EPriority priority, ::NActors::NLog::EComponent component)
-        : ActorContext(NActors::TlsActivationContext ? &NActors::TlsActivationContext->AsActorContext() : nullptr)
-        , Priority(priority)
-        , Component(component) {
-        TBase::WriteDirectly(TlsLogContext.Get().GetCurrentHeader());
-    }
-
-    TFormattedRecordWriter::~TFormattedRecordWriter() {
-        if (ActorContext) {
-            ::NActors::MemLogAdapter(
-                *ActorContext,
-                Priority,
-                Component,
-                __FILE_NAME__,
-                __LINE__,
-                TBase::GetResult());
-        } else {
-            Cerr << "FALLBACK_ACTOR_LOGGING;priority=" << Priority << ";component=" << Component << ";" << TBase::GetResult() << Endl;
-        }
-    }
-
-    TVerifyFormattedRecordWriter::TVerifyFormattedRecordWriter(const TString& conditionText)
-        : ConditionText(conditionText) {
-        TBase::WriteDirectly(TlsLogContext.Get().GetCurrentHeader());
-        TBase::Write("verification", ConditionText);
-
-    }
-
-    TVerifyFormattedRecordWriter::~TVerifyFormattedRecordWriter() {
-        const TString data = TBase::GetResult();
-        Y_ABORT("%s", data.data());
-    }
-
-    TEnsureFormattedRecordWriter::TEnsureFormattedRecordWriter(const TString& conditionText)
-        : ConditionText(conditionText) {
-        TBase::WriteDirectly(TlsLogContext.Get().GetCurrentHeader());
-        TBase::Write("verification", ConditionText);
-
-    }
-
-    TEnsureFormattedRecordWriter::~TEnsureFormattedRecordWriter() noexcept(false) {
-        const TString data = TBase::GetResult();
+        // Log message
         if (NActors::TlsActivationContext) {
-            ::NActors::MemLogAdapter(
+            ::NActors::MemStructLogAdapter(
                 NActors::TlsActivationContext->AsActorContext(),
                 NLog::EPriority::PRI_ERROR,
                 0,
-                __FILE_NAME__,
-                __LINE__,
-                data);
+                filename.Data(),
+                lineNum,
+                "Ensure failed",
+                std::move(structuredMessage) );
         } else {
-            Cerr << "FALLBACK_EXCEPTION_LOGGING;component=EXCEPTION;" << data << Endl;
+            Cerr << "FALLBACK_EXCEPTION_LOGGING;component=EXCEPTION;" << textMessage.data() << Endl;
         }
+
+        // final action
         if (!std::uncaught_exceptions()) {
-            Y_ENSURE(false, data.data());
+            Y_ENSURE(false, textMessage.data());
         } else {
-            Y_ABORT("%s", data.data());
+            Y_ABORT("%s", textMessage.data());
         }
     }
 

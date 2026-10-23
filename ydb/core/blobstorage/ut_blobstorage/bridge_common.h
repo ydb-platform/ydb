@@ -275,8 +275,17 @@ namespace NBridgeTest {
             TStringBuilder() << "pile state " << NKikimrBridge::TClusterState::EPileState_Name(state));
     }
 
-    // group info as BSC distributes it to nodes
+    // group info from distconf for static groups and from BSC for dynamic ones
     inline NKikimrBlobStorage::TGroupInfo GetGroupInfo(TEnvironmentSetup& env, ui32 groupId) {
+        if (TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Static) {
+            const auto config = QueryStorageConfig(env);
+            for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+                if (group.GetGroupID() == groupId) {
+                    return group;
+                }
+            }
+            UNIT_FAIL("static group not found GroupId# " << groupId);
+        }
         const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
         auto request = std::make_unique<TEvBlobStorage::TEvControllerGetGroup>();
         request->Record.AddGroupIDs(groupId);

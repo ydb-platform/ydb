@@ -25,7 +25,13 @@ namespace NKikimr::NGRpcService {
     }
 
     TString IRequestCtxBaseMtSafe::NormalizePath(TStringBuf path) const {
-        return PathNormalizer_ ? PathNormalizer_->NormalizePath(path) : TString(path);
+        TString normalized = PathNormalizer_ ? PathNormalizer_->NormalizePath(path) : TString(path);
+        if (normalized != path) {
+            if (auto* counters = GetRequestCounters(); counters && !PathAliasCounted_.exchange(true, std::memory_order_relaxed)) {
+                counters->CountPathAlias();
+            }
+        }
+        return normalized;
     }
 
     void IRequestProxyCtx::InitializePathNormalization(

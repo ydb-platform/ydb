@@ -3,6 +3,7 @@
 #include <util/generic/fwd.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
+#include <atomic>
 #include <memory>
 
 namespace google::protobuf {
@@ -14,6 +15,11 @@ namespace NACLib {
 class TUserToken;
 
 }
+
+namespace NYdbGrpc {
+struct ICounterBlock;
+}
+
 namespace NKikimr {
 
 namespace NPathAliasing {
@@ -66,10 +72,12 @@ public:
 protected:
     bool IsPathNormalizationEnabled() const noexcept;
     void SetPathNormalizer(std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer) noexcept;
+    virtual NYdbGrpc::ICounterBlock* GetRequestCounters() const { return nullptr; }
 
 private:
     std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer_;
     bool PathNormalizationEnabled_ = false;
+    mutable std::atomic<bool> PathAliasCounted_ = false;
 };
 
 

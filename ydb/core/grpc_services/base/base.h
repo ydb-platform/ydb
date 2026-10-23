@@ -560,7 +560,6 @@ public:
 
 protected:
     virtual void CountRequestBodyPaths() const {}
-    virtual NYdbGrpc::ICounterBlock* GetRequestCounters() const { return nullptr; }
 
 private:
     mutable bool RelativeDatabaseCounted_ = false;

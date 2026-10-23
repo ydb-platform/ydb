@@ -3,8 +3,37 @@
 namespace NKikimr::NSchemeShard {
 
 bool TOlapOptionsDescription::ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate, IErrorCollector& /*errors*/) {
-    SchemeNeedActualization = schemaUpdate.GetSchemeNeedActualization();
-    if (!!schemaUpdate.GetScanReaderPolicyName()) {
+    using TRequestedOptions = TOlapOptionsUpdate::TRequestedOptions;
+    // Resets are applied first: the field is cleared so the columnshard falls back to its defaults
+    for (const auto option : schemaUpdate.GetResetOptions()) {
+        switch (option) {
+            case TRequestedOptions::SCHEME_NEED_ACTUALIZATION:
+                SchemeNeedActualization = false;
+                break;
+            case TRequestedOptions::COMPACTION_PLANNER:
+                CompactionPlannerConstructor = {};
+                break;
+            case TRequestedOptions::METADATA_MEMORY_MANAGER:
+                MetadataManagerConstructor = {};
+                break;
+            case TRequestedOptions::SCAN_READER_POLICY_NAME:
+                ScanReaderPolicyName.reset();
+                break;
+            case TRequestedOptions::DEDUPLICATION_ENABLED:
+                DeduplicationEnabled.reset();
+                break;
+            case TRequestedOptions::INSERT_OPTIONS:
+                InsertOptions = {};
+                break;
+            case TRequestedOptions::CACHE_BLOBS_AFTER_WRITE:
+                CacheBlobsAfterWrite.reset();
+                break;
+        }
+    }
+    if (schemaUpdate.GetSchemeNeedActualization()) {
+        SchemeNeedActualization = *schemaUpdate.GetSchemeNeedActualization();
+    }
+    if (schemaUpdate.GetScanReaderPolicyName()) {
         ScanReaderPolicyName = *schemaUpdate.GetScanReaderPolicyName();
     }
     if (schemaUpdate.GetDeduplicationEnabled()) {

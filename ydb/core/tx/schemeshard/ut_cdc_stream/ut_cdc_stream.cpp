@@ -566,15 +566,18 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
     }
 
     enum class EAcknowledgedRetentionActivation { Disabled, Enabled };
+    enum class EAcknowledgedRetentionQuota { Disabled, Enabled };
 
-    void AcknowledgedRetentionAtomicCreation(EAcknowledgedRetentionActivation activation) {
+    void AcknowledgedRetentionAtomicCreation(EAcknowledgedRetentionActivation activation,
+            EAcknowledgedRetentionQuota quota = EAcknowledgedRetentionQuota::Enabled) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
             .EnableProtoSourceIdInfo(true)
             .EnableChangefeedInitialScan(true));
         runtime.GetAppData().FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(
             activation == EAcknowledgedRetentionActivation::Enabled);
-        runtime.GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(false);
+        runtime.GetAppData().FeatureFlags.SetEnableTopicDiskSubDomainQuota(
+            quota == EAcknowledgedRetentionQuota::Enabled);
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
         ui64 txId = 100;
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -631,9 +634,11 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         for (const auto& config : initialConfigs) {
             const auto& part = config.GetPartitionConfig();
             UNIT_ASSERT_VALUES_EQUAL(part.GetLifetimeSeconds(), 86400);
-            if (activation == EAcknowledgedRetentionActivation::Disabled) {
+            if (activation == EAcknowledgedRetentionActivation::Disabled
+                    || quota == EAcknowledgedRetentionQuota::Disabled) {
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(part.GetRetentionPolicy()), static_cast<i32>(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_STANDARD));
                 UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 0);
+                UNIT_ASSERT(!part.HasRetentionConsumer());
                 continue;
             }
             UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(part.GetRetentionPolicy()), static_cast<i32>(NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED));
@@ -655,6 +660,11 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
     Y_UNIT_TEST(AcknowledgedRetentionDisabledCreationPreservesStandard) {
         AcknowledgedRetentionAtomicCreation(EAcknowledgedRetentionActivation::Disabled);
+    }
+
+    Y_UNIT_TEST(AcknowledgedRetentionQuotaDisabledCreationPreservesStandard) {
+        AcknowledgedRetentionAtomicCreation(EAcknowledgedRetentionActivation::Enabled,
+            EAcknowledgedRetentionQuota::Disabled);
     }
 
     Y_UNIT_TEST(AcknowledgedRetentionRequiresFirstClassTopics) {

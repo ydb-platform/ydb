@@ -660,6 +660,7 @@ void DoCreateLock(
 TString GetAcknowledgedRetentionConsumer(const NKikimrSchemeOp::TCreateCdcStream& op) {
     const auto& stream = op.GetStreamDescription();
     if (!AppData()->FeatureFlags.GetEnableReplicationTopicAcknowledgedRetention()
+        || !AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota()
         || stream.GetMode() != NKikimrSchemeOp::ECdcStreamModeUpdate
         || stream.GetFormat() != NKikimrSchemeOp::ECdcStreamFormatJson)
     {

@@ -150,7 +150,7 @@ Y_UNIT_TEST(AcknowledgedRetentionAlterPreservesIdentity) {
     auto& runtime = setup->GetRuntime();
     for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
         runtime.GetAppData(node).FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(true);
-        runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(false);
+        runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
     }
     ExecuteDDL(*setup, "CREATE TABLE ack_table (id Uint64, PRIMARY KEY (id))");
     auto client = setup->MakeTableClient();
@@ -161,6 +161,11 @@ Y_UNIT_TEST(AcknowledgedRetentionAlterPreservesIdentity) {
             .AddAttribute("__async_replication", R"({"id":"1","path":"/Root/replica","retention_policy":"acknowledged","retention_consumer":"replication"})")))
         .GetValueSync();
     UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+    // Activation requires quota support. Persisted ACK topics must still survive
+    // ordinary current-API alters if the operator later disables the quota flag.
+    for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+        runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(false);
+    }
     const TString path = "/Root/ack_table/feed";
     const auto checkPolicy = [&] {
         const auto config = DescribeTabletConfig(runtime, path);

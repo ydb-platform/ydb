@@ -1389,7 +1389,7 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         auto& runtime = env.GetRuntime();
         for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
             runtime.GetAppData(node).FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(true);
-            runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(false);
+            runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
             runtime.GetAppData(node).ReplicationConfig.SetSourceTopicRetentionPolicy(
                 NKikimrReplication::TReplicationDefaults::SOURCE_TOPIC_RETENTION_ACKNOWLEDGED);
             runtime.GetAppData(node).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
@@ -1733,7 +1733,7 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         auto& runtime = env.GetRuntime();
         for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
             runtime.GetAppData(node).FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(true);
-            runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(false);
+            runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
             runtime.GetAppData(node).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
         }
         CreateSourceTable(env, "split_source");
@@ -1914,7 +1914,7 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
             runtime.GetAppData(node).FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(true);
             runtime.GetAppData(node).FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
-            runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(false);
+            runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(true);
             runtime.GetAppData(node).ReplicationConfig.SetSourceTopicRetentionPolicy(
                 NKikimrReplication::TReplicationDefaults::SOURCE_TOPIC_RETENTION_ACKNOWLEDGED);
         }

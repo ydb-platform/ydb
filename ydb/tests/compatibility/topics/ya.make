@@ -7,7 +7,12 @@ FORK_TESTS()
 FORK_SUBTESTS()
 SPLIT_FACTOR(16)
 
+PY_SRCS(
+    cdc_replication_common.py
+)
+
 TEST_SRCS(
+    test_replication_retention.py
     test_topic.py
     test_direct_read.py
     test_cluster_discovery.py
@@ -17,7 +22,7 @@ TEST_SRCS(
 )
 
 SIZE(LARGE)
-REQUIREMENTS(cpu:8 network:full)
+REQUIREMENTS(cpu:8 ram:16 network:full)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(

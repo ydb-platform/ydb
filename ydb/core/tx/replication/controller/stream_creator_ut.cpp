@@ -16,15 +16,17 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
     enum class EAcknowledgedSource { Enabled, Disabled };
     enum class EAcknowledgedConsistency { Row, Global };
+    enum class EAcknowledgedQuota { Disabled, Enabled };
 
     void AcknowledgedRetentionCreationAndFallback(EAcknowledgedSource source,
             EAcknowledgedConsistency consistency,
-            NKikimrReplication::TReplicationDefaults::ESourceTopicRetentionPolicy retentionPolicy) {
+            NKikimrReplication::TReplicationDefaults::ESourceTopicRetentionPolicy retentionPolicy,
+            EAcknowledgedQuota quota = EAcknowledgedQuota::Enabled) {
         TEnv env(true, ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
         for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
             runtime.GetAppData(node).FeatureFlags.SetEnableReplicationTopicAcknowledgedRetention(source == EAcknowledgedSource::Enabled);
-            runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(false);
+            runtime.GetAppData(node).FeatureFlags.SetEnableTopicDiskSubDomainQuota(quota == EAcknowledgedQuota::Enabled);
         }
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
             .Name = "Table", .KeyColumns = {"key"}, .Columns = {{.Name = "key", .Type = "Uint32"}},
@@ -50,12 +52,17 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionConfig().GetLifetimeSeconds(), 86400);
         UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 1);
         const bool acknowledged = source == EAcknowledgedSource::Enabled
+            && quota == EAcknowledgedQuota::Enabled
             && retentionPolicy == NKikimrReplication::TReplicationDefaults::SOURCE_TOPIC_RETENTION_ACKNOWLEDGED;
         UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers(0).GetImportant(), acknowledged);
         UNIT_ASSERT_VALUES_EQUAL(addConsumers, acknowledged ? 0 : 1);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(config.GetPartitionConfig().GetRetentionPolicy()), static_cast<i32>(acknowledged
             ? NKikimrPQ::TPartitionConfig::RETENTION_POLICY_REPLICATION_ACKNOWLEDGED
             : NKikimrPQ::TPartitionConfig::RETENTION_POLICY_STANDARD));
+        if (!acknowledged) {
+            UNIT_ASSERT(!config.GetPartitionConfig().HasRetentionConsumer());
+            UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers(0).GetReadFromTimestampsMs(), 0);
+        }
         if (acknowledged) {
             // Reproduce an old destination replaying Creating after the source
             // already committed the atomic ACK topic configuration.
@@ -90,6 +97,14 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         }
         AcknowledgedRetentionCreationAndFallback(EAcknowledgedSource::Enabled, EAcknowledgedConsistency::Row,
             NKikimrReplication::TReplicationDefaults::SOURCE_TOPIC_RETENTION_STANDARD);
+    }
+
+    Y_UNIT_TEST(AcknowledgedRetentionQuotaDisabledFallsBack) {
+        for (auto consistency : {EAcknowledgedConsistency::Row, EAcknowledgedConsistency::Global}) {
+            AcknowledgedRetentionCreationAndFallback(EAcknowledgedSource::Enabled, consistency,
+                NKikimrReplication::TReplicationDefaults::SOURCE_TOPIC_RETENTION_ACKNOWLEDGED,
+                EAcknowledgedQuota::Disabled);
+        }
     }
 
     Y_UNIT_TEST(AcknowledgedRetentionExcludedTargetsRemainStandard) {

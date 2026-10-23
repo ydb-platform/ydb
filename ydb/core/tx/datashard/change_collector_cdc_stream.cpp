@@ -124,9 +124,16 @@ bool TCdcStreamChangeCollector::NeedToReadKeys() const {
 
     bool value = false;
     for (const auto& [_, tableInfo] : Self->GetUserTables()) {
-        for (const auto& [_, streamInfo] : tableInfo->CdcStreams) {
+        for (const auto& [pathId, streamInfo] : tableInfo->CdcStreams) {
             if (streamInfo.State == NKikimrSchemeOp::ECdcStreamStateDisabled) {
                 continue;
+            }
+
+            // Initial scans read the snapshot regardless of the stream mode.
+            if (streamInfo.State == NKikimrSchemeOp::ECdcStreamStateScan &&
+                Self->GetCdcStreamScanManager().Has(pathId))
+            {
+                value = true;
             }
 
             switch (streamInfo.Mode) {
@@ -146,6 +153,37 @@ bool TCdcStreamChangeCollector::NeedToReadKeys() const {
 
     CachedNeedToReadKeys = value;
     return *CachedNeedToReadKeys;
+}
+
+bool TCdcStreamChangeCollector::NeedHistoricalPrecharge(const TTableId& tableId, TArrayRef<const TRawTypeValue> key) const {
+    const auto& userTable = *Self->GetUserTables().at(tableId.PathId.LocalPathId);
+    Y_ENSURE(key.size() == userTable.KeyColumnTypes.size());
+    TMaybe<TVector<TCell>> keyCells;
+
+    // Only initial CDC snapshot reads beyond the persisted scan progress
+    // need historical precharge.
+    for (const auto& [pathId, stream] : userTable.CdcStreams) {
+        if (stream.State != NKikimrSchemeOp::ECdcStreamStateScan) {
+            continue;
+        }
+        if (const auto* info = Self->GetCdcStreamScanManager().Get(pathId)) {
+            if (!info->LastKey) {
+                return true;
+            }
+            const auto& lastKeyCells = info->LastKey->GetCells();
+            if (!keyCells) {
+                keyCells = MakeKeyCells(key);
+            }
+            Y_ENSURE(keyCells->size() == lastKeyCells.size());
+            if (CompareTypedCellVectors(keyCells->data(), lastKeyCells.data(),
+                    userTable.KeyColumnTypes.data(), key.size()) > 0)
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,

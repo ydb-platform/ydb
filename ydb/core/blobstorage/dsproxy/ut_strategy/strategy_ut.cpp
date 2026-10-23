@@ -315,6 +315,44 @@ Y_UNIT_TEST_SUITE(DSProxyStrategyTest) {
         RunStrategyTest<TRestoreStrategy>(TBlobStorageGroupType::Erasure4Plus2Block);
     }
 
+    Y_UNIT_TEST(Restore_block42_skipsNotReady) {
+        const TBlobStorageGroupType type(TBlobStorageGroupType::Erasure4Plus2Block);
+        TBlobStorageGroupInfo info(type);
+        info.Ref();
+        TGroupQueues groupQueues(info.GetTopology());
+        groupQueues.Ref();
+        TBlackboard blackboard(&info, &groupQueues, NKikimrBlobStorage::UserData, NKikimrBlobStorage::FastRead);
+        const TString data(1000, 'X');
+        const TLogoBlobID id(1'000'000'000, 1, 1, 0, data.size(), 0);
+        std::vector<TRope> parts(type.TotalPartCount());
+        ErasureSplit(TBlobStorageGroupType::CrcModeNone, type, TRope(data), parts,
+            nullptr, GetDefaultRcBufAllocator());
+        blackboard.RegisterBlobForPut(id, 0);
+        for (ui32 partIdx = 0; partIdx < parts.size(); ++partIdx) {
+            blackboard.AddPartToPut(id, partIdx, TRope(parts[partIdx]));
+        }
+        const ui32 unavailableDisk = blackboard[id].Disks[0].OrderNumber;
+        blackboard.AddErrorResponse(TLogoBlobID(id, 1), unavailableDisk, "Queue is not ready", NKikimrProto::NOTREADY);
+
+        TLogContext logCtx(NKikimrServices::BS_PROXY, false);
+        logCtx.SuppressLog = true;
+        UNIT_ASSERT(blackboard.RunStrategy(logCtx, TRestoreStrategy(), TAccelerationParams{}) == EStrategyOutcome::IN_PROGRESS);
+        UNIT_ASSERT_VALUES_EQUAL(blackboard.GroupDiskRequests.PutsPending.size(), type.TotalPartCount());
+        bool handedOff = false;
+        for (const auto& request : blackboard.GroupDiskRequests.PutsPending) {
+            UNIT_ASSERT(request.OrderNumber != unavailableDisk);
+            if (request.Id.PartId() == 1) {
+                const ui32 subgroupIdx = info.GetIdxInSubgroup(info.GetVDiskId(request.OrderNumber), id.Hash());
+                UNIT_ASSERT(subgroupIdx >= type.TotalPartCount());
+                handedOff = true;
+            }
+            blackboard.AddPutOkResponse(request.Id, request.OrderNumber);
+        }
+        UNIT_ASSERT(handedOff);
+        blackboard.GroupDiskRequests.PutsPending.clear();
+        UNIT_ASSERT(blackboard.RunStrategy(logCtx, TRestoreStrategy(), TAccelerationParams{}) == EStrategyOutcome::DONE);
+    }
+
     Y_UNIT_TEST(Restore_mirror3dc) {
         THPTimer timer;
         const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);

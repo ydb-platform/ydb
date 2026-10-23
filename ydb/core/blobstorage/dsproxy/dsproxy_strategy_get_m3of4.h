@@ -45,6 +45,7 @@ namespace NKikimr {
 
                         // if this disk has answered the query
                         case TBlobState::ESituation::Error:
+                        case TBlobState::ESituation::NotReady:
                             failedSubgroupDisks |= TBlobStorageGroupInfo::TSubgroupVDisks(&info.GetTopology(), diskIdx);
                             [[fallthrough]];
                         case TBlobState::ESituation::Absent:
@@ -74,6 +75,7 @@ namespace NKikimr {
                         break;
 
                     case TBlobState::ESituation::Error:
+                    case TBlobState::ESituation::NotReady:
                         failedSubgroupDisks |= TBlobStorageGroupInfo::TSubgroupVDisks(&info.GetTopology(), diskIdx);
                         [[fallthrough]];
                     case TBlobState::ESituation::Absent:
@@ -150,6 +152,7 @@ namespace NKikimr {
                             break;
 
                         case TBlobState::ESituation::Error: // on error we assume that the part is here
+                        case TBlobState::ESituation::NotReady:
                         case TBlobState::ESituation::Lost: // on NOT_YET we also assume that part was written here
                         case TBlobState::ESituation::Present: // it is actually here :)
                             any |= {&info.GetTopology(), diskIdx};

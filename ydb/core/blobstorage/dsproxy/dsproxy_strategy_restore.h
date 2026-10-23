@@ -23,7 +23,8 @@ public:
             ui32 endPartIdx = isHandoff ? totalPartCount : (diskIdx + 1);
             bool isErrorDisk = false;
             for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
-                if (disk.DiskParts[partIdx].Situation == TBlobState::ESituation::Error) {
+                const auto situation = disk.DiskParts[partIdx].Situation;
+                if (situation == TBlobState::ESituation::Error || situation == TBlobState::ESituation::NotReady) {
                     DSP_LOG_DEBUG_SX(logCtx, "BPG50", "Id# " << state.Id.ToString()
                         << " restore disk# " << diskIdx
                         << " part# " << partIdx
@@ -51,6 +52,7 @@ public:
                             break;
 
                         case TBlobState::ESituation::Error:
+                        case TBlobState::ESituation::NotReady:
                             break;
                     }
                 }

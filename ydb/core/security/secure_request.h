@@ -18,6 +18,7 @@ private:
     TString RequestId;
     bool RequireAdminAccess = false;
     bool UserAdmin = false;
+    bool AnonymousAuthorizationPending = false;
     TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> Entries;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken;
 
@@ -97,6 +98,10 @@ private:
     }
 
     void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
+        if (AnonymousAuthorizationPending && ev->Sender == ctx.SelfID) {
+            AnonymousAuthorizationPending = false;
+            return FinishAuthorization(ctx);
+        }
         ProcessAuthorizeTicketResult(ev.Get()->Release(), ctx);
     }
 
@@ -205,10 +210,7 @@ public:
                 return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Access denied without user token", .Retryable = false}, ctx);
             }
             if (SecurityToken.empty()) {
-                if (GetDefaultUserSIDs().empty()) {
-                    return FinishAuthorization(ctx);
-                }
-
+                AnonymousAuthorizationPending = GetDefaultUserSIDs().empty();
                 ctx.Send(ctx.SelfID, new TEvTicketParser::TEvAuthorizeTicketResult(
                     TString(),
                     NACLib::TUserToken(GetDefaultUserSIDs())

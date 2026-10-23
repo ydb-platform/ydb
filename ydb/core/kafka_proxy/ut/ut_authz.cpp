@@ -163,10 +163,10 @@ void WaitUntil(TFn&& fn, TDuration timeout = TDuration::Seconds(20)) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
-    Y_UNIT_TEST(SaslRejectsEmptyTicketParserErrorWithoutTokenEnforcement) {
-        TInsecureTestServer testServer("2");
+    Y_UNIT_TEST(SaslRejectsEmptyTicketParserErrorWithTokenEnforcement) {
+        TSecureTestServer testServer("2");
         auto* runtime = testServer.KikimrServer->GetRuntime();
-        UNIT_ASSERT(!runtime->GetAppData().EnforceUserTokenRequirement);
+        UNIT_ASSERT(runtime->GetAppData().EnforceUserTokenRequirement);
         UNIT_ASSERT(!runtime->GetAppData().EnforceUserTokenCheckRequirement);
 
         const auto ticketParserEdge = runtime->AllocateEdgeActor();

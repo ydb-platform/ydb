@@ -4,11 +4,13 @@
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/mock/yql_mock.h>
+#include <ydb/core/fq/libs/wasm_services/mock/tvm.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/testlib/test_client.h>
 
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 #include <ydb/library/grpc/server/actors/logger.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/tests/tools/kqprun/runlib/kikimr_setup.h>
 
@@ -60,6 +62,14 @@ private:
         fqConfig.MutableControlPlaneStorage()->AddSuperUsers(BUILTIN_ACL_ROOT);
         fqConfig.MutablePrivateProxy()->AddGrantedUsers(BUILTIN_ACL_ROOT);
 
+        if (fqConfig.GetWasmServices().GetEnabled()) {
+            fqConfig.MutableWasmServices()->SetModuleSource(NFq::NConfig::TWasmServicesConfig::LOCAL_FILES);
+            auto* storage = fqConfig.MutableControlPlaneStorage();
+            if (Find(storage->GetAvailableConnection(), "EXTERNAL_SERVICE") == storage->GetAvailableConnection().end()) {
+                storage->AddAvailableConnection("EXTERNAL_SERVICE");
+            }
+        }
+
         const TString endpoint = TStringBuilder() << "localhost:" << grpcPort;
         const TString database = NKikimr::CanonizePath(Settings.DomainName);
         const auto fillStorageConfig = [endpoint, database](NFq::NConfig::TYdbStorageConfig* config,
@@ -84,7 +94,9 @@ private:
         }
 
         auto& cpStorage = *fqConfig.MutableControlPlaneStorage();
-        cpStorage.SetUseInMemory(!Settings.EnableCpStorage);
+        // The in-memory implementation acknowledges ControlQuery without
+        // applying it. Service calls need real cancellation via the pinger.
+        cpStorage.SetUseInMemory(!Settings.EnableCpStorage && !fqConfig.GetWasmServices().GetEnabled());
         fillStorageConfig(cpStorage.MutableStorage(), Settings.CpStorageDatabase);
         fillStorageConfig(fqConfig.MutableDbPool()->MutableStorage(), Settings.CpStorageDatabase);
 
@@ -147,7 +159,7 @@ private:
     void InitializeFqProxy(ui32 grpcPort) {
         const auto& fqConfig = GetFqProxyConfig(grpcPort);
         if (Settings.VerbosityLevel >= EVerbosity::InitLogs) {
-            Cout << "FQ config:\n" << fqConfig.DebugString() << Endl;
+            Cout << "FQ config:\n" << NKikimr::SecureDebugStringMultiline(fqConfig) << Endl;
         }
 
         const auto counters = GetRuntime()->GetAppData().Counters->GetSubgroup("counters", "yq");
@@ -163,7 +175,8 @@ private:
         };
 
         NFq::Init(fqConfig, GetRuntime()->GetNodeId(), actorRegistrator, &GetRuntime()->GetAppData(), Settings.DomainName, nullptr,
-            YqSharedResources, folderServiceFactory, 0, {}, Settings.PqGatewayFactory);
+            YqSharedResources, folderServiceFactory, 0, {}, Settings.PqGatewayFactory,
+            Settings.MockTvm ? NFq::NWasmServices::CreateMockTvmTicketProvider(TDuration::MilliSeconds(Settings.MockTvmDelayMs)) : nullptr);
         YqSharedResources->Init(GetRuntime()->GetActorSystem(0));
     }
 
@@ -225,6 +238,14 @@ public:
             NFq::TEvControlPlaneProxy::TEvDescribeQueryResponse>(request, options);
     }
 
+    NFq::TEvControlPlaneProxy::TEvControlQueryResponse::TPtr AbortQuery(const TString& queryId, const TFqOptions& options) const {
+        FederatedQuery::ControlQueryRequest request;
+        request.set_query_id(queryId);
+        request.set_action(FederatedQuery::ABORT);
+        return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvControlQueryRequest,
+            NFq::TEvControlPlaneProxy::TEvControlQueryResponse>(request, options);
+    }
+
     NFq::TEvControlPlaneProxy::TEvGetResultDataResponse::TPtr FetchQueryResults(
         const TString& queryId, i32 resultSetId, const TFqOptions& options) const {
         FederatedQuery::GetResultDataRequest request;
@@ -243,6 +264,18 @@ public:
 
         return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvCreateConnectionRequest,
             NFq::TEvControlPlaneProxy::TEvCreateConnectionResponse>(request, options);
+    }
+
+    NFq::TEvControlPlaneProxy::TEvListConnectionsResponse::TPtr ListConnections(
+        const TString& name, const TString& pageToken, const TFqOptions& options) const {
+        FederatedQuery::ListConnectionsRequest request;
+        request.set_limit(100);
+        request.set_page_token(pageToken);
+        request.mutable_filter()->set_name(name);
+        request.mutable_filter()->set_created_by_me(true);
+        request.mutable_filter()->set_visibility(FederatedQuery::Acl::PRIVATE);
+        return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvListConnectionsRequest,
+            NFq::TEvControlPlaneProxy::TEvListConnectionsResponse>(request, options);
     }
 
     NFq::TEvControlPlaneProxy::TEvCreateBindingResponse::TPtr CreateBinding(
@@ -333,7 +366,9 @@ private:
 
         GetRuntime()->Send(controlPlaneProxy, edgeActor, event.release());
 
-        return GetRuntime()->GrabEdgeEvent<TResponse>(edgeActor);
+        auto response = GetRuntime()->GrabEdgeEvent<TResponse>(edgeActor, IsInterrupted() ? CancellationTimeout() : TDuration::Seconds(30));
+        Y_ENSURE(response, "Timed out waiting for FQ control plane response");
+        return response;
     }
 
 private:
@@ -351,6 +386,10 @@ private:
 TFqSetup::TFqSetup(const TFqSetupSettings& settings)
     : Impl(new TImpl(settings))
 {
+}
+
+TRequestResult TFqSetup::AbortQuery(const TString& queryId, const TFqOptions& options) const {
+    return GetStatus(Impl->AbortQuery(queryId, options)->Get()->Issues);
 }
 
 TRequestResult TFqSetup::QueryRequest(const TRequestOptions& query, TString& queryId) const {
@@ -396,6 +435,27 @@ TRequestResult TFqSetup::CreateConnection(
     connectionId = response->Get()->Result.connection_id();
 
     return GetStatus(response->Get()->Issues);
+}
+
+TRequestResult TFqSetup::FindConnection(const TString& name, const TFqOptions& options, TString& connectionId) const {
+    connectionId.clear();
+    TString pageToken;
+    do {
+        const auto response = Impl->ListConnections(name, pageToken, options);
+        const auto status = GetStatus(response->Get()->Issues);
+        if (!status.IsSuccess()) {
+            return status;
+        }
+        for (const auto& connection : response->Get()->Result.connection()) {
+            if (connection.content().name() == name) {
+                Y_ENSURE(connection.content().setting().has_external_service(), "Existing connection is not an ExternalService: " << name);
+                connectionId = connection.meta().id();
+                return status;
+            }
+        }
+        pageToken = response->Get()->Result.next_page_token();
+    } while (!pageToken.empty());
+    return GetStatus({});
 }
 
 TRequestResult TFqSetup::CreateBinding(const FederatedQuery::BindingContent& binding, const TFqOptions& options) const {

@@ -85,6 +85,10 @@ message TTVMConfig {
     optional bool UpdatePublicKeys = 4 [default = true];
     optional uint64 UpdatePublicKeysSuccessTimeout = 5 [default = 82800];
     optional uint64 UpdatePublicKeysFailureTimeout = 6 [default = 10];
+    // Regional TVM API hostname without a scheme or path. The source determines key trust.
+    // Use tvm-api.passport.yango.tech for Serbia.
+    optional string PublicKeysHost = 7 [default = "tvm-api.yandex.net"];
+    repeated uint32 AdditionalServiceTvmIds = 8;
 }
 
 message TStaffApiTvmSettings {

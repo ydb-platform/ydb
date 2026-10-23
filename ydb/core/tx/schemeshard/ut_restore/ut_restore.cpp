@@ -561,6 +561,25 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         Restore(runtime, env, creationScheme, std::move(data), readBatchSize);
     }
 
+    Y_UNIT_TEST_TWIN(ClientDataWritesDisabled, directParts) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableClientModifications(false);
+        runtime.GetAppData().AdministrationAllowedSIDs = {"admin@builtin"};
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(directParts);
+
+        const auto data = GenerateTestData("", 3);
+        Restore(runtime, env, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )", {data});
+
+        const auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson(data.YsonStr, content);
+    }
+
     Y_UNIT_TEST_WITH_COMPRESSION_FLAG(ShouldSucceedOnSingleShardTable, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
 
@@ -2320,7 +2339,9 @@ value {
         // Check export
         TestGetExport(runtime, exportId, "/MyRoot");
 
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 10);
+        UNIT_ASSERT(s3Mock.GetData().contains("/data_complete.json"));
+        UNIT_ASSERT(s3Mock.GetData().contains("/export_complete.json"));
 
         // Restore table
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -2401,7 +2422,9 @@ value {
         // Check export
         TestGetExport(runtime, exportId, "/MyRoot");
 
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 10);
+        UNIT_ASSERT(s3Mock.GetData().contains("/data_complete.json"));
+        UNIT_ASSERT(s3Mock.GetData().contains("/export_complete.json"));
 
         // Make corruption
         corruption(s3Mock.GetData());
@@ -3007,7 +3030,8 @@ value {
             size_t resultFileSize,
             size_t readBatchSize,
             bool compressed,
-            EEncryptedImportRebootMode rebootMode = EEncryptedImportRebootMode::None)
+            EEncryptedImportRebootMode rebootMode = EEncryptedImportRebootMode::None,
+            size_t finalReadSize = 0)
     {
         TString key = "Cool very very secret rand key!!";
         NBackup::TEncryptionIV iv = NBackup::TEncryptionIV::Generate();
@@ -3020,6 +3044,10 @@ value {
 
         const auto [lines, contentLength] = MakeBigEncryptedExport(s3Mock, key, iv, encryptedBlockSize, resultFileSize, compressed);
         UNIT_ASSERT_GT(contentLength, 0);
+        if (finalReadSize) {
+            UNIT_ASSERT_GT(contentLength, 2 * finalReadSize);
+            readBatchSize = contentLength - finalReadSize;
+        }
 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(false));
@@ -3043,6 +3071,7 @@ value {
 
         bool wholeFileRead = false;
         bool readyToReboot = false;
+        bool restoreSucceeded = false;
         ui32 rebootCount = 0;
 
         if (rebootMode != EEncryptedImportRebootMode::None) {
@@ -3068,6 +3097,19 @@ value {
                         readyToReboot = true;
                     }
                     break;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+        }
+
+        if (finalReadSize) {
+            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvDataShard::EvSchemaChanged) {
+                    const auto& record = ev->Get<TEvDataShard::TEvSchemaChanged>()->Record;
+                    if (record.GetTxId() == txId && record.HasOpResult()) {
+                        UNIT_ASSERT_C(record.GetOpResult().GetSuccess(), record.ShortDebugString());
+                        restoreSucceeded = true;
+                    }
                 }
                 return TTestActorRuntime::EEventAction::PROCESS;
             });
@@ -3131,8 +3173,18 @@ value {
 
         env.TestWaitNotification(runtime, txId);
 
+        if (finalReadSize) {
+            UNIT_ASSERT(restoreSucceeded);
+        }
         const ui64 rows = CountRows(runtime, "/MyRoot/TestTable");
         UNIT_ASSERT_VALUES_EQUAL(rows, lines);
+    }
+
+    Y_UNIT_TEST_TWIN(ImportEncryptedFileWithSeparateTerminator, Compressed) {
+        for (size_t finalReadSize = 1; finalReadSize <= 20; ++finalReadSize) {
+            ImportBigEncryptedFile(555_B, 2_KB, 8_KB, Compressed,
+                EEncryptedImportRebootMode::None, finalReadSize);
+        }
     }
 
     Y_UNIT_TEST(ImportBigEncryptedFileWithRebootAfterLastPortion) {
@@ -4975,6 +5027,79 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) {
             return ev->GetTypeRewrite() == TEvPrivate::EvImportSchemeReady;
         });
+    }
+
+    // Regression test: a manual cancel while the schema-mapping getter is in flight
+    // must not be resurrected by the late getter reply. Previously the reply flipped
+    // the cancelled import back to Waiting and restarted the whole import, pinning
+    // schemeshard memory and re-appending duplicated items on every cancel.
+    Y_UNIT_TEST(CancelWhileGettingSchemaMappingShouldNotResurrect) {
+        TTestBasicRuntime runtime;
+
+        TTestEnv env(runtime, TTestEnvOptions());
+        // Needed to reach EState::DownloadExportMetadata, which is what spawns the
+        // schema-mapping getter.
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_path: "/MyRoot"
+              destination_prefix: "BackupPrefix"
+              items {
+                source_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        THolder<IEventHandle> delayed;
+        auto prevObserver = SetDelayObserver(runtime, delayed, [](TAutoPtr<IEventHandle>& ev) {
+            return ev->GetTypeRewrite() == TEvPrivate::EvImportSchemaMappingReady;
+        });
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_prefix: "BackupPrefix"
+              destination_path: "/MyRoot/Restored"
+            }
+        )", port));
+
+        WaitForDelayed(runtime, delayed, prevObserver);
+
+        // Cancel while the schema-mapping getter reply is still in flight
+        TestCancelImport(runtime, ++txId, "/MyRoot", importId);
+        env.TestWaitNotification(runtime, importId);
+
+        // Deliver the late getter reply: it must be dropped, not resurrect the import
+        runtime.Send(delayed.Release(), 0, true);
+        env.TestWaitNotification(runtime, importId);
+
+        TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+
+        // The cancelled import must be forgettable
+        TestForgetImport(runtime, ++txId, "/MyRoot", importId);
+        TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
     }
 
     Y_UNIT_TEST(CancelUponCreatingTableShouldSucceed) {

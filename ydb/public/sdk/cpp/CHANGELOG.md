@@ -1,3 +1,5 @@
+* Federated topic `GetInitSeqNo()` now waits for the server InitResponse. It fails with "session closed" if the session closes first, and throws `TContractViolation` when deduplication is disabled or the session is already in auto SeqNo mode. After a federation switch the new subsession stays in manual SeqNo mode.
+
 * Added `TExecuteQueryIterator::Cancel()` to explicitly cancel a query response stream, including a pending read.
 
 * Added `TBridgeClient::RemovePile()` to remove a DISCONNECTED pile from a bridged cluster along with its data.

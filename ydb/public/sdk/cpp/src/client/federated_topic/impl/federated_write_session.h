@@ -5,6 +5,8 @@
 #include <ydb/public/sdk/cpp/src/client/topic/impl/write_session.h>
 
 #include <deque>
+#include <exception>
+#include <optional>
 
 namespace NYdb::inline Dev::NFederatedTopic {
 
@@ -16,10 +18,13 @@ std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseImpl(
     NTopic::TFederatedWriteSessionSettings const& settings,
     std::vector<std::shared_ptr<TDbInfo>> const& dbInfos, std::string const& selfLocation);
 
+class TFederatedWriteSessionTestAccess;
+
 class TFederatedWriteSessionImpl : public NTopic::TContinuationTokenIssuer,
                                    public NTopic::TEnableSelfContext<TFederatedWriteSessionImpl> {
     friend class TFederatedWriteSession;
     friend class TFederatedTopicClient::TImpl;
+    friend class TFederatedWriteSessionTestAccess;
 
 public:
     TFederatedWriteSessionImpl(const TFederatedWriteSessionSettings& settings,
@@ -121,12 +126,32 @@ private:
     void WriteInternal(NTopic::TContinuationToken&&, TWrappedWriteMessage&& message);
     bool MaybeWriteImpl();
 
-    void CloseImpl(EStatus statusCode, NYdb::NIssue::TIssues&& issues);
-    void CloseImpl(NTopic::TSessionClosedEvent const& ev);
-
     bool MessageQueuesAreEmptyImpl() const;
 
     void IssueTokenIfAllowed();
+
+    // Forwards the current subsession's GetInitSeqNo() once the caller has asked for it.
+    // Prepared under Lock. The public promise is completed on the response queue,
+    // after LockShared is dropped and off the subsession read callback stack.
+    void MaybePrepareInitSeqNoArm();
+    void DispatchPendingInitSeqNoArm();
+    bool IsDeduplicationEnabled() const;
+
+    struct TInitSeqNoCompletion {
+        NThreading::TPromise<uint64_t> Promise;
+        std::optional<uint64_t> Value;
+        std::exception_ptr Error;
+
+        void Apply();
+    };
+
+    TInitSeqNoCompletion ClaimInitSeqNo(size_t generation, const NThreading::TFuture<uint64_t>& future, std::exception_ptr error);
+
+    // Marks the session closed and claims a still-pending init promise.
+    // PublishPendingClose() must run after LockShared is released: it fails the
+    // init promise before ClientEventsQueue::Close wakes WaitEvent subscribers.
+    void BeginClose(const NTopic::TSessionClosedEvent& event);
+    void PublishPendingClose();
 
     TStringBuilder GetLogPrefixImpl() const;
 
@@ -173,12 +198,28 @@ private:
     State SessionState{State::CREATED};
     NThreading::TPromise<void> MessageQueuesHaveBeenEmptied;
     NThreading::TPromise<void> HasBeenClosed;
+
+    // Completed from the subsession InitResponse, or with "session closed".
+    // Stays uninitialized until the first GetInitSeqNo() call so a read of the
+    // seq no is not forced onto sessions that write in auto mode.
+    NThreading::TPromise<uint64_t> InitSeqNoPromise;
+    bool InitSeqNoSettled = false;
+    size_t InitSeqNoArmedGeneration = 0;
+    bool HasPendingInitSeqNoArm = false;
+    size_t PendingInitSeqNoGeneration = 0;
+    NThreading::TFuture<uint64_t> PendingInitSeqNoFuture;
+    std::exception_ptr PendingInitSeqNoError;
+
+    bool PendingCloseActive = false;
+    std::optional<NTopic::TSessionClosedEvent> PendingCloseEvent;
+    NThreading::TPromise<uint64_t> PendingCloseInitSeqNo;
 };
 
 class TFederatedWriteSession : public NTopic::IWriteSession,
                                public NTopic::TContextOwner<TFederatedWriteSessionImpl> {
     friend class TFederatedTopicClient::TImpl;
     friend class TSimpleBlockingFederatedWriteSession;
+    friend class TFederatedWriteSessionTestAccess;
 
 public:
 

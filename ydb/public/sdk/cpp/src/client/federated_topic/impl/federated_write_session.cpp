@@ -10,9 +10,30 @@
 
 #include <library/cpp/threading/future/future.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
+
 #include <algorithm>
+#include <exception>
 
 namespace NYdb::inline Dev::NFederatedTopic {
+
+namespace {
+
+bool IsContractViolation(const std::exception_ptr& error) {
+    if (!error) {
+        return false;
+    }
+    try {
+        std::rethrow_exception(error);
+    } catch (const TContractViolation&) {
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+}  // namespace
 
 constexpr TDuration UPDATE_FEDERATION_STATE_DELAY = TDuration::Seconds(10);
 
@@ -100,10 +121,20 @@ void TFederatedWriteSessionImpl::Start() {
 
     AsyncInit.Subscribe([selfCtx = SelfContext](const auto& f) {
         Y_UNUSED(f);
-        if (auto self = selfCtx->LockShared()) {
+        std::shared_ptr<TFederatedWriteSessionImpl> pinned;
+        {
+            auto self = selfCtx->LockShared();
+            if (!self) {
+                return;
+            }
+            pinned = selfCtx->TryGet();
             with_lock(self->Lock) {
                 self->UpdateFederationStateImpl();
             }
+            self->DispatchPendingInitSeqNoArm();
+        }
+        if (pinned) {
+            pinned->PublishPendingClose();
         }
     });
 }
@@ -170,13 +201,23 @@ std::shared_ptr<NTopic::IWriteSession> TFederatedWriteSessionImpl::OpenSubsessio
                 // In this case we get SUCCESS status and don't need to propagate it further.
                 return;
             }
-            if (auto self = selfCtx->LockShared()) {
+            std::shared_ptr<TFederatedWriteSessionImpl> pinned;
+            {
+                auto self = selfCtx->LockShared();
+                if (!self) {
+                    return;
+                }
+                pinned = selfCtx->TryGet();
                 with_lock(self->Lock) {
                     if (generation != self->SubsessionGeneration) {
+                        pinned.reset();
                         return;
                     }
-                    self->CloseImpl(ev);
+                    self->BeginClose(ev);
                 }
+            }
+            if (pinned) {
+                pinned->PublishPendingClose();
             }
         });
 
@@ -195,6 +236,7 @@ std::shared_ptr<NTopic::IWriteSession> TFederatedWriteSessionImpl::OpenSubsessio
 
     Subsession = subclient->CreateWriteSession(wsSettings);
     CurrentDatabase = db;
+    MaybePrepareInitSeqNoArm();
 
     return oldSubsession;
 }
@@ -286,7 +328,7 @@ std::shared_ptr<NTopic::IWriteSession> TFederatedWriteSessionImpl::OnFederationS
     if (!FederationState->Status.IsSuccess()) {
         // The observer became stale, it won't try to get federation state anymore due to retry policy,
         // so there's no reason to keep the write session alive.
-        CloseImpl(FederationState->Status.GetStatus(), NYdb::NIssue::TIssues(FederationState->Status.GetIssues()));
+        BeginClose(NTopic::TSessionClosedEvent(FederationState->Status.GetStatus(), NYdb::NIssue::TIssues(FederationState->Status.GetIssues())));
         return {};
     }
 
@@ -304,7 +346,7 @@ std::shared_ptr<NTopic::IWriteSession> TFederatedWriteSessionImpl::OnFederationS
         } else {
             std::string message = "Failed to select database: no available database";
             LOG_LAZY(Log, TLOG_ERR, GetLogPrefixImpl() << message << ". Status: " << status);
-            CloseImpl(status, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(message)});
+            BeginClose(NTopic::TSessionClosedEvent(status, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(message)}));
         }
         return {};
     }
@@ -328,21 +370,31 @@ void TFederatedWriteSessionImpl::ScheduleFederationStateUpdateImpl(TDuration del
     Y_ABORT_UNLESS(Lock.IsLocked());
     auto cb = [selfCtx = SelfContext](bool ok) {
         if (ok) {
-            if (auto self = selfCtx->LockShared()) {
+            std::shared_ptr<TFederatedWriteSessionImpl> pinned;
+            {
+                auto self = selfCtx->LockShared();
+                if (!self) {
+                    return;
+                }
+                pinned = selfCtx->TryGet();
                 std::shared_ptr<NTopic::IWriteSession> old;
                 with_lock(self->Lock) {
                     old = self->UpdateFederationStateImpl();
                 }
+                self->DispatchPendingInitSeqNoArm();
                 if (old) {
                     old->Close(TDuration::Zero());
                 }
+            }
+            if (pinned) {
+                pinned->PublishPendingClose();
             }
         }
     };
 
     UpdateStateDelayContext = Connections->CreateContext();
     if (!UpdateStateDelayContext) {
-        CloseImpl(EStatus::TRANSPORT_UNAVAILABLE, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue("Could not update federation state")});
+        BeginClose(NTopic::TSessionClosedEvent(EStatus::TRANSPORT_UNAVAILABLE, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue("Could not update federation state")}));
         // TODO log DRIVER_IS_STOPPING_DESCRIPTION
         return;
     }
@@ -364,8 +416,182 @@ std::optional<NTopic::TWriteSessionEvent::TEvent> TFederatedWriteSessionImpl::Ge
     return events.empty() ? std::nullopt : std::optional<NTopic::TWriteSessionEvent::TEvent>{std::move(events.front())};
 }
 
+void TFederatedWriteSessionImpl::MaybePrepareInitSeqNoArm() {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    if (!InitSeqNoPromise.Initialized() || !Subsession) {
+        return;
+    }
+    if (InitSeqNoArmedGeneration == SubsessionGeneration) {
+        return;
+    }
+
+    const auto current = InitSeqNoPromise.GetFuture();
+    // The public promise is one-shot. A replacement subsession still needs
+    // GetInitSeqNo() so ValidateSeqNo locks manual mode, as on a direct session.
+    const bool publish = !InitSeqNoSettled && !current.HasValue() && !current.HasException();
+
+    InitSeqNoArmedGeneration = SubsessionGeneration;
+    if (!publish) {
+        try {
+            Subsession->GetInitSeqNo();
+        } catch (...) {
+            // Already settled. A contract error means this subsession is in auto
+            // mode; a later manual write fails there. Do not reopen the promise.
+        }
+        return;
+    }
+
+    PendingInitSeqNoGeneration = SubsessionGeneration;
+    PendingInitSeqNoError = nullptr;
+    try {
+        // Called before this subsession accepts writes, so ValidateSeqNo still
+        // sees an unset mode and locks manual SeqNo the same way a direct topic
+        // session does. Must not subscribe here: a ready future would re-enter Lock.
+        PendingInitSeqNoFuture = Subsession->GetInitSeqNo();
+    } catch (...) {
+        PendingInitSeqNoFuture = {};
+        PendingInitSeqNoError = std::current_exception();
+    }
+    HasPendingInitSeqNoArm = true;
+}
+
+void TFederatedWriteSessionImpl::TInitSeqNoCompletion::Apply() {
+    if (!Promise.Initialized()) {
+        return;
+    }
+    if (Value.has_value()) {
+        Promise.TrySetValue(*Value);
+    } else if (Error) {
+        Promise.TrySetException(Error);
+    }
+}
+
+bool TFederatedWriteSessionImpl::IsDeduplicationEnabled() const {
+    if (Settings.DeduplicationEnabled_.has_value()) {
+        return *Settings.DeduplicationEnabled_;
+    }
+    // TWriteSessionImpl::InitWriter enables deduplication only when an id is set.
+    return !Settings.ProducerId_.empty() || !Settings.MessageGroupId_.empty();
+}
+
+void TFederatedWriteSessionImpl::DispatchPendingInitSeqNoArm() {
+    bool hasArm = false;
+    size_t generation = 0;
+    NThreading::TFuture<uint64_t> future;
+    std::exception_ptr error;
+    with_lock(Lock) {
+        if (!HasPendingInitSeqNoArm) {
+            return;
+        }
+        hasArm = true;
+        generation = PendingInitSeqNoGeneration;
+        future = std::move(PendingInitSeqNoFuture);
+        error = std::move(PendingInitSeqNoError);
+        HasPendingInitSeqNoArm = false;
+        PendingInitSeqNoError = nullptr;
+    }
+    if (!hasArm) {
+        return;
+    }
+
+    // Subscribe can run inline when the subsession future is already ready, and this
+    // method is reachable from a discovery callback that still holds LockShared.
+    // The subsession promise itself is completed on the read callback stack
+    // (TWriteSessionImpl::OnReadDone). Public subscribers must run on neither:
+    // a subscriber that drops the session would destroy that subsession reentrantly,
+    // and LockShared would deadlock the context destructor.
+    auto connections = Connections;
+    auto selfCtx = SelfContext;
+    connections->PostToResponseQueue([selfCtx, generation, future = std::move(future), error = std::move(error), connections]() mutable {
+        auto apply = [selfCtx, generation, error = std::move(error), connections](const NThreading::TFuture<uint64_t>& ready) mutable {
+            TInitSeqNoCompletion completion;
+            {
+                auto self = selfCtx->LockShared();
+                if (self) {
+                    with_lock(self->Lock) {
+                        completion = self->ClaimInitSeqNo(generation, ready, std::move(error));
+                    }
+                }
+            }
+            connections->PostToResponseQueue([completion = std::move(completion)]() mutable {
+                completion.Apply();
+            });
+        };
+        if (error || !future.Initialized()) {
+            apply(future);
+            return;
+        }
+        future.Subscribe(std::move(apply));
+    });
+}
+
+TFederatedWriteSessionImpl::TInitSeqNoCompletion TFederatedWriteSessionImpl::ClaimInitSeqNo(
+    size_t generation,
+    const NThreading::TFuture<uint64_t>& future,
+    std::exception_ptr error
+) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    TInitSeqNoCompletion completion;
+    if (SessionState == State::CLOSED || InitSeqNoSettled || generation != SubsessionGeneration || !InitSeqNoPromise.Initialized()) {
+        return completion;
+    }
+    const auto current = InitSeqNoPromise.GetFuture();
+    if (current.HasValue() || current.HasException()) {
+        InitSeqNoSettled = true;
+        return completion;
+    }
+    if (error) {
+        InitSeqNoSettled = true;
+        completion.Promise = InitSeqNoPromise;
+        completion.Error = std::move(error);
+        return completion;
+    }
+    if (!future.Initialized()) {
+        return completion;
+    }
+    try {
+        completion.Value = future.GetValue();
+    } catch (...) {
+        completion.Error = std::current_exception();
+    }
+    InitSeqNoSettled = true;
+    completion.Promise = InitSeqNoPromise;
+    return completion;
+}
+
 NThreading::TFuture<uint64_t> TFederatedWriteSessionImpl::GetInitSeqNo() {
-    return NThreading::MakeFuture<uint64_t>(0u);
+    if (!IsDeduplicationEnabled()) {
+        NYdb::ThrowFatalError("Cannot call GetInitSeqNo when deduplication is disabled");
+    }
+
+    NThreading::TFuture<uint64_t> result;
+    std::exception_ptr contractError;
+    with_lock(Lock) {
+        if (!InitSeqNoPromise.Initialized()) {
+            InitSeqNoPromise = NThreading::NewPromise<uint64_t>();
+            if (SessionState == State::CLOSED) {
+                InitSeqNoPromise.SetException("session closed");
+            }
+        }
+        result = InitSeqNoPromise.GetFuture();
+        if (!result.HasValue() && !result.HasException()) {
+            MaybePrepareInitSeqNoArm();
+            if (IsContractViolation(PendingInitSeqNoError)) {
+                // TWriteSessionImpl::GetInitSeqNo throws before handing out a future.
+                // Drop the arm so the next call throws again instead of hanging.
+                contractError = PendingInitSeqNoError;
+                HasPendingInitSeqNoArm = false;
+                PendingInitSeqNoError = nullptr;
+                PendingInitSeqNoFuture = {};
+                InitSeqNoArmedGeneration = 0;
+            }
+        }
+    }
+    if (contractError) {
+        std::rethrow_exception(contractError);
+    }
+    DispatchPendingInitSeqNoArm();
+    return result;
 }
 
 NThreading::TFuture<bool> TFederatedWriteSessionImpl::Flush() {
@@ -447,11 +673,7 @@ bool TFederatedWriteSessionImpl::MaybeWriteImpl() {
     return true;
 }
 
-void TFederatedWriteSessionImpl::CloseImpl(EStatus statusCode, NYdb::NIssue::TIssues&& issues) {
-    CloseImpl(TPlainStatus(statusCode, std::move(issues)));
-}
-
-void TFederatedWriteSessionImpl::CloseImpl(NTopic::TSessionClosedEvent const& ev) {
+void TFederatedWriteSessionImpl::BeginClose(const NTopic::TSessionClosedEvent& event) {
     Y_ABORT_UNLESS(Lock.IsLocked());
     if (SessionState == State::CLOSED) {
         return;
@@ -469,10 +691,37 @@ void TFederatedWriteSessionImpl::CloseImpl(NTopic::TSessionClosedEvent const& ev
     if (!HasBeenClosed.HasValue()) {
         HasBeenClosed.SetValue();
     }
-    {
-        auto unguard = Unguard(Lock);
-        ClientEventsQueue->Close(ev);
+    if (!InitSeqNoSettled && InitSeqNoPromise.Initialized()) {
+        const auto current = InitSeqNoPromise.GetFuture();
+        if (!current.HasValue() && !current.HasException()) {
+            InitSeqNoSettled = true;
+            PendingCloseInitSeqNo = InitSeqNoPromise;
+        }
     }
+    PendingCloseEvent = event;
+    PendingCloseActive = true;
+}
+
+void TFederatedWriteSessionImpl::PublishPendingClose() {
+    std::optional<NTopic::TSessionClosedEvent> event;
+    NThreading::TPromise<uint64_t> initSeqNo;
+    with_lock(Lock) {
+        if (!PendingCloseActive) {
+            return;
+        }
+        event = std::move(PendingCloseEvent);
+        initSeqNo = std::move(PendingCloseInitSeqNo);
+        PendingCloseEvent.reset();
+        PendingCloseActive = false;
+    }
+    if (!event) {
+        return;
+    }
+    // Ready before Close(): a WaitEvent subscriber invoked inline must observe this future.
+    if (initSeqNo.Initialized()) {
+        initSeqNo.TrySetException(std::make_exception_ptr(yexception() << "session closed"));
+    }
+    ClientEventsQueue->Close(*event);
 }
 
 bool TFederatedWriteSessionImpl::Close(TDuration timeout) {
@@ -492,10 +741,13 @@ bool TFederatedWriteSessionImpl::Close(TDuration timeout) {
     std::vector<NThreading::TFuture<void>> futures{MessageQueuesHaveBeenEmptied.GetFuture(), HasBeenClosed.GetFuture()};
     NThreading::WaitAny(futures).Wait(timeout);
 
+    bool queuesEmpty = false;
     with_lock(Lock) {
-        CloseImpl(EStatus::SUCCESS, NYdb::NIssue::TIssues{});
-        return MessageQueuesAreEmptyImpl();
+        BeginClose(NTopic::TSessionClosedEvent(EStatus::SUCCESS, NYdb::NIssue::TIssues{}));
+        queuesEmpty = MessageQueuesAreEmptyImpl();
     }
+    PublishPendingClose();
+    return queuesEmpty;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -95,6 +95,7 @@ public:
 
     TAsyncStatus ConvertToBridge(const TConvertToBridgeSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Bridge::ConvertToBridgeRequest>(settings);
+        request.set_keep_ordinary_storage(settings.KeepOrdinaryStorage_);
 
         return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::ConvertToBridgeRequest, Ydb::Bridge::ConvertToBridgeResponse>(
             std::move(request),

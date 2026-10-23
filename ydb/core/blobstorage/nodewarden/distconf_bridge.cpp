@@ -399,12 +399,14 @@ namespace NKikimr::NStorage {
     }
 
     std::optional<TString> ConvertStorageConfigToBridge(NKikimrBlobStorage::TStorageConfig *config,
-            const NKikimrConfig::TBridgeConfig& bridgeConfig) {
+            const NKikimrConfig::TBridgeConfig& bridgeConfig, bool keepOrdinaryStorage) {
         if (config->HasClusterState()) {
             return "cluster is already bridged one";
         } else if (bridgeConfig.PilesSize() != 1) {
             return "BridgeConfig must contain exactly one pile to convert cluster to bridged one";
-        } else if (bridgeConfig.GetEnableNonUniformStorage()) {
+        } else if (keepOrdinaryStorage && !bridgeConfig.GetEnableNonUniformStorage()) {
+            return "keeping ordinary storage requires bridge_config.enable_non_uniform_storage";
+        } else if (!keepOrdinaryStorage && bridgeConfig.GetEnableNonUniformStorage()) {
             return "enable non-uniform storage only after BSC conversion completes";
         }
 
@@ -412,7 +414,12 @@ namespace NKikimr::NStorage {
         // the pile is the implicit one, as nodes and groups of the cluster have no pile settings yet
         config->MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(1));
         auto *details = config->MutableClusterStateDetails();
-        details->SetBscConversionPending(true);
+        if (keepOrdinaryStorage) {
+            // BSC has nothing to convert: its pools and groups stay ordinary ones in the cluster supporting both kinds
+            details->SetNonUniformStorageEnabled(true);
+        } else {
+            details->SetBscConversionPending(true);
+        }
         *details->MutablePileRegistry() = NBridge::MakeImpliedPileRegistry(bridgeConfig);
         // nodes of older versions don't handle inline piles (their VDisks abort, their bridge proxies loop), so they
         // must neither get the converted config nor connect to the ones having it

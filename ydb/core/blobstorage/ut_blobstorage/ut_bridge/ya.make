@@ -16,6 +16,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
         bridge_keep_flags.cpp
         bridge_mixed_storage.cpp
         bridge_piles.cpp
+        bridge_pool_mode.cpp
         bridge_remove_pile.cpp
         bridge_restart.cpp
         bridge_routing.cpp

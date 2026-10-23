@@ -104,6 +104,7 @@ public:
 
 private:
     bool AllowEmptyDatabase = false;
+    bool KeepOrdinaryStorage = false;
 };
 
 class TCommandBridgeAddPile : public TYdbCommand {

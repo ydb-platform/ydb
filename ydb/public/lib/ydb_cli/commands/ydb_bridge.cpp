@@ -408,6 +408,9 @@ void TCommandBridgeConvert::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.SetFreeArgsNum(0);
+    config.Opts->AddLongOption("keep-ordinary-storage", "Keep storage pools and their groups ordinary ones; only the "
+            "system storage becomes bridged. Requires enable_non_uniform_storage in the bridge config.")
+        .StoreTrue(&KeepOrdinaryStorage);
 }
 
 void TCommandBridgeConvert::Parse(TConfig& config) {
@@ -418,7 +421,8 @@ int TCommandBridgeConvert::Run(TConfig& config) {
     auto driver = CreateDriver(config);
     auto client = NYdb::NBridge::TBridgeClient(driver);
 
-    auto result = client.ConvertToBridge().GetValueSync();
+    auto result = client.ConvertToBridge(NYdb::NBridge::TConvertToBridgeSettings()
+        .KeepOrdinaryStorage(KeepOrdinaryStorage)).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "Cluster converted to bridge mode successfully." << Endl;

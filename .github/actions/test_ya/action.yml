@@ -208,8 +208,16 @@ runs:
       run: |
         set -ex
         . .github/scripts/utils/analytics/github_actions/analytics.sh
-        trap 'trap - EXIT; analytics send --conclusion cancelled' TERM INT
-        trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
+        DISK_PRESSURE_PID=""
+        stop_disk_pressure() {
+          if [ -n "$DISK_PRESSURE_PID" ]; then
+            kill "$DISK_PRESSURE_PID" 2>/dev/null || true
+            wait "$DISK_PRESSURE_PID" || echo "Disk pressure exited abnormally; inspect disk_pressure.log before comparing runs"
+            DISK_PRESSURE_PID=""
+          fi
+        }
+        trap 'stop_disk_pressure; trap - EXIT; analytics send --conclusion cancelled; exit 130' TERM INT
+        trap 'rc=$?; trap - EXIT; stop_disk_pressure; analytics send --rc "$rc"; exit $rc' EXIT
 
         if [ "${COLLECT_COREDUMPS}" = "true" ]; then
           # Bounded loop volume so a flaky suite cannot fill the runner root FS.
@@ -550,6 +558,22 @@ runs:
           YA_MAKE_NAME="ya_make_try_${RETRY}"
           analytics start "ya_make_try_${RETRY}"
 
+          # Experimental PR only: saturate the build filesystem during attempt 1.
+          # Retries run without the injector; its four files occupy at most 4 GiB.
+          if [ "$RETRY" -eq 1 ]; then
+            test "$(stat -c %d "$TMP_DIR")" = "$(stat -c %d "$HOME/.ya")"
+            DISK_PRESSURE_READY="$TMP_DIR/disk-pressure-ready"
+            python3 .github/scripts/utils/disk_pressure_experiment.py \
+              "$TMP_DIR" "$DISK_PRESSURE_READY" > "$CURRENT_PUBLIC_DIR/disk_pressure.log" 2>&1 &
+            DISK_PRESSURE_PID=$!
+            for attempt in $(seq 1 150); do
+              [ -f "$DISK_PRESSURE_READY" ] && break
+              kill -0 "$DISK_PRESSURE_PID" || { cat "$CURRENT_PUBLIC_DIR/disk_pressure.log"; exit 1; }
+              sleep 0.2
+            done
+            test -f "$DISK_PRESSURE_READY"
+          fi
+
           set +e
           # sudo -u / setpriv restore supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
           # Inner sudo -E keeps job env (needs SETENV in sudoers; standard on self-hosted runners).
@@ -561,6 +585,7 @@ runs:
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e
           RC=`cat exit_code`
+          stop_disk_pressure
           if [ $RC -eq 0 ]; then
             analytics end "$YA_MAKE_NAME"
           else

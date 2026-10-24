@@ -392,7 +392,7 @@ public:
     // Chunk writing
     bool ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize);
     void ChunkWritePiecePlain(TChunkWrite *evChunkWrite);
-    void ChunkWritePiecePreformatted(TChunkWrite *evChunkWrite);
+    bool ChunkWritePiecePreformatted(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize);
     bool ChunkWritePieceEncrypted(TChunkWrite *evChunkWrite, TChunkWriter &writer, ui32 bytesAvailable);
     void SendChunkWriteError(TChunkWrite &evChunkWrite, const TString &errorReason, NKikimrProto::EReplyStatus status);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

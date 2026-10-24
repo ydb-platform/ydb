@@ -4,6 +4,7 @@
 #include "schemeshard_export_helpers.h"
 #include "schemeshard_export_uploaders.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_scheme_builders.h"
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
@@ -53,6 +54,20 @@ bool IsPathTypeSchemeObject(const NKikimr::NSchemeShard::TExportInfo::TItem& ite
     default:
         return false;
     }
+}
+
+bool SupportsTableBackupAsSql(NKikimr::NSchemeShard::TExportInfo::EKind kind) {
+    return kind == NKikimr::NSchemeShard::TExportInfo::EKind::S3
+        || kind == NKikimr::NSchemeShard::TExportInfo::EKind::FS;
+}
+
+bool NeedsTableSchemeUpload(
+    const NKikimr::NSchemeShard::TExportInfo& exportInfo,
+    const NKikimr::NSchemeShard::TExportInfo::TItem& item)
+{
+    auto isMainTable = item.ParentIdx == Max<ui32>() && NKikimr::NSchemeShard::IsPathTypeTable(item);
+    auto isEnabledFlag = exportInfo.EnableTableBackupAsSql;
+    return SupportsTableBackupAsSql(exportInfo.Kind) && isEnabledFlag && isMainTable;
 }
 
 template <typename T>
@@ -226,6 +241,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             if (enableFeatureFlags) {
                 exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
                 exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
+                exportInfo->EnableTableBackupAsSql = SupportsTableBackupAsSql(kind) && AppData()->FeatureFlags.GetEnableTableBackupAsSql();
             }
             TString explain;
             if (!FillItems(*exportInfo, settings, explain)) {
@@ -403,6 +419,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     TEvPrivate::TEvExportUploadMetadataResult::TPtr UploadMetadataResult = nullptr;
     TEvPrivate::TEvExportCompletionUploadResult::TPtr CompletionUploadResult = nullptr;
     TTxId CompletedTxId = InvalidTxId;
+    TVector<std::pair<TExportInfo::TPtr, ui32>> TableSchemeUploads;
 
     explicit TTxProgress(TSelf* self, ui64 id)
         : TXxport::TTxBase(self)
@@ -454,7 +471,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         YDB_LOG_DEBUG("TExport::TTxProgress: DoExecute");
 
         if (AllocateResult) {
-            OnAllocateResult();
+            OnAllocateResult(txc);
         } else if (ModifyResult) {
             OnModifyResult(txc, ctx);
         } else if (SchemeUploadResult) {
@@ -472,8 +489,14 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         return true;
     }
 
-    void DoComplete(const TActorContext&) override {
+    void DoComplete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG("TExport::TTxProgress: DoComplete");
+        // Encryption must not start until the exact plaintext is durable.
+        for (const auto& [exportInfo, itemIdx] : TableSchemeUploads) {
+            if (exportInfo->State == EState::Transferring) {
+                UploadTableScheme(*exportInfo, itemIdx, ctx);
+            }
+        }
     }
 
 private:
@@ -497,20 +520,40 @@ private:
         Send(Self->SelfId(), CopyTablesPropose(Self, txId, exportInfo));
     }
 
-    void TransferData(TExportInfo& exportInfo, ui32 itemIdx, TTxId txId) {
-        Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
-        auto& item = exportInfo.Items[itemIdx];
+    bool TransferData(TExportInfo::TPtr exportInfo, ui32 itemIdx, TTxId txId, NIceDb::TNiceDb& db) {
+        Y_ABORT_UNLESS(exportInfo);
+        auto& info = *exportInfo;
+
+        Y_ABORT_UNLESS(itemIdx < info.Items.size());
+        auto& item = info.Items[itemIdx];
+
+        TString error;
+        auto propose = BackupPropose(Self, txId, info, itemIdx, error);
+        if (!propose) {
+            item.State = EState::Cancelled;
+            item.Issue = error;
+            Self->PersistExportItemState(db, info, itemIdx);
+
+            if (info.IsInProgress()) {
+                Cancel(info, itemIdx, "failed to prepare immutable table scheme", db);
+                Self->PersistExportState(db, info);
+                Self->EraseEncryptionKey(db, info);
+                SendNotificationsIfFinished(exportInfo);
+            }
+            return false;
+        }
 
         item.SubState = ESubState::Proposed;
 
         YDB_LOG_INFO("TExport::TTxProgress: Backup propose",
-            {"info", exportInfo.ToString()},
+            {"info", info.ToString()},
             {"item", item.ToString(itemIdx)},
             {"txId", txId},
         );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
+        Send(Self->SelfId(), std::move(propose));
+        return true;
     }
 
     template <typename Func>
@@ -537,6 +580,82 @@ private:
         DispatchByExportKind([&]<typename TSettings>() {
             return UploadScheme<TSettings>(exportInfo, itemIdx, ctx);
         }, exportInfo);
+    }
+
+    bool PrepareTableSchemeSql(TExportInfo& exportInfo, ui32 itemIdx, TString& error) {
+        auto& item = exportInfo.Items.at(itemIdx);
+        const TPath sourcePath = TPath::Init(item.SourcePathId, Self);
+        const TPath exportItemPath = TPath::Resolve(ExportItemPathName(Self, exportInfo, itemIdx), Self);
+
+        TExportTableSchemeContext context;
+
+        const NKikimrSchemeOp::TBackupTask* backupTask = nullptr;
+        if (exportItemPath.IsResolved()) {
+            const TPathId pathId = exportItemPath.Base()->PathId;
+            if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
+                if (Self->ColumnTables.contains(pathId)) {
+                    backupTask = &Self->ColumnTables.at(pathId).GetPtr()->BackupSettings;
+                }
+            } else if (Self->Tables.contains(pathId)) {
+                backupTask = &Self->Tables.at(pathId)->BackupSettings;
+            }
+        }
+
+        const bool prepared = backupTask && backupTask->HasTable()
+            ? PrepareExportTableSchemeContext(Self, item.SourcePathName, *backupTask, exportItemPath, context, error)
+            : PrepareExportTableSchemeContext(Self, sourcePath, exportItemPath, context, error);
+
+        if (!prepared || !FillExportTableSchemePaths(Self, exportInfo.DomainPathId, item.SourcePathName, context, error)) {
+            return false;
+        }
+
+        context.IncludeIndexData = exportInfo.IncludeIndexData;
+
+        return BuildCreateTableScheme(context, item.TableSchemeSql, error);
+    }
+
+    template <typename TSettings>
+    void UploadTableSchemeWithSettings(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
+        auto& item = exportInfo.Items[itemIdx];
+
+        auto fail = [&](const TString& error) {
+            Send(Self->SelfId(), new TEvPrivate::TEvExportSchemeUploadResult(exportInfo.Id, itemIdx, false, error));
+        };
+
+        TSettings exportSettings;
+        if (!exportSettings.ParseFromString(exportInfo.Settings)) {
+            return fail("Cannot parse settings for SQL scheme upload");
+        }
+
+        TMaybe<NBackup::TEncryptionIV> iv;
+        if (exportSettings.has_encryption_settings() && itemIdx < ui32(exportInfo.ExportMetadata.SchemaMappingSize())) {
+            iv = NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
+        }
+
+        item.SchemeUploader = ctx.Register(CreateTableSchemeUploader(Self->SelfId(), exportInfo.Id, itemIdx, exportSettings,
+            item.TableSchemeSql, exportInfo.EnableChecksums, iv));
+        Self->RunningExportSchemeUploaders.emplace(item.SchemeUploader);
+    }
+
+    void UploadTableScheme(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
+        const auto& item = exportInfo.Items[itemIdx];
+
+        if (!NeedsTableSchemeUpload(exportInfo, item)
+            || item.State != EState::UploadTableSchemeSql
+            || item.SchemeUploader) {
+            return;
+        }
+
+        switch (exportInfo.Kind) {
+        case TExportInfo::EKind::S3:
+            return UploadTableSchemeWithSettings<Ydb::Export::ExportToS3Settings>(exportInfo, itemIdx, ctx);
+        case TExportInfo::EKind::FS:
+            return UploadTableSchemeWithSettings<Ydb::Export::ExportToFsSettings>(exportInfo, itemIdx, ctx);
+        default:
+            Y_ABORT("Unsupported export kind for CREATE TABLE upload");
+        }
     }
 
     bool UploadExportMetadata(TExportInfo& exportInfo, const TActorContext& ctx) {
@@ -1106,6 +1225,11 @@ private:
             for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                 const auto& item = exportInfo->Items.at(itemIdx);
 
+                if (item.State == EState::UploadTableSchemeSql) {
+                    TableSchemeUploads.emplace_back(exportInfo, itemIdx);
+                    continue;
+                }
+
                 if (item.State == EState::Done || item.State == EState::Cancelled) {
                     continue;
                 }
@@ -1197,7 +1321,7 @@ private:
         AuditLogExportEnd(*exportInfo, Self);
     }
 
-    void OnAllocateResult() {
+    void OnAllocateResult(TTransactionContext& txc) {
         Y_ABORT_UNLESS(AllocateResult);
 
         const auto txId = TTxId(AllocateResult->Get()->TxIds.front());
@@ -1217,6 +1341,7 @@ private:
 
         TExportInfo::TPtr exportInfo = Self->Exports.at(id);
         ui32 itemIdx = Max<ui32>();
+        NIceDb::TNiceDb db(txc.DB);
 
         switch (exportInfo->State) {
         case EState::CreateExportDir:
@@ -1233,7 +1358,9 @@ private:
             }
             itemIdx = PopFront(exportInfo->PendingItems);
             if (IsPathTypeTransferrable(exportInfo->Items.at(itemIdx))) {
-                TransferData(*exportInfo, itemIdx, txId);
+                if (!TransferData(exportInfo, itemIdx, txId, db)) {
+                    return;
+                }
             } else {
                 YDB_LOG_WARN("TExport::TTxProgress: OnAllocateResult allocated a needless txId for an item transferring",
                     {"id", id},
@@ -1501,10 +1628,51 @@ private:
         NIceDb::TNiceDb db(txc.DB);
 
         auto& item = exportInfo->Items[itemIdx];
-        if (!item.SchemeUploader || item.SchemeUploader != SchemeUploadResult->Sender) {
+        // Unreadable settings prevent both upload and cleanup from starting.
+        const bool startFailed = NeedsTableSchemeUpload(*exportInfo, item)
+            && item.State == EState::UploadTableSchemeSql
+            && !item.SchemeUploader
+            && SchemeUploadResult->Sender == Self->SelfId()
+            && !result.Success;
+        if (!startFailed && (!item.SchemeUploader || item.SchemeUploader != SchemeUploadResult->Sender)) {
             return;
         }
         Self->RunningExportSchemeUploaders.erase(std::exchange(item.SchemeUploader, {}));
+
+        if (NeedsTableSchemeUpload(*exportInfo, item)) {
+            if (item.State != EState::UploadTableSchemeSql) {
+                return;
+            }
+
+            if (exportInfo->State == EState::Transferring) {
+                if (!result.Success) {
+                    // Upload failures are handled inside the uploader. A failure
+                    // here means it could not make fallback safe either.
+                    item.State = EState::Cancelled;
+                    item.Issue = result.Error;
+                    Self->PersistExportItemState(db, *exportInfo, itemIdx);
+                    CancelAndPersistExport(exportInfo, itemIdx, "SQL upload and cleanup failed", db);
+                    return;
+                }
+
+                item.State = EState::Transferring;
+                Self->PersistExportItemState(db, *exportInfo, itemIdx);
+
+                exportInfo->PendingItems.emplace_back(itemIdx);
+                AllocateTxId(*exportInfo, itemIdx);
+            } else if (exportInfo->State == EState::Cancellation || exportInfo->State == EState::Cancelled) {
+                item.State = EState::Cancelled;
+                Self->PersistExportItemState(db, *exportInfo, itemIdx);
+
+                if (exportInfo->State == EState::Cancellation && AllOf(exportInfo->Items, [](const TExportInfo::TItem& item) {
+                    // on cancellation we wait only for transferring items
+                    return item.State != EState::Transferring;
+                })) {
+                    EndExport(exportInfo, EState::Cancelled, db);
+                }
+            }
+            return;
+        }
 
         if (!result.Success) {
             item.State = EState::Cancelled;
@@ -1697,6 +1865,23 @@ private:
             TDeque<ui32> tables;
             for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                 auto& item = exportInfo->Items[itemIdx];
+
+                if (NeedsTableSchemeUpload(*exportInfo, item)) {
+                    TString error;
+                    if (!PrepareTableSchemeSql(*exportInfo, itemIdx, error)) {
+                        item.TableSchemeSql.clear();
+                        YDB_LOG_WARN("Cannot prepare CREATE TABLE SQL, removing SQL artifacts before backup",
+                            {"id", exportInfo->Id},
+                            {"itemIdx", itemIdx},
+                            {"error", error},
+                        );
+                    }
+                    item.State = EState::UploadTableSchemeSql;
+                    Self->PersistExportItemState(db, *exportInfo, itemIdx);
+                    TableSchemeUploads.emplace_back(exportInfo, itemIdx);
+                    continue;
+                }
+
                 item.State = EState::Transferring;
                 Self->PersistExportItemState(db, *exportInfo, itemIdx);
 

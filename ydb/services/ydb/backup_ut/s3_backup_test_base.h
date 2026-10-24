@@ -52,7 +52,9 @@ public:
                 keys.insert(key);
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(keys, paths);
+        auto expectedPaths = paths;
+        AddExpectedTableBackupAsSqlFiles(expectedPaths);
+        UNIT_ASSERT_VALUES_EQUAL(keys, expectedPaths);
     }
 
     void ModifyChecksumAndCheckThatImportFails(const TString& checksumFile, const NYdb::NImport::TImportFromS3Settings& importSettings) {

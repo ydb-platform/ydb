@@ -2,6 +2,10 @@
 
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/checksum.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/wrappers/abstract.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <google/protobuf/text_format.h>
 #include <util/folder/path.h>
@@ -29,6 +33,166 @@ namespace {
         TFsPath result(basePath);
         result = result / destPath / file;
         return result.GetPath();
+    }
+
+    enum class ESqlCleanupOutcome {
+        Fallback,
+        DeleteFailure,
+        NonEmptyDirectory,
+        Cancel,
+    };
+
+    void CheckFsSqlCleanup(bool encrypted, ESqlCleanupOutcome outcome, bool reboot) {
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        flags.SetEnableFsBackups(true);
+        flags.SetEnableTableBackupAsSql(true);
+        flags.SetEnableEncryptedExport(true);
+        flags.SetEnableExportAutoDropping(false);
+        // An old checksum still has to be removed when new checksums are disabled.
+        flags.SetEnableChecksumsExport(false);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 1, "newValue");
+
+        const TString destination = "backup/Table";
+        const TString directory = (TFsPath(tempDir.Path()) / destination).GetPath();
+        TFsPath(directory).MkDirs();
+        for (const TString name : {"create_table.sql", "create_table.sql.sha256", "create_table.sql.enc", "scheme.pb", "data_00.csv"}) {
+            TFileOutput file(directory + "/" + name);
+            file << "old " << name;
+            file.Finish();
+        }
+        const TString sqlPath = directory + "/create_table.sql";
+        const TString failedUpload = sqlPath + (encrypted ? ".enc" : "");
+        ui32 sqlAttempts = 0;
+        auto uploads = runtime.AddObserver<NWrappers::NExternalStorage::TEvPutObjectRequest>([&](auto& ev) {
+            if (ev->Get()->Request.GetKey() == failedUpload) {
+                ++sqlAttempts;
+                auto response = MakeHolder<NWrappers::NExternalStorage::TEvPutObjectResponse>(failedUpload,
+                    Aws::Utils::Outcome<Aws::S3::Model::PutObjectResult, Aws::S3::S3Error>(
+                        Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::ACCESS_DENIED, false)));
+                runtime.Send(new NActors::IEventHandle(ev->Sender, ev->Recipient,
+                    response.Release(), ev->Flags, ev->Cookie), 0, true);
+                ev.Reset();
+            }
+        });
+        NActors::TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> backups(runtime, [](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.TransactionSize() == 1 && record.GetTransaction(0).HasBackup();
+        });
+        NActors::TBlockEvents<NWrappers::NExternalStorage::TEvDeleteObjectRequest> deletes(runtime, [&](const auto& ev) {
+            return ev->Get()->Request.GetKey() == sqlPath + ".enc";
+        });
+        const TString encryptionSettings = encrypted ? R"(
+            encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key { key: "0123456789012345" }
+            }
+        )" : "";
+        const auto exportId = ++txId;
+        TestExport(runtime, exportId, "/MyRoot", Sprintf(R"(
+            ExportToFsSettings {
+                base_path: "%s"
+                number_of_retries: 0
+                items { source_path: "/MyRoot/Table" destination_path: "%s" }
+                %s
+            }
+        )", tempDir.Path().c_str(), destination.c_str(), encryptionSettings.c_str()));
+        runtime.WaitFor("FS cleanup after removing plaintext SQL and checksum", [&] { return !deletes.empty(); });
+        UNIT_ASSERT(!FileExists(sqlPath));
+        UNIT_ASSERT(!FileExists(sqlPath + ".sha256"));
+        UNIT_ASSERT(FileExists(sqlPath + ".enc"));
+        UNIT_ASSERT(backups.empty());
+        UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(directory + "/scheme.pb"), "old scheme.pb");
+        UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(directory + "/data_00.csv"), "old data_00.csv");
+        if (encrypted) {
+            UNIT_ASSERT(!FileExists(directory + "/scheme.pb.enc"));
+            UNIT_ASSERT(!FileExists(directory + "/data_00.csv.enc"));
+        }
+
+        if (outcome == ESqlCleanupOutcome::Fallback) {
+            if (reboot) {
+                deletes.clear();
+                RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+                runtime.WaitFor("FS cleanup resumes after reboot", [&] { return !deletes.empty(); });
+            }
+            UNIT_ASSERT(backups.empty());
+            deletes.Stop().Unblock();
+            runtime.WaitFor("FS backup after cleanup", [&] { return !backups.empty(); });
+            UNIT_ASSERT(!FileExists(sqlPath + ".enc"));
+            UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(directory + "/data_00.csv"), "old data_00.csv");
+            backups.Stop().Unblock();
+        } else if (outcome == ESqlCleanupOutcome::DeleteFailure) {
+            const auto& request = deletes.front();
+            auto response = MakeHolder<NWrappers::NExternalStorage::TEvDeleteObjectResponse>(sqlPath + ".enc",
+                Aws::Utils::Outcome<Aws::S3::Model::DeleteObjectResult, Aws::S3::S3Error>(
+                    Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::ACCESS_DENIED, false)));
+            runtime.Send(new NActors::IEventHandle(request->Sender, request->Recipient,
+                response.Release(), request->Flags, request->Cookie), 0, true);
+            deletes.Stop();
+            deletes.clear();
+        } else if (outcome == ESqlCleanupOutcome::NonEmptyDirectory) {
+            // Exercise a real filesystem error instead of synthesizing an S3 response.
+            const TFsPath blockedPath(sqlPath + ".enc");
+            blockedPath.DeleteIfExists();
+            blockedPath.MkDir();
+            TFileOutput child((blockedPath / "keep").GetPath());
+            child << "must survive failed cleanup";
+            child.Finish();
+            deletes.Stop().Unblock();
+        } else {
+            TestCancelExport(runtime, ++txId, "/MyRoot", exportId);
+            env.TestWaitNotification(runtime, exportId);
+            deletes.Stop().Unblock();
+        }
+
+        const auto expectedStatus = outcome == ESqlCleanupOutcome::Fallback
+            ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED;
+        env.TestWaitNotification(runtime, exportId);
+        const auto result = TestGetExport(runtime, exportId, "/MyRoot", expectedStatus);
+        if (expectedStatus == Ydb::StatusIds::SUCCESS) {
+            UNIT_ASSERT(!FileExists(sqlPath));
+            UNIT_ASSERT(!FileExists(sqlPath + ".enc"));
+            UNIT_ASSERT(!FileExists(sqlPath + ".sha256"));
+            TString data = ReadFileContent(directory + (encrypted ? "/data_00.csv.enc" : "/data_00.csv"));
+            if (encrypted) {
+                const auto [plain, iv] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                    NBackup::TEncryptionKey("0123456789012345"), TBuffer(data.data(), data.size()));
+                data.assign(plain.Data(), plain.Size());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(data, "1,\"newValue\"\n");
+        } else {
+            UNIT_ASSERT_C(result.GetResponse().GetEntry().IssuesSize(), result.DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetResponse().GetEntry().GetIssues(0).message(),
+                outcome == ESqlCleanupOutcome::Cancel ? "Cancelled manually" : "Cannot invalidate");
+            if (outcome == ESqlCleanupOutcome::NonEmptyDirectory) {
+                UNIT_ASSERT_STRING_CONTAINS(result.GetResponse().GetEntry().GetIssues(0).message(), "create_table.sql.enc");
+            }
+            if (reboot) {
+                RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            }
+            TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+            UNIT_ASSERT(backups.empty());
+            UNIT_ASSERT_VALUES_EQUAL(sqlAttempts, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(directory + "/scheme.pb"), "old scheme.pb");
+            UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(directory + "/data_00.csv"), "old data_00.csv");
+            if (outcome == ESqlCleanupOutcome::NonEmptyDirectory) {
+                UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(sqlPath + ".enc/keep"), "must survive failed cleanup");
+            }
+        }
+        TestForgetExport(runtime, ++txId, "/MyRoot", exportId);
+        env.TestWaitNotification(runtime, exportId);
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/export-%" PRIu64, exportId)), {NLs::PathNotExist});
     }
 
 } // namespace
@@ -198,12 +362,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         UNIT_ASSERT_VALUES_EQUAL(settings.items_size(), 2);
     }
 
-    Y_UNIT_TEST(ShouldExportDataAndSchemaToFs) {
+    Y_UNIT_TEST_TWIN(ShouldExportDataAndSchemaToFs, TableBackupAsSql) {
         TTempDir tempDir;
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableTableBackupAsSql(TableBackupAsSql);
+        runtime.GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NActors::NLog::PRI_TRACE);
@@ -241,7 +407,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(entry.HasEndTime());
 
-        TString schemePath = MakeExportPath(basePath, "backup/Table", "scheme.pb");
+        const TString schemeFile = "scheme.pb";
+        const TString createTableFile = "create_table.sql";
+
+        TString schemePath = MakeExportPath(basePath, "backup/Table", schemeFile);
+        TString createTablePath = MakeExportPath(basePath, "backup/Table", createTableFile);
         TString metadataPath = MakeExportPath(basePath, "backup/Table", "metadata.json");
         TString dataPath = MakeExportPath(basePath, "backup/Table", "data_00.csv");
 
@@ -254,11 +424,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         UNIT_ASSERT_C(!schemeContent.empty(), "Scheme file is empty");
 
         Ydb::Table::CreateTableRequest schemeProto;
-        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(schemeContent, &schemeProto),
-                     "Failed to parse scheme.pb");
+        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(schemeContent, &schemeProto), "Failed to parse scheme.pb");
         UNIT_ASSERT_VALUES_EQUAL(schemeProto.columns_size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(schemeProto.columns(0).name(), "key");
         UNIT_ASSERT_VALUES_EQUAL(schemeProto.columns(1).name(), "value");
+        UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(schemePath + ".sha256"),
+            NBackup::ComputeChecksum(schemeContent) + " " + schemeFile);
+
+        if constexpr (TableBackupAsSql) {
+            UNIT_ASSERT_C(FileExists(createTablePath), "CREATE TABLE file not found: " << createTablePath);
+            const TString createTable = ReadFileContent(createTablePath);
+            UNIT_ASSERT_C(createTable.Contains("CREATE TABLE `Table`"), createTable);
+            UNIT_ASSERT_C(createTable.Contains("`key` Uint32"), createTable);
+            UNIT_ASSERT_C(createTable.Contains("`value` Utf8"), createTable);
+            UNIT_ASSERT_C(createTable.Contains("PRIMARY KEY (`key`)"), createTable);
+            UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(createTablePath + ".sha256"),
+                NBackup::ComputeChecksum(createTable) + " " + createTableFile);
+        } else {
+            UNIT_ASSERT(!FileExists(createTablePath));
+            UNIT_ASSERT(!FileExists(createTablePath + ".sha256"));
+        }
 
         TString metadataContent = ReadFileContent(metadataPath);
         UNIT_ASSERT_C(!metadataContent.empty(), "Metadata file is empty");
@@ -268,6 +453,123 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         UNIT_ASSERT_C(!dataContent.empty(), "Data file is empty");
         UNIT_ASSERT_C(dataContent.Contains("row1") || dataContent.Contains("row2") || dataContent.Contains("row3"),
                      "Data file doesn't contain expected rows");
+    }
+
+    Y_UNIT_TEST(TableBackupAsSqlChecksumFailureContinuesFsExport) {
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
+        runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
+        runtime.GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 1, "row1");
+
+        const TString basePath = tempDir.Path();
+        const TString destination = "backup/Table";
+        const TString sqlPath = MakeExportPath(basePath, destination, "create_table.sql");
+        const TString checksumPath = sqlPath + ".sha256";
+        const TString metadataPath = MakeExportPath(basePath, destination, "metadata.json");
+        const TString dataPath = MakeExportPath(basePath, destination, "data_00.csv");
+
+        NActors::TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> backupProposals(
+            runtime, [](const auto& ev) {
+                const auto& record = ev->Get()->Record;
+                return record.TransactionSize() == 1 && record.GetTransaction(0).HasBackup();
+            });
+        NActors::TBlockEvents<NWrappers::NExternalStorage::TEvPutObjectRequest> checksumUploads(
+            runtime, [&checksumPath](const auto& ev) {
+                return ev->Get()->Request.GetKey() == checksumPath;
+            });
+
+        const ui64 exportId = ++txId;
+        TestExport(runtime, exportId, "/MyRoot", Sprintf(R"(
+            ExportToFsSettings {
+              base_path: "%s"
+              number_of_retries: 0
+              items {
+                source_path: "/MyRoot/Table"
+                destination_path: "%s"
+              }
+            }
+        )", basePath.c_str(), destination.c_str()));
+        runtime.WaitFor("blocked FS CREATE TABLE checksum upload", [&] { return !checksumUploads.empty(); });
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        UNIT_ASSERT(FileExists(sqlPath));
+        UNIT_ASSERT(!FileExists(checksumPath));
+        UNIT_ASSERT(!FileExists(metadataPath));
+        UNIT_ASSERT(!FileExists(dataPath));
+        UNIT_ASSERT_C(backupProposals.empty(), "FS backup must not start before SQL checksum upload");
+
+        const auto& request = checksumUploads.front();
+        auto response = MakeHolder<NWrappers::NExternalStorage::TEvPutObjectResponse>(
+            checksumPath,
+            Aws::Utils::Outcome<Aws::S3::Model::PutObjectResult, Aws::S3::S3Error>(
+                Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::ACCESS_DENIED, false)));
+        auto failure = MakeHolder<NActors::IEventHandle>(request->Sender, request->Recipient,
+            response.Release(), request->Flags, request->Cookie);
+        checksumUploads.Stop();
+        checksumUploads.clear();
+        backupProposals.Stop().Unblock();
+        runtime.Send(failure.Release(), 0, true);
+
+        env.TestWaitNotification(runtime, exportId);
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(!FileExists(sqlPath));
+        UNIT_ASSERT(!FileExists(checksumPath));
+        UNIT_ASSERT(FileExists(metadataPath));
+        UNIT_ASSERT(FileExists(MakeExportPath(basePath, destination, "scheme.pb")));
+        UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(dataPath), "1,\"row1\"\n");
+
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table"), 1u);
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 2, "row2");
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table"), 2u);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "after_failure" Type: "Utf8" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const TString exportPath = Sprintf("/MyRoot/export-%" PRIu64, exportId);
+        TestDescribeResult(DescribePath(runtime, exportPath), {NLs::PathExist});
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        TestForgetExport(runtime, ++txId, "/MyRoot", exportId);
+        env.TestWaitNotification(runtime, exportId);
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        TestDescribeResult(DescribePath(runtime, exportPath), {NLs::PathNotExist});
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        TestDescribeResult(DescribePath(runtime, exportPath), {NLs::PathNotExist});
+        backupProposals.Stop();
+    }
+
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlCleanupResumesFsExport, Encrypted, Reboot) {
+        CheckFsSqlCleanup(Encrypted, ESqlCleanupOutcome::Fallback, Reboot);
+    }
+
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlCleanupFailureCancelsFsExport, Encrypted, Reboot) {
+        CheckFsSqlCleanup(Encrypted, ESqlCleanupOutcome::DeleteFailure, Reboot);
+    }
+
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlCleanupNonEmptyDirectoryCancelsFsExport, Encrypted, Reboot) {
+        CheckFsSqlCleanup(Encrypted, ESqlCleanupOutcome::NonEmptyDirectory, Reboot);
+    }
+
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlCancelDuringFsCleanup, Encrypted, Reboot) {
+        CheckFsSqlCleanup(Encrypted, ESqlCleanupOutcome::Cancel, Reboot);
     }
 
     Y_UNIT_TEST(ShouldExportMultipleTablesWithData) {
@@ -551,13 +853,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
     }
 
-    Y_UNIT_TEST(EncryptedExport) {
+    Y_UNIT_TEST_TWIN(EncryptedExport, TableBackupAsSql) {
         TTempDir tempDir;
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
         runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableTableBackupAsSql(TableBackupAsSql);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
@@ -613,20 +916,30 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
 
         TFsPath baseDir(basePath);
+        const TString schemeFile = "scheme.pb.enc";
+        const TString createTableFile = "create_table.sql.enc";
         TVector<TFsPath> expectedFiles = {
             baseDir / "metadata.json",
             baseDir / "SchemaMapping" / "metadata.json.enc",
             baseDir / "SchemaMapping" / "mapping.json.enc",
-            baseDir / "001" / "scheme.pb.enc",
+            baseDir / "001" / schemeFile,
             baseDir / "001" / "data_00.csv.enc",
             baseDir / "001" / "data_01.csv.enc",
-            baseDir / "002" / "scheme.pb.enc",
+            baseDir / "002" / schemeFile,
             baseDir / "002" / "data_00.csv.enc",
             baseDir / "002" / "data_01.csv.enc",
         };
+        if constexpr (TableBackupAsSql) {
+            expectedFiles.push_back(baseDir / "001" / createTableFile);
+            expectedFiles.push_back(baseDir / "002" / createTableFile);
+        }
 
         for (const auto& file : expectedFiles) {
             UNIT_ASSERT_C(FileExists(file.GetPath()), "File not found: " << file.GetPath());
+        }
+        if constexpr (!TableBackupAsSql) {
+            UNIT_ASSERT(!FileExists((baseDir / "001" / createTableFile).GetPath()));
+            UNIT_ASSERT(!FileExists((baseDir / "002" / createTableFile).GetPath()));
         }
 
         TVector<TFsPath> allFiles;
@@ -665,16 +978,27 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
                 ), filePath);
 
             UNIT_ASSERT_C(ivs.insert(iv.GetBinaryString()).second, "Duplicate IV for: " << filePath);
+            if constexpr (TableBackupAsSql) {
+                if (filePath.EndsWith(createTableFile)) {
+                    const TString sql(decryptedData.Data(), decryptedData.Size());
+                    const TString tableName = filePath == (baseDir / "001" / createTableFile).GetPath()
+                        ? "Table1"
+                        : "Table2";
+                    UNIT_ASSERT_C(sql.Contains("CREATE TABLE `" + tableName + "`"), sql);
+                    UNIT_ASSERT_C(sql.Contains("PRIMARY KEY (`key`)"), sql);
+                }
+            }
         }
     }
 
-    Y_UNIT_TEST(IndexMaterializationForFs) {
+    Y_UNIT_TEST_TWIN(IndexMaterializationForFs, TableBackupAsSql) {
         TTempDir tempDir;
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
         runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+        runtime.GetAppData().FeatureFlags.SetEnableTableBackupAsSql(TableBackupAsSql);
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -712,8 +1036,27 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         const auto& entry = desc.GetResponse().GetEntry();
         UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
 
-        UNIT_ASSERT(FileExists(MakeExportPath(basePath, "backup/Table", "scheme.pb")));
-        UNIT_ASSERT(FileExists(MakeExportPath(basePath, "backup/Table/index/indexImplTable", "scheme.pb")));
+        const TString schemeFile = "scheme.pb";
+        const TString createTableFile = "create_table.sql";
+        const auto schemeContent = ReadFileContent(MakeExportPath(basePath, "backup/Table", schemeFile));
+        UNIT_ASSERT(!schemeContent.empty());
+        Ydb::Table::CreateTableRequest tableScheme;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(schemeContent, &tableScheme));
+        const auto createTablePath = MakeExportPath(basePath, "backup/Table", createTableFile);
+        if constexpr (TableBackupAsSql) {
+            UNIT_ASSERT_C(FileExists(createTablePath), "CREATE TABLE file not found: " << createTablePath);
+            const auto createTable = ReadFileContent(createTablePath);
+            UNIT_ASSERT_C(createTable.Contains("CREATE TABLE `Table`"), createTable);
+            UNIT_ASSERT_C(createTable.Contains("INDEX `index`"), createTable);
+        } else {
+            UNIT_ASSERT(!FileExists(createTablePath));
+        }
+        const TString indexPath = "backup/Table/index/indexImplTable";
+        Ydb::Table::CreateTableRequest indexScheme;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
+            ReadFileContent(MakeExportPath(basePath, indexPath, "scheme.pb")), &indexScheme));
+        UNIT_ASSERT_VALUES_EQUAL(indexScheme.columns_size(), 2);
+        UNIT_ASSERT(!FileExists(MakeExportPath(basePath, indexPath, "create_table.sql")));
     }
 
     Y_UNIT_TEST(ShouldFailOnNonExistentBasePath) {

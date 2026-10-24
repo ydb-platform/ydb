@@ -3788,6 +3788,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         CopyTables = 3,
         Transferring = 4,
         UploadExportMetadata = 5,
+        UploadTableSchemeSql = 6,
         Done = 240,
         Dropping = 241,
         Dropped = 242,
@@ -3819,6 +3820,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         TTxId WaitTxId = InvalidTxId;
         TActorId SchemeUploader;
         TString Issue;
+        TString TableSchemeSql; // Immutable plaintext for retries with the same encryption IV.
 
         TItem() = default;
 
@@ -3871,6 +3873,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     bool EnableChecksums = false;
     bool EnablePermissions = false;
     bool IncludeIndexData = false;
+    bool EnableTableBackupAsSql = false;
 
     NKikimrSchemeOp::TExportMetadata ExportMetadata;
     TActorId ExportMetadataUploader;

@@ -1487,6 +1487,9 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     // additionally dropes cdc stream on src table consistently with taking snapshot
     optional TDropCdcStream DropSrcCdcStream = 10;
     map<string, TDropCdcStream> IndexImplTableDropCdcStreams = 11;
+
+    // Internal option used by SQL-enabled exports only
+    optional bool CaptureBackupSchemeSnapshot = 12 [default = false];
 }
 
 message TConsistentTableCopyingConfig {
@@ -2149,6 +2152,9 @@ message TModifyScheme {
     optional TCreateFullBackupOp CreateFullBackupOp = 95;
 
     optional TCreateTestShardSet CreateTestShardSet = 96;
+
+    // Captures the immutable source scheme for SQL-enabled backup copies.
+    optional bool CaptureBackupSchemeSnapshot = 97 [default = false];
 
     // Some entries are grouped by semantics, so are out of order
 }

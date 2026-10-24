@@ -72,6 +72,8 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
     TDeque<std::pair<TPathId, TTopicInfo::TPtr>> PersQueueGroup;
     TDeque<std::pair<TPathId, TTopicInfo::TPtr>> AddPersQueueGroupAlter;
 
+    TDeque<TPathId> BackupSchemeSnapshots;
+
 public:
     ~TStorageChanges() = default;
 
@@ -217,6 +219,10 @@ public:
 
     void PersistTestShardSet(const TPathId& pathId) {
         TestShardSets.emplace_back(pathId);
+    }
+
+    void PersistBackupSchemeSnapshot(const TPathId& pathId) {
+        BackupSchemeSnapshots.push_back(pathId);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

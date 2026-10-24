@@ -1,5 +1,7 @@
 #pragma once
 
+#include "schemeshard_export_table_scheme.h"
+
 #include <ydb/core/scheme/scheme_pathid.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -8,11 +10,12 @@ namespace NKikimrSchemeOp {
     class TExportMetadata;
 }
 
-namespace NBackup {
-    class TEncryptionIV;
+namespace NKikimr::NBackup {
+    struct TEncryptionIV;
 }
 
 namespace Ydb::Export {
+    class ExportToFsSettings;
     class ExportToS3Settings;
 }
 
@@ -26,6 +29,19 @@ template <typename TSettings>
 NActors::IActor* CreateSchemeUploader(NActors::TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const TSettings& settings, const TString& databaseRoot, const TString& metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
+);
+
+// Reports success after uploading SQL or removing all SQL artifacts for fallback.
+// Empty SQL skips upload and performs cleanup; cleanup failure reports failure.
+template <typename TSettings>
+NActors::IActor* CreateTableSchemeUploader(
+    NActors::TActorId schemeShard,
+    ui64 exportId,
+    ui32 itemIdx,
+    const TSettings& settings,
+    TString scheme,
+    bool enableChecksums,
+    const TMaybe<NBackup::TEncryptionIV>& iv
 );
 
 template <typename TSettings>

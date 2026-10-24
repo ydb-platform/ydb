@@ -64,6 +64,9 @@ class TExpression {
     // Check if this is a potential comparison of a column with a constant
     bool MaybeConstantCondition() const;
 
+    // Check if the expression is a literal of one
+    bool IsLiteralOne() const;
+
     // Return the full lambda ExprNode of this expression
     TExprNode::TPtr GetLambda() const;
 

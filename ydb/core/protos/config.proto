@@ -177,6 +177,11 @@ message TStaticNameserviceConfig {
     }
 
     message TNode { // todo: multiple networks
+        enum EDistconfState {
+            ACTIVE = 0;
+            EXCLUDED = 1;
+        }
+
         optional uint32 NodeId = 1;
 
         optional string Address = 2;
@@ -190,6 +195,7 @@ message TStaticNameserviceConfig {
         repeated TEndpoint Endpoint = 7;
 
         optional NActorsInterconnect.TNodeLocation WalleLocation = 8 [deprecated=true];
+        optional EDistconfState DistconfState = 9;
     }
 
     repeated TNode Node = 1;
@@ -395,6 +401,11 @@ message TBlobStorageConfig {
 }
 
 message TSelfManagementConfig {
+    message TDataCenterState {
+        optional string Name = 1;
+        optional TStaticNameserviceConfig.TNode.EDistconfState State = 2;
+    }
+
     // whether the self management is enabled (through distconf)? (mandatory field)
     optional bool Enabled = 1;
 
@@ -430,6 +441,9 @@ message TSelfManagementConfig {
     // node ids onto which state storage scheme board may be relocated during self-heal;
     // empty list means no restriction
     repeated uint32 SchemeBoardSelfHealAllowedNodes = 30;
+
+    optional bool OverrideDistconfState = 31 [default = false];
+    repeated TDataCenterState DataCenterStates = 32;
 }
 
 message TBlobStorageFormatConfig {

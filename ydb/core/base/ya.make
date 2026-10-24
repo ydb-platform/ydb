@@ -26,6 +26,7 @@ SRCS(
     database_kind.cpp
     database_kind.h
     defs.h
+    distconf_state.h
     domain.cpp
     domain.h
     event_filter.cpp

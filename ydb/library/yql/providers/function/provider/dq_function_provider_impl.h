@@ -8,6 +8,9 @@
 
 namespace NYql::NDqFunction {
 
+THolder<IGraphTransformer> CreateServiceExpressionDiscovery(TDqFunctionState::TPtr state);
+THolder<IGraphTransformer> CreateServiceExpressionLowering(TDqFunctionState::TPtr state);
+
 THolder<TVisitorTransformerBase> CreateDqFunctionIntentTransformer(TDqFunctionState::TPtr state);
 THolder<IGraphTransformer> CreateDqFunctionMetaLoader(TDqFunctionState::TPtr state);
 THolder<IGraphTransformer> CreateDqFunctionPhysicalOptTransformer(TDqFunctionState::TPtr state);

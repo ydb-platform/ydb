@@ -9,16 +9,14 @@ Y_UNIT_TEST(CreateSymlinkDoesntWorkOnOldLangVersion) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2026, 2);
     ExpectFailWithError("USE plato; CREATE SYMLINK link TO target;",
-                        "<main>:1:12: Error: CREATE/DROP SYMLINK is not available before language version 2026.03\n",
-                        settings);
+                        "<main>:1:12: Error: CREATE/DROP SYMLINK is not available before language version 2026.03\n", settings);
 }
 
 Y_UNIT_TEST(DropSymlinkDoesntWorkOnOldLangVersion) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2026, 2);
     ExpectFailWithError("USE plato; DROP SYMLINK link;",
-                        "<main>:1:12: Error: CREATE/DROP SYMLINK is not available before language version 2026.03\n",
-                        settings);
+                        "<main>:1:12: Error: CREATE/DROP SYMLINK is not available before language version 2026.03\n", settings);
 }
 
 Y_UNIT_TEST(CreateSymlink) {
@@ -30,7 +28,9 @@ Y_UNIT_TEST(CreateSymlink) {
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write!") {
             UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
-                                         line.find(R"__((Write! world sink (Key '('link (String '"link")) '('target (String '"target"))) (Void) '('('mode 'create_symlink))))__"), line);
+                                         line.find(
+                                             R"__((Write! world sink (Key '('link (String '"link")) '('target (String '"target"))) (Void) '('('mode 'create_symlink))))__"),
+                                         line);
         }
     };
 
@@ -48,7 +48,9 @@ Y_UNIT_TEST(CreateSymlinkIfNotExists) {
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write!") {
             UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
-                                         line.find(R"__((Write! world sink (Key '('link (String '"link")) '('target (String '"target"))) (Void) '('('mode 'create_symlink_if_not_exists))))__"), line);
+                                         line.find(
+                                             R"__((Write! world sink (Key '('link (String '"link")) '('target (String '"target"))) (Void) '('('mode 'create_symlink_if_not_exists))))__"),
+                                         line);
         }
     };
 
@@ -121,7 +123,9 @@ Y_UNIT_TEST(CreateSymlinkWithTablePathPrefix) {
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write!") {
             UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
-                                         line.find(R"__((Write! world sink (Key '('link (String '"/prefix/link")) '('target (String '"/prefix/target"))) (Void) '('('mode 'create_symlink))))__"), line);
+                                         line.find(
+                                             R"__((Write! world sink (Key '('link (String '"/prefix/link")) '('target (String '"/prefix/target"))) (Void) '('('mode 'create_symlink))))__"),
+                                         line);
         }
     };
 
@@ -143,7 +147,9 @@ Y_UNIT_TEST(CreateSymlinkWithTablePathPrefixKeepsAbsolutePaths) {
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write!") {
             UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
-                                         line.find(R"__((Write! world sink (Key '('link (String '"//home/link")) '('target (String '"//home/target"))) (Void) '('('mode 'create_symlink))))__"), line);
+                                         line.find(
+                                             R"__((Write! world sink (Key '('link (String '"//home/link")) '('target (String '"//home/target"))) (Void) '('('mode 'create_symlink))))__"),
+                                         line);
         }
     };
 
@@ -188,10 +194,10 @@ Y_UNIT_TEST(SymlinkParametersWithTablePathPrefix) {
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write!") {
-            UNIT_ASSERT_STRING_CONTAINS(line,
-                                        R"__('('link (String (EvaluateAtom (BuildTablePath (String '"/prefix") (String (EvaluateAtom "$link"))))))__");
-            UNIT_ASSERT_STRING_CONTAINS(line,
-                                        R"__('('target (String (EvaluateAtom (BuildTablePath (String '"/prefix") (String (EvaluateAtom "$target"))))))__");
+            UNIT_ASSERT_STRING_CONTAINS(
+                line, R"__('('link (String (EvaluateAtom (BuildTablePath (String '"/prefix") (String (EvaluateAtom "$link"))))))__");
+            UNIT_ASSERT_STRING_CONTAINS(
+                line, R"__('('target (String (EvaluateAtom (BuildTablePath (String '"/prefix") (String (EvaluateAtom "$target"))))))__");
         }
     };
 
@@ -265,7 +271,8 @@ Y_UNIT_TEST(CreateExternalDataSourceWithAuthNone) {
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"NONE") '('"location" '"my-bucket") '('"source_type" '"ObjectStorage"))#");
+            UNIT_ASSERT_STRING_CONTAINS(
+                line, R"#('('('"auth_method" '"NONE") '('"location" '"my-bucket") '('"source_type" '"ObjectStorage"))#");
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
         }
     };
@@ -340,10 +347,8 @@ Y_UNIT_TEST(CreateEDSWithSecretsFromNameAndPathForOneSecretType) {
         );
     )sql");
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(
-        Err2Str(res),
-        "<main>:9:34: Error: Usage secrets of different types is not allowed: "
-        "PASSWORD_SECRET_NAME and PASSWORD_SECRET_PATH are set\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:9:34: Error: Usage secrets of different types is not allowed: "
+                                      "PASSWORD_SECRET_NAME and PASSWORD_SECRET_PATH are set\n");
 }
 
 Y_UNIT_TEST(CreateEDSWithSecretsFromNameAndPathForDifferentSecretTypes) {
@@ -360,10 +365,8 @@ Y_UNIT_TEST(CreateEDSWithSecretsFromNameAndPathForDifferentSecretTypes) {
         );
     )sql");
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(
-        Err2Str(res),
-        "<main>:9:24: Error: Usage secrets of different types is not allowed: "
-        "AWS_SECRET_ACCESS_KEY_SECRET_NAME and AWS_ACCESS_KEY_ID_SECRET_PATH are set\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:9:24: Error: Usage secrets of different types is not allowed: "
+                                      "AWS_SECRET_ACCESS_KEY_SECRET_NAME and AWS_ACCESS_KEY_ID_SECRET_PATH are set\n");
 }
 
 Y_UNIT_TEST(CreateEDSWithSecretsFromNameWithTablePathPrefix) {
@@ -434,7 +437,8 @@ Y_UNIT_TEST(CreateExternalDataSourceWithAuthServiceAccount) {
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"SERVICE_ACCOUNT") '('"location" '"my-bucket") '('"service_account_id" '"sa") '('"service_account_secret_name" '"sa_secret_name") '('"source_type" '"ObjectStorage"))#");
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        R"#('('('"auth_method" '"SERVICE_ACCOUNT") '('"location" '"my-bucket") '('"service_account_id" '"sa") '('"service_account_secret_name" '"sa_secret_name") '('"source_type" '"ObjectStorage"))#");
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
         }
     };
@@ -460,7 +464,8 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBasic) {
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"BASIC") '('"location" '"protocol://host:port/") '('"login" '"admin") '('"password_secret_name" '"secret_name") '('"source_type" '"PostgreSQL"))#");
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        R"#('('('"auth_method" '"BASIC") '('"location" '"protocol://host:port/") '('"login" '"admin") '('"password_secret_name" '"secret_name") '('"source_type" '"PostgreSQL"))#");
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
         }
     };
@@ -488,7 +493,8 @@ Y_UNIT_TEST(CreateExternalDataSourceWithMdbBasic) {
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"MDB_BASIC") '('"location" '"protocol://host:port/") '('"login" '"admin") '('"password_secret_name" '"secret_name") '('"service_account_id" '"sa") '('"service_account_secret_name" '"sa_secret_name") '('"source_type" '"PostgreSQL"))#");
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        R"#('('('"auth_method" '"MDB_BASIC") '('"location" '"protocol://host:port/") '('"login" '"admin") '('"password_secret_name" '"secret_name") '('"service_account_id" '"sa") '('"service_account_secret_name" '"sa_secret_name") '('"source_type" '"PostgreSQL"))#");
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
         }
     };
@@ -515,7 +521,8 @@ Y_UNIT_TEST(CreateExternalDataSourceWithAws) {
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"AWS") '('"aws_access_key_id_secret_name" '"secred_id_name") '('"aws_region" '"ru-central-1") '('"aws_secret_access_key_secret_name" '"secret_key_name") '('"location" '"protocol://host:port/") '('"source_type" '"PostgreSQL"))#");
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        R"#('('('"auth_method" '"AWS") '('"aws_access_key_id_secret_name" '"secred_id_name") '('"aws_region" '"ru-central-1") '('"aws_secret_access_key_secret_name" '"secret_key_name") '('"location" '"protocol://host:port/") '('"source_type" '"PostgreSQL"))#");
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
         }
     };
@@ -524,6 +531,131 @@ Y_UNIT_TEST(CreateExternalDataSourceWithAws) {
     VerifyProgram(res, elementStat, verifyLine);
 
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateExternalServiceWithWasmAuth) {
+    const auto result = SqlToYql(R"sql(
+            USE plato; CREATE EXTERNAL DATA SOURCE service WITH (
+                SOURCE_TYPE="ExternalService", LOCATION="https://example.org", PROTOCOL="HTTP",
+                AUTH_METHOD="WASM", AUTH_PROVIDER="TEST_AUTH", AUTH_PARAMETERS='{"secret":"/Root/secret"}'
+            );
+        )sql");
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+}
+
+Y_UNIT_TEST(WasmAuthRequiresProviderAndRejectsOtherCredentials) {
+    for (const auto& extra : {TString(), TString(", TOKEN_SECRET_NAME='secret'")}) {
+        const auto result = SqlToYql(TStringBuilder() << "USE plato; CREATE EXTERNAL DATA SOURCE service WITH (SOURCE_TYPE='ExternalService', LOCATION='https://example.org', "
+                                                         "AUTH_METHOD='WASM', AUTH_PARAMETERS='{}'"
+                                                      << (extra.empty() ? "" : ", AUTH_PROVIDER='TEST_AUTH'") << extra << ");");
+        UNIT_ASSERT(!result.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), extra.empty() ? "AUTH_PROVIDER requires key" : "not supported for AUTH_METHOD");
+    }
+    const auto wrongSource = SqlToYql(R"sql(
+            USE plato; CREATE EXTERNAL DATA SOURCE service WITH (SOURCE_TYPE="ObjectStorage", LOCATION="bucket",
+                AUTH_METHOD="WASM", AUTH_PROVIDER="TEST_AUTH", AUTH_PARAMETERS='{}');
+        )sql");
+    UNIT_ASSERT(!wrongSource.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(wrongSource), "WASM authorization requires SOURCE_TYPE=ExternalService");
+}
+
+Y_UNIT_TEST(CreateExternalServiceWithTvm) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE profiles WITH (
+            SOURCE_TYPE="ExternalService", AUTH_METHOD="TVM",
+            TVM_SOURCE_ID="2020001", TVM_DESTINATION_ID="2020002", TVM_SECRET_NAME="source_secret"
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(CreateExternalServiceWithTvmSecretPath) {
+    auto res = SqlToYql(R"sql(
+        USE plato; PRAGMA TablePathPrefix='/Root';
+        CREATE EXTERNAL DATA SOURCE profiles WITH (
+            SOURCE_TYPE="ExternalService", AUTH_METHOD="TVM",
+            TVM_SOURCE_ID="123", TVM_DESTINATION_ID="456", TVM_SECRET_PATH="source_secret"
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    TWordCountHive words = {{TString("Write"), 0}};
+    VerifyProgram(res, words, [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "tvm_secret_path");
+            UNIT_ASSERT_STRING_CONTAINS(line, "/Root/source_secret");
+        }
+    });
+    UNIT_ASSERT_VALUES_EQUAL(words["Write"], 1);
+}
+
+Y_UNIT_TEST(CreateExternalServiceWithTvmRejectsMixedSecrets) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE profiles WITH (
+            SOURCE_TYPE="ExternalService", AUTH_METHOD="TVM",
+            TVM_SOURCE_ID="123", TVM_DESTINATION_ID="456",
+            TVM_SECRET_NAME="source_secret", TVM_SECRET_PATH="/Root/source_secret"
+        );
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "TVM_SECRET_NAME and TVM_SECRET_PATH");
+}
+
+Y_UNIT_TEST(CreateExternalServiceWithTvmRequiresDestination) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE profiles WITH (
+            SOURCE_TYPE="ExternalService", AUTH_METHOD="TVM", TVM_SOURCE_ID="2020001", TVM_SECRET_NAME="source_secret"
+        );
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "TVM_DESTINATION_ID requires key");
+}
+
+Y_UNIT_TEST(CreateExternalDataSourceTvmRequiresExternalService) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE profiles WITH (
+            SOURCE_TYPE="ObjectStorage", AUTH_METHOD="TVM",
+            TVM_SOURCE_ID="2020001", TVM_DESTINATION_ID="2020002", TVM_SECRET_NAME="source_secret"
+        );
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "TVM authorization requires SOURCE_TYPE=ExternalService");
+}
+
+Y_UNIT_TEST(CreateExternalServiceWithCurrentIam) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE profiles WITH (
+            SOURCE_TYPE="ExternalService", PROTOCOL="HTTP", LOCATION="https://example.test",
+            AUTH_METHOD="CURRENT_IAM", USE_TLS=TRUE
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(CreateExternalServiceWithCurrentIamRejectsCredentials) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE profiles WITH (
+            SOURCE_TYPE="ExternalService", AUTH_METHOD="CURRENT_IAM", TOKEN_SECRET_NAME="secret"
+        );
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "not supported");
+}
+
+Y_UNIT_TEST(CreateExternalDataSourceCurrentIamRequiresExternalService) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE source WITH (
+            SOURCE_TYPE="ObjectStorage", AUTH_METHOD="CURRENT_IAM"
+        );
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Unknown AUTH_METHOD");
 }
 
 Y_UNIT_TEST(CreateExternalDataSourceWithToken) {
@@ -540,7 +672,8 @@ Y_UNIT_TEST(CreateExternalDataSourceWithToken) {
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"TOKEN") '('"location" '"protocol://host:port/") '('"source_type" '"YT") '('"token_secret_name" '"token_name"))#");
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        R"#('('('"auth_method" '"TOKEN") '('"location" '"protocol://host:port/") '('"source_type" '"YT") '('"token_secret_name" '"token_name"))#");
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
         }
     };
@@ -589,7 +722,8 @@ Y_UNIT_TEST(CreateExternalDataSourceIfNotExists) {
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"NONE") '('"location" '"my-bucket") '('"source_type" '"ObjectStorage"))#");
+            UNIT_ASSERT_STRING_CONTAINS(
+                line, R"#('('('"auth_method" '"NONE") '('"location" '"my-bucket") '('"source_type" '"ObjectStorage"))#");
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObjectIfNotExists"));
         }
     };
@@ -613,8 +747,10 @@ Y_UNIT_TEST(AlterExternalDataSource) {
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
             UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"location" '"bucket") '('"login" '"Admin") '('"source_type" '"ObjectStorage"))))#");
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetFeatures '('"auth_method" '"service_account_id" '"service_account_secret_name")))#");
+            UNIT_ASSERT_STRING_CONTAINS(
+                line, R"#('('features '('('"location" '"bucket") '('"login" '"Admin") '('"source_type" '"ObjectStorage"))))#");
+            UNIT_ASSERT_STRING_CONTAINS(
+                line, R"#('('resetFeatures '('"auth_method" '"service_account_id" '"service_account_secret_name")))#");
         }
     };
 
@@ -671,7 +807,8 @@ Y_UNIT_TEST(CreateExternalDataSourceOrReplace) {
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"NONE") '('"location" '"my-bucket") '('"source_type" '"ObjectStorage"))#");
+            UNIT_ASSERT_STRING_CONTAINS(
+                line, R"#('('('"auth_method" '"NONE") '('"location" '"my-bucket") '('"source_type" '"ObjectStorage"))#");
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObjectOrReplace"));
         }
     };
@@ -850,7 +987,8 @@ Y_UNIT_TEST(CreateExternalDataSourceWithBadArguments) {
                     AWS_ACCESS_KEY_ID_SECRET_NAME="secred_id_name",
                     AWS_REGION="ru-central-1"
                 );
-            )sql", "<main>:8:32: Error: A value must be provided for either AWS_SECRET_ACCESS_KEY_SECRET_NAME or AWS_SECRET_ACCESS_KEY_SECRET_PATH\n");
+            )sql",
+                        "<main>:8:32: Error: A value must be provided for either AWS_SECRET_ACCESS_KEY_SECRET_NAME or AWS_SECRET_ACCESS_KEY_SECRET_PATH\n");
 
     ExpectFailWithError(R"sql(
                 USE plato;
@@ -939,8 +1077,9 @@ inline void TestQuery(const TString& query, bool expectOk = true, const TVector<
     } else {
         UNIT_ASSERT(!res.IsOk());
         for (const auto& issue : issueSubstrings) {
-            UNIT_ASSERT_STRING_CONTAINS_C(Err2Str(res), issue, "Query: " << query << "\n"
-                                                                         << "Issues: " << Err2Str(res));
+            UNIT_ASSERT_STRING_CONTAINS_C(Err2Str(res), issue,
+                                          "Query: " << query << "\n"
+                                                    << "Issues: " << Err2Str(res));
         }
     }
 }
@@ -1049,9 +1188,7 @@ Y_UNIT_TEST(TopicMetricsLevelStringParseCorrect) {
         )", 10, "kikimr");
 
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-    UNIT_ASSERT_STRING_CONTAINS(
-        GetPrettyPrint(res),
-        R"('('setMetricsLevel (String '"TOPIC")))");
+    UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(res), R"('('setMetricsLevel (String '"TOPIC")))");
 }
 
 Y_UNIT_TEST(AlterTopicConsumer) {
@@ -1166,7 +1303,6 @@ Y_UNIT_TEST(TopicWithPrefix) {
 } // Y_UNIT_TEST_SUITE(TopicsDDL)
 
 Y_UNIT_TEST_SUITE(ResourcePool) {
-
 Y_UNIT_TEST(CreateResourcePool) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
                     USE plato;
@@ -1180,7 +1316,8 @@ Y_UNIT_TEST(CreateResourcePool) {
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"concurrent_query_limit" (Int32 '"20")) '('"query_cancel_after_seconds" (Int32 '"86400")) '('"queue_type" '"FIFO"))#");
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        R"#('('('"concurrent_query_limit" (Int32 '"20")) '('"query_cancel_after_seconds" (Int32 '"86400")) '('"queue_type" '"FIFO"))#");
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
         }
     };
@@ -1218,7 +1355,8 @@ Y_UNIT_TEST(AlterResourcePool) {
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
             UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"concurrent_query_limit" (Int32 '"30")) '('"queue_type" '"UNORDERED") '('"weight" (Int32 '"5")))))#");
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        R"#('('features '('('"concurrent_query_limit" (Int32 '"30")) '('"queue_type" '"UNORDERED") '('"weight" (Int32 '"5")))))#");
             UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetFeatures '('"query_cancel_after_seconds" '"query_count_limit")))#");
         }
     };
@@ -1251,7 +1389,6 @@ Y_UNIT_TEST(DropResourcePool) {
 } // Y_UNIT_TEST_SUITE(ResourcePool)
 
 Y_UNIT_TEST_SUITE(BackupCollection) {
-
 Y_UNIT_TEST(CreateBackupCollection) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
         USE plato;
@@ -1322,7 +1459,8 @@ Y_UNIT_TEST(CreateBackupCollectionWithTables) {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
             UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"storage" (String '"local")))#");
             UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"tag" (String '"test"))))#");
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#(('entries '('('('type 'table) '('path '"someTable")) '('('type 'table) '('path '"prefix/anotherTable")))))#");
+            UNIT_ASSERT_STRING_CONTAINS(
+                line, R"#(('entries '('('('type 'table) '('path '"someTable")) '('('type 'table) '('path '"prefix/anotherTable")))))#");
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
         }
     };
@@ -1438,7 +1576,6 @@ Y_UNIT_TEST(DropBackupCollection) {
 } // Y_UNIT_TEST_SUITE(BackupCollection)
 
 Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
-
 Y_UNIT_TEST(CreateResourcePoolClassifier) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
@@ -1452,7 +1589,8 @@ Y_UNIT_TEST(CreateResourcePoolClassifier) {
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"member_name" '"yandex_query@abc") '('"rank" (Int32 '"20")) '('"resource_pool" '"wgUserQueries"))#");
+            UNIT_ASSERT_STRING_CONTAINS(
+                line, R"#('('('"member_name" '"yandex_query@abc") '('"rank" (Int32 '"20")) '('"resource_pool" '"wgUserQueries"))#");
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
         }
     };
@@ -1490,7 +1628,8 @@ Y_UNIT_TEST(AlterResourcePoolClassifier) {
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
             UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alterObject))#");
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('features '('('"member_name" '"test@user") '('"rank" (Int32 '"30")) '('"weight" (Int32 '"5")))))#");
+            UNIT_ASSERT_STRING_CONTAINS(
+                line, R"#('('features '('('"member_name" '"test@user") '('"rank" (Int32 '"30")) '('"weight" (Int32 '"5")))))#");
             UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetFeatures '('"resource_pool")))#");
         }
     };
@@ -1522,9 +1661,10 @@ Y_UNIT_TEST(DropResourcePoolClassifier) {
 }
 
 Y_UNIT_TEST(BacktickMatching) {
-    auto req = "select\n"
-               "    1 as `Schema has \\`RealCost\\``\n"
-               "    -- foo`bar";
+    auto req =
+        "select\n"
+        "    1 as `Schema has \\`RealCost\\``\n"
+        "    -- foo`bar";
     auto res = SqlToYql(req);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
@@ -1547,7 +1687,6 @@ Y_UNIT_TEST(BacktickMatching) {
 } // Y_UNIT_TEST_SUITE(ResourcePoolClassifier)
 
 Y_UNIT_TEST_SUITE(Backup) {
-
 Y_UNIT_TEST(Simple) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
@@ -1591,7 +1730,6 @@ Y_UNIT_TEST(Incremental) {
 } // Y_UNIT_TEST_SUITE(Backup)
 
 Y_UNIT_TEST_SUITE(Restore) {
-
 Y_UNIT_TEST(Simple) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
@@ -1663,7 +1801,6 @@ Y_UNIT_TEST(InvalidExpression) {
 } // Y_UNIT_TEST_SUITE(Analyze)
 
 Y_UNIT_TEST_SUITE(Transfer) {
-
 Y_UNIT_TEST(Lambda) {
     NYql::TAstParseResult res = SqlToYql(R"( use plato;
             -- Русский коммент, empty statement
@@ -1802,11 +1939,8 @@ Y_UNIT_TEST(CreateWithSecretsWithNameAndPath) {
         auto req = Sprintf(requestTemplate, settings.first.c_str(), settings.second.c_str());
         auto res = SqlToYql(req);
         UNIT_ASSERT(!res.IsOk());
-        UNIT_ASSERT_NO_DIFF(
-            Err2Str(res),
-            std::format(
-                "<main>:14:{}: Error: {} and {} are mutually exclusive\n",
-                16 + settings.first.size(), settings.first.c_str(), settings.second.c_str()));
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), std::format("<main>:14:{}: Error: {} and {} are mutually exclusive\n", 16 + settings.first.size(),
+                                                      settings.first.c_str(), settings.second.c_str()));
     }
 }
 
@@ -1856,9 +1990,7 @@ Y_UNIT_TEST(MetricsLevel) {
     UNIT_ASSERT_VALUES_EQUAL_C(res.Issues.Size(), 0, Err2Str(res));
 
     const auto programm = GetPrettyPrint(res);
-    UNIT_ASSERT_STRING_CONTAINS(
-        GetPrettyPrint(res),
-        R"('"metrics_level" (String '"DETAILED"))");
+    UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(res), R"('"metrics_level" (String '"DETAILED"))");
 }
 
 Y_UNIT_TEST(MetricsLevelCaseSensivity) {
@@ -2012,7 +2144,8 @@ USE hahn;
         }
 
         if (word == "__query_text") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '"\nPRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;")))#");
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        R"#('('"__query_text" '"\nPRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;")))#");
         }
     };
 
@@ -2049,7 +2182,8 @@ USE hahn;
         }
 
         if (word == "__query_text") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n")))#");
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n")))#");
         }
     };
 
@@ -2087,9 +2221,10 @@ USE hahn;
         }
 
         if (word == "__query_text") {
-            UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder()
-                                                  << R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n") )#"
-                                                  << R"#('('"resource_pool" (EvaluateExpr (String '"my_pool"))) '('"run" (EvaluateExpr (Bool '"true"))) '('"streaming_disposition" '('('"from_time" (EvaluateExpr (String '"2025-05-04T11:30:34.336938Z"))))))#");
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        TStringBuilder()
+                                            << R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n") )#"
+                                            << R"#('('"resource_pool" (EvaluateExpr (String '"my_pool"))) '('"run" (EvaluateExpr (Bool '"true"))) '('"streaming_disposition" '('('"from_time" (EvaluateExpr (String '"2025-05-04T11:30:34.336938Z"))))))#");
         }
     };
 
@@ -2102,11 +2237,10 @@ USE hahn;
 
 void TestStreamingQueryReadFrom(const TString& value) {
     for (const bool alter : {false, true}) {
-        const TString query = TStringBuilder()
-                              << "USE plato; $timestamp = Timestamp(\"2025-05-04T11:30:34.336938Z\"); "
-                              << (alter ? "ALTER STREAMING QUERY MyQuery SET (" : "CREATE STREAMING QUERY MyQuery WITH (")
-                              << "READ_FROM = " << value << ")"
-                              << (alter ? ";" : " AS DO BEGIN USE plato; INSERT INTO Output SELECT * FROM Input; END DO;");
+        const TString query = TStringBuilder() << "USE plato; $timestamp = Timestamp(\"2025-05-04T11:30:34.336938Z\"); "
+                                               << (alter ? "ALTER STREAMING QUERY MyQuery SET (" : "CREATE STREAMING QUERY MyQuery WITH (")
+                                               << "READ_FROM = " << value << ")"
+                                               << (alter ? ";" : " AS DO BEGIN USE plato; INSERT INTO Output SELECT * FROM Input; END DO;");
         auto res = SqlToYql(query);
         UNIT_ASSERT_C(res.IsOk(), query << "\n"
                                         << Err2Str(res));
@@ -2167,10 +2301,8 @@ Y_UNIT_TEST(StreamingQuerySettingExpressions) {
 void TestStreamingQuerySettingsRejectSourceReferences(const TString& setting, const TString& error) {
     for (const bool alter : {false, true}) {
         const TString query = TStringBuilder()
-                              << "USE plato; "
-                              << (alter ? "ALTER STREAMING QUERY MyQuery SET (" : "CREATE STREAMING QUERY MyQuery WITH (")
-                              << setting << ")"
-                              << (alter ? ";" : " AS DO BEGIN USE plato; INSERT INTO Output SELECT * FROM Input; END DO;");
+                              << "USE plato; " << (alter ? "ALTER STREAMING QUERY MyQuery SET (" : "CREATE STREAMING QUERY MyQuery WITH (")
+                              << setting << ")" << (alter ? ";" : " AS DO BEGIN USE plato; INSERT INTO Output SELECT * FROM Input; END DO;");
         auto res = SqlToYql(query);
         UNIT_ASSERT_C(!res.IsOk(), query);
         UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), error);
@@ -2186,11 +2318,13 @@ Y_UNIT_TEST(StreamingQuerySettingsRejectRunFlagAndTrue) {
 }
 
 Y_UNIT_TEST(StreamingQuerySettingsRejectReadFromColumn) {
-    TestStreamingQuerySettingsRejectSourceReferences("READ_FROM = Unwrap(t.ts + Interval(\"PT1S\"))", "Source does not allow column references");
+    TestStreamingQuerySettingsRejectSourceReferences(
+        "READ_FROM = Unwrap(t.ts + Interval(\"PT1S\"))", "Source does not allow column references");
 }
 
 Y_UNIT_TEST(StreamingQuerySettingsRejectStreamingDispositionColumn) {
-    TestStreamingQuerySettingsRejectSourceReferences("STREAMING_DISPOSITION = (FROM_TIME = t.ts)", "Source does not allow column references");
+    TestStreamingQuerySettingsRejectSourceReferences(
+        "STREAMING_DISPOSITION = (FROM_TIME = t.ts)", "Source does not allow column references");
 }
 
 Y_UNIT_TEST(StreamingQuerySettingsRejectRunAggregation) {
@@ -2198,7 +2332,8 @@ Y_UNIT_TEST(StreamingQuerySettingsRejectRunAggregation) {
 }
 
 Y_UNIT_TEST(StreamingQuerySettingsRejectStreamingDispositionAggregation) {
-    TestStreamingQuerySettingsRejectSourceReferences("STREAMING_DISPOSITION = (TIME_AGO = SUM(1))", "Aggregation is not allowed in this context");
+    TestStreamingQuerySettingsRejectSourceReferences(
+        "STREAMING_DISPOSITION = (TIME_AGO = SUM(1))", "Aggregation is not allowed in this context");
 }
 
 Y_UNIT_TEST(CreateOrReplaceStreamingQuery) {
@@ -2337,7 +2472,8 @@ USE hahn;
         }
 
         if (word == "__query_text") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '"\nPRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n")))#");
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        R"#('('"__query_text" '"\nPRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n")))#");
         }
     };
 
@@ -2368,7 +2504,8 @@ Y_UNIT_TEST(AlterStreamingQuerySetOptions) {
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"resource_pool" (EvaluateExpr (String '"other_pool"))) '('"streaming_disposition" '('('"time_ago" (EvaluateExpr (String '"PT1H"))))) '('"wait_checkpoint" (EvaluateExpr (Bool '"true")))))#");
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        R"#('('('"resource_pool" (EvaluateExpr (String '"other_pool"))) '('"streaming_disposition" '('('"time_ago" (EvaluateExpr (String '"PT1H"))))) '('"wait_checkpoint" (EvaluateExpr (Bool '"true")))))#");
             UNIT_ASSERT_STRING_CONTAINS(line, "alterObject");
         }
     };
@@ -2395,7 +2532,8 @@ Y_UNIT_TEST(AlterStreamingQuerySetBothOptionsAndQuery) {
         }
 
         if (word == "__query_text") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '" /* alter */ SELECT 42; ") '('"resource_pool" (EvaluateExpr (String '"other_pool"))) '('"wait_checkpoint" (EvaluateExpr (Bool '"true")))))#");
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        R"#('('"__query_text" '" /* alter */ SELECT 42; ") '('"resource_pool" (EvaluateExpr (String '"other_pool"))) '('"wait_checkpoint" (EvaluateExpr (Bool '"true")))))#");
         }
     };
 

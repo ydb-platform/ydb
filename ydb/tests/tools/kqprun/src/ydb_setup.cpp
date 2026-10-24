@@ -13,6 +13,7 @@
 #include <ydb/services/keyvalue/grpc_service_v2.h>
 #include <ydb/services/persqueue_v1/grpc_pq_schema.h>
 #include <ydb/services/persqueue_v1/services_initializer.h>
+#include <ydb/services/udf_store/service.h>
 #include <ydb/tests/tools/kqprun/runlib/kikimr_setup.h>
 #include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
 
@@ -379,6 +380,14 @@ private:
             }
         }
 
+        if (Settings_.AppConfig.GetUdfStoreConfig().GetEnabled()) {
+            // The loaded WASM catalog and UDF registry are process-wide. Restore
+            // persisted tenants before checking this embedded-runner boundary.
+            Y_ENSURE(Settings_.Tenants.size() == 1 && Settings_.Tenants.begin()->second.GetType() != TStorageMeta::TTenant::SERVERLESS,
+                "UDF Store in kqprun requires exactly one dedicated/shared tenant; "
+                "use --dedicated services -D /Root/services or reopen its persistent storage");
+        }
+
         DistributeDefaultResources();
         serverSettings.SetNodeCount(Settings_.NodeCount)
             .SetDataCenterCount(Settings_.DcCount)
@@ -574,6 +583,26 @@ private:
                     NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
                     GetRuntime()->Register(NKikimr::CreateBoardPublishActor(NKikimr::MakeEndpointsBoardPath(absolutePath), "", edgeActor, 0,
                                                true), node, GetRuntime()->GetAppData(node).UserPoolId);
+                }
+            }
+
+            // The Store compile controller belongs to a tenant, not the root domain.
+            if (Settings_.AppConfig.HasUdfStoreConfig() && absolutePath != NKikimr::CanonizePath(Settings_.DomainName)) {
+                auto storeConfig = Settings_.AppConfig.GetUdfStoreConfig();
+                if (!storeConfig.HasKvStorageMedia()) {
+                    TString media = "test";
+                    for (const auto& [name, info] : Settings_.Tenants) {
+                        if (GetTenantPath(name) == absolutePath) {
+                            media = name;
+                            break;
+                        }
+                    }
+                    storeConfig.SetKvStorageMedia(media);
+                }
+                if (auto* service = NKikimr::NUdfStore::CreateService(storeConfig, Settings_.FunctionRegistry)) {
+                    const auto serviceId = GetRuntime()->Register(service, node, GetRuntime()->GetAppData(node).UserPoolId);
+                    GetRuntime()->GetActorSystem(node)->RegisterLocalService(
+                        NKikimr::NUdfStore::MakeServiceId(GetRuntime()->GetNodeId(node)), serviceId);
                 }
             }
 

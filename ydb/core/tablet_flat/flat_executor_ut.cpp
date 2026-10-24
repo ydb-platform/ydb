@@ -4101,22 +4101,29 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_RejectProbability) {
     };
 
     struct TTxWrite8MB : public ITransaction {
+        static constexpr ui64 PayloadSize = 8 * 1024 * 1024;
+
         i64 Key;
         ui32 TableId;
+        ui64* AllocatedSize;
 
-        explicit TTxWrite8MB(i64 key, ui32 tableId = TRowsModel::TableId)
+        explicit TTxWrite8MB(i64 key, ui32 tableId = TRowsModel::TableId, ui64* allocatedSize = nullptr)
             : Key(key)
             , TableId(tableId)
-        { }
+            , AllocatedSize(allocatedSize)
+        {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             const auto key = NScheme::TInt64::TInstance(Key);
 
-            TString str(size_t(8 * 1024 * 1024), 'x');
+            TString str(PayloadSize, 'x');
             const auto val = NScheme::TString::TInstance(str);
             NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, val };
 
             txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, { ops });
+            if (AllocatedSize) {
+                *AllocatedSize = txc.DB.GetTableMemAllocatedSize(TableId);
+            }
             return true;
         }
 
@@ -4161,19 +4168,25 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_RejectProbability) {
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
         TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
+        const ui64 lowWatermark = policy->InMemForceSizeToSnapshot * 2.5f;
+        const ui64 highWatermark = policy->InMemForceSizeToSnapshot * 4.0f;
 
         env.SendSync(rows.MakeScheme(std::move(policy)));
 
+        ui64 allocatedSize = 0;
         float rejectProbability;
         env.SendSync(new NFake::TEvCall{ [&](auto* executor, const auto& ctx) {
-            // Write 48MB
-            for (i64 key = 1; key <= 6; ++key) {
-                executor->Execute(new TTxWrite8MB(key), ctx);
+            for (i64 key = 1; allocatedSize <= lowWatermark; ++key) {
+                UNIT_ASSERT_C(ui64(key) <= lowWatermark / TTxWrite8MB::PayloadSize + 1,
+                    "Allocated size did not reach the low watermark: " << allocatedSize);
+                executor->Execute(new TTxWrite8MB(key, TRowsModel::TableId, &allocatedSize), ctx);
             }
             rejectProbability = executor->GetRejectProbability();
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
+        UNIT_ASSERT_C(allocatedSize > lowWatermark && allocatedSize < highWatermark,
+            "Allocated size " << allocatedSize << " must be between " << lowWatermark << " and " << highWatermark);
         UNIT_ASSERT_C(rejectProbability > 0.0f && rejectProbability < 1.0f,
                 "unexpected reject probability: " << rejectProbability);
     }
@@ -4188,19 +4201,25 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_RejectProbability) {
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
         TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
+        const ui64 lowWatermark = policy->InMemForceSizeToSnapshot * 2.5f;
+        const ui64 targetSize = lowWatermark / 2;
 
         env.SendSync(rows.MakeScheme(std::move(policy)));
 
+        ui64 allocatedSize = 0;
         float rejectProbability;
         env.SendSync(new NFake::TEvCall{ [&](auto* executor, const auto& ctx) {
-            // Write 32MB
-            for (i64 key = 1; key <= 4; ++key) {
-                executor->Execute(new TTxWrite8MB(key), ctx);
+            for (i64 key = 1; allocatedSize < targetSize; ++key) {
+                UNIT_ASSERT_C(ui64(key) <= targetSize / TTxWrite8MB::PayloadSize + 1,
+                    "Allocated size did not reach the target: " << allocatedSize);
+                executor->Execute(new TTxWrite8MB(key, TRowsModel::TableId, &allocatedSize), ctx);
             }
             rejectProbability = executor->GetRejectProbability();
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
+        UNIT_ASSERT_C(allocatedSize >= targetSize && allocatedSize < lowWatermark,
+            "Allocated size " << allocatedSize << " must remain below the low watermark " << lowWatermark);
         UNIT_ASSERT_C(rejectProbability <= 0.0f,
                 "unexpected reject probability: " << rejectProbability);
     }

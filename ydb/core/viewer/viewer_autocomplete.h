@@ -97,11 +97,15 @@ public:
         for (const TString& path : Paths) {
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
+            entry.Access = NACLib::DescribeSchema;
             entry.SyncVersion = false;
             auto splittedPath = SplitPath(path);
             entry.Path = DatabasePath;
             entry.Path.insert(entry.Path.end(), splittedPath.begin(), splittedPath.end());
             request->ResultSet.emplace_back(entry);
+        }
+        if (auto token = GetRequest().GetUserTokenObject()) {
+            request->UserToken = new NACLib::TUserToken(token);
         }
         return MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(),
             new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));

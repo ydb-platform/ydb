@@ -3950,6 +3950,79 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL_C(ticketParser->AuthorizeTicketSuccesses, 1, response);
     }
 
+    Y_UNIT_TEST(AutocompleteRequiresDescribeSchema) {
+        TPortManager tp;
+        const ui16 grpcPort = tp.GetPort(2135);
+        const ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(tp.GetPort(2134));
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.FeatureFlags.SetEnableExtraSidsControlForHttpViewer(true);
+        settings.FeatureFlags.SetEnableDatabaseAccessCheckForHttpMonitoring(true);
+        auto& securityConfig = *settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
+        securityConfig.SetEnforceUserTokenCheckRequirement(true);
+        securityConfig.AddDatabaseAllowedSIDs("username");
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+        CreateUser(client);
+        client.TestGrantConnect("username");
+
+        // Database resolution requires DescribeSchema on /Root. Do not inherit it so that
+        // autocomplete reaches its own access check for /Root/dir without access to that path.
+        NACLib::TDiffACL rootAccess;
+        rootAccess.AddAccess(
+            NACLib::EAccessType::Allow,
+            NACLib::DescribeSchema,
+            "username",
+            NACLib::EInheritanceType::InheritNone);
+        client.TestModifyACL("/", "Root", rootAccess.SerializeAsString());
+        client.TestMkDir("/Root", "dir");
+        client.TestMkDir("/Root/dir", "dir2");
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Authorization"] = VALID_TOKEN;
+        const auto requestAutocomplete = [&] {
+            TStringStream responseStream;
+            const auto statusCode = httpClient.DoGet(
+                "/viewer/autocomplete?database=%2FRoot&prefix=dir%2F",
+                &responseStream,
+                headers);
+            const TString response = responseStream.ReadAll();
+            UNIT_ASSERT_VALUES_EQUAL_C(statusCode, HTTP_OK, response);
+
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(response, &json, /* throwOnError = */ true);
+            return std::pair(std::move(json), response);
+        };
+
+        auto [denied, deniedResponse] = requestAutocomplete();
+        UNIT_ASSERT_C(!denied["Success"].GetBoolean(), deniedResponse);
+        UNIT_ASSERT_C(!denied.Has("Result") || !denied["Result"].Has("Entities"), deniedResponse);
+
+        NACLib::TDiffACL grant;
+        grant.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, "username");
+        client.TestModifyACL("/Root", "dir", grant.SerializeAsString());
+
+        auto [allowed, allowedResponse] = requestAutocomplete();
+        UNIT_ASSERT_C(allowed["Success"].GetBoolean(), allowedResponse);
+        UNIT_ASSERT_VALUES_EQUAL_C(allowed["Result"]["Total"].GetUInteger(), 1, allowedResponse);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            allowed["Result"]["Entities"][0]["Name"].GetString(),
+            "dir2",
+            allowedResponse);
+    }
+
     Y_UNIT_TEST(SimpleFeatureFlags) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);

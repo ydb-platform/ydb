@@ -20,7 +20,7 @@ class ParallelArchivesTest(unittest.TestCase):
         executor.assert_not_called()
 
     def test_worker_count_is_bounded_by_cpus_and_suites(self):
-        for cpus, suites, workers in ((None, 10, 1), (2, 10, 2), (64, 2, 2), (64, 8, 4)):
+        for cpus, suites, workers in ((None, 10, 1), (2, 10, 2), (64, 2, 2), (64, 8, 8), (64, 128, 64)):
             with self.subTest(cpus=cpus, suites=suites):
                 jobs = {f"suite/{i}": {f"logs/{i}"} for i in range(suites)}
                 with mock.patch.object(reports.os, "cpu_count", return_value=cpus), \
@@ -30,18 +30,18 @@ class ParallelArchivesTest(unittest.TestCase):
                 executor.assert_called_once_with(max_workers=workers)
                 self.assertEqual(urls, {suite: suite for suite in jobs})
 
-    def test_four_archives_can_be_compressed_concurrently(self):
-        barrier = threading.Barrier(4, timeout=10)
-        jobs = {f"suite/{i}": {f"logs/{i}"} for i in range(8)}
+    def test_more_than_four_archives_can_be_compressed_concurrently(self):
+        barrier = threading.Barrier(8, timeout=10)
+        jobs = {f"suite/{i}": {f"logs/{i}"} for i in range(16)}
 
         def pack(suite, out_dir, url_prefix, logs_dir):
             self.assertEqual(logs_dir, jobs[suite])
-            # Would time out if ZIP creation were serialized. Eight jobs exercise
-            # two batches with the same four-worker limit, without timing sleeps.
+            # Would time out with the old four-worker cap. Sixteen jobs exercise
+            # two batches on eight CPUs, without timing sleeps.
             barrier.wait()
             return url_prefix + suite
 
-        with mock.patch.object(reports.os, "cpu_count", return_value=64), \
+        with mock.patch.object(reports.os, "cpu_count", return_value=8), \
                 mock.patch.object(reports, "save_zip", side_effect=pack):
             urls = reports.save_zips(jobs, "/unused", "https://example.com/")
         self.assertEqual(urls, {suite: "https://example.com/" + suite for suite in jobs})

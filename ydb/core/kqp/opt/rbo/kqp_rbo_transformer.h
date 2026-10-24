@@ -63,6 +63,7 @@ public:
     TKqpNewRBOTransformer(TIntrusivePtr<NOpt::TKqpOptimizeContext>& kqpCtx, NYql::TTypeAnnotationContext& typeCtx, TAutoPtr<NYql::IGraphTransformer>&& rboTypeAnnTransformer,
                           NYql::TKikimrTablesData& tables, const TString& cluster, const TString& database,
                           NActors::TActorSystem* actorSystem, const NMiniKQL::IFunctionRegistry& funcRegistry, TIntrusivePtr<TKqlTransformContext> transformCtx);
+    ~TKqpNewRBOTransformer();
     // Main method of the transformer
     NYql::IGraphTransformer::TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) final;
     NThreading::TFuture<void> DoGetAsyncFuture(const NYql::TExprNode& input) final;
@@ -83,6 +84,9 @@ private:
     std::optional<TVector<TString>> FindEqHeightHistogramTuple(const TString& tableName, const THashSet<TString>& columns) const;
     bool IsSuitableToCollectStatistics(IOperator* op) const;
     void ApplyColumnStatistics();
+    // Ends the statistics span with the outcome of the request, or with the
+    // reason if the request is still in flight.
+    void EndColumnStatisticsSpan(const char* unfinishedReason);
     void InitializeRBOOptimizationStages();
 
     NYql::TTypeAnnotationContext& TypeCtx;
@@ -101,6 +105,9 @@ private:
     NActors::TActorSystem* ActorSystem;
     std::shared_ptr<TColumnStatisticsSharedState> SharedState;
     NThreading::TFuture<void> ColumnStatisticsReadiness;
+    NWilson::TSpan ColumnStatisticsSpan;
+    // Issues of all statistics responses, only collected when tracing.
+    std::shared_ptr<NYql::TIssues> ColumnStatisticsIssues;
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
     THashMap<TString, THashSet<TString>> HistColumnsByTableName;
     THashMap<TString, THashMap<TString, TVector<TString>>> EqHeightHistTuplesByTableName;

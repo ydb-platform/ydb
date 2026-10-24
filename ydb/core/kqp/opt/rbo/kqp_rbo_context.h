@@ -4,6 +4,7 @@
 
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_cbo.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 
 #include <library/cpp/json/writer/json_value.h>
 
@@ -36,6 +37,8 @@ public:
     bool NeedToLog() const {
         return TraceLog.NeedToLog();
     }
+
+    TCompileTrace* GetCompileTrace() const;
 
     template <typename TEnricher>
     void EnrichRuleLog(TEnricher&& enricher) {

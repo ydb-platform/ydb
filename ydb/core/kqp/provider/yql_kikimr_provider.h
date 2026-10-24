@@ -3,6 +3,7 @@
 #include "yql_kikimr_gateway.h"
 
 #include <ydb/core/kqp/common/simple/temp_tables.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/library/actors/core/actorid.h>
 
@@ -176,6 +177,9 @@ struct TKikimrQueryContext : TThrRefBase {
     std::shared_ptr<NKikimr::NGRpcService::IRequestCtxMtSafe> RpcCtx;
 
     NSQLTranslation::TTranslationSettings TranslationSettings;
+
+    // Spans of the query compilation, if it is traced.
+    NKikimr::NKqp::TCompileTrace::TPtr CompileTrace;
 
     void Reset();
 };

@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/host/kqp_transform.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/naming_conventions/naming_conventions.h>
 
@@ -48,6 +49,46 @@ using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
 using TStatus = IGraphTransformer::TStatus;
+
+// KQP peephole stages run synchronously. Record each invocation so repeats and
+// restarts do not leave spans open across other transformers of the pipeline.
+class TPeepholeTraceTransformer : public TSyncTransformerBase {
+public:
+    TPeepholeTraceTransformer(TAutoPtr<IGraphTransformer> transformer, const TString& stageName, TCompileTrace* trace)
+        : Transformer(std::move(transformer))
+        , StageName(stageName)
+        , Trace(trace)
+    {}
+
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
+        TCompileTraceScope scope(Trace, TCompileTraceLevels::Detail, "Peephole: " + StageName);
+        const auto status = Transformer->Transform(input, output, ctx);
+        scope.SetSuccess(status != TStatus::Error);
+        return status;
+    }
+
+    void Rewind() final {
+        Transformer->Rewind();
+    }
+
+    TStatistics GetStatistics() const final {
+        return Transformer->GetStatistics();
+    }
+
+private:
+    const TAutoPtr<IGraphTransformer> Transformer;
+    const TString StageName;
+    TCompileTrace* const Trace;
+};
+
+void AddTracedPeepholeTransformer(TTransformationPipeline* pipeline, TAutoPtr<IGraphTransformer> transformer,
+    const TString& stageName, TCompileTrace* trace)
+{
+    if (trace && trace->IsEnabled(TCompileTraceLevels::Detail)) {
+        transformer = new TPeepholeTraceTransformer(std::move(transformer), stageName, trace);
+    }
+    pipeline->Add(transformer, stageName);
+}
 
 TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& ctx,
     THashMap<TString, TKqpParamBinding>* paramBindings)
@@ -193,10 +234,12 @@ protected:
 struct TKqpPeepholePipelineConfigurator : IPipelineConfigurator {
     TKqpPeepholePipelineConfigurator(
         TKikimrConfiguration::TPtr config,
-        TSet<TString> disabledOpts
+        TSet<TString> disabledOpts,
+        TCompileTrace* trace
     )
         : Config(config)
         , DisabledOpts(disabledOpts)
+        , Trace(trace)
     {}
 
     void AfterCreate(TTransformationPipeline*) const override {
@@ -206,12 +249,15 @@ struct TKqpPeepholePipelineConfigurator : IPipelineConfigurator {
     }
 
     void AfterOptimize(TTransformationPipeline* pipeline) const override {
-        pipeline->Add(new TKqpPeepholeTransformer(*pipeline->GetTypeAnnotationContext(), DisabledOpts), "KqpPeephole");
+        AddTracedPeepholeTransformer(pipeline,
+            new TKqpPeepholeTransformer(*pipeline->GetTypeAnnotationContext(), DisabledOpts),
+            "KqpPeephole", Trace);
     }
 
 private:
     TKikimrConfiguration::TPtr Config;
     TSet<TString> DisabledOpts;
+    TCompileTrace* const Trace;
 };
 
 class TKqpPeepholeNewOperatorTransformer : public TOptimizeTransformerBase {
@@ -289,27 +335,37 @@ private:
 };
 
 struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
-    TKqpPeepholePipelineFinalConfigurator(TKikimrConfiguration::TPtr config, const bool withFinalStageRules)
+    TKqpPeepholePipelineFinalConfigurator(TKikimrConfiguration::TPtr config, const bool withFinalStageRules,
+        TCompileTrace* trace)
         : Config(config)
         , WithFinalStageRules(withFinalStageRules)
+        , Trace(trace)
     {}
 
-    void AfterCreate(TTransformationPipeline*) const override {}
+    void AfterCreate(TTransformationPipeline*) const override {
+    }
 
     void AfterTypeAnnotation(TTransformationPipeline* pipeline) const override {
-        pipeline->Add(new TKqpPeepholeFinalTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeFinal");
+        AddTracedPeepholeTransformer(pipeline,
+            new TKqpPeepholeFinalTransformer(*pipeline->GetTypeAnnotationContext(), Config),
+            "KqpPeepholeFinal", Trace);
     }
 
     void AfterOptimize(TTransformationPipeline* pipeline) const override {
         if (WithFinalStageRules) {
-            pipeline->Add(new TKqpPeepholeNewOperatorTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeNewOperator");
+            AddTracedPeepholeTransformer(pipeline,
+                new TKqpPeepholeNewOperatorTransformer(*pipeline->GetTypeAnnotationContext(), Config),
+                "KqpPeepholeNewOperator", Trace);
         }
-        pipeline->Add(new TKqpPeepholeBlockPackUnpackTransformer(*pipeline->GetTypeAnnotationContext()), "KqpPeepholeBlockPackUnpack");
+        AddTracedPeepholeTransformer(pipeline,
+            new TKqpPeepholeBlockPackUnpackTransformer(*pipeline->GetTypeAnnotationContext()),
+            "KqpPeepholeBlockPackUnpack", Trace);
     }
 
 private:
     const TKikimrConfiguration::TPtr Config;
     const bool WithFinalStageRules;
+    TCompileTrace* const Trace;
 };
 
 // Sort stages in topological order by their inputs, so that we optimize the ones without inputs first.
@@ -724,10 +780,10 @@ private:
 
 TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, TExprContext& ctx,
     TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config,
-    bool allowNonDeterministicFunctions, bool withFinalStageRules, TSet<TString> disabledOpts)
+    bool allowNonDeterministicFunctions, bool withFinalStageRules, TSet<TString> disabledOpts, TCompileTrace* trace)
 {
-    TKqpPeepholePipelineConfigurator kqpPeephole(config, disabledOpts);
-    TKqpPeepholePipelineFinalConfigurator kqpPeepholeFinal(config, withFinalStageRules);
+    TKqpPeepholePipelineConfigurator kqpPeephole(config, disabledOpts, trace);
+    TKqpPeepholePipelineFinalConfigurator kqpPeepholeFinal(config, withFinalStageRules, trace);
     TPeepholeSettings peepholeSettings;
     peepholeSettings.CommonConfig = &kqpPeephole;
     peepholeSettings.FinalConfig = &kqpPeepholeFinal;

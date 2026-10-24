@@ -1,6 +1,7 @@
 #include "kqp_compile_service.h"
 #include "kqp_warmup_compile_actor.h"
 
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -26,6 +27,8 @@
 #include <util/string/escape.h>
 
 #include <ydb/core/base/cputime.h>
+
+#include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPILE_ACTOR
 
@@ -168,6 +171,25 @@ public:
         TBase::Die(ctx);
     }
 
+    void PassAway() override {
+        // Keep Compile query open until its compiler-owned state is released.
+        // This runs on the actor's thread right after the reply, not when the
+        // executor deletes the actor (which may happen during shutdown).
+        // Die calls PassAway, so this covers both.
+        FinishCompileTrace(CompileStatus);
+        auto cleanup = CompileActorSpan.CreateChild(TCompileTraceLevels::Step, "Cleanup compiler");
+        AsyncSplitResult.Drop();
+        AsyncCompileResult.Drop();
+        KqpHost.Drop();
+        Gateway.Drop();
+        SplitExpr.Reset();
+        SplitCtx.reset();
+        cleanup.EndOk();
+        EndQueryTraceSpan(CompileActorSpan, CompileStatus);
+
+        TBase::PassAway();
+    }
+
 private:
     STFUNC(CompileState) {
         try {
@@ -206,7 +228,17 @@ private:
             .SetQueryParameters(QueryId.QueryParameterTypes)
             .SetFromConfig(*Config);
 
-        return ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult);
+        auto span = CompileActorSpan.CreateChild(TCompileTraceLevels::Phase, "Parse query");
+        auto statements = ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult);
+        const bool success = !statements.empty() && std::all_of(statements.begin(), statements.end(), [](const auto& statement) {
+            return statement.Ast && statement.Ast->IsOk() && statement.Ast->Root;
+        });
+        if (success) {
+            span.EndOk();
+        } else {
+            span.EndError("Parsing failed");
+        }
+        return statements;
     }
 
     void ReplySplitResult(const TActorContext &ctx, IKqpHost::TSplitResult&& result) {
@@ -226,7 +258,8 @@ private:
 
         Counters->ReportCompileFinish(DbCounters);
 
-        EndQueryTraceSpan(CompileActorSpan, GetYdbStatus(result));
+        FinishCompileTrace(GetYdbStatus(result));
+        CompileStatus = GetYdbStatus(result);
 
         PassAway();
     }
@@ -368,6 +401,11 @@ private:
     }
 
     IKqpHost::TPrepareSettings PrepareCompilationSettings(const TActorContext &ctx) {
+        // A restarted compilation gets its own trace.
+        FinishCompileTrace(Ydb::StatusIds::ABORTED);
+        if (CompileActorSpan) {
+            CompileTrace = MakeIntrusive<TCompileTrace>(CompileActorSpan.GetTraceId(), ctx.ActorSystem());
+        }
         TKqpRequestCounters::TPtr counters = new TKqpRequestCounters;
         counters->Counters = Counters;
         counters->DbCounters = DbCounters;
@@ -375,9 +413,9 @@ private:
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(
                 QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup,
-                CompileActorSpan.GetTraceId());
+                CompileActorSpan.GetTraceId(), CompileTrace);
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, QueryId.DatabaseId, std::move(loader),
-            ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig, CompileActorSpan.GetTraceId());
+            ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig, CompileActorSpan.GetTraceId(), CompileTrace);
         Gateway->SetToken(QueryId.Cluster, UserToken);
         Gateway->SetClientAddress(ClientAddress);
 
@@ -399,6 +437,7 @@ private:
             prepareSettings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
         }
         prepareSettings.UsePessimisticLocks = UsePessimisticLocks;
+        prepareSettings.CompileTrace = CompileTrace;
 
         switch (QueryId.Settings.Syntax) {
             case Ydb::Query::Syntax::SYNTAX_YQL_V1:
@@ -411,6 +450,13 @@ private:
         }
 
         return prepareSettings;
+    }
+
+    void FinishCompileTrace(Ydb::StatusIds::StatusCode status) {
+        if (CompileTrace) {
+            CompileTrace->Finish(status == Ydb::StatusIds::SUCCESS);
+            CompileTrace.Reset();
+        }
     }
 
     void AddMessageToReplayLog(const TString& queryPlan) {
@@ -497,7 +543,8 @@ private:
 
         CompileActorSpan.Attribute("ydb.actor.type", TString("TKqpCompileActor"));
         CompileActorSpan.Attribute("ydb.cpu_us", static_cast<i64>(CompileCpuTime.MicroSeconds()));
-        EndQueryTraceSpan(CompileActorSpan, KqpCompileResult->Status);
+        FinishCompileTrace(KqpCompileResult->Status);
+        CompileStatus = KqpCompileResult->Status;
 
         PassAway();
     }
@@ -569,7 +616,8 @@ private:
 
         Counters->ReportCompileFinish(DbCounters);
 
-        EndQueryTraceSpan(CompileActorSpan, Ydb::StatusIds::SUCCESS);
+        FinishCompileTrace(Ydb::StatusIds::SUCCESS);
+        CompileStatus = Ydb::StatusIds::SUCCESS;
 
         PassAway();
     }
@@ -787,6 +835,8 @@ private:
 
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     NWilson::TSpan CompileActorSpan;
+    Ydb::StatusIds::StatusCode CompileStatus = Ydb::StatusIds::ABORTED;
+    TCompileTrace::TPtr CompileTrace;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
     bool CollectFullDiagnostics;

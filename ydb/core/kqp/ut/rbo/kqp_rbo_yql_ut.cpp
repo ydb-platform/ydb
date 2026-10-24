@@ -38,6 +38,15 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/testing/common/env.h>
+#include <util/stream/file.h>
+#include <util/string/ascii.h>
+#include <util/string/hex.h>
+#include <util/string/split.h>
+#include <util/system/mutex.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/wilson/wilson_uploader.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 
@@ -8058,6 +8067,236 @@ FROM (
         UNIT_ASSERT_C(root->GetInput()->GetChild(0)->Kind == EOperator::Replicate, root->PlanToString(f.ExprCtx));
         UNIT_ASSERT_C(root->GetInput()->GetChild(1)->Kind == EOperator::Replicate, root->PlanToString(f.ExprCtx));
         UNIT_ASSERT(hub->GetInput()->Kind == EOperator::UnionAll);
+    }
+
+    // Collects the spans of a test server, optionally forwarding them to a collector.
+    class TCompileTraceCollector : public NActors::TActorBootstrapped<TCompileTraceCollector> {
+    public:
+        struct TState {
+            TMutex Lock;
+            TVector<NJson::TJsonValue> Spans;
+        };
+
+        TCompileTraceCollector(std::shared_ptr<TState> state, NActors::TActorId forwardTo)
+            : State(std::move(state))
+            , ForwardTo(forwardTo)
+        {}
+
+        void Bootstrap() {
+            Become(&TThis::StateFunc);
+        }
+
+        STRICT_STFUNC(StateFunc,
+            hFunc(NWilson::TEvWilson, Handle);
+        );
+
+    private:
+        static TString Hex(const TString& bytes) {
+            return to_lower(HexEncode(bytes));
+        }
+
+        void Handle(NWilson::TEvWilson::TPtr& ev) {
+            const auto& span = ev->Get()->Span;
+            NJson::TJsonValue json;
+            json["kind"] = "span";
+            json["trace_id"] = Hex(span.trace_id());
+            json["span_id"] = Hex(span.span_id());
+            json["parent_span_id"] = Hex(span.parent_span_id());
+            json["name"] = span.name();
+            json["start_ns"] = static_cast<ui64>(span.start_time_unix_nano());
+            json["end_ns"] = static_cast<ui64>(span.end_time_unix_nano());
+            json["status"] = static_cast<int>(span.status().code());
+            json["status_message"] = span.status().message();
+            {
+                TGuard guard(State->Lock);
+                State->Spans.push_back(std::move(json));
+            }
+            if (ForwardTo) {
+                auto copy = span;
+                Send(ForwardTo, new NWilson::TEvWilson(&copy));
+            }
+        }
+
+        std::shared_ptr<TState> State;
+        const NActors::TActorId ForwardTo;
+    };
+
+    double ReadLoadAverage() {
+        try {
+            const TString loadAvg = TFileInput("/proc/loadavg").ReadAll();
+            return FromString<double>(TStringBuf(loadAvg).Before(' '));
+        } catch (...) {
+            return -1;
+        }
+    }
+
+    TVector<ui32> ParseNumbers(const TString& list) {
+        TVector<ui32> result;
+        for (const auto& item : StringSplitter(list).Split(',').SkipEmpty()) {
+            result.push_back(FromString<ui32>(item.Token()));
+        }
+        return result;
+    }
+
+    // Compiles the benchmark queries at every tracing level, one test server per level,
+    // and writes the client compile times and the spans to a JSON lines file.
+    void RunCompileTraceBenchmark(EBenchType type, const TString& benchName, const TVector<ui32>& queries,
+            const TVector<ui32>& levels, ui32 repeats, bool columnStore, const TString& collectorUrl, IOutputStream& out) {
+        const auto writeLine = [&](const NJson::TJsonValue& json) {
+            NJson::WriteJson(&out, &json, /*formatOutput=*/false, /*sortkeys=*/false);
+            out << '\n';
+        };
+
+        for (ui32 repeat = 0; repeat < repeats; ++repeat) {
+            // Rotate the order of levels so that none is always measured first.
+            for (size_t i = 0; i < levels.size(); ++i) {
+                const ui32 level = levels[(i + repeat) % levels.size()];
+
+                NKikimrConfig::TAppConfig appConfig;
+                appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+                appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+                appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+                appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+                appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+                if (level) {
+                    auto* tracing = appConfig.MutableTracingConfig()->AddExternalThrottling();
+                    tracing->SetLevel(level);
+                    tracing->SetMaxTracesPerMinute(1'000'000);
+                    tracing->SetMaxTracesBurst(1'000'000);
+                }
+                auto kikimrSettings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+                kikimrSettings.LogSettings = TTestLogSettings();
+                kikimrSettings.LogSettings->DefaultLogPriority = NActors::NLog::EPriority::PRI_CRIT;
+                TKikimrRunner kikimr(kikimrSettings);
+
+                auto& runtime = *kikimr.GetTestServer().GetRuntime();
+                auto state = std::make_shared<TCompileTraceCollector::TState>();
+                NActors::TActorId forwardTo;
+                if (level && !collectorUrl.empty()) {
+                    forwardTo = runtime.Register(NWilson::CreateWilsonUploader({
+                        .CollectorUrl = collectorUrl,
+                        .ServiceName = TStringBuilder() << "ydb-compile-" << benchName << "-L" << level,
+                    }), 0);
+                }
+                const auto collectorId = runtime.Register(new TCompileTraceCollector(state, forwardTo), 0);
+                for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+                    runtime.RegisterService(NWilson::MakeWilsonUploaderId(), collectorId, node);
+                }
+
+                auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+                CreateTablesFromPath(tableSession, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
+                auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+
+                const auto queryText = [&](ui32 queryId, TStringBuf tag) {
+                    // The tag makes every text distinct, so no compilation is served from the cache.
+                    return TStringBuilder() << "-- " << tag << "\n"
+                        << R"($round = ($x,$y) -> {return $x;};)" << "\n"
+                        << R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)" << "\n"
+                        << R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)" << "\n"
+                        << GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
+                };
+                const auto explain = [&](const TString& text, const TString& traceParent) {
+                    auto settings = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain);
+                    if (!traceParent.empty()) {
+                        settings.TraceParent(traceParent);
+                    }
+                    return session.ExecuteQuery(text, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                };
+
+                // Warm up the server caches (scheme cache, statistics) and the process-wide state.
+                for (ui32 queryId : queries) {
+                    explain(queryText(queryId, TStringBuilder() << "warmup " << repeat << " " << level), {});
+                }
+
+                for (ui32 queryId : queries) {
+                    const TString text = queryText(queryId, TStringBuilder() << "run " << repeat << " " << level);
+                    NWilson::TSpan root;
+                    TString traceParent;
+                    if (level) {
+                        root = NWilson::TSpan(level, NWilson::TTraceId::NewTraceId(level, Max<ui32>()),
+                            TStringBuilder() << benchName << " Q" << queryId, NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+                        const auto rootId = root.GetTraceId();
+                        traceParent = TStringBuilder() << "00-"
+                            << to_lower(HexEncode(rootId.GetTraceIdPtr(), rootId.GetTraceIdSize())) << "-"
+                            << to_lower(HexEncode(rootId.GetSpanIdPtr(), rootId.GetSpanIdSize())) << "-01";
+                    }
+                    const TInstant start = TInstant::Now();
+                    auto result = explain(text, traceParent);
+                    const TDuration elapsed = TInstant::Now() - start;
+                    if (result.IsSuccess()) {
+                        root.EndOk();
+                    } else {
+                        root.EndError(result.GetIssues().ToOneLineString());
+                    }
+
+                    NJson::TJsonValue run;
+                    run["kind"] = "run";
+                    run["bench"] = benchName;
+                    run["query"] = static_cast<ui64>(queryId);
+                    run["level"] = static_cast<ui64>(level);
+                    run["repeat"] = static_cast<ui64>(repeat);
+                    run["client_us"] = elapsed.MicroSeconds();
+                    run["ok"] = result.IsSuccess();
+                    run["load1"] = ReadLoadAverage();
+                    if (level) {
+                        run["trace_id"] = to_lower(HexEncode(root.GetTraceId().GetTraceIdPtr(), root.GetTraceId().GetTraceIdSize()));
+                    }
+                    writeLine(run);
+                    Cerr << "compile trace bench: " << benchName << " Q" << queryId << " L" << level << " r" << repeat
+                         << " " << elapsed.MilliSeconds() << " ms" << (result.IsSuccess() ? "" : " FAILED") << Endl;
+                }
+
+                // Let the last spans reach the collector.
+                Sleep(TDuration::Seconds(level && !collectorUrl.empty() ? 10 : 1));
+                TGuard guard(state->Lock);
+                for (const auto& span : state->Spans) {
+                    writeLine(span);
+                }
+                out.Flush();
+            }
+        }
+    }
+
+    // Measures compilation with spans at several verbosity levels. Disabled
+    // unless COMPILE_TRACE_BENCH names the benchmarks to run.
+    Y_UNIT_TEST(CompileTraceBench) {
+        const TString benches = GetTestParam("COMPILE_TRACE_BENCH");
+        if (benches.empty()) {
+            return;
+        }
+        const auto levels = ParseNumbers(GetTestParam("COMPILE_TRACE_LEVELS", "0,10,14,15"));
+        const ui32 repeats = FromString<ui32>(GetTestParam("COMPILE_TRACE_REPEATS", "3"));
+        const bool columnStore = GetTestParam("COMPILE_TRACE_COLUMN_STORE", "1") != "0";
+        const TString collectorUrl = GetTestParam("COMPILE_TRACE_COLLECTOR");
+        const TString outPath = GetTestParam("COMPILE_TRACE_OUT", (GetOutputPath() / "compile_traces.jsonl").GetPath());
+        const auto selectedQueries = ParseNumbers(GetTestParam("COMPILE_TRACE_QUERIES"));
+
+        TFileOutput out(TFile(outPath, OpenAlways | WrOnly | ForAppend));
+        for (const auto& bench : StringSplitter(benches).Split(',').SkipEmpty()) {
+            const TString name(bench.Token());
+            EBenchType type;
+            TVector<ui32> queries;
+            if (name == "tpch") {
+                type = EBenchType::TPCH;
+                for (ui32 i = 1; i <= 22; ++i) {
+                    queries.push_back(i);
+                }
+            } else if (name == "tpcds") {
+                type = EBenchType::TPCDS;
+                queries = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20,
+                    21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39, 40,
+                    41, 42, 43, 45, 46, 48, 49, 50, 52, 53, 54, 55, 56, 58, 59, 60,
+                    61, 62, 63, 64, 65, 66, 67, 68, 69, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
+                    81, 82, 83, 84, 85, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99};
+            } else {
+                UNIT_FAIL("Unknown benchmark " << name << ", expected tpch or tpcds");
+            }
+            if (!selectedQueries.empty()) {
+                queries = selectedQueries;
+            }
+            RunCompileTraceBenchmark(type, name, queries, levels, repeats, columnStore, collectorUrl, out);
+        }
+        Cerr << "compile trace bench: written to " << outPath << Endl;
     }
 
     Y_UNIT_TEST(TPCH_YQL) {

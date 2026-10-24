@@ -10,6 +10,7 @@ SRCS(
 PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/opt/physical
+    ydb/core/kqp/tracing
     ydb/library/accessor
     ydb/library/naming_conventions
     ydb/library/yql/dq/opt

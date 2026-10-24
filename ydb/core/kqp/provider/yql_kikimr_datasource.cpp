@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/protos/kqp_lookup_source.pb.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -24,6 +25,9 @@
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 
 #include <util/generic/is_in.h>
+#include <util/generic/scope.h>
+
+#include <algorithm>
 
 namespace NYql {
 
@@ -198,6 +202,9 @@ public:
         futures.reserve(tablesCount);
         std::optional<THashMap<std::pair<TString, TString>, THashMap<TString, TString>>> readAttributes;
         const bool isShowCreate = ContainsShowCreateSetting(*input);
+        auto* trace = SessionCtx->QueryPtr()->CompileTrace.Get();
+        NWilson::TSpan dependencyJoin;
+        TVector<std::shared_ptr<IKikimrGateway::TTableMetadataResult>> dependencyResults;
 
         for (auto& it : SessionCtx->Tables().GetTables()) {
             const TString& clusterName = it.first.first;
@@ -223,17 +230,35 @@ public:
             auto queryType = SessionCtx->Query().Type;
             auto& result = emplaceResult.first->second;
 
-            auto future = Gateway->LoadTableMetadata(clusterName, tableName,
-                IKikimrGateway::TLoadTableMetadataSettings()
-                            .WithTableStats(table.GetNeedsStats())
-                            .WithPrivateTables(IsInternalCall)
-                            .WithExternalDatasources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
-                            .WithAuthInfo(isShowCreate ? false : table.GetNeedAuthInfo())
-                            .WithExternalSourceFactory(ExternalSourceFactory)
-                            .WithReadAttributes(readAttrs ? std::move(*readAttrs) : THashMap<TString, TString>{})
-                            .WithSysViewRewritten(table.GetSysViewRewritten())
-                            .WithTopicsIo(SessionCtx->Config().FeatureFlags.GetEnableTopicsSqlIoOperations())
-            );
+            if (trace && !dependencyJoin) {
+                dependencyJoin = trace->StartSpan(NKikimr::NKqp::TCompileTraceLevels::Step,
+                    "Await table metadata");
+            }
+            if (dependencyJoin) {
+                dependencyResults.push_back(result);
+            }
+            // The metadata requests of the gateway are parented by the wait.
+            auto future = [&] {
+                if (trace) {
+                    trace->Push(dependencyJoin);
+                }
+                Y_DEFER {
+                    if (trace) {
+                        trace->Pop(dependencyJoin);
+                    }
+                };
+                return Gateway->LoadTableMetadata(clusterName, tableName,
+                    IKikimrGateway::TLoadTableMetadataSettings()
+                                .WithTableStats(table.GetNeedsStats())
+                                .WithPrivateTables(IsInternalCall)
+                                .WithExternalDatasources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
+                                .WithAuthInfo(isShowCreate ? false : table.GetNeedAuthInfo())
+                                .WithExternalSourceFactory(ExternalSourceFactory)
+                                .WithReadAttributes(readAttrs ? std::move(*readAttrs) : THashMap<TString, TString>{})
+                                .WithSysViewRewritten(table.GetSysViewRewritten())
+                                .WithTopicsIo(SessionCtx->Config().FeatureFlags.GetEnableTopicsSqlIoOperations())
+                );
+            }();
 
             futures.push_back(future.Apply([result, queryType]
                 (const NThreading::TFuture<IKikimrGateway::TTableMetadataResult>& future) {
@@ -262,7 +287,15 @@ public:
             return TStatus::Ok;
         }
 
-        AsyncFuture = NThreading::WaitExceptionOrAll(futures);
+        // A missing table is a valid outcome, e.g. for CREATE TABLE: whether the
+        // query needs the table is checked later.
+        AsyncFuture = NKikimr::NKqp::TraceCompileDependency(
+            NThreading::WaitExceptionOrAll(futures), std::move(dependencyJoin),
+            [results = std::move(dependencyResults)] {
+                return std::ranges::all_of(results, [](const auto& result) {
+                    return result->Success();
+                });
+            });
         return TStatus::Async;
     }
 

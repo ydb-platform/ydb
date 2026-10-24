@@ -26,11 +26,11 @@ struct TColumnStatisticsSharedState {
 
 void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColumnStatisticsResponse>>& futures, TKikimrTablesData& tables,
                     const TString& cluster, const TString& database, TTypeAnnotationContext& typesCtx, const NKikimr::NStat::EStatType type,
-                    const THashMap<TString, THashSet<TString>>& columnsByTableName, std::function<bool(const NYql::TColumnStatistics&)> alreadyHasStatistics);
+                    const THashMap<TString, THashSet<TString>>& columnsByTableName, std::function<bool(const NYql::TColumnStatistics&)> alreadyHasStatistics, NWilson::TSpan* dependencyJoin = nullptr);
 
 void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColumnStatisticsResponse>>& futures, TKikimrTablesData& tables,
                     const TString& cluster, const TString& database, TTypeAnnotationContext& typesCtx, const NKikimr::NStat::EStatType type,
                     const THashMap<TString, THashMap<TString, TVector<TString>>>& columnTuplesByTableName,
-                    std::function<bool(const NYql::TMultiColumnStatistics&)> alreadyHasStatistics);
+                    std::function<bool(const NYql::TMultiColumnStatistics&)> alreadyHasStatistics, NWilson::TSpan* dependencyJoin = nullptr);
 
 } // namespace NKikimr::NKqp

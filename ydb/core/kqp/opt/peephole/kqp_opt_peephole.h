@@ -20,6 +20,10 @@ class TExprBase;
 
 } // namespace NYql
 
+namespace NKikimr::NKqp {
+class TCompileTrace;
+}
+
 namespace NKikimr::NKqp::NOpt {
 
 struct TKqpOptimizeContext;
@@ -41,6 +45,7 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpTxsPeepholeTransformer(
 
 NYql::IGraphTransformer::TStatus PeepHoleOptimize(const NYql::NNodes::TExprBase& program, NYql::TExprNode::TPtr& newProgram, NYql::TExprContext& ctx,
     NYql::TTypeAnnotationContext& typesCtx, TIntrusivePtr<NYql::TKikimrConfiguration> config,
-    bool allowNonDeterministicFunctions, bool withFinalStageRules, TSet<TString> disabledOpts);
+    bool allowNonDeterministicFunctions, bool withFinalStageRules, TSet<TString> disabledOpts,
+    TCompileTrace* trace = nullptr);
 
 } // namespace NKikimr::NKqp::NOpt

@@ -2,6 +2,8 @@
 
 From this repository you can build YDB Server and YDB CLI (Command Line Interface utility) executables.
 
+For an Apple Silicon Mac, see the [experimental macOS build recipe](BUILD-macos.md), including the pending fixes and SDK selection commands.
+
 [Yatool](https://github.com/yandex/yatool) is the multilanguage build/test system being used to [build and test YDB](https://ydb.tech/docs/en/development/build-ya). You need to use Yatool and follow the [YDB development process](https://ydb.tech/docs/en/development/suggest-change) to make contributions to the YDB project.
 
 ## Create the work directory. 

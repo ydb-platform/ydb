@@ -3,6 +3,8 @@
 #include <util/generic/fwd.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <memory>
 
 namespace google::protobuf {
@@ -65,11 +67,19 @@ public:
 
 protected:
     bool IsPathNormalizationEnabled() const noexcept;
+    bool CanInitializePathAliasCounter() const noexcept;
     void SetPathNormalizer(std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer) noexcept;
+    void SetPathAliasCounter(NMonitoring::TDynamicCounters::TCounterPtr counter);
 
 private:
+    void RecordPathAliasUsage(bool used) const;
+
     std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer_;
+    NMonitoring::TDynamicCounters::TCounterPtr PathAliasCounter_;
     bool PathNormalizationEnabled_ = false;
+    // Updated by the proxy before dispatch, then only by the owning RPC actor.
+    mutable bool PathAliasUsed_ = false;
+    mutable bool PathAliasCounted_ = false;
 };
 
 

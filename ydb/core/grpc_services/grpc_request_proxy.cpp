@@ -154,6 +154,17 @@ private:
 
         MaybeStartTracing(event);
 
+        // Counter labels require schema confirmation, unavailable with SkipSchemeCheck.
+        if (AppData(ctx)->PathNormalizer) {
+            const auto aliasDatabase = requestBaseCtx->GetDatabaseName();
+            auto databaseIt = Databases.find(aliasDatabase && !aliasDatabase->empty()
+                ? CanonizePath(*aliasDatabase) : RootDatabase);
+            if (databaseIt != Databases.end() && databaseIt->second.IsDatabaseReady()) {
+                requestBaseCtx->InitializePathAliasCounter(AppData(ctx)->Counters,
+                    databaseIt->second.SchemeBoardResult->DescribeSchemeResult);
+            }
+        }
+
         if (IsAuthStateOK(*requestBaseCtx)) {
             Handle(event, ctx);
             return;

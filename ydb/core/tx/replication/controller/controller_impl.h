@@ -83,6 +83,7 @@ private:
     void Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvPrepareAttachDst::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
@@ -96,6 +97,8 @@ private:
     void Handle(TEvPrivate::TEvDescribeTargetsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCancelCreateStream::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCancelDropStream::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscovery::TEvError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& ctx);
@@ -139,6 +142,7 @@ private:
     class TTxCreateStreamResult;
     class TTxDropStreamResult;
     class TTxCreateDstResult;
+    class TTxPrepareAttachDst;
     class TTxAlterDstResult;
     class TTxDropDstResult;
     class TTxResolveDatabaseResult;
@@ -163,6 +167,7 @@ private:
     void RunTxCreateStreamResult(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TActorContext& ctx);
     void RunTxDropStreamResult(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);
     void RunTxCreateDstResult(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
+    void RunTxPrepareAttachDst(TEvPrivate::TEvPrepareAttachDst::TPtr& ev, const TActorContext& ctx);
     void RunTxAlterDstResult(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxDropDstResult(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveDatabaseResult(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);

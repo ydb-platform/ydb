@@ -114,6 +114,8 @@ STFUNC(TController::StateWork) {
         HFunc(TEvService::TEvHeartbeat, Handle);
         HFunc(TEvService::TEvIndexBuildProgress, Handle);
         HFunc(TEvService::TEvSchemaChangeReport, Handle);
+        HFunc(TEvService::TEvSourceOffsetReport, Handle);
+        HFunc(TEvPrivate::TEvCheckDrain, Handle);
         HFunc(TEvTxAllocatorClient::TEvAllocateResult, Handle);
         HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
         HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -202,6 +204,9 @@ void TController::SwitchToWork(const TActorContext& ctx) {
         }
     }
     Schedule(BootPersistedWorkersDelay, new TEvPrivate::TEvBootPersistedWorkers());
+    for (const auto& [id, _] : DrainDeadlines) {
+        Schedule(DrainCheckInterval, new TEvPrivate::TEvCheckDrain(id));
+    }
 
     for (const auto& [key, barrier] : SchemaBarriers) {
         if (barrier.Phase == ESchemaBarrierPhase::FlushingTarget) {
@@ -222,6 +227,9 @@ void TController::SwitchToWork(const TActorContext& ctx) {
 
 void TController::Reset() {
     SysParams.Reset();
+    ProcessedSourceOffsets.clear();
+    DrainDeadlines.clear();
+    ReplicationsWithSourceOffsetMismatch.clear();
     Replications.clear();
     ReplicationsByPathId.clear();
     UnresolvedDatabaseReplications.clear();
@@ -504,6 +512,7 @@ void TController::CreateSession(ui32 nodeId, const TActorContext& ctx) {
 
     auto ev = MakeHolder<TEvService::TEvHandshake>(TabletID(), Executor()->Generation());
     ev->Record.SetSupportsIndexMetadata(true);
+    ev->Record.SetSupportsSourceOffsets(true);
     ui32 flags = 0;
     if (SelfId().NodeId() != nodeId) {
         flags = IEventHandle::FlagSubscribeOnSession;
@@ -561,10 +570,21 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
 
     auto& session = Sessions[nodeId];
     session.SetReady();
+    session.SupportsSourceOffsets = ev->Get()->Record.GetSupportsSourceOffsets();
 
     for (const auto& protoId : ev->Get()->Record.GetWorkers()) {
         const auto id = TWorkerId::Parse(protoId);
-        if (!IsValidWorker(id)) {
+        auto* saved = Workers.FindPtr(id);
+        if (saved && DrainDeadlines.contains(id.ReplicationId())) {
+            session.AttachWorker(id);
+            saved->AttachSession(nodeId);
+            StopQueue.emplace(id, nodeId);
+            continue;
+        }
+        // Storage rollback requires restarting destination processes.
+        if (!IsValidWorker(id)
+            || (ProcessedSourceOffsets.contains(id) && !session.SupportsSourceOffsets))
+        {
             StopQueue.emplace(id, nodeId);
             continue;
         }
@@ -608,8 +628,10 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
 
     switch (record.GetStatus()) {
     case NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING:
-        if (!session.HasWorker(id)) {
+        if (!session.HasWorker(id) || ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId())) {
             StopQueue.emplace(id, nodeId);
+        } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_SOURCE_OFFSET_MISMATCH) {
+            RunTxWorkerError(id, record.GetErrorDescription(), ctx, true);
         } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_INFO) {
             UpdateLag(id, TDuration::MilliSeconds(record.GetLagMilliSeconds()));
         } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_STATS) {
@@ -622,16 +644,15 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
     case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
         UpdateStats(id, record.GetStatus());
         if (!MaybeRemoveWorker(id, ctx)) {
-            if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ERROR) {
+            if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ERROR && !ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId())) {
                 RunTxWorkerError(id, record.GetErrorDescription(), ctx);
             } else {
                 session.DetachWorker(id);
-                const auto worker = Workers.find(id);
-                if (worker != Workers.end()) {
-                    if (worker->second.HasSession() && worker->second.GetSession() == nodeId) {
-                        worker->second.ClearSession();
+                if (auto* worker = Workers.FindPtr(id)) {
+                    if (worker->HasSession() && worker->GetSession() == nodeId) {
+                        worker->ClearSession();
                     }
-                    if (IsValidWorker(id) && !worker->second.HasSession() && worker->second.HasCommand()) {
+                    if (IsValidWorker(id) && !worker->HasSession() && worker->HasCommand()) {
                         BootQueue.insert(id);
                     }
                 }
@@ -742,7 +763,9 @@ bool TController::IsValidWorker(const TWorkerId& id) const {
         return false;
     }
 
-    if (replication->GetState() != TReplication::EState::Ready) {
+    if (ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId())
+        || replication->GetState() != TReplication::EState::Ready)
+    {
         return false;
     }
 
@@ -763,13 +786,8 @@ bool TController::IsValidWorker(const TWorkerId& id) const {
 }
 
 bool TController::HasWorkerSession(const TWorkerId& id, ui32 nodeId) const {
-    const auto it = Workers.find(id);
-    if (it == Workers.end()) {
-        return false;
-    }
-
-    return it->second.HasSession()
-        && it->second.GetSession() == nodeId;
+    const auto* worker = Workers.FindPtr(id);
+    return worker && worker->HasSession() && worker->GetSession() == nodeId;
 }
 
 TWorkerInfo* TController::GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd) {
@@ -860,6 +878,10 @@ void TController::ProcessBootQueue(const TActorContext&) {
             continue;
         }
 
+        if (TracksSourceOffsets(id) && ProcessedSourceOffsets.contains(id) && !Sessions[nodeId].SupportsSourceOffsets) {
+            ++iter;
+            continue;
+        }
         Y_ABORT_UNLESS(worker.HasCommand());
         BootWorker(nodeId, id, *worker.GetCommand());
         worker.AttachSession(nodeId);
@@ -885,6 +907,11 @@ void TController::BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrRepl
     controller.SetGeneration(Executor()->Generation());
     id.Serialize(*record.MutableWorker());
     record.MutableCommand()->CopyFrom(cmd);
+    record.MutableCommand()->SetTrackSourceOffsets(TracksSourceOffsets(id) && session.SupportsSourceOffsets);
+    record.MutableCommand()->ClearProcessedSourceOffset();
+    if (const auto* saved = ProcessedSourceOffsets.FindPtr(id); saved && saved->PersistedNextOffset) {
+        record.MutableCommand()->SetProcessedSourceOffset(*saved->PersistedNextOffset);
+    }
 
     if (const auto build = IndexBuilds.find({id.ReplicationId(), id.TargetId()}); build != IndexBuilds.end()) {
         auto& settings = *record.MutableCommand()->MutableLocalTableWriter();
@@ -977,9 +1004,14 @@ void TController::StopWorker(ui32 nodeId, const TWorkerId& id) {
     controller.SetTabletId(TabletID());
     controller.SetGeneration(Executor()->Generation());
     id.Serialize(*record.MutableWorker());
+    const auto* worker = Workers.FindPtr(id);
+    const bool drain = DrainDeadlines.contains(id.ReplicationId()) && worker && worker->DrainPending;
+    record.SetDrain(drain && session.SupportsSourceOffsets);
 
     Send(MakeReplicationServiceId(nodeId), std::move(ev));
-    session.DetachWorker(id);
+    if (!drain) {
+        session.DetachWorker(id);
+    }
 }
 
 void TController::Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx) {
@@ -1036,6 +1068,9 @@ void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& 
         return;
     }
 
+    if (IsStoppedAfterSourceOffsetMismatch(replication->GetId())) {
+        return;
+    }
     const auto& config = replication->GetConfig().GetConsistencySettings();
     switch (config.GetLevelCase()) {
     case NKikimrReplication::TConsistencySettings::kGlobal:
@@ -1079,6 +1114,13 @@ void TController::Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext
 
     const auto& record = ev->Get()->Record;
     const auto id = TWorkerId::Parse(record.GetWorker());
+    if (!HasWorkerSession(id, nodeId)) {
+        return;
+    }
+    const auto replication = Find(id.ReplicationId());
+    if (!replication || IsStoppedAfterSourceOffsetMismatch(id.ReplicationId())) {
+        return;
+    }
     const auto version = TRowVersion::FromProto(record.GetVersion());
     PendingHeartbeats[id] = version;
 
@@ -1183,6 +1225,8 @@ void TController::Remove(ui64 id) {
         return;
     }
 
+    ReplicationsWithSourceOffsetMismatch.erase(id);
+    DrainDeadlines.erase(id);
     ReplicationsByPathId.erase(it->second->GetPathId());
     Replications.erase(it);
 }

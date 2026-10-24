@@ -19,6 +19,7 @@ public:
 
     void SetReady();
     bool IsReady() const;
+    bool SupportsSourceOffsets = false;
 
     void AttachWorker(const TWorkerId& id);
     void DetachWorker(const TWorkerId& id);
@@ -50,6 +51,8 @@ public:
     void ClearHeartbeat();
     bool HasHeartbeat() const;
     const TRowVersion& GetHeartbeat() const;
+
+    bool DrainPending = false;
 
 private:
     THolder<NKikimrReplication::TRunWorkerCommand> Command;

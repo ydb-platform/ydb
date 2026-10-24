@@ -117,6 +117,10 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
+        if (Self->IsStoppedAfterSourceOffsetMismatch(replication->GetId())) {
+            Self->PendingHeartbeats.clear();
+            return true;
+        }
 
         ui32 i = 0;
         while (!Self->PendingHeartbeats.empty() && i++ < MaxBatchSize) {
@@ -129,33 +133,13 @@ public:
                 continue;
             }
 
-            auto& worker = Self->Workers[id];
-            if (worker.HasHeartbeat()) {
-                const auto& prevVersion = worker.GetHeartbeat();
-                if (version < prevVersion) {
-                    Self->PendingHeartbeats.erase(it);
-                    continue;
-                }
-
-                auto jt = Self->WorkersByHeartbeat.find(prevVersion);
-                if (jt != Self->WorkersByHeartbeat.end()) {
-                    jt->second.erase(id);
-                    if (jt->second.empty()) {
-                        Self->WorkersByHeartbeat.erase(jt);
-                    }
-                }
-            }
-
-            worker.SetHeartbeat(version);
-            Self->WorkersWithHeartbeat.insert(id);
-            Self->WorkersByHeartbeat[version].insert(id);
-
-            db.Table<Schema::Workers>().Key(id.ReplicationId(), id.TargetId(), id.WorkerId()).Update(
-                NIceDb::TUpdate<Schema::Workers::HeartbeatVersionStep>(version.Step),
-                NIceDb::TUpdate<Schema::Workers::HeartbeatVersionTxId>(version.TxId)
-            );
+            Self->SaveHeartbeat(id, version, db);
 
             Self->PendingHeartbeats.erase(it);
+        }
+
+        if (Self->IsMismatchBlockingCommit(replication->GetId(), ctx.Now())) {
+            return true;
         }
 
         const auto participants = Self->CountHeartbeatParticipants();
@@ -208,7 +192,7 @@ public:
             ctx.Send(MakeTxProxyID(), std::move(ev), 0, Self->CommittingTxId);
         }
 
-        if (HadHeartbeats) {
+        if (HadHeartbeats && Self->ReplicationsWithSourceOffsetMismatch.empty()) {
             Self->RunTxIndexBuild(ctx);
         }
 
@@ -222,6 +206,7 @@ public:
             Self->Execute(new TTxHeartbeat(Self), ctx);
         } else {
             Self->ProcessHeartbeatsInFlight = false;
+            Self->CheckDrains(ctx);
         }
     }
 
@@ -272,7 +257,9 @@ public:
                 {"issues", NYql::IssuesFromMessageAsString(record.GetIssues())});
             Self->TabletCounters->Cumulative()[COUNTER_ERROR_COMMITTING_CHANGES] += 1;
 
-            CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
+            if (!Self->IsMismatchBlockingCommit(replication->GetId(), ctx.Now())) {
+                CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
+            }
             return true;
         }
 
@@ -294,6 +281,9 @@ public:
         db.Table<Schema::TxIds>().Key(it->first.Step, it->first.TxId).Delete();
         it = Self->AssignedTxIds.erase(it);
         Self->CommittingTxId = 0;
+        if (Self->IsMismatchBlockingCommit(replication->GetId(), ctx.Now())) {
+            return true;
+        }
 
         Self->AdvanceVerifyingSchemaBarriers(db);
 
@@ -391,6 +381,7 @@ void TController::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, 
             if (barrier != SchemaBarriers.end()
                 && replication
                 && replication->GetState() != TReplication::EState::Removing
+                && !ReplicationsWithSourceOffsetMismatch.contains(key.first)
                 && target)
             {
                 ctx.Send(MakeTxProxyID(),

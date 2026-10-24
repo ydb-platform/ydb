@@ -74,6 +74,12 @@ public:
             {"assigned", Self->AssignedTxIds.size()},
             {"allocated", Self->AllocatedTxIds.size()});
 
+        const auto replication = Self->GetSingle();
+        if (replication && Self->IsStoppedAfterSourceOffsetMismatch(replication->GetId())) {
+            Self->PendingTxId.clear();
+            return true;
+        }
+
         NIceDb::TNiceDb db(txc.DB);
 
         auto result = Process([&](const TRowVersion& version) -> TAssignResult {
@@ -186,6 +192,14 @@ public:
 }; // TTxAssignTxId
 
 void TController::AllocateTxIds(const TActorContext& ctx) {
+    const auto replication = GetSingle();
+    if (replication && ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
+        const auto* deadline = DrainDeadlines.FindPtr(replication->GetId());
+        // Only refill when admitted writers are waiting during the drain.
+        if (!deadline || ctx.Now() >= *deadline || (PendingTxId.empty() && PendingIndexTxIds.empty())) {
+            return;
+        }
+    }
     if (AllocateTxIdInFlight || AllocatedTxIds.size() >= MinAllocatedTxIds) {
         return;
     }

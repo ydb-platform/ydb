@@ -69,6 +69,7 @@ SRCS(
     tx_resolve_secret_result.cpp
     tx_run_worker.cpp
     tx_worker_error.cpp
+    tx_source_offset_report.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(replication.h)

@@ -169,6 +169,18 @@ private:
     void Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvIndexBuildProgress::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvSchemaChangeReport::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvSourceOffsetReport::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCheckDrain::TPtr& ev, const TActorContext& ctx);
+    bool TracksSourceOffsets(const TWorkerId& id) const;
+    bool HasSourceOffsetMismatchError(const TReplication& replication) const;
+    bool IsStoppedAfterSourceOffsetMismatch(ui64 replicationId) const;
+    bool IsMismatchBlockingCommit(ui64 replicationId, TInstant now) const;
+    void QueueReplicationWorkerStops(ui64 replicationId);
+    void SaveHeartbeat(const TWorkerId& id, const TRowVersion& version, NIceDb::TNiceDb& db);
+    void CheckDrains(const TActorContext&);
+    void DeleteProcessedSourceOffsets(ui64 replicationId, ui64 targetId, NIceDb::TNiceDb&);
+    void StopWorkersForMismatch(ui64 replicationId, bool drainStarted, const TActorContext& ctx);
+    void StartMismatchDrain(const TWorkerId& id, const TString& issue, NIceDb::TNiceDb& db, const TActorContext& ctx);
     void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
@@ -220,6 +232,8 @@ private:
     class TTxResolveSecretResult;
     class TTxResolveResourceIdResult;
     class TTxWorkerError;
+    class TTxSourceOffsetReport;
+    class TTxFinishDrain;
     class TTxAssignTxId;
     class TTxHeartbeat;
     class TTxIndexBuild;
@@ -253,7 +267,7 @@ private:
     void RunTxResolveDatabaseResult(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveSecretResult(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveResourceIdResult(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const TActorContext& ctx);
-    void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx);
+    void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx, bool sourceOffsetMismatch = false);
     void RunTxAssignTxId(const TActorContext& ctx);
     void RunTxHeartbeat(const TActorContext& ctx);
     void RunTxIndexBuild(const TActorContext& ctx);
@@ -320,6 +334,13 @@ private:
     TNodesManager NodesManager;
     THashMap<ui32, TSessionInfo> Sessions;
     THashMap<TWorkerId, TWorkerInfo> Workers;
+    struct TProcessedSourceOffset {
+        ui64 NextOffset = 0;
+        TMaybe<ui64> PersistedNextOffset;
+    };
+    THashMap<TWorkerId, TProcessedSourceOffset> ProcessedSourceOffsets;
+    THashMap<ui64, TInstant> DrainDeadlines;
+    THashSet<ui64> ReplicationsWithSourceOffsetMismatch;
     THashSet<std::pair<ui64, ui64>> CompleteWorkerSets;
     TMap<std::pair<ui64, ui64>, TSchemaBarrier> SchemaBarriers;
     THashMap<std::pair<ui64, ui64>, TActorId> SchemaChangeDstAlterers;
@@ -330,6 +351,8 @@ private:
 
     bool ProcessQueuesScheduled = false;
     static constexpr ui32 ProcessBatchLimit = 100;
+    static constexpr TDuration DrainCheckInterval = TDuration::Seconds(1);
+    static constexpr TDuration DrainTimeout = TDuration::Seconds(30);
     static constexpr TDuration RestoreSessionInterval = TDuration::Seconds(1);
     static constexpr TDuration BootPersistedWorkersDelay = TDuration::Seconds(10);
 

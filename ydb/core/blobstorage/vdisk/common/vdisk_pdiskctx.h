@@ -23,8 +23,9 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // Nonces of the chunks this VDisk owns, for sealing sectors without the PDisk. Filled from
     // TEvYardInitResult and from every TEvChunkReserveResult; a chunk index gets a new nonce each time it
-    // is reserved again, so a reservation must always be recorded. PDisk checks the nonce of every
-    // preformatted write, so a missing entry only means the ordinary write path is used.
+    // is reserved again, so a reservation must always be recorded, and a chunk allocated by a write (sync log)
+    // must be forgotten. A missing entry only means the ordinary write path is used; a wrong one makes PDisk
+    // refuse the write with ERROR, which stops the VDisk.
     ////////////////////////////////////////////////////////////////////////////
     class TChunkNonces {
     public:
@@ -36,6 +37,11 @@ namespace NKikimr {
             for (size_t i = 0; i < chunks.size(); ++i) {
                 Nonces[chunks[i]] = nonces[i];
             }
+        }
+
+        void Forget(ui32 chunkIdx) {
+            auto guard = Guard(Lock);
+            Nonces.erase(chunkIdx);
         }
 
         std::optional<ui64> Get(ui32 chunkIdx) const {

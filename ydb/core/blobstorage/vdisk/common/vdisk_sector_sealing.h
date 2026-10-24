@@ -1,10 +1,15 @@
 #pragma once
 
+#include "memusage.h"
 #include "vdisk_pdiskctx.h"
 
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 namespace NKikimr {
+
+    // A buffer for whole sectors to be written as they are: 4096-aligned for direct I/O without over-allocating,
+    // and, given a consumer, counted by it for as long as anyone (PDisk included) holds the buffer.
+    TRcBuf AllocateSectorBuffer(size_t size, const TMemoryConsumer *consumer = nullptr);
 
     // Turns an ordinary chunk write into PreformattedSectors: lays the payload out in whole sectors of a
     // page-aligned buffer and seals them (copy or encryption, canary, footer with nonce and hash) in the

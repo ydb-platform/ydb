@@ -196,6 +196,91 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         RecoverLegacyReplica(false, true);
     }
 
+    void CheckRejectedLegacyAttachmentCleanup(bool drop) {
+        TEnv env;
+        auto table = MakeTableDescription({
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        });
+        env.CreateTable("/Root", *table);
+        table->SetName("Dst");
+        FillReplicationConfig(*table->MutableReplicationConfig(), EReplicationMode::ReadOnly, EConsistencyLevel::Row);
+        env.CreateTable("/Root", *table);
+        const auto owner = env.GetPathId("/Root");
+        env.GetRuntime().Register(CreateDstCreator(env.GetSender(), owner.OwnerId,
+            env.GetYdbProxy(), "/Root", owner, 1, 1,
+            TReplication::ETargetKind::Table, "/Root/Source", "/Root/Dst",
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+        auto prepare = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDst>(env.GetSender());
+        const auto pendingPath = prepare->Get()->DstPathId;
+        env.GetRuntime().Send(prepare->Sender, env.GetSender(), new TEvPrivate::TEvPrepareAttachDstResult());
+        auto rejected = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->Status, NKikimrScheme::StatusPreconditionFailed);
+        UNIT_ASSERT_STRING_CONTAINS(rejected->Get()->Error, "Cannot claim a legacy replica without an owner");
+
+        // DONE and DROP clean up the path persisted before the failed attachment.
+        if (drop) {
+            env.GetRuntime().Register(CreateDstRemover(env.GetSender(), owner.OwnerId, env.GetYdbProxy(),
+                1, 1, TReplication::ETargetKind::Table, {}, pendingPath, owner));
+            auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDropDstResult>(env.GetSender());
+            UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+        } else {
+            env.GetRuntime().Register(CreateDstAlterer(env.GetSender(), owner.OwnerId, 1, 1,
+                TReplication::ETargetKind::Table, pendingPath, TReplication::EState::Done, owner));
+            auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvAlterDstResult>(env.GetSender());
+            UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+        }
+        const auto config = env.GetDescription("/Root/Dst").GetPathDescription().GetTable().GetReplicationConfig();
+        UNIT_ASSERT_VALUES_EQUAL_C(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY,
+            "Cleanup of a rejected attachment detached the legacy replication destination");
+    }
+
+    Y_UNIT_TEST(DoneAfterRejectedLegacyAttachment) {
+        CheckRejectedLegacyAttachmentCleanup(false);
+    }
+
+    Y_UNIT_TEST(DropAfterRejectedLegacyAttachment) {
+        CheckRejectedLegacyAttachmentCleanup(true);
+    }
+
+    void CheckLegacyReplicaCleanup(bool drop) {
+        TEnv env;
+        auto table = MakeTableDescription({
+            .Name = "Dst",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        });
+        FillReplicationConfig(*table->MutableReplicationConfig(), EReplicationMode::ReadOnly, EConsistencyLevel::Row);
+        env.CreateTable("/Root", *table);
+        const auto owner = env.GetPathId("/Root");
+        const auto dstPathId = env.GetPathId("/Root/Dst");
+        if (drop) {
+            env.GetRuntime().Register(CreateDstRemover(env.GetSender(), owner.OwnerId, env.GetYdbProxy(),
+                1, 1, TReplication::ETargetKind::Table, {}, dstPathId, owner, false /* requireTargetOwnership */));
+            auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDropDstResult>(env.GetSender());
+            UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+        } else {
+            env.GetRuntime().Register(CreateDstAlterer(env.GetSender(), owner.OwnerId, 1, 1,
+                TReplication::ETargetKind::Table, dstPathId, TReplication::EState::Done, owner, false /* requireTargetOwnership */));
+            auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvAlterDstResult>(env.GetSender());
+            UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
+        }
+        const auto config = env.GetDescription("/Root/Dst").GetPathDescription().GetTable().GetReplicationConfig();
+        UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+        UNIT_ASSERT(!config.HasOwner());
+    }
+
+    Y_UNIT_TEST(LegacyReplicaDone) {
+        CheckLegacyReplicaCleanup(false);
+    }
+
+    Y_UNIT_TEST(LegacyAttachmentDrop) {
+        CheckLegacyReplicaCleanup(true);
+    }
+
     Y_UNIT_TEST(CleanupDuringOwnerTakeover) {
         TEnv env(true, ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
@@ -282,9 +367,9 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         PrepareAttachDst(env);
         UNIT_ASSERT(result()->Get()->IsSuccess());
 
-        auto done = [&](const TPathId& owner) {
+        auto done = [&](const TPathId& owner, bool requireTargetOwnership = true) {
             env.GetRuntime().Register(CreateDstAlterer(env.GetSender(), owner1.OwnerId, 1, 1,
-                TReplication::ETargetKind::Table, dstPathId, TReplication::EState::Done, owner));
+                TReplication::ETargetKind::Table, dstPathId, TReplication::EState::Done, owner, requireTargetOwnership));
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvAlterDstResult>(env.GetSender());
             UNIT_ASSERT_C(ev->Get()->IsSuccess(), ev->Get()->Error);
         };
@@ -295,6 +380,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         PrepareAttachDst(env);
         UNIT_ASSERT(result()->Get()->IsSuccess());
         done(owner1);
+        done(owner1, false /* requireTargetOwnership */);
         env.GetRuntime().Register(CreateDstRemover(env.GetSender(), owner1.OwnerId, env.GetYdbProxy(),
             1, 1, TReplication::ETargetKind::Table, dstPathId, {}, owner1));
         auto dropped = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDropDstResult>(env.GetSender());
@@ -606,7 +692,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         }
 
         createDstCreator(pendingDstPathId);
-        if (!attached && schemaChange == EAttachmentSchemaChange::None) {
+        if (schemaChange == EAttachmentSchemaChange::None) {
             PrepareAttachDst(env);
         }
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
@@ -752,6 +838,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                     *result->Record.MutablePathDescription()->MutableTable()->MutableReplicationConfig(),
                     EReplicationMode::ReadOnly,
                     EConsistencyLevel::Row);
+                databasePathId.ToProto(result->Record.MutablePathDescription()->MutableTable()
+                    ->MutableReplicationConfig()->MutableOwner());
                 result->Record.MutablePathDescription()->MutableSelf()->SetPathState(
                     NKikimrSchemeOp::EPathStateAlter);
             }
@@ -769,10 +857,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         allocate(100);
         describe(start == EAttachmentStart::RecoveredPublished || start == EAttachmentStart::FreshPublished);
-        if (!recovery) {
-            runtime.GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDst>(env.GetSender());
-            env.SendAsync(creator, new TEvPrivate::TEvPrepareAttachDstResult());
-        }
+        PrepareAttachDst(env);
         allocate(101);
         if (!beforeSubmission) {
             if (!recovery) {
@@ -791,6 +876,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             proposeResult(recovery ? 101 : 102, NKikimrScheme::StatusMultipleModifications);
             env.SendAsync(creator, new TEvents::TEvWakeup());
             describe(true);
+            PrepareAttachDst(env);
             allocate(103);
         }
 
@@ -831,6 +917,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             *completed->Record.MutablePathDescription()->MutableTable()->MutableReplicationConfig(),
             EReplicationMode::ReadOnly,
             EConsistencyLevel::Row);
+        databasePathId.ToProto(completed->Record.MutablePathDescription()->MutableTable()
+            ->MutableReplicationConfig()->MutableOwner());
         runtime.Send(creator, pipeCache, completed.Release());
         const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);

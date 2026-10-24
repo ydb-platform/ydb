@@ -213,10 +213,13 @@ ui64 TPortionMetaBase::GetMetadataDataSize() const {
     return GetBlobIds().size() * sizeof(TUnifiedBlobId);
 }
 
-TPortionMeta::TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max)
+TPortionMeta::TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max,
+    const std::vector<NScheme::TTypeInfo>& pkTypes, const NArrow::TComparator& comparator)
     : PKSchema(pk.GetSchema())
-    , FirstPKRow(pk.GetFirst().GetContent())
-    , LastPKRow(pk.GetLast().GetContent())
+    , PKTypes(pkTypes)
+    , Comparator(comparator)
+    , FirstPKRow(pk.GetFirst(pkTypes, comparator).GetContent())
+    , LastPKRow(pk.GetLast(pkTypes, comparator).GetContent())
     , RecordSnapshotMin(min)
     , RecordSnapshotMax(max)
 {
@@ -231,19 +234,19 @@ void TPortionMeta::FullValidation() const {
 }
 
 NArrow::TSimpleRow TPortionMeta::IndexKeyStart() const {
-    return FirstPKRow.Build(PKSchema);
+    return FirstPKRow.Build(PKSchema, PKTypes, Comparator);
 }
 
 NArrow::TSimpleRow TPortionMeta::IndexKeyEnd() const {
-    return LastPKRow.Build(PKSchema);
+    return LastPKRow.Build(PKSchema, PKTypes, Comparator);
 }
 
 NArrow::TSimpleRowRef TPortionMeta::IndexKeyStartRef() const {
-    return NArrow::TSimpleRowRef(IndexKeyViewStart(), *PKSchema);
+    return NArrow::TSimpleRowRef(IndexKeyViewStart(), *PKSchema, PKTypes, Comparator);
 }
 
 NArrow::TSimpleRowRef TPortionMeta::IndexKeyEndRef() const {
-    return NArrow::TSimpleRowRef(IndexKeyViewEnd(), *PKSchema);
+    return NArrow::TSimpleRowRef(IndexKeyViewEnd(), *PKSchema, PKTypes, Comparator);
 }
 
 NArrow::TSimpleRowViewV0 TPortionMeta::IndexKeyViewStart() const {
@@ -267,11 +270,11 @@ ui64 TPortionMeta::GetMetadataMemorySize() const {
 }
 
 ui64 TPortionMeta::GetMemorySize() const {
-    return sizeof(TPortionMeta) + FirstPKRow.GetMemorySize() + LastPKRow.GetMemorySize();
+    return sizeof(TPortionMeta) + PKTypes.capacity() * sizeof(NScheme::TTypeInfo) + FirstPKRow.GetMemorySize() + LastPKRow.GetMemorySize();
 }
 
 ui64 TPortionMeta::GetDataSize() const {
-    return sizeof(TPortionMeta) + FirstPKRow.GetDataSize() + LastPKRow.GetDataSize();
+    return sizeof(TPortionMeta) + PKTypes.size() * sizeof(NScheme::TTypeInfo) + FirstPKRow.GetDataSize() + LastPKRow.GetDataSize();
 }
 
 TPortionAddress::TPortionAddress(const TInternalPathId pathId, const ui64 portionId)

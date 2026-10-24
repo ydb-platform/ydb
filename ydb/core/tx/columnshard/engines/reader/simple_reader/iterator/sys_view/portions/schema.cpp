@@ -11,7 +11,8 @@ NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(const NColumnShard::TUnifiedPa
     writer.Append<ui64>(tabletId);
     writer.Append<ui64>(portionId);
 
-    return NArrow::TSimpleRow(writer.Finish(), GetPKSchema());
+    return NArrow::TSimpleRow(writer.Finish(), GetPKSchema(), std::vector<NScheme::TTypeInfo>(3, NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)),
+        NArrow::TComparator(NArrow::EDecimalComparisonMode::Legacy));
 }
 
 const std::shared_ptr<arrow::Schema>& TSchemaAdapter::GetPKSchema() {

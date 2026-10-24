@@ -92,8 +92,8 @@ public:
     }
 };
 
-std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
-    TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
+std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*recordsCount*/,
+    const NScheme::TTypeInfo& /*logicalType*/, const NArrow::TComparator& /*comparator*/) const {
     std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> result;
     ui32 chunkIdx = 0;
     for (reader.Start(); reader.IsCorrect(); reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount())) {

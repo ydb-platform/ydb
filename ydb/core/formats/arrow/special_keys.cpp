@@ -18,8 +18,9 @@ bool TSpecialKeys::DeserializeFromString(const TString& data) {
     return true;
 }
 
-TSimpleRow TSpecialKeys::GetKeyByIndex(const ui32 position) const {
-    return Rows.GetRecord(position, Schema);
+TSimpleRow TSpecialKeys::GetKeyByIndex(
+    const ui32 position, const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator) const {
+    return Rows.GetRecord(position, Schema, logicalTypes, comparator);
 }
 
 TString TSpecialKeys::SerializePayloadToString() const {
@@ -72,12 +73,13 @@ TFirstLastSpecialKeys::TFirstLastSpecialKeys(
     }
 }
 
-TMinMaxSpecialKeys::TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::shared_ptr<arrow::Schema>& schema) {
+TMinMaxSpecialKeys::TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::shared_ptr<arrow::Schema>& schema,
+    const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator) {
     Y_ABORT_UNLESS(batch);
     Y_ABORT_UNLESS(batch->num_rows());
     Y_ABORT_UNLESS(schema);
 
-    NMerger::TRWSortableBatchPosition record(batch, 0, schema->field_names(), {}, false);
+    NMerger::TRWSortableBatchPosition record(batch, 0, schema->field_names(), {}, false, logicalTypes, comparator);
     std::optional<NMerger::TCursor> minValue;
     std::optional<NMerger::TCursor> maxValue;
     while (true) {

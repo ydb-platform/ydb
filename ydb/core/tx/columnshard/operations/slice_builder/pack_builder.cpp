@@ -191,7 +191,9 @@ public:
                 dataSchema = indexInfo.GetColumnsSchemaByOrderedIndexes(indexes);
             }
             NArrow::NMerger::TMergePartialStream stream(context.GetActualSchema()->GetIndexInfo().GetReplaceKey(), dataSchema, false,
-                { IIndexInfo::GetWriteIdField()->name() }, std::nullopt, std::nullopt);
+                { IIndexInfo::GetWriteIdField()->name() }, std::nullopt, std::nullopt,
+                context.GetActualSchema()->GetIndexInfo().GetPrimaryKeyTypes(), { NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) },
+                context.GetActualSchema()->GetIndexInfo().GetComparator());
             for (auto&& i : containers) {
                 stream.AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -236,8 +238,9 @@ void TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) 
             writeResults.emplace_back(unit.GetData()->GetWriteMetaPtr(), unit.GetData()->GetSize(), nullptr, true, 0);
             continue;
         }
-        auto batches = NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInIntervalPositions(
-            originalBatch.GetContainer(), Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->field_names(), splitPositions);
+        auto batches = NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInIntervalPositions(originalBatch.GetContainer(),
+            Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->field_names(), splitPositions,
+            Context.GetActualSchema()->GetIndexInfo().GetPrimaryKeyTypes(), Context.GetActualSchema()->GetIndexInfo().GetComparator());
         std::shared_ptr<arrow::RecordBatch> pkBatch =
             NArrow::TColumnOperator().Extract(originalBatch.GetContainer(), Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
         writeResults.emplace_back(unit.GetData()->GetWriteMetaPtr(), unit.GetData()->GetSize(), pkBatch, false, originalBatch->num_rows());

@@ -59,19 +59,17 @@ TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& b
 std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob,
                                                      const std::shared_ptr<arrow::Schema>& schema);
 
-std::shared_ptr<arrow::RecordBatch> SortBatch(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique);
-std::shared_ptr<arrow::RecordBatch> SortBatch(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::shared_ptr<arrow::Array>>& sortingKey, const bool andUnique);
-bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch,
-    const std::shared_ptr<arrow::Schema>& sortingKey,
-    bool desc = false);
-bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
-                       const std::shared_ptr<arrow::Schema>& sortingKey,
-                       bool desc = false);
-void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
-                       const std::shared_ptr<arrow::Schema>& sortingKey,
-                       std::vector<std::shared_ptr<arrow::RecordBatch>>& out);
+std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
+    const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator, const bool andUnique);
+std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::vector<std::shared_ptr<arrow::Array>>& sortingKey, const std::vector<NScheme::TTypeInfo>& logicalTypes,
+    const TComparator& comparator, const bool andUnique);
+bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
+    const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator, bool desc = false);
+bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
+    const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator, bool desc = false);
+void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
+    const std::vector<NScheme::TTypeInfo>& logicalTypes, const TComparator& comparator, std::vector<std::shared_ptr<arrow::RecordBatch>>& out);
 
 [[nodiscard]] std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
 [[nodiscard]] std::shared_ptr<arrow::Table> ReallocateBatch(

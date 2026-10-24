@@ -13,7 +13,7 @@ size_t TReplaceKeyHelper::LowerBound(const std::vector<TRawReplaceKey>& batchKey
 }
 
 TReplaceKeyView TReplaceKey::GetView() const {
-    return TReplaceKeyView(*GetColumns(), GetPosition());
+    return TReplaceKeyView(*GetColumns(), GetPosition(), GetLogicalTypes(), GetComparator());
 }
 
 }   // namespace NKikimr::NArrow

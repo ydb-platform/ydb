@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/container/container.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
@@ -49,6 +50,11 @@ public:
     static const std::vector<std::string>& GetSnapshotColumnNames() {
         static const std::vector<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID),
             std::string(SPEC_COL_WRITE_ID) };
+        return result;
+    }
+
+    static const std::vector<NScheme::TTypeInfo>& GetSnapshotColumnTypes() {
+        static const std::vector<NScheme::TTypeInfo> result(3, NScheme::TTypeInfo(NScheme::NTypeIds::Uint64));
         return result;
     }
 

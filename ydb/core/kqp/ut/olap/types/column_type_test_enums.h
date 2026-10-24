@@ -8,6 +8,11 @@ enum EQueryMode {
     EXECUTE_QUERY
 };
 
+enum EIntervalTreeMode {
+    INTERVAL_TREE_ENABLED,
+    INTERVAL_TREE_DISABLED
+};
+
 enum ETableKind {
     COLUMNSHARD,
     DATASHARD

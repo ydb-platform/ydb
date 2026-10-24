@@ -54,15 +54,19 @@ std::vector<std::string> GetVersionColumns() {
 NArrow::NMerger::TBatchIterator MakeIterator(const std::shared_ptr<arrow::RecordBatch>& batch, ui64 sourceId) {
     auto keySchema = MakeKeySchema();
     auto dataSchema = MakeDataSchema();
-    return NArrow::NMerger::TBatchIterator(batch, nullptr, *keySchema, *dataSchema, GetVersionColumns(), sourceId);
+    return NArrow::NMerger::TBatchIterator(batch, nullptr, *keySchema, *dataSchema, GetVersionColumns(), sourceId,
+        NArrow::NMerger::TIterationOrder::Forward(0), { NScheme::TTypeInfo(NScheme::NTypeIds::Int32) },
+        { NScheme::TTypeInfo(NScheme::NTypeIds::Int32) }, NArrow::TComparator(NArrow::EDecimalComparisonMode::Legacy));
 }
 
 // Helper to create TEvRequestFilter::TPtr for testing
 TEvRequestFilter::TPtr MakeTestRequest(ui64 portionId, ui64 recordsCount, const std::shared_ptr<IFilterSubscriber>& subscriber) {
     // Create a minimal arrow batch for TSimpleRow construction
     auto batch = MakeTestBatch({ 0 }, { 0 });
-    NArrow::TSimpleRow minPK(batch, 0);
-    NArrow::TSimpleRow maxPK(batch, 0);
+    NArrow::TSimpleRow minPK(batch, 0, std::vector<NScheme::TTypeInfo>(2, NScheme::TTypeInfo(NScheme::NTypeIds::Int32)),
+        NArrow::TComparator(NArrow::EDecimalComparisonMode::Legacy));
+    NArrow::TSimpleRow maxPK(batch, 0, std::vector<NScheme::TTypeInfo>(2, NScheme::TTypeInfo(NScheme::NTypeIds::Int32)),
+        NArrow::TComparator(NArrow::EDecimalComparisonMode::Legacy));
 
     auto abortionFlag = std::make_shared<TAtomicCounter>(0);
 

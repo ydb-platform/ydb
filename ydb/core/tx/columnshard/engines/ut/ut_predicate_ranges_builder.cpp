@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         const TString fromBuf = TSerializedCellVec::Serialize(fromCells);
         const TString toBuf = TSerializedCellVec::Serialize(toCells);
 
-        TRangesBuilder builder(ydbPk, pkSchema);
+        TRangesBuilder builder(ydbPk, pkSchema, NArrow::TComparator(NArrow::EDecimalComparisonMode::Legacy));
         builder.AddRange(TSerializedTableRange(fromBuf, toBuf, false, false));
         auto filter = builder.Finish();
         UNIT_ASSERT_C(filter.IsSuccess(), filter.GetErrorMessage());
@@ -209,7 +209,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         UNIT_ASSERT(!ser.ToTableRange().IsEmptyRange(PairTsUtf8KeyTypes()));
         UNIT_ASSERT(!ser.ToTableRange().IsAmbiguousReason(2));
 
-        TRangesBuilder builder(ydbPk, pkSchema);
+        TRangesBuilder builder(ydbPk, pkSchema, NArrow::TComparator(NArrow::EDecimalComparisonMode::Legacy));
         builder.AddRange(std::move(ser));
         auto filter = builder.Finish();
         UNIT_ASSERT_C(filter.IsSuccess(), filter.GetErrorMessage());
@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         TSerializedTableRange ser(fromBuf, toBuf, false, true);
         UNIT_ASSERT(!ser.ToTableRange().IsAmbiguousReason(2));
 
-        TRangesBuilder builder(ydbPk, pkSchema);
+        TRangesBuilder builder(ydbPk, pkSchema, NArrow::TComparator(NArrow::EDecimalComparisonMode::Legacy));
         builder.AddRange(std::move(ser));
         auto filter = builder.Finish();
         UNIT_ASSERT_C(filter.IsSuccess(), filter.GetErrorMessage());
@@ -268,7 +268,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         TSerializedTableRange ser(fromBuf, toBuf, false, true);
         UNIT_ASSERT(!ser.ToTableRange().IsAmbiguousReason(2));
 
-        TRangesBuilder builder(ydbPk, pkSchema);
+        TRangesBuilder builder(ydbPk, pkSchema, NArrow::TComparator(NArrow::EDecimalComparisonMode::Legacy));
         builder.AddRange(std::move(ser));
         auto filter = builder.Finish();
         UNIT_ASSERT_C(filter.IsSuccess(), filter.GetErrorMessage());
@@ -430,7 +430,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         TSerializedTableRange ser(TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), true, false);
         UNIT_ASSERT(!ser.ToTableRange().IsAmbiguousReason(2));
 
-        TRangesBuilder builder(ydbPk, pkSchema);
+        TRangesBuilder builder(ydbPk, pkSchema, NArrow::TComparator(NArrow::EDecimalComparisonMode::Legacy));
         builder.AddRange(std::move(ser));
         auto filter = builder.Finish();
         UNIT_ASSERT_C(filter.IsSuccess(), filter.GetErrorMessage());
@@ -706,7 +706,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         t1.push_back(TCell::Make(200ULL));
         t1.push_back(TCell("d", 1));
 
-        TRangesBuilder builder(ydbPk, pkSchema);
+        TRangesBuilder builder(ydbPk, pkSchema, NArrow::TComparator(NArrow::EDecimalComparisonMode::Legacy));
         builder.AddRange(TSerializedTableRange(TSerializedCellVec::Serialize(f0), TSerializedCellVec::Serialize(t0), true, true));
         builder.AddRange(TSerializedTableRange(TSerializedCellVec::Serialize(f1), TSerializedCellVec::Serialize(t1), true, true));
         auto filter = builder.Finish();
@@ -734,7 +734,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         UNIT_ASSERT(ser.Point);
         UNIT_ASSERT(!ser.ToTableRange().IsAmbiguousReason(2));
 
-        TRangesBuilder builder(ydbPk, pkSchema);
+        TRangesBuilder builder(ydbPk, pkSchema, NArrow::TComparator(NArrow::EDecimalComparisonMode::Legacy));
         builder.AddRange(std::move(ser));
         auto filter = builder.Finish();
         UNIT_ASSERT_C(filter.IsSuccess(), filter.GetErrorMessage());
@@ -935,7 +935,7 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         TConstArrayRef<TCell> ref1(c1);
         TTableRange pt0(ref0);
         TTableRange pt1(ref1);
-        TRangesBuilder builder(ydbPk, pkSchema);
+        TRangesBuilder builder(ydbPk, pkSchema, NArrow::TComparator(NArrow::EDecimalComparisonMode::Legacy));
         builder.AddRange(TSerializedTableRange(pt0));
         builder.AddRange(TSerializedTableRange(pt1));
         auto filter = builder.Finish();

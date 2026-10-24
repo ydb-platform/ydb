@@ -1009,9 +1009,10 @@ namespace NKikimr::NStorage {
         const NKikimrConfig::TBridgeConfig *currentBridgeConfig, bool *pileListChanged);
 
     // Turn the config of ordinary (not bridged) cluster into the config of the single-pile bridged one: add ClusterState
-    // and make every static group an inline pile of itself.
+    // and make every static group an inline pile of itself. BSC converts its groups afterwards unless they are kept
+    // ordinary ones, which activates non-uniform storage.
     std::optional<TString> ConvertStorageConfigToBridge(NKikimrBlobStorage::TStorageConfig *config,
-        const NKikimrConfig::TBridgeConfig& bridgeConfig);
+        const NKikimrConfig::TBridgeConfig& bridgeConfig, bool keepOrdinaryStorage = false);
 
     // Make VDisks of the static groups follow their new generations (each one is bumped by one); donors and VDisks being
     // destroyed have older generations and keep them.

@@ -68,6 +68,9 @@ message UpdateClusterStateResult {
 // GetClusterStateResult.conversion_in_progress.
 message ConvertToBridgeRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+    // Keep storage pools and their groups ordinary ones; only the system storage becomes bridged. The bridge config
+    // must enable non-uniform storage, which gets activated along with the conversion.
+    bool keep_ordinary_storage = 2;
 }
 
 message ConvertToBridgeResponse {

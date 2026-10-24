@@ -166,6 +166,11 @@ namespace NKikimr {
                 groupId));
         }
 
+        // Pile whose part of the bridged group is the only one sure to hold everything written to the group: the one
+        // designated in TGroupState.AuthorityPileId, or the one of the only part of the group. Invalid pile id means
+        // that parts in synchronized piles hold everything, as it is the case for the groups following pile states.
+        TBridgePileId GetAuthorityPileId(const NKikimrBridge::TGroupState& state);
+
         // Pile of the operation changing the set of piles which is pending, or invalid pile id if there is none.
         inline TBridgePileId GetPendingPileOperationPileId(const NKikimrBridge::TClusterStateDetails& details) {
             return details.HasPendingPileOperation()
@@ -235,8 +240,10 @@ namespace NKikimr {
 
         // Inline pile is the group serving as the only pile of its own (this is what groups of the cluster converted
         // from non-bridged one become): pile 0 of the group references the group itself with its current generation.
-        void MakeInlinePileGroupState(NKikimrBridge::TGroupState *state, TGroupId groupId, ui32 generation);
+        // Ordinary group of the multi-pile cluster becomes inline pile in the pile it resides in.
         TBridgePileId GetInlinePileId();
+        void MakeInlinePileGroupState(NKikimrBridge::TGroupState *state, TGroupId groupId, ui32 generation,
+            TBridgePileId bridgePileId = GetInlinePileId());
         // make the group (with its id and generation already filled in) an inline pile
         void MakeInlinePile(NKikimrBlobStorage::TGroupInfo *group);
 

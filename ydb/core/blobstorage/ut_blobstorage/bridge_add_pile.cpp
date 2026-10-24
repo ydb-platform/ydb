@@ -129,6 +129,36 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
         }
     }
 
+    // groups kept ordinary ones at conversion get no parts in the added pile, while static groups do
+    Y_UNIT_TEST(ConvertedOneToTwoKeepingOrdinary) {
+        const auto named = std::make_shared<bool>(false);
+        TEnvironmentSetup env(MakeConvertedClusterSettings(named));
+        TDataChecker checker(env);
+        const ui32 groupId = ConvertCluster(env, checker, 1, true);
+        const ui32 staticGroupId = 0;
+        checker.Write(staticGroupId);
+
+        NameConvertedClusterNodes(env, *named, [&] {
+            checker.Write(groupId);
+            checker.CheckAll();
+        });
+        auto res = AddPileToConfig(env, "pile_2", 10, 17);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        StartPileNodes(env, "pile_2", 10, 17);
+        AddPileAndWait(env, "pile_2");
+        UNIT_ASSERT_VALUES_EQUAL(CheckPileParts(env, 1, 10, 17), 0); // no dynamic bridged groups
+        RejoinPile(env, 1);
+
+        const auto info = GetGroupInfo(env, groupId);
+        UNIT_ASSERT_C(!info.HasBridgeGroupState(), info.ShortDebugString());
+        for (ui32 nodeId : {1u, 10u}) {
+            checker.Write(groupId, nodeId);
+            checker.Write(staticGroupId, nodeId);
+            checker.CheckAll(nodeId);
+        }
+    }
+
     // nothing gets committed when there are not enough resources in the pile, neither for static groups, nor for the
     // groups of BSC; nodes of the pile don't have to be running to add it
     Y_UNIT_TEST(NotEnoughResources) {

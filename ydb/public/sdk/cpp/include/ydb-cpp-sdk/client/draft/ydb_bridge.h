@@ -15,7 +15,10 @@ struct TUpdateClusterStateSettings : public TOperationRequestSettings<TUpdateClu
 
 struct TGetClusterStateSettings : public TOperationRequestSettings<TGetClusterStateSettings> {};
 
-struct TConvertToBridgeSettings : public TOperationRequestSettings<TConvertToBridgeSettings> {};
+struct TConvertToBridgeSettings : public TOperationRequestSettings<TConvertToBridgeSettings> {
+    // Keep storage pools and their groups ordinary ones; requires the bridge config to enable non-uniform storage
+    FLUENT_SETTING_DEFAULT(bool, KeepOrdinaryStorage, false);
+};
 
 struct TAddPileSettings : public TOperationRequestSettings<TAddPileSettings> {};
 

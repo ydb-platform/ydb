@@ -1,3 +1,4 @@
+* Added `--keep-ordinary-storage` option to `ydb admin bridge convert` to keep storage pools and their groups ordinary when converting a cluster into a bridged one.
 * Added `ydb admin bridge remove-pile` command to remove a DISCONNECTED pile from a bridged cluster along with all its data (asks for confirmation unless `-y` is given).
 * Added `ydb admin bridge add-pile` command to add a pile listed in the bridge config to a running bridged cluster, and the pending pile operation to the output of `ydb admin bridge list`.
 

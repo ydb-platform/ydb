@@ -26,3 +26,9 @@ def _RUST_CONFIGURE(unit: ymake.Unit):
 
     macros = values(unit, "_RUST_PROC_MACROS")
     unit.set(["_RUST_PROC_TOOLS", " ".join('${tool:"' + path + '"}' for path in macros)])
+
+    tools = []
+    for value in values(unit, "_RUST_BUILD_TOOLS"):
+        name, path = value.split("=", 1)
+        tools.append(name + '=${tool:"' + path + '"}')
+    unit.set(["_RUST_BUILD_TOOL_ENV", " ".join(tools)])

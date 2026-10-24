@@ -44,6 +44,7 @@ def toolchain_environment(args, work):
         "CARGO_PKG_VERSION": args.version,
         "CC": env["HOST_CC"],
         "CXX": env["HOST_CXX"],
+        "AR": env["HOST_AR"],
         "CFLAGS": shlex.join(["-I" + str(args.source_root.resolve()), "--target=" + target]),
         "CXXFLAGS": shlex.join(["-I" + str(args.source_root.resolve()), "--target=" + target]),
     })
@@ -56,6 +57,8 @@ def toolchain_environment(args, work):
             if isinstance(value, (str, list)):
                 env["CARGO_PKG_" + key.upper().replace("-", "_")] = ":".join(value) if isinstance(value, list) else value
         env["CARGO_MANIFEST_PATH"] = str(args.manifest.resolve())
+        if "links" in manifest.get("package", {}):
+            env["CARGO_MANIFEST_LINKS"] = manifest["package"]["links"]
     version = env["CARGO_PKG_VERSION"]
     parts = version.split("-", 1)
     for key, value in zip(("MAJOR", "MINOR", "PATCH"), parts[0].split(".")):

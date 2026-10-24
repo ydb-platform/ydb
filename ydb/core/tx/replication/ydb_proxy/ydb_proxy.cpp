@@ -236,7 +236,12 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
             if (AutoCommit) {
                 DeferredCommit.Add(*x);
             }
-            return (void)Send(ev->Get()->Sender, new TEvYdbProxy::TEvReadTopicResponse(*x), 0, ev->Get()->Cookie);
+            try {
+                return (void)Send(ev->Get()->Sender, new TEvYdbProxy::TEvReadTopicResponse(*x), 0, ev->Get()->Cookie);
+            } catch (...) {
+                auto status = TStatus(EStatus::EXTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage())});
+                return Leave(ev->Get()->Sender, std::move(status));
+            }
         } else if (auto* x = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
             PartitionEndWatcher.SetCommittedOffset(x->GetCommittedOffset() - 1, ev->Get()->Sender);
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);

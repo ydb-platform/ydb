@@ -1,0 +1,12 @@
+{
+    malloc;
+    free;
+    calloc;
+    realloc;
+    memalign;
+    posix_memalign;
+    aligned_alloc;
+    valloc;
+    pvalloc;
+    malloc_usable_size;
+};

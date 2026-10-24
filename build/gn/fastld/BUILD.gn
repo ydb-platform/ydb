@@ -1,0 +1,26 @@
+config("fastld_private_config") {
+    cflags_c = [
+        "-std=gnu11",
+        "-Wextra",
+        "-fno-builtin-malloc",
+        "-fno-builtin-free",
+        "-fno-builtin-calloc",
+        "-fno-builtin-realloc",
+    ]
+    ldflags = [
+        "-Wl,--dynamic-list=" + rebase_path("fastld.dynlist", root_build_dir),
+        "-Wl,--no-as-needed",
+    ]
+}
+
+executable("fastld") {
+    sources = [ "fastld.c" ]
+    inputs = [ "fastld.dynlist" ]
+    deps = []
+    configs -= [
+        "//build/gn/config:std_string",
+        "//build/gn/config:ydb_embedded_nbs",
+        "//build/gn/config:yql_abi",
+    ]
+    configs += [ ":fastld_private_config" ]
+}

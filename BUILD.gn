@@ -85,6 +85,7 @@ group("all") {
 group("tests") {
     testonly = true
     deps = [
+        "//build/gn/fastld",
         "//util/charset/ut",
         "//util/datetime/ut",
         "//util/digest/ut",

@@ -4,6 +4,7 @@
 #include "local_rate_limiter.h"
 
 #include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/base/base.h>
 
 #include <ydb/public/api/protos/ydb_clickhouse_internal.pb.h>
@@ -122,7 +123,7 @@ template <ui32 TRpcId, typename TReq, typename TResp>
 void TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp>::RefreshToken(const TString& token, const TActorContext& ctx, TActorId id, NWilson::TTraceId traceId) {
     using TSelf = typename std::remove_pointer<decltype(this)>::type;
     using TRefreshToken = typename TRefreshTokenTypeForRequest<TSelf>::type;
-    RefreshTokenSendRequest(ctx, new TRefreshToken(token, this->GetDatabaseName().GetOrElse(""), GetPeerName(), GetTraceId().GetOrElse(""), id), std::move(traceId));
+    RefreshTokenSendRequest(ctx, new TRefreshToken(token, CanonizePath(this->GetDatabaseName().GetOrElse("")), GetPeerName(), GetTraceId().GetOrElse(""), id), std::move(traceId));
 }
 
 template <ui32 TRpcId>

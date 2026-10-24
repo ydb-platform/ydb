@@ -1181,6 +1181,7 @@ public:
     TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond,
              std::optional<TExpression> offsetCond, const EOpPhase limitPhase);
 
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     const TUnorderedIUs& GetUniqueRawInputIUs() const override;
     virtual TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;

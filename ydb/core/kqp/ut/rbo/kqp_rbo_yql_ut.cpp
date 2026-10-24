@@ -8247,11 +8247,15 @@ FROM (
                 PRAGMA YqlSelect = 'force';
                 SELECT bar.id FROM `/Root/bar` as bar where bar.id == 0 AND NOT EXISTS (SELECT foo.id FROM `/Root/foo` as foo WHERE foo.id == 6);
             )",
+            R"(
+                SELECT bar.id FROM `/Root/bar` as bar where bar.id == 0 AND (SELECT foo.id FROM `/Root/foo` as foo where foo.id == -1) IS NULL;
+            )",
         };
 
         // TODO: The order of result is not defined, we need order by to add more interesting tests.
         std::vector<std::string> results = {
             R"([[3]])",
+            R"([[0]])",
             R"([[0]])",
             R"([[0]])",
             R"([[0]])",

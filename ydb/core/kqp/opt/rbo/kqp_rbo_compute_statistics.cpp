@@ -829,6 +829,23 @@ void TOpUnionAll::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     }
 }
 
+void TOpLimit::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    IUnaryOperator::ComputeMetadata(ctx, planProps);
+    if (!HasOffset() && GetLimitCond().IsLiteralOne()) {
+        switch(Props.Metadata->LogicalCard) {
+            case ELogicalCardinality::OneOrMore:
+            case ELogicalCardinality::One:
+                Props.Metadata->LogicalCard = ELogicalCardinality::One;
+                break;
+            case ELogicalCardinality::Zero:
+                break;
+            default:
+                Props.Metadata->LogicalCard = ELogicalCardinality::ZeroOrOne;
+                break;
+        }
+    }
+}
+
 void TOpCBOTree::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     for (auto op: TreeNodes) {
         op->ComputeMetadata(ctx, planProps);

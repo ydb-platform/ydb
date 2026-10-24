@@ -4,17 +4,23 @@
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/mock/yql_mock.h>
+#include <ydb/core/fq/libs/wasm_services/mock/tvm.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/testlib/test_client.h>
 
+#include <ydb/library/actors/wilson/wilson_uploader.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 #include <ydb/library/grpc/server/actors/logger.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/tests/tools/kqprun/runlib/kikimr_setup.h>
 
 #include <library/cpp/colorizer/colors.h>
 #include <library/cpp/protobuf/interop/cast.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/testing/unittest/tests_data.h>
+#include <util/stream/file.h>
+#include <util/string/hex.h>
 #include <yql/essentials/utils/log/log.h>
 
 using namespace NKikimrRun;
@@ -22,6 +28,51 @@ using namespace NKikimrRun;
 namespace NFqRun {
 
 namespace {
+
+class TLocalTraceCollector: public NActors::TActorBootstrapped<TLocalTraceCollector> {
+public:
+    using TSpans = TVector<opentelemetry::proto::trace::v1::Span>;
+
+    struct TEvSnapshot: NActors::TEventLocal<TEvSnapshot, NActors::TEvents::ES_PRIVATE * 65536 + 77> {
+        NThreading::TPromise<TSpans> Promise;
+
+        explicit TEvSnapshot(NThreading::TPromise<TSpans> promise)
+            : Promise(std::move(promise))
+        {
+        }
+    };
+
+    void Bootstrap() {
+        Become(&TLocalTraceCollector::StateWork);
+    }
+
+    void Handle(NWilson::TEvWilson::TPtr& ev) {
+        const auto bytes = ev->Get()->Span.ByteSizeLong();
+        if (Spans.size() >= 10000 || bytes > (16 << 20) - Bytes) {
+            ++Dropped;
+            return;
+        }
+        Bytes += bytes;
+        Spans.push_back(std::move(ev->Get()->Span));
+    }
+
+    void Handle(TEvSnapshot::TPtr& ev) {
+        if (Dropped) {
+            Cerr << "Tracing: dropped " << Dropped << " spans at local capture limit" << Endl;
+        }
+        ev->Get()->Promise.SetValue(std::move(Spans));
+        Bytes = 0;
+    }
+
+    STRICT_STFUNC(StateWork,
+        hFunc(NWilson::TEvWilson, Handle);
+        hFunc(TEvSnapshot, Handle);
+    );
+
+private:
+    TSpans Spans;
+    size_t Bytes = 0, Dropped = 0;
+};
 
 TRequestResult GetStatus(const NYql::TIssues& issues) {
     return TRequestResult(issues ? Ydb::StatusIds::BAD_REQUEST : Ydb::StatusIds::SUCCESS, issues);
@@ -37,6 +88,9 @@ private:
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
         auto serverSettings = TBase::GetServerSettings(Settings, grpcPort, Settings.VerbosityLevel >= EVerbosity::InitLogs);
 
+        // This embedded KQP serves FQ metadata/storage. WASM calls execute in
+        // the separately configured FQ proxy, which selects LOCAL_FILES below.
+        serverSettings.AppConfig->MutableFederatedQueryConfig()->MutableWasmServices()->SetEnabled(false);
         serverSettings.SetEnableYqGrpc(true);
 
         return serverSettings;
@@ -56,9 +110,25 @@ private:
 
     NFq::NConfig::TConfig GetFqProxyConfig(ui32 grpcPort) const {
         auto fqConfig = Settings.AppConfig.GetFederatedQueryConfig();
+        if (Settings.TraceFile) {
+            fqConfig.MutableWasmServices()->SetTraceSamplePerMillion(1000000);
+        }
 
         fqConfig.MutableControlPlaneStorage()->AddSuperUsers(BUILTIN_ACL_ROOT);
         fqConfig.MutablePrivateProxy()->AddGrantedUsers(BUILTIN_ACL_ROOT);
+
+        if (fqConfig.GetWasmServices().GetEnabled()) {
+            fqConfig.MutableWasmServices()->SetModuleSource(NFq::NConfig::TWasmServicesConfig::LOCAL_FILES);
+            auto* storage = fqConfig.MutableControlPlaneStorage();
+            if (Find(storage->GetAvailableConnection(), "EXTERNAL_SERVICE") == storage->GetAvailableConnection().end()) {
+                storage->AddAvailableConnection("EXTERNAL_SERVICE");
+            }
+            // An empty streaming list inherits AvailableConnection in FQ.
+            if (storage->AvailableStreamingConnectionSize() &&
+                Find(storage->GetAvailableStreamingConnection(), "EXTERNAL_SERVICE") == storage->GetAvailableStreamingConnection().end()) {
+                storage->AddAvailableStreamingConnection("EXTERNAL_SERVICE");
+            }
+        }
 
         const TString endpoint = TStringBuilder() << "localhost:" << grpcPort;
         const TString database = NKikimr::CanonizePath(Settings.DomainName);
@@ -84,7 +154,9 @@ private:
         }
 
         auto& cpStorage = *fqConfig.MutableControlPlaneStorage();
-        cpStorage.SetUseInMemory(!Settings.EnableCpStorage);
+        // The in-memory implementation acknowledges ControlQuery without
+        // applying it. Service calls need real cancellation via the pinger.
+        cpStorage.SetUseInMemory(!Settings.EnableCpStorage && !fqConfig.GetWasmServices().GetEnabled());
         fillStorageConfig(cpStorage.MutableStorage(), Settings.CpStorageDatabase);
         fillStorageConfig(fqConfig.MutableDbPool()->MutableStorage(), Settings.CpStorageDatabase);
 
@@ -147,7 +219,7 @@ private:
     void InitializeFqProxy(ui32 grpcPort) {
         const auto& fqConfig = GetFqProxyConfig(grpcPort);
         if (Settings.VerbosityLevel >= EVerbosity::InitLogs) {
-            Cout << "FQ config:\n" << fqConfig.DebugString() << Endl;
+            Cout << "FQ config:\n" << NKikimr::SecureDebugStringMultiline(fqConfig) << Endl;
         }
 
         const auto counters = GetRuntime()->GetAppData().Counters->GetSubgroup("counters", "yq");
@@ -163,7 +235,8 @@ private:
         };
 
         NFq::Init(fqConfig, GetRuntime()->GetNodeId(), actorRegistrator, &GetRuntime()->GetAppData(), Settings.DomainName, nullptr,
-            YqSharedResources, folderServiceFactory, 0, {}, Settings.PqGatewayFactory);
+            YqSharedResources, folderServiceFactory, 0, {}, Settings.PqGatewayFactory,
+            Settings.MockTvm ? NFq::NWasmServices::CreateMockTvmTicketProvider(TDuration::MilliSeconds(Settings.MockTvmDelayMs)) : nullptr);
         YqSharedResources->Init(GetRuntime()->GetActorSystem(0));
     }
 
@@ -197,6 +270,10 @@ public:
 
         InitializeYqlLogger();
         InitializeServer(grpcPort);
+        if (Settings.TraceFile) {
+            TraceCollector = GetRuntime()->Register(new TLocalTraceCollector);
+            GetRuntime()->RegisterService(NWilson::MakeWilsonUploaderId(), TraceCollector);
+        }
         InitializeFqProxy(grpcPort);
         InitializeTenantNodes();
 
@@ -207,6 +284,30 @@ public:
     }
 
     ~TImpl() {
+        if (TraceCollector) {
+            try {
+                auto promise = NThreading::NewPromise<TLocalTraceCollector::TSpans>();
+                GetRuntime()->GetActorSystem(0)->Send(TraceCollector, new TLocalTraceCollector::TEvSnapshot(promise));
+                Y_ENSURE(promise.GetFuture().Wait(TDuration::Seconds(5)), "trace snapshot timed out");
+                TFileOutput out(Settings.TraceFile);
+                for (auto span : promise.GetFuture().GetValueSync()) {
+                    span.set_trace_id(HexEncode(span.trace_id()));
+                    span.set_span_id(HexEncode(span.span_id()));
+                    span.set_parent_span_id(HexEncode(span.parent_span_id()));
+                    if (span.name() == "SQL execution") {
+                        for (const auto& attr : span.attributes()) {
+                            if (attr.key() == "query_id") {
+                                Cout << "Query " << attr.value().string_value() << " trace_id=" << span.trace_id() << Endl;
+                            }
+                        }
+                    }
+                    NProtobufJson::Proto2Json(span, out, NProtobufJson::TProto2JsonConfig());
+                    out << '\n';
+                }
+            } catch (const std::exception& e) {
+                Cerr << "Tracing export failed: " << e.what() << Endl;
+            }
+        }
         if (YqSharedResources) {
             YqSharedResources->Stop();
         }
@@ -223,6 +324,14 @@ public:
 
         return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvDescribeQueryRequest,
             NFq::TEvControlPlaneProxy::TEvDescribeQueryResponse>(request, options);
+    }
+
+    NFq::TEvControlPlaneProxy::TEvControlQueryResponse::TPtr AbortQuery(const TString& queryId, const TFqOptions& options) const {
+        FederatedQuery::ControlQueryRequest request;
+        request.set_query_id(queryId);
+        request.set_action(FederatedQuery::ABORT);
+        return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvControlQueryRequest,
+            NFq::TEvControlPlaneProxy::TEvControlQueryResponse>(request, options);
     }
 
     NFq::TEvControlPlaneProxy::TEvGetResultDataResponse::TPtr FetchQueryResults(
@@ -243,6 +352,18 @@ public:
 
         return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvCreateConnectionRequest,
             NFq::TEvControlPlaneProxy::TEvCreateConnectionResponse>(request, options);
+    }
+
+    NFq::TEvControlPlaneProxy::TEvListConnectionsResponse::TPtr ListConnections(
+        const TString& name, const TString& pageToken, const TFqOptions& options) const {
+        FederatedQuery::ListConnectionsRequest request;
+        request.set_limit(100);
+        request.set_page_token(pageToken);
+        request.mutable_filter()->set_name(name);
+        request.mutable_filter()->set_created_by_me(true);
+        request.mutable_filter()->set_visibility(FederatedQuery::Acl::PRIVATE);
+        return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvListConnectionsRequest,
+            NFq::TEvControlPlaneProxy::TEvListConnectionsResponse>(request, options);
     }
 
     NFq::TEvControlPlaneProxy::TEvCreateBindingResponse::TPtr CreateBinding(
@@ -333,7 +454,9 @@ private:
 
         GetRuntime()->Send(controlPlaneProxy, edgeActor, event.release());
 
-        return GetRuntime()->GrabEdgeEvent<TResponse>(edgeActor);
+        auto response = GetRuntime()->GrabEdgeEvent<TResponse>(edgeActor, IsInterrupted() ? CancellationTimeout() : TDuration::Seconds(30));
+        Y_ENSURE(response, "Timed out waiting for FQ control plane response");
+        return response;
     }
 
 private:
@@ -345,12 +468,17 @@ private:
     NFq::IYqSharedResources::TPtr YqSharedResources;
     TPortManager PortManager;
 
+    NActors::TActorId TraceCollector;
     std::optional<NActors::TActorId> AsyncQueryRunnerActorId;
 };
 
 TFqSetup::TFqSetup(const TFqSetupSettings& settings)
     : Impl(new TImpl(settings))
 {
+}
+
+TRequestResult TFqSetup::AbortQuery(const TString& queryId, const TFqOptions& options) const {
+    return GetStatus(Impl->AbortQuery(queryId, options)->Get()->Issues);
 }
 
 TRequestResult TFqSetup::QueryRequest(const TRequestOptions& query, TString& queryId) const {
@@ -396,6 +524,27 @@ TRequestResult TFqSetup::CreateConnection(
     connectionId = response->Get()->Result.connection_id();
 
     return GetStatus(response->Get()->Issues);
+}
+
+TRequestResult TFqSetup::FindConnection(const TString& name, const TFqOptions& options, TString& connectionId) const {
+    connectionId.clear();
+    TString pageToken;
+    do {
+        const auto response = Impl->ListConnections(name, pageToken, options);
+        const auto status = GetStatus(response->Get()->Issues);
+        if (!status.IsSuccess()) {
+            return status;
+        }
+        for (const auto& connection : response->Get()->Result.connection()) {
+            if (connection.content().name() == name) {
+                Y_ENSURE(connection.content().setting().has_external_service(), "Existing connection is not an ExternalService: " << name);
+                connectionId = connection.meta().id();
+                return status;
+            }
+        }
+        pageToken = response->Get()->Result.next_page_token();
+    } while (!pageToken.empty());
+    return GetStatus({});
 }
 
 TRequestResult TFqSetup::CreateBinding(const FederatedQuery::BindingContent& binding, const TFqOptions& options) const {

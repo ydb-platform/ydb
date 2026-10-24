@@ -2,6 +2,7 @@
 #include "blobstorage_skeletonfront.h"
 #include "blobstorage_skeletonerr.h"
 #include "blobstorage_skeleton.h"
+#include "skeleton_vrestore_part.h"
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/base/html.h>
@@ -1148,6 +1149,14 @@ namespace NKikimr {
                         str << "SkeletonFront";
                     }
                     DIV_CLASS("panel-body") {
+                        str << "<form method=\"get\" action=\"../../restore_part\" class=\"form-inline\">"
+                            << "<input type=\"hidden\" name=\"VDiskId\" value=\"" << SelfVDiskId.ToString() << "\">"
+                            << "<label for=\"restore-part\">VRestorePart on this VDisk: </label> "
+                            << "<input id=\"restore-part\" name=\"BlobId\" type=\"text\" size=\"64\" required "
+                            << "placeholder=\"[tablet:gen:step:channel:cookie:blobsize:partid]\"> "
+                            << "<button type=\"submit\" class=\"btn btn-default\">VRestorePart</button>"
+                            << "<p>PartId must be nonzero. Returns JSON when the part is written; "
+                            << "timeout is 30 seconds (optional timeout parameter: 1..300 seconds).</p></form>";
                         DIV_CLASS("row") {
                             // global VDisk state and SkeletonFront State
                             DIV_CLASS("col-md-6") {str << GenerateHtmlStateForGlobalVDiskState(); }
@@ -1824,6 +1833,15 @@ namespace NKikimr {
             SetRacingGroupInfo(ev->Get()->Record, response->Record, GInfo);
             ctx.Send(ev->Sender, response.release(), flags, ev->Cookie);
         }
+
+        void Reply(TEvVRestorePart::TPtr& ev, const TActorContext& ctx,
+                NKikimrProto::EReplyStatus status, const TString& errorReason, TInstant /*now*/) {
+            auto result = std::make_unique<TEvVRestorePartResult>();
+            result->Record.SetStatus(status);
+            result->Record.SetErrorReason(errorReason);
+            const ui32 flags = IEventHandle::MakeFlags(ev->GetChannel(), 0);
+            ctx.Send(ev->Sender, result.release(), flags, ev->Cookie);
+        }
         // FIXME: don't forget about counters
 
 
@@ -1855,6 +1873,18 @@ namespace NKikimr {
             auto aid = Register(CreateFrontSkeletonGetLogoBlobRequestHandler(SelfVDiskId, SelfId(), SkeletonId,
                 Config, Top, ev));
             ActiveActors.Insert(aid, __FILE__, __LINE__, TActivationContext::AsActorContext(), NKikimrServices::BLOBSTORAGE);
+        }
+
+        void Handle(TEvVRestorePart::TPtr& ev, const TActorContext& ctx) {
+            if (!GInfo->CheckScope(TKikimrScopeId(ev->OriginScopeId), ctx, true)) {
+                return DatabaseAccessDeniedHandle(ev, ctx);
+            }
+            auto aid = Register(CreateVRestorePartActor(SelfVDiskId, SelfId(), SkeletonId, Config, Top, ev));
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+        }
+
+        void HandleVRestorePartNotReady(TEvVRestorePart::TPtr& ev, const TActorContext& ctx) {
+            Reply(ev, ctx, NKikimrProto::NOTREADY, "VDisk is not ready for VRestorePart", TAppData::TimeProvider->Now());
         }
 
 
@@ -2073,6 +2103,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvVDiskStatRequest, Handle)
             hFunc(TEvGetLogoBlobRequest, Handle)
+            HFunc(TEvVRestorePart, HandleVRestorePartNotReady)
             HFunc(TEvFrontRecoveryStatus, Handle)
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)
@@ -2121,6 +2152,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvVDiskStatRequest, Handle)
             hFunc(TEvGetLogoBlobRequest, Handle)
+            HFunc(TEvVRestorePart, HandleVRestorePartNotReady)
             HFunc(TEvFrontRecoveryStatus, Handle)
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)
@@ -2168,6 +2200,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvVDiskStatRequest, Handle)
             hFunc(TEvGetLogoBlobRequest, Handle)
+            HFunc(TEvVRestorePart, HandleVRestorePartNotReady)
             CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)
             cFunc(NActors::TEvents::TSystem::PoisonPill, PassAway)
             HFunc(TEvents::TEvGone, Handle)
@@ -2345,6 +2378,7 @@ namespace NKikimr {
             HFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvVDiskStatRequest, Handle)
             hFunc(TEvGetLogoBlobRequest, Handle)
+            HFunc(TEvVRestorePart, Handle)
             // TEvFrontRecoveryStatus
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateStats)

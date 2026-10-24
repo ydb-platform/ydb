@@ -41,6 +41,7 @@ SRCS(
     main.cpp
     mirror3dc.cpp
     mirror3of4.cpp
+    mon_restore_part.cpp
     monitoring.cpp
     multiget.cpp
     node_warden_cache.cpp
@@ -64,14 +65,17 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/json
     ydb/core/base
     ydb/core/blobstorage/dsproxy
     ydb/core/blobstorage/groupinfo
+    ydb/core/blobstorage/other
     ydb/core/blobstorage/ut_blobstorage/lib
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/scrub
     ydb/core/blobstorage/vdisk/synclog
     ydb/core/mind/bscontroller
+    ydb/core/sys_view/common
 )
 
 END()

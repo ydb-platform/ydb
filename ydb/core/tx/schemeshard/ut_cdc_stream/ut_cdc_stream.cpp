@@ -1950,6 +1950,102 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 } // TCdcStreamTests
 
 Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
+    Y_UNIT_TEST(IndexStreamsRejectUnrelatedBaseLock) {
+        const auto options = TTestEnvOptions()
+            .EnableChangefeedInitialScan(true)
+            .EnableChangefeedsOnIndexTables(true);
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().DisableCdcAutoSwitchingToReadyStateForTests = true;
+        ui64 txId = 100;
+
+        const TString readyIndex = "/MyRoot/Table/Ready";
+        const TString scanningIndex = "/MyRoot/Table/Scanning";
+        const TString newIndex = "/MyRoot/Table/New";
+        const TString streamPath = scanningIndex + "/indexImplTable/Stream";
+        const TString streamTarget = R"(
+            TableName: "indexImplTable"
+            StreamName: "Stream"
+        )";
+        const TString disableStream = streamTarget + "Disable {}";
+        const TString streamSchema = R"(
+            TableName: "indexImplTable"
+            StreamDescription {
+                Name: "Stream"
+                Mode: ECdcStreamModeKeysOnly
+                Format: ECdcStreamFormatProto
+                %s
+            }
+        )";
+        const TString readyStream = Sprintf(streamSchema.c_str(), "");
+        const TString scanningStream = Sprintf(streamSchema.c_str(), "State: ECdcStreamStateScan");
+        const TString table = R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription { Name: "Ready" KeyColumnNames: ["value"] }
+            IndexDescription { Name: "Scanning" KeyColumnNames: ["value"] }
+            IndexDescription { Name: "New" KeyColumnNames: ["value"] }
+        )";
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", table);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, readyIndex, readyStream);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, scanningIndex, scanningStream);
+        env.TestWaitNotification(runtime, txId);
+        const ui64 indexLock = txId;
+
+        TestLock(runtime, ++txId, "/MyRoot", "Table");
+        env.TestWaitNotification(runtime, txId);
+        const ui64 baseLock = txId;
+
+        const auto getReady = [&](NKikimrScheme::EStatus expectedStatus) {
+            auto request = AlterCdcStreamRequest(++txId, scanningIndex, streamTarget);
+            auto& transaction = *request->Record.MutableTransaction(0);
+            transaction.MutableAlterCdcStream()->MutableGetReady()->SetLockTxId(indexLock);
+            transaction.MutableLockGuard()->SetOwnerTxId(indexLock);
+
+            const auto sender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
+            TestModificationResult(runtime, txId, expectedStatus);
+        };
+
+        const auto lockedStatus = NKikimrScheme::StatusMultipleModifications;
+        const TVector<TExpectedResult> locked = {lockedStatus};
+
+        TestCreateCdcStream(runtime, ++txId, newIndex, scanningStream, locked);
+        TestAlterCdcStream(runtime, ++txId, readyIndex, disableStream, locked);
+        TestDropCdcStream(runtime, ++txId, readyIndex, streamTarget, locked);
+        TestDropCdcStream(runtime, ++txId, scanningIndex, streamTarget, locked);
+        getReady(lockedStatus);
+
+        const auto description = DescribePrivatePath(runtime, streamPath);
+        const auto scanningState = NKikimrSchemeOp::ECdcStreamStateScan;
+        const auto expectedState = NLs::StreamState(scanningState);
+
+        TestDescribeResult(description, {expectedState});
+
+        // Failed CDC operations must neither replace nor release either lock.
+        TestUnlock(runtime, ++txId, baseLock, "/MyRoot", "Table");
+        env.TestWaitNotification(runtime, txId);
+
+        getReady(NKikimrScheme::StatusAccepted);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, newIndex, scanningStream);
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropCdcStream(runtime, ++txId, newIndex, streamTarget);
+        env.TestWaitNotification(runtime, txId);
+    }
+
     void InitialScan(bool enable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()

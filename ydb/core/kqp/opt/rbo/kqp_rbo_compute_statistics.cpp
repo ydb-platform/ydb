@@ -815,6 +815,13 @@ void TOpUnionAll::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     }
 }
 
+void TOpLimit::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    IUnaryOperator::ComputeMetadata(ctx, planProps);
+    if (!HasOffset() && GetLimitCond().IsLiteralOne()) {
+        Props.Metadata->LogicalCard = One;
+    }
+}
+
 void TOpCBOTree::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     for (auto op: TreeNodes) {
         op->ComputeMetadata(ctx, planProps);

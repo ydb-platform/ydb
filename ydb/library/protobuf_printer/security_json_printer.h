@@ -7,10 +7,21 @@
 #include <util/generic/string.h>
 
 namespace NJson {
+    class TJsonValue;
     class TJsonWriter;
 }
 
+class TStringStream;
+
 namespace NKikimr {
+
+void SecureProto2Json(const NProtoBuf::Message& proto,
+                      NJson::TJsonValue& json,
+                      const NProtobufJson::TProto2JsonConfig& config = NProtobufJson::TProto2JsonConfig());
+
+void SecureProto2Json(const NProtoBuf::Message& proto,
+                      TStringStream& json,
+                      const NProtobufJson::TProto2JsonConfig& config = NProtobufJson::TProto2JsonConfig());
 
 void SecureProto2Json(const NProtoBuf::Message& proto,
                       NJson::TJsonWriter& writer,

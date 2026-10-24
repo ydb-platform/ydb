@@ -14,6 +14,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/protobuf_printer/security_json_printer.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
@@ -368,7 +369,7 @@ protected:
     template<typename TJson>
     void Proto2Json(const NProtoBuf::Message& proto, TJson& json) {
         try {
-            NProtobufJson::Proto2Json(proto, json, Proto2JsonConfig);
+            NKikimr::SecureProto2Json(proto, json, Proto2JsonConfig);
         }
         catch (const std::exception& e) {
             json = TStringBuilder() << "error converting " << proto.GetTypeName() << " to json: " << e.what();

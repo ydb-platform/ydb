@@ -45,6 +45,8 @@ ydb/tests/functional/statistics test_restarts.py.test_basic
 ydb/tests/functional/ydb_cli test_ydb_interactive_ai.py.TestToolsAnthropic.test_request_interrupting
 ydb/tests/stress/compare_index_performance/tests test_compare.py.TestCompareIndexPerformance.test_fulltext
 ydb/tests/stress/compare_index_performance/tests test_compare.py.TestCompareIndexPerformance.test_vector
+ydb/tests/stress/kafka/tests py3test.sole chunk
+ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <queue>
 #include <mutex>
+#include <optional>
 
 #include "dq_arrow_helpers.h"
 #include "dq_channel_service_impl.h"
@@ -171,8 +172,10 @@ void TLocalBuffer::Push(TDataChunk&& data) {
     }
 }
 
+// Notifications and aborts send events, so they are made after Mutex is released: the actor system (the test
+// runtime in particular) may take its own locks in Send, and an event handler may take Mutex in Pop.
 void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
-    std::lock_guard lock(Mutex);
+    std::unique_lock lock(Mutex);
 
     if (PushStats.CollectBasic()) {
         PushStats.Chunks++;
@@ -197,6 +200,7 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
         } else {
             // allocate quota before the chunk is counted as inflight to keep InflightBytes always allocated
             if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes, /* isOptional = */ false)) {
+                lock.unlock();
                 AbortChannelByMemoryLimit(data.Bytes);
                 return;
             }
@@ -207,6 +211,7 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
         }
     } else {
         if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes, /* isOptional = */ false)) {
+            lock.unlock();
             AbortChannelByMemoryLimit(data.Bytes);
             return;
         }
@@ -228,6 +233,7 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
     }
 
     ReadyHook.Mark();
+    lock.unlock();
     NotifyInput(Finished.load());
 }
 
@@ -259,7 +265,7 @@ bool TLocalBuffer::IsEmpty() {
 }
 
 bool TLocalBuffer::Pop(TDataChunk& data) {
-    std::lock_guard lock(Mutex);
+    std::unique_lock lock(Mutex);
 
     if (Queue.empty()) {
         PushStats.TryPause();
@@ -290,6 +296,7 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
 
     RefreshMemoryPressure();
 
+    std::optional<ui64> abortBytes;
     if (data.Finished) {
         if (!Finished.exchange(true)) {
             FinishTime = TInstant::Now();
@@ -304,7 +311,7 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
             // quota for a spilled chunk is allocated as soon as it is counted as inflight (and released on pop),
             // no matter whether it is loaded right here or via LoadingQueue
             if (QuotaManager && !QuotaManager->AllocateQuota(bytes, /* isOptional = */ false)) {
-                AbortChannelByMemoryLimit(bytes);
+                abortBytes = bytes;
                 break;
             }
             SpilledChunkBytes.pop();
@@ -333,14 +340,24 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
         }
     }
 
+    bool notifyOutput = false;
+    bool forceNotifyOutput = Queue.empty() || Finished.load();
     if (FillLevel != fillLevel) {
         if (Aggregator) {
             Aggregator->UpdateCount(FillLevel, fillLevel);
         }
         FillLevel = fillLevel;
-        NotifyOutput(Queue.empty() || Finished.load());
-    } else if (Queue.empty() || Finished.load())  {
-        NotifyOutput(true);
+        notifyOutput = true;
+    } else if (forceNotifyOutput) {
+        notifyOutput = true;
+    }
+
+    lock.unlock();
+    if (abortBytes) {
+        AbortChannelByMemoryLimit(*abortBytes);
+    }
+    if (notifyOutput) {
+        NotifyOutput(forceNotifyOutput);
     }
 
     return true;
@@ -374,14 +391,15 @@ void TLocalBuffer::EarlyFinish() {
 }
 
 void TLocalBuffer::StorageWakeupHandler() {
-    std::lock_guard lock(Mutex);
+    std::unique_lock lock(Mutex);
 
+    bool notifyOutput = false;
     if (FillLevel == EDqFillLevel::HardLimit && !Storage->IsFull()) {
         if (Aggregator) {
             Aggregator->UpdateCount(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit);
         }
         FillLevel = EDqFillLevel::SoftLimit;
-        NotifyOutput(false);
+        notifyOutput = true;
     }
 
     ui32 chunksLoaded = 0;
@@ -408,6 +426,13 @@ void TLocalBuffer::StorageWakeupHandler() {
 
     if (chunksLoaded) {
         ReadyHook.Mark();
+    }
+
+    lock.unlock();
+    if (notifyOutput) {
+        NotifyOutput(false);
+    }
+    if (chunksLoaded) {
         NotifyInput(false);
     }
 }

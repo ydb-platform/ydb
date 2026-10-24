@@ -2199,6 +2199,40 @@ namespace NSchemeShardUT_Private {
         return std::make_unique<TEvIndexBuilder::TEvCreateRequest>(id, dbName, std::move(settings));
     }
 
+    std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateGeneratedBuildColumnRequest(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString& dbName, const TString& src) {
+        // Opaque executable bytes are sufficient for orchestration tests that stop
+        // before scanning. Runtime evaluation is covered by the DataShard suites.
+        auto request = CreateBuildColumnRequest(id, dbName, src, "g", Ydb::TypedValue{});
+        auto* column = request->Record.MutableSettings()->mutable_column_build_operation()->mutable_column(0);
+        column->clear_default_from_literal();
+        auto* generated = column->mutable_generated_from_expression();
+        generated->SetExprText("key + 1");
+        generated->MutableOutputType()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
+        generated->SetProgram(TString("program\0bytes", 13));
+        generated->SetProgramFormatVersion(1);
+        generated->SetMiniKqlRuntimeVersion(86);
+        generated->SetLanguageVersion(1);
+        generated->SetRuntimeSettings("settings");
+        generated->AddRequiredUdfNames("Test.Module");
+        const auto description = DescribePath(runtime, schemeShard, src).GetPathDescription();
+        generated->SetSourceOwnerId(description.GetSelf().GetSchemeshardId());
+        generated->SetSourcePathId(description.GetSelf().GetPathId());
+        generated->SetSourceSchemaVersion(description.GetTable().GetTableSchemaVersion());
+        for (const auto& source : description.GetTable().GetColumns()) {
+            if (source.GetName() == "key") {
+                auto* dep = generated->AddDependencies();
+                dep->SetName(source.GetName());
+                dep->SetColumnId(source.GetId());
+                if (source.GetNotNull()) {
+                    dep->MutableType()->set_type_id(Ydb::Type::UINT32);
+                } else {
+                    dep->MutableType()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
+                }
+            }
+        }
+        return request;
+    }
+
     void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const Ydb::Table::TableIndex& index) {
         auto sender = runtime.AllocateEdgeActor();
         auto request = CreateBuildIndexRequest(id, dbName, src, index);

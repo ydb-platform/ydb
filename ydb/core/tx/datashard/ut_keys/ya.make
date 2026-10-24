@@ -28,6 +28,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     datashard_ut_keys.cpp
+    datashard_user_table_ut.cpp
 )
 
 END()

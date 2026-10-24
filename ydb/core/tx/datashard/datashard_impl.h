@@ -1142,9 +1142,10 @@ class TDataShard
             struct SeqNoRound : Column<3, NScheme::NTypeIds::Uint64> {};
             struct ResponseType : Column<4, NScheme::NTypeIds::Uint32> {};
             struct FinalProgressRecord : Column<5, NScheme::NTypeIds::String> {};
+            struct GeneratedFillContext : Column<6, NScheme::NTypeIds::String> {};
 
             using TKey = TableKey<BuildId, SeqNoGeneration, SeqNoRound>;
-            using TColumns = TableColumns<BuildId, SeqNoGeneration, SeqNoRound, ResponseType, FinalProgressRecord>;
+            using TColumns = TableColumns<BuildId, SeqNoGeneration, SeqNoRound, ResponseType, FinalProgressRecord, GeneratedFillContext>;
         };
 
         // Per-writer uncommitted write seq num.
@@ -2082,6 +2083,10 @@ public:
         const TActorContext& ctx, TTransactionContext& txc,
         const TPathId& pathId, const ui64 tableSchemaVersion,
         bool persist = true);
+
+    TUserTable::TPtr AlterTableFinishColumnBuild(
+        const TActorContext& ctx, TTransactionContext& txc,
+        const TPathId& pathId, ui64 tableSchemaVersion, ui32 columnId);
 
     TUserTable::TPtr AlterTableAddIndex(
         const TActorContext& ctx, TTransactionContext& txc,

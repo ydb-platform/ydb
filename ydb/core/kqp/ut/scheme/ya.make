@@ -3,6 +3,11 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
+IF (OS_LINUX)
+    # Keep backtrace line tables within the DWARF32 debug-info offset limit.
+    CXXFLAGS(-g1)
+ENDIF()
+
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
     REQUIREMENTS(cpu:4)
@@ -16,6 +21,8 @@ SRCS(
     kqp_acl_ut.cpp
     kqp_constraints_ut.cpp
     kqp_generated_columns_ut.cpp
+    kqp_generated_stored_add_column_cdc_ut.cpp
+    kqp_generated_stored_add_column_ut.cpp
     kqp_scheme_ut.cpp
     kqp_secrets_ut.cpp
     kqp_scheme_fulltext_ut.cpp

@@ -13,6 +13,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/core/tablet_flat/test/libs/table
     ydb/core/tx/datashard/ut_common
     library/cpp/getopt
     library/cpp/regex/pcre
@@ -30,6 +31,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_filter_kmeans.cpp
+    ut_generated_columns.cpp
     ut_fulltext.cpp
     ut_fulltext_dict.cpp
     ut_helpers.cpp

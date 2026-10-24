@@ -5903,6 +5903,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableWasmCompileController = appData->FeatureFlags.GetEnableWasmCompileController();
     EnableServerlessExclusiveDynamicNodes = appData->FeatureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = appData->FeatureFlags.GetEnableAddColumsWithDefaults();
+    EnableAddColumnGeneratedStored = appData->FeatureFlags.GetEnableAddColumnGeneratedStored();
     EnableReplaceIfExistsForExternalEntities = appData->FeatureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
     EnableInitialUniqueIndex = appData->FeatureFlags.GetEnableUniqConstraint();
@@ -8394,6 +8395,10 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             descr->SetFamily(colInfo.Family);
             descr->SetNotNull(colInfo.NotNull);
             descr->SetSetNotNullInProgress(colInfo.SetNotNullInProgress);
+            if (colInfo.DefaultKind == ETableColumnDefaultKind::FromExpression) {
+                Y_ENSURE(descr->MutableDefaultFromExpression()->ParseFromString(colInfo.DefaultValue));
+                descr->SetIsBuildInProgress(colInfo.IsBuildInProgress);
+            }
         }
     }
 
@@ -8994,6 +8999,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableWasmCompileController = featureFlags.GetEnableWasmCompileController();
     EnableServerlessExclusiveDynamicNodes = featureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = featureFlags.GetEnableAddColumsWithDefaults();
+    EnableAddColumnGeneratedStored = featureFlags.GetEnableAddColumnGeneratedStored();
     EnableTempTables = featureFlags.GetEnableTempTables();
     EnableReplaceIfExistsForExternalEntities = featureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();

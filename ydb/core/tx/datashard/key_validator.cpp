@@ -91,6 +91,14 @@ bool TKeyValidator::IsValidKey(TKeyDesc& key, const TValidateOptions& opt) const
         return true;
 
     if (key.RowOperation != TKeyDesc::ERowOperation::Read) {
+        const auto table = Self.GetUserTables().find(key.TableId.PathId.LocalPathId);
+        if (table != Self.GetUserTables().end() && table->second->HasStoredGeneratedColumns()
+            && !key.TableId.SchemaVersion)
+        {
+            // Legacy MiniKQL calls IsValidKey directly, bypassing ValidateKeys below.
+            key.Status = TKeyDesc::EStatus::OperationNotSupported;
+            return false;
+        }
         // Prevent updates/erases with LockTxId set, unless it's allowed for immediate mvcc txs
         if (opt.IsLockTxId) {
             if (!(Self.GetEnableLockedWrites() && opt.IsImmediateTx && opt.IsLockNodeId)) {
@@ -132,7 +140,11 @@ std::tuple<NMiniKQL::IEngineFlat::EResult, TString> TKeyValidator::ValidateKeys(
 
         if (valid) {
             auto curSchemaVersion = GetTableSchemaVersion(key->TableId);
-            if (key->TableId.SchemaVersion && curSchemaVersion && curSchemaVersion != key->TableId.SchemaVersion) {
+            const bool storedGeneratedWrite = !TSysTables::IsSystemTable(key->TableId)
+                && key->RowOperation != TKeyDesc::ERowOperation::Read
+                && Self.GetUserTables().at(key->TableId.PathId.LocalPathId)->HasStoredGeneratedColumns();
+            if ((storedGeneratedWrite && (!key->TableId.SchemaVersion || curSchemaVersion != key->TableId.SchemaVersion))
+                || (key->TableId.SchemaVersion && curSchemaVersion && curSchemaVersion != key->TableId.SchemaVersion)) {
                 auto error = TStringBuilder()
                              << "Schema version mismatch for table id: " << key->TableId
                              << " key table version: " << key->TableId.SchemaVersion

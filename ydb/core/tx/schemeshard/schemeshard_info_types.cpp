@@ -1178,6 +1178,12 @@ TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
             colDescr->SetNotNull(column.NotNull);
             colDescr->SetSetNotNullInProgress(column.SetNotNullInProgress);
             colDescr->SetFamily(column.Family);
+            if (column.DefaultKind == ETableColumnDefaultKind::FromExpression) {
+                // Virtual expressions were omitted above. Physical expressions
+                // must reach DataShard, including while hidden by a build.
+                Y_ENSURE(colDescr->MutableDefaultFromExpression()->ParseFromString(column.DefaultValue));
+                colDescr->SetIsBuildInProgress(column.IsBuildInProgress);
+            }
         }
         for (auto ci : keyColumnIds) {
             TableDescription.AddKeyColumnIds(ci);

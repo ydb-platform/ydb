@@ -146,7 +146,8 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     for (auto& col : *copyAlter.MutableColumns()) {
         const bool hasLiteralDefault = col.HasDefaultFromLiteral();
         const bool hasSequenceDefault = col.HasDefaultFromSequence();
-        const bool hasDefault = hasLiteralDefault || hasSequenceDefault;
+        const bool hasStoredExpression = col.HasDefaultFromExpression() && col.GetDefaultFromExpression().GetStored();
+        const bool hasDefault = hasLiteralDefault || hasSequenceDefault || hasStoredExpression;
         if (hasLiteralDefault && !context.SS->EnableAddColumsWithDefaults) {
             errStr = Sprintf("Adding columns with defaults is disabled");
             status = NKikimrScheme::StatusInvalidParameter;

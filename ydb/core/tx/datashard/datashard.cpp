@@ -1847,6 +1847,19 @@ TUserTable::TPtr TDataShard::AlterTableSchemaVersion(
     return newTableInfo;
 }
 
+TUserTable::TPtr TDataShard::AlterTableFinishColumnBuild(
+    const TActorContext& ctx, TTransactionContext& txc,
+    const TPathId& pathId, ui64 tableSchemaVersion, ui32 columnId)
+{
+    auto tableInfo = AlterTableSchemaVersion(ctx, txc, pathId, tableSchemaVersion, false);
+    tableInfo->FinishColumnBuild(columnId);
+
+    NIceDb::TNiceDb db(txc.DB);
+    PersistUserTable(db, pathId.LocalPathId, *tableInfo);
+
+    return tableInfo;
+}
+
 TUserTable::TPtr TDataShard::AlterTableAddIndex(
     const TActorContext& ctx, TTransactionContext& txc,
     const TPathId& pathId, ui64 tableSchemaVersion,

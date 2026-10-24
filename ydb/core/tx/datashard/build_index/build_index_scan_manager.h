@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/strbuf.h>
@@ -24,13 +25,17 @@ namespace NKikimr::NDataShard {
             ui64 SeqNoRound = 0;
             ui32 ResponseType = 0;
             TString FinalProgressRecordSerialized;
+            TString GeneratedFillContextSerialized;
         };
 
     public:
         bool Load(NIceDb::TNiceDb& db);
 
         void PersistAdd(NIceDb::TNiceDb& db, ui64 buildId, ui64 seqNoGeneration, ui64 seqNoRound,
-                        ui32 responseType);
+                        ui32 responseType,
+                        const NKikimrTxDataShard::TGeneratedColumnFillContext* generatedContext = nullptr);
+
+        bool ValidateGeneratedFill(const NKikimrTxDataShard::TGeneratedColumnFillContext& context, TString& error) const;
 
         void PersistRemove(NIceDb::TNiceDb& db, ui64 buildId, ui64 seqNoGeneration, ui64 seqNoRound);
 

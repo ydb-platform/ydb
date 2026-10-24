@@ -2,6 +2,7 @@ YQL_LIBRARY()
 
 SRCS(
     generated_column.cpp
+    generated_column_backfill.cpp
     read_attributes_utils.cpp
     rewrite_io_utils.cpp
     sql_path_aliases.cpp
@@ -30,6 +31,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/docapi
+    ydb/core/engine/generated_columns
     ydb/core/external_sources
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/opt/cbo
@@ -52,6 +54,7 @@ PEERDIR(
     ydb/public/lib/scheme_types
     ydb/public/sdk/cpp/src/client/topic
     ydb/services/metadata/optimization
+    ydb/services/udf_store/wasm
     yql/essentials/core
     yql/essentials/core/expr_nodes
     yql/essentials/core/services
@@ -59,6 +62,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/providers/common/codec
+    yql/essentials/providers/common/mkql
     yql/essentials/providers/common/config
     yql/essentials/providers/common/gateway
     yql/essentials/providers/common/proto

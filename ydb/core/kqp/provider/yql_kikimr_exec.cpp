@@ -1,4 +1,5 @@
 #include "yql_kikimr_provider_impl.h"
+#include "generated_column_backfill.h"
 
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
@@ -1832,10 +1833,13 @@ public:
     TKiSinkCallableExecutionTransformer(
         TIntrusivePtr<IKikimrGateway> gateway,
         TIntrusivePtr<TKikimrSessionContext> sessionCtx,
-        TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
+        TIntrusivePtr<IKikimrQueryExecutor> queryExecutor,
+        TTypeAnnotationContext& types, const NKikimr::NMiniKQL::IFunctionRegistry& registry)
         : Gateway(gateway)
         , SessionCtx(sessionCtx)
-        , QueryExecutor(queryExecutor) {}
+        , QueryExecutor(queryExecutor)
+        , TypesCtx(types)
+        , FunctionRegistry(registry) {}
 
     std::pair<TStatus, TAsyncTransformCallbackFuture> CallbackTransform(const TExprNode::TPtr& input,
         TExprNode::TPtr& output, TExprContext& ctx)
@@ -2120,9 +2124,48 @@ public:
                                         "Column addition with serial data type is unsupported"));
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "generated") {
-                                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                                        "Column addition with a GENERATED ALWAYS AS expression is not supported"));
-                                    return SyncError();
+                                    const auto& generated = constraint.Value().Cast().Ref();
+                                    if (generated.ChildrenSize() < 3 || generated.Child(2)->Content() != "stored") {
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                            "Column addition with a GENERATED ALWAYS AS expression is not supported"));
+                                        return SyncError();
+                                    }
+                                    if (!SessionCtx->Config().FeatureFlags.GetEnableAddColumnGeneratedStored()
+                                        || !SessionCtx->Config().FeatureFlags.GetEnableGeneratedStored()
+                                        || !SessionCtx->Config().GetEnableIndexStreamWrite()) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                            "Column addition with a GENERATED ALWAYS AS expression is not supported: adding STORED generated columns requires EnableAddColumnGeneratedStored, EnableGeneratedStored and EnableIndexStreamWrite"));
+                                        return SyncError();
+                                    }
+                                    if (maybeAlter.Cast().Actions().Size() != 1 || listNode.Size() != 1
+                                        || table.Metadata->IsOlap()) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                            "A STORED GENERATED column must be the only ALTER action on a row table"));
+                                        return SyncError();
+                                    }
+                                    if (columnBuild == nullptr) {
+                                        columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
+                                    }
+                                    columnBuild->SetColumnName(TString(columnName));
+                                    bool generatedNotNull = notNull;
+                                    for (const auto& item : columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
+                                        generatedNotNull |= item.Name().Value() == "not_null";
+                                    }
+                                    columnBuild->SetNotNull(generatedNotNull);
+                                    auto* descriptor = columnBuild->mutable_generated_from_expression();
+                                    if (!SetColumnType(actualType, generatedNotNull, *descriptor->MutableOutputType(), error)) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), error));
+                                        return SyncError();
+                                    }
+                                    add_column->mutable_type()->CopyFrom(descriptor->GetOutputType());
+                                    const auto* generatedOutputType = generatedNotNull && type->GetKind() != ETypeAnnotationKind::Pg
+                                        ? &RemoveOptionality(*type) : type;
+                                    auto lambda = PrepareGeneratedColumnBackfill(TString(generated.Child(1)->Content()),
+                                        TString(columnName), *generatedOutputType, *table.Metadata, *SessionCtx, ctx, TypesCtx, descriptor);
+                                    if (!lambda || !CompileGeneratedColumnBackfill(lambda, ctx, TypesCtx, FunctionRegistry, *descriptor)) {
+                                        return SyncError();
+                                    }
+                                    hasDefaultValue = true;
                                 } else if (constraint.Name().Value() == "default") {
                                     if (table.Metadata->Kind == EKikimrTableKind::Olap) {
                                         ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
@@ -4532,6 +4575,8 @@ private:
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     TIntrusivePtr<IKikimrQueryExecutor> QueryExecutor;
+    TTypeAnnotationContext& TypesCtx;
+    const NKikimr::NMiniKQL::IFunctionRegistry& FunctionRegistry;
 };
 
 } // anonymous namespace
@@ -4547,9 +4592,10 @@ TAutoPtr<IGraphTransformer> CreateKiSourceCallableExecutionTransformer(
 TAutoPtr<IGraphTransformer> CreateKiSinkCallableExecutionTransformer(
     TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
-    TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
+    TIntrusivePtr<IKikimrQueryExecutor> queryExecutor,
+    TTypeAnnotationContext& types, const NKikimr::NMiniKQL::IFunctionRegistry& registry)
 {
-    return new TKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor);
+    return new TKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor, types, registry);
 }
 
 } // namespace NYql

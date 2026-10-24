@@ -326,7 +326,8 @@ TAutoPtr<IGraphTransformer> CreateKiSourceCallableExecutionTransformer(
 TAutoPtr<IGraphTransformer> CreateKiSinkCallableExecutionTransformer(
     TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
-    TIntrusivePtr<IKikimrQueryExecutor> queryExecutor);
+    TIntrusivePtr<IKikimrQueryExecutor> queryExecutor,
+    TTypeAnnotationContext& types, const NKikimr::NMiniKQL::IFunctionRegistry& registry);
 
 NNodes::TCoAtomList BuildColumnsList(const TKikimrTableDescription& table, TPositionHandle pos,
     TExprContext& ctx, bool withSystemColumns, bool ignoreWriteOnlyColumns);

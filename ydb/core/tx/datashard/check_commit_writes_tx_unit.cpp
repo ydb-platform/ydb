@@ -59,7 +59,8 @@ public:
 
         const auto& tableInfo = *DataShard.GetUserTables().at(tableId.GetTableId());
 
-        if (tableId.GetSchemaVersion() && tableInfo.GetTableSchemaVersion() != tableId.GetSchemaVersion()) {
+        if ((tableInfo.HasStoredGeneratedColumns() && !tableId.GetSchemaVersion())
+            || (tableId.GetSchemaVersion() && tableInfo.GetTableSchemaVersion() != tableId.GetSchemaVersion())) {
             return buildUnsuccessfulResult(
                 TStringBuilder()
                     << "SchemaVersion mismatch for table "

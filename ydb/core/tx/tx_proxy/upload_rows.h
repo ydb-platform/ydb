@@ -3,6 +3,10 @@
 
 #include <ydb/core/util/backoff.h>
 
+namespace NKikimrTxDataShard {
+    class TGeneratedColumnFillContext;
+}
+
 namespace Ydb {
     class Type;
 }
@@ -17,6 +21,7 @@ enum class EUploadRowsMode {
     Normal,
     WriteToTableShadow,
     UpsertIfExists,
+    FillGeneratedColumn,
 };
 
 using TUploadTypes = TVector<std::pair<TString, Ydb::Type>>;
@@ -32,6 +37,7 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
                                  bool writeToIndexImplTable = false,
                                  bool disableChangeCollection = false,
                                  ui64 cookie = 0,
-                                 TBackoff backoff = TBackoff(0));
+                                 TBackoff backoff = TBackoff(0),
+                                 const NKikimrTxDataShard::TGeneratedColumnFillContext* generatedFillContext = nullptr);
 } // namespace NTxProxy
 } // namespace NKikimr

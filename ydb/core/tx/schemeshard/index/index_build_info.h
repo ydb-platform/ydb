@@ -136,6 +136,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         TString FamilyName;
         TString DefaultFromSequence;
         bool BitReverseSequenceValue = false;
+        TMaybe<NKikimrIndexBuilder::TGeneratedColumnBuild> GeneratedFromExpression;
 
         TColumnBuildInfo(const TString& name, const TString& serializedLiteral, bool notNull, const TString& familyName)
             : ColumnName(name)
@@ -165,13 +166,33 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             *DefaultFromLiteral.mutable_type() = columnType;
         }
 
+        struct FromExpressionTag {};
+        TColumnBuildInfo(FromExpressionTag, const TString& name,
+                         const NKikimrIndexBuilder::TGeneratedColumnBuild& expression,
+                         bool notNull, const TString& familyName)
+            : ColumnName(name)
+            , NotNull(notNull)
+            , FamilyName(familyName)
+            , GeneratedFromExpression(expression)
+        {}
+
+        bool IsFromExpression() const {
+            return GeneratedFromExpression.Defined();
+        }
+
+        // Used at acceptance and once more after acquiring the path lock. The
+        // original source schema must never be compared after our own alter.
+        bool ValidateGeneratedBinding(const TTableInfo& table, const TPathId& tableId, TString& error) const;
+
         bool IsFromSequence() const {
             return !DefaultFromSequence.empty();
         }
 
         void SerializeToProto(NKikimrIndexBuilder::TColumnBuildSetting* setting, const TString& tablePath) const {
             setting->SetColumnName(ColumnName);
-            if (IsFromSequence()) {
+            if (IsFromExpression()) {
+                *setting->mutable_generated_from_expression() = *GeneratedFromExpression;
+            } else if (IsFromSequence()) {
                 setting->set_default_from_sequence(JoinPath({tablePath, DefaultFromSequence}));
                 setting->set_bit_reverse_sequence_value(BitReverseSequenceValue);
                 if (DefaultFromLiteral.has_type()) {
@@ -515,6 +536,11 @@ public:
         auto& back = BuildColumns.emplace_back(columnName, defaultFromLiteral, notNull, familyName);
         back.DefaultFromSequence = defaultFromSequence;
         back.BitReverseSequenceValue = bitReverseSequenceValue;
+        const auto generated = row.template GetValueOrDefault<Schema::BuildColumnOperationSettings::GeneratedFromExpression>(TString{});
+        if (!generated.empty()) {
+            back.GeneratedFromExpression.ConstructInPlace();
+            Y_ENSURE(back.GeneratedFromExpression->ParseFromString(generated));
+        }
     }
 
     template<class TRowSetType>

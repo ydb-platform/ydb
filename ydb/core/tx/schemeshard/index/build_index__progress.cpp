@@ -926,14 +926,23 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
         TString typeMod;
         Ydb::StatusIds::StatusCode status;
         TString error;
-        if (!ExtractColumnTypeInfo(typeInfo, typeMod, colInfo.DefaultFromLiteral.type(), status, error)) {
+        const auto& columnType = colInfo.IsFromExpression()
+            ? colInfo.GeneratedFromExpression->GetOutputType() : colInfo.DefaultFromLiteral.type();
+        if (!ExtractColumnTypeInfo(typeInfo, typeMod, columnType, status, error)) {
             // todo gvit fix that
             Y_ENSURE(false, "failed to extract column type info");
         }
 
         col->SetType(NScheme::TypeName(typeInfo, typeMod));
         col->SetName(colInfo.ColumnName);
-        if (colInfo.IsFromSequence()) {
+        if (colInfo.IsFromExpression()) {
+            auto* expression = col->MutableDefaultFromExpression();
+            expression->SetExprText(colInfo.GeneratedFromExpression->GetExprText());
+            expression->SetStored(true);
+            for (const auto& dependency : colInfo.GeneratedFromExpression->GetDependencies()) {
+                expression->AddDependencyColumnNames(dependency.GetName());
+            }
+        } else if (colInfo.IsFromSequence()) {
             // Store the sequence as a table-local leaf name (not an absolute path), matching
             // the create-table convention and how the path describer / KQP key local
             // sequences by leaf.
@@ -3247,7 +3256,7 @@ private:
             return true;
         }
         for (const auto& col : buildInfo.BuildColumns) {
-            if (!col.IsFromSequence()) {
+            if (!col.IsFromSequence() && !col.IsFromExpression()) {
                 return false;
             }
         }
@@ -3300,6 +3309,21 @@ public:
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.LockTxId)));
             } else {
                 if (buildInfo.IsBuildColumns()) {
+                    bool bindingValid = true;
+                    for (const auto& column : buildInfo.BuildColumns) {
+                        TString error;
+                        if (!column.ValidateGeneratedBinding(*Self->Tables.at(buildInfo.TablePathId), buildInfo.TablePathId, error)) {
+                            NIceDb::TNiceDb db(txc.DB);
+                            Self->PersistBuildIndexAddIssue(db, buildInfo, error);
+                            ChangeState(BuildId, TIndexBuildInfo::EState::Rejection_Unlocking);
+                            Progress(BuildId);
+                            bindingValid = false;
+                            break;
+                        }
+                    }
+                    if (!bindingValid) {
+                        break;
+                    }
                     if (buildInfo.HasFromSequenceBuildColumn()) {
                         ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuildSequence);
                     } else {

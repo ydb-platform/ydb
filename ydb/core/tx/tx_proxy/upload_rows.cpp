@@ -21,7 +21,8 @@ public:
         bool writeToIndexImplTable,
         bool disableChangeCollection,
         ui64 cookie,
-        TBackoff backoff)
+        TBackoff backoff,
+        const NKikimrTxDataShard::TGeneratedColumnFillContext* generatedFillContext)
         : TUploadRowsBase(std::move(rows), userCtx)
         , Sender(sender)
         , Database(database)
@@ -33,6 +34,11 @@ public:
         AllowWriteToIndexImplTable = writeToIndexImplTable;
         DisableChangeCollection = disableChangeCollection;
 
+        if (generatedFillContext) {
+            GeneratedFillContext = *generatedFillContext;
+        }
+        FillGeneratedColumn = mode == EUploadRowsMode::FillGeneratedColumn;
+
         switch (mode) {
             case EUploadRowsMode::Normal:
                 // nothing
@@ -40,6 +46,7 @@ public:
             case EUploadRowsMode::WriteToTableShadow:
                 WriteToTableShadow = true;
                 break;
+            case EUploadRowsMode::FillGeneratedColumn:
             case EUploadRowsMode::UpsertIfExists:
                 UpsertIfExists = true;
                 break;
@@ -67,6 +74,12 @@ private:
     }
 
     bool ValidateTable(TString& errorMessage) override {
+        if (FillGeneratedColumn != GeneratedFillContext.Defined() ||
+            (FillGeneratedColumn && (!AllowWriteToPrivateTable || !AllowWriteToIndexImplTable || WriteToTableShadow)))
+        {
+            errorMessage = "Generated fill requires an internal upload with a complete build context";
+            return false;
+        }
         if (GetTableKind() != NSchemeCache::TSchemeCacheNavigate::KindTable) {
             errorMessage = "Only the OLTP table is supported";
             return false;
@@ -111,7 +124,8 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
     bool writeToIndexImplTable,
     bool disableChangeCollection,
     ui64 cookie,
-    TBackoff backoff)
+    TBackoff backoff,
+    const NKikimrTxDataShard::TGeneratedColumnFillContext* generatedFillContext)
 {
     return new TUploadRowsInternal(sender,
         database,
@@ -124,7 +138,8 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
         writeToIndexImplTable,
         disableChangeCollection,
         cookie,
-        backoff);
+        backoff,
+        generatedFillContext);
 }
 
 } // namespace NTxProxy

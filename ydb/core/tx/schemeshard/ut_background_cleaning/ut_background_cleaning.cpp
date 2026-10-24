@@ -252,6 +252,56 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCleaningTest) {
         CheckPath(runtime, "/MyRoot/tmp", TTestTxConfig::SchemeShard, true);
     }
 
+    // Every network flap between the schemeshard and the node of a live owner is a retry, and the node reconnects
+    // each time. Flaps that the schemeshard survived must not add up to the retry limit and remove the temp tables
+    // of the owner.
+    Y_UNIT_TEST(SchemeshardBackgroundCleaningTestManyFlapsKeepTempTables) {
+        TTestBasicRuntime runtime(3);
+        TTestEnv env(runtime);
+
+        SetBackgroundCleaning(runtime, env, TTestTxConfig::SchemeShard, true);
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        auto ownerActorId = runtime.AllocateEdgeActor(1);
+
+        ui64 txId = 100;
+
+        TestMkTempDir(runtime, txId, "/MyRoot", "tmp", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, false);
+        env.TestWaitNotification(runtime, txId);
+        ++txId;
+
+        TestCreateTable(runtime, txId, "/MyRoot/tmp", R"(
+            TableDescription {
+                Name: "TempTable"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+        )", ownerActorId, { NKikimrScheme::StatusAccepted }, 1, true);
+        env.TestWaitNotification(runtime, txId);
+
+        CheckTable(runtime, "/MyRoot/tmp/TempTable");
+
+        // more flaps than the default limit of retries (MaxRetryNumber = 8), each long after the reconnect of the
+        // previous one
+        runtime.SetScheduledLimit(10'000'000);
+        runtime.SetDispatchedEventsLimit(10'000'000);
+        for (ui32 flap = 0; flap < 12; ++flap) {
+            const TActorId proxy = runtime.GetInterconnectProxy(1, 0);
+            runtime.Send(new IEventHandle(proxy, TActorId(), new TEvInterconnect::TEvDisconnect(), 0, 0), 1, true);
+
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvInterconnect::EvNodeDisconnected);
+            runtime.DispatchEvents(options);
+
+            env.SimulateSleep(runtime, TDuration::Minutes(1));
+
+            CheckPath(runtime, "/MyRoot/tmp", TTestTxConfig::SchemeShard, true);
+        }
+
+        CheckTable(runtime, "/MyRoot/tmp/TempTable", TTestTxConfig::SchemeShard, true);
+    }
+
     Y_UNIT_TEST(SchemeshardBackgroundCleaningTestCreateCleanManyTables) {
         TTestBasicRuntime runtime(3);
         TTestEnv env(runtime);

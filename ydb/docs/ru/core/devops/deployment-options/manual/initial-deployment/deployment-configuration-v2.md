@@ -92,13 +92,19 @@ config:
   client_certificate_authorization:
     request_client_certificate: true
     client_certificate_definitions:
-        - member_groups: ["ADMINS"]
+        - member_groups: ["ADMINS", "databaseNodes@cert"]
           subject_terms:
           - short_name: "O"
             values: ["YDB"]
 ```
 
-Для ускорения и упрощения первичного развёртывания {{ ydb-short-name }} конфигурационный файл уже содержит большинство настроек для установки кластера. Достаточно заменить стандартные хосты FQDN в разделе `hosts` и пути к дискам на актуальные в разделе `hosts_configs`.
+{% note info  %}
+
+Приведенные выше настройки подготовлены для запуска {{ ydb-short-name }} на 3х физических или виртуальных серверах с использованием [режима работы кластера](../../../../concepts/topology.md#cluster-config) mirror-3-dc.
+
+{% endnote %}
+
+Для ускорения и упрощения первичного развёртывания {{ ydb-short-name }} предлагаемый пример конфигурационного файла уже содержит большинство настроек для установки кластера. Достаточно заменить стандартные хосты FQDN в разделе `hosts` и пути к дискам на актуальные в разделе `hosts_configs`.
 
 * Раздел `hosts`:
 
@@ -357,7 +363,7 @@ echo $?
   ```
 
   В примере команды выше `<ydb-static-node1>` , `<ydb-static-node2>`, `<ydb-static-node3>`  - FQDN трех любых серверов, на которых запущены статические узлы кластера.
-  
+
   Запустите динамический узел {{ ydb-short-name }} для базы `/Root/testdb`:
 
   ```bash

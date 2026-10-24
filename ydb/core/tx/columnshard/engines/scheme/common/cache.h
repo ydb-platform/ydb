@@ -5,6 +5,7 @@
 #include <util/system/mutex.h>
 
 #include <memory>
+#include <optional>
 
 namespace NKikimr::NOlap {
 
@@ -58,6 +59,16 @@ public:
             Objects[key] = cachedObject;
         }
         return TEntryGuard(std::move(key), cachedObject, this);
+    }
+
+    std::optional<TEntryGuard> Find(const TKey& key) {
+        TGuard lock(Mutex);
+        auto* findObject = Objects.FindPtr(key);
+        std::shared_ptr<const TObject> cachedObject = findObject ? findObject->lock() : nullptr;
+        if (!cachedObject) {
+            return std::nullopt;
+        }
+        return std::optional<TEntryGuard>(std::in_place, key, cachedObject, this);
     }
 
     void TryFree(const TKey& key) {

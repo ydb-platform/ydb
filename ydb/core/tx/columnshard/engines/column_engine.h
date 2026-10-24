@@ -119,12 +119,14 @@ public:
             , Diff(info.HasDiff() ? &info.GetDiff() : nullptr)
         {
         }
+
         TSchemaVersionView(const NKikimrTxColumnShard::TSchemaPresetVersionInfo&&) = delete;
 
         explicit TSchemaVersionView(const NKikimrSchemeOp::TColumnTableSchemaDiff& diff)
             : Diff(&diff)
         {
         }
+
         TSchemaVersionView(const NKikimrSchemeOp::TColumnTableSchemaDiff&&) = delete;
 
         TSchemaVersionView(const TSchemaVersionView&) = delete;
@@ -218,7 +220,6 @@ public:
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept = 0;
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual bool ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
-    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) = 0;
     virtual void RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) = 0;
 

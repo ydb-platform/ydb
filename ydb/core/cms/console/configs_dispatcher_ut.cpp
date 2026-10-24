@@ -215,6 +215,7 @@ struct TEvPrivate {
     struct TEvGotNotification : public TEventLocal<TEvGotNotification, EvGotNotification> {
         TConfigId ConfigId;
         NKikimrConfig::TAppConfig Config;
+        bool Local = false;
     };
 
     struct TEvComplete : public TEventLocal<TEvComplete, EvComplete> {};
@@ -285,6 +286,7 @@ public:
             auto *event = new TEvPrivate::TEvGotNotification;
             event->ConfigId.Load(rec.GetConfigId());
             event->Config = rec.GetConfig();
+            event->Local = rec.GetLocal();
             ctx.Send(Sink, event);
         }
 
@@ -426,6 +428,70 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
         auto notification = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
         UNIT_ASSERT(!notification->Config.HasCompositeConveyorConfig());
+    }
+
+    void CheckLateCmsConfigSubscription(bool yaml) {
+        NKikimrConfig::TAppConfig config;
+        auto* selfHeal = config.MutableCmsConfig()->MutableSentinelConfig()->MutableStateStorageSelfHealConfig();
+        selfHeal->SetEnable(true);
+        selfHeal->SetPileupReplicas(true);
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), yaml ? NKikimrConfig::TAppConfig() : config);
+        TAutoPtr<IEventHandle> handle;
+        auto dispatcher = InitConfigsDispatcher(runtime);
+
+        // Receiving an unrelated kind ensures the dispatcher is initialized
+        // before CMS subscribes.
+        AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+        runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+
+        if (yaml) {
+            CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, R"(
+metadata:
+  cluster: ""
+  version: 0
+config:
+  yaml_config_enabled: true
+  log_config:
+    cluster_name: cms-config-ready
+  cms_config:
+    sentinel_config:
+      state_storage_self_heal_config:
+        enable: true
+        pileup_replicas: true
+)");
+            auto notification = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(notification->Config.GetLogConfig().GetClusterName(), "cms-config-ready");
+        }
+
+        // Cover a new subscription and a new subscriber joining an already
+        // acknowledged subscription, as after a CMS tablet restart.
+        for (ui32 i = 0; i < 2; ++i) {
+            AddSubscriber(runtime, {
+                (ui32)NKikimrConsole::TConfigItem::CmsConfigItem,
+                (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem,
+            });
+            auto notification = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+            UNIT_ASSERT_C(notification->Local,
+                "CMS ignores dispatcher notifications without Local=true");
+            const auto& received = notification->Config.GetCmsConfig()
+                .GetSentinelConfig().GetStateStorageSelfHealConfig();
+            UNIT_ASSERT(received.GetEnable());
+            UNIT_ASSERT(received.GetPileupReplicas());
+
+            // Process the subscriber's ACK before adding another subscriber.
+            runtime.Send(new IEventHandle(dispatcher, runtime.Sender,
+                new TEvConfigsDispatcher::TEvGetStateRequest()));
+            runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvGetStateResponse>(handle);
+        }
+    }
+
+    Y_UNIT_TEST(TestLateCmsConfigSubscription) {
+        CheckLateCmsConfigSubscription(false);
+    }
+
+    Y_UNIT_TEST(TestLateCmsYamlConfigSubscription) {
+        CheckLateCmsConfigSubscription(true);
     }
 
     Y_UNIT_TEST(TestSubscriptionNotification) {

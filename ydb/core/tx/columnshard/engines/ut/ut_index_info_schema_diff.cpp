@@ -24,16 +24,22 @@ NKikimrSchemeOp::TColumnTableSchema MakeSchemaV1() {
     return proto;
 }
 
-NKikimrSchemeOp::TColumnTableSchema MakeSchemaV2AfterDropAndAdd() {
+NKikimrSchemeOp::TColumnTableSchema MakeSchemaV2AfterDropChangeAndAdd() {
     NKikimrSchemeOp::TColumnTableSchema proto;
     const std::vector<NArrow::NTest::TTestColumn> columns = {
-        NArrow::NTest::TTestColumn("timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)).SetNullable(false),
+        // a changed key column must keep its key order
+        NArrow::NTest::TTestColumn("timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp))
+            .SetNullable(false)
+            .SetStorageId(IStoragesManager::DefaultStorageId),
         NArrow::NTest::TTestColumn("value", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)),
         NArrow::NTest::TTestColumn("added", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)),
+        // two added columns for one dropped move the special columns, so the name order must be renumbered
+        NArrow::NTest::TTestColumn("also_added", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)),
     };
     *proto.MutableColumns()->Add() = columns[0].CreateColumn(1);
     *proto.MutableColumns()->Add() = columns[1].CreateColumn(2);
     *proto.MutableColumns()->Add() = columns[2].CreateColumn(4);
+    *proto.MutableColumns()->Add() = columns[3].CreateColumn(5);
     proto.AddKeyColumnNames("timestamp");
     proto.SetVersion(2);
     return proto;
@@ -50,7 +56,7 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
         auto indexInfoV1 = TIndexInfo::BuildFromProto(1, schemaV1, storages, cache);
         UNIT_ASSERT(indexInfoV1);
 
-        const auto schemaV2 = MakeSchemaV2AfterDropAndAdd();
+        const auto schemaV2 = MakeSchemaV2AfterDropChangeAndAdd();
         const auto diffProto = TSchemaDiffView::MakeSchemasDiff(schemaV1, schemaV2);
         UNIT_ASSERT(diffProto.DropColumnsSize() > 0);
         UNIT_ASSERT(diffProto.UpsertColumnsSize() > 0);
@@ -68,6 +74,25 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
             UNIT_ASSERT_C(it != columnsMap.end(), TStringBuilder() << "missing column_id=" << columnId);
             UNIT_ASSERT(!it->second.first.empty());
         }
+    }
+
+    Y_UNIT_TEST(FindsColumnsByNameAfterDropChangeAndAddColumns) {
+        auto storages = TTestStoragesManager::GetInstance();
+        auto cache = std::make_shared<TSchemaObjectsCache>();
+        const auto schemaV1 = MakeSchemaV1();
+        const auto schemaV2 = MakeSchemaV2AfterDropChangeAndAdd();
+        auto indexInfoV1 = TIndexInfo::BuildFromProto(1, schemaV1, storages, cache);
+        UNIT_ASSERT(indexInfoV1);
+
+        auto fromDiff = TIndexInfo::BuildFromProto(TSchemaDiffView::MakeSchemasDiff(schemaV1, schemaV2), *indexInfoV1, storages, cache);
+        auto fromSchema = TIndexInfo::BuildFromProto(1, schemaV2, storages, cache);
+        UNIT_ASSERT(fromDiff);
+        UNIT_ASSERT(fromSchema);
+
+        for (const auto& name : fromSchema->GetColumnSTLNames()) {
+            UNIT_ASSERT_C(fromDiff->GetColumnIdOptional(name) == fromSchema->GetColumnIdOptional(name), name);
+        }
+        UNIT_ASSERT(!fromDiff->GetColumnIdOptional("to_drop"));
     }
 }
 

@@ -39,7 +39,9 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
-                .AppendDropChangefeeds(StreamName)));
+                .AppendDropChangefeeds(StreamName)),
+                0,
+                ProxyGeneration);
             break;
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("Unreachable");
@@ -53,13 +55,16 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
             {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
-            sFunc(TEvents::TEvWakeup, DropStream);
+            hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
         }
     }
 
     void Handle(TEvYdbProxy::TEvAlterTableResponse::TPtr& ev) {
+        if (ev->Cookie != ProxyGeneration) {
+            return;
+        }
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
         auto& result = ev->Get()->Result;
@@ -67,7 +72,7 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
                 YDB_LOG_DEBUG("Retry");
-                return Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
+                return Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup(ProxyGeneration));
             }
 
             YDB_LOG_ERROR("Error",
@@ -79,6 +84,27 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
         }
 
         Send(Parent, new TEvPrivate::TEvDropStreamResult(ReplicationId, TargetId, std::move(result)));
+        PassAway();
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == ProxyGeneration) {
+            DropStream();
+        }
+    }
+
+    void Handle(TEvPrivate::TEvUpdateYdbProxy::TPtr& ev) {
+        if (YdbProxy != ev->Get()->YdbProxy) {
+            YdbProxy = ev->Get()->YdbProxy;
+            ++ProxyGeneration;
+            if (CurrentStateFunc() == &TThis::StateWork) {
+                DropStream();
+            }
+        }
+    }
+
+    void Cancel() {
+        Send(Parent, new TEvPrivate::TEvCancelDropStream());
         PassAway();
     }
 
@@ -121,13 +147,15 @@ public:
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
             {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
-            sFunc(TEvents::TEvPoison, PassAway);
+            hFunc(TEvPrivate::TEvUpdateYdbProxy, Handle);
+            sFunc(TEvents::TEvPoison, Cancel);
         }
     }
 
 private:
     const TActorId Parent;
-    const TActorId YdbProxy;
+    TActorId YdbProxy;
+    ui64 ProxyGeneration = 0;
     const ui64 ReplicationId;
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;

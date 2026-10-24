@@ -40,14 +40,14 @@ Y_UNIT_TEST_SUITE(Replication) {
         UNIT_ASSERT_VALUES_EQUAL(replication->GetConfig().GetSrcConnectionParams().GetIamCredentials().GetResourceId(), "");
     }
 
-    Y_UNIT_TEST(SkipInitialScanIsImmutable) {
+    Y_UNIT_TEST(InitialScanIsImmutable) {
         NKikimrReplication::TReplicationConfig config;
-        config.SetSkipInitialScan(true);
+        config.SetInitialScan(false);
         auto replication = MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2), config, "/Root/db");
 
-        config.ClearSkipInitialScan();
+        config.ClearInitialScan();
         replication->SetConfig(std::move(config));
-        UNIT_ASSERT(replication->GetConfig().GetSkipInitialScan());
+        UNIT_ASSERT(!replication->GetConfig().GetInitialScan());
     }
 
     Y_UNIT_TEST(RemoveTargetClearsReportedLag) {

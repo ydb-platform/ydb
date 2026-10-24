@@ -5898,6 +5898,50 @@ Y_UNIT_TEST(CreateAsyncReplicationParseSecretPathsCorrect) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+Y_UNIT_TEST(CreateAsyncReplicationInitialScan) {
+    for (const auto& value : {"TRUE", "FALSE", "true", "false"}) {
+        const auto res = SqlToYql(TStringBuilder()
+                                  << "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+                                  << "WITH (INITIAL_SCAN = " << value << ");");
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder()
+                                                      << "'('\"initial_scan\" (Bool '\"" << to_lower(TString(value)) << "\"))");
+            }
+        };
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationInvalidInitialScan) {
+    for (const auto& value : {"\"true\"", "1", "NULL", "TRUE AND FALSE"}) {
+        const auto res = SqlToYql(TStringBuilder()
+                                  << "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+                                  << "WITH (INITIAL_SCAN = " << value << ");");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Literal of Bool type is expected for INITIAL_SCAN");
+    }
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationDuplicateInitialScan) {
+    const auto res = SqlToYql(
+        "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+        "WITH (INITIAL_SCAN = TRUE, initial_scan = FALSE);");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Duplicate replication setting: initial_scan");
+}
+
+Y_UNIT_TEST(AlterAsyncReplicationInitialScan) {
+    const auto res = SqlToYql(
+        "USE plato; ALTER ASYNC REPLICATION MyReplication SET (INITIAL_SCAN = TRUE);");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "INITIAL_SCAN is not supported in ALTER");
+}
+
 Y_UNIT_TEST(CreateAsyncReplicationUnsupportedSettings) {
     const auto settings = THashMap<TString, TString>{
         {"STATE", "DONE"},

@@ -1516,6 +1516,7 @@ struct TReplicationSettings : public TReplicationSettingsBase {
 
     TMaybe<TRowConsistency> RowConsistency;
     TMaybe<TGlobalConsistency> GlobalConsistency;
+    TMaybe<bool> InitialScan;
 
     TRowConsistency& EnsureRowConsistency() {
         if (!RowConsistency) {

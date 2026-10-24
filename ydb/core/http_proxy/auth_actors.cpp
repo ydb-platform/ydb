@@ -129,10 +129,15 @@ namespace NKikimr::NHttpProxy {
             NACLib::TUserToken userToken = NACLibProto::TUserToken();
             if (ev->Get()->HasError()) {
                 if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
-                    return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->Error.Message});
+                    return ReplyWithError(
+                        ctx,
+                        ev->Get()->GetError().Retryable
+                            ? NYdb::EStatus::UNAVAILABLE
+                            : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->GetError().Message}
+                    );
                 }
             } else {
-                userToken = *ev->Get()->Token;
+                userToken = *ev->Get()->GetToken();
             }
             ctx.Send(Sender, new TEvServerlessProxy::TEvToken(userToken.GetUserSID(), "", userToken.GetSerializedToken(), {"", DatabaseId, DatabasePath, CloudId, FolderId}));
 

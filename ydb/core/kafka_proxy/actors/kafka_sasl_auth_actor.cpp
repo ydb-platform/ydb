@@ -207,12 +207,12 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketRes
             }
 
             SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, Ydb::StatusIds::UNAUTHORIZED,
-                                "", TString{ev->Get()->Error.Message}, ctx);
+                                "", TString{ev->Get()->GetError().Message}, ctx);
             return;
         }
     }
 
-    UserToken = ev->Get()->Token;
+    UserToken = ev->Get()->HasError() ? nullptr : ev->Get()->GetToken();
     SendResponseAndDie(EKafkaErrors::NONE_ERROR, Ydb::StatusIds::SUCCESS, "", "", ctx);
 }
 

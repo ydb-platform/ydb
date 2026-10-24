@@ -745,26 +745,26 @@ protected:
         TokenRecheckInFlight = false;
         auto* result = ev->Get();
         if (result->HasError()) {
-            if (result->Error.Retryable) {
+            if (result->GetError().Retryable) {
                 Context->Token.Status = ETokenCheckStatus::Unavailable;
                 YDB_LOG_WARN("Token recheck unavailable",
                     {LogPrefix()},
-                    {"error", result->Error.ToString()});
+                    {"error", result->GetError().ToString()});
             } else {
                 Context->Token.Status = ETokenCheckStatus::Invalid;
                 YDB_LOG_ERROR("Token recheck failed",
                     {LogPrefix()},
-                    {"error", result->Error.ToString()});
+                    {"error", result->GetError().ToString()});
             }
-        } else if (result->Token && !result->Token->GetSerializedToken().empty()) {
+        } else if (!result->GetToken()->GetSerializedToken().empty()) {
             Context->Token.Status = ETokenCheckStatus::Ok;
-            Context->Token.UserToken = result->Token;
+            Context->Token.UserToken = result->GetToken();
             const auto& path = Context->RlContext.GetPath();
             Context->RlContext = NKikimr::NPQ::TRlContext(
                 path.CoordinationNode,
                 path.ResourcePath,
                 Context->DatabasePath,
-                result->Token->GetSerializedToken());
+                result->GetToken()->GetSerializedToken());
             YDB_LOG_DEBUG("Token recheck successful",
                 {LogPrefix()},
                 {"SID", Context->Token.UserToken->GetUserSID()});

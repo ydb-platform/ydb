@@ -1,6 +1,8 @@
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/testlib/actor_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -24,9 +26,9 @@ namespace NKikimr::NGRpcService {
 
         class TNamedRequest final : public TEvHttpRequestAuthAndCheck {
         public:
-            explicit TNamedRequest(TString method)
+            explicit TNamedRequest(TString method, const TString& database = "/raw")
                 : TEvHttpRequestAuthAndCheck(
-                    "/raw", TMaybe<TString>{}, TActorId{}, TAuditMode::NonModifying(), "peer", "request-id")
+                    database, TMaybe<TString>{}, TActorId{}, TAuditMode::NonModifying(), "peer", "request-id")
                 , Method_(std::move(method))
             {}
 
@@ -80,7 +82,11 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/raw");
         }
 
-        Y_UNIT_TEST(LegacyServicesKeepRawDatabaseAndIdentityPaths) {
+        Y_UNIT_TEST_TWIN(LegacyServicesKeepRawDatabaseAndIdentityPaths, relativePathsEnabled) {
+            TActorSystemStub actorSystem;
+            actorSystem.AppData.DomainsInfo = new TDomainsInfo;
+            actorSystem.AppData.DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("Root").Release());
+            actorSystem.AppData.FeatureFlags.SetEnableRelativePaths(relativePathsEnabled);
             const TString methods[] = {
                 "Ydb.PersQueue.V1.PersQueueService/CreateTopic",
                 "Ydb.PersQueue.V1.ClusterDiscoveryService/DiscoverClusters",
@@ -95,6 +101,13 @@ namespace NKikimr::NGRpcService {
 
                 request.UseDatabase("/resolved");
                 UNIT_ASSERT_VALUES_EQUAL_C(request.GetDatabaseName().GetOrElse(""), "/resolved", method);
+
+                TNamedRequest relativeRequest(method, "mydb");
+                relativeRequest.EnablePathNormalization();
+                relativeRequest.InitializePathNormalization(MakeNormalizer());
+                UNIT_ASSERT_VALUES_EQUAL_C(relativeRequest.GetDatabaseName().GetOrElse(""),
+                    relativePathsEnabled ? "/Root/mydb" : "mydb", method);
+                UNIT_ASSERT_VALUES_EQUAL_C(relativeRequest.NormalizePath("/raw"), "/raw", method);
             }
         }
     }

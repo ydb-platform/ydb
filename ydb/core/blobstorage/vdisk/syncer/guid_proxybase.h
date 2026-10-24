@@ -19,6 +19,7 @@ namespace NKikimr {
         TVDiskID SelfVDiskId;
         TVDiskID TargetVDiskId;
         TActorId TargetServiceId;
+        bool FailedRealm;
         // notify this actor when done
         const TActorId NotifyId;
         const TDuration RetryPeriod = TDuration::MilliSeconds(50);
@@ -40,6 +41,10 @@ namespace NKikimr {
         }
 
         void SendRequestAndWaitForResponse(const TActorContext &ctx) {
+            if (FailedRealm) {
+                Become(&TThis::StateSleep);
+                return;
+            }
             // we don't use cookie, because in general any response is OK
 
             // track delivery and subscribe on session
@@ -105,6 +110,12 @@ namespace NKikimr {
             Become(&TThis::StateSleep, ctx, RetryPeriod, new TEvents::TEvWakeup());
         }
 
+        void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev, const TActorContext& ctx) {
+            if (FailedRealm) {
+                ctx.Send(ev->Sender, new TEvents::TEvUnsubscribe);
+            }
+        }
+
         void HandleWakeup(const TActorContext &ctx) {
             SendRequestAndWaitForResponse(ctx);
         }
@@ -116,11 +127,13 @@ namespace NKikimr {
 
         // BlobStorage Group reconfiguration
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ctx);
-
             // extract info
             auto *msg = ev->Get();
             TIntrusivePtr<TBlobStorageGroupInfo> &info = msg->NewInfo;
+            if (info->GroupGeneration <= SelfVDiskId.GroupGeneration) {
+                return;
+            }
+            ctx.Send(TActivationContext::InterconnectProxy(TargetServiceId.NodeId()), new TEvents::TEvUnsubscribe);
 
             // update self
             auto shortSelf = TVDiskIdShort(SelfVDiskId);
@@ -130,14 +143,17 @@ namespace NKikimr {
             auto shortTarget = TVDiskIdShort(TargetVDiskId);
             TargetVDiskId = info->GetVDiskId(shortTarget);
             TargetServiceId = info->GetActorId(shortTarget);
+            FailedRealm = info->IsFailRealmFailed(shortTarget.FailRealm);
+            SendRequestAndWaitForResponse(ctx);
         }
 
         STRICT_STFUNC(StateFunc,
+            IgnoreFunc(TEvents::TEvWakeup)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvInterconnect::TEvNodeDisconnected, Handle)
             HFunc(TEvents::TEvUndelivered, Handle)
             HFunc(TEvBlobStorage::TEvVSyncGuidResult, Handle)
-            IgnoreFunc(TEvInterconnect::TEvNodeConnected)
+            HFunc(TEvInterconnect::TEvNodeConnected, Handle)
             HFunc(TEvVGenerationChange, Handle)
         )
 
@@ -147,7 +163,7 @@ namespace NKikimr {
             IgnoreFunc(TEvents::TEvUndelivered)
             IgnoreFunc(TEvBlobStorage::TEvVSyncGuidResult)
             CFunc(TEvents::TEvWakeup::EventType, HandleWakeup)
-            IgnoreFunc(TEvInterconnect::TEvNodeConnected)
+            HFunc(TEvInterconnect::TEvNodeConnected, Handle)
             HFunc(TEvVGenerationChange, Handle)
         )
 
@@ -157,6 +173,7 @@ namespace NKikimr {
         }
 
         TVDiskGuidProxyBase(TIntrusivePtr<TVDiskContext> vctx,
+                            TIntrusivePtr<TBlobStorageGroupInfo> info,
                             const TVDiskID &selfVDiskId,
                             const TVDiskID &targetVDiskId,
                             const TActorId &targetServiceId,
@@ -166,6 +183,7 @@ namespace NKikimr {
             , SelfVDiskId(selfVDiskId)
             , TargetVDiskId(targetVDiskId)
             , TargetServiceId(targetServiceId)
+            , FailedRealm(info->IsFailRealmFailed(targetVDiskId.FailRealm))
             , NotifyId(notifyId)
         {}
     };

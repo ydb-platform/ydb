@@ -221,6 +221,7 @@ namespace NKikimr {
         TIntrusivePtr<TSyncerData> SyncerData;
         TSchedulerQueue SchedulerQueue;
         TActiveActors ActiveActors;
+        THashSet<TActorId> SyncJobs;
         const TDuration SyncTimeInterval;
         TActorId CommitterId;
         TActorId NotifyId;
@@ -310,7 +311,8 @@ namespace NKikimr {
                 bool fullRecovery) {
             YDB_LOG_INFO_CTX(ctx, VDISKP(SyncerContext->VCtx->VDiskLogPrefix, "SyncerScheduler: sync job done: vDiskId# %s status# %s newSyncState# %s", vDiskId.ToString().data(), NKikimrVDiskData::TSyncerVDiskEntry::ESyncStatus_Name(peerSyncState.LastSyncStatus).data(), peerSyncState.SyncState.ToString().data()));
 
-            auto interval = fullRecovery ? TDuration::Seconds(0) : SyncTimeInterval;
+            auto interval = fullRecovery && !GInfo->IsFailRealmFailed(vDiskId.FailRealm)
+                ? TDuration::Seconds(0) : SyncTimeInterval;
             SyncerData->Neighbors->ApplyChanges(vDiskId, peerSyncState, interval);
             ActualizeUnsyncedDisksNum();
             const ui32 orderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));
@@ -338,9 +340,10 @@ namespace NKikimr {
 
         void Handle(TEvSyncerJobDone::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
+            SyncJobs.erase(ev->Sender);
             TEvSyncerJobDone *msg = ev->Get();
 #ifdef USE_MERGE_FULL_SYNC_SCHEME
-            if (msg->Task->IsFullRecoveryTask()) {
+            if (msg->Task->IsFullRecoveryTask() && !GInfo->IsFailRealmFailed(msg->Task->VDiskId.FailRealm)) {
                 YDB_LOG_INFO_CTX(ctx, VDISKP(SyncerContext->VCtx->VDiskLogPrefix, "SyncerScheduler: need full sync for vDiskId# %s", msg->Task->VDiskId.ToString().data()));
 
                 GatheredDisksForFullSync[msg->Task->VDiskId] = msg->Task->GetCurrent();
@@ -404,6 +407,7 @@ namespace NKikimr {
                     JobCtx);
             const TActorId aid = ctx.Register(CreateSyncerJob(SyncerContext, std::move(task), ctx.SelfID));
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+            SyncJobs.insert(aid);
 
             YDB_LOG_INFO_CTX(ctx, VDISKP(SyncerContext->VCtx->VDiskLogPrefix, "SyncerScheduler: start sync job: vDiskId# %s", vDiskId.ToString().data()));
         }
@@ -485,10 +489,18 @@ namespace NKikimr {
 
         // BlobStorage Group reconfiguration
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ctx);
             auto *msg = ev->Get();
+            if (msg->NewInfo->GroupGeneration <= GInfo->GroupGeneration) {
+                return;
+            }
             GInfo = msg->NewInfo;
             JobCtx = TSjCtx::Create(SyncerContext, GInfo);
+            for (const auto& actorId : SyncJobs) {
+                ctx.Send(actorId, msg->Clone());
+            }
+            for (const auto& [actorId, _] : FullSyncsInProgress) {
+                ctx.Send(actorId, msg->Clone());
+            }
         }
 
         void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {

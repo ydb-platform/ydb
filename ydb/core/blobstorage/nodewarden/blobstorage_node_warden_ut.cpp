@@ -1950,6 +1950,73 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         VDiskIDFromVDiskID(vdiskId, record.Config.MutableVDiskID());
     }
 
+    CUSTOM_UNIT_TEST(TestFailedRealmStopsVDiskWithoutSlay) {
+        using TWarden = NStorage::TNodeWarden;
+        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
+        const auto wardenId = SetupNodeWardenForSlayTest(runtime);
+        const ui32 pdiskId = 2095;
+        const TWarden::TVSlotId slot(1, pdiskId, 1);
+        const TVDiskID vdiskId(100595, 1, 1, 0, 0);
+        const auto serviceId = slot.GetVDiskServiceId();
+        const auto actorId = runtime.AllocateEdgeActor(1);
+        auto makeInfo = [&](ui32 generation, R::EState state) {
+            TBlobStorageGroupInfo::TDynamicInfo dynamic(vdiskId.GroupID, generation);
+            dynamic.FailRealmStates = {R::N0, state, R::N0};
+            for (ui32 i = 0; i < 9; ++i) {
+                dynamic.PushBackActorId(serviceId);
+            }
+            return MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupInfo::TTopology(
+                TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1), std::move(dynamic), "");
+        };
+        runtime.WrapInActorContext(wardenId, [&](IActor* actor) {
+            auto& warden = *dynamic_cast<TWarden*>(actor);
+            auto& pdisk = NStorage::TNodeWardenTestPeer::AddPDisk(warden, pdiskId);
+            pdisk.SetNodeID(1);
+            pdisk.SetPDiskID(pdiskId);
+            pdisk.SetPDiskGuid(123);
+            auto& group = warden.Groups[vdiskId.GroupID.GetRawId()];
+            group.Group.emplace();
+            group.Info = makeInfo(1, R::F);
+            auto& record = warden.LocalVDisks[slot];
+            SetSlayTestVDisk(record, 1, pdiskId, 1, vdiskId);
+            record.Config.MutableVDiskLocation()->SetPDiskGuid(123);
+
+            warden.StartLocalVDiskActor(record);
+            UNIT_ASSERT(!record.RuntimeData);
+            UNIT_ASSERT(!group.VDisksOfGroup.Empty());
+            UNIT_ASSERT(warden.SlayInFlight.empty());
+
+            // Model an already running incarnation, then exclude its realm.
+            auto normal = makeInfo(2, R::N0);
+            record.RuntimeData.emplace(TWarden::TVDiskRecord::TRuntimeData{
+                .GroupInfo = normal,
+                .ActorId = actorId,
+                .ServiceId = serviceId,
+                .OrderNumber = normal->GetOrderNumber(TVDiskIdShort(vdiskId)),
+                .DonorMode = false,
+                .ReadOnly = false,
+                .DDisk = false,
+            });
+            warden.VDiskIdByActor.emplace(actorId, slot);
+            group.Info = makeInfo(3, R::F);
+            warden.UpdateGroupInfoForDisk(record, group.Info);
+            UNIT_ASSERT(!record.RuntimeData);
+            UNIT_ASSERT(record.ShutdownPending);
+            UNIT_ASSERT_VALUES_EQUAL(record.ShutdownActorId, actorId);
+            UNIT_ASSERT(!group.VDisksOfGroup.Empty());
+            UNIT_ASSERT(warden.SlayInFlight.empty());
+
+            // Returning before the old actor exits must wait for its shutdown.
+            group.Info = makeInfo(4, R::R);
+            warden.UpdateGroupInfoForDisk(record, group.Info);
+            UNIT_ASSERT(!record.RuntimeData);
+            UNIT_ASSERT(record.RestartAfterShutdown);
+            UNIT_ASSERT(warden.SlayInFlight.empty());
+        });
+        runtime.WaitForEdgeActorEvent<TEvents::TEvPoison>(actorId, false);
+    }
+
     CUSTOM_UNIT_TEST(TestSlayCompletesWhenPDiskIsDestroyedBeforeReply) {
         TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
         runtime.SetupNodeSubSystems = [](ui32, TActorSystemSetup* setup) {

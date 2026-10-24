@@ -97,7 +97,8 @@ namespace NBalancing {
             for (ui32 i = 0; i < GInfo->GetTotalVDisksNum(); ++i) {
                 const auto vdiskId = GInfo->GetVDiskId(i);
                 const auto actorId = GInfo->GetActorId(i);
-                if (TVDiskIdShort(vdiskId) != Ctx->VCtx->ShortSelfVDisk) {
+                if (TVDiskIdShort(vdiskId) != Ctx->VCtx->ShortSelfVDisk
+                        && !GInfo->IsFailRealmFailed(vdiskId.FailRealm)) {
                     Send(actorId, new TEvBlobStorage::TEvVStatus(vdiskId));
                 }
             }

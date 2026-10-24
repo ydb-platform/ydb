@@ -13,6 +13,7 @@ namespace NKikimr {
         friend class TActorBootstrapped<TSyncerGuidPropagator>;
 
         TIntrusivePtr<TVDiskContext> VCtx;
+        TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         // vdisk/actor ids are reconfigurable, they are changed during group reconfiguration
         TVDiskID SelfVDiskId;
         TVDiskID TargetVDiskId;
@@ -27,7 +28,7 @@ namespace NKikimr {
 
 
         void RunWriter(const TActorContext &ctx) {
-            WriterId = ctx.Register(CreateProxyForWritingVDiskGuid(VCtx,
+            WriterId = ctx.Register(CreateProxyForWritingVDiskGuid(VCtx, GInfo,
                                                                    SelfVDiskId,
                                                                    TargetVDiskId,
                                                                    TargetServiceId,
@@ -81,6 +82,7 @@ namespace NKikimr {
             // extract info
             auto *msg = ev->Get();
             TIntrusivePtr<TBlobStorageGroupInfo> &info = msg->NewInfo;
+            GInfo = info;
 
             // update self
             auto shortSelf = TVDiskIdShort(SelfVDiskId);
@@ -118,6 +120,7 @@ namespace NKikimr {
         }
 
         TSyncerGuidPropagator(TIntrusivePtr<TVDiskContext> vctx,
+                              TIntrusivePtr<TBlobStorageGroupInfo> info,
                               const TVDiskID &selfVDiskId,
                               const TVDiskID &targetVDiskId,
                               const TActorId &targetServiceId,
@@ -125,6 +128,7 @@ namespace NKikimr {
                               TVDiskEternalGuid guid)
             : TActorBootstrapped<TSyncerGuidPropagator>()
             , VCtx(std::move(vctx))
+            , GInfo(std::move(info))
             , SelfVDiskId(selfVDiskId)
             , TargetVDiskId(targetVDiskId)
             , TargetServiceId(targetServiceId)
@@ -138,12 +142,13 @@ namespace NKikimr {
     // SYNCER GUID PROPAGATOR
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateSyncerGuidPropagator(TIntrusivePtr<TVDiskContext> vctx,
+                                       TIntrusivePtr<TBlobStorageGroupInfo> info,
                                        const TVDiskID &selfVDiskId,
                                        const TVDiskID &targetVDiskId,
                                        const TActorId &targetServiceId,
                                        NKikimrBlobStorage::TSyncGuidInfo::EState state,
                                        TVDiskEternalGuid guid) {
-        return new TSyncerGuidPropagator(std::move(vctx), selfVDiskId, targetVDiskId, targetServiceId,
+        return new TSyncerGuidPropagator(std::move(vctx), std::move(info), selfVDiskId, targetVDiskId, targetServiceId,
                                          state, guid);
     }
 

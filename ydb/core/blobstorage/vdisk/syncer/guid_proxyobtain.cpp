@@ -34,11 +34,12 @@ namespace NKikimr {
 
     public:
         TObtainVDiskGuidProxy(TIntrusivePtr<TVDiskContext> vctx,
+                              TIntrusivePtr<TBlobStorageGroupInfo> info,
                               const TVDiskID &selfVDiskId,
                               const TVDiskID &targetVDiskId,
                               const TActorId &targetServiceId,
                               const TActorId &notifyId)
-            : TVDiskGuidProxyBase(std::move(vctx), selfVDiskId, targetVDiskId, targetServiceId, notifyId)
+            : TVDiskGuidProxyBase(std::move(vctx), std::move(info), selfVDiskId, targetVDiskId, targetServiceId, notifyId)
         {}
     };
 
@@ -47,11 +48,12 @@ namespace NKikimr {
     // CreateProxyForObtainingVDiskGuid
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateProxyForObtainingVDiskGuid(TIntrusivePtr<TVDiskContext> vctx,
+                                             TIntrusivePtr<TBlobStorageGroupInfo> info,
                                              const TVDiskID &selfVDiskId,
                                              const TVDiskID &targetVDiskId,
                                              const TActorId &targetServiceId,
                                              const TActorId &notifyId) {
-        return new TObtainVDiskGuidProxy(std::move(vctx), selfVDiskId, targetVDiskId,
+        return new TObtainVDiskGuidProxy(std::move(vctx), std::move(info), selfVDiskId, targetVDiskId,
                                          targetServiceId, notifyId);
     }
 

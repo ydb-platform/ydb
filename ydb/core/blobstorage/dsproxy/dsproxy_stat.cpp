@@ -44,6 +44,9 @@ namespace NKikimr {
         if (Info) {
             Stat.Fadeout(TActivationContext::Now());
             for (ui32 i = 0, num = Info->GetTotalVDisksNum(); i < num; ++i) {
+                if (Info->IsFailRealmFailed(Info->GetVDiskId(i).FailRealm)) {
+                    continue;
+                }
                 const TActorId vdiskServiceId = Info->GetActorId(i);
                 const TActorId groupStatAggregatorId = MakeGroupStatAggregatorId(vdiskServiceId);
                 Send(groupStatAggregatorId, new TEvGroupStatReport(TActorId(), GroupId.GetRawId(), Stat));

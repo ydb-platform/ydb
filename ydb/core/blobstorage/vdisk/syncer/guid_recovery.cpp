@@ -653,7 +653,7 @@ namespace NKikimr {
                     auto selfVDiskId = GInfo->GetVDiskId(VCtx->ShortSelfVDisk);
                     auto vd = GInfo->GetVDiskId(x.OrderNumber);
                     auto aid = GInfo->GetActorId(x.OrderNumber);
-                    auto proxyActor = CreateProxyForObtainingVDiskGuid(VCtx, selfVDiskId, vd, aid, ctx.SelfID);
+                    auto proxyActor = CreateProxyForObtainingVDiskGuid(VCtx, GInfo, selfVDiskId, vd, aid, ctx.SelfID);
                     auto actorId = ctx.Register(proxyActor);
                     x.Get().SetActorID(actorId);
                 };

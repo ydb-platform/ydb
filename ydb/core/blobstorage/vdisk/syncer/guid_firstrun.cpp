@@ -341,7 +341,7 @@ namespace NKikimr {
                 auto selfVDiskId = GInfo->GetVDiskId(VCtx->ShortSelfVDisk);
                 auto vd = GInfo->GetVDiskId(x.OrderNumber);
                 auto aid = GInfo->GetActorId(x.OrderNumber);
-                auto proxyActor = CreateProxyForWritingVDiskGuid(VCtx, selfVDiskId, vd, aid, ctx.SelfID, state, guid);
+                auto proxyActor = CreateProxyForWritingVDiskGuid(VCtx, GInfo, selfVDiskId, vd, aid, ctx.SelfID, state, guid);
                 auto actorId = ctx.Register(proxyActor);
                 x.Get().SetActorID(actorId);
             };
@@ -421,7 +421,7 @@ namespace NKikimr {
                 auto selfVDiskId = GInfo->GetVDiskId(VCtx->ShortSelfVDisk);
                 auto vd = GInfo->GetVDiskId(x.OrderNumber);
                 auto aid = GInfo->GetActorId(x.OrderNumber);
-                auto proxyActor = CreateProxyForWritingVDiskGuid(VCtx, selfVDiskId, vd, aid, ctx.SelfID, state, guid);
+                auto proxyActor = CreateProxyForWritingVDiskGuid(VCtx, GInfo, selfVDiskId, vd, aid, ctx.SelfID, state, guid);
                 auto actorId = ctx.Register(proxyActor);
                 x.Get().SetActorID(actorId);
             };

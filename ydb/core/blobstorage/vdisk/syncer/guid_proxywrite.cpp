@@ -32,13 +32,14 @@ namespace NKikimr {
 
     public:
         TWriteVDiskGuidProxy(TIntrusivePtr<TVDiskContext> vctx,
+                             TIntrusivePtr<TBlobStorageGroupInfo> info,
                              const TVDiskID &selfVDiskId,
                              const TVDiskID &targetVDiskId,
                              const TActorId &targetServiceId,
                              const TActorId &notifyId,
                              NKikimrBlobStorage::TSyncGuidInfo::EState state,
                              TVDiskEternalGuid guid)
-            : TVDiskGuidProxyBase(std::move(vctx), selfVDiskId, targetVDiskId, targetServiceId, notifyId)
+            : TVDiskGuidProxyBase(std::move(vctx), std::move(info), selfVDiskId, targetVDiskId, targetServiceId, notifyId)
             , State(state)
             , Guid(guid)
         {}
@@ -48,6 +49,7 @@ namespace NKikimr {
     // CreateProxyForWritingVDiskGuid
     ////////////////////////////////////////////////////////////////////////////
     IActor* CreateProxyForWritingVDiskGuid(TIntrusivePtr<TVDiskContext> vctx,
+                                           TIntrusivePtr<TBlobStorageGroupInfo> info,
                                            const TVDiskID &selfVDiskId,
                                            const TVDiskID &targetVDiskId,
                                            const TActorId &targetServiceId,
@@ -56,7 +58,7 @@ namespace NKikimr {
                                            TVDiskEternalGuid guid) {
         Y_VERIFY_S(!(state == NKikimrBlobStorage::TSyncGuidInfo::Final &&
                    guid == TVDiskEternalGuid()), vctx->VDiskLogPrefix);
-        return new TWriteVDiskGuidProxy(std::move(vctx), selfVDiskId, targetVDiskId, targetServiceId,
+        return new TWriteVDiskGuidProxy(std::move(vctx), std::move(info), selfVDiskId, targetVDiskId, targetServiceId,
                                         notifyId, state, guid);
     }
 

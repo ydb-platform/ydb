@@ -47,6 +47,7 @@ namespace NKikimr {
         // Target VDiskId and ActorId are reconfigurable
         TVDiskID TargetVDiskId;
         TActorId TargetActorId;
+        TActorId JobActorId;
 
         void Bootstrap(const TActorContext &ctx) {
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): START", TargetVDiskId.ToString().data()));
@@ -64,6 +65,7 @@ namespace NKikimr {
                 JobCtx);
             // run task
             const TActorId jobActorId = ctx.Register(CreateSyncerJob(SyncerCtx, std::move(task), ctx.SelfID));
+            JobActorId = jobActorId;
             ActiveActors.Insert(jobActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             // state func
             Become(&TThis::WaitForSyncStateFunc);
@@ -72,6 +74,7 @@ namespace NKikimr {
         void Handle(TEvSyncerJobDone::TPtr &ev, const TActorContext &ctx) {
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): TEvSyncerJobDone; Task# %s", TargetVDiskId.ToString().data(), ev->Get()->Task->ToString().data()));
             ActiveActors.Erase(ev->Sender);
+            JobActorId = {};
             auto* msg = ev->Get();
             std::unique_ptr<TSyncerJobTask> task = std::move(msg->Task);
             auto syncStatus = task->GetCurrent().LastSyncStatus;
@@ -148,8 +151,13 @@ namespace NKikimr {
         // BlobStorage Group reconfiguration
         ////////////////////////////////////////////////////////////////////////
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ctx);
             auto msg = ev->Get();
+            if (msg->NewInfo->GroupGeneration <= JobCtx->GInfo->GroupGeneration) {
+                return;
+            }
+            if (JobActorId) {
+                ctx.Send(JobActorId, msg->Clone());
+            }
             // reconfigure target VDiskId and ActorId
             auto shortTargetVDiskId = TVDiskIdShort(TargetVDiskId);
             TargetVDiskId = msg->NewInfo->GetVDiskId(shortTargetVDiskId);

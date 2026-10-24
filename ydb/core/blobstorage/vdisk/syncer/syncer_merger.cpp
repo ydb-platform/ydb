@@ -424,7 +424,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
         }
     }
 
-    void SyncError(const TVDiskID& vdiskId, TSyncerJobTask::ESyncStatus status) {
+    void SyncError(const TVDiskID& vdiskId, TSyncerJobTask::ESyncStatus status, bool progress = true) {
         Y_VERIFY_S(status != TSyncStatusVal::Running, VCtx->VDiskLogPrefix);
         auto& sync = Syncs[vdiskId];
 
@@ -446,7 +446,28 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
         auto msg = std::make_unique<TEvSyncerFullSyncDiskCancelled>(vdiskId, sync.Current);
         Send(SchedulerActorId, msg.release());
 
-        Progress();
+        if (progress) {
+            Progress();
+        }
+    }
+
+    void CancelFailedRealms() {
+        for (const auto& [vdiskId, sync] : Syncs) {
+            if (!sync.Cancelled && GInfo->IsFailRealmFailed(vdiskId.FailRealm)) {
+                SyncError(vdiskId, TSyncStatusVal::DroppedConnection, false);
+            }
+        }
+        if (!InCommit) {
+            Progress();
+            ProcessWrites();
+        }
+    }
+
+    void Handle(TEvVGenerationChange::TPtr& ev) {
+        if (ev->Get()->NewInfo->GroupGeneration > GInfo->GroupGeneration) {
+            GInfo = ev->Get()->NewInfo;
+            CancelFailedRealms();
+        }
     }
 
     void NotifySchedulerAndDie() {
@@ -589,6 +610,9 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
         auto& sync = Syncs[vDiskId];
 
         VSyncFullInFlight.erase(vDiskId);
+        if (sync.Cancelled) {
+            return;
+        }
 
         Y_VERIFY_S(record.GetCookie() == sync.FullRecoverInfo->VSyncFullMsgsReceived,
             VCtx->VDiskLogPrefix);
@@ -685,6 +709,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
     }
 
     STRICT_STFUNC(MainFunc,
+        hFunc(TEvVGenerationChange, Handle)
         hFunc(TEvBlobStorage::TEvVSyncFullResult, Handle)
         hFunc(NPDisk::TEvChunkReserveResult, Handle)
         hFunc(NPDisk::TEvChunkWriteResult, Handle)
@@ -728,7 +753,7 @@ public:
 
     void Bootstrap() {
         Become(&TIndexMergerActor::MainFunc);
-        Progress();
+        CancelFailedRealms();
     }
 };
 

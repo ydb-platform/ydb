@@ -3093,14 +3093,18 @@ namespace NKikimr {
     struct TEvVGenerationChange: public TEventLocal<TEvVGenerationChange, TEvBlobStorage::EvVGenerationChange> {
         TVDiskID NewVDiskId;
         TIntrusivePtr<TBlobStorageGroupInfo> NewInfo;
+        // A donor keeps its old VDisk generation while receiving current realm states.
+        ui32 ConfigurationGeneration;
 
-        TEvVGenerationChange(const TVDiskID &newVDiskId, const TIntrusivePtr<TBlobStorageGroupInfo> &newInfo)
+        TEvVGenerationChange(const TVDiskID &newVDiskId, const TIntrusivePtr<TBlobStorageGroupInfo> &newInfo,
+                std::optional<ui32> configurationGeneration = {})
             : NewVDiskId(newVDiskId)
             , NewInfo(newInfo)
+            , ConfigurationGeneration(configurationGeneration.value_or(newInfo->GroupGeneration))
         {}
 
         TEvVGenerationChange *Clone() {
-            return new TEvVGenerationChange(NewVDiskId, NewInfo);
+            return new TEvVGenerationChange(NewVDiskId, NewInfo, ConfigurationGeneration);
         }
 
         TString ToString() const override {

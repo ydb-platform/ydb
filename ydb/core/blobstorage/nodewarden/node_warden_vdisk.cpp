@@ -35,11 +35,11 @@ namespace NKikimr::NStorage {
             {"runtimeData", vdisk.RuntimeData.has_value()});
 
         bool vdiskRunning = false;
+        vdisk.TIntrusiveListItem<TVDiskRecord, TGroupRelationTag>::Unlink();
 
         if (vdisk.RuntimeData) {
             vdiskRunning = true;
             vdisk.ShutdownActorId = vdisk.RuntimeData->ActorId;
-            vdisk.TIntrusiveListItem<TVDiskRecord, TGroupRelationTag>::Unlink();
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdisk.RuntimeData->ActorId, {}, nullptr, 0));
             vdisk.RuntimeData.reset();
         }
@@ -179,9 +179,33 @@ namespace NKikimr::NStorage {
 
             // entangle VDisk with the group
             group.VDisksOfGroup.PushBack(&vdisk);
+            if (groupInfo->IsFailRealmFailed(vdiskId.FailRealm)) {
+                // Keep the slot subscribed to group updates so it can start when the realm returns.
+                vdisk.Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                VDiskStatusChanged = true;
+                return;
+            }
         } else {
             const auto& dm = vdisk.Config.GetDonorMode();
             TBlobStorageGroupType type(static_cast<TBlobStorageGroupType::EErasureSpecies>(dm.GetErasureSpecies()));
+
+            if (type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
+                auto& group = Groups[vdisk.GetGroupId()];
+                group.VDisksOfGroup.PushBack(&vdisk);
+                auto info = group.Info;
+                if (!info && group.Group) {
+                    info = TBlobStorageGroupInfo::Parse(*group.Group, nullptr, nullptr);
+                }
+                if (!info) {
+                    RequestGroupConfig(vdisk.GetGroupId(), group);
+                    return;
+                }
+                if (info->IsFailRealmFailed(vdiskId.FailRealm)) {
+                    vdisk.Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                    VDiskStatusChanged = true;
+                    return;
+                }
+            }
 
             // generate desired group topology
             TBlobStorageGroupInfo::TTopology topology(type, dm.GetNumFailRealms(), dm.GetNumFailDomainsPerFailRealm(),
@@ -723,11 +747,12 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::UpdateGroupInfoForDisk(TVDiskRecord& vdisk, const TIntrusivePtr<TBlobStorageGroupInfo>& newInfo) {
-        if (!vdisk.RuntimeData) {
-            return;
-        }
         if (newInfo->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE || !newInfo->GetTotalVDisksNum()) {
             // group has no VDisks anymore (it is decommitted, or it has lost its inline pile), they will be deleted soon
+            return;
+        }
+        if (!vdisk.RuntimeData) {
+            StartLocalVDiskActor(vdisk);
             return;
         }
 
@@ -736,6 +761,12 @@ namespace NKikimr::NStorage {
 
         const ui32 orderNumber = vdisk.RuntimeData->OrderNumber;
         const TActorId vdiskServiceId = vdisk.RuntimeData->ServiceId;
+
+        if (newInfo->IsFailRealmFailed(vdisk.GetVDiskId().FailRealm)) {
+            PoisonLocalVDisk(vdisk);
+            Groups.at(vdisk.GetGroupId()).VDisksOfGroup.PushBack(&vdisk);
+            return;
+        }
 
         if (newInfo->GetActorId(orderNumber) != vdiskServiceId) {
             // this disk is in donor mode, we don't care about generation change; donor modes are operated by BSC solely

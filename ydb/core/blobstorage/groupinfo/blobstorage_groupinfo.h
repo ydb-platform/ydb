@@ -367,6 +367,10 @@ public:
     TDynamicInfo::EFailRealmState GetFailRealmState(ui32 failRealmIdx) const {
         return Dynamic.FailRealmStates.at(failRealmIdx);
     }
+    bool IsFailRealmFailed(ui32 failRealmIdx) const {
+        return Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+            && GetFailRealmState(failRealmIdx) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F;
+    }
     EEncryptionMode GetEncryptionMode() const { return EncryptionMode; }
     ELifeCyclePhase GetLifeCyclePhase() const { return LifeCyclePhase; }
     ui64 GetGroupKeyNonce() const { return GroupKeyNonce; }

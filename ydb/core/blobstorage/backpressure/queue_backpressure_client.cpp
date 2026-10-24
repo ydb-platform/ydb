@@ -42,6 +42,7 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
     const TVDiskIdShort VDiskIdShort;
     TActorId RemoteVDisk;
     TVDiskID VDiskId;
+    ui32 ConfigurationGeneration = 0;
     ui32 VDiskOrderNumber;
     NKikimrBlobStorage::EVDiskQueueId QueueId;
     const TDuration QueueWatchdogTimeout;
@@ -52,6 +53,7 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
     std::optional<NKikimrBlobStorage::TGroupInfo> RecentGroup;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
     TBlobStorageGroupType GType;
+    bool FailedRealm = false;
     TInstant ConnectionFailureTime;
     ui32 RaceNotifiedGeneration = 0;
 
@@ -157,7 +159,9 @@ private:
         VDiskOrderNumber = info.GetOrderNumber(VDiskIdShort);
         LogPrefix = Sprintf("[%s TargetVDisk# %s Queue# %s]", SelfId().ToString().data(), VDiskId.ToString().data(), QueueName.data());
         RecentGroup = info.Group;
+        ConfigurationGeneration = info.GroupGeneration;
         DeviceType = info.GetDeviceType();
+        FailedRealm = info.IsFailRealmFailed(VDiskIdShort.FailRealm);
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -637,6 +641,10 @@ private:
     }
 
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr ev, const TActorContext& ctx) {
+        if (FailedRealm) {
+            ctx.Send(ev->Sender, new TEvents::TEvUnsubscribe);
+            return;
+        }
         if (ev->Get()->NodeId == RemoteVDisk.NodeId()) {
             Y_ABORT_UNLESS(!SessionId || SessionId == ev->Sender, "SessionId# %s Sender# %s", SessionId.ToString().data(),
                 ev->Sender.ToString().data());
@@ -678,6 +686,9 @@ private:
     // * message is not delivered and we receive TEvUndelivered from Interconnect
     // * connection to the node is lost and we get TEvNodeDisconnected
     void RequestReadiness(TEvRequestReadiness::TPtr ev, const TActorContext& ctx) {
+        if (FailedRealm) {
+            return;
+        }
         if (ev && ev->Get()->Cookie != CheckReadinessCookie) {
             return; // obsolete scheduled event
         }
@@ -1022,19 +1033,22 @@ private:
         break; \
     }
 
-    void ChangeGroupInfo(const TBlobStorageGroupInfo& info, const TActorContext& ctx) {
-        if (info.GroupGeneration > VDiskId.GroupGeneration) { // ignore any possible races with old generations
+    void ChangeGroupInfo(const TBlobStorageGroupInfo& info, const TActorContext& ctx,
+            ui32 generation) {
+        if (generation > ConfigurationGeneration) { // ignore any possible races with old generations
             const TActorId prevActorId = RemoteVDisk;
+            const bool prevFailedRealm = FailedRealm;
             ApplyGroupInfo(info);
+            ConfigurationGeneration = generation;
             YDB_LOG_DEBUG_CTX(ctx, "ChangeGroupInfo",
                 {"logPrefix", LogPrefix},
                 {"func", __func__},
-                {"reconnect", (prevActorId != RemoteVDisk ? "true" : "false")},
+                {"reconnect", (prevActorId != RemoteVDisk || prevFailedRealm != FailedRealm ? "true" : "false")},
                 {"state", GetStateName()},
                 {"marker", "BSQ97"});
-            if (prevActorId != RemoteVDisk) {
+            if (prevActorId != RemoteVDisk || prevFailedRealm != FailedRealm) {
                 Unsubscribe(prevActorId.NodeId(), ctx);
-                ResetConnection(ctx, NKikimrProto::RACE, "target disk changed", TDuration::Zero());
+                ResetConnection(ctx, NKikimrProto::RACE, "target disk or failrealm state changed", TDuration::Zero());
             }
         }
     }
@@ -1045,7 +1059,7 @@ private:
             {"func", __func__},
             {"ev", ev->Get()->ToString()},
             {"marker", "BSQ98"});
-        ChangeGroupInfo(*ev->Get()->NewInfo, ctx);
+        ChangeGroupInfo(*ev->Get()->NewInfo, ctx, ev->Get()->ConfigurationGeneration);
     }
 
     void HandlePostponedPump(const TActorContext& ctx) {

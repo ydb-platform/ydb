@@ -9,11 +9,13 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
     ydb/core/base
+    ydb/core/util/actorsys_test
     ydb/core/blobstorage
     ydb/core/testlib/default
 )
 
 SRCS(
+    failed_realm_ut.cpp
     blobstorage_syncer_broker_ut.cpp
     blobstorage_syncer_data_ut.cpp
     blobstorage_syncer_localwriter_ut.cpp

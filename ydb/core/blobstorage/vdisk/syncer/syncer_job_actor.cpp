@@ -65,7 +65,7 @@ namespace NKikimr {
             if (outcome.Die) {
                 // if full sync, notify AnubisRunner about it
 #ifndef USE_MERGE_FULL_SYNC_SCHEME
-                if (Task->IsFullRecoveryTask()) {
+                if (Task->IsFullRecoveryTask() && TPeerSyncState::Good(Task->GetCurrent().LastSyncStatus)) {
                     TVDiskIdShort vd = Task->VDiskId;
                     ctx.Send(SyncerCtx->AnubisRunnerId, new TEvFullSyncedWith(vd));
                 }
@@ -159,6 +159,10 @@ namespace NKikimr {
         }
 
         void Bootstrap(const TActorContext &ctx) {
+            if (Task->IsTargetRealmFailed()) {
+                Handle(Task->Terminate(TSyncStatusVal::DroppedConnection), ctx);
+                return;
+            }
             // don't run sync job for too long
             if (const auto timeout = SyncerCtx->Config->SyncJobTimeout; timeout != TDuration::Max()) {
                 ctx.Schedule(timeout, new TEvents::TEvWakeup());
@@ -171,6 +175,14 @@ namespace NKikimr {
 
             if (!PostponedOutcome.Ev) {
                 Become(&TThis::StateFunc);
+            }
+        }
+
+        void Handle(TEvVGenerationChange::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Get()->NewInfo->GroupGeneration > Task->VDiskId.GroupGeneration
+                    && ev->Get()->NewInfo->IsFailRealmFailed(Task->VDiskId.FailRealm)) {
+                ctx.Send(TActivationContext::InterconnectProxy(NodeId), new TEvents::TEvUnsubscribe);
+                Handle(Task->Terminate(TSyncStatusVal::DroppedConnection), ctx);
             }
         }
 
@@ -200,6 +212,7 @@ namespace NKikimr {
         }
 
         STRICT_STFUNC(StateFunc,
+            HFunc(TEvVGenerationChange, Handle)
             HFunc(TEvBlobStorage::TEvVSyncFullResult, Handle)
             HFunc(TEvBlobStorage::TEvVSyncResult, Handle)
             HFunc(TEvLocalSyncDataResult, Handle)
@@ -213,6 +226,7 @@ namespace NKikimr {
         )
 
         STRICT_STFUNC(WaitForSyncBrokerFunc,
+            HFunc(TEvVGenerationChange, Handle)
             IgnoreFunc(TEvBlobStorage::TEvVSyncFullResult)
             IgnoreFunc(TEvBlobStorage::TEvVSyncResult)
             IgnoreFunc(TEvLocalSyncDataResult)

@@ -288,7 +288,7 @@ namespace NKikimr {
             for (auto &x : neighbors) {
                 const TVDiskID vd = GInfo->GetVDiskId(x.OrderNumber);
                 const TActorId va = GInfo->GetActorId(x.OrderNumber);
-                auto aid = ctx.Register(CreateSyncerGuidPropagator(SyncerCtx->VCtx,
+                auto aid = ctx.Register(CreateSyncerGuidPropagator(SyncerCtx->VCtx, GInfo,
                                                                    selfVDiskId,
                                                                    vd,
                                                                    va,

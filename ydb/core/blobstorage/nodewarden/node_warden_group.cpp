@@ -308,8 +308,13 @@ namespace NKikimr::NStorage {
 
             if (const auto& info = group.Info) {
                 Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate(info));
+                // Updating a failed realm may stop a disk and relink it for a later restart.
+                TVector<TVDiskRecord*> disks;
                 for (auto& vdisk : group.VDisksOfGroup) {
-                    UpdateGroupInfoForDisk(vdisk, info);
+                    disks.push_back(&vdisk);
+                }
+                for (auto* vdisk : disks) {
+                    UpdateGroupInfoForDisk(*vdisk, info);
                 }
             }
 

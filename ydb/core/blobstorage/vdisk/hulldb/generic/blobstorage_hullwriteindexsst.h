@@ -46,13 +46,7 @@ protected:
         info.OutboundItems = 0;
         info.CTime = TAppData::TimeProvider->Now();
 
-        if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
-            LevelSegment->LoadLinearIndex(Recs);
-            Recs.clear();
-        } else {
-            Recs.shrink_to_fit();
-            LevelSegment->LoadedIndex = std::move(Recs);
-        }
+        LevelSegment->LoadLinearIndex(std::move(Recs));
 
         TVector<ui32> usedChunks;
         usedChunks.push_back(ChunkIdx);

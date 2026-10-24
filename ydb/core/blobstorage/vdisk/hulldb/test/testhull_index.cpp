@@ -134,11 +134,7 @@ namespace NTest {
                 ++it;
             }
 
-            if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
-                sst->LoadLinearIndex(linearIndex);
-            } else {
-                sst->LoadedIndex.swap(linearIndex);
-            }
+            sst->LoadLinearIndex(std::move(linearIndex));
 
             return sst;
         }

@@ -123,11 +123,7 @@ struct TInput {
             }
             index.emplace_back(MakeKey(step), memRec);
         }
-        if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
-            sst->LoadLinearIndex(index);
-        } else {
-            sst->LoadedIndex.swap(index);
-        }
+        sst->LoadLinearIndex(std::move(index));
         sst->AssignedSstId = id;
         sst->AllChunks.push_back(id);
         sst->Info.Chunks = 1;

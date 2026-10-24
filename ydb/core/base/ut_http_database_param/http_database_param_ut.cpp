@@ -58,9 +58,11 @@ Y_UNIT_TEST(PostWithEmptyContentTypeAndJsonBody) {
         "db-from-body");
 }
 
-Y_UNIT_TEST(PostWithFormUrlEncodedContentTypeIsIgnored) {
+Y_UNIT_TEST(PostWithFormUrlEncodedBodyWithDatabaseField) {
     TCgiParameters params;
-    UNIT_ASSERT(ExtractHttpDatabaseParam(params, "POST", "database=db", "application/x-www-form-urlencoded").empty());
+    UNIT_ASSERT_VALUES_EQUAL(
+        ExtractHttpDatabaseParam(params, "POST", "database=db", "application/x-www-form-urlencoded"),
+        "db");
 }
 
 Y_UNIT_TEST(QueryParamHasPriorityOverPostBodyWithContentType) {

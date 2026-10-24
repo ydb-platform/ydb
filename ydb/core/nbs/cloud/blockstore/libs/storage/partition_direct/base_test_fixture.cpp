@@ -227,6 +227,18 @@ void TBaseFixture::Init()
     };
 }
 
+void TBaseFixture::TearDown(NUnitTest::TTestContext& context)
+{
+    Y_UNUSED(context);
+
+    // Keep DirectBlockGroup alive across the join. ~TVChunk runs on the
+    // executor thread and must not drop the last TExecutor reference there:
+    // TExecutor::Stop() would Join() the thread it is running on.
+    if (DirectBlockGroup) {
+        DirectBlockGroup->GetExecutor()->Stop();
+    }
+}
+
 TGuardedSgList TBaseFixture::MakeSgList() const
 {
     return TGuardedSgList(

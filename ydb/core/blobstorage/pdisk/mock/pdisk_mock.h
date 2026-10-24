@@ -62,6 +62,10 @@ namespace NKikimr {
         void SetReportVDiskMetrics(bool reportVDiskMetrics);
 
         bool IsDiskReadOnly() const;
+
+        // How many PreformattedSectors writes and RawSectors reads the mock has served.
+        ui64 GetPreformattedSectorWrites() const;
+        ui64 GetRawSectorReads() const;
     };
 
     struct TEvMoveDrive : TEventLocal<TEvMoveDrive, EvReplaceData> {

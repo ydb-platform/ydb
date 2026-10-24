@@ -70,6 +70,8 @@ struct TPDiskMockState::TImpl {
     ui32 SlotSizeInUnits = 0;
     // TEvChunkLock: free chunks taken out of use, by owner; 0 stands for the log, as OwnerSystem does in PDisk.
     std::map<ui8, std::set<ui32>> LockedChunks;
+    ui64 PreformattedSectorWrites = 0;
+    ui64 RawSectorReads = 0;
 
     ESpaceColorPolicy SpaceColorPolicy;
     std::shared_ptr<NPDisk::TQuotaRecord> ChunkSharedQuota;
@@ -500,6 +502,14 @@ bool TPDiskMockState::IsDiskReadOnly() const {
     return Impl->IsDiskReadOnly;
 }
 
+ui64 TPDiskMockState::GetPreformattedSectorWrites() const {
+    return Impl->PreformattedSectorWrites;
+}
+
+ui64 TPDiskMockState::GetRawSectorReads() const {
+    return Impl->RawSectorReads;
+}
+
 TString& TPDiskMockState::GetStateErrorReason() {
     return Impl->StateErrorReason;
 }
@@ -715,9 +725,7 @@ public:
                 Impl.AppendBlockSize, TString());
             res->StartingPoints = owner->StartingPoints;
             const NPDisk::TDiskFormat format = TImpl::MakeDiskFormat(bool(Impl.FormatContext), Impl.RawChunkSize);
-            res->DiskFormat = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(format), +[](NPDisk::TDiskFormat* ptr) {
-                delete ptr;
-            });
+            res->DiskFormat = NPDisk::MakeDiskFormatCopy(format);
             if (Impl.FormatContext) {
                 res->FormatContext = Impl.FormatContext;
                 res->OwnedChunkNonces.reserve(res->OwnedChunks.size());
@@ -1139,6 +1147,7 @@ public:
         res.Offset = rawOffset;
         res.RawSectors = true;
         res.ChunkNonce = chunkNonce;
+        ++Impl.RawSectorReads;
 
         const auto chunkIt = owner.ChunkData.find(msg.ChunkIdx);
         const ui64 chunkOffset = (ui64)msg.ChunkIdx * Impl.ChunkSize;
@@ -1213,6 +1222,7 @@ public:
         }
         msg.PartsPtr = NPDisk::TEvChunkWrite::TPartsPtr(new NPDisk::TEvChunkWrite::TAlignedParts(std::move(payload)));
         msg.PreformattedSectors = false;
+        ++Impl.PreformattedSectorWrites;
         return {};
     }
 

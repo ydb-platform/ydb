@@ -8,6 +8,7 @@
 #include "indexes/abstract/meta.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/program/abstract.h>
 #include <ydb/core/formats/arrow/program/execution.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -292,6 +293,11 @@ public:
     const THashMap<ui32, NIndexes::TIndexMetaContainer>& GetIndexes() const {
         return Indexes;
     }
+
+    // Smallest ngram_size among the bloom-ngram indexes on `columnId` that can serve `caseSensitive` probes.
+    // A column can carry several such indexes and the reader picks one per portion, so a probe shorter
+    // than the smallest size cannot be checked by every candidate. Empty when no such index exists.
+    std::optional<ui32> GetBloomNgramSize(ui32 columnId, bool caseSensitive) const;
 
     TString DebugString() const {
         TStringBuilder sb;

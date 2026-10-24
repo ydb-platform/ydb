@@ -508,7 +508,7 @@ namespace NKikimr {
             --InFlightReads;
 
             // apply read result to batcher
-            ReadBatcher.Apply(msg);
+            ReadBatcher.Apply(msg, PDiskCtx.get());
             return ProcessReadBatcher(now);
         }
 
@@ -925,6 +925,8 @@ namespace NKikimr {
             std::unique_ptr<NPDisk::TEvChunkRead> readMsg;
             while (InFlightReads < MaxInFlightReads && (readMsg = ReadBatcher.GetPendingMessage(
                             PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, NPriRead::HullComp))) {
+                // opened here, in the batch pool, rather than in the PDisk completion thread
+                readMsg->RawSectors = UseRawSectorReads(*PDiskCtx);
                 HullCtx->VCtx->CountCompactionCost(*readMsg);
                 Statistics.Update(readMsg.get());
                 msgsForYard.push_back(std::move(readMsg));

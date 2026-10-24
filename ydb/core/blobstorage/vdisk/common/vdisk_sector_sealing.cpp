@@ -73,4 +73,44 @@ namespace NKikimr {
         return true;
     }
 
+    bool UseRawSectorReads(const TPDiskCtx& pdiskCtx) {
+        return pdiskCtx.FormatContext && !pdiskCtx.FormatContext->IsPlainDataChunks()
+            && static_cast<i64>(pdiskCtx.EnableSectorPreparation) != 0;
+    }
+
+    void OpenRawSectors(const TPDiskCtx& pdiskCtx, NPDisk::TEvChunkReadResult& msg, ui32 offset, ui32 size,
+            TLogoBlobID blobId) {
+        if (msg.Status != NKikimrProto::OK || !msg.RawSectors) {
+            return;
+        }
+        const NPDisk::TFormatContextPtr& format = pdiskCtx.FormatContext;
+        Y_ABORT_UNLESS(format && size);
+        const ui32 payloadSize = format->GetSectorPayloadSize();
+        const ui32 sectorSize = format->GetSectorSize();
+        const ui32 firstSector = offset / payloadSize;
+        Y_ABORT_UNLESS(msg.Offset == firstSector * sectorSize);
+
+        // The buffer was read for this request alone, so it is decrypted in place.
+        const ui32 sectors = (offset + size - 1) / payloadSize - firstSector + 1;
+        ui8 *raw = msg.Data.RawDataPtr(0, sectors * sectorSize);
+        TRcBuf data = TRcBuf::UninitializedPageAligned(size);
+        NPDisk::TFormatContext::TOpener opener(format, msg.ChunkIdx, msg.ChunkNonce, blobId);
+        TBufferWithGaps result(offset);
+        ui32 done = 0;
+        for (ui32 sector = firstSector; done < size; ++sector) {
+            const ui32 from = sector == firstSector ? offset % payloadSize : 0;
+            const ui32 len = Min(payloadSize - from, size - done);
+            ui8 *dst = reinterpret_cast<ui8*>(data.GetDataMut()) + done;
+            if (!opener.Open(dst, raw + (ui64)(sector - firstSector) * sectorSize, sector, from, len)) {
+                memset(dst, 0, len);
+                result.AddGap(sector * payloadSize, (sector + 1) * payloadSize);
+            }
+            done += len;
+        }
+        result.SetData(std::move(data));
+        msg.Data = std::move(result);
+        msg.Offset = offset;
+        msg.RawSectors = false;
+    }
+
 } // NKikimr

@@ -11,6 +11,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    mirror3dc_put_ut.cpp
     strategy_ut.cpp
 )
 

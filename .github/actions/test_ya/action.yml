@@ -613,7 +613,6 @@ runs:
 
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || POSTPROCESS_RC=$?
-          echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
           analytics end postprocess_try --rc "$POSTPROCESS_RC"
 
           if [ $RC -ne 0 ]; then

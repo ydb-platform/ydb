@@ -5,13 +5,14 @@
 
 namespace NYdb::inline Dev::NFederatedTopic {
 
-constexpr TDuration REDISCOVERY_DELAY = TDuration::Seconds(30);
-
 TFederatedDbObserverImpl::TFederatedDbObserverImpl(std::shared_ptr<TGRpcConnectionsImpl> connections, const TFederatedTopicClientSettings& settings)
     : TClientImplCommon(std::move(connections), settings)
     , FederatedDbState(std::make_shared<TFederatedDbState>())
     , PromiseToInitState(NThreading::NewPromise())
     , FederationDiscoveryRetryPolicy(settings.RetryPolicy_)
+    , DiscoveryInterval(settings.FederationDiscoveryInterval_
+        ? settings.FederationDiscoveryInterval_
+        : TDuration::Seconds(30))
 {
     RpcSettings.EndpointPolicy = TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint;
     RpcSettings.UseAuth = true;
@@ -172,7 +173,7 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
             FederatedDbState->DbInfos.emplace_back(std::move(db));
         } else {
             if (status.IsSuccess()) {
-                ScheduleFederationDiscoveryImpl(REDISCOVERY_DELAY);
+                ScheduleFederationDiscoveryImpl(DiscoveryInterval);
             } else {
                 LOG_LAZY(DbDriverState_->Log, TLOG_ERR, TStringBuilder()
                     << "OnFederationDiscovery: Got error. Status: " << status.GetStatus()

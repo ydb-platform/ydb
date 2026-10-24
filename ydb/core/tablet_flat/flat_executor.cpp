@@ -534,7 +534,7 @@ void TExecutor::Active(const TActorContext &ctx) {
     CompactionLogic->Start();
 
     for (const auto &it: Database->GetScheme().Tables)
-        CompactionLogic->UpdateInMemStatsStep(it.first, 0, Database->GetTableMemSize(it.first));
+        CompactionLogic->UpdateInMemStatsStep(it.first, 0, Database->GetTableMemAllocatedSize(it.first));
 
     UpdateCompactions();
 
@@ -2081,6 +2081,7 @@ void TExecutor::ExecuteTransaction(TSeat* seat) {
 
     auto *annex = CommitManager ? CommitManager->Annex.Get() : nullptr;
     auto prod = Database->Commit(Stamp(), done && !failed, annex);
+    auto rollbackAffects = std::move(prod.Change->RollbackAffects);
 
     if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl
@@ -2132,6 +2133,14 @@ void TExecutor::ExecuteTransaction(TSeat* seat) {
                     << NFmt::Do(*seat->Self) << " postponed w/o demands");
         }
         PostponeTransaction(seat, env, prod.Change, cpuTimer);
+    }
+
+    if (CompactionLogic) {
+        for (ui32 table : rollbackAffects) {
+            if (Scheme().Tables.contains(table)) {
+                CompactionLogic->UpdateInMemStatsStep(table, 0, Database->GetTableMemAllocatedSize(table));
+            }
+        }
     }
 
     activeTransaction.Done();
@@ -2886,7 +2895,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
         }
 
         for (auto &affectedTable : change->Affects)
-            CompactionLogic->UpdateInMemStatsStep(affectedTable, 1, Database->GetTableMemSize(affectedTable));
+            CompactionLogic->UpdateInMemStatsStep(affectedTable, 1, Database->GetTableMemAllocatedSize(affectedTable));
 
         if (commitResult.NeedFlush && !LogBatchFlushScheduled) {
             LogBatchFlushScheduled = true;
@@ -3972,7 +3981,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     CommitManager->Commit(commit);
 
     if (hadFrozen || logicResult.MemCompacted)
-        CompactionLogic->UpdateInMemStatsStep(tableId, 0, Database->GetTableMemSize(tableId));
+        CompactionLogic->UpdateInMemStatsStep(tableId, 0, Database->GetTableMemAllocatedSize(tableId), true);
 
     CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());
 

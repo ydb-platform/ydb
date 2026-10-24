@@ -110,12 +110,14 @@ namespace NKikimr {
         const auto& record = ev->Get()->Record;
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         std::unordered_map<TLogoBlobID, TInstant, THash<TLogoBlobID>> rerequest;
-        std::unordered_set<TLogoBlobID> done;
+        std::unordered_map<TLogoBlobID, const NKikimrBlobStorage::TQueryResult*, THash<TLogoBlobID>> lastResult;
+        for (const auto& res : record.GetResult()) {
+            lastResult[LogoBlobIDFromLogoBlobID(res.GetBlobID()).FullID()] = &res;
+        }
 
         for (const auto& res : record.GetResult()) {
             const TLogoBlobID& id = LogoBlobIDFromLogoBlobID(res.GetBlobID());
             const TLogoBlobID& fullId = id.FullID(); // whole blob id
-            done.insert(fullId);
             const NKikimrProto::EReplyStatus status = res.GetStatus();
             auto [begin, end] = VGetResultMap.equal_range(fullId);
             for (auto it = begin; it != end; ) {
@@ -128,11 +130,12 @@ namespace NKikimr {
                         auto& item = *info.Item; // only here we can access item, after obtaining context pointer
                         TRope data = ev->Get()->GetBlobData(res);
                         bool update = false;
-                        if (res.GetStatus() == NKikimrProto::OK && data) {
+                        if (res.GetStatus() == NKikimrProto::OK && (data
+                                || (Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3of4 && id.PartId() == 3))) {
                             item.SetPartData(id, std::move(data));
                             update = true;
                         }
-                        const bool term = !--info.BlobReplyCounter;
+                        bool term = lastResult.at(fullId) == &res && !--info.BlobReplyCounter;
                         if (item.Status == NKikimrProto::UNKNOWN && (term || update)) {
                             const NKikimrProto::EReplyStatus prevStatus = std::exchange(item.Status, ProcessItemData(item));
                             if (item.Status == NKikimrProto::UNKNOWN && term) { // not enough parts to fulfill request
@@ -149,6 +152,7 @@ namespace NKikimr {
                                 {"entryStatus", prevStatus},
                                 {"exitStatus", item.Status});
                         }
+                        term |= item.Status != NKikimrProto::UNKNOWN;
                         if (item.Status != NKikimrProto::UNKNOWN && !--context->NumUnrespondedBlobs) { // request fully completed
                             context->SendResult(SelfId());
                             InFlight.erase(context->Iterator);
@@ -165,7 +169,7 @@ namespace NKikimr {
             }
         }
 
-        for (const auto& id : done) {
+        for (const auto& [id, _] : lastResult) {
             const size_t n = GetsInFlight.erase(std::make_tuple(vdiskId, id));
             Y_DEBUG_ABORT_UNLESS(n == 1);
         }
@@ -179,7 +183,8 @@ namespace NKikimr {
         if (item.GetAvailableParts().IsSupersetOf(item.Needed)) {
             return NKikimrProto::OK;
         }
-        const ui32 numParts = std::popcount(item.PartsMask);
+        const ui32 numParts = std::popcount(Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3of4
+            ? item.PartsMask & 3u : item.PartsMask);
         if (numParts >= Info->Type.MinimalRestorablePartCount()) {
             Y_DEBUG_ABORT_UNLESS(item.Parts.size() == Info->Type.TotalPartCount());
 

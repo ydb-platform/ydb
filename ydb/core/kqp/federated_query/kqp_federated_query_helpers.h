@@ -2,6 +2,8 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_provider_integration.h>
+#include <ydb/core/fq/libs/config/protos/wasm_services.pb.h>
+#include <ydb/core/fq/libs/wasm_services/tvm.h>
 #include <ydb/core/local_proxy/local_pq_client/local_topic_client_settings.h>
 
 #include <ydb/library/logger/actor.h>
@@ -99,6 +101,8 @@ struct TKqpFederatedQuerySetup {
     NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
     TScriptExecutionSettings ScriptExecutionSettings = {};
     NFq::TCheckpointProviderIntegrations CheckpointProviderIntegrations = {};
+    NFq::NConfig::TWasmServicesConfig WasmServices = {};
+    std::shared_ptr<NFq::NWasmServices::ITvmTicketProvider> WasmTvmProvider = {};
 };
 
 struct IKqpFederatedQuerySetupFactory {
@@ -131,6 +135,7 @@ struct TKqpFederatedQuerySetupFactoryDefault: public IKqpFederatedQuerySetupFact
     void Cleanup() override;
 
 private:
+    NFq::NConfig::TWasmServicesConfig WasmServices = {};
     NYql::THttpGatewayConfig HttpGatewayConfig;
     NYql::IHTTPGateway::TPtr HttpGateway;
     NYql::TS3GatewayConfig S3GatewayConfig;
@@ -162,7 +167,8 @@ struct TKqpFederatedQuerySetupFactoryMock: public IKqpFederatedQuerySetupFactory
         NMiniKQL::TComputationNodeFactory computationFactory, const NYql::NDq::TS3ReadActorFactoryConfig& s3ReadActorFactoryConfig,
         NYql::TTaskTransformFactory dqTaskTransformFactory, const NYql::TPqGatewayConfig& pqGatewayConfig,
         NYql::IPqGatewayFactory::TPtr pqGatewayFactory, NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr,
-        std::shared_ptr<NYdb::TDriver> driver)
+        std::shared_ptr<NYdb::TDriver> driver, NFq::NConfig::TWasmServicesConfig wasmServices = {},
+        std::shared_ptr<NFq::NWasmServices::ITvmTicketProvider> wasmTvmProvider = {})
         : HttpGateway(httpGateway)
         , ConnectorClient(connectorClient)
         , CredentialsFactory(credentialsFactory)
@@ -179,6 +185,8 @@ struct TKqpFederatedQuerySetupFactoryMock: public IKqpFederatedQuerySetupFactory
         , PqGatewayFactory(pqGatewayFactory)
         , ActorSystemPtr(actorSystemPtr)
         , Driver(driver)
+        , WasmServices(std::move(wasmServices))
+        , WasmTvmProvider(std::move(wasmTvmProvider))
     {
     }
 
@@ -189,7 +197,8 @@ struct TKqpFederatedQuerySetupFactoryMock: public IKqpFederatedQuerySetupFactory
     std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
         return TKqpFederatedQuerySetup{ Driver, YdbExternalResources, HttpGateway, ConnectorClient, CredentialsFactory, DatabaseAsyncResolver,
             S3GatewayConfig, GenericGatewayConfig, YtGatewayConfig, YtGateway, SolomonGatewayConfig, ComputationFactory,
-            S3ReadActorFactoryConfig, DqTaskTransformFactory, PqGatewayConfig, PqGatewayFactory, ActorSystemPtr, ScriptExecutionSettings };
+            S3ReadActorFactoryConfig, DqTaskTransformFactory, PqGatewayConfig, PqGatewayFactory, ActorSystemPtr, ScriptExecutionSettings, {},
+            WasmServices, WasmTvmProvider };
     }
 
     void Cleanup() override {
@@ -216,6 +225,8 @@ private:
     std::shared_ptr<NYdb::TDriver> Driver;
     std::shared_ptr<TYdbExternalResources> YdbExternalResources = std::make_shared<TYdbExternalResources>();
     TScriptExecutionSettings ScriptExecutionSettings;
+    NFq::NConfig::TWasmServicesConfig WasmServices = {};
+    std::shared_ptr<NFq::NWasmServices::ITvmTicketProvider> WasmTvmProvider = {};
 };
 
 IKqpFederatedQuerySetupFactory::TPtr MakeKqpFederatedQuerySetupFactory(

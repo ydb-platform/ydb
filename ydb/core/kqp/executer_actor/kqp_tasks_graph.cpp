@@ -33,6 +33,8 @@
 
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>
 
+#include <library/cpp/string_utils/base64/base64.h>
+
 #include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
@@ -2062,6 +2064,11 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
         params["checkpoints_enabled"] = ToString(GetMeta().AllowCheckpoints);
     }
 
+    if (stage.OutputTransformsSize() == 1 && stage.GetOutputTransforms(0).GetExternalTransform().GetType() == "WasmService" &&
+        UserToken && !UserToken->GetUserSID().empty()) {
+        (*result->MutableSecureParams())["wasm.auth.identity"] = Base64Encode(UserToken->SerializeAsString());
+        (*result->MutableSecureParams())["wasm.auth.database"] = GetMeta().Database;
+    }
     SerializeCtxToMap(*GetMeta().UserRequestContext, *result->MutableRequestContext());
 
     result->SetDisableMetering(!enableMetering);
@@ -3615,6 +3622,13 @@ void TKqpTasksGraph::BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TSta
 
         if (transform.HasInternalSink()) {
             BuildInternalOutputTransform(transform, stageInfo, internalSinksOrder, task);
+        } else if (transform.HasExternalTransform()) {
+            TTransform outputTransform;
+            outputTransform.Type = transform.GetExternalTransform().GetType();
+            outputTransform.InputType = transform.GetInputType();
+            outputTransform.OutputType = transform.GetOutputType();
+            outputTransform.Settings = transform.GetExternalTransform().GetSettings();
+            task.Outputs[transform.GetOutputIndex()].Transform = std::move(outputTransform);
         } else {
             YQL_ENSURE(false, "unknown sink type");
         }

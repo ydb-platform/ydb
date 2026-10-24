@@ -129,6 +129,35 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         {
             return status;
         }
+    } else if (authMethod == "WASM") {
+        const auto provider = GetOrEmpty(settings, "auth_provider");
+        const auto parameters = GetOrEmpty(settings, "auth_parameters");
+        if (sourceType != "ExternalService" || provider.empty() || parameters.empty()) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+                "WASM requires ExternalService, AUTH_PROVIDER and AUTH_PARAMETERS");
+        }
+        auto& properties = *externalDataSourceDesc.MutableProperties()->MutableProperties();
+        properties["auth_provider"] = provider;
+        properties["auth_parameters"] = parameters;
+        // Provider-specific references are resolved at runtime, under the executing user.
+        externalDataSourceDesc.MutableAuth()->MutableNone();
+    } else if (authMethod == "TVM") {
+        const auto sourceId = GetOrEmpty(settings, "tvm_source_id");
+        const auto destinationId = GetOrEmpty(settings, "tvm_destination_id");
+        if (sourceType != "ExternalService" || sourceId.empty() || destinationId.empty()) {
+            return TYqlConclusionStatus::Fail(
+                NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "TVM requires ExternalService, TVM_SOURCE_ID and TVM_DESTINATION_ID");
+        }
+        auto& properties = *externalDataSourceDesc.MutableProperties()->MutableProperties();
+        properties["tvm_source_id"] = sourceId;
+        properties["tvm_destination_id"] = destinationId;
+        // Reuse the existing single-secret auth storage and its ACL/rotation path.
+        // Public TVM ids distinguish this credential from a bearer token.
+        auto& token = *externalDataSourceDesc.MutableAuth()->MutableToken();
+        token.SetTokenSecretName(GetSecretName(settings, "tvm_secret"));
+        if (const auto status = CheckOldSecretCreationAllowed(disableOldSecretCreation, token.GetTokenSecretName()); status.IsFail()) {
+            return status;
+        }
     } else if (authMethod == "TOKEN") {
         auto& token = *externalDataSourceDesc.MutableAuth()->MutableToken();
         token.SetTokenSecretName(GetSecretName(settings, "token_secret"));
@@ -158,6 +187,11 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         "mdb_cluster_id",   // managed PG, CH, GP, MY
         "database_id",   // managed YDB
         "use_tls",
+        "ca_certificate",   // ExternalService
+        "auth_provider",   // ExternalService
+        "auth_parameters",   // ExternalService
+        "tvm_source_id",   // ExternalService
+        "tvm_destination_id",   // ExternalService
         "schema",   // managed PG, GP
         "service_name",   // oracle
         "folder_id",   // logging

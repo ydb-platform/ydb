@@ -21,8 +21,11 @@
 #include <ydb/core/fq/libs/read_rule/read_rule_creator.h>
 #include <ydb/core/fq/libs/read_rule/read_rule_deleter.h>
 #include <ydb/core/fq/libs/tasks_packer/tasks_packer.h>
+#include <ydb/core/fq/libs/wasm_services/query/query.h>
+#include <ydb/core/fq/libs/wasm_services/tracing.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_execution_compression.h>
 
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -42,6 +45,8 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
+#include <ydb/library/yql/providers/function/proto/dq_function.pb.h>
+#include <ydb/library/yql/providers/function/provider/dq_function_provider.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
@@ -58,6 +63,7 @@
 #include <library/cpp/json/yson/json2yson.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 #include <library/cpp/scheme/scheme.h>
+#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <util/string/split.h>
 #include <util/system/hostname.h>
@@ -358,6 +364,17 @@ public:
     static constexpr char ActorName[] = "YQ_RUN_ACTOR";
 
     void Bootstrap() {
+        const auto& wasm = Params.Config.GetWasmServices();
+        if (wasm.GetEnabled() && Params.RandomProvider->GenRand64() % 1000000 < std::min<ui32>(wasm.GetTraceSamplePerMillion(), 1000000)) {
+            ExecutionTrace = NWasmServices::TCallTrace::Start(NWasmServices::TTraceContext::Create(NWilson::TTraceId::NewTraceId(15, 64),
+                                                                  NActors::TActivationContext::ActorSystem(), 1), "SQL execution");
+            ExecutionTrace->Attribute("query_id", Params.QueryId);
+            ExecutionTrace->Attribute("job_id", Params.JobId);
+            ExecutionTrace->Attribute("restart_count", i64(Params.RestartCount));
+            ExecutionTrace->Attribute("execution_id", ExecutionTrace->Context().Parent->GetHexTraceIdLowerCase());
+            YDB_LOG_INFO("SQL execution trace", {"queryId", Params.QueryId},
+                {"traceId", ExecutionTrace->Context().Parent->GetHexTraceIdLowerCase()});
+        }
         YDB_LOG_DEBUG("Start run actor. Compute",
             {"queryId", Params.QueryId},
             {"state", FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)});
@@ -1559,6 +1576,35 @@ private:
         return false;
     }
 
+    void FillServiceConnectionParams(Yql::DqsProto::ExecuteGraphRequest& request) {
+        if (!Params.Config.GetWasmServices().GetEnabled()) {
+            return;
+        }
+        if (!Params.UserId.empty() && !Params.Config.GetWasmServices().GetAuthSecretDatabase().empty()) {
+            const NACLib::TUserToken identity(Params.UserId, TVector<TString>{});
+            (*request.MutableSecureParams())["wasm.auth.identity"] = Base64Encode(identity.SerializeAsString());
+            (*request.MutableSecureParams())["wasm.auth.database"] = Params.Config.GetWasmServices().GetAuthSecretDatabase();
+        }
+        for (const auto& task : request.GetTask()) {
+            for (const auto& output : task.GetOutputs()) {
+                if (!output.HasTransform()) {
+                    continue;
+                }
+                NYql::NProto::TFunctionTransform settings;
+                if (!output.GetTransform().GetSettings().UnpackTo(&settings)) {
+                    continue;
+                }
+                const auto id = NWasmServices::ServiceInvocationConnection(settings.GetInvokeUrl());
+                const auto connection = YqConnections.find(id);
+                Y_ENSURE(connection != YqConnections.end(), "External service connection is inaccessible");
+                // Credentials are added only to the private execution request,
+                // never to persisted graph metadata or public function settings.
+                (*request.MutableSecureParams())[NWasmServices::ServiceConnectionKey(id)] =
+                    NWasmServices::PrepareServiceConnection(connection->second, Params.AuthToken);
+            }
+        }
+    }
+
     TEvaluationGraphInfo RunEvalDqGraph(NFq::NProto::TGraphParams& dqGraphParams) {
         YDB_LOG_DEBUG("RunEvalDqGraph",
             {"queryId", Params.QueryId});
@@ -1607,6 +1653,7 @@ private:
         *request.MutableColumns() = dqGraphParams.GetColumns();
         PrepareResultFormatSettings(info.ResultFormatSettings, dqGraphParams, *dqConfiguration);
         NTasksPacker::UnPack(*request.MutableTask(), dqGraphParams.GetTasks(), dqGraphParams.GetStageProgram());
+        FillServiceConnectionParams(request);
         Send(info.ExecuterId, new NYql::NDqs::TEvGraphRequest(request, info.ControlId, info.ResultId));
         YDB_LOG_DEBUG("Evaluation",
             {"queryId", Params.QueryId},
@@ -1688,10 +1735,15 @@ private:
         *request.MutableColumns() = dqGraphParams.GetColumns();
         auto& commonTaskParams = *request.MutableCommonTaskParams();
         commonTaskParams["fq.job_id"] = Params.JobId;
+        commonTaskParams["fq.query_id"] = Params.QueryId;
+        if (ExecutionTrace) {
+            commonTaskParams["dq.wilson.traceparent"] = ExecutionTrace->Context().Parent->ToTraceresponseHeader();
+        }
         commonTaskParams["fq.restart_count"] = ToString(Params.RestartCount);
         request.SetStatsMode(StatsMode);
 
         NTasksPacker::UnPack(*request.MutableTask(), dqGraphParams.GetTasks(), dqGraphParams.GetStageProgram());
+        FillServiceConnectionParams(request);
         Send(ExecuterId, new NYql::NDqs::TEvGraphRequest(request, ControlId, resultId));
         YDB_LOG_DEBUG("Dump queryId, executer, controller, resultIdActor",
             {"queryId", Params.QueryId},
@@ -1877,6 +1929,13 @@ private:
         YDB_LOG_DEBUG("Is about to finish query with status",
             {"queryId", Params.QueryId},
             {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(status)});
+        if (ExecutionTrace) {
+            const auto outcome = status == FederatedQuery::QueryMeta::COMPLETED          ? NWasmServices::EMetricOutcome::Success
+                                 : status == FederatedQuery::QueryMeta::ABORTED_BY_USER  ? NWasmServices::EMetricOutcome::Cancelled
+                                 : Params.Deadline && TInstant::Now() >= Params.Deadline ? NWasmServices::EMetricOutcome::Timeout
+                                                                                         : NWasmServices::EMetricOutcome::Error;
+            ExecutionTrace->Complete(outcome);
+        }
         Finishing = true;
         FinalQueryStatus = status;
 
@@ -2054,6 +2113,10 @@ private:
             gatewaysConfig, clusters);
 
         TVector<TDataProviderInitializer> dataProvidersInit;
+        if (Params.Config.GetWasmServices().GetEnabled()) {
+            dataProvidersInit.push_back(GetDqFunctionDataProviderInitializer(
+                nullptr, NWasmServices::CreateServiceGatewayFactory(Params.Config.GetWasmServices(), YqConnections)));
+        }
         const std::shared_ptr<IDatabaseAsyncResolver> dbResolver = std::make_shared<TDatabaseAsyncResolverImpl>(
             NActors::TActivationContext::ActorSystem(), Params.DatabaseResolver, Params.Config.GetCommon().GetYdbMvpCloudEndpoint(),
             Params.Config.GetCommon().GetMdbGateway(), Params.MdbEndpointGenerator, Params.QueryId);
@@ -2375,6 +2438,7 @@ private:
     TActorId FetcherId;
     TActorId ProgramRunnerId;
     TRunActorParams Params;
+    std::shared_ptr<NWasmServices::TCallTrace> ExecutionTrace;
     THashMap<TString, FederatedQuery::Connection> YqConnections;
 
     TProgramPtr Program;

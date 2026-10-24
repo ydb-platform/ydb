@@ -1003,7 +1003,10 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     Y_ABORT_UNLESS(!resolveEntityInsideDataSource || externalEntryItem, "External data source must be resolved using path only");
     auto resNavigate = resolveEntityInsideDataSource ? *externalEntryItem : CreateNavigateEntry(entityName,
         settings, TempTablesState);
-    const auto entry = resNavigate.Entry;
+    auto entry = resNavigate.Entry;
+    if (settings.RequiredAccess) {
+        entry.Access = settings.RequiredAccess;
+    }
     const auto queryName = resNavigate.QueryName;
     const auto externalEntry = resolveEntityInsideDataSource ? std::optional<NavigateEntryResult>{} : externalEntryItem;
     const ui64 expectedSchemaVersion = GetExpectedVersion(entityName);
@@ -1015,6 +1018,9 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     navigate->ResultSet.emplace_back(entry);
     if (externalEntry) {
         navigate->ResultSet.emplace_back(externalEntry->Entry);
+        if (settings.RequiredAccess) {
+            navigate->ResultSet.back().Access = settings.RequiredAccess;
+        }
     }
     const TString& table = resNavigate.Path;
 

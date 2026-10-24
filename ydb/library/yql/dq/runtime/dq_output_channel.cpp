@@ -79,6 +79,12 @@ public:
     }
 
     EDqFillLevel CalcFillLevel() const {
+        // V1 stores control records outside the row queue. Until they are
+        // drained, admitting more rows would move those rows before the barrier
+        // (and could include post-checkpoint results in downstream state).
+        if (Watermark || Checkpoint) {
+            return HardLimit;
+        }
         if (Storage) {
             return FirstStoredId < NextStoredId ? (Storage->IsFull() ? HardLimit : SoftLimit) : NoLimit;
         } else {
@@ -251,11 +257,13 @@ public:
         // if there were already watermark in-fly replace it with latest one
         YQL_ENSURE(!Watermark || Watermark->GetTimestampUs() <= watermark.GetTimestampUs());
         Watermark.ConstructInPlace(std::move(watermark));
+        UpdateFillLevel();
     }
 
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
         YQL_ENSURE(!Checkpoint);
         Checkpoint.ConstructInPlace(std::move(checkpoint));
+        UpdateFillLevel();
     }
 
     [[nodiscard]]
@@ -321,6 +329,7 @@ public:
         if (!HasData() && Watermark) {
             watermark = std::move(*Watermark);
             Watermark = Nothing();
+            UpdateFillLevel();
             return true;
         }
         return false;
@@ -331,6 +340,7 @@ public:
         if (!HasData() && Checkpoint) {
             checkpoint = std::move(*Checkpoint);
             Checkpoint = Nothing();
+            UpdateFillLevel();
             return true;
         }
         return false;

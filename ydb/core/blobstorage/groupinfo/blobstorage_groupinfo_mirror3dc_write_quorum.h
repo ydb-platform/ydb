@@ -109,6 +109,10 @@ class TMirror3dcWriteQuorumChecker {
     }
 
 public:
+    EMirror3dcLayout GetWriteLayout() const {
+        return WriteLayout;
+    }
+
     static std::optional<TMirror3dcWriteQuorumChecker> TryCreate(
             const std::array<EMirror3dcFailRealmState, 3>& realms,
             EMirror3dcLayout writeLayout, EMirror3dcLayout ensuredLayout) {

@@ -4339,7 +4339,7 @@ bool IsSomeMergeLambda(const TExprNode& lambda) {
     return &body == &a || &body == &b;
 }
 
-TExprNode::TPtr NarrowTraitsLambdaOutputToFields(TCoLambda lambda, ui32 requiredArgsCount, const TSet<TString>& usedFields, TExprContext& ctx) {
+TExprNode::TPtr NarrowTraitsLambdaOutputToFields(TCoLambda lambda, const TSet<TString>& usedFields, TExprContext& ctx) {
     const TTypeAnnotationNode* bodyType = lambda.Body().Ref().GetTypeAnn();
     if (bodyType->GetKind() != ETypeAnnotationKind::Struct) {
         return nullptr;
@@ -4357,40 +4357,9 @@ TExprNode::TPtr NarrowTraitsLambdaOutputToFields(TCoLambda lambda, ui32 required
     }
     auto subsetType = ctx.MakeType<TStructExprType>(subsetItems);
 
-    const ui32 argCount = lambda.Args().Size();
-    if (argCount != requiredArgsCount) {
-        return nullptr;
-    }
-
-    const auto pos = lambda.Pos();
-    const auto& lambdaRef = lambda.Ref();
-    if (argCount == 1) {
-        return ctx.Builder(pos)
-            .Lambda()
-                .Param("state")
-                .Callable("CastStruct")
-                    .Apply(0, lambdaRef)
-                        .With(0, "state")
-                    .Seal()
-                    .Add(1, ExpandType(lambda.Body().Pos(), *subsetType, ctx))
-                .Seal()
-            .Seal()
-            .Build();
-    } else {
-        return ctx.Builder(pos)
-            .Lambda()
-                .Param("state")
-                .Param("item")
-                .Callable("CastStruct")
-                    .Apply(0, lambdaRef)
-                        .With(0, "state")
-                        .With(1, "item")
-                    .Seal()
-                    .Add(1, ExpandType(lambda.Body().Pos(), *subsetType, ctx))
-                .Seal()
-            .Seal()
-            .Build();
-    }
+    auto body = ctx.NewCallable(lambda.Body().Pos(), "CastStruct",
+                                {lambda.Body().Ptr(), ExpandType(lambda.Body().Pos(), *subsetType, ctx)});
+    return ctx.DeepCopyLambda(*ctx.ChangeChild(lambda.Ref(), TCoLambda::idx_Body, std::move(body)));
 }
 
 } // namespace
@@ -6051,8 +6020,16 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return node;
         }
 
-        auto newInit = NarrowTraitsLambdaOutputToFields(self.InitHandler(), 1, usedFields, ctx);
-        auto newUpdate = NarrowTraitsLambdaOutputToFields(self.UpdateHandler(), 2, usedFields, ctx);
+        const auto update = self.UpdateHandler();
+        const auto state = update.Args().Arg(1);
+        // Forwarding state is safe; other updates must retain every state field they read.
+        if (update.Body().Raw() != state.Raw() &&
+            !HaveFieldsSubset(update.Body().Ptr(), state.Ref(), usedFields, *optCtx.ParentsMap)) {
+            return node;
+        }
+
+        auto newInit = NarrowTraitsLambdaOutputToFields(self.InitHandler(), usedFields, ctx);
+        auto newUpdate = NarrowTraitsLambdaOutputToFields(self.UpdateHandler(), usedFields, ctx);
         if (!newInit || !newUpdate) {
             return node;
         }

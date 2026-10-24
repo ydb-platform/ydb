@@ -1,3 +1,5 @@
+## v3.25.0
+
 * Added `TExecuteQueryIterator::Cancel()` to explicitly cancel a query response stream, including a pending read.
 
 * Added `TBridgeClient::RemovePile()` to remove a DISCONNECTED pile from a bridged cluster along with its data.

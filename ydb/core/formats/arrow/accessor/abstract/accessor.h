@@ -384,8 +384,9 @@ public:
         DoVisitValues(visitor);
     }
 
-    // Optimized version of VisitValues for consumers that do not care about order, positions, nulls and duplicate
+    // Optimized version of VisitValues for consumers that do not care about order, positions and duplicate
     // multiplicity. For implementations that do not have an optimized version it is the same as VisitValues.
+    // Null values are visited if present.
     void VisitDistinctValues(const TValuesSimpleVisitor& visitor) const {
         DoVisitDistinctValues(visitor);
     }

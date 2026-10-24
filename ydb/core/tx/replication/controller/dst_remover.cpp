@@ -108,6 +108,19 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
             break;
         case NKikimrScheme::StatusPathDoesNotExist:
             return Success();
+        case NKikimrScheme::StatusNameConflict:
+            if (PendingDstPathId) {
+                // ALTER reports a collected path id as a name conflict.
+                // Confirm that the pending destination is absent before detaching.
+                DetachError = record.GetReason();
+                Send(
+                    PipeCache,
+                    new TEvPipeCache::TEvForward(
+                        new TEvSchemeShard::TEvDescribeScheme(PendingDstPathId),
+                        SchemeShardId));
+                return Become(&TThis::StateCheckDst);
+            }
+            return Error(record.GetStatus(), record.GetReason());
         default:
             if (PendingDstPathId) {
                 YDB_LOG_WARN("Retry detach dst", {"status", record.GetStatus()}, {"reason", record.GetReason()});
@@ -115,6 +128,28 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
             }
             return Error(record.GetStatus(), record.GetReason());
         }
+    }
+
+    STATEFN(StateCheckDst) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateCheckDst"});
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            sFunc(TEvents::TEvWakeup, AllocateTxId);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
+
+        if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusPathDoesNotExist) {
+            return Success();
+        }
+
+        return Error(NKikimrScheme::StatusNameConflict, DetachError);
     }
 
     void SubscribeTx(ui64 txId) {
@@ -236,6 +271,7 @@ private:
 
     ui64 TxId = 0;
     TActorId PipeCache;
+    TString DetachError;
 
 }; // TDstRemover
 

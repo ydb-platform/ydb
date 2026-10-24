@@ -8,6 +8,10 @@
 namespace NKikimr {
 namespace NDataShard {
 
+// Empty on success. Shared by row uploads and direct-part imports.
+TString CheckUploadKeySizeLimit(TConstArrayRef<TCell> keys);
+TString CheckUploadValueSizeLimit(TConstArrayRef<TCell> values);
+
 template <typename TEvRequest, typename TEvResponse>
 class TCommonUploadOps {
     typename TEvRequest::TPtr Ev;

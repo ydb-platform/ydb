@@ -15,6 +15,7 @@
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/services/workload_manager/events.h>
+#include <ydb/services/workload_manager/gateway.h>
 #include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -329,6 +330,7 @@ public:
     void MakeNewQueryState(TEvKqp::TEvQueryRequest::TPtr& ev) {
         ++QueryId;
         YQL_ENSURE(!QueryState);
+        YQL_ENSURE(!QueryClassifier);
         auto selfId = SelfId();
         auto as = TActivationContext::ActorSystem();
         ev->Get()->SetClientLostAction(selfId, as);
@@ -606,6 +608,8 @@ public:
 
         QueryState->UpdateTempTablesState(TempTablesState);
 
+        QueryClassifier = TryCreateQueryClassifier();
+
         if (WmPreCompileClassify()) {
             return;
         }
@@ -616,12 +620,30 @@ public:
     void NotifyWmClassification(const TString& poolId,
                                 const NWorkloadManager::TResolver& resolver = NWorkloadManager::TResolver::Default()) {
         if (auto updater = QueryState->RequestEv->GetWmSessionUpdater()) {
-            updater->SetPoolContext(poolId, resolver.ToSysViewString());
+            updater->SetPoolContext({poolId, resolver.ToSysViewString()});
         }
     }
 
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> TryCreateQueryClassifier() const {
+        const auto& request = *QueryState->RequestEv;
+        if (request.IsInternalCall() || request.GetIsWarmupCompilation()) {
+            return nullptr;
+        }
+
+        const auto& gateway = AppData()->WorkloadManagerGateway;
+        if (!gateway) {
+            return nullptr;
+        }
+
+        return gateway->TryCreateQueryClassifier(request.GetDatabaseId(), NWorkloadManager::TClassifyContext{
+            .PoolId = request.GetPoolId(),
+            .AppName = Settings.ApplicationName.GetOrElse(""),
+            .UserToken = QueryState->UserToken,
+        });
+    }
+
     bool WmPreCompileClassify() {
-        auto classifier = QueryState->QueryClassifier;
+        auto classifier = QueryClassifier;
 
         if (!classifier) {
             QueryState->UserRequestContext->PoolId = NResourcePool::DEFAULT_POOL_ID;
@@ -785,9 +807,9 @@ public:
     // PassRequestToResourcePool(), which requires a classifier — null here is a
     // caller-side invariant violation, not a runtime edge case to handle.
     void ContinueAfterWmAdmission() {
-        Y_VALIDATE(QueryState->QueryClassifier, "ContinueAfterWmAdmission called without QueryClassifier");
+        Y_VALIDATE(QueryClassifier, "ContinueAfterWmAdmission called without QueryClassifier");
 
-        auto classifier = QueryState->QueryClassifier;
+        auto classifier = QueryClassifier;
         auto state = classifier->GetState();
 
         if (state == NWorkloadManager::IQueryClassifier::EState::PreCompileDone) {
@@ -804,7 +826,7 @@ public:
             OnSuccessCompileRequest();
         } else {
             Y_VALIDATE(false, TStringBuilder()
-                << "WmQueryClassifier with invalid state after admission: "
+                << "QueryClassifier with invalid state after admission: "
                 << static_cast<int>(state));
         }
     }
@@ -1098,7 +1120,7 @@ public:
     }
 
     bool WmPostCompileClassify() {
-        auto classifier = QueryState->QueryClassifier;
+        auto classifier = QueryClassifier;
 
         if (!classifier || classifier->GetState() != NWorkloadManager::IQueryClassifier::EState::WaitCompile) {
             return false;
@@ -1887,35 +1909,27 @@ public:
         AFL_ENSURE(txCtx.TxManager);
         const bool broken = !!txCtx.TxManager->GetLockIssue();
 
-        if ((!txCtx.DeferredEffects.Empty() || txCtx.HasUnflushedEffectsInBuffer) && broken) {
+        if ((txCtx.TxHasEffects() && broken) || txCtx.TxManager->BrokenLocks()) {
             EmitVictimTliLog(
                 txCtx.TxManager->GetVictimQuerySpanId(),
                 std::nullopt,
                 txCtx.TxManager->GetBrokenLocksCount());
-            ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has deferred effects, but locks are broken",
-                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+
+            if ((!txCtx.DeferredEffects.Empty() || txCtx.HasUnflushedEffectsInBuffer) && broken) {
+                ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has deferred effects, but locks are broken",
+                    MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            } else if (txCtx.TxHasEffects() && broken) {
+                ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
+                    MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            } else {
+                AFL_ENSURE(txCtx.TxManager->BrokenLocks());
+                ReplyQueryError(Ydb::StatusIds::ABORTED, "transaction locks invalidated",
+                    MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            }
             return false;
         }
 
-        if (tx && tx->GetHasEffects() && broken) {
-            EmitVictimTliLog(
-                txCtx.TxManager->GetVictimQuerySpanId(),
-                std::nullopt,
-                txCtx.TxManager->GetBrokenLocksCount());
-            ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
-                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
-            return false;
-        }
-
-        if (txCtx.TxManager->BrokenLocks()) {
-            EmitVictimTliLog(
-                txCtx.TxManager->GetVictimQuerySpanId(),
-                std::nullopt,
-                txCtx.TxManager->GetBrokenLocksCount());
-            ReplyQueryError(Ydb::StatusIds::ABORTED, "transaction locks invalidated",
-                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
-            return false;
-        }
+        AFL_ENSURE(!tx || !tx->GetHasEffects() || !broken);
 
         return true;
     }
@@ -4072,6 +4086,7 @@ public:
             ExecuterId = TActorId{};
             bool doNotKeepSession = QueryState && !QueryState->KeepSession;
             QueryState.reset();
+            QueryClassifier.reset();
             if (doNotKeepSession) {
                 // TEvCloseSessionRequest was received in final=false CleanupState, so actor should rerun Cleanup with final=true
                 CleanupAndPassAway();
@@ -4508,6 +4523,7 @@ private:
     TActorId ExecuterId;
 
     std::shared_ptr<TKqpQueryState> QueryState;
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> QueryClassifier;
     std::unique_ptr<TKqpCleanupCtx> CleanupCtx;
     ui32 QueryId = 0;
     ui64 LastAcceptedWmAdmissionQueryId = 0;

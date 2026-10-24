@@ -18,7 +18,7 @@ inputs:
     description: "small or small-medium or all"
   test_threads:
     required: false
-    default: "56"
+    default: "64"
     description: "Test threads count"
   link_threads:
     required: false
@@ -937,3 +937,16 @@ runs:
         BUILD_PRESET: ${{ inputs.build_preset }}
         GITHUB_TOKEN: ${{ github.token }}
       run:  echo "Check cancelled" | .github/scripts/tests/comment-pr.py --color black
+
+    - name: cleanup tmp
+      if: always()
+      shell: bash
+      run: |
+        set +e
+        set -x
+        if [ -n "${TMP_DIR:-}" ]; then
+          rm -rf "$TMP_DIR"
+        fi
+        # mktemp / graph_compare leftovers; does not match /tmp/systemd-private-*
+        rm -rf /tmp/tmp*
+        df -h / || true

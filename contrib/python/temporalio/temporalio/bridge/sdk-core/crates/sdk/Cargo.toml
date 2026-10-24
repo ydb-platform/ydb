@@ -1,0 +1,231 @@
+[package]
+name = "temporalio-sdk"
+version = "0.6.0"
+edition = "2024"
+authors = ["Spencer Judge <spencer@temporal.io>"]
+license-file = { workspace = true }
+description = "Temporal Rust SDK"
+homepage = "https://temporal.io/"
+repository = "https://github.com/temporalio/sdk-rust"
+keywords = ["temporal", "workflow"]
+categories = ["development-tools"]
+readme = "README.md"
+autoexamples = false
+
+[dependencies]
+async-trait = "0.1"
+anyhow = "1.0"
+bon = { workspace = true }
+derive_more = { workspace = true }
+futures-util = { version = "0.3", default-features = false, features = [
+  "async-await-macro",
+] }
+gethostname = "1.0.2"
+parking_lot = { version = "0.12" }
+prost = { workspace = true }
+prost-types = { workspace = true }
+serde = "1.0"
+thiserror = "2"
+tokio = { version = "1.47", default-features = false, features = [
+  "rt",
+  "rt-multi-thread",
+  "parking_lot",
+  "time",
+  "fs",
+  "macros",
+] }
+tokio-util = { version = "0.7" }
+tokio-stream = { version = "0.1", default-features = false }
+tracing = "0.1"
+uuid = { version = "1.18", default-features = false, features = ["v4"] }
+wasmtime = { version = "44", optional = true, features = ["component-model"] }
+
+[dependencies.temporalio-sdk-core]
+path = "../sdk-core"
+version = "0.6"
+default-features = false
+
+[dependencies.temporalio-workflow]
+path = "../workflow"
+version = "0.6"
+
+[dependencies.temporalio-common]
+path = "../common"
+version = "0.6"
+default-features = false
+
+[dependencies.temporalio-client]
+path = "../client"
+version = "0.6"
+default-features = false
+
+[dependencies.temporalio-macros]
+path = "../macros"
+version = "0.6"
+
+[dev-dependencies]
+futures = "0.3"
+rstest = "0.26"
+
+[features]
+default = ["envconfig", "prometheus"]
+envconfig = ["temporalio-sdk-core/envconfig"]
+prometheus = ["temporalio-sdk-core/prometheus"]
+otel = ["temporalio-sdk-core/otel"]
+examples = ["serde/derive", "dep:serde_json", "envconfig"]
+wasm-examples = []
+wasm-workflows = ["dep:wasmtime"]
+dynamic-tls = ["temporalio-client/dynamic-tls"]
+
+[dependencies.serde_json]
+version = "1"
+optional = true
+
+[[example]]
+name = "hello-world-worker"
+path = "examples/hello_world/worker.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "hello-world-starter"
+path = "examples/hello_world/starter.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "activity-heartbeating-worker"
+path = "examples/activity_heartbeating/worker.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "activity-heartbeating-starter"
+path = "examples/activity_heartbeating/starter.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "activity-interceptor-worker"
+path = "examples/activity_interceptor/worker.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "activity-interceptor-starter"
+path = "examples/activity_interceptor/starter.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "timer-examples-worker"
+path = "examples/timer_examples/worker.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "timer-examples-starter"
+path = "examples/timer_examples/starter.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "message-passing-worker"
+path = "examples/message_passing/worker.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "message-passing-starter"
+path = "examples/message_passing/starter.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "child-workflows-worker"
+path = "examples/child_workflows/worker.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "child-workflows-starter"
+path = "examples/child_workflows/starter.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "continue-as-new-worker"
+path = "examples/continue_as_new/worker.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "continue-as-new-starter"
+path = "examples/continue_as_new/starter.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "saga-worker"
+path = "examples/saga/worker.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "saga-starter"
+path = "examples/saga/starter.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "local-activities-worker"
+path = "examples/local_activities/worker.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "local-activities-starter"
+path = "examples/local_activities/starter.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "search-attributes-worker"
+path = "examples/search_attributes/worker.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "search-attributes-starter"
+path = "examples/search_attributes/starter.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "updatable-timer-worker"
+path = "examples/updatable_timer/worker.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "updatable-timer-starter"
+path = "examples/updatable_timer/starter.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "polling-worker"
+path = "examples/polling/worker.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "polling-starter"
+path = "examples/polling/starter.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "cancellation-worker"
+path = "examples/cancellation/worker.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "cancellation-starter"
+path = "examples/cancellation/starter.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "schedules-worker"
+path = "examples/schedules/worker.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "schedules-starter"
+path = "examples/schedules/starter.rs"
+required-features = ["examples"]
+
+[[example]]
+name = "wasm-workflows"
+path = "examples/wasm_workflows/src/lib.rs"
+crate-type = ["cdylib"]
+required-features = ["examples", "wasm-examples"]
+
+[lints]
+workspace = true

@@ -1,0 +1,19 @@
+@startuml
+RequestInitiated --> Accepted: Accept
+RequestInitiated --> Rejected: Reject
+Accepted --> CompletedImmediately: Complete
+Accepted --> CompletedImmediately: Reject
+Accepted -[#blue]-> AcceptCommandCreated: CommandProtocolMessage
+AcceptCommandCreated -[#blue]-> AcceptCommandRecorded: WorkflowExecutionUpdateAccepted
+AcceptCommandCreated --> CompletedImmediatelyAcceptCreated: Complete
+AcceptCommandCreated --> CompletedImmediatelyAcceptCreated: Reject
+AcceptCommandRecorded --> Completed: Complete
+AcceptCommandRecorded --> Completed: Reject
+Completed -[#blue]-> CompletedCommandCreated: CommandProtocolMessage
+CompletedCommandCreated -[#blue]-> CompletedCommandRecorded: WorkflowExecutionUpdateCompleted
+CompletedImmediately -[#blue]-> CompletedImmediatelyAcceptCreated: CommandProtocolMessage
+CompletedImmediatelyAcceptCreated -[#blue]-> CompletedImmediatelyCompleteCreated: CommandProtocolMessage
+CompletedImmediatelyCompleteCreated -[#blue]-> CompletedCommandCreated: WorkflowExecutionUpdateAccepted
+Rejected --> [*]
+CompletedCommandRecorded --> [*]
+@enduml

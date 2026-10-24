@@ -1,0 +1,245 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  1799ab8a11e5f4f56d854defaa8bbc2c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        pixman/pixman-combine-float.c [6:23]
+        pixman/pixman-combine-float.h [7:24]
+        pixman/pixman-glyph.c [5:22]
+        pixman/pixman-noop.c [5:22]
+
+KEEP     FSFUL                246ec1770fd347b4f31deec561391551
+BELONGS ya.make
+    License text:
+        This file is free documentation; the Free Software Foundation gives
+        unlimited permission to copy, distribute and modify it.
+    Scancode info:
+        Original SPDX id: FSFUL
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.fsf.org/licensing/licenses/, https://fedoraproject.org/wiki/Licensing/FSF_Unlimited_License, https://spdx.org/licenses/FSFUL
+    Files with this license:
+        INSTALL [7:8]
+
+KEEP     HPND-sell-variant    2618461a91e808a57757949dd59d3d3e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: HPND-sell-variant
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/HPND-sell-variant
+    Files with this license:
+        pixman/pixman-timer.c [4:19]
+
+KEEP     HPND-sell-variant    5ae5969a5fa76de7e98ad3ab5d4b8526
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: HPND-sell-variant
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/HPND-sell-variant
+    Files with this license:
+        pixman/pixman-matrix.c [4:20]
+
+KEEP     HPND-sell-variant    5c4293c4863f26024f9eb1468ff3ef6b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: HPND-sell-variant
+        Score           : 97.50
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/HPND-sell-variant
+    Files with this license:
+        pixman/pixman-arm.c [5:20]
+        pixman/pixman-fast-path.c [6:21]
+        pixman/pixman-image.c [5:20]
+        pixman/pixman-inlines.h [6:21]
+        pixman/pixman-mips.c [5:20]
+        pixman/pixman-ppc.c [5:20]
+        pixman/pixman-solid-fill.c [6:21]
+        pixman/pixman-utils.c [5:20]
+        pixman/pixman-x86.c [5:20]
+        pixman/pixman.c [6:21]
+
+KEEP     MIT-open-group       7c6e1aff298d1457f671cf9725a55516
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT-open-group
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.xfree86.org/current/LICENSE5.html, https://spdx.org/licenses/MIT-open-group
+    Files with this license:
+        pixman/pixman-region.c [4:22]
+
+KEEP     HPND-sell-variant    9266a93298206266190318c062c29a84
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: HPND-sell-variant
+        Score           : 97.62
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/HPND-sell-variant
+    Files with this license:
+        pixman/pixman-region16.c [4:21]
+        pixman/pixman-region32.c [4:21]
+        pixman/pixman-region64f.c [4:21]
+
+KEEP     HPND                 969b69aa72d8445c821b270f8e4e16eb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: HPND
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/historical.php, https://spdx.org/licenses/HPND
+    Files with this license:
+        pixman/pixman-region.c [29:43]
+
+KEEP     HPND-sell-variant    a2390d2d4c0cad3d4b0d169215c4416c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: HPND-sell-variant
+        Score           : 95.83
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/HPND-sell-variant
+    Files with this license:
+        pixman/pixman-access.c [7:24]
+        pixman/pixman-bits-image.c [9:26]
+        pixman/pixman-combine32.c [5:22]
+        pixman/pixman-conical-gradient.c [7:24]
+        pixman/pixman-gradient-walker.c [6:23]
+        pixman/pixman-linear-gradient.c [8:25]
+        pixman/pixman-radial-gradient.c [10:27]
+        pixman/pixman-riscv.c [4:21]
+
+KEEP     MIT                  a2d170c5d9bdbe03d1d349cbf2ae1326
+BELONGS ya.make
+    License text:
+        The following is the MIT license, agreed upon by most contributors.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [1:1]
+
+KEEP     HPND                 a5bdf226f9387659e54124bc21efcd99
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: HPND
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/historical.php, https://spdx.org/licenses/HPND
+    Files with this license:
+        pixman/pixman.h [29:43]
+
+KEEP     MIT-open-group       e152fafc023fa7bc8d97938577404aa9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT-open-group
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.xfree86.org/current/LICENSE5.html, https://spdx.org/licenses/MIT-open-group
+    Files with this license:
+        pixman/pixman.h [5:23]
+
+KEEP     HPND-sell-variant    e57345c550680e8b80996d5e0fc9fbfb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: HPND-sell-variant
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/HPND-sell-variant
+    Files with this license:
+        pixman/pixman-edge-imp.h [4:20]
+        pixman/pixman-edge.c [4:20]
+        pixman/pixman-region.c [47:63]
+        pixman/pixman-trap.c [5:21]
+        pixman/pixman.h [50:66]
+
+KEEP     HPND-sell-variant AND HPND-sell-variant f26dc364ffc7b300fad6791a63463783
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: HPND-sell-variant
+        Score           : 96.95
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/HPND-sell-variant
+    Files with this license:
+        pixman/pixman-general.c [9:26]
+        pixman/pixman-implementation.c [4:21]
+    Scancode info:
+        Original SPDX id: HPND-sell-variant
+        Score           : 95.83
+        Match type      : TEXT
+        Links           : https://spdx.org/licenses/HPND-sell-variant
+    Files with this license:
+        pixman/pixman-mmx.c [6:23]
+        pixman/pixman-sse2.c [5:22]
+
+KEEP     MIT                  f759889bc387afe17a80ab852d7af858
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        pixman/pixman-version.h [4:22]
+
+KEEP     MIT                  fa319394303c6c1271dd64e2e2e63bb0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        COPYING [24:41]
+        pixman/pixman-filter.c [5:22]
+        pixman/pixman-ssse3.c [5:22]

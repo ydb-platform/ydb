@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package temporal.api.query.v1;
+
+option go_package = "go.temporal.io/api/query/v1;query";
+option java_package = "io.temporal.api.query.v1";
+option java_multiple_files = true;
+option java_outer_classname = "MessageProto";
+option ruby_package = "Temporalio::Api::Query::V1";
+option csharp_namespace = "Temporalio.Api.Query.V1";
+
+import "temporal/api/enums/v1/query.proto";
+import "temporal/api/enums/v1/workflow.proto";
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/failure/v1/message.proto";
+
+// See https://docs.temporal.io/docs/concepts/queries/
+message WorkflowQuery {
+    // The workflow-author-defined identifier of the query. Typically a function name.
+    string query_type = 1;
+    // Serialized arguments that will be provided to the query handler.
+    temporal.api.common.v1.Payloads query_args = 2;
+    // Headers that were passed by the caller of the query and copied by temporal
+    // server into the workflow task.
+    temporal.api.common.v1.Header header = 3;
+}
+
+// Answer to a `WorkflowQuery`
+message WorkflowQueryResult {
+    // Did the query succeed or fail?
+    temporal.api.enums.v1.QueryResultType result_type = 1;
+    // Set when the query succeeds with the results.
+    // Mutually exclusive with `error_message` and `failure`.
+    temporal.api.common.v1.Payloads answer = 2;
+    // Mutually exclusive with `answer`. Set when the query fails.
+    // See also the newer `failure` field.
+    string error_message = 3;
+    // The full reason for this query failure. This field is newer than `error_message` and can be encoded by the SDK's
+    // failure converter to support E2E encryption of messages and stack traces.
+    // Mutually exclusive with `answer`. Set when the query fails.
+    temporal.api.failure.v1.Failure failure = 4;
+}
+
+message QueryRejected {
+    temporal.api.enums.v1.WorkflowExecutionStatus status = 1;
+}

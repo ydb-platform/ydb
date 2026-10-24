@@ -1,0 +1,125 @@
+# Native Rust build POC; dependencies and features follow Cargo.lock.
+
+CRATE(encoding_rs)
+
+CRATE_VERSION(0.8.35)
+CRATE_EDITION(2018)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+VERSION(0.8.35)
+LICENSE("(Apache-2.0 OR MIT) AND BSD-3-Clause")
+
+CRATE_SOURCES(
+    src/ascii.rs
+    src/big5.rs
+    src/data.rs
+    src/euc_jp.rs
+    src/euc_kr.rs
+    src/gb18030.rs
+    src/gb18030_2022.rs
+    src/handles.rs
+    src/iso_2022_jp.rs
+    src/macros.rs
+    src/mem.rs
+    src/replacement.rs
+    src/shift_jis.rs
+    src/simd_funcs.rs
+    src/single_byte.rs
+    src/test_labels_names.rs
+    src/testing.rs
+    src/utf_16.rs
+    src/utf_8.rs
+    src/variant.rs
+    src/x_user_defined.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    CONTRIBUTING.md
+    COPYRIGHT
+    Ideas.md
+    LICENSE-APACHE
+    LICENSE-MIT
+    LICENSE-WHATWG
+    README.md
+    doc/Big5.txt
+    doc/EUC-JP.txt
+    doc/EUC-KR.txt
+    doc/GBK.txt
+    doc/IBM866.txt
+    doc/ISO-2022-JP.txt
+    doc/ISO-8859-10.txt
+    doc/ISO-8859-13.txt
+    doc/ISO-8859-14.txt
+    doc/ISO-8859-15.txt
+    doc/ISO-8859-16.txt
+    doc/ISO-8859-2.txt
+    doc/ISO-8859-3.txt
+    doc/ISO-8859-4.txt
+    doc/ISO-8859-5.txt
+    doc/ISO-8859-6.txt
+    doc/ISO-8859-7.txt
+    doc/ISO-8859-8-I.txt
+    doc/ISO-8859-8.txt
+    doc/KOI8-R.txt
+    doc/KOI8-U.txt
+    doc/Shift_JIS.txt
+    doc/UTF-16BE.txt
+    doc/UTF-16LE.txt
+    doc/UTF-8.txt
+    doc/gb18030.txt
+    doc/macintosh.txt
+    doc/replacement.txt
+    doc/windows-1250.txt
+    doc/windows-1251.txt
+    doc/windows-1252.txt
+    doc/windows-1253.txt
+    doc/windows-1254.txt
+    doc/windows-1255.txt
+    doc/windows-1256.txt
+    doc/windows-1257.txt
+    doc/windows-1258.txt
+    doc/windows-874.txt
+    doc/x-mac-cyrillic.txt
+    doc/x-user-defined.txt
+    generate-encoding-data.py
+    rustfmt.toml
+    src/test_data/big5_in.txt
+    src/test_data/big5_in_ref.txt
+    src/test_data/big5_out.txt
+    src/test_data/big5_out_ref.txt
+    src/test_data/euc_kr_in.txt
+    src/test_data/euc_kr_in_ref.txt
+    src/test_data/euc_kr_out.txt
+    src/test_data/euc_kr_out_ref.txt
+    src/test_data/gb18030_in.txt
+    src/test_data/gb18030_in_ref.txt
+    src/test_data/gb18030_out.txt
+    src/test_data/gb18030_out_ref.txt
+    src/test_data/iso_2022_jp_in.txt
+    src/test_data/iso_2022_jp_in_ref.txt
+    src/test_data/iso_2022_jp_out.txt
+    src/test_data/iso_2022_jp_out_ref.txt
+    src/test_data/jis0208_in.txt
+    src/test_data/jis0208_in_ref.txt
+    src/test_data/jis0208_out.txt
+    src/test_data/jis0208_out_ref.txt
+    src/test_data/jis0212_in.txt
+    src/test_data/jis0212_in_ref.txt
+    src/test_data/shift_jis_in.txt
+    src/test_data/shift_jis_in_ref.txt
+    src/test_data/shift_jis_out.txt
+    src/test_data/shift_jis_out_ref.txt
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+
+CRATE_FEATURES(
+    alloc
+    default
+)
+PEERDIR(contrib/crates/cfg-if-1.0.4)
+
+END()

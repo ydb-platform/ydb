@@ -1,0 +1,384 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0df7210c6f1912746c2672ef0a3f085f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [3:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0f04714b48c40d135c5efebd902216d7
+BELONGS ya.make
+    License text:
+         * Copyright © 2000 Tuomas J. Lukka
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/fcmatrix.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 205b9d1951464cc0aeafbf1fe33fea2c
+BELONGS ya.make
+    License text:
+         * Copyright 息 2006 Keith Packard
+         * Copyright 息 2010 Behdad Esfahbod
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        config-fixups.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 269e0d40cf2fbd054d03c20b5874112a
+BELONGS ya.make
+    License text:
+         * Copyright © 2013  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/fcwindows.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 296089cb7a05594f2df822767620f072
+BELONGS ya.make
+    License text:
+         * Copyright © 2002 Keith Packard
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        fc-lang/fclang.h [4:4]
+        src/fcatomic.c [4:4]
+        src/fclang.c [4:4]
+        src/fcrange.c [4:4]
+        src/fcxml.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2d707f4d94eaea23e664b850c9d64f75
+BELONGS ya.make
+    License text:
+         * Copyright © 2007  Chris Wilson
+         * Copyright © 2009,2010  Red Hat, Inc.
+         * Copyright © 2011,2012,2013  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [45:47]
+        COPYING [127:129]
+        src/fcatomic.h [4:6]
+        src/fcmutex.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 41a0a301c5c9cae42fb85c89a17c38a7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [3:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 43320b03f5950a8041006967477d7e36
+BELONGS ya.make
+    License text:
+        © 2019 Unicode®, Inc.
+        Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the U.S. and other countries.
+        For terms of use, see http://www.unicode.org/terms_of_use.html
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [34:36]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5086502cd423339cdd2dea56375c807e
+BELONGS ya.make
+    License text:
+         * Copyright © 2006 Keith Packard
+         * Copyright © 2010 Behdad Esfahbod
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/fcarch.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 558d535ff3d7ecd2e1d0f0359111befa
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [3:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5ecbd97f318eedd0c863b0bf247fb933
+BELONGS ya.make
+    License text:
+         * Copyright © 2012 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/fccompat.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5f1e7a2eea6f89b27ec29aa1b47e9d81
+BELONGS ya.make
+    License text:
+         * Copyright © 2000 Keith Packard
+         * Copyright © 2005 Patrick Lam
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/fccache.c [2:3]
+        src/fccfg.c [4:4]
+        src/fcdbg.c [4:4]
+        src/fcdir.c [4:4]
+        src/fcfs.c [4:4]
+        src/fchash.c [2:2]
+        src/fcint.h [4:4]
+        src/fclist.c [4:4]
+        src/fcmatch.c [4:4]
+        src/fcname.c [4:4]
+        src/fcobjs.c [4:4]
+        src/fcobjs.h [4:4]
+        src/fcpat.c [2:2]
+        src/fcptrlist.c [4:4]
+        src/fcstat.c [2:3]
+        src/fcstr.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7c16020e4a9fc83994d1a30b5f94e861
+BELONGS ya.make
+    License text:
+         * Copyright © 2007  Chris Wilson
+         * Copyright © 2009,2010  Red Hat, Inc.
+         * Copyright © 2011,2012,2013  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [45:47]
+        COPYING [127:129]
+        src/fcatomic.h [4:6]
+        src/fcmutex.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7e3f1c0cd85a75815bf5bb002ccf7451
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [3:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 849c4f37493ec230678c2d0296097aa4
+BELONGS ya.make
+    License text:
+         * Copyright © 2007 Keith Packard
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/fcdeprecate.h [2:2]
+        src/fcftint.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 864612024766312779e73a912405578c
+BELONGS ya.make
+    License text:
+          Copyright © 2002-2003 by Juliusz Chroboczek
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [78:78]
+        src/fcfoundry.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 89510d575bb91b47454fa40d73abff18
+BELONGS ya.make
+    License text:
+         * Copyright © 2006 Keith Packard
+         * Copyright © 2010 Behdad Esfahbod
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/fcarch.h [2:3]
+        src/fcserialize.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8c3da0fc02bd1016f74253fbdad5206d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [3:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 90f80156e55841f3948b8d9b0894d9ae
+BELONGS ya.make
+    License text:
+         * Copyright © 2008,2009 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/fcformat.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 912cc24ea62beecc135cd7a0c489eb5f
+BELONGS ya.make
+    License text:
+            intptr_t	*leaves = FcCharSetLeaves (c);
+            FcChar16	*numbers = FcCharSetNumbers (c);
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/fcdbg.c [157:158]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a2394dece66b1c9d80ed88d8fe7fbf3a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/fcint.h [428:433]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a8e8285ba3becb86cf3f6b6e9daf9932
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/fcint.h [372:376]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aaf25436775ec6d5d75312607ab67d9d
+BELONGS ya.make
+    License text:
+         * Copyright © 2007  Chris Wilson
+         * Copyright © 2009,2010  Red Hat, Inc.
+         * Copyright © 2011,2012,2013  Google, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [45:47]
+        COPYING [127:129]
+        src/fcatomic.h [4:6]
+        src/fcmutex.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b121ba8ff45a42fdb35e191cb069187f
+BELONGS ya.make
+    License text:
+         * Copyright © 2001 Keith Packard
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        fontconfig/fcfreetype.h [4:4]
+        fontconfig/fcprivate.h [4:4]
+        fontconfig/fontconfig.h [4:4]
+        src/fccharset.c [4:4]
+        src/fcdefault.c [4:4]
+        src/fcfreetype.c [4:4]
+        src/fcinit.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bba53a79d566ea0068289b709af7ca0f
+BELONGS ya.make
+    License text:
+            FcFontSet	*old = FcCacheSet (c);
+            FcFontSet	*new = FcFontSetCreate ();
+            int		i;
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/fccache.c [1725:1727]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d55793d4582b8fa828a4106deddd57f4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [3:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d6075af55e5ecf1999cadb41c5e2da31
+BELONGS ya.make
+    License text:
+         * Copyright 息 2006 Keith Packard
+         * Copyright 息 2010 Behdad Esfahbod
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        config-fixups.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e20e5a45f72e5b0ff33f69f08274ab35
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [3:9]
+        src/fccache.c [2:3]
+        src/fcstat.c [2:3]

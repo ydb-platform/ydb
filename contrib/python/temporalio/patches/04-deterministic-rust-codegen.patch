@@ -1,0 +1,162 @@
+--- contrib/python/temporalio/temporalio/bridge/sdk-core/crates/common/build.rs
++++ contrib/python/temporalio/temporalio/bridge/sdk-core/crates/common/build.rs
+@@ -3,8 +3,9 @@
+     DescriptorProto, FieldDescriptorProto, FileDescriptorSet, MessageOptions,
+     field_descriptor_proto::{Label, Type},
+ };
++// Stable traversal keeps generated sources independent of hash randomization.
+ use std::{
+-    collections::{HashMap, HashSet},
++    collections::{BTreeMap, BTreeSet},
+     env,
+     fs::File,
+     io::{Read, Write},
+@@ -39,7 +40,7 @@
+     let model = PayloadModel::build(&descriptor_set);
+     let mut generator = PayloadVisitorGenerator {
+         model,
+-        message_fields: HashMap::new(),
++        message_fields: BTreeMap::new(),
+     };
+     generator.build_field_infos();
+ 
+@@ -93,22 +94,22 @@
+ 
+ struct PayloadModel {
+     /// Maps fully qualified message names to their descriptors
+-    messages: HashMap<String, DescriptorProto>,
++    messages: BTreeMap<String, DescriptorProto>,
+     /// Message names that contain Payloads (directly or transitively)
+-    payload_containing: HashSet<String>,
++    payload_containing: BTreeSet<String>,
+     /// Types currently being checked (for cycle detection)
+-    checking: HashSet<String>,
++    checking: BTreeSet<String>,
+     /// Types that have been checked and don't contain payloads
+-    not_payload_containing: HashSet<String>,
++    not_payload_containing: BTreeSet<String>,
+ }
+ 
+ impl PayloadModel {
+     fn build(descriptor_set: &FileDescriptorSet) -> Self {
+         let mut model = Self {
+-            messages: HashMap::new(),
+-            payload_containing: HashSet::new(),
+-            checking: HashSet::new(),
+-            not_payload_containing: HashSet::new(),
++            messages: BTreeMap::new(),
++            payload_containing: BTreeSet::new(),
++            checking: BTreeSet::new(),
++            not_payload_containing: BTreeSet::new(),
+         };
+         for file in &descriptor_set.file {
+             let package = file.package.as_deref().unwrap_or("");
+@@ -215,7 +216,7 @@
+ 
+ struct PayloadVisitorGenerator {
+     model: PayloadModel,
+-    message_fields: HashMap<String, Vec<PayloadFieldInfo>>,
++    message_fields: BTreeMap<String, Vec<PayloadFieldInfo>>,
+ }
+ 
+ impl PayloadVisitorGenerator {
+@@ -243,7 +244,7 @@
+         let mut fields = Vec::new();
+ 
+         // Group fields by oneof
+-        let mut oneof_fields: HashMap<i32, Vec<&FieldDescriptorProto>> = HashMap::new();
++        let mut oneof_fields: BTreeMap<i32, Vec<&FieldDescriptorProto>> = BTreeMap::new();
+         let mut regular_fields: Vec<&FieldDescriptorProto> = Vec::new();
+ 
+         for field in &msg.field {
+@@ -959,7 +960,7 @@
+     }
+ 
+     let table = load_payload_limits_table()?;
+-    let mut used_keys: HashSet<String> = HashSet::new();
++    let mut used_keys: BTreeSet<String> = BTreeSet::new();
+     let mut unclassified: Vec<String> = Vec::new();
+ 
+     // Compute the closure of structural messages reachable from the service request roots.
+@@ -1042,7 +1043,7 @@
+     Ok(())
+ }
+ 
+-fn load_payload_limits_table() -> Result<HashMap<String, FieldPolicy>, Box<dyn std::error::Error>> {
++fn load_payload_limits_table() -> Result<BTreeMap<String, FieldPolicy>, Box<dyn std::error::Error>> {
+     let blob = Validated {
+         class: LimitClass::Blob,
+         enforce_error: true,
+@@ -1061,7 +1062,7 @@
+         .chain(MEMO_FIELDS.iter().zip(repeat(memo)))
+         .chain(BLOB_WARN_FIELDS.iter().zip(repeat(blob_warn)))
+         .chain(NOT_VALIDATED_FIELDS.iter().zip(repeat(NotValidated)));
+-    let mut map = HashMap::new();
++    let mut map = BTreeMap::new();
+     for (path, classification) in entries {
+         if map.insert((*path).to_string(), classification).is_some() {
+             return Err(format!("payload-limits: duplicate table entry for `{path}`").into());
+@@ -1072,8 +1073,8 @@
+ 
+ /// BFS from the roots, following payload-containing structural fields, collecting the message types
+ /// that need a generated `PayloadLimitsValidatable` impl (excludes terminal leaf types).
+-fn limits_closure(model: &PayloadModel, roots: &[String]) -> HashSet<String> {
+-    let mut result = HashSet::new();
++fn limits_closure(model: &PayloadModel, roots: &[String]) -> BTreeSet<String> {
++    let mut result = BTreeSet::new();
+     let mut queue: Vec<String> = roots.to_vec();
+     while let Some(name) = queue.pop() {
+         if TERMINAL_LEAVES.contains(&name.as_str()) || result.contains(&name) {
+@@ -1151,8 +1152,8 @@
+ fn generate_limits_impl(
+     model: &PayloadModel,
+     proto_name: &str,
+-    table: &HashMap<String, FieldPolicy>,
+-    used_keys: &mut HashSet<String>,
++    table: &BTreeMap<String, FieldPolicy>,
++    used_keys: &mut BTreeSet<String>,
+     unclassified: &mut Vec<String>,
+ ) -> String {
+     let rust_path = proto_to_rust_path(proto_name);
+@@ -1161,7 +1162,7 @@
+     let mut body = String::new();
+ 
+     // Group oneof fields; handle regular fields directly.
+-    let mut oneof_fields: HashMap<i32, Vec<&FieldDescriptorProto>> = HashMap::new();
++    let mut oneof_fields: BTreeMap<i32, Vec<&FieldDescriptorProto>> = BTreeMap::new();
+     for field in &msg.field {
+         if let Some(oneof_index) = field.oneof_index
+             && !is_map_field(msg, field)
+@@ -1279,8 +1280,8 @@
+ /// effect, so the caller need not track table coverage itself.
+ fn leaf_class(
+     proto_path: &str,
+-    table: &HashMap<String, FieldPolicy>,
+-    used_keys: &mut HashSet<String>,
++    table: &BTreeMap<String, FieldPolicy>,
++    used_keys: &mut BTreeSet<String>,
+     unclassified: &mut Vec<String>,
+ ) -> Option<FieldPolicy> {
+     match table.get(proto_path) {
+@@ -1332,8 +1333,8 @@
+     proto_field: &str,
+     rust_field: &str,
+     kind: LeafKind,
+-    table: &HashMap<String, FieldPolicy>,
+-    used_keys: &mut HashSet<String>,
++    table: &BTreeMap<String, FieldPolicy>,
++    used_keys: &mut BTreeSet<String>,
+     unclassified: &mut Vec<String>,
+ ) -> String {
+     let Some(FieldPolicy::Validated {
+@@ -1379,8 +1380,8 @@
+     proto_path: &str,
+     proto_field: &str,
+     kind: LeafKind,
+-    table: &HashMap<String, FieldPolicy>,
+-    used_keys: &mut HashSet<String>,
++    table: &BTreeMap<String, FieldPolicy>,
++    used_keys: &mut BTreeSet<String>,
+     unclassified: &mut Vec<String>,
+ ) -> String {
+     let Some(FieldPolicy::Validated {

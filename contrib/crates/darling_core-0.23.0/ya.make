@@ -1,0 +1,110 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(darling_core)
+
+CRATE_VERSION(0.23.0)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/ast/data/mod.rs
+    src/ast/data/nested_meta.rs
+    src/ast/generics.rs
+    src/ast/mod.rs
+    src/codegen/attr_extractor.rs
+    src/codegen/attrs_field.rs
+    src/codegen/default_expr.rs
+    src/codegen/error.rs
+    src/codegen/field.rs
+    src/codegen/from_attributes_impl.rs
+    src/codegen/from_derive_impl.rs
+    src/codegen/from_field.rs
+    src/codegen/from_meta_impl.rs
+    src/codegen/from_type_param.rs
+    src/codegen/from_variant_impl.rs
+    src/codegen/mod.rs
+    src/codegen/outer_from_impl.rs
+    src/codegen/postfix_transform.rs
+    src/codegen/trait_impl.rs
+    src/codegen/variant.rs
+    src/codegen/variant_data.rs
+    src/derive.rs
+    src/error/child.rs
+    src/error/kind.rs
+    src/error/mod.rs
+    src/error/util.rs
+    src/from_attributes.rs
+    src/from_derive_input.rs
+    src/from_field.rs
+    src/from_generic_param.rs
+    src/from_generics.rs
+    src/from_meta.rs
+    src/from_type_param.rs
+    src/from_variant.rs
+    src/macros_private.rs
+    src/macros_public.rs
+    src/options/core.rs
+    src/options/forward_attrs.rs
+    src/options/forwarded_field.rs
+    src/options/from_attributes.rs
+    src/options/from_derive.rs
+    src/options/from_field.rs
+    src/options/from_meta.rs
+    src/options/from_type_param.rs
+    src/options/from_variant.rs
+    src/options/input_field.rs
+    src/options/input_variant.rs
+    src/options/mod.rs
+    src/options/outer_from.rs
+    src/options/shape.rs
+    src/usage/generics_ext.rs
+    src/usage/ident_set.rs
+    src/usage/lifetimes.rs
+    src/usage/mod.rs
+    src/usage/options.rs
+    src/usage/type_params.rs
+    src/util/callable.rs
+    src/util/flag.rs
+    src/util/ident_string/mod.rs
+    src/util/ident_string/serde.rs
+    src/util/ignored.rs
+    src/util/mod.rs
+    src/util/over_ride.rs
+    src/util/parse_attribute.rs
+    src/util/parse_expr.rs
+    src/util/path_list.rs
+    src/util/path_to_string.rs
+    src/util/preserved_str_expr.rs
+    src/util/shape.rs
+    src/util/spanned_value.rs
+    src/util/with_original.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    Cargo.lock
+    LICENSE
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    strsim
+    suggestions
+)
+
+PEERDIR(
+    contrib/crates/ident_case-1.0.1
+    contrib/crates/proc-macro2-1.0.107
+    contrib/crates/quote-1.0.47
+    contrib/crates/strsim-0.11.1
+    contrib/crates/syn-2.0.119
+)
+
+LICENSE("MIT")
+VERSION(0.23.0)
+ORIGINAL_SOURCE(https://static.crates.io/crates/darling_core/darling_core-0.23.0.crate)
+
+END()

@@ -112,6 +112,12 @@ namespace NKikimr {
             void Handle(NPDisk::TEvChunkWriteResult::TPtr &ev, const TActorContext &ctx) {
                 YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "COMMITTER: write done"));
 
+                if (ev->Get()->Status == NKikimrProto::OK) {
+                    // The chunk may have been allocated by the write itself, with a nonce this VDisk was never told;
+                    // an older one recorded for the same index must not be used to seal sectors.
+                    SlCtx->PDiskCtx->ChunkNonces->Forget(ev->Get()->ChunkIdx);
+                }
+
                 if (ev->Get()->Status == NKikimrProto::OUT_OF_SPACE) {
                     // We tried to allocate a new chunk for the sync log, but PDisk is out
                     // of space (only fresh chunk allocation, i.e. chunkIdx == 0, can return

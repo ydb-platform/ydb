@@ -4,7 +4,65 @@
 #include <ydb/library/actors/util/rc_buf.h>
 #include <ydb/library/actors/util/rope.h>
 
+#include <cstdlib>
+#include <optional>
+
 namespace NKikimr {
+
+    namespace {
+
+        class TSectorBufferChunk : public IContiguousChunk {
+            static constexpr size_t Alignment = 4096;
+
+            char *Ptr = nullptr;
+            const size_t Size;
+            std::optional<TMemoryConsumer> Consumer;
+
+        public:
+            TSectorBufferChunk(size_t size, const TMemoryConsumer *consumer)
+                : Size(size)
+            {
+                void *ptr = nullptr;
+                Y_ABORT_UNLESS(posix_memalign(&ptr, Alignment, Max<size_t>(Size, 1)) == 0);
+                Ptr = static_cast<char*>(ptr);
+                if (consumer) {
+                    Consumer.emplace(*consumer);
+                    Consumer->Add(Size);
+                }
+            }
+
+            ~TSectorBufferChunk() {
+                if (Consumer) {
+                    Consumer->Subtract(Size);
+                }
+                free(Ptr);
+            }
+
+            IContiguousChunk::TPtr Clone() override {
+                TIntrusivePtr<TSectorBufferChunk> res = MakeIntrusive<TSectorBufferChunk>(Size,
+                    Consumer ? &*Consumer : nullptr);
+                memcpy(res->Ptr, Ptr, Size);
+                return res;
+            }
+
+            TContiguousSpan GetData() const override {
+                return {Ptr, Size};
+            }
+
+            TMutableContiguousSpan UnsafeGetDataMut() override {
+                return {Ptr, Size};
+            }
+
+            size_t GetOccupiedMemorySize() const override {
+                return Size;
+            }
+        };
+
+    } // anonymous
+
+    TRcBuf AllocateSectorBuffer(size_t size, const TMemoryConsumer *consumer) {
+        return TRcBuf(IContiguousChunk::TPtr(MakeIntrusive<TSectorBufferChunk>(size, consumer)));
+    }
 
     bool PrepareChunkWriteSectors(NPDisk::TEvChunkWrite& ev, const TPDiskCtx& pdiskCtx) {
         const bool enabled = static_cast<i64>(pdiskCtx.EnableSectorPreparation) != 0;
@@ -31,7 +89,7 @@ namespace NKikimr {
 
         const ui32 firstSectorIdx = ev.Offset / payloadSize;
         const ui64 rawSize = format.RawSize(totalSize);
-        TRcBuf raw = TRcBuf::UninitializedPageAligned(rawSize);
+        TRcBuf raw = AllocateSectorBuffer(rawSize);
         ui8 *out = reinterpret_cast<ui8*>(raw.GetDataMut());
 
         // Gather the payload of each sector at the sector's beginning, then seal it in place. A part with
@@ -93,7 +151,7 @@ namespace NKikimr {
         // The buffer was read for this request alone, so it is decrypted in place.
         const ui32 sectors = (offset + size - 1) / payloadSize - firstSector + 1;
         ui8 *raw = msg.Data.RawDataPtr(0, sectors * sectorSize);
-        TRcBuf data = TRcBuf::UninitializedPageAligned(size);
+        TRcBuf data = TRcBuf::Uninitialized(size); // payload for the reader: no alignment needed
         NPDisk::TFormatContext::TOpener opener(format, msg.ChunkIdx, msg.ChunkNonce, blobId);
         TBufferWithGaps result(offset);
         ui32 done = 0;

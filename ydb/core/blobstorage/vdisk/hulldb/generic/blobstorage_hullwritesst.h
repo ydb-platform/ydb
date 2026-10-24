@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/blobstorage/vdisk/common/align.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_sector_sealing.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_format_context.h>
 
@@ -150,7 +151,7 @@ namespace NKikimr {
             const ui32 sectorSize = Format->GetSectorSize();
             while (len) {
                 if (!HasBuffer) {
-                    SectorBuffer = TRcBuf::UninitializedPageAligned((ui64)WriteBlockSize / AppendBlockSize * sectorSize);
+                    SectorBuffer = AllocateSectorBuffer((ui64)WriteBlockSize / AppendBlockSize * sectorSize, &Consumer);
                     SectorBufferStart = Offset;
                     SectorFill = 0;
                     HasBuffer = true;
@@ -172,6 +173,7 @@ namespace NKikimr {
         void CreateSectorsWriteMsg() {
             if (!HasBuffer || !SectorFill) {
                 HasBuffer = false;
+                SectorFill = 0;
                 return;
             }
             const ui32 sectorSize = Format->GetSectorSize();
@@ -195,6 +197,7 @@ namespace NKikimr {
             ev->FirstSectorNonce = ChunkNonce + firstSectorIdx;
             MsgQueue.push(std::move(ev));
             HasBuffer = false;
+            SectorFill = 0;
         }
 
         void CreateChunkWriteMsg() {

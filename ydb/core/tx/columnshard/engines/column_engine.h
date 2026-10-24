@@ -113,10 +113,12 @@ public:
         const NKikimrTxColumnShard::TSchemaPresetVersionInfo& Info;
 
     public:
-        explicit TSchemaVersionView(const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info Y_LIFETIME_BOUND)
+        explicit TSchemaVersionView(const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info)
             : Info(info)
         {
         }
+
+        TSchemaVersionView(const NKikimrTxColumnShard::TSchemaPresetVersionInfo&&) = delete;
 
         TSchemaVersionView(const TSchemaVersionView&) = delete;
         TSchemaVersionView(TSchemaVersionView&&) = delete;

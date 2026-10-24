@@ -3926,7 +3926,7 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
     Y_UNIT_TEST_TWIN(StandbyRejectsDestinationOwnedByAnotherReplication, directory) {
         TTestEnv env;
         const auto first = StartPendingAttachment(env);
-        env.SendAsync(first.Info.ControllerId,
+        SendAttachmentResult(env, first,
             new TEvPrivate::TEvCreateDstResult(1, first.TargetId, first.DstPathId));
         DescribeReplication(env, first.Info);
         if (directory) {
@@ -3957,10 +3957,7 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         UNIT_ASSERT(desc.GetState().HasPaused());
         env.SendAsync(second.ControllerId, new TEvService::TEvStatus());
         UNIT_ASSERT(WaitFor([&] { return DescribeReplication(env, second)->Get()->Record.TargetsSize() == 1; }));
-        const auto targetId = DescribeReplication(env, second)->Get()->Record.GetTargets(0).GetId();
-        env.SendAsync(second.ControllerId, new TEvPrivate::TEvCreateStreamResult(1, targetId,
-            NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues())));
-        DescribeReplication(env, second);
+        UNIT_ASSERT(WaitFor([&] { return SourceStreamsReady(env, second, 1); }));
 
         const auto resumed = session.ExecuteSchemeQuery(
             "ALTER ASYNC REPLICATION `second` SET (STATE = \"STANDBY\");").GetValueSync();
@@ -4118,16 +4115,36 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
             return DescribeReplication(env, info)->Get()->Record.TargetsSize() == 1;
         }));
         const auto targetId = DescribeReplication(env, info)->Get()->Record.GetTargets(0).GetId();
-        env.SendAsync(info.ControllerId, new TEvPrivate::TEvCreateStreamResult(1, targetId,
-            NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues())));
-        env.Send<TEvPrivate::TEvPrepareAttachDstResult>(info.ControllerId,
-            new TEvPrivate::TEvPrepareAttachDst(1, targetId, dstPathId));
-        env.SendAsync(info.ControllerId, new TEvPrivate::TEvCreateDstResult(1, targetId,
-            NKikimrScheme::StatusPreconditionFailed, "Table is owned by another replication"));
+        UNIT_ASSERT(WaitFor([&] { return SourceStreamsReady(env, info, 1); }));
+        auto rejectTakeover = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(
+            [&](NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                const auto& record = ev->Get()->Record;
+                if (record.TransactionSize() != 1) {
+                    return;
+                }
+                const auto& alter = record.GetTransaction(0).GetAlterTable();
+                if (!alter.GetReplicationConfig().HasOwner()
+                    || TPathId::FromProto(alter.GetPathId()) != dstPathId)
+                {
+                    return;
+                }
+                runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                    new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(
+                        NKikimrScheme::StatusPreconditionFailed, record.GetTxId(), dstPathId.OwnerId,
+                        "Table is owned by another replication")));
+                ev.Reset();
+            });
+        auto initialResume = MakeAlterReplicationRequest(info, 106);
+        initialResume->Record.MutableSwitchState()->MutableStandBy();
+        const auto initiallyResumed = env.Send<TEvController::TEvAlterReplicationResult>(
+            info.ControllerId, std::move(initialResume));
+        UNIT_ASSERT_VALUES_EQUAL(initiallyResumed->Get()->Record.GetStatus(),
+            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
         UNIT_ASSERT(WaitFor([&] {
             return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
         }));
         AssertAttachmentPaths(env, {info, targetId, dstPathId}, dstPathId);
+        rejectTakeover.Remove();
 
         const auto pipeService = MakePipePerNodeCacheID(false);
         const auto pipeCache = runtime.GetLocalServiceId(pipeService);

@@ -1236,7 +1236,8 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
             }
             const auto& config = table->second->ReplicationConfig();
             if (config.HasOwner()
-                && TPathId::FromProto(config.GetOwner()) != TPathId::FromProto(tx.GetExpectedReplicationOwner())) {
+                ? TPathId::FromProto(config.GetOwner()) != TPathId::FromProto(tx.GetExpectedReplicationOwner())
+                : !tx.GetAllowUnownedReplicationCleanup()) {
                 return {CreateReject(id, NKikimrScheme::StatusSuccess,
                     "Replication owner has changed; cleanup skipped")};
             }

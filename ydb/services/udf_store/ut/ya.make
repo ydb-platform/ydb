@@ -18,6 +18,7 @@ PEERDIR(
 )
 
 SRCS(
+    async_runtime_ut.cpp
     exact_bridge_runtime_ut.cpp
     manifest_ut.cpp
     blob_chunks_ut.cpp
@@ -39,6 +40,8 @@ SRCS(
 )
 
 RESOURCE(
+    ydb/udfs/wasm/auth_test/ut/data/auth_test.wasm /auth_test.wasm
+    ydb/services/udf_store/ut/data/async_coroutine.wasm /async_coroutine.wasm
     ydb/services/udf_store/ut/data/throw_with_dwarf.wasm /throw_with_dwarf.wasm
 )
 

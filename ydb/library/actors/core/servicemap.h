@@ -10,13 +10,16 @@
 #include <type_traits>
 
 namespace NActors {
-    // wait-free one writer multi reader hash-tree for service mapping purposes
-    // on fast updates on same key - could lead to false-negatives, we don't care as such cases are broken from service-map app logic
+    // Single-writer, multi-reader hash tree for service mapping purposes.
+    // Readers do not wait for the writer, but may retry a missed lookup when
+    // a concurrent update moves an existing key behind the reader's cursor.
 
     template <typename TKey, typename TValue, typename THash, ui64 BaseSize = 256 * 1024, ui64 ExtCount = 4, ui64 ExtBranching = 4>
     class TServiceMap : TNonCopyable {
         // CounterIn/CounterOut validate the whole snapshot, but every part still
         // has to be accessed atomically to make a discarded torn read well-defined.
+        // Observing reused storage must also observe the preceding invalidation
+        // and update revision, even when the key no longer matches.
         template <typename T>
         class TAtomicStorage : TNonCopyable {
             static_assert(std::is_trivially_copyable_v<T>);
@@ -29,7 +32,7 @@ namespace NActors {
             T Load() const noexcept {
                 std::array<ui64, PartCount> parts;
                 for (size_t i = 0; i != PartCount; ++i) {
-                    parts[i] = Parts[i].load(std::memory_order_relaxed);
+                    parts[i] = Parts[i].load(std::memory_order_acquire);
                 }
 
                 T value;
@@ -42,7 +45,7 @@ namespace NActors {
                 std::memcpy(parts.data(), &value, sizeof(value));
 
                 for (size_t i = 0; i != PartCount; ++i) {
-                    Parts[i].store(parts[i], std::memory_order_relaxed);
+                    Parts[i].store(parts[i], std::memory_order_release);
                 }
             }
         };
@@ -70,6 +73,7 @@ namespace NActors {
         };
 
         ui32 Counter;
+        std::atomic<ui64> PublishedUpdates{0};
         TBranch* Line[BaseSize];
 
         bool ScanBranch(TBranch* branch, const TKey& key, ui64 hash, TValue& ret) {
@@ -139,13 +143,19 @@ namespace NActors {
             const ui64 hash = hashOp(key);
             const ui64 hash0 = hash % BaseSize;
 
-            if (TBranch* branch = AtomicLoad(Line + hash0)) {
-                TValue ret;
-                if (ScanBranch(branch, key, hash / BaseSize, ret))
-                    return ret;
-            }
+            for (;;) {
+                const ui64 before = PublishedUpdates.load(std::memory_order_acquire);
+                if (TBranch* branch = AtomicLoad(Line + hash0)) {
+                    TValue ret;
+                    if (ScanBranch(branch, key, hash / BaseSize, ret)) {
+                        return ret;
+                    }
+                }
 
-            return TValue();
+                if (PublishedUpdates.load(std::memory_order_acquire) == before) {
+                    return TValue();
+                }
+            }
         }
 
         // returns true on update, false on insert
@@ -173,6 +183,11 @@ namespace NActors {
             AtomicStore(&zeroEntry->CounterIn, counter);
 
             if (oldEntry != nullptr) {
+                // A reader may have skipped zeroEntry before it was published.
+                // Mark the move before clearing oldEntry, so that a reader
+                // missing both entries retries. Readers that observe this
+                // revision also observe the already-published new entry.
+                PublishedUpdates.fetch_add(1, std::memory_order_release);
                 const TValue ret = oldEntry->Value.Load();
                 AtomicStore<ui32>(&oldEntry->CounterOut, 0);
                 AtomicStore<ui32>(&oldEntry->CounterIn, 0);

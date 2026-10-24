@@ -19,25 +19,11 @@ ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDr
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithoutSchemaChangesReportsError
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTableWithLocalBloomIndexes
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb py3test.sole chunk
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_A_b_C_d_E]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_COL1]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_asterisk]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2_COL1]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col3]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[constant]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[count]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[optional_types]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[primitive_types]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[pushdown]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[unsupported_types]
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedClusterTableFailsGetClustersList
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedVersionsTableIsRecreated
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_wm_after_parsing[False-2-no_shared]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
-ydb/tests/functional/config py3test.[test_distconf.py */*] chunk
-ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_replace_config_unknown_fields[host_config]
+ydb/tests/functional/config test_distconf_self_heal.py.TestKiKiMRDistConfSelfHealParallelCall2.test
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_basic
 ydb/tests/functional/tenants test_system_views.py.TestQueryMetricsOneHourRestart.test_case
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]

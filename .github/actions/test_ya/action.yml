@@ -88,6 +88,13 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Pin comparison sources
+      shell: bash
+      run: |
+        # Keep source and mute-list revisions identical to baseline #56690,
+        # even if main advances before this experimental PR is checked out.
+        git checkout --detach "${{ github.event.pull_request.head.sha }}"
+
     - name: comment-build-start
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
       shell: bash

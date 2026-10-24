@@ -78,5 +78,5 @@ dashboard:
   mem_min_chunk_gb: 24.0
   cpu_saturation_pct: 90.0
   near_budget_factor: 1.10
-  # Matches ya make cgroup MemoryMax in test_ya action (95% of MemTotal).
+  # Matches ya make cgroup MemoryMax in build_and_test_ya action (95% of MemTotal).
   ya_make_mem_fraction: 0.95

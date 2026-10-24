@@ -69,6 +69,7 @@ Y_UNIT_TEST_SUITE(Path) {
         for (size_t i = 0; i < Data.size(); i++) {
             const TString& result = DoCanonizePathFast(Data[i].first);
             UNIT_ASSERT_VALUES_EQUAL(result, Data[i].second);
+            UNIT_ASSERT_VALUES_EQUAL(DoCanonizePathFast(result), result);
         }
     }
 

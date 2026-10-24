@@ -1,5 +1,6 @@
 #pragma once
 
+#include "blobstorage_pdisk.h"
 #include "blobstorage_pdisk_crypto.h"
 #include "blobstorage_pdisk_data.h"
 
@@ -74,6 +75,9 @@ public:
         const ui64 ChunkNonce;
         const TLogoBlobID BlobId;
         TPDiskHashCalculator Hasher;
+        // Keyed once per read; which one opens a sector is recorded in its footer.
+        TPDiskStreamCypher PlainCypher;
+        TPDiskStreamCypher EncryptedCypher;
     };
 
 private:
@@ -87,5 +91,8 @@ private:
 };
 
 using TFormatContextPtr = std::shared_ptr<const TFormatContext>;
+
+// A copy of the disk format for an owner (TEvYardInitResult::DiskFormat): its keys are wiped when it is destroyed.
+TDiskFormatPtr MakeDiskFormatCopy(const TDiskFormat& format);
 
 } // NKikimr::NPDisk

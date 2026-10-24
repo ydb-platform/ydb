@@ -569,6 +569,11 @@ public:
     bool ChunkEncrypted = true;
     bool PreformattedSectors = false; // see TEvChunkWrite::PreformattedSectors
     ui64 FirstSectorNonce = 0;
+    // A preformatted write goes to the device in pieces; Completion runs when the last one is done.
+    TAtomic PreformattedPiecesInFlight = 0;
+    TAtomic PreformattedPieceFailed = 0;
+    ui32 PreformattedPieceCount = 0; // set when the write is cut into pieces
+    ui32 PreformattedPiecesSubmitted = 0; // in the PDisk thread
 
     TLogoBlobID BlobId;
 

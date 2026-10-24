@@ -785,6 +785,118 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         }
     }
 
+    // Sectors an owner seals itself (TEvChunkWrite::PreformattedSectors) must be exactly what PDisk writes: byte for
+    // byte, read back the ordinary way by PDisk, and opened by the owner after a RawSectors read. The write and the
+    // reads are long enough to go to the device in several pieces.
+    void TestPreformattedSectors(bool encrypt) {
+        TActorTestContext testCtx({.EnableSectorEncryption = encrypt});
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        UNIT_ASSERT(vdisk.FormatContext);
+        const NPDisk::TFormatContextPtr format = vdisk.FormatContext;
+        const ui32 payloadSize = format->GetSectorPayloadSize();
+        const ui32 sectorSize = format->GetSectorSize();
+        UNIT_ASSERT_VALUES_EQUAL(vdisk.PDiskParams->AppendBlockSize, payloadSize);
+        const auto owner = vdisk.PDiskParams->Owner;
+        const auto ownerRound = vdisk.PDiskParams->OwnerRound;
+
+        vdisk.ReserveChunk(2);
+        const TSet<TChunkIdx> reserved = vdisk.Chunks[EChunkState::RESERVED];
+        const TChunkIdx sealedChunk = *reserved.begin();
+        const TChunkIdx pdiskChunk = *reserved.rbegin();
+        const ui64 sealedNonce = vdisk.ChunkNonces.at(sealedChunk);
+        const ui64 pdiskNonce = vdisk.ChunkNonces.at(pdiskChunk);
+
+        // 300 sectors from sector 2 on, the last one half full
+        const ui32 firstSector = 2;
+        const ui32 sectors = 300;
+        const TString payload = PrepareData((sectors - 1) * payloadSize + payloadSize / 2);
+        const ui32 offset = firstSector * payloadSize;
+
+        auto seal = [&](TChunkIdx chunkIdx, ui64 chunkNonce) {
+            TRcBuf buf = TRcBuf::UninitializedPageAligned(sectors * sectorSize);
+            NPDisk::TFormatContext::TSealer sealer(format, chunkIdx, chunkNonce, {});
+            for (ui32 i = 0; i < sectors; ++i) {
+                const ui32 size = Min<ui32>(payloadSize, payload.size() - i * payloadSize);
+                sealer.Seal(reinterpret_cast<ui8*>(buf.GetDataMut()) + (ui64)i * sectorSize,
+                    payload.data() + (ui64)i * payloadSize, size, firstSector + i);
+            }
+            return buf;
+        };
+        auto preformattedWrite = [&](TChunkIdx chunkIdx, ui32 writeOffset, ui64 firstSectorNonce, TRcBuf buf) {
+            const size_t size = buf.size();
+            auto ev = new NPDisk::TEvChunkWrite(owner, ownerRound, chunkIdx, writeOffset,
+                new NPDisk::TEvChunkWrite::TRopeAlignedParts(TRope(std::move(buf)), size), nullptr, false, 0);
+            ev->PreformattedSectors = true;
+            ev->FirstSectorNonce = firstSectorNonce;
+            return ev;
+        };
+        auto rawRead = [&](TChunkIdx chunkIdx, ui64 chunkNonce) {
+            auto ev = new NPDisk::TEvChunkRead(owner, ownerRound, chunkIdx, offset, payload.size(), 0, nullptr);
+            ev->RawSectors = true;
+            auto res = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(ev, NKikimrProto::OK);
+            UNIT_ASSERT(res->RawSectors);
+            UNIT_ASSERT_VALUES_EQUAL(res->ChunkNonce, chunkNonce);
+            UNIT_ASSERT_VALUES_EQUAL(res->Offset, firstSector * sectorSize);
+            UNIT_ASSERT_VALUES_EQUAL(res->Data.Size(), sectors * sectorSize);
+            const ui8 *raw = res->Data.RawDataPtr(0, sectors * sectorSize);
+            return TString(reinterpret_cast<const char*>(raw), sectors * sectorSize);
+        };
+
+        // what PDisk refuses
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+            preformattedWrite(sealedChunk, offset, sealedNonce + firstSector + 1, seal(sealedChunk, sealedNonce)),
+            NKikimrProto::ERROR);
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+            preformattedWrite(sealedChunk, offset + 1, sealedNonce + firstSector, seal(sealedChunk, sealedNonce)),
+            NKikimrProto::ERROR);
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+            preformattedWrite(0, offset, firstSector, seal(sealedChunk, sealedNonce)),
+            NKikimrProto::ERROR);
+
+        // sealed by the owner: PDisk writes exactly these bytes and reads them back the ordinary way
+        const TRcBuf sealed = seal(sealedChunk, sealedNonce);
+        const TString sealedBytes(sealed.data(), sealed.size());
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+            preformattedWrite(sealedChunk, offset, sealedNonce + firstSector, sealed), NKikimrProto::OK);
+        UNIT_ASSERT(rawRead(sealedChunk, sealedNonce) == sealedBytes);
+        {
+            const auto res = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+                new NPDisk::TEvChunkRead(owner, ownerRound, sealedChunk, offset + 123, payload.size() - 173, 0,
+                    nullptr),
+                NKikimrProto::OK);
+            UNIT_ASSERT(res->Data.IsReadable());
+            const TRcBuf data = res->Data.ToString();
+            UNIT_ASSERT(TString(data.data(), data.size()) == payload.substr(123, payload.size() - 173));
+        }
+
+        // written by PDisk: byte for byte what the owner would have sealed, and it opens to the payload
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+            new NPDisk::TEvChunkWrite(owner, ownerRound, pdiskChunk, offset,
+                new NPDisk::TEvChunkWrite::TAlignedParts(TString(payload)), nullptr, false, 0),
+            NKikimrProto::OK);
+        TString raw = rawRead(pdiskChunk, pdiskNonce);
+        const TRcBuf expected = seal(pdiskChunk, pdiskNonce);
+        UNIT_ASSERT(raw == TString(expected.data(), expected.size()));
+        NPDisk::TFormatContext::TOpener opener(format, pdiskChunk, pdiskNonce, {});
+        TString opened = TString::Uninitialized(sectors * payloadSize);
+        for (ui32 i = 0; i < sectors; ++i) {
+            UNIT_ASSERT_C(opener.Open(reinterpret_cast<ui8*>(opened.Detach()) + (ui64)i * payloadSize,
+                reinterpret_cast<ui8*>(raw.Detach()) + (ui64)i * sectorSize, firstSector + i, 0, payloadSize),
+                "sector# " << firstSector + i);
+        }
+        UNIT_ASSERT(opened.substr(0, payload.size()) == payload);
+        UNIT_ASSERT(opened.substr(payload.size()) == TString(opened.size() - payload.size(), '\0'));
+    }
+
+    Y_UNIT_TEST(PreformattedSectorsEncrypted) {
+        TestPreformattedSectors(true);
+    }
+
+    Y_UNIT_TEST(PreformattedSectorsNotEncrypted) {
+        TestPreformattedSectors(false);
+    }
+
     Y_UNIT_TEST(TestAbstractPDiskInterface) {
         TString path = "/tmp/asdqwe";
         TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(path, 12345, 0xffffffffull,

@@ -18,6 +18,15 @@ TFormatContext::~TFormatContext() {
     SecureWipeBuffer((ui8*)&ChunkKey, sizeof(ChunkKey));
 }
 
+TDiskFormatPtr MakeDiskFormatCopy(const TDiskFormat& format) {
+    return TDiskFormatPtr(new TDiskFormat(format), +[](TDiskFormat* ptr) {
+        SecureWipeBuffer((ui8*)&ptr->SysLogKey, sizeof(ptr->SysLogKey));
+        SecureWipeBuffer((ui8*)&ptr->LogKey, sizeof(ptr->LogKey));
+        SecureWipeBuffer((ui8*)&ptr->ChunkKey, sizeof(ptr->ChunkKey));
+        delete ptr;
+    });
+}
+
 ////////////////////////////////////////////////////////////////////////////
 // TSealer
 ////////////////////////////////////////////////////////////////////////////
@@ -70,8 +79,12 @@ TFormatContext::TOpener::TOpener(std::shared_ptr<const TFormatContext> ctx, TChu
     , ChunkIdx(chunkIdx)
     , ChunkNonce(chunkNonce)
     , BlobId(blobId)
+    , PlainCypher(false)
+    , EncryptedCypher(true)
 {
     Y_ABORT_UNLESS(!Ctx->PlainDataChunks, "plain data chunks have no sector footers");
+    PlainCypher.SetKey(Ctx->ChunkKey);
+    EncryptedCypher.SetKey(Ctx->ChunkKey);
 }
 
 bool TFormatContext::TOpener::Open(ui8 *dst, ui8 *sector, ui32 sectorIdx, ui32 from, ui32 size) {
@@ -85,8 +98,7 @@ bool TFormatContext::TOpener::Open(ui8 *dst, ui8 *sector, ui32 sectorIdx, ui32 f
         return false;
     }
     // Whether this sector is encrypted is recorded in its own footer, not taken from the configuration.
-    TPDiskStreamCypher cypher(footer.IsEncrypted());
-    cypher.SetKey(Ctx->ChunkKey);
+    TPDiskStreamCypher& cypher = footer.IsEncrypted() ? EncryptedCypher : PlainCypher;
     cypher.StartMessage(footer.Nonce);
     cypher.InplaceEncrypt(sector, Ctx->SectorPayloadSize + CanarySize);
     if (CanarySize && memcmp(sector + Ctx->SectorPayloadSize, &Canary, CanarySize) != 0) {

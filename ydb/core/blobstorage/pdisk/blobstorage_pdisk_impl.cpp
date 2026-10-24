@@ -1071,18 +1071,29 @@ bool TPDisk::ChunkWritePieceEncrypted(TChunkWrite *evChunkWrite, TChunkWriter& w
     return true;
 }
 
-void TPDisk::ChunkWritePiecePreformatted(TChunkWrite *evChunkWrite) {
-    // Checked in PreprocessRequest: one page-aligned part of whole sectors with the right nonces.
+bool TPDisk::ChunkWritePiecePreformatted(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize) {
+    // Checked in PreprocessRequest: one page-aligned part of whole sectors with the right nonces. Pieces are cut
+    // at whole sectors (PushRequestToScheduler), so each one is page-aligned too.
     const auto [buff, size] = (*evChunkWrite->PartsPtr)[0];
-    const ui32 firstSectorIdx = evChunkWrite->Offset / Format.SectorPayloadSize();
+    Y_VERIFY_S(pieceShift % Format.SectorSize == 0 && pieceSize % Format.SectorSize == 0
+        && pieceShift + pieceSize <= size, PCtx->PDiskLogPrefix << "pieceShift# " << pieceShift
+        << " pieceSize# " << pieceSize << " size# " << size);
+    const ui32 firstSectorIdx = evChunkWrite->Offset / Format.SectorPayloadSize() + pieceShift / Format.SectorSize;
     const ui64 diskOffset = Format.Offset(evChunkWrite->ChunkIdx, firstSectorIdx);
-    *Mon.BandwidthPChunkPayload += size / Format.SectorSize * Format.SectorPayloadSize();
+    *Mon.BandwidthPChunkPayload += pieceSize / Format.SectorSize * Format.SectorPayloadSize();
 
+    // the last one sent, whichever part of the buffer it holds
+    const bool last = ++evChunkWrite->PreformattedPiecesSubmitted == evChunkWrite->PreformattedPieceCount;
+    if (last) {
+        evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
+    }
     auto traceId = evChunkWrite->Span.GetTraceId();
-    evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
-    BlockDevice->PwriteAsync(buff, size, diskOffset, evChunkWrite->Completion.Release(), evChunkWrite->ReqId,
-        &traceId);
-    evChunkWrite->IsReplied = true;
+    BlockDevice->PwriteAsync(static_cast<const ui8*>(buff) + pieceShift, pieceSize, diskOffset,
+        new TCompletionChunkWritePreformattedPiece(evChunkWrite), evChunkWrite->ReqId, &traceId);
+    if (last) {
+        evChunkWrite->IsReplied = true; // the reply is up to the completions now
+    }
+    return last;
 }
 
 bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize) {
@@ -1090,8 +1101,7 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
         return true;
     }
     if (evChunkWrite->PreformattedSectors) {
-        ChunkWritePiecePreformatted(evChunkWrite);
-        return true;
+        return ChunkWritePiecePreformatted(evChunkWrite, pieceShift, pieceSize);
     }
     Y_VERIFY_S(evChunkWrite->BytesWritten == pieceShift, PCtx->PDiskLogPrefix);
 
@@ -1227,6 +1237,22 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
         {"diskOffset", diskOffset},
         {"bytesToRead", bytesToRead},
         {"pieceSizeLimit", pieceSizeLimit});
+
+    if (read->RawSectors) {
+        // Whole sectors straight into the result buffer, unchecked; a piece at a time, as encrypted chunks are read,
+        // so that a long read does not hold the device for the other owners.
+        THolder<TCompletionChunkReadPart> completion(new TCompletionChunkReadPart(this, read, bytesToRead,
+                    bytesToRead, currentSectorOffset, read->FinalCompletion, isTheLastPart));
+        completion->CostNs = DriveModel.TimeForSizeNs(bytesToRead, read->ChunkIdx, TDriveModel::OP_TYPE_READ);
+        completion->Orbit = std::move(orbit);
+        read->CurrentSector += sectorsToRead;
+        read->RemainingSize -= bytesToRead;
+        AtomicAdd(InFlightChunkRead, (ui64)bytesToRead);
+        ui8 *data = read->FinalCompletion->GetCommonBuffer()->RawDataPtr(currentSectorOffset, bytesToRead);
+        BlockDevice->PreadAsync(data, bytesToRead, diskOffset + currentSectorOffset, completion.Release(),
+                read->ReqId, {});
+        return isTheLastPart ? ReadPieceResultOk : ReadPieceResultInProgress;
+    }
 
     if (!read->ChunkEncrypted) {
         Y_VERIFY(isTheFirstPart);
@@ -2484,6 +2510,8 @@ void TPDisk::FillFormatContext(NPDisk::TEvYardInitResult &result) {
         return; // no sector footers to build or check
     }
     if (!FormatContextCache) {
+        // Cfg, and so the encryption flag, is fixed for the life of this TPDisk: a new config comes with a restart,
+        // a new TPDisk and new YardInits, so owners never seal differently from TChunkWriter.
         FormatContextCache = std::make_shared<const TFormatContext>(Format,
             Cfg->FeatureFlags.GetEnablePDiskDataEncryption());
     }
@@ -2593,9 +2621,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
                 Cfg->RetrieveDeviceType(), isTinyDisk, Format.SectorSize, ""));
 
     GetStartingPoints(owner, result->StartingPoints);
-    result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
-        delete ptr;
-    });
+    result->DiskFormat = MakeDiskFormatCopy(Format);
     FillFormatContext(*result);
     AttachSharedUringRouter(evYardInit, *result);
     ownerData.VDiskId = vDiskId;
@@ -2800,9 +2826,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         Cfg->RetrieveDeviceType(), isTinyDisk, Format.SectorSize, ""));
 
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);
-    result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
-        delete ptr;
-    });
+    result->DiskFormat = MakeDiskFormatCopy(Format);
     FillFormatContext(*result);
     AttachSharedUringRouter(evYardInit, *result);
     WriteSysLogRestorePoint(new TCompletionEventSender(
@@ -4113,7 +4137,11 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             }
 
             ev.SetOwnerGroupType(ownerData.IsStaticGroupOwner());
-            ownerData.WriteThroughput.Increment(ev.TotalSize, PCtx->ActorSystem->Timestamp());
+            // Owner throughput counts payload, as for other writes; preformatted ones carry whole sectors.
+            const ui64 payloadSize = ev.PreformattedSectors
+                ? ev.TotalSize / Format.SectorSize * Format.SectorPayloadSize()
+                : ev.TotalSize;
+            ownerData.WriteThroughput.Increment(payloadSize, PCtx->ActorSystem->Timestamp());
             request->JobKind = NSchLab::JobKindWrite;
             ev.ChunkEncrypted = !Format.IsPlainDataChunks();
 
@@ -4416,11 +4444,18 @@ void TPDisk::PushRequestToScheduler(TRequestBase *request) {
     if (request->GetType() == ERequestType::RequestChunkWrite) {
         TIntrusivePtr<TChunkWrite> whole(static_cast<TChunkWrite*>(request));
 
-        // Preformatted sectors go to the device in one request, as plain chunks do.
-        const ui32 jobSizeLimit = whole->ChunkEncrypted && !whole->PreformattedSectors
+        // Preformatted sectors are cut into pieces of whole raw sectors, each written straight from the owner's
+        // buffer; the write completes when the last of them has.
+        const ui32 jobSizeLimit = whole->PreformattedSectors
+            ? Max<ui32>(Format.SectorSize, ForsetiOpPieceSizeCached / Format.SectorSize * Format.SectorSize)
+            : whole->ChunkEncrypted
             ? ui64(ForsetiOpPieceSizeCached) * Format.SectorPayloadSize() / Format.SectorSize
             : whole->TotalSize;
         const ui32 jobCount = (whole->TotalSize + jobSizeLimit - 1) / jobSizeLimit;
+        if (whole->PreformattedSectors) {
+            whole->PreformattedPieceCount = jobCount;
+            AtomicSet(whole->PreformattedPiecesInFlight, jobCount);
+        }
 
         ui32 remainingSize = whole->TotalSize;
         for (ui32 idx = 0; idx < jobCount; ++idx) {
@@ -4440,11 +4475,13 @@ void TPDisk::PushRequestToScheduler(TRequestBase *request) {
         ui32 totalSectors = read->LastSector - read->FirstSector + 1;
 
         Y_VERIFY_DEBUG_S(ForsetiOpPieceSizeCached % Format.SectorSize == 0, PCtx->PDiskLogPrefix);
-        const ui32 jobSizeLimit = read->ChunkEncrypted
-            ? ForsetiOpPieceSizeCached / Format.SectorSize
+        // Raw sectors are read in pieces too: each piece lands at its own place in the result buffer.
+        const bool inPieces = read->ChunkEncrypted || read->RawSectors;
+        const ui32 jobSizeLimit = inPieces
+            ? Max<ui32>(1, ForsetiOpPieceSizeCached / Format.SectorSize)
             : totalSectors;
         const ui32 jobCount = (totalSectors + jobSizeLimit - 1) / jobSizeLimit;
-        Y_VERIFY(read->ChunkEncrypted || jobCount == 1);
+        Y_VERIFY(inPieces || jobCount == 1);
         for (ui32 idx = 0; idx < jobCount; ++idx) {
             bool isLast = idx == jobCount - 1;
 

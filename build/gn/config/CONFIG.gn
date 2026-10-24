@@ -54,7 +54,14 @@ declare_args() {
   #   "none"
   pch_mode = "none"
 
-  # write "$" for the shell as "\$\$"
+  # compile through dist-clang, tagged with the git branch of the sources
+  # (or the short commit when detached)
+  distclang = false
+}
+
+if (distclang) {
+  cc_wrapper = "dist-clang --restat --tag=\$\$(cd " + rebase_path("//") + " 2>/dev/null && { git symbolic-ref --short -q HEAD || git rev-parse --short HEAD; } 2>/dev/null)"
+} else {
   cc_wrapper = ""
 }
 

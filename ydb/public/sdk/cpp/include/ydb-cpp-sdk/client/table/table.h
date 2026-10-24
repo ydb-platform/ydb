@@ -381,6 +381,10 @@ public:
     uint32_t OverlapClusters = 0;
     double OverlapRatio = 0;
 
+    // Maintain the index on table writes. Enabled when unset.
+    // When false, rebuild the index to reflect table changes.
+    std::optional<bool> AutoUpdate = std::nullopt;
+
     static TKMeansTreeSettings FromProto(const Ydb::Table::KMeansTreeSettings& proto);
 
     void SerializeTo(Ydb::Table::KMeansTreeSettings& settings) const;

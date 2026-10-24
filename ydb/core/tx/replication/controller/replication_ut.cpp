@@ -38,6 +38,16 @@ Y_UNIT_TEST_SUITE(Replication) {
         replication->SetConfig(std::move(config));
         UNIT_ASSERT_VALUES_EQUAL(replication->GetConfig().GetSrcConnectionParams().GetIamCredentials().GetResourceId(), "");
     }
+
+    Y_UNIT_TEST(InitialScanIsImmutable) {
+        NKikimrReplication::TReplicationConfig config;
+        config.SetInitialScan(false);
+        auto replication = MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2), config, "/Root/db");
+
+        config.ClearInitialScan();
+        replication->SetConfig(std::move(config));
+        UNIT_ASSERT(!replication->GetConfig().GetInitialScan());
+    }
 }
 
 }

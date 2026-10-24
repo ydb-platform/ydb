@@ -21,6 +21,29 @@ namespace NKikimr {
 struct TPDiskMockState::TImpl {
     struct TChunkData {
         std::unordered_map<ui32, const TString*> Blocks;
+        // The blob id a block's sector hash was salted with, as PDisk does for a write that carries one. Such a
+        // sector checks out only when read with the same blob id; an unsalted one checks out with any.
+        std::unordered_map<ui32, TLogoBlobID> Salts;
+
+        bool SaltMatches(ui32 blockIdx, const TLogoBlobID& readBlobId) const {
+            const auto it = Salts.find(blockIdx);
+            return it == Salts.end() || it->second == readBlobId;
+        }
+
+        TLogoBlobID GetSalt(ui32 blockIdx) const {
+            const auto it = Salts.find(blockIdx);
+            return it == Salts.end() ? TLogoBlobID() : it->second;
+        }
+
+        void SetSalt(ui32 firstBlockIdx, ui32 count, const TLogoBlobID& blobId) {
+            for (ui32 blockIdx = firstBlockIdx; blockIdx < firstBlockIdx + count; ++blockIdx) {
+                if (blobId) {
+                    Salts[blockIdx] = blobId;
+                } else {
+                    Salts.erase(blockIdx);
+                }
+            }
+        }
     };
     struct TOwner {
         TVDiskID VDiskId;
@@ -1094,7 +1117,9 @@ public:
                             chunkOffset + blockIdx * Impl.AppendBlockSize,
                             chunkOffset + (blockIdx + 1) * Impl.AppendBlockSize));
 
-                        bool ok = it != chunk.Blocks.end() && !corrupted;
+                        // with sectors, a salted one does not check out under another blob id, as in PDisk
+                        bool ok = it != chunk.Blocks.end() && !corrupted
+                            && (!Impl.FormatContext || chunk.SaltMatches(blockIdx, msg->BlobId));
                         if (ok && it->second->size() == Impl.AppendBlockSize) {
                             memcpy(data.GetDataMut() + offsetInBuffer, it->second->data() + offsetInBlock, num);
                         } else if (ok) { // a whole sector written by TEvChunkWriteRaw, read as PDisk would read it
@@ -1137,7 +1162,8 @@ public:
     }
 
     // TEvChunkRead::RawSectors: the whole sectors that hold the payload, sealed from the stored payload as PDisk
-    // would have written them. A sector never written or corrupted comes back as zeroes, which do not open.
+    // would have written them, salted as they were written (not as they are read). A sector never written or
+    // corrupted comes back as zeroes, which do not open.
     void ReadRawSectors(const NPDisk::TEvChunkRead& msg, TImpl::TOwner& owner, NPDisk::TEvChunkReadResult& res) {
         const ui32 sectorSize = Impl.FormatContext->GetSectorSize();
         const ui32 firstSector = msg.Offset / Impl.AppendBlockSize;
@@ -1159,7 +1185,6 @@ public:
         }
 
         TRcBuf data = TRcBuf::UninitializedPageAligned((ui64)(lastSector - firstSector + 1) * sectorSize);
-        NPDisk::TFormatContext::TSealer sealer(Impl.FormatContext, msg.ChunkIdx, chunkNonce, msg.BlobId);
         for (ui32 sectorIdx = firstSector; sectorIdx <= lastSector; ++sectorIdx) {
             ui8 *sector = reinterpret_cast<ui8*>(data.GetDataMut()) + (ui64)(sectorIdx - firstSector) * sectorSize;
             const TString *block = nullptr;
@@ -1174,7 +1199,8 @@ public:
             if (block && !corrupted && block->size() == sectorSize) { // written by TEvChunkWriteRaw
                 memcpy(sector, block->data(), sectorSize);
             } else if (block && !corrupted) {
-                sealer.Seal(sector, block->data(), Impl.AppendBlockSize, sectorIdx);
+                NPDisk::TFormatContext::TSealer(Impl.FormatContext, msg.ChunkIdx, chunkNonce,
+                    chunkIt->second.GetSalt(sectorIdx)).Seal(sector, block->data(), Impl.AppendBlockSize, sectorIdx);
             } else {
                 memset(sector, 0, sectorSize);
             }
@@ -1210,15 +1236,29 @@ public:
         const ui32 sectors = part.second / sectorSize;
         TString payload = TString::Uninitialized((ui64)sectors * Impl.AppendBlockSize);
         TString sector = TString::Uninitialized(sectorSize); // opening decrypts in place; the sender's buffer stays
-        NPDisk::TFormatContext::TOpener opener(Impl.FormatContext, msg.ChunkIdx, Impl.GetChunkNonce(msg.ChunkIdx),
-            msg.BlobId);
+        // Whether the owner salted the hashes with the write's blob id is learned from the sectors themselves: an
+        // unsalted one opens without a blob id. The write then stores the salt it really has, for reads to check.
+        const ui64 chunkNonce = Impl.GetChunkNonce(msg.ChunkIdx);
+        NPDisk::TFormatContext::TOpener unsalted(Impl.FormatContext, msg.ChunkIdx, chunkNonce, TLogoBlobID());
+        NPDisk::TFormatContext::TOpener salted(Impl.FormatContext, msg.ChunkIdx, chunkNonce, msg.BlobId);
+        std::optional<bool> isSalted;
         for (ui32 i = 0; i < sectors; ++i) {
-            memcpy(sector.Detach(), static_cast<const char*>(part.first) + (ui64)i * sectorSize, sectorSize);
-            const bool opened = opener.Open(reinterpret_cast<ui8*>(payload.Detach()) + (ui64)i * Impl.AppendBlockSize,
-                reinterpret_cast<ui8*>(sector.Detach()), firstSectorIdx + i, 0, Impl.AppendBlockSize);
+            auto open = [&](NPDisk::TFormatContext::TOpener& opener) {
+                memcpy(sector.Detach(), static_cast<const char*>(part.first) + (ui64)i * sectorSize, sectorSize);
+                return opener.Open(reinterpret_cast<ui8*>(payload.Detach()) + (ui64)i * Impl.AppendBlockSize,
+                    reinterpret_cast<ui8*>(sector.Detach()), firstSectorIdx + i, 0, Impl.AppendBlockSize);
+            };
+            bool opened = open(unsalted);
+            const bool sectorSalted = !opened && msg.BlobId && (opened = open(salted));
             // PDisk would write such a sector and fail to read it back; here the owner's bug is caught at once.
             Y_VERIFY_S(opened, "preformatted sector does not open ChunkIdx# " << msg.ChunkIdx
                 << " SectorIdx# " << firstSectorIdx + i);
+            Y_VERIFY_S(!isSalted || *isSalted == sectorSalted, "preformatted sectors of one write salted differently"
+                << " ChunkIdx# " << msg.ChunkIdx << " SectorIdx# " << firstSectorIdx + i);
+            isSalted = sectorSalted;
+        }
+        if (!*isSalted) {
+            msg.BlobId = TLogoBlobID();
         }
         msg.PartsPtr = NPDisk::TEvChunkWrite::TPartsPtr(new NPDisk::TEvChunkWrite::TAlignedParts(std::move(payload)));
         msg.PreformattedSectors = false;
@@ -1312,6 +1352,10 @@ public:
                 for (ui32 i = 0; i < msg->PartsPtr->Size(); ++i) {
                     push((*msg->PartsPtr)[i]);
                 }
+                if (Impl.FormatContext) { // PDisk salts the sector hashes of a write that carries a blob id
+                    chunk.SetSalt(offset / Impl.AppendBlockSize, msg->PartsPtr->ByteSize() / Impl.AppendBlockSize,
+                        msg->BlobId);
+                }
             }
             YDB_LOG_PDISK_MOCK(PRI_DEBUG, "Received TEvChunkWriteResult",
                 {"marker", "PDM16"},
@@ -1353,8 +1397,8 @@ public:
                     } else { // the payload of a sector-format write, as PDisk would have written the sector
                         Y_ABORT_UNLESS(Impl.FormatContext && it->second->size() == Impl.AppendBlockSize);
                         NPDisk::TFormatContext::TSealer(Impl.FormatContext, msg->ChunkIdx,
-                            Impl.GetChunkNonce(msg->ChunkIdx), TLogoBlobID()).Seal(reinterpret_cast<ui8*>(dest),
-                            it->second->data(), Impl.AppendBlockSize, blockIdx);
+                            Impl.GetChunkNonce(msg->ChunkIdx), chunk.GetSalt(blockIdx)).Seal(
+                            reinterpret_cast<ui8*>(dest), it->second->data(), Impl.AppendBlockSize, blockIdx);
                     }
                 }
             }
@@ -1416,6 +1460,7 @@ public:
             for (auto iter = data.Begin(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) {
                 push(iter.ContiguousData(), iter.ContiguousSize());
             }
+            chunk.SetSalt(offset / Impl.SectorSize, data.size() / Impl.SectorSize, {}); // raw bytes, as written
         }
 
         Send(ev->Sender, res.release(), 0, ev->Cookie);

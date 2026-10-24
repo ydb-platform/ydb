@@ -877,6 +877,63 @@ Y_UNIT_TEST_SUITE(PDiskMockInterfaces) {
         UNIT_ASSERT(init->Get()->OwnedChunkNonces == TVector<ui64>{chunkNonce});
     }
 
+    // A sector whose hash was salted with blob id A checks out only when read with A, as on a real PDisk: the mock
+    // must not reseal it with whatever blob id a read brings.
+    Y_UNIT_TEST(SaltedSectorsNeedTheirBlobId) {
+        TMockOwner mock(true);
+        const auto reserved = mock.Reserve();
+        const TChunkIdx chunkIdx = reserved.first;
+        const ui64 chunkNonce = reserved.second;
+        const NPDisk::TFormatContextPtr format = mock.FormatContext;
+        const ui32 payloadSize = format->GetSectorPayloadSize();
+        const ui32 sectorSize = format->GetSectorSize();
+        const TLogoBlobID a(1, 2, 3, 0, 100, 0, 1);
+        const TLogoBlobID b(1, 2, 4, 0, 100, 0, 1);
+        const TString payload(payloadSize, 'x');
+
+        // sector 0: sealed by the owner with A; sector 1: written the ordinary way with A
+        TRcBuf buf = TRcBuf::UninitializedPageAligned(sectorSize);
+        NPDisk::TFormatContext::TSealer(format, chunkIdx, chunkNonce, a).Seal(
+            reinterpret_cast<ui8*>(buf.GetDataMut()), payload.data(), payloadSize, 0);
+        auto sealed = std::make_unique<NPDisk::TEvChunkWrite>(mock.Owner, mock.OwnerRound, chunkIdx, 0,
+            new NPDisk::TEvChunkWrite::TRopeAlignedParts(TRope(std::move(buf)), sectorSize), nullptr, true, 0);
+        sealed->PreformattedSectors = true;
+        sealed->FirstSectorNonce = chunkNonce;
+        sealed->BlobId = a;
+        mock.Send(sealed.release());
+        UNIT_ASSERT_VALUES_EQUAL(mock.Wait<NPDisk::TEvChunkWriteResult>()->Get()->Status, NKikimrProto::OK);
+        auto ordinary = std::make_unique<NPDisk::TEvChunkWrite>(mock.Owner, mock.OwnerRound, chunkIdx, payloadSize,
+            new NPDisk::TEvChunkWrite::TAlignedParts(TString(payload)), nullptr, true, 0);
+        ordinary->BlobId = a;
+        mock.Send(ordinary.release());
+        UNIT_ASSERT_VALUES_EQUAL(mock.Wait<NPDisk::TEvChunkWriteResult>()->Get()->Status, NKikimrProto::OK);
+
+        auto read = [&](const TLogoBlobID& blobId, bool raw) {
+            auto ev = std::make_unique<NPDisk::TEvChunkRead>(mock.Owner, mock.OwnerRound, chunkIdx, 0, 2 * payloadSize,
+                0, nullptr);
+            ev->BlobId = blobId;
+            ev->RawSectors = raw;
+            mock.Send(ev.release());
+            auto res = mock.Wait<NPDisk::TEvChunkReadResult>();
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->RawSectors, raw);
+            return res;
+        };
+        for (const TLogoBlobID& blobId : {a, b, TLogoBlobID()}) {
+            const bool match = blobId == a;
+            UNIT_ASSERT_VALUES_EQUAL_C(read(blobId, false)->Get()->Data.IsReadable(0, 2 * payloadSize), match, blobId);
+
+            auto raw = read(blobId, true);
+            ui8 *sectors = raw->Get()->Data.RawDataPtr(0, 2 * sectorSize);
+            NPDisk::TFormatContext::TOpener opener(format, chunkIdx, chunkNonce, blobId);
+            TString opened = TString::Uninitialized(payloadSize);
+            for (ui32 i = 0; i < 2; ++i) {
+                UNIT_ASSERT_VALUES_EQUAL_C(opener.Open(reinterpret_cast<ui8*>(opened.Detach()), sectors + i * sectorSize,
+                    i, 0, payloadSize), match, blobId << " sector# " << i);
+            }
+        }
+    }
+
     Y_UNIT_TEST(ChunkLockAndUnlock) {
         TMockOwner mock(false);
         const ui32 freeChunks = mock.GetFreeChunks();

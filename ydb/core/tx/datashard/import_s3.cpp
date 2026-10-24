@@ -787,37 +787,48 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
         }
 
-        THolder<IReadController> reader;
-        switch (CompressionCodec) {
-        case NBackupRestoreTraits::ECompressionCodec::None:
-            reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
-            break;
-        case NBackupRestoreTraits::ECompressionCodec::Zstd:
-            reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
-            break;
-        case NBackupRestoreTraits::ECompressionCodec::Invalid:
-            Y_ENSURE(false, "unreachable");
-        }
-
-        if (Settings.EncryptionSettings.EncryptedBackup) {
-            NBackup::TEncryptionIV expectedIV = NBackup::TEncryptionIV::Combine(
-                *Settings.EncryptionSettings.IV,
-                NBackup::EBackupFileType::TableData,
-                0 /* already combined */,
-                Settings.Shard
-            );
-            Reader = MakeHolder<TEncryptionDeserializerController>(
-                *Settings.EncryptionSettings.Key,
-                expectedIV,
-                std::move(reader),
-                ReadBatchSize
-            );
-        } else {
-            Reader = std::move(reader);
-        }
-
+        const TString previousETag = ETag;
+        const ui64 previousContentLength = ContentLength;
         ETag = result.GetResult().GetETag();
         ContentLength = result.GetResult().GetContentLength();
+
+        const bool preserveLiveDirectState = DirectImport
+            && DirectImport->State() != TDirectImportWriter::EState::Pending;
+        if (preserveLiveDirectState) {
+            if (ETag != previousETag || ContentLength != previousContentLength) {
+                return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                    << ": the data file has changed during the import");
+            }
+        } else {
+            THolder<IReadController> reader;
+            switch (CompressionCodec) {
+            case NBackupRestoreTraits::ECompressionCodec::None:
+                reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
+                break;
+            case NBackupRestoreTraits::ECompressionCodec::Zstd:
+                reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
+                break;
+            case NBackupRestoreTraits::ECompressionCodec::Invalid:
+                Y_ENSURE(false, "unreachable");
+            }
+
+            if (Settings.EncryptionSettings.EncryptedBackup) {
+                NBackup::TEncryptionIV expectedIV = NBackup::TEncryptionIV::Combine(
+                    *Settings.EncryptionSettings.IV,
+                    NBackup::EBackupFileType::TableData,
+                    0 /* already combined */,
+                    Settings.Shard
+                );
+                Reader = MakeHolder<TEncryptionDeserializerController>(
+                    *Settings.EncryptionSettings.Key,
+                    expectedIV,
+                    std::move(reader),
+                    ReadBatchSize
+                );
+            } else {
+                Reader = std::move(reader);
+            }
+        }
 
         if (!ContentLength && Settings.EncryptionSettings.EncryptedBackup) {
             // Encrypted file can not have zero length
@@ -863,8 +874,14 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return;
         }
 
-        DownloadState = info.DownloadState;
-        if (loadState) {
+        // Direct writes only checkpoint after attachment. On retry, keep the live
+        // reader, checksum and counters in sync with rows already fed to the writer.
+        const bool preserveLiveDirectState = loadState && DirectImport
+            && DirectImport->State() != TDirectImportWriter::EState::Pending;
+        if (!preserveLiveDirectState) {
+            DownloadState = info.DownloadState;
+        }
+        if (loadState && !preserveLiveDirectState) {
             if (Checksum) {
                 Checksum->SetState(info.ProcessedChecksumState);
             }
@@ -878,11 +895,13 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             }
         }
 
-        ProcessedBytes = info.ProcessedBytes;
-        ProcessedChecksumState = info.ProcessedChecksumState;
-        ReadBytes = ProcessedBytes + Reader->PendingBytes();
-        WrittenBytes = info.WrittenBytes;
-        WrittenRows = info.WrittenRows;
+        if (!preserveLiveDirectState) {
+            ProcessedBytes = info.ProcessedBytes;
+            ProcessedChecksumState = info.ProcessedChecksumState;
+            ReadBytes = ProcessedBytes + Reader->PendingBytes();
+            WrittenBytes = info.WrittenBytes;
+            WrittenRows = info.WrittenRows;
+        }
 
         if (!ContentLength || ProcessedBytes >= ContentLength) {
             if (!CheckChecksum()) {

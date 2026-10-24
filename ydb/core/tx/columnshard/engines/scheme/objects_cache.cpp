@@ -9,4 +9,8 @@ TSchemaObjectsCache::TSchemasCache::TEntryGuard TSchemaObjectsCache::UpsertIndex
     return SchemasByVersion.Upsert(versionId, std::move(indexInfo));
 }
 
+std::optional<TSchemaObjectsCache::TSchemasCache::TEntryGuard> TSchemaObjectsCache::FindIndexInfo(const ui64 presetId, const ui64 version) {
+    return SchemasByVersion.Find(TSchemaVersionId(presetId, version));
+}
+
 }   // namespace NKikimr::NOlap

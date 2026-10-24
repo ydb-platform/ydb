@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/kqp_streaming_query_controller.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
@@ -79,9 +80,9 @@ public:
         const TMaybe<ui8> ArrayBufferMinFillPercentage;
         const TMaybe<size_t> BufferPageAllocSize;
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
-        const TActorId& CheckpointCoordinator;
+        const bool EnableCheckpoints;
         const bool EnableWatermarks;
-        TActorId StreamingQueryNodesManager;
+        IKqpStreamingQueryController* StreamingQuery = nullptr;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
@@ -164,9 +165,9 @@ private:
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
     const TMaybe<size_t> BufferPageAllocSize;
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
-    TActorId CheckpointCoordinatorId;
+    bool EnableCheckpoints;
     const bool EnableWatermarks;
-    const TActorId StreamingQueryNodesManagerId;
+    IKqpStreamingQueryController* const StreamingQuery;
     bool ReadyStateSent = false;
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error

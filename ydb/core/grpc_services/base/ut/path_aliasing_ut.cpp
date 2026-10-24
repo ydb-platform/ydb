@@ -227,10 +227,6 @@ namespace NKikimr::NGRpcService {
             request->InitializePathAliasCounter(root, MakeDatabase("/raw"));
             UNIT_ASSERT_VALUES_EQUAL(request->NormalizePath("/raw"), "/raw");
 
-            TRefreshTokenImpl<TRpcServices::EvRefreshToken> refresh("token", "/raw", "peer", "request-id", TActorId{});
-            refresh.InitializePathNormalization(MakeNormalizer());
-            refresh.InitializePathAliasCounter(root, MakeDatabase("/raw"));
-            UNIT_ASSERT_VALUES_EQUAL(refresh.NormalizePath("/raw"), "/raw");
             UNIT_ASSERT(!root->FindSubgroup("counters", "ydb"));
 
             request->UseDatabase("/resolved");

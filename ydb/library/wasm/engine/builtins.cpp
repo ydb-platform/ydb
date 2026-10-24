@@ -1,6 +1,7 @@
 #include "builtins.h"
 
 #include <library/cpp/resource/resource.h>
+#include <library/cpp/yt/error/error.h>
 
 namespace NYdb::NWasm {
 
@@ -63,7 +64,7 @@ TModuleBytecode GetBuiltinYtQlUdfs()
     return udfs;
 }
 
-TModuleBytecode GetBuiltinSdk()
+TModuleBytecode FindBuiltinSdk()
 {
     static auto sdk = [] {
         auto bytecode = ::NResource::Has(BuiltinEmscriptenSystemLibrariesResource)
@@ -81,6 +82,14 @@ TModuleBytecode GetBuiltinSdk()
         };
     }();
 
+    return sdk;
+}
+
+TModuleBytecode GetBuiltinSdk()
+{
+    auto sdk = FindBuiltinSdk();
+    THROW_ERROR_EXCEPTION_IF(
+        sdk.Data.Empty(), "WebAssembly system library resource %Qv is missing or empty", BuiltinEmscriptenSystemLibrariesResource);
     return sdk;
 }
 

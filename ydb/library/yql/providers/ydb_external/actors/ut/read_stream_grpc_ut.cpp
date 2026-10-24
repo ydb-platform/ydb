@@ -327,7 +327,7 @@ public:
     }
 
     // Destruction order keeps the actor system alive until the SDK driver stops.
-    TFakeCASetup Setup;
+    TFakeCASetup Setup{ CreateLocalActorRuntime() };
     TQueryServer Server;
     TInstant Deadline;
     std::atomic<ui32> Attempts = 0;

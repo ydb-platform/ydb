@@ -491,11 +491,6 @@ private:
 public:
     virtual ~IRequestProxyCtx() = default;
 
-    const TMaybe<TString> GetDatabaseName() const final {
-        return PathNormalizationInitialized_ || EffectiveDatabaseName_
-            ? EffectiveDatabaseName_ : GetDatabaseNameFromRequest();
-    }
-
     // auth
     virtual const TMaybe<TString> GetYdbToken() const = 0;
     virtual void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) = 0;
@@ -521,8 +516,11 @@ public:
     // validation
     virtual bool Validate(TString& error) = 0;
 
-    void InitializePathNormalization(std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer,
-        const TAppData* appData = nullptr);
+    void InitializePathNormalization(std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer);
+
+    const TMaybe<TString> GetDatabaseName() const final {
+        return PathNormalizationInitialized_ ? EffectiveDatabaseName_ : GetDatabaseNameFromRequest();
+    }
 
     // counters
     void CountRequestPaths() const;
@@ -566,12 +564,12 @@ public:
 protected:
     virtual void CountRequestBodyPaths() const {}
     virtual NYdbGrpc::ICounterBlock* GetRequestCounters() const { return nullptr; }
-    TMaybe<TString> EffectiveDatabaseName_;
-    bool PathNormalizationInitialized_ = false;
 
 private:
     mutable bool RelativeDatabaseCounted_ = false;
     mutable bool RelativeResourceCounted_ = false;
+    TMaybe<TString> EffectiveDatabaseName_;
+    bool PathNormalizationInitialized_ = false;
 };
 
 // Request context
@@ -657,13 +655,12 @@ class TRefreshTokenImpl
 public:
     TRefreshTokenImpl(const TString& token, const TString& database, const TString& peerName, const TString& traceId, TActorId from)
         : Token_(token)
+        , Database_(database)
         , PeerName_(peerName)
         , From_(from)
         , TraceId_(traceId)
         , State_(true)
-    {
-        EffectiveDatabaseName_ = database;
-    }
+    { }
 
     const TMaybe<TString> GetYdbToken() const override {
         return Token_;
@@ -688,7 +685,7 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseNameFromRequest() const override {
-        return EffectiveDatabaseName_;
+        return Database_;
     }
 
     const NYdbGrpc::TAuthState& GetAuthState() const override {
@@ -852,6 +849,7 @@ public:
 
 private:
     const TString Token_;
+    const TString Database_;
     const TString PeerName_;
     const TActorId From_;
     const TString TraceId_;
@@ -2020,7 +2018,7 @@ public:
         if (status == Ydb::StatusIds::SUCCESS) {
             ctx.Send(Sender,
                 new TEvRequestAuthAndCheckResult(
-                    GetDatabaseName().GetOrElse(TString()),
+                    Database,
                     YdbToken,
                     UserToken,
                     GetAuditLogParts(),
@@ -2077,9 +2075,7 @@ public:
     }
 
     void UseDatabase(const TString& database) override {
-        if (!PathNormalizationInitialized_ || !IsPathNormalizationEnabled()) {
-            EffectiveDatabaseName_ = database;
-        }
+        Database = database;
     }
 
     void SetRespHook(TRespHook&& /*hook*/) override {

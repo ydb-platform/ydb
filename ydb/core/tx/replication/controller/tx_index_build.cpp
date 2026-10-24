@@ -145,7 +145,7 @@ class TController::TTxIndexBuild: public TTxBase {
             const auto& record = ev->Get()->Record;
             const auto id = TWorkerId::Parse(record.GetWorker());
             const auto* target = Self->FindTarget(id);
-            if (!target || !target->IsIndexBuild() || (!Self->IsValidWorker(id) && !Self->DrainStateByReplicationId.contains(id.ReplicationId())) || !record.HasProgress()) {
+            if (!target || !target->IsIndexBuild() || (!Self->IsValidWorker(id) && !Self->DrainDeadlines.contains(id.ReplicationId())) || !record.HasProgress()) {
                 continue;
             }
 

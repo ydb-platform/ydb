@@ -248,7 +248,7 @@ public:
             return true;
         }
 
-        if (Self->DrainStateByReplicationId.contains(Replication->GetId())) {
+        if (Self->DrainDeadlines.contains(Replication->GetId())) {
             // Keep membership unchanged while admitted writes drain.
             WaitForDrain = true;
             return true;

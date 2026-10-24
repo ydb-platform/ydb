@@ -21,15 +21,15 @@ bool TController::HasSourceOffsetMismatchError(const TReplication& replication) 
 
 bool TController::IsStoppedAfterSourceOffsetMismatch(ui64 replicationId) const {
     return ReplicationsWithSourceOffsetMismatch.contains(replicationId)
-        && !DrainStateByReplicationId.contains(replicationId);
+        && !DrainDeadlines.contains(replicationId);
 }
 
 bool TController::IsMismatchBlockingCommit(ui64 replicationId, TInstant now) const {
     if (!ReplicationsWithSourceOffsetMismatch.contains(replicationId)) {
         return false;
     }
-    const auto* drain = DrainStateByReplicationId.FindPtr(replicationId);
-    return !drain || drain->UnknownCommit || now >= drain->Deadline;
+    const auto* deadline = DrainDeadlines.FindPtr(replicationId);
+    return !deadline || now >= *deadline;
 }
 
 void TController::DeleteProcessedSourceOffsets(ui64 replicationId, ui64 targetId, NIceDb::TNiceDb& db) {
@@ -69,18 +69,6 @@ void TController::SaveHeartbeat(const TWorkerId& id, const TRowVersion& version,
         NIceDb::TUpdate<Schema::Workers::HeartbeatVersionTxId>(version.TxId));
 }
 
-void TController::SaveDrainCommit(NIceDb::TNiceDb& db) {
-    for (const auto rid : ReplicationsWithSourceOffsetMismatch) {
-        if (auto* drain = DrainStateByReplicationId.FindPtr(rid)) {
-            drain->CommitTxId = CommittingTxId;
-            drain->UnknownCommit = false;
-        }
-        // A late success also clears the recorded attempt after the timeout.
-        db.Table<Schema::Replications>().Key(rid).Update(
-            NIceDb::TUpdate<Schema::Replications::DrainCommitTxId>(CommittingTxId));
-    }
-}
-
 void TController::StartMismatchDrain(const TWorkerId& id, const TString& issue,
         NIceDb::TNiceDb& db, const TActorContext& ctx)
 {
@@ -92,15 +80,13 @@ void TController::StartMismatchDrain(const TWorkerId& id, const TString& issue,
     YDB_LOG_ERROR_CTX(ctx, "Destination source offset mismatch", {"worker", id}, {"issue", issue});
     replication->SetState(TReplication::EState::Error, issue);
     ReplicationsWithSourceOffsetMismatch.insert(id.ReplicationId());
-    auto& drain = DrainStateByReplicationId[id.ReplicationId()];
-    drain.Deadline = ctx.Now() + DrainTimeout;
-    drain.CommitTxId = CommittingTxId;
+    const auto deadline = ctx.Now() + DrainTimeout;
+    DrainDeadlines[id.ReplicationId()] = deadline;
     db.Table<Schema::Replications>().Key(id.ReplicationId()).Update(
         NIceDb::TUpdate<Schema::Replications::State>(replication->GetState()),
         NIceDb::TUpdate<Schema::Replications::Issue>(issue),
         NIceDb::TUpdate<Schema::Replications::SourceOffsetMismatch>(true),
-        NIceDb::TUpdate<Schema::Replications::DrainDeadline>(drain.Deadline.MilliSeconds()),
-        NIceDb::TUpdate<Schema::Replications::DrainCommitTxId>(drain.CommitTxId));
+        NIceDb::TUpdate<Schema::Replications::DrainDeadline>(deadline.MilliSeconds()));
 
     // Retain failed workers in the GLOBAL quorum.
     for (auto& [workerId, worker] : Workers) {
@@ -149,7 +135,7 @@ public:
                 db.Table<Schema::ProcessedSourceOffsets>().Key(Id.ReplicationId(), Id.TargetId(), Id.WorkerId()).Update(
                     NIceDb::TUpdate<Schema::ProcessedSourceOffsets::NextOffset>(request.GetNextOffset()));
             }
-            if (request.GetDrained() && Self->DrainStateByReplicationId.contains(Id.ReplicationId())) {
+            if (request.GetDrained() && Self->DrainDeadlines.contains(Id.ReplicationId())) {
                 if (request.HasHeartbeat()) {
                     const auto version = TRowVersion::FromProto(request.GetHeartbeat());
                     Self->SaveHeartbeat(Id, version, db);
@@ -230,30 +216,29 @@ public:
     TTxType GetTxType() const override { return TXTYPE_FINISH_DRAIN; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        const auto it = Self->DrainStateByReplicationId.find(ReplicationId);
-        if (it == Self->DrainStateByReplicationId.end()) {
+        const auto it = Self->DrainDeadlines.find(ReplicationId);
+        if (it == Self->DrainDeadlines.end()) {
             return true;
         }
-        const auto& drain = it->second;
-        const bool expired = ctx.Now() >= drain.Deadline;
+        const bool expired = ctx.Now() >= it->second;
         const auto pending = CountIf(Self->Workers, [this](const auto& item) {
             return item.first.ReplicationId() == ReplicationId && item.second.DrainPending;
         });
-        if (!expired && (pending || Self->ProcessHeartbeatsInFlight || !Self->PendingHeartbeats.empty() || Self->CommittingTxId || drain.UnknownCommit
+        if (!expired && (pending || Self->ProcessHeartbeatsInFlight || !Self->PendingHeartbeats.empty() || Self->CommittingTxId
             || !Self->IndexCommits.empty() || !Self->SchemaTargetFlushes.empty())) {
             return true;
         }
         auto replication = Self->Find(ReplicationId);
         if (!replication) {
-            Self->DrainStateByReplicationId.erase(it);
+            Self->DrainDeadlines.erase(it);
             return true;
         }
         auto issue = TStringBuilder() << replication->GetIssue();
         if (pending) {
             issue << " Drain timed out with " << pending << " unfinished workers.";
         }
-        if (Self->CommittingTxId || drain.UnknownCommit) {
-            issue << " GLOBAL commit " << drain.CommitTxId << " was unconfirmed when draining stopped.";
+        if (Self->CommittingTxId) {
+            issue << " GLOBAL commit " << Self->CommittingTxId << " was unconfirmed when draining stopped.";
         }
         if (!Self->IndexCommits.empty() || !Self->SchemaTargetFlushes.empty()) {
             issue << " Auxiliary commit proposals have an unknown outcome.";
@@ -267,13 +252,13 @@ public:
         db.Table<Schema::Replications>().Key(ReplicationId).Update(
             NIceDb::TUpdate<Schema::Replications::Issue>(replication->GetIssue()),
             NIceDb::TUpdate<Schema::Replications::DrainDeadline>(0));
-        Self->DrainStateByReplicationId.erase(it);
+        Self->DrainDeadlines.erase(it);
         Finished = true;
         return true;
     }
 
     void Complete(const TActorContext&) override {
-        if (!Self->DrainStateByReplicationId.contains(ReplicationId) && !Finished) {
+        if (!Self->DrainDeadlines.contains(ReplicationId) && !Finished) {
             return;
         }
         Self->QueueReplicationWorkerStops(ReplicationId);
@@ -285,7 +270,7 @@ void TController::Handle(TEvService::TEvSourceOffsetReport::TPtr& ev, const TAct
 }
 
 void TController::Handle(TEvPrivate::TEvCheckDrain::TPtr& ev, const TActorContext& ctx) {
-    if (!DrainStateByReplicationId.contains(ev->Get()->ReplicationId)) {
+    if (!DrainDeadlines.contains(ev->Get()->ReplicationId)) {
         return;
     }
     ctx.Schedule(DrainCheckInterval, new TEvPrivate::TEvCheckDrain(ev->Get()->ReplicationId));
@@ -295,7 +280,7 @@ void TController::Handle(TEvPrivate::TEvCheckDrain::TPtr& ev, const TActorContex
 void TController::CheckDrains(const TActorContext& ctx) {
     // Finalize only after the latest heartbeat transaction completes.
     TVector<ui64> ids;
-    for (const auto& [id, _] : DrainStateByReplicationId) {
+    for (const auto& [id, _] : DrainDeadlines) {
         ids.push_back(id);
     }
     for (const auto id : ids) {

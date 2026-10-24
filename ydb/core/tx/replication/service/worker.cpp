@@ -239,12 +239,16 @@ class TWorker: public TActorBootstrapped<TWorker> {
         Send(Parent, std::move(ev), 0, SourceOffsetReportId);
     }
 
+    bool IsReaderValidated() const {
+        return ReaderSessionStarted && SourceOffsetMismatch.empty();
+    }
+
     void ProcessSourceActions() {
         if (Draining) {
             SourceActions.clear();
             return MaybeDrained();
         }
-        if (TrackSourceOffsets && (!Reader || !ReaderValidated || SourceOffsetReport || !SourceOffsetMismatch.empty())) {
+        if (TrackSourceOffsets && (!Reader || !IsReaderValidated() || SourceOffsetReport)) {
             return;
         }
         while (!SourceActions.empty()) {
@@ -300,7 +304,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void StartValidatedReader() {
-        if (!Reader || !ReaderValidated || Draining) {
+        if (!Reader || !IsReaderValidated() || Draining) {
             return;
         }
         if (RecoveredCompletionSchema && ReaderCommittedOffset
@@ -844,7 +848,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         if (Draining) {
             return;
         }
-        if (TrackSourceOffsets && !ReaderValidated) {
+        if (TrackSourceOffsets && !IsReaderValidated()) {
             return;
         }
         Y_ABORT_UNLESS(!InFlightData);
@@ -894,7 +898,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
         ReaderSessionStarted = true;
         ReaderCommittedOffset = ev->Get()->CommittedOffset;
         if (TrackSourceOffsets) {
-            ReaderValidated = false;
             if (AuthorizedSourceOffset && *ReaderCommittedOffset > *AuthorizedSourceOffset) {
                 SourceOffsetMismatch = TStringBuilder()
                     << "Source consumer committed next offset " << *ReaderCommittedOffset
@@ -903,7 +906,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 ReportSourceOffsetMismatch();
                 return;
             }
-            ReaderValidated = true;
             return StartValidatedReader();
         }
         if (RecoveredCompletionSchema && *ReaderCommittedOffset > RecoveredCompletionOffset) {
@@ -944,7 +946,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 }
             }
             ReaderSessionStarted = false;
-            ReaderValidated = false;
             ReadRequested = false;
             if (Draining) {
                 return MaybeDrained();
@@ -1187,7 +1188,6 @@ private:
     TMaybe<ui64> PendingWriterCheckpoint;
     bool ReaderSessionStarted = false;
     const bool TrackSourceOffsets;
-    bool ReaderValidated = false;
     bool ReadRequested = false;
     bool Draining = false;
     ui64 SourceOffsetReportId = 0;

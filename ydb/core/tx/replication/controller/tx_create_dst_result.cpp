@@ -180,7 +180,7 @@ public:
                 target->SetDstState(Replication->GetDesiredState() == TReplication::EState::Paused
                     ? TReplication::EDstState::Paused
                     : TReplication::EDstState::Ready);
-                if (!Self->HasSourceOffsetMismatchError(*Replication) && wasAltering && Replication->CheckAlterDone()) {
+                if (wasAltering && Replication->CheckAlterDone()) {
                     Replication->SetState(Replication->GetDesiredState());
                 }
             }

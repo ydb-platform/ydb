@@ -64,8 +64,7 @@ class TController::TTxInit: public TTxBase {
             auto replication = Self->Add(rid, pathId, config, database);
             replication->SetState(state, issue);
             if (const auto deadline = rowset.GetValueOrDefault<Schema::Replications::DrainDeadline>(0)) {
-                const auto commit = rowset.GetValueOrDefault<Schema::Replications::DrainCommitTxId>(0);
-                Self->DrainStateByReplicationId[rid] = {TInstant::MilliSeconds(deadline), commit, commit != 0};
+                Self->DrainDeadlines[rid] = TInstant::MilliSeconds(deadline);
             }
             if (rowset.GetValueOrDefault<Schema::Replications::SourceOffsetMismatch>(false)) {
                 Self->ReplicationsWithSourceOffsetMismatch.insert(rid);

@@ -194,9 +194,9 @@ public:
 void TController::AllocateTxIds(const TActorContext& ctx) {
     const auto replication = GetSingle();
     if (replication && ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
-        const auto* drain = DrainStateByReplicationId.FindPtr(replication->GetId());
+        const auto* deadline = DrainDeadlines.FindPtr(replication->GetId());
         // Only refill when admitted writers are waiting during the drain.
-        if (!drain || ctx.Now() >= drain->Deadline || (PendingTxId.empty() && PendingIndexTxIds.empty())) {
+        if (!deadline || ctx.Now() >= *deadline || (PendingTxId.empty() && PendingIndexTxIds.empty())) {
             return;
         }
     }

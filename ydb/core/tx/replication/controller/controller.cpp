@@ -204,7 +204,7 @@ void TController::SwitchToWork(const TActorContext& ctx) {
         }
     }
     Schedule(BootPersistedWorkersDelay, new TEvPrivate::TEvBootPersistedWorkers());
-    for (const auto& [id, _] : DrainStateByReplicationId) {
+    for (const auto& [id, _] : DrainDeadlines) {
         Schedule(DrainCheckInterval, new TEvPrivate::TEvCheckDrain(id));
     }
 
@@ -228,7 +228,7 @@ void TController::SwitchToWork(const TActorContext& ctx) {
 void TController::Reset() {
     SysParams.Reset();
     ProcessedSourceOffsets.clear();
-    DrainStateByReplicationId.clear();
+    DrainDeadlines.clear();
     ReplicationsWithSourceOffsetMismatch.clear();
     Replications.clear();
     ReplicationsByPathId.clear();
@@ -575,7 +575,7 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
     for (const auto& protoId : ev->Get()->Record.GetWorkers()) {
         const auto id = TWorkerId::Parse(protoId);
         auto* saved = Workers.FindPtr(id);
-        if (saved && DrainStateByReplicationId.contains(id.ReplicationId())) {
+        if (saved && DrainDeadlines.contains(id.ReplicationId())) {
             session.AttachWorker(id);
             saved->AttachSession(nodeId);
             StopQueue.emplace(id, nodeId);
@@ -907,8 +907,7 @@ void TController::BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrRepl
     controller.SetGeneration(Executor()->Generation());
     id.Serialize(*record.MutableWorker());
     record.MutableCommand()->CopyFrom(cmd);
-    record.MutableCommand()->SetTrackSourceOffsets(TracksSourceOffsets(id) && session.SupportsSourceOffsets
-        && (AppData()->FeatureFlags.GetEnableAsyncReplicationSourceOffsets() || ProcessedSourceOffsets.contains(id)));
+    record.MutableCommand()->SetTrackSourceOffsets(TracksSourceOffsets(id) && session.SupportsSourceOffsets);
     record.MutableCommand()->ClearProcessedSourceOffset();
     if (const auto* saved = ProcessedSourceOffsets.FindPtr(id); saved && saved->PersistedNextOffset) {
         record.MutableCommand()->SetProcessedSourceOffset(*saved->PersistedNextOffset);
@@ -1006,7 +1005,7 @@ void TController::StopWorker(ui32 nodeId, const TWorkerId& id) {
     controller.SetGeneration(Executor()->Generation());
     id.Serialize(*record.MutableWorker());
     const auto* worker = Workers.FindPtr(id);
-    const bool drain = DrainStateByReplicationId.contains(id.ReplicationId()) && worker && worker->DrainPending;
+    const bool drain = DrainDeadlines.contains(id.ReplicationId()) && worker && worker->DrainPending;
     record.SetDrain(drain && session.SupportsSourceOffsets);
 
     Send(MakeReplicationServiceId(nodeId), std::move(ev));
@@ -1227,7 +1226,7 @@ void TController::Remove(ui64 id) {
     }
 
     ReplicationsWithSourceOffsetMismatch.erase(id);
-    DrainStateByReplicationId.erase(id);
+    DrainDeadlines.erase(id);
     ReplicationsByPathId.erase(it->second->GetPathId());
     Replications.erase(it);
 }

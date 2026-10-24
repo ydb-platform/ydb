@@ -177,7 +177,6 @@ private:
     bool IsMismatchBlockingCommit(ui64 replicationId, TInstant now) const;
     void QueueReplicationWorkerStops(ui64 replicationId);
     void SaveHeartbeat(const TWorkerId& id, const TRowVersion& version, NIceDb::TNiceDb& db);
-    void SaveDrainCommit(NIceDb::TNiceDb& db);
     void CheckDrains(const TActorContext&);
     void DeleteProcessedSourceOffsets(ui64 replicationId, ui64 targetId, NIceDb::TNiceDb&);
     void StopWorkersForMismatch(ui64 replicationId, bool drainStarted, const TActorContext& ctx);
@@ -335,17 +334,12 @@ private:
     TNodesManager NodesManager;
     THashMap<ui32, TSessionInfo> Sessions;
     THashMap<TWorkerId, TWorkerInfo> Workers;
-    struct TDrainState {
-        TInstant Deadline;
-        ui64 CommitTxId = 0;
-        bool UnknownCommit = false;
-    };
     struct TProcessedSourceOffset {
         ui64 NextOffset = 0;
         TMaybe<ui64> PersistedNextOffset;
     };
     THashMap<TWorkerId, TProcessedSourceOffset> ProcessedSourceOffsets;
-    THashMap<ui64, TDrainState> DrainStateByReplicationId;
+    THashMap<ui64, TInstant> DrainDeadlines;
     THashSet<ui64> ReplicationsWithSourceOffsetMismatch;
     THashSet<std::pair<ui64, ui64>> CompleteWorkerSets;
     TMap<std::pair<ui64, ui64>, TSchemaBarrier> SchemaBarriers;

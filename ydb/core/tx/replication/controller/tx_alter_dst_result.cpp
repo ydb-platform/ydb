@@ -72,7 +72,7 @@ public:
                 {"rid", rid},
                 {"tid", tid});
 
-            if (!Self->HasSourceOffsetMismatchError(*Replication) && Replication->CheckAlterDone()) {
+            if (Replication->CheckAlterDone()) {
                 YDB_LOG_NOTICE_CTX(ctx, "Replication altered",
                     {"rid", rid},
                     {"state", Replication->GetDesiredState()});

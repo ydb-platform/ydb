@@ -317,7 +317,7 @@ public:
             state.MutablePaused();
             break;
         case TReplication::EState::Error:
-            if (Self->DrainStateByReplicationId.contains(replication->GetId())) {
+            if (Self->DrainDeadlines.contains(replication->GetId())) {
                 state.MutablePaused();
                 break;
             }

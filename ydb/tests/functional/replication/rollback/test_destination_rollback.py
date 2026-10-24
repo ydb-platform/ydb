@@ -71,7 +71,6 @@ class Database:
             static_pdisk_size=16 * 1024**3,
             use_in_memory_pdisks=False,
             extra_grpc_services=["replication"],
-            extra_feature_flags=["enable_async_replication_source_offsets"],
         ), cluster_name=name)
         self.disk_paths = [Path(disk["pdisk_path"]) for disk in self.cluster.config.pdisks_info]
         for path in self.disk_paths:

@@ -173,7 +173,6 @@ public:
         }
 
         Self->CommittingTxId = Self->AssignedTxIds.begin()->second;
-        Self->SaveDrainCommit(db);
         CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
 
         return true;
@@ -258,11 +257,8 @@ public:
                 {"issues", NYql::IssuesFromMessageAsString(record.GetIssues())});
             Self->TabletCounters->Cumulative()[COUNTER_ERROR_COMMITTING_CHANGES] += 1;
 
-            if (!Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
+            if (!Self->IsMismatchBlockingCommit(replication->GetId(), ctx.Now())) {
                 CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
-            } else if (auto* drain = Self->DrainStateByReplicationId.FindPtr(replication->GetId())) {
-                // Failure does not prove cancellation; retain the proposal until timeout.
-                drain->UnknownCommit = true;
             }
             return true;
         }
@@ -285,7 +281,6 @@ public:
         db.Table<Schema::TxIds>().Key(it->first.Step, it->first.TxId).Delete();
         it = Self->AssignedTxIds.erase(it);
         Self->CommittingTxId = 0;
-        Self->SaveDrainCommit(db);
         if (Self->IsMismatchBlockingCommit(replication->GetId(), ctx.Now())) {
             return true;
         }
@@ -313,7 +308,6 @@ public:
         }
 
         Self->CommittingTxId = Self->AssignedTxIds.begin()->second;
-        Self->SaveDrainCommit(db);
         CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
 
         return true;

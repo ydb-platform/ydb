@@ -105,6 +105,47 @@ NWilson::TTraceId CreateTraceId()
         NWilson::TTraceId::MAX_TIME_TO_LIVE);
 }
 
+TDBGReadBlocksResponse ReadDDisk(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    TBlockRange16 range,
+    TString& buffer)
+{
+    auto pendingRead = RunOnExecutor(
+        executor,
+        [&]
+        {
+            return dbg->ReadBlocksFromDDisk(
+                0,
+                0,
+                range,
+                MakeSgList(buffer),
+                CreateTraceId());
+        });
+    return GetResponse(pendingRead);
+}
+
+TDBGReadBlocksResponse ReadPBuffer(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    TBlockRange16 range,
+    TString& buffer)
+{
+    auto pendingRead = RunOnExecutor(
+        executor,
+        [&]
+        {
+            return dbg->ReadBlocksFromPBuffer(
+                0,
+                0,
+                TPBufferKey{.Generation = 1, .Lsn = 1},
+                range,
+                MakeSgList(buffer),
+                CreateTraceId());
+        });
+    return GetResponse(pendingRead);
+}
+
 void ExpectChecksums(
     const TBlockChecksums& expected,
     const TBlockChecksums& actual)
@@ -2150,6 +2191,76 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             .GetValue(WaitTimeout);
 
         UNIT_ASSERT_VALUES_EQUAL(0u, Service->RemoveHostRequests.size());
+    }
+
+    Y_UNIT_TEST_F(ShouldForwardCompleteDDiskReadChecksums, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport = std::make_shared<TStorageTransportMock>();
+        const TBlockChecksums checksums{11, 12};
+        transport->ReadChecksums = checksums;
+        auto dbg = MakeDirectBlockGroup(executor, transport);
+        WaitReady(RunAndGetInitialReady(dbg));
+
+        const auto range = TBlockRange16::WithLength(0, 2);
+        TString buffer(
+            static_cast<size_t>(range.Size()) * DefaultBlockSize,
+            'r');
+        const auto response = ReadDDisk(executor, dbg, range, buffer);
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+        UNIT_ASSERT_VALUES_EQUAL(checksums.size(), response.Checksums.size());
+        UNIT_ASSERT_VALUES_EQUAL(checksums[0], response.Checksums[0]);
+        UNIT_ASSERT_VALUES_EQUAL(checksums[1], response.Checksums[1]);
+    }
+
+    Y_UNIT_TEST_F(ShouldFailDDiskReadOnWrongChecksumCount, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport = std::make_shared<TStorageTransportMock>();
+        // One block needs one checksum. Two is a broken reply.
+        transport->ReadChecksums = TVector<ui64>{1, 2};
+        auto dbg = MakeDirectBlockGroup(executor, transport);
+        WaitReady(RunAndGetInitialReady(dbg));
+
+        const auto range = TBlockRange16::WithLength(0, 1);
+        TString buffer(DefaultBlockSize, 'r');
+        const auto response = ReadDDisk(executor, dbg, range, buffer);
+        UNIT_ASSERT_VALUES_EQUAL(E_IO, response.Error.GetCode());
+        UNIT_ASSERT(response.Error.GetMessage().Contains("checksum count"));
+        UNIT_ASSERT(response.Checksums.empty());
+    }
+
+    Y_UNIT_TEST_F(ShouldFailPBufferReadWithoutChecksums, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport = std::make_shared<TStorageTransportMock>();
+        transport->ReadChecksums = TVector<ui64>{};
+        auto dbg = MakeDirectBlockGroup(executor, transport);
+        WaitReady(RunAndGetInitialReady(dbg));
+
+        const auto range = TBlockRange16::WithLength(0, 1);
+        TString buffer(DefaultBlockSize, 'r');
+        const auto response = ReadPBuffer(executor, dbg, range, buffer);
+        UNIT_ASSERT_VALUES_EQUAL(E_IO, response.Error.GetCode());
+        UNIT_ASSERT(response.Error.GetMessage().Contains("checksum count"));
+        UNIT_ASSERT(response.Checksums.empty());
+    }
+
+    Y_UNIT_TEST_F(ShouldReturnEmptyChecksumsWhenDisabled, TDBGFixture)
+    {
+        StorageServiceConfig.SetEnableChecksums(false);
+        auto executor = MakeExecutor();
+        auto transport = std::make_shared<TStorageTransportMock>();
+        // The source still attached values. Disabled mode must drop them.
+        transport->ReadChecksums = TVector<ui64>{7};
+        auto dbg = MakeDirectBlockGroup(executor, transport);
+        WaitReady(RunAndGetInitialReady(dbg));
+
+        const auto range = TBlockRange16::WithLength(0, 1);
+        TString buffer(DefaultBlockSize, 'r');
+        const auto response = ReadDDisk(executor, dbg, range, buffer);
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+        UNIT_ASSERT(response.Checksums.empty());
     }
 }
 

@@ -127,6 +127,10 @@ public:
     }
 
     ui64 Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, ui64 bytes) override {
+        return PopWithAdmission(batch, bytes, {});
+    }
+
+    ui64 PopWithAdmission(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, ui64 bytes, const TRowAdmission& admit) override {
         batch.clear();
         ui64 valuesCount = 0;
         ui64 usedBytes = 0;
@@ -141,6 +145,10 @@ public:
             usedBytes < bytes && iter != end && iter->HasValue();
             ++iter)
         {
+            if (admit && std::holds_alternative<NUdf::TUnboxedValue>(iter->Value) &&
+                !admit(std::get<NUdf::TUnboxedValue>(iter->Value))) {
+                break;
+            }
             ++valuesCount;
             usedBytes += iter->EstimatedSize;
         }

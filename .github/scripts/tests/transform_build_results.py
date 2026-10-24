@@ -161,9 +161,6 @@ def save_zip(suite_name, out_dir, url_prefix, logs_dir: Set[str]):
 
 
 def save_zips(logs_by_suite, out_dir, url_prefix):
-    if not logs_by_suite:
-        return {}
-
     # Existing ZIP names flatten paths. Reject collisions before workers can
     # open the same output file concurrently; keep published names unchanged.
     archive_names = [suite_name.replace('/', '-') for suite_name in logs_by_suite]
@@ -171,9 +168,9 @@ def save_zips(logs_by_suite, out_dir, url_prefix):
         raise ValueError("Different suites map to the same ZIP filename")
 
     # zlib releases the GIL while compressing. Each worker owns a separate ZIP;
-    # use at most one worker per CPU and no more workers than there are archives.
-    workers = min(os.cpu_count() or 1, len(logs_by_suite))
-    log_print(f"Creating {len(logs_by_suite)} ZIP archives with {workers} workers (compression level 6)")
+    # the pool starts threads on demand, up to one per CPU.
+    workers = os.cpu_count() or 1
+    log_print(f"Creating {len(logs_by_suite)} ZIP archives with up to {workers} workers (compression level 6)")
     urls = {}
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {

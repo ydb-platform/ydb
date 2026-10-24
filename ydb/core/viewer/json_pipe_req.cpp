@@ -137,7 +137,8 @@ TViewerPipeClient::TViewerPipeClient(NWilson::TTraceId traceId) {
 }
 
 TString TViewerPipeClient::RestorePath(const TString& path, TStringBuf parameter) const {
-    if (!HasAppData() || !AppData()->PathNormalizer || !AppData()->PathNormalizer->HasRules()) {
+    const auto normalizer = HasAppData() ? std::atomic_load(&AppData()->PathNormalizer) : nullptr;
+    if (!normalizer || !normalizer->HasRules()) {
         return path;
     }
     if (parameter == "database" && Params.Get(parameter).empty()) {

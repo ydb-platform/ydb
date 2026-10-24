@@ -67,8 +67,10 @@ TString ExtractMonDatabaseParam(const NHttp::THttpIncomingRequest* request) {
 
 void InitMonHttpIncomingRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event) {
     event->Database = ExtractMonDatabaseParam(event->Request.Get());
-    if (!event->Database.empty() && HasAppData() && AppData()->PathNormalizer) {
-        event->Database = AppData()->PathNormalizer->NormalizePath(CanonizePath(event->Database));
+    if (!event->Database.empty() && HasAppData()) {
+        if (const auto normalizer = std::atomic_load(&AppData()->PathNormalizer)) {
+            event->Database = normalizer->NormalizePath(CanonizePath(event->Database));
+        }
     }
 }
 

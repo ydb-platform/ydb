@@ -97,10 +97,11 @@ TString GetLegacyJsonPathAlias(TStringBuf path) {
 }
 
 TCgiParameters NormalizePathParameters(TCgiParameters params, bool pathList) {
-    if (HasAppData() && AppData()->PathNormalizer && AppData()->PathNormalizer->HasRules()) {
+    const auto normalizer = HasAppData() ? std::atomic_load(&AppData()->PathNormalizer) : nullptr;
+    if (normalizer && normalizer->HasRules()) {
         for (auto& [key, value] : params) {
             if (IsPathParameter(key)) {
-                value = NormalizePathValue(key, value, *AppData()->PathNormalizer, pathList);
+                value = NormalizePathValue(key, value, *normalizer, pathList);
             }
         }
     }
@@ -108,7 +109,8 @@ TCgiParameters NormalizePathParameters(TCgiParameters params, bool pathList) {
 }
 
 void NormalizePathParameters(NJson::TJsonValue& params, bool pathList) {
-    if (!params.IsMap() || !HasAppData() || !AppData()->PathNormalizer || !AppData()->PathNormalizer->HasRules()) {
+    const auto normalizer = HasAppData() ? std::atomic_load(&AppData()->PathNormalizer) : nullptr;
+    if (!params.IsMap() || !normalizer || !normalizer->HasRules()) {
         return;
     }
     for (auto& [key, value] : params.GetMapSafe()) {
@@ -116,11 +118,11 @@ void NormalizePathParameters(NJson::TJsonValue& params, bool pathList) {
             continue;
         }
         if (value.IsString()) {
-            value = NormalizePathValue(key, value.GetString(), *AppData()->PathNormalizer, pathList);
+            value = NormalizePathValue(key, value.GetString(), *normalizer, pathList);
         } else if (value.IsArray()) {
             for (auto& item : value.GetArraySafe()) {
                 if (item.IsString()) {
-                    item = NormalizePathValue(key, item.GetString(), *AppData()->PathNormalizer);
+                    item = NormalizePathValue(key, item.GetString(), *normalizer);
                 }
             }
         }

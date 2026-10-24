@@ -42,6 +42,27 @@ public:
             return true;
         }
 
+        // State alone cannot distinguish a creator replaced by ALTER from its
+        // successor.
+        if (!target->IsExpectedStreamCreator(Ev->Sender)) {
+            YDB_LOG_DEBUG_CTX(ctx, "Ignore obsolete stream creator",
+                {"rid", rid},
+                {"tid", tid},
+                {"sender", Ev->Sender});
+            Replication.Reset();
+            return true;
+        }
+
+        if (Replication->GetDesiredState() == TReplication::EState::Done) {
+            // The source request may have committed before its creator stopped.
+            // Preserve its cleanup metadata without reviving setup or failing DONE.
+            YDB_LOG_DEBUG_CTX(ctx, "Ignore stream creation result after DONE request",
+                {"rid", rid},
+                {"tid", tid});
+            Replication.Reset();
+            return true;
+        }
+
         if (target->GetStreamState() != TReplication::EStreamState::Creating) {
             YDB_LOG_WARN_CTX(ctx, "Stream state mismatch",
                 {"rid", rid},

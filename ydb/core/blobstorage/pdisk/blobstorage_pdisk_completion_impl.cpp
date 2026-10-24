@@ -129,7 +129,9 @@ TCompletionChunkReadPart::TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<
     , CommonBufferOffset(commonBufferOffset)
     , CumulativeCompletion(cumulativeCompletion)
     , ChunkNonce(CumulativeCompletion->GetChunkNonce())
-    , Buffer(PDisk->BufferPool->Pop())
+    // Only an encrypted part is read into a pool buffer and decrypted from it; the others go straight into
+    // the common buffer.
+    , Buffer(read->ChunkEncrypted ? PDisk->BufferPool->Pop() : TBuffer::TPtr())
     , IsTheLastPart(isTheLastPart)
     , Span(read->Span.CreateChild(TWilson::PDiskDetailed, "PDisk.ChunkRead.CompletionPart"))
 {

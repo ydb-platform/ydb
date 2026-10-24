@@ -79,6 +79,8 @@ def get_ydb_config(request, enable_fq_connector=None):
         "allow_ydb_requests_without_database",
         "enable_updating_partitions_on_streaming_query_restart",
         "enable_pq_source_rescaling",
+        "enable_topics_predicate_pushdown",
+        "enable_streaming_query_topic_autopartitioning",
     }
     disabled_feature_flags = []
 

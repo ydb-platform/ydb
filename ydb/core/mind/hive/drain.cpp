@@ -26,6 +26,7 @@ protected:
     ui32 DomainMovements = 0;
     ui64 SeqNo = 0;
     TDrainSettings Settings;
+    bool Skipped = false;
 
     TString GetLogPrefix() const {
         return Hive->GetLogPrefix();
@@ -44,6 +45,11 @@ protected:
         for (const TNodeId nodeId : Nodes) {
             if (auto node = Hive->FindNode(nodeId); node && node->DrainActor == this) {
                 node->DrainActor = nullptr;
+            }
+        }
+        if (const auto* pileId = std::get_if<TBridgePileId>(&Target)) {
+            if (auto it = Hive->BridgePiles.find(*pileId); it != Hive->BridgePiles.end() && it->second.DrainActor == this) {
+                it->second.DrainActor = nullptr;
             }
         }
         return IActor::PassAway();
@@ -74,8 +80,18 @@ protected:
                 }
             }
         }
-        Hive->Execute(Hive->CreateSwitchDrainOff(Target, std::move(Settings), status, Movements + DomainMovements));
+        auto* switchDrainOff = Hive->CreateSwitchDrainOff(Target, std::move(Settings), status, Movements + DomainMovements, Skipped);
+        // a read-only tx completes synchronously, and its Complete may restart this drain
         PassAway();
+        Hive->Execute(switchDrainOff);
+    }
+
+    bool IsTargetTablet(const TTabletInfo& tablet) const {
+        if (std::holds_alternative<TBridgePileId>(Target)) {
+            // a STARTING tablet has Node set but NodeId 0; a node drain owns its node
+            return tablet.Node != nullptr && Nodes.contains(tablet.Node->Id) && !tablet.Node->Drain;
+        }
+        return Nodes.contains(tablet.NodeId); // node drains keep NodeId: STARTING stays with its booter
     }
 
     bool CanKickNextTablet() const {
@@ -87,7 +103,7 @@ protected:
         while (CanKickNextTablet()) {
             TFullTabletId tabletId = *NextKick;
             TTabletInfo* tablet = Hive->FindTablet(tabletId);
-            if (tablet != nullptr && tablet->IsAlive() && Nodes.contains(tablet->NodeId)) {
+            if (tablet != nullptr && tablet->IsAlive() && IsTargetTablet(*tablet)) {
                 THive::TBestNodeResult result = Hive->FindBestNode(*tablet);
                 if (std::holds_alternative<TNodeInfo*>(result)) {
                     TNodeInfo* node = std::get<TNodeInfo*>(result);
@@ -111,6 +127,9 @@ protected:
                             {"selfId", SelfId()},
                             {"tablet", tablet->ToString()},
                             {"sourceNodeId", tablet->Node->Id});
+                        if (const auto* pileId = std::get_if<TBridgePileId>(&Target); pileId && !tablet->GetNodeFilter().IsAllowedPile(*pileId)) {
+                            Skipped = true; // the tablet must leave the pile, so the flag stays for a later resume
+                        }
                     } else if (std::holds_alternative<THive::TTooManyTabletsStarting>(result)){
                         YDB_LOG_DEBUG("Drain postponed tablet move due to too many tablets starting",
                             {"logPrefix", GetLogPrefix()},
@@ -238,10 +257,22 @@ public:
                         }
                     }
                 }
-                DownBefore[nodeId] = nodeInfo->Down;
-                nodeInfo->SetDown(true, EHiveEventReason::DrainStarted);
+                if (auto it = nodeInfo->Tablets.find(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN);
+                        it != nodeInfo->Tablets.end() && std::holds_alternative<TBridgePileId>(Target)) {
+                    // not resynced yet: keep the flag, the node's TTxStatus after resync resumes the drain;
+                    // locked tablets stay Unknown under LockedTabletsSendMetrics
+                    Skipped |= std::any_of(it->second.begin(), it->second.end(), [](const TTabletInfo* tablet) {
+                        return !(tablet->IsLeader() && tablet->AsLeader().IsLockedToActor());
+                    });
+                }
             } else {
                 return ReplyAndDie(NKikimrProto::ERROR);
+            }
+        }
+        for (const TNodeId nodeId : ReservedNodes) {
+            if (TNodeInfo* nodeInfo = Hive->FindNode(nodeId)) {
+                DownBefore[nodeId] = nodeInfo->Down;
+                nodeInfo->SetDown(true, EHiveEventReason::DrainStarted);
             }
         }
         NextKick = Tablets.begin();
@@ -312,6 +343,23 @@ THiveDrain* THive::StartHiveDrain(TDrainTarget target, TDrainSettings settings) 
             {"logPrefix", GetLogPrefix()},
             {"target", target});
         return nullptr;
+    }
+}
+
+void THive::StartPileDrain(TBridgePileInfo& pile) {
+    if (!pile.Drain || IsPrimaryPile(pile.Id)) {
+        return; // a primary pile hosts the drained tablets, so its flag is stale
+    }
+    if (pile.DrainActor) {
+        pile.DrainRetry = true;
+        return;
+    }
+    if (std::none_of(Nodes.begin(), Nodes.end(), [this](const auto& item) { return item.second.IsAlive() && IsPrimaryPile(item.second.BridgePileId); })) {
+        return; // nowhere to move tablets yet; a primary pile node connect resumes the drain
+    }
+    pile.DrainActor = StartHiveDrain(pile.Id, TDrainSettings{.DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN, .Forward = false});
+    if (pile.DrainActor) {
+        ++pile.DrainEpoch;
     }
 }
 

@@ -6,6 +6,7 @@
 #include <ydb/core/kafka_proxy/kafka_topic_partition.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
 
+#include <util/datetime/base.h>
 #include <util/system/tempfile.h>
 
 using namespace NKafka;
@@ -50,6 +51,8 @@ struct TReadInfo {
 class TKafkaTestClient {
     public:
         TKafkaTestClient(ui16 port, const TString clientName = "TestClient");
+
+        void SetSocketTimeout(TDuration timeout);
 
         template <std::derived_from<TApiMessage> T>
         void WriteToSocket(TRequestHeaderData& header, T& request) {

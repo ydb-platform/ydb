@@ -20,7 +20,7 @@ TCertificateChecker::TCertificateCheckResult TCertificateChecker::Check(const TS
     // ToDo First of all need verify client`s certificate by server CA
 
     TReadCertificateAsPemResult readCertificateAsPemResult = ReadCertificatesAsPem(clientCertificate);
-    if (!readCertificateAsPemResult.Error.empty()) {
+    if (readCertificateAsPemResult.Error.has_value()) {
         return {.Error = readCertificateAsPemResult.Error, .UserSid = "", .Groups = {""}};
     }
 
@@ -36,39 +36,57 @@ TCertificateChecker::TReadCertificateAsPemResult TCertificateChecker::ReadCertif
     TPemCertificates& pemCertificates = result.PemCertificates;
     pemCertificates.ClientCertX509 = X509CertificateReader::ReadCertAsPEM(clientCertificate);
     if (!pemCertificates.ClientCertX509) {
-        result.Error = { .Message = "Cannot read client certificate", .Retryable = false };
+        result.Error = TEvTicketParser::TError{
+            .Message = "Cannot read client certificate",
+            .Retryable = false,
+        };
         return result;
     }
 
     pemCertificates.ServerCertX509 = X509CertificateReader::ReadCertAsPEM(ServerCertificate);
     if (!pemCertificates.ServerCertX509) {
-        result.Error = { .Message = "Cannot read server certificate", .Retryable = false };
+        result.Error = TEvTicketParser::TError{
+            .Message = "Cannot read server certificate",
+            .Retryable = false,
+        };
         return result;
     }
 
     return result;
 }
 
-TEvTicketParser::TError TCertificateChecker::CheckIssuers(const TPemCertificates& pemCertificates) const {
+std::optional<TEvTicketParser::TError> TCertificateChecker::CheckIssuers(const TPemCertificates& pemCertificates) const {
     const auto& clientIssuerDn = X509CertificateReader::ReadIssuerTerms(pemCertificates.ClientCertX509);
     if (clientIssuerDn.empty()) {
-        return { .Message = "Cannot extract issuer dn from client certificate", .Retryable = false };
+        return TEvTicketParser::TError{
+            .Message = "Cannot extract issuer dn from client certificate",
+            .Retryable = false
+        };
     }
     const auto& serverIssuerDn = X509CertificateReader::ReadIssuerTerms(pemCertificates.ServerCertX509);
     if (serverIssuerDn.empty()) {
-        return { .Message = "Cannot extract issuer dn from server certificate", .Retryable = false };
+        return TEvTicketParser::TError{
+            .Message = "Cannot extract issuer dn from server certificate",
+            .Retryable = false
+        };
     }
     if (clientIssuerDn != serverIssuerDn) {
-        return { .Message = "Client`s certificate and server`s certificate have different issuers", .Retryable = false };
+        return TEvTicketParser::TError{
+            .Message = "Client`s certificate and server`s certificate have different issuers",
+            .Retryable = false
+        };
     }
-    return {};
+    return std::nullopt;
 }
 
 TCertificateChecker::TReadClientSubjectResult TCertificateChecker::ReadSubjectFromClientCertificate(const TPemCertificates& pemCertificates) const {
     TReadClientSubjectResult result;
     result.SubjectDn = X509CertificateReader::ReadAllSubjectTerms(pemCertificates.ClientCertX509);
     if (result.SubjectDn.empty()) {
-        result.Error = { .Message = "Cannot extract subject from client certificate", .Retryable = false };
+        result.Error = TEvTicketParser::TError{
+            .Message = "Cannot extract subject from client certificate",
+            .Retryable = false
+        };
         return result;
     }
     result.SubjectDns = X509CertificateReader::ReadSubjectDns(pemCertificates.ClientCertX509, result.SubjectDn);
@@ -85,7 +103,7 @@ TString TCertificateChecker::CreateUserSidFromSubjectDn(const std::vector<std::p
     return userSid;
 }
 
-TEvTicketParser::TError TCertificateChecker::CheckClientSubject(const TReadClientSubjectResult& subjectInfo, const TCertificateAuthorizationParams& authParams) const {
+std::optional<TEvTicketParser::TError> TCertificateChecker::CheckClientSubject(const TReadClientSubjectResult& subjectInfo, const TCertificateAuthorizationParams& authParams) const {
     std::unordered_map<TString, std::vector<TString>> subjectDescription;
     for (const auto& [attribute, value] : subjectInfo.SubjectDn) {
         auto& attributeValues = subjectDescription[attribute];
@@ -93,20 +111,23 @@ TEvTicketParser::TError TCertificateChecker::CheckClientSubject(const TReadClien
     }
 
     if (!authParams.CheckSubject(subjectDescription, subjectInfo.SubjectDns)) {
-        return { .Message = "Client certificate failed verification", .Retryable = false };
+        return TEvTicketParser::TError{
+            .Message = "Client certificate failed verification",
+            .Retryable = false
+        };
     }
-    return {};
+    return std::nullopt;
 }
 
 TCertificateChecker::TCertificateCheckResult TCertificateChecker::DefaultCheckClientCertificate(const TPemCertificates& pemCertificates) const {
     TCertificateCheckResult result;
     auto checkIssuersError = CheckIssuers(pemCertificates);
-    if (!checkIssuersError.empty()) {
+    if (checkIssuersError.has_value()) {
         result.Error = checkIssuersError;
         return result;
     }
     TReadClientSubjectResult readClientSubjectResult = ReadSubjectFromClientCertificate(pemCertificates);
-    if (!readClientSubjectResult.Error.empty()) {
+    if (readClientSubjectResult.Error.has_value()) {
         result.Error = readClientSubjectResult.Error;
         return result;
     }
@@ -119,18 +140,18 @@ TCertificateChecker::TCertificateCheckResult TCertificateChecker::CheckClientCer
     TCertificateCheckResult result;
     auto checkIssuersError = CheckIssuers(pemCertificates);
     TReadClientSubjectResult readClientSubjectResult = ReadSubjectFromClientCertificate(pemCertificates);
-    if (!readClientSubjectResult.Error.empty()) {
+    if (readClientSubjectResult.Error.has_value()) {
         result.Error = readClientSubjectResult.Error;
         return result;
     }
     std::unordered_set<TString> groups;
     for (const auto& authParams : CertificateAuthorizationParams) {
-        if (authParams.RequireSameIssuer && !checkIssuersError.empty()) {
+        if (authParams.RequireSameIssuer && checkIssuersError.has_value()) {
             continue;
         }
 
         auto checkClientSubjectError = CheckClientSubject(readClientSubjectResult, authParams);
-        if (!checkClientSubjectError.empty()) {
+        if (checkClientSubjectError.has_value()) {
             continue;
         }
         if (authParams.Groups.empty()) {
@@ -140,7 +161,10 @@ TCertificateChecker::TCertificateCheckResult TCertificateChecker::CheckClientCer
         }
     }
     if (groups.empty()) {
-        result.Error = { .Message = "Client certificate failed verification", .Retryable = false };
+        result.Error = TEvTicketParser::TError{
+            .Message = "Client certificate failed verification",
+            .Retryable = false
+        };
         return result;
     }
     result.UserSid = CreateUserSidFromSubjectDn(readClientSubjectResult.SubjectDn);

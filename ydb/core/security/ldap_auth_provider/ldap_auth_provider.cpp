@@ -170,7 +170,7 @@ private:
 
     TInitAndBindResponse InitAndBind(LDAP** ld, std::function<THolder<IEventBase>(const TEvLdapAuthProvider::EStatus&, const TEvLdapAuthProvider::TError&)> eventFabric) {
         const auto initializeResponse = InitializeLDAPConnection(ld);
-        if (initializeResponse.Error) {
+        if (initializeResponse.Status != TEvLdapAuthProvider::EStatus::SUCCESS) {
             return {.Success = false, .Event = eventFabric(initializeResponse.Status, initializeResponse.Error)};
         }
 

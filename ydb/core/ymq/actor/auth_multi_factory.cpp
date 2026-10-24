@@ -18,6 +18,8 @@
 
 #include <ydb/library/security/util.h>
 
+#include <util/generic/overloaded.h>
+
 namespace NKikimr::NSQS {
 
 bool UseMockedVersion(const NKikimrConfig::TSqsConfig& config) {
@@ -251,31 +253,42 @@ void TBaseCloudAuthRequestProxy::HandleAuthorizationResult(const TEvTicketParser
 }
 
 void TBaseCloudAuthRequestProxy::ProcessAuthorizationResult(const TEvTicketParser::TEvAuthorizeTicketResult& result) {
-    ChangeCounters([this, &result](){
-        Counters_.IncAuthorizeCounter(
-            (AccessKeySignature_ ? NCloudAuth::ECredentialType::Signature : NCloudAuth::ECredentialType::IamToken),
-            result.Error
-        );
-        Counters_.AuthorizeDuration->Collect((TActivationContext::Now() - AuthorizeRequestStartTimestamp_).MilliSeconds());
-    });
+    const auto updateCounters = [this](bool hasError) {
+        ChangeCounters([this, hasError](){
+            Counters_.IncAuthorizeCounter(
+                (AccessKeySignature_ ? NCloudAuth::ECredentialType::Signature : NCloudAuth::ECredentialType::IamToken),
+                hasError
+            );
+            Counters_.AuthorizeDuration->Collect((TActivationContext::Now() - AuthorizeRequestStartTimestamp_).MilliSeconds());
+        });
+    };
 
-    if (result.HasError()) {
-        if (CanRetry() && result.Error.Retryable) {
-            ScheduleAuthorizationRetry();
-            return;
-        } else {
+    const bool success = std::visit(TOverloaded{
+        [this, &updateCounters](const TEvTicketParser::TError& error) {
+            updateCounters(true);
+            if (CanRetry() && error.Retryable) {
+                ScheduleAuthorizationRetry();
+                return false;
+            }
             if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
-                RLOG_SQS_INFO("Authorize failed. Error: " << result.Error.ToString());
+                RLOG_SQS_INFO("Authorize failed. Error: " << error.ToString());
                 SetError(
-                    result.Error.Retryable ? NErrors::SERVICE_UNAVAILABLE : NErrors::ACCESS_DENIED,
+                    error.Retryable ? NErrors::SERVICE_UNAVAILABLE : NErrors::ACCESS_DENIED,
                     "IAM authorization error."
                 );
                 SendReplyAndDie();
-                return;
+                return false;
             }
+            return true;
+        },
+        [this, &updateCounters](const NACLib::TUserToken& token) {
+            updateCounters(false);
+            UserSID_ = token.GetUserSID();
+            return true;
         }
-    } else {
-        UserSID_ = result.Token->GetUserSID();
+    }, result.Result);
+    if (!success) {
+        return;
     }
 
     MaskedToken_ = NKikimr::MaskIAMTicket(IamToken_);
@@ -429,21 +442,20 @@ void TBaseCloudAuthRequestProxy::Authorize() {
     if (!UseMockedVersion(Cfg())) {
         Send(MakeTicketParserID(), request.Release());
     } else {
-        TEvTicketParser::TEvAuthorizeTicketResult result("fake_token", nullptr);
         if (AccessKeySignature_ && AccessKeySignature_->AccessKeyId.empty()) {
-            result.SetError({
+            ProcessAuthorizationResult(TEvTicketParser::TEvAuthorizeTicketResult("fake_token", TEvTicketParser::TError{
                 .Message = "mocked_auth_error: empty access key",
                 .Retryable = false
-            });
+            }));
         } else if (AccessKeySignature_ && AccessKeySignature_->AccessKeyId == "TEST_ID_FOR_RETRYIES") {
-            result.SetError({
+            ProcessAuthorizationResult(TEvTicketParser::TEvAuthorizeTicketResult("fake_token", TEvTicketParser::TError{
                 .Message = "mocked_auth_error: correct process retries",
                 .Retryable = true
-            });
+            }));
         } else {
-            result.Token = MakeIntrusive<NACLib::TUserToken>("fake_user_sid@as", TVector<TString>());
+            ProcessAuthorizationResult(TEvTicketParser::TEvAuthorizeTicketResult(
+                "fake_token", NACLib::TUserToken("fake_user_sid@as", TVector<TString>())));
         }
-        ProcessAuthorizationResult(result);
     }
 
 }

@@ -26,6 +26,7 @@ struct TEvSecureRequestTest {
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         bool IsUserAdmin;
         TString ErrorMessage;
+        bool BootstrapDeferred = false;
     };
 };
 
@@ -78,6 +79,47 @@ IActor* CreateSecureRequestTestActor(TActorId replyTo, TIntrusiveConstPtr<NACLib
     return new TSecureRequestTestActor(replyTo, std::move(userToken), requireAdminAccess);
 }
 
+class TAnonymousBootstrapOrderActor
+    : public TSecureRequestActor<TActorBootstrapped<TAnonymousBootstrapOrderActor>, TAnonymousBootstrapOrderActor>
+{
+    using TBase = TSecureRequestActor<TActorBootstrapped<TAnonymousBootstrapOrderActor>, TAnonymousBootstrapOrderActor>;
+
+public:
+    explicit TAnonymousBootstrapOrderActor(TActorId replyTo)
+        : ReplyTo(replyTo)
+    {}
+
+    void Bootstrap(const TActorContext& ctx) {
+        if (!AuthorizationStarted) {
+            AuthorizationStarted = true;
+            TBase::Bootstrap(ctx);
+            InitialBootstrapReturned = true;
+            return;
+        }
+        Reply(false, {}, ctx);
+    }
+
+    void OnAccessDenied(const TEvTicketParser::TError& error, const TActorContext& ctx) {
+        Reply(true, error.Message, ctx);
+    }
+
+private:
+    void Reply(bool accessDenied, const TString& error, const TActorContext& ctx) {
+        auto response = MakeHolder<TEvSecureRequestTest::TEvResponse>();
+        response->AccessDenied = accessDenied;
+        response->UserToken = GetParsedToken();
+        response->IsUserAdmin = IsUserAdmin();
+        response->ErrorMessage = error;
+        response->BootstrapDeferred = InitialBootstrapReturned;
+        ctx.Send(ReplyTo, response.Release());
+        Die(ctx);
+    }
+
+    const TActorId ReplyTo;
+    bool AuthorizationStarted = false;
+    bool InitialBootstrapReturned = false;
+};
+
 struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
     TFakeTicketParserActor()
         : TActor<TFakeTicketParserActor>(&TFakeTicketParserActor::StateFunc)
@@ -104,9 +146,9 @@ struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
         } else {
             args.UserSID = "user";
         }
-        TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
-        userToken->SaveSerializationInfo();
-        Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));
+        NACLib::TUserToken userToken(args);
+        userToken.SaveSerializationInfo();
+        Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, std::move(userToken)));
     }
 
     STFUNC(StateFunc) {
@@ -169,6 +211,19 @@ public:
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSecureRequestActorTest) {
+
+Y_UNIT_TEST(AnonymousBootstrapIsDeferred) {
+    TSecureRequestTestEnv env(TTestEnvSettings{});
+    auto* runtime = env.GetRuntime();
+    const TActorId sender = runtime->AllocateEdgeActor();
+    runtime->Register(new TAnonymousBootstrapOrderActor(sender));
+
+    auto response = runtime->GrabEdgeEvent<TEvSecureRequestTest::TEvResponse>(sender, TDuration::Seconds(5));
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(!response->Get()->AccessDenied);
+    UNIT_ASSERT(!response->Get()->UserToken);
+    UNIT_ASSERT_C(response->Get()->BootstrapDeferred, "Anonymous authorization must finish after the initial Bootstrap returns");
+}
 
 // Anonymous requests: allowed
 // Invalid tokens: allowed

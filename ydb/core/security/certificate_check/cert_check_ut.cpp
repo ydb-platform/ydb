@@ -270,11 +270,11 @@ Y_UNIT_TEST_SUITE(TCertificateCheckerTest) {
 
             TCertificateChecker::TCertificateCheckResult result = checker.Check(TString(clientServer.Certificate));
             if (test.CheckResult) {
-                UNIT_ASSERT_C(result.Error.empty(), "Test number: " << testNumber << ". Error: " << result.Error);
+                UNIT_ASSERT_C(!result.Error.has_value(), "Test number: " << testNumber << ". Error: " << result.Error->Message);
                 UNIT_ASSERT_VALUES_EQUAL_C(result.Groups.size(), 1, "Test number: " << testNumber);
                 UNIT_ASSERT_VALUES_EQUAL_C(result.Groups[0], "ClusterNodeGroup@cert", "Test number: " << testNumber);
             } else {
-                UNIT_ASSERT_C(!result.Error.empty(), "Test number: " << testNumber);
+                UNIT_ASSERT_C(result.Error.has_value(), "Test number: " << testNumber);
             }
         }
     }

@@ -710,23 +710,27 @@ TReadAnswer TReadInfo::FormAnswer(
 
             readResult->SetBlobsCachedSize(readResult->GetBlobsCachedSize() + writeBlob.GetSerializedSize());
 
-            const ui64 resultOffset = writeBlob.IsLastPart()
-                && cachedBlobOffset <= Offset
-                && Offset < cachedBlobOffset + writeBlob.LogicalMessageCount
-                    ? cachedBlobOffset
-                    : Offset;
+            // Example: a client batch covers [100, 105) and has two parts.
+            // A read at (103, 0) must return (100, 0), then (100, 1), not (103, 0).
+            // Both parts belong to the same batch and must carry its base offset.
+            // Normalize the cursor before emitting either part: if the response
+            // ends after part 0, the next cursor is (100, 1); after part 1 it is (105, 0).
+            // The response's RealReadOffset retains the original request offset, 103.
+            if (cachedBlobOffset <= Offset && Offset < cachedBlobOffset + writeBlob.LogicalMessageCount) {
+                Offset = cachedBlobOffset;
+            }
 
             if (userInfo) {
                 userInfo->AddTimestampToCache(
-                    resultOffset, writeBlob.WriteTimestamp, writeBlob.CreateTimestamp,
+                    Offset, writeBlob.WriteTimestamp, writeBlob.CreateTimestamp,
                     Destination != 0, ctx.Now()
                 );
             }
 
-            AddResultBlob(readResult, writeBlob, resultOffset);
+            AddResultBlob(readResult, writeBlob, Offset);
             if (writeBlob.IsLastPart()) {
                 PartNo = 0;
-                Offset = resultOffset + writeBlob.LogicalMessageCount;
+                Offset += writeBlob.LogicalMessageCount;
                 cachedBlobOffset += writeBlob.LogicalMessageCount;
             } else {
                 ++PartNo;

@@ -2,6 +2,7 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition_blob_encoder.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition_util.h>
@@ -174,6 +175,7 @@ void TPartitionTestWrapper::LoadMeta(const NKikimrPQ::TPartitionCounterData& cou
 
 
 Y_UNIT_TEST_SUITE(TPartitionTests) {
+
 using TSrcIdMap = THashMap<TString, std::pair<ui64, ui64>>;
 
 
@@ -7076,6 +7078,163 @@ Y_UNIT_TEST_F(GetBlobsFromHeadMidLmcThenFormAnswerCache, TPartitionFixture) {
     Ctx->Runtime->DispatchEvents(options);
 }
 
+Y_UNIT_TEST_F(GetBlobsFromHeadFiltersPartsInsideClientBatch, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    auto probe = [&](const TActorContext&) {
+        constexpr ui64 baseOffset = 100;
+        constexpr ui16 totalParts = 3;
+        for (ui32 logicalMessageCount : {1u, 5u}) {
+            for (bool isBatch : {false, true}) {
+                if (!isBatch && logicalMessageCount > 1) {
+                    continue;
+                }
+                for (ui32 bytesPerPart : {24u, static_cast<ui32>(512_KB)}) {
+                    // All parts together; one part per storage batch; parts 0 and 1
+                    // together with part 2 separate (requires rewind and filtering).
+                    for (ui16 partsPerBatch : {ui16{3}, ui16{1}, ui16{2}}) {
+                        const TPartitionId partitionId(1);
+                        TPartitionBlobEncoder encoder(partitionId, /*fastWrite=*/false);
+                        encoder.Head.Offset = baseOffset;
+                        for (ui16 partNo = 0; partNo < totalParts; ++partNo) {
+                            if (partNo % partsPerBatch == 0) {
+                                encoder.Head.AddBatch(TBatch(baseOffset, partNo));
+                            }
+                            auto blob = MakeMultipartBodyReadBlob(1, partNo, totalParts, bytesPerPart, 'a');
+                            blob.LogicalMessageCount = logicalMessageCount;
+                            blob.IsBatch = isBatch;
+                            encoder.Head.AddBlob(blob);
+                        }
+                        encoder.Head.AddBlob(MakeSinglePartBodyReadBlob(2, 'b'));
+                        ui32 packedSize = 0;
+                        for (ui32 i = 0; i < encoder.Head.GetBatches().size(); ++i) {
+                            encoder.Head.MutableBatch(i).Pack();
+                            packedSize += encoder.Head.GetBatch(i).GetPackedSize();
+                        }
+                        encoder.Head.PackedSize = packedSize;
+                        const auto key = TKey::ForHead(
+                            TKeyPrefix::TypeData, partitionId, baseOffset, 0,
+                            logicalMessageCount + 1, totalParts - 1, logicalMessageCount + 1);
+                        auto token = std::make_shared<TBlobKeyToken>();
+                        token->NeedDelete = false;
+                        encoder.HeadKeys.push_back(
+                            TDataKey{key, packedSize, TInstant::MilliSeconds(1), 0, std::move(token)});
+
+                        auto check = [&](ui64 offset, ui16 partNo, ui16 firstExpectedPart) {
+                            ui32 count = 0;
+                            ui32 size = 0;
+                            ui64 insideHeadOffset = 0;
+                            const auto cached = encoder.GetBlobsFromHead(
+                                offset, partNo, /*maxCount=*/10, /*maxSize=*/8_MB,
+                                /*readTimestampMs=*/0, count, size, insideHeadOffset, /*lastOffset=*/0);
+                            const ui32 expectedParts = totalParts - firstExpectedPart;
+                            UNIT_ASSERT_VALUES_EQUAL(cached.size(), expectedParts + 1);
+                            UNIT_ASSERT_VALUES_EQUAL(insideHeadOffset,
+                                expectedParts ? baseOffset : baseOffset + logicalMessageCount);
+                            for (ui32 i = 0; i < expectedParts; ++i) {
+                                UNIT_ASSERT_VALUES_EQUAL(cached[i].SeqNo, 1u);
+                                UNIT_ASSERT_VALUES_EQUAL(cached[i].GetPartNo(), firstExpectedPart + i);
+                            }
+                            // The next message's part 0 must survive a request for part 1 or 2.
+                            UNIT_ASSERT_VALUES_EQUAL(cached.back().SeqNo, 2u);
+                            UNIT_ASSERT_VALUES_EQUAL(cached.back().GetPartNo(), 0u);
+                        };
+                        for (ui16 partNo = 0; partNo < totalParts; ++partNo) {
+                            check(baseOffset, partNo, partNo);
+                            check(baseOffset + logicalMessageCount - 1, partNo, partNo);
+                        }
+                        check(baseOffset + logicalMessageCount, 0, totalParts);
+                        // A request in a gap before Head must not discard its first part.
+                        check(baseOffset - 1, 1, 0);
+                    }
+                }
+            }
+        }
+    };
+
+    Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
+// Every cached part must use the container's base offset, even if the response
+// ends before its last part. Keep the requested logical offset separately.
+Y_UNIT_TEST_F(FormAnswerCacheNormalizesMultipartBatchOffset, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    auto probe = [&](const TActorContext& ctx) {
+        constexpr ui64 baseOffset = 100;
+        constexpr ui16 totalParts = 3;
+        for (ui32 logicalMessageCount : {1u, 5u}) {
+            for (bool isBatch : {false, true}) {
+                if (!isBatch && logicalMessageCount > 1) {
+                    continue;
+                }
+                for (ui32 bytesPerPart : {24u, static_cast<ui32>(512_KB)}) {
+                    for (ui16 firstPart : {ui16{0}, ui16{1}}) {
+                        for (bool complete : {false, true}) {
+                            // Resume requests use the base offset returned with the parts.
+                            const ui64 requestedOffset = firstPart == 0
+                                ? baseOffset + logicalMessageCount - 1 : baseOffset;
+                            auto info = MakeReadInfoForAddBlobsFromBodyTest(
+                                Ctx->Edge, requestedOffset, /*lastOffset=*/0, firstPart,
+                                /*messageCountLimit=*/10, /*byteSizeLimit=*/8_MB);
+                            info.CachedOffset = baseOffset;
+                            const ui16 endPart = complete ? totalParts : firstPart + 1;
+                            for (ui16 partNo = firstPart; partNo < endPart; ++partNo) {
+                                auto blob = MakeMultipartBodyReadBlob(1, partNo, totalParts, bytesPerPart, 'a');
+                                blob.LogicalMessageCount = logicalMessageCount;
+                                blob.IsBatch = isBatch;
+                                info.Cached.push_back(std::move(blob));
+                            }
+                            if (complete) {
+                                info.Cached.push_back(MakeSinglePartBodyReadBlob(2, 'b'));
+                            }
+
+                            TEvPQ::TEvBlobResponse blobResponse(0, TVector<TRequestedBlob>{});
+                            auto answer = info.FormAnswer(
+                                ctx, blobResponse, baseOffset, baseOffset + logicalMessageCount + 1,
+                                TPartitionId(1), nullptr, 0, /*sizeLag=*/8_MB, Ctx->Edge,
+                                NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS, true,
+                                [](bool, NKikimrClient::TCmdReadResult&) {});
+                            auto* proxy = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get());
+                            UNIT_ASSERT(proxy != nullptr);
+                            const auto& result = proxy->Response->GetPartitionResponse().GetCmdReadResult();
+                            const ui32 partCount = endPart - firstPart;
+                            UNIT_ASSERT_VALUES_EQUAL(result.ResultSize(), partCount + (complete ? 1u : 0u));
+                            for (ui32 i = 0; i < partCount; ++i) {
+                                UNIT_ASSERT_VALUES_EQUAL(result.GetResult(i).GetOffset(), baseOffset);
+                                UNIT_ASSERT_VALUES_EQUAL(result.GetResult(i).GetPartNo(), firstPart + i);
+                                UNIT_ASSERT_VALUES_EQUAL(result.GetResult(i).GetLogicalMessageCount(), logicalMessageCount);
+                            }
+                            UNIT_ASSERT_VALUES_EQUAL(result.GetRealReadOffset(), requestedOffset);
+                            UNIT_ASSERT_VALUES_EQUAL(info.RealReadOffset, requestedOffset);
+                            if (complete) {
+                                UNIT_ASSERT_VALUES_EQUAL(result.GetResult(partCount).GetOffset(), baseOffset + logicalMessageCount);
+                                UNIT_ASSERT_VALUES_EQUAL(info.Offset, baseOffset + logicalMessageCount + 1);
+                                UNIT_ASSERT_VALUES_EQUAL(info.PartNo, 0u);
+                            } else {
+                                UNIT_ASSERT_VALUES_EQUAL(info.Offset, baseOffset);
+                                UNIT_ASSERT_VALUES_EQUAL(info.PartNo, endPart);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
 // Compaction rewrite (CompactRequestedBlob): rebuild headers from Key.Offset → Key==Header;
 // mid-read must work (positive control vs tx-rename Key≠Header path).
 Y_UNIT_TEST_F(CompactionRewriteAlignsHeaderWithKeyThenMidRead, TPartitionFixture) {
@@ -8638,6 +8797,46 @@ Y_UNIT_TEST_F(CleanUpBlobsResetsStaleCompactionZoneHeadPartNo, TPartitionFixture
         return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
     });
     Ctx->Runtime->DispatchEvents(options);
+}
+
+Y_UNIT_TEST(PositionInBodyUsesLastBodyRangeForMultipartHead) {
+    const TPartitionId partitionId(1);
+    constexpr ui64 offset = 100;
+
+    for (ui32 logicalMessageCount : {1u, 5u}) {
+        TPartitionBlobEncoder encoder(partitionId, false);
+
+        // Part 0 is in Body; Head holds part 1 and a subsequent whole message.
+        AddBodyKeyToEncoder(encoder, partitionId, offset, 16,
+                            TInstant::MilliSeconds(1), 0, 0, 1);
+        encoder.DataKeysBody.back().Key.SetOffsetDelta(logicalMessageCount);
+
+        auto tail = MakeMultipartBodyReadBlob(1, 1, 2, 16, 'a');
+        tail.LogicalMessageCount = logicalMessageCount;
+        tail.IsBatch = logicalMessageCount > 1;
+        std::deque<TClientBlob> blobs;
+        blobs.push_back(std::move(tail));
+        blobs.push_back(MakeSinglePartBodyReadBlob(2, 'b'));
+        TBatch batch = TBatch::FromBlobs(offset, std::move(blobs));
+        batch.Pack();
+        const ui32 headSize = batch.GetPackedSize();
+        const TKey headKey = TKey::ForHead(TKeyPrefix::TypeData, partitionId,
+            offset, 1, logicalMessageCount + 1, 0, logicalMessageCount + 1);
+        encoder.HeadKeys.push_back(TDataKey{headKey, headSize,
+            TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()});
+        encoder.Head.Offset = offset;
+        encoder.Head.PartNo = 1;
+        encoder.Head.PackedSize = headSize;
+        encoder.Head.AddBatch(batch);
+
+        UNIT_ASSERT_VALUES_EQUAL(encoder.Head.GetOffsetDelta(), logicalMessageCount + 1);
+        UNIT_ASSERT(encoder.PositionInBody(offset, 0));
+        UNIT_ASSERT(encoder.PositionInBody(offset + logicalMessageCount - 1, 0));
+        UNIT_ASSERT(!encoder.PositionInBody(offset, 1));
+        UNIT_ASSERT(!encoder.PositionInBody(offset + logicalMessageCount - 1, 1));
+        // The next whole message is in Head, beyond the last Body blob's range.
+        UNIT_ASSERT(!encoder.PositionInBody(offset + logicalMessageCount, 0));
+    }
 }
 
 Y_UNIT_TEST(PopFrontHeadKeySyncsHeadWithRemainingHeadKeys) {

@@ -10,10 +10,16 @@
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/threading/future/async.h>
 
 namespace NKikimr::NReplication::NTestHelpers {
 
 class TFeatureFlags: public TTestFeatureFlagsHolder<TFeatureFlags> {
+};
+
+enum class ERuntimeMode {
+    RealThreads,
+    Simulated,
 };
 
 template <bool UseDatabase = true>
@@ -31,8 +37,10 @@ class TEnv {
         auto grpcPort = PortManager.GetPort();
 
         Server.EnableGRpc(grpcPort);
-        Server.SetupDefaultProfiles();
-        Client.InitRootScheme(DomainName);
+        RunCall([&] {
+            Server.SetupDefaultProfiles();
+            Client.InitRootScheme(DomainName);
+        });
 
         Endpoint = "localhost:" + ToString(grpcPort);
         Database = "/" + ToString(DomainName);
@@ -68,9 +76,22 @@ class TEnv {
     }
 
 public:
-    TEnv(bool init = true)
+    template <typename TFunc>
+    auto RunCall(TFunc&& func) {
+        if (GetRuntime().IsRealThreads()) {
+            return func();
+        }
+
+        TAdaptiveThreadPool threadPool;
+        threadPool.Start();
+        auto future = NThreading::Async(std::forward<TFunc>(func), threadPool);
+        return GetRuntime().WaitFuture(std::move(future), TDuration::Seconds(60));
+    }
+
+    TEnv(bool init = true, ERuntimeMode runtimeMode = ERuntimeMode::RealThreads)
         : Settings(Tests::TServerSettings(PortManager.GetPort(), {}, MakePqConfig())
             .SetDomainName(DomainName)
+            .SetUseRealThreads(runtimeMode == ERuntimeMode::RealThreads)
         )
         , Server(Settings)
         , Client(Settings)
@@ -143,7 +164,7 @@ public:
 
     template <typename... Args>
     auto Describe(Args&&... args) {
-        return Client.Ls(std::forward<Args>(args)...);
+        return RunCall([&] { return Client.Ls(std::forward<Args>(args)...); });
     }
 
     auto GetDescription(const TString& path) {
@@ -166,7 +187,7 @@ public:
 
     template <typename... Args>
     auto CreateTable(Args&&... args) {
-        return Client.CreateTable(std::forward<Args>(args)...);
+        return RunCall([&] { return Client.CreateTable(std::forward<Args>(args)...); });
     }
 
     template <typename... Args>

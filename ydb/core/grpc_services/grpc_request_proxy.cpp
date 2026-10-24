@@ -154,6 +154,7 @@ private:
 
         MaybeStartTracing(event);
 
+        // Counter labels require schema confirmation, unavailable with SkipSchemeCheck.
         if (AppData(ctx)->PathNormalizer) {
             const auto aliasDatabase = requestBaseCtx->GetDatabaseName();
             auto databaseIt = Databases.find(aliasDatabase && !aliasDatabase->empty()

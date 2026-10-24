@@ -72,6 +72,9 @@ namespace NKikimr::NGRpcService {
                 TNamedRequest request("Ydb.Topic.V1.TopicService/CreateTopic");
                 request.EnablePathNormalization();
                 request.InitializePathNormalization(MakeNormalizer());
+                auto unavailable = MakeDatabase("/rewritten");
+                unavailable.SetStatus(NKikimrScheme::StatusPathDoesNotExist);
+                request.InitializePathAliasCounter(root, unavailable);
                 UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Topic.V1.TopicService", "CreateTopic"), count - 1);
                 request.InitializePathAliasCounter(root, MakeDatabase("/rewritten"));
                 UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, "Ydb.Topic.V1.TopicService", "CreateTopic"), count);
@@ -122,6 +125,7 @@ namespace NKikimr::NGRpcService {
                 request.InitializePathNormalization(MakeNormalizer());
                 request.InitializePathAliasCounter(root, MakeDatabase("/physical"));
                 UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/physical/a"), "/physical/a");
+                UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("//physical/a"), "//physical/a");
                 UNIT_ASSERT_VALUES_EQUAL(GetPathAliasCount(root, service, method, "/physical"), 0);
                 UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw/a"), "/rewritten/a");
                 UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw/b"), "/rewritten/b");
@@ -217,9 +221,17 @@ namespace NKikimr::NGRpcService {
         }
 
         Y_UNIT_TEST(InternalRequestKeepsLiveDatabaseAndIdentityPaths) {
+            NMonitoring::TDynamicCounterPtr root = new NMonitoring::TDynamicCounters;
             auto request = MakeRequest();
             request->InitializePathNormalization(MakeNormalizer());
+            request->InitializePathAliasCounter(root, MakeDatabase("/raw"));
             UNIT_ASSERT_VALUES_EQUAL(request->NormalizePath("/raw"), "/raw");
+
+            TRefreshTokenImpl<TRpcServices::EvRefreshToken> refresh("token", "/raw", "peer", "request-id", TActorId{});
+            refresh.InitializePathNormalization(MakeNormalizer());
+            refresh.InitializePathAliasCounter(root, MakeDatabase("/raw"));
+            UNIT_ASSERT_VALUES_EQUAL(refresh.NormalizePath("/raw"), "/raw");
+            UNIT_ASSERT(!root->FindSubgroup("counters", "ydb"));
 
             request->UseDatabase("/resolved");
             UNIT_ASSERT_VALUES_EQUAL(request->GetDatabaseName().GetOrElse(""), "/resolved");

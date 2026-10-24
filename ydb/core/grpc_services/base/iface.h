@@ -77,6 +77,7 @@ private:
     std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer_;
     NMonitoring::TDynamicCounters::TCounterPtr PathAliasCounter_;
     bool PathNormalizationEnabled_ = false;
+    // Updated by the proxy before dispatch, then only by the owning RPC actor.
     mutable bool PathAliasUsed_ = false;
     mutable bool PathAliasCounted_ = false;
 };

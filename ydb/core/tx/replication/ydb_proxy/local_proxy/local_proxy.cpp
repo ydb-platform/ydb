@@ -106,11 +106,12 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
     YDB_LOG_TRACE("Handle",
         {"ev", ev->Get()->ToString()});
 
-    auto [path, _] = std::move(ev->Get()->GetArgs());
+    auto [path, settings] = std::move(ev->Get()->GetArgs());
     path = MakeLocalPath(path);
 
     auto request = std::make_unique<Ydb::Topic::DescribeTopicRequest>();
     request->set_path(TStringBuilder() << Database << "/" << path);
+    request->set_include_stats(settings.IncludeStats_);
 
     class TDescribeTopicContext: public TCaptureContext {
     public:

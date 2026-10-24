@@ -9,6 +9,7 @@ TIMEOUT(600)
 PEERDIR(
     ydb/core/tx/replication/service
     ydb/core/tx/replication/ut_helpers
+    ydb/public/api/protos
     library/cpp/testing/unittest
 )
 

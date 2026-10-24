@@ -188,6 +188,14 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         runtime.GrabEdgeEvent<TEvWorker::TEvHandshake>(worker);
         runtime.Send(reader, readSession,
             new TEvYdbProxy::TEvStartTopicReadingSession(TString("read-session"), 7));
+        runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicRequest>(ydbProxy);
+        Ydb::Topic::DescribeTopicResult description;
+        auto* partition = description.add_partitions();
+        partition->set_partition_id(0);
+        partition->mutable_partition_stats()->mutable_partition_offsets()->set_start(0);
+        runtime.Send(reader, ydbProxy,
+            new TEvYdbProxy::TEvDescribeTopicResponse(
+                NYdb::NTopic::TDescribeTopicResult(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(description))));
         auto started = runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(worker);
         UNIT_ASSERT_VALUES_EQUAL(started->Sender, reader);
         UNIT_ASSERT_VALUES_EQUAL(started->Get()->CommittedOffset, 7);

@@ -619,6 +619,16 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
             UNIT_ASSERT_VALUES_EQUAL(schema.GetTotalPartitionsCount(), 1);
             UNIT_ASSERT_VALUES_EQUAL(schema.GetRetentionPeriod(), TDuration::Days(1));
         }
+        {
+            const auto proxy = env.GetRuntime().Register(CreateLocalYdbProxy(env.GetDatabase()));
+            auto ev = env.Send<TEvYdbProxy::TEvDescribeTopicResponse>(
+                proxy, new TEvYdbProxy::TEvDescribeTopicRequest("/Root/topic", NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true)));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT(ev->Get()->Result.IsSuccess());
+            const auto& partitions = ev->Get()->Result.GetTopicDescription().GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+            UNIT_ASSERT(partitions.front().GetPartitionStats());
+        }
     }
 
     Y_UNIT_TEST(DescribeConsumer) {

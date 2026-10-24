@@ -111,6 +111,9 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void ProcessData() {
         Y_ABORT_UNLESS(!ResponseQueue.empty());
+        if (!ReaderValidated) {
+            return;
+        }
         ui64 totalSize = 0;
 
         auto& response = ResponseQueue.front();
@@ -146,7 +149,13 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             {"ev", ev->Get()->ToString()});
 
         auto& result = ev->Get()->Result;
-        Send(Worker, new TEvWorker::TEvDataEnd(result.PartitionId, std::move(result.AdjacentPartitionsIds), std::move(result.ChildPartitionsIds)));
+        auto dataEnd = MakeHolder<TEvWorker::TEvDataEnd>(result.PartitionId,
+            std::move(result.AdjacentPartitionsIds), std::move(result.ChildPartitionsIds));
+        if (ReaderValidated) {
+            Send(Worker, dataEnd.Release());
+        } else {
+            PendingDataEnd = std::move(dataEnd);
+        }
     }
 
     void Handle(TEvYdbProxy::TEvStartTopicReadingSession::TPtr& ev) {
@@ -154,7 +163,45 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             {"ev", ev->Get()->ToString()});
 
         ReadSessionId = ev->Get()->Result.ReadSessionId;
-        Send(Worker, new TEvWorker::TEvReaderStarted(ev->Get()->Result.CommittedOffset));
+        CommittedOffset = ev->Get()->Result.CommittedOffset;
+        ReaderValidated = false;
+        const auto& path = Settings.GetBase().Topics_.at(0).Path_;
+        Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(
+            TString(path.data(), path.size()), NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true)));
+    }
+
+    void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+        if (!result.IsSuccess()) {
+            return Leave(TEvWorker::TEvGone::UNAVAILABLE, result.GetIssues().ToOneLineString());
+        }
+
+        const auto partitionId = Settings.GetBase().Topics_.at(0).PartitionIds_.at(0);
+        for (const auto& partition : result.GetTopicDescription().GetPartitions()) {
+            if (partition.GetPartitionId() != partitionId) {
+                continue;
+            }
+            if (!partition.GetPartitionStats()) {
+                return Leave(TEvWorker::TEvGone::UNAVAILABLE, "Topic partition stats are unavailable");
+            }
+
+            const auto startOffset = partition.GetPartitionStats()->GetStartOffset();
+            if (CommittedOffset < startOffset) {
+                const TString error = TStringBuilder() << "Topic retention advanced partition " << partitionId
+                    << " start offset to " << startOffset << " past committed offset " << CommittedOffset;
+                return Leave(TEvWorker::TEvGone::DATA_LOSS, error);
+            }
+            ReaderValidated = true;
+            Send(Worker, new TEvWorker::TEvReaderStarted(CommittedOffset));
+            while (!ResponseQueue.empty()) {
+                ProcessData();
+            }
+            if (PendingDataEnd) {
+                Send(Worker, PendingDataEnd.Release());
+            }
+            return;
+        }
+        Leave(TEvWorker::TEvGone::UNAVAILABLE, "Topic partition is absent from description");
     }
 
     void Handle(TEvWorker::TEvCommit::TPtr& ev) {
@@ -315,6 +362,7 @@ public:
             hFunc(TEvYdbProxy::TEvReadTopicResponse, Handle);
             hFunc(TEvYdbProxy::TEvCommitOffsetResponse, Handle);
             hFunc(TEvYdbProxy::TEvStartTopicReadingSession, Handle);
+            hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
             hFunc(TEvYdbProxy::TEvEndTopicPartition, Handle);
             hFunc(TEvYdbProxy::TEvTopicReaderGone, Handle);
             hFunc(TEvents::TEvWakeup, HandleWakeup);
@@ -351,6 +399,8 @@ private:
     TDeque<TReadRequestDataTracker> ReadQueue;
     TDeque<TResponseDataTracker> DecompressQueue;
     TDeque<TResponseDataTracker> ResponseQueue;
+    THolder<TEvWorker::TEvDataEnd> PendingDataEnd;
+    bool ReaderValidated = false;
 
     constexpr const static ui64 DecompressWakeupTag = 1;
     constexpr const static ui64 DecompressionDoneWakeupTag = 2;

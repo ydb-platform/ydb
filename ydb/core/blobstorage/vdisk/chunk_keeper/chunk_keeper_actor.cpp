@@ -328,6 +328,7 @@ private:
             Y_VERIFY_S(ev->Get()->ChunkIds.size() == 1, Ctx.LogCtx->VCtx->VDiskLogPrefix <<
                     "Allocated wrong number of chunks# " << ev->Get()->ToString());
             ui32 chunkIdx = ev->Get()->ChunkIds[0];
+            Ctx.LogCtx->PDiskCtx->ChunkNonces->Record(ev->Get()->ChunkIds, ev->Get()->ChunkNonces);
             request->AllocatedChunk = chunkIdx;
             ui32 subsystem = request->Subsystem;
 

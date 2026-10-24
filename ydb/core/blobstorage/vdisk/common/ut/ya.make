@@ -25,6 +25,7 @@ SRCS(
     vdisk_lsnmngr_ut.cpp
     vdisk_outofspace_ut.cpp
     vdisk_pdisk_error_ut.cpp
+    vdisk_sector_sealing_ut.cpp
     vdisk_syncneighbors_ut.cpp
 )
 

@@ -5,6 +5,7 @@
 #include "top.h"
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/blobstorage/base/utility.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_sector_sealing.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/vdisk/common/align.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
@@ -227,6 +228,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             if (AppData()->FeatureFlags.GetEnableBlobIdInSectorChecksum()) {
                 ev->BlobId = Item->LogoBlobId;
             }
+            // This writer is an actor of its own, so sealing here keeps the work off both PDisk and the keeper.
+            PrepareChunkWriteSectors(*ev, *HugeKeeperCtx->PDiskCtx);
             ev->Orbit = std::move(Item->Orbit);
             ctx.Send(HugeKeeperCtx->PDiskCtx->PDiskId, ev.release(), 0, 0, Span.GetTraceId());
             DiskAddr = TDiskPart(chunkId, offset, storedBlobSize);
@@ -344,6 +347,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
             Y_VERIFY_S(ev->Get()->ChunkIds.size() == 1, HugeKeeperCtx->VCtx->VDiskLogPrefix);
             ChunkId = ev->Get()->ChunkIds.front();
+            HugeKeeperCtx->PDiskCtx->ChunkNonces->Record(ev->Get()->ChunkIds, ev->Get()->ChunkNonces);
             Lsn = HugeKeeperCtx->LsnMngr->AllocLsnForLocalUse().Point();
             ctx.Send(HugeKeeperCtx->SkeletonId, new TEvNotifyChunksDeleted(Lsn, ev->Get()->ChunkIds));
 

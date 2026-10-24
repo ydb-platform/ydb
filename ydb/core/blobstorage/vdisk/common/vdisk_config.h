@@ -291,6 +291,9 @@ namespace NKikimr {
         TControlWrapper EnableFreshSyncDataThrottling;
         TControlWrapper EnableChecksumReadValidationOnVDisk;
         TControlWrapper EnableChecksumWriteValidationOnVDisk;
+        // Build and check PDisk data sectors in VDisk actors (TFormatContext) instead of the PDisk threads.
+        // Read per request, so either value is safe at any moment.
+        TControlWrapper EnableVDiskSectorPreparation;
 
         ///////////// CHUNK Keeper //////////////////
         TControlWrapper EnableChunkKeeper;

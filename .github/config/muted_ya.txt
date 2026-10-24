@@ -28,6 +28,7 @@ ydb/core/statistics/aggregator/ut AnalyzeSampling.CollectAndPersistStatistics+Co
 ydb/core/tx/columnshard/backup/import/ut Restore.RestoreOversizedBatch
 ydb/core/tx/conveyor_composite/ut TCompositeConveyorRuntimeUpdate.WeightsUpdateInPlace
 ydb/core/tx/replication/controller/ut_dst_creator DstCreator.AttachmentAlterRejectsDroppedIndexAfterRestart
+ydb/core/tx/replication/controller/ut_schema_change AttachmentLifecycle.PublicDoneRetriesResourceExhaustionAcrossRestart
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ChangedCredentialsBeforeDeferredReset+ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ChangedCredentialsBeforeDeferredReset-ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.DropDuringDeferredDoneResolvesFreshSecret
@@ -46,6 +47,7 @@ ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedConfigPres
 ydb/core/tx/replication/controller/ut_schema_change StreamRetry.ResetSurvivesRestartBeforeSourceCompletion+Deferred
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.CurrentFailureAndRetry
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.EmptyDiscoveryIsConsumed
+ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.ReplacedDiscovery+NewFirst
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.ReplacedDiscovery-NewFirst
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.TerminalStateIgnoresDiscovery+Drop
 ydb/core/tx/replication/controller/ut_stream_creator StreamCreator.MissingSourceDnsNameDuringConsumerCreationRetries

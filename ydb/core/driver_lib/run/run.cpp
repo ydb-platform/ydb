@@ -231,6 +231,40 @@ namespace {
 >>>>>>> 99c51a5c8e6 (Fix  Y_VERIFY assert on shutdown due to access to dangling pointers (#53001))
 }
 
+<<<<<<< HEAD
+=======
+// Prepare the wrapper for a new generation of servers created by
+// TGRpcServersManager::Start(). The servers being replaced were stopped (or, on
+// the very first start, never started), but actors may still hold request
+// contexts referencing them, so they must not be destroyed while any request is
+// still registered. Servers without registered requests are destroyed right
+// away; the rest are moved to RetiredServers and stay there until they drain
+// (checked on the next restart) or the wrapper is destroyed in ~TKikimrRunner().
+void RetireReplacedServers(TGRpcServersWrapper& wrapper) {
+    auto drained = [](const TAutoPtr<NYdbGrpc::TGRpcServer>& server) {
+        return !server || server->RequestsInProgress() == 0;
+    };
+
+    auto& servers = wrapper.Servers;
+    for (auto it = servers.begin(); it != servers.end();) {
+        it = drained(it->second) ? servers.erase(it) : std::next(it);
+    }
+
+    auto& retired = wrapper.RetiredServers;
+    for (auto it = retired.begin(); it != retired.end();) {
+        it = drained(it->second) ? retired.erase(it) : std::next(it);
+    }
+
+    for (auto& [name, server] : servers) {
+        // TAutoPtr "copies" transfer ownership, so move the server explicitly
+        retired.emplace_back(name, TAutoPtr<NYdbGrpc::TGRpcServer>(server.Release()));
+    }
+    servers.clear();
+}
+
+} // anonymous namespace
+
+>>>>>>> f7dc04e7b16 (grpc: keep replaced gRPC servers alive until their requests drain (#56598))
 class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
     std::weak_ptr<TGRpcServersWrapper> GRpcServersWrapper;
     TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
@@ -332,6 +366,7 @@ public:
             return;
         }
         TGuard<TMutex> guard = wrapper->Guard();
+        RetireReplacedServers(*wrapper);
         wrapper->Servers = wrapper->GrpcServersFactory();
         for (auto& [name, server] : wrapper->Servers) {
             if (!server) {

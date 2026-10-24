@@ -1,11 +1,8 @@
 #include "json_pipe_req.h"
 #include "log.h"
-<<<<<<< HEAD
-=======
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
->>>>>>> 016f538bd7a (Fix aliases in Viewer (#56311))
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>

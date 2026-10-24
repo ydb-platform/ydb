@@ -6,11 +6,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/counters.h>
-<<<<<<< HEAD
-=======
 #include <ydb/core/base/http_database_param.h>
 #include <ydb/core/base/path.h>
->>>>>>> 016f538bd7a (Fix aliases in Viewer (#56311))
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -61,35 +58,12 @@ struct TIssueInfo {
     }
 };
 
-bool HasJsonContent(const NHttp::THttpIncomingRequest* request) {
-    if (request->Method == "POST") {
-        const TStringBuf header = request->ContentType.Before(';');
-        return header.empty() || AsciiEqualsIgnoreCase(header, "application/json"); // by default we will try to parse json, no error will be generated if parsing fails
-    }
-    return false;
-}
-
-<<<<<<< HEAD
 TString GetDatabase(const NHttp::THttpIncomingRequest* request) {
-    NHttp::TUrlParameters urlParams(request->URL);
-    TString database = urlParams["database"];
-    if (database) {
-        return database;
+    TString database = ExtractHttpDatabaseParamFromUrl(request->URL, request->Method, request->Body, request->ContentType);
+    if (!database.empty() && HasAppData() && AppData()->PathNormalizer) {
+        database = AppData()->PathNormalizer->NormalizePath(CanonizePath(database));
     }
-    if (HasJsonContent(request)) {
-        NJson::TJsonValue requestData;
-        if (NJson::ReadJsonTree(request->Body, &requestData)) {
-            return requestData["database"].GetString(); // empty if not string or no such key
-        }
-    }
-    return {};
-=======
-void InitMonHttpIncomingRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event) {
-    event->Database = ExtractMonDatabaseParam(event->Request.Get());
-    if (!event->Database.empty() && HasAppData() && AppData()->PathNormalizer) {
-        event->Database = AppData()->PathNormalizer->NormalizePath(CanonizePath(event->Database));
-    }
->>>>>>> 016f538bd7a (Fix aliases in Viewer (#56311))
+    return database;
 }
 
 void LogAuthorizedHttpRequest(

@@ -108,16 +108,26 @@ def read_build_output(path, work):
     return [(key, value.replace("${OUT_DIR}", out)) for key, value in instructions], out
 
 
+def host_tool(args, config, env, path):
+    command = [str(path.resolve())]
+    rust = args.rust_root.resolve()
+    loader = rust / "runtime/usr/lib/ld-linux-x86-64.so.2"
+    if config["host"] == "x86_64-unknown-linux-gnu" and loader.is_file():
+        if subprocess.run([str(loader), "--verify", command[0]], env=env,
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+            libraries = os.pathsep.join([
+                str(loader.resolve().parent), str(rust / "lib"),
+                str(rust / "lib/rustlib" / config["host"] / "lib"),
+                str(args.clang_root.resolve() / "lib"),
+            ])
+            command = [str(loader), "--library-path", libraries, *command]
+    return command
+
+
 def split_rlib(args, config, env, full):
     """Keep metadata for rustc and export the remaining members to the C++ linker."""
     suffix = ".exe" if os.name == "nt" else ""
-    ar = [str(args.clang_root.resolve() / "bin" / ("llvm-ar" + suffix))]
-    loader = args.rust_root.resolve() / "runtime/usr/lib/ld-linux-x86-64.so.2"
-    if config["host"] == "x86_64-unknown-linux-gnu" and loader.exists():
-        if subprocess.run([str(loader), "--verify", ar[0]], env=env,
-                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
-            libraries = os.pathsep.join([str(loader.parent), str(args.clang_root.resolve() / "lib")])
-            ar = [str(loader), "--library-path", libraries, *ar]
+    ar = host_tool(args, config, env, args.clang_root / "bin" / ("llvm-ar" + suffix))
     members = subprocess.check_output([*ar, "t", str(full)], env=env, text=True).splitlines()
     if members.count("lib.rmeta") != 1:
         raise RuntimeError("expected one lib.rmeta in " + str(full))
@@ -243,7 +253,7 @@ def run_build_script(args):
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="rust-build-", dir=output.parent) as directory:
         work = Path(directory)
-        _, env = toolchain_environment(args, work)
+        config, env = toolchain_environment(args, work)
         out = work / "out"
         out.mkdir()
         env["OUT_DIR"] = str(out)
@@ -255,7 +265,9 @@ def run_build_script(args):
             key = "CARGO_CFG_" + name.upper()
             value = value.strip('"') if separator else ""
             env[key] = env[key] + "," + value if key in env else value
-        result = subprocess.run([str(args.program.resolve())], env=env, cwd=args.manifest_dir.resolve(),
+        # A cached executable may contain the producer's resource path in PT_INTERP.
+        result = subprocess.run(host_tool(args, config, env, args.program),
+                                env=env, cwd=args.manifest_dir.resolve(),
                                 stdout=subprocess.PIPE, text=True, check=True)
         instructions = parse_instructions(result.stdout, out)
         archive_build_output(output, out, instructions)

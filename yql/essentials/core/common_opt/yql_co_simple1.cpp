@@ -3440,11 +3440,6 @@ TExprNode::TPtr DoNormalizeFrames(const TExprNode::TPtr& sortSpec, const TExprNo
 
     normalized.clear();
     for (auto& winOn : frames->ChildrenList()) {
-        if (hasAnsiCumeDists(winOn)) {
-            normalized.push_back(winOn);
-            continue;
-        }
-
         TWindowFrameSettings frameSettings = TWindowFrameSettings::Parse(*winOn, ctx);
         if (frameSettings.GetFrameType() == EFrameType::FrameByRows) {
             // TODO: maybe we need to rewrite non-trivial ROWS frames also
@@ -3459,8 +3454,8 @@ TExprNode::TPtr DoNormalizeFrames(const TExprNode::TPtr& sortSpec, const TExprNo
             auto item = winOn->Child(i)->Child(1);
             // all non-aggregating window functions except first_value/last_value/nth_value work on partition, not frame,
             // so we rewrite their frames to most basic one - ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-            // (first_value/last_value/nth_value are handled by WindowTraits)
-            if (item->IsCallable("WindowTraits")) {
+            // first_value/last_value/nth_value use WindowTraits; ANSI CumeDist keeps its RANGE frame.
+            if (item->IsCallable("WindowTraits") || (item->IsCallable("CumeDist") && HasSetting(item->Tail(), "ansi"))) {
                 winOnChildrenRest.push_back(winOn->ChildPtr(i));
                 continue;
             }

@@ -754,6 +754,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     return nullptr;
                 }
 
+                if (source && !stored && !featureFlags.EnableAddColumnGeneratedVirtual) {
+                    errStr = "Adding VIRTUAL GENERATED columns is disabled (EnableAddColumnGeneratedVirtual)";
+                    return nullptr;
+                }
+
                 if (!stored && columnFamily && columnFamily->GetId() != 0) {
                     errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
                     return nullptr;
@@ -870,6 +875,12 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
 
         alterData->TableDescriptionFull->MutableTTLSettings()->CopyFrom(ttl);
+    } else if (source && source->TTLSettings().HasEnabled()
+        && AnyOf(op.GetColumns(), [](const auto& column) { return column.HasDefaultFromExpression(); }))
+    {
+        if (!ValidateTtlSettings(source->TTLSettings(), source->Columns, alterData->Columns, colName2Id, subDomain, errStr)) {
+            return nullptr;
+        }
     }
 
     // Multi-column statistics.

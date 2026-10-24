@@ -11,6 +11,18 @@ namespace {
 void EnableGeneratedColumns(TTestActorRuntime& runtime) {
     runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
     runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+    runtime.GetAppData().FeatureFlags.SetEnableAddColumnGeneratedVirtual(true);
+}
+
+void CreateTableWithVirtualColumn(TTestActorRuntime& runtime, TTestEnv& env, ui64& txId,
+    const TString& table, const TString& virtualColumn, bool alterAddColumn)
+{
+    TestCreateTable(runtime, ++txId, "/MyRoot", table + (alterAddColumn ? TString() : virtualColumn));
+    env.TestWaitNotification(runtime, txId);
+    if (alterAddColumn) {
+        TestAlterTable(runtime, ++txId, "/MyRoot", TStringBuilder() << "Name: \"Table\"\n" << virtualColumn);
+        env.TestWaitNotification(runtime, txId);
+    }
 }
 
 const NKikimrSchemeOp::TColumnDescription* FindColumn(const NKikimrScheme::TEvDescribeSchemeResult& describe, const TString& name) {
@@ -147,14 +159,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
             /* dependencies */ { "first", "last" });
     }
 
-    Y_UNIT_TEST(VirtualColumnAbsentFromDataShard) {
+    Y_UNIT_TEST_FLAG(VirtualColumnAbsentFromDataShard, AlterAddColumn) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         EnableGeneratedColumns(runtime);
 
         ui64 txId = 100;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        CreateTableWithVirtualColumn(runtime, env, txId, R"(
               Name: "Table"
               Columns { Name: "key" Type: "Uint64" }
               Columns { Name: "a" Type: "Int32" }
@@ -167,6 +179,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       DependencyColumnNames: ["a"]
                   }
               }
+              KeyColumnNames: ["key"]
+        )", R"(
               Columns {
                   Name: "diff"
                   Type: "Int32"
@@ -176,9 +190,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       DependencyColumnNames: ["a"]
                   }
               }
-              KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
+        )", AlterAddColumn);
 
         auto describe = DescribePath(runtime, "/MyRoot/Table");
         CheckGeneratedColumn(describe, "diff", "a - 1", /* expectedStored */ false, { "a" });
@@ -191,17 +203,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
             "virtual generated column leaked into the datashard schema");
     }
 
-    Y_UNIT_TEST(DropVirtualColumnDoesNotReachDataShard) {
+    Y_UNIT_TEST_FLAG(DropVirtualColumnDoesNotReachDataShard, AlterAddColumn) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         EnableGeneratedColumns(runtime);
 
         ui64 txId = 100;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        CreateTableWithVirtualColumn(runtime, env, txId, R"(
               Name: "Table"
               Columns { Name: "key" Type: "Uint64" }
               Columns { Name: "a" Type: "Int32" }
+              KeyColumnNames: ["key"]
+        )", R"(
               Columns {
                   Name: "diff"
                   Type: "Int32"
@@ -211,9 +225,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
                       DependencyColumnNames: ["a"]
                   }
               }
-              KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
+        )", AlterAddColumn);
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
               Name: "Table"
@@ -925,6 +937,152 @@ Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
             { { NKikimrScheme::StatusSchemeError, "VIRTUAL GENERATED columns are disabled" } });
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), { NLs::PathNotExist });
+    }
+
+    Y_UNIT_TEST(AlterAddVirtualGeneratedColumnFeatureFlags) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableGeneratedColumns(runtime);
+        runtime.GetAppData().FeatureFlags.ClearEnableAddColumnGeneratedVirtual();
+        UNIT_ASSERT(!runtime.GetAppData().FeatureFlags.GetEnableAddColumnGeneratedVirtual());
+
+        ui64 txId = 100;
+        const TString virtualColumn = R"(
+              Columns {
+                  Name: "v"
+                  Type: "Int32"
+                  DefaultFromExpression {
+                      ExprText: "a + 1"
+                      Stored: false
+                      DependencyColumnNames: ["a"]
+                  }
+              }
+        )";
+        TestCreateTable(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "a" Type: "Int32" }
+              KeyColumnNames: ["key"]
+        )" << virtualColumn);
+        env.TestWaitNotification(runtime, txId);
+        CheckGeneratedColumn(DescribePath(runtime, "/MyRoot/Table"), "v", "a + 1", false, {"a"});
+
+        const TString addition = R"(
+              Name: "Table"
+              Columns {
+                  Name: "added"
+                  Type: "Int32"
+                  DefaultFromExpression {
+                      ExprText: "a - 1"
+                      Stored: false
+                      DependencyColumnNames: ["a"]
+                  }
+              }
+        )";
+        TestAlterTable(runtime, ++txId, "/MyRoot", addition,
+            {{NKikimrScheme::StatusInvalidParameter, "EnableAddColumnGeneratedVirtual"}});
+        UNIT_ASSERT(!FindColumn(DescribePath(runtime, "/MyRoot/Table"), "added"));
+
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumnGeneratedVirtual(true);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(false);
+        TestAlterTable(runtime, ++txId, "/MyRoot", addition,
+            {{NKikimrScheme::StatusInvalidParameter, "VIRTUAL GENERATED columns are disabled"}});
+
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+        TestAlterTable(runtime, ++txId, "/MyRoot", addition);
+        env.TestWaitNotification(runtime, txId);
+        CheckGeneratedColumn(DescribePath(runtime, "/MyRoot/Table"), "added", "a - 1", false, {"a"});
+
+        runtime.GetAppData().FeatureFlags.SetEnableAddColumnGeneratedVirtual(false);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "b" Type: "Int32" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              DropColumns { Name: "added" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT(!FindColumn(DescribePath(runtime, "/MyRoot/Table"), "added"));
+    }
+
+    Y_UNIT_TEST(AlterAddVirtualColumnRechecksExistingTtl) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableGeneratedColumns(runtime);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "ts" Type: "Timestamp" }
+              KeyColumnNames: ["key"]
+              TTLSettings { Enabled { ColumnName: "ts" ExpireAfterSeconds: 3600 } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const TString virtualColumn = R"(
+              Columns {
+                  Name: "v"
+                  Type: "Timestamp"
+                  DefaultFromExpression {
+                      ExprText: "ts"
+                      Stored: false
+                      DependencyColumnNames: ["ts"]
+                  }
+              }
+        )";
+        TestAlterTable(runtime, ++txId, "/MyRoot", TStringBuilder() << "Name: \"Table\"\n" << virtualColumn,
+            {{NKikimrScheme::StatusInvalidParameter, "used by generated column 'v'"}});
+        UNIT_ASSERT(!FindColumn(DescribePath(runtime, "/MyRoot/Table"), "v"));
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
+              Name: "Table"
+              TTLSettings { Disabled {} }
+        )" << virtualColumn);
+        env.TestWaitNotification(runtime, txId);
+        CheckGeneratedColumn(DescribePath(runtime, "/MyRoot/Table"), "v", "ts", false, {"ts"});
+    }
+
+    Y_UNIT_TEST(AlterAddNotNullVirtualColumnSurvivesRestart) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableGeneratedColumns(runtime);
+
+        ui64 txId = 100;
+        CreateTableWithVirtualColumn(runtime, env, txId, R"(
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "a" Type: "Int32" }
+              KeyColumnNames: ["key"]
+        )", R"(
+              Columns {
+                  Name: "v"
+                  Type: "Int32"
+                  NotNull: true
+                  DefaultFromExpression {
+                      ExprText: "COALESCE(a, 0) + 1"
+                      Stored: false
+                      DependencyColumnNames: ["a"]
+                  }
+              }
+        )", true);
+
+        auto checkSchema = [&]() {
+            auto describe = DescribePath(runtime, "/MyRoot/Table");
+            CheckGeneratedColumn(describe, "v", "COALESCE(a, 0) + 1", false, {"a"});
+            UNIT_ASSERT(FindColumn(describe, "v")->GetNotNull());
+            const auto datashard = GetDataShardTableDescription(runtime, "/MyRoot/Table");
+            UNIT_ASSERT(!FindDataShardColumn(datashard, "v"));
+        };
+        checkSchema();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        checkSchema();
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table"
+              DropColumns { Name: "a" }
+        )", {{NKikimrScheme::StatusInvalidParameter, "used by generated column 'v'"}});
     }
 
     Y_UNIT_TEST(AlterAddStoredGeneratedColumnFeatureFlagDisabled) {

@@ -34,6 +34,9 @@ class IUringRouterClient;
 
 using TDiskFormatPtr = std::unique_ptr<TDiskFormat, void(*)(TDiskFormat*)>;
 
+class TFormatContext; // blobstorage_pdisk_format_context.h
+using TFormatContextPtr = std::shared_ptr<const TFormatContext>;
+
 struct TCommitRecord {
     ui64 FirstLsnToKeep = 0; // 0 == not set
     TVector<TChunkIdx> CommitChunks;
@@ -206,6 +209,12 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     TStatusFlags StatusFlags;
     TIntrusivePtr<TPDiskParams> PDiskParams;
     TVector<TChunkIdx> OwnedChunks;  // Sorted vector of owned chunk identifiers.
+    // Nonce of each chunk in OwnedChunks, same order. Sector i of a chunk has nonce chunk nonce + i.
+    // Empty for plain data chunks.
+    TVector<ui64> OwnedChunkNonces;
+    // For building and checking data sectors outside the PDisk (PreformattedSectors writes, RawSectors
+    // reads). Null for plain data chunks.
+    TFormatContextPtr FormatContext;
     TString ErrorReason;
     TDiskFormatPtr DiskFormat{nullptr, nullptr}; // On-device format for direct disk access offset calculations
 #if defined(__linux__)
@@ -1000,6 +1009,7 @@ struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkRes
 struct TEvChunkReserveResult : TEventLocal<TEvChunkReserveResult, TEvBlobStorage::EvChunkReserveResult> {
     NKikimrProto::EReplyStatus Status;
     TVector<TChunkIdx> ChunkIds;
+    TVector<ui64> ChunkNonces; // nonce of each chunk in ChunkIds, same order
     TStatusFlags StatusFlags;
     TString ErrorReason;
     TSpaceHeadroom Headroom;
@@ -1115,6 +1125,11 @@ struct TEvChunkRead : TEventLocal<TEvChunkRead, TEvBlobStorage::EvChunkRead> {
     ui8 PriorityClass;
     void *Cookie;
     TLogoBlobID BlobId; // when set, this blob id is used to salt sector hash
+    // Return the whole raw sectors that hold [Offset, Offset + Size), unchecked, together with the chunk
+    // nonce; the owner checks and opens them with TFormatContext::TOpener. The read is scheduled as usual.
+    // The result's Offset and Data then cover the raw sectors: Offset = first sector * sector size.
+    // Ignored for plain data chunks, which are returned as they are anyway.
+    bool RawSectors = false;
 
     TEvChunkRead(TOwner owner, TOwnerRound ownerRound, TChunkIdx chunkIdx, ui32 offset, ui32 size,
             ui8 priorityClass, void *cookie)
@@ -1153,6 +1168,9 @@ struct TEvChunkReadResult : TEventLocal<TEvChunkReadResult, TEvBlobStorage::EvCh
     void *Cookie;
     TStatusFlags StatusFlags;
     TString ErrorReason;
+    // For a RawSectors read: the nonce of the chunk, for TFormatContext::TOpener.
+    bool RawSectors = false;
+    ui64 ChunkNonce = 0;
 
     TEvChunkReadResult(NKikimrProto::EReplyStatus status, TChunkIdx chunkIdx, ui32 offset, void *cookie,
                         TStatusFlags statusFlags, TString errorReason)
@@ -1233,6 +1251,11 @@ struct TEvChunkWrite : TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunkWrite> 
     const TWriteSource WriteSource;
     bool IsSeqWrite; // sequential write to this chunk (normally, it is 'true', for huge blobs -- 'false')
     TLogoBlobID BlobId; // when set, this blob id is used to salt sector hash
+    // The parts already hold whole sealed sectors (TFormatContext::TSealer): one part, aligned for
+    // direct I/O, a multiple of the sector size. Offset stays in payload bytes and must start a sector.
+    // PDisk checks FirstSectorNonce against the chunk and writes the buffer without reading it.
+    bool PreformattedSectors = false;
+    ui64 FirstSectorNonce = 0;
 
     mutable NLWTrace::TOrbit Orbit;
 

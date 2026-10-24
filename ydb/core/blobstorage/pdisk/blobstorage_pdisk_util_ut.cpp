@@ -549,6 +549,46 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
         UNIT_ASSERT_VALUES_EQUAL(restorator.GoodSectorCount, 0);
     }
 
+    // Sectors sealed outside the PDisk pass the PDisk's own sector check and open back to the payload.
+    Y_UNIT_TEST(FormatContextSealOpen) {
+        for (const bool encrypt : {false, true}) {
+            TDiskFormat format = {};
+            format.Clear(encrypt);
+            format.ChunkKey = 0x0123456789ABCDEFull;
+            const auto ctx = std::make_shared<const TFormatContext>(format, encrypt);
+            const TChunkIdx chunkIdx = 5;
+            const ui64 chunkNonce = 1000;
+            const TLogoBlobID blobId(1, 2, 3, 0, 100, 0, 1);
+            const ui32 payloadSize = ctx->GetSectorPayloadSize();
+            UNIT_ASSERT_VALUES_EQUAL(payloadSize, format.SectorPayloadSize());
+
+            TVector<ui8> payload(payloadSize);
+            for (ui32 i = 0; i < payloadSize; ++i) {
+                payload[i] = ui8(i * 7 + 1);
+            }
+            TSectorsWithData sectors(format.SectorSize, 2);
+            TFormatContext::TSealer sealer(ctx, chunkIdx, chunkNonce, blobId);
+            sealer.Seal(sectors[0].Begin(), payload.data(), payloadSize, 3);
+            memcpy(sectors[1].Begin(), payload.data(), 100);
+            sealer.SealInPlace(sectors[1].Begin(), 100, 4);
+
+            for (ui32 i = 0; i < 2; ++i) {
+                TSectorRestorator restorator(false, 1, false, format, blobId);
+                restorator.Restore(sectors[i].Begin(), format.Offset(chunkIdx, 3 + i), format.MagicDataChunk, 0, 0);
+                UNIT_ASSERT_VALUES_EQUAL_C(restorator.GoodSectorCount, 1, "encrypt# " << encrypt << " i# " << i);
+                UNIT_ASSERT_VALUES_EQUAL(sectors[i].GetDataFooter()->Nonce, chunkNonce + 3 + i);
+            }
+
+            TFormatContext::TOpener opener(ctx, chunkIdx, chunkNonce, blobId);
+            TVector<ui8> out(payloadSize);
+            UNIT_ASSERT(!opener.Open(out.data(), sectors[0].Begin(), 4, 0, payloadSize)); // wrong place
+            UNIT_ASSERT(opener.Open(out.data(), sectors[0].Begin(), 3, 0, payloadSize));
+            UNIT_ASSERT(memcmp(out.data(), payload.data(), payloadSize) == 0);
+            UNIT_ASSERT(opener.Open(out.data(), sectors[1].Begin(), 4, 10, 90));
+            UNIT_ASSERT(memcmp(out.data(), payload.data() + 10, 90) == 0);
+        }
+    }
+
     Y_UNIT_TEST(SectorPrint) {
         TSectorsWithData sectors(97, 1);
         memset(sectors[0].Begin(), 0, sectors[0].Size());

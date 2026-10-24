@@ -54,6 +54,8 @@ TChunkWrite::TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender
     , Cookie(ev.Cookie)
     , DoFlush(ev.DoFlush)
     , IsSeqWrite(ev.IsSeqWrite)
+    , PreformattedSectors(ev.PreformattedSectors)
+    , FirstSectorNonce(ev.FirstSectorNonce)
     , BlobId(ev.BlobId)
 {
     if (PartsPtr) {

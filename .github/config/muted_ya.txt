@@ -29,12 +29,15 @@ ydb/core/tx/columnshard/backup/import/ut Restore.RestoreOversizedBatch
 ydb/core/tx/conveyor_composite/ut TCompositeConveyorRuntimeUpdate.WeightsUpdateInPlace
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ChangedCredentialsBeforeDeferredReset+ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ChangedCredentialsBeforeDeferredReset-ResourceId
+ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.DropDuringDeferredDoneResolvesFreshSecret
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.LateResultsDuringAndAfterDone+ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ReplacementRejectsOldResultsAndAcceptsNew-ResourceId
 ydb/core/tx/replication/controller/ut_schema_change ReplicationCreation.InitialScanDisabledDoesNotTouchMissingDestination
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropAsyncIndexWithRowConsistency
+ydb/core/tx/replication/controller/ut_schema_change StatsDescription.CredentialsDuringStatsRequest+ReplyPending
 ydb/core/tx/replication/controller/ut_schema_change StatsDescription.CredentialsDuringStatsRequest-ReplyPending
 ydb/core/tx/replication/controller/ut_schema_change StatsDescription.UnresponsiveProxyReturnsPartialStats
+ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentSuccessAfterReplacement-DescribeOnly
 ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedConfigPreservesDestinationError
 ydb/core/tx/replication/controller/ut_schema_change StreamRetry.ResetSurvivesRestartBeforeSourceCompletion+Deferred
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.ReplacedDiscovery-NewFirst
@@ -48,6 +51,7 @@ ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
+ydb/core/viewer/tests test.py.TestViewer.test_topic_data_cdc
 ydb/core/viewer/ut Viewer.TabletMerging
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/services/metadata/secret/ut Secret.Simple
@@ -115,6 +119,7 @@ ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[1-no_sha
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[2-no_shared]
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[no_shared]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
+ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_enabled
 ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_basic
 ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles
 ydb/tests/functional/bridge/chaos test_bridge_chaos.py.TestBridgeChaos.test_bridge_chaos

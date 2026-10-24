@@ -14,7 +14,9 @@ PEERDIR(
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/federation_recipe/recipe.inc)
 
-# Share one federation recipe across the scenarios.
+FORK_SUBTESTS()
+SPLIT_FACTOR(8)
+
 SIZE(MEDIUM)
 TIMEOUT(600)
 REQUIREMENTS(ram:16)

@@ -65,33 +65,26 @@ def clients():
 def _wait_for_topic(cluster, name):
     endpoint = 'localhost:' + os.environ[cluster + '_port']
     deadline = time.monotonic() + 60
-    last_error = None
+    last_error_details = None
     while time.monotonic() < deadline:
         try:
             operation = _topic_request(
                 endpoint, DATABASE, 'DescribeTopic', ydb_topic_pb2.DescribeTopicRequest(path=name),
-                timeout=min(5, max(0.1, deadline - time.monotonic())),
-            )
+                timeout=5)
         except grpc.RpcError as error:
             if error.code() not in (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED):
                 raise
-            last_error = error
+            last_error_details = error
         else:
-            last_error = operation
+            last_error_details = operation
             if operation.ready and operation.status == ydb_status_codes_pb2.StatusIds.SUCCESS:
                 description = ydb_topic_pb2.DescribeTopicResult()
                 assert operation.result.Unpack(description)
                 if any(c.name == CONSUMER_PATH and c.HasField('shared_consumer_type')
                        for c in description.consumers):
                     return
-            elif operation.status not in (
-                ydb_status_codes_pb2.StatusIds.SCHEME_ERROR,
-                ydb_status_codes_pb2.StatusIds.UNAVAILABLE,
-                ydb_status_codes_pb2.StatusIds.OVERLOADED,
-            ):
-                _assert_success(operation)
         time.sleep(0.1)
-    pytest.fail('Topic {} is not ready on {}: {}'.format(name, cluster, last_error))
+    pytest.fail('Topic {} is not ready on {}: {}'.format(name, cluster, last_error_details))
 
 
 @pytest.fixture
@@ -104,7 +97,6 @@ def topic():
     consumer = request.consumers.add(name=CM_DATABASE + '/' + CONSUMER)
     consumer.shared_consumer_type.keep_messages_order = False
     consumer.shared_consumer_type.default_processing_timeout.seconds = 30
-    # Also attempt cleanup if creation succeeds server-side but its response is lost.
     try:
         _assert_success(_topic_request(endpoint, CM_DATABASE, 'CreateTopic', request, timeout=60))
         for cluster in CLUSTERS:
@@ -171,8 +163,10 @@ def test_reports_missing_queue(clients):
     for client in clients.values():
         with pytest.raises(ClientError) as error:
             client.get_queue_url(QueueName='missing-' + uuid.uuid4().hex)
-        assert error.value.response['Error']['Code'] in (
-            'AWS.SimpleQueueService.NonExistentQueue', 'QueueDoesNotExist')
+        error_code = error.value.response['Error']['Code']
+        assert error_code in (
+            'AWS.SimpleQueueService.NonExistentQueue', 'QueueDoesNotExist'
+            ), f'Unexpected error code: {error_code}'
         assert error.value.response['Error']['Message']
 
 
@@ -203,7 +197,7 @@ def test_change_message_visibility(clients, topic, batch):
         bodies = [cluster + '-first', cluster + '-second'] if batch else [cluster + '-single']
         _send(client, url, bodies)
         messages = _receive(client, url, len(bodies))
-        _assert_empty(client, url)
+        _assert_empty(client, url) # because messages visibility equals to 60s
         if batch:
             response = client.change_message_visibility_batch(
                 QueueUrl=url, Entries=[

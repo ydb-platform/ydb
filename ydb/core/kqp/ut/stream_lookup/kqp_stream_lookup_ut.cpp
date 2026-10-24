@@ -155,6 +155,7 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
             ui64 cnt = parser.ColumnParser("cnt").GetUint64();
             Cerr << "StreamLookupManyPartitions: count = " << cnt << Endl;
             UNIT_ASSERT_VALUES_EQUAL(cnt, 8 * TotalRows);
+            UNIT_ASSERT(!parser.TryNextRow());
         }
     }
 
@@ -260,6 +261,7 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
             ui64 cnt = parser.ColumnParser("cnt").GetUint64();
             Cerr << "StreamLookupJoinManyPartitions: count = " << cnt << Endl;
             UNIT_ASSERT_VALUES_EQUAL(cnt, 8 * TotalRows);
+            UNIT_ASSERT(!parser.TryNextRow());
         }
     }
 }

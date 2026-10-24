@@ -42,6 +42,10 @@ def toolchain_environment(args, work):
         "CARGO_MANIFEST_DIR": str(args.manifest_dir.resolve()),
         "CARGO_PKG_NAME": args.name, "CARGO_CRATE_NAME": args.name.replace("-", "_"),
         "CARGO_PKG_VERSION": args.version,
+        "CC": env["HOST_CC"],
+        "CXX": env["HOST_CXX"],
+        "CFLAGS": shlex.join(["-I" + str(args.source_root.resolve()), "--target=" + target]),
+        "CXXFLAGS": shlex.join(["-I" + str(args.source_root.resolve()), "--target=" + target]),
     })
     for key in list(env):
         if key.startswith(("CARGO_FEATURE_", "CARGO_CFG_")):
@@ -100,12 +104,39 @@ def remap_flags(args, work):
     ]
 
 
-def read_build_output(path, work):
+def read_build_output(path, work, args):
     with tarfile.open(path) as archive:
         archive.extractall(work, filter="data")
     instructions = json.loads((work / "instructions.json").read_text())
     out = str(work / "out")
-    return [(key, value.replace("${OUT_DIR}", out)) for key, value in instructions], out
+    substitutions = {"OUT_DIR": out, "SOURCE_ROOT": str(args.source_root.resolve()),
+                     "BUILD_ROOT": str(args.build_root.resolve())}
+    for name, value in substitutions.items():
+        instructions = [(key, item.replace("${" + name + "}", value)) for key, item in instructions]
+    return instructions, out
+
+
+def dependency_metadata(args, work, env):
+    """Cargo exposes links metadata from direct dependencies to build.rs only."""
+    seen = set()
+    for i, path in enumerate(args.direct):
+        archive_path = Path(path).resolve().with_suffix(".build.tar")
+        with tarfile.open(archive_path) as archive:
+            package = json.load(archive.extractfile("package.json"))
+        links = package.get("links")
+        if not links:
+            continue
+        prefix = "DEP_" + links.upper().replace("-", "_") + "_"
+        if prefix in seen:
+            raise RuntimeError("duplicate native library links: " + links)
+        seen.add(prefix)
+        instructions, _ = read_build_output(archive_path, work / str(i), args)
+        for key, value in instructions:
+            if key == "metadata":
+                key, value = value.split("=", 1)
+            elif key.startswith(("rustc-", "rerun-if-")):
+                continue
+            env[prefix + key.upper().replace("-", "_")] = value
 
 
 def host_tool(args, config, env, path):
@@ -124,10 +155,13 @@ def host_tool(args, config, env, path):
     return command
 
 
+def llvm_tool(args, config, env, name):
+    suffix = ".exe" if os.name == "nt" else ""
+    return host_tool(args, config, env, args.clang_root / "bin" / (name + suffix))
+
 def split_rlib(args, config, env, full):
     """Keep metadata for rustc and export the remaining members to the C++ linker."""
-    suffix = ".exe" if os.name == "nt" else ""
-    ar = host_tool(args, config, env, args.clang_root / "bin" / ("llvm-ar" + suffix))
+    ar = llvm_tool(args, config, env, "llvm-ar")
     members = subprocess.check_output([*ar, "t", str(full)], env=env, text=True).splitlines()
     if members.count("lib.rmeta") != 1:
         raise RuntimeError("expected one lib.rmeta in " + str(full))
@@ -161,10 +195,16 @@ def compile_crate(args):
             "--edition", args.edition, "--target", target,
             "-C", "metadata=" + metadata, "-C", "opt-level=" + args.opt_level,
             "-C", "debuginfo=" + args.debuginfo,
+            "-C", "embed-bitcode=no",
             "-C", "panic=" + ("unwind" if args.mode == "host" else "abort"),
             "--emit=link", "-o", str(compiled),
         ]
         command += remap_flags(args, work)
+        if args.sanitizer and args.mode == "target":
+            env["RUSTC_BOOTSTRAP"] = "1"
+            command += ["-Zsanitizer=" + args.sanitizer, "-Cunsafe-allow-abi-mismatch=sanitizer"]
+            if args.sanitizer == "memory":
+                command += ["-Zsanitizer-memory-track-origins=2"]
         command += externs(args)
         for directory in sorted({str(Path(p).resolve().parent) for p in args.dependencies}):
             command += ["-L", "dependency=" + directory]
@@ -187,8 +227,10 @@ def compile_crate(args):
             archives = dict.fromkeys(p for p in [*args.dependencies, *args.native] if p.endswith((".a", ".lib")))
             for path in archives:
                 command += ["-C", "link-arg=" + str(Path(path).resolve())]
-        if args.build_script:
-            instructions, out = read_build_output(args.build_script, work / "build-script")
+        build_output = work / "build.tar" if args.build_script_program else None
+        if build_output:
+            run_build_script(args, build_output, args.build_script_program)
+            instructions, out = read_build_output(build_output, work / "build-script", args)
             env["OUT_DIR"] = out
             for key, value in instructions:
                 if key in ("rustc-cfg", "rustc-check-cfg"):
@@ -208,11 +250,21 @@ def compile_crate(args):
         subprocess.run(command, env=env, cwd=args.manifest_dir.resolve(), check=True)
         if args.kind == "rlib":
             split_rlib(args, config, env, compiled)
+            if build_output:
+                shutil.copyfile(build_output, args.build_info_output)
+            else:
+                archive_build_output(args.build_info_output, None, [], None)
+        if args.sanitizer == "memory" and args.mode == "target":
+            subprocess.run([*llvm_tool(args, config, env, "llvm-objcopy"),
+                            "--redefine-sym=malloc=__safe_malloc",
+                            "--redefine-sym=__msan_set_alloca_origin_with_descr=__safe_msan_set_alloca_origin_with_descr",
+                            str(output)], env=env, check=True)
 
 
-def parse_instructions(stdout, out):
+def parse_instructions(stdout, out, args):
     result = []
     for line in stdout.splitlines():
+        modern = line.startswith("cargo::")
         if line.startswith("cargo::"):
             line = line[7:]
         elif line.startswith("cargo:"):
@@ -227,17 +279,26 @@ def parse_instructions(stdout, out):
         elif key == "error":
             raise RuntimeError(value)
         else:
-            result.append((key, value.replace(str(out), "${OUT_DIR}")))
+            if key == "metadata" and not modern:
+                value = "metadata=" + value
+            for path, token in [(str(out), "OUT_DIR"), (str(args.source_root.resolve()), "SOURCE_ROOT"),
+                                (str(args.build_root.resolve()), "BUILD_ROOT")]:
+                value = value.replace(path, "${" + token + "}")
+            result.append((key, value))
     return result
 
 
-def archive_build_output(output, out, instructions):
+def archive_build_output(output, out, instructions, links):
     with tarfile.open(output, "w") as archive:
         data = (json.dumps(instructions) + "\n").encode()
         info = tarfile.TarInfo("instructions.json")
         info.size = len(data)
         archive.addfile(info, io.BytesIO(data))
-        for path in sorted(out.rglob("*")):
+        data = (json.dumps({"links": links}) + "\n").encode()
+        info = tarfile.TarInfo("package.json")
+        info.size = len(data)
+        archive.addfile(info, io.BytesIO(data))
+        for path in sorted(out.rglob("*")) if out else []:
             info = archive.gettarinfo(str(path), "out/" + path.relative_to(out).as_posix())
             info.uid = info.gid = info.mtime = 0
             info.uname = info.gname = ""
@@ -248,14 +309,21 @@ def archive_build_output(output, out, instructions):
                 archive.addfile(info)
 
 
-def run_build_script(args):
-    output = args.output.resolve()
+def run_build_script(args, output=None, program=None):
+    output = (output or args.output).resolve()
+    program = program or args.program
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="rust-build-", dir=output.parent) as directory:
         work = Path(directory)
         config, env = toolchain_environment(args, work)
+        for key in list(env):
+            if key.startswith("DEP_"):
+                del env[key]
         out = work / "out"
         out.mkdir()
+        # Keep dependency files in the exported output too: build.rs may
+        # forward their paths as its own links metadata.
+        dependency_metadata(args, out / ".dependencies", env)
         env["OUT_DIR"] = str(out)
         cfg = subprocess.check_output([
             env["RUSTC"], "--print=cfg", "--target", env["TARGET"],
@@ -266,11 +334,14 @@ def run_build_script(args):
             value = value.strip('"') if separator else ""
             env[key] = env[key] + "," + value if key in env else value
         # A cached executable may contain the producer's resource path in PT_INTERP.
-        result = subprocess.run(host_tool(args, config, env, args.program),
-                                env=env, cwd=args.manifest_dir.resolve(),
-                                stdout=subprocess.PIPE, text=True, check=True)
-        instructions = parse_instructions(result.stdout, out)
-        archive_build_output(output, out, instructions)
+        result = subprocess.run(host_tool(args, config, env, program), env=env, cwd=args.manifest_dir.resolve(),
+                                stdout=subprocess.PIPE, text=True)
+        if result.returncode:
+            print(result.stdout, file=sys.stderr, end="")
+            result.check_returncode()
+        instructions = parse_instructions(result.stdout, out, args)
+        links = tomllib.loads(args.manifest.read_text()).get("package", {}).get("links") if args.manifest else None
+        archive_build_output(output, out, instructions, links)
 
 
 def main():
@@ -284,11 +355,13 @@ def main():
     parser.add_argument("--version", required=True)
     parser.add_argument("--opt-level", required=True)
     parser.add_argument("--debuginfo", required=True)
+    parser.add_argument("--sanitizer", choices=("", "address", "memory", "thread", "leak"), default="")
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--features", nargs="*", default=[])
     parser.add_argument("--env", nargs="*", default=[])
     parser.add_argument("--kind", choices=("rlib", "proc-macro", "runtime", "bin"))
     parser.add_argument("--metadata-output", type=Path)
+    parser.add_argument("--build-info-output", type=Path)
     parser.add_argument("--edition", default="2021")
     parser.add_argument("--crate-root", type=Path)
     parser.add_argument("--flag", action="append", default=[])
@@ -297,14 +370,14 @@ def main():
     parser.add_argument("--direct", nargs="*", default=[])
     parser.add_argument("--dependencies", nargs="*", default=[])
     parser.add_argument("--native", nargs="*", default=[])
-    parser.add_argument("--build-script", type=Path)
+    parser.add_argument("--build-script-program", type=Path)
     parser.add_argument("--program", type=Path)
     args = parser.parse_args()
     if args.command == "compile":
         if not args.crate_root or not args.kind:
             parser.error("compile requires --crate-root and --kind")
-        if args.kind == "rlib" and not args.metadata_output:
-            parser.error("rlib compilation requires --metadata-output")
+        if args.kind == "rlib" and (not args.metadata_output or not args.build_info_output):
+            parser.error("rlib compilation requires --metadata-output and --build-info-output")
         compile_crate(args)
     else:
         if not args.program:

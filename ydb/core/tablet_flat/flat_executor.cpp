@@ -376,8 +376,7 @@ void TExecutor::CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&
 }
 
 void TExecutor::SendReassignYellowChannels(const TVector<ui32> &yellowChannels) {
-    Y_ASSERT(yellowChannels);
-    if (Owner->ReassignChannelsEnabled()) {
+    if (Owner->ReassignChannelsEnabled() && !yellowChannels.empty()) {
         auto* info = Owner->Info();
         if (Y_LIKELY(info) && info->HiveId) {
             if (auto logl = Logger->Log(ELnLev::Notice)) {
@@ -2780,6 +2779,17 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
         for (auto &attached : env.AttachedParts) {
             const ui32 attachTableId = attached.TableId;
             auto &result = attached.Result;
+
+            if (result->Parts.empty()) {
+                // An empty writer has no blobs to attach or protect until commit.
+                // Leave the table's epoch and redo log intact, and do not persist
+                // a part switch without any introduced parts.
+                ReleaseWritePart(result->Step);
+                if (result->YellowMoveChannels || result->YellowStopChannels) {
+                    CheckYellow(std::move(result->YellowMoveChannels), std::move(result->YellowStopChannels));
+                }
+                continue;
+            }
 
             // Place the part at the table's current head epoch and advance the
             // head above it, so it merges below the (new) mutable memtable. For

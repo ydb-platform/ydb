@@ -4133,6 +4133,9 @@ void TDataShard::CheckChangesQueueNoOverflow(ui64 cookie) {
 }
 
 void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
+    // Unrelated executor commits may update yellow-stop flags without notifying
+    // the shard. Stop active direct imports on the next periodic check as well.
+    AbortDirectImportsForSpace();
     UpdateLagCounters(ctx);
     UpdateChangeExchangeLag(ctx.Now());
     UpdateTableStats(ctx);

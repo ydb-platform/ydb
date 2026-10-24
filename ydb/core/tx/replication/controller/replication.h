@@ -46,6 +46,7 @@ public:
         Done,
         Removing,
         Paused,
+        Attaching,
         Error = Max<ui8>()
     };
 
@@ -88,8 +89,13 @@ public:
         virtual EDstState GetDstState() const = 0;
         virtual void SetDstState(const EDstState value) = 0;
 
+        virtual bool IsExpectedDstCreator(const TActorId& actorId) const = 0;
+        virtual bool IsExpectedDstAlterer(const TActorId& actorId) const = 0;
+
         virtual const TPathId& GetDstPathId() const = 0;
         virtual void SetDstPathId(const TPathId& value) = 0;
+        virtual const TPathId& GetPendingDstPathId() const = 0;
+        virtual void SetPendingDstPathId(const TPathId& value) = 0;
 
         virtual const TString& GetStreamName() const = 0;
         virtual void SetStreamName(const TString& value) = 0;
@@ -99,6 +105,7 @@ public:
 
         virtual EStreamState GetStreamState() const = 0;
         virtual void SetStreamState(EStreamState value) = 0;
+        virtual bool IsExpectedStreamCreator(const TActorId& actorId) const = 0;
 
         virtual const TString& GetIssue() const = 0;
         virtual void SetIssue(const TString& value) = 0;
@@ -142,7 +149,11 @@ public:
     const ITarget* FindTarget(ui64 id) const;
     ITarget* FindTarget(ui64 id);
     void RemoveTarget(ui64 id);
+    TVector<ITarget*> GetTargets() const;
     const TVector<TString>& GetTargetTablePaths() const;
+
+    bool IsExpectedTargetDiscoverer(const TActorId& actorId) const;
+    void FinishTargetDiscovery();
 
     void Progress(const TActorContext& ctx);
     void Shutdown(const TActorContext& ctx);
@@ -150,6 +161,8 @@ public:
     ui64 GetId() const;
     const TPathId& GetPathId() const;
     const TActorId& GetYdbProxy() const;
+    void AddTargetDescriber(const TActorId& actorId);
+    void RemoveTargetDescriber(const TActorId& actorId);
     ui64 GetSchemeShardId() const;
     void SetConfig(NKikimrReplication::TReplicationConfig&& config);
     void SetLocation(const NKikimrReplication::TReplicationLocationConfig& location);
@@ -167,9 +180,10 @@ public:
     ui64 GetNextTargetId() const;
 
     void UpdateSecret(const TString& secretValue);
-    ui64 GetExpectedSecretResolverCookie() const;
+    bool IsExpectedSecretResolver(const TActorId& actorId, ui64 cookie) const;
 
     void UpdateResourceId(const TString& value);
+    bool IsExpectedResourceIdResolver(const TActorId& actorId) const;
 
     void SetDatabase(const TString& value);
     const TString& GetDatabase() const;

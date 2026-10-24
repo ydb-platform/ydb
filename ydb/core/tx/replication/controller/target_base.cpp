@@ -14,6 +14,15 @@ using ETargetKind = TReplication::ETargetKind;
 using EDstState = TReplication::EDstState;
 using EStreamState = TReplication::EStreamState;
 
+namespace {
+
+bool ShouldWaitForAttachment(const TReplication* replication) {
+    return !replication->GetConfig().GetInitialScan()
+        && replication->GetDesiredState() == TReplication::EState::Paused;
+}
+
+} // anonymous namespace
+
 TTargetBase::TConfigBase::TConfigBase(ETargetKind kind, const TString& srcPath, const TString& dstPath)
     : Kind(kind)
     , SrcPath(srcPath)
@@ -74,6 +83,7 @@ void TTargetBase::SetDstState(const EDstState value) {
     DstState = value;
     switch (DstState) {
     case EDstState::Alter:
+    case EDstState::Attaching:
         Replication->AddPendingAlterTarget(Id);
         break;
     default:
@@ -81,7 +91,7 @@ void TTargetBase::SetDstState(const EDstState value) {
         break;
     }
 
-    if (DstState != EDstState::Creating) {
+    if (DstState != EDstState::Creating && DstState != EDstState::Attaching) {
         Reset(DstCreator);
     }
     if (DstState != EDstState::Ready) {
@@ -102,8 +112,24 @@ const TPathId& TTargetBase::GetDstPathId() const {
     return DstPathId;
 }
 
+bool TTargetBase::IsExpectedDstCreator(const TActorId& actorId) const {
+    return DstCreator && DstCreator == actorId;
+}
+
+bool TTargetBase::IsExpectedDstAlterer(const TActorId& actorId) const {
+    return DstAlterer && DstAlterer == actorId;
+}
+
 void TTargetBase::SetDstPathId(const TPathId& value) {
     DstPathId = value;
+}
+
+const TPathId& TTargetBase::GetPendingDstPathId() const {
+    return PendingDstPathId;
+}
+
+void TTargetBase::SetPendingDstPathId(const TPathId& value) {
+    PendingDstPathId = value;
 }
 
 const TString& TTargetBase::GetStreamName() const {
@@ -195,24 +221,46 @@ const std::optional<TDuration> TTargetBase::GetLag() const {
 void TTargetBase::Progress(const TActorContext& ctx) {
     switch (DstState) {
     case EDstState::Creating:
+        if (!DstCreator && !ShouldWaitForAttachment(Replication)) {
+            DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
+        }
+        break;
+    case EDstState::Attaching:
         if (!DstCreator) {
             DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
         }
-        break;
-    case EDstState::Ready:
-        if (!WorkerRegistar) {
-            WorkerRegistar = ctx.Register(CreateWorkerRegistar(ctx));
+        if (Replication->GetDesiredState() == TReplication::EState::Done
+            || Replication->GetState() == TReplication::EState::Removing)
+        {
+            // Targets with a stream reach destination progress only after its
+            // removal, so DROP can now finish attachment reconciliation locally.
+            ctx.Send(DstCreator, new TEvPrivate::TEvCompleteDstAttachment());
         }
         break;
-    case EDstState::Alter:
+    case EDstState::Ready:
+        if (WorkerRegistar && WorkerRegistarProxy != Replication->GetYdbProxy()) {
+            // Registration also captures connection settings for the workers.
+            // Restart this read-only actor so both its proxy and settings refresh.
+            Reset(WorkerRegistar);
+        }
+        if (Replication->GetState() == TReplication::EState::Ready && !WorkerRegistar) {
+            WorkerRegistar = ctx.Register(CreateWorkerRegistar(ctx));
+            WorkerRegistarProxy = Replication->GetYdbProxy();
+        }
+        break;
+    case EDstState::Alter: {
+        const bool needsCreator = !DstCreator && !DstPathId;
+        const bool canAttach = !ShouldWaitForAttachment(Replication)
+            && Replication->GetDesiredState() != TReplication::EState::Done;
         if (Workers) {
             RemoveWorkers(ctx);
-        } else if (!DstCreator && !DstPathId) {
+        } else if (needsCreator && canAttach) {
             DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
-        } else if (!DstAlterer) {
+        } else if (!DstCreator && !DstAlterer) {
             DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
         }
         break;
+    }
     case EDstState::Done:
         break;
     case EDstState::Removing:
@@ -226,6 +274,12 @@ void TTargetBase::Progress(const TActorContext& ctx) {
         break;
     case EDstState::Error:
         break;
+    }
+
+    if (DstCreator && Replication->GetYdbProxy()) {
+        // ALTER can replace the source proxy while an attachment creator is
+        // retained to reconcile local DDL that may already have been submitted.
+        ctx.Send(DstCreator, new TEvPrivate::TEvUpdateYdbProxy(Replication->GetYdbProxy()));
     }
 }
 

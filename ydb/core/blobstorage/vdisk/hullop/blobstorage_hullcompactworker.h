@@ -572,6 +572,7 @@ namespace NKikimr {
             ChunkReservePending = 0;
 
             // add newly allocated chunks to reserved chunks set
+            PDiskCtx->ChunkNonces->Record(msg->ChunkIds, msg->ChunkNonces);
             ReservedChunks.insert(ReservedChunks.end(), msg->ChunkIds.begin(), msg->ChunkIds.end());
             AllocatedChunks.insert(AllocatedChunks.end(), msg->ChunkIds.begin(), msg->ChunkIds.end());
         }

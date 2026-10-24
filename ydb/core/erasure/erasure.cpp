@@ -77,15 +77,31 @@ struct TErasureParameters {
 };
 
 const TErasureParameters& GetErasureParameters(TErasureType::EErasureSpecies species) {
-    static const std::unordered_map<TErasureType::EErasureSpecies, TErasureParameters> erasureSpeciesParameters{{
-        {TErasureType::EErasureSpecies::ErasureNone,          {TErasureType::ErasureMirror,       1, 0, 1}}
-        ,{TErasureType::EErasureSpecies::Erasure4Plus2Block,  {TErasureType::ErasureParityBlock,  4, 2, 5}}
-        ,{TErasureType::EErasureSpecies::ErasureMirror3dc,    {TErasureType::ErasureMirror,       1, 2, 1}}
-        ,{TErasureType::EErasureSpecies::Erasure4Plus3Block,  {TErasureType::ErasureParityBlock,  4, 3, 5}}
-        ,{TErasureType::EErasureSpecies::Erasure3Plus3Block,  {TErasureType::ErasureParityBlock,  3, 3, 3}}
-        ,{TErasureType::EErasureSpecies::ErasureMirror3of4,   {TErasureType::ErasureMirror,       1, 2, 1}}
-    }};
-    return erasureSpeciesParameters.at(species);
+    static constexpr std::array<TErasureParameters, 6> ErasureParameters = {
+        TErasureParameters{TErasureType::ErasureMirror, 1, 0, 1},
+        TErasureParameters{TErasureType::ErasureParityBlock, 4, 2, 5},
+        TErasureParameters{TErasureType::ErasureMirror, 1, 2, 1},
+        TErasureParameters{TErasureType::ErasureParityBlock, 4, 3, 5},
+        TErasureParameters{TErasureType::ErasureParityBlock, 3, 3, 3},
+        TErasureParameters{TErasureType::ErasureMirror, 1, 2, 1}
+    };
+
+    switch (species) {
+        case TErasureType::EErasureSpecies::ErasureNone:
+            return ErasureParameters[0];
+        case TErasureType::EErasureSpecies::Erasure4Plus2Block:
+            return ErasureParameters[1];
+        case TErasureType::EErasureSpecies::ErasureMirror3dc:
+            return ErasureParameters[2];
+        case TErasureType::EErasureSpecies::Erasure4Plus3Block:
+            return ErasureParameters[3];
+        case TErasureType::EErasureSpecies::Erasure3Plus3Block:
+            return ErasureParameters[4];
+        case TErasureType::EErasureSpecies::ErasureMirror3of4:
+            return ErasureParameters[5];
+    }
+
+    Y_ABORT("Unknown erasure species = %d", static_cast<int>(species));
 }
 
 void PadAndCrcAtTheEnd(char *data, ui64 dataSize, ui64 bufferSize) {

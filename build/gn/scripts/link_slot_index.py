@@ -30,7 +30,8 @@ be written literally in the target's block (a condition around it is not
 looked at), and a target created by a template with a computed name is
 skipped.
 
-Usage: link_slot_index.py <source root> <gn binary>
+Usage: link_slot_index.py <source root> <gn binary> [<build dir>]
+(a build dir inside the source root is not scanned)
 Prints a gn scope (for exec_script(..., "scope")):
 
     providers = [ { slot = "..."  value = "..."  labels = [ ... ] }, ... ]
@@ -46,11 +47,29 @@ INTERFACE_KEY = "link_slot_interface"
 BUILD_FILE = "BUILD.gn"
 
 
-def build_files(root):
+def build_dir_under(root, build_dir):
+    """build_dir as os.walk(root) spells it, or None if it is not inside root."""
+    if not build_dir:
+        return None
+    rel = os.path.relpath(os.path.realpath(build_dir), os.path.realpath(root))
+    if rel == os.curdir or rel == os.pardir or rel.startswith(os.pardir + os.sep):
+        return None
+    return os.path.normpath(os.path.join(root, rel))
+
+
+def walk(root, build_dir=None):
+    """os.walk(root) in sorted order, without the dot dirs and build_dir."""
+    skip = build_dir_under(root, build_dir)
+    for d, dirs, files in os.walk(root):
+        dirs[:] = sorted(x for x in dirs
+                         if not x.startswith(".") and os.path.normpath(os.path.join(d, x)) != skip)
+        yield d, dirs, files
+
+
+def build_files(root, build_dir=None):
     """Repo-relative BUILD.gn files that mention KEY or INTERFACE_KEY at all."""
     out = []
-    for d, dirs, files in os.walk(root):
-        dirs[:] = sorted(x for x in dirs if not x.startswith("."))
+    for d, dirs, files in walk(root, build_dir):
         if BUILD_FILE not in files:
             continue
         path = os.path.join(d, BUILD_FILE)
@@ -140,11 +159,11 @@ def label(file, name):
     return "//%s" % d if name == os.path.basename(d) else "//%s:%s" % (d, name)
 
 
-def index(root, gn):
+def index(root, gn, build_dir=None):
     """({(slot, value): [provider label, ...]}, {slot: [interface label, ...]})
     of the BUILD.gn files under root."""
     providers, interfaces = {}, {}
-    for file, tree in dump_trees(root, gn, build_files(root)):
+    for file, tree in dump_trees(root, gn, build_files(root, build_dir)):
         for name, block in _targets(tree):
             try:
                 provides = _assigned(block, KEY)
@@ -170,7 +189,8 @@ def _gn_string(s):
 
 def main():
     root, gn = sys.argv[1], sys.argv[2]
-    providers, interfaces = index(root, gn)
+    build_dir = sys.argv[3] if len(sys.argv) > 3 else None
+    providers, interfaces = index(root, gn, build_dir)
     orphans = sorted({slot for slot, _ in providers} - set(interfaces))
     if orphans:
         sys.exit("link_slot_index: link slots with providers and no interface (a target with "

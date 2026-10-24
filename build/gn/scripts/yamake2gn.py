@@ -2312,15 +2312,28 @@ ALLOCATOR_SLOT = "allocator"
 
 _slot_index = {}
 
+# --build-dir as os.walk(root) spells it, if it is inside the tree: not scanned
+_build_dir = None
+
+
+def _lsi():
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import link_slot_index
+    return link_slot_index
+
+
+def _prune_build_dir(cur, dirs):
+    """Drops --build-dir from the dirs of os.walk at cur."""
+    if _build_dir:
+        dirs[:] = [x for x in dirs if os.path.normpath(os.path.join(cur, x)) != _build_dir]
+
 
 def _link_slot_index(root):
     """({(slot, value): [provider label, ...]}, {slot: [interface label, ...]})
     of the BUILD.gn files of the tree, as `gn gen` reads them
     (build/gn/scripts/link_slot_index.py); scanned once."""
     if root not in _slot_index:
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        import link_slot_index
-        _slot_index[root] = link_slot_index.index(root, "gn")
+        _slot_index[root] = _lsi().index(root, "gn", _build_dir)
     return _slot_index[root]
 
 
@@ -3992,6 +4005,7 @@ class Report:
 
 def find_yamakes(root, start):
     for cur, dirs, files in os.walk(start):
+        _prune_build_dir(cur, dirs)
         rel = os.path.relpath(cur, root)
         parts = rel.split(os.sep)
         if parts[0] == "contrib":
@@ -4017,6 +4031,7 @@ VARIANT_GNI = "variant.gni"     # the family's template, hand-written
 def find_variant_incs(root, starts):
     for start in starts:
         for cur, dirs, files in os.walk(os.path.join(root, start)):
+            _prune_build_dir(cur, dirs)
             rel = os.path.relpath(cur, root)
             if rel.split(os.sep)[0] == "contrib":
                 dirs[:] = []
@@ -4392,6 +4407,7 @@ def orphan_buildgns(args, root, rendered):
     out = set()
     for top in tops:
         for dp, dn, fn in os.walk(os.path.join(root, top)):
+            _prune_build_dir(dp, dn)
             rel = os.path.relpath(dp, root)
             if rel == ".":
                 dn[:] = [n for n in dn if n not in ORPHAN_SCAN_SKIP and not n.startswith(".")]
@@ -4471,6 +4487,9 @@ def main():
                          "what is no root (aggregators, see top_targets) and labels of no "
                          "target; without it the groups only grow")
     ap.add_argument("--root", default=os.getcwd())
+    ap.add_argument("--build-dir",
+                    help="a build dir: if it is inside the tree, it is not scanned "
+                         "(the same for the scripts of `gn gen`)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--no-format", action="store_true")
     ap.add_argument("--problems-only", action="store_true",
@@ -4479,6 +4498,8 @@ def main():
                          "the unresolved includes nor the PEERDIR vs derived diff")
     args = ap.parse_args()
     root = os.path.abspath(args.root)
+    global _build_dir
+    _build_dir = _lsi().build_dir_under(root, args.build_dir)
     if args.as_target and not args.paths:
         ap.error("--as-target requires at least one path")
     if args.recurse and not args.as_target:

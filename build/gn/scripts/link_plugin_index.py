@@ -21,7 +21,8 @@ written literally in the target's block; a label with $-expansions, a target
 created by a template with a computed name and the deps a template adds on
 its own (the default ones) are not seen.
 
-Usage: link_plugin_index.py <source root> <gn binary>
+Usage: link_plugin_index.py <source root> <gn binary> [<build dir>]
+(a build dir inside the source root is not scanned)
 Prints a gn scope (for exec_script(..., "scope")):
 
     executables = [ { label = "//dir:name"  plugins = [ ... ] }, ... ]
@@ -39,10 +40,9 @@ TESTING = "build/gn/testing.gni"   # the templates of tests, executables too
 DEP_KEYS = ("deps", "public_deps")
 
 
-def all_build_files(root):
+def all_build_files(root, build_dir=None):
     out = []
-    for d, dirs, files in os.walk(root):
-        dirs[:] = sorted(x for x in dirs if not x.startswith("."))
+    for d, dirs, files in lsi.walk(root, build_dir):
         if lsi.BUILD_FILE in files:
             out.append(os.path.relpath(os.path.join(d, lsi.BUILD_FILE), root))
     return out
@@ -123,8 +123,8 @@ def short(label):
     return "//%s" % d if name == os.path.basename(d) else label
 
 
-def index(root, gn):
-    files = all_build_files(root)
+def index(root, gn, build_dir=None):
+    files = all_build_files(root, build_dir)
     if not mentions_plugins(root, files):
         return {}
     exes = executables(root)
@@ -138,7 +138,7 @@ def index(root, gn):
                 plugins[me] = p
             if func in exes:
                 selects[me] = _strings(block, "link_select")
-    providers = lsi.index(root, gn)[0]
+    providers = lsi.index(root, gn, build_dir)[0]
 
     out = {}
     for exe, select in selects.items():
@@ -164,8 +164,9 @@ def index(root, gn):
 
 def main():
     root, gn = sys.argv[1], sys.argv[2]
+    build_dir = sys.argv[3] if len(sys.argv) > 3 else None
     print("executables = [")
-    for exe, found in sorted(index(root, gn).items()):
+    for exe, found in sorted(index(root, gn, build_dir).items()):
         print("  {\n    label = %s\n    plugins = [ %s ]\n  }," % (
             lsi._gn_string(exe), ", ".join(map(lsi._gn_string, found))))
     print("]")

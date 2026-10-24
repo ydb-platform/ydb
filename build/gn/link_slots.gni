@@ -47,6 +47,7 @@ link_slot_index = exec_script("//build/gn/scripts/link_slot_index.py",
                               [
                                 rebase_path("//"),
                                 link_slot_gn,
+                                rebase_path(root_build_dir),
                               ],
                               "scope")
 
@@ -54,6 +55,7 @@ link_plugin_index = exec_script("//build/gn/scripts/link_plugin_index.py",
                                 [
                                   rebase_path("//"),
                                   link_slot_gn,
+                                  rebase_path(root_build_dir),
                                 ],
                                 "scope",
                                 [ "//build/gn/testing.gni" ])

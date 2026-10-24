@@ -27,14 +27,14 @@ config("_avx512_config") {
 
 _src_root = string_replace(string_replace(rebase_path("//.", root_build_dir) + "/", "/./", "/"), "//", "/")
 _gen_root = string_replace(rebase_path(root_gen_dir, root_build_dir) + "/", "//", "/")
+_abs_src_root = string_replace(string_replace(rebase_path("//.") + "/", "/./", "/"), "//", "/")
 
 config("path_prefix_map") {
     cflags = [
-        "-fmacro-prefix-map=${_src_root}=",
-        "-fmacro-prefix-map=${_gen_root}=",
+        "-ffile-prefix-map=${_abs_src_root}=",
+        "-ffile-prefix-map=${_src_root}=",
+        "-ffile-prefix-map=${_gen_root}=",
         "-fdebug-compilation-dir=.",
-        "-fdebug-prefix-map=${_src_root}=",
-        "-fdebug-prefix-map=${_gen_root}=",
     ]
 }
 
@@ -212,4 +212,8 @@ config("ydb_default_pdisk_sequence_weak") {
         "-include",
         rebase_path("ydb_default_pdisk_sequence_weak.h", root_build_dir),
     ]
+}
+
+if (current_toolchain == default_toolchain) {
+    write_file("$root_build_dir/.gitignore", [ "*" ])
 }

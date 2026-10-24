@@ -4,6 +4,10 @@ template("shared_pch") {
   _object = get_path_info(invoker.source, "out_dir") + "/$_compile." +
             get_path_info(invoker.source, "file") + ".o"
   _pch = "$target_gen_dir/$_name.pch"
+  _pch_root = [
+    "-isysroot",
+    string_replace(string_replace(rebase_path("//.") + "/", "/./", "/"), "//", "/"),
+  ]
 
   config("${_name}_private_config") {
     visibility = [ ":*" ]
@@ -23,7 +27,10 @@ template("shared_pch") {
       "-x",
       "c++-header",
       "-fpch-instantiate-templates",
-    ]
+      "-relocatable-pch",
+      "-Xclang",
+      "-fno-pch-timestamp",
+    ] + _pch_root
     if (defined(invoker.cflags)) {
       cflags = invoker.cflags
     }
@@ -73,7 +80,7 @@ template("shared_pch") {
     cflags_cc = [
       "-include-pch",
       rebase_path(_pch, root_build_dir),
-    ]
+    ] + _pch_root
   }
 
   group(_name) {

@@ -355,4 +355,12 @@ const TVector<TGRpcServer::IGRpcServicePtr>& TGRpcServer::GetServices() const {
     return Services_;
 }
 
+size_t TGRpcServer::RequestsInProgress() const {
+    size_t infly = 0;
+    for (const auto& service : Services_) {
+        infly += service->RequestsInProgress();
+    }
+    return infly;
+}
+
 } // namespace NYdbGrpc

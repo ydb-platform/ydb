@@ -2082,7 +2082,10 @@ Value* GetNodeValue(IComputationNode* node, const TCodegenContext& ctx, BasicBlo
         {ConstantInt::get(Type::getInt64Ty(context), GetMethodIndex(&IComputationNode::GetValue))}, "element", block);
     const auto func = new LoadInst(ptrFunType, elem, "func", /*isVolatile=*/false, block);
 
-    CallInst::Create(funType, func, {retPtr, nodeThis, ctx.Ctx}, "", block);
+    // TUnboxedValue has a non-trivial destructor: this is the C++ hidden result
+    // pointer, not an ordinary first argument (AArch64 passes it in x8).
+    const auto call = CallInst::Create(funType, func, {retPtr, nodeThis, ctx.Ctx}, "", block);
+    call->addParamAttr(0, Attribute::getWithStructRetType(context, Type::getInt128Ty(context)));
 
     ValueRelease(node->GetRepresentation(), retPtr, ctx, block);
     const auto result = new LoadInst(valueType, retPtr, "return", /*isVolatile=*/false, block);
@@ -2115,7 +2118,8 @@ void GetNodeValue(Value* value, IComputationNode* node, const TCodegenContext& c
         {ConstantInt::get(Type::getInt64Ty(context), GetMethodIndex(&IComputationNode::GetValue))}, "element", block);
     const auto func = new LoadInst(ptrFunType, elem, "func", /*isVolatile=*/false, block);
 
-    CallInst::Create(funType, func, {value, nodeThis, ctx.Ctx}, "", block);
+    const auto call = CallInst::Create(funType, func, {value, nodeThis, ctx.Ctx}, "", block);
+    call->addParamAttr(0, Attribute::getWithStructRetType(context, Type::getInt128Ty(context)));
 }
 
 ICodegeneratorInlineWideNode::TGenerateResult GetNodeValues(IComputationWideFlowNode* node,
@@ -2362,7 +2366,8 @@ void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* 
         {ConstantInt::get(Type::getInt64Ty(context), GetMethodPtrIndex(methodPtr))}, "element", block);
     const auto func = new LoadInst(ptrFunType, elem, "func", /*isVolatile=*/false, block);
 
-    CallInst::Create(funType, func, {output, boxed}, "", block);
+    const auto call = CallInst::Create(funType, func, {output, boxed}, "", block);
+    call->addParamAttr(0, Attribute::getWithStructRetType(context, Type::getInt128Ty(context)));
 }
 
 void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* value,
@@ -2385,7 +2390,8 @@ void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* 
         {ConstantInt::get(Type::getInt64Ty(context), GetMethodPtrIndex(methodPtr))}, "element", block);
     const auto func = new LoadInst(ptrFunType, elem, "func", /*isVolatile=*/false, block);
 
-    CallInst::Create(funType, func, {output, boxed, argument}, "", block);
+    const auto call = CallInst::Create(funType, func, {output, boxed, argument}, "", block);
+    call->addParamAttr(0, Attribute::getWithStructRetType(context, Type::getInt128Ty(context)));
 }
 
 Value* CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Type* returnType, Value* value,
@@ -2431,7 +2437,8 @@ void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* 
         {ConstantInt::get(Type::getInt64Ty(context), GetMethodPtrIndex(methodPtr))}, "element", block);
     const auto func = new LoadInst(ptrFunType, elem, "func", /*isVolatile=*/false, block);
 
-    CallInst::Create(funType, func, {output, boxed, arg1, arg2}, "", block);
+    const auto call = CallInst::Create(funType, func, {output, boxed, arg1, arg2}, "", block);
+    call->addParamAttr(0, Attribute::getWithStructRetType(context, Type::getInt128Ty(context)));
 }
 
 Value* CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Type* returnType, Value* value,

@@ -1,4 +1,5 @@
 #include "codegen.h"
+#include "codegen_target.h"
 Y_PRAGMA_DIAGNOSTIC_PUSH
 Y_PRAGMA("GCC diagnostic ignored \"-Wbitwise-instead-of-logical\"")
 #include "codegen_llvm_deps.h" // Y_IGNORE
@@ -221,10 +222,22 @@ void FatalErrorHandler(void* user_data, const char* reason, bool gen_crash_diag)
 
 struct TCodegenInit {
     TCodegenInit() {
-        llvm::InitializeNativeTarget();
-        llvm::InitializeNativeTargetAsmPrinter();
-        llvm::InitializeNativeTargetAsmParser();
-        llvm::InitializeNativeTargetDisassembler();
+        // Explicit OS targets retain their x86 backend. Do not rely on LLVM's
+        // configured native target: its Darwin configuration may still be x86.
+        LLVMInitializeX86TargetInfo();
+        LLVMInitializeX86Target();
+        LLVMInitializeX86TargetMC();
+        LLVMInitializeX86AsmPrinter();
+        LLVMInitializeX86AsmParser();
+        LLVMInitializeX86Disassembler();
+#if defined(__aarch64__) || defined(_M_ARM64)
+        LLVMInitializeAArch64TargetInfo();
+        LLVMInitializeAArch64Target();
+        LLVMInitializeAArch64TargetMC();
+        LLVMInitializeAArch64AsmPrinter();
+        LLVMInitializeAArch64AsmParser();
+        LLVMInitializeAArch64Disassembler();
+#endif
         llvm::install_fatal_error_handler(&FatalErrorHandler, /*user_data=*/nullptr);
     }
 };
@@ -243,6 +256,20 @@ uintptr_t AsanGlobalsAnchor;
 
 bool ICodegen::IsCodegenAvailable() {
     return true;
+}
+
+void NPrivate::ConfigureNativeTarget(llvm::EngineBuilder& builder, const llvm::Triple& triple,
+                                     const std::string& hostCpu, const std::vector<std::string>& hostFeatures)
+{
+    if (triple.isAArch64() && triple.isOSLinux()) {
+        // CPU models can imply optional instructions absent from the actual SoC:
+        // LLVM's cortex-a72 enables crypto, while Raspberry Pi 4 lacks it.
+        // Start with ARMv8-A and add only extensions reported by the OS.
+        builder.setMCPU("generic");
+        builder.setMAttrs(hostFeatures);
+    } else {
+        builder.setMCPU(hostCpu);
+    }
 }
 
 class TCodegen: public ICodegen, private llvm::JITEventListener {
@@ -295,6 +322,13 @@ public:
                 ythrow yexception() << "Failed to select target";
         }
 
+#if defined(__aarch64__) || defined(_M_ARM64)
+        if (Target_ == ETarget::Native || Target_ == ETarget::CurrentOS) {
+            llvm::Triple hostTriple(triple);
+            hostTriple.setArch(llvm::Triple::aarch64);
+            triple = hostTriple.str();
+        }
+#endif
         Triple_ = llvm::Triple::normalize(triple);
         Module_->setTargetTriple(Triple_);
         Module_->addModuleFlag(llvm::Module::Warning, "Dwarf Version", llvm::dwarf::DWARF_VERSION);
@@ -311,8 +345,18 @@ public:
             .setTargetOptions(targetOptions);
 
         if (Target_ == ETarget::Native) {
-            auto hostCpu = llvm::sys::getHostCPUName();
-            engineBuilder.setMCPU(hostCpu);
+            std::vector<std::string> hostFeatures;
+            const llvm::Triple nativeTriple(Triple_);
+            if (nativeTriple.isAArch64() && nativeTriple.isOSLinux()) {
+                llvm::StringMap<bool> features;
+                if (llvm::sys::getHostCPUFeatures(features)) {
+                    for (const auto& feature : features) {
+                        hostFeatures.push_back(std::string(feature.second ? "+" : "-") + feature.first().str());
+                    }
+                }
+            }
+            NPrivate::ConfigureNativeTarget(engineBuilder, nativeTriple,
+                                            llvm::sys::getHostCPUName().str(), hostFeatures);
         }
 
         Engine_.reset(engineBuilder.create());
@@ -433,8 +477,15 @@ public:
         AddGlobalMapping("__umodti3", (const void*)&__umodti3);
 
         for (auto& function : Module_->getFunctionList()) {
-            function.addFnAttr("target-cpu", "x86-64");
-            function.addFnAttr("target-features", "+sse,+sse2");
+            if (llvm::Triple(Triple_).isX86()) {
+                function.addFnAttr("target-cpu", "x86-64");
+                function.addFnAttr("target-features", "+sse,+sse2");
+            } else {
+                // Loaded bitcode can carry attributes from another target.
+                // Use the execution engine's CPU and features on ARM.
+                function.removeFnAttr("target-cpu");
+                function.removeFnAttr("target-features");
+            }
         }
 
         if (dumpTimers) {
@@ -662,7 +713,10 @@ public:
 
     void AddGlobalMapping(TStringBuf name, const void* address) override {
         ReverseGlobalMapping_[address] = TString(name);
-        Engine_->updateGlobalMapping(llvm::StringRef(name.data(), name.size()), (uint64_t)address);
+        std::string mangledName;
+        llvm::raw_string_ostream stream(mangledName);
+        llvm::Mangler::getNameWithPrefix(stream, llvm::StringRef(name.data(), name.size()), Engine_->getDataLayout());
+        Engine_->updateGlobalMapping(mangledName, (uint64_t)address);
     }
 
     void notifyObjectLoaded(ObjectKey key, const llvm::object::ObjectFile& obj,

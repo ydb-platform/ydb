@@ -2,6 +2,7 @@
 
 #include "lightweight_schema.h"
 
+#include <ydb/core/change_exchange/binary_cdc.h>
 #include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
@@ -33,6 +34,12 @@ public:
 
     bool IsValidJson(TString& error) const;
 
+    // Binary row changes are checked before they are applied. A malformed
+    // record returns false so the worker stops with an error. Serialize() and
+    // GetKey() still abort if this check was skipped: that is an internal miss,
+    // not a way to handle a bad payload.
+    bool CheckData(TString& error) const;
+
     void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record, TMemoryPool& pool) const;
 
     TConstArrayRef<TCell> GetKey(TMemoryPool& pool) const;
@@ -47,17 +54,31 @@ public:
     bool TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema, TString& error) const;
 
 private:
+    void ClassifyBody(TStringBuf body);
+    bool EnsureBinaryCells(TString& error) const;
+
     NJson::TJsonValue JsonBody;
     bool JsonParsed = false;
     TString JsonError;
     TLightweightSchema::TCPtr Schema;
     ui64 WriteTxId = 0;
+    bool IsBinary = false;
+    NChangeExchange::TBinaryCdcHeader BinaryHeader;
 
+    mutable bool BinaryReady = false;
+    mutable TString BinaryError;
+    mutable NChangeExchange::EBinaryCdcOp BinaryOp = NChangeExchange::EBinaryCdcOp::None;
+    mutable TVector<TCell> BinaryKeys;
+    mutable TVector<ui16> BinaryValueIndexes;
+    mutable TVector<TCell> BinaryValues;
+    mutable TVector<NTable::TTag> BinaryDestTags;
     mutable TMaybe<TOwnedCellVec> Key;
 
 }; // TChangeRecord
 
 class TChangeRecordBuilder: public NChangeExchange::TChangeRecordBuilder<TChangeRecord, TChangeRecordBuilder> {
+    friend class TChangeRecord;
+
 public:
     using TBase::TBase;
 
@@ -69,7 +90,7 @@ public:
     template <typename T>
     TSelf& WithBody(T&& body) {
         auto* record = GetRecord();
-        record->JsonParsed = ParseJsonBody(body, record->JsonBody, record->JsonError);
+        record->ClassifyBody(body);
         return static_cast<TBase*>(this)->WithBody(std::forward<T>(body));
     }
 

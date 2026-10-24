@@ -177,8 +177,12 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         SessionAcquisitionFailure(Ydb::StatusIds::UNAUTHORIZED);
     }
 
-    void Basic(const std::optional<TDuration>& resolvedTimestamps = {}) {
-        TEnv env;
+    void Basic(const std::optional<TDuration>& resolvedTimestamps = {}, bool binaryFormat = false) {
+        TFeatureFlags flags;
+        if (binaryFormat) {
+            flags.FeatureFlags.SetEnableBinaryChangefeedForAsyncReplication(true);
+        }
+        TEnv env(flags);
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         const auto tableDesc = TTestTableDescription{
@@ -206,7 +210,8 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         env.GetRuntime().Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1 /* rid */, 1 /* tid */,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-            "Stream", "replicationConsumer", TDuration::Hours(1), resolvedTimestamps
+            "Stream", "replicationConsumer", TDuration::Hours(1), resolvedTimestamps,
+            false, true, false, true, false, binaryFormat
         ));
         {
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
@@ -225,7 +230,9 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
         const auto& stream = streams.at(0);
         UNIT_ASSERT_VALUES_EQUAL(stream.GetMode(), NKikimrSchemeOp::ECdcStreamModeUpdate);
-        UNIT_ASSERT_VALUES_EQUAL(stream.GetFormat(), NKikimrSchemeOp::ECdcStreamFormatJson);
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetFormat(), binaryFormat
+            ? NKikimrSchemeOp::ECdcStreamFormatBinary
+            : NKikimrSchemeOp::ECdcStreamFormatJson);
         UNIT_ASSERT(!stream.GetSchemaChanges());
         UNIT_ASSERT_VALUES_EQUAL(stream.GetVirtualTimestamps(), resolvedTimestamps.has_value());
         UNIT_ASSERT_VALUES_EQUAL(stream.GetResolvedTimestampsIntervalMs(), resolvedTimestamps.value_or(TDuration::Zero()).MilliSeconds());
@@ -233,6 +240,28 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
     Y_UNIT_TEST(Basic) {
         Basic();
+    }
+
+    Y_UNIT_TEST(BinaryFormatWhenEnabled) {
+        Basic({}, true);
+    }
+
+    Y_UNIT_TEST(BinaryFormatRejectedWhenDisabled) {
+        TEnv env;
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+        env.GetRuntime().Register(CreateStreamCreator(
+            env.GetSender(), env.GetYdbProxy(), 1, 1,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
+            false, true, false, true, false, true));
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender());
+        UNIT_ASSERT(!result->Get()->IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Status.GetIssues().ToString(), "BINARY format is not supported yet");
     }
 
     Y_UNIT_TEST(WithResolvedTimestamps) {

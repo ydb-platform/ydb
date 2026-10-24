@@ -1207,6 +1207,17 @@ namespace {
             } else if (name == "initial_scan") {
                 YQL_ENSURE(setting.Value().Maybe<TCoBool>());
                 dstSettings.InitialScan = FromString<bool>(setting.Value().Cast<TCoBool>().Literal().Value());
+            } else if (name == "format") {
+                auto value = to_lower(ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()));
+                if (value == "json") {
+                    dstSettings.ChangefeedFormat = TReplicationSettings::EChangefeedFormat::Json;
+                } else if (value == "binary") {
+                    dstSettings.ChangefeedFormat = TReplicationSettings::EChangefeedFormat::Binary;
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Unknown changefeed format: " << value));
+                    return false;
+                }
             }
         }
 
@@ -3152,6 +3163,8 @@ public:
                                         add_changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
                                     } else if (to_lower(format) == "debezium_json") {
                                         add_changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
+                                    } else if (to_lower(format) == "binary") {
+                                        add_changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_BINARY);
                                     } else {
                                         ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                             TStringBuilder() << "Unknown changefeed format: " << format));

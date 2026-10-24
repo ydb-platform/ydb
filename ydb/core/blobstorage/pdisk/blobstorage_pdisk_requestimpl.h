@@ -450,6 +450,7 @@ public:
     ui64 RemainingSize;
     TCompletionChunkRead *FinalCompletion = nullptr;
     bool ChunkEncrypted = true;
+    bool RawSectors = false; // see TEvChunkRead::RawSectors; read then as a plain chunk would be
     bool IsReplied = false;
 
     ui64 SlackSize;
@@ -473,6 +474,7 @@ public:
         , Cookie(ev.Cookie)
         , BlobId(ev.BlobId)
         , RemainingSize(ev.Size)
+        , RawSectors(ev.RawSectors)
         , SlackSize(Max<ui32>())
         , DoubleFreeCanary(ReferenceCanary)
     {
@@ -565,6 +567,8 @@ public:
     bool IsSeqWrite;
     bool IsReplied = false;
     bool ChunkEncrypted = true;
+    bool PreformattedSectors = false; // see TEvChunkWrite::PreformattedSectors
+    ui64 FirstSectorNonce = 0;
 
     TLogoBlobID BlobId;
 

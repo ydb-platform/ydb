@@ -370,6 +370,10 @@ void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
         auto newBuf = CommonBuffer.SubstrRaw(headroom, CommonBuffer.Size() - headroom);
         CommonBuffer.SetData(std::move(newBuf));
     }
+    if (Read->RawSectors) {
+        result->RawSectors = true;
+        result->ChunkNonce = ChunkNonce;
+    }
     result->Data = std::move(CommonBuffer);
     CommonBuffer.Clear();
     //Y_VERIFY(result->Data.IsDetached());

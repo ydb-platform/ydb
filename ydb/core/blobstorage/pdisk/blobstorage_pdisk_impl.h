@@ -8,6 +8,7 @@
 #include "blobstorage_pdisk_crypto.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_delayed_cost_loop.h"
+#include "blobstorage_pdisk_format_context.h"
 #include "blobstorage_pdisk_drivemodel.h"
 #include "blobstorage_pdisk_free_chunks.h"
 #include "blobstorage_pdisk_gate.h"
@@ -391,6 +392,7 @@ public:
     // Chunk writing
     bool ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize);
     void ChunkWritePiecePlain(TChunkWrite *evChunkWrite);
+    void ChunkWritePiecePreformatted(TChunkWrite *evChunkWrite);
     bool ChunkWritePieceEncrypted(TChunkWrite *evChunkWrite, TChunkWriter &writer, ui32 bytesAvailable);
     void SendChunkWriteError(TChunkWrite &evChunkWrite, const TString &errorReason, NKikimrProto::EReplyStatus status);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -446,6 +448,10 @@ public:
     bool YardInitStart(TYardInit &evYardInit);
     void YardInitFinish(TYardInit &evYardInit);
     ui32 ReleaseUncommittedChunks(TOwner owner);
+    // Format context and chunk nonces for an owner that builds and checks its sectors itself.
+    // StateMutex must be held by the caller.
+    void FillFormatContext(NPDisk::TEvYardInitResult &result);
+    TFormatContextPtr FormatContextCache; // created on first use; the format does not change afterwards
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
     void AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitResult& result);
     void EnsureSharedUringRouter(ui32 idleSpinUs, bool devNullMode);

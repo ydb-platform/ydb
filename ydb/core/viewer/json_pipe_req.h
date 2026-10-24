@@ -358,8 +358,9 @@ protected:
 
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
-    void BuildParamsFromJson(TStringBuf data);
-    void BuildParamsFromFormData(TStringBuf data);
+    TString RestorePath(const TString& path, TStringBuf parameter = "path") const;
+    void BuildParamsFromJson(TStringBuf data, bool pathList = false);
+    void BuildParamsFromFormData(TStringBuf data, bool pathList = false);
     void SetupTracing(const TString& handlerName);
     bool RequireAdminIfForce(bool& force, TStringBuf forceParamName = "force");
     void ApplyForceMode(TEvBlobStorage::TEvControllerConfigRequest& request);

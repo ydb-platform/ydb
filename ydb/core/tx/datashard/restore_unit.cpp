@@ -24,7 +24,7 @@ protected:
         op->ResetWaitingForAsyncJobFlag();
     }
 
-    bool Run(TOperation::TPtr op, TTransactionContext&, const TActorContext& ctx) override {
+    bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
@@ -39,10 +39,16 @@ protected:
         const auto settingsKind = restore.GetSettingsCase();
         switch (settingsKind) {
         case NKikimrSchemeOp::TRestoreTask::kS3Settings:
-        case NKikimrSchemeOp::TRestoreTask::kFSSettings:
+        case NKikimrSchemeOp::TRestoreTask::kFSSettings: {
         #ifndef KIKIMR_DISABLE_S3_OPS
+            // CLI restore can target a non-empty table. Existing rows, including those
+            // from a legacy restore checkpoint, must retain upload/upsert semantics.
+            // Direct part attachment requires no parts or memtable rows;
+            // GetCompactionStats reads these counters synchronously from the table.
+            const auto stats = txc.DB.GetCompactionStats(DataShard.GetUserTables().at(tableId)->LocalTid);
+            const bool directPartImportAllowed = !stats.PartCount && !stats.MemRowCount;
             tx->SetAsyncJobActor(ctx.Register(
-                CreateS3Downloader(DataShard.SelfId(), DataShard.TabletID(), op->GetTxId(), restore, tableInfo),
+                CreateS3Downloader(DataShard.SelfId(), DataShard.TabletID(), op->GetTxId(), restore, tableInfo, directPartImportAllowed),
                 TMailboxType::HTSwap,
                 AppData(ctx)->BatchPoolId));
             break;
@@ -52,6 +58,7 @@ protected:
                 << " are disabled");
             return false;
         #endif
+        }
         default:
             Abort(op, ctx, TStringBuilder() << "Unknown settings: " << static_cast<ui32>(settingsKind));
             return false;
@@ -77,12 +84,16 @@ protected:
         schemeOp->RowsProcessed = result->RowsWritten;
 
         op->SetAsyncJobResult(nullptr);
+        DataShard.CancelS3DirectWrite(op->GetTxId());
         tx->SetAsyncJobActor(TActorId());
 
         return true;
     }
 
     void Cancel(TActiveTransaction* tx, const TActorContext& ctx) override {
+        // The begin reply may still be in flight, so the downloader cannot
+        // always release the reservation itself.
+        DataShard.CancelS3DirectWrite(tx->GetTxId());
         tx->KillAsyncJobActor(ctx);
     }
 

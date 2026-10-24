@@ -329,6 +329,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) const {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
+        PathId.ToProto(replicationConfig.MutableOwner());
     }
 
     void AllocateTxId() {
@@ -493,19 +494,25 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
-            if (InitialScan || AttachmentComplete) {
+            if (CanResumeReplica(desc.GetTable())
+                && (InitialScan || AttachmentComplete
+                    || (!RequireTargetOwnership && !desc.GetTable().GetReplicationConfig().HasOwner())))
+            {
                 return Success();
             }
+            if (InitialScan) {
+                return Error(NKikimrScheme::StatusPreconditionFailed, "Existing table is not owned by this replication");
+            }
 
+            // SchemeShard atomically decides whether a previous owner is gone.
+            // Describing a read-only table alone does not establish ownership.
             // Readonly metadata is published before destination shards finish
             // the ALTER. A recovered/uncertain attachment needs a serialized
             // replacement ALTER and its completion, even if mode already matches.
             Attaching = true;
             NeedToCheck = true;
-            if (PendingDstPathId) {
-                return AllocateTxId();
-            }
-            // The controller must persist this path before SchemeShard may alter it.
+            // A saved path may belong to a failed attempt. Persist Attaching again
+            // so DONE and DROP wait for this ALTER too.
             PendingDstPathId = DstPathId;
             Send(Parent, new TEvPrivate::TEvPrepareAttachDst(ReplicationId, TargetId, DstPathId));
             return Become(&TThis::StateWaitForPrepareAttachDstResult);
@@ -550,6 +557,14 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
+    }
+
+    bool CanResumeReplica(const NKikimrSchemeOp::TTableDescription& table) const {
+        const auto& config = table.GetReplicationConfig();
+        // Only replications persisted before ownership validation may resume
+        // ownerless tables. Leave those tables unclaimed by new replications.
+        return IsReplica(table) && (config.HasOwner()
+            ? TPathId::FromProto(config.GetOwner()) == PathId : !RequireTargetOwnership);
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
@@ -799,6 +814,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return;
         }
 
+        if (Kind == TReplication::ETargetKind::IndexTable && !CanResumeReplica(desc.GetPathDescription().GetTable())) {
+            return Error(NKikimrScheme::StatusPreconditionFailed, "Index table is not owned by this replication");
+        }
         DstPathId = ev->Get()->PathId;
         return Success();
     }
@@ -920,7 +938,8 @@ public:
             const TString& database,
             bool initialScan,
             const TPathId& pendingDstPathId,
-            bool cleanup)
+            bool cleanup,
+            bool requireTargetOwnership)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -934,6 +953,7 @@ public:
         , Consistency(consistency)
         , InitialScan(initialScan)
         , Cleanup(cleanup)
+        , RequireTargetOwnership(requireTargetOwnership)
         , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
         , PendingDstPathId(pendingDstPathId)
@@ -987,6 +1007,7 @@ private:
     const EConsistencyLevel Consistency;
     const bool InitialScan;
     bool Cleanup;
+    const bool RequireTargetOwnership;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TPathId DomainKey;
@@ -1077,17 +1098,17 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
         replication->GetConfig().GetInitialScan(),
         target->GetPendingDstPathId(),
         replication->GetDesiredState() == TReplication::EState::Done
-            || replication->GetState() == TReplication::EState::Removing);
+            || replication->GetState() == TReplication::EState::Removing,
+        replication->GetConfig().GetRequireTargetOwnership());
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         const TString& database, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
         EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
-        const TPathId& pendingDstPathId,
-        bool cleanup)
+        const TPathId& pendingDstPathId, bool cleanup, bool requireTargetOwnership)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, pendingDstPathId, cleanup);
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, pendingDstPathId, cleanup, requireTargetOwnership);
 }
 
 }

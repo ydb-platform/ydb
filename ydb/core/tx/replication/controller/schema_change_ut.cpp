@@ -2,6 +2,7 @@
 #include "controller.h"
 #include "dst_alterer.h"
 #include "dst_creator.h"
+#include "dst_remover.h"
 #include "dst_schema_changer.h"
 #include "stream_creator.h"
 #include "stream_remover.h"
@@ -208,12 +209,16 @@ private:
     TVector<TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr> PendingRequests;
 };
 
-class TSchemaDescribeGate: public TActorBootstrapped<TSchemaDescribeGate> {
+class TSchemaRequestGate: public TActorBootstrapped<TSchemaRequestGate> {
 public:
-    TSchemaDescribeGate(const TActorId& pipeCache, const TActorId& notify, TPathId pathId)
+    enum class ERequest { Describe, Attach };
+
+    TSchemaRequestGate(const TActorId& pipeCache, const TActorId& notify, TPathId pathId,
+            ERequest request = ERequest::Describe)
         : PipeCache(pipeCache)
         , Notify(notify)
         , PathId(pathId)
+        , Request(request)
     {
     }
 
@@ -226,13 +231,21 @@ public:
 
 private:
     void Handle(TEvPipeCache::TEvForward::TPtr& ev) {
-        if (ev->Get()->Ev->Type() == NSchemeShard::TEvSchemeShard::TEvDescribeScheme::EventType) {
+        bool matchesPath = false;
+        if (Request == ERequest::Describe && ev->Get()->Ev->Type() == NSchemeShard::TEvSchemeShard::TEvDescribeScheme::EventType) {
             const auto& record = static_cast<NSchemeShard::TEvSchemeShard::TEvDescribeScheme*>(ev->Get()->Ev.Get())->Record;
-            if (record.GetSchemeshardId() == PathId.OwnerId && record.GetPathId() == PathId.LocalPathId) {
-                Pending.push_back(std::move(ev));
-                Send(Notify, new TEvents::TEvWakeup(Blocked));
-                return;
+            matchesPath = record.GetSchemeshardId() == PathId.OwnerId && record.GetPathId() == PathId.LocalPathId;
+        } else if (Request == ERequest::Attach && ev->Get()->Ev->Type() == NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType) {
+            const auto& record = static_cast<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction*>(ev->Get()->Ev.Get())->Record;
+            if (record.TransactionSize() == 1) {
+                const auto& alter = record.GetTransaction(0).GetAlterTable();
+                matchesPath = alter.GetReplicationConfig().HasOwner() && TPathId::FromProto(alter.GetPathId()) == PathId;
             }
+        }
+        if (matchesPath) {
+            Pending.push_back(std::move(ev));
+            Send(Notify, new TEvents::TEvWakeup(Blocked));
+            return;
         }
 
         Send(ev->Forward(PipeCache));
@@ -259,6 +272,7 @@ private:
     const TActorId PipeCache;
     const TActorId Notify;
     const TPathId PathId;
+    const ERequest Request;
     TVector<TEvPipeCache::TEvForward::TPtr> Pending;
 };
 
@@ -1376,6 +1390,34 @@ void AssertIndexCancellationCleanedUp(TIndexBuildTestEnv& env) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(ReplicationCreation) {
+    Y_UNIT_TEST(TargetOwnershipValidationSurvivesRestartAndAlter) {
+        TTestEnv env;
+        const auto info = StartReplication(env, 1, "root@builtin", false, false,
+            NKikimrSchemeOp::EIndexTypeGlobal, true, false);
+
+        auto checkConfig = [&] {
+            NKikimrMiniKQL::TResult result;
+            UNIT_ASSERT_VALUES_EQUAL(LocalQuery(env.GetRuntime(), info.ControllerId, R"((
+                (let key '('('Id (Uint64 '1))))
+                (return (AsList (SetResult 'Config (SelectRow 'Replications key '('Config)))))
+            ))", result), NKikimrProto::OK);
+            const auto& row = result.GetValue().GetStruct(0).GetOptional();
+            UNIT_ASSERT_C(row.HasOptional(), result.DebugString());
+            NKikimrReplication::TReplicationConfig config;
+            UNIT_ASSERT(config.ParseFromString(row.GetOptional().GetStruct(0).GetOptional().GetBytes()));
+            UNIT_ASSERT(config.GetRequireTargetOwnership());
+        };
+        checkConfig();
+        RestartController(env, info.ControllerId);
+        // The config received from SchemeShard has no controller-local marker.
+        UNIT_ASSERT(!info.Config.HasRequireTargetOwnership());
+        RequestConfigUpdate(env, info, 100);
+        checkConfig();
+        RestartController(env, info.ControllerId);
+        RequestConfigUpdate(env, info, 101);
+        checkConfig();
+    }
+
     Y_UNIT_TEST(InitialScanDisabledDoesNotTouchMissingDestination) {
         TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
@@ -3806,6 +3848,128 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, dstPathId);
     }
 
+    void CheckCleanupStatus(bool success, bool alter, bool detach = false) {
+        TTestActorRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        const auto parent = runtime.AllocateEdgeActor();
+        const auto allocator = runtime.AllocateEdgeActor();
+        const auto pipeCache = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeTxProxyID(), allocator);
+        const TPathId pathId(1, 2);
+        const TPathId owner(1, 3);
+        const auto actor = runtime.Register(alter
+            ? CreateDstAlterer(parent, pathId.OwnerId, 1, 1,
+                TReplication::ETargetKind::Table, pathId, TReplication::EState::Done, owner)
+            : CreateDstRemover(parent, pathId.OwnerId, {}, 1, 1,
+                TReplication::ETargetKind::Table, pathId, detach ? pathId : TPathId(), owner));
+        NTxProxy::TTxProxyServices services;
+        services.LeaderPipeCache = pipeCache;
+        auto allocate = [&](ui64 txId) {
+            runtime.GrabEdgeEvent<TEvTxUserProxy::TEvAllocateTxId>(allocator);
+            runtime.Send(actor, allocator,
+                new TEvTxUserProxy::TEvAllocateTxIdResult(txId, services, {}));
+            const auto proposal = runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(pipeCache);
+            UNIT_ASSERT_VALUES_EQUAL(proposal->Get()->Ev->Type(),
+                NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType);
+        };
+        allocate(100);
+        runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& runtime,
+                TAutoPtr<IEventHandle>&, TDuration delay, TInstant& deadline) {
+            deadline = runtime.GetCurrentTime() + delay;
+            return false;
+        });
+        const TString error = "AlreadyExists unrelated to replication ownership";
+        runtime.Send(actor, pipeCache,
+            new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(
+                success ? NKikimrScheme::StatusSuccess : NKikimrScheme::StatusAlreadyExists,
+                100, pathId.OwnerId, success ? TString() : error));
+        if (!success && detach) {
+            // An unrelated AlreadyExists must retain the previous retry behavior.
+            const auto scheduled = runtime.CaptureScheduledEvents();
+            UNIT_ASSERT_VALUES_EQUAL(scheduled.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(scheduled.begin()->Event->Type, ui32(TEvents::TSystem::Wakeup));
+            runtime.Send(actor, parent, new TEvents::TEvWakeup());
+            allocate(101);
+            runtime.Send(actor, pipeCache,
+                new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(
+                    NKikimrScheme::StatusSuccess, 101, pathId.OwnerId));
+        }
+        if (alter) {
+            const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvAlterDstResult>(parent);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->IsSuccess(), success);
+            if (!success) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusAlreadyExists);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Error, error);
+            }
+        } else {
+            const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvDropDstResult>(parent);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->IsSuccess(), success || detach);
+            if (!success && !detach) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusAlreadyExists);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Error, error);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DoneCleanupStatus, success) {
+        CheckCleanupStatus(success, true);
+    }
+
+    Y_UNIT_TEST_TWIN(DropCleanupStatus, success) {
+        CheckCleanupStatus(success, false);
+    }
+
+    Y_UNIT_TEST_TWIN(DetachCleanupStatus, success) {
+        CheckCleanupStatus(success, false, true);
+    }
+
+    Y_UNIT_TEST_TWIN(StandbyRejectsDestinationOwnedByAnotherReplication, directory) {
+        TTestEnv env;
+        const auto first = StartPendingAttachment(env);
+        SendAttachmentResult(env, first,
+            new TEvPrivate::TEvCreateDstResult(1, first.TargetId, first.DstPathId));
+        DescribeReplication(env, first.Info);
+        if (directory) {
+            env.MkDir("/Root", "source");
+            env.CreateTable("/Root/source", *NTestHelpers::MakeTableDescription(NTestHelpers::TTestTableDescription{
+                .Name = "replica1",
+                .KeyColumns = {"key"},
+                .Columns = {{.Name = "key", .Type = "Uint32"}, {.Name = "value", .Type = "Utf8"}},
+                .ReplicationConfig = Nothing(),
+            }));
+        }
+
+        NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
+            .DiscoveryEndpoint(env.GetEndpoint()).Database(env.GetDatabase()));
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(Sprintf(R"(
+            CREATE ASYNC REPLICATION `second` FOR `%s` AS `%s`
+            WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", TOKEN = "root@builtin", INITIAL_SCAN = FALSE);
+        )", directory ? "/Root/source" : "/Root/table1", directory ? "/Root" : "/Root/replica1",
+            env.GetEndpoint().c_str())).GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        const auto desc = env.GetDescription("/Root/second").GetPathDescription().GetReplicationDescription();
+        TReplicationTestInfo second;
+        second.ControllerId = desc.GetControllerId();
+        second.PathId = env.GetPathId("/Root/second");
+        second.Config = desc.GetConfig();
+        UNIT_ASSERT(second.PathId != first.Info.PathId);
+        UNIT_ASSERT(desc.GetState().HasPaused());
+        env.SendAsync(second.ControllerId, new TEvService::TEvStatus());
+        UNIT_ASSERT(WaitFor([&] { return DescribeReplication(env, second)->Get()->Record.TargetsSize() == 1; }));
+        UNIT_ASSERT(WaitFor([&] { return SourceStreamsReady(env, second, 1); }));
+
+        const auto resumed = session.ExecuteSchemeQuery(
+            "ALTER ASYNC REPLICATION `second` SET (STATE = \"STANDBY\");").GetValueSync();
+        UNIT_ASSERT_C(resumed.IsSuccess(), resumed.GetIssues().ToString());
+        UNIT_ASSERT(WaitFor([&] { return DescribeReplication(env, second)->Get()->Record.GetState().HasError(); }));
+        const auto state = DescribeReplication(env, second)->Get()->Record.GetState();
+        UNIT_ASSERT_STRING_CONTAINS(state.DebugString(), "another replication");
+        const auto config = env.GetDescription("/Root/replica1").GetPathDescription().GetTable().GetReplicationConfig();
+        UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config.GetOwner()), first.Info.PathId);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+    }
+
     Y_UNIT_TEST(DoneAfterDestinationNameConflict) {
         for (const auto status : {NKikimrScheme::StatusPathDoesNotExist,
                 NKikimrScheme::StatusSuccess, NKikimrScheme::StatusSchemeError}) {
@@ -3927,6 +4091,91 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
             new TEvPrivate::TEvCreateDstResult(1, targetId, dstPathId));
         AssertEventuallyDone(env, info);
         AssertDestinationWritable(env);
+    }
+
+    Y_UNIT_TEST(DoneWaitsForRetriedOwnerTakeover) {
+        TTestEnv env;
+        auto& runtime = env.GetRuntime();
+        const auto info = StartReplication(env, 1, "root@builtin", false, false,
+            NKikimrSchemeOp::EIndexTypeGlobal, true, false);
+        // The previous owner's path has been collected after DROP, but its
+        // read-only table and our failed attachment's pending path remain.
+        const TPathId oldOwner(info.PathId.OwnerId, 1000000);
+        auto table = NTestHelpers::MakeTableDescription({
+            .Name = "replica1",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}, {.Name = "value", .Type = "Utf8"}},
+            .ReplicationConfig = Nothing(),
+        });
+        FillReplicationConfig(*table->MutableReplicationConfig(), EReplicationMode::ReadOnly, EConsistencyLevel::Row);
+        oldOwner.ToProto(table->MutableReplicationConfig()->MutableOwner());
+        env.CreateTable("/Root", *table);
+        const auto dstPathId = env.GetPathId("/Root/replica1");
+        UNIT_ASSERT(WaitFor([&] {
+            return DescribeReplication(env, info)->Get()->Record.TargetsSize() == 1;
+        }));
+        const auto targetId = DescribeReplication(env, info)->Get()->Record.GetTargets(0).GetId();
+        UNIT_ASSERT(WaitFor([&] { return SourceStreamsReady(env, info, 1); }));
+        auto rejectTakeover = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(
+            [&](NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+                const auto& record = ev->Get()->Record;
+                if (record.TransactionSize() != 1) {
+                    return;
+                }
+                const auto& alter = record.GetTransaction(0).GetAlterTable();
+                if (!alter.GetReplicationConfig().HasOwner()
+                    || TPathId::FromProto(alter.GetPathId()) != dstPathId)
+                {
+                    return;
+                }
+                runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                    new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(
+                        NKikimrScheme::StatusPreconditionFailed, record.GetTxId(), dstPathId.OwnerId,
+                        "Table is owned by another replication")));
+                ev.Reset();
+            });
+        auto initialResume = MakeAlterReplicationRequest(info, 106);
+        initialResume->Record.MutableSwitchState()->MutableStandBy();
+        const auto initiallyResumed = env.Send<TEvController::TEvAlterReplicationResult>(
+            info.ControllerId, std::move(initialResume));
+        UNIT_ASSERT_VALUES_EQUAL(initiallyResumed->Get()->Record.GetStatus(),
+            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+        UNIT_ASSERT(WaitFor([&] {
+            return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
+        }));
+        AssertAttachmentPaths(env, {info, targetId, dstPathId}, dstPathId);
+        rejectTakeover.Remove();
+
+        const auto pipeService = MakePipePerNodeCacheID(false);
+        const auto pipeCache = runtime.GetLocalServiceId(pipeService);
+        const auto gate = runtime.Register(new TSchemaRequestGate(pipeCache, env.GetSender(), dstPathId,
+            TSchemaRequestGate::ERequest::Attach));
+        runtime.RegisterService(pipeService, gate);
+        auto resume = MakeAlterReplicationRequest(info, 107);
+        resume->Record.MutableSwitchState()->MutableStandBy();
+        const auto resumed = env.Send<TEvController::TEvAlterReplicationResult>(info.ControllerId, std::move(resume));
+        UNIT_ASSERT_VALUES_EQUAL(resumed->Get()->Record.GetStatus(), NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
+            TSchemaRequestGate::Blocked);
+        runtime.RegisterService(pipeService, pipeCache);
+
+        const auto done = env.Send<TEvController::TEvAlterReplicationResult>(info.ControllerId, MakeDoneRequest(info, 108));
+        UNIT_ASSERT_VALUES_EQUAL(done->Get()->Record.GetStatus(), NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+        NKikimrMiniKQL::TResult result;
+        UNIT_ASSERT_VALUES_EQUAL(LocalQuery(runtime, info.ControllerId, Sprintf(R"((
+            (let key '('('ReplicationId (Uint64 '1)) '('Id (Uint64 '%lu))))
+            (return (AsList (SetResult 'State (SelectRow 'Targets key '('DstState)))))
+        ))", targetId), result), NKikimrProto::OK);
+        const auto state = result.GetValue().GetStruct(0).GetOptional().GetOptional()
+            .GetStruct(0).GetOptional().GetUint32();
+        UNIT_ASSERT_VALUES_EQUAL_C(state, static_cast<ui32>(TReplication::EDstState::Attaching),
+            "DONE must wait for the queued attachment retry");
+        UNIT_ASSERT(!DescribeReplication(env, info)->Get()->Record.GetState().HasDone());
+
+        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaRequestGate::Release));
+        AssertEventuallyDone(env, info);
+        AssertDestinationWritable(env);
+        UNIT_ASSERT(!env.GetDescription("/Root/replica1").GetPathDescription().GetTable().GetReplicationConfig().HasOwner());
     }
 
     Y_UNIT_TEST(DoneAfterRestartWithoutSource) {
@@ -5665,7 +5914,7 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
 
         const auto pipeService = MakePipePerNodeCacheID(false);
         const auto pipeCache = runtime.GetLocalServiceId(pipeService);
-        const auto gate = runtime.Register(new TSchemaDescribeGate(
+        const auto gate = runtime.Register(new TSchemaRequestGate(
             pipeCache, env.GetSender(), env.GetPathId("/Root/replica1")));
         runtime.RegisterService(pipeService, gate);
         auto schema = MakeSchemaChange(100, 10, 2, false);
@@ -5675,23 +5924,23 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
 
         env.SendAsync(info.ControllerId, MakeSchemaChangeReport(base, legacy));
         UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TSchemaDescribeGate::Blocked);
+            TSchemaRequestGate::Blocked);
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable().TableIndexesSize(), 1);
 
         // Recover after collection with a persisted legacy Altering barrier.
         RestartController(env, info.ControllerId);
         UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TSchemaDescribeGate::Blocked);
+            TSchemaRequestGate::Blocked);
 
         AttachWorkers(env, info.ControllerId, {base, index});
         env.SendAsync(info.ControllerId, MakeSchemaChangeReport(base, schema));
         const auto stop = runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(stop->Get()->Record.GetWorker()), index);
         UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TSchemaDescribeGate::Blocked);
+            TSchemaRequestGate::Blocked);
 
         runtime.RegisterService(pipeService, pipeCache);
-        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaDescribeGate::Release));
+        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaRequestGate::Release));
         const auto release = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(release->Get()->Record.GetWorker()), base);
         UNIT_ASSERT(release->Get()->Record.GetSchema().HasIndexes());
@@ -5719,7 +5968,7 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
 
         const auto pipeService = MakePipePerNodeCacheID(false);
         const auto pipeCache = runtime.GetLocalServiceId(pipeService);
-        const auto gate = runtime.Register(new TSchemaDescribeGate(
+        const auto gate = runtime.Register(new TSchemaRequestGate(
             pipeCache, env.GetSender(), env.GetPathId("/Root/replica1")));
         runtime.RegisterService(pipeService, gate);
         auto schema = MakeSchemaChange(100, 10, 2, false);
@@ -5729,20 +5978,20 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
 
         env.SendAsync(info.ControllerId, MakeSchemaChangeReport(worker, legacy));
         UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TSchemaDescribeGate::Blocked);
+            TSchemaRequestGate::Blocked);
 
         RestartController(env, info.ControllerId);
         UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TSchemaDescribeGate::Blocked);
+            TSchemaRequestGate::Blocked);
 
         AttachWorkers(env, info.ControllerId, {worker});
         // There is no IndexTable target to remove for an async index.
         env.SendAsync(info.ControllerId, MakeSchemaChangeReport(worker, schema));
         UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TSchemaDescribeGate::Blocked);
+            TSchemaRequestGate::Blocked);
 
         runtime.RegisterService(pipeService, pipeCache);
-        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaDescribeGate::Release));
+        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaRequestGate::Release));
         const auto release = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(release->Get()->Record.GetWorker()), worker);
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable().TableIndexesSize(), 0);
@@ -5791,7 +6040,7 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
             const auto pipeCache = runtime.GetLocalServiceId(pipeService);
             TActorId gate;
             if (!dropIndex) {
-                gate = runtime.Register(new TSchemaDescribeGate(pipeCache, env.GetSender(),
+                gate = runtime.Register(new TSchemaRequestGate(pipeCache, env.GetSender(),
                     env.GetPathId("/Root/replica1")));
                 runtime.RegisterService(pipeService, gate);
             }
@@ -5799,7 +6048,7 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
             env.SendAsync(info.ControllerId, MakeSchemaChangeReport(worker, schema));
             if (!dropIndex) {
                 UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-                    TSchemaDescribeGate::Blocked);
+                    TSchemaRequestGate::Blocked);
                 NKikimrMiniKQL::TResult result;
                 UNIT_ASSERT_VALUES_EQUAL(LocalQuery(runtime, info.ControllerId, Sprintf(R"((
                     (let key '('('ReplicationId (Uint64 '%lu)) '('Id (Uint64 '%lu))))
@@ -5810,11 +6059,11 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
 
                 RestartController(env, info.ControllerId);
                 UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-                    TSchemaDescribeGate::Blocked);
+                    TSchemaRequestGate::Blocked);
 
                 AttachWorkers(env, info.ControllerId, {worker});
                 runtime.RegisterService(pipeService, pipeCache);
-                env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaDescribeGate::Release));
+                env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaRequestGate::Release));
             }
 
             const auto release = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
@@ -5940,7 +6189,7 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
 
         const auto pipeService = MakePipePerNodeCacheID(false);
         const auto pipeCache = runtime.GetLocalServiceId(pipeService);
-        const auto gate = runtime.Register(new TSchemaDescribeGate(
+        const auto gate = runtime.Register(new TSchemaRequestGate(
             pipeCache, env.GetSender(), env.GetPathId("/Root/replica1")));
         runtime.RegisterService(pipeService, gate);
         auto schema = MakeSchemaChange(11000, 10, 2);
@@ -5948,18 +6197,18 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
 
         env.SendAsync(info.ControllerId, MakeSchemaChangeReport(worker, schema));
         UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TSchemaDescribeGate::Blocked);
+            TSchemaRequestGate::Blocked);
 
         auto success = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>();
         success->Record.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
 
         runtime.Send(new IEventHandle(commit->Sender, env.GetSender(), success.Release(), 0, writeTxId));
         DescribeReplication(env, info);
-        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaDescribeGate::Release));
+        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaRequestGate::Release));
         // The preflight requested a flush, but the last assignment is gone.
         // Stop its replacement before DDL to inspect and recover that state.
         UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TSchemaDescribeGate::Blocked);
+            TSchemaRequestGate::Blocked);
         NKikimrMiniKQL::TResult result;
         UNIT_ASSERT_VALUES_EQUAL(LocalQuery(runtime, info.ControllerId, Sprintf(R"((
             (let key '('('ReplicationId (Uint64 '%lu)) '('Id (Uint64 '%lu))))
@@ -5969,12 +6218,12 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
             .GetStruct(0).GetOptional().GetUint32(), 2); // Altering
         RestartController(env, info.ControllerId);
         UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TSchemaDescribeGate::Blocked);
+            TSchemaRequestGate::Blocked);
 
         AttachWorkers(env, info.ControllerId, {worker});
         runtime.RegisterService(pipeService, pipeCache);
         runtime.RegisterService(MakeTxProxyID(), txProxy);
-        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaDescribeGate::Release));
+        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaRequestGate::Release));
         runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
         WaitForColumnCount(env, "/Root/replica1", 3);
         CompleteSchemaChange(env, info.ControllerId, worker, schema);
@@ -7012,12 +7261,12 @@ Y_UNIT_TEST_SUITE(IndexBuild) {
 
         const auto pipeService = MakePipePerNodeCacheID(false);
         const auto pipeCache = runtime.GetLocalServiceId(pipeService);
-        const auto gate = runtime.Register(new TSchemaDescribeGate(pipeCache, env.GetSender(),
+        const auto gate = runtime.Register(new TSchemaRequestGate(pipeCache, env.GetSender(),
             env.GetPathId("/Root/replica1")));
         runtime.RegisterService(pipeService, gate);
         env.AlterReplication(MakeDoneRequest(info, 1005));
         UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TSchemaDescribeGate::Blocked);
+            TSchemaRequestGate::Blocked);
         env.AssertBuildPhase(indexWorker, NKikimrReplication::TIndexBuildState::CANCELLING);
 
         const auto checkLateResults = [&](bool done) {
@@ -7033,14 +7282,14 @@ Y_UNIT_TEST_SUITE(IndexBuild) {
         if (restart) {
             RestartController(env, info.ControllerId);
             UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-                TSchemaDescribeGate::Blocked);
+                TSchemaRequestGate::Blocked);
 
             AttachWorkers(env, info.ControllerId, {base});
             checkLateResults(false);
         }
 
         runtime.RegisterService(pipeService, pipeCache);
-        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaDescribeGate::Release));
+        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaRequestGate::Release));
         env.StopWorker(base);
         AssertEventuallyDone(env, info);
         env.AssertBuildPhase(indexWorker, NKikimrReplication::TIndexBuildState::CANCELLED);

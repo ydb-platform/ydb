@@ -1,4 +1,6 @@
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NSchemeShardUT_Private;
@@ -505,6 +507,92 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
     Y_UNIT_TEST(CreateReplicatedTable) {
         CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE, {});
         CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY, {{"__async_replica", "true"}});
+    }
+
+    Y_UNIT_TEST(OwnerCanChangeOnlyAfterReplicationDropCompletes) {
+        using NKikimr::TPathId;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        auto createOwner = [&](const TString& name) {
+            TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme(name));
+            env.TestWaitNotification(runtime, txId);
+            const auto desc = DescribePath(runtime, "/MyRoot/" + name);
+            return TPathId(TTestTxConfig::SchemeShard, desc.GetPathDescription().GetSelf().GetPathId());
+        };
+        const auto owner1 = createOwner("First");
+        const auto owner2 = createOwner("Second");
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        auto attach = [&](const TPathId& owner) {
+            auto* request = InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
+                Name: "Table"
+                ReplicationConfig { Mode: REPLICATION_MODE_READ_ONLY ConsistencyLevel: CONSISTENCY_LEVEL_ROW }
+            )"));
+            owner.ToProto(request->Record.MutableTransaction(0)->MutableAlterTable()->MutableReplicationConfig()->MutableOwner());
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+        };
+        auto finish = [&] {
+            TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId);
+        };
+        auto config = [&] {
+            return DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable().GetReplicationConfig();
+        };
+        attach(owner1);
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+        const auto attachingTxId = txId;
+        attach(owner2);
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+        env.TestWaitNotification(runtime, attachingTxId);
+        attach(owner1);
+        finish();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config().GetOwner()), owner1);
+        attach(owner2);
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusPreconditionFailed});
+
+        NActors::TBlockEvents<NKikimr::NReplication::TEvController::TEvDropReplication> drops(runtime);
+        TestDropReplication(runtime, ++txId, "/MyRoot", "First");
+        const auto droppingTxId = txId;
+        runtime.WaitFor("replication controller drop request", [&] { return !drops.empty(); });
+        attach(owner2);
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusPreconditionFailed});
+        drops.Stop().Unblock();
+        env.TestWaitNotification(runtime, droppingTxId);
+        // DROP leaves the table and its old owner intact. The next attachment
+        // reclaims it by checking that the old replication path has been deleted.
+        UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config().GetOwner()), owner1);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        attach(owner2);
+        finish();
+        UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config().GetOwner()), owner2);
+        UNIT_ASSERT_VALUES_EQUAL(config().GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+    }
+
+    Y_UNIT_TEST(CannotClaimLegacyReplicaWithoutOwner) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            ReplicationConfig { Mode: REPLICATION_MODE_READ_ONLY }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
+            Name: "Table"
+            ReplicationConfig {
+                Mode: REPLICATION_MODE_READ_ONLY
+                Owner { OwnerId: 1 LocalId: 1 }
+            }
+        )")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusPreconditionFailed});
     }
 
     Y_UNIT_TEST(CannotAddReplicationConfig) {

@@ -164,6 +164,8 @@ public:
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TString QueryTextForLogging;
     TKqpCompileResult::TConstPtr CompileResult;
+    const std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer =
+        std::atomic_load(&AppData()->PathNormalizer);
     TVector<NKikimrKqp::TParameterDescription> ResultParams;
     TKqpStatsCompile CompileStats;
     TIntrusivePtr<TKqpTransactionContext> TxCtx;

@@ -4,6 +4,7 @@
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/testlib/common_helper.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -50,6 +51,56 @@ static auto ExecuteQueryAndCheckResultSets(NYdb::NQuery::TQueryClient& db, const
 }
 
 Y_UNIT_TEST_SUITE(KqpQuery) {
+    Y_UNIT_TEST_TWIN(SqlPathAliasesDynamicReload, AstCache) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableAstCache(AstCache);
+        auto* rule = appConfig.MutableResourcePathPrefixMapping()->AddRules();
+        rule->SetSrc("/front");
+        rule->SetDst("/Root/First");
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        const auto scheme = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/First` (Key Uint64 NOT NULL, PRIMARY KEY (Key));
+            CREATE TABLE `/Root/Second` (Key Uint64 NOT NULL, PRIMARY KEY (Key));
+        )").GetValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+        const auto write = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/First` (Key) VALUES (1);
+            UPSERT INTO `/Root/Second` (Key) VALUES (2);
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+
+        const TString query = "SELECT Key FROM `/front`;";
+        TExecDataQuerySettings settings;
+        settings.KeepInQueryCache(true);
+        settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+        const auto read = [&](const TString& expected, bool cached) {
+            const auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::TProtoAccessor::GetProto(*result.GetStats()).compilation().from_cache(), cached);
+        };
+        read("[[1u]]", false);
+        read("[[1u]]", true);
+
+        appConfig.MutableResourcePathPrefixMapping()->MutableRules(0)->SetDst("/Root/Second");
+        std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer =
+            std::make_shared<NPathAliasing::TPathNormalizer>(appConfig.GetResourcePathPrefixMapping());
+        auto& appData = kikimr.GetTestServer().GetRuntime()->GetAppData();
+        std::atomic_store(&appData.PathNormalizer, std::move(normalizer));
+        const auto stale = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(stale.GetStatus(), EStatus::NOT_FOUND);
+        read("[[2u]]", false);
+        read("[[2u]]", true);
+
+        std::atomic_store(&appData.PathNormalizer, std::shared_ptr<const NPathAliasing::TPathNormalizer>{});
+        const auto staleDisabled = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(staleDisabled.GetStatus(), EStatus::NOT_FOUND);
+        const auto disabled = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(disabled.GetStatus(), EStatus::SCHEME_ERROR);
+    }
+
     Y_UNIT_TEST_TWIN(SqlPathAliasesWithNewRbo, NewRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);

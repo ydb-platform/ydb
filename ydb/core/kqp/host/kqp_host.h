@@ -13,6 +13,9 @@ class TActorSystem;
 } // namespace NActors
 
 namespace NKikimr {
+namespace NPathAliasing {
+class TPathNormalizer;
+}
 namespace NKqp {
 
 struct TKqpQueryRef;
@@ -134,7 +137,8 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     bool keepConfigChanges = false, bool isInternalCall = false, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
     NActors::TActorSystem* actorSystem = nullptr /*take from TLS by default*/,
     NYql::TExprContext* ctx = nullptr, const TIntrusivePtr<TUserRequestContext>& userRequestContext = nullptr,
-    bool usePessimisticLocks = false);
+    bool usePessimisticLocks = false,
+    std::optional<std::shared_ptr<const NPathAliasing::TPathNormalizer>> pathNormalizer = std::nullopt);
 
 } // namespace NKqp
 } // namespace NKikimr

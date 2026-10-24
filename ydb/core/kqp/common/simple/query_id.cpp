@@ -55,7 +55,8 @@ bool TKqpQueryId::operator==(const TKqpQueryId& other) const {
         Text == other.Text &&
         Settings == other.Settings &&
         !QueryParameterTypes == !other.QueryParameterTypes &&
-        GUCSettings == other.GUCSettings)) {
+        GUCSettings == other.GUCSettings &&
+        PathNormalizer == other.PathNormalizer)) {
         return false;
     }
 

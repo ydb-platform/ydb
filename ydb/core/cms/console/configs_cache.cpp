@@ -20,7 +20,8 @@ namespace {
 
     const THashSet<ui32> DYNAMIC_KINDS({
         (ui32)NKikimrConsole::TConfigItem::LogConfigItem,
-        (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem
+        (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem,
+        (ui32)NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem
     });
 
     struct TSave {

@@ -258,6 +258,10 @@ bool TKqpQueryState::TryGetFromCache(
             YQL_ENSURE(false);
     }
 
+    if (query) {
+        query->PathNormalizer = PathNormalizer;
+    }
+
     CompileStats = {};
 
     auto compileResult = cache.Find(
@@ -270,7 +274,7 @@ bool TKqpQueryState::TryGetFromCache(
         DbCounters,
         sender,
         TlsActivationContext->AsActorContext(),
-        warmupAttribution);
+        warmupAttribution, PathNormalizer);
 
     if (compileResult) {
         if (SaveAndCheckCompileResult(compileResult)) {
@@ -324,6 +328,9 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
             YQL_ENSURE(false);
     }
 
+    if (query) {
+        query->PathNormalizer = PathNormalizer;
+    }
     auto compileDeadline = QueryDeadlines.TimeoutAt;
     if (QueryDeadlines.CancelAt) {
         compileDeadline = Min(compileDeadline, QueryDeadlines.CancelAt);
@@ -378,6 +385,9 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
             YQL_ENSURE(false);
     }
 
+    if (query) {
+        query->PathNormalizer = PathNormalizer;
+    }
     auto compileDeadline = QueryDeadlines.TimeoutAt;
     bool isQueryActionPrepare = GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE;
     if (QueryDeadlines.CancelAt) {
@@ -424,6 +434,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
         compileDeadline = Min(compileDeadline, QueryDeadlines.CancelAt);
     }
 
+    query->PathNormalizer = PathNormalizer;
     const bool perStatementResult = (!HasTxControl() && GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE);
 
     TMaybe<TQueryAst> statementAst;

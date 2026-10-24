@@ -3646,7 +3646,7 @@ message TUdfStoreConfig {
     optional uint32 WasmCompileWorkerRetentionSeconds = 16 [default = 86400];
 }
 
-// Local path-prefix aliases. Rules are ordered and take effect on node restart.
+// Local path-prefix aliases. Rules are ordered and can be updated dynamically.
 message TPathRewriteConfig {
     message TRule {
         // Nonempty absolute prefixes; trailing Src slashes are ignored.

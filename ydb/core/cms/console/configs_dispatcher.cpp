@@ -10,6 +10,7 @@
 #include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/config/init/init.h>
 #include <ydb/core/config/init/mock.h>
 
@@ -74,6 +75,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::ColumnShardConfigItem,
     (ui32)NKikimrConsole::TConfigItem::UdfStoreConfigItem,
     (ui32)NKikimrConsole::TConfigItem::CompositeConveyorConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem,
 });
 
 const THashSet<ui32> NON_YAML_KINDS({
@@ -316,6 +318,7 @@ private:
     const std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
     const NKikimrConfig::TAppConfig BaseConfig;
     NKikimrConfig::TAppConfig CurrentConfig;
+    TString PathAliasesConfig;
     const TString StartupConfigYaml;
     const TString StartupStorageYaml;
     NKikimrConfig::TAppConfig CandidateStartupConfig;
@@ -373,6 +376,7 @@ TConfigsDispatcher::TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInf
         , ItemsServeRules(initInfo.ItemsServeRules)
         , BaseConfig(initInfo.InitialConfig)
         , CurrentConfig(initInfo.InitialConfig)
+        , PathAliasesConfig(initInfo.InitialConfig.GetResourcePathPrefixMapping().SerializeAsString())
         , StartupConfigYaml(initInfo.StartupConfigYaml)
         , StartupStorageYaml(initInfo.StartupStorageYaml)
         , CandidateStartupConfig(initInfo.InitialConfig)
@@ -1320,6 +1324,27 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
     AppData()->YamlConfigEnabled = YamlConfigEnabled;
 
     std::swap(YamlProtoConfig, newYamlProtoConfig);
+
+    const auto aliasKinds = FilterKinds(KindsToBitMap(TVector<ui32>{
+        NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem}));
+    if (!aliasKinds.Empty()) {
+        const auto& source = YamlConfigEnabled ? YamlProtoConfig : CurrentConfig;
+        const auto& aliases = source.HasResourcePathPrefixMapping()
+            ? source.GetResourcePathPrefixMapping() : BaseConfig.GetResourcePathPrefixMapping();
+        const TString serialized = aliases.SerializeAsString();
+        if (serialized != PathAliasesConfig) {
+            try {
+                std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer;
+                if (aliases.RulesSize()) {
+                    normalizer = std::make_shared<NPathAliasing::TPathNormalizer>(aliases);
+                }
+                std::atomic_store(&AppData()->PathNormalizer, std::move(normalizer));
+                PathAliasesConfig = serialized;
+            } catch (const yexception& e) {
+                YDB_LOG_ERROR("Invalid path aliases configuration", {"error", e.what()});
+            }
+        }
+    }
 
     THashSet<ui32> affectedKinds;
     for (const auto& kind : ev->Get()->Record.GetAffectedKinds()) {

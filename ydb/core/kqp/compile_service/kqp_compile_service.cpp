@@ -558,7 +558,8 @@ private:
             dbCounters,
             ev->Sender,
             ctx,
-            request.IsWarmupCompilation ? EWarmupAttributionMode::Warmup : EWarmupAttributionMode::Client);
+            request.IsWarmupCompilation ? EWarmupAttributionMode::Warmup : EWarmupAttributionMode::Client,
+            request.Query ? request.Query->PathNormalizer : std::atomic_load(&AppData()->PathNormalizer));
 
         if (request.Uid) {
             if (compileResult) {
@@ -654,6 +655,10 @@ private:
         Counters->ReportRecompileRequestGet(dbCounters);
 
         TKqpCompileResult::TConstPtr compileResult = QueryCache->FindByUid(request.Uid, false);
+        if (compileResult && compileResult->Query->PathNormalizer !=
+            (request.Query ? request.Query->PathNormalizer : std::atomic_load(&AppData()->PathNormalizer))) {
+            compileResult = nullptr;
+        }
         if (HasTempTablesNameClashes(compileResult, request.TempTablesState)) {
             compileResult = nullptr;
         }
@@ -1387,7 +1392,8 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     TKqpDbCountersPtr& dbCounters,
     const TActorId& sender,
     const TActorContext& ctx,
-    EWarmupAttributionMode warmupAttribution)
+    EWarmupAttributionMode warmupAttribution,
+    const std::shared_ptr<const NPathAliasing::TPathNormalizer>& pathNormalizer)
 {
     TGuard<TAdaptiveLock> guard(Lock);
 
@@ -1402,6 +1408,9 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
 
         if (compileResult) {
             Y_ENSURE(compileResult->Query);
+            if (compileResult->Query->PathNormalizer != pathNormalizer) {
+                return nullptr;
+            }
             if (compileResult->Query->UserSid == userSid) {
                 counters->ReportQueryCacheHit(dbCounters, true);
 
@@ -1583,7 +1592,10 @@ TKqpQueryId TKqpQueryCache::GetQueryIdWithAst(const TKqpQueryId& query, const NY
             }
         }
     }
-    return TKqpQueryId{query.Cluster, query.Database, query.DatabaseId, query.UserSid, ast.Root->ToString(), query.Settings, astPgParams, query.GUCSettings};
+    auto astQuery = query;
+    astQuery.Text = ast.Root->ToString();
+    astQuery.QueryParameterTypes = std::move(astPgParams);
+    return astQuery;
 }
 
 //

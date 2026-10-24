@@ -1223,7 +1223,8 @@ public:
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr, NActors::TActorSystem* actorSystem = nullptr,
         NYql::TExprContext* ctx = nullptr, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig = NKikimrConfig::TQueryServiceConfig(),
         const TIntrusivePtr<TUserRequestContext>& userRequestContext = nullptr,
-        bool usePessimisticLocks = false)
+        bool usePessimisticLocks = false,
+        std::optional<std::shared_ptr<const NPathAliasing::TPathNormalizer>> pathNormalizer = std::nullopt)
         : Gateway(gateway)
         , Cluster(cluster)
         , GUCSettings(gUCSettings)
@@ -1252,10 +1253,11 @@ public:
 
         SessionCtx = MakeIntrusive<TKikimrSessionContext>(FuncRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken, nullptr, userRequestContext);
 
-        if (HasAppData(ActorSystem)) {
-            if (auto normalizer = AppData(ActorSystem)->PathNormalizer) {
-                config->NormalizePath = [normalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
-            }
+        auto normalizer = pathNormalizer ? *pathNormalizer
+            : HasAppData(ActorSystem) ? std::atomic_load(&AppData(ActorSystem)->PathNormalizer) : nullptr;
+        config->NormalizePath = {};
+        if (normalizer) {
+            config->NormalizePath = [normalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
         }
 
         TypesCtx->LangVer = config->GetDefaultLangVer();
@@ -2476,10 +2478,12 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway, const 
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TGUCSettings::TPtr& gUCSettings,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TMaybe<TString>& applicationName, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
     bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem, NYql::TExprContext* ctx, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-    bool usePessimisticLocks)
+    bool usePessimisticLocks,
+    std::optional<std::shared_ptr<const NPathAliasing::TPathNormalizer>> pathNormalizer)
 {
     return MakeIntrusive<TKqpHost>(gateway, cluster, database, gUCSettings, applicationName, config, moduleResolver, federatedQuerySetup, userToken, funcRegistry,
-                                   keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem, ctx, queryServiceConfig, userRequestContext, usePessimisticLocks);
+                                   keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem, ctx, queryServiceConfig, userRequestContext, usePessimisticLocks,
+                                   std::move(pathNormalizer));
 }
 
 } // namespace NKikimr::NKqp

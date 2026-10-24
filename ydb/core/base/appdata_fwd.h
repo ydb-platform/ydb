@@ -222,7 +222,7 @@ struct TAppData {
     const NSchemeShard::IOperationFactory *SchemeOperationFactory = nullptr;
     const NYamlConfig::IConfigSwissKnife *ConfigSwissKnife = nullptr;
 
-    // Compiled once before actors start; configuration changes require a restart.
+    // Use atomic_load/atomic_store after startup; requests retain immutable snapshots.
     std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
 
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;

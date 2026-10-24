@@ -472,7 +472,7 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
     const TString dbBasePath = dbPathSplit.Reconstruct();
     LOG_D("Resolved db base path: " << dbBasePath.Quote());
 
-    auto oldDirectoryList = RecursiveList(SchemeClient, dbBasePath, TRecursiveListSettings().SkipSys(false));
+    auto oldDirectoryList = RecursiveList(SchemeClient, dbBasePath, TRecursiveListSettings().SkipMode(ERecursiveListSkipMode::None));
     if (const auto& status = oldDirectoryList.Status; !status.IsSuccess()) {
         LOG_E("Error listing db base path: " << dbBasePath.Quote() << ": " << status.GetIssues().ToOneLineString());
         return Result<TRestoreResult>(dbBasePath, EStatus::SCHEME_ERROR, "Can not list existing directory");
@@ -511,7 +511,7 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
 
     LOG_I("Cleanup");
 
-    auto newListing = RecursiveList(SchemeClient, dbBasePath, TRecursiveListSettings().SkipSys(false));
+    auto newListing = RecursiveList(SchemeClient, dbBasePath, TRecursiveListSettings().SkipMode(ERecursiveListSkipMode::None));
     if (!newListing.Status.IsSuccess()) {
         return restoreResult;
     }
@@ -2387,7 +2387,7 @@ TRestoreResult TRestoreClient::RestoreDir(
     }
 
     TPathSplitUnix dbPathSplit(dbPath);
-    if (IsSystemName(dbPathSplit.back())) {
+    if (IsInternalName(dbPathSplit.back())) {
         if (auto result = CheckExistenceAndType(dbPath, ESchemeEntryType::Directory); !result.IsSuccess()) {
             LOG_D("System dir " << dbPath.Quote() << " does not exist, skipping");
             return Result<TRestoreResult>();

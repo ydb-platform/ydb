@@ -2155,6 +2155,8 @@ message TModifyScheme {
 
     // Conditional replication cleanup: skip if the table has another owner.
     optional NKikimrProto.TPathID ExpectedReplicationOwner = 97;
+    // Allow detaching ownerless tables only for replications predating ownership.
+    optional bool AllowUnownedReplicationCleanup = 98 [default = false];
 
     // Some entries are grouped by semantics, so are out of order
 }

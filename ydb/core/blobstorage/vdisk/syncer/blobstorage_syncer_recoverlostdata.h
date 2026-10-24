@@ -7,6 +7,10 @@
 
 namespace NKikimr {
 
+    struct TEvSyncerLostDataRecoveryStarted :
+        TEventLocal<TEvSyncerLostDataRecoveryStarted, TEvBlobStorage::EvSyncerLostDataRecoveryStarted>
+    {};
+
     ////////////////////////////////////////////////////////////////////////////
     // TEvSyncerLostDataRecovered
     ////////////////////////////////////////////////////////////////////////////

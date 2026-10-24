@@ -684,6 +684,17 @@ namespace NKikimr {
                 Send(kv.second, msg->Clone());
             }
             ReplCtx->GInfo = msg->NewInfo;
+            for (const auto& [vdiskId, queues] : Donors) {
+                const auto it = std::find_if(ReplCtx->VDiskCfg->BaseInfo.DonorDiskIds.begin(),
+                    ReplCtx->VDiskCfg->BaseInfo.DonorDiskIds.end(),
+                    [&](const auto& donor) { return donor.first == vdiskId; });
+                Y_ABORT_UNLESS(it != ReplCtx->VDiskCfg->BaseInfo.DonorDiskIds.end());
+                auto info = MakeIntrusive<TBlobStorageGroupInfo>(ReplCtx->GInfo, vdiskId, it->second);
+                Send(queues.AsyncReadQueueActorId, new TEvVGenerationChange(vdiskId, info,
+                    ReplCtx->GInfo->GroupGeneration));
+                Send(queues.FastReadQueueActorId, new TEvVGenerationChange(vdiskId, info,
+                    ReplCtx->GInfo->GroupGeneration));
+            }
         }
 
         std::set<TActorId> DonorQueryActors;

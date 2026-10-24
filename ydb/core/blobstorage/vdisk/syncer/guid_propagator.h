@@ -16,6 +16,7 @@ namespace NKikimr {
     class TVDiskContext;
     struct TVDiskID;
     IActor* CreateSyncerGuidPropagator(TIntrusivePtr<TVDiskContext> vctx,
+                                       TIntrusivePtr<TBlobStorageGroupInfo> info,
                                        const TVDiskID &selfVDiskId,
                                        const TVDiskID &targetVDiskId,
                                        const TActorId &targetServiceId,

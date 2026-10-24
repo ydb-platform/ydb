@@ -2022,6 +2022,9 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVSync::TPtr &ev, const TActorContext &ctx) {
+            if (RejectFailedSyncSource(&ev, ctx)) {
+                return;
+            }
             if (!Config->BaseInfo.DonorMode) {
                 ctx.Send(ev->Forward(Db->SyncLogID));
             }
@@ -2041,6 +2044,9 @@ namespace NKikimr {
         // FIXME: check for RACE in other handlers!!!
 
         void Handle(TEvBlobStorage::TEvVSyncGuid::TPtr &ev, const TActorContext &ctx) {
+            if (RejectFailedSyncSource(&ev, ctx)) {
+                return;
+            }
             const NKikimrBlobStorage::TEvVSyncGuid &record = ev->Get()->Record;
             TInstant now = TAppData::TimeProvider->Now();
             if (!SelfVDiskId.SameGroupAndGeneration(record.GetSourceVDiskID())) {
@@ -2292,11 +2298,27 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVSyncFull::TPtr &ev, const TActorContext &ctx) {
+            if (RejectFailedSyncSource(&ev, ctx)) {
+                return;
+            }
             if (Config->BaseInfo.DonorMode) {
                 return; // this is a race; donor disk can't answer TEvVSyncFull queries
             }
             Y_VERIFY(Db->SyncFullHandlerID);
             ctx.Send(ev->Forward(Db->SyncFullHandlerID));
+        }
+
+        template<typename TEventPtr>
+        bool RejectFailedSyncSource(TEventPtr* ev, const TActorContext& ctx) {
+            const auto source = VDiskIDFromVDiskID((*ev)->Get()->Record.GetSourceVDiskID());
+            if (source.GroupID == SelfVDiskId.GroupID
+                    && source.FailRealm < GInfo->GetTopology().GetTotalFailRealmsNum()
+                    && GInfo->IsFailRealmFailed(source.FailRealm)) {
+                ReplyError(NKikimrProto::NOTREADY, "source failrealm is failed", *ev, ctx,
+                    TAppData::TimeProvider->Now());
+                return true;
+            }
+            return false;
         }
 
         ////////////////////////////////////////////////////////////////////////

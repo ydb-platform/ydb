@@ -11,9 +11,11 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TSjCtx - Syncer Job Context
         ////////////////////////////////////////////////////////////////////////////
-        TSjCtx::TSjCtx(const TVDiskID &self, const TIntrusivePtr<TSyncerContext> &sc)
+        TSjCtx::TSjCtx(const TVDiskID &self, const TIntrusivePtr<TSyncerContext> &sc,
+                const TIntrusivePtr<TBlobStorageGroupInfo>& info)
             : SelfVDiskId(self)
             , SyncerCtx(sc)
+            , GInfo(info)
         {}
 
         // create TSjCtx using actual Db and GInfo
@@ -22,7 +24,7 @@ namespace NKikimr {
         {
             const TVDiskID vdiskId = info->GetVDiskId(sc->VCtx->ShortSelfVDisk);
             // to prevent memory leaks -- unique_ptr ctor does not throw, unlike shared_ptr's one
-            return std::shared_ptr<TSjCtx>(std::unique_ptr<TSjCtx>(new TSjCtx(vdiskId, sc)));
+            return std::shared_ptr<TSjCtx>(std::unique_ptr<TSjCtx>(new TSjCtx(vdiskId, sc, info)));
         }
 
 
@@ -474,35 +476,32 @@ namespace NKikimr {
                 Ctx->SyncerCtx->VCtx->VDiskLogPrefix << "msg# " << ev->Get()->ToString() <<
                 "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
 
-            if (EndOfStream) {
-                return ReplyAndDie(TSyncStatusVal::SyncDone);
-            } else {
-                if (Phase == ETerminated) {
-                    // job timed out
-                    return ReplyAndDie(Current.LastSyncStatus);
-                } else {
-                    // continue sending requests
-                    return NextRequest();
-                }
+            if (Phase == ETerminated) {
+                return ReplyAndDie(Current.LastSyncStatus);
             }
+            return EndOfStream ? ReplyAndDie(TSyncStatusVal::SyncDone) : NextRequest();
         }
 
         TSjOutcome TSyncerJobTask::Handle(TEvFullSyncFinished::TPtr& /*ev*/) {
-            return ReplyAndDie(TSyncStatusVal::SyncDone);
+            return ReplyAndDie(Phase == ETerminated ? Current.LastSyncStatus : TSyncStatusVal::SyncDone);
         }
 
         TSjOutcome TSyncerJobTask::Terminate(ESyncStatus status) {
+            if (Phase == ETerminated) {
+                return TSjOutcome::Nothing();
+            }
             Y_VERIFY_S(Phase == EWaitLocal || Phase == EWaitRemote || Phase == EStart,
                 Ctx->SyncerCtx->VCtx->VDiskLogPrefix <<
                 "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
 
             Sublog.Log() << "Terminate: status# " << status << "\n";
+            const bool waitingForLocalWrite = Phase == EWaitLocal;
             Phase = ETerminated;
             Current.LastSyncStatus = status;
 
             // we can get job timeout or session disconnect during local write;
             // we have to wait until this write is finished (to avoid generating infinite writes)
-            if (Phase == EWaitLocal) {
+            if (waitingForLocalWrite) {
                 // do nothing, wait for TEvLocalSyncDataResult
                 return TSjOutcome::Nothing();
             } else {

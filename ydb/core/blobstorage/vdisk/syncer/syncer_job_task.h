@@ -73,6 +73,7 @@ namespace NKikimr {
             // so we can keep SelfVDiskId const
             const TVDiskID SelfVDiskId;
             const TIntrusivePtr<TSyncerContext> SyncerCtx;
+            const TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
 
             // create TSjCtx using actual Db and GInfo
             static std::shared_ptr<TSjCtx> Create(
@@ -80,7 +81,8 @@ namespace NKikimr {
                                 const TIntrusivePtr<TBlobStorageGroupInfo> &info);
 
         protected:
-            TSjCtx(const TVDiskID &self, const TIntrusivePtr<TSyncerContext> &sc);
+            TSjCtx(const TVDiskID &self, const TIntrusivePtr<TSyncerContext> &sc,
+                const TIntrusivePtr<TBlobStorageGroupInfo>& info);
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -152,6 +154,10 @@ namespace NKikimr {
             TSjOutcome Handle(TEvLocalSyncDataResult::TPtr &ev);
             TSjOutcome Handle(TEvFullSyncFinished::TPtr &ev);
             TSjOutcome Terminate(ESyncStatus status);
+
+            bool IsTargetRealmFailed() const {
+                return Ctx->GInfo->IsFailRealmFailed(VDiskId.FailRealm);
+            }
 
             bool NeedCommit() const {
                 bool need = OldSyncState != GetCurrent().SyncState;

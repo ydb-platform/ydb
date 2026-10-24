@@ -50,6 +50,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TVDiskContext;
     IActor *CreateProxyForWritingVDiskGuid(TIntrusivePtr<TVDiskContext> vctx,
+                                           TIntrusivePtr<TBlobStorageGroupInfo> info,
                                            const TVDiskID &selfVDiskId,
                                            const TVDiskID &targetVDiskId,
                                            const TActorId &targetServiceId,

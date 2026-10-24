@@ -35,6 +35,7 @@ private:
     YDB_ACCESSOR_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
     YDB_READONLY_DEF(NOlap::TColumnDefaultScalarValue, DefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TConstructorContainer, AccessorConstructor);
+    YDB_READONLY_DEF(std::optional<NKikimrSchemeOp::TDefaultExpressionColumnDescription>, DefaultFromExpression);
 
 public:
     TOlapColumnBase(const std::optional<ui32>& keyOrder)
@@ -47,6 +48,9 @@ public:
     bool ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors);
     bool IsKeyColumn() const {
         return !!KeyOrder;
+    }
+    bool IsVirtualGenerated() const {
+        return DefaultFromExpression && !DefaultFromExpression->GetStored();
     }
     static bool IsAllowedType(ui32 typeId);
     static bool IsAllowedPkType(ui32 typeId);

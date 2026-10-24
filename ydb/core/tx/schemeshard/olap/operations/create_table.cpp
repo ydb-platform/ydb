@@ -273,7 +273,9 @@ public:
                 init->SetOwnerPath(path.PathString());
 
                 create = init->AddTables();
-                create->MutableSchema()->CopyFrom(tableInfo->Description.GetSchema());
+                TOlapSchema logicalSchema;
+                logicalSchema.ParseFromLocalDB(tableInfo->Description.GetSchema());
+                logicalSchema.SerializeForColumnShard(*create->MutableSchema());
             } else {
                 Y_ABORT_UNLESS(tableInfo->GetColumnShards().size());
                 Y_ABORT_UNLESS(!tableInfo->Description.HasSchema());

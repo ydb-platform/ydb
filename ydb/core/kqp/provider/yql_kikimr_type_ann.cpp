@@ -1543,6 +1543,20 @@ private:
         }
         meta->TableType = tableTypeEnum;
 
+        if (meta->TableType == ETableType::Table || meta->TableType == ETableType::TableStore) {
+            for (auto&& setting : create.TableSettings()) {
+                if (setting.Name().Value() != "storeType") {
+                    continue;
+                }
+
+                const TMaybe<TString> storeType = TString(setting.Value().Cast<TCoAtom>().Value());
+                if (storeType && to_lower(storeType.GetRef()) == "column") {
+                    meta->StoreType = EStoreType::Column;
+                }
+                break;
+            }
+        }
+
         meta->Temporary = TString(create.Temporary()) == "true" ? true : false;
 
         for (auto atom : create.PrimaryKey()) {
@@ -1616,22 +1630,6 @@ private:
 
         if (auto status = ValidateGeneratedColumns(create, *meta, ctx, Types, cluster, *SessionCtx); status != TStatus::Ok) {
             return status;
-        }
-
-        if (meta->TableType == ETableType::Table) {
-            for (auto&& setting : create.TableSettings()) {
-                if (setting.Name().Value() == "storeType") {
-                    const TMaybe<TString> storeType = TString(setting.Value().Cast<TCoAtom>().Value());
-                    if (storeType) {
-                        const auto& val = to_lower(storeType.GetRef());
-                        if (val == "column") {
-                            meta->StoreType = EStoreType::Column;
-                        }
-                    }
-
-                    break;
-                }
-            }
         }
 
         for (const auto& index : create.Indexes()) {
@@ -2173,7 +2171,9 @@ private:
                     return TStatus::Error;
                 }
 
-                if (const auto* ttlColumn = meta->Columns.FindPtr(ttlSettings.ColumnName); ttlColumn && ttlColumn->IsDefaultFromExpression()) {
+                if (const auto* ttlColumn = meta->Columns.FindPtr(ttlSettings.ColumnName);
+                    meta->StoreType != EStoreType::Column && ttlColumn && ttlColumn->IsDefaultFromExpression())
+                {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), TStringBuilder()
                         << "TTL column " << ttlSettings.ColumnName << " can not be a GENERATED column"));
                     return TStatus::Error;

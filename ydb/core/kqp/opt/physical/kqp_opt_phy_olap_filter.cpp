@@ -205,21 +205,6 @@ std::vector<std::pair<TExprBase, TExprBase>> ExtractComparisonParameters(const T
 TMaybeNode<TExprBase> ComparisonPushdown(const std::vector<std::pair<TExprBase, TExprBase>>& parameters, const TCoCompare& predicate, TExprContext& ctx,
                                          TPositionHandle pos, const TPushdownOptions& pushdownOptions);
 
-TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, const TExprNode& argument, TExprContext& ctx, const TPushdownOptions& pushdownOptions) {
-    if (const auto params = ExtractBinaryFunctionParameters(coalesce, argument, ctx, coalesce.Pos(), pushdownOptions)) {
-        // clang-format off
-        return Build<TKqpOlapFilterBinaryOp>(ctx, coalesce.Pos())
-                .Operator().Value("??", TNodeFlags::Default).Build()
-                .Left(params->first)
-                .Right(params->second)
-                .OpType(ExpandType(coalesce.Pos(), *(coalesce.Ptr()->GetTypeAnn()), ctx))
-                .Done();
-        // clang-format on
-    }
-
-    return NullNode;
-}
-
 TMaybeNode<TExprBase> YqlIfPushdown(const TCoIf& ifOp, const TExprNode& argument, TExprContext& ctx, const TPushdownOptions& pushdownOptions) {
     if (const auto params = ExtractTernaryFunctionParameters(ifOp, argument, ctx, ifOp.Pos(), pushdownOptions)) {
         return Build<TKqpOlapFilterTernaryOp>(ctx, ifOp.Pos())
@@ -364,6 +349,21 @@ TString GetAlias(const TString& colName) {
     return "";
 }
 } //namespace
+
+TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, const TExprNode& argument, TExprContext& ctx, const TPushdownOptions& pushdownOptions) {
+    if (const auto params = ExtractBinaryFunctionParameters(coalesce, argument, ctx, coalesce.Pos(), pushdownOptions)) {
+        // clang-format off
+        return Build<TKqpOlapFilterBinaryOp>(ctx, coalesce.Pos())
+                .Operator().Value("??", TNodeFlags::Default).Build()
+                .Left(UnwrapOptionalTKqpOlapApplyColumnArg(params->first, ctx))
+                .Right(UnwrapOptionalTKqpOlapApplyColumnArg(params->second, ctx))
+                .OpType(ExpandType(coalesce.Pos(), *(coalesce.Ptr()->GetTypeAnn()), ctx))
+                .Done();
+        // clang-format on
+    }
+
+    return NullNode;
+}
 
 std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos,
                                              const TPushdownOptions& pushdownOptions) {

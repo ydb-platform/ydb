@@ -49,7 +49,7 @@ ui32 CountChanges(const NKikimrSchemeOp::TColumnTableSchemaDiff& diff) {
     return diff.UpsertColumnsSize() + diff.DropColumnsSize() + diff.UpsertIndexesSize() + diff.DropIndexesSize();
 }
 
-bool ParseDiffOnly(const TString& versionInfoProto, NKikimrSchemeOp::TColumnTableSchemaDiff& diff) {
+bool ParseSmallDiffOnly(const TString& versionInfoProto, NKikimrSchemeOp::TColumnTableSchemaDiff& diff) {
     using google::protobuf::internal::WireFormatLite;
     google::protobuf::io::CodedInputStream input(reinterpret_cast<const ui8*>(versionInfoProto.data()), versionInfoProto.size());
     diff.Clear();
@@ -67,7 +67,7 @@ bool ParseDiffOnly(const TString& versionInfoProto, NKikimrSchemeOp::TColumnTabl
         hasDiff = true;
     }
     AFL_VERIFY(input.ConsumedEntireMessage());
-    return hasDiff;
+    return hasDiff && CountChanges(diff) <= MaxSchemaDiffChanges;
 }
 
 }   //namespace
@@ -391,11 +391,12 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
                 rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceStep>(), rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceTxId>());
 
             const TString versionInfoProto = rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>();
-            // a version after the first one is built from the previous one and its diff, so its full schema is not needed
-            const bool diffOnly = PrimaryIndex && ParseDiffOnly(versionInfoProto, diff);
+            // a version after the first one is built from the previous one and its small diff, so its full schema is not needed
+            const bool diffOnly = PrimaryIndex && ParseSmallDiffOnly(versionInfoProto, diff);
             if (!diffOnly) {
                 AFL_VERIFY(info.ParseFromString(versionInfoProto));
                 AFL_VERIFY(info.HasSchema());
+                info.ClearDiff();
             }
             const NOlap::IColumnEngine::TSchemaVersionView versionView =
                 diffOnly ? NOlap::IColumnEngine::TSchemaVersionView(diff) : NOlap::IColumnEngine::TSchemaVersionView(info);

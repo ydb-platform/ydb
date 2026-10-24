@@ -16,6 +16,7 @@ namespace NKikimr::NPathAliasing {
         TPathNormalizer() noexcept = default;
         explicit TPathNormalizer(const NKikimrConfig::TPathRewriteConfig& config);
 
+        bool HasRules() const noexcept { return bool(Impl); }
         TString NormalizePath(TStringBuf path) const;
 
     private:

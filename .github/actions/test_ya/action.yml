@@ -565,21 +565,19 @@ runs:
           YA_MAKE_NAME="ya_make_try_${RETRY}"
           analytics start "ya_make_try_${RETRY}"
 
-          # Experimental PR only: saturate the build filesystem during attempt 1.
-          # Retries run without the injector; its four files occupy at most 4 GiB.
-          if [ "$RETRY" -eq 1 ]; then
-            test "$(stat -c %d "$TMP_DIR")" = "$(stat -c %d "$HOME/.ya")"
-            DISK_PRESSURE_READY="$TMP_DIR/disk-pressure-ready"
-            python3 .github/scripts/utils/disk_pressure_experiment.py \
-              "$TMP_DIR" "$DISK_PRESSURE_READY" > "$CURRENT_PUBLIC_DIR/disk_pressure.log" 2>&1 &
-            DISK_PRESSURE_PID=$!
-            for attempt in $(seq 1 150); do
-              [ -f "$DISK_PRESSURE_READY" ] && break
-              kill -0 "$DISK_PRESSURE_PID" || { cat "$CURRENT_PUBLIC_DIR/disk_pressure.log"; exit 1; }
-              sleep 0.2
-            done
-            test -f "$DISK_PRESSURE_READY"
-          fi
+          # Experimental PR only: apply the same disk pressure on every attempt.
+          # Four direct writers repeatedly overwrite at most 4 GiB in total.
+          test "$(stat -c %d "$TMP_DIR")" = "$(stat -c %d "$HOME/.ya")"
+          DISK_PRESSURE_READY="$TMP_DIR/disk-pressure-ready"
+          python3 .github/scripts/utils/disk_pressure_experiment.py \
+            "$TMP_DIR" "$DISK_PRESSURE_READY" > "$CURRENT_PUBLIC_DIR/disk_pressure.log" 2>&1 &
+          DISK_PRESSURE_PID=$!
+          for attempt in $(seq 1 150); do
+            [ -f "$DISK_PRESSURE_READY" ] && break
+            kill -0 "$DISK_PRESSURE_PID" || { cat "$CURRENT_PUBLIC_DIR/disk_pressure.log"; exit 1; }
+            sleep 0.2
+          done
+          test -f "$DISK_PRESSURE_READY"
 
           set +e
           # sudo -u / setpriv restore supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.

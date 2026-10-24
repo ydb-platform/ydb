@@ -1,4 +1,4 @@
-"""Temporary CI experiment: bounded direct writes, stopped before test retries."""
+"""Temporary CI experiment: bounded direct writes during each test attempt."""
 
 import mmap
 import multiprocessing as mp

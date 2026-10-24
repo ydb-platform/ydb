@@ -3,6 +3,7 @@
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_sector_sealing.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h>
 
 #include <util/generic/hash_set.h>
@@ -117,14 +118,21 @@ namespace NKikimr {
         friend class TActorBootstrapped<TThis>;
 
 
+        TDiskPart PendingRead; // the one read in flight
+
         void Bootstrap(const TActorContext &ctx) {
             const TDiskPart &entry = LevelSegment->GetEntryPoint();
-            ctx.Send(PDiskCtx->PDiskId, new NPDisk::TEvChunkRead(PDiskCtx->Dsk->Owner,
-                                                        PDiskCtx->Dsk->OwnerRound,
-                                                        entry.ChunkIdx, entry.Offset, entry.Size,
-                                                        NPriRead::HullLoad, nullptr));
+            SendRead(entry, ctx);
             Chunks.Add(entry.ChunkIdx);
             TThis::Become(&TThis::StateFunc);
+        }
+
+        void SendRead(const TDiskPart& part, const TActorContext &ctx) {
+            auto msg = std::make_unique<NPDisk::TEvChunkRead>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
+                part.ChunkIdx, part.Offset, part.Size, NPriRead::HullLoad, nullptr);
+            msg->RawSectors = UseRawSectorReads(*PDiskCtx); // opened here rather than in the PDisk completion thread
+            PendingRead = part;
+            ctx.Send(PDiskCtx->PDiskId, msg.release());
         }
 
         // loaded index to string
@@ -224,6 +232,7 @@ namespace NKikimr {
 
         void Handle(NPDisk::TEvChunkReadResult::TPtr &ev, const TActorContext &ctx) {
             auto *msg = ev->Get();
+            OpenRawSectors(*PDiskCtx, *msg, PendingRead.Offset, PendingRead.Size, TLogoBlobID());
             CHECK_PDISK_RESPONSE_READABLE_MSG(VCtx, ev, ctx, TStringBuilder() << "{Origin# '" << Origin << "'}");
 
             const TBufferWithGaps &data = msg->Data;
@@ -248,12 +257,7 @@ namespace NKikimr {
                 AppendData(data.DataPtr<const char>(0, partSize), partSize);
 
                 if (!placeHolder.PrevPart.Empty()) {
-                    ctx.Send(PDiskCtx->PDiskId, new NPDisk::TEvChunkRead(PDiskCtx->Dsk->Owner,
-                                                                 PDiskCtx->Dsk->OwnerRound,
-                                                                 placeHolder.PrevPart.ChunkIdx,
-                                                                 placeHolder.PrevPart.Offset,
-                                                                 placeHolder.PrevPart.Size, NPriRead::HullLoad,
-                                                                 nullptr));
+                    SendRead(placeHolder.PrevPart, ctx);
                     Chunks.Add(placeHolder.PrevPart.ChunkIdx);
                 } else {
                     Finish(ctx);
@@ -267,11 +271,7 @@ namespace NKikimr {
                 AppendData(data.DataPtr<const char>(0, partSize), partSize);
 
                 if (!linker.PrevPart.Empty()) {
-                    ctx.Send(PDiskCtx->PDiskId, new NPDisk::TEvChunkRead(PDiskCtx->Dsk->Owner,
-                                                                 PDiskCtx->Dsk->OwnerRound,
-                                                                 linker.PrevPart.ChunkIdx,
-                                                                 linker.PrevPart.Offset, linker.PrevPart.Size,
-                                                                 NPriRead::HullLoad, nullptr));
+                    SendRead(linker.PrevPart, ctx);
                     Chunks.Add(linker.PrevPart.ChunkIdx);
                 } else {
                     Finish(ctx);

@@ -16,4 +16,15 @@ namespace NKikimr {
     // The on-disk result is the same either way.
     bool PrepareChunkWriteSectors(NPDisk::TEvChunkWrite& ev, const TPDiskCtx& pdiskCtx);
 
+    // Whether a chunk read should ask for raw sectors (TEvChunkRead::RawSectors), to be checked and opened by
+    // OpenRawSectors in the reading actor rather than in the PDisk completion thread.
+    bool UseRawSectorReads(const TPDiskCtx& pdiskCtx);
+
+    // Turns a successful RawSectors read result into an ordinary one: checks and decrypts its sectors (in place)
+    // and leaves in msg.Data the payload [offset, offset + size) the read asked for, with msg.Offset = offset. A
+    // sector that does not check out becomes a gap, as when PDisk checks the sectors itself. blobId is the one
+    // the read was salted with, if any. Other results are left as they are.
+    void OpenRawSectors(const TPDiskCtx& pdiskCtx, NPDisk::TEvChunkReadResult& msg, ui32 offset, ui32 size,
+        TLogoBlobID blobId);
+
 } // NKikimr

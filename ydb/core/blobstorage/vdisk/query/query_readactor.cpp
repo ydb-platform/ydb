@@ -1,7 +1,7 @@
 #include "query_readbatch.h"
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_format_context.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_sector_sealing.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <util/generic/algorithm.h>
@@ -51,7 +51,7 @@ namespace NKikimr {
 
                 msg->BlobId = it->HugeBlobId;
                 // Whole raw sectors, to be checked and opened here rather than in the PDisk completion thread.
-                msg->RawSectors = UseRawSectors();
+                msg->RawSectors = UseRawSectorReads(*Ctx->PDiskCtx);
 
                 YDB_LOG_DEBUG_CTX(ctx, VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD(%p): %s", this, msg->ToString().data()));
 
@@ -93,54 +93,13 @@ namespace NKikimr {
             NPDisk::TEvChunkReadResult *msg = ev->Get();
 
             TGlueRead *glueRead = static_cast<TGlueRead *>(msg->Cookie);
-            if (status == NKikimrProto::OK && msg->RawSectors) {
-                glueRead->Data = OpenRawSectors(*glueRead, *msg);
-            } else {
-                glueRead->Data = std::move(msg->Data);
-            }
+            OpenRawSectors(*Ctx->PDiskCtx, *msg, glueRead->Part.Offset, glueRead->Part.Size, glueRead->HugeBlobId);
+            glueRead->Data = std::move(msg->Data);
             glueRead->Success = status == NKikimrProto::OK;
 
             Counter--;
             if (Counter == 0)
                 Finish(ctx);
-        }
-
-        bool UseRawSectors() const {
-            const auto& pdiskCtx = *Ctx->PDiskCtx;
-            return pdiskCtx.FormatContext && !pdiskCtx.FormatContext->IsPlainDataChunks()
-                && static_cast<i64>(pdiskCtx.EnableSectorPreparation) != 0;
-        }
-
-        // Checks and decrypts the raw sectors of a RawSectors read into the payload the request asked for. A sector
-        // that does not check out becomes a gap, as when the PDisk itself checks the sectors.
-        TBufferWithGaps OpenRawSectors(const TGlueRead& glueRead, NPDisk::TEvChunkReadResult& msg) {
-            const NPDisk::TFormatContextPtr& format = Ctx->PDiskCtx->FormatContext;
-            const ui32 payloadSize = format->GetSectorPayloadSize();
-            const ui32 sectorSize = format->GetSectorSize();
-            const ui32 offset = glueRead.Part.Offset;
-            const ui32 size = glueRead.Part.Size;
-            const ui32 firstSector = offset / payloadSize;
-            Y_ABORT_UNLESS(msg.Offset == firstSector * sectorSize);
-
-            // The buffer was read for this request alone, so it is decrypted in place.
-            const ui32 sectors = (offset + size - 1) / payloadSize - firstSector + 1;
-            ui8 *raw = msg.Data.RawDataPtr(0, sectors * sectorSize);
-            TRcBuf data = TRcBuf::UninitializedPageAligned(size);
-            NPDisk::TFormatContext::TOpener opener(format, glueRead.Part.ChunkIdx, msg.ChunkNonce, glueRead.HugeBlobId);
-            TBufferWithGaps result(offset);
-            ui32 done = 0;
-            for (ui32 sector = firstSector; done < size; ++sector) {
-                const ui32 from = sector == firstSector ? offset % payloadSize : 0;
-                const ui32 len = Min(payloadSize - from, size - done);
-                ui8 *dst = reinterpret_cast<ui8*>(data.GetDataMut()) + done;
-                if (!opener.Open(dst, raw + (ui64)(sector - firstSector) * sectorSize, sector, from, len)) {
-                    memset(dst, 0, len);
-                    result.AddGap(sector * payloadSize, (sector + 1) * payloadSize);
-                }
-                done += len;
-            }
-            result.SetData(std::move(data));
-            return result;
         }
 
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {

@@ -171,8 +171,8 @@ def save_zips(logs_by_suite, out_dir, url_prefix):
         raise ValueError("Different suites map to the same ZIP filename")
 
     # zlib releases the GIL while compressing. Each worker owns a separate ZIP;
-    # cap concurrency to avoid overwhelming the disk or keeping many files open.
-    workers = min(4, os.cpu_count() or 1, len(logs_by_suite))
+    # use at most one worker per CPU and no more workers than there are archives.
+    workers = min(os.cpu_count() or 1, len(logs_by_suite))
     log_print(f"Creating {len(logs_by_suite)} ZIP archives with {workers} workers (compression level 6)")
     urls = {}
     with ThreadPoolExecutor(max_workers=workers) as executor:

@@ -30,8 +30,10 @@ template("protobuf_sources") {
     if (_generated_sources) {
         _proto_paths += [ "-I", rebase_path(root_gen_dir, root_build_dir) ]
         _out_base = target_gen_dir
+        _out_base_arg = rebase_path(target_gen_dir, root_build_dir)
     } else {
         _out_base = "{{source_gen_dir}}"
+        _out_base_arg = _out_base
     }
 
     _protoc = "//contrib/tools/protoc:protoc($tool_toolchain)"
@@ -98,7 +100,7 @@ template("protobuf_sources") {
     # prefix it stripped, so files still land at `{{source_gen_dir}}` (the long
     # path GN expects). This holds for `-I`s inherited from deps too, which GN
     # cannot see here (they are resolved from `_proto_includes_file` at runtime).
-    _cpp_out = "$root_gen_dir"
+    _cpp_out = rebase_path(root_gen_dir, root_build_dir)
 
     action_foreach(_action) {
         forward_variables_from(invoker, [ "testonly", "visibility" ])
@@ -119,7 +121,11 @@ template("protobuf_sources") {
             outputs += [ "$_out_base/{{source_name_part}}.deps.pb.h" ]
         }
 
-        args = [ _source_dir ] + outputs + ["--"] + [ "./$_protoc_bin" ] + _proto_paths + _self_proto_paths
+        _output_args = []
+        foreach(_o, outputs) {
+            _output_args += [ string_replace(_o, _out_base, _out_base_arg) ]
+        }
+        args = [ _source_dir ] + _output_args + ["--"] + [ "./$_protoc_bin" ] + _proto_paths + _self_proto_paths
         args += [
             "--cpp_out", _cpp_out,
             "--cpp_styleguide_out", _cpp_out,

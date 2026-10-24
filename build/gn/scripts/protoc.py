@@ -97,13 +97,20 @@ def relativize_proto_sources(args, source_dir):
 
 # protoc derives the output path from the (possibly shortened) source name, so
 # every `--*_out` directory has to be shifted by the prefix that was stripped.
+# A generated source lies under the output dir and is expected at its path
+# relative to it: only the part of the prefix below the output dir counts.
 def shift_output_dirs(args, prefix):
     if not prefix or prefix == ".":
         return
     i = 0
     while i < len(args):
         if args[i].startswith("--") and args[i].endswith("_out") and i + 1 < len(args):
-            args[i + 1] = os.path.join(args[i + 1], prefix)
+            out_dir = os.path.normpath(args[i + 1])
+            shift = prefix
+            if prefix == out_dir or prefix.startswith(out_dir + os.sep):
+                shift = os.path.relpath(prefix, out_dir)
+            if shift != ".":
+                args[i + 1] = os.path.join(args[i + 1], shift)
             i += 2
         else:
             i += 1

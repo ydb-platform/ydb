@@ -2,6 +2,8 @@
 
 ## v3.25.0
 
+* Added recognition of Solomon volumes in Scheme API results and a draft `NKeyValue::TKeyValueClient::DropVolume()` method.
+
 * Added `TExecuteQueryIterator::Cancel()` to explicitly cancel a query response stream, including a pending read.
 
 * Added `TBridgeClient::RemovePile()` to remove a DISCONNECTED pile from a bridged cluster along with its data.

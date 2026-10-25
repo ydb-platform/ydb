@@ -42,6 +42,7 @@ enum class ESchemeEntryType : i32 {
     RtmrVolume = 5,
     BlockStoreVolume = 6,
     CoordinationNode = 7,
+    SolomonVolume = 8,
     ColumnStore = 12,
     ColumnTable = 13,
     Sequence = 15,

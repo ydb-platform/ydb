@@ -433,6 +433,7 @@ TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog
     , TableClient(driver)
     , TopicClient(driver)
     , CoordinationNodeClient(driver)
+    , KeyValueClient(driver)
     , RateLimiterClient(driver)
     , QueryClient(driver)
     , CmsClient(driver)
@@ -532,6 +533,7 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
         TopicClient,
         QueryClient,
         CoordinationNodeClient,
+        KeyValueClient,
         newListing.Entries.rbegin(),
         newListing.Entries.rend()
     );
@@ -1118,7 +1120,7 @@ TRestoreResult TRestoreClient::Drop(ESchemeEntryType type, const TString& path, 
         return Result<TRestoreResult>();
     }
 
-    auto remover = NInternal::CreateDefaultRemover(SchemeClient, TableClient, TopicClient, QueryClient, CoordinationNodeClient, {});
+    auto remover = NInternal::CreateDefaultRemover(SchemeClient, TableClient, TopicClient, QueryClient, CoordinationNodeClient, KeyValueClient, {});
     TSchemeEntry entry;
     entry.Type = type;
     entry.Name = path;

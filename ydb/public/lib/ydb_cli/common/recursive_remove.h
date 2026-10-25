@@ -4,6 +4,7 @@
 #include "recursive_list.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_keyvalue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -53,6 +54,7 @@ namespace NInternal {
         NTopic::TTopicClient& topicClient,
         NQuery::TQueryClient& queryClient,
         NCoordination::TClient& coordinationClient,
+        NKeyValue::TKeyValueClient& keyValueClient,
         const TRemoveDirectoryRecursiveSettings& settings
     );
 
@@ -100,6 +102,7 @@ TStatus RemovePathsRecursive(
     NTopic::TTopicClient& topicClient,
     NQuery::TQueryClient& queryClient,
     NCoordination::TClient& coordinationClient,
+    NKeyValue::TKeyValueClient& keyValueClient,
     TIterator begin,
     TIterator end,
     const TRemoveDirectoryRecursiveSettings& settings = {},
@@ -107,7 +110,7 @@ TStatus RemovePathsRecursive(
     NInternal::TRemover&& remover = {}
 ) {
     if (!remover) {
-        remover = NInternal::CreateDefaultRemover(schemeClient, tableClient, topicClient, queryClient, coordinationClient, settings);
+        remover = NInternal::CreateDefaultRemover(schemeClient, tableClient, topicClient, queryClient, coordinationClient, keyValueClient, settings);
     }
     std::unique_ptr<TProgressBar> progressBar;
     if (settings.CreateProgressBar_) {

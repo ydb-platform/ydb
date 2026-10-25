@@ -4,6 +4,7 @@ SRCS(
     ydb_backup.cpp
     ydb_bridge.cpp
     ydb_dynamic_config.cpp
+    ydb_keyvalue.cpp
     ydb_udf.cpp
     ydb_replication.cpp
     ydb_scripting.cpp

@@ -27,6 +27,8 @@ namespace {
         return ::Ydb::Scheme::Entry::BLOCK_STORE_VOLUME;
     case ESchemeEntryType::CoordinationNode:
         return ::Ydb::Scheme::Entry::COORDINATION_NODE;
+    case ESchemeEntryType::SolomonVolume:
+        return ::Ydb::Scheme::Entry::SOLOMON_VOLUME;
     case ESchemeEntryType::Sequence:
         return ::Ydb::Scheme::Entry::SEQUENCE;
     case ESchemeEntryType::Replication:

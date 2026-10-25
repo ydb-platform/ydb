@@ -91,6 +91,29 @@ runs:
         sudo -n sysctl -w fs.pipe-user-pages-hard=0
         sysctl fs.pipe-user-pages-soft fs.pipe-user-pages-hard fs.pipe-max-size
 
+    - name: Print runner writeback settings
+      shell: bash
+      continue-on-error: true
+      run: |
+        # Diagnose writeback throttling during linking without changing host settings.
+        uname -r
+        sysctl vm.dirty_background_bytes vm.dirty_background_ratio \
+          vm.dirty_bytes vm.dirty_ratio vm.dirty_expire_centisecs \
+          vm.dirty_writeback_centisecs vm.laptop_mode
+        grep -E '^(MemTotal|MemAvailable|Cached|Dirty|Writeback|SwapTotal|SwapFree):' /proc/meminfo
+        grep -E '^nr_(dirty|writeback|dirty_threshold|dirty_background_threshold) ' /proc/vmstat
+        getconf PAGESIZE
+        for path in "$GITHUB_WORKSPACE" "${YA_CACHE_DIR:-$HOME/.ya}" "${TMPDIR:-/tmp}"; do
+          echo "Filesystem for $path"
+          if [[ -e "$path" ]]; then
+            findmnt --target "$path" --output TARGET,SOURCE,FSTYPE,OPTIONS
+          else
+            echo "Directory does not exist yet"
+          fi
+        done
+        lsblk --output NAME,TYPE,SIZE,ROTA,MOUNTPOINT
+        grep -H . /sys/block/*/queue/write_cache /sys/block/*/queue/scheduler
+
     - name: Prepare folder prefix
       id: prepare_prefix
       shell: bash

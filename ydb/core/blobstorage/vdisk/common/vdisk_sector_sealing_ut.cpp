@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TVDiskSectorSealing) {
             TString expected = a + TString(padding, '\0') + b;
 
             NPDisk::TEvChunkWrite ev(1, 1, TFixture::ChunkIdx, offset,
-                MakeIntrusive<NPDisk::TEvChunkWrite::TNonOwningParts>(parts, 3), nullptr, true, 0);
+                MakeIntrusive<NPDisk::TEvChunkWrite::TNonOwningParts>(parts, 3u), nullptr, true, 0);
             UNIT_ASSERT(PrepareChunkWriteSectors(ev, *f.PDiskCtx));
             UNIT_ASSERT(ev.PreformattedSectors);
             UNIT_ASSERT_VALUES_EQUAL(ev.FirstSectorNonce, TFixture::ChunkNonce + 3);
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(TVDiskSectorSealing) {
         const NPDisk::TEvChunkWrite::TPart parts[] = {{a.data(), ui32(a.size())}};
         auto make = [&](ui32 chunkIdx) {
             return NPDisk::TEvChunkWrite(1, 1, chunkIdx, 0,
-                MakeIntrusive<NPDisk::TEvChunkWrite::TNonOwningParts>(parts, 1), nullptr, true, 0);
+                MakeIntrusive<NPDisk::TEvChunkWrite::TNonOwningParts>(parts, 1u), nullptr, true, 0);
         };
         auto unknown = make(TFixture::ChunkIdx + 1);
         UNIT_ASSERT(!PrepareChunkWriteSectors(unknown, *f.PDiskCtx));

@@ -20,6 +20,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/string/split.h>
+
 namespace NKikimr::NColumnShard {
 namespace {
 using namespace NTxUT;
@@ -438,9 +440,9 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL(f.Journal(), journal);
     }
 
-    Y_UNIT_TEST(RequestLimitKeepsEverySentBatchCommitted) {
+    Y_UNIT_TEST(AllRequestsCommittedBeforeSending) {
         TFixture f;
-        constexpr ui32 intervalCount = CutHistoryRequestLimit + 1;
+        constexpr ui32 intervalCount = CutHistoryJournalLimit + 1;
         f.PrepareClosedIntervals(intervalCount);
         TEvFindEmptyHistoryIntervals::TEvContinue::TPtr scan;
         auto pauseScan = f.Runtime.AddObserver<TEvFindEmptyHistoryIntervals::TEvContinue>(
@@ -471,23 +473,38 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Runtime.Send(scan.Release(), 0, true);
         f.Drive(1);
         UNIT_ASSERT(!commits.empty());
-        UNIT_ASSERT_VALUES_EQUAL_C(cutFrom.size(), 0u, "the first batch must wait for its journal commit");
-
-        holdNextCommit = true;
-        commits.Unblock(1);
-        f.Drive(1);
-        UNIT_ASSERT_VALUES_EQUAL_C(cutFrom.size(), CutHistoryRequestLimit, "the next batch must wait for its own journal commit");
-        UNIT_ASSERT_C(!commits.empty(), "remaining intervals must continue without another scan");
+        UNIT_ASSERT_VALUES_EQUAL_C(cutFrom.size(), 0u, "requests must wait for their journal commit");
         commits.Stop().Unblock();
         f.Drive(1);
         UNIT_ASSERT_VALUES_EQUAL(cutFrom.size(), intervalCount);
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 1u);
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("ScanToSend"), intervalCount);
         const auto journal = f.Journal();
-        UNIT_ASSERT(!journal.Contains("FromGeneration: 0\n"));
-        for (ui32 i = 1; i < intervalCount; ++i) {
+        UNIT_ASSERT(!journal.Contains("Requests {"));
+        for (ui32 i = 0; i < intervalCount; ++i) {
             UNIT_ASSERT(cutFrom.contains(f.History[i].first));
             UNIT_ASSERT_STRING_CONTAINS(journal, "FromGeneration: " + ToString(f.History[i].first) + "\n");
+        }
+    }
+
+    Y_UNIT_TEST(JournalKeepsRecentRequestSets) {
+        TFixture f;
+        constexpr ui32 intervalCount = 2;
+        f.PrepareClosedIntervals(intervalCount);
+        auto observer = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([](auto& ev) {
+            ev.Reset();
+        });
+        std::vector<ui32> generations;
+        for (ui32 i = 0; i <= CutHistoryJournalLimit; ++i) {
+            f.Restart();
+            f.Drive(1);
+            generations.push_back(f.Controller->GetTheOnlyShard()->Generation());
+            UNIT_ASSERT_STRING_CONTAINS(f.Journal(), "SendingGeneration: " + ToString(generations.back()) + "\n");
+        }
+        const auto journal = f.Journal();
+        for (size_t i = 0; i < generations.size(); ++i) {
+            const auto requests = StringSplitter(journal).SplitByString("SendingGeneration: " + ToString(generations[i]) + "\n").Count() - 1;
+            UNIT_ASSERT_VALUES_EQUAL(requests, i == 0 ? 0 : intervalCount);
         }
     }
 

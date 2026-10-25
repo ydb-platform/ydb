@@ -2,8 +2,6 @@
 
 #include <ydb/core/base/logoblob.h>
 
-#include <util/generic/function_ref.h>
-
 #include <compare>
 #include <map>
 #include <optional>
@@ -35,8 +33,30 @@ public:
     // Intervals for each channel are disjoint half-open generation ranges from tablet history.
     THistoryIntervals(ui64 tabletId, TIntervals intervals);
 
-    // The caller supplies physical BlobStorage references, excluding external-storage blobs.
-    void Exclude(const TLogoBlobID& blobId, std::optional<ui32> actualGroup = {}, TFunctionRef<void()> onGroupMismatch = [] {});
+    template <class TVisitor>
+    void Exclude(const TLogoBlobID& blobId, std::optional<ui32> actualGroup, TVisitor&& onGroupMismatch) {
+        if (blobId.TabletID() != TabletId) {
+            return;
+        }
+        auto it = Intervals.upper_bound({ blobId.Channel(), blobId.Generation() });
+        if (it == Intervals.begin()) {
+            return;
+        }
+        --it;
+        const auto& [key, interval] = *it;
+        if (key.Channel != blobId.Channel() || blobId.Generation() >= interval.To) {
+            return;
+        }
+        const bool mismatch = actualGroup && *actualGroup != interval.Group;
+        Intervals.erase(it);
+        if (mismatch) {
+            onGroupMismatch();
+        }
+    }
+
+    void Exclude(const TLogoBlobID& blobId, std::optional<ui32> actualGroup = {}) {
+        Exclude(blobId, actualGroup, [] {});
+    }
 
     const TIntervals& GetIntervals() const {
         return Intervals;

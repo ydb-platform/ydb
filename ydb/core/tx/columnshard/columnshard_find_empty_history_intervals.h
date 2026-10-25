@@ -36,7 +36,7 @@ class TTaskContext;
 
 namespace NKikimr::NColumnShard {
 
-inline constexpr ui64 CutHistoryRequestLimit = 64;
+inline constexpr ui64 CutHistoryJournalLimit = 10;
 
 class TCSCounters;
 
@@ -95,10 +95,6 @@ public:
         const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& Config;
         const TCSCounters& Counters;
     };
-
-    bool IsFinished() const {
-        return !ScanActor;
-    }
 
     NActors::TActorId Start(ui32 completedBarrierGeneration, const TStartContext& context, const NActors::TActorContext& ctx);
     std::optional<TEmptyHistoryIntervalsScanResult> HandleFinish(

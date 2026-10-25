@@ -604,7 +604,7 @@ private:
     void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
-    bool CanCutHistory() const;
+    bool IsCutHistoryEnabledAndAllowedBySharing() const;
     void StartFindEmptyHistoryIntervals(ui32 completedBarrierGeneration, const TActorContext& ctx);
     void Handle(TEvFindEmptyHistoryIntervals::TEvScanFinished::TPtr& ev, const TActorContext& ctx);
     void SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request);

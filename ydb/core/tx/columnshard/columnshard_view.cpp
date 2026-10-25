@@ -665,15 +665,17 @@ bool FillCutHistoryMonitoringReport(NTabletFlatExecutor::TTransactionContext& tx
     report.clear();
     using T = Schema::CutHistoryRequests;
     NIceDb::TNiceDb db(txc.DB);
-    auto row = db.Table<T>().Range().Select<T::RequestProto>();
+    auto row = db.Table<T>().Range().Select<T::RequestsProto>();
     if (!row.IsReady()) {
         return false;
     }
     while (!row.EndOfSet()) {
-        NKikimrTxColumnShard::TCutHistoryRequest request;
-        Y_ABORT_UNLESS(request.ParseFromString(row.GetValue<T::RequestProto>()));
-        report += request.DebugString();
-        report += "\n";
+        NKikimrTxColumnShard::TCutHistoryRequests requests;
+        Y_ABORT_UNLESS(requests.ParseFromString(row.GetValue<T::RequestsProto>()));
+        for (const auto& request : requests.GetRequests()) {
+            report += request.DebugString();
+            report += "\n";
+        }
         if (!row.Next()) {
             return false;
         }
@@ -834,7 +836,7 @@ TString TTxMonitoring::RenderCutHistoryPage() {
     html << "<a href=\"app?TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\">ColumnShard</a>";
     HTML(html) {
         H3_CLASS("") {
-            html << "Persisted CutHistory request intents (latest " << CutHistoryRequestLimit << "; Hive confirmation is not tracked)";
+            html << "Persisted CutHistory request intents (latest " << CutHistoryJournalLimit << " request sets; Hive confirmation is not tracked)";
         }
         PRE() {
             html << TEscapeHtml(CutHistoryReport);

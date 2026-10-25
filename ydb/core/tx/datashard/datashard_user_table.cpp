@@ -136,6 +136,39 @@ bool TUserTable::HasAsyncIndexes() const {
     return AsyncIndexCount > 0;
 }
 
+bool TUserTable::HasStoredGeneratedColumns() const {
+    for (const auto& [id, column] : Columns) {
+        if (column.IsStoredGenerated()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TUserTable::HasStoredGeneratedColumnDependency(ui32 columnId) const {
+    const auto* dependency = Columns.FindPtr(columnId);
+    if (!dependency) {
+        return false;
+    }
+    for (const auto& [id, column] : Columns) {
+        if (column.IsStoredGenerated()) {
+            for (const auto& name : column.DefaultFromExpression.GetDependencyColumnNames()) {
+                if (name == dependency->Name) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+void TUserTable::FinishColumnBuild(ui32 columnId) {
+    auto* column = Columns.FindPtr(columnId);
+    Y_ENSURE(column && column->IsStoredGenerated(), "Missing stored generated column " << columnId);
+    column->IsBuildInProgress = false;
+    AlterSchema();
+}
+
 static bool IsJsonCdcStream(TUserTable::TCdcStream::EFormat format) {
     switch (format) {
     case TUserTable::TCdcStream::EFormat::ECdcStreamFormatJson:
@@ -283,6 +316,10 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         column.Family = col.GetFamily();
         column.NotNull = col.GetNotNull();
         column.SetNotNullInProgress = col.GetSetNotNullInProgress();
+        column.IsBuildInProgress = col.GetIsBuildInProgress();
+        if (col.HasDefaultFromExpression() && col.GetDefaultFromExpression().GetStored()) {
+            column.DefaultFromExpression.CopyFrom(col.GetDefaultFromExpression());
+        }
     }
 
     for (const auto& col : descr.GetDropColumns()) {
@@ -419,6 +456,11 @@ void TUserTable::AlterSchema() {
         }
         descr->SetFamily(column.Family);
         descr->SetNotNull(column.NotNull);
+        descr->SetSetNotNullInProgress(column.SetNotNullInProgress);
+        if (column.IsStoredGenerated()) {
+            descr->MutableDefaultFromExpression()->CopyFrom(column.DefaultFromExpression);
+            descr->SetIsBuildInProgress(column.IsBuildInProgress);
+        }
     }
 
     schema.SetPartitionRangeBegin(Range.From.GetBuffer());

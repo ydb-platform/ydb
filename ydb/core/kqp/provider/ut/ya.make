@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp/provider)
 
 SRCS(
+    generated_column_backfill_ut.cpp
     read_attributes_utils_ut.cpp
     sql_path_aliases_ut.cpp
     yql_kikimr_gateway_ut.cpp
@@ -16,6 +17,8 @@ PEERDIR(
     ydb/core/resource_pools
     ydb/library/yql/providers/pq/provider
     yql/essentials/ast
+    yql/essentials/providers/common/udf_resolve
+    yql/essentials/public/udf/service/exception_policy
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
     yql/essentials/sql/v1/translation

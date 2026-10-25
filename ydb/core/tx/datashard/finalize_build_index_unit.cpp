@@ -60,7 +60,28 @@ public:
 
             tableInfo = DataShard.AlterTableDropIndex(ctx, txc, pathId, version, indexPathId);
         } else {
-            tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, version);
+            ui32 generatedColumnId = 0;
+            if (const auto* scan = DataShard.GetBuildIndexScanManager().GetScans().FindPtr(params.GetBuildIndexId())) {
+                if (!scan->GeneratedFillContextSerialized.empty()) {
+                    NKikimrTxDataShard::TGeneratedColumnFillContext context;
+                    Y_ENSURE(context.ParseFromString(scan->GeneratedFillContextSerialized));
+                    if (context.GetOwnerId() == pathId.OwnerId && context.GetPathId() == pathId.LocalPathId &&
+                        context.GetSnapshotStep() == params.GetSnapshotStep() && context.GetSnapshotTxId() == params.GetSnapshotTxId())
+                    {
+                        // Cancellation drops the hidden column before finalizing.
+                        const auto oldTable = DataShard.FindUserTable(pathId);
+                        const auto* target = oldTable->Columns.FindPtr(context.GetTargetColumnId());
+                        if (target && target->IsStoredGenerated()) {
+                            generatedColumnId = context.GetTargetColumnId();
+                        }
+                    }
+                }
+            }
+            // Persist publication before revoking the attempt below in this same
+            // transaction, retaining expression metadata for foreground writes.
+            tableInfo = generatedColumnId
+                ? DataShard.AlterTableFinishColumnBuild(ctx, txc, pathId, version, generatedColumnId)
+                : DataShard.AlterTableSchemaVersion(ctx, txc, pathId, version);
         }
 
         Y_ENSURE(tableInfo);

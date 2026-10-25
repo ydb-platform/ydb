@@ -10,6 +10,28 @@ import "google/protobuf/timestamp.proto";
 package NKikimrIndexBuilder;
 option java_package = "ru.yandex.kikimr.proto";
 
+// Durable, bound scalar program for a single physical STORED column build.
+// SQL metadata is retained separately from the executable backfill program.
+message TGeneratedColumnBuild {
+    message TDependency {
+        optional string Name = 1;
+        optional uint32 ColumnId = 2;
+        optional Ydb.Type Type = 3;
+    }
+    optional string ExprText = 1;
+    repeated TDependency Dependencies = 2;
+    optional Ydb.Type OutputType = 3;
+    optional bytes Program = 4;
+    optional uint32 ProgramFormatVersion = 5;
+    optional uint32 MiniKqlRuntimeVersion = 6;
+    optional uint32 LanguageVersion = 7;
+    optional bytes RuntimeSettings = 8;
+    repeated string RequiredUdfNames = 9;
+    optional uint64 SourceOwnerId = 10;
+    optional uint64 SourcePathId = 11;
+    optional uint64 SourceSchemaVersion = 12;
+}
+
 message TColumnBuildSetting {
     optional string ColumnName = 1;
     optional Ydb.TypedValue default_from_literal = 2;
@@ -23,6 +45,7 @@ message TColumnBuildSetting {
     // before it is written into the row. Used for hot-shard mitigation of monotone
     // sequences when the sequence column is part of a range-partitioned PK/index.
     optional bool bit_reverse_sequence_value = 6;
+    optional TGeneratedColumnBuild generated_from_expression = 7;
 }
 
 message TColumnBuildSettings {
@@ -35,6 +58,7 @@ message TIndexBuildScanSettings {
     optional uint64 MaxBatchBytes = 2 [ default = 8388608 ];
     optional uint32 MaxBatchRetries = 3 [ default = 50 ];
     optional uint64 MaxCheckpointBytes = 4 [ default = 104857600 ]; // 100 MB
+    optional uint64 MaxProgramMemoryBytes = 5 [ default = 67108864 ]; // 64 MiB
 }
 
 message TMeteringStats {

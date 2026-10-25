@@ -37,6 +37,7 @@ SRCS(
     build_index/fulltext_dict.cpp
     build_index/recompute_kmeans.cpp
     build_index/reshuffle_kmeans.cpp
+    build_index/generated_columns_scan.cpp
     build_index/secondary_index.cpp
     cdc_stream_heartbeat.cpp
     cdc_stream_scan.cpp
@@ -463,6 +464,7 @@ PEERDIR(
     ydb/library/json_index
     ydb/core/change_exchange
     ydb/core/engine
+    ydb/core/engine/generated_columns
     ydb/core/engine/minikql
     ydb/core/formats
     ydb/core/io_formats/ydb_dump

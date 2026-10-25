@@ -4,6 +4,8 @@
 
 #include <ydb/library/aclib/user_context.h>
 
+#include <type_traits>
+
 namespace NKikimr::NDataShard {
 
 TString CheckUploadKeySizeLimit(TConstArrayRef<TCell> keys) {
@@ -89,6 +91,54 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         }
     }
 
+    const NKikimrTxDataShard::TGeneratedColumnFillContext* generatedFill = nullptr;
+    if constexpr (std::is_same_v<TEvRequest, TEvDataShard::TEvUploadRowsRequest>) {
+        if (record.HasGeneratedColumnFillContext()) {
+            generatedFill = &record.GetGeneratedColumnFillContext();
+        }
+    } else if (record.HasGeneratedColumnFillContext()) {
+        SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, "Generated fill context is not supported for S3 uploads");
+        return true;
+    }
+    if (generatedFill) {
+        TString error;
+        if (!self->GetBuildIndexScanManager().ValidateGeneratedFill(*generatedFill, error)) {
+            SetError(NKikimrTxDataShard::TError::SCHEME_CHANGED, error);
+            return true;
+        }
+        const auto* target = tableInfo.Columns.FindPtr(generatedFill->GetTargetColumnId());
+        const TSnapshotKey snapshot(fullTableId.PathId, generatedFill->GetSnapshotStep(), generatedFill->GetSnapshotTxId());
+        if (record.GetWriteToTableShadow() || !record.GetUpsertIfExists() ||
+            !record.GetSchemaVersion() || record.GetSchemaVersion() != tableInfo.GetTableSchemaVersion() ||
+            generatedFill->GetSchemaVersion() != tableInfo.GetTableSchemaVersion() ||
+            generatedFill->GetOwnerId() != fullTableId.PathId.OwnerId || generatedFill->GetPathId() != tableId ||
+            record.GetRowScheme().ValueColumnIdsSize() != 1 ||
+            record.GetRowScheme().GetValueColumnIds(0) != generatedFill->GetTargetColumnId() ||
+            !target || target->IsKey || !target->IsStoredGenerated() || !target->IsBuildInProgress ||
+            !self->GetSnapshotManager().FindAvailable(snapshot))
+        {
+            SetError(NKikimrTxDataShard::TError::SCHEME_CHANGED, "Generated fill does not match the live hidden column, schema and snapshot");
+            return true;
+        }
+    } else if (tableInfo.HasStoredGeneratedColumns()) {
+        // Only an independent, existing-row default/sequence fill is safe without
+        // running generated expression maintenance. This fence also applies after
+        // the generated column has been published.
+        if (!record.GetUpsertIfExists() || record.GetWriteToTableShadow() ||
+            !record.GetSchemaVersion() || record.GetSchemaVersion() != tableInfo.GetTableSchemaVersion())
+        {
+            SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, "Raw uploads to tables with STORED generated columns require an exact-version independent existing-row fill");
+            return true;
+        }
+        for (ui32 columnId : record.GetRowScheme().GetValueColumnIds()) {
+            const auto* column = tableInfo.Columns.FindPtr(columnId);
+            if ((column && column->IsStoredGenerated()) || tableInfo.HasStoredGeneratedColumnDependency(columnId)) {
+                SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, "Raw upload touches a STORED generated column or its dependency");
+                return true;
+            }
+        }
+    }
+
     const bool upsertIfExists = record.GetUpsertIfExists();
     const bool writeToTableShadow = record.GetWriteToTableShadow();
     const ui32 writeTableId = writeToTableShadow && shadowTableId ? shadowTableId : localTableId;
@@ -107,6 +157,9 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
 
     // Prepare (id, Type) vector for value columns
     TVector<NTable::TTag> tagsForSelect;
+    if (generatedFill) {
+        tagsForSelect.push_back(generatedFill->GetTargetColumnId());
+    }
     TVector<std::pair<ui32, NScheme::TTypeInfo>> valueCols;
     for (const auto& colId : record.GetRowScheme().GetValueColumnIds()) {
         auto* col = tableInfo.Columns.FindPtr(colId);
@@ -172,6 +225,10 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
 
             if (rowState == NTable::ERowOp::Erase || rowState == NTable::ERowOp::Absent) {
                 // in upsert if exists mode we must be sure that we insert only existing rows.
+                continue;
+            }
+            if (generatedFill && rowState.GetCellOp(0) != NTable::ECellOp::Empty) {
+                // An explicit NULL is materialized just like any other value.
                 continue;
             }
         }

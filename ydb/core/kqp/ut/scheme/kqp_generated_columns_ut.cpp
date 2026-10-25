@@ -5798,10 +5798,6 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
                 ALTER TABLE TestTable ADD COLUMN virtual_value
                     Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) VIRTUAL;
             )", expectedError);
-            fixture.Rejects(R"(
-                ALTER TABLE TestTable ADD COLUMN stored_value
-                    Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) STORED;
-            )", expectedError);
         }
 
         Y_UNIT_TEST(ChangefeedExcludesVirtualColumn) {

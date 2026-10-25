@@ -180,7 +180,9 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
             NIceDb::TUpdate<Schema::BuildColumnOperationSettings::NotNull>(info.BuildColumns[i].NotNull),
             NIceDb::TUpdate<Schema::BuildColumnOperationSettings::FamilyName>(info.BuildColumns[i].FamilyName),
             NIceDb::TUpdate<Schema::BuildColumnOperationSettings::DefaultFromSequence>(info.BuildColumns[i].DefaultFromSequence),
-            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::BitReverseSequenceValue>(info.BuildColumns[i].BitReverseSequenceValue)
+            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::BitReverseSequenceValue>(info.BuildColumns[i].BitReverseSequenceValue),
+            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::GeneratedFromExpression>(
+                info.BuildColumns[i].IsFromExpression() ? TString(info.BuildColumns[i].GeneratedFromExpression->SerializeAsString()) : TString{})
         );
     }
 }

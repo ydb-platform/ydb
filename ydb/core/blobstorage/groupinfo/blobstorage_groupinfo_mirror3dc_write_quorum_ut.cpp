@@ -252,8 +252,9 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         // In N/R/F, E fits in N alone; copies in R do not change that failure threshold.
         CheckBlobStateCase({R::N1, R::R, R::F}, {2, 2, 0}, {1, 0, 3}, G::EBS_DISINTEGRATED);
         CheckBlobStateCase({R::N2, R::R, R::F}, {2, 2, 0}, {1, 0, 3}, G::EBS_FULL);
-        // E = 1+1+1 OR 2+2: R is untrustworthy for absence, so one error in each N can hide 1+1+1.
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {2, 2, 0}, {1, 1, 0}, G::EBS_DISINTEGRATED);
+        // E = 1+1+1 OR 2+2: one error in each N cannot hide E; failures in R are ignored.
+        CheckBlobStateCase({R::N2, R::N2, R::R}, {2, 2, 0}, {1, 1, 0}, G::EBS_FULL);
+        CheckBlobStateCase({R::N2, R::N2, R::R}, {2, 2, 0}, {1, 1, 3}, G::EBS_FULL);
     }
 
     Y_UNIT_TEST(AbsenceRequiresExcludingEveryEnsuredLayout) {
@@ -273,12 +274,16 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         CheckBlobStateCase({R::N2, R::F, R::F}, {}, {2, 0, 0}, G::EBS_DISINTEGRATED);
     }
 
-    Y_UNIT_TEST(RecoveryAbsenceIsNotTrustworthy) {
-        // E = 1+1+1 OR 2+2: R stays uncertain even with no explicit errors there.
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 1, 0}, G::EBS_DISINTEGRATED);
+    Y_UNIT_TEST(RecoveryFailuresDoNotContributeUncertainty) {
+        // E = 1+1+1 OR 2+2: failures in R cannot hide a guaranteed copy.
+        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 1, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
+        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 1, 3}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
+        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {2, 2, 3}, G::EBS_DISINTEGRATED);
         CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 0, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
-        // Explicit E = 1+1+1 needs R for absence checks; actual 1+1+1 satisfies W = 1+1+1 OR 2+2.
-        CheckBlobStateCase({R::N0, R::N0, R::R}, {}, {1, 1, 0}, G::EBS_DISINTEGRATED, L::LAYOUT_111);
+        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 0, 3}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
+        // Explicit E = 1+1+1 cannot hide in failures without counting R; known 1+1+1 still satisfies W.
+        CheckBlobStateCase({R::N0, R::N0, R::R}, {}, {1, 1, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY, L::LAYOUT_111);
+        CheckBlobStateCase({R::N0, R::N0, R::R}, {}, {1, 1, 3}, G::EBS_UNRECOVERABLE_FRAGMENTARY, L::LAYOUT_111);
         CheckBlobStateCase({R::N0, R::N0, R::R}, {1, 1, 1}, {}, G::EBS_FULL, L::LAYOUT_111);
         // E = 1 fits in N alone: R cannot hide the guaranteed copy; R-only data cannot satisfy W = 2+2.
         CheckBlobStateCase({R::N1, R::R, R::F}, {}, {0, 3, 3}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
@@ -347,6 +352,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
             CheckCase({state, state, R::R}, {2, 2, 0}, true);
             // W = 1+1+1 OR 2+2: N/R cannot provide 2+2 instead of N/N; 1+1+1 is also missing.
             CheckCase({state, state, R::R}, {2, 0, 2}, false);
+            CheckBlobStateCase({state, state, R::R}, {2, 0, 2}, {}, G::EBS_RECOVERABLE_FRAGMENTARY);
             // W = 1+1+1 OR 2+2: no copy in R for 1+1+1, and only one in the second N for 2+2.
             CheckCase({state, state, R::R}, {2, 1, 0}, false);
         }

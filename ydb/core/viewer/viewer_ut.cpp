@@ -8,6 +8,7 @@
 #include <library/cpp/http/misc/httpcodes.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
+#include <util/generic/set.h>
 #include <util/stream/null.h>
 #include <util/string/join.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
@@ -97,83 +98,123 @@ duration_t GetBasePerformance() {
 double BASE_PERF = GetBasePerformance().count();
 
 Y_UNIT_TEST_SUITE(Viewer) {
+    // Parsing and merging allocate memory; their wall time cannot be calibrated
+    // against the unrelated CPU-only BASE_PERF workload.
     Y_UNIT_TEST(TabletMerging) {
-        THPTimer timer;
-        Cerr << "BASE_PERF = " << BASE_PERF << Endl;
-        {
-            TMap<ui32, TString> nodesBlob;
-            timer.Reset();
-            for (ui32 nodeId = 1; nodeId <= 1000; ++nodeId) {
-                NKikimrWhiteboard::TEvTabletStateResponse nodeData;
-                nodeData.MutableTabletStateInfo()->Reserve(10000);
-                for (ui32 tabletId = 1; tabletId <= 10000; ++tabletId) {
-                    NKikimrWhiteboard::TTabletStateInfo* tabletData = nodeData.AddTabletStateInfo();
+        constexpr ui32 NodeCount = 4;
+        constexpr ui32 TabletCount = 100;
+        constexpr ui32 FollowerCount = 2;
+        TMap<ui32, NKikimrWhiteboard::TEvTabletStateResponse> nodesData;
+        for (ui32 nodeId = 1; nodeId <= NodeCount; ++nodeId) {
+            NKikimrWhiteboard::TEvTabletStateResponse nodeData;
+            nodeData.SetResponseTime(100 - nodeId);
+            nodeData.SetResponseDuration(10 * nodeId);
+            nodeData.SetProcessDuration(nodeId);
+            for (ui32 tabletId = 1; tabletId <= TabletCount; ++tabletId) {
+                for (ui32 followerId = 0; followerId < FollowerCount; ++followerId) {
+                    const ui32 winnerNodeId = 2 + followerId;
+                    auto* tabletData = nodeData.AddTabletStateInfo();
                     tabletData->SetTabletId(tabletId);
-                    tabletData->SetLeader(true);
-                    tabletData->SetGeneration(13);
-                    tabletData->SetChangeTime(TInstant::Now().MilliSeconds());
+                    tabletData->SetFollowerId(followerId);
+                    tabletData->SetLeader(followerId == 0);
+                    // Nodes 1 and 4 have newer timestamps but older generations.
+                    tabletData->SetGeneration(nodeId == 2 || nodeId == 3 ? 13 : 12);
+                    tabletData->SetChangeTime(nodeId == 1 || nodeId == 4 ? 500 : 100);
+                    const bool sameVersion = followerId == 0 && nodeId == 3 && tabletId % 2 == 0;
+                    if (nodeId == winnerNodeId || sameVersion) {
+                        // Equal versions keep the first node's record.
+                        tabletData->SetChangeTime(200);
+                    }
+                    if (tabletId % 2 == 0) {
+                        tabletData->SetNodeId(100 + nodeId);
+                    }
                     tabletData->MutableTenantId()->SetSchemeShard(8);
-                    tabletData->MutableTenantId()->SetPathId(14);
-                    tabletData->MutableChannelGroupIDs()->Add(9);
-                    tabletData->MutableChannelGroupIDs()->Add(10);
-                    tabletData->MutableChannelGroupIDs()->Add(11);
+                    tabletData->MutableTenantId()->SetPathId(14 + nodeId);
+                    for (ui32 channel = 0; channel < 3; ++channel) {
+                        tabletData->AddChannelGroupIDs(9 + nodeId + channel);
+                    }
                 }
-                nodesBlob[nodeId] = nodeData.SerializeAsString();
             }
-            Ctest << "Build = " << timer.Passed() << Endl;
-            timer.Reset();
-            TMap<ui32, NKikimrWhiteboard::TEvTabletStateResponse> nodesData;
-            for (const auto& [nodeId, nodeBlob] : nodesBlob) {
-                NKikimrWhiteboard::TEvTabletStateResponse nodeData;
-                bool res = nodeData.ParseFromString(nodesBlob[nodeId]);
-                Y_UNUSED(res);
-                nodesData[nodeId] = std::move(nodeData);
-            }
-            NKikimrWhiteboard::TEvTabletStateResponse result;
-            MergeWhiteboardResponses(result, nodesData);
-            Ctest << "Merge = " << timer.Passed() << Endl;
-            UNIT_ASSERT_LT(timer.Passed(), 8 * BASE_PERF);
-            UNIT_ASSERT_VALUES_EQUAL(result.TabletStateInfoSize(), 10000);
-            timer.Reset();
+            UNIT_ASSERT(nodesData[nodeId].ParseFromString(nodeData.SerializeAsString()));
         }
-        Ctest << "Destroy = " << timer.Passed() << Endl;
+
+        THPTimer timer;
+        NKikimrWhiteboard::TEvTabletStateResponse result;
+        MergeWhiteboardResponses(result, nodesData);
+        Ctest << "Merge = " << timer.Passed() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(result.TabletStateInfoSize(), TabletCount * FollowerCount);
+        TSet<std::pair<ui64, ui32>> seen;
+        for (const auto& tabletData : result.GetTabletStateInfo()) {
+            const ui64 tabletId = tabletData.GetTabletId();
+            const ui32 followerId = tabletData.GetFollowerId();
+            UNIT_ASSERT(tabletId >= 1 && tabletId <= TabletCount);
+            UNIT_ASSERT_LT(followerId, FollowerCount);
+            UNIT_ASSERT(seen.emplace(tabletId, followerId).second);
+            const ui32 winnerNodeId = 2 + followerId;
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetNodeId(), winnerNodeId + (tabletId % 2 == 0 ? 100 : 0));
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetGeneration(), 13);
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetChangeTime(), 200);
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetLeader(), followerId == 0);
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetTenantId().GetSchemeShard(), 8);
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetTenantId().GetPathId(), 14 + winnerNodeId);
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.ChannelGroupIDsSize(), 3);
+            for (ui32 channel = 0; channel < 3; ++channel) {
+                UNIT_ASSERT_VALUES_EQUAL(tabletData.GetChannelGroupIDs(channel), 9 + winnerNodeId + channel);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResponseTime(), 100 - NodeCount);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResponseDuration(), 10 * NodeCount);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetProcessDuration(), NodeCount * (NodeCount + 1) / 2);
     }
 
     Y_UNIT_TEST(TabletMergingPacked) {
-        THPTimer timer;
-        {
-            TMap<ui32, TString> nodesBlob;
-            timer.Reset();
-            for (ui32 nodeId = 1; nodeId <= 1000; ++nodeId) {
-                THolder<TEvWhiteboard::TEvTabletStateResponse> nodeData = MakeHolder<TEvWhiteboard::TEvTabletStateResponse>();
-                auto* tabletData = nodeData->AllocatePackedResponse(10000);
-                for (ui32 tabletId = 1; tabletId <= 10000; ++tabletId) {
+        constexpr ui32 NodeCount = 4;
+        constexpr ui32 TabletCount = 100;
+        constexpr ui32 FollowerCount = 2;
+        TMap<ui32, NKikimrWhiteboard::TEvTabletStateResponse> nodesData;
+        for (ui32 nodeId = 1; nodeId <= NodeCount; ++nodeId) {
+            auto nodeData = MakeHolder<TEvWhiteboard::TEvTabletStateResponse>();
+            nodeData->Record.SetResponseTime(100 - nodeId);
+            nodeData->Record.SetResponseDuration(10 * nodeId);
+            nodeData->Record.SetProcessDuration(nodeId);
+            auto* tabletData = nodeData->AllocatePackedResponse(TabletCount * FollowerCount);
+            for (ui32 tabletId = 1; tabletId <= TabletCount; ++tabletId) {
+                for (ui32 followerId = 0; followerId < FollowerCount; ++followerId) {
+                    const ui32 winnerNodeId = 2 + followerId;
                     tabletData->TabletId = tabletId;
-                    tabletData->FollowerId = 0;
-                    tabletData->Generation = 13;
-                    tabletData->Type = NKikimrTabletBase::TTabletTypes::TxProxy;
-                    tabletData->State = NKikimrWhiteboard::TTabletStateInfo::Restored;
-                    //tabletData->SetChangeTime(TInstant::Now().MilliSeconds());
+                    tabletData->FollowerId = followerId;
+                    const bool sameVersion = followerId == 0 && nodeId == 3 && tabletId % 2 == 0;
+                    tabletData->Generation = nodeId == winnerNodeId || sameVersion ? 13 : 12;
+                    tabletData->Type = followerId == 0 ? NKikimrTabletBase::TTabletTypes::DataShard : NKikimrTabletBase::TTabletTypes::TxProxy;
+                    tabletData->State = nodeId == winnerNodeId ? NKikimrWhiteboard::TTabletStateInfo::Active : NKikimrWhiteboard::TTabletStateInfo::Restored;
                     ++tabletData;
                 }
-                nodesBlob[nodeId] = nodeData->Record.SerializeAsString();
             }
-            Ctest << "Build = " << timer.Passed() << Endl;
-            TMap<ui32, NKikimrWhiteboard::TEvTabletStateResponse> nodesData;
-            for (const auto& [nodeId, nodeBlob] : nodesBlob) {
-                NKikimrWhiteboard::TEvTabletStateResponse nodeData;
-                bool res = nodeData.ParseFromString(nodesBlob[nodeId]);
-                Y_UNUSED(res);
-                nodesData[nodeId] = std::move(nodeData);
-            }
-            NKikimrWhiteboard::TEvTabletStateResponse result;
-            MergeWhiteboardResponses(result, nodesData);
-            Ctest << "Merge = " << timer.Passed() << Endl;
-            UNIT_ASSERT_LT(timer.Passed(), 3 * BASE_PERF);
-            UNIT_ASSERT_VALUES_EQUAL(result.TabletStateInfoSize(), 10000);
-            timer.Reset();
+            UNIT_ASSERT(nodesData[nodeId].ParseFromString(nodeData->Record.SerializeAsString()));
         }
-        Ctest << "Destroy = " << timer.Passed() << Endl;
+
+        THPTimer timer;
+        NKikimrWhiteboard::TEvTabletStateResponse result;
+        MergeWhiteboardResponses(result, nodesData);
+        Ctest << "Merge = " << timer.Passed() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(result.TabletStateInfoSize(), TabletCount * FollowerCount);
+        TSet<std::pair<ui64, ui32>> seen;
+        for (const auto& tabletData : result.GetTabletStateInfo()) {
+            const ui64 tabletId = tabletData.GetTabletId();
+            const ui32 followerId = tabletData.GetFollowerId();
+            UNIT_ASSERT(tabletId >= 1 && tabletId <= TabletCount);
+            UNIT_ASSERT_LT(followerId, FollowerCount);
+            UNIT_ASSERT(seen.emplace(tabletId, followerId).second);
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetNodeId(), 2 + followerId);
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetGeneration(), 13);
+            UNIT_ASSERT_VALUES_EQUAL(tabletData.GetType(), followerId == 0 ? NKikimrTabletBase::TTabletTypes::DataShard : NKikimrTabletBase::TTabletTypes::TxProxy);
+            UNIT_ASSERT(tabletData.GetState() == NKikimrWhiteboard::TTabletStateInfo::Active);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResponseTime(), 100 - NodeCount);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResponseDuration(), 10 * NodeCount);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetProcessDuration(), NodeCount * (NodeCount + 1) / 2);
     }
 
     Y_UNIT_TEST(VDiskMerging) {

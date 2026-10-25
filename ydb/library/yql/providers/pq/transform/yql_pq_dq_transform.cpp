@@ -4,12 +4,11 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
+#include <util/string/split.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/utils/yql_panic.h>
-
-#include <util/string/split.h>
 
 namespace NYql::NDq {
 
@@ -51,7 +50,7 @@ public:
                         if (topicSource.ParseFromString(it->second)) {
                             for (const auto& fc : topicSource.GetFederatedClusters()) {
                                 federatedClusters.push_back(TPartitionKey{
-                                    .Cluster    = fc.GetName(),
+                                    .Cluster = fc.GetName(),
                                     .PartitionId = fc.GetPartitionsCount(),
                                 });
                             }
@@ -59,13 +58,14 @@ public:
                     } else {
                         // Fallback: decode compile-time atoms from watermark settings arg[5].
                         const auto watermarkSettingsNode = AS_VALUE(TListLiteral, callable.GetInput(5));
-                        const auto watermarkSettings = TConstArrayRef<TRuntimeNode>(watermarkSettingsNode->GetItems(), watermarkSettingsNode->GetItemsCount());
+                        const auto watermarkSettings =
+                            TConstArrayRef<TRuntimeNode>(watermarkSettingsNode->GetItems(), watermarkSettingsNode->GetItemsCount());
 
                         for (ui32 i = 0; i + 2 <= watermarkSettings.size(); i += 2) {
-                            const auto  name = AS_VALUE(TDataLiteral, watermarkSettings[i + 0])->AsValue().AsStringRef();
+                            const auto name = AS_VALUE(TDataLiteral, watermarkSettings[i + 0])->AsValue().AsStringRef();
                             const auto value = AS_VALUE(TDataLiteral, watermarkSettings[i + 1])->AsValue().AsStringRef();
 
-                            if ("FederatedClusters" == std::string_view{name}) {
+                            if ("FederatedClusters" == std::string_view{ name }) {
                                 TVector<TString> federatedClustersStr;
                                 Split(value.data(), ",", federatedClustersStr);
 
@@ -113,4 +113,4 @@ TTaskTransformFactory CreatePqDqTaskTransformFactory() {
     };
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

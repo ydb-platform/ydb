@@ -603,6 +603,70 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         }
     }
 
+    Y_UNIT_TEST(TestBatchPackMatchesSinglePack) {
+        TScalarLayoutConverterTestData data;
+
+        const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true);
+        const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, true);
+        TVector<NKikimr::NMiniKQL::TType*> types{int64Type, stringType};
+        TVector<NPackedTuple::EColumnRole> roles{
+            NPackedTuple::EColumnRole::Key,
+            NPackedTuple::EColumnRole::Payload};
+
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+
+        constexpr ui32 numTuples = 17;
+        const ui32 numColumns = types.size();
+        TVector<NYql::NUdf::TUnboxedValue> testValues;
+        testValues.reserve(numTuples * numColumns);
+        for (ui32 i = 0; i < numTuples; ++i) {
+            if (i % 3 == 0) {
+                testValues.push_back(NYql::NUdf::TUnboxedValuePod());
+            } else {
+                testValues.push_back(NYql::NUdf::TUnboxedValuePod(static_cast<i64>(i)));
+            }
+
+            if (i % 4 == 0) {
+                testValues.push_back(NYql::NUdf::TUnboxedValuePod());
+            } else if (i % 4 == 1) {
+                testValues.push_back(MakeString(NUdf::TStringRef("", 0)));
+            } else if (i % 4 == 2) {
+                TString str = "row-";
+                str.push_back(static_cast<char>('a' + (i % 26)));
+                testValues.push_back(MakeString(NUdf::TStringRef(str)));
+            } else {
+                const TString str(300, static_cast<char>('a' + (i % 26)));
+                testValues.push_back(MakeString(NUdf::TStringRef(str)));
+            }
+        }
+
+        auto assertSamePack = [](const TPackResult& rowPack, const TPackResult& batchPack) {
+            UNIT_ASSERT_VALUES_EQUAL(rowPack.NTuples, batchPack.NTuples);
+            UNIT_ASSERT_VALUES_EQUAL(rowPack.PackedTuples.size(), batchPack.PackedTuples.size());
+            UNIT_ASSERT_VALUES_EQUAL(rowPack.Overflow.size(), batchPack.Overflow.size());
+            UNIT_ASSERT(std::memcmp(rowPack.PackedTuples.data(), batchPack.PackedTuples.data(), rowPack.PackedTuples.size()) == 0);
+            if (!rowPack.Overflow.empty()) {
+                UNIT_ASSERT(std::memcmp(rowPack.Overflow.data(), batchPack.Overflow.data(), rowPack.Overflow.size()) == 0);
+            }
+        };
+
+        for (ui32 count : {ui32(1), ui32(7), ui32(8), ui32(9), numTuples}) {
+            TPackResult rowPack;
+            TPackResult batchPack;
+            for (ui32 i = 0; i < count; ++i) {
+                converter->Pack(testValues.data() + i * numColumns, rowPack);
+            }
+            converter->PackBatch(testValues.data(), count, batchPack);
+            assertSamePack(rowPack, batchPack);
+
+            for (ui32 i = 0; i < count; ++i) {
+                converter->Pack(testValues.data() + i * numColumns, rowPack);
+            }
+            converter->PackBatch(testValues.data(), count, batchPack);
+            assertSamePack(rowPack, batchPack);
+        }
+    }
+
     Y_UNIT_TEST(TestBucketPack) {
         TScalarLayoutConverterTestData data;
 

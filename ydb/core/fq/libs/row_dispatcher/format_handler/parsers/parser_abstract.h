@@ -2,6 +2,7 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/common/common.h>
+
 #include <ydb/library/yql/providers/abstract/message_stream/message_stream_session.h>
 
 #include <yql/essentials/public/udf/udf_value.h>
@@ -10,7 +11,7 @@
 
 namespace NFq::NRowDispatcher {
 
-class IParsedDataConsumer : public TThrRefBase {
+class IParsedDataConsumer: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IParsedDataConsumer>;
 
@@ -21,7 +22,7 @@ public:
     virtual void OnParsedData(ui64 numberRows) = 0;
 };
 
-class ITopicParser : public TThrRefBase, public TNonCopyable {
+class ITopicParser: public TThrRefBase, public TNonCopyable {
 public:
     using TPtr = TIntrusivePtr<ITopicParser>;
 
@@ -36,4 +37,4 @@ public:
     virtual void FillStatistics(TFormatHandlerStatistic& statistic) = 0;
 };
 
-}  // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

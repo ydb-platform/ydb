@@ -1,0 +1,22 @@
+Snapshot: Snapshot(local_realms=(0, 1), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0))
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+Stdout: 1 7 A FCur Key# [1:1:1:0:0:100:0] Ingress# {nodeId: 0 main: 1 1 1 handoff0: 01 00 00 handoff1: 00 01 00 handoff2: 00 00 01 handoff3: 01 00 00 handoff4: 00 01 00 handoff5: 00 00 01 local: 1 0 0 Keep}
+1 7 C FCur Key# [1 0 2 1 soft] MemRec# {CollectGen: 1 CollectStep: 1 Ingress: [1][1][1][1][1][1][1][*1*][1]}
+1 1 A FCur Key# [1:1:1:0:0:100:0] Ingress# {nodeId: 1 main: 1 1 1 handoff0: 01 00 00 handoff1: 00 01 00 handoff2: 00 00 01 handoff3: 01 00 00 handoff4: 00 01 00 handoff5: 00 00 01 local: 0 1 0 Keep}
+1 1 C FCur Key# [1 0 2 1 soft] MemRec# {CollectGen: 1 CollectStep: 1 Ingress: [1][*1*][1][1][1][1][1][1][1]}
+1 8 A FCur Key# [1:1:1:0:0:100:0] Ingress# {nodeId: 3 main: 1 1 1 handoff0: 01 00 00 handoff1: 00 01 00 handoff2: 00 00 01 handoff3: 01 00 00 handoff4: 00 01 00 handoff5: 00 00 01 local: 1 0 0 Keep}
+1 8 C FCur Key# [1 0 2 1 soft] MemRec# {CollectGen: 1 CollectStep: 1 Ingress: [1][1][1][1][1][1][1][1][*1*]}
+1 2 A FCur Key# [1:1:1:0:0:100:0] Ingress# {nodeId: 4 main: 1 1 1 handoff0: 01 00 00 handoff1: 00 01 00 handoff2: 00 00 01 handoff3: 01 00 00 handoff4: 00 01 00 handoff5: 00 00 01 local: 0 1 0 Keep}
+1 2 C FCur Key# [1 0 2 1 soft] MemRec# {CollectGen: 1 CollectStep: 1 Ingress: [1][1][*1*][1][1][1][1][1][1]}
+1 6 A FCur Key# [1:1:1:0:0:100:0] Ingress# {nodeId: 6 main: 1 1 1 handoff0: 01 00 00 handoff1: 00 01 00 handoff2: 00 00 01 handoff3: 01 00 00 handoff4: 00 01 00 handoff5: 00 00 01 local: 1 0 0 Keep}
+1 6 C FCur Key# [1 0 2 1 soft] MemRec# {CollectGen: 1 CollectStep: 1 Ingress: [1][1][1][1][1][1][*1*][1][1]}
+1 0 A FCur Key# [1:1:1:0:0:100:0] Ingress# {nodeId: 7 main: 1 1 1 handoff0: 01 00 00 handoff1: 00 01 00 handoff2: 00 00 01 handoff3: 01 00 00 handoff4: 00 01 00 handoff5: 00 00 01 local: 0 1 0 Keep}
+1 0 C FCur Key# [1 0 2 1 soft] MemRec# {CollectGen: 1 CollectStep: 1 Ingress: [*1*][1][1][1][1][1][1][1][1]}

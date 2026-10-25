@@ -8,17 +8,19 @@ IOutputQueue::TPtr MakeCompressorQueue(const std::string_view& /*compression*/) 
     return {};
 }
 
-} // namespace NYql
+}   // namespace NYql
 
 #else
 
-#include "lz4io.h"
 #include "brotli.h"
-#include "zstd.h"
 #include "bzip2.h"
-#include "xz.h"
 #include "gz.h"
+#include "lz4io.h"
 #include "output_queue_impl.h"
+#include "xz.h"
+#include "zstd.h"
+
+#undef NO_SANITIZE_THREAD
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 
@@ -67,12 +69,12 @@ IOutputQueue::TPtr MakeCompressorQueue(const std::string_view& compression) {
         return NGz::MakeCompressor();
     }
     if (compression.empty()) {
-        return std::make_unique<TOutputQueue<5_MB>>();
+        return std::make_unique<TOutputQueue<5_MB> >();
     }
 
     return {};
 }
 
-} // namespace NYql
+}   // namespace NYql
 
 #endif

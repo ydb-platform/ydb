@@ -7,6 +7,7 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/http_database_param.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -14,6 +15,7 @@
 #include <ydb/core/grpc_services/base/http_database_access_verdict.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/mon/audit/audit.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/protos/mon.pb.h>
 #include <ydb/core/util/wildcard.h>
 
@@ -65,6 +67,9 @@ TString ExtractMonDatabaseParam(const NHttp::THttpIncomingRequest* request) {
 
 void InitMonHttpIncomingRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event) {
     event->Database = ExtractMonDatabaseParam(event->Request.Get());
+    if (!event->Database.empty() && HasAppData() && AppData()->PathNormalizer) {
+        event->Database = AppData()->PathNormalizer->NormalizePath(CanonizePath(event->Database));
+    }
 }
 
 void LogAuthorizedHttpRequest(
@@ -253,6 +258,18 @@ NActors::IEventHandle* SelectAuthorizationScheme(
     } else {
         return nullptr;
     }
+}
+
+TString GetRelativeRoot(TStringBuf path) {
+    path = path.Before('?').Before('#');
+    path.SkipPrefix("/");
+    TString root;
+    for (char c : path) {
+        if (c == '/') {
+            root += "../";
+        }
+    }
+    return root;
 }
 
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status) {

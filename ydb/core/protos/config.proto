@@ -1742,6 +1742,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
+        optional uint64 MergeBySizeEnabled = 21 [(ControlOptions) = {
+            Description: "Enables merge by size",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
     }
 
     message TTCMallocControls {
@@ -3495,6 +3500,8 @@ message TBridgeConfig {
         optional string Name = 1; // name (to be matched with node's BridgePileName)
     }
     repeated TPile Piles = 1; // order of realms must not change during config updates
+    // Opt in to ordinary mirror-3-dc pools alongside bridged pools. Activation is irreversible.
+    optional bool EnableNonUniformStorage = 2 [default = false];
 }
 
 message TLabel {

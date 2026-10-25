@@ -5,16 +5,14 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http_proxy.h>
-
 #include <ydb/library/security/util.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/services/services.pb.h>
-
 #include <ydb/library/yql/utils/actors/http_sender.h>
 #include <ydb/library/yql/utils/actors/http_sender_actor.h>
-#include <yql/essentials/utils/url_builder.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <yql/essentials/utils/url_builder.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
@@ -22,7 +20,7 @@ namespace NFq {
 
 using namespace NActors;
 
-class TMonitoringRestServiceActor : public NActors::TActor<TMonitoringRestServiceActor> {
+class TMonitoringRestServiceActor: public NActors::TActor<TMonitoringRestServiceActor> {
 public:
     using TBase = NActors::TActor<TMonitoringRestServiceActor>;
 
@@ -31,7 +29,8 @@ public:
         , Endpoint(endpoint)
         , Database(database)
         , CredentialsProvider(credentialsProvider)
-    {}
+    {
+    }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvYdbCompute::TEvCpuLoadRequest, Handle);
@@ -43,21 +42,20 @@ public:
             HttpProxyId = Register(NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance()));
         }
 
-        auto httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(
-            NYql::TUrlBuilder(Endpoint)
-                .AddPathComponent("viewer")
-                .AddPathComponent("json")
-                .AddPathComponent("tenantinfo")
-                .AddUrlParam("path", Database)
-                .Build()
-        );
+        auto httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(NYql::TUrlBuilder(Endpoint)
+                                                                             .AddPathComponent("viewer")
+                                                                             .AddPathComponent("json")
+                                                                             .AddPathComponent("tenantinfo")
+                                                                             .AddUrlParam("path", Database)
+                                                                             .Build() );
         auto ticket = CredentialsProvider->GetAuthInfo();
         YDB_LOG_DEBUG("[ydb] using ticket",
             {"httpRequest", httpRequest->GetObfuscatedData()},
             {"token", NKikimr::MaskTicket(ticket)});
         httpRequest->Set("Authorization", ticket);
 
-        auto httpSenderId = Register(NYql::NDq::CreateHttpSenderActor(SelfId(), HttpProxyId, NYql::NDq::THttpSenderRetryPolicy::GetNoRetryPolicy()));
+        auto httpSenderId =
+            Register(NYql::NDq::CreateHttpSenderActor(SelfId(), HttpProxyId, NYql::NDq::THttpSenderRetryPolicy::GetNoRetryPolicy()));
         Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), 0, Cookie);
         Requests[Cookie++] = ev;
     }
@@ -126,7 +124,7 @@ public:
             } else {
                 forwardResponse->Issues.AddIssue("Malformed JSON");
             }
-        } catch(const std::exception& e) {
+        } catch (const std::exception& e) {
             forwardResponse->Issues.AddIssue(TStringBuilder() << "Error on JSON parsing: '" << e.what() << "'");
         }
 
@@ -146,8 +144,9 @@ private:
     TActorId HttpProxyId;
 };
 
-std::unique_ptr<NActors::IActor> CreateMonitoringRestClientActor(const TString& endpoint, const TString& database, const NYdb::TCredentialsProviderPtr& credentialsProvider) {
+std::unique_ptr<NActors::IActor> CreateMonitoringRestClientActor(
+    const TString& endpoint, const TString& database, const NYdb::TCredentialsProviderPtr& credentialsProvider) {
     return std::make_unique<TMonitoringRestServiceActor>(endpoint, database, credentialsProvider);
 }
 
-}
+}   // namespace NFq

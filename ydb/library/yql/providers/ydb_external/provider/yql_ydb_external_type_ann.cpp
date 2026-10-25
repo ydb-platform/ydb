@@ -1,9 +1,9 @@
-#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include "yql_ydb_external_provider_impl.h"
 
-#include <yql/essentials/core/sql_types/block.h>
-
+#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include <ydb/library/yql/providers/ydb_external/expr_nodes/yql_ydb_external_expr_nodes.h>
+
+#include <yql/essentials/core/sql_types/block.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
@@ -12,19 +12,19 @@ namespace {
 
 using namespace NNodes;
 
-class TTypeAnnotationTransformer final : public TVisitorTransformerBase {
+class TTypeAnnotationTransformer final: public TVisitorTransformerBase {
 public:
     explicit TTypeAnnotationTransformer(TState::TPtr state)
         : TVisitorTransformerBase(true)
         , State_(std::move(state))
     {
-        AddHandler({TYdbExternalReadTable::CallableName()}, Hndl(&TTypeAnnotationTransformer::HandleRead));
-        AddHandler({TYdbExternalSourceSettings::CallableName()}, Hndl(&TTypeAnnotationTransformer::HandleSource));
+        AddHandler({ TYdbExternalReadTable::CallableName() }, Hndl(&TTypeAnnotationTransformer::HandleRead));
+        AddHandler({ TYdbExternalSourceSettings::CallableName() }, Hndl(&TTypeAnnotationTransformer::HandleSource));
     }
 
 private:
-    const TStructExprType* SelectColumns(const TString& cluster, const TString& tableName,
-            TExprNode& columns, TExprContext& ctx, TVector<TString>* order = nullptr) {
+    const TStructExprType* SelectColumns(
+        const TString& cluster, const TString& tableName, TExprNode& columns, TExprContext& ctx, TVector<TString>* order = nullptr) {
         const auto it = State_->Tables.find(TState::TTableKey(cluster, tableName));
         if (it == State_->Tables.end()) {
             ctx.AddError(TIssue(ctx.GetPosition(columns.Pos()), "YdbExternal table metadata is missing"));
@@ -69,32 +69,29 @@ private:
 
     TStatus HandleRead(const TExprNode::TPtr& input, TExprContext& ctx) {
         if (!EnsureArgsCount(*input, 4, ctx) || !EnsureWorldType(*input->Child(0), ctx) ||
-            !EnsureSpecificDataSource(*input->Child(1), YdbExternalProviderName, ctx) ||
-            !EnsureAtom(*input->Child(2), ctx)) {
+            !EnsureSpecificDataSource(*input->Child(1), YdbExternalProviderName, ctx) || !EnsureAtom(*input->Child(2), ctx)) {
             return TStatus::Error;
         }
         const TYdbExternalReadTable read(input);
         TVector<TString> order;
-        const auto* row = SelectColumns(read.DataSource().Cluster().StringValue(), read.Table().StringValue(),
-            read.Columns().MutableRef(), ctx, &order);
+        const auto* row =
+            SelectColumns(read.DataSource().Cluster().StringValue(), read.Table().StringValue(), read.Columns().MutableRef(), ctx, &order);
         if (!row) {
             return TStatus::Error;
         }
-        input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-            read.World().Ref().GetTypeAnn(), ctx.MakeType<TListExprType>(row)}));
+        input->SetTypeAnn(
+            ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{ read.World().Ref().GetTypeAnn(), ctx.MakeType<TListExprType>(row) }));
         return State_->Types->SetColumnOrder(*input, TColumnOrder(order), ctx);
     }
 
     TStatus HandleSource(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 5, ctx) || !EnsureWorldType(*input->Child(0), ctx) ||
-            !EnsureAtom(*input->Child(1), ctx) || !EnsureAtom(*input->Child(2), ctx) ||
-            !EnsureCallable(*input->Child(3), ctx) || !TCoSecureParam::Match(input->Child(3)) ||
+        if (!EnsureArgsCount(*input, 5, ctx) || !EnsureWorldType(*input->Child(0), ctx) || !EnsureAtom(*input->Child(1), ctx) ||
+            !EnsureAtom(*input->Child(2), ctx) || !EnsureCallable(*input->Child(3), ctx) || !TCoSecureParam::Match(input->Child(3)) ||
             !EnsureTuple(*input->Child(4), ctx)) {
             return TStatus::Error;
         }
         const TYdbExternalSourceSettings settings(input);
-        const auto* row = SelectColumns(settings.Cluster().StringValue(), settings.Table().StringValue(),
-            settings.Columns().MutableRef(), ctx);
+        const auto* row = SelectColumns(settings.Cluster().StringValue(), settings.Table().StringValue(), settings.Columns().MutableRef(), ctx);
         if (!row) {
             return TStatus::Error;
         }
@@ -102,8 +99,8 @@ private:
         for (const auto* column : row->GetItems()) {
             items.emplace_back(ctx.MakeType<TItemExprType>(column->GetName(), ctx.MakeType<TBlockExprType>(column->GetItemType())));
         }
-        items.emplace_back(ctx.MakeType<TItemExprType>(BlockLengthColumnName,
-            ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64))));
+        items.emplace_back(
+            ctx.MakeType<TItemExprType>(BlockLengthColumnName, ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64))));
         input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TStructExprType>(items)));
         return TStatus::Ok;
     }
@@ -111,10 +108,10 @@ private:
     const TState::TPtr State_;
 };
 
-} // namespace
+}   // namespace
 
 THolder<TVisitorTransformerBase> CreateTypeAnnotationTransformer(TState::TPtr state) {
     return MakeHolder<TTypeAnnotationTransformer>(std::move(state));
 }
 
-} // namespace NYql::NYdbExternal
+}   // namespace NYql::NYdbExternal

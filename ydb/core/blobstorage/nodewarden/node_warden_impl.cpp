@@ -23,6 +23,7 @@
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/mind/bscontroller/yaml_config_helpers.h>
 #include <ydb/core/base/nameservice.h>
+#include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <util/folder/dirut.h>
 
@@ -39,6 +40,8 @@ TNodeWardenConfig::TNodeWardenConfig()
     , AllVDiskKinds(new TAllVDiskKinds)
     , AllDriveModels(new NPDisk::TDriveModelDb)
     , FeatureFlags(std::make_unique<NKikimrConfig::TFeatureFlags>())
+    , SelfHealStateRequestTimeout(TDuration::MicroSeconds(NKikimrCms::TCmsConfig::TSentinelConfig::
+        TStateStorageSelfHealConfig::default_instance().GetSelfHealStateRequestTimeout()))
 {}
 
 TNodeWardenConfig::~TNodeWardenConfig()
@@ -237,6 +240,8 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvNodeWardenReadMetadata, Handle);
         hFunc(TEvNodeWardenWriteMetadata, Handle);
         hFunc(TEvPrivate::TEvDereferencePDisk, Handle);
+        hFunc(TEvPrivate::TEvCleanupTemporaryPDisk, Handle);
+        hFunc(TEvents::TEvPoisonTaken, Handle);
 
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
 
@@ -1982,8 +1987,8 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 return false;
             }
         }
-        if (piles.size() < 2) {
-            *errorReason = "pile set can't be empty or contain less than two elements when bridge mode is enabled";
+        if (piles.empty()) {
+            *errorReason = "pile set can't be empty when bridge mode is enabled";
             return false;
         }
     }
@@ -2002,8 +2007,15 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         }
         const auto& bridgePileName = TNodeLocation(r->GetLocation()).GetBridgePileName();
         if (!piles.empty()) {
-            if (!bridgePileName) {
-                *errorReason = TStringBuilder() << "mandatory pile name is missing for node " << r->GetNodeId();
+            // pile name may be omitted only for single-pile configuration (cluster converted from non-bridged one)
+            if (!bridgePileName && piles.size() != 1) {
+                *errorReason = TStringBuilder() << "mandatory pile name is missing for node " << r->GetNodeId()
+                    << " (nodes of the cluster converted from non-bridged one have to get the name of its pile before"
+                    " other piles are added)";
+                return false;
+            } else if (bridgePileName && !piles.contains(*bridgePileName)) {
+                *errorReason = TStringBuilder() << "unknown pile name '" << *bridgePileName << "' for node "
+                    << r->GetNodeId();
                 return false;
             }
         } else if (bridgePileName) {
@@ -2028,7 +2040,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
 
             auto updateConfig = [&](bool needMerge, auto *to, const auto& from, const char *entity) {
                 if (needMerge) {
-                    *errorReason = NKikimr::NConfig::ValidateStateStorageConfig(entity, from, *to);
+                    *errorReason = NKikimr::NConfig::ValidateStateStorageConfig(entity, *to, from);
                     if (!errorReason->empty()) {
                         return false;
                     }

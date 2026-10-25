@@ -24,7 +24,6 @@ PEERDIR(
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
     library/cpp/xml/document
-    ydb/core/base
     ydb/core/fq/libs/events
     ydb/core/util
     ydb/library/yql/dq/actors/compute

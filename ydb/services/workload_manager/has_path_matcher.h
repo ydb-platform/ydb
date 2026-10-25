@@ -8,6 +8,11 @@
 
 #include <optional>
 
+namespace NKikimr::NKqp {
+
+struct TQueryTable;
+
+}   // namespace NKikimr::NKqp
 
 namespace NKikimr::NWorkloadManager {
 
@@ -22,8 +27,10 @@ namespace NKikimr::NWorkloadManager {
 /// Callers pass `queryTables` from `TPreparedQueryHolder::GetQueryTables()` and
 /// `phyQuery` from `TPreparedQueryHolder::GetPhysicalQuery()`.
 ///
-bool MatchesPath(const std::optional<NResourcePool::TRegexPredicate>& predicate,
-                 const TVector<TString>& queryTables,
-                 const NKqpProto::TKqpPhyQuery& phyQuery);
+bool MatchesPath(const std::optional<NResourcePool::TRegexPredicate>& predicate, const TVector<TString>& queryTables,
+    const NKqpProto::TKqpPhyQuery& phyQuery);
 
-}  // namespace NKikimr::NWorkloadManager
+bool MatchesPath(const std::optional<NResourcePool::TRegexPredicate>& predicate, const TVector<NKqp::TQueryTable>& queryTables,
+    const NKqpProto::TKqpPhyQuery& phyQuery);
+
+}   // namespace NKikimr::NWorkloadManager

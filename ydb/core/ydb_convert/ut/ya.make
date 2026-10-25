@@ -25,3 +25,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    permissions
+)

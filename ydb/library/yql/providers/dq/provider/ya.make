@@ -56,7 +56,6 @@ PEERDIR(
     yql/essentials/providers/common/proto
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/transform
-    yql/essentials/providers/result/expr_nodes
     yql/essentials/utils/log
 )
 

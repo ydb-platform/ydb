@@ -1,7 +1,9 @@
 #include "util.h"
+
 #include <ydb/public/api/protos/ydb_query.pb.h>
-#include <yql/essentials/public/issue/protos/issue_message.pb.h>
+
 #include <library/cpp/testing/unittest/registar.h>
+#include <yql/essentials/public/issue/protos/issue_message.pb.h>
 
 namespace NFq {
 
@@ -13,7 +15,9 @@ Y_UNIT_TEST_SUITE(EscapingBasics) {
     Y_UNIT_TEST(HideSecretsShouldWork) {
         UNIT_ASSERT_VALUES_EQUAL(HideSecrets("some text"), "some text");
         UNIT_ASSERT_VALUES_EQUAL(HideSecrets("/* 51a91b5d91a99eb7 */some_secret1/* e87c9b191b202354 */"), "/*SECRET*/");
-        UNIT_ASSERT_VALUES_EQUAL(HideSecrets("/* 51a91b5d91a99eb7 */some_secret1/* e87c9b191b202354 */\n/* 51a91b5d91a99eb7 */some_secret2/* e87c9b191b202354 */"), "/*SECRET*/\n/*SECRET*/");
+        UNIT_ASSERT_VALUES_EQUAL(
+            HideSecrets("/* 51a91b5d91a99eb7 */some_secret1/* e87c9b191b202354 */\n/* 51a91b5d91a99eb7 */some_secret2/* e87c9b191b202354 */"),
+            "/*SECRET*/\n/*SECRET*/");
     }
 
     Y_UNIT_TEST(HideSecretsOverEncloseSecretShouldWork) {
@@ -35,8 +39,10 @@ Y_UNIT_TEST_SUITE(EscapingBasics) {
 
         UNIT_ASSERT_VALUES_EQUAL(EncloseAndEscapeString("some\"_\"secret1", '"'), "\"some\\\"_\\\"secret1\"");
         UNIT_ASSERT_VALUES_EQUAL(EncloseAndEscapeString("some\"_\\\"secret1", '"'), "\"some\\\"_\\\\\\\"secret1\"");
-        UNIT_ASSERT_VALUES_EQUAL(EncloseAndEscapeString("some_secret1}+{\n}+{some_secret2", "}+{", "[*]"), "}+{some_secret1[*]\n[*]some_secret2}+{");
-        UNIT_ASSERT_VALUES_EQUAL(EncloseAndEscapeString("some_secret1}+{\\}+{some_secret2", "}+{", "[*]"), "}+{some_secret1[*]\\\\[*]some_secret2}+{");
+        UNIT_ASSERT_VALUES_EQUAL(
+            EncloseAndEscapeString("some_secret1}+{\n}+{some_secret2", "}+{", "[*]"), "}+{some_secret1[*]\n[*]some_secret2}+{");
+        UNIT_ASSERT_VALUES_EQUAL(
+            EncloseAndEscapeString("some_secret1}+{\\}+{some_secret2", "}+{", "[*]"), "}+{some_secret1[*]\\\\[*]some_secret2}+{");
     }
 }
 
@@ -48,7 +54,7 @@ Y_UNIT_TEST_SUITE(IssuesTextFiltering) {
         midIssue->AddSubIssue(bottomIssue);
         NYql::TIssue topIssue("While doing smth db.[] /path/to/other/smth");
         topIssue.AddSubIssue(midIssue);
-        NYql::TIssues issues({topIssue});
+        NYql::TIssues issues({ topIssue });
 
         TVector<NYql::TIssue> vecIssuesExpected;
         auto bottomIssueExpected = MakeIntrusive<NYql::TIssue>("Error binding_name binding_name");
@@ -56,10 +62,10 @@ Y_UNIT_TEST_SUITE(IssuesTextFiltering) {
         midIssueExpected->AddSubIssue(bottomIssueExpected);
         NYql::TIssue topIssueExpected("While doing smth db.[] /path/to/other/smth");
         topIssueExpected.AddSubIssue(midIssueExpected);
-        NYql::TIssues issuesExpected({topIssueExpected});
+        NYql::TIssues issuesExpected({ topIssueExpected });
 
         auto issuesActual = RemoveDatabaseFromIssues(issues, "/path/to/database");
-        
+
         auto iterActual = issuesActual.begin();
         auto iterExpected = issuesExpected.begin();
         while (iterActual != issuesActual.end()) {
@@ -87,7 +93,7 @@ Y_UNIT_TEST_SUITE(IssuesTruncating) {
 
         constexpr ui32 maxLevels = 10;
         constexpr ui32 keepTailLevels = 3;
-        const auto truncated = TruncateIssues({issue}, maxLevels, keepTailLevels);
+        const auto truncated = TruncateIssues({ issue }, maxLevels, keepTailLevels);
         UNIT_ASSERT_VALUES_EQUAL(truncated.Size(), 1);
 
         NYql::NIssue::NProto::IssueMessage nestedProto;
@@ -127,4 +133,4 @@ Y_UNIT_TEST_SUITE(IssuesTruncating) {
     }
 }
 
-} // NFq
+}   // namespace NFq

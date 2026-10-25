@@ -4,6 +4,7 @@
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 
@@ -29,16 +30,14 @@ struct TMetadataSchema {
     TVector<std::pair<TString, Ydb::Type>> Columns;
 };
 
-bool ExtractMetadataSchema(const Ydb::Table::DescribeTableResult& description,
-                           TMetadataSchema& schema, TString& error);
+bool ExtractMetadataSchema(const Ydb::Table::DescribeTableResult& description, TMetadataSchema& schema, TString& error);
 
-struct TState : public TThrRefBase {
+struct TState: public TThrRefBase {
     using TPtr = TIntrusivePtr<TState>;
     using TTableKey = std::pair<TString, TString>;
 
     TState(TTypeAnnotationContext* types, TYdbExternalMetadataClientCacheFactory metadataClientCacheFactory,
-           IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-           TInstant metadataDeadline = TInstant::Max())
+        IStructuredTokenCredentialsFactory::TPtr credentialsFactory, TInstant metadataDeadline = TInstant::Max())
         : Types(types)
         , CredentialsFactory(std::move(credentialsFactory))
         , MetadataDeadline(metadataDeadline == TInstant::Max() ? TInstant::Now() + TDuration::Seconds(60) : metadataDeadline)
@@ -65,4 +64,4 @@ THolder<IGraphTransformer> CreatePhysicalOptimizer();
 THolder<IGraphTransformer> CreateLogicalOptimizer(TState::TPtr state);
 THolder<IDqIntegration> CreateDqIntegration(TState::TPtr state);
 
-} // namespace NYql::NYdbExternal
+}   // namespace NYql::NYdbExternal

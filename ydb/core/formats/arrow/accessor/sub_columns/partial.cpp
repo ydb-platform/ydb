@@ -14,12 +14,8 @@ void TSubColumnsPartialArray::InitOthers(const TString& blob, const TChunkConstr
     StoreOthersString = blob;
 }
 
-TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> TSubColumnsPartialArray::GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
-    auto parsedResult = NSubColumns::ParseJsonPath(svPath);
-    if (parsedResult.IsFail()) {
-        return TConclusionStatus::Fail(parsedResult.GetErrorMessage());
-    }
-    const auto parsedPath = parsedResult.DetachResult();
+TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> TSubColumnsPartialArray::GetPathAccessor(
+    const NSubColumns::TParsedJsonPath& parsedPath, const ui32 recordsCount) const {
     const auto& headerStats = Header.GetColumnStats();
     auto columnsResult = headerStats.ResolvePath(parsedPath, [this](const ui32 columnIndex) {
         return PartialColumnsData.HasColumn(columnIndex);

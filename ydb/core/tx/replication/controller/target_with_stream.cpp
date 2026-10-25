@@ -218,7 +218,7 @@ bool TTargetWithStreamCounters::UpdateWithSingleStatsItem(ui64, ui64 key, i64 va
 }
 
 bool TTargetWithStream::CanDetachWithoutStream() const {
-    if (!IsIndexBuild() || GetReplication()->GetDesiredState() != TReplication::EState::Done) {
+    if (GetReplication()->GetDesiredState() != TReplication::EState::Done) {
         return false;
     }
 
@@ -227,6 +227,7 @@ bool TTargetWithStream::CanDetachWithoutStream() const {
     }
 
     switch (GetDstState()) {
+    case EDstState::Attaching:
     case EDstState::Paused:
     case EDstState::Alter:
     case EDstState::Done:
@@ -240,10 +241,21 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
 
     if (CanDetachWithoutStream()) {
+        Reset(StreamCreator);
         // Keep the stream metadata so a later DROP can clean up a stream whose
-        // creation was already submitted when the build was cancelled.
+        // creation was already submitted when DONE was requested.
         TTargetBase::Progress(ctx);
         return;
+    }
+
+    // Source setup can return before destination progress, including while the
+    // replication is initially PAUSED. Refresh retained source actors first.
+    if (replication->GetYdbProxy()) {
+        for (const auto& actor : {StreamCreator, StreamRemover}) {
+            if (actor) {
+                ctx.Send(actor, new TEvPrivate::TEvUpdateYdbProxy(replication->GetYdbProxy()));
+            }
+        }
     }
 
     switch (GetStreamState()) {
@@ -286,6 +298,10 @@ void TTargetWithStream::Shutdown(const TActorContext& ctx) {
     }
 
     TTargetBase::Shutdown(ctx);
+}
+
+bool TTargetWithStream::IsExpectedStreamCreator(const TActorId& actorId) const {
+    return StreamCreator && StreamCreator == actorId;
 }
 
 void TTargetWithStream::WorkerStatusChanged(ui64, ui64) {

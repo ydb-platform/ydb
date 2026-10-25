@@ -1,17 +1,17 @@
 #pragma once
 
-#include "schemeshard__operation.h"
-#include "schemeshard_impl.h"
-#include "schemeshard_path.h"
+#include <ydb/core/protos/flat_scheme_op.pb.h>  // for NKikimrSchemeOp::TModifyScheme
+#include <ydb/core/protos/schemeshard/operations.pb.h>  // for NKikimrSchemeOp::EOperationType
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-
-#include <util/generic/map.h>
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
 #include <optional>
 
 namespace NKikimr::NSchemeShard {
+
+struct TOperationContext;
 
 using TTxTransaction = NKikimrSchemeOp::TModifyScheme;
 
@@ -19,6 +19,14 @@ struct TSchemeTxTraitsFallback {
     constexpr inline static bool CreateDirsFromName = false;
     constexpr inline static bool CreateAdditionalDirs = false;
     constexpr inline static bool NeedRewrite = false;
+
+    // Propose writes to the database directly (context.GetDB()), i.e. it is
+    // undo-unsafe. Such a suboperation may only be the single part of a scheme
+    // transaction: on a failed propose the transaction aborts with zero
+    // accepted parts and the txc rolls the direct writes back. Never allowed
+    // in a multi-part transaction (verified at ignite time in
+    // ProcessOperationParts).
+    constexpr inline static bool RequiresSinglePartTransaction = false;
 };
 
 template <NKikimrSchemeOp::EOperationType opType>
@@ -50,6 +58,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain
     : public TSchemeTxTraitsFallback
 {
     constexpr inline static bool CreateDirsFromName = true;
+    constexpr inline static bool RequiresSinglePartTransaction = true;
 };
 
 template <>
@@ -57,6 +66,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDom
     : public TSchemeTxTraitsFallback
 {
     constexpr inline static bool CreateDirsFromName = true;
+    constexpr inline static bool RequiresSinglePartTransaction = true;
 };
 
 template <>
@@ -64,6 +74,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolum
     : public TSchemeTxTraitsFallback
 {
     constexpr inline static bool CreateDirsFromName = true;
+    constexpr inline static bool RequiresSinglePartTransaction = true;
 };
 
 template <>
@@ -71,6 +82,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStor
     : public TSchemeTxTraitsFallback
 {
     constexpr inline static bool CreateDirsFromName = true;
+    constexpr inline static bool RequiresSinglePartTransaction = true;
 };
 
 template <>
@@ -78,6 +90,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore
     : public TSchemeTxTraitsFallback
 {
     constexpr inline static bool CreateDirsFromName = true;
+    constexpr inline static bool RequiresSinglePartTransaction = true;
 };
 
 template <>
@@ -85,6 +98,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus>
     : public TSchemeTxTraitsFallback
 {
     constexpr inline static bool CreateDirsFromName = true;
+    constexpr inline static bool RequiresSinglePartTransaction = true;
 };
 
 template <>
@@ -92,6 +106,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVo
     : public TSchemeTxTraitsFallback
 {
     constexpr inline static bool CreateDirsFromName = true;
+    constexpr inline static bool RequiresSinglePartTransaction = true;
 };
 
 template <>
@@ -106,6 +121,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnSto
     : public TSchemeTxTraitsFallback
 {
     constexpr inline static bool CreateDirsFromName = true;
+    constexpr inline static bool RequiresSinglePartTransaction = true;
 };
 
 template <>
@@ -185,6 +201,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplicati
     : public TSchemeTxTraitsFallback
 {
     constexpr inline static bool CreateDirsFromName = true;
+    constexpr inline static bool RequiresSinglePartTransaction = true;
 };
 
 template <>
@@ -199,6 +216,14 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret>
     : public TSchemeTxTraitsFallback
 {
     constexpr inline static bool CreateDirsFromName = true;
+    constexpr inline static bool RequiresSinglePartTransaction = true;
+};
+
+template <>
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropFileStore>
+    : public TSchemeTxTraitsFallback
+{
+    constexpr inline static bool RequiresSinglePartTransaction = true;
 };
 
 template <>

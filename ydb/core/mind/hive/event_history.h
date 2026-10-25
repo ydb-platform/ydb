@@ -14,7 +14,7 @@ namespace NHive {
 //
 // THiveEvent and the two enums below are shared by all kinds of events: node and tablet events today,
 // Hive settings changes are expected to follow.
-enum class EHiveEventType : ui8 {
+enum class EHiveEventType : ui64 {
     // Node events
     Registered,          // Local registered on Hive (first time or after node restart)
     Connected,           // Local reported StatusOk, node can run tablets
@@ -46,12 +46,16 @@ enum class EHiveEventType : ui8 {
     Unlocked,
     StopRequested,       // persistent stop requested by the owner or tenant
     Resumed,
+
+    MAX, // keep last
 };
+
+static_assert(static_cast<ui64>(EHiveEventType::MAX) <= (1 << 8), "EHiveEventType must fit into THiveEvent::Type");
 
 TStringBuf EHiveEventTypeName(EHiveEventType value);
 
 // Why it happened: the constant part of the description, rendered as text only when logged or shown in the UI
-enum class EHiveEventReason : ui8 {
+enum class EHiveEventReason : ui64 {
     NewLocalActor,
     SameLocalActor,
     ServicedDomainsChanged,
@@ -122,12 +126,17 @@ enum class EHiveEventReason : ui8 {
     NodesLocationUnknown,
     TooManyStarting,
     PreferredNodeUnavailable,
+
+    MAX, // keep last
 };
+
+static_assert(static_cast<ui64>(EHiveEventReason::MAX) <= (1 << 8), "EHiveEventReason must fit into THiveEvent::Reason");
 
 TStringBuf EHiveEventReasonName(EHiveEventReason value);
 
 // Kept small on purpose: a cluster may have thousands of nodes and tablets with a full history each.
 // One word holds the millisecond timestamp (48 bits), the type and the reason (a byte each);
+// the enums have a 64-bit underlying type so that MSVC packs all the bitfields into one word;
 // Details is a refcounted pointer (8 bytes, no allocation when empty) shared by the copies
 // in the global and per-node histories.
 struct THiveEvent {

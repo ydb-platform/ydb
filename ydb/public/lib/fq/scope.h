@@ -10,15 +10,18 @@ public:
     static TString YandexCloudScopeSchema;
 
     TScope()
-    { }
+    {
+    }
 
     TScope(const TString& scope)
         : Scope(scope)
-    { }
+    {
+    }
 
     TScope(TString&& scope)
         : Scope(std::move(scope))
-    { }
+    {
+    }
 
     const TString& ToString() const {
         return Scope;
@@ -34,5 +37,5 @@ private:
     TString Scope;
 };
 
-} // namespace NFq
-} // namespace Ndb
+}   // namespace NFq
+}   // namespace NYdb

@@ -9,6 +9,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/runtime/kqp_arrow_memory_pool.h>
 #include <ydb/core/kqp/common/kqp_row_builder.h>
+#include <ydb/core/kqp/common/kqp_shard_meta.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
@@ -1926,11 +1927,11 @@ public:
     void OnPartitioningChanged(
         const TPartitioning::TCPtr& partitioning) override {
         IsOlap = false;
-        Partitioning = partitioning;
+        Partitioning = TShardPartitionIndex(partitioning);
         BeforePartitioningChanged();
         for (auto& [_, writeInfo] : WriteInfos) {
             writeInfo.Serializer = CreateDataShardPayloadSerializer(
-                Partitioning->GetTablePartitioning(),
+                Partitioning.GetPartitioning()->GetTablePartitioning(),
                 writeInfo.Metadata.KeyColumnsMetadata,
                 writeInfo.Metadata.InputColumnsMetadata,
                 Alloc);
@@ -1960,6 +1961,10 @@ public:
     }
 
     TPartitioning::TCPtr GetPartitioning() const override {
+        return Partitioning.GetPartitioning();
+    }
+
+    const TShardPartitionIndex& GetShardPartitionIndex() const override {
         return Partitioning;
     }
 
@@ -1968,9 +1973,10 @@ public:
             return {};
         }
         AFL_ENSURE(Partitioning);
+        const auto& partitioning = *Partitioning.GetPartitioning();
         THashSet<ui64> resolvedShards;
-        resolvedShards.reserve(Partitioning->Size());
-        for (const auto& partition : Partitioning->GetTablePartitioning()) {
+        resolvedShards.reserve(partitioning.Size());
+        for (const auto& partition : partitioning.GetTablePartitioning()) {
             resolvedShards.insert(partition.ShardId);
         }
         TVector<ui64> deletedShards;
@@ -2064,7 +2070,7 @@ public:
 
         if (Partitioning) {
             iter->second.Serializer = CreateDataShardPayloadSerializer(
-                Partitioning->GetTablePartitioning(),
+                Partitioning.GetPartitioning()->GetTablePartitioning(),
                 iter->second.Metadata.KeyColumnsMetadata,
                 iter->second.Metadata.InputColumnsMetadata,
                 Alloc);
@@ -2431,7 +2437,7 @@ private:
     std::vector<IShardedWriteController::TPendingShardInfo> ShardUpdates;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
-    TPartitioning::TCPtr Partitioning;
+    TShardPartitionIndex Partitioning;
     std::optional<bool> IsOlap;
 };
 

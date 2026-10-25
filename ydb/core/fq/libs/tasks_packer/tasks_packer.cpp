@@ -33,10 +33,8 @@ void UnPack(TVector<NYql::NDqProto::TDqTask>& tasks, const THashMap<i64, TString
     }
 }
 
-void UnPack(
-    google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& dst,
-    const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& src,
-    const google::protobuf::Map<i64, TString>& stagePrograms)
+void UnPack(google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& dst,
+    const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& src, const google::protobuf::Map<i64, TString>& stagePrograms)
 {
     if (stagePrograms.empty()) {
         dst = src;
@@ -60,6 +58,6 @@ void UnPack(
     dst.Assign(tasks.begin(), tasks.end());
 }
 
-} // namespace NTasksPacker
+}   // namespace NTasksPacker
 
-} // namespace NFq
+}   // namespace NFq

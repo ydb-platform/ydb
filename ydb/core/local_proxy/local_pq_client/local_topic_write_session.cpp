@@ -1,8 +1,9 @@
-#include "local_topic_write_session.h"
 #include "local_topic_client_helpers.h"
 #include "local_topic_io_session_common.h"
+#include "local_topic_write_session.h"
 
 #include <ydb/core/grpc_services/rpc_calls.h>
+
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/persqueue_v1/actors/write_session_actor.h>
 
@@ -19,10 +20,11 @@ using namespace NYdb;
 using namespace NYdb::NTopic;
 
 class TLocalTopicWriteSessionActor final
-    : public TLocalTopicIoSessionActor<TLocalTopicWriteSessionActor, Ydb::Topic::StreamWriteMessage::FromClient, Ydb::Topic::StreamWriteMessage::FromServer, TWriteSessionEvent::TEvent, TWriterCounters>
-    , private TContinuationTokenIssuer
-{
-    using TBase = TLocalTopicIoSessionActor<TLocalTopicWriteSessionActor, Ydb::Topic::StreamWriteMessage::FromClient, Ydb::Topic::StreamWriteMessage::FromServer, TWriteSessionEvent::TEvent, TWriterCounters>;
+    : public TLocalTopicIoSessionActor<TLocalTopicWriteSessionActor, Ydb::Topic::StreamWriteMessage::FromClient,
+          Ydb::Topic::StreamWriteMessage::FromServer, TWriteSessionEvent::TEvent, TWriterCounters>,
+      private TContinuationTokenIssuer {
+    using TBase = TLocalTopicIoSessionActor<TLocalTopicWriteSessionActor, Ydb::Topic::StreamWriteMessage::FromClient,
+        Ydb::Topic::StreamWriteMessage::FromServer, TWriteSessionEvent::TEvent, TWriterCounters>;
 
     struct TEvWriteSession {
         enum EEv {
@@ -47,23 +49,25 @@ class TLocalTopicWriteSessionActor final
     };
 
 public:
-    struct TSessionEvents final : public TBase::TSessionEvents {
-        struct TEvWriteMessage : public TEventLocal<TEvWriteMessage, TEvWriteSession::EvWriteMessage> {
+    struct TSessionEvents final: public TBase::TSessionEvents {
+        struct TEvWriteMessage: public TEventLocal<TEvWriteMessage, TEvWriteSession::EvWriteMessage> {
             TEvWriteMessage(TContinuationToken&& continuationToken, TWriteMessage&& message)
                 : ContinuationToken(std::move(continuationToken))
                 , Message(std::move(message))
                 , Data(Message.Data)
-            {}
+            {
+            }
 
             TContinuationToken ContinuationToken;
             TWriteMessage Message;
             TString Data;
         };
 
-        struct TEvGetInitSeqNo : public TEventLocal<TEvGetInitSeqNo, TEvWriteSession::EvGetInitSeqNo> {
+        struct TEvGetInitSeqNo: public TEventLocal<TEvGetInitSeqNo, TEvWriteSession::EvGetInitSeqNo> {
             explicit TEvGetInitSeqNo(NThreading::TPromise<uint64_t> seqNoPromise)
                 : SeqNoPromise(std::move(seqNoPromise))
-            {}
+            {
+            }
 
             NThreading::TPromise<uint64_t> SeqNoPromise;
         };
@@ -94,7 +98,8 @@ public:
 
 protected:
     void StartSession() final {
-        auto ev = CreateRpcBiStreamingEvent<TEvStreamTopicWriteRequest>(Settings, "StreamWrite", NJaegerTracing::ERequestType::TOPIC_STREAMWRITE);
+        auto ev =
+            CreateRpcBiStreamingEvent<TEvStreamTopicWriteRequest>(Settings, "StreamWrite", NJaegerTracing::ERequestType::TOPIC_STREAMWRITE);
         Send(NGRpcProxy::V1::GetPQWriteServiceActorID(), ev.release(), IEventHandle::FlagTrackDelivery);
     }
 
@@ -174,7 +179,7 @@ private:
             {"size", size});
 
         InflightMemory += size;
-        InflightMessages.push({seqNo, static_cast<i64>(size)});
+        InflightMessages.push({ seqNo, static_cast<i64>(size) });
         Counters->BytesInflightTotal->Add(size);
 
         ContinuationEventInflight = false;
@@ -193,7 +198,9 @@ private:
             publicationProto.set_int_publication_id(publication->IntPublicationId);
 
             if (auto& extPublicationId = publication->ExtPublicationId) {
-                Y_VALIDATE(extPublicationId->size() <= TDeferredPublication::MaxExtPublicationIdLength, "External publication id is too large, max length is " << TDeferredPublication::MaxExtPublicationIdLength << ", got " << extPublicationId->size());
+                Y_VALIDATE(extPublicationId->size() <= TDeferredPublication::MaxExtPublicationIdLength,
+                    "External publication id is too large, max length is " << TDeferredPublication::MaxExtPublicationIdLength << ", got "
+                                                                           << extPublicationId->size());
                 publicationProto.set_ext_publication_id(std::move(*extPublicationId));
             }
         }
@@ -227,7 +234,8 @@ private:
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         const auto sourceType = ev->Get()->SourceType;
         const auto reason = ev->Get()->Reason;
-        Y_VALIDATE(sourceType == TEvStreamTopicWriteRequest::EventType, "Unexpected undelivered event: " << sourceType << ", reason: " << reason);
+        Y_VALIDATE(
+            sourceType == TEvStreamTopicWriteRequest::EventType, "Unexpected undelivered event: " << sourceType << ", reason: " << reason);
 
         YDB_LOG_ERROR("PQ write service is unavailable",
             {"logPrefix", LogPrefix()},
@@ -368,7 +376,7 @@ private:
 // Supposed to be used from actor system, so all blocking methods are not supported.
 // Write session is not thread safe and MUST be used from single actor.
 // NOTICE: data compression is not supported.
-class TLocalTopicWriteSession final : public TLocalTopicSessionBase<TWriteSessionEvent::TEvent>, public IWriteSession {
+class TLocalTopicWriteSession final: public TLocalTopicSessionBase<TWriteSessionEvent::TEvent>, public IWriteSession {
     using TBase = TLocalTopicSessionBase<TWriteSessionEvent::TEvent>;
     using TWriteEvents = TLocalTopicWriteSessionActor::TSessionEvents;
 
@@ -430,7 +438,7 @@ public:
             ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvEventsConsumed(result.size()));
         }
 
-        WaitEvent(); // Request next event batch
+        WaitEvent();   // Request next event batch
 
         return result;
     }
@@ -467,7 +475,8 @@ public:
         }
     }
 
-    void Write(TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp) final {
+    void Write(TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo,
+        std::optional<TInstant> createTimestamp) final {
         TWriteMessage message(data);
         message.SeqNo(seqNo);
         message.CreateTimestamp(createTimestamp);
@@ -478,7 +487,8 @@ public:
         Write(std::move(continuationToken), std::move(params), tx);
     }
 
-    void WriteEncoded(TContinuationToken&& continuationToken, std::string_view data, ECodec codec, uint32_t originalSize, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp) final {
+    void WriteEncoded(TContinuationToken&& continuationToken, std::string_view data, ECodec codec, uint32_t originalSize,
+        std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp) final {
         auto message = TWriteMessage::CompressedMessage(data, codec, originalSize);
         message.SeqNo(seqNo);
         message.CreateTimestamp(createTimestamp);
@@ -488,8 +498,8 @@ public:
     bool Close(TDuration closeTimeout) final {
         Y_VALIDATE(!closeTimeout, "Timeout on close is not allowed for local topic write session");
 
-        ExtractEvents(); // Refresh events and maybe accept TSessionClosedEvent
-        WaitEvent(); // Request next event batch if there is no TSessionClosedEvent 
+        ExtractEvents();   // Refresh events and maybe accept TSessionClosedEvent
+        WaitEvent();   // Request next event batch if there is no TSessionClosedEvent
 
         if (!WriteSessionActor) {
             // TSessionClosedEvent accepted
@@ -521,8 +531,7 @@ private:
 
         Y_VALIDATE(settings.Codec_ == ECodec::RAW, "Compression is not supported for local topic write session");
         Y_VALIDATE(
-            settings.BatchFlushInterval_ == TDuration::Seconds(1),
-            "Custom BatchFlushInterval is not supported for local topic write session");
+            settings.BatchFlushInterval_ == TDuration::Seconds(1), "Custom BatchFlushInterval is not supported for local topic write session");
         Y_VALIDATE(!settings.BatchFlushSizeBytes_, "BatchFlushSizeBytes is not supported for local topic write session");
 
         const auto& eventHandlers = settings.EventHandlers_;
@@ -542,12 +551,13 @@ private:
 
     void Start(const TWriteSessionSettings& sessionSettings) {
         Y_VALIDATE(!WriteSessionActor, "Write session is already started");
-        WriteSessionActor = ActorSystem->Register(new TLocalTopicWriteSessionActor({
-            .Database = Database,
-            .CredentialsProvider = CredentialsProvider,
-            .Counters = Counters,
-        }, sessionSettings), TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
-        WaitEvent(); // Request continuation token
+        WriteSessionActor = ActorSystem->Register(
+            new TLocalTopicWriteSessionActor({
+                                                 .Database = Database,
+                                                 .CredentialsProvider = CredentialsProvider,
+                                                 .Counters = Counters,
+                                             }, sessionSettings), TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
+        WaitEvent();   // Request continuation token
     }
 
     void UseAutoSeqNo() {
@@ -584,10 +594,11 @@ private:
     std::optional<NThreading::TPromise<uint64_t>> InitSeqNoPromise;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-std::shared_ptr<IWriteSession> CreateLocalTopicWriteSession(const TLocalTopicSessionSettings& localSettings, const TWriteSessionSettings& sessionSettings) {
+std::shared_ptr<IWriteSession> CreateLocalTopicWriteSession(
+    const TLocalTopicSessionSettings& localSettings, const TWriteSessionSettings& sessionSettings) {
     return std::make_shared<TLocalTopicWriteSession>(localSettings, sessionSettings);
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

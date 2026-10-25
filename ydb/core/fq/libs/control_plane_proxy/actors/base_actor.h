@@ -9,9 +9,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <yql/essentials/public/issue/yql_issue.h>
-
 #include <contrib/libs/fmt/include/fmt/format.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NFq::NPrivate {
 
@@ -19,8 +18,8 @@ using namespace NActors;
 using namespace NThreading;
 using namespace NYdb;
 
-template<typename TDerived>
-class TPlainBaseActor : public TActorBootstrapped<TDerived> {
+template <typename TDerived>
+class TPlainBaseActor: public TActorBootstrapped<TDerived> {
 public:
     using TBase = TActorBootstrapped<TDerived>;
     using TBase::Become;
@@ -28,14 +27,14 @@ public:
     using TBase::Send;
 
 public:
-    TPlainBaseActor(const TActorId& successActorId,
-                    const TActorId& errorActorId,
-                    TDuration requestTimeout,
-                    const TRequestCommonCountersPtr& counters)
+    TPlainBaseActor(
+        const TActorId& successActorId, const TActorId& errorActorId, TDuration requestTimeout, const TRequestCommonCountersPtr& counters)
         : Counters(counters)
         , SuccessActorId(successActorId)
         , ErrorActorId(errorActorId)
-        , RequestTimeout(std::move(requestTimeout)) { }
+        , RequestTimeout(std::move(requestTimeout))
+    {
+    }
 
     void Bootstrap() {
         YDB_LOG_TRACE_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "TBaseActor Bootstrap started. Actor",
@@ -45,7 +44,7 @@ public:
         BootstrapImpl();
     }
 
-    template<class THandler>
+    template <class THandler>
     void SendRequestToSender(TAutoPtr<THandler> handle) {
         Counters->Ok->Inc();
         Send(handle->Forward(SuccessActorId));
@@ -58,9 +57,7 @@ public:
         PassAway();
     }
 
-    void SendErrorMessageToSender(IEventBase* event,
-                                  NActors::TActorIdentity::TEventFlags flags = 0,
-                                  ui64 cookie                                = 0) {
+    void SendErrorMessageToSender(IEventBase* event, NActors::TActorIdentity::TEventFlags flags = 0, ui64 cookie = 0) {
         Counters->Error->Inc();
         Send(ErrorActorId, event, flags, cookie);
         PassAway();
@@ -70,9 +67,7 @@ public:
         YDB_LOG_WARN_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "TBaseActor Timeout occurred. Actor",
             {"id", SelfId()});
         Counters->Timeout->Inc();
-        SendErrorMessageToSender(MakeTimeoutEventImpl(
-            MakeErrorIssue(TIssuesIds::TIMEOUT,
-                           "Timeout occurred. Try repeating the request later")));
+        SendErrorMessageToSender(MakeTimeoutEventImpl(MakeErrorIssue(TIssuesIds::TIMEOUT, "Timeout occurred. Try repeating the request later")));
     }
 
     void PassAway() override {
@@ -91,14 +86,14 @@ protected:
     const TDuration RequestTimeout;
 };
 
-template<typename T>
+template <typename T>
 struct TBaseActorTypeTag {
-    using TRequest  = typename T::TRequest;
+    using TRequest = typename T::TRequest;
     using TResponse = typename T::TResponse;
 };
 
-template<typename TDerived>
-class TBaseActor : public TPlainBaseActor<TDerived> {
+template <typename TDerived>
+class TBaseActor: public TPlainBaseActor<TDerived> {
 public:
     using TBase = TPlainBaseActor<TDerived>;
     using TBase::Become;
@@ -107,23 +102,17 @@ public:
     using TBase::Send;
 
     using TEventRequestPtr = typename TBaseActorTypeTag<TDerived>::TRequest::TPtr;
-    using TEventResponse   = typename TBaseActorTypeTag<TDerived>::TResponse;
+    using TEventResponse = typename TBaseActorTypeTag<TDerived>::TResponse;
 
 public:
-    TBaseActor(const TActorId& proxyActorId,
-               const TEventRequestPtr request,
-               TDuration requestTimeout,
-               const TRequestCommonCountersPtr& counters)
-        : TPlainBaseActor<TDerived>(proxyActorId,
-                                    request->Sender,
-                                    std::move(requestTimeout),
-                                    counters)
-        , Request(std::move(request)) { }
+    TBaseActor(const TActorId& proxyActorId, const TEventRequestPtr request, TDuration requestTimeout, const TRequestCommonCountersPtr& counters)
+        : TPlainBaseActor<TDerived>(proxyActorId, request->Sender, std::move(requestTimeout), counters)
+        , Request(std::move(request))
+    {
+    }
 
     void SendErrorMessageToSender(const NYql::TIssue& issue) {
-        TBase::SendErrorMessageToSender(new TEventResponse({issue}, {}),
-                                        0,
-                                        Request->Cookie);
+        TBase::SendErrorMessageToSender(new TEventResponse({ issue }, {}), 0, Request->Cookie);
     }
 
     void HandleError(const TString& message, EStatus status, const NYql::TIssues& issues) {
@@ -147,11 +136,11 @@ public:
 
 protected:
     IEventBase* MakeTimeoutEventImpl(NYql::TIssue issue) final {
-        return new TEventResponse({std::move(issue)}, {});
+        return new TEventResponse({ std::move(issue) }, {});
     };
 
 protected:
     const TEventRequestPtr Request;
 };
 
-} // namespace NFq::NPrivate
+}   // namespace NFq::NPrivate

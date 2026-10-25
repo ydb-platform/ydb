@@ -14,6 +14,8 @@ SRCS(
     defs.h
     mon_blob_range_page.cpp
     mon_blob_range_page.h
+    mon_blob_rescue_service.cpp
+    mon_blob_rescue_service.h
     mon_check_integrity.cpp
     mon_check_integrity.h
     mon_get_blob_page.cpp

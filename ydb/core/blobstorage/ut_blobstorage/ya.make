@@ -41,6 +41,7 @@ SRCS(
     main.cpp
     mirror3dc.cpp
     mirror3of4.cpp
+    mon_blob_rescue_service.cpp
     mon_restore_part.cpp
     monitoring.cpp
     multiget.cpp

@@ -119,12 +119,14 @@ public:
             , Diff(info.HasDiff() ? &info.GetDiff() : nullptr)
         {
         }
+
         TSchemaVersionView(const NKikimrTxColumnShard::TSchemaPresetVersionInfo&&) = delete;
 
         explicit TSchemaVersionView(const NKikimrSchemeOp::TColumnTableSchemaDiff& diff)
             : Diff(&diff)
         {
         }
+
         TSchemaVersionView(const NKikimrSchemeOp::TColumnTableSchemaDiff&&) = delete;
 
         TSchemaVersionView(const TSchemaVersionView&) = delete;

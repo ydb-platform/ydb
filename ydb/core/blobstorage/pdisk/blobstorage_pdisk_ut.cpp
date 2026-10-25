@@ -889,6 +889,64 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT(opened.substr(payload.size()) == TString(opened.size() - payload.size(), '\0'));
     }
 
+    // Long writes go to the device in pieces; a PDiskStop that drops the pieces still queued must leave every write
+    // answered exactly once (with an error if it was cut short), never waiting forever.
+    void TestWritesInPiecesAnsweredOnStop(bool preformatted) {
+        TActorTestContext testCtx({});
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        const NPDisk::TFormatContextPtr format = vdisk.FormatContext;
+        const ui32 payloadSize = format->GetSectorPayloadSize();
+        const ui32 sectorSize = format->GetSectorSize();
+        const auto owner = vdisk.PDiskParams->Owner;
+        const auto ownerRound = vdisk.PDiskParams->OwnerRound;
+        vdisk.ReserveChunk();
+        const TChunkIdx chunkIdx = *vdisk.Chunks[EChunkState::RESERVED].begin();
+        const ui64 chunkNonce = vdisk.ChunkNonces.at(chunkIdx);
+
+        const ui32 writes = 4;
+        const ui32 sectors = 1000; // many Forseti pieces each
+        const TString payload = PrepareData(sectors * payloadSize);
+        for (ui32 w = 0; w < writes; ++w) {
+            const ui32 firstSector = w * sectors;
+            NPDisk::TEvChunkWrite *ev;
+            if (preformatted) {
+                TRcBuf buf = TRcBuf::UninitializedPageAligned(sectors * sectorSize);
+                NPDisk::TFormatContext::TSealer sealer(format, chunkIdx, chunkNonce, {});
+                for (ui32 i = 0; i < sectors; ++i) {
+                    sealer.Seal(reinterpret_cast<ui8*>(buf.GetDataMut()) + (ui64)i * sectorSize,
+                        payload.data() + (ui64)i * payloadSize, payloadSize, firstSector + i);
+                }
+                ev = new NPDisk::TEvChunkWrite(owner, ownerRound, chunkIdx, firstSector * payloadSize,
+                    new NPDisk::TEvChunkWrite::TRopeAlignedParts(TRope(std::move(buf)), sectors * sectorSize),
+                    nullptr, false, 0);
+                ev->PreformattedSectors = true;
+                ev->FirstSectorNonce = chunkNonce + firstSector;
+            } else {
+                ev = new NPDisk::TEvChunkWrite(owner, ownerRound, chunkIdx, firstSector * payloadSize,
+                    new NPDisk::TEvChunkWrite::TAlignedParts(TString(payload)), nullptr, false, 0);
+            }
+            testCtx.Send(ev);
+        }
+        testCtx.Send(new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr));
+
+        // one answer per write, whatever its status; a missing one would hang here
+        ui32 answered = 0;
+        while (answered < writes) {
+            testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+            ++answered;
+        }
+        testCtx.Recv<NPDisk::TEvYardControlResult>();
+    }
+
+    Y_UNIT_TEST(WritesInPiecesAnsweredOnStopPreformatted) {
+        TestWritesInPiecesAnsweredOnStop(true);
+    }
+
+    Y_UNIT_TEST(WritesInPiecesAnsweredOnStopEncrypted) {
+        TestWritesInPiecesAnsweredOnStop(false);
+    }
+
     Y_UNIT_TEST(PreformattedSectorsEncrypted) {
         TestPreformattedSectors(true);
     }

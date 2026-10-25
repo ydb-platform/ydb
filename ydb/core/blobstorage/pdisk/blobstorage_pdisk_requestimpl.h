@@ -596,11 +596,16 @@ public:
         AtomicIncrement(Pieces);
     }
 
-    void AbortPiece(TActorSystem *actorSystem) {
-        if (AtomicDecrement(Pieces) == 0) {
-            this->Abort(actorSystem);
-        }
-    }
+    // Each piece, sent or dropped, is accounted for exactly once, as the pieces of a read are: a write that lost a
+    // piece is answered once, with an error, when the last of its pieces is done or dropped.
+    void AbortPiece(TActorSystem *actorSystem); // a piece dropped unsent, when the PDisk stops
+    void PieceDone(TActorSystem *actorSystem); // a piece of an ordinary write was executed
+    TAtomic PieceAborted = 0;
+
+private:
+    void ReplyAborted(TActorSystem *actorSystem);
+
+public:
 
     ERequestType GetType() const override {
         return ERequestType::RequestChunkWrite;

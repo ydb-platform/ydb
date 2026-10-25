@@ -1,0 +1,5 @@
+--- a/config-linux-x86_64.h
++++ b/config-linux-x86_64.h
+@@ -46,1 +45,1 @@
++/* #undef HAVE_CLOSE_RANGE */
+-#define HAVE_CLOSE_RANGE 1

@@ -1,0 +1,137 @@
+use crate::object::*;
+#[cfg(not(any(Py_LIMITED_API, PyPy, GraalPy)))]
+use crate::pyport::Py_hash_t;
+use crate::pyport::Py_ssize_t;
+use core::ffi::c_int;
+
+pub const PySet_MINSIZE: usize = 8;
+
+#[cfg(not(any(Py_LIMITED_API, PyPy, GraalPy)))]
+#[repr(C)]
+#[derive(Debug)]
+pub struct setentry {
+    pub key: *mut PyObject,
+    pub hash: Py_hash_t,
+}
+
+#[cfg(not(any(Py_LIMITED_API, PyPy, GraalPy)))]
+#[repr(C)]
+#[derive(Debug)]
+pub struct PySetObject {
+    pub ob_base: PyObject,
+    pub fill: Py_ssize_t,
+    pub used: Py_ssize_t,
+    pub mask: Py_ssize_t,
+    pub table: *mut setentry,
+    pub hash: Py_hash_t,
+    pub finger: Py_ssize_t,
+    pub smalltable: [setentry; PySet_MINSIZE],
+    pub weakreflist: *mut PyObject,
+}
+
+// skipped
+#[inline]
+#[cfg(all(not(any(PyPy, GraalPy)), not(Py_LIMITED_API)))]
+pub unsafe fn PySet_GET_SIZE(so: *mut PyObject) -> Py_ssize_t {
+    debug_assert_eq!(PyAnySet_Check(so), 1);
+    let so = so.cast::<PySetObject>();
+    (*so).used
+}
+
+// skipped _PySet_Dummy
+
+extern_libpython! {
+    // skipped non-limited _PySet_NextEntry
+    // skipped non-limited _PySet_Update
+}
+
+#[cfg(not(RustPython))]
+extern_libpython! {
+    #[cfg_attr(PyPy, link_name = "PyPySet_Type")]
+    pub static mut PySet_Type: PyTypeObject;
+    #[cfg_attr(PyPy, link_name = "PyPyFrozenSet_Type")]
+    pub static mut PyFrozenSet_Type: PyTypeObject;
+    pub static mut PySetIter_Type: PyTypeObject;
+}
+
+extern_libpython! {
+    #[cfg_attr(PyPy, link_name = "PyPySet_New")]
+    pub fn PySet_New(arg1: *mut PyObject) -> *mut PyObject;
+    #[cfg_attr(PyPy, link_name = "PyPyFrozenSet_New")]
+    pub fn PyFrozenSet_New(arg1: *mut PyObject) -> *mut PyObject;
+
+    #[cfg_attr(PyPy, link_name = "PyPySet_Add")]
+    pub fn PySet_Add(set: *mut PyObject, key: *mut PyObject) -> c_int;
+    #[cfg_attr(PyPy, link_name = "PyPySet_Clear")]
+    pub fn PySet_Clear(set: *mut PyObject) -> c_int;
+    #[cfg_attr(PyPy, link_name = "PyPySet_Contains")]
+    pub fn PySet_Contains(anyset: *mut PyObject, key: *mut PyObject) -> c_int;
+    #[cfg_attr(PyPy, link_name = "PyPySet_Discard")]
+    pub fn PySet_Discard(set: *mut PyObject, key: *mut PyObject) -> c_int;
+    #[cfg_attr(PyPy, link_name = "PyPySet_Pop")]
+    pub fn PySet_Pop(set: *mut PyObject) -> *mut PyObject;
+    #[cfg_attr(PyPy, link_name = "PyPySet_Size")]
+    pub fn PySet_Size(anyset: *mut PyObject) -> Py_ssize_t;
+
+    #[cfg(any(PyPy, RustPython))]
+    #[cfg_attr(PyPy, link_name = "PyPyFrozenSet_CheckExact")]
+    pub fn PyFrozenSet_CheckExact(ob: *mut PyObject) -> c_int;
+
+    #[cfg(any(PyPy, RustPython))]
+    #[cfg_attr(PyPy, link_name = "PyPyFrozenSet_Check")]
+    pub fn PyFrozenSet_Check(ob: *mut PyObject) -> c_int;
+
+    #[cfg(any(PyPy, RustPython))]
+    #[cfg_attr(PyPy, link_name = "PyPyAnySet_CheckExact")]
+    pub fn PyAnySet_CheckExact(ob: *mut PyObject) -> c_int;
+
+    #[cfg(RustPython)]
+    pub fn PyAnySet_Check(ob: *mut PyObject) -> c_int;
+
+    #[cfg(RustPython)]
+    pub fn PySet_CheckExact(op: *mut PyObject) -> c_int;
+
+    #[cfg(any(PyPy, RustPython))]
+    #[cfg_attr(PyPy, link_name = "PyPySet_Check")]
+    pub fn PySet_Check(ob: *mut PyObject) -> c_int;
+}
+
+#[inline]
+#[cfg(not(any(PyPy, GraalPy, RustPython)))]
+pub unsafe fn PyFrozenSet_CheckExact(ob: *mut PyObject) -> c_int {
+    (Py_TYPE(ob) == &raw mut PyFrozenSet_Type) as c_int
+}
+
+#[inline]
+#[cfg(not(any(PyPy, RustPython)))]
+pub unsafe fn PyFrozenSet_Check(ob: *mut PyObject) -> c_int {
+    (Py_TYPE(ob) == &raw mut PyFrozenSet_Type
+        || PyType_IsSubtype(Py_TYPE(ob), &raw mut PyFrozenSet_Type) != 0) as c_int
+}
+
+#[inline]
+#[cfg(not(any(PyPy, RustPython)))]
+pub unsafe fn PyAnySet_CheckExact(ob: *mut PyObject) -> c_int {
+    (Py_TYPE(ob) == &raw mut PySet_Type || Py_TYPE(ob) == &raw mut PyFrozenSet_Type) as c_int
+}
+
+#[inline]
+#[cfg(not(RustPython))]
+pub unsafe fn PyAnySet_Check(ob: *mut PyObject) -> c_int {
+    (PyAnySet_CheckExact(ob) != 0
+        || PyType_IsSubtype(Py_TYPE(ob), &raw mut PySet_Type) != 0
+        || PyType_IsSubtype(Py_TYPE(ob), &raw mut PyFrozenSet_Type) != 0) as c_int
+}
+
+#[inline]
+#[cfg(all(Py_3_10, not(RustPython)))]
+pub unsafe fn PySet_CheckExact(op: *mut PyObject) -> c_int {
+    crate::Py_IS_TYPE(op, &raw mut PySet_Type)
+}
+
+#[inline]
+#[cfg(not(any(PyPy, RustPython)))]
+pub unsafe fn PySet_Check(ob: *mut PyObject) -> c_int {
+    (Py_TYPE(ob) == &raw mut PySet_Type || PyType_IsSubtype(Py_TYPE(ob), &raw mut PySet_Type) != 0)
+        as c_int
+}

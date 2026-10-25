@@ -1,0 +1,15 @@
+zopfli-rs contributors. List available at:
+https://github.com/zopfli-rs/zopfli/graphs/contributors?type=c
+
+The original Zopfli C code by Google, translated to Rust by the zopfli-rs
+contributors, was brought to you by:
+
+Mark Adler
+Jyrki Alakuijala
+Frédéric Kayser
+Jeffrey Lim
+Daniel Reed
+Huzaifa Sidhpurwala
+Péter Szabó
+Lode Vandevenne
+Derek Buitenhuis

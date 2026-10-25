@@ -460,11 +460,10 @@ def _NODEJS_BINARY_FOR_CONFIGURE(unit: ymake.Unit, for_mod: str, *, RELATIVE: bo
         )
         return
 
-    root = unit.path() if RELATIVE else "$S"
-    _SET_TS_FOR_VARS(unit, f"{root}/{for_mod}")
+    _SET_TS_FOR_VARS(unit, for_mod)
 
-    package_json_path = os.path.join(unit.resolve(unit.get("TS_FOR_DIR")), "package.json")
-    if not os.path.isfile(package_json_path):
+    for_mod_dir = unit.get("TS_FOR_DIR")
+    if not for_mod_dir or not os.path.isfile(os.path.join(unit.resolve(for_mod_dir), "package.json")):
         ymake.report_configure_error(
             f"NODEJS_BINARY_FOR: package.json not found in project directory '{unit.get('TS_FOR_PATH')}'."
         )

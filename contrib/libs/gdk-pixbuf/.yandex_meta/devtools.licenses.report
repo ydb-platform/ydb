@@ -1,0 +1,206 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     LGPL-2.0-or-later AND GPL-1.0-or-later 10ec5452a6965dc68cc8e8dc8e396bbe
+BELONGS ya.make
+    License text:
+         * "LGPL", "GPL", "QPL", "GPL/QPL", or "other" to indicate some other license.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        gdk-pixbuf/gdk-pixbuf-io.c [3506:3506]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        gdk-pixbuf/gdk-pixbuf-io.c [3506:3506]
+
+KEEP     LGPL-2.0-or-later    1550d8e36dfec17ad4ca090b7bbf7f60
+BELONGS ya.make
+    License text:
+        	info->license = "LGPL";
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        gdk-pixbuf/io-jpeg.c [1726:1726]
+        gdk-pixbuf/io-png.c [1287:1287]
+
+KEEP     LGPL-2.0-or-later    1ea22ec20c0b14dbd0aa5628482c93e8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        gdk-pixbuf/fallback-c89.c [6:17]
+
+KEEP     LGPL-2.1-only        23c2a5e0106b99d75238986559bb5fc6
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: COPYING at line 116
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        COPYING [1:502]
+
+KEEP     GPL-1.0-or-later AND LGPL-2.0-or-later 2aff3198d5d27948c7c142f7ab657803
+BELONGS ya.make
+    License text:
+         *   shorthands like "GPL", "LGPL", etc.
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        gdk-pixbuf/gdk-pixbuf-io.h [455:455]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        gdk-pixbuf/gdk-pixbuf-io.h [455:455]
+
+KEEP     LicenseRef-scancode-unknown-license-reference AND LGPL-2.0-or-later 9cd106456df9b0dd60ed3dec7972b980
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        gdk-pixbuf/gdk-pixbuf-enum-types.c [2:2]
+        gdk-pixbuf/gdk-pixbuf-enum-types.h [2:2]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        gdk-pixbuf/gdk-pixbuf-enum-types.c [2:2]
+        gdk-pixbuf/gdk-pixbuf-enum-types.h [2:2]
+
+KEEP     LGPL-2.1-only        ca578fe40948f65a44fef0998efebc2b
+BELONGS ya.make
+    License text:
+        GdkPixbuf is released under the terms of the GNU Lesser General Public
+        License version 2.1, or, at your option, any later version. See the
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 77.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        README.md [86:87]
+
+KEEP     LGPL-2.1-only        e66cdb4fae4ad4fb794539b32e09c3be
+BELONGS ya.make
+    License text:
+        This code is copyright Red Hat, Inc, 2000 and licensed under the terms
+        of the GNU Lesser General Public License (LGPL).
+        (If you want to use it in a project where that license is not
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 50.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        gdk-pixbuf/pixops/README [4:7]
+
+KEEP     LicenseRef-scancode-unknown-license-reference AND LGPL-2.0-or-later f43daf451b166664f390a5a283b65e09
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        gdk-pixbuf/gdk-pixbuf-marshal.c [1:1]
+        gdk-pixbuf/gdk-pixbuf-marshal.h [1:1]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        gdk-pixbuf/gdk-pixbuf-marshal.c [1:1]
+        gdk-pixbuf/gdk-pixbuf-marshal.h [1:1]
+
+KEEP     LGPL-2.0-or-later    f46f7e6c6daaa21a2223c2fe9fc32d2b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        gdk-pixbuf/gdk-pixbuf-animation.c [9:20]
+        gdk-pixbuf/gdk-pixbuf-animation.h [11:22]
+        gdk-pixbuf/gdk-pixbuf-core.h [10:21]
+        gdk-pixbuf/gdk-pixbuf-data.c [7:18]
+        gdk-pixbuf/gdk-pixbuf-io.c [8:19]
+        gdk-pixbuf/gdk-pixbuf-io.h [13:24]
+        gdk-pixbuf/gdk-pixbuf-loader.c [11:22]
+        gdk-pixbuf/gdk-pixbuf-loader.h [10:21]
+        gdk-pixbuf/gdk-pixbuf-macros.h [7:18]
+        gdk-pixbuf/gdk-pixbuf-private.h [11:22]
+        gdk-pixbuf/gdk-pixbuf-scale.c [7:18]
+        gdk-pixbuf/gdk-pixbuf-scaled-anim.c [8:19]
+        gdk-pixbuf/gdk-pixbuf-scaled-anim.h [8:19]
+        gdk-pixbuf/gdk-pixbuf-simple-anim.c [8:19]
+        gdk-pixbuf/gdk-pixbuf-simple-anim.h [8:19]
+        gdk-pixbuf/gdk-pixbuf-transform.h [10:21]
+        gdk-pixbuf/gdk-pixbuf-util.c [8:19]
+        gdk-pixbuf/gdk-pixbuf.c [10:21]
+        gdk-pixbuf/gdk-pixbuf.h [10:21]
+        gdk-pixbuf/gdk-pixdata.c [4:15]
+        gdk-pixbuf/gdk-pixdata.h [4:15]
+        gdk-pixbuf/io-jpeg.c [13:24]
+        gdk-pixbuf/io-png.c [10:21]
+        gdk-pixbuf/pixops/pixops.c [7:18]
+        gdk-pixbuf/pixops/pixops.h [4:15]

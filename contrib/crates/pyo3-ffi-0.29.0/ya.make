@@ -1,0 +1,155 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(pyo3_ffi)
+
+CRATE_VERSION(0.29.0)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    build.rs
+    src/abstract_.rs
+    src/bltinmodule.rs
+    src/boolobject.rs
+    src/bytearrayobject.rs
+    src/bytesobject.rs
+    src/ceval.rs
+    src/codecs.rs
+    src/compat/mod.rs
+    src/compat/py_3_10.rs
+    src/compat/py_3_13.rs
+    src/compat/py_3_14.rs
+    src/compat/py_3_15.rs
+    src/compat/py_3_9.rs
+    src/compile.rs
+    src/complexobject.rs
+    src/context.rs
+    src/cpython/abstract_.rs
+    src/cpython/bytearrayobject.rs
+    src/cpython/bytesobject.rs
+    src/cpython/cellobject.rs
+    src/cpython/ceval.rs
+    src/cpython/code.rs
+    src/cpython/compile.rs
+    src/cpython/complexobject.rs
+    src/cpython/critical_section.rs
+    src/cpython/descrobject.rs
+    src/cpython/dictobject.rs
+    src/cpython/floatobject.rs
+    src/cpython/frameobject.rs
+    src/cpython/funcobject.rs
+    src/cpython/genobject.rs
+    src/cpython/import.rs
+    src/cpython/initconfig.rs
+    src/cpython/listobject.rs
+    src/cpython/lock.rs
+    src/cpython/longintrepr.rs
+    src/cpython/longobject.rs
+    src/cpython/marshal.rs
+    src/cpython/methodobject.rs
+    src/cpython/mod.rs
+    src/cpython/object.rs
+    src/cpython/objimpl.rs
+    src/cpython/pydebug.rs
+    src/cpython/pyerrors.rs
+    src/cpython/pyframe.rs
+    src/cpython/pyhash.rs
+    src/cpython/pylifecycle.rs
+    src/cpython/pymem.rs
+    src/cpython/pystate.rs
+    src/cpython/pythonrun.rs
+    src/cpython/traceback.rs
+    src/cpython/tupleobject.rs
+    src/cpython/unicodeobject.rs
+    src/cpython/warnings.rs
+    src/cpython/weakrefobject.rs
+    src/critical_section.rs
+    src/datetime.rs
+    src/descrobject.rs
+    src/dictobject.rs
+    src/enumobject.rs
+    src/fileobject.rs
+    src/fileutils.rs
+    src/floatobject.rs
+    src/genericaliasobject.rs
+    src/impl_/macros.rs
+    src/impl_/mod.rs
+    src/import.rs
+    src/intrcheck.rs
+    src/iterobject.rs
+    src/listobject.rs
+    src/longobject.rs
+    src/memoryobject.rs
+    src/methodobject.rs
+    src/modsupport.rs
+    src/moduleobject.rs
+    src/object.rs
+    src/objimpl.rs
+    src/osmodule.rs
+    src/pyarena.rs
+    src/pybuffer.rs
+    src/pycapsule.rs
+    src/pyerrors.rs
+    src/pyframe.rs
+    src/pyhash.rs
+    src/pylifecycle.rs
+    src/pymem.rs
+    src/pyport.rs
+    src/pystate.rs
+    src/pystrtod.rs
+    src/pythonrun.rs
+    src/pytypedefs.rs
+    src/rangeobject.rs
+    src/refcount.rs
+    src/setobject.rs
+    src/sliceobject.rs
+    src/slots.rs
+    src/slots_generated.rs
+    src/structmember.rs
+    src/structseq.rs
+    src/sysmodule.rs
+    src/traceback.rs
+    src/tupleobject.rs
+    src/unicodeobject.rs
+    src/warnings.rs
+    src/weakrefobject.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    ACKNOWLEDGEMENTS
+    Cargo.lock
+    LICENSE-APACHE
+    LICENSE-MIT
+    README.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    abi3
+    abi3-py310
+    abi3-py311
+    abi3-py312
+    abi3-py313
+    abi3-py314
+    abi3-py315
+    default
+    extension-module
+)
+
+PEERDIR(
+    contrib/crates/libc-0.2.189
+)
+
+CRATE_BUILD_SCRIPT(contrib/crates/pyo3-ffi-0.29.0/build_script)
+
+LICENSE("MIT OR Apache-2.0")
+VERSION(0.29.0)
+ORIGINAL_SOURCE(https://static.crates.io/crates/pyo3-ffi/pyo3-ffi-0.29.0.crate)
+
+END()
+
+RECURSE(build_script)

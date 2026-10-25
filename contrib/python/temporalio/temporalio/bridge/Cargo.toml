@@ -1,0 +1,90 @@
+[package]
+name = "temporal-sdk-bridge"
+version = "0.1.0"
+edition = "2021"
+description = "Python sdk-core bridge"
+license = "MIT"
+repository = "https://github.com/temporalio/sdk-python"
+documentation = "https://docs.temporal.io/dev-guide/python"
+
+[package.metadata.maturin]
+module-name = "temporalio.bridge.temporal_sdk_bridge"
+
+
+[lib]
+name = "temporal_sdk_bridge"
+crate-type = ["cdylib"]
+
+[features]
+# Default builds keep the historical `ring` rustls provider (unchanged behavior).
+# A FIPS build — `maturin build --no-default-features --features fips`
+# (TEMPORALIO_FIPS=1) — swaps the entire rustls stack onto aws-lc-rs in FIPS
+# mode (aws-lc-fips-sys) and eliminates `ring`: the transitive core/client/common
+# TLS *and* this crate's own tokio-rustls use in client.rs. Ported from
+# temporalio/sdk-ruby PR #466.
+# The extra `tokio-rustls/*` entry is sdk-python-specific: the bridge has its own
+# direct tokio-rustls dep (client.rs custom verifier) that Ruby lacked, so its
+# provider must track the build too — else `cargo tree -i ring` would still find ring.
+default = ["tls-ring"]
+tls-ring = [
+    "temporalio-sdk-core/tls-ring",
+    "temporalio-client/tls-ring",
+    "tokio-rustls/ring",
+]
+tls-aws-lc = [
+    "temporalio-sdk-core/tls-aws-lc",
+    "temporalio-client/tls-aws-lc",
+    "tokio-rustls/aws_lc_rs",
+]
+fips = ["tls-aws-lc", "dep:aws-lc-rs"]
+
+[dependencies]
+anyhow = "1.0"
+async-trait = "0.1"
+# Only compiled under `fips`. Not called directly — its presence flips the
+# shared aws-lc-rs crate (rustls' aws_lc_rs provider) into FIPS mode, linking
+# aws-lc-fips-sys instead of aws-lc-sys. Ported from sdk-ruby PR #466.
+aws-lc-rs = { version = "1", features = ["fips"], optional = true }
+futures = "0.3"
+prost = "0.14"
+pyo3 = { version = "0.29", features = [
+    "extension-module",
+    "abi3-py310",
+    "anyhow",
+    "multiple-pymethods",
+] }
+pyo3-async-runtimes = { version = "0.29", features = ["tokio-runtime"] }
+pythonize = "0.29"
+# default-features disabled so the rustls provider isn't pinned to `tls-ring`;
+# the bridge's tls-ring/tls-aws-lc features (above) select it. Re-add the
+# crate's non-TLS default (`envconfig`).
+temporalio-client = { version = "0.6", path = "./sdk-core/crates/client", default-features = false, features = [
+    "envconfig",
+] }
+temporalio-common = { version = "0.6", path = "./sdk-core/crates/common", features = [
+    "envconfig", "otel"
+]}
+# default-features disabled (drops the pinned `tls-ring`); re-add the non-TLS
+# defaults the bridge relied on (`envconfig`, `prometheus`) plus `ephemeral-server`.
+temporalio-sdk-core = { version = "0.6", path = "./sdk-core/crates/sdk-core", default-features = false, features = [
+    "ephemeral-server",
+    "envconfig",
+    "prometheus",
+] }
+tokio = "1.26"
+# Matches the sdk-core client crate's rustls stack; used to build the custom
+# server certificate verifier for ClientTlsConfig.verification_server_name.
+# Provider is NOT pinned here — the bridge's tls-ring/tls-aws-lc features select
+# `ring` (default) or `aws_lc_rs` (fips), so this crate's direct rustls use in
+# client.rs tracks the rest of the stack and the `cargo tree -i ring` FIPS gate passes.
+tokio-rustls = { version = "0.26", default-features = false }
+tokio-stream = "0.1"
+tonic = "0.14"
+tracing = "0.1"
+url = "2.2"
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = true
+incremental = false

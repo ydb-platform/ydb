@@ -1,0 +1,6 @@
+@startuml
+Created -[#blue]-> CancelWorkflowCommandCreated: Schedule
+CancelWorkflowCommandCreated -[#blue]-> CancelWorkflowCommandCreated: CommandCancelWorkflowExecution
+CancelWorkflowCommandCreated -[#blue]-> CancelWorkflowCommandRecorded: WorkflowExecutionCanceled
+CancelWorkflowCommandRecorded --> [*]
+@enduml

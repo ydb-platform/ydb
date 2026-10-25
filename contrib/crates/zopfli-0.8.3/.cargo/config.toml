@@ -1,0 +1,12 @@
+# Do a best effort at producing builds with frame pointers, which
+# are useful for low-overhead, cross-platform, and accurate enough
+# stack unwinding by profilers such as perf.
+#
+# This does not affect downstream Zopfli users.
+#
+# Related reads:
+# - <https://www.brendangregg.com/blog/2024-03-17/the-return-of-the-frame-pointers.html>
+# - <https://fedoraproject.org/wiki/Changes/fno-omit-frame-pointer>
+# - <https://pagure.io/fedora-rust/rust2rpm/pull-request/237>
+[build]
+rustflags = ["-C", "force-frame-pointers=true"]

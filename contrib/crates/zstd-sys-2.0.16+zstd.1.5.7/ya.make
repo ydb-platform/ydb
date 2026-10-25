@@ -1,0 +1,149 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(zstd_sys)
+
+CRATE_VERSION(2.0.16+zstd.1.5.7)
+CRATE_EDITION(2018)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    build.rs
+    src/bindings_zdict.rs
+    src/bindings_zdict_experimental.rs
+    src/bindings_zdict_std_experimental.rs
+    src/bindings_zstd.rs
+    src/bindings_zstd_experimental.rs
+    src/bindings_zstd_seekable.rs
+    src/bindings_zstd_std_experimental.rs
+    src/wasm_shim.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    Cargo.lock
+    LICENSE
+    LICENSE.Apache-2.0
+    LICENSE.BSD-3-Clause
+    LICENSE.Mit
+    Readme.md
+    wasm-shim/assert.h
+    wasm-shim/stdio.h
+    wasm-shim/stdlib.h
+    wasm-shim/string.h
+    wasm-shim/time.h
+    zdict.h
+    zstd.h
+    zstd/COPYING
+    zstd/LICENSE
+    zstd/contrib/seekable_format/zstd_seekable.h
+    zstd/contrib/seekable_format/zstdseek_compress.c
+    zstd/contrib/seekable_format/zstdseek_decompress.c
+    zstd/lib/common/allocations.h
+    zstd/lib/common/bits.h
+    zstd/lib/common/bitstream.h
+    zstd/lib/common/compiler.h
+    zstd/lib/common/cpu.h
+    zstd/lib/common/debug.c
+    zstd/lib/common/debug.h
+    zstd/lib/common/entropy_common.c
+    zstd/lib/common/error_private.c
+    zstd/lib/common/error_private.h
+    zstd/lib/common/fse.h
+    zstd/lib/common/fse_decompress.c
+    zstd/lib/common/huf.h
+    zstd/lib/common/mem.h
+    zstd/lib/common/pool.c
+    zstd/lib/common/pool.h
+    zstd/lib/common/portability_macros.h
+    zstd/lib/common/threading.c
+    zstd/lib/common/threading.h
+    zstd/lib/common/xxhash.c
+    zstd/lib/common/xxhash.h
+    zstd/lib/common/zstd_common.c
+    zstd/lib/common/zstd_deps.h
+    zstd/lib/common/zstd_internal.h
+    zstd/lib/common/zstd_trace.h
+    zstd/lib/compress/clevels.h
+    zstd/lib/compress/fse_compress.c
+    zstd/lib/compress/hist.c
+    zstd/lib/compress/hist.h
+    zstd/lib/compress/huf_compress.c
+    zstd/lib/compress/zstd_compress.c
+    zstd/lib/compress/zstd_compress_internal.h
+    zstd/lib/compress/zstd_compress_literals.c
+    zstd/lib/compress/zstd_compress_literals.h
+    zstd/lib/compress/zstd_compress_sequences.c
+    zstd/lib/compress/zstd_compress_sequences.h
+    zstd/lib/compress/zstd_compress_superblock.c
+    zstd/lib/compress/zstd_compress_superblock.h
+    zstd/lib/compress/zstd_cwksp.h
+    zstd/lib/compress/zstd_double_fast.c
+    zstd/lib/compress/zstd_double_fast.h
+    zstd/lib/compress/zstd_fast.c
+    zstd/lib/compress/zstd_fast.h
+    zstd/lib/compress/zstd_lazy.c
+    zstd/lib/compress/zstd_lazy.h
+    zstd/lib/compress/zstd_ldm.c
+    zstd/lib/compress/zstd_ldm.h
+    zstd/lib/compress/zstd_ldm_geartab.h
+    zstd/lib/compress/zstd_opt.c
+    zstd/lib/compress/zstd_opt.h
+    zstd/lib/compress/zstd_preSplit.c
+    zstd/lib/compress/zstd_preSplit.h
+    zstd/lib/compress/zstdmt_compress.c
+    zstd/lib/compress/zstdmt_compress.h
+    zstd/lib/decompress/huf_decompress.c
+    zstd/lib/decompress/huf_decompress_amd64.S
+    zstd/lib/decompress/zstd_ddict.c
+    zstd/lib/decompress/zstd_ddict.h
+    zstd/lib/decompress/zstd_decompress.c
+    zstd/lib/decompress/zstd_decompress_block.c
+    zstd/lib/decompress/zstd_decompress_block.h
+    zstd/lib/decompress/zstd_decompress_internal.h
+    zstd/lib/deprecated/zbuff.h
+    zstd/lib/deprecated/zbuff_common.c
+    zstd/lib/deprecated/zbuff_compress.c
+    zstd/lib/deprecated/zbuff_decompress.c
+    zstd/lib/dictBuilder/cover.c
+    zstd/lib/dictBuilder/cover.h
+    zstd/lib/dictBuilder/divsufsort.c
+    zstd/lib/dictBuilder/divsufsort.h
+    zstd/lib/dictBuilder/fastcover.c
+    zstd/lib/dictBuilder/zdict.c
+    zstd/lib/legacy/zstd_legacy.h
+    zstd/lib/legacy/zstd_v01.c
+    zstd/lib/legacy/zstd_v01.h
+    zstd/lib/legacy/zstd_v02.c
+    zstd/lib/legacy/zstd_v02.h
+    zstd/lib/legacy/zstd_v03.c
+    zstd/lib/legacy/zstd_v03.h
+    zstd/lib/legacy/zstd_v04.c
+    zstd/lib/legacy/zstd_v04.h
+    zstd/lib/legacy/zstd_v05.c
+    zstd/lib/legacy/zstd_v05.h
+    zstd/lib/legacy/zstd_v06.c
+    zstd/lib/legacy/zstd_v06.h
+    zstd/lib/legacy/zstd_v07.c
+    zstd/lib/legacy/zstd_v07.h
+    zstd/lib/zdict.h
+    zstd/lib/zstd.h
+    zstd/lib/zstd_errors.h
+    zstd_seekable.h
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    std
+)
+
+# Link Arcadia zstd instead of building another copy of its C sources.
+PEERDIR(contrib/libs/zstd)
+
+LICENSE("MIT OR Apache-2.0")
+VERSION(2.0.16+zstd.1.5.7)
+ORIGINAL_SOURCE(https://static.crates.io/crates/zstd-sys/zstd-sys-2.0.16+zstd.1.5.7.crate)
+
+END()

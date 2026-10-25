@@ -178,9 +178,8 @@ public:
 };
 
 // One piece of a PreformattedSectors write. The write's own completion runs when the last piece is done, as a
-// failure if any piece failed. Pieces are only dropped unsent when the PDisk stops, which stops its VDisks too, so
-// such a write is left unanswered, as an encrypted one in pieces is; nothing leaks: each piece and each completion
-// holds the write, and the write's never-run Completion (with the owner's buffer) is destroyed with it.
+// failure if any piece failed. A piece dropped unsent (TChunkWrite::AbortPiece, when the PDisk stops) counts as a
+// failed one, so the write is always answered exactly once.
 class TCompletionChunkWritePreformattedPiece : public TCompletionAction {
     TIntrusivePtr<TChunkWrite> Write;
 

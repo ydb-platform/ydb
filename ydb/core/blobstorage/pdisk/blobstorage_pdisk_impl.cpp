@@ -1100,6 +1100,10 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
     if (evChunkWrite->IsReplied) {
         return true;
     }
+    if (AtomicGet(evChunkWrite->PieceAborted) && !evChunkWrite->PreformattedSectors) {
+        // a piece of this write was dropped: the rest is not written, the write is answered with the error
+        return true;
+    }
     if (evChunkWrite->PreformattedSectors) {
         return ChunkWritePiecePreformatted(evChunkWrite, pieceShift, pieceSize);
     }
@@ -3236,6 +3240,9 @@ void TPDisk::ProcessChunkWriteQueue() {
         bool lastPart = ChunkWritePiece(piece->ChunkWrite.Get(), piece->PieceShift, piece->PieceSize);
         if (lastPart) {
             Mon.IncrementQueueTime(piece->ChunkWrite->PriorityClass, piece->ChunkWrite->LifeDurationMs(HPNow()));
+        }
+        if (!piece->ChunkWrite->PreformattedSectors) { // those are counted by their completions
+            piece->ChunkWrite->PieceDone(PCtx->ActorSystem);
         }
         delete piece;
         // prevent the thread from being stuck for long

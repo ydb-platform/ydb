@@ -67,6 +67,34 @@ TChunkWrite::TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender
     SlackSize = Max<ui32>();
 }
 
+void TChunkWrite::AbortPiece(TActorSystem *actorSystem) {
+    AtomicSet(PieceAborted, 1);
+    if (PreformattedSectors && PreformattedPieceCount) {
+        // counted with the pieces in flight; the last one to finish answers with the error
+        AtomicSet(PreformattedPieceFailed, 1);
+        if (AtomicDecrement(PreformattedPiecesInFlight) == 0) {
+            ReplyAborted(actorSystem);
+        }
+    } else if (AtomicDecrement(Pieces) == 0 && Completion) {
+        ReplyAborted(actorSystem);
+    }
+}
+
+void TChunkWrite::PieceDone(TActorSystem *actorSystem) {
+    Y_VERIFY(!PreformattedSectors); // counted by their own completions
+    // The last piece hands Completion to the device; until then it is here and answers if a piece was dropped.
+    if (AtomicDecrement(Pieces) == 0 && AtomicGet(PieceAborted) && Completion) {
+        ReplyAborted(actorSystem);
+    }
+}
+
+void TChunkWrite::ReplyAborted(TActorSystem *actorSystem) {
+    TCompletionChunkWrite *completion = Completion.Release();
+    completion->ErrorReason = "TChunkWrite is being aborted";
+    completion->Release(actorSystem); // replies CORRUPTED, as Abort does, and deletes itself
+    IsReplied = true;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TChunkRead

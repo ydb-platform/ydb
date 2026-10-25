@@ -101,6 +101,7 @@ bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
         "commit_interval",
         "initial_scan",
         "format",
+        "compression",
     };
 
     static const TSet<TString> StateSettings = {

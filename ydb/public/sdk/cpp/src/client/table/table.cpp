@@ -3668,6 +3668,11 @@ TChangefeedDescription& TChangefeedDescription::WithAwsRegion(const std::string&
     return *this;
 }
 
+TChangefeedDescription& TChangefeedDescription::WithCompression(EChangefeedCompression compression) {
+    Compression_ = compression;
+    return *this;
+}
+
 const std::string& TChangefeedDescription::GetName() const {
     return Name_;
 }
@@ -3678,6 +3683,10 @@ EChangefeedMode TChangefeedDescription::GetMode() const {
 
 EChangefeedFormat TChangefeedDescription::GetFormat() const {
     return Format_;
+}
+
+EChangefeedCompression TChangefeedDescription::GetCompression() const {
+    return Compression_;
 }
 
 EChangefeedState TChangefeedDescription::GetState() const {
@@ -3763,7 +3772,22 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
         break;
     }
 
+    EChangefeedCompression compression = EChangefeedCompression::None;
+    switch (proto.compression()) {
+    case Ydb::Table::ChangefeedCompression::COMPRESSION_UNSPECIFIED:
+    case Ydb::Table::ChangefeedCompression::COMPRESSION_NONE:
+        compression = EChangefeedCompression::None;
+        break;
+    case Ydb::Table::ChangefeedCompression::COMPRESSION_ZSTD:
+        compression = EChangefeedCompression::Zstd;
+        break;
+    default:
+        compression = EChangefeedCompression::Unknown;
+        break;
+    }
+
     auto ret = TChangefeedDescription(proto.name(), mode, format);
+    ret.WithCompression(compression);
     if (proto.virtual_timestamps()) {
         ret.WithVirtualTimestamps();
     }
@@ -3861,6 +3885,16 @@ void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
         break;
     }
 
+    switch (Compression_) {
+    case EChangefeedCompression::Zstd:
+        proto.set_compression(Ydb::Table::ChangefeedCompression::COMPRESSION_ZSTD);
+        break;
+    case EChangefeedCompression::None:
+        break;
+    case EChangefeedCompression::Unknown:
+        break;
+    }
+
     if (ResolvedTimestamps_) {
         SetDuration(*ResolvedTimestamps_, *proto.mutable_resolved_timestamps_interval());
     }
@@ -3908,6 +3942,7 @@ void TChangefeedDescription::Out(IOutputStream& o) const {
     o << "{ name: \"" << Name_ << "\""
       << ", mode: " << Mode_ << ""
       << ", format: " << Format_ << ""
+      << ", compression: " << Compression_ << ""
       << ", virtual_timestamps: " << (VirtualTimestamps_ ? "on": "off") << ""
       << ", schema_changes: " << (SchemaChanges_ ? "on": "off") << "";
 
@@ -3934,6 +3969,7 @@ bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription&
     return lhs.GetName() == rhs.GetName()
         && lhs.GetMode() == rhs.GetMode()
         && lhs.GetFormat() == rhs.GetFormat()
+        && lhs.GetCompression() == rhs.GetCompression()
         && lhs.GetVirtualTimestamps() == rhs.GetVirtualTimestamps()
         && lhs.GetSchemaChanges() == rhs.GetSchemaChanges()
         && lhs.GetResolvedTimestamps() == rhs.GetResolvedTimestamps()

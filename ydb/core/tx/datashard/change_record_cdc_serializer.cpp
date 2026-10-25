@@ -20,8 +20,9 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
-#include <library/cpp/streams/zstd/zstd.h>
 #include <library/cpp/string_utils/base64/base64.h>
+
+#include <contrib/libs/zstd/include/zstd.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
@@ -39,15 +40,65 @@ class TBaseSerializer: public IChangeRecordSerializer {
         return data;
     }
 
+    // Heartbeats stay raw. A data row below CdcZstdMinPayloadBytes stays raw.
+    // Anything we do compress is written with one ZSTD_compress2 into a context
+    // owned by this serializer. Data rows use the fastest zstd level, which still
+    // shrinks a 1024-byte run of identical bytes. Schema snapshots use the
+    // library default level. The raw bytes stay in place when zstd does not
+    // make them shorter.
+    void ApplyCompression(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) {
+        if (Opts.Compression != NKikimrSchemeOp::ECdcStreamCompressionZstd) {
+            return;
+        }
+        if (record.GetKind() == TChangeRecord::EKind::CdcHeartbeat) {
+            return;
+        }
+
+        const auto& payload = data.GetData();
+        const bool schema = record.GetKind() == TChangeRecord::EKind::CdcSchemaChange;
+        if (!schema && payload.size() < CdcZstdMinPayloadBytes) {
+            return;
+        }
+        if (payload.size() > static_cast<size_t>(Max<i32>())) {
+            return;
+        }
+
+        if (!CCtx_) {
+            CCtx_ = ZSTD_createCCtx();
+            Y_ENSURE(CCtx_, "failed to allocate a zstd compression context");
+        }
+        const int level = schema ? ZSTD_defaultCLevel() : ZSTD_minCLevel();
+        if (ZSTD_isError(ZSTD_CCtx_setParameter(CCtx_, ZSTD_c_compressionLevel, level))) {
+            return;
+        }
+        const size_t bound = ZSTD_compressBound(payload.size());
+        if (bound == 0) {
+            return;
+        }
+
+        TString compressed = TString::Uninitialized(bound);
+        const size_t written = ZSTD_compress2(
+            CCtx_, compressed.begin(), compressed.size(), payload.data(), payload.size());
+        if (ZSTD_isError(written) || written >= payload.size()) {
+            return;
+        }
+        compressed.resize(written);
+        data.SetCodec(NPersQueueCommon::ZSTD);
+        UncompressedSize = static_cast<ui32>(payload.size());
+        data.SetData(std::move(compressed));
+    }
+
     void SerializeDataChange(TCmdWrite& cmd, const TChangeRecord& record) {
         auto data = MakeDataChunk();
         FillDataChunk(data, record);
+        ApplyCompression(data, record);
         cmd.SetData(data.SerializeAsString());
     }
 
     void SerializeSchemaChange(TCmdWrite& cmd, const TChangeRecord& record) {
         auto data = MakeDataChunk();
         FillDataChunk(data, record);
+        ApplyCompression(data, record);
 
         auto& schemaChange = *cmd.MutableSchemaChange();
         schemaChange.SetStep(record.GetStep());
@@ -58,12 +109,15 @@ class TBaseSerializer: public IChangeRecordSerializer {
     void SerializeHeartbeat(TCmdWrite& cmd, const TChangeRecord& record) {
         auto data = MakeDataChunk();
         FillDataChunk(data, record);
+        ApplyCompression(data, record);
 
         auto& heartbeat = *cmd.MutableHeartbeat();
         heartbeat.SetStep(record.GetStep());
         heartbeat.SetTxId(record.GetTxId());
         heartbeat.SetData(data.SerializeAsString());
     }
+
+    TMaybe<ui32> UncompressedSize;
 
 protected:
     virtual void FillDataChunk(NKikimrPQClient::TDataChunk& chunk, const TChangeRecord& record) = 0;
@@ -73,24 +127,41 @@ public:
         : Opts(opts)
     {}
 
+    ~TBaseSerializer() override {
+        if (CCtx_) {
+            ZSTD_freeCCtx(CCtx_);
+        }
+    }
+
+    TBaseSerializer(const TBaseSerializer&) = delete;
+    TBaseSerializer& operator=(const TBaseSerializer&) = delete;
+
     void Serialize(TCmdWrite& cmd, const TChangeRecord& record) override {
+        UncompressedSize.Clear();
         cmd.SetSeqNo(record.GetSeqNo());
         cmd.SetCreateTimeMS(record.GetApproximateCreationDateTime().MilliSeconds());
         switch (record.GetKind()) {
         case TChangeRecord::EKind::CdcDataChange:
-            return SerializeDataChange(cmd, record);
+            SerializeDataChange(cmd, record);
+            break;
         case TChangeRecord::EKind::CdcSchemaChange:
-            return SerializeSchemaChange(cmd, record);
+            SerializeSchemaChange(cmd, record);
+            break;
         case TChangeRecord::EKind::CdcHeartbeat:
-            return SerializeHeartbeat(cmd, record);
+            SerializeHeartbeat(cmd, record);
+            break;
         case TChangeRecord::EKind::AsyncIndex:
         case TChangeRecord::EKind::IncrementalRestore:
             Y_ENSURE(false, "Unexpected");
+        }
+        if (UncompressedSize.Defined()) {
+            cmd.SetUncompressedSize(static_cast<i32>(*UncompressedSize));
         }
     }
 
 protected:
     const TChangeRecordSerializerOpts Opts;
+    ZSTD_CCtx* CCtx_ = nullptr;
 
 }; // TBaseSerializer
 
@@ -711,29 +782,21 @@ public:
 }; // TDebeziumJsonSerializer
 
 class TBinaryCdcSerializer: public TBaseSerializer {
-    struct TIndexedCell {
+    // A view into a TSerializedCellVec that stays alive until the writer finishes.
+    struct TValueRef {
         ui16 Index = 0;
         NScheme::TTypeInfo Type;
-        bool Null = false;
-        // Owns bytes so a cell larger than the inline TCell limit stays valid
-        // after the source TSerializedCellVec is destroyed.
-        TString Storage;
+        TCell Cell;
+    };
 
-        TCell View() const {
-            if (Null) {
-                return TCell();
-            }
-            if (Storage.empty()) {
-                static const char empty = 0;
-                return TCell(&empty, 0);
-            }
-            return TCell(Storage.data(), Storage.size());
-        }
+    struct TColumnSlot {
+        ui16 Index = 0;
+        NScheme::TTypeInfo Type;
     };
 
     struct TColumnMap {
         TVector<std::pair<ui32, NScheme::TTypeInfo>> Keys;
-        TVector<TIndexedCell> Values;
+        TVector<TColumnSlot> Values;
         THashMap<ui32, ui16> TagToIndex;
         bool Wide = false;
     };
@@ -760,64 +823,55 @@ class TBinaryCdcSerializer: public TBaseSerializer {
         for (ui16 index = 0; index < names.size(); ++index) {
             const auto tag = names[index].second;
             const auto& column = table.Columns.at(tag);
-            TIndexedCell value;
-            value.Index = index;
-            value.Type = column.Type;
-            map.Values.push_back(value);
+            map.Values.push_back(TColumnSlot{index, column.Type});
             map.TagToIndex.emplace(tag, index);
         }
         map.Wide = map.Values.size() > 127;
         return map;
     }
 
-    static TVector<TIndexedCell> CollectValues(const NKikimrChangeExchange::TDataChange::TSerializedCells& in,
-            const TColumnMap& map)
+    const TColumnMap& ColumnMapFor(const TUserTable::TCPtr& table) {
+        const ui64 version = table->GetTableSchemaVersion();
+        if (CachedMap && CachedTable.Get() == table.Get() && CachedVersion == version) {
+            return *CachedMap;
+        }
+        CachedTable = table;
+        CachedVersion = version;
+        CachedMap = BuildColumnMap(*table);
+        return *CachedMap;
+    }
+
+    // storage outlives every TCell copied into out.
+    static void CollectValues(const NKikimrChangeExchange::TDataChange::TSerializedCells& in,
+            const TColumnMap& map, TSerializedCellVec& storage, TVector<TValueRef>& out)
     {
         if (!in.TagsSize()) {
-            return {};
+            return;
         }
 
-        TSerializedCellVec cells;
-        Y_ENSURE(TSerializedCellVec::TryParse(in.GetData(), cells));
-        Y_ENSURE(in.TagsSize() == cells.GetCells().size());
+        Y_ENSURE(TSerializedCellVec::TryParse(in.GetData(), storage));
+        Y_ENSURE(in.TagsSize() == storage.GetCells().size());
 
-        TVector<TIndexedCell> result;
-        result.reserve(in.TagsSize());
+        out.reserve(in.TagsSize());
+        const auto cells = storage.GetCells();
         for (ui32 i = 0; i < in.TagsSize(); ++i) {
             const auto tag = in.GetTags(i);
             const auto it = map.TagToIndex.find(tag);
             Y_ENSURE(it != map.TagToIndex.end(), "binary CDC value tag is not in the schema: " << tag);
-            TIndexedCell value = map.Values[it->second];
-            const auto& cell = cells.GetCells()[i];
-            value.Null = cell.IsNull();
-            if (!value.Null && cell.Size()) {
-                value.Storage.assign(cell.Data(), cell.Size());
-            }
-            result.push_back(std::move(value));
+            const auto index = it->second;
+            out.push_back(TValueRef{index, map.Values[index].Type, cells[i]});
         }
-        Sort(result, [](const TIndexedCell& left, const TIndexedCell& right) {
+        Sort(out, [](const TValueRef& left, const TValueRef& right) {
             return left.Index < right.Index;
         });
-        return result;
     }
 
-    // zstd level 3 (TZstdCompress quality 0). Keep the raw payload when the
-    // frame does not shrink it: a tiny row or an erase must not grow on disk.
-    void StoreBinaryPayload(NKikimrPQClient::TDataChunk& data, TString payload) {
-        TStringStream out;
-        {
-            TZstdCompress compress(&out);
-            compress.Write(payload.data(), payload.size());
+    static size_t IndexedWireBytes(bool wide, const TValueRef& value) {
+        size_t bytes = wide ? 2 : 1;
+        if (!value.Cell.IsNull()) {
+            bytes += NChangeExchange::BinaryCdcCellSize(value.Cell, value.Type);
         }
-        if (out.Size() < payload.size()) {
-            data.SetCodec(NPersQueueCommon::ZSTD);
-            if (payload.size() <= static_cast<size_t>(Max<i32>())) {
-                UncompressedSize = static_cast<ui32>(payload.size());
-            }
-            data.SetData(out.Str());
-            return;
-        }
-        data.SetData(std::move(payload));
+        return bytes;
     }
 
     void FillDataChunk(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) override {
@@ -829,13 +883,14 @@ class TBinaryCdcSerializer: public TBaseSerializer {
 
         switch (record.GetKind()) {
         case TChangeRecord::EKind::CdcSchemaChange: {
+            const TString json = TYdbJsonSerializer::RenderSchemaChangeJson(record);
             TBinaryCdcHeader header;
             header.Version = NChangeExchange::BinaryCdcVersion;
             header.Kind = EBinaryCdcKind::Schema;
             TBinaryCdcWriter writer;
-            writer.Start(header);
-            writer.SetSchemaJson(TYdbJsonSerializer::RenderSchemaChangeJson(record));
-            StoreBinaryPayload(data, writer.Finish());
+            writer.Start(header, 8 + sizeof(ui32) + json.size());
+            writer.SetSchemaJson(json);
+            data.SetData(writer.Finish());
             return;
         }
         case TChangeRecord::EKind::CdcHeartbeat: {
@@ -846,8 +901,8 @@ class TBinaryCdcSerializer: public TBaseSerializer {
             header.Step = record.GetStep();
             header.TxId = record.GetTxId();
             TBinaryCdcWriter writer;
-            writer.Start(header);
-            StoreBinaryPayload(data, writer.Finish());
+            writer.Start(header, 8 + sizeof(ui64) * 2);
+            data.SetData(writer.Finish());
             return;
         }
         case TChangeRecord::EKind::CdcDataChange:
@@ -858,7 +913,7 @@ class TBinaryCdcSerializer: public TBaseSerializer {
         }
 
         Y_ENSURE(record.GetSchema());
-        const auto map = BuildColumnMap(*record.GetSchema());
+        const auto& map = ColumnMapFor(record.GetSchema());
         const auto& body = record.GetDataChange();
 
         TSerializedCellVec keyCells;
@@ -872,21 +927,24 @@ class TBinaryCdcSerializer: public TBaseSerializer {
         const bool hasOld = body.HasOldImage();
         const bool hasNew = body.HasNewImage();
         const bool hasImage = hasOld || hasNew;
-        TVector<TIndexedCell> values;
-        TVector<TIndexedCell> oldImage;
-        TVector<TIndexedCell> newImage;
+        TSerializedCellVec valueStorage;
+        TSerializedCellVec oldStorage;
+        TSerializedCellVec newStorage;
+        TVector<TValueRef> values;
+        TVector<TValueRef> oldImage;
+        TVector<TValueRef> newImage;
         EBinaryCdcOp op = EBinaryCdcOp::None;
         switch (body.GetRowOperationCase()) {
         case NKikimrChangeExchange::TDataChange::kUpsert:
             op = EBinaryCdcOp::Upsert;
             if (!hasImage) {
-                values = CollectValues(body.GetUpsert(), map);
+                CollectValues(body.GetUpsert(), map, valueStorage, values);
             }
             break;
         case NKikimrChangeExchange::TDataChange::kReset:
             op = EBinaryCdcOp::Reset;
             if (!hasImage) {
-                values = CollectValues(body.GetReset(), map);
+                CollectValues(body.GetReset(), map, valueStorage, values);
             }
             break;
         case NKikimrChangeExchange::TDataChange::kErase:
@@ -896,10 +954,10 @@ class TBinaryCdcSerializer: public TBaseSerializer {
             Y_ENSURE(false, "Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
         }
         if (hasOld) {
-            oldImage = CollectValues(body.GetOldImage(), map);
+            CollectValues(body.GetOldImage(), map, oldStorage, oldImage);
         }
         if (hasNew) {
-            newImage = CollectValues(body.GetNewImage(), map);
+            CollectValues(body.GetNewImage(), map, newStorage, newImage);
         }
 
         TString user;
@@ -948,19 +1006,55 @@ class TBinaryCdcSerializer: public TBaseSerializer {
             }
         }
 
+        size_t bytes = 8;
+        if (hasOld) {
+            bytes += sizeof(ui16);
+        }
+        if (hasNew) {
+            bytes += sizeof(ui16);
+        }
+        if (Opts.VirtualTimestamps) {
+            bytes += sizeof(ui64) * 2;
+        }
+        const bool nullKeys = (header.Flags & static_cast<ui8>(EBinaryCdcFlag::NullKeys)) != 0;
+        for (size_t i = 0; i < map.Keys.size(); ++i) {
+            const auto& cell = keyCells.GetCells()[i];
+            if (nullKeys) {
+                bytes += 1;
+            }
+            if (!cell.IsNull()) {
+                bytes += NChangeExchange::BinaryCdcCellSize(cell, map.Keys[i].second);
+            }
+        }
+        for (const auto& value : values) {
+            bytes += IndexedWireBytes(map.Wide, value);
+        }
+        for (const auto& value : oldImage) {
+            bytes += IndexedWireBytes(map.Wide, value);
+        }
+        for (const auto& value : newImage) {
+            bytes += IndexedWireBytes(map.Wide, value);
+        }
+        if (!user.empty()) {
+            bytes += sizeof(ui16) + user.size();
+        }
+        if (!trace.empty()) {
+            bytes += sizeof(ui16) + trace.size();
+        }
+
         TBinaryCdcWriter writer;
-        writer.Start(header);
+        writer.Start(header, bytes);
         for (size_t i = 0; i < map.Keys.size(); ++i) {
             writer.AddKey(keyCells.GetCells()[i], map.Keys[i].second);
         }
         for (const auto& value : values) {
-            writer.AddValue(value.Index, value.View(), value.Type);
+            writer.AddValue(value.Index, value.Cell, value.Type);
         }
         for (const auto& value : oldImage) {
-            writer.AddOldImage(value.Index, value.View(), value.Type);
+            writer.AddOldImage(value.Index, value.Cell, value.Type);
         }
         for (const auto& value : newImage) {
-            writer.AddNewImage(value.Index, value.View(), value.Type);
+            writer.AddNewImage(value.Index, value.Cell, value.Type);
         }
         if (!user.empty()) {
             writer.SetUser(user);
@@ -968,21 +1062,15 @@ class TBinaryCdcSerializer: public TBaseSerializer {
         if (!trace.empty()) {
             writer.SetTrace(trace);
         }
-        StoreBinaryPayload(data, writer.Finish());
+        data.SetData(writer.Finish());
     }
 
-    TMaybe<ui32> UncompressedSize;
+    TUserTable::TCPtr CachedTable;
+    TMaybe<TColumnMap> CachedMap;
+    ui64 CachedVersion = 0;
 
 public:
     using TBaseSerializer::TBaseSerializer;
-
-    void Serialize(TCmdWrite& cmd, const TChangeRecord& record) override {
-        UncompressedSize.Clear();
-        TBaseSerializer::Serialize(cmd, record);
-        if (UncompressedSize.Defined()) {
-            cmd.SetUncompressedSize(static_cast<i32>(*UncompressedSize));
-        }
-    }
 
     TString DebugString(const TChangeRecord& record) override {
         return TStringBuilder() << "binary CDC kind " << static_cast<int>(record.GetKind());
@@ -1032,6 +1120,17 @@ TString TChangeRecord::GetPartitionKey() const {
 
     PartitionKey.ConstructInPlace(MD5::Calc(WriteJson(key, false)));
     return *PartitionKey;
+}
+
+TString TChangeRecord::GetRawKeyPartitionKey() const {
+    if (RawKeyPartitionKey) {
+        return *RawKeyPartitionKey;
+    }
+
+    Y_ENSURE(Kind == EKind::CdcDataChange);
+    const auto& key = GetDataChange().GetKey().GetData();
+    RawKeyPartitionKey.ConstructInPlace(MD5::Calc(TStringBuf(key.data(), key.size())));
+    return *RawKeyPartitionKey;
 }
 
 }

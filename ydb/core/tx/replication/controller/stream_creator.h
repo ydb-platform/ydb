@@ -12,6 +12,7 @@ IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 
     const TString& streamName, const TString& consumerName, const TDuration& streamRetentionPeriod,
     const std::optional<TDuration>& resolvedTimestamps = std::nullopt,
     bool supportsTopicAutopartitioning = false, bool needCreate = true, bool schemaChanges = false,
-    bool initialScan = true, bool describeOnly = false, bool binaryFormat = false);
+    bool initialScan = true, bool describeOnly = false, bool binaryFormat = false,
+    bool zstdCompression = false);
 
 }

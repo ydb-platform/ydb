@@ -86,6 +86,12 @@ enum EChangefeedFormat {
     CHANGEFEED_FORMAT_BINARY = 2;
 }
 
+enum EChangefeedCompression {
+    CHANGEFEED_COMPRESSION_UNSPECIFIED = 0;
+    CHANGEFEED_COMPRESSION_NONE = 1;
+    CHANGEFEED_COMPRESSION_ZSTD = 2;
+}
+
 message TReplicationConfig {
     message TTargetEverything {
         optional string DstPrefix = 1;
@@ -139,6 +145,8 @@ message TReplicationConfig {
     // Unspecified means JSON. BINARY is stored only when the destination
     // accepted it; the source still rejects the stream unless its own flag is on.
     optional EChangefeedFormat ChangefeedFormat = 12;
+    // Codec of the changefeeds this replication creates. Unspecified means NONE.
+    optional EChangefeedCompression ChangefeedCompression = 13;
 
     // targets to be replicated
     // Currently, only OLTP tables are supported.

@@ -9,6 +9,7 @@
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
+#include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/streams/zstd/zstd.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -95,11 +96,13 @@ TStoredPayload ReadPayload(const NKikimrClient::TPersQueuePartitionRequest::TCmd
 }
 
 std::unique_ptr<IChangeRecordSerializer> MakeSerializer(NKikimrSchemeOp::ECdcStreamFormat format,
-        bool virtualTimestamps = true)
+        bool virtualTimestamps = true,
+        NKikimrSchemeOp::ECdcStreamCompression compression = NKikimrSchemeOp::ECdcStreamCompressionUnspecified)
 {
     TChangeRecordSerializerOpts opts;
     opts.StreamFormat = format;
     opts.VirtualTimestamps = virtualTimestamps;
+    opts.Compression = compression;
     return std::unique_ptr<IChangeRecordSerializer>(CreateChangeRecordSerializer(opts));
 }
 
@@ -117,7 +120,8 @@ Y_UNIT_TEST_SUITE(BinaryCdcCompression) {
             .Build();
 
         NKikimrClient::TPersQueuePartitionRequest::TCmdWrite cmd;
-        MakeSerializer(NKikimrSchemeOp::ECdcStreamFormatBinary)->Serialize(cmd, *record);
+        MakeSerializer(NKikimrSchemeOp::ECdcStreamFormatBinary, true,
+            NKikimrSchemeOp::ECdcStreamCompressionZstd)->Serialize(cmd, *record);
 
         const auto stored = ReadPayload(cmd);
         UNIT_ASSERT_VALUES_EQUAL(stored.Codec, static_cast<i64>(NPersQueueCommon::ZSTD));
@@ -167,8 +171,9 @@ Y_UNIT_TEST_SUITE(BinaryCdcCompression) {
             .WithTxId(20)
             .Build();
 
-        // No virtual timestamp: sixteen zero bytes would let zstd shrink the record.
-        auto serializer = MakeSerializer(NKikimrSchemeOp::ECdcStreamFormatBinary, false);
+        // These payloads are under CdcZstdMinPayloadBytes, and a heartbeat is never compressed.
+        auto serializer = MakeSerializer(NKikimrSchemeOp::ECdcStreamFormatBinary, false,
+            NKikimrSchemeOp::ECdcStreamCompressionZstd);
         NKikimrClient::TPersQueuePartitionRequest::TCmdWrite upsertCmd;
         NKikimrClient::TPersQueuePartitionRequest::TCmdWrite eraseCmd;
         NKikimrClient::TPersQueuePartitionRequest::TCmdWrite heartbeatCmd;
@@ -204,6 +209,137 @@ Y_UNIT_TEST_SUITE(BinaryCdcCompression) {
         const auto stored = ReadPayload(cmd);
         UNIT_ASSERT_VALUES_EQUAL(stored.Codec, static_cast<i64>(NPersQueueCommon::RAW));
         UNIT_ASSERT(stored.Payload.Contains("aaaa"));
+    }
+
+    Y_UNIT_TEST(RepetitivePayloadStaysRawWithoutCompression) {
+        const TString value(1024, 'a');
+        auto record = TChangeRecordBuilder(TChangeRecord::EKind::CdcDataChange)
+            .WithOrder(1)
+            .WithSchema(MakeTable())
+            .WithBody(MakeUpsertBody(7, value))
+            .Build();
+
+        NKikimrClient::TPersQueuePartitionRequest::TCmdWrite cmd;
+        MakeSerializer(NKikimrSchemeOp::ECdcStreamFormatBinary, false)->Serialize(cmd, *record);
+        const auto stored = ReadPayload(cmd);
+        UNIT_ASSERT_VALUES_EQUAL(stored.Codec, static_cast<i64>(NPersQueueCommon::RAW));
+        UNIT_ASSERT(stored.Payload.size() > value.size());
+    }
+
+    Y_UNIT_TEST(JsonCompressesWhenZstdRequested) {
+        const TString value(1024, 'a');
+        auto record = TChangeRecordBuilder(TChangeRecord::EKind::CdcDataChange)
+            .WithOrder(1)
+            .WithStep(10)
+            .WithTxId(20)
+            .WithSchema(MakeTable())
+            .WithBody(MakeUpsertBody(7, value))
+            .Build();
+
+        NKikimrClient::TPersQueuePartitionRequest::TCmdWrite cmd;
+        MakeSerializer(NKikimrSchemeOp::ECdcStreamFormatJson, true,
+            NKikimrSchemeOp::ECdcStreamCompressionZstd)->Serialize(cmd, *record);
+        const auto stored = ReadPayload(cmd);
+        UNIT_ASSERT_VALUES_EQUAL(stored.Codec, static_cast<i64>(NPersQueueCommon::ZSTD));
+        UNIT_ASSERT(stored.Payload.Contains("aaaa"));
+        UNIT_ASSERT(stored.Payload.size() >= CdcZstdMinPayloadBytes);
+    }
+
+    Y_UNIT_TEST(JsonShortRecordStaysRawWhenZstdRequested) {
+        auto record = TChangeRecordBuilder(TChangeRecord::EKind::CdcDataChange)
+            .WithOrder(1)
+            .WithSchema(MakeTable())
+            .WithBody(MakeUpsertBody(7, "hi"))
+            .Build();
+
+        NKikimrClient::TPersQueuePartitionRequest::TCmdWrite cmd;
+        MakeSerializer(NKikimrSchemeOp::ECdcStreamFormatJson, false,
+            NKikimrSchemeOp::ECdcStreamCompressionZstd)->Serialize(cmd, *record);
+        const auto stored = ReadPayload(cmd);
+        UNIT_ASSERT_VALUES_EQUAL(stored.Codec, static_cast<i64>(NPersQueueCommon::RAW));
+        UNIT_ASSERT(stored.Payload.size() < CdcZstdMinPayloadBytes);
+        UNIT_ASSERT(stored.Payload.Contains("hi"));
+    }
+
+    Y_UNIT_TEST(SkipsZstdBelowMinPayload) {
+        const TString value(128, 'a');
+        auto record = TChangeRecordBuilder(TChangeRecord::EKind::CdcDataChange)
+            .WithOrder(1)
+            .WithSchema(MakeTable())
+            .WithBody(MakeUpsertBody(7, value))
+            .Build();
+
+        NKikimrClient::TPersQueuePartitionRequest::TCmdWrite cmd;
+        MakeSerializer(NKikimrSchemeOp::ECdcStreamFormatBinary, false,
+            NKikimrSchemeOp::ECdcStreamCompressionZstd)->Serialize(cmd, *record);
+        const auto stored = ReadPayload(cmd);
+        UNIT_ASSERT(stored.Payload.size() < CdcZstdMinPayloadBytes);
+        UNIT_ASSERT_VALUES_EQUAL(stored.Codec, static_cast<i64>(NPersQueueCommon::RAW));
+        UNIT_ASSERT(stored.Payload.Contains(value));
+    }
+
+    Y_UNIT_TEST(LeavesLongIncompressibleRaw) {
+        TString value(1024, '\0');
+        ui32 state = 0xA5A5A5A5u;
+        for (size_t i = 0; i < value.size(); ++i) {
+            state = state * 1664525u + 1013904223u;
+            value[i] = static_cast<char>(state >> 24);
+        }
+        auto record = TChangeRecordBuilder(TChangeRecord::EKind::CdcDataChange)
+            .WithOrder(1)
+            .WithSchema(MakeTable())
+            .WithBody(MakeUpsertBody(7, value))
+            .Build();
+
+        NKikimrClient::TPersQueuePartitionRequest::TCmdWrite cmd;
+        MakeSerializer(NKikimrSchemeOp::ECdcStreamFormatBinary, false,
+            NKikimrSchemeOp::ECdcStreamCompressionZstd)->Serialize(cmd, *record);
+        const auto stored = ReadPayload(cmd);
+        UNIT_ASSERT(stored.Payload.size() >= CdcZstdMinPayloadBytes);
+        UNIT_ASSERT_VALUES_EQUAL(stored.Codec, static_cast<i64>(NPersQueueCommon::RAW));
+    }
+
+    Y_UNIT_TEST(SerializerReusesColumnMapAcrossRows) {
+        auto table = MakeTable();
+        auto serializer = MakeSerializer(NKikimrSchemeOp::ECdcStreamFormatBinary, false);
+        auto write = [&](ui64 key, TStringBuf value) {
+            auto record = TChangeRecordBuilder(TChangeRecord::EKind::CdcDataChange)
+                .WithOrder(key)
+                .WithSchema(table)
+                .WithBody(MakeUpsertBody(key, value))
+                .Build();
+            NKikimrClient::TPersQueuePartitionRequest::TCmdWrite cmd;
+            serializer->Serialize(cmd, *record);
+            return ReadPayload(cmd).Payload;
+        };
+
+        const auto first = write(1, "alpha");
+        const auto second = write(2, "beta");
+        UNIT_ASSERT(first.Contains("alpha"));
+        UNIT_ASSERT(!first.Contains("beta"));
+        UNIT_ASSERT(second.Contains("beta"));
+        UNIT_ASSERT(!second.Contains("alpha"));
+    }
+
+    Y_UNIT_TEST(RawKeyPartitionHashCoversEmbeddedZeros) {
+        auto record = TChangeRecordBuilder(TChangeRecord::EKind::CdcDataChange)
+            .WithOrder(1)
+            .WithSchema(MakeTable())
+            .WithBody(MakeUpsertBody(7, "v"))
+            .Build();
+        const auto& key = record->GetDataChange().GetKey().GetData();
+        UNIT_ASSERT(key.Contains('\0'));
+        const auto raw = record->GetRawKeyPartitionKey();
+        UNIT_ASSERT_VALUES_EQUAL(raw, MD5::Calc(TStringBuf(key.data(), key.size())));
+        UNIT_ASSERT_VALUES_UNEQUAL(raw, MD5::Calc(TStringBuf(key.data())));
+        UNIT_ASSERT_VALUES_UNEQUAL(raw, record->GetPartitionKey());
+
+        auto again = TChangeRecordBuilder(TChangeRecord::EKind::CdcDataChange)
+            .WithOrder(2)
+            .WithSchema(MakeTable())
+            .WithBody(MakeUpsertBody(7, "other"))
+            .Build();
+        UNIT_ASSERT_VALUES_EQUAL(again->GetRawKeyPartitionKey(), raw);
     }
 
     Y_UNIT_TEST(WritesNullPrimaryKey) {

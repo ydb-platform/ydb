@@ -4539,12 +4539,20 @@ Y_UNIT_TEST(AlterTableSetTieringIsCorrect) {
 
 Y_UNIT_TEST(AlterTableAddChangefeedIsCorrect) {
     UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table ADD CHANGEFEED feed WITH (MODE = 'UPDATES', FORMAT = 'json')").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table ADD CHANGEFEED feed WITH (MODE = 'UPDATES', FORMAT = 'JSON', COMPRESSION = 'ZSTD')").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table ADD CHANGEFEED feed WITH (MODE = 'UPDATES', FORMAT = 'JSON', COMPRESSION = 'none')").IsOk());
+    const auto badCompression = SqlToYql(
+        "USE ydb;   ALTER TABLE table ADD CHANGEFEED feed WITH (MODE = 'UPDATES', FORMAT = 'JSON', COMPRESSION = TRUE)");
+    UNIT_ASSERT(!badCompression.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(badCompression), "Literal of String type is expected for COMPRESSION");
 }
 
 Y_UNIT_TEST(AlterTableAlterChangefeedIsCorrect) {
     UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table ALTER CHANGEFEED feed DISABLE").IsOk());
     ExpectFailWithError("USE ydb;   ALTER TABLE table ALTER CHANGEFEED feed SET (FORMAT = 'proto');",
                         "<main>:1:57: Error: FORMAT alter is not supported\n");
+    ExpectFailWithError("USE ydb;   ALTER TABLE table ALTER CHANGEFEED feed SET (COMPRESSION = 'ZSTD');",
+                        "<main>:1:57: Error: COMPRESSION alter is not supported\n");
 }
 
 Y_UNIT_TEST(AlterTableDropChangefeedIsCorrect) {
@@ -5974,6 +5982,40 @@ Y_UNIT_TEST(AlterAsyncReplicationFormat) {
         "USE plato; ALTER ASYNC REPLICATION MyReplication SET (FORMAT = \"BINARY\");");
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "FORMAT is not supported in ALTER");
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationCompression) {
+    for (const auto& value : {"ZSTD", "zstd", "NONE"}) {
+        const auto res = SqlToYql(TStringBuilder()
+                                  << "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+                                  << "WITH (COMPRESSION = \"" << value << "\");");
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder()
+                                                      << "'('\"compression\" (String '\"" << value << "\"))");
+            }
+        };
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationInvalidCompression) {
+    const auto res = SqlToYql(
+        "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+        "WITH (COMPRESSION = TRUE);");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Literal of String type is expected for COMPRESSION");
+}
+
+Y_UNIT_TEST(AlterAsyncReplicationCompression) {
+    const auto res = SqlToYql(
+        "USE plato; ALTER ASYNC REPLICATION MyReplication SET (COMPRESSION = \"ZSTD\");");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "COMPRESSION is not supported in ALTER");
 }
 
 Y_UNIT_TEST(CreateAsyncReplicationUnsupportedSettings) {

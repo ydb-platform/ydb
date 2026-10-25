@@ -222,6 +222,12 @@ bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TSqlEx
             return false;
         }
         settings.Format = exprNode;
+    } else if (to_lower(id.Name) == "compression") {
+        if (!exprNode->IsLiteral() || exprNode->GetLiteralType() != "String") {
+            ctx.Context().Error() << "Literal of String type is expected for " << id.Name;
+            return false;
+        }
+        settings.Compression = exprNode;
     } else if (to_lower(id.Name) == "initial_scan") {
         if (!exprNode->IsLiteral() || exprNode->GetLiteralType() != "Bool") {
             ctx.Context().Error() << "Literal of Bool type is expected for " << id.Name;

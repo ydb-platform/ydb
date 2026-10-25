@@ -89,6 +89,13 @@ enum class EChangefeedFormat {
     Unknown = std::numeric_limits<int>::max()
 };
 
+enum class EChangefeedCompression {
+    None /* "NONE" */,
+    Zstd /* "ZSTD" */,
+
+    Unknown = std::numeric_limits<int>::max()
+};
+
 enum class EChangefeedState {
     Enabled,
     Disabled,

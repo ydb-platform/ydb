@@ -1365,6 +1365,16 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
             ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected cdc stream format");
     }
 
+    switch (cdcStream.GetCompression()) {
+        case NKikimrSchemeOp::ECdcStreamCompression::ECdcStreamCompressionZstd: {
+            Stream << del << "COMPRESSION = \'ZSTD\'";
+            del = ", ";
+            break;
+        }
+        default:
+            break;
+    }
+
     if (cdcStream.GetVirtualTimestamps()) {
         Stream << del << "VIRTUAL_TIMESTAMPS = TRUE";
         del = ", ";

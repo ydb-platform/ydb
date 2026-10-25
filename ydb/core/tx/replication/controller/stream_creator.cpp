@@ -29,7 +29,8 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             const TString& attrs,
             bool schemaChanges,
             bool initialScan,
-            bool binaryFormat)
+            bool binaryFormat,
+            bool zstdCompression)
     {
         using namespace NYdb::NTable;
 
@@ -37,6 +38,9 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         auto desc = TChangefeedDescription(name, EChangefeedMode::Updates, format)
             .WithRetentionPeriod(retentionPeriod)
             .AddAttribute("__async_replication", attrs);
+        if (zstdCompression) {
+            desc.WithCompression(EChangefeedCompression::Zstd);
+        }
 
         if (initialScan) {
             desc.WithInitialScan();
@@ -364,7 +368,8 @@ public:
             bool needCreate,
             bool initialScan,
             bool describeOnly,
-            bool binaryFormat)
+            bool binaryFormat,
+            bool zstdCompression)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -385,6 +390,7 @@ public:
         , SchemaChangesFlag(schemaChanges)
         , InitialScan(initialScan)
         , BinaryFormat(binaryFormat)
+        , ZstdCompression(zstdCompression)
         , NeedCreate(needCreate)
         , DescribeOnly(describeOnly)
         , LogPrefix(CreateActorLogPrefix("StreamCreator", ReplicationId, TargetId))
@@ -401,7 +407,7 @@ public:
             return Finish(NYdb::TStatus(NYdb::EStatus::PRECONDITION_FAILED, std::move(issues)));
         }
         Changefeed.emplace(MakeChangefeed(StreamName, RetentionPeriod, ResolvedTimestamps, ChangefeedAttrs,
-            SchemaChangesFlag, InitialScan, BinaryFormat && binaryAllowed));
+            SchemaChangesFlag, InitialScan, BinaryFormat && binaryAllowed, ZstdCompression));
         if (DescribeOnly) {
             DescribeStreamTable();
         } else if (NeedCreate) {
@@ -436,6 +442,7 @@ private:
     const bool SchemaChangesFlag;
     const bool InitialScan;
     const bool BinaryFormat;
+    const bool ZstdCompression;
     std::optional<NYdb::NTable::TChangefeedDescription> Changefeed;
     const bool NeedCreate;
     const bool DescribeOnly;
@@ -457,12 +464,14 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
     const bool schemaChanges = AppData()->FeatureFlags.GetEnableAsyncReplicationSchemaChanges();
     const bool initialScan = config.GetInitialScan() || target->IsIndexBuild();
     const bool binaryFormat = config.GetChangefeedFormat() == NKikimrReplication::CHANGEFEED_FORMAT_BINARY;
+    const bool zstdCompression = config.GetChangefeedCompression() == NKikimrReplication::CHANGEFEED_COMPRESSION_ZSTD;
 
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(),
         target->GetConfig(), target->GetStreamName(), target->GetStreamConsumerName(),
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
-        supportsTopicAutopartitioning, needCreate, schemaChanges, initialScan, describeOnly, binaryFormat);
+        supportsTopicAutopartitioning, needCreate, schemaChanges, initialScan, describeOnly, binaryFormat,
+        zstdCompression);
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
@@ -470,11 +479,11 @@ IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 
         const TString& streamName, const TString& consumerName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
         bool supportsTopicAutopartitioning, bool needCreate, bool schemaChanges, bool initialScan, bool describeOnly,
-        bool binaryFormat)
+        bool binaryFormat, bool zstdCompression)
 {
     return new TStreamCreator(parent, proxy, rid, tid, config,
         streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
-        schemaChanges, needCreate, initialScan, describeOnly, binaryFormat);
+        schemaChanges, needCreate, initialScan, describeOnly, binaryFormat, zstdCompression);
 }
 
 }

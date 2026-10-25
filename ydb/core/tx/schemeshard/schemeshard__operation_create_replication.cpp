@@ -466,6 +466,16 @@ public:
             return result;
         }
 
+        switch (desc.GetConfig().GetChangefeedCompression()) {
+        case NKikimrReplication::CHANGEFEED_COMPRESSION_UNSPECIFIED:
+        case NKikimrReplication::CHANGEFEED_COMPRESSION_NONE:
+        case NKikimrReplication::CHANGEFEED_COMPRESSION_ZSTD:
+            break;
+        default:
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Invalid changefeed compression");
+            return result;
+        }
+
         path.MaterializeLeaf(owner);
         path->CreateTxId = OperationId.GetTxId();
         path->LastTxId = OperationId.GetTxId();

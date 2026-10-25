@@ -561,6 +561,16 @@ message ChangefeedFormat {
     }
 }
 
+message ChangefeedCompression {
+    enum Compression {
+        COMPRESSION_UNSPECIFIED = 0;
+        // Store the change record as-is
+        COMPRESSION_NONE = 1;
+        // Store zstd when the compressed bytes are shorter than the record
+        COMPRESSION_ZSTD = 2;
+    }
+}
+
 message Changefeed {
     // Name of the feed
     string name = 1;
@@ -588,6 +598,8 @@ message Changefeed {
     bool user_sids = 12;
     // Emit user trace identifier (trace_id) or not.
     bool trace_ids = 13;
+    // Codec of the stored change record. Unspecified means NONE.
+    ChangefeedCompression.Compression compression = 14;
 }
 
 message ChangefeedDescription {
@@ -635,6 +647,8 @@ message ChangefeedDescription {
     bool user_sids = 11;
     // State of emitting of user trace identifier (trace_id) or not.
     bool trace_ids = 12;
+    // Codec of the stored change record. Unspecified means NONE.
+    ChangefeedCompression.Compression compression = 13;
 }
 
 message StoragePool {

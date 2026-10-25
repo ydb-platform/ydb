@@ -2361,6 +2361,17 @@ void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
         break;
     }
 
+    switch (in.GetCompression()) {
+    case NKikimrSchemeOp::ECdcStreamCompression::ECdcStreamCompressionNone:
+        out.set_compression(Ydb::Table::ChangefeedCompression::COMPRESSION_NONE);
+        break;
+    case NKikimrSchemeOp::ECdcStreamCompression::ECdcStreamCompressionZstd:
+        out.set_compression(Ydb::Table::ChangefeedCompression::COMPRESSION_ZSTD);
+        break;
+    default:
+        break;
+    }
+
     switch (in.GetState()) {
     case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateReady:
     case NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateDisabled:
@@ -2438,6 +2449,21 @@ bool FillChangefeedDescriptionCommon(NKikimrSchemeOp::TCdcStreamDescription& out
     default:
         status = Ydb::StatusIds::BAD_REQUEST;
         error = "Invalid changefeed format";
+        return false;
+    }
+
+    switch (in.compression()) {
+    case Ydb::Table::ChangefeedCompression::COMPRESSION_UNSPECIFIED:
+        break;
+    case Ydb::Table::ChangefeedCompression::COMPRESSION_NONE:
+        out.SetCompression(NKikimrSchemeOp::ECdcStreamCompression::ECdcStreamCompressionNone);
+        break;
+    case Ydb::Table::ChangefeedCompression::COMPRESSION_ZSTD:
+        out.SetCompression(NKikimrSchemeOp::ECdcStreamCompression::ECdcStreamCompressionZstd);
+        break;
+    default:
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Invalid changefeed compression";
         return false;
     }
 

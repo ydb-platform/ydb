@@ -208,7 +208,8 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         SessionAcquisitionFailure(Ydb::StatusIds::UNAUTHORIZED);
     }
 
-    void Basic(const std::optional<TDuration>& resolvedTimestamps = {}, bool binaryFormat = false) {
+    void Basic(const std::optional<TDuration>& resolvedTimestamps = {}, bool binaryFormat = false,
+            bool zstdCompression = false) {
         TFeatureFlags flags;
         if (binaryFormat) {
             flags.FeatureFlags.SetEnableBinaryChangefeedForAsyncReplication(true);
@@ -242,7 +243,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             env.GetSender(), env.GetYdbProxy(), 1 /* rid */, 1 /* tid */,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
             "Stream", "replicationConsumer", TDuration::Hours(1), resolvedTimestamps,
-            false, true, false, true, false, binaryFormat
+            false, true, false, true, false, binaryFormat, zstdCompression
         ));
         {
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
@@ -264,6 +265,9 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         UNIT_ASSERT_VALUES_EQUAL(stream.GetFormat(), binaryFormat
             ? NKikimrSchemeOp::ECdcStreamFormatBinary
             : NKikimrSchemeOp::ECdcStreamFormatJson);
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetCompression(), zstdCompression
+            ? NKikimrSchemeOp::ECdcStreamCompressionZstd
+            : NKikimrSchemeOp::ECdcStreamCompressionUnspecified);
         UNIT_ASSERT(!stream.GetSchemaChanges());
         UNIT_ASSERT_VALUES_EQUAL(stream.GetVirtualTimestamps(), resolvedTimestamps.has_value());
         UNIT_ASSERT_VALUES_EQUAL(stream.GetResolvedTimestampsIntervalMs(), resolvedTimestamps.value_or(TDuration::Zero()).MilliSeconds());
@@ -275,6 +279,10 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
     Y_UNIT_TEST(BinaryFormatWhenEnabled) {
         Basic({}, true);
+    }
+
+    Y_UNIT_TEST(ZstdCompression) {
+        Basic({}, false, true);
     }
 
     Y_UNIT_TEST(BinaryFormatRejectedWhenDisabled) {

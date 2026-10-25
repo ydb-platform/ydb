@@ -296,6 +296,7 @@ public:
             .ShardId = DataShard.TabletId,
             .UserSIDs = stream.UserSIDs,
             .TraceIds = stream.TraceIds,
+            .Compression = stream.Compression,
         }))
     {
     }
@@ -350,17 +351,22 @@ private:
 
 class TBoundaryPartitionResolver final: public NChangeExchange::TBasePartitionResolver {
 public:
-    TBoundaryPartitionResolver(const std::shared_ptr<NPQ::IPartitionChooser>& chooser) {
+    // rawKey hashes the serialized key cells. JSON topics keep MD5(JSON(key)).
+    TBoundaryPartitionResolver(const std::shared_ptr<NPQ::IPartitionChooser>& chooser, bool rawKey)
+        : RawKey(rawKey)
+    {
         Chooser = chooser;
     }
 
     void Visit(const TChangeRecord& record) override {
-        auto* p = Chooser->GetPartition(record.GetPartitionKey());
+        const auto& key = RawKey ? record.GetRawKeyPartitionKey() : record.GetPartitionKey();
+        auto* p = Chooser->GetPartition(key);
         SetPartitionId(p->PartitionId);
     }
 
 private:
     std::shared_ptr<NPQ::IPartitionChooser> Chooser;
+    const bool RawKey;
 };
 
 class TCdcChangeSenderMain
@@ -614,7 +620,8 @@ class TCdcChangeSenderMain
 
         if (topicAutoPartitioning) {
             Y_ENSURE(entry.PQGroupInfo->PartitionChooser);
-            SetPartitionResolver(new TBoundaryPartitionResolver(entry.PQGroupInfo->PartitionChooser));
+            const bool rawKey = NKikimrSchemeOp::ECdcStreamFormatBinary == Stream.Format;
+            SetPartitionResolver(new TBoundaryPartitionResolver(entry.PQGroupInfo->PartitionChooser, rawKey));
         } else if (NKikimrSchemeOp::ECdcStreamFormatProto == Stream.Format
             || NKikimrSchemeOp::ECdcStreamFormatBinary == Stream.Format)
         {

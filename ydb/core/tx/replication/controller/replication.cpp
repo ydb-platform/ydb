@@ -319,6 +319,9 @@ public:
         if (config.GetChangefeedFormat() == NKikimrReplication::CHANGEFEED_FORMAT_UNSPECIFIED) {
             config.SetChangefeedFormat(Config.GetChangefeedFormat());
         }
+        if (config.GetChangefeedCompression() == NKikimrReplication::CHANGEFEED_COMPRESSION_UNSPECIFIED) {
+            config.SetChangefeedCompression(Config.GetChangefeedCompression());
+        }
         Config = config;
     }
 

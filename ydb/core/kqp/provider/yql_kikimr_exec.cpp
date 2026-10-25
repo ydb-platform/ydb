@@ -1218,6 +1218,17 @@ namespace {
                         TStringBuilder() << "Unknown changefeed format: " << value));
                     return false;
                 }
+            } else if (name == "compression") {
+                auto value = to_lower(ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()));
+                if (value == "none") {
+                    dstSettings.ChangefeedCompression = TReplicationSettings::EChangefeedCompression::None;
+                } else if (value == "zstd") {
+                    dstSettings.ChangefeedCompression = TReplicationSettings::EChangefeedCompression::Zstd;
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Unknown changefeed compression: " << value));
+                    return false;
+                }
             }
         }
 
@@ -3168,6 +3179,20 @@ public:
                                     } else {
                                         ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                             TStringBuilder() << "Unknown changefeed format: " << format));
+                                        return SyncError();
+                                    }
+                                } else if (name == "compression") {
+                                    auto compression = TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+
+                                    if (to_lower(compression) == "none") {
+                                        add_changefeed->set_compression(Ydb::Table::ChangefeedCompression::COMPRESSION_NONE);
+                                    } else if (to_lower(compression) == "zstd") {
+                                        add_changefeed->set_compression(Ydb::Table::ChangefeedCompression::COMPRESSION_ZSTD);
+                                    } else {
+                                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                                            TStringBuilder() << "Unknown changefeed compression: " << compression));
                                         return SyncError();
                                     }
                                 } else if (name == "initial_scan") {

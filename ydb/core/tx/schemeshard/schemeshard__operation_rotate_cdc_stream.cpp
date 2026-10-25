@@ -297,6 +297,17 @@ public:
             return result;
         }
 
+        switch (newStreamDesc.GetCompression()) {
+        case NKikimrSchemeOp::ECdcStreamCompressionUnspecified:
+        case NKikimrSchemeOp::ECdcStreamCompressionNone:
+        case NKikimrSchemeOp::ECdcStreamCompressionZstd:
+            break;
+        default:
+            result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+                << "Invalid stream compression: " << static_cast<ui32>(newStreamDesc.GetCompression()));
+            return result;
+        }
+
         if (!newStreamDesc.GetAwsRegion().empty()) {
             switch (newStreamDesc.GetFormat()) {
             case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:

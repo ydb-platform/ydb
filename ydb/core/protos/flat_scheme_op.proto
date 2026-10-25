@@ -1171,6 +1171,12 @@ enum ECdcStreamFormat {
     ECdcStreamFormatBinary = 5;
 }
 
+enum ECdcStreamCompression {
+    ECdcStreamCompressionUnspecified = 0;
+    ECdcStreamCompressionNone = 1;
+    ECdcStreamCompressionZstd = 2;
+}
+
 message TCdcStreamScanProgress {
     optional uint32 ShardsTotal = 1;
     optional uint32 ShardsCompleted = 2;
@@ -1193,6 +1199,9 @@ message TCdcStreamDescription {
     optional bool SchemaChanges = 12;
     optional bool UserSIDs = 13;
     optional bool TraceIds = 14;
+    // Codec of the stored change record. Unspecified and NONE keep the record as-is.
+    // ZSTD stores zstd when the compressed bytes are shorter than the record.
+    optional ECdcStreamCompression Compression = 15;
 }
 
 message TCreateCdcStream {

@@ -7,6 +7,7 @@ import yatest
 
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin
+from ydb.tests.library.common.wait_for import wait_for
 
 CLUSTER_CONFIG = dict(
     extra_feature_flags=["enable_external_data_sources", "enable_schema_secrets", "enable_backup_service"],
@@ -121,12 +122,16 @@ class TestRecursiveRemove:
         )
         assert "test_pool" not in [child.name for child in driver.scheme_client.list_directory(pools).children]
 
-    def test_backup_collections(self, ydb_cluster, ydb_database, ydb_client, ydb_client_session):
+    @pytest.mark.parametrize("with_backup", [False, True], ids=["empty", "populated"])
+    def test_backup_collections(self, ydb_cluster, ydb_database, ydb_client, ydb_client_session, with_backup):
         driver = ydb_client(ydb_database)
         driver.wait(timeout=10, fail_fast=True)
         collections = f"{ydb_database}/.backups/collections"
         with ydb_client_session(ydb_database).checkout() as session:
             create_table(session, "source")
+            session.transaction().execute(
+                'UPSERT INTO source (key, value) VALUES (1, "retained");', commit_tx=True,
+            )
             session.execute_scheme(
                 f"CREATE BACKUP COLLECTION `{collections}/test_collection` "
                 f"(TABLE `{ydb_database}/source`) WITH (STORAGE = 'cluster');"
@@ -135,12 +140,40 @@ class TestRecursiveRemove:
             ydb_cluster.nodes[1], ydb_database, ["scheme", "ls", "--format", "json", collections],
         ))
         assert entries == [{"type": "backup-collection", "path": "test_collection"}]
-        execute_ydb_cli_command(
-            ydb_cluster.nodes[1], ydb_database,
-            ["scheme", "rmdir", "--recursive", "--force", collections],
+        if with_backup:
+            backup = json.loads(execute_ydb_cli_command(
+                ydb_cluster.nodes[1], ydb_database,
+                ["sql", "--script", "BACKUP `test_collection`;", "--format", "json-unicode"],
+            ))
+            operation_id = f"ydb://fullbackup/14?id={backup['operation_id']}"
+
+            def backup_is_complete():
+                operation = json.loads(execute_ydb_cli_command(
+                    ydb_cluster.nodes[1], ydb_database,
+                    ["operation", "get", operation_id, "--format", "proto-json-base64"],
+                ))
+                if not operation.get("ready", False):
+                    return False
+                assert operation["status"] == "SUCCESS", operation
+                return True
+
+            assert wait_for(backup_is_complete, timeout_seconds=60), f"Backup {operation_id} did not complete"
+            snapshots = driver.scheme_client.list_directory(f"{collections}/test_collection").children
+            assert len(snapshots) == 1
+            snapshot_path = f"{collections}/test_collection/{snapshots[0].name}"
+            assert [child.name for child in driver.scheme_client.list_directory(snapshot_path).children] == ["source"]
+
+        node = ydb_cluster.nodes[1]
+        removal = yatest.common.execute(
+            [ydb_bin(), "--endpoint", f"grpc://{node.host}:{node.grpc_port}", "--database", ydb_database,
+             "scheme", "rmdir", "--recursive", "--force", collections],
         )
+        assert b"Couldn't delete path" not in removal.std_err, removal.std_err.decode("utf-8")
         assert not driver.scheme_client.list_directory(f"{ydb_database}/.backups").children
         assert driver.scheme_client.describe_path(f"{ydb_database}/source").name == "source"
+        with ydb_client_session(ydb_database).checkout() as session:
+            rows = session.transaction().execute("SELECT key, value FROM source;", commit_tx=True)[0].rows
+        assert [(row.key, row.value) for row in rows] == [(1, "retained")]
 
     @pytest.mark.parametrize(
         "path,secret", [(".", "secret"), ("secrets", "secrets/nested/secret")],

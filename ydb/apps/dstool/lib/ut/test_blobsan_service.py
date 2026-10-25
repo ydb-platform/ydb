@@ -1447,6 +1447,29 @@ class TestHttp(unittest.TestCase):
 
 
 class TestCLI(unittest.TestCase):
+    def test_master_accepts_long_restore_timeout(self):
+        for timeout in (301, 3600):
+            with self.subTest(timeout=timeout), tempfile.TemporaryDirectory() as directory, \
+                    patch.object(common, 'connection_params', common.ConnectionParams()), \
+                    patch.object(svc, 'serve') as serve:
+                parser = ArgumentParser()
+                service_command.add_options(parser)
+                parsed = parser.parse_args(['master', '--db', directory, '--console-sock', directory + '/socket',
+                                            '--restore', '--restore-timeout', str(timeout)])
+                parsed.dry_run = False
+                service_command.do(parsed)
+                serve.assert_called_once_with(parsed, Path(directory))
+                self.assertEqual(parsed.restore_timeout, timeout)
+
+    def test_restore_timeout_must_be_positive(self):
+        parser = ArgumentParser()
+        service_command.add_options(parser)
+        for timeout in ('0', '-1', 'invalid'):
+            with self.subTest(timeout=timeout), patch('sys.stderr', new_callable=io.StringIO), \
+                    self.assertRaises(SystemExit):
+                parser.parse_args(['master', '--db', '/tmp/master', '--console-sock', '/tmp/socket',
+                                   '--restore-timeout', timeout])
+
     def setUp(self):
         version = patch.object(cli, 'get_version', return_value='test')
         version.start()

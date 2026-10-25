@@ -44,6 +44,9 @@ WITH (option = value [, ...])
 * `FORMAT` — format of the changefeed records created on the source:
   * `JSON` — JSON records. This is the default.
   * `BINARY` — [binary records](../../../concepts/cdc.md#binary-record-structure). Binary changefeeds must be enabled on this cluster and on the source cluster.
+* `COMPRESSION` — codec of the changefeed records created on the source. It applies to records of any `FORMAT`:
+  * `NONE` — store each record as-is. This is the default.
+  * `ZSTD` — compress a schema snapshot, and a data record of at least 512 bytes, with zstd when the compressed bytes are shorter than the record. A shorter data record and every heartbeat stay uncompressed.
 
 ## Examples {#examples}
 

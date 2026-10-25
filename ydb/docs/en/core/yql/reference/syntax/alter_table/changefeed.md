@@ -24,6 +24,9 @@
 {% if audience == "tech" %}
    * `DYNAMODB_STREAMS_JSON`: Write data in the [JSON format compatible with Amazon DynamoDB Streams](../../../../concepts/cdc.md#dynamodb-streams-json-record-structure).
 {% endif %}
+* `COMPRESSION`: Codec of the stored change record. The option is set when the changefeed is created and applies to a record of any `FORMAT`.
+   * `NONE`: Store the record as-is. This is the default.
+   * `ZSTD`: Compress a schema snapshot, and a data record of at least 512 bytes, with zstd when the compressed bytes are shorter than the record. A shorter data record and every heartbeat stay uncompressed. The topic client removes that zstd compression before it returns the message body. Removing zstd does not parse the record.
 * `VIRTUAL_TIMESTAMPS`: Enabling/disabling [virtual timestamps](../../../../concepts/cdc.md#virtual-timestamps). Disabled by default.
 * `USER_SIDS`: Enabling/disabling user [SIDs](../../../../concepts/cdc.md#record-structure). Disabled by default.
 * `TRACE_IDS`: Enabling/disabling OpenTelemetry [trace identifiers](../../../../concepts/cdc.md#record-structure). Disabled by default.

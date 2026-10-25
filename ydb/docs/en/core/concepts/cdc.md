@@ -207,7 +207,7 @@ A barrier has kind `2`, operation `0`, no cells, and always includes `step` and 
 
 When `USER_SIDS` or `TRACE_IDS` is enabled and the value is not empty, the value is written after the cells. The user SID comes before the trace id. Each value is a 16-bit length followed by its bytes.
 
-The topic compresses this binary record with zstd when the compressed bytes are shorter than the record, and stores the record without zstd otherwise. The topic client removes that zstd compression before it returns the message body. The body is still this binary record. The application parses the record from that body; removing zstd does not parse it.
+By default the record is stored without compression. `COMPRESSION = 'ZSTD'` compresses a schema snapshot, and a data record of at least 512 bytes, with zstd when the compressed bytes are shorter than the record. A shorter data record and every heartbeat stay uncompressed. The option is set when the changefeed is created and does not depend on `FORMAT`. The topic client removes that zstd compression before it returns the message body. The body is still this binary record. The application parses the record from that body; removing zstd does not parse it.
 
 A changefeed in this format can be created only when binary changefeeds are enabled on the cluster that owns the table. An asynchronous replication uses this format when it is created with [`FORMAT = 'BINARY'`](../yql/reference/syntax/create-async-replication.md#params) and binary changefeeds are enabled on both the destination cluster and the source cluster. Otherwise its changefeeds are created in JSON.
 

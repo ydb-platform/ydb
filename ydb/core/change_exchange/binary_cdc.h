@@ -92,9 +92,13 @@ struct TBinaryCdcHeader {
     }
 };
 
+// Bytes WriteCell appends for a non-null cell.
+size_t BinaryCdcCellSize(const TCell& cell, NScheme::TTypeInfo type);
+
 class TBinaryCdcWriter {
 public:
-    void Start(const TBinaryCdcHeader& header);
+    // bytes is the exact size of the finished record. Pass 0 to skip that check.
+    void Start(const TBinaryCdcHeader& header, size_t bytes = 0);
     void AddKey(const TCell& cell, NScheme::TTypeInfo type);
     void AddValue(ui16 index, const TCell& cell, NScheme::TTypeInfo type);
     void AddOldImage(ui16 index, const TCell& cell, NScheme::TTypeInfo type);
@@ -110,6 +114,7 @@ private:
 
     TBinaryCdcHeader Header_;
     TString Out_;
+    size_t Expected_ = 0;
     ui16 Keys_ = 0;
     ui16 Values_ = 0;
     ui16 Old_ = 0;

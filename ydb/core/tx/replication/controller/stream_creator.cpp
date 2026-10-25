@@ -30,7 +30,8 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             const NJson::TJsonMap& attrs,
             bool schemaChanges,
             bool initialScan,
-            bool binaryFormat)
+            bool binaryFormat,
+            bool zstdCompression)
     {
         using namespace NYdb::NTable;
 
@@ -38,6 +39,9 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         auto desc = TChangefeedDescription(name, EChangefeedMode::Updates, format)
             .WithRetentionPeriod(retentionPeriod)
             .AddAttribute("__async_replication", NJson::WriteJson(attrs, false));
+        if (zstdCompression) {
+            desc.WithCompression(EChangefeedCompression::Zstd);
+        }
 
         if (initialScan) {
             desc.WithInitialScan();
@@ -415,7 +419,8 @@ public:
             TDuration streamRetentionPeriod,
             TDuration consumerAvailabilityPeriod,
             bool consumerImportant,
-            bool binaryFormat)
+            bool binaryFormat,
+            bool zstdCompression)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -429,7 +434,7 @@ public:
             // A schema barrier snapshots its partition membership, so topic
             // repartitioning is unsupported for schema-aware streams.
             {"supports_topic_autopartitioning", supportsTopicAutopartitioning && !schemaChanges},
-        }, schemaChanges, initialScan, binaryFormat && AppData()->FeatureFlags.GetEnableBinaryChangefeedForAsyncReplication()))
+        }, schemaChanges, initialScan, binaryFormat && AppData()->FeatureFlags.GetEnableBinaryChangefeedForAsyncReplication(), zstdCompression))
         , StreamRetentionPeriod(streamRetentionPeriod)
         , ConsumerAvailabilityPeriod(consumerAvailabilityPeriod)
         , ConsumerImportant(consumerImportant)
@@ -515,6 +520,7 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
         : config.GetAvailabilityPeriod().HasDuration() ? GetDuration(config.GetAvailabilityPeriod().GetDuration())
         : TDuration::Seconds(AppData()->ReplicationConfig.GetConsumerAvailabilityPeriodSeconds());
     const bool binaryFormat = config.GetChangefeedFormat() == NKikimrReplication::CHANGEFEED_FORMAT_BINARY;
+    const bool zstdCompression = config.GetChangefeedCompression() == NKikimrReplication::CHANGEFEED_COMPRESSION_ZSTD;
 
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(),
@@ -522,7 +528,7 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
         supportsTopicAutopartitioning, needCreate, schemaChanges, initialScan, describeOnly,
         TDuration::Seconds(AppData()->ReplicationConfig.GetStreamRetentionPeriodSeconds()),
-        consumerAvailabilityPeriod, consumerImportant, binaryFormat);
+        consumerAvailabilityPeriod, consumerImportant, binaryFormat, zstdCompression);
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
@@ -531,12 +537,12 @@ IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 
         const std::optional<TDuration>& resolvedTimestamps,
         bool supportsTopicAutopartitioning, bool needCreate, bool schemaChanges, bool initialScan, bool describeOnly,
         TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant,
-        bool binaryFormat)
+        bool binaryFormat, bool zstdCompression)
 {
     return new TStreamCreator(parent, proxy, rid, tid, config,
         streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
         schemaChanges, needCreate, initialScan, describeOnly, streamRetentionPeriod, consumerAvailabilityPeriod,
-        consumerImportant, binaryFormat);
+        consumerImportant, binaryFormat, zstdCompression);
 }
 
 }

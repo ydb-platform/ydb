@@ -354,6 +354,7 @@ struct TUserTable : public TThrRefBase {
         using EMode = NKikimrSchemeOp::ECdcStreamMode;
         using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
         using EState = NKikimrSchemeOp::ECdcStreamState;
+        using ECompression = NKikimrSchemeOp::ECdcStreamCompression;
 
         TString Name;
         EMode Mode;
@@ -365,6 +366,7 @@ struct TUserTable : public TThrRefBase {
         TMaybe<TString> AwsRegion;
         bool UserSIDs = false;
         bool TraceIds = false;
+        ECompression Compression = NKikimrSchemeOp::ECdcStreamCompressionUnspecified;
 
         TCdcStream() = default;
 
@@ -378,6 +380,7 @@ struct TUserTable : public TThrRefBase {
             , SchemaChanges(streamDesc.GetSchemaChanges())
             , UserSIDs(streamDesc.GetUserSIDs())
             , TraceIds(streamDesc.GetTraceIds())
+            , Compression(streamDesc.GetCompression())
         {
             if (const auto& awsRegion = streamDesc.GetAwsRegion()) {
                 AwsRegion = awsRegion;

@@ -50,7 +50,18 @@ bool Take(TStringBuf& in, T& value, TString& error) {
 
 } // namespace
 
-void TBinaryCdcWriter::Start(const TBinaryCdcHeader& header) {
+size_t BinaryCdcCellSize(const TCell& cell, NScheme::TTypeInfo type) {
+    Y_ENSURE(!cell.IsNull(), "binary CDC key and non-null value cells cannot be null");
+    const ui32 fixed = CellFixedSize(type);
+    if (fixed) {
+        Y_ENSURE(cell.Size() == fixed, "binary CDC cell size " << cell.Size()
+            << " does not match fixed type size " << fixed);
+        return fixed;
+    }
+    return sizeof(ui32) + cell.Size();
+}
+
+void TBinaryCdcWriter::Start(const TBinaryCdcHeader& header, size_t bytes) {
     Y_ENSURE(header.Version == BinaryCdcVersion);
     Y_ENSURE((header.Flags & ~BinaryCdcKnownFlags) == 0);
     if (header.Has(EBinaryCdcFlag::NullKeys)) {
@@ -58,8 +69,9 @@ void TBinaryCdcWriter::Start(const TBinaryCdcHeader& header) {
             "binary CDC null key flag requires key cells");
     }
     Header_ = header;
+    Expected_ = bytes;
     Out_.clear();
-    Out_.reserve(64);
+    Out_.reserve(bytes ? bytes : 64);
     Append<ui8>(Out_, header.Version);
     Append<ui8>(Out_, static_cast<ui8>(header.Kind));
     Append<ui8>(Out_, static_cast<ui8>(header.Op));
@@ -174,6 +186,10 @@ TString TBinaryCdcWriter::Finish() {
     Y_ENSURE(Values_ == Header_.ValueCount);
     Y_ENSURE(Old_ == Header_.OldImageCount);
     Y_ENSURE(New_ == Header_.NewImageCount);
+    if (Expected_) {
+        Y_ENSURE(Out_.size() == Expected_, "binary CDC reserved " << Expected_
+            << " bytes and wrote " << Out_.size());
+    }
     Finished_ = true;
     return Out_;
 }

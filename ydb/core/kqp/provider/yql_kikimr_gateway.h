@@ -1523,11 +1523,17 @@ struct TReplicationSettings : public TReplicationSettingsBase {
         Binary,
     };
 
+    enum class EChangefeedCompression {
+        None,
+        Zstd,
+    };
+
     TMaybe<TRowConsistency> RowConsistency;
     TMaybe<TGlobalConsistency> GlobalConsistency;
     TMaybe<bool> InitialScan;
     TMaybe<NKikimrReplication::TAvailabilityPeriod> AvailabilityPeriod;
     TMaybe<EChangefeedFormat> ChangefeedFormat;
+    TMaybe<EChangefeedCompression> ChangefeedCompression;
 
     TRowConsistency& EnsureRowConsistency() {
         if (!RowConsistency) {

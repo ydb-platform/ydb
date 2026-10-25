@@ -320,19 +320,76 @@ Y_UNIT_TEST_SUITE(TStateStorageProxyLookup) {
     }
 
     Y_UNIT_TEST(FirstKnownStateRepliesWithoutWaitingForOtherRingGroups) {
-        TLookupFixture f(TEvStateStorage::TProxyOptions::SigNone, 2,
+        TLookupFixture f(TEvStateStorage::TProxyOptions::SigAsync, 2,
             {ERingGroupState::PRIMARY, ERingGroupState::SYNCHRONIZED});
         f.KnownLeader(5);
         f.KnownLeader(6);
         f.KnownLeader(7);
         f.ExpectReply(NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(f.ReplyLeader, f.Leader);
+        UNIT_ASSERT_VALUES_EQUAL(f.SignatureUpdateCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Signatures.Size(), 3);
 
         f.Empty(0);
         f.Empty(1);
         f.Empty(2);
         f.Elapse();
         UNIT_ASSERT_VALUES_EQUAL(f.ReplyCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.SignatureUpdateCount, 0);
+
+        f.Empty(3);
+        f.Empty(4);
+        f.KnownLeader(8);
+        f.KnownLeader(9);
+        f.Elapse();
+        UNIT_ASSERT(f.SignatureUpdateCount > 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Signatures.Size(), 10);
+    }
+
+    Y_UNIT_TEST(SigSyncRingGroupsWaitsForEveryGroupButNotEveryReplica) {
+        TLookupFixture f(TEvStateStorage::TProxyOptions::SigSyncRingGroups, 2,
+            {ERingGroupState::PRIMARY, ERingGroupState::SYNCHRONIZED});
+        f.KnownLeader(5);
+        f.KnownLeader(6);
+        f.KnownLeader(7);
+        f.ExpectPending();
+
+        f.Empty(0);
+        f.Empty(1);
+        f.Empty(2);
+        f.ExpectReply(NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReplyLeader, f.Leader);
+        UNIT_ASSERT_VALUES_EQUAL(f.SignatureUpdateCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Signatures.Size(), 6);
+
+        f.Empty(3);
+        f.Empty(4);
+        f.KnownLeader(8);
+        f.KnownLeader(9);
+        f.Elapse();
+        UNIT_ASSERT(f.SignatureUpdateCount > 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Signatures.Size(), 10);
+    }
+
+    Y_UNIT_TEST(SigSyncWaitsForEveryRingGroupBeforeReturningState) {
+        TLookupFixture f(TEvStateStorage::TProxyOptions::SigSync, 2,
+            {ERingGroupState::PRIMARY, ERingGroupState::SYNCHRONIZED});
+        f.KnownLeader(5);
+        f.KnownLeader(6);
+        f.KnownLeader(7);
+        f.KnownLeader(8);
+        f.KnownLeader(9);
+        f.ExpectPending();
+
+        f.Empty(0);
+        f.Empty(1);
+        f.Empty(2);
+        f.Empty(3);
+        f.Empty(4);
+        f.ExpectReply(NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReplyLeader, f.Leader);
+        UNIT_ASSERT_VALUES_EQUAL(f.SignatureUpdateCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Signatures.Size(), 10);
     }
 
     Y_UNIT_TEST(LateDifferentStateIsDiagnosticOnly) {

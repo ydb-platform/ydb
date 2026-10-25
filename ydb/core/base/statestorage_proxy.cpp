@@ -144,7 +144,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void ReplyAndSig(NKikimrProto::EReplyStatus status) {
         Reply(status);
-        if (ProxyOptions.SigWaitMode == ProxyOptions.SigAsync && RepliesMerged != Replicas)
+        if ((ProxyOptions.SigWaitMode == ProxyOptions.SigAsync
+                || ProxyOptions.SigWaitMode == ProxyOptions.SigSyncRingGroups) && RepliesMerged != Replicas)
             Become(&TThis::StateUpdateSig);
         else
             PassAway();
@@ -453,7 +454,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void CheckLookupReply() {
         const bool allowReply = ProxyOptions.SigWaitMode == ProxyOptions.SigNone
-            || (ProxyOptions.SigWaitMode == ProxyOptions.SigAsync && SignaturesMerged >= Majority())
+            || ((ProxyOptions.SigWaitMode == ProxyOptions.SigAsync
+                    || ProxyOptions.SigWaitMode == ProxyOptions.SigSyncRingGroups) && SignaturesMerged >= Majority())
             || RepliesMerged == Replicas;
 
         if (allowReply) {
@@ -797,6 +799,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     };
 
     ERequestKind RequestKind = ERequestKind::None;
+    bool WaitForAllRingGroups = false;
     NKikimrProto::EReplyStatus AggregatedStatus = NKikimrProto::OK;
     NKikimrProto::EReplyStatus StateStatus = NKikimrProto::UNKNOWN;
     ui32 StateRingGroupIdx = Max<ui32>();
@@ -854,6 +857,8 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         TabletID = msg->TabletID;
         Cookie = msg->Cookie;
         RequestKind = ERequestKind::Lookup;
+        WaitForAllRingGroups = msg->ProxyOptions.SigWaitMode == TEvStateStorage::TProxyOptions::SigSync
+            || msg->ProxyOptions.SigWaitMode == TEvStateStorage::TProxyOptions::SigSyncRingGroups;
         YDB_LOG_DEBUG("RingGroupProxyRequest::HandleInit",
             {"ev", msg->ToString()});
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
@@ -953,7 +958,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
 
     void MaybeReply(NKikimrProto::EReplyStatus status, bool isInitialReply) {
         Y_UNUSED(status);
-        if (RequestKind == ERequestKind::Lookup && HasState && !Replied) {
+        if (RequestKind == ERequestKind::Lookup && HasState && !WaitForAllRingGroups && !Replied) {
             Reply(StateStatus);
         }
         if (!ShouldReply()) {
@@ -962,10 +967,10 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         const bool justCompletedInitialReplies = !InitialRepliesComplete;
         InitialRepliesComplete = true;
         if (Replied) {
-            // An early lookup reply must not turn the last initial TEvInfo into
-            // a spurious signature update. Before early replies were added,
-            // that event produced the initial TEvInfo itself. Preserve the
-            // subsequent update stream, including late write-only TEvInfo.
+            // The last initial TEvInfo completes the signature that would have
+            // been returned by the initial reply before early lookup replies.
+            // Do not expose that transition as an intermediate async update;
+            // subsequent per-group signature updates are still forwarded.
             if (isInitialReply && justCompletedInitialReplies) {
                 return;
             }
@@ -974,7 +979,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
                 {"ev", msg->ToString()});
             Send(Source, msg, 0, SourceCookie);
         } else {
-            Reply(AggregatedStatus);
+            Reply(RequestKind == ERequestKind::Lookup && HasState ? StateStatus : AggregatedStatus);
         }
     }
 

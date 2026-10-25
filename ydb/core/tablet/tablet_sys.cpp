@@ -2574,7 +2574,10 @@ void TTablet::Bootstrap() {
     }
     ReportTabletStateChange(TTabletStateInfo::Created, SuggestedGeneration); // useless?
     StateStorageInfo.ProxyID = MakeStateStorageProxyID();
-    Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)));
+    // A leader immediately mutates StateStorage while booting, so it needs a
+    // quorum signature from every active ring group before that mutation.
+    Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0,
+        TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigSyncRingGroups)));
     if (IntrospectionTrace) {
         IntrospectionTrace->Attach(MakeHolder<NTracing::TOnTabletBootstrap>(SuggestedGeneration, true, StateStorageInfo.ProxyID));
     }

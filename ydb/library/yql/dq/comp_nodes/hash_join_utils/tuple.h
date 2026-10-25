@@ -252,6 +252,20 @@ struct TTupleLayout {
         return (res[BitmaskOffset + keyColIdx / 8] >> (keyColIdx % 8)) & 1u;
     }
 
+    Y_FORCE_INLINE bool KeyHasNull(const ui8* row) const {
+        if (Y_LIKELY(KeyColumnsNum <= 8)) {
+            const ui8 mask = static_cast<ui8>((1u << KeyColumnsNum) - 1);
+            return (ReadUnaligned<ui8>(row + BitmaskOffset) & mask) != mask;
+        }
+        for (i32 i = KeyColumnsNum, byteN = 0; i > 0; i -= 8, ++byteN) {
+            const ui8 mask = i >= 8 ? 0xFF : static_cast<ui8>((1u << i) - 1);
+            if ((ReadUnaligned<ui8>(row + BitmaskOffset + byteN) & mask) != mask) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Creates new tuple layout based on provided columns description.
     static THolder<TTupleLayout>
     Create(const std::vector<TColumnDesc> &columns);

@@ -59,6 +59,7 @@ ydb/core/kqp/ut/tli KqpTli.LogDisabled
 ydb/core/kqp/ut/tli KqpTli.ManyUpserts2Node
 ydb/core/kqp/ut/tli KqpTli.MultipleKeys
 ydb/core/kqp/ut/tli KqpTli.VictimReadThenWriteSameTableMultiTable
+ydb/core/kqp/ut/tracing TKqpQueryTrace.TransactionTracePropagation-TableService
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.ConflictWrite+IsOlap+FillTables
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationOnlineRO
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationReadCommittedRW

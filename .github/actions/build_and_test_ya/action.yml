@@ -134,12 +134,12 @@ runs:
         # Temporary comparison PR: rerun all PR-check tests with a fixed link limit.
         increment: false
         link_threads: 4
-        additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
+        additional_ya_make_args: ${{ inputs.additional_ya_make_args }} --no-bazel-remote-store
         test_threads: ${{ inputs.test_threads }}
-        bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
+        bazel_remote_uri: ''
         bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
         bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
-        put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
+        put_build_results_to_cache: false
         test_retry_count: ${{ inputs.test_retry_count }}
         custom_branch_name: ${{ inputs.custom_branch_name }}
         add_vcs_info: ${{ inputs.add_vcs_info }}

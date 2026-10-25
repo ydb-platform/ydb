@@ -3425,6 +3425,29 @@ TExprNode::TPtr FixupPgWindowCall(
     return ret;
 }
 
+TNodeOnNodeOwnedMap WindowResultReferences(const TWindowsCtx& windows, const TExprNode::TPtr& row, TExprContext& ctx) {
+    TNodeOnNodeOwnedMap replacements;
+    for (const auto& [call, index] : windows.FuncsId) {
+        auto member = ctx.NewCallable(call->Pos(), "Member", {row, ctx.NewAtom(call->Pos(), "_yql_win_" + ToString(index))});
+        if (call->IsCallable({"PgWindowCall", "PgAggWindowCall"})) {
+            member = FixupPgWindowCall(call->Pos(), call->Head().Content(), std::move(member), ctx);
+        }
+        replacements.emplace(call, std::move(member));
+    }
+    return replacements;
+}
+
+TExprNode::TPtr RewriteWindowArguments(const TExprNode::TPtr& call, const TWindowsCtx& windows,
+    const TExprNode::TPtr& row, TExprContext& ctx)
+{
+    const auto replacements = WindowResultReferences(windows, row, ctx);
+    TExprNode::TListType children;
+    for (const auto& child : call->Children()) {
+        children.push_back(ctx.ReplaceNodes(TExprNode::TPtr(child), replacements));
+    }
+    return ctx.ChangeChildren(*call, std::move(children));
+}
+
 TExprNode::TPtr BuildWindows(
     TPositionHandle pos,
     const TExprNode::TPtr& list,
@@ -3438,15 +3461,8 @@ TExprNode::TPtr BuildWindows(
     TOptimizeContext& optCtx)
 {
     auto ret = list;
-    // clang-format off
-    auto listTypeNode = ctx.Builder(pos)
-        .Callable("TypeOf")
-            .Add(0, list)
-        .Seal()
-        .Build();
-    // clang-format on
-
     for (const auto& [windowId, funcIds] : winCtx.FuncIdsByWindowId) {
+        auto listTypeNode = ctx.NewCallable(pos, "TypeOf", {ret});
         auto winDef = window->Tail().Child(windowId);
         const auto& frameSettings = winDef->Tail();
 
@@ -3577,6 +3593,7 @@ TExprNode::TPtr BuildWindows(
 
         for (const auto& index : funcIds) {
             auto p = winCtx.Funcs[index];
+            p.first = RewriteWindowArguments(p.first, winCtx, p.second, ctx);
 
             TExprNode::TPtr value;
             if (p.first->IsCallable({"PgAggWindowCall", "YqlAggWin"})) {
@@ -3633,29 +3650,7 @@ TExprNode::TPtr BuildWindows(
         // clang-format on
     }
 
-    auto status = OptimizeExpr(projectionRoot, projectionRoot, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        auto it = winCtx.FuncsId.find(node.Get());
-        if (it != winCtx.FuncsId.end()) {
-            // clang-format off
-            auto ret = ctx.Builder(pos)
-                .Callable("Member")
-                    .Add(0, projectionArg)
-                    .Atom(1, "_yql_win_" + ToString(it->second))
-                .Seal()
-                .Build();
-            // clang-format on
-
-            if (!node->IsCallable("YqlWin")) {
-                ret = FixupPgWindowCall(pos, node->Head().Content(), std::move(ret), ctx);
-            }
-
-            return ret;
-        }
-
-        return node;
-    }, ctx, TOptimizeExprSettings(optCtx.Types));
-
-    YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error);
+    projectionRoot = ctx.ReplaceNodes(std::move(projectionRoot), WindowResultReferences(winCtx, projectionArg, ctx));
     return ret;
 }
 

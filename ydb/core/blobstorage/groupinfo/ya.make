@@ -18,6 +18,7 @@ SRCS(
     blobstorage_groupinfo_data_check.h
     blobstorage_groupinfo_iter.h
     blobstorage_groupinfo_mirror3dc_state.h
+    blobstorage_groupinfo_mirror3dc_write_quorum.h
     blobstorage_groupinfo_partlayout.cpp
     blobstorage_groupinfo_partlayout.h
     blobstorage_groupinfo_sets.h

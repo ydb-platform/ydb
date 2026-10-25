@@ -22,6 +22,7 @@ PEERDIR(
 SRCS(
     blobstorage_groupinfo_iter_ut.cpp
     blobstorage_groupinfo_mirror3dc_state_ut.cpp
+    blobstorage_groupinfo_mirror3dc_write_quorum_ut.cpp
     blobstorage_groupinfo_ut.cpp
 )
 

@@ -702,7 +702,7 @@ public:
         const auto& replicationConfig = table->ReplicationConfig();
         const auto owner = replicationConfig.HasOwner()
             ? TPathId::FromProto(replicationConfig.GetOwner()) : TPathId{};
-        if (alter.HasReplicationConfig()) {
+        if (alter.HasReplicationConfig() && AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()) {
             const auto& config = alter.GetReplicationConfig();
             const auto newOwner = config.HasOwner() ? TPathId::FromProto(config.GetOwner()) : TPathId{};
             if (owner && owner != newOwner && !Transaction.HasExpectedReplicationOwner()) {
@@ -1224,7 +1224,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     }
 
     // Fence cleanup before creating sub-operations for an index table.
-    if (tx.HasExpectedReplicationOwner()) {
+    if (tx.HasExpectedReplicationOwner() && AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()) {
         const auto checks = path.Check().NotUnderOperation();
         if (!checks) {
             return {CreateReject(id, checks.GetStatus(), checks.GetError())};
@@ -1236,8 +1236,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
             }
             const auto& config = table->second->ReplicationConfig();
             if (config.HasOwner()
-                ? TPathId::FromProto(config.GetOwner()) != TPathId::FromProto(tx.GetExpectedReplicationOwner())
-                : !tx.GetAllowUnownedReplicationCleanup()) {
+                && TPathId::FromProto(config.GetOwner()) != TPathId::FromProto(tx.GetExpectedReplicationOwner())) {
                 return {CreateReject(id, NKikimrScheme::StatusSuccess,
                     "Replication owner has changed; cleanup skipped")};
             }

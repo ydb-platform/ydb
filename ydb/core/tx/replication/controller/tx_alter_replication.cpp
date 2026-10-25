@@ -249,8 +249,6 @@ public:
 
         const auto& oldConfig = Replication->GetConfig();
         auto newConfig = std::move(*record.MutableConfig());
-        // SchemeShard does not manage this controller-local compatibility marker.
-        newConfig.SetRequireTargetOwnership(oldConfig.GetRequireTargetOwnership());
         bool alter = HasRelevantTransferConfigChanges(oldConfig, newConfig);
 
         auto desiredState = Replication->GetDesiredState();

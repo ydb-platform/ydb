@@ -1390,32 +1390,23 @@ void AssertIndexCancellationCleanedUp(TIndexBuildTestEnv& env) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(ReplicationCreation) {
-    Y_UNIT_TEST(TargetOwnershipValidationSurvivesRestartAndAlter) {
+    Y_UNIT_TEST(TargetOwnerSurvivesControllerRestartAndAlter) {
         TTestEnv env;
-        const auto info = StartReplication(env, 1, "root@builtin", false, false,
-            NKikimrSchemeOp::EIndexTypeGlobal, true, false);
+        const auto info = StartReplication(env);
+        env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
 
-        auto checkConfig = [&] {
-            NKikimrMiniKQL::TResult result;
-            UNIT_ASSERT_VALUES_EQUAL(LocalQuery(env.GetRuntime(), info.ControllerId, R"((
-                (let key '('('Id (Uint64 '1))))
-                (return (AsList (SetResult 'Config (SelectRow 'Replications key '('Config)))))
-            ))", result), NKikimrProto::OK);
-            const auto& row = result.GetValue().GetStruct(0).GetOptional();
-            UNIT_ASSERT_C(row.HasOptional(), result.DebugString());
-            NKikimrReplication::TReplicationConfig config;
-            UNIT_ASSERT(config.ParseFromString(row.GetOptional().GetStruct(0).GetOptional().GetBytes()));
-            UNIT_ASSERT(config.GetRequireTargetOwnership());
+        auto checkOwner = [&] {
+            const auto config = env.GetDescription("/Root/replica1").GetPathDescription().GetTable().GetReplicationConfig();
+            UNIT_ASSERT(config.HasOwner());
+            UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config.GetOwner()), info.PathId);
         };
-        checkConfig();
+        checkOwner();
         RestartController(env, info.ControllerId);
-        // The config received from SchemeShard has no controller-local marker.
-        UNIT_ASSERT(!info.Config.HasRequireTargetOwnership());
         RequestConfigUpdate(env, info, 100);
-        checkConfig();
+        checkOwner();
         RestartController(env, info.ControllerId);
         RequestConfigUpdate(env, info, 101);
-        checkConfig();
+        checkOwner();
     }
 
     Y_UNIT_TEST(InitialScanDisabledDoesNotTouchMissingDestination) {
@@ -4143,7 +4134,7 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         UNIT_ASSERT(WaitFor([&] {
             return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
         }));
-        AssertAttachmentPaths(env, {info, targetId, dstPathId}, dstPathId);
+        AssertAttachmentPaths(env, {info, targetId, dstPathId, {}}, dstPathId);
         rejectTakeover.Remove();
 
         const auto pipeService = MakePipePerNodeCacheID(false);

@@ -329,7 +329,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) const {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
-        PathId.ToProto(replicationConfig.MutableOwner());
+        if (AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()) {
+            PathId.ToProto(replicationConfig.MutableOwner());
+        }
     }
 
     void AllocateTxId() {
@@ -551,8 +553,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 }
             }
             if (CanResumeReplica(desc.GetTable())
-                && (InitialScan || AttachmentComplete
-                    || (!RequireTargetOwnership && !desc.GetTable().GetReplicationConfig().HasOwner())))
+                && (!AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()
+                    || InitialScan || AttachmentComplete
+                    || !desc.GetTable().GetReplicationConfig().HasOwner()))
             {
                 return Success();
             }
@@ -617,10 +620,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     bool CanResumeReplica(const NKikimrSchemeOp::TTableDescription& table) const {
         const auto& config = table.GetReplicationConfig();
-        // Only replications persisted before ownership validation may resume
-        // ownerless tables. Leave those tables unclaimed by new replications.
-        return IsReplica(table) && (config.HasOwner()
-            ? TPathId::FromProto(config.GetOwner()) == PathId : !RequireTargetOwnership);
+        // Ownerless replicas retain legacy behavior and remain unclaimed.
+        return IsReplica(table) && (!AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()
+            || !config.HasOwner()
+            || TPathId::FromProto(config.GetOwner()) == PathId);
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
@@ -997,8 +1000,7 @@ public:
             const TString& database,
             bool initialScan,
             const TPathId& pendingDstPathId,
-            bool cleanup,
-            bool requireTargetOwnership)
+            bool cleanup)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -1012,7 +1014,6 @@ public:
         , Consistency(consistency)
         , InitialScan(initialScan)
         , Cleanup(cleanup)
-        , RequireTargetOwnership(requireTargetOwnership)
         , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
         , PendingDstPathId(pendingDstPathId)
@@ -1066,7 +1067,6 @@ private:
     const EConsistencyLevel Consistency;
     const bool InitialScan;
     bool Cleanup;
-    const bool RequireTargetOwnership;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TPathId DomainKey;
@@ -1158,17 +1158,16 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
         replication->GetConfig().GetInitialScan(),
         target->GetPendingDstPathId(),
         replication->GetDesiredState() == TReplication::EState::Done
-            || replication->GetState() == TReplication::EState::Removing,
-        replication->GetConfig().GetRequireTargetOwnership());
+            || replication->GetState() == TReplication::EState::Removing);
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         const TString& database, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
         EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
-        const TPathId& pendingDstPathId, bool cleanup, bool requireTargetOwnership)
+        const TPathId& pendingDstPathId, bool cleanup)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, pendingDstPathId, cleanup, requireTargetOwnership);
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, pendingDstPathId, cleanup);
 }
 
 }

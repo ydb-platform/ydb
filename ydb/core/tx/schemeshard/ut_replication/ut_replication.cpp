@@ -513,6 +513,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         using NKikimr::TPathId;
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        runtime.GetAppData().FeatureFlags.SetEnableAsyncReplicationTableOwnership(true);
         ui64 txId = 100;
         auto createOwner = [&](const TString& name) {
             TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme(name));
@@ -577,6 +578,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
     Y_UNIT_TEST(CannotClaimLegacyReplicaWithoutOwner) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableAsyncReplicationTableOwnership(true);
         ui64 txId = 100;
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"

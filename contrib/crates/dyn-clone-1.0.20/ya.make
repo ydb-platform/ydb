@@ -27,4 +27,9 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(1.0.20)
 ORIGINAL_SOURCE(https://static.crates.io/crates/dyn-clone/dyn-clone-1.0.20.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+    src/macros.rs
+)
+
 END()

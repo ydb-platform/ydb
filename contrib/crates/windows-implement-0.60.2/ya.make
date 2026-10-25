@@ -33,4 +33,10 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.60.2)
 ORIGINAL_SOURCE(https://static.crates.io/crates/windows-implement/windows-implement-0.60.2.crate)
 
+CRATE_SOURCES(
+    src/gen.rs
+    src/lib.rs
+    src/tests.rs
+)
+
 END()

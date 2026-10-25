@@ -24,19 +24,24 @@ CRATE_FEATURES(
 )
 
 PEERDIR(
-    contrib/crates/icu_normalizer-2.2.0
-    contrib/crates/icu_properties-2.2.0
+    contrib/crates/icu_normalizer-2.4.0
+    contrib/crates/icu_properties-2.4.0
 )
 
 LICENSE("Apache-2.0 OR MIT")
 VERSION(1.2.2)
 ORIGINAL_SOURCE(https://static.crates.io/crates/idna_adapter/idna_adapter-1.2.2.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 CRATE_PROC_MACROS(
-    contrib/crates/displaydoc-0.2.6
-    contrib/crates/yoke-derive-0.8.2
-    contrib/crates/zerofrom-derive-0.1.7
-    contrib/crates/zerovec-derive-0.11.3
+    contrib/crates/displaydoc-0.2.7
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/yoke-derive-0.8.4
+    contrib/crates/zerofrom-derive-0.1.8
+    contrib/crates/zerovec-derive-0.11.7
 )
 
 END()

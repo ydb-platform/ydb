@@ -19,6 +19,8 @@ CRATE_INPUTS(
 CRATE_FLAGS(--cap-lints=allow)
 
 
-PEERDIR(contrib/crates/byteorder-1.5.0)
+PEERDIR(
+    contrib/crates/byteorder-1.5.0
+)
 
 END()

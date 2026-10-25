@@ -46,11 +46,32 @@ CRATE_INPUTS(
 CRATE_FLAGS(--cap-lints=allow)
 
 PEERDIR(
-    contrib/crates/lazy_static-1.5.0
+    contrib/crates/lazy_static-1.5.1
 )
 
 LICENSE("MIT")
 VERSION(0.1.7)
 ORIGINAL_SOURCE(https://static.crates.io/crates/sharded-slab/sharded-slab-0.1.7.crate)
+
+CRATE_SOURCES(
+    src/cfg.rs
+    src/clear.rs
+    src/implementation.rs
+    src/iter.rs
+    src/lib.rs
+    src/macros.rs
+    src/page/mod.rs
+    src/page/slot.rs
+    src/page/stack.rs
+    src/pool.rs
+    src/shard.rs
+    src/sync.rs
+    src/tests/custom_config.rs
+    src/tests/loom_pool.rs
+    src/tests/loom_slab.rs
+    src/tests/mod.rs
+    src/tests/properties.rs
+    src/tid.rs
+)
 
 END()

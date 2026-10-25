@@ -34,24 +34,28 @@ PEERDIR(
     contrib/crates/gdk-pixbuf-0.22.0
     contrib/crates/gio-0.22.1
     contrib/crates/glib-0.22.0
-    contrib/crates/libc-0.2.189
+    contrib/crates/libc-0.2.191
     contrib/crates/rgb-0.8.52
     contrib/crates/url-2.5.8
 )
 CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
     contrib/crates/cssparser-macros-0.6.1
     contrib/crates/derive_more-impl-2.1.1
-    contrib/crates/displaydoc-0.2.6
-    contrib/crates/futures-macro-0.3.33
+    contrib/crates/displaydoc-0.2.7
+    contrib/crates/futures-macro-0.3.34
     contrib/crates/glib-macros-0.22.0
+    contrib/crates/multiversion_no_op-1.0.0
     contrib/crates/mutants-0.0.3
     contrib/crates/nalgebra-macros-0.3.0
     contrib/crates/paste-1.0.15
     contrib/crates/phf_macros-0.11.3
+    contrib/crates/rustversion-1.0.23
     contrib/crates/serde_derive-1.0.229
-    contrib/crates/yoke-derive-0.8.2
-    contrib/crates/zerofrom-derive-0.1.7
-    contrib/crates/zerovec-derive-0.11.3
+    contrib/crates/yoke-derive-0.8.4
+    contrib/crates/zerocopy-derive-0.8.63
+    contrib/crates/zerofrom-derive-0.1.8
+    contrib/crates/zerovec-derive-0.11.7
 )
 
 LICENSE(Apache-2.0 AND BSD-3-Clause AND LGPL-2.1-only AND LGPL-2.1-or-later AND MIT AND MPL-2.0)

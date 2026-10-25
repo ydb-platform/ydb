@@ -38,11 +38,38 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
-CRATE_FEATURES(default)
+CRATE_FEATURES(
+    default
+)
 PEERDIR(
     contrib/crates/lock_api-0.4.14
     contrib/crates/parking_lot_core-0.9.12
+)
+
+CRATE_FEATURES(
+    arc_lock
+    send_guard
+    serde
+)
+
+CRATE_SOURCES(
+    src/condvar.rs
+    src/deadlock.rs
+    src/elision.rs
+    src/fair_mutex.rs
+    src/lib.rs
+    src/mutex.rs
+    src/once.rs
+    src/raw_fair_mutex.rs
+    src/raw_mutex.rs
+    src/raw_rwlock.rs
+    src/remutex.rs
+    src/rwlock.rs
+    src/util.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/serde_derive-1.0.229
 )
 
 END()

@@ -42,4 +42,24 @@ LICENSE("Apache-2.0 OR BSL-1.0")
 VERSION(1.0.23)
 ORIGINAL_SOURCE(https://static.crates.io/crates/ryu/ryu-1.0.23.crate)
 
+CRATE_SOURCES(
+    src/buffer/mod.rs
+    src/common.rs
+    src/d2s.rs
+    src/d2s_full_table.rs
+    src/d2s_intrinsics.rs
+    src/d2s_small_table.rs
+    src/digit_table.rs
+    src/f2s.rs
+    src/f2s_intrinsics.rs
+    src/lib.rs
+    src/parse.rs
+    src/pretty/exponent.rs
+    src/pretty/mantissa.rs
+    src/pretty/mod.rs
+    src/s2d.rs
+    src/s2f.rs
+    src/tests.rs
+)
+
 END()

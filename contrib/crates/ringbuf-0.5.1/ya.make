@@ -78,7 +78,7 @@ CRATE_FEATURES(
 )
 
 PEERDIR(
-    contrib/crates/crossbeam-utils-0.8.22
+    contrib/crates/crossbeam-utils-0.8.23
 )
 
 LICENSE("MIT OR Apache-2.0")

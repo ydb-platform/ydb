@@ -21,4 +21,8 @@ LICENSE("MIT")
 VERSION(0.3.3)
 ORIGINAL_SOURCE(https://static.crates.io/crates/tower-service/tower-service-0.3.3.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 END()

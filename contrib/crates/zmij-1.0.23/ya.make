@@ -31,6 +31,13 @@ LICENSE("MIT")
 VERSION(1.0.23)
 ORIGINAL_SOURCE(https://static.crates.io/crates/zmij/zmij-1.0.23.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+    src/stdarch_x86.rs
+    src/tests.rs
+    src/traits.rs
+)
+
 END()
 
 RECURSE(build_script)

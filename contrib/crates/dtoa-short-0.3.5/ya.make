@@ -20,6 +20,8 @@ CRATE_INPUTS(
 CRATE_FLAGS(--cap-lints=allow)
 
 
-PEERDIR(contrib/crates/dtoa-1.0.11)
+PEERDIR(
+    contrib/crates/dtoa-1.0.11
+)
 
 END()

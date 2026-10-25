@@ -79,14 +79,29 @@ CRATE_FEATURES(
 )
 
 PEERDIR(
-    contrib/crates/aho-corasick-1.1.4
+    contrib/crates/aho-corasick-1.1.5
     contrib/crates/memchr-2.8.3
-    contrib/crates/regex-automata-0.4.16
+    contrib/crates/regex-automata-0.4.18
     contrib/crates/regex-syntax-0.8.11
 )
 
 LICENSE("MIT OR Apache-2.0")
 VERSION(1.13.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/regex/regex-1.13.1.crate)
+
+CRATE_SOURCES(
+    src/builders.rs
+    src/bytes.rs
+    src/error.rs
+    src/find_byte.rs
+    src/lib.rs
+    src/pattern.rs
+    src/regex/bytes.rs
+    src/regex/mod.rs
+    src/regex/string.rs
+    src/regexset/bytes.rs
+    src/regexset/mod.rs
+    src/regexset/string.rs
+)
 
 END()

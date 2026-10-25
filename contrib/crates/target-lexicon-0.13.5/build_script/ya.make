@@ -35,4 +35,16 @@ LICENSE("Apache-2.0 WITH LLVM-exception")
 VERSION(0.13.5)
 ORIGINAL_SOURCE(https://static.crates.io/crates/target-lexicon/target-lexicon-0.13.5.crate)
 
+CRATE_SOURCES(
+    ../src/data_model.rs
+    ../src/targets.rs
+    ../src/triple.rs
+)
+
+CRATE_SOURCES(
+    ../src/host.rs
+    ../src/lib.rs
+    ../src/parse_error.rs
+)
+
 END()

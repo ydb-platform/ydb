@@ -25,4 +25,9 @@ LICENSE("MPL-2.0")
 VERSION(0.2.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/option-ext/option-ext-0.2.0.crate)
 
+CRATE_SOURCES(
+    src/impl.rs
+    src/lib.rs
+)
+
 END()

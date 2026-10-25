@@ -29,6 +29,13 @@ CRATE_FLAGS(--cap-lints=allow)
 
 CRATE_BUILD_SCRIPT(contrib/crates/paste-1.0.15/build_script)
 
+CRATE_SOURCES(
+    src/attr.rs
+    src/error.rs
+    src/lib.rs
+    src/segment.rs
+)
+
 END()
 
 RECURSE(build_script)

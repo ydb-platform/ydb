@@ -114,13 +114,16 @@ VERSION(0.32.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/opentelemetry-proto/opentelemetry-proto-0.32.0.crate)
 
 CRATE_PROC_MACROS(
-    contrib/crates/async-trait-0.1.91
-    contrib/crates/futures-macro-0.3.33
+    contrib/crates/async-trait-0.1.92
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/futures-macro-0.3.34
     contrib/crates/pin-project-internal-1.1.13
     contrib/crates/prost-derive-0.14.4
-    contrib/crates/thiserror-impl-2.0.19
-    contrib/crates/tokio-macros-2.7.1
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/thiserror-impl-2.0.21
+    contrib/crates/tokio-macros-2.7.2
     contrib/crates/tracing-attributes-0.1.31
+    contrib/crates/zerocopy-derive-0.8.63
 )
 
 END()

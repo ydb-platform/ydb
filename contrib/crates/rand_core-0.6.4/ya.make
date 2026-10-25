@@ -32,4 +32,23 @@ CRATE_FLAGS(--cap-lints=allow)
 
 
 
+CRATE_FEATURES(
+    alloc
+    getrandom
+    std
+)
+
+PEERDIR(
+    contrib/crates/getrandom-0.2.17
+)
+
+CRATE_SOURCES(
+    src/block.rs
+    src/error.rs
+    src/impls.rs
+    src/le.rs
+    src/lib.rs
+    src/os.rs
+)
+
 END()

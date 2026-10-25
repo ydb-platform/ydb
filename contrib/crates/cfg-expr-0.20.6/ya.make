@@ -38,15 +38,18 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 CRATE_FEATURES(
     default
     target-lexicon
     targets
 )
 PEERDIR(
-    contrib/crates/smallvec-1.15.2
+    contrib/crates/smallvec-1.16.4
     contrib/crates/target-lexicon-0.13.5
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/serde_derive-1.0.229
 )
 
 END()

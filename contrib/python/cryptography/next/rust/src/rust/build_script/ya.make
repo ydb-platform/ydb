@@ -54,7 +54,7 @@ CRATE_FEATURES(
 CRATE_FLAGS(--cap-lints=allow)
 
 PEERDIR(
-    contrib/crates/cc-1.4.0
+    contrib/crates/cc-1.10.0
 )
 
 LICENSE(Apache-2.0 OR BSD-3-Clause)

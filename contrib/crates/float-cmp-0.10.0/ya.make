@@ -33,6 +33,17 @@ CRATE_FEATURES(
     num-traits
     ratio
 )
-PEERDIR(contrib/crates/num-traits-0.2.19)
+PEERDIR(
+    contrib/crates/num-traits-0.2.19
+)
+
+CRATE_SOURCES(
+    src/eq.rs
+    src/lib.rs
+    src/macros.rs
+    src/ratio.rs
+    src/ulps.rs
+    src/ulps_eq.rs
+)
 
 END()

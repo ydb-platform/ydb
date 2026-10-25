@@ -34,13 +34,16 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 PEERDIR(
     contrib/crates/cfg-expr-0.20.6
     contrib/crates/heck-0.5.0
-    contrib/crates/pkg-config-0.3.33
+    contrib/crates/pkg-config-0.3.34
     contrib/crates/toml-1.1.3+spec-1.1.0
     contrib/crates/version-compare-0.2.1
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/serde_derive-1.0.229
 )
 
 END()

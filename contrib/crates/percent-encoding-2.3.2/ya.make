@@ -31,4 +31,9 @@ CRATE_FEATURES(
     default
 )
 
+CRATE_SOURCES(
+    src/ascii_set.rs
+    src/lib.rs
+)
+
 END()

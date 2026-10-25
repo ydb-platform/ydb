@@ -93,6 +93,29 @@ LICENSE("MIT")
 VERSION(0.1.44)
 ORIGINAL_SOURCE(https://static.crates.io/crates/tracing/tracing-0.1.44.crate)
 
+CRATE_FEATURES(
+    log
+)
+
+PEERDIR(
+    contrib/crates/log-0.4.34
+)
+
+CRATE_FEATURES(
+    valuable
+)
+
+CRATE_SOURCES(
+    src/dispatcher.rs
+    src/field.rs
+    src/instrument.rs
+    src/level_filters.rs
+    src/lib.rs
+    src/macros.rs
+    src/span.rs
+    src/subscriber.rs
+)
+
 CRATE_PROC_MACROS(
     contrib/crates/tracing-attributes-0.1.31
 )

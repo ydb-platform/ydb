@@ -30,4 +30,13 @@ LICENSE("Apache-2.0 OR MIT")
 VERSION(1.5.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/autocfg/autocfg-1.5.1.crate)
 
+CRATE_SOURCES(
+    src/error.rs
+    src/lib.rs
+    src/rustc.rs
+    src/tests.rs
+    src/version.rs
+)
+
+
 END()

@@ -42,4 +42,17 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.3.13)
 ORIGINAL_SOURCE(https://static.crates.io/crates/enum_dispatch/enum_dispatch-0.3.13.crate)
 
+CRATE_SOURCES(
+    src/attributed_parser.rs
+    src/cache.rs
+    src/enum_dispatch_arg_list.rs
+    src/enum_dispatch_item.rs
+    src/enum_dispatch_variant.rs
+    src/expansion.rs
+    src/filter_attrs.rs
+    src/lib.rs
+    src/supported_generics.rs
+    src/syn_utils.rs
+)
+
 END()

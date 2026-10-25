@@ -29,4 +29,12 @@ LICENSE("Zlib")
 VERSION(0.2.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/foldhash/foldhash-0.2.0.crate)
 
+CRATE_SOURCES(
+    src/convenience.rs
+    src/fast.rs
+    src/lib.rs
+    src/quality.rs
+    src/seed.rs
+)
+
 END()

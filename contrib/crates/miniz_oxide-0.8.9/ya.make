@@ -50,4 +50,21 @@ PEERDIR(
     contrib/crates/simd-adler32-0.3.10
 )
 
+CRATE_SOURCES(
+    src/deflate/buffer.rs
+    src/deflate/core.rs
+    src/deflate/mod.rs
+    src/deflate/stored.rs
+    src/deflate/stream.rs
+    src/deflate/zlib.rs
+    src/inflate/core.rs
+    src/inflate/mod.rs
+    src/inflate/output_buffer.rs
+    src/inflate/stream.rs
+    src/lib.rs
+    src/serde/big_array.rs
+    src/serde/mod.rs
+    src/shared.rs
+)
+
 END()

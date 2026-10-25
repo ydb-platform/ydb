@@ -28,7 +28,6 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 CRATE_FEATURES(
     default
     serde

@@ -66,10 +66,10 @@ CRATE_FEATURES(
 )
 
 PEERDIR(
-    contrib/crates/futures-core-0.3.33
-    contrib/crates/futures-sink-0.3.33
+    contrib/crates/futures-core-0.3.34
+    contrib/crates/futures-sink-0.3.34
     contrib/crates/pin-project-lite-0.2.17
-    contrib/crates/thiserror-2.0.19
+    contrib/crates/thiserror-2.0.21
 )
 
 LICENSE("Apache-2.0")
@@ -77,7 +77,7 @@ VERSION(0.32.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/opentelemetry/opentelemetry-0.32.0.crate)
 
 CRATE_PROC_MACROS(
-    contrib/crates/thiserror-impl-2.0.19
+    contrib/crates/thiserror-impl-2.0.21
 )
 
 END()

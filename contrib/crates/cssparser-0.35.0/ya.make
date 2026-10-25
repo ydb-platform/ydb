@@ -36,16 +36,18 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 PEERDIR(
     contrib/crates/dtoa-short-0.3.5
     contrib/crates/itoa-1.0.18
     contrib/crates/phf-0.11.3
-    contrib/crates/smallvec-1.15.2
+    contrib/crates/smallvec-1.16.4
 )
+
 CRATE_PROC_MACROS(
     contrib/crates/cssparser-macros-0.6.1
     contrib/crates/phf_macros-0.11.3
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/zerocopy-derive-0.8.63
 )
 
 END()

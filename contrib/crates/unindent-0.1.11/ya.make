@@ -25,4 +25,9 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.1.11)
 ORIGINAL_SOURCE(https://static.crates.io/crates/unindent/unindent-0.1.11.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+    src/unindent.rs
+)
+
 END()

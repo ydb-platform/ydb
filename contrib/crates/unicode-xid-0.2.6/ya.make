@@ -32,4 +32,10 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.2.6)
 ORIGINAL_SOURCE(https://static.crates.io/crates/unicode-xid/unicode-xid-0.2.6.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+    src/tables.rs
+    src/tests.rs
+)
+
 END()

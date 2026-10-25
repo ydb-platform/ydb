@@ -77,12 +77,74 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 CRATE_FEATURES(
     default
     use_alloc
     use_std
 )
-PEERDIR(contrib/crates/either-1.17.0)
+PEERDIR(
+    contrib/crates/either-1.19.0
+)
+
+CRATE_INPUTS(
+    examples/iris.data
+)
+
+CRATE_SOURCES(
+    src/adaptors/coalesce.rs
+    src/adaptors/map.rs
+    src/adaptors/mod.rs
+    src/adaptors/multi_product.rs
+    src/combinations.rs
+    src/combinations_with_replacement.rs
+    src/concat_impl.rs
+    src/cons_tuples_impl.rs
+    src/diff.rs
+    src/duplicates_impl.rs
+    src/either_or_both.rs
+    src/exactly_one_err.rs
+    src/extrema_set.rs
+    src/flatten_ok.rs
+    src/format.rs
+    src/free.rs
+    src/group_map.rs
+    src/groupbylazy.rs
+    src/grouping_map.rs
+    src/impl_macros.rs
+    src/intersperse.rs
+    src/iter_index.rs
+    src/k_smallest.rs
+    src/kmerge_impl.rs
+    src/lazy_buffer.rs
+    src/lib.rs
+    src/merge_join.rs
+    src/minmax.rs
+    src/multipeek_impl.rs
+    src/next_array.rs
+    src/pad_tail.rs
+    src/peek_nth.rs
+    src/peeking_take_while.rs
+    src/permutations.rs
+    src/powerset.rs
+    src/process_results_impl.rs
+    src/put_back_n_impl.rs
+    src/rciter_impl.rs
+    src/repeatn.rs
+    src/size_hint.rs
+    src/sources.rs
+    src/take_while_inclusive.rs
+    src/tee.rs
+    src/tuple_impl.rs
+    src/unique_impl.rs
+    src/unziptuple.rs
+    src/with_position.rs
+    src/zip_eq_impl.rs
+    src/zip_longest.rs
+    src/ziptuple.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/serde_derive-1.0.229
+)
 
 END()

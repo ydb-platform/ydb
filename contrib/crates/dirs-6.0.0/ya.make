@@ -34,4 +34,12 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(6.0.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/dirs/dirs-6.0.0.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+    src/lin.rs
+    src/mac.rs
+    src/wasm.rs
+    src/win.rs
+)
+
 END()

@@ -25,4 +25,13 @@ CRATE_FLAGS(--cap-lints=allow)
 
 
 
+CRATE_FEATURES(
+    default
+    use_std
+)
+
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 END()

@@ -45,11 +45,14 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 CRATE_FEATURES(std)
 PEERDIR(
-    contrib/crates/bytemuck-1.24.0
+    contrib/crates/bytemuck-1.25.2
     contrib/crates/safe_arch-0.7.4
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
 )
 
 END()

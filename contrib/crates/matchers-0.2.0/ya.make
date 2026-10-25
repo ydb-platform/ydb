@@ -20,11 +20,15 @@ CRATE_INPUTS(
 CRATE_FLAGS(--cap-lints=allow)
 
 PEERDIR(
-    contrib/crates/regex-automata-0.4.16
+    contrib/crates/regex-automata-0.4.18
 )
 
 LICENSE("MIT")
 VERSION(0.2.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/matchers/matchers-0.2.0.crate)
+
+CRATE_SOURCES(
+    src/lib.rs
+)
 
 END()

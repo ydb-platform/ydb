@@ -104,14 +104,14 @@ CRATE_FEATURES(
 )
 
 PEERDIR(
-    contrib/crates/futures-channel-0.3.33
-    contrib/crates/futures-executor-0.3.33
-    contrib/crates/futures-util-0.3.33
+    contrib/crates/futures-channel-0.3.34
+    contrib/crates/futures-executor-0.3.34
+    contrib/crates/futures-util-0.3.34
     contrib/crates/opentelemetry-0.32.0
     contrib/crates/percent-encoding-2.3.2
     contrib/crates/rand-0.9.5
-    contrib/crates/thiserror-2.0.19
-    contrib/crates/tokio-1.53.1
+    contrib/crates/thiserror-2.0.21
+    contrib/crates/tokio-1.54.1
     contrib/crates/tokio-stream-0.1.19
 )
 
@@ -120,9 +120,11 @@ VERSION(0.32.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/opentelemetry_sdk/opentelemetry_sdk-0.32.1.crate)
 
 CRATE_PROC_MACROS(
-    contrib/crates/futures-macro-0.3.33
-    contrib/crates/thiserror-impl-2.0.19
-    contrib/crates/tokio-macros-2.7.1
+    contrib/crates/futures-macro-0.3.34
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/thiserror-impl-2.0.21
+    contrib/crates/tokio-macros-2.7.2
+    contrib/crates/zerocopy-derive-0.8.63
 )
 
 END()

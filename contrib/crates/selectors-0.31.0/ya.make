@@ -36,24 +36,27 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 CRATE_BUILD_SCRIPT(contrib/crates/selectors-0.31.0/build_script)
 PEERDIR(
-    contrib/crates/bitflags-2.13.1
+    contrib/crates/bitflags-2.13.2
     contrib/crates/cssparser-0.35.0
     contrib/crates/derive_more-2.1.1
     contrib/crates/fxhash-0.2.1
-    contrib/crates/log-0.4.33
+    contrib/crates/log-0.4.34
     contrib/crates/new_debug_unreachable-1.0.6
     contrib/crates/phf-0.11.3
     contrib/crates/precomputed-hash-0.1.1
     contrib/crates/servo_arc-0.4.3
-    contrib/crates/smallvec-1.15.2
+    contrib/crates/smallvec-1.16.4
 )
+
 CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
     contrib/crates/cssparser-macros-0.6.1
     contrib/crates/derive_more-impl-2.1.1
     contrib/crates/phf_macros-0.11.3
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/zerocopy-derive-0.8.63
 )
 
 END()

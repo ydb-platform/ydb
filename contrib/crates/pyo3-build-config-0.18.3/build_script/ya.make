@@ -39,11 +39,21 @@ CRATE_FEATURES(
 CRATE_FLAGS(--cap-lints=allow)
 
 PEERDIR(
-    contrib/crates/target-lexicon-0.12.7
+    contrib/crates/target-lexicon-0.12.16
 )
 
 LICENSE("Apache-2.0")
 VERSION(0.18.3)
 ORIGINAL_SOURCE(https://static.crates.io/crates/pyo3-build-config/pyo3-build-config-0.18.3.crate)
+
+CRATE_SOURCES(
+    ../src/errors.rs
+    ../src/impl_.rs
+    ../src/import_lib.rs
+)
+
+CRATE_SOURCES(
+    ../src/lib.rs
+)
 
 END()

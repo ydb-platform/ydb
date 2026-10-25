@@ -34,4 +34,16 @@ CRATE_FLAGS(--cap-lints=allow)
 
 
 
+CRATE_SOURCES(
+    src/kebab.rs
+    src/lib.rs
+    src/lower_camel.rs
+    src/shouty_kebab.rs
+    src/shouty_snake.rs
+    src/snake.rs
+    src/title.rs
+    src/train.rs
+    src/upper_camel.rs
+)
+
 END()

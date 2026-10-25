@@ -56,6 +56,31 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.2.37)
 ORIGINAL_SOURCE(https://static.crates.io/crates/prettyplease/prettyplease-0.2.37.crate)
 
+CRATE_SOURCES(
+    src/algorithm.rs
+    src/attr.rs
+    src/classify.rs
+    src/convenience.rs
+    src/data.rs
+    src/expr.rs
+    src/file.rs
+    src/fixup.rs
+    src/generics.rs
+    src/item.rs
+    src/iter.rs
+    src/lib.rs
+    src/lifetime.rs
+    src/lit.rs
+    src/mac.rs
+    src/pat.rs
+    src/path.rs
+    src/precedence.rs
+    src/ring.rs
+    src/stmt.rs
+    src/token.rs
+    src/ty.rs
+)
+
 END()
 
 RECURSE(build_script)

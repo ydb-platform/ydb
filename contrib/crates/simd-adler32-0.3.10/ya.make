@@ -45,4 +45,17 @@ CRATE_FEATURES(
     default
 )
 
+CRATE_SOURCES(
+    src/hash.rs
+    src/imp/avx2.rs
+    src/imp/avx512.rs
+    src/imp/mod.rs
+    src/imp/neon.rs
+    src/imp/scalar.rs
+    src/imp/sse2.rs
+    src/imp/ssse3.rs
+    src/imp/wasm.rs
+    src/lib.rs
+)
+
 END()

@@ -23,4 +23,8 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(1.0.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/ident_case/ident_case-1.0.1.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 END()

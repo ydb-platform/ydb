@@ -56,4 +56,34 @@ LICENSE("Apache-2.0")
 VERSION(0.14.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/prometheus/prometheus-0.14.0.crate)
 
+CRATE_SOURCES(
+    ../proto/proto_model.rs
+    ../src/plain_model.rs
+)
+
+CRATE_SOURCES(
+    ../src/atomic64.rs
+    ../src/auto_flush.rs
+    ../src/counter.rs
+    ../src/desc.rs
+    ../src/encoder/mod.rs
+    ../src/encoder/pb.rs
+    ../src/encoder/text.rs
+    ../src/errors.rs
+    ../src/gauge.rs
+    ../src/histogram.rs
+    ../src/lib.rs
+    ../src/macros.rs
+    ../src/metrics.rs
+    ../src/nohash.rs
+    ../src/process_collector.rs
+    ../src/proto_ext.rs
+    ../src/pulling_gauge.rs
+    ../src/push.rs
+    ../src/registry.rs
+    ../src/timer.rs
+    ../src/value.rs
+    ../src/vec.rs
+)
+
 END()

@@ -43,4 +43,33 @@ CRATE_FLAGS(--cap-lints=allow)
 
 
 
+CRATE_FEATURES(
+    backtrace
+    deadlock_detection
+    petgraph
+)
+
+CRATE_SOURCES(
+    ../src/thread_parker/generic.rs
+    ../src/thread_parker/linux.rs
+    ../src/thread_parker/redox.rs
+    ../src/thread_parker/sgx.rs
+    ../src/thread_parker/unix.rs
+    ../src/thread_parker/wasm.rs
+    ../src/thread_parker/wasm_atomic.rs
+    ../src/thread_parker/windows/mod.rs
+)
+
+CRATE_SOURCES(
+    ../src/lib.rs
+    ../src/parking_lot.rs
+    ../src/spinwait.rs
+    ../src/thread_parker/mod.rs
+    ../src/thread_parker/windows/bindings.rs
+    ../src/thread_parker/windows/keyed_event.rs
+    ../src/thread_parker/windows/waitaddress.rs
+    ../src/util.rs
+    ../src/word_lock.rs
+)
+
 END()

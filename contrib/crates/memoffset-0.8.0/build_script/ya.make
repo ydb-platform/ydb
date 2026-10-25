@@ -37,4 +37,11 @@ LICENSE("MIT")
 VERSION(0.8.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/memoffset/memoffset-0.8.0.crate)
 
+CRATE_SOURCES(
+    ../src/lib.rs
+    ../src/offset_of.rs
+    ../src/raw_field.rs
+    ../src/span_of.rs
+)
+
 END()

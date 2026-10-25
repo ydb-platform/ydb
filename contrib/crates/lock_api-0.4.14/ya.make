@@ -25,11 +25,32 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 CRATE_FEATURES(
     atomic_usize
     default
 )
-PEERDIR(contrib/crates/scopeguard-1.2.0)
+PEERDIR(
+    contrib/crates/scopeguard-1.2.0
+)
+
+CRATE_FEATURES(
+    arc_lock
+    serde
+)
+
+PEERDIR(
+    contrib/crates/serde-1.0.229
+)
+
+CRATE_SOURCES(
+    src/lib.rs
+    src/mutex.rs
+    src/remutex.rs
+    src/rwlock.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/serde_derive-1.0.229
+)
 
 END()

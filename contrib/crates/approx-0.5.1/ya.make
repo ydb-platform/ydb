@@ -28,6 +28,8 @@ CRATE_FLAGS(--cap-lints=allow)
 
 
 CRATE_FEATURES(std)
-PEERDIR(contrib/crates/num-traits-0.2.19)
+PEERDIR(
+    contrib/crates/num-traits-0.2.19
+)
 
 END()

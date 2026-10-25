@@ -42,8 +42,15 @@ LICENSE("MIT")
 VERSION(0.14.6)
 ORIGINAL_SOURCE(https://static.crates.io/crates/tonic-prost-build/tonic-prost-build-0.14.6.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+    src/tests.rs
+)
+
 CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
     contrib/crates/prost-derive-0.14.4
+    contrib/crates/serde_derive-1.0.229
 )
 
 END()

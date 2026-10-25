@@ -28,4 +28,8 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.59.3)
 ORIGINAL_SOURCE(https://static.crates.io/crates/windows-interface/windows-interface-0.59.3.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 END()

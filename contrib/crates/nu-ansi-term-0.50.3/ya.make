@@ -37,11 +37,11 @@ CRATE_FEATURES(
     std
 )
 
-IF (_RUST_TARGET == "aarch64-apple-darwin" OR _RUST_TARGET == "aarch64-unknown-linux-gnu" OR _RUST_TARGET == "aarch64-unknown-linux-musl" OR _RUST_TARGET == "x86_64-apple-darwin" OR _RUST_TARGET == "x86_64-unknown-linux-gnu" OR _RUST_TARGET == "x86_64-unknown-linux-musl")
-ELSEIF (_RUST_TARGET == "x86_64-pc-windows-msvc")
+IF (OS_DARWIN AND ARCH_ARM64 OR OS_LINUX AND ARCH_AARCH64 AND _RUST_MODE == "host" OR OS_LINUX AND ARCH_AARCH64 AND NOT MUSL OR OS_LINUX AND ARCH_AARCH64 AND _RUST_MODE != "host" AND MUSL OR OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_X86_64 AND _RUST_MODE == "host" OR OS_LINUX AND ARCH_X86_64 AND NOT MUSL OR OS_LINUX AND ARCH_X86_64 AND _RUST_MODE != "host" AND MUSL)
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
     PEERDIR(
-        contrib/crates/windows-sys-0.61.2
-    )
+    contrib/crates/windows-sys-0.61.2
+)
 
     CRATE_DEPENDENCY_ALIAS(windows contrib/crates/windows-sys-0.61.2)
 ENDIF()
@@ -49,5 +49,19 @@ ENDIF()
 LICENSE("MIT")
 VERSION(0.50.3)
 ORIGINAL_SOURCE(https://static.crates.io/crates/nu-ansi-term/nu-ansi-term-0.50.3.crate)
+
+CRATE_SOURCES(
+    src/ansi.rs
+    src/debug.rs
+    src/difference.rs
+    src/display.rs
+    src/gradient.rs
+    src/lib.rs
+    src/rgb.rs
+    src/style.rs
+    src/util.rs
+    src/windows.rs
+    src/write.rs
+)
 
 END()

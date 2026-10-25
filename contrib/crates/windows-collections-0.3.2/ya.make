@@ -37,6 +37,18 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.3.2)
 ORIGINAL_SOURCE(https://static.crates.io/crates/windows-collections/windows-collections-0.3.2.crate)
 
+CRATE_INPUTS(
+    readme.md
+)
+
+CRATE_SOURCES(
+    src/bindings.rs
+    src/iterable.rs
+    src/lib.rs
+    src/map_view.rs
+    src/vector_view.rs
+)
+
 CRATE_PROC_MACROS(
     contrib/crates/windows-implement-0.60.2
     contrib/crates/windows-interface-0.59.3

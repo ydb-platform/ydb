@@ -33,4 +33,17 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.10.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/rand_core/rand_core-0.10.1.crate)
 
+CRATE_INPUTS(
+    README.md
+)
+
+CRATE_SOURCES(
+    src/block.rs
+    src/lib.rs
+    src/seedable_rng.rs
+    src/unwrap_err.rs
+    src/utils.rs
+    src/word.rs
+)
+
 END()

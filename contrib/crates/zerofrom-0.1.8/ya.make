@@ -30,8 +30,18 @@ LICENSE("Unicode-3.0")
 VERSION(0.1.8)
 ORIGINAL_SOURCE(https://static.crates.io/crates/zerofrom/zerofrom-0.1.8.crate)
 
+CRATE_FEATURES(
+    alloc
+)
+
+CRATE_SOURCES(
+    src/lib.rs
+    src/macro_impls.rs
+    src/zero_from.rs
+)
+
 CRATE_PROC_MACROS(
-    contrib/crates/zerofrom-derive-0.1.7
+    contrib/crates/zerofrom-derive-0.1.8
 )
 
 END()

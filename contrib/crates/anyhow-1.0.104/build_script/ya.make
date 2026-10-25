@@ -45,4 +45,19 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(1.0.104)
 ORIGINAL_SOURCE(https://static.crates.io/crates/anyhow/anyhow-1.0.104.crate)
 
+CRATE_SOURCES(
+    ../src/backtrace.rs
+    ../src/chain.rs
+    ../src/context.rs
+    ../src/ensure.rs
+    ../src/error.rs
+    ../src/fmt.rs
+    ../src/kind.rs
+    ../src/lib.rs
+    ../src/macros.rs
+    ../src/nightly.rs
+    ../src/ptr.rs
+    ../src/wrapper.rs
+)
+
 END()

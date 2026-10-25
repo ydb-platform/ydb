@@ -30,4 +30,13 @@ CRATE_FEATURES(
     std
 )
 
+CRATE_FEATURES(
+    i128
+)
+
+CRATE_SOURCES(
+    src/io.rs
+    src/lib.rs
+)
+
 END()

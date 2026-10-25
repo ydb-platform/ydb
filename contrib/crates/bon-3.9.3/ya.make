@@ -36,6 +36,11 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(3.9.3)
 ORIGINAL_SOURCE(https://static.crates.io/crates/bon/bon-3.9.3.crate)
 
+CRATE_FEATURES(
+    default
+    std
+)
+
 CRATE_PROC_MACROS(
     contrib/crates/bon-macros-3.9.3
     contrib/crates/darling_macro-0.23.0

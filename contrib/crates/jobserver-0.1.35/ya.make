@@ -27,15 +27,28 @@ CRATE_INPUTS(
 CRATE_FLAGS(--cap-lints=allow)
 
 PEERDIR(
-    contrib/crates/libc-0.2.189
+    contrib/crates/libc-0.2.191
 )
 
 LICENSE("MIT OR Apache-2.0")
 VERSION(0.1.35)
 ORIGINAL_SOURCE(https://static.crates.io/crates/jobserver/jobserver-0.1.35.crate)
 
-IF (_RUST_TARGET == "x86_64-pc-windows-msvc")
-    PEERDIR(contrib/crates/getrandom-0.4.3)
+IF (OS_WINDOWS AND ARCH_X86_64)
+    PEERDIR(
+    contrib/crates/getrandom-0.4.3
+)
 ENDIF()
+
+CRATE_SOURCES(
+    src/unix.rs
+    src/wasm.rs
+    src/windows.rs
+)
+
+CRATE_SOURCES(
+    src/error.rs
+    src/lib.rs
+)
 
 END()

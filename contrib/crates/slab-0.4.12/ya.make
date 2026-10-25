@@ -33,4 +33,10 @@ LICENSE("MIT")
 VERSION(0.4.12)
 ORIGINAL_SOURCE(https://static.crates.io/crates/slab/slab-0.4.12.crate)
 
+CRATE_SOURCES(
+    src/builder.rs
+    src/lib.rs
+    src/serde.rs
+)
+
 END()

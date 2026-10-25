@@ -42,6 +42,10 @@ def toolchain_environment(args, work):
         "CARGO_MANIFEST_DIR": str(args.manifest_dir.resolve()),
         "CARGO_PKG_NAME": args.name, "CARGO_CRATE_NAME": args.name.replace("-", "_"),
         "CARGO_PKG_VERSION": args.version,
+        "CARGO_PKG_AUTHORS": "", "CARGO_PKG_DESCRIPTION": "",
+        "CARGO_PKG_HOMEPAGE": "", "CARGO_PKG_REPOSITORY": "",
+        "CARGO_PKG_LICENSE": "", "CARGO_PKG_LICENSE_FILE": "",
+        "CARGO_PKG_README": "", "CARGO_PKG_RUST_VERSION": "",
         "CC": env["HOST_CC"],
         "CXX": env["HOST_CXX"],
         "AR": env["HOST_AR"],
@@ -95,7 +99,9 @@ def externs(args):
         alias = aliases.get(relative, alias)
         result += ["--extern", alias + "=" + str(Path(path).resolve().with_suffix(".rlib"))]
     for path in args.proc_macros:
-        result += ["--extern", dependency_name(path) + "=" + str(Path(path).resolve())]
+        relative = Path(path).resolve().parent.relative_to(args.build_root.resolve()).as_posix()
+        alias = aliases.get(relative, dependency_name(path))
+        result += ["--extern", alias + "=" + str(Path(path).resolve())]
     return result
 
 

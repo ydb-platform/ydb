@@ -29,7 +29,6 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 CRATE_FEATURES(
     default
     std
@@ -39,11 +38,31 @@ PEERDIR(
     contrib/crates/idna-1.1.0
     contrib/crates/percent-encoding-2.3.2
 )
+
+CRATE_FEATURES(
+    serde
+)
+
+PEERDIR(
+    contrib/crates/serde-1.0.229
+)
+
+CRATE_SOURCES(
+    src/host.rs
+    src/lib.rs
+    src/origin.rs
+    src/parser.rs
+    src/path_segments.rs
+    src/quirks.rs
+    src/slicing.rs
+)
+
 CRATE_PROC_MACROS(
-    contrib/crates/displaydoc-0.2.6
-    contrib/crates/yoke-derive-0.8.2
-    contrib/crates/zerofrom-derive-0.1.7
-    contrib/crates/zerovec-derive-0.11.3
+    contrib/crates/displaydoc-0.2.7
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/yoke-derive-0.8.4
+    contrib/crates/zerofrom-derive-0.1.8
+    contrib/crates/zerovec-derive-0.11.7
 )
 
 END()

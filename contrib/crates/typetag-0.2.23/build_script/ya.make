@@ -36,4 +36,16 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.2.23)
 ORIGINAL_SOURCE(https://static.crates.io/crates/typetag/typetag-0.2.23.crate)
 
+CRATE_SOURCES(
+    ../src/adjacently.rs
+    ../src/content.rs
+    ../src/de.rs
+    ../src/externally.rs
+    ../src/internally.rs
+    ../src/is_serialize_str.rs
+    ../src/lib.rs
+    ../src/private.rs
+    ../src/ser.rs
+)
+
 END()

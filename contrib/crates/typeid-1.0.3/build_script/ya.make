@@ -28,4 +28,8 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(1.0.3)
 ORIGINAL_SOURCE(https://static.crates.io/crates/typeid/typeid-1.0.3.crate)
 
+CRATE_SOURCES(
+    ../src/lib.rs
+)
+
 END()

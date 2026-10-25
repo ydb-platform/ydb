@@ -23,11 +23,15 @@ CRATE_FEATURES(
 )
 
 PEERDIR(
-    contrib/crates/futures-core-0.3.33
+    contrib/crates/futures-core-0.3.34
 )
 
 LICENSE("Apache-2.0")
 VERSION(1.0.2)
 ORIGINAL_SOURCE(https://static.crates.io/crates/sync_wrapper/sync_wrapper-1.0.2.crate)
+
+CRATE_SOURCES(
+    src/lib.rs
+)
 
 END()

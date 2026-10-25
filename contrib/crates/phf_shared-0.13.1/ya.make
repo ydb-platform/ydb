@@ -26,6 +26,8 @@ CRATE_FEATURES(
     default
     std
 )
-PEERDIR(contrib/crates/siphasher-1.0.3)
+PEERDIR(
+    contrib/crates/siphasher-1.0.4
+)
 
 END()

@@ -40,4 +40,17 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(1.0.47)
 ORIGINAL_SOURCE(https://static.crates.io/crates/quote/quote-1.0.47.crate)
 
+CRATE_SOURCES(
+    ../src/runtime.rs
+)
+
+CRATE_SOURCES(
+    ../src/ext.rs
+    ../src/format.rs
+    ../src/ident_fragment.rs
+    ../src/lib.rs
+    ../src/spanned.rs
+    ../src/to_tokens.rs
+)
+
 END()

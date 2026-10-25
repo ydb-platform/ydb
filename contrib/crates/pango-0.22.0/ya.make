@@ -83,7 +83,6 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 CRATE_FEATURES(
     v1_42
     v1_44
@@ -92,12 +91,15 @@ CRATE_FEATURES(
 PEERDIR(
     contrib/crates/gio-0.22.1
     contrib/crates/glib-0.22.0
-    contrib/crates/libc-0.2.189
+    contrib/crates/libc-0.2.191
     contrib/crates/pango-sys-0.22.0
 )
+
 CRATE_PROC_MACROS(
-    contrib/crates/futures-macro-0.3.33
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/futures-macro-0.3.34
     contrib/crates/glib-macros-0.22.0
+    contrib/crates/serde_derive-1.0.229
 )
 
 END()

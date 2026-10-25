@@ -30,4 +30,12 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(1.13.3)
 ORIGINAL_SOURCE(https://static.crates.io/crates/unicode-segmentation/unicode-segmentation-1.13.3.crate)
 
+CRATE_SOURCES(
+    src/grapheme.rs
+    src/lib.rs
+    src/sentence.rs
+    src/tables.rs
+    src/word.rs
+)
+
 END()

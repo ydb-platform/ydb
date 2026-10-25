@@ -38,4 +38,14 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.9.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/rand_chacha/rand_chacha-0.9.0.crate)
 
+CRATE_SOURCES(
+    src/chacha.rs
+    src/guts.rs
+    src/lib.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/zerocopy-derive-0.8.63
+)
+
 END()

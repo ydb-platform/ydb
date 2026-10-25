@@ -39,4 +39,15 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(1.21.4)
 ORIGINAL_SOURCE(https://static.crates.io/crates/once_cell/once_cell-1.21.4.crate)
 
+CRATE_SOURCES(
+    src/imp_cs.rs
+    src/imp_pl.rs
+    src/imp_std.rs
+)
+
+CRATE_SOURCES(
+    src/lib.rs
+    src/race.rs
+)
+
 END()

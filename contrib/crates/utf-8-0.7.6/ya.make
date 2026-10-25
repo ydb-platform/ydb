@@ -27,4 +27,10 @@ CRATE_FLAGS(--cap-lints=allow)
 
 
 
+CRATE_SOURCES(
+    src/lib.rs
+    src/lossy.rs
+    src/read.rs
+)
+
 END()

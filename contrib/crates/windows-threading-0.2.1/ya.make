@@ -31,4 +31,14 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.2.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/windows-threading/windows-threading-0.2.1.crate)
 
+CRATE_INPUTS(
+    readme.md
+)
+
+CRATE_SOURCES(
+    src/bindings.rs
+    src/lib.rs
+    src/pool.rs
+)
+
 END()

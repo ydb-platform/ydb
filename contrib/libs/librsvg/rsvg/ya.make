@@ -151,14 +151,14 @@ PEERDIR(
     contrib/crates/cssparser-0.35.0
     contrib/crates/cssparser-color-0.3.0
     contrib/crates/data-url-0.3.2
-    contrib/crates/encoding_rs-0.8.35
+    contrib/crates/encoding_rs-0.8.42
     contrib/crates/float-cmp-0.10.0
     contrib/crates/gio-0.22.1
     contrib/crates/glib-0.22.0
     contrib/crates/image-0.25.9
     contrib/crates/itertools-0.14.0
     contrib/crates/language-tags-0.3.2
-    contrib/crates/libc-0.2.189
+    contrib/crates/libc-0.2.191
     contrib/crates/locale_config-0.3.0
     contrib/crates/markup5ever-0.35.0
     contrib/crates/nalgebra-0.34.1
@@ -166,30 +166,34 @@ PEERDIR(
     contrib/crates/pango-0.22.0
     contrib/crates/pangocairo-0.22.0
     contrib/crates/precomputed-hash-0.1.1
-    contrib/crates/rayon-1.11.0
+    contrib/crates/rayon-1.12.0
     contrib/crates/rctree-0.6.0
     contrib/crates/regex-1.13.1
     contrib/crates/rgb-0.8.52
     contrib/crates/selectors-0.31.0
     contrib/crates/string_cache-0.9.0
-    contrib/crates/tinyvec-1.10.0
+    contrib/crates/tinyvec-1.11.0
     contrib/crates/url-2.5.8
     contrib/crates/xml5ever-0.35.0
 )
 CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
     contrib/crates/cssparser-macros-0.6.1
     contrib/crates/derive_more-impl-2.1.1
-    contrib/crates/displaydoc-0.2.6
-    contrib/crates/futures-macro-0.3.33
+    contrib/crates/displaydoc-0.2.7
+    contrib/crates/futures-macro-0.3.34
     contrib/crates/glib-macros-0.22.0
+    contrib/crates/multiversion_no_op-1.0.0
     contrib/crates/mutants-0.0.3
     contrib/crates/nalgebra-macros-0.3.0
     contrib/crates/paste-1.0.15
     contrib/crates/phf_macros-0.11.3
+    contrib/crates/rustversion-1.0.23
     contrib/crates/serde_derive-1.0.229
-    contrib/crates/yoke-derive-0.8.2
-    contrib/crates/zerofrom-derive-0.1.7
-    contrib/crates/zerovec-derive-0.11.3
+    contrib/crates/yoke-derive-0.8.4
+    contrib/crates/zerocopy-derive-0.8.63
+    contrib/crates/zerofrom-derive-0.1.8
+    contrib/crates/zerovec-derive-0.11.7
 )
 
 END()

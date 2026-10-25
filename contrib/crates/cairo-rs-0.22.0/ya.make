@@ -57,7 +57,6 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 CRATE_FEATURES(
     default
     glib
@@ -69,14 +68,17 @@ CRATE_FEATURES(
     v1_16
 )
 PEERDIR(
-    contrib/crates/bitflags-2.13.1
+    contrib/crates/bitflags-2.13.2
     contrib/crates/cairo-sys-rs-0.22.0
     contrib/crates/glib-0.22.0
-    contrib/crates/libc-0.2.189
+    contrib/crates/libc-0.2.191
 )
+
 CRATE_PROC_MACROS(
-    contrib/crates/futures-macro-0.3.33
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/futures-macro-0.3.34
     contrib/crates/glib-macros-0.22.0
+    contrib/crates/serde_derive-1.0.229
 )
 
 END()

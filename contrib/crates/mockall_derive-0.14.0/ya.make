@@ -30,7 +30,7 @@ CRATE_INPUTS(
 CRATE_FLAGS(--cap-lints=allow)
 
 PEERDIR(
-    contrib/crates/cfg-if-1.0.4
+    contrib/crates/cfg-if-1.0.5
     contrib/crates/proc-macro2-1.0.107
     contrib/crates/quote-1.0.47
     contrib/crates/syn-2.0.119

@@ -25,15 +25,16 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 CRATE_BUILD_SCRIPT(contrib/crates/web_atoms-0.1.3/build_script)
 PEERDIR(
     contrib/crates/phf-0.11.3
     contrib/crates/string_cache-0.9.0
 )
+
 CRATE_PROC_MACROS(
     contrib/crates/phf_macros-0.11.3
     contrib/crates/serde_derive-1.0.229
+    contrib/crates/zerocopy-derive-0.8.63
 )
 
 END()

@@ -21,4 +21,8 @@ LICENSE("MIT")
 VERSION(0.2.5)
 ORIGINAL_SOURCE(https://static.crates.io/crates/try-lock/try-lock-0.2.5.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 END()

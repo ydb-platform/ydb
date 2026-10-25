@@ -18,11 +18,15 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
+PEERDIR(
+    contrib/crates/cssparser-0.35.0
+)
 
-PEERDIR(contrib/crates/cssparser-0.35.0)
 CRATE_PROC_MACROS(
     contrib/crates/cssparser-macros-0.6.1
     contrib/crates/phf_macros-0.11.3
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/zerocopy-derive-0.8.63
 )
 
 END()

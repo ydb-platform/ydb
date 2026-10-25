@@ -94,7 +94,6 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 CRATE_FEATURES(
     gif
     jpeg
@@ -102,7 +101,7 @@ CRATE_FEATURES(
     webp
 )
 PEERDIR(
-    contrib/crates/bytemuck-1.24.0
+    contrib/crates/bytemuck-1.25.2
     contrib/crates/byteorder-lite-0.1.0
     contrib/crates/color_quant-1.1.0
     contrib/crates/gif-0.14.1
@@ -112,6 +111,10 @@ PEERDIR(
     contrib/crates/png-0.18.0
     contrib/crates/zune-core-0.5.1
     contrib/crates/zune-jpeg-0.5.12
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
 )
 
 END()

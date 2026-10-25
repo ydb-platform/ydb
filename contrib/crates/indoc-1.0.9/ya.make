@@ -30,4 +30,11 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(1.0.9)
 ORIGINAL_SOURCE(https://static.crates.io/crates/indoc/indoc-1.0.9.crate)
 
+CRATE_SOURCES(
+    src/error.rs
+    src/expr.rs
+    src/lib.rs
+    src/unindent.rs
+)
+
 END()

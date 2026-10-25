@@ -40,4 +40,16 @@ LICENSE("MIT")
 VERSION(0.14.6)
 ORIGINAL_SOURCE(https://static.crates.io/crates/tonic-build/tonic-build-0.14.6.crate)
 
+CRATE_INPUTS(
+    README.md
+)
+
+CRATE_SOURCES(
+    src/client.rs
+    src/code_gen.rs
+    src/lib.rs
+    src/manual.rs
+    src/server.rs
+)
+
 END()

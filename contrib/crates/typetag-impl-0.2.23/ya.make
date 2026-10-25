@@ -27,11 +27,18 @@ CRATE_FLAGS(--cap-lints=allow)
 PEERDIR(
     contrib/crates/proc-macro2-1.0.107
     contrib/crates/quote-1.0.47
-    contrib/crates/syn-3.0.3
+    contrib/crates/syn-3.0.9
 )
 
 LICENSE("MIT OR Apache-2.0")
 VERSION(0.2.23)
 ORIGINAL_SOURCE(https://static.crates.io/crates/typetag-impl/typetag-impl-0.2.23.crate)
+
+CRATE_SOURCES(
+    src/lib.rs
+    src/parse.rs
+    src/tagged_impl.rs
+    src/tagged_trait.rs
+)
 
 END()

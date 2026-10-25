@@ -31,7 +31,7 @@ CRATE_BUILD_SCRIPT(contrib/crates/pangocairo-sys-0.22.0/build_script)
 PEERDIR(
     contrib/crates/cairo-sys-rs-0.22.0
     contrib/crates/glib-sys-0.22.0
-    contrib/crates/libc-0.2.189
+    contrib/crates/libc-0.2.191
     contrib/crates/pango-sys-0.22.0
 )
 

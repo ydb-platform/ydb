@@ -15,6 +15,8 @@ CRATE_INPUTS(.cargo-checksum.json)
 CRATE_FLAGS(--cap-lints=allow)
 
 
-PEERDIR(contrib/crates/libc-0.2.189)
+PEERDIR(
+    contrib/crates/libc-0.2.191
+)
 
 END()

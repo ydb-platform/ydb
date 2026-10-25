@@ -33,14 +33,12 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 CRATE_FEATURES(
     add
     add_assign
     default
     std
 )
-CRATE_PROC_MACROS(contrib/crates/derive_more-impl-2.1.1)
 
 CRATE_FEATURES(
     constructor
@@ -49,6 +47,27 @@ CRATE_FEATURES(
     from
     into
     try_into
+)
+
+CRATE_INPUTS(
+    README.md
+)
+
+CRATE_SOURCES(
+    src/add.rs
+    src/as.rs
+    src/as_dyn_error.rs
+    src/cmp.rs
+    src/convert.rs
+    src/fmt.rs
+    src/lib.rs
+    src/ops.rs
+    src/str.rs
+    src/try_unwrap.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/derive_more-impl-2.1.1
 )
 
 END()

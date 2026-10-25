@@ -37,7 +37,12 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
+PEERDIR(
+    contrib/crates/phf_codegen-0.11.3
+)
 
-PEERDIR(contrib/crates/phf_codegen-0.11.3)
+CRATE_PROC_MACROS(
+    contrib/crates/zerocopy-derive-0.8.63
+)
 
 END()

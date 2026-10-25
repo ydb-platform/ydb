@@ -24,7 +24,7 @@ CRATE_INPUTS(
 CRATE_FLAGS(--cap-lints=allow)
 
 PEERDIR(
-    contrib/crates/cfg-if-1.0.4
+    contrib/crates/cfg-if-1.0.5
     contrib/crates/downcast-0.11.0
     contrib/crates/fragile-2.1.0
     contrib/crates/predicates-3.1.4

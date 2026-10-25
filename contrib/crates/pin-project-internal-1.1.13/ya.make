@@ -37,4 +37,15 @@ LICENSE("Apache-2.0 OR MIT")
 VERSION(1.1.13)
 ORIGINAL_SOURCE(https://static.crates.io/crates/pin-project-internal/pin-project-internal-1.1.13.crate)
 
+CRATE_SOURCES(
+    src/error.rs
+    src/lib.rs
+    src/pin_project/args.rs
+    src/pin_project/attribute.rs
+    src/pin_project/derive.rs
+    src/pin_project/mod.rs
+    src/pinned_drop.rs
+    src/utils.rs
+)
+
 END()

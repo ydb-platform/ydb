@@ -27,18 +27,26 @@ CRATE_INPUTS(
 CRATE_FLAGS(--cap-lints=allow)
 
 PEERDIR(
-    contrib/crates/futures-0.3.33
+    contrib/crates/futures-0.3.34
     contrib/crates/pin-project-lite-0.2.17
-    contrib/crates/tokio-1.53.1
+    contrib/crates/tokio-1.54.1
 )
 
 LICENSE("MIT OR Apache-2.0")
 VERSION(0.6.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/futures-retry/futures-retry-0.6.0.crate)
 
+CRATE_SOURCES(
+    src/error_handler.rs
+    src/future.rs
+    src/lib.rs
+    src/stream.rs
+)
+
 CRATE_PROC_MACROS(
-    contrib/crates/futures-macro-0.3.33
-    contrib/crates/tokio-macros-2.7.1
+    contrib/crates/futures-macro-0.3.34
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/tokio-macros-2.7.2
 )
 
 END()

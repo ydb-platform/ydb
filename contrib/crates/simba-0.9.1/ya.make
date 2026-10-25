@@ -42,7 +42,6 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 CRATE_FEATURES(
     std
     wide
@@ -53,6 +52,10 @@ PEERDIR(
     contrib/crates/num-traits-0.2.19
     contrib/crates/wide-0.7.33
 )
-CRATE_PROC_MACROS(contrib/crates/paste-1.0.15)
+
+CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/paste-1.0.15
+)
 
 END()

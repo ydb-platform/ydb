@@ -33,4 +33,12 @@ LICENSE("MIT")
 VERSION(0.1.3)
 ORIGINAL_SOURCE(https://static.crates.io/crates/aliasable/aliasable-0.1.3.crate)
 
+CRATE_SOURCES(
+    src/boxed.rs
+    src/lib.rs
+    src/mut_ref.rs
+    src/string.rs
+    src/vec.rs
+)
+
 END()

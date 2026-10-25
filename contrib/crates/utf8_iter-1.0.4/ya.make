@@ -28,4 +28,10 @@ CRATE_FLAGS(--cap-lints=allow)
 
 
 
+CRATE_SOURCES(
+    src/indices.rs
+    src/lib.rs
+    src/report.rs
+)
+
 END()

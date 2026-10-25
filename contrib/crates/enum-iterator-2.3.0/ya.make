@@ -21,6 +21,10 @@ LICENSE("0BSD")
 VERSION(2.3.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/enum-iterator/enum-iterator-2.3.0.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 CRATE_PROC_MACROS(
     contrib/crates/enum-iterator-derive-1.5.0
 )

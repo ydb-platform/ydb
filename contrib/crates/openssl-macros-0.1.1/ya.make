@@ -26,4 +26,8 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.1.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/openssl-macros/openssl-macros-0.1.1.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 END()

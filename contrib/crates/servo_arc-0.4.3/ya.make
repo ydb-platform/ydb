@@ -25,6 +25,8 @@ CRATE_FEATURES(
     default
     track_alloc_size
 )
-PEERDIR(contrib/crates/stable_deref_trait-1.2.1)
+PEERDIR(
+    contrib/crates/stable_deref_trait-1.2.1
+)
 
 END()

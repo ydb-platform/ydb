@@ -41,4 +41,19 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.4.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/windows-result/windows-result-0.4.1.crate)
 
+CRATE_INPUTS(
+    readme.md
+)
+
+CRATE_SOURCES(
+    src/bindings.rs
+    src/bool.rs
+    src/bstr.rs
+    src/com.rs
+    src/error.rs
+    src/hresult.rs
+    src/lib.rs
+    src/strings.rs
+)
+
 END()

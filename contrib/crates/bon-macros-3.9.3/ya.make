@@ -115,6 +115,10 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(3.9.3)
 ORIGINAL_SOURCE(https://static.crates.io/crates/bon-macros/bon-macros-3.9.3.crate)
 
+CRATE_FEATURES(
+    std
+)
+
 CRATE_PROC_MACROS(
     contrib/crates/darling_macro-0.23.0
     contrib/crates/rustversion-1.0.23

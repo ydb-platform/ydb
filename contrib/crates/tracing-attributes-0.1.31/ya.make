@@ -33,4 +33,10 @@ LICENSE("MIT")
 VERSION(0.1.31)
 ORIGINAL_SOURCE(https://static.crates.io/crates/tracing-attributes/tracing-attributes-0.1.31.crate)
 
+CRATE_SOURCES(
+    src/attr.rs
+    src/expand.rs
+    src/lib.rs
+)
+
 END()

@@ -25,10 +25,16 @@ CRATE_FEATURES(
     alloc
     std
 )
-PEERDIR(contrib/crates/percent-encoding-2.3.2)
+PEERDIR(
+    contrib/crates/percent-encoding-2.3.2
+)
 
 CRATE_FEATURES(
     default
+)
+
+CRATE_SOURCES(
+    src/lib.rs
 )
 
 END()

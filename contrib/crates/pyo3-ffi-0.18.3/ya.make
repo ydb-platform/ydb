@@ -112,7 +112,7 @@ CRATE_FEATURES(
 CRATE_FLAGS(--cap-lints=allow)
 
 PEERDIR(
-    contrib/crates/libc-0.2.189
+    contrib/crates/libc-0.2.191
 )
 
 CRATE_BUILD_SCRIPT(contrib/crates/pyo3-ffi-0.18.3/build_script)
@@ -120,6 +120,90 @@ CRATE_BUILD_SCRIPT(contrib/crates/pyo3-ffi-0.18.3/build_script)
 LICENSE("Apache-2.0")
 VERSION(0.18.3)
 ORIGINAL_SOURCE(https://static.crates.io/crates/pyo3-ffi/pyo3-ffi-0.18.3.crate)
+
+CRATE_SOURCES(
+    src/abstract_.rs
+    src/bltinmodule.rs
+    src/boolobject.rs
+    src/buffer.rs
+    src/bytearrayobject.rs
+    src/bytesobject.rs
+    src/ceval.rs
+    src/code.rs
+    src/codecs.rs
+    src/compile.rs
+    src/complexobject.rs
+    src/context.rs
+    src/cpython/abstract_.rs
+    src/cpython/bytesobject.rs
+    src/cpython/ceval.rs
+    src/cpython/code.rs
+    src/cpython/compile.rs
+    src/cpython/descrobject.rs
+    src/cpython/dictobject.rs
+    src/cpython/frameobject.rs
+    src/cpython/funcobject.rs
+    src/cpython/genobject.rs
+    src/cpython/import.rs
+    src/cpython/initconfig.rs
+    src/cpython/listobject.rs
+    src/cpython/methodobject.rs
+    src/cpython/mod.rs
+    src/cpython/object.rs
+    src/cpython/pydebug.rs
+    src/cpython/pyerrors.rs
+    src/cpython/pylifecycle.rs
+    src/cpython/pymem.rs
+    src/cpython/pystate.rs
+    src/cpython/pythonrun.rs
+    src/cpython/tupleobject.rs
+    src/cpython/unicodeobject.rs
+    src/cpython/weakrefobject.rs
+    src/datetime.rs
+    src/descrobject.rs
+    src/dictobject.rs
+    src/enumobject.rs
+    src/fileobject.rs
+    src/fileutils.rs
+    src/floatobject.rs
+    src/import.rs
+    src/intrcheck.rs
+    src/iterobject.rs
+    src/lib.rs
+    src/listobject.rs
+    src/longobject.rs
+    src/marshal.rs
+    src/memoryobject.rs
+    src/methodobject.rs
+    src/modsupport.rs
+    src/moduleobject.rs
+    src/object.rs
+    src/objimpl.rs
+    src/osmodule.rs
+    src/pyarena.rs
+    src/pycapsule.rs
+    src/pyerrors.rs
+    src/pyframe.rs
+    src/pyhash.rs
+    src/pylifecycle.rs
+    src/pymem.rs
+    src/pyport.rs
+    src/pystate.rs
+    src/pystrtod.rs
+    src/pythonrun.rs
+    src/rangeobject.rs
+    src/setobject.rs
+    src/sliceobject.rs
+    src/structmember.rs
+    src/structseq.rs
+    src/sysmodule.rs
+    src/traceback.rs
+    src/tupleobject.rs
+    src/typeslots.rs
+    src/unicodeobject.rs
+    src/warnings.rs
+    src/weakrefobject.rs
+)
 
 END()
 

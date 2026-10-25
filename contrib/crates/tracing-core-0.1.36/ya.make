@@ -49,4 +49,29 @@ LICENSE("MIT")
 VERSION(0.1.36)
 ORIGINAL_SOURCE(https://static.crates.io/crates/tracing-core/tracing-core-0.1.36.crate)
 
+CRATE_FEATURES(
+    valuable
+)
+
+CRATE_SOURCES(
+    src/callsite.rs
+    src/dispatcher.rs
+    src/event.rs
+    src/field.rs
+    src/lazy.rs
+    src/lib.rs
+    src/metadata.rs
+    src/parent.rs
+    src/span.rs
+    src/spin/mod.rs
+    src/spin/mutex.rs
+    src/spin/once.rs
+    src/subscriber.rs
+    src/sync.rs
+)
+
+CRATE_INPUTS(
+    src/spin/LICENSE
+)
+
 END()

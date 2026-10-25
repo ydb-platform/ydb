@@ -267,21 +267,23 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 PEERDIR(
-    contrib/crates/futures-channel-0.3.33
-    contrib/crates/futures-core-0.3.33
-    contrib/crates/futures-io-0.3.33
-    contrib/crates/futures-util-0.3.33
+    contrib/crates/futures-channel-0.3.34
+    contrib/crates/futures-core-0.3.34
+    contrib/crates/futures-io-0.3.34
+    contrib/crates/futures-util-0.3.34
     contrib/crates/gio-sys-0.22.0
     contrib/crates/glib-0.22.0
-    contrib/crates/libc-0.2.189
+    contrib/crates/libc-0.2.191
     contrib/crates/pin-project-lite-0.2.17
-    contrib/crates/smallvec-1.15.2
+    contrib/crates/smallvec-1.16.4
 )
+
 CRATE_PROC_MACROS(
-    contrib/crates/futures-macro-0.3.33
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/futures-macro-0.3.34
     contrib/crates/glib-macros-0.22.0
+    contrib/crates/serde_derive-1.0.229
 )
 
 END()

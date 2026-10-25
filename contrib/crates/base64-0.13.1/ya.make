@@ -49,4 +49,21 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.13.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/base64/base64-0.13.1.crate)
 
+CRATE_SOURCES(
+    src/chunked_encoder.rs
+    src/decode.rs
+    src/display.rs
+    src/encode.rs
+    src/lib.rs
+    src/read/decoder.rs
+    src/read/decoder_tests.rs
+    src/read/mod.rs
+    src/tables.rs
+    src/tests.rs
+    src/write/encoder.rs
+    src/write/encoder_string_writer.rs
+    src/write/encoder_tests.rs
+    src/write/mod.rs
+)
+
 END()

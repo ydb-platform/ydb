@@ -147,4 +147,8 @@ CRATE_ENV(
 CRATE_FEATURES(capi)
 PEERDIR(contrib/crates/system-deps-7.0.7)
 
+CRATE_PROC_MACROS(
+    contrib/crates/serde_derive-1.0.229
+)
+
 END()

@@ -31,11 +31,24 @@ CRATE_FEATURES(
 )
 
 PEERDIR(
-    contrib/crates/zerocopy-0.8.55
+    contrib/crates/zerocopy-0.8.63
 )
 
 LICENSE("MIT OR Apache-2.0")
 VERSION(0.2.21)
 ORIGINAL_SOURCE(https://static.crates.io/crates/ppv-lite86/ppv-lite86-0.2.21.crate)
+
+CRATE_SOURCES(
+    src/generic.rs
+    src/lib.rs
+    src/soft.rs
+    src/types.rs
+    src/x86_64/mod.rs
+    src/x86_64/sse2.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/zerocopy-derive-0.8.63
+)
 
 END()

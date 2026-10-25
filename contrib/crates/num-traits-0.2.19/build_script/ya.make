@@ -49,6 +49,30 @@ CRATE_FEATURES(
     i128
     std
 )
-PEERDIR(contrib/crates/autocfg-1.5.1)
+PEERDIR(
+    contrib/crates/autocfg-1.5.1
+)
+
+CRATE_SOURCES(
+    ../src/bounds.rs
+    ../src/cast.rs
+    ../src/float.rs
+    ../src/identities.rs
+    ../src/int.rs
+    ../src/lib.rs
+    ../src/macros.rs
+    ../src/ops/bytes.rs
+    ../src/ops/checked.rs
+    ../src/ops/euclid.rs
+    ../src/ops/inv.rs
+    ../src/ops/mod.rs
+    ../src/ops/mul_add.rs
+    ../src/ops/overflowing.rs
+    ../src/ops/saturating.rs
+    ../src/ops/wrapping.rs
+    ../src/pow.rs
+    ../src/real.rs
+    ../src/sign.rs
+)
 
 END()

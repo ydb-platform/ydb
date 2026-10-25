@@ -42,8 +42,25 @@ LICENSE("Apache-2.0")
 VERSION(0.14.4)
 ORIGINAL_SOURCE(https://static.crates.io/crates/prost/prost-0.14.4.crate)
 
+CRATE_INPUTS(
+    README.md
+)
+
+CRATE_SOURCES(
+    src/encoding.rs
+    src/encoding/length_delimiter.rs
+    src/encoding/varint.rs
+    src/encoding/wire_type.rs
+    src/error.rs
+    src/lib.rs
+    src/message.rs
+    src/name.rs
+    src/types.rs
+)
+
 CRATE_PROC_MACROS(
     contrib/crates/prost-derive-0.14.4
+    contrib/crates/serde_derive-1.0.229
 )
 
 END()

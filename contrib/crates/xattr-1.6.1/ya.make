@@ -34,11 +34,25 @@ CRATE_FEATURES(
 )
 
 PEERDIR(
-    contrib/crates/rustix-1.1.4
+    contrib/crates/rustix-1.1.5
 )
 
 LICENSE("MIT OR Apache-2.0")
 VERSION(1.6.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/xattr/xattr-1.6.1.crate)
+
+CRATE_SOURCES(
+    src/error.rs
+    src/lib.rs
+    src/sys/bsd.rs
+    src/sys/linux_macos.rs
+    src/sys/mod.rs
+    src/sys/unsupported.rs
+    src/util.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
+)
 
 END()

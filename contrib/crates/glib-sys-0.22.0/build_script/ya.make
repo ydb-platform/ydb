@@ -33,6 +33,12 @@ CRATE_ENV(
     SYSTEM_DEPS_GOBJECT_2_0_LIB=gobject_2_0
 )
 
-PEERDIR(contrib/crates/system-deps-7.0.7)
+PEERDIR(
+    contrib/crates/system-deps-7.0.7
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/serde_derive-1.0.229
+)
 
 END()

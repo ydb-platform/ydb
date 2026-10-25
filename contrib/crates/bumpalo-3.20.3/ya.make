@@ -41,4 +41,29 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(3.20.3)
 ORIGINAL_SOURCE(https://static.crates.io/crates/bumpalo/bumpalo-3.20.3.crate)
 
+CRATE_FEATURES(
+    allocator-api2
+)
+
+PEERDIR(
+    contrib/crates/allocator-api2-0.2.21
+)
+
+CRATE_INPUTS(
+    README.md
+)
+
+CRATE_SOURCES(
+    src/alloc.rs
+    src/boxed.rs
+    src/collections/collect_in.rs
+    src/collections/mod.rs
+    src/collections/raw_vec.rs
+    src/collections/str/lossy.rs
+    src/collections/str/mod.rs
+    src/collections/string.rs
+    src/collections/vec.rs
+    src/lib.rs
+)
+
 END()

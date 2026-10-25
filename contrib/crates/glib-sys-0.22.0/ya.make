@@ -33,7 +33,9 @@ CRATE_ENV(
 )
 
 CRATE_BUILD_SCRIPT(contrib/crates/glib-sys-0.22.0/build_script)
-PEERDIR(contrib/crates/libc-0.2.189)
+PEERDIR(
+    contrib/crates/libc-0.2.191
+)
 
 END()
 

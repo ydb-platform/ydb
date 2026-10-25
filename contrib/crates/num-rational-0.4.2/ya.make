@@ -22,11 +22,31 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 CRATE_FEATURES(std)
 PEERDIR(
-    contrib/crates/num-integer-0.1.46
+    contrib/crates/num-integer-0.1.47
     contrib/crates/num-traits-0.2.19
+)
+
+CRATE_FEATURES(
+    default
+    num-bigint
+    num-bigint-std
+    serde
+)
+
+PEERDIR(
+    contrib/crates/num-bigint-0.4.8
+    contrib/crates/serde-1.0.229
+)
+
+CRATE_SOURCES(
+    src/lib.rs
+    src/pow.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/serde_derive-1.0.229
 )
 
 END()

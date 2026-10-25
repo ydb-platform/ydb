@@ -46,13 +46,16 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 PEERDIR(
-    contrib/crates/bitflags-2.13.1
-    contrib/crates/crc32fast-1.5.0
+    contrib/crates/bitflags-2.13.2
+    contrib/crates/crc32fast-1.5.3
     contrib/crates/fdeflate-0.3.7
-    contrib/crates/flate2-1.1.9
+    contrib/crates/flate2-1.1.10
     contrib/crates/miniz_oxide-0.8.9
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
 )
 
 END()

@@ -60,6 +60,8 @@ CRATE_FEATURES(
     std
     x86
 )
-PEERDIR(contrib/crates/zune-core-0.5.1)
+PEERDIR(
+    contrib/crates/zune-core-0.5.1
+)
 
 END()

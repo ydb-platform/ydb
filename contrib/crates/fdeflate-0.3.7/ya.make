@@ -29,6 +29,23 @@ CRATE_INPUTS(
 CRATE_FLAGS(--cap-lints=allow)
 
 
-PEERDIR(contrib/crates/simd-adler32-0.3.10)
+PEERDIR(
+    contrib/crates/simd-adler32-0.3.10
+)
+
+CRATE_INPUTS(
+    tests/input-chunking-sensitivity-example1.zz
+    tests/input-chunking-sensitivity-example2.zz
+    tests/input-chunking-sensitivity-example3.zz
+)
+
+CRATE_SOURCES(
+    src/compress.rs
+    src/decompress.rs
+    src/decompress/tests/test_utils.rs
+    src/huffman.rs
+    src/lib.rs
+    src/tables.rs
+)
 
 END()

@@ -30,20 +30,29 @@ CRATE_FEATURES(
     all
 )
 
-IF (_RUST_TARGET == "aarch64-apple-darwin" OR _RUST_TARGET == "aarch64-unknown-linux-gnu" OR _RUST_TARGET == "aarch64-unknown-linux-musl" OR _RUST_TARGET == "x86_64-apple-darwin" OR _RUST_TARGET == "x86_64-unknown-linux-gnu" OR _RUST_TARGET == "x86_64-unknown-linux-musl")
+IF (OS_DARWIN AND ARCH_ARM64 OR OS_LINUX AND ARCH_AARCH64 AND _RUST_MODE == "host" OR OS_LINUX AND ARCH_AARCH64 AND NOT MUSL OR OS_LINUX AND ARCH_AARCH64 AND _RUST_MODE != "host" AND MUSL OR OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_X86_64 AND _RUST_MODE == "host" OR OS_LINUX AND ARCH_X86_64 AND NOT MUSL OR OS_LINUX AND ARCH_X86_64 AND _RUST_MODE != "host" AND MUSL)
     PEERDIR(
-        contrib/crates/libc-0.2.189
-    )
+    contrib/crates/libc-0.2.191
+)
 
-ELSEIF (_RUST_TARGET == "x86_64-pc-windows-msvc")
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
     PEERDIR(
-        contrib/crates/windows-sys-0.61.2
-    )
+    contrib/crates/windows-sys-0.61.2
+)
 
 ENDIF()
 
 LICENSE("MIT OR Apache-2.0")
 VERSION(0.6.5)
 ORIGINAL_SOURCE(https://static.crates.io/crates/socket2/socket2-0.6.5.crate)
+
+CRATE_SOURCES(
+    src/lib.rs
+    src/sockaddr.rs
+    src/socket.rs
+    src/sockref.rs
+    src/sys/unix.rs
+    src/sys/windows.rs
+)
 
 END()

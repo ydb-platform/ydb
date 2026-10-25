@@ -28,4 +28,11 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.9.5)
 ORIGINAL_SOURCE(https://static.crates.io/crates/version_check/version_check-0.9.5.crate)
 
+CRATE_SOURCES(
+    src/channel.rs
+    src/date.rs
+    src/lib.rs
+    src/version.rs
+)
+
 END()

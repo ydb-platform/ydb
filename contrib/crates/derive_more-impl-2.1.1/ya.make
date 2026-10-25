@@ -108,4 +108,46 @@ PEERDIR(
     contrib/crates/unicode-xid-0.2.6
 )
 
+CRATE_INPUTS(
+    README.md
+)
+
+CRATE_SOURCES(
+    src/as/mod.rs
+    src/as/mut.rs
+    src/as/ref.rs
+    src/cmp/eq.rs
+    src/cmp/mod.rs
+    src/cmp/partial_eq.rs
+    src/constructor.rs
+    src/deref.rs
+    src/deref_mut.rs
+    src/error.rs
+    src/fmt/debug.rs
+    src/fmt/display.rs
+    src/fmt/mod.rs
+    src/fmt/parsing.rs
+    src/from.rs
+    src/from_str.rs
+    src/index.rs
+    src/index_mut.rs
+    src/into.rs
+    src/into_iterator.rs
+    src/is_variant.rs
+    src/lib.rs
+    src/not_like.rs
+    src/ops/add.rs
+    src/ops/add_assign.rs
+    src/ops/mod.rs
+    src/ops/mul.rs
+    src/ops/mul_assign.rs
+    src/parsing.rs
+    src/sum_like.rs
+    src/try_from.rs
+    src/try_into.rs
+    src/try_unwrap.rs
+    src/unwrap.rs
+    src/utils.rs
+)
+
 END()

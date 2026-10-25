@@ -23,4 +23,8 @@ LICENSE("Apache-2.0 OR MIT")
 VERSION(1.1.2)
 ORIGINAL_SOURCE(https://static.crates.io/crates/atomic-waker/atomic-waker-1.1.2.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 END()

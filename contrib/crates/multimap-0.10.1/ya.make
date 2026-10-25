@@ -27,4 +27,10 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.10.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/multimap/multimap-0.10.1.crate)
 
+CRATE_SOURCES(
+    src/entry.rs
+    src/lib.rs
+    src/serde.rs
+)
+
 END()

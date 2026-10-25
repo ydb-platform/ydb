@@ -24,4 +24,8 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.3.2)
 ORIGINAL_SOURCE(https://static.crates.io/crates/foreign-types/foreign-types-0.3.2.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 END()

@@ -27,4 +27,9 @@ CRATE_FEATURES(
     std
 )
 
+CRATE_SOURCES(
+    src/io.rs
+    src/lib.rs
+)
+
 END()

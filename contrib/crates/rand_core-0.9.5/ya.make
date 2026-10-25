@@ -40,4 +40,12 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.9.5)
 ORIGINAL_SOURCE(https://static.crates.io/crates/rand_core/rand_core-0.9.5.crate)
 
+CRATE_SOURCES(
+    src/block.rs
+    src/impls.rs
+    src/le.rs
+    src/lib.rs
+    src/os.rs
+)
+
 END()

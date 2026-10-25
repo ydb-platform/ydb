@@ -35,4 +35,17 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(1.0.14)
 ORIGINAL_SOURCE(https://static.crates.io/crates/anstyle/anstyle-1.0.14.crate)
 
+CRATE_INPUTS(
+    README.md
+)
+
+CRATE_SOURCES(
+    src/color.rs
+    src/effect.rs
+    src/lib.rs
+    src/macros.rs
+    src/reset.rs
+    src/style.rs
+)
+
 END()

@@ -19,6 +19,8 @@ CRATE_INPUTS(
 CRATE_FLAGS(--cap-lints=allow)
 
 
-PEERDIR(contrib/crates/objc-0.2.7)
+PEERDIR(
+    contrib/crates/objc-0.2.7
+)
 
 END()

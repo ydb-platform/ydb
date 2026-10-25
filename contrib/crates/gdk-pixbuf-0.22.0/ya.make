@@ -42,16 +42,18 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 PEERDIR(
     contrib/crates/gdk-pixbuf-sys-0.22.0
     contrib/crates/gio-0.22.1
     contrib/crates/glib-0.22.0
-    contrib/crates/libc-0.2.189
+    contrib/crates/libc-0.2.191
 )
+
 CRATE_PROC_MACROS(
-    contrib/crates/futures-macro-0.3.33
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/futures-macro-0.3.34
     contrib/crates/glib-macros-0.22.0
+    contrib/crates/serde_derive-1.0.229
 )
 
 END()

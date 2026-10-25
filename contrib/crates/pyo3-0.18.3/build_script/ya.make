@@ -195,4 +195,108 @@ LICENSE("Apache-2.0")
 VERSION(0.18.3)
 ORIGINAL_SOURCE(https://static.crates.io/crates/pyo3/pyo3-0.18.3.crate)
 
+CRATE_INPUTS(
+    ../assets/script.py
+    ../guide/pyclass_parameters.md
+)
+
+CRATE_SOURCES(
+    ../src/buffer.rs
+    ../src/callback.rs
+    ../src/conversion.rs
+    ../src/conversions/anyhow.rs
+    ../src/conversions/chrono.rs
+    ../src/conversions/eyre.rs
+    ../src/conversions/hashbrown.rs
+    ../src/conversions/indexmap.rs
+    ../src/conversions/mod.rs
+    ../src/conversions/num_bigint.rs
+    ../src/conversions/num_complex.rs
+    ../src/conversions/serde.rs
+    ../src/conversions/std/array.rs
+    ../src/conversions/std/map.rs
+    ../src/conversions/std/mod.rs
+    ../src/conversions/std/num.rs
+    ../src/conversions/std/osstr.rs
+    ../src/conversions/std/path.rs
+    ../src/conversions/std/set.rs
+    ../src/conversions/std/slice.rs
+    ../src/conversions/std/string.rs
+    ../src/conversions/std/vec.rs
+    ../src/derive_utils.rs
+    ../src/err/err_state.rs
+    ../src/err/impls.rs
+    ../src/err/mod.rs
+    ../src/exceptions.rs
+    ../src/ffi/mod.rs
+    ../src/ffi/tests.rs
+    ../src/gil.rs
+    ../src/impl_.rs
+    ../src/impl_/deprecations.rs
+    ../src/impl_/extract_argument.rs
+    ../src/impl_/freelist.rs
+    ../src/impl_/frompyobject.rs
+    ../src/impl_/not_send.rs
+    ../src/impl_/panic.rs
+    ../src/impl_/pycell.rs
+    ../src/impl_/pyclass.rs
+    ../src/impl_/pyclass/lazy_type_object.rs
+    ../src/impl_/pyfunction.rs
+    ../src/impl_/pymethods.rs
+    ../src/impl_/pymodule.rs
+    ../src/impl_/trampoline.rs
+    ../src/inspect/mod.rs
+    ../src/inspect/types.rs
+    ../src/instance.rs
+    ../src/internal_tricks.rs
+    ../src/lib.rs
+    ../src/macros.rs
+    ../src/marker.rs
+    ../src/marshal.rs
+    ../src/panic.rs
+    ../src/prelude.rs
+    ../src/pycell.rs
+    ../src/pycell/impl_.rs
+    ../src/pyclass.rs
+    ../src/pyclass/create_type_object.rs
+    ../src/pyclass/gc.rs
+    ../src/pyclass_init.rs
+    ../src/sync.rs
+    ../src/test_hygiene/misc.rs
+    ../src/test_hygiene/mod.rs
+    ../src/test_hygiene/pyclass.rs
+    ../src/test_hygiene/pyfunction.rs
+    ../src/test_hygiene/pymethods.rs
+    ../src/test_hygiene/pymodule.rs
+    ../src/type_object.rs
+    ../src/types/any.rs
+    ../src/types/boolobject.rs
+    ../src/types/bytearray.rs
+    ../src/types/bytes.rs
+    ../src/types/capsule.rs
+    ../src/types/code.rs
+    ../src/types/complex.rs
+    ../src/types/datetime.rs
+    ../src/types/dict.rs
+    ../src/types/floatob.rs
+    ../src/types/frame.rs
+    ../src/types/frozenset.rs
+    ../src/types/function.rs
+    ../src/types/iterator.rs
+    ../src/types/list.rs
+    ../src/types/mapping.rs
+    ../src/types/mod.rs
+    ../src/types/module.rs
+    ../src/types/num.rs
+    ../src/types/pysuper.rs
+    ../src/types/sequence.rs
+    ../src/types/set.rs
+    ../src/types/slice.rs
+    ../src/types/string.rs
+    ../src/types/traceback.rs
+    ../src/types/tuple.rs
+    ../src/types/typeobject.rs
+    ../src/version.rs
+)
+
 END()

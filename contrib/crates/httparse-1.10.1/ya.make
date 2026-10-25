@@ -43,6 +43,18 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(1.10.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/httparse/httparse-1.10.1.crate)
 
+CRATE_SOURCES(
+    src/iter.rs
+    src/lib.rs
+    src/macros.rs
+    src/simd/avx2.rs
+    src/simd/mod.rs
+    src/simd/neon.rs
+    src/simd/runtime.rs
+    src/simd/sse42.rs
+    src/simd/swar.rs
+)
+
 END()
 
 RECURSE(build_script)

@@ -22,10 +22,18 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 PEERDIR(
     contrib/crates/phf_shared-0.13.1
-    contrib/crates/rand-0.8.5
+    contrib/crates/rand-0.8.8
+)
+
+CRATE_SOURCES(
+    src/bin/gen_hash_test.rs
+    src/lib.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/zerocopy-derive-0.8.63
 )
 
 END()

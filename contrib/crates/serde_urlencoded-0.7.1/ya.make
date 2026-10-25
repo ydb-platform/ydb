@@ -39,6 +39,16 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.7.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/serde_urlencoded/serde_urlencoded-0.7.1.crate)
 
+CRATE_SOURCES(
+    src/de.rs
+    src/lib.rs
+    src/ser/key.rs
+    src/ser/mod.rs
+    src/ser/pair.rs
+    src/ser/part.rs
+    src/ser/value.rs
+)
+
 CRATE_PROC_MACROS(
     contrib/crates/serde_derive-1.0.229
 )

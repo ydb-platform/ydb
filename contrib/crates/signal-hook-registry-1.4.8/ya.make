@@ -25,11 +25,17 @@ CRATE_FLAGS(--cap-lints=allow)
 
 PEERDIR(
     contrib/crates/errno-0.3.14
-    contrib/crates/libc-0.2.189
+    contrib/crates/libc-0.2.191
 )
 
 LICENSE("MIT OR Apache-2.0")
 VERSION(1.4.8)
 ORIGINAL_SOURCE(https://static.crates.io/crates/signal-hook-registry/signal-hook-registry-1.4.8.crate)
+
+CRATE_SOURCES(
+    src/half_lock.rs
+    src/lib.rs
+    src/vec_map.rs
+)
 
 END()

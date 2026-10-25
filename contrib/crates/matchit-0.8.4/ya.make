@@ -36,4 +36,17 @@ LICENSE("MIT AND BSD-3-Clause")
 VERSION(0.8.4)
 ORIGINAL_SOURCE(https://static.crates.io/crates/matchit/matchit-0.8.4.crate)
 
+CRATE_INPUTS(
+    README.md
+)
+
+CRATE_SOURCES(
+    src/error.rs
+    src/escape.rs
+    src/lib.rs
+    src/params.rs
+    src/router.rs
+    src/tree.rs
+)
+
 END()

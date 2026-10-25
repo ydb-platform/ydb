@@ -28,4 +28,12 @@ LICENSE("MIT")
 VERSION(0.3.3)
 ORIGINAL_SOURCE(https://static.crates.io/crates/tower-layer/tower-layer-0.3.3.crate)
 
+CRATE_SOURCES(
+    src/identity.rs
+    src/layer_fn.rs
+    src/lib.rs
+    src/stack.rs
+    src/tuple.rs
+)
+
 END()

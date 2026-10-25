@@ -28,4 +28,9 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.3.17)
 ORIGINAL_SOURCE(https://static.crates.io/crates/mime/mime-0.3.17.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+    src/parse.rs
+)
+
 END()

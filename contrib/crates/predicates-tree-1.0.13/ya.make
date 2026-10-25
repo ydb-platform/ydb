@@ -27,4 +27,12 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(1.0.13)
 ORIGINAL_SOURCE(https://static.crates.io/crates/predicates-tree/predicates-tree-1.0.13.crate)
 
+CRATE_INPUTS(
+    README.md
+)
+
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 END()

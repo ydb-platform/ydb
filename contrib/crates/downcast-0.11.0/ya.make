@@ -29,4 +29,8 @@ LICENSE("MIT")
 VERSION(0.11.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/downcast/downcast-0.11.0.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 END()

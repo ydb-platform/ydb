@@ -1,0 +1,64 @@
+use core::ptr::NonNull;
+
+use crate::ffi::{self, Py_ssize_t, PY_SSIZE_T_MAX};
+
+macro_rules! pyo3_exception {
+    ($doc: expr, $name: ident, $base: ty) => {
+        #[doc = $doc]
+        #[repr(transparent)]
+        pub struct $name($crate::PyAny);
+
+        $crate::impl_exception_boilerplate!($name);
+
+        $crate::create_exception_type_object!(pyo3_runtime, $name, $base, Some($doc));
+    };
+}
+
+/// Convert an usize index into a Py_ssize_t index, clamping overflow to
+/// PY_SSIZE_T_MAX.
+pub(crate) fn get_ssize_index(index: usize) -> Py_ssize_t {
+    index.min(PY_SSIZE_T_MAX as usize) as Py_ssize_t
+}
+
+// TODO: use ptr::fn_addr_eq on MSRV 1.85
+pub(crate) fn clear_eq(f: Option<ffi::inquiry>, g: ffi::inquiry) -> bool {
+    #[cfg(fn_ptr_eq)]
+    #[expect(clippy::incompatible_msrv, reason = "guarded by cfg(fn_ptr_eq)")]
+    {
+        let Some(f) = f else { return false };
+        core::ptr::fn_addr_eq(f, g)
+    }
+
+    #[cfg(not(fn_ptr_eq))]
+    {
+        f == Some(g)
+    }
+}
+
+// TODO: use ptr::fn_addr_eq on MSRV 1.85
+pub(crate) fn traverse_eq(f: Option<ffi::traverseproc>, g: ffi::traverseproc) -> bool {
+    #[cfg(fn_ptr_eq)]
+    #[expect(clippy::incompatible_msrv, reason = "guarded by cfg(fn_ptr_eq)")]
+    {
+        let Some(f) = f else { return false };
+        core::ptr::fn_addr_eq(f, g)
+    }
+
+    #[cfg(not(fn_ptr_eq))]
+    {
+        f == Some(g)
+    }
+}
+
+// TODO: use Box::into_non_null when stabilized
+pub(crate) fn box_into_non_null<T>(b: Box<T>) -> NonNull<T> {
+    // SAFETY: `Box::into_raw` guarantees an non-null pointer
+    unsafe { NonNull::new_unchecked(Box::into_raw(b)) }
+}
+
+/// Replacement for the unstable `<*mut [T; N]>::as_mut_ptr` method, which avoids
+/// possibility of type getting lost from using e.g. `.cast()` to change array
+/// type to point to the data.
+pub(crate) const fn array_ptr_as_mut<T, const N: usize>(ptr: *mut [T; N]) -> *mut T {
+    ptr.cast()
+}

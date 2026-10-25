@@ -40,6 +40,20 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.3.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/windows-numerics/windows-numerics-0.3.1.crate)
 
+CRATE_INPUTS(
+    readme.md
+)
+
+CRATE_SOURCES(
+    src/bindings.rs
+    src/lib.rs
+    src/matrix3x2.rs
+    src/matrix4x4.rs
+    src/vector2.rs
+    src/vector3.rs
+    src/vector4.rs
+)
+
 CRATE_PROC_MACROS(
     contrib/crates/windows-implement-0.60.2
     contrib/crates/windows-interface-0.59.3

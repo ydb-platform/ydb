@@ -30,4 +30,8 @@ LICENSE("Apache-2.0")
 VERSION(0.18.3)
 ORIGINAL_SOURCE(https://static.crates.io/crates/pyo3-macros/pyo3-macros-0.18.3.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 END()

@@ -28,24 +28,24 @@ CRATE_INPUTS(
 CRATE_FLAGS(--cap-lints=allow)
 
 
-IF (_RUST_TARGET == "x86_64-unknown-linux-gnu" OR _RUST_TARGET == "x86_64-unknown-linux-musl" OR _RUST_TARGET == "aarch64-unknown-linux-gnu" OR _RUST_TARGET == "aarch64-unknown-linux-musl")
+IF (OS_LINUX AND ARCH_X86_64 AND _RUST_MODE == "host" OR OS_LINUX AND ARCH_X86_64 AND NOT MUSL OR OS_LINUX AND ARCH_X86_64 AND _RUST_MODE != "host" AND MUSL OR OS_LINUX AND ARCH_AARCH64 AND _RUST_MODE == "host" OR OS_LINUX AND ARCH_AARCH64 AND NOT MUSL OR OS_LINUX AND ARCH_AARCH64 AND _RUST_MODE != "host" AND MUSL)
     PEERDIR(
-        contrib/crates/lazy_static-1.5.0
-        contrib/crates/regex-1.13.1
-    )
-ELSEIF (_RUST_TARGET == "x86_64-apple-darwin" OR _RUST_TARGET == "aarch64-apple-darwin")
+    contrib/crates/lazy_static-1.5.1
+    contrib/crates/regex-1.13.1
+)
+ELSEIF (OS_DARWIN AND ARCH_X86_64 OR OS_DARWIN AND ARCH_ARM64)
     PEERDIR(
-        contrib/crates/lazy_static-1.5.0
-        contrib/crates/objc-0.2.7
-        contrib/crates/objc-foundation-0.1.1
-        contrib/crates/regex-1.13.1
-    )
-ELSEIF (_RUST_TARGET == "x86_64-pc-windows-msvc")
+    contrib/crates/lazy_static-1.5.1
+    contrib/crates/objc-0.2.7
+    contrib/crates/objc-foundation-0.1.1
+    contrib/crates/regex-1.13.1
+)
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
     PEERDIR(
-        contrib/crates/lazy_static-1.5.0
-        contrib/crates/regex-1.13.1
-        contrib/crates/winapi-0.3.9
-    )
+    contrib/crates/lazy_static-1.5.1
+    contrib/crates/regex-1.13.1
+    contrib/crates/winapi-0.3.9
+)
 ENDIF()
 
 END()

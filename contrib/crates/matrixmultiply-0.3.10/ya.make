@@ -57,7 +57,53 @@ CRATE_FEATURES(
     std
 )
 CRATE_BUILD_SCRIPT(contrib/crates/matrixmultiply-0.3.10/build_script)
-PEERDIR(contrib/crates/rawpointer-0.2.1)
+PEERDIR(
+    contrib/crates/rawpointer-0.2.1
+)
+
+CRATE_FEATURES(
+    cgemm
+    num_cpus
+    once_cell
+    thread-tree
+    threading
+)
+
+PEERDIR(
+    contrib/crates/num_cpus-1.17.0
+    contrib/crates/once_cell-1.21.4
+    contrib/crates/thread-tree-0.3.3
+)
+
+CRATE_SOURCES(
+    testdefs/testdefs.rs
+)
+
+CRATE_SOURCES(
+    src/aarch64/macros.rs
+    src/aarch64/mod.rs
+    src/aligned_alloc.rs
+    src/archmacros.rs
+    src/archparam.rs
+    src/archparam_defaults.rs
+    src/cgemm_common.rs
+    src/cgemm_kernel.rs
+    src/constparse.rs
+    src/debugmacros.rs
+    src/dgemm_kernel.rs
+    src/gemm.rs
+    src/kernel.rs
+    src/lib.rs
+    src/loopmacros.rs
+    src/packing.rs
+    src/ptr.rs
+    src/sgemm_kernel.rs
+    src/threading.rs
+    src/util.rs
+    src/x86/macros.rs
+    src/x86/mod.rs
+    src/zgemm_kernel.rs
+)
 
 END()
 

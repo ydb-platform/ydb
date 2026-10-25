@@ -34,4 +34,11 @@ LICENSE("ISC")
 VERSION(0.9.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/untrusted/untrusted-0.9.0.crate)
 
+CRATE_SOURCES(
+    src/input.rs
+    src/lib.rs
+    src/no_panic.rs
+    src/reader.rs
+)
+
 END()

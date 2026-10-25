@@ -52,15 +52,15 @@ CRATE_FEATURES(
 )
 
 PEERDIR(
-    contrib/crates/http-1.4.2
+    contrib/crates/http-1.5.0
     contrib/crates/opentelemetry-0.32.0
     contrib/crates/opentelemetry-http-0.32.0
     contrib/crates/opentelemetry-proto-0.32.0
     contrib/crates/opentelemetry_sdk-0.32.1
     contrib/crates/prost-0.14.4
     contrib/crates/reqwest-0.13.4
-    contrib/crates/thiserror-2.0.19
-    contrib/crates/tokio-1.53.1
+    contrib/crates/thiserror-2.0.21
+    contrib/crates/tokio-1.54.1
     contrib/crates/tonic-0.14.6
     contrib/crates/tonic-types-0.14.6
 )
@@ -70,18 +70,20 @@ VERSION(0.32.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/opentelemetry-otlp/opentelemetry-otlp-0.32.0.crate)
 
 CRATE_PROC_MACROS(
-    contrib/crates/async-trait-0.1.91
-    contrib/crates/displaydoc-0.2.6
-    contrib/crates/futures-macro-0.3.33
+    contrib/crates/async-trait-0.1.92
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/displaydoc-0.2.7
+    contrib/crates/futures-macro-0.3.34
     contrib/crates/pin-project-internal-1.1.13
     contrib/crates/prost-derive-0.14.4
     contrib/crates/serde_derive-1.0.229
-    contrib/crates/thiserror-impl-2.0.19
-    contrib/crates/tokio-macros-2.7.1
+    contrib/crates/thiserror-impl-2.0.21
+    contrib/crates/tokio-macros-2.7.2
     contrib/crates/tracing-attributes-0.1.31
-    contrib/crates/yoke-derive-0.8.2
-    contrib/crates/zerofrom-derive-0.1.7
-    contrib/crates/zerovec-derive-0.11.3
+    contrib/crates/yoke-derive-0.8.4
+    contrib/crates/zerocopy-derive-0.8.63
+    contrib/crates/zerofrom-derive-0.1.8
+    contrib/crates/zerovec-derive-0.11.7
 )
 
 END()

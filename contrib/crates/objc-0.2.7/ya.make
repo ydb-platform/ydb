@@ -43,6 +43,8 @@ CRATE_INPUTS(
 CRATE_FLAGS(--cap-lints=allow)
 
 
-PEERDIR(contrib/crates/malloc_buf-0.0.6)
+PEERDIR(
+    contrib/crates/malloc_buf-0.0.6
+)
 
 END()

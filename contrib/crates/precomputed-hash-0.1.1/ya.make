@@ -20,4 +20,8 @@ CRATE_FLAGS(--cap-lints=allow)
 
 
 
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 END()

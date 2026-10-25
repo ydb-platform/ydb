@@ -117,13 +117,13 @@ PEERDIR(
     contrib/crates/anyhow-1.0.104
     contrib/crates/backon-1.6.0
     contrib/crates/bon-3.9.3
-    contrib/crates/crossbeam-channel-0.5.16
-    contrib/crates/crossbeam-utils-0.8.22
+    contrib/crates/crossbeam-channel-0.5.17
+    contrib/crates/crossbeam-utils-0.8.23
     contrib/crates/derive_more-2.1.1
     contrib/crates/enum-iterator-2.3.0
-    contrib/crates/flate2-1.1.9
-    contrib/crates/futures-0.3.33
-    contrib/crates/futures-util-0.3.33
+    contrib/crates/flate2-1.1.10
+    contrib/crates/futures-0.3.34
+    contrib/crates/futures-util-0.3.34
     contrib/crates/gethostname-1.1.0
     contrib/crates/itertools-0.14.0
     contrib/crates/lru-0.18.1
@@ -132,59 +132,59 @@ PEERDIR(
     contrib/crates/pid-4.0.0
     contrib/crates/pin-project-1.1.13
     contrib/crates/prost-0.14.4
-    contrib/crates/prost-wkt-types-0.7.1
-    contrib/crates/rand-0.10.2
+    contrib/crates/prost-wkt-types-0.7.2
+    contrib/crates/rand-0.10.3
     contrib/crates/reqwest-0.13.4
     contrib/crates/serde-1.0.229
-    contrib/crates/serde_json-1.0.151
-    contrib/crates/siphasher-1.0.3
+    contrib/crates/serde_json-1.0.154
+    contrib/crates/siphasher-1.0.4
     contrib/crates/slotmap-1.1.1
     contrib/crates/sysinfo-0.38.4
     contrib/crates/tar-0.4.46
-    contrib/crates/thiserror-2.0.19
-    contrib/crates/tokio-1.53.1
+    contrib/crates/thiserror-2.0.21
+    contrib/crates/tokio-1.54.1
     contrib/crates/tokio-stream-0.1.19
-    contrib/crates/tokio-util-0.7.19
+    contrib/crates/tokio-util-0.7.20
     contrib/crates/tonic-0.14.6
     contrib/crates/tracing-0.1.44
     contrib/crates/url-2.5.8
-    contrib/crates/uuid-1.24.0
+    contrib/crates/uuid-1.29.0
     contrib/crates/zip-8.6.0
     contrib/python/temporalio/temporalio/bridge/sdk-core/crates/client
     contrib/python/temporalio/temporalio/bridge/sdk-core/crates/common
 )
 
-CRATE_DEPENDENCY_ALIAS(prost_types contrib/crates/prost-wkt-types-0.7.1)
+CRATE_DEPENDENCY_ALIAS(prost_types contrib/crates/prost-wkt-types-0.7.2)
 LICENSE(MIT)
 VERSION(0.6.0)
 
 CRATE_PROC_MACROS(
-    contrib/crates/async-trait-0.1.91
+    contrib/crates/async-trait-0.1.92
     contrib/crates/bon-macros-3.9.3
+    contrib/crates/bytemuck_derive-1.12.1
     contrib/crates/darling_macro-0.23.0
     contrib/crates/derive_more-impl-2.1.1
-    contrib/crates/displaydoc-0.2.6
-    contrib/crates/displaydoc-0.2.6
+    contrib/crates/displaydoc-0.2.7
     contrib/crates/enum-iterator-derive-1.5.0
     contrib/crates/enum_dispatch-0.3.13
-    contrib/crates/futures-macro-0.3.33
+    contrib/crates/futures-macro-0.3.34
     contrib/crates/mockall_derive-0.14.0
     contrib/crates/pin-project-internal-1.1.13
     contrib/crates/prost-derive-0.14.4
     contrib/crates/rustversion-1.0.23
     contrib/crates/serde_derive-1.0.229
-    contrib/crates/thiserror-impl-2.0.19
-    contrib/crates/tokio-macros-2.7.1
+    contrib/crates/thiserror-impl-1.0.69
+    contrib/crates/thiserror-impl-2.0.21
+    contrib/crates/tokio-macros-2.7.2
     contrib/crates/tracing-attributes-0.1.31
     contrib/crates/typetag-impl-0.2.23
+    contrib/crates/valuable-derive-0.1.1
     contrib/crates/windows-implement-0.60.2
     contrib/crates/windows-interface-0.59.3
-    contrib/crates/yoke-derive-0.8.2
-    contrib/crates/yoke-derive-0.8.2
-    contrib/crates/zerofrom-derive-0.1.7
-    contrib/crates/zerofrom-derive-0.1.7
-    contrib/crates/zerovec-derive-0.11.3
-    contrib/crates/zerovec-derive-0.11.3
+    contrib/crates/yoke-derive-0.8.4
+    contrib/crates/zerocopy-derive-0.8.63
+    contrib/crates/zerofrom-derive-0.1.8
+    contrib/crates/zerovec-derive-0.11.7
     contrib/python/temporalio/temporalio/bridge/sdk-core/crates/macros
 )
 

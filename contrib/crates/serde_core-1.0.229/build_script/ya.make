@@ -52,4 +52,30 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(1.0.229)
 ORIGINAL_SOURCE(https://static.crates.io/crates/serde_core/serde_core-1.0.229.crate)
 
+CRATE_FEATURES(
+    rc
+)
+
+CRATE_SOURCES(
+    ../src/crate_root.rs
+    ../src/de/ignored_any.rs
+    ../src/de/impls.rs
+    ../src/de/mod.rs
+    ../src/de/value.rs
+    ../src/format.rs
+    ../src/lib.rs
+    ../src/macros.rs
+    ../src/private/content.rs
+    ../src/private/doc.rs
+    ../src/private/mod.rs
+    ../src/private/seed.rs
+    ../src/private/size_hint.rs
+    ../src/private/string.rs
+    ../src/ser/fmt.rs
+    ../src/ser/impls.rs
+    ../src/ser/impossible.rs
+    ../src/ser/mod.rs
+    ../src/std_error.rs
+)
+
 END()

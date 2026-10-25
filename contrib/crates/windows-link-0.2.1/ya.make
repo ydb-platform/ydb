@@ -24,4 +24,12 @@ CRATE_FLAGS(--cap-lints=allow)
 
 
 
+CRATE_INPUTS(
+    readme.md
+)
+
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 END()

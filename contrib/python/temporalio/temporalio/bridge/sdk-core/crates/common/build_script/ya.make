@@ -50,6 +50,7 @@ VERSION(0.6.0)
 
 CRATE_PROC_MACROS(
     contrib/crates/prost-derive-0.14.4
+    contrib/crates/serde_derive-1.0.229
 )
 
 END()

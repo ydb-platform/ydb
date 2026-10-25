@@ -66,10 +66,10 @@ CRATE_FEATURES(
 
 PEERDIR(
     contrib/crates/serde_core-1.0.229
-    contrib/crates/serde_spanned-1.1.1
+    contrib/crates/serde_spanned-1.1.2
     contrib/crates/toml_datetime-1.1.1+spec-1.1.0
-    contrib/crates/toml_parser-1.1.2+spec-1.1.0
-    contrib/crates/toml_writer-1.1.2+spec-1.1.0
+    contrib/crates/toml_parser-1.1.5+spec-1.1.0
+    contrib/crates/toml_writer-1.1.3+spec-1.1.0
     contrib/crates/winnow-1.0.4
 )
 

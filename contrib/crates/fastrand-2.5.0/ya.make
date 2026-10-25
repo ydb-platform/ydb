@@ -33,4 +33,9 @@ LICENSE("Apache-2.0 OR MIT")
 VERSION(2.5.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/fastrand/fastrand-2.5.0.crate)
 
+CRATE_SOURCES(
+    src/global_rng.rs
+    src/lib.rs
+)
+
 END()

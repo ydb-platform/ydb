@@ -38,4 +38,17 @@ LICENSE("bzip2-1.0.6")
 VERSION(0.2.5)
 ORIGINAL_SOURCE(https://static.crates.io/crates/libbz2-rs-sys/libbz2-rs-sys-0.2.5.crate)
 
+CRATE_SOURCES(
+    src/allocator.rs
+    src/blocksort.rs
+    src/bzlib.rs
+    src/compress.rs
+    src/crctable.rs
+    src/decompress.rs
+    src/high_level.rs
+    src/huffman.rs
+    src/lib.rs
+    src/randtable.rs
+)
+
 END()

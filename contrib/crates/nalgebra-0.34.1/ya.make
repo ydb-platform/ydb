@@ -235,7 +235,6 @@ CRATE_INPUTS(
 
 CRATE_FLAGS(--cap-lints=allow)
 
-
 CRATE_FEATURES(
     default
     macros
@@ -250,11 +249,14 @@ PEERDIR(
     contrib/crates/num-rational-0.4.2
     contrib/crates/num-traits-0.2.19
     contrib/crates/simba-0.9.1
-    contrib/crates/typenum-1.19.0
+    contrib/crates/typenum-1.20.1
 )
+
 CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
     contrib/crates/nalgebra-macros-0.3.0
     contrib/crates/paste-1.0.15
+    contrib/crates/serde_derive-1.0.229
 )
 
 END()

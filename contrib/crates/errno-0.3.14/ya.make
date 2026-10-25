@@ -35,15 +35,26 @@ CRATE_FEATURES(
 )
 
 PEERDIR(
-    contrib/crates/libc-0.2.189
+    contrib/crates/libc-0.2.191
 )
 
 LICENSE("MIT OR Apache-2.0")
 VERSION(0.3.14)
 ORIGINAL_SOURCE(https://static.crates.io/crates/errno/errno-0.3.14.crate)
 
-IF (_RUST_TARGET == "x86_64-pc-windows-msvc")
-    PEERDIR(contrib/crates/windows-sys-0.61.2)
+IF (OS_WINDOWS AND ARCH_X86_64)
+    PEERDIR(
+    contrib/crates/windows-sys-0.61.2
+)
 ENDIF()
+
+CRATE_SOURCES(
+    src/hermit.rs
+    src/lib.rs
+    src/sys.rs
+    src/unix.rs
+    src/wasi.rs
+    src/windows.rs
+)
 
 END()

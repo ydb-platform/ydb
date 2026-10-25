@@ -22,4 +22,8 @@ LICENSE("BSD-3-Clause")
 VERSION(2.6.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/subtle/subtle-2.6.1.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 END()

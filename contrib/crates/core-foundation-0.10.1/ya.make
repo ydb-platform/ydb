@@ -47,11 +47,35 @@ CRATE_FEATURES(
 
 PEERDIR(
     contrib/crates/core-foundation-sys-0.8.7
-    contrib/crates/libc-0.2.189
+    contrib/crates/libc-0.2.191
 )
 
 LICENSE("MIT OR Apache-2.0")
 VERSION(0.10.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/core-foundation/core-foundation-0.10.1.crate)
+
+CRATE_SOURCES(
+    src/array.rs
+    src/attributed_string.rs
+    src/base.rs
+    src/boolean.rs
+    src/bundle.rs
+    src/characterset.rs
+    src/data.rs
+    src/date.rs
+    src/dictionary.rs
+    src/error.rs
+    src/filedescriptor.rs
+    src/lib.rs
+    src/mach_port.rs
+    src/number.rs
+    src/propertylist.rs
+    src/runloop.rs
+    src/set.rs
+    src/string.rs
+    src/timezone.rs
+    src/url.rs
+    src/uuid.rs
+)
 
 END()

@@ -73,12 +73,12 @@ CRATE_FEATURES(
 
 PEERDIR(
     contrib/crates/bzip2-0.6.1
-    contrib/crates/crc32fast-1.5.0
-    contrib/crates/flate2-1.1.9
-    contrib/crates/indexmap-2.14.0
+    contrib/crates/crc32fast-1.5.3
+    contrib/crates/flate2-1.1.10
+    contrib/crates/indexmap-2.14.2
     contrib/crates/memchr-2.8.3
     contrib/crates/typed-path-0.12.3
-    contrib/crates/zopfli-0.8.3
+    contrib/crates/zopfli-0.8.4
     contrib/crates/zstd-0.13.3
 )
 

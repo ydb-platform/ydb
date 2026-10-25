@@ -50,6 +50,36 @@ CRATE_FEATURES(
 )
 CRATE_BUILD_SCRIPT(contrib/crates/num-traits-0.2.19/build_script)
 
+CRATE_FEATURES(
+    libm
+)
+
+PEERDIR(
+    contrib/crates/libm-0.2.16
+)
+
+CRATE_SOURCES(
+    src/bounds.rs
+    src/cast.rs
+    src/float.rs
+    src/identities.rs
+    src/int.rs
+    src/lib.rs
+    src/macros.rs
+    src/ops/bytes.rs
+    src/ops/checked.rs
+    src/ops/euclid.rs
+    src/ops/inv.rs
+    src/ops/mod.rs
+    src/ops/mul_add.rs
+    src/ops/overflowing.rs
+    src/ops/saturating.rs
+    src/ops/wrapping.rs
+    src/pow.rs
+    src/real.rs
+    src/sign.rs
+)
+
 END()
 
 RECURSE(build_script)

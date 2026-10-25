@@ -59,15 +59,15 @@ CRATE_FEATURES(
 )
 
 PEERDIR(
-    contrib/crates/cfg-if-1.0.4
+    contrib/crates/cfg-if-1.0.5
 )
 
-IF (_RUST_TARGET == "aarch64-apple-darwin" OR _RUST_TARGET == "aarch64-unknown-linux-gnu" OR _RUST_TARGET == "aarch64-unknown-linux-musl" OR _RUST_TARGET == "x86_64-apple-darwin" OR _RUST_TARGET == "x86_64-unknown-linux-gnu" OR _RUST_TARGET == "x86_64-unknown-linux-musl")
+IF (OS_DARWIN AND ARCH_ARM64 OR OS_LINUX AND ARCH_AARCH64 AND _RUST_MODE == "host" OR OS_LINUX AND ARCH_AARCH64 AND NOT MUSL OR OS_LINUX AND ARCH_AARCH64 AND _RUST_MODE != "host" AND MUSL OR OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_X86_64 AND _RUST_MODE == "host" OR OS_LINUX AND ARCH_X86_64 AND NOT MUSL OR OS_LINUX AND ARCH_X86_64 AND _RUST_MODE != "host" AND MUSL)
     PEERDIR(
-        contrib/crates/libc-0.2.189
-    )
+    contrib/crates/libc-0.2.191
+)
 
-ELSEIF (_RUST_TARGET == "x86_64-pc-windows-msvc")
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
 ENDIF()
 
 CRATE_BUILD_SCRIPT(contrib/crates/getrandom-0.3.4/build_script)
@@ -75,6 +75,52 @@ CRATE_BUILD_SCRIPT(contrib/crates/getrandom-0.3.4/build_script)
 LICENSE("MIT OR Apache-2.0")
 VERSION(0.3.4)
 ORIGINAL_SOURCE(https://static.crates.io/crates/getrandom/getrandom-0.3.4.crate)
+
+CRATE_FEATURES(
+    wasm_js
+)
+
+CRATE_SOURCES(
+    src/lazy.rs
+    src/util_libc.rs
+)
+
+CRATE_INPUTS(
+    README.md
+)
+
+CRATE_SOURCES(
+    src/backends.rs
+    src/backends/apple_other.rs
+    src/backends/custom.rs
+    src/backends/efi_rng.rs
+    src/backends/esp_idf.rs
+    src/backends/fuchsia.rs
+    src/backends/getentropy.rs
+    src/backends/getrandom.rs
+    src/backends/hermit.rs
+    src/backends/linux_android_with_fallback.rs
+    src/backends/linux_raw.rs
+    src/backends/netbsd.rs
+    src/backends/rdrand.rs
+    src/backends/rndr.rs
+    src/backends/sanitizer.rs
+    src/backends/solaris.rs
+    src/backends/solid.rs
+    src/backends/unsupported.rs
+    src/backends/use_file.rs
+    src/backends/vxworks.rs
+    src/backends/wasi_p1.rs
+    src/backends/wasi_p2.rs
+    src/backends/wasm_js.rs
+    src/backends/windows.rs
+    src/backends/windows_legacy.rs
+    src/error.rs
+    src/error_std_impls.rs
+    src/lib.rs
+    src/util.rs
+)
+
 
 END()
 

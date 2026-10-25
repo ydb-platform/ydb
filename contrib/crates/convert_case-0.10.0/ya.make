@@ -37,4 +37,12 @@ LICENSE("MIT")
 VERSION(0.10.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/convert_case/convert_case-0.10.0.crate)
 
+CRATE_SOURCES(
+    src/boundary.rs
+    src/case.rs
+    src/converter.rs
+    src/lib.rs
+    src/pattern.rs
+)
+
 END()

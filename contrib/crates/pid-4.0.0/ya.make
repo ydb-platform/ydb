@@ -27,4 +27,8 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(4.0.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/pid/pid-4.0.0.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 END()

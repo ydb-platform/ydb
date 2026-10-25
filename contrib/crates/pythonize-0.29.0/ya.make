@@ -26,7 +26,7 @@ CRATE_INPUTS(
 CRATE_FLAGS(--cap-lints=allow)
 
 PEERDIR(
-    contrib/crates/pyo3-0.29.0
+    contrib/crates/pyo3-0.29.2
     contrib/crates/serde-1.0.229
 )
 
@@ -35,7 +35,7 @@ VERSION(0.29.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/pythonize/pythonize-0.29.0.crate)
 
 CRATE_PROC_MACROS(
-    contrib/crates/pyo3-macros-0.29.0
+    contrib/crates/pyo3-macros-0.29.2
     contrib/crates/serde_derive-1.0.229
 )
 

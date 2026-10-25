@@ -25,4 +25,8 @@ LICENSE("MIT")
 VERSION(0.11.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/strsim/strsim-0.11.1.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+)
+
 END()

@@ -46,4 +46,24 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(0.5.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/windows-strings/windows-strings-0.5.1.crate)
 
+CRATE_INPUTS(
+    readme.md
+)
+
+CRATE_SOURCES(
+    src/bindings.rs
+    src/bstr.rs
+    src/decode.rs
+    src/hstring.rs
+    src/hstring_builder.rs
+    src/hstring_header.rs
+    src/lib.rs
+    src/literals.rs
+    src/pcstr.rs
+    src/pcwstr.rs
+    src/pstr.rs
+    src/pwstr.rs
+    src/ref_count.rs
+)
+
 END()

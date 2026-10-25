@@ -26,11 +26,17 @@ CRATE_INPUTS(
 CRATE_FLAGS(--cap-lints=allow)
 
 PEERDIR(
-    contrib/crates/cfg-if-1.0.4
+    contrib/crates/cfg-if-1.0.5
 )
 
 LICENSE("MIT OR Apache-2.0")
 VERSION(1.1.10)
 ORIGINAL_SOURCE(https://static.crates.io/crates/thread_local/thread_local-1.1.10.crate)
+
+CRATE_SOURCES(
+    src/cached.rs
+    src/lib.rs
+    src/thread_id.rs
+)
 
 END()

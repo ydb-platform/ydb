@@ -53,4 +53,35 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(3.1.4)
 ORIGINAL_SOURCE(https://static.crates.io/crates/predicates/predicates-3.1.4.crate)
 
+CRATE_INPUTS(
+    README.md
+)
+
+CRATE_SOURCES(
+    src/boolean.rs
+    src/boxed.rs
+    src/color.rs
+    src/constant.rs
+    src/float/close.rs
+    src/float/mod.rs
+    src/function.rs
+    src/iter.rs
+    src/lib.rs
+    src/name.rs
+    src/ord.rs
+    src/path/existence.rs
+    src/path/fc.rs
+    src/path/fs.rs
+    src/path/ft.rs
+    src/path/mod.rs
+    src/prelude.rs
+    src/str/adapters.rs
+    src/str/basics.rs
+    src/str/difference.rs
+    src/str/mod.rs
+    src/str/normalize.rs
+    src/str/regex.rs
+    src/utils.rs
+)
+
 END()

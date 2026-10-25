@@ -39,6 +39,7 @@ ORIGINAL_SOURCE(https://static.crates.io/crates/pbjson-build/pbjson-build-0.9.0.
 
 CRATE_PROC_MACROS(
     contrib/crates/prost-derive-0.14.4
+    contrib/crates/serde_derive-1.0.229
 )
 
 END()

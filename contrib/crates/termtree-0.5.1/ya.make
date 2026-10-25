@@ -25,4 +25,9 @@ LICENSE("MIT")
 VERSION(0.5.1)
 ORIGINAL_SOURCE(https://static.crates.io/crates/termtree/termtree-0.5.1.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+    src/tests.rs
+)
+
 END()

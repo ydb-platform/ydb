@@ -25,11 +25,21 @@ CRATE_FLAGS(--cap-lints=allow)
 
 PEERDIR(
     contrib/crates/bytes-1.12.1
-    contrib/crates/http-1.4.2
+    contrib/crates/http-1.5.0
 )
 
 LICENSE("MIT")
 VERSION(1.1.0)
 ORIGINAL_SOURCE(https://static.crates.io/crates/http-body/http-body-1.1.0.crate)
+
+CRATE_SOURCES(
+    src/frame.rs
+    src/lib.rs
+    src/size_hint.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/serde_derive-1.0.229
+)
 
 END()

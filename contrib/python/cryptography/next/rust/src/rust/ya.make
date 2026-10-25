@@ -56,8 +56,8 @@ PEERDIR(
     contrib/crates/asn1-0.15.2
     contrib/crates/foreign-types-shared-0.1.1
     contrib/crates/once_cell-1.21.4
-    contrib/crates/openssl-0.10.54
-    contrib/crates/openssl-sys-0.9.88
+    contrib/crates/openssl-0.10.81
+    contrib/crates/openssl-sys-0.9.117
     contrib/crates/ouroboros-0.15.6
     contrib/crates/pem-1.1.1
     contrib/crates/pyo3-0.18.3
@@ -68,11 +68,13 @@ PEERDIR(
 
 CRATE_PROC_MACROS(
     contrib/crates/asn1_derive-0.15.2
+    contrib/crates/bytemuck_derive-1.12.1
     contrib/crates/indoc-1.0.9
     contrib/crates/openssl-macros-0.1.1
     contrib/crates/ouroboros_macro-0.15.6
     contrib/crates/proc-macro-error-attr-1.0.4
     contrib/crates/pyo3-macros-0.18.3
+    contrib/crates/serde_derive-1.0.229
 )
 
 CRATE_BUILD_SCRIPT(contrib/python/cryptography/next/rust/src/rust/build_script)

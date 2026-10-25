@@ -28,4 +28,9 @@ CRATE_FLAGS(--cap-lints=allow)
 
 
 
+CRATE_SOURCES(
+    src/algo.rs
+    src/lib.rs
+)
+
 END()

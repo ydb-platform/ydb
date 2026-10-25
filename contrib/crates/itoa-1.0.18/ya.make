@@ -27,4 +27,9 @@ LICENSE("MIT OR Apache-2.0")
 VERSION(1.0.18)
 ORIGINAL_SOURCE(https://static.crates.io/crates/itoa/itoa-1.0.18.crate)
 
+CRATE_SOURCES(
+    src/lib.rs
+    src/u128_ext.rs
+)
+
 END()

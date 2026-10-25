@@ -88,14 +88,6 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Pin comparison sources
-      shell: bash
-      env:
-        EXPERIMENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      run: |
-        # Keep tested sources on the original experiment base as main advances.
-        git checkout --detach "$EXPERIMENT_HEAD_SHA"
-
     - name: comment-build-start
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
       shell: bash

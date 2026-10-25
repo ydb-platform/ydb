@@ -1,5 +1,6 @@
 #include "scan_gate.h"
 
+#include <ydb/core/tx/columnshard/counters/tablet_counters.h>
 #include <ydb/core/tx/columnshard/engines/metadata_accessor.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -12,16 +13,24 @@ bool TScanGate::ArePortionsLoaded(const IColumnEngine* engine, const TScanTarget
     return !engine || target.TableMetadataAccessor->ArePortionsLoaded(*engine, *target.PKRangesFilter);
 }
 
+void TScanGate::UpdateCounters() const {
+    TabletCounters->SetCounter(NColumnShard::COUNTER_SCANS_WAITING_SNAPSHOT, WaitingForSnapshot.size());
+    TabletCounters->SetCounter(NColumnShard::COUNTER_SCANS_WAITING_LOADED_PORTIONS, WaitingForLoadedPortions.size());
+}
+
 std::optional<ui64> TScanGate::ReleaseReadable(const TSnapshot& maxReadVersion) {
+    std::optional<ui64> waitedStep;
     while (!WaitingForSnapshot.empty()) {
         auto it = WaitingForSnapshot.begin();
         if (maxReadVersion < it->first) {
-            return it->first.GetPlanStep();
+            waitedStep = it->first.GetPlanStep();
+            break;
         }
         TActivationContext::Send(it->second.Release());
         WaitingForSnapshot.erase(it);
     }
-    return std::nullopt;
+    UpdateCounters();
+    return waitedStep;
 }
 
 void TScanGate::ReleaseLoadedPortions(const IColumnEngine& engine) {
@@ -32,6 +41,7 @@ void TScanGate::ReleaseLoadedPortions(const IColumnEngine& engine) {
         TActivationContext::Send(it->Ev.Release());
     }
     WaitingForLoadedPortions.erase(firstLoaded, WaitingForLoadedPortions.end());
+    UpdateCounters();
 }
 
 ui64 TScanGate::GetMemoryUsage() const {

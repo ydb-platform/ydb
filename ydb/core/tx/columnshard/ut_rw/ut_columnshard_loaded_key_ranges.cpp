@@ -50,6 +50,18 @@ Y_UNIT_TEST_SUITE(TColumnShardLoadedKeyRanges) {
         return NOlap::TLoadedKeyRanges::BuildFrom(MakeTestKey(row, TestTableDescription().Pk));
     }
 
+    ui64 GetSimpleCounter(TTestBasicRuntime & runtime, TActorId & sender, const TString& name) {
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvTablet::TEvGetCounters());
+        const auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(sender);
+        for (const auto& counter : ev->Get()->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
+            if (counter.GetName() == name) {
+                return counter.GetValue();
+            }
+        }
+        UNIT_FAIL("counter " << name << " not found");
+        return 0;
+    }
+
     void AddRowsRange(TShardReader & reader, const std::pair<ui64, ui64> rows) {
         const TestTableDescription table;
         reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
@@ -91,6 +103,37 @@ Y_UNIT_TEST_SUITE(TColumnShardLoadedKeyRanges) {
         const auto rows = reader.ContinueReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
         UNIT_ASSERT_VALUES_EQUAL(rows->num_rows(), 101);
+    }
+
+    Y_UNIT_TEST(ScanWaitingForLoadedPortionsIsCounted) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        TActorId sender;
+        const NOlap::TSnapshot snapshot = StartShardWithRows(runtime, sender);
+        SetLoadedKeyRanges(runtime, sender, csControllerGuard, LoadedFromRow(500));
+
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, TableId, snapshot);
+        AddRowsRange(reader, { 100, 200 });
+        reader.StartScanner();
+        UNIT_ASSERT(!reader.WaitScannerAnswer(NoAnswerWait));
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, sender, "ScansWaitingLoadedPortions"), 1);
+
+        SetLoadedKeyRanges(runtime, sender, csControllerGuard, NOlap::TLoadedKeyRanges::BuildEverything());
+        UNIT_ASSERT(reader.WaitScannerAnswer());
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, sender, "ScansWaitingLoadedPortions"), 0);
+    }
+
+    Y_UNIT_TEST(ScanWaitingForSnapshotIsCounted) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        TActorId sender;
+        const NOlap::TSnapshot snapshot = StartShardWithRows(runtime, sender);
+
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, TableId, NOlap::TSnapshot(snapshot.GetPlanStep() + 1000000, Max<ui64>()));
+        AddRowsRange(reader, { 100, 200 });
+        reader.StartScanner();
+        UNIT_ASSERT(!reader.WaitScannerAnswer(NoAnswerWait));
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, sender, "ScansWaitingSnapshot"), 1);
     }
 
     // an insert reads the rows it writes through an internal scan

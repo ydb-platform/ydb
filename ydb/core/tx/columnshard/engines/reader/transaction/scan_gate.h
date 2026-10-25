@@ -9,6 +9,10 @@
 #include <optional>
 #include <vector>
 
+namespace NKikimr::NColumnShard {
+class TTabletCountersHandle;
+}
+
 namespace NKikimr::NOlap {
 class IColumnEngine;
 class ITableMetadataAccessor;
@@ -32,12 +36,19 @@ private:
         TScanTarget Target;
     };
 
+    const std::shared_ptr<const NColumnShard::TTabletCountersHandle> TabletCounters;
     TMultiMap<TSnapshot, TAutoPtr<NActors::IEventHandle>> WaitingForSnapshot;
     std::vector<TWaitingForLoadedPortions> WaitingForLoadedPortions;
 
     static bool ArePortionsLoaded(const IColumnEngine* engine, const TScanTarget& target);
+    void UpdateCounters() const;
 
 public:
+    explicit TScanGate(const std::shared_ptr<const NColumnShard::TTabletCountersHandle>& tabletCounters)
+        : TabletCounters(tabletCounters)
+    {
+    }
+
     // false: the gate holds ev
     template <class TEventPtr>
     bool PassSnapshot(TEventPtr& ev, const TSnapshot& readVersion, const TSnapshot& maxReadVersion) {
@@ -45,6 +56,7 @@ public:
             return true;
         }
         WaitingForSnapshot.emplace(readVersion, ev.Release());
+        UpdateCounters();
         return false;
     }
 
@@ -55,6 +67,7 @@ public:
             return true;
         }
         WaitingForLoadedPortions.push_back({ ev.Release(), target });
+        UpdateCounters();
         return false;
     }
 

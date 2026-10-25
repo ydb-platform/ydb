@@ -10,6 +10,7 @@ PY_SRCS(
 
 PEERDIR(
     ydb/apps/dstool/lib
+    ydb/apps/dstool/tui
     contrib/python/six
 )
 
@@ -19,4 +20,4 @@ RESOURCE(
 
 END()
 
-RECURSE(lib)
+RECURSE(lib tui)

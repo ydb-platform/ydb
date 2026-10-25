@@ -5,11 +5,14 @@
 #include <ydb/core/blobstorage/vdisk/query/query_stream.h>
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/getopt/last_getopt.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/writer/json.h>
 #include <library/cpp/streams/bzip2/bzip2.h>
 #include <util/generic/buffer.h>
 #include <util/generic/hash.h>
 #include <util/stream/buffer.h>
 #include <util/stream/input.h>
+#include <util/stream/file.h>
 #include <util/stream/output.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
@@ -31,6 +34,8 @@ ui32 BlobSubgroupSize = 0;
 
 bool OutputCout = true;
 bool Write2x2Candidates = false;
+TString ScanManifestPath;
+TString ScanReportPath;
 
 struct TRecordHeader {
     ui32 GroupId;
@@ -370,6 +375,53 @@ TString FormatLayout(const TSubgroupPartLayout& layout, TBlobStorageGroupType ty
     return s.Str();
 }
 
+struct TScanCounters {
+    ui64 Blobs = 0;
+    ui64 LogicalBytes = 0;
+    ui64 ObservedReplicaBytes = 0;
+    ui64 MissingMetadataBlobs = 0;
+
+    NJson::TJsonValue ToJson() const {
+        NJson::TJsonValue result(NJson::JSON_MAP);
+        result["blobs"] = Blobs;
+        result["logical_bytes"] = LogicalBytes;
+        result["observed_replica_bytes"] = ObservedReplicaBytes;
+        result["missing_metadata_blobs"] = MissingMetadataBlobs;
+        return result;
+    }
+};
+
+// Counts are in group failrealm order, not the blob-dependent subgroup order.
+TString ScanLayout(const TSubgroupPartLayout& layout, const TBlobStorageGroupInfo::TOrderNums& nums,
+        const TBlobStorageGroupInfo& info, const std::unordered_set<ui32>* completed, ui32* replicas = nullptr) {
+    ui32 counts[3] = {};
+    bool known[3] = {true, true, true};
+    for (ui32 node = 0; node < nums.size(); ++node) {
+        const ui32 realm = info.GetTopology().GetVDiskId(nums[node]).FailRealm;
+        if (completed && !completed->contains(nums[node])) {
+            known[realm] = false;
+        }
+        if (layout.GetDisksWithPart(node % 3) >> node & 1) {
+            ++counts[realm];
+            if (replicas) {
+                ++*replicas;
+            }
+        }
+    }
+    TStringStream result;
+    for (ui32 realm = 0; realm < 3; ++realm) {
+        if (realm) {
+            result << "+";
+        }
+        if (known[realm]) {
+            result << counts[realm];
+        } else {
+            result << "?";
+        }
+    }
+    return result.Str();
+}
+
 int main(int argc, char **argv) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.SetTitle("Analyze BlobStorage VDisk index snapshots for incomplete blob layouts.");
@@ -377,6 +429,10 @@ int main(int argc, char **argv) {
     opts.SetFreeArgTitle(0, "erasure", "Erasure species of all input groups, e.g. mirror-3-dc or block-4-2");
     opts.AddLongOption("write2x2-candidates", "Find mirror-3-dc write2x2 recovery candidates using local parts from the snapshot")
         .StoreTrue(&Write2x2Candidates);
+    opts.AddLongOption("scan-manifest", "JSON file with group_id and completed_vdisks, including successfully captured empty VDisks")
+        .RequiredArgument("PATH").StoreResult(&ScanManifestPath);
+    opts.AddLongOption("scan-report", "Write a JSON histogram of all observed mirror-3-dc blobs before candidate filtering")
+        .RequiredArgument("PATH").StoreResult(&ScanReportPath);
     opts.AddSection("Input",
         "Read a binary snapshot from stdin, as produced by `ydb-dstool group take-snapshot`."
         " It contains group/VDisk headers and bzip2-compressed LogoBlobs, Blocks and"
@@ -427,6 +483,35 @@ int main(int argc, char **argv) {
         Cerr << "--write2x2-candidates requires mirror-3-dc" << Endl;
         return 1;
     }
+    const bool scanReport = !ScanReportPath.empty();
+    if (scanReport != !ScanManifestPath.empty() || (scanReport && species != TBlobStorageGroupType::ErasureMirror3dc)) {
+        Cerr << "--scan-report and --scan-manifest must be used together with mirror-3-dc" << Endl;
+        return 1;
+    }
+    ui32 scanGroupId = 0;
+    std::unordered_set<ui32> completed;
+    if (scanReport) {
+        TFileInput input(ScanManifestPath);
+        NJson::TJsonValue manifest;
+        if (!NJson::ReadJsonTree(&input, &manifest) || !manifest["group_id"].IsUInteger()
+                || manifest["group_id"].GetUInteger() > Max<ui32>() || !manifest["completed_vdisks"].IsArray()) {
+            Cerr << "Invalid scan manifest" << Endl;
+            return 1;
+        }
+        scanGroupId = manifest["group_id"].GetUInteger();
+        for (const auto& index : manifest["completed_vdisks"].GetArray()) {
+            if (!index.IsUInteger() || index.GetUInteger() >= 9 || !completed.insert(index.GetUInteger()).second) {
+                Cerr << "Invalid or duplicate VDisk in scan manifest" << Endl;
+                return 1;
+            }
+        }
+        // A complete stream may contain no blocks. Its empty index must still
+        // participate in coverage and in the existing candidate checks.
+        for (const ui32 index : completed) {
+            Groups[scanGroupId].States[index];
+        }
+        Groups[scanGroupId];
+    }
     TBlobStorageGroupType type(species);
     TotalPartCount = type.TotalPartCount();
     BlobSubgroupSize = type.BlobSubgroupSize();
@@ -443,6 +528,10 @@ int main(int argc, char **argv) {
         TRecordHeader header;
         if (const size_t read = stream.Load(&header, sizeof(header))) {
             Y_ABORT_UNLESS(read == sizeof(header));
+            if (scanReport && (header.GroupId != scanGroupId || !completed.contains(header.Index))) {
+                Cerr << "Snapshot block is outside the scan manifest" << Endl;
+                return 1;
+            }
             TBuffer buffer(read + header.Length);
             buffer.Append((const char*)&header, sizeof(header));
             const size_t n = stream.Load(buffer.Pos(), header.Length);
@@ -455,10 +544,13 @@ int main(int argc, char **argv) {
     }
 
     TBufferedOutput err(&Cerr, 1_MB);
+    std::map<std::tuple<TString, TString, TString, bool, bool>, TScanCounters> scanBuckets;
+    TScanCounters scanTotals;
 
     for (auto& [groupId, group] : Groups) {
         struct TBlobRecord {
             TBlobInfo Info;
+            TSubgroupPartLayout ObservedLocalLayout;
             bool Hard = false;
             ui32 UnderBarrierMask = 0;
             ui32 DiscardMask = 0;
@@ -506,6 +598,7 @@ int main(int argc, char **argv) {
                     }
                 }
 
+                record.ObservedLocalLayout.Merge(blob.LocalLayout, type);
                 if (discard) { // no local data
                     blob.LocalLayout = {};
                 }
@@ -584,35 +677,54 @@ int main(int argc, char **argv) {
                 }
             }
 
-            if (blob.Hard || blob.Info.KeepMode == DO_NOT_KEEP) {
-                continue;
-            }
-            if (blob.UnderBarrierMask && blob.Info.KeepMode != KEEP) {
-                continue;
-            }
-            if (!Write2x2Candidates && (!blob.UnderBarrierMask || blob.Info.KeepMode != KEEP)) {
-                continue;
-            }
-
-            if (Write2x2Candidates ? isFull(originalLocalLayout) :
-                    (isFull(blob.Info.Layout) && isFull(blob.Info.ReflectionLayout) && isFull(blob.Info.LocalLayout))) {
-                // looks like correct blob -- either it is not under barrier (and may be being written right now), or
-                // it is with keep flags and fully written with correct ingress bits on every disk
-                continue;
-            }
-
             ui32 seenDisks = 0;
             for (ui32 i = 0; i < BlobSubgroupSize; ++i) {
                 if (group.States.contains(nums[i])) {
                     seenDisks |= 1 << i;
                 }
             }
-
             const bool phantomLike = seenDisks != blob.Info.Nodes;
+            const bool gcEligible = !blob.Hard && blob.Info.KeepMode != DO_NOT_KEEP
+                && (!blob.UnderBarrierMask || blob.Info.KeepMode == KEEP);
+            const bool restorable = !phantomLike && numParts >= type.MinimalRestorablePartCount()
+                && numLocalParts >= type.MinimalRestorablePartCount()
+                && checker.CheckFailModelForSubgroup(~TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(
+                    &info.GetTopology(), blob.Info.Nodes));
+            const bool fullLocalLayout = isFull(originalLocalLayout);
+            const bool write2x2Candidate = gcEligible && !fullLocalLayout && restorable;
 
-            if (phantomLike || numParts < type.MinimalRestorablePartCount() || numLocalParts < type.MinimalRestorablePartCount() ||
-                    !info.GetQuorumChecker().CheckFailModelForSubgroup(~TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(
-                    &info.GetTopology(), blob.Info.Nodes))) {
+            if (scanReport) {
+                const TString gc = blob.Hard ? "hard_barrier"
+                    : blob.Info.KeepMode == DO_NOT_KEEP ? "do_not_keep"
+                    : blob.UnderBarrierMask ? (blob.Info.KeepMode == KEEP ? "soft_with_keep" : "soft_without_keep")
+                    : "no_covering_barrier";
+                ui32 replicas = 0;
+                const TString local = ScanLayout(blob.ObservedLocalLayout, nums, info, &completed, &replicas);
+                const TString ingress = ScanLayout(blob.Info.Layout, nums, info, nullptr);
+                auto add = [&](TScanCounters& counters) {
+                    ++counters.Blobs;
+                    counters.LogicalBytes += blobId.BlobSize();
+                    counters.ObservedReplicaBytes += ui64(replicas) * blobId.BlobSize();
+                    counters.MissingMetadataBlobs += phantomLike;
+                };
+                add(scanBuckets[{local, ingress, gc, phantomLike, write2x2Candidate}]);
+                add(scanTotals);
+            }
+            if (!gcEligible) {
+                continue;
+            }
+            if (!Write2x2Candidates && (!blob.UnderBarrierMask || blob.Info.KeepMode != KEEP)) {
+                continue;
+            }
+
+            if (Write2x2Candidates ? fullLocalLayout :
+                    (isFull(blob.Info.Layout) && isFull(blob.Info.ReflectionLayout) && isFull(blob.Info.LocalLayout))) {
+                // looks like correct blob -- either it is not under barrier (and may be being written right now), or
+                // it is with keep flags and fully written with correct ingress bits on every disk
+                continue;
+            }
+
+            if (!restorable) {
                 // looks like phantom blob -- count found parts as trash
                 for (ui32 partIdx = 0; partIdx < TotalPartCount; ++partIdx) {
                     if (const ui32 disks = blob.Info.LocalLayout.GetDisksWithPart(partIdx)) {
@@ -666,6 +778,35 @@ int main(int argc, char **argv) {
 
     if (trashSize) {
         err << "TrashSize# " << trashSize << Endl;
+    }
+
+    if (scanReport) {
+        NJson::TJsonValue report(NJson::JSON_MAP);
+        report["version"] = 1;
+        report["group_id"] = scanGroupId;
+        report["completed_vdisks"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+        for (ui32 index = 0; index < 9; ++index) {
+            if (completed.contains(index)) {
+                report["completed_vdisks"].AppendValue(index);
+            }
+        }
+        report["totals"] = scanTotals.ToJson();
+        report["buckets"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+        for (const auto& [key, counters] : scanBuckets) {
+            auto bucket = counters.ToJson();
+            const auto& [local, ingress, gc, phantomLike, write2x2Candidate] = key;
+            bucket["local"] = local;
+            bucket["ingress"] = ingress;
+            bucket["gc"] = gc;
+            bucket["phantom_like"] = phantomLike;
+            bucket["write2x2_candidate"] = Write2x2Candidates
+                ? NJson::TJsonValue(write2x2Candidate) : NJson::TJsonValue(NJson::JSON_NULL);
+            report["buckets"].AppendValue(std::move(bucket));
+        }
+        TFileOutput output(ScanReportPath);
+        NJsonWriter::TBuf json;
+        json.WriteJsonValue(&report);
+        output << json.Str() << Endl;
     }
 
     return 0;

@@ -1,6 +1,7 @@
 #include "blobstorage_pdisk_ut.h"
 
 #include "blobstorage_pdisk_abstract.h"
+#include "blobstorage_pdisk_completion_impl.h"
 #include "blobstorage_pdisk_impl.h"
 #include "blobstorage_pdisk_params.h"
 #include "blobstorage_pdisk_tools.h"
@@ -919,24 +920,108 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 }
                 ev = new NPDisk::TEvChunkWrite(owner, ownerRound, chunkIdx, firstSector * payloadSize,
                     new NPDisk::TEvChunkWrite::TRopeAlignedParts(TRope(std::move(buf)), sectors * sectorSize),
-                    nullptr, false, 0);
+                    reinterpret_cast<void*>(w + 1), false, 0);
                 ev->PreformattedSectors = true;
                 ev->FirstSectorNonce = chunkNonce + firstSector;
             } else {
                 ev = new NPDisk::TEvChunkWrite(owner, ownerRound, chunkIdx, firstSector * payloadSize,
-                    new NPDisk::TEvChunkWrite::TAlignedParts(TString(payload)), nullptr, false, 0);
+                    new NPDisk::TEvChunkWrite::TAlignedParts(TString(payload)), reinterpret_cast<void*>(w + 1), false, 0);
             }
             testCtx.Send(ev);
         }
         testCtx.Send(new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr));
 
-        // one answer per write, whatever its status; a missing one would hang here
-        ui32 answered = 0;
-        while (answered < writes) {
-            testCtx.Recv<NPDisk::TEvChunkWriteResult>();
-            ++answered;
+        // one answer per write, whatever its status; a missing one would hang here, a second one would repeat a cookie
+        // (where exactly the stop falls is up to timing; WritePiecesAccounting covers the cases one by one)
+        TSet<ui64> answered;
+        while (answered.size() < writes) {
+            const auto res = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+            const ui64 cookie = reinterpret_cast<ui64>(res->Cookie);
+            UNIT_ASSERT_C(cookie >= 1 && cookie <= writes, cookie);
+            UNIT_ASSERT_C(answered.insert(cookie).second, "write# " << cookie << " answered twice");
         }
         testCtx.Recv<NPDisk::TEvYardControlResult>();
+    }
+
+    // The accounting of a write's pieces, driven by hand: a write whose first piece was done and the others dropped
+    // is answered once, with an error, however the pieces interleave; a write answered already is not answered
+    // again. The answers are checked in order, so a missing or a repeated one shows.
+    Y_UNIT_TEST(WritePiecesAccounting) {
+        TActorTestContext testCtx({});
+        TActorSystem *actorSystem = testCtx.SafeRunOnPDisk([](NPDisk::TPDisk *pdisk) {
+            return pdisk->PCtx->ActorSystem;
+        });
+
+        struct TWrite {
+            TIntrusivePtr<NPDisk::TChunkWrite> Write;
+            std::vector<std::unique_ptr<NPDisk::TChunkWritePiece>> Pieces;
+        };
+        auto makeWrite = [&](ui64 cookie, bool preformatted, ui32 pieces) {
+            NPDisk::TEvChunkWrite ev(1, 1, 1, 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(4096, 'x')),
+                reinterpret_cast<void*>(cookie), false, 0);
+            ev.PreformattedSectors = preformatted;
+            TWrite res;
+            res.Write = new NPDisk::TChunkWrite(ev, testCtx.Sender, NPDisk::TReqId(NPDisk::TReqId::Test0, cookie), {});
+            res.Write->Completion = MakeHolder<NPDisk::TCompletionChunkWrite>(testCtx.Sender,
+                new NPDisk::TEvChunkWriteResult(NKikimrProto::OK, 1, reinterpret_cast<void*>(cookie), 0, TString()),
+                nullptr, 0, HPNow(), 4096, 0, [] {}, NPDisk::TReqId(), NWilson::TSpan());
+            if (preformatted) {
+                res.Write->PreformattedPieceCount = pieces;
+                AtomicSet(res.Write->PreformattedPiecesInFlight, pieces);
+            }
+            for (ui32 i = 0; i < pieces; ++i) {
+                res.Pieces.emplace_back(new NPDisk::TChunkWritePiece(res.Write, i * 4096, 4096, NWilson::TSpan()));
+            }
+            return res;
+        };
+        auto pieceSent = [&](TWrite& w) { // a preformatted piece handed to the device
+            return new NPDisk::TCompletionChunkWritePreformattedPiece(w.Write.Get());
+        };
+
+        // 1: ordinary, first piece done, the rest dropped
+        TWrite w1 = makeWrite(1, false, 3);
+        w1.Write->PieceDone(actorSystem);
+        w1.Pieces[1]->Abort(actorSystem);
+        w1.Pieces[2]->Abort(actorSystem);
+
+        // 2: ordinary, refused already (SendChunkWriteError), then the rest dropped: no second answer
+        TWrite w2 = makeWrite(2, false, 3);
+        w2.Write->IsReplied = true;
+        w2.Write->PieceDone(actorSystem);
+        w2.Pieces[1]->Abort(actorSystem);
+        w2.Pieces[2]->Abort(actorSystem);
+
+        // 3: preformatted, first piece done on the device, the rest dropped
+        TWrite w3 = makeWrite(3, true, 3);
+        pieceSent(w3)->Exec(actorSystem);
+        w3.Pieces[1]->Abort(actorSystem);
+        w3.Pieces[2]->Abort(actorSystem);
+
+        // 4: preformatted, the rest dropped while the first piece is still on the device
+        TWrite w4 = makeWrite(4, true, 3);
+        auto *inFlight = pieceSent(w4);
+        w4.Pieces[1]->Abort(actorSystem);
+        w4.Pieces[2]->Abort(actorSystem);
+        inFlight->Exec(actorSystem);
+
+        // 5: preformatted, all pieces done: one answer, OK
+        TWrite w5 = makeWrite(5, true, 2);
+        pieceSent(w5)->Exec(actorSystem);
+        pieceSent(w5)->Exec(actorSystem);
+
+        // 6: ordinary, every piece dropped before any was sent
+        TWrite w6 = makeWrite(6, false, 2);
+        w6.Pieces[0]->Abort(actorSystem);
+        w6.Pieces[1]->Abort(actorSystem);
+
+        const std::pair<ui64, NKikimrProto::EReplyStatus> expected[] = {
+            {1, NKikimrProto::CORRUPTED}, {3, NKikimrProto::CORRUPTED}, {4, NKikimrProto::CORRUPTED},
+            {5, NKikimrProto::OK}, {6, NKikimrProto::CORRUPTED}};
+        for (const auto& [cookie, status] : expected) {
+            const auto res = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+            UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<ui64>(res->Cookie), cookie);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Status, status, cookie);
+        }
     }
 
     Y_UNIT_TEST(WritesInPiecesAnsweredOnStopPreformatted) {

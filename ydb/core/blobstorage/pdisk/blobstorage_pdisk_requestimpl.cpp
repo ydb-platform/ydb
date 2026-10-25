@@ -89,6 +89,11 @@ void TChunkWrite::PieceDone(TActorSystem *actorSystem) {
 }
 
 void TChunkWrite::ReplyAborted(TActorSystem *actorSystem) {
+    if (IsReplied) {
+        // already answered, e.g. by SendChunkWriteError for a bad piece; Completion and the owner's buffer go
+        // with this write, unanswered a second time
+        return;
+    }
     TCompletionChunkWrite *completion = Completion.Release();
     completion->ErrorReason = "TChunkWrite is being aborted";
     completion->Release(actorSystem); // replies CORRUPTED, as Abort does, and deletes itself

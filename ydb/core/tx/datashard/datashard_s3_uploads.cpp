@@ -79,13 +79,23 @@ const TS3Upload* TS3UploadsManager::Find(ui64 txId) const {
     return &it->second;
 }
 
-const TS3Upload& TS3UploadsManager::Add(NIceDb::TNiceDb& db, ui64 txId, const TString& uploadId) {
+const TS3Upload& TS3UploadsManager::Add(NIceDb::TNiceDb& db, ui64 txId, const TString& uploadId, bool replaceExisting) {
     using Schema = TDataShard::Schema;
 
-    Y_ENSURE(!Uploads.contains(txId));
+    auto it = Uploads.find(txId);
+    Y_ENSURE(replaceExisting || it == Uploads.end());
+    if (it != Uploads.end()) {
+        for (ui32 partIndex = 0; partIndex < it->second.Parts.size(); ++partIndex) {
+            db.Table<Schema::S3UploadedParts>().Key(txId, partIndex + 1).Delete();
+        }
+        Uploads.erase(it);
+    }
     auto res = Uploads.emplace(txId, TS3Upload(uploadId));
 
-    db.Table<Schema::S3Uploads>().Key(txId).Update<Schema::S3Uploads::UploadId>(uploadId);
+    db.Table<Schema::S3Uploads>().Key(txId).Update(
+        NIceDb::TUpdate<Schema::S3Uploads::UploadId>(uploadId),
+        NIceDb::TUpdate<Schema::S3Uploads::Status>(TS3Upload::EStatus::UploadParts),
+        NIceDb::TNull<Schema::S3Uploads::Error>());
 
     return res.first->second;
 }

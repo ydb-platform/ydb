@@ -532,18 +532,11 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         YDB_LOG_DEBUG("[Export] Handle TEvDataShard::TEvS3Upload",
             {"upload", upload});
 
-        if (!upload) {
+        if (!upload || ForceNewUpload) {
             CurrentObjectKey = Settings.GetDataKey(DataFormat, CompressionCodec);
             auto request = Aws::S3::Model::CreateMultipartUploadRequest()
                 .WithKey(CurrentObjectKey);
             this->Send(Client, new TEvExternalStorage::TEvCreateMultipartUploadRequest(request));
-        } else if (ForceNewUpload) {
-            ForceNewUpload = false;
-            UploadId = upload->Id;
-            Parts.clear();
-            this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(
-                this->SelfId(), TxId,
-                TS3Upload::EStatus::UploadParts, TVector<TString>{}));
         } else {
             UploadId = upload->Id;
 
@@ -597,7 +590,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             return;
         }
 
-        this->Send(DataShard, new TEvDataShard::TEvStoreS3UploadId(this->SelfId(), TxId, result.GetResult().GetUploadId().c_str()));
+        this->Send(DataShard, new TEvDataShard::TEvStoreS3UploadId(this->SelfId(), TxId, result.GetResult().GetUploadId().c_str(), ForceNewUpload));
+        ForceNewUpload = false;
     }
 
     void Handle(TEvExternalStorage::TEvUploadPartResponse::TPtr& ev) {

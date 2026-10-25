@@ -29,7 +29,7 @@ namespace NKikimr {
         }
 
         // send queries to VDisks if necessary
-        if (IsConnected) {
+        if (IsConnected || msg->IgnoreConnectionQuorum) {
             SendPendingQueries();
         }
 

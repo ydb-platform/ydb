@@ -1441,6 +1441,22 @@ message TEvNodeWardenGroupInfo {
     repeated uint32 StartedGroupIds = 2;
 }
 
+message TEvVRestorePart {
+    optional TVDiskID VDiskID = 1;
+    optional NKikimrProto.TLogoBlobID BlobID = 2;
+    optional uint64 Deadline = 3; // microseconds since the epoch
+}
+
+message TEvVRestorePartResult {
+    enum EResponseOrigin {
+        VRESTORE_PART_ACTOR = 0;
+        SKELETON_FRONT = 1;
+    }
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 2;
+    optional EResponseOrigin ResponseOrigin = 3;
+}
+
 message TEvControllerProposeConfigRequest {
     optional uint64 ConfigHash = 1;
     optional uint64 ConfigVersion = 2;

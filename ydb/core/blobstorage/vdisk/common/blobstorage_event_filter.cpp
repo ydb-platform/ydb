@@ -8,6 +8,7 @@ namespace NKikimr {
 
         static const ui32 eventsFromPeerToSystem[] = {
             TEvBlobStorage::EvVPut,
+            TEvBlobStorage::EvVRestorePart,
             TEvBlobStorage::EvVGet,
             TEvBlobStorage::EvVBlock,
             TEvBlobStorage::EvVGetBlock,
@@ -27,6 +28,7 @@ namespace NKikimr {
 
         static const ui32 eventsFromSystemToPeer[] = {
             TEvBlobStorage::EvVPutResult,
+            TEvBlobStorage::EvVRestorePartResult,
             TEvBlobStorage::EvVGetResult,
             TEvBlobStorage::EvVBlockResult,
             TEvBlobStorage::EvVGetBlockResult,

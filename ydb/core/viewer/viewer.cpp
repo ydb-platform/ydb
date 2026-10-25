@@ -1,5 +1,5 @@
 #include "viewer.h"
-#include "viewer_utils.h"
+#include <ydb/core/base/http_database_param.h>
 #include "counters_hosts.h"
 #include "viewer_healthcheck.h"
 #include "json_handlers.h"
@@ -713,6 +713,7 @@ private:
         const TCgiParameters& params,
         const TStringBuf& method,
         const TStringBuf& body,
+        const TStringBuf& contentType,
         const TString& serializedToken,
         TString& error) const
     {
@@ -727,7 +728,7 @@ private:
         }
         const auto itAccess = EndpointAccess.find(path);
         if (itAccess != EndpointAccess.end() && itAccess->second.RequireDatabaseParam) {
-            if (GetDatabaseParam(params, method, body).empty()) {
+            if (ExtractHttpDatabaseParam(params, method, body, contentType).empty()) {
                 error = TStringBuilder() << "`database` is required for " << path;
                 return EDatabaseScopedRequestValidationResult::DatabaseRequired;
             }
@@ -965,6 +966,7 @@ private:
                 msg->Request.GetParams(),
                 msg->Request.GetMethod() == HTTP_METHOD_POST ? TStringBuf("POST") : TStringBuf(),
                 msg->Request.GetPostContent(),
+                TrimHttpContentTypeHeader(msg->Request.GetHeader("Content-Type")),
                 msg->UserToken,
                 scopeError)) {
                 case EDatabaseScopedRequestValidationResult::DatabaseRequired:
@@ -1067,6 +1069,7 @@ private:
                 proxyParams,
                 ev->Get()->Request->Method,
                 ev->Get()->Request->Body,
+                TrimHttpContentTypeHeader(ev->Get()->Request->ContentType),
                 ev->Get()->UserToken,
                 scopeError)) {
                 case EDatabaseScopedRequestValidationResult::DatabaseRequired:

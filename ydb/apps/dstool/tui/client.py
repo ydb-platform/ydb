@@ -8,7 +8,7 @@ from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
-from textual.widgets import Button, Collapsible, DataTable, Footer, Header, Input, RichLog, Select, Static, TabbedContent, TabPane, Tabs
+from textual.widgets import Button, Checkbox, Collapsible, DataTable, Footer, Header, Input, RichLog, Select, Static, TabbedContent, TabPane, Tabs
 
 from ydb.apps.dstool.lib import write2x2_report
 from ydb.apps.dstool.tui.connection import ConsoleConnection, ConsoleError, CommandError
@@ -55,6 +55,61 @@ def json_rows(response):
     return [] if response == '(empty)' else [json.loads(line) for line in response.splitlines()]
 
 
+def restore_rate(automatic):
+    value = automatic.get('blobs_per_second')
+    return '—' if value is None else f'{value:,.1f} blobs/s'
+
+
+def restore_eta(automatic):
+    value = automatic.get('eta_seconds')
+    return '—' if value is None else age(value)
+
+
+def automatic_restore_progress(automatic):
+    state = automatic.get('state', 'enabled' if automatic.get('enabled') else 'disabled')
+    inv1 = automatic.get('pending_inv1', 0)
+    inv2 = automatic.get('pending_inv2_only', 0)
+    byte_rate = automatic.get('bytes_per_second')
+    byte_rate = '—' if byte_rate is None else size(byte_rate) + '/s'
+    last_batch = automatic.get('last_batch_finished_at')
+    last_batch = since(last_batch) + ' ago' if last_batch is not None else 'never'
+    lines = [
+        f'Automatic restore · {state} · all groups · inv1 first',
+        f'Remaining eligible: {inv1 + inv2:,} blobs · inv1: {inv1:,} · inv2 only: {inv2:,}',
+        f"In flight: {automatic.get('inflight_blobs', 0):,} · "
+        f"Awaiting rescan: {automatic.get('awaiting_rescan', 0):,} · "
+        f"Retry wait: {automatic.get('retry_wait', 0):,}",
+        f"Unknown outcomes: {automatic.get('unknown_outcomes', 0):,} · "
+        f"Excluded (outdated / stale): {automatic.get('excluded_blobs', 0):,} · "
+        f"Active candidates: {automatic.get('active_unique_blobs', 0):,}",
+        f'Success rate (last 5m): {restore_rate(automatic)} · {byte_rate} · ETA (eligible queue): {restore_eta(automatic)}',
+        f"Successful blob attempts: {automatic.get('completed_blobs', 0):,} "
+        f"({size(automatic.get('completed_bytes', 0))}) · "
+        f'Last batch: {last_batch}',
+        'Successful attempts await scan verification; a blob may need another attempt. New discoveries change the ETA.',
+    ]
+    phases = automatic.get('phase_rates') or {}
+    if phases:
+        lines.insert(5, 'Phase rates (last 5m): ' + ' · '.join(
+            f'{label}: {restore_rate(phases[key])}, ETA {restore_eta(phases[key])}'
+            for key, label in (('inv1', 'inv1'), ('inv2_only', 'inv2 only')) if key in phases))
+    batch = automatic.get('current_batch')
+    if batch:
+        lines.append(f"Batch {batch['id']}: {batch['blobs']:,} blobs · {batch['requests']:,} VDisk requests · "
+                     f"running {since(batch['started_at'])}")
+    counts = automatic.get('status_counts') or {}
+    if counts:
+        lines.append('VDisk responses (last 5m): ' + ' · '.join(f'{status}: {count:,}' for status, count in sorted(counts.items())))
+    for error in automatic.get('errors') or []:
+        context = ' · '.join(
+            label + str(error[key])
+            for key, label in (
+                ('gid', 'Group '), ('blob', 'BlobId '), ('vdisk', 'VDiskId '), ('status', ''), ('origin', ''))
+            if error.get(key) is not None)
+        lines.append((context + ': ' if context else '') + str(error.get('error', 'Unknown restore error')))
+    return '\n'.join(lines)
+
+
 class ConsoleApp(App):
     TITLE = 'blobsan-service'
     BINDINGS = [
@@ -83,6 +138,18 @@ class ConsoleApp(App):
     .hint { height: auto; color: $text-muted; }
     #detail { height: auto; max-height: 7; overflow-y: auto; }
     #layout-filter { width: 55; }
+    #annotation-filters { height: auto; }
+    #candidate-controls { height: auto; }
+    #candidate-category { width: 24; }
+    #candidate-selected-group { width: 35; }
+    #candidate-controls Button { min-width: 10; width: 10; }
+    #candidate-summary { height: auto; }
+    #restore-controls { height: auto; }
+    #restore-category { width: 18; }
+    #restore-selected-group { width: 24; }
+    #restore-controls Button { min-width: 10; width: 10; }
+    #restore-summary { height: auto; margin-bottom: 1; }
+    #restore-progress { height: 1fr; overflow-y: auto; margin-top: 1; }
     #gc-table { height: 5; }
     #bucket-table { height: 10; }
     #gc-summary, #bucket-details { height: auto; padding: 0; }
@@ -92,12 +159,12 @@ class ConsoleApp(App):
         'pool-table': ('Pool', 'Key', 'Reports', 'Full', 'Partial', 'Never', 'Outdated', 'Stale',
                        'Failed', 'Blobs', 'Size', 'Oldest'),
         'group-table': ('Group', 'Pool', 'Generation', 'Scan age', 'Candidates', 'Worker', 'Due', 'Error'),
-        'layout-table': ('Local2', 'Blobs', 'Size', 'phantom_like', 'write2x2-candidate'),
+        'layout-table': ('Local2', 'Blobs', 'Size', 'phantom_like', 'inv1_candidate', 'inv2_candidate'),
         'gc-table': ('GC', 'Blobs', 'Size'),
         'bucket-table': ('Local', 'Local3', 'Ingress', 'GC', 'Blobs', 'Size', 'Replica size', 'Missing metadata',
-                         'phantom_like', 'write2x2-candidate'),
+                         'phantom_like', 'inv1_candidate', 'inv2_candidate'),
         'worker-table': ('Worker', 'Last seen', 'Info'),
-        'finding-table': ('Group', 'Blob', 'Status', 'First seen', 'Last seen', 'Coverage'),
+        'candidate-table': ('Group', 'Category', 'Blob', 'First seen', 'Last seen', 'Coverage', 'State'),
     }
 
     def __init__(self, path, refresh=5, timeout=10, *, connection=None):
@@ -111,6 +178,13 @@ class ConsoleApp(App):
         self._connected = False
         self._layout_data = None
         self._selected_layout = None
+        self._candidate_offset = 0
+        self._candidate_total = 0
+        self._candidate_category = 'all'
+        self._candidate_selected_group = True
+        self._restore_category = 'inv1_candidate'
+        self._restore_selected_group = False
+        self._restore_preview = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True, icon='>')
@@ -133,6 +207,10 @@ class ConsoleApp(App):
                 yield Select([('soft_with_keep + no_covering_barrier', 'active'), ('all GC states', 'all')]
                              + [(gc, gc) for gc in sorted(write2x2_report.GC_STATES)],
                              value='active', allow_blank=False, id='layout-filter')
+                with Horizontal(id='annotation-filters'):
+                    yield Checkbox('Show phantom_like', value=True, id='show-phantom-like')
+                    yield Checkbox('Show inv1_candidate only', id='inv1-candidate-only')
+                    yield Checkbox('Show inv2_candidate only', id='inv2-candidate-only')
                 yield Static('Local: ? = incomplete realm; 0 = all three VDisks scanned, no part. '
                              'Local3: descending, ? last. Local2: first two of Local3. '
                              'Enter: Local / ingress / GC details. mixed = yes / blobs; unknown = annotation unavailable.', classes='hint')
@@ -143,9 +221,27 @@ class ConsoleApp(App):
                     yield DataTable(id='bucket-table', cursor_type='row', zebra_stripes=True)
             with TabPane('Workers', id='workers'):
                 yield DataTable(id='worker-table', cursor_type='row', zebra_stripes=True)
-            with TabPane('Findings', id='findings'):
-                yield Static('Up to 1000 unresolved findings. Enter opens the group histogram.', classes='hint')
-                yield DataTable(id='finding-table', cursor_type='row', zebra_stripes=True)
+            with TabPane('Candidates', id='candidates'):
+                yield Static('Restore candidates collected by the master. Enter opens the group histogram.', classes='hint')
+                with Horizontal(id='candidate-controls'):
+                    yield Select([('All categories', 'all'), ('inv1_candidate', 'inv1_candidate'), ('inv2_candidate', 'inv2_candidate')],
+                                 value='all', allow_blank=False, id='candidate-category')
+                    yield Checkbox('Selected group when available', value=True, id='candidate-selected-group')
+                    yield Button('Previous', id='candidate-previous', disabled=True)
+                    yield Button('Next', id='candidate-next', disabled=True)
+                yield Static('', id='candidate-summary', markup=False)
+                yield DataTable(id='candidate-table', cursor_type='row', zebra_stripes=True)
+            with TabPane('Restore', id='restore'):
+                with Horizontal(id='restore-controls'):
+                    yield Select([('inv1', 'inv1_candidate'), ('inv2', 'inv2_candidate')],
+                                 value='inv1_candidate', allow_blank=False, id='restore-category')
+                    yield Checkbox('Selected group', id='restore-selected-group')
+                    yield Button('Preview', id='restore-preview')
+                    yield Button('Restore', id='restore-start', variant='warning', disabled=True)
+                yield Static('Loading preview…', id='restore-summary', markup=False)
+                yield Static('Successful requests may leave inv2 candidates; later scans recheck the layout.',
+                             classes='hint')
+                yield Static('No restore started.', id='restore-progress', markup=False)
             with TabPane('Console', id='console'):
                 yield RichLog(id='log', max_lines=2000, wrap=True, min_width=0, markup=False)
         yield Input(placeholder='Console command (help, layouts GROUP, scan GROUP, interval SEC, …)', id='command')
@@ -173,7 +269,7 @@ class ConsoleApp(App):
 
     def _move_tab(self, step):
         tabs = self.query_one('#views', TabbedContent)
-        order = ('pools', 'groups', 'layouts', 'workers', 'findings', 'console')
+        order = ('pools', 'groups', 'layouts', 'workers', 'candidates', 'restore', 'console')
         self.set_focus(tabs.query_one(Tabs))
         tabs.active = order[(order.index(tabs.active) + step) % len(order)]
 
@@ -201,6 +297,16 @@ class ConsoleApp(App):
         for name in ('pause', 'scan', 'inventory'):
             self.query_one('#' + name, Button).disabled = not self._connected or self._command_busy
         self.query_one('#pause', Button).label = 'Resume' if str(self.stats.get('paused')) == '1' else 'Pause'
+        self.query_one('#candidate-previous', Button).disabled = not self._connected or self._candidate_offset == 0
+        self.query_one('#candidate-next', Button).disabled = (
+            not self._connected or self._candidate_offset + 1000 >= self._candidate_total)
+        preview = self._restore_preview
+        automatic = (preview or {}).get('automatic') or self.stats.get('automatic') or {}
+        self.query_one('#restore-preview', Button).disabled = not self._connected or self._command_busy
+        self.query_one('#restore-start', Button).disabled = (
+            not self._connected or self._command_busy or not preview or not preview['blobs']
+            or automatic.get('enabled', False)
+            or (preview['run'] is not None and preview['run']['state'] == 'running'))
 
     def _table(self, name, rows):
         table = self.query_one('#' + name, DataTable)
@@ -215,27 +321,54 @@ class ConsoleApp(App):
             table.move_cursor(row=keys.index(selected), animate=False, scroll=False)
         table.scroll_to(x=offset.x, y=offset.y, animate=False)
 
+    def _candidate_query(self):
+        category = self._candidate_category
+        selected = self._candidate_selected_group
+        group = self.detail_target[1] if selected and self.detail_target and self.detail_target[0] == 'group' else 'all'
+        return category, group, self._candidate_offset
+
+    def _restore_query(self):
+        group = self.detail_target[1] if self._restore_selected_group and self.detail_target and (
+            self.detail_target[0] == 'group') else 'all'
+        return self._restore_category, group
+
     async def refresh_view(self):
         tabs = self.query_one('#views', TabbedContent)
         view, target = tabs.active, self.detail_target
+        candidate_query = self._candidate_query()
+        restore_query = self._restore_query()
         try:
             self.stats = json.loads(await self.connection.request('stats'))
             s = self.stats
+            automatic = s.get('automatic')
+            restore_summary = ''
+            if automatic and automatic.get('enabled'):
+                restore_summary = (f"Auto restore {automatic['state']} · inv1 {automatic['pending_inv1']:,} · "
+                                   f"inv2 only {automatic['pending_inv2_only']:,} · {restore_rate(automatic)} · "
+                                   f"ETA {restore_eta(automatic)}\n")
             self.query_one('#summary', Static).update(
-                f"{'PAUSED' if str(s.get('paused')) == '1' else 'RUNNING'}  "
+                restore_summary + f"{'PAUSED' if str(s.get('paused')) == '1' else 'RUNNING'}  "
                 f"Groups: {s.get('groups', 0)}  Busy: {s.get('busy') or 0}  "
                 f"Workers: {s.get('workers_alive', 0)}  Scans: {s.get('scans') or 0}  "
-                f"Failed: {s.get('failed') or 0}  Findings: {s.get('unresolved_findings', 0)}  "
+                f"Failed: {s.get('failed') or 0}  Candidates: {s.get('unresolved_candidates', 0)}  "
                 f"Stale inventory: {s.get('stale_inventory_groups', 0)}"
                 + (f"\nDiscovery error: {s['discovery_error']}" if s.get('discovery_error') else ''))
-            command = {'pools': 'pools', 'groups': 'groups brief', 'workers': 'workers', 'findings': 'findings'}.get(view)
+            command = {'pools': 'pools', 'groups': 'groups brief', 'workers': 'workers'}.get(view)
             if view == 'layouts' and target:
                 command = ('layouts ' if target[0] == 'group' else 'pools ') + shlex.quote(target[1])
+            if view == 'candidates':
+                command = 'candidates %s %s %d 1000' % candidate_query
+            if view == 'restore':
+                command = 'restore-preview %s %s' % restore_query
             response = await self.connection.request(command) if command else None
-            if tabs.active == view and self.detail_target == target:
+            if tabs.active == view and self.detail_target == target and (
+                    view != 'candidates' or self._candidate_query() == candidate_query) and (
+                    view != 'restore' or self._restore_query() == restore_query):
                 self._render(view, response, target)
             self._status('Connected · updated ' + time.strftime('%H:%M:%S'), True)
         except CommandError as exc:
+            if view == 'restore':
+                self._restore_preview = None
             self._status(f'Command failed: {exc} · displayed data may be stale', True)
             self._log(str(exc))
         except (ConsoleError, ValueError, KeyError, TypeError) as exc:
@@ -263,12 +396,46 @@ class ConsoleApp(App):
                 'now' if g['due'] <= now else 'in ' + age(g['due'] - now), g['error'])) for g in json_rows(response)])
         elif view == 'workers':
             self._table('worker-table', [(w['id'], (w['id'], since(w['seen']), w['info'])) for w in json_rows(response)])
-        elif view == 'findings':
-            self._table('finding-table', [(json.dumps([f['gid'], f['blob']]), (
-                f['gid'], f['blob'], f['status'], since(f['first_seen']), since(f['last_seen']),
-                f.get('coverage'))) for f in json_rows(response)])
+        elif view == 'candidates':
+            data = json.loads(response)
+            self._candidate_total = data['total']
+            start = data['offset'] + 1 if data['rows'] else 0
+            end = data['offset'] + len(data['rows']) if data['rows'] else 0
+            scope = 'all groups' if data['group'] is None else 'group ' + str(data['group'])
+            self.query_one('#candidate-summary', Static).update(
+                f"{scope} · {data['category']} · {start:,}–{end:,} of {data['total']:,} entries")
+            self._table('candidate-table', [(json.dumps([f['gid'], f['category'], f['blob']]), (
+                f['gid'], f['category'], f['blob'], since(f['first_seen']), since(f['last_seen']),
+                ','.join(map(str, f['coverage'])),
+                '; '.join(label for key, label in (('outdated', 'outdated'), ('inventory_stale', 'stale inventory'))
+                          if f.get(key)))) for f in data['rows']])
+            self._update_buttons()
         elif view == 'layouts':
             self._render_layout(json.loads(response), target)
+        elif view == 'restore':
+            self._restore_preview = data = json.loads(response)
+            scope = 'all groups' if data['group'] is None else 'group ' + str(data['group'])
+            self.query_one('#restore-summary', Static).update(
+                f"{scope} · {data['category']}\n"
+                f"Total: {data['blobs']:,} blobs · {size(data['logical_bytes'])} · {data['groups']:,} groups\n"
+                f"Excluded (outdated / stale): {data['excluded_blobs']:,} blobs · {size(data['excluded_logical_bytes'])}")
+            run = data['run']
+            progress = 'No restore started.'
+            if run:
+                done = sum(run[key] for key in ('restored', 'absent', 'failed', 'skipped'))
+                scope = 'all groups' if run['group'] is None else 'group ' + str(run['group'])
+                progress = (f"{run['state']} · {run['category']} · {scope} · {done:,}/{run['blobs']:,} blobs\n"
+                            f"Successful requests: {run['restored']:,} ({size(run['restored_bytes'])}) · "
+                            f"Absent: {run['absent']:,} · Failed: {run['failed']:,} · Skipped: {run['skipped']:,}")
+                if run.get('error'):
+                    progress += '\n' + run['error']
+                for error in run['errors']:
+                    progress += f"\nGroup {error['gid']} {error['blob']}: {error['error']}"
+            automatic = data.get('automatic')
+            if automatic:
+                progress = automatic_restore_progress(automatic) + '\n\nManual restore\n' + progress
+            self.query_one('#restore-progress', Static).update(progress)
+            self._update_buttons()
 
     def _render_layout(self, data, target):
         self._layout_data = (data, target)
@@ -303,13 +470,19 @@ class ConsoleApp(App):
                 text += '\nLatest attempt error: ' + data['latest_error']
             if data.get('stream_errors'):
                 text += '\nStream errors: ' + json.dumps(data['stream_errors'], ensure_ascii=False)
+        show_phantom = self.query_one('#show-phantom-like', Checkbox).value
+        inv1_candidate_only = self.query_one('#inv1-candidate-only', Checkbox).value
+        inv2_candidate_only = self.query_one('#inv2-candidate-only', Checkbox).value
+        filtered = [b for b in buckets if (show_phantom or b.get('phantom_like') is not True)
+                    and (not inv1_candidate_only or b.get('inv1_candidate') is True)
+                    and (not inv2_candidate_only or b.get('inv2_candidate') is True)]
         selected_gc = self.query_one('#layout-filter', Select).value
-        visible = [b for b in buckets if selected_gc == 'all' or
+        visible = [b for b in filtered if selected_gc == 'all' or
                    (b['gc'] in ACTIVE_GC if selected_gc == 'active' else b['gc'] == selected_gc)]
         visible_totals = write2x2_report.totals(visible)
         if totals:
             text += (f"\nSelected: {visible_totals['blobs']:,} blobs · {size(visible_totals['logical_bytes'])}"
-                     f" · All GC states: {totals['blobs']:,} blobs · {size(totals['logical_bytes'])}")
+                     f" · Report total: {totals['blobs']:,} blobs · {size(totals['logical_bytes'])}")
         self.query_one('#detail', Static).update(text)
         by_local = {}
         for bucket in visible:
@@ -323,11 +496,11 @@ class ConsoleApp(App):
         self._table('layout-table', rows)
         gc_rows = []
         for gc in sorted(DISCARDED_GC):
-            counts = write2x2_report.totals([b for b in buckets if b['gc'] == gc])
+            counts = write2x2_report.totals([b for b in filtered if b['gc'] == gc])
             if counts['blobs']:
                 gc_rows.append((gc, (gc, counts['blobs'], size(counts['logical_bytes']))))
         self._table('gc-table', gc_rows)
-        discarded = write2x2_report.totals([b for b in buckets if b['gc'] in DISCARDED_GC])
+        discarded = write2x2_report.totals([b for b in filtered if b['gc'] in DISCARDED_GC])
         summary = self.query_one('#gc-summary', Collapsible)
         summary.title = f"GC · {discarded['blobs']:,} blobs · {size(discarded['logical_bytes'])}"
         summary.display = bool(discarded['blobs'])
@@ -348,6 +521,30 @@ class ConsoleApp(App):
     def on_select_changed(self, event: Select.Changed):
         if event.select.id == 'layout-filter' and self._layout_data:
             self._render_layout(*self._layout_data)
+        elif event.select.id == 'candidate-category':
+            if event.value not in ('all', 'inv1_candidate', 'inv2_candidate'):
+                return
+            self._candidate_category = event.value
+            self._candidate_offset = 0
+            self.action_refresh()
+        elif event.select.id == 'restore-category' and event.value in ('inv1_candidate', 'inv2_candidate'):
+            self._restore_category = event.value
+            self._restore_preview = None
+            self._update_buttons()
+            self.action_refresh()
+
+    def on_checkbox_changed(self, event: Checkbox.Changed):
+        if event.checkbox.id in ('show-phantom-like', 'inv1-candidate-only', 'inv2-candidate-only') and self._layout_data:
+            self._render_layout(*self._layout_data)
+        elif event.checkbox.id == 'candidate-selected-group':
+            self._candidate_selected_group = event.value
+            self._candidate_offset = 0
+            self.action_refresh()
+        elif event.checkbox.id == 'restore-selected-group':
+            self._restore_selected_group = event.value
+            self._restore_preview = None
+            self._update_buttons()
+            self.action_refresh()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected):
         key = event.row_key.value
@@ -361,10 +558,13 @@ class ConsoleApp(App):
             self.detail_target = ('pool', key)
         elif event.data_table.id == 'group-table':
             self.detail_target = ('group', key)
-        elif event.data_table.id == 'finding-table':
+        elif event.data_table.id == 'candidate-table':
             self.detail_target = ('group', str(json.loads(key)[0]))
         else:
             return
+        self._candidate_offset = 0
+        self._restore_preview = None
+        self._update_buttons()
         self._selected_layout = None
         self._layout_data = None
         self.query_one('#bucket-details', Collapsible).collapsed = True
@@ -422,3 +622,16 @@ class ConsoleApp(App):
             self.submit_command('scan all')
         elif event.button.id == 'inventory':
             self.submit_command('refresh')
+        elif event.button.id == 'restore-preview':
+            self._restore_preview = None
+            self._update_buttons()
+            self.action_refresh()
+        elif event.button.id == 'restore-start' and self._restore_preview:
+            category, group = self._restore_query()
+            token = self._restore_preview['token']
+            self._restore_preview = None
+            self.submit_command(f'restore {category} {group} {token}')
+        elif event.button.id in ('candidate-previous', 'candidate-next'):
+            self._candidate_offset = max(0, self._candidate_offset + (
+                -1000 if event.button.id == 'candidate-previous' else 1000))
+            self.action_refresh()

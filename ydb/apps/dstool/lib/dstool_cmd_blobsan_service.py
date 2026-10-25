@@ -1,4 +1,4 @@
-"""CLI adapter for the continuous single-DC repair service."""
+"""CLI adapter for the continuous replica invariant scan service."""
 
 import logging
 import os
@@ -10,7 +10,7 @@ from ydb.apps.dstool.lib import common
 
 hidden = True
 
-description = 'Continuously scan mirror-3-dc groups and repair single-DC blobs'
+description = 'Continuously scan mirror-3-dc groups for replica invariant candidates'
 
 
 def positive(value):
@@ -34,14 +34,15 @@ def add_options(parser):
     master.add_argument('--retry', type=positive, default=60, help='Rescan candidates/failed groups after this many seconds')
     master.add_argument('--refresh', type=positive, default=300, help='Inventory refresh interval in seconds')
     master.add_argument('--lease', type=positive, default=120)
-    worker = sub.add_parser('worker', help='Scan and repair one group at a time')
+    master.add_argument('--restore', action='store_true', help='Restore candidate blobs automatically in the background')
+    master.add_argument('--restore-inflight', type=positive, default=16, help='Maximum simultaneous VDisk repair requests')
+    master.add_argument('--restore-timeout', type=positive, default=60, help='Server repair batch deadline, 1..300 seconds')
+    worker = sub.add_parser('worker', help='Scan one group at a time and report restoration candidates')
     worker.add_argument('--master', required=True, help='HOST:PORT or URL of coordinator')
-    worker.add_argument('--blobsan', default='~/blobsan', help='Path to blobsan supporting --write2x2-candidates')
+    worker.add_argument('--blobsan', default='~/blobsan', help='Path to blobsan supporting --restore-canidates')
     worker.add_argument('--scan-timeout', type=positive, default=3600)
     worker.add_argument('--poll', type=positive, default=5)
     worker.add_argument('--heartbeat', type=positive, default=20, help='Must be shorter than master lease')
-    worker.add_argument('--repair-delay', type=float, default=0.0, help='Seconds between repair requests')
-    worker.add_argument('--scan-only', action='store_true', help='Report layouts without issuing repair requests')
     for p in (master, worker):
         p.add_argument('--db', required=True, help='Persistent local state directory')
         p.add_argument('--viewer', help='Viewer URL; defaults to this process endpoint/monitoring port')
@@ -63,10 +64,6 @@ def do(args):
     import fcntl
     from ydb.apps.dstool.lib import blobsan_service as svc
 
-    if args.blobsan_service_action == 'worker' and not 0 <= args.repair_delay <= 3600:
-        raise common.InvalidParameterError(
-            common.connection_params.parser, '--repair-delay', args.repair_delay,
-            'Must be in [0, 3600]')
     if args.blobsan_service_action == 'worker':
         binary = Path(args.blobsan).expanduser().resolve()
         if not binary.is_file() or not os.access(binary, os.X_OK):
@@ -78,6 +75,10 @@ def do(args):
         raise common.InvalidParameterError(
             common.connection_params.parser, '--listen', args.listen,
             'Port must be in [1, 65535]')
+    if args.blobsan_service_action == 'master' and args.restore_timeout > 300:
+        raise common.InvalidParameterError(
+            common.connection_params.parser, '--restore-timeout', args.restore_timeout,
+            'Timeout must be in [1, 300] seconds')
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     directory = Path(args.db).expanduser()
     directory.mkdir(parents=True, exist_ok=True)

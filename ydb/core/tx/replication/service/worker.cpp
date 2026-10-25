@@ -361,7 +361,8 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void MaybeDrained() {
-        if (!Draining || InFlightData || PendingBuildProgress || SourceOffsetReport) {
+        AFL_VERIFY(Draining);
+        if (InFlightData || PendingBuildProgress || SourceOffsetReport) {
             return;
         }
         SourceOffsetReport = MakeSourceOffsetReport();

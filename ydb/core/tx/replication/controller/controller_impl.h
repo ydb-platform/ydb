@@ -176,6 +176,7 @@ private:
     bool IsStoppedAfterSourceOffsetMismatch(ui64 replicationId) const;
     bool IsMismatchBlockingCommit(ui64 replicationId, TInstant now) const;
     void QueueReplicationWorkerStops(ui64 replicationId);
+    void RetryWorkerRemovals(ui64 replicationId, const TActorContext& ctx);
     void SaveHeartbeat(const TWorkerId& id, const TRowVersion& version, NIceDb::TNiceDb& db);
     void CheckDrains(const TActorContext&);
     void DeleteProcessedSourceOffsets(ui64 replicationId, ui64 targetId, NIceDb::TNiceDb&);

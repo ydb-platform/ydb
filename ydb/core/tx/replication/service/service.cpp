@@ -219,9 +219,7 @@ public:
             return; // old controller: do not authorize further source commits
         }
         const auto id = GetWorkerId(ev->Sender);
-        if (!HasWorker(id)) {
-            return;
-        }
+        AFL_VERIFY_DEBUG(HasWorker(id))("worker", id);
         auto& record = ev->Get()->Record;
         id.Serialize(*record.MutableWorker());
         record.MutableController()->SetTabletId(ControllerTabletId);

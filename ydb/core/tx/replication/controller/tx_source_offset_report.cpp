@@ -46,7 +46,8 @@ void TController::DeleteProcessedSourceOffsets(ui64 replicationId, ui64 targetId
 
 void TController::SaveHeartbeat(const TWorkerId& id, const TRowVersion& version, NIceDb::TNiceDb& db) {
     auto* worker = Workers.FindPtr(id);
-    if (!worker || !IsHeartbeatParticipant(id)) {
+    AFL_VERIFY(worker)("worker", id);
+    if (!IsHeartbeatParticipant(id)) {
         return;
     }
     if (worker->HasHeartbeat()) {
@@ -72,11 +73,9 @@ void TController::SaveHeartbeat(const TWorkerId& id, const TRowVersion& version,
 void TController::StartMismatchDrain(const TWorkerId& id, const TString& issue,
         NIceDb::TNiceDb& db, const TActorContext& ctx)
 {
-    if (ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId())) {
-        return;
-    }
+    AFL_VERIFY(!ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId()))("worker", id);
     auto replication = Find(id.ReplicationId());
-    Y_ABORT_UNLESS(replication);
+    AFL_VERIFY(replication)("worker", id);
     YDB_LOG_ERROR_CTX(ctx, "Destination source offset mismatch", {"worker", id}, {"issue", issue});
     replication->SetState(TReplication::EState::Error, issue);
     ReplicationsWithSourceOffsetMismatch.insert(id.ReplicationId());
@@ -180,6 +179,21 @@ void TController::QueueReplicationWorkerStops(ui64 replicationId) {
     ScheduleProcessQueues();
 }
 
+void TController::RetryWorkerRemovals(ui64 replicationId, const TActorContext& ctx) {
+    const TVector<TWorkerId> pending(RemoveQueue.begin(), RemoveQueue.end());
+    for (const auto& id : pending) {
+        if (id.ReplicationId() != replicationId) {
+            continue;
+        }
+        if (const auto* worker = Workers.FindPtr(id); worker && worker->HasSession()) {
+            StopQueue.emplace(id, worker->GetSession());
+        } else {
+            MaybeRemoveWorker(id, ctx);
+        }
+    }
+    ScheduleProcessQueues();
+}
+
 void TController::StopWorkersForMismatch(ui64 replicationId, bool drainStarted, const TActorContext& ctx) {
     if (drainStarted) {
         for (auto it = IndexReadyActors.begin(); it != IndexReadyActors.end();) {
@@ -229,10 +243,7 @@ public:
             return true;
         }
         auto replication = Self->Find(ReplicationId);
-        if (!replication) {
-            Self->DrainDeadlines.erase(it);
-            return true;
-        }
+        AFL_VERIFY(replication)("replication", ReplicationId);
         auto issue = TStringBuilder() << replication->GetIssue();
         if (pending) {
             issue << " Drain timed out with " << pending << " unfinished workers.";
@@ -257,11 +268,14 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext& ctx) override {
         if (!Self->DrainDeadlines.contains(ReplicationId) && !Finished) {
             return;
         }
         Self->QueueReplicationWorkerStops(ReplicationId);
+        if (Finished) {
+            Self->RetryWorkerRemovals(ReplicationId, ctx);
+        }
     }
 };
 

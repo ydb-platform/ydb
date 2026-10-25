@@ -227,6 +227,7 @@ public:
         }
 
         if (Replication) {
+            Self->RetryWorkerRemovals(Replication->GetId(), ctx);
             Replication->Progress(ctx);
         }
     }

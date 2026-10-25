@@ -6,6 +6,7 @@ ydb/core/kqp/executer_actor/ut unittest.[*/*] chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
+ydb/core/kqp/ut/rbo KqpRboOlap.OlapPerfQueries
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
 ydb/core/kqp/ut/rbo KqpRboYql.Decorrelation+ColumnStore+EqualNullsJoinKeys
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_14
@@ -38,12 +39,14 @@ ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.SameCre
 ydb/core/tx/replication/controller/ut_schema_change ReplicationCreation.InitialScanDisabledDoesNotTouchMissingDestination
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithSchemaChangesEnabledAfterCreationReportsError
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropSyncIndexWithGlobalConsistency
+ydb/core/tx/replication/controller/ut_schema_change StatsDescription.CredentialsDuringStatsRequest+ReplyPending
 ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentFailureAfterReplacement-DescribeOnly
 ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentSuccessAfterReplacement-DescribeOnly
 ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedBootstrapUnchangedCredentialRetryAfterConsumerFailure
 ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedConfigPreservesDestinationError
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.CurrentFailureAndRetry
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.TerminalStateIgnoresDiscovery+Drop
+ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.TerminalStateIgnoresDiscovery-Drop
 ydb/library/actors/interconnect/ut DynamicProxy.RaceCheck10
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/nmslib/test/run_test_integr exectest.sole chunk

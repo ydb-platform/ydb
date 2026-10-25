@@ -23,8 +23,8 @@ PEERDIR(
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/src/client/params
-    ydb/services/metadata/initializer
 )
+# gn: peerdir ydb/services/metadata/initializer
 # gn: partition_chooser peerdir ydb/core/persqueue/public:utils
 
 END()

@@ -7,6 +7,9 @@ PY_SRCS(
     commands.py
     common.py
     nbs_dbg_like_load.py
+    blobsan_service.py
+    write2x2_report.py
+    dstool_cmd_blobsan_service.py
     dstool_cmd_cluster_workload_nbs_dbg_like.py
     grouptool.py
     table.py

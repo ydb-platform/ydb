@@ -1,6 +1,9 @@
 import bz2
+import json
 import struct
 import subprocess
+import tempfile
+import unittest
 from pathlib import Path
 
 import yatest.common
@@ -365,3 +368,185 @@ class TestBlobSan:
         results = [self._testcase(name, snapshot(**parameters), description)
                    for name, parameters, description in cases]
         return self._canonical_file('output.txt', '\n\n'.join(results) + '\n')
+
+
+class TestScanReport(unittest.TestCase):
+    def analyze(self, data, completed=None, check=True):
+        completed = data.parameters['indexes'] if completed is None else completed
+        binary = yatest.common.binary_path('ydb/tools/blobsan/blobsan')
+        with tempfile.TemporaryDirectory() as directory:
+            manifest, report = Path(directory) / 'manifest.json', Path(directory) / 'report.json'
+            manifest.write_text(json.dumps(dict(group_id=1, completed_vdisks=list(completed))))
+            command = [binary, '--write2x2-candidates', '--scan-manifest', str(manifest), '--scan-report', str(report)]
+            command.append('mirror-3-dc')
+            result = subprocess.run(command, input=bytes(data), stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.PIPE, check=check)
+            return (json.loads(report.read_text()) if report.exists() else None), result
+
+    def test_full_layouts_are_counted_in_group_realm_order(self):
+        # Subgroup realms 0, 1, 2 map to group realms 2, 0, 1.
+        cases = [({7: (0,), 1: (1,), 4: (2,)}, '1+1+1', 300),
+                 ({7: (0,), 8: (0,), 1: (1,), 2: (1,)}, '2+0+2', 400)]
+        for parts, local, replica_bytes in cases:
+            with self.subTest(local=local):
+                report, result = self.analyze(snapshot(indexes=range(9), local_realms=(), local_parts=parts,
+                                                       known_nodes=(0, 1, 2)))
+                self.assertNotIn(b'GroupId#', result.stderr)
+                expected = dict(
+                    local=local, ingress='1+1+1', gc='no_covering_barrier', blobs=1,
+                    logical_bytes=100, observed_replica_bytes=replica_bytes, missing_metadata_blobs=0,
+                    phantom_like=False, write2x2_candidate=False)
+                self.assertEqual(report['buckets'], [expected])
+                self.assertEqual(report['totals']['blobs'], 1)
+
+    def test_missing_disk_makes_the_whole_realm_unknown(self):
+        for completed, expected in [(tuple(i for i in range(9) if i != 6), '1+1+?'),
+                                    (TWO_REALMS, '1+?+1'), ((7,), '?+?+?')]:
+            with self.subTest(completed=completed):
+                report, _ = self.analyze(snapshot(
+                    indexes=completed, local_realms=(), known_nodes=(0, 1, 2), local_parts={7: (0,), 1: (1,), 4: (2,)}))
+                self.assertEqual(report['buckets'][0]['local'], expected)
+                self.assertEqual(report['buckets'][0]['ingress'], '1+1+1')
+                self.assertEqual(report['completed_vdisks'], sorted(completed))
+
+    def test_manifest_includes_empty_streams_and_missing_metadata_is_not_filtered(self):
+        report, result = self.analyze(snapshot(indexes=(6, 7, 8)), completed=range(9))
+        self.assertEqual(report['buckets'][0]['local'], '0+0+3')
+        self.assertEqual(report['totals']['missing_metadata_blobs'], 1)
+        self.assertNotIn(b'GroupId#', result.stderr)
+        report, _ = self.analyze(snapshot(indexes=()), completed=range(9))
+        self.assertEqual(report['buckets'], [])
+        self.assertEqual(report['totals'], dict(blobs=0, logical_bytes=0, observed_replica_bytes=0, missing_metadata_blobs=0))
+
+    def test_gc_categories_and_raw_local_parts_before_gc_filter(self):
+        cases = [({'keep': 1, 'barrier': 'hard'}, 'hard_barrier'),
+                 ({'keep': 2, 'barrier': 'hard'}, 'hard_barrier'),
+                 ({'keep': 2}, 'do_not_keep'),
+                 ({'barrier': 'soft'}, 'soft_without_keep'),
+                 ({'keep': 1, 'barrier': 'soft'}, 'soft_with_keep'),
+                 ({'keep': 1}, 'no_covering_barrier'),
+                 ({}, 'no_covering_barrier')]
+        for parameters, gc in cases:
+            with self.subTest(parameters=parameters):
+                report, _ = self.analyze(snapshot(indexes=range(9), **parameters))
+                bucket = report['buckets'][0]
+                self.assertEqual(bucket['gc'], gc)
+                self.assertEqual(bucket['local'], '0+0+3')
+                self.assertEqual(bucket['observed_replica_bytes'], 300)
+
+    def test_duplicate_records_merge_and_distinct_blobs_accumulate(self):
+        data = snapshot(indexes=range(9), local_realms=(0, 1, 2), keep_flags={7: (0, 1)})
+        other = snapshot(indexes=range(9), local_realms=(0, 1, 2), blob_channel=5,
+                         subgroup_order=CHANNEL5_SUBGROUP_ORDER)
+        other_blobs = {index: blobs for index, _, blobs, _ in other.records}
+        records = []
+        for index, node, blobs, barriers in data.records:
+            records.append((index, node, blobs + other_blobs[index], barriers))
+        data.records = records
+        report, _ = self.analyze(data)
+        self.assertEqual(report['totals'], dict(blobs=2, logical_bytes=200, observed_replica_bytes=1800, missing_metadata_blobs=0))
+        self.assertEqual(len(report['buckets']), 1)
+
+    def test_wrong_realm_parts_do_not_count_as_replicas(self):
+        report, _ = self.analyze(snapshot(indexes=range(9), local_realms=(), local_parts={7: (1,)}))
+        self.assertEqual(report['buckets'][0]['local'], '0+0+0')
+        self.assertEqual(report['totals']['observed_replica_bytes'], 0)
+
+    def test_annotations_match_candidate_selection(self):
+        cases = [
+            dict(indexes=range(9)),
+            dict(indexes=range(9), keep=1, barrier='soft'),
+            dict(indexes=range(9), keep=1, barrier='hard'),
+            dict(indexes=range(9), keep=2),
+            dict(indexes=range(9), barrier='soft'),
+            dict(indexes=range(9), local_realms=(0, 1, 2)),
+            dict(indexes=range(9), local_realms=()),
+            dict(indexes=range(9), local_realms=(), local_parts={7: (1,)}),
+            dict(indexes=range(9), blob_indexes=(0, 1, 2, 6, 7, 8)),
+            dict(indexes=TWO_REALMS),
+            dict(indexes=(7,)),
+            dict(indexes=range(9), known_full=False),
+        ]
+        for parameters in cases:
+            with self.subTest(parameters=parameters):
+                data = snapshot(**parameters)
+                report, result = self.analyze(data)
+                bucket, = report['buckets']
+                self.assertEqual(bucket['write2x2_candidate'], b'GroupId#' in result.stderr)
+                self.assertEqual(bucket['phantom_like'], bool(bucket['missing_metadata_blobs']))
+
+    def test_same_layout_splits_phantom_and_candidate_annotations(self):
+        data = snapshot(indexes=range(9), local_realms=(), local_parts={7: (0,), 1: (1,)},
+                        known_nodes=(0, 1, 2))
+        other = snapshot(indexes=range(9), local_realms=(), local_parts={0: (0,), 6: (2,)},
+                         known_nodes=(0, 1, 2), blob_indexes=range(8), blob_channel=5,
+                         subgroup_order=CHANNEL5_SUBGROUP_ORDER)
+        other_blobs = {index: blobs for index, _, blobs, _ in other.records}
+        data.records = [(index, node, blobs + other_blobs[index], barriers)
+                        for index, node, blobs, barriers in data.records]
+        report, result = self.analyze(data)
+        self.assertEqual(len(report['buckets']), 2)
+        self.assertEqual({(b['local'], b['ingress'], b['gc']) for b in report['buckets']},
+                         {('1+0+1', '1+1+1', 'no_covering_barrier')})
+        self.assertEqual({(b['phantom_like'], b['write2x2_candidate']) for b in report['buckets']},
+                         {(False, True), (True, False)})
+        self.assertEqual(result.stderr.count(b'GroupId#'), 1)
+
+    def test_manifest_rejects_duplicate_and_unlisted_vdisks(self):
+        for completed in [(7, 7), (9,), (-1,), (0, 1, 2)]:
+            with self.subTest(completed=completed):
+                report, result = self.analyze(snapshot(indexes=(7,)), completed=completed, check=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIsNone(report)
+
+    def test_worker_to_pool_with_real_analyzer_and_partial_snapshot(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import threading
+        import time
+        from ydb.apps.dstool.lib import blobsan_service as svc
+
+        binary = yatest.common.binary_path('ydb/tools/blobsan/blobsan')
+        args = SimpleNamespace(viewer='http://viewer', request_timeout=5, scan_timeout=30, scan_only=True,
+                               blobsan=binary, interval=3600, retry=60, refresh=300, lease=120)
+        layout = dict(id=1, generation=7, fingerprint='v7', pool='pool1', pool_key='1:1',
+                      slots=[dict(index=i, node=i + 1, pdisk=1, slot=100 + i) for i in range(9)])
+        completed = set(TWO_REALMS)
+        calls = {}
+
+        def fetch(_args, url, raw=False):
+            from urllib.parse import urlsplit
+            index = int(urlsplit(url).path.split('/')[2]) - 1
+            if index not in completed:
+                raise OSError('DC unavailable')
+            calls[index] = calls.get(index, 0) + 1
+            if calls[index] > 1:
+                return b''
+            return bytes(snapshot(indexes=(index,), local_realms=(), known_nodes=(0, 1, 2),
+                                  local_parts={7: (0,), 1: (1,)}))[12:]
+
+        svc.STOP.clear()
+        with tempfile.TemporaryDirectory() as directory:
+            master = svc.Master(args, Path(directory))
+            try:
+                with master.db:
+                    master.db.execute('INSERT INTO groups(id,layout,seen) VALUES(?,?,?)',
+                                      (1, json.dumps(layout), time.time()))
+                job = master.rpc('/claim', dict(worker='test'))['job']
+                scratch = Path(directory) / 'scan'
+                scratch.mkdir()
+                with patch.object(svc, 'ydb_http', side_effect=fetch):
+                    candidates, coverage = svc.scan(args, job, scratch, threading.Event())
+                self.assertEqual(candidates, {'[1:1:1:0:0:100:0]'})
+                reply = master.rpc('/result', dict(
+                    worker='test', group=1, token=job['token'], result=dict(findings={}, findings_complete=False, **coverage)))
+                self.assertTrue(reply['accepted'])
+                pool, = json.loads(master.console('pools pool1'))
+                self.assertEqual(pool['partial_groups'], 1)
+                self.assertEqual(pool['totals']['logical_bytes'], 100)
+                self.assertEqual(pool['buckets'][0]['local'], '1+?+1')
+                detail = json.loads(master.console('layouts 1'))
+                self.assertEqual(detail['missing_vdisks'], [3, 4, 5])
+                self.assertEqual(detail['scan_report']['totals'], pool['totals'])
+            finally:
+                master.db.close()

@@ -10,6 +10,7 @@ DEPENDS(
 
 PEERDIR(
     library/python/testing/yatest_common
+    ydb/apps/dstool/lib
 )
 
 END()

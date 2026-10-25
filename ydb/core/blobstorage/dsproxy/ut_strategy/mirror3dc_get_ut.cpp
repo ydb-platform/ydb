@@ -454,7 +454,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
         UNIT_ASSERT(t.Blackboard.GroupDiskRequests.PutsPending.empty());
     }
 
-    Y_UNIT_TEST(RestoreWaitsForExplicitUnknownRepliesInRecoveryRealm) {
+    Y_UNIT_TEST(RestoreDoesNotWaitForUnknownRepliesInRecoveryRealm) {
         for (const auto recoveryReply : {S::Absent, S::Unknown, S::Error, S::Lost}) {
             for (ui32 cookie = 0; cookie < 3; ++cookie) {
                 TTest t({R::N2, R::N2, R::R}, cookie);
@@ -469,13 +469,10 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
                     }
                 }
                 UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::IN_PROGRESS);
-                // Unknown in N/N alone allows restoration; Unknown in R completes E=1+1+1.
-                // ERROR and NOT_YET in R do not contribute to the failure check.
-                UNIT_ASSERT_VALUES_EQUAL(bool(t.PutMask()), recoveryReply != S::Unknown);
-                if (recoveryReply != S::Unknown) {
-                    t.ConfirmPuts();
-                    UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::DONE);
-                }
+                // Unknown in N/N allows restoration; replies from R do not affect this check.
+                UNIT_ASSERT(t.PutMask());
+                t.ConfirmPuts();
+                UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::DONE);
             }
         }
     }

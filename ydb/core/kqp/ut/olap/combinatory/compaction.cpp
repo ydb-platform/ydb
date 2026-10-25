@@ -57,6 +57,25 @@ TConclusionStatus TFastPortionsCleanupCommand::DoExecute(TKikimrRunner& /*kikimr
     return TConclusionStatus::Success();
 }
 
+TConclusionStatus TWaitPortionsCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
+    auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+    AFL_VERIFY(controller);
+    const i64 erased = controller->GetPortionsErasedCounter().Val();
+    const TInstant start = TInstant::Now();
+    while (TInstant::Now() - start < TDuration::Seconds(60)) {
+        if (erased < controller->GetPortionsErasedCounter().Val()) {
+            Cerr << "PORTIONS_ERASED: " << erased << " -> " << controller->GetPortionsErasedCounter().Val() << Endl;
+            break;
+        }
+
+        Cerr << "WAIT_PORTIONS_CLEANUP: " << controller->GetPortionsErasedCounter().Val() << Endl;
+        Sleep(TDuration::MilliSeconds(300));
+    }
+
+    AFL_VERIFY(erased < controller->GetPortionsErasedCounter().Val());
+    return TConclusionStatus::Success();
+}
+
 TConclusionStatus TStopCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
     AFL_VERIFY(controller);

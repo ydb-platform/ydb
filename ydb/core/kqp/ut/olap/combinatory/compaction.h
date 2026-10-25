@@ -61,6 +61,15 @@ public:
     }
 };
 
+class TWaitPortionsCleanupCommand: public ICommand {
+private:
+    virtual TConclusionStatus DoExecute(TKikimrRunner& /*kikimr*/) override;
+
+public:
+    TWaitPortionsCleanupCommand() {
+    }
+};
+
 class TStopCompactionCommand: public ICommand {
 private:
     virtual TConclusionStatus DoExecute(TKikimrRunner& /*kikimr*/) override;

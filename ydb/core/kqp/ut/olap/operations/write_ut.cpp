@@ -199,6 +199,8 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         ------
         ONE_COMPACTION:
         ------
+        WAIT_PORTIONS_CLEANUP
+        ------
         ONE_SCHEMAS_CLEANUP:
         EXPECTED: true
         ------

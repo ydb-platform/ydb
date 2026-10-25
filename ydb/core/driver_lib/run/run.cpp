@@ -162,6 +162,7 @@
 #include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/tablet/ydb_tablet.h>
 #include <ydb/services/view/grpc_service.h>
+#include <ydb/services/workload_manager/gateway_internal.h>
 
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
 #include <ydb/services/nbs/classic_grpc_service_factory.h>
@@ -195,6 +196,7 @@
 
 #include <util/charset/wide.h>
 #include <util/folder/dirut.h>
+#include <util/generic/hash_set.h>
 #include <util/system/file.h>
 #include <util/system/getpid.h>
 #include <util/system/hostname.h>
@@ -250,6 +252,35 @@ void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool
     // ~TKikimrRunner(), which runs after ActorSystem.Destroy().
 }
 
+// Prepare the wrapper for a new generation of servers created by
+// TGRpcServersManager::Start(). The servers being replaced were stopped (or, on
+// the very first start, never started), but actors may still hold request
+// contexts referencing them, so they must not be destroyed while any request is
+// still registered. Servers without registered requests are destroyed right
+// away; the rest are moved to RetiredServers and stay there until they drain
+// (checked on the next restart) or the wrapper is destroyed in ~TKikimrRunner().
+void RetireReplacedServers(TGRpcServersWrapper& wrapper) {
+    auto drained = [](const TAutoPtr<NYdbGrpc::TGRpcServer>& server) {
+        return !server || server->RequestsInProgress() == 0;
+    };
+
+    auto& servers = wrapper.Servers;
+    for (auto it = servers.begin(); it != servers.end();) {
+        it = drained(it->second) ? servers.erase(it) : std::next(it);
+    }
+
+    auto& retired = wrapper.RetiredServers;
+    for (auto it = retired.begin(); it != retired.end();) {
+        it = drained(it->second) ? retired.erase(it) : std::next(it);
+    }
+
+    for (auto& [name, server] : servers) {
+        // TAutoPtr "copies" transfer ownership, so move the server explicitly
+        retired.emplace_back(name, TAutoPtr<NYdbGrpc::TGRpcServer>(server.Release()));
+    }
+    servers.clear();
+}
+
 } // anonymous namespace
 
 class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
@@ -257,7 +288,7 @@ class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
     TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     bool Started = false;
     bool StopScheduled = false;
-    bool WaitingForDisconnectRequest = false;
+    THashSet<TActorId> DisconnectRequests;
     TDuration WarmupTimeout = TDuration::Zero();
     bool WarmupReceived = false;
 
@@ -308,12 +339,12 @@ public:
         }
     }
 
-    void HandleDisconnectRequestStarted() {
-        WaitingForDisconnectRequest = true;
+    void Handle(TEvGRpcServersManager::TEvDisconnectRequestStarted::TPtr& ev) {
+        DisconnectRequests.insert(ev->Sender);
     }
 
-    void HandleDisconnectRequestFinished() {
-        WaitingForDisconnectRequest = false;
+    void Handle(TEvGRpcServersManager::TEvDisconnectRequestFinished::TPtr& ev) {
+        DisconnectRequests.erase(ev->Sender);
         CheckAndExecuteStop();
     }
 
@@ -332,19 +363,18 @@ public:
     }
 
     void CheckAndExecuteStop() {
-        if (StopScheduled && !WaitingForDisconnectRequest) {
+        if (StopScheduled && DisconnectRequests.empty()) {
             StopScheduled = false;
             Stop();
         }
     }
 
     void Start() {
+        StopScheduled = false;
         if (Started) {
             return;
         }
         Started = true;
-        StopScheduled = false;
-        WaitingForDisconnectRequest = false;
         auto wrapper = GRpcServersWrapper.lock();
         if (!wrapper) {
             return;
@@ -353,6 +383,7 @@ public:
             return;
         }
         TGuard<TMutex> guard = wrapper->Guard();
+        RetireReplacedServers(*wrapper);
         wrapper->Servers = wrapper->GrpcServersFactory();
         for (auto& [name, server] : wrapper->Servers) {
             if (!server) {
@@ -402,8 +433,8 @@ public:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvNodeWardenStorageConfig, Handle)
         hFunc(TEvStop, HandleStop)
-        cFunc(TEvGRpcServersManager::EvDisconnectRequestStarted, HandleDisconnectRequestStarted)
-        cFunc(TEvGRpcServersManager::EvDisconnectRequestFinished, HandleDisconnectRequestFinished)
+        hFunc(TEvGRpcServersManager::TEvDisconnectRequestStarted, Handle)
+        hFunc(TEvGRpcServersManager::TEvDisconnectRequestFinished, Handle)
         hFunc(NKqp::TEvKqpWarmupComplete, HandleWarmupComplete)
         cFunc(EvWarmupTimeout, HandleWarmupTimeout)
         cFunc(TEvents::TSystem::PoisonPill, PassAway)
@@ -2198,8 +2229,11 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, ProcessMemoryInfoProvider));
 
+    auto workloadManagerGateway = std::make_shared<NWorkloadManager::NPrivate::TWorkloadManagerGateway>();
+    AppData->WorkloadManagerGateway = workloadManagerGateway;
+
     if (serviceMask.EnableWorkloadManagerService) {
-        sil->AddServiceInitializer(new TWorkloadManagerServiceInitializer(runConfig));
+        sil->AddServiceInitializer(new TWorkloadManagerServiceInitializer(runConfig, workloadManagerGateway));
     }
 
     if (serviceMask.EnableKqp) {

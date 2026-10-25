@@ -72,6 +72,9 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::PassAway() {
+        CancelStateStorageSelfHealRefresh();
+        CancelConfigRefill();
+        CancelBindingLiveness();
         for (const auto& item : InvokeQ) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, item.ActorId, SelfId(), nullptr, 0));
         }
@@ -111,6 +114,13 @@ namespace NKikimr::NStorage {
 
             if (Cfg->BridgeConfig) {
                 BridgeInfo = GenerateBridgeInfo(config);
+                if (IsBridged()) {
+                    // recovery of applied configurations is not used in bridge mode, forget its state the cluster could
+                    // have had before being converted
+                    ConfigRecoveryRequired = false;
+                    KnownAppliedConfig.reset();
+                    KnownAppliedConfigConflicting = false;
+                }
             } else {
                 Y_ABORT_UNLESS(!BridgeInfo);
             }
@@ -132,7 +142,19 @@ namespace NKikimr::NStorage {
                 ApplyNewNodeList(newNodeList);
             }
 
+            if (IsSelfStatic && AllBoundNodes.contains(SelfNode)) {
+                auto update = std::make_unique<TEvNodeConfigPush>();
+                UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, update.get());
+                if (Binding && Binding->SessionId && update->IsUseful()) {
+                    SendEvent(*Binding, std::move(update));
+                }
+            }
+
             QuorumValid = false;
+
+            // A generation-zero root can learn its first managed configuration
+            // from quorum recovery after BecomeRoot has already run.
+            StartStateStorageSelfHealRefresh();
 
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
@@ -203,6 +225,14 @@ namespace NKikimr::NStorage {
 
         // apply volatile config locally
         ApplyStorageConfig(msg.Config);
+
+        if (IsBridged() && IsSelfStatic && Binding && Binding->SessionId && StorageConfig->GetGeneration()
+            && (!LocalCommittedStorageConfig
+                || LocalCommittedStorageConfig->GetGeneration() < StorageConfig->GetGeneration())) {
+            auto request = std::make_unique<TEvNodeConfigPush>();
+            request->Record.SetRequestedCommittedConfigGeneration(StorageConfig->GetGeneration());
+            SendEvent(*Binding, std::move(request));
+        }
     }
 
     void TDistributedConfigKeeper::HandleConfigConfirm(STATEFN_SIG) {
@@ -237,10 +267,13 @@ namespace NKikimr::NStorage {
             const auto [it, inserted] = allBoundNodesMap.emplace(nodeIdentifier.NodeId(), nodeIdentifier);
             Y_ABORT_UNLESS(inserted);
         }
+        std::multiset<ui32> subtreeHeights;
         for (const auto& [nodeId, info] : DirectBoundNodes) { // validate incoming binding
             Y_ABORT_UNLESS(allBoundNodesMap.contains(nodeId));
             Y_ABORT_UNLESS(AllBoundNodes.contains(allBoundNodesMap[nodeId]));
+            subtreeHeights.insert(info.GetSubtreeHeight());
         }
+        Y_ABORT_UNLESS(subtreeHeights == BoundSubtreeHeights);
         if (Binding) { // validate outgoing binding
             Y_ABORT_UNLESS(std::ranges::binary_search(NodeIdsForOutgoingBinding, Binding->NodeId) ||
                 std::ranges::binary_search(NodeIdsForIncomingBinding, Binding->NodeId) ||
@@ -306,6 +339,9 @@ namespace NKikimr::NStorage {
                 okay = true;
             }
             if (UnsubscribeQueue.contains(nodeId)) {
+                okay = true;
+            }
+            if (!okay && IsProvisionalPeer(nodeId)) {
                 okay = true;
             }
             if (!okay) {
@@ -463,9 +499,14 @@ namespace NKikimr::NStorage {
             {"sessionId", ev->InterconnectSession},
             {"cookie", ev->Cookie});
         const ui32 senderNodeId = ev->Sender.NodeId();
-        if (ev->InterconnectSession && SubscribedSessions.contains(senderNodeId)) {
-            // keep session actors intact
-            SubscribeToPeerNode(senderNodeId, ev->InterconnectSession);
+        if (ev->InterconnectSession) {
+            if (const auto it = SubscribedSessions.find(senderNodeId); it != SubscribedSessions.end()) {
+                const auto& subs = it->second;
+                if (!subs.SubscriptionCookie && subs.SessionId != ev->InterconnectSession) {
+                    return;
+                }
+                SubscribeToPeerNode(senderNodeId, ev->InterconnectSession);
+            }
         }
         STRICT_STFUNC_BODY(
             hFunc(TEvNodeConfigPush, Handle);
@@ -481,6 +522,7 @@ namespace NKikimr::NStorage {
             cFunc(TEvPrivate::EvErrorTimeout, HandleErrorTimeout);
             hFunc(TEvPrivate::TEvStorageConfigLoaded, Handle);
             hFunc(TEvPrivate::TEvStorageConfigStored, Handle);
+            hFunc(TEvPrivate::TEvScatterTaskTimeout, Handle);
             fFunc(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, HandleConfigConfirm);
             hFunc(TEvNodeWardenDynamicConfigSubscribe, Handle);
             hFunc(TEvNodeWardenDynamicConfigPush, Handle);
@@ -503,6 +545,7 @@ namespace NKikimr::NStorage {
             cFunc(TEvPrivate::EvFlushRetroTraceBatch, HandleFlushRetroTraceBatch);
             fFunc(TEvPrivate::EvRootProbeTimeout, HandleRootProbeTimeout);
             fFunc(TEvPrivate::EvBindingTimeout, HandleBindingTimeout);
+            fFunc(TEvPrivate::EvRetryConfigPropagation, HandleRetryConfigPropagation);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);
@@ -515,6 +558,7 @@ namespace NKikimr::NStorage {
 
         if (IsSelfStatic && StorageConfig && NodeListObtained) {
             ReconcileNodeRole();
+            CheckBindingLiveness();
         }
         if (StorageConfig && NodeListObtained) {
             ReportStorageConfigToNodeWarden();
@@ -577,7 +621,13 @@ namespace NKikimr::NStorage {
     }
 
     TBridgeInfo::TPtr TDistributedConfigKeeper::GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config) {
-        const auto registry = GetConfigPileRegistry(config);
+        Y_ABORT_UNLESS(Cfg);
+        return GenerateBridgeInfo(config, *Cfg, SelfNode.NodeId());
+    }
+
+    TBridgeInfo::TPtr TDistributedConfigKeeper::GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config,
+            const TNodeWardenConfig& cfg, ui32 selfNodeId) {
+        const auto registry = GetPileRegistry(config, cfg.BridgeConfig.get());
         Y_ABORT_UNLESS(registry);
 
         // prepare structure with all the piles of the registry
@@ -605,13 +655,13 @@ namespace NKikimr::NStorage {
             const ui32 nodeId = node.GetNodeId();
             pile.StaticNodeIds.push_back(node.GetNodeId());
             bridgeInfo->StaticNodeIdToPile[nodeId] = &pile;
-            if (nodeId == SelfNode.NodeId()) {
+            if (nodeId == selfNodeId) {
                 bridgeInfo->SelfNodePile = &pile;
             }
         }
 
-        if (Cfg->DynamicNodeConfig && Cfg->DynamicNodeConfig->HasNodeInfo()) {
-            const auto& nodeInfo = Cfg->DynamicNodeConfig->GetNodeInfo();
+        if (cfg.DynamicNodeConfig && cfg.DynamicNodeConfig->HasNodeInfo()) {
+            const auto& nodeInfo = cfg.DynamicNodeConfig->GetNodeInfo();
             if (!nodeInfo.HasLocation()) {
                 Y_ABORT("missing Location in dynamic TNodeInfo");
             }
@@ -622,7 +672,8 @@ namespace NKikimr::NStorage {
             bridgeInfo->SelfNodePile = &bridgeInfo->Piles[bridgePileId.GetPileIndex()];
         }
 
-        Y_VERIFY_S(bridgeInfo->SelfNodePile, "SelfNodeId# " << SelfNode.NodeId() << " Config# " << NKikimr::SecureDebugString(config));
+        Y_VERIFY_S(bridgeInfo->SelfNodePile, "SelfNodeId# " << selfNodeId << " Config# "
+            << NKikimr::SecureDebugString(config));
 
         // the cluster may be not converted to bridged one yet; then it runs single pile in implicit state
         std::optional<NKikimrBridge::TClusterState> implicitState;

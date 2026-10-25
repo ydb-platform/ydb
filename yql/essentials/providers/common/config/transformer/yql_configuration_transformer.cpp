@@ -14,7 +14,7 @@ namespace NYql::NCommon {
 
 using namespace NNodes;
 
-TProviderConfigurationTransformer::TProviderConfigurationTransformer(TSettingDispatcher::TPtr dispatcher,
+TProviderConfigurationTransformer::TProviderConfigurationTransformer(ISettingDispatcher::TPtr dispatcher,
                                                                      const TTypeAnnotationContext& types, TString provider, const THashSet<TStringBuf>& configureCallables)
     : Dispatcher(std::move(dispatcher))
     , Types_(types)
@@ -132,10 +132,10 @@ bool TProviderConfigurationTransformer::HandleAttr(TPositionHandle pos, const TS
 {
     Y_UNUSED(pos);
     Y_UNUSED(ctx);
-    return Dispatcher->Dispatch(cluster, name, value, TSettingDispatcher::EStage::STATIC, TSettingDispatcher::GetErrorCallback(pos, ctx));
+    return Dispatcher->Dispatch(cluster, name, value, ISettingDispatcher::EStage::STATIC, GetErrorCallback(pos, ctx));
 }
 
-TSettingDispatcher::TPtr TProviderConfigurationTransformer::GetDispatcher() const {
+ISettingDispatcher::TPtr TProviderConfigurationTransformer::GetDispatcher() const {
     return Dispatcher;
 }
 
@@ -157,11 +157,11 @@ bool TProviderConfigurationTransformer::HandleAuth(TPositionHandle pos,
         return false;
     }
 
-    return Dispatcher->Dispatch(cluster, "Auth", cred->Content, TSettingDispatcher::EStage::STATIC, TSettingDispatcher::GetErrorCallback(pos, ctx));
+    return Dispatcher->Dispatch(cluster, "Auth", cred->Content, ISettingDispatcher::EStage::STATIC, GetErrorCallback(pos, ctx));
 }
 
 THolder<IGraphTransformer> CreateProviderConfigurationTransformer(
-    TSettingDispatcher::TPtr dispatcher,
+    ISettingDispatcher::TPtr dispatcher,
     const TTypeAnnotationContext& types,
     const TString& provider) {
     return THolder(new TProviderConfigurationTransformer(dispatcher, types, provider));

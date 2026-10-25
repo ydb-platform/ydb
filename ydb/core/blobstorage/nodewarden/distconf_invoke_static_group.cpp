@@ -24,13 +24,13 @@ namespace NKikimr::NStorage {
                 if (!group.HasBridgeGroupState()) {
                     continue;
                 }
-                for (auto& pile : *group.MutableBridgeGroupState()->MutablePile()) {
-                    if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) != groupId) {
-                        continue;
+                NBridge::ForEachGroupPile(group.MutableBridgeGroupState(), [&](TBridgePileId,
+                        NKikimrBridge::TGroupState::TPile& pile) {
+                    if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == groupId) {
+                        pile.SetGroupGeneration(*generation);
+                        BumpBridgeProxyGeneration(&group, [&](TGroupId id) { return id == groupId; });
                     }
-                    pile.SetGroupGeneration(*generation);
-                    BumpBridgeProxyGeneration(&group, [&](TGroupId id) { return id == groupId; });
-                }
+                });
             }
         }
 
@@ -169,6 +169,9 @@ namespace NKikimr::NStorage {
         for (const ui32 nodeId : nodesToConnect) {
             Send(TActivationContext::InterconnectProxy(nodeId), new TEvInterconnect::TEvConnectNode);
         }
+
+        TActivationContext::Schedule(TDuration::Seconds(30), new IEventHandle(TEvents::TSystem::Wakeup, 0,
+            SelfId(), {}, nullptr, VStatusTimeoutCookie));
     }
 
     void TInvokeRequestHandlerActor::SendVStatusQuery(TActorId actorId, TVDiskID vdiskId, TActorId sessionId) {
@@ -204,7 +207,7 @@ namespace NKikimr::NStorage {
             {"record", record},
             {"VDiskId", vdiskId});
         if (!PendingVDiskIds.erase(vdiskId)) {
-            throw TExError() << "TEvVStatusResult VDiskID# " << vdiskId << " is unexpected";
+            return;
         }
         if (record.GetJoinedGroup() && record.GetReplicated()) {
             *SuccessfulVDisks |= {&GroupInfo->GetTopology(), vdiskId};
@@ -227,8 +230,16 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvNodeWardenBaseConfig::TPtr ev) {
+        if (const auto& error = ev->Get()->ErrorReason) {
+            // static groups can't be placed without knowing PDisks of BSC, they would get conflicting ones otherwise
+            throw TExError() << "Can't get base config: " << *error;
+        }
         BaseConfig.emplace(std::move(ev->Get()->BaseConfig));
-        CheckReassignGroupDisk();
+        if (BridgePileOpPileId) {
+            AddBridgePileWithBaseConfig();
+        } else {
+            CheckReassignGroupDisk();
+        }
     }
 
     void TInvokeRequestHandlerActor::CheckReassignGroupDisk() {
@@ -362,7 +373,12 @@ namespace NKikimr::NStorage {
                 break;
             }
         }
-        Y_ABORT_UNLESS(0 < actualGroupGeneration && vdiskId.GroupGeneration < actualGroupGeneration);
+        // the group may have been removed along with the pile it was a part of, then its VDisks are destroyed ones
+        const bool groupRemoved = !actualGroupGeneration;
+        if (groupRemoved && isDropDonor) {
+            throw TExError() << "Group not found";
+        }
+        Y_ABORT_UNLESS(groupRemoved || vdiskId.GroupGeneration < actualGroupGeneration);
 
         for (size_t i = 0; i < ss->VDisksSize(); ++i) {
             if (const auto& vdisk = ss->GetVDisks(i); vdisk.HasVDiskID() && vdisk.HasVDiskLocation()) {
@@ -402,8 +418,12 @@ namespace NKikimr::NStorage {
                     continue; // doesn't match our pdisk
                 }
 
+                if (groupRemoved && vdisk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {
+                    continue; // VDisk of the removed group can only be a destroyed one
+                }
+
                 // this must be the obsolete disk (donor has generation from the past, destroyed disks too)
-                Y_ABORT_UNLESS(currentVDiskId.GroupGeneration < actualGroupGeneration);
+                Y_ABORT_UNLESS(groupRemoved || currentVDiskId.GroupGeneration < actualGroupGeneration);
 
                 if (!isDropDonor) {
                     // destroying slot on this disk

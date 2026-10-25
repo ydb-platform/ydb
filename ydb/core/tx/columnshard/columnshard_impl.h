@@ -14,6 +14,7 @@
 #include "common/path_id.h"
 #include "counters/columnshard.h"
 #include "counters/counters_manager.h"
+#include "counters/startup_timeline.h"
 #include "data_sharing/destination/events/control.h"
 #include "data_sharing/destination/events/transfer.h"
 #include "data_sharing/manager/sessions.h"
@@ -465,6 +466,7 @@ protected:
 private:
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
     TCountersManager Counters;
+    TStartupTimeline StartupTimeline;
     std::unique_ptr<TWriteTasksQueue> WriteTasksQueue;
 
     std::unique_ptr<TTxController> ProgressTxController;
@@ -479,8 +481,6 @@ private:
     using TSchemaPreset = TSchemaPreset;
     using TTableInfo = TTableInfo;
 
-    const TMonotonic CreateInstant = TMonotonic::Now();
-    std::optional<TMonotonic> StartInstant;
     bool IsTxInitFinished = false;
 
     ui64 CurrentSchemeShardId = 0;

@@ -372,6 +372,8 @@ namespace NKikimr::NBsController {
                 }
                 Y_ABORT_UNLESS(prev.VDisksInGroup.size() == cur.VDisksInGroup.size() ||
                     (cur.VDisksInGroup.empty() && cur.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) ||
+                    // inline pile has been removed along with its pile, the group serves as bridge proxy only now
+                    (cur.VDisksInGroup.empty() && prev.IsInlinePile() && !cur.BridgePileId && cur.BridgeGroupInfo) ||
                     (prev.VDisksInGroup.empty() && cur.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING));
                 for (size_t i = 0; i < Min(prev.VDisksInGroup.size(), cur.VDisksInGroup.size()); ++i) {
                     const TVSlotInfo& prevSlot = *prev.VDisksInGroup[i];
@@ -415,12 +417,13 @@ namespace NKikimr::NBsController {
             updates.clear();
             for (TGroupId groupId : state.GroupContentChanged) {
                 if (const TGroupInfo *group = state.Groups.Find(groupId); group && group->BridgeGroupInfo) {
-                    for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    NBridge::ForEachGroupPile(group->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                            const NKikimrBridge::TGroupState::TPile& pile) {
                         const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                         if (!state.GroupContentChanged.contains(groupId)) {
                             updates.insert(groupId);
                         }
-                    }
+                    });
                 }
             }
             state.GroupContentChanged.insert(updates.begin(), updates.end());
@@ -450,13 +453,21 @@ namespace NKikimr::NBsController {
                 Y_ABORT_UNLESS(group->BridgeGroupInfo);
 
                 // set correct generations for bridge groups
-                for (auto& pile : *group->BridgeGroupInfo->MutableBridgeGroupState()->MutablePile()) {
+                NBridge::ForEachGroupPile(group->BridgeGroupInfo->MutableBridgeGroupState(), [&](TBridgePileId,
+                        NKikimrBridge::TGroupState::TPile& pile) {
                     const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                     Y_ABORT_UNLESS(state.GroupContentChanged.contains(groupId));
                     const TGroupInfo *referenced = state.Groups.Find(groupId);
                     Y_ABORT_UNLESS(referenced);
                     Y_DEBUG_ABORT_UNLESS(pile.GetGroupGeneration() + 1 == referenced->Generation);
                     pile.SetGroupGeneration(referenced->Generation);
+                });
+
+                // the new group state is made for the cluster state we know; proxies won't serve the group with older one
+                auto *bridgeGroupState = group->BridgeGroupInfo->MutableBridgeGroupState();
+                if (StorageConfig) {
+                    bridgeGroupState->SetClusterStateGeneration(Max(bridgeGroupState->GetClusterStateGeneration(),
+                        StorageConfig->GetClusterState().GetGeneration()));
                 }
             }
 
@@ -592,7 +603,7 @@ namespace NKikimr::NBsController {
 
         std::optional<TString> TBlobStorageController::ValidateAndCommitConfigUpdate(std::optional<TConfigState>& state,
                 TConfigTxFlags flags, TTransactionContext& txc,
-                NKikimrBlobStorage::TConfigResponse *response) {
+                NKikimrBlobStorage::TConfigResponse *response, bool dryRun) {
             if (!state || !state->Changed()) {
                 return std::nullopt;
             }
@@ -607,6 +618,9 @@ namespace NKikimr::NBsController {
             if (!ValidateConfigUpdates(*state, parameters, &error, response)) {
                 RollbackConfigUpdate(state);
                 return error;
+            } else if (dryRun) {
+                RollbackConfigUpdate(state);
+                return std::nullopt;
             }
 
             CommitConfigUpdates(*state, txc);
@@ -1257,6 +1271,7 @@ namespace NKikimr::NBsController {
             }
 
             pb->SetKind(pool.Kind);
+            pb->SetBridgeMode(pool.BridgeMode);
             pb->SetNumGroups(pool.NumGroups);
             pb->SetRandomizeGroupMapping(pool.RandomizeGroupMapping);
             if (pool.DefaultGroupSizeInUnits != 0) {
@@ -1284,6 +1299,59 @@ namespace NKikimr::NBsController {
             }
         }
 
+        TBlobStorageController::TStoragePoolInfo::TPDiskFilter
+        TBlobStorageController::TStoragePoolInfo::TPDiskFilter::Parse(ui64 boxId, ui64 storagePoolId,
+                const NKikimrBlobStorage::TPDiskFilter& proto) {
+            TPDiskFilter filter;
+            filter.BoxId = boxId;
+            filter.StoragePoolId = storagePoolId;
+            bool hasLocation = false;
+
+            for (const auto &property : proto.GetProperty()) {
+                switch (property.GetPropertyCase()) {
+#define PROPERTY(NAME) \
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::k ## NAME: { \
+                        if (filter.NAME) { \
+                            throw TExError() << #NAME << " already set"; \
+                        } else { \
+                            filter.NAME = property.Get ## NAME(); \
+                            continue; \
+                        } \
+                    }
+
+                    PROPERTY(Type)
+                    PROPERTY(SharedWithOs)
+                    PROPERTY(ReadCentric)
+                    PROPERTY(Kind)
+#undef PROPERTY
+
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kLocation:
+                        if (std::exchange(hasLocation, true)) {
+                            throw TExError() << "Location already set";
+                        }
+                        if (!IsValidPDiskFilterLocation(property.GetLocation())) {
+                            throw TExError() << "Location requires current string fields; legacy numeric and unknown fields are not supported";
+                        }
+                        // an empty location constrains nothing, so it is stored the same way as an absent one
+                        if (TNodeLocation location(property.GetLocation()); !location.GetItems().empty()) {
+                            filter.SetLocation(location.GetSerializedLocation());
+                        }
+                        continue;
+
+                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
+                        throw TExError() << "TPDiskFilter.TRequiredProperty.Property not set";
+                }
+
+                throw TExError() << "TPDiskFilter.TRequiredProperty.Property has invalid case";
+            }
+
+            if (!filter.Type) {
+                throw TExError() << "TPDiskFilter did not specify Type property";
+            }
+
+            return filter;
+        }
+
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter) {
 #define SERIALIZE_VARIABLE(NAME) (filter.NAME && (pb->AddProperty()->Set##NAME(*filter.NAME), true))
             SERIALIZE_VARIABLE(Type);
@@ -1291,6 +1359,9 @@ namespace NKikimr::NBsController {
             SERIALIZE_VARIABLE(ReadCentric);
             SERIALIZE_VARIABLE(Kind);
 #undef SERIALIZE_VARIABLE
+            if (filter.Location) {
+                *pb->AddProperty()->MutableLocation() = TNodeLocation::ParseLocation(*filter.Location);
+            }
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TPDisk *pb, const TPDiskId &id, const TPDiskInfo &pdisk) {

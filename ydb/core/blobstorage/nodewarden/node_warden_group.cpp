@@ -276,6 +276,10 @@ namespace NKikimr::NStorage {
                     ? DsProxyPerPoolCounters->GetPoolCounters(info->GetStoragePoolName(), info->GetDeviceType())
                     : nullptr;
 
+                if (info && !info->IsInlinePile() && info->IsBridged()) {
+                    // the group has lost its inline pile, the bridge proxy stops the DS proxy of that pile itself
+                    group.InlinePileProxy = false;
+                }
                 if (info && info->IsInlinePile() && !group.InlinePileProxy) {
                     // the group has just been converted into the bridged one, it becomes an inline pile; put bridge
                     // proxy in front of the running DS proxy, the latter will serve the inline pile; this also happens
@@ -323,7 +327,7 @@ namespace NKikimr::NStorage {
 
                 for (auto& [timestamp, ev] : queue) {
                     THolder<IEventHandle> tmp(ev.release());
-                    TActivationContext::Forward(tmp, ev->GetForwardOnNondeliveryRecipient());
+                    TActivationContext::Forward(tmp, tmp->GetForwardOnNondeliveryRecipient());
                 }
 
                 GroupPendingQueue.erase(it);
@@ -358,31 +362,50 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TNodeWarden::ApplyGroupInfoFromServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet) {
+    void TNodeWarden::ApplyGroupInfoFromServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet,
+            bool isStatic, bool comprehensive) {
+        std::unordered_set<ui32> seenGroupIds;
         for (const auto& group : serviceSet.GetGroups()) {
             const ui32 groupId = group.GetGroupID();
             if (group.GetEntityStatus() == NKikimrBlobStorage::DESTROY) {
-                if (EjectedGroups.insert(groupId).second) {
-                    TGroupRecord& group = Groups[groupId];
-                    YDB_LOG_DEBUG("Destroying group",
-                        {"marker", "NW99"},
-                        {"groupId", groupId},
-                        {"proxyId", group.ProxyId});
-                    if (group.ProxyId) {
-                        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.ProxyId, {}, nullptr, 0));
-                    }
-                    if (group.GroupResolver) {
-                        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
-                    }
-                    Groups.erase(groupId);
-                    Send(SelfId(), new TEvNodeWardenUnsubscribeFromCache(Sprintf("G%08" PRIx32, groupId)));
-
-                    // report group deletion to whiteboard
-                    Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateDelete(groupId));
-                }
+                EjectGroup(groupId);
             } else {
+                if (isStatic) {
+                    seenGroupIds.insert(groupId);
+                }
                 ApplyGroupInfo(groupId, group.GetGroupGeneration(), &group, true, false);
             }
+        }
+        if (isStatic && comprehensive) {
+            for (const ui32 groupId : StaticGroupIds) {
+                if (!seenGroupIds.contains(groupId)) {
+                    EjectGroup(groupId);
+                }
+            }
+            StaticGroupIds = std::move(seenGroupIds);
+        } else if (isStatic) {
+            StaticGroupIds.insert(seenGroupIds.begin(), seenGroupIds.end());
+        }
+    }
+
+    void TNodeWarden::EjectGroup(ui32 groupId) {
+        if (EjectedGroups.insert(groupId).second) {
+            TGroupRecord& group = Groups[groupId];
+            YDB_LOG_DEBUG("Destroying group",
+                {"marker", "NW99"},
+                {"groupId", groupId},
+                {"proxyId", group.ProxyId});
+            if (group.ProxyId) {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.ProxyId, {}, nullptr, 0));
+            }
+            if (group.GroupResolver) {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
+            }
+            Groups.erase(groupId);
+            Send(SelfId(), new TEvNodeWardenUnsubscribeFromCache(Sprintf("G%08" PRIx32, groupId)));
+
+            // report group deletion to whiteboard
+            Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateDelete(groupId));
         }
     }
 

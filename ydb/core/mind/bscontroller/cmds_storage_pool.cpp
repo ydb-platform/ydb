@@ -50,6 +50,26 @@ namespace NKikimr::NBsController {
         const TBoxStoragePoolId id(boxId, storagePoolId);
         const ui64 nextGen = CheckGeneration(cmd, StoragePools.Get(), id);
 
+        const auto current = StoragePools.Get().find(id);
+        const bool existing = current != StoragePools.Get().end();
+        const bool defaultBridgeMode = BridgeInfo && !BridgeInfo->IsImplicit;
+        const bool bridgeMode = existing ? current->second.BridgeMode
+            : cmd.HasBridgeMode() ? cmd.GetBridgeMode() : defaultBridgeMode;
+        if (existing && cmd.HasBridgeMode() && cmd.GetBridgeMode() != bridgeMode) {
+            throw TExError() << "can't change storage pool BridgeMode";
+        }
+        if (!existing && bridgeMode != defaultBridgeMode) {
+            const auto& details = Self.StorageConfig
+                ? Self.StorageConfig->GetClusterStateDetails()
+                : NKikimrBridge::TClusterStateDetails::default_instance();
+            if (!defaultBridgeMode || details.GetBscConversionPending()) {
+                throw TExError() << "BridgeMode override requires a bridged cluster with BSC conversion complete";
+            }
+            if (!details.GetNonUniformStorageEnabled()) {
+                throw TExError() << "BridgeMode override requires bridge_config.enable_non_uniform_storage";
+            }
+        }
+
         TStoragePoolInfo storagePool;
         storagePool.Name = cmd.GetName();
         storagePool.Generation = nextGen;
@@ -58,6 +78,9 @@ namespace NKikimr::NBsController {
         if (!TBlobStorageGroupType::ParseErasureName(storagePool.ErasureSpecies, erasureSpecies)) {
             throw TExError() << "invalid ErasureSpecies# " << erasureSpecies;
         }
+
+        // Resolve the default only at creation; updates preserve the stored mode.
+        storagePool.BridgeMode = bridgeMode;
 
         if (cmd.HasGeometry()) {
             const auto &geom = cmd.GetGeometry();
@@ -102,44 +125,7 @@ namespace NKikimr::NBsController {
         }
 
         for (const auto &item : cmd.GetPDiskFilter()) {
-            TStoragePoolInfo::TPDiskFilter filter;
-            filter.BoxId = boxId;
-            filter.StoragePoolId = storagePoolId;
-
-            bool hasTypeProperty = false;
-
-            for (const auto &property : item.GetProperty()) {
-                switch (property.GetPropertyCase()) {
-#define PROPERTY(NAME, PTR) \
-                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::k ## NAME: { \
-                        if (filter.NAME) { \
-                            throw TExError() << #NAME << " already set"; \
-                        } else { \
-                            filter.NAME = property.Get ## NAME(); \
-                            if (bool *p = (PTR)) { \
-                                *p = true; \
-                            } \
-                            continue; \
-                        } \
-                    }
-
-                    PROPERTY(Type, &hasTypeProperty)
-                    PROPERTY(SharedWithOs, nullptr)
-                    PROPERTY(ReadCentric, nullptr)
-                    PROPERTY(Kind, nullptr)
-
-                    case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::PROPERTY_NOT_SET:
-                        throw TExError() << "TPDiskFilter.TRequiredProperty.Property not set";
-                }
-
-                throw TExError() << "TPDiskFilter.TRequiredProperty.Property has invalid case";
-            }
-
-            if (!hasTypeProperty) {
-                throw TExError() << "TPDiskFilter did not specify Type property";
-            }
-
-            storagePool.PDiskFilters.insert(std::move(filter));
+            storagePool.PDiskFilters.insert(TStoragePoolInfo::TPDiskFilter::Parse(boxId, storagePoolId, item));
         }
 
         if (cmd.HasExistingGroups()) {
@@ -177,15 +163,8 @@ namespace NKikimr::NBsController {
                 }
             }
             // retain some fields; TStoragePoolSettings are changed by UpdateStoragePoolSettings only
-            storagePool.BridgeMode = cur.BridgeMode;
             storagePool.VDiskHeapAllocatorNumLeadingDisks = cur.VDiskHeapAllocatorNumLeadingDisks;
             cur = std::move(storagePool); // update existing storage pool
-        } else {
-            // enable bridge mode by default for new pools (when the cluster is bridged one; bridge-capable cluster
-            // that has not been converted yet runs in implicit single-pile state and keeps creating ordinary pools)
-            Y_DEBUG_ABORT_UNLESS(AppData()->BridgeModeEnabled == static_cast<bool>(BridgeInfo));
-            const bool bridgeMode = BridgeInfo && !BridgeInfo->IsImplicit;
-            spIt->second.BridgeMode = bridgeMode;
         }
         Fit.PoolsAndGroups.emplace(id, std::nullopt);
     }
@@ -488,6 +467,9 @@ namespace NKikimr::NBsController {
 
         if (origin.DDisk || target.DDisk) {
             throw TExError() << "can't move groups between DDisk pools";
+        }
+        if (origin.BridgeMode != target.BridgeMode) {
+            throw TExError() << "can't move groups between pools with different BridgeMode";
         }
 
         auto& storagePoolGroups = StoragePoolGroups.Unshare();

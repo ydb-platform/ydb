@@ -10,6 +10,263 @@
 
 namespace NKikimr::NStorage {
 
+    class TDistributedConfigKeeper::TBindingLivenessActor : public TActorBootstrapped<TBindingLivenessActor> {
+        static constexpr TDuration ProbeInterval = TDuration::Seconds(30);
+        static constexpr TDuration ProbeTimeout = TDuration::Seconds(10);
+        static constexpr TDuration RetryDelay = TDuration::Seconds(60);
+        static constexpr ui32 MaxFailures = 3;
+
+        TDistributedConfigKeeper *const Keeper;
+        const std::weak_ptr<TLifetimeToken> Lifetime;
+        const TBinding Binding;
+        ui64 RequestCookie = 0;
+        ui32 Failures = 0;
+        bool Waiting = false;
+        bool DisconnectRequested = false;
+
+        bool IsCurrent() const {
+            return !Lifetime.expired() && Keeper->BindingLivenessActorId == SelfId()
+                   && Keeper->Binding && *Keeper->Binding == Binding;
+        }
+
+        void ScheduleProbe() {
+            const auto jitter = TDuration::MilliSeconds(RandomNumber<ui32>(5000));
+            TActivationContext::Schedule(ProbeInterval + jitter,
+                new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(), {}, nullptr, RequestCookie));
+        }
+
+        void Request() {
+            auto request = std::make_unique<TEvNodeConfigInvokeOnRoot>();
+            request->Record.MutableQueryWorkingRoot();
+            auto handle = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(Binding.NodeId), SelfId(),
+                request.release(), 0, ++RequestCookie);
+            handle->Rewrite(TEvInterconnect::EvForward, Binding.SessionId);
+            TActivationContext::Send(handle.release());
+            Waiting = true;
+            TActivationContext::Schedule(ProbeTimeout,
+                new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(), {}, nullptr, RequestCookie));
+        }
+
+        void HandleWakeup(STATEFN_SIG) {
+            if (ev->Cookie != RequestCookie || DisconnectRequested) {
+                return;
+            }
+            if (Waiting && ++Failures == MaxFailures) {
+                DisconnectRequested = true;
+                if (auto *queue = Keeper->GetBindQueue(Binding.NodeId)) {
+                    queue->Postpone(Binding.NodeId, TActivationContext::Monotonic() + RetryDelay);
+                }
+                YDB_LOG_WARN("Distconf parent stopped responding",
+                    {"nodeId", Binding.NodeId},
+                    {"sessionId", Binding.SessionId});
+                Send(Binding.SessionId, new TEvents::TEvPoison);
+            } else {
+                Request();
+            }
+        }
+
+        void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
+            if (!Waiting || DisconnectRequested || ev->Cookie != RequestCookie
+                || ev->Sender.NodeId() != Binding.NodeId || ev->InterconnectSession != Binding.SessionId
+                || ev->Get()->Record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+                return;
+            }
+            Waiting = false;
+            Failures = 0;
+            ++RequestCookie;
+            ScheduleProbe();
+        }
+
+        STFUNC(StateFunc) {
+            if (!IsCurrent()) {
+                return PassAway();
+            }
+            STRICT_STFUNC_BODY(
+                hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
+                fFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+                cFunc(TEvents::TSystem::Poison, PassAway);
+            )
+        }
+
+    public:
+        TBindingLivenessActor(TDistributedConfigKeeper *keeper, const TBinding& binding)
+            : Keeper(keeper)
+            , Lifetime(keeper->LifetimeToken)
+            , Binding(binding)
+        {}
+
+        void Bootstrap() {
+            if (!IsCurrent()) {
+                return PassAway();
+            }
+            Become(&TThis::StateFunc);
+            ScheduleProbe();
+        }
+
+        void PassAway() override {
+            if (!Lifetime.expired() && Keeper->BindingLivenessActorId == SelfId()) {
+                Keeper->BindingLivenessActorId = {};
+            }
+            TActorBootstrapped::PassAway();
+        }
+    };
+
+    void TDistributedConfigKeeper::CheckBindingLiveness() {
+        // Keep ordinary V1 clusters independent of keeper liveness. The startup flag applies only
+        // before bootstrap, so a committed disable also stops an already running watchdog.
+        const bool bootstrapping = BaseConfig->GetSelfManagementConfig().GetEnabled()
+            && (!StorageConfig || !StorageConfig->GetGeneration());
+        if (!SelfManagementEnabled && !bootstrapping) {
+            CancelBindingLiveness();
+            return;
+        }
+        if (Binding && Binding->RootNodeId && Binding->SessionId && Binding->SupportsDirectRootQueries
+            && !BindingLivenessActorId) {
+            BindingLivenessActorId = RegisterWithSameMailbox(new TBindingLivenessActor(this, *Binding));
+        }
+    }
+
+    void TDistributedConfigKeeper::CancelBindingLiveness() {
+        if (const auto actorId = std::exchange(BindingLivenessActorId, {})) {
+            Send(actorId, new TEvents::TEvPoison);
+        }
+    }
+
+    class TDistributedConfigKeeper::TConfigRefillActor : public TActorBootstrapped<TConfigRefillActor> {
+        TDistributedConfigKeeper *const Keeper;
+        const std::weak_ptr<TLifetimeToken> Lifetime;
+        const TBinding Binding;
+        ui64 RequestCookie = 0;
+        bool Waiting = false;
+
+        bool IsCurrent() const {
+            return !Lifetime.expired() && Keeper->ConfigRefillActorId == SelfId() && Keeper->Binding
+                   && *Keeper->Binding == Binding && Keeper->Binding->RootNodeId == Binding.RootNodeId;
+        }
+
+        void Request() {
+            auto request = std::make_unique<TEvNodeConfigInvokeOnRoot>();
+            request->Record.MutableQueryConfig()->SetRequireFresh(true);
+            request->Record.MutableQueryConfig()->SetRefillNodeId(SelfId().NodeId());
+            Waiting = true;
+            Send(Keeper->SelfId(), request.release(), 0, ++RequestCookie);
+            TActivationContext::Schedule(TDuration::Seconds(30),
+                                         new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(), {}, nullptr, RequestCookie));
+        }
+
+        void Retry() {
+            Waiting = false;
+            TActivationContext::Schedule(TDuration::Seconds(1),
+                                         new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(), {}, nullptr, RequestCookie));
+        }
+
+        void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
+            if (!ev->Cookie || ev->Cookie > RequestCookie) {
+                return;
+            }
+            const bool currentReply = Waiting && ev->Cookie == RequestCookie;
+            const auto& result = ev->Get()->Record;
+            if (result.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK
+                || !result.HasQueryConfig() || !result.HasScepter()
+                || result.GetScepter().GetNodeId() != Binding.RootNodeId) {
+                if (currentReply) {
+                    Retry();
+                }
+                return;
+            }
+            const auto& query = result.GetQueryConfig();
+            if (query.GetFresh()) {
+                const auto& config = query.GetConfig();
+                const auto& pending = Keeper->PendingConfigRefill;
+                if (!config.GetGeneration() || (pending && (config.GetGeneration() < pending->GetGeneration()
+                    || (config.GetGeneration() == pending->GetGeneration()
+                        && config.GetFingerprint() != pending->GetFingerprint())))) {
+                    if (currentReply) {
+                        Retry();
+                    }
+                    return;
+                }
+                Keeper->PendingConfigRefill.reset();
+                InvokeOtherActor(*Keeper, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, config);
+            } else {
+                Keeper->LegacyConfigRefill = true;
+                if (auto config = std::exchange(Keeper->PendingConfigRefill, std::nullopt)) {
+                    InvokeOtherActor(*Keeper, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *config);
+                }
+            }
+            InvokeOtherActor(*Keeper, &TDistributedConfigKeeper::ReportStorageConfigToNodeWarden);
+            PassAway();
+        }
+
+        void HandleWakeup(STATEFN_SIG) {
+            if (ev->Cookie == RequestCookie) {
+                if (Waiting) {
+                    Retry();
+                } else {
+                    Request();
+                }
+            }
+        }
+
+        STFUNC(StateFunc) {
+            if (!IsCurrent() || Keeper->HasLocalConfig()) {
+                return PassAway();
+            }
+            STRICT_STFUNC_BODY(
+                hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
+                fFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+                cFunc(TEvents::TSystem::Poison, PassAway);
+            )
+        }
+
+    public:
+        TConfigRefillActor(TDistributedConfigKeeper *keeper, const TBinding& binding)
+            : Keeper(keeper)
+            , Lifetime(keeper->LifetimeToken)
+            , Binding(binding)
+        {}
+
+        void Bootstrap() {
+            if (!IsCurrent()) {
+                return PassAway();
+            }
+            Become(&TThis::StateFunc);
+            Request();
+        }
+
+        void PassAway() override {
+            if (!Lifetime.expired() && Keeper->ConfigRefillActorId == SelfId()) {
+                Keeper->ConfigRefillActorId = {};
+            }
+            TActorBootstrapped::PassAway();
+        }
+    };
+
+    void TDistributedConfigKeeper::RequestConfigRefill() {
+        if (PendingConfigRefill && !IsBridged() && !HasLocalConfig() && Binding && Binding->RootNodeId
+            && !LegacyConfigRefill && !ConfigRefillActorId) {
+            ConfigRefillActorId = RegisterWithSameMailbox(new TConfigRefillActor(this, *Binding));
+        }
+    }
+
+    void TDistributedConfigKeeper::CancelConfigRefill() {
+        if (const auto actorId = std::exchange(ConfigRefillActorId, {})) {
+            Send(actorId, new TEvents::TEvPoison);
+        }
+        PendingConfigRefill.reset();
+        LegacyConfigRefill = false;
+    }
+
+    bool TDistributedConfigKeeper::DeferConfigRefill(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (IsBridged() || HasLocalConfig() || !config.GetGeneration() || !Binding || LegacyConfigRefill) {
+            return false;
+        }
+        if (!PendingConfigRefill || PendingConfigRefill->GetGeneration() < config.GetGeneration()) {
+            PendingConfigRefill = config;
+        }
+        return true;
+    }
+
     void TDistributedConfigKeeper::LogUnboundBindingWarning() {
         auto& ctx = TActivationContext::AsActorContext();
         const auto makeMessage = [&] {
@@ -77,6 +334,8 @@ namespace NKikimr::NStorage {
             {"marker", "NWDC13"},
             {"newNodeList", newNodeList});
 
+        // node list may contain nodes of the pile that is not in the registry (just removed from the cluster config, or
+        // not added there yet); such nodes are not bound to any known pile
         const auto registry = GetCurrentPileRegistry();
         auto resolvePileId = [&](const TNodeLocation& location) {
             return ResolveNodePileId(registry, location).value_or(TBridgePileId());
@@ -212,7 +471,6 @@ namespace NKikimr::NStorage {
         } else if (const auto bridgePileId = NBridge::ResolvePileId(*registry, location.GetBridgePileName())) {
             return bridgePileId;
         } else {
-            Y_DEBUG_ABORT_S("can't resolve bridge pile for node Location# " << location.ToString());
             return std::nullopt;
         }
     }
@@ -288,6 +546,14 @@ namespace NKikimr::NStorage {
         auto& record = ev->Record;
 
         record.SetInitial(true);
+        record.SetSubtreeHeight(GetSubtreeHeight());
+        record.SetSupportsMetadataOnlyCollect(true);
+        if (IsBridged() && StorageConfig->GetGeneration()
+            && ((!LocalCommittedStorageConfig
+                    || LocalCommittedStorageConfig->GetGeneration() < StorageConfig->GetGeneration())
+                || (!CommittedStorageConfig && !DirectBoundNodes.empty()))) {
+            record.SetRequestedCommittedConfigGeneration(StorageConfig->GetGeneration());
+        }
 
         for (const auto& [nodeId, node] : AllBoundNodes) {
             auto *boundNode = record.AddBoundNodes();
@@ -477,8 +743,9 @@ namespace NKikimr::NStorage {
 
         // abort or restart scatter tasks issued to newly added nodes
         const TMonotonic now = TActivationContext::Monotonic();
-        for (auto it = AddedNodesScatterTasks.lower_bound({nodeId, 0}); it != AddedNodesScatterTasks.end(); ) {
-            const auto& [nodeId, cookie] = *it;
+        for (auto it = AddedNodesScatterTasks.lower_bound({nodeId, 0});
+                it != AddedNodesScatterTasks.end() && std::get<0>(*it) == nodeId; ) {
+            const ui64 cookie = std::get<1>(*it);
 
             // find matching scatter task
             const auto jt = ScatterTasks.find(cookie);
@@ -486,13 +753,20 @@ namespace NKikimr::NStorage {
             TScatterTask& task = jt->second;
 
             if (task.StartTimestamp + TDuration::Seconds(3) <= now) { // task has timed out -- abort it
+                AddedNodesScatterTasks.erase(it);
                 AbortScatterTask(cookie, nodeId);
-                it = AddedNodesScatterTasks.erase(it);
+                it = AddedNodesScatterTasks.lower_bound({nodeId, 0});
             } else { // restart scatter task for this node
                 IssueAddedNodeScatterTask(nodeId, cookie, task);
                 ++it;
             }
         }
+    }
+
+    bool TDistributedConfigKeeper::IsProvisionalPeer(ui32 nodeId) const {
+        return !IsBridged() && Scepter && CurrentProposition
+               && std::ranges::binary_search(CurrentProposition->AddedOrChangedNodeIdentifiers,
+                   nodeId, {}, &TNodeIdentifier::NodeId);
     }
 
     void TDistributedConfigKeeper::UnsubscribeInterconnect(ui32 nodeId) {
@@ -506,6 +780,9 @@ namespace NKikimr::NStorage {
             return;
         }
         if (ConnectedDynamicNodes.contains(nodeId)) {
+            return;
+        }
+        if (IsProvisionalPeer(nodeId)) {
             return;
         }
         if (const auto it = AddedNodesScatterTasks.lower_bound({nodeId, 0}); it != AddedNodesScatterTasks.end() &&
@@ -579,7 +856,9 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::AbortBinding(const char *reason, bool sendUnbindMessage, bool sendUpdate) {
+        CancelBindingLiveness();
         if (Binding) {
+            CancelConfigRefill();
             YDB_LOG_DEBUG("AbortBinding",
                 {"marker", "NWDC03"},
                 {"binding", Binding},
@@ -651,6 +930,7 @@ namespace NKikimr::NStorage {
                 AbortBinding("binding cycle", /*sendUnbindMessage=*/ true, /*sendUpdate=*/ false);
                 bindingUpdate = true;
             } else if (record.GetRootNodeId() != Binding->RootNodeId) {
+                CancelConfigRefill();
                 Binding->RootNodeId = record.GetRootNodeId();
                 bindingUpdate = true;
             }
@@ -658,6 +938,10 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(!Binding || Binding->RootNodeId != SelfId().NodeId());
 
             if (Binding) {
+                Binding->SupportsDirectRootQueries = record.GetSupportsDirectRootQueries();
+                if (!Binding->SupportsDirectRootQueries) {
+                    CancelBindingLiveness();
+                }
                 BindFailuresStreak = 0;
                 LastUnboundWarnAt = TInstant::Zero();
             }
@@ -665,10 +949,15 @@ namespace NKikimr::NStorage {
 
         // update config if needed, or just fan-out binding changes
         if (record.HasCommittedStorageConfig()) {
-            ApplyCommittedStorageConfig(record.GetCommittedStorageConfig());
+            if (DeferConfigRefill(record.GetCommittedStorageConfig())) {
+                FanOutReversePush(&*PendingConfigRefill);
+            } else {
+                ApplyCommittedStorageConfig(record.GetCommittedStorageConfig());
+            }
         } else if (bindingUpdate) {
             FanOutReversePush(nullptr); // no configuration change, but root node has been updated
         }
+        RequestConfigRefill();
 
         std::unique_ptr<TEvNodeConfigPush> pendingPush;
         auto getPendingPushRecord = [&] {
@@ -749,6 +1038,16 @@ namespace NKikimr::NStorage {
             auto *boundNode = msg->Record.AddBoundNodes();
             it->first.Serialize(boundNode->MutableNodeId());
             boundNode->MutableMeta()->CopyFrom(node.Configs.back());
+        }
+
+        if (Scepter && !IsBridged()) {
+            const bool appliedConfigChanged = RememberAppliedConfig(meta);
+            if ((prev != node.Configs.back() || (refInserted && !meta.GetGeneration()))
+                && (!meta.GetGeneration() || meta.GetGeneration() > StorageConfig->GetGeneration()
+                    || (meta.GetGeneration() == StorageConfig->GetGeneration()
+                        && meta != TStorageConfigMeta(*StorageConfig)))) {
+                RequestConfigRecovery(/*invalidateInFlight=*/ appliedConfigChanged);
+            }
         }
 
         return prev != node.Configs.back();
@@ -868,10 +1167,13 @@ namespace NKikimr::NStorage {
         };
 
         // insert new connection into map (if there is none)
+        const ui32 previousSubtreeHeight = GetSubtreeHeight();
         const auto [it, inserted] = DirectBoundNodes.try_emplace(senderNodeId, ev->Cookie, ev->InterconnectSession,
             GetRootNodeId());
         TBoundNode& info = it->second;
+        const ui32 previousChildHeight = info.GetSubtreeHeight();
         if (inserted) {
+            BoundSubtreeHeights.insert(previousChildHeight);
             auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId());
             if (record.GetInitial()) {
                 auto *cache = record.MutableCacheUpdate();
@@ -898,9 +1200,6 @@ namespace NKikimr::NStorage {
             }
 
             SendEvent(senderNodeId, info, std::move(response));
-            for (auto& [cookie, task] : ScatterTasks) {
-                IssueScatterTaskForNode(senderNodeId, info, cookie, task);
-            }
         } else if (ev->Cookie != info.Cookie || ev->InterconnectSession != info.SessionId) {
             YDB_LOG_CRIT("Distributed configuration protocol violation: cookie/session mismatch",
                 {"marker", "NWDC12"},
@@ -912,6 +1211,12 @@ namespace NKikimr::NStorage {
                 {"expectedSessionId", info.SessionId});
             Y_DEBUG_ABORT();
             return;
+        }
+        if (record.HasSubtreeHeight()) {
+            info.ReportedSubtreeHeight = record.GetSubtreeHeight();
+        }
+        if (record.HasSupportsMetadataOnlyCollect()) {
+            info.SupportsMetadataOnlyCollect = record.GetSupportsMetadataOnlyCollect();
         }
 
         // process updates
@@ -929,6 +1234,18 @@ namespace NKikimr::NStorage {
         }
         if (fanOutCommittedStorageConfig) {
             FanOutReversePush(CommittedStorageConfig.get());
+        }
+
+        if (IsBridged() && record.GetRequestedCommittedConfigGeneration()) {
+            const ui64 generation = record.GetRequestedCommittedConfigGeneration();
+            if (CommittedStorageConfig && generation <= CommittedStorageConfig->GetGeneration()) {
+                auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId());
+                response->Record.MutableCommittedStorageConfig()->CopyFrom(*CommittedStorageConfig);
+                SendEvent(senderNodeId, info, std::move(response));
+            } else if (auto *push = getPushEv()) {
+                push->Record.SetRequestedCommittedConfigGeneration(
+                    Max(generation, push->Record.GetRequestedCommittedConfigGeneration()));
+            }
         }
 
         // process deleted items
@@ -951,6 +1268,23 @@ namespace NKikimr::NStorage {
         // process cache items
         if (!record.GetInitial() && record.HasCacheUpdate()) {
             ApplyCacheUpdates(record.MutableCacheUpdate(), senderNodeId);
+        }
+
+        if (const ui32 height = info.GetSubtreeHeight(); height != previousChildHeight) {
+            const auto heightIt = BoundSubtreeHeights.find(previousChildHeight);
+            Y_ABORT_UNLESS(heightIt != BoundSubtreeHeights.end());
+            BoundSubtreeHeights.erase(heightIt);
+            BoundSubtreeHeights.insert(height);
+        }
+        if (GetSubtreeHeight() != previousSubtreeHeight) {
+            if (auto *push = getPushEv()) {
+                push->Record.SetSubtreeHeight(GetSubtreeHeight());
+            }
+        }
+        if (inserted) {
+            for (auto& [cookie, task] : ScatterTasks) {
+                IssueScatterTaskForNode(senderNodeId, info, cookie, task);
+            }
         }
 
         if (pushEv && pushEv->IsUseful()) {
@@ -982,6 +1316,7 @@ namespace NKikimr::NStorage {
                 {"reason", reason});
 
             TBoundNode& info = it->second;
+            const ui32 previousSubtreeHeight = GetSubtreeHeight();
 
             std::unique_ptr<TEvNodeConfigPush> pushEv;
             auto getPushEv = [&] {
@@ -993,6 +1328,15 @@ namespace NKikimr::NStorage {
 
             for (const TNodeIdentifier& boundNodeId : info.BoundNodeIds) {
                 DeleteBound(nodeId, boundNodeId, getPushEv());
+            }
+
+            const auto heightIt = BoundSubtreeHeights.find(info.GetSubtreeHeight());
+            Y_ABORT_UNLESS(heightIt != BoundSubtreeHeights.end());
+            BoundSubtreeHeights.erase(heightIt);
+            if (GetSubtreeHeight() != previousSubtreeHeight) {
+                if (auto *push = getPushEv()) {
+                    push->Record.SetSubtreeHeight(GetSubtreeHeight());
+                }
             }
 
             if (pushEv && pushEv->IsUseful()) {
@@ -1012,6 +1356,10 @@ namespace NKikimr::NStorage {
 
     ui32 TDistributedConfigKeeper::GetRootNodeId() const {
         return Binding && Binding->RootNodeId ? Binding->RootNodeId : SelfId().NodeId();
+    }
+
+    ui32 TDistributedConfigKeeper::GetSubtreeHeight() const {
+        return BoundSubtreeHeights.empty() ? 0 : *BoundSubtreeHeights.rbegin() + 1;
     }
 
     bool TDistributedConfigKeeper::PartOfNodeQuorum() const {

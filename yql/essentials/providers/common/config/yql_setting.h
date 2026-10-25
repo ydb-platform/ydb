@@ -20,16 +20,18 @@ enum class EConfSettingType {
 template <typename TType, EConfSettingType SettingType = EConfSettingType::Dynamic>
 class TConfSetting {
 public:
+    using TValueType = TType;
+
     TConfSetting() = default;
     TConfSetting(const TConfSetting&) = default;
     TConfSetting(TConfSetting&&) = default;
     ~TConfSetting() = default;
 
-    bool IsRuntime() const {
+    static constexpr bool IsRuntime() {
         return SettingType == EConfSettingType::Dynamic;
     }
 
-    bool IsPerCluster() const {
+    static constexpr bool IsPerCluster() {
         return SettingType == EConfSettingType::Dynamic || SettingType == EConfSettingType::StaticPerCluster;
     }
 
@@ -88,16 +90,18 @@ private:
 template <typename TType>
 class TConfSetting<TType, EConfSettingType::Static> {
 public:
+    using TValueType = TType;
+
     TConfSetting() = default;
     TConfSetting(const TConfSetting&) = default;
     TConfSetting(TConfSetting&&) = default;
     ~TConfSetting() = default;
 
-    bool IsRuntime() const {
+    static constexpr bool IsRuntime() {
         return false;
     }
 
-    bool IsPerCluster() const {
+    static constexpr bool IsPerCluster() {
         return false;
     }
 

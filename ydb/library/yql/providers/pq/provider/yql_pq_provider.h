@@ -42,6 +42,9 @@ public:
     }
 
     bool IsRtmrMode() const;
+    bool IsYtflowEngine() const;
+    bool AllowYdbSysColumns() const;
+    bool ShouldAddTransparentPrefixToTransparentSystemColumns() const;
 
 public:
     bool SupportRtmrMode = false;
@@ -49,7 +52,7 @@ public:
     bool AddTransparentPrefixToTransparentSystemColumns = true;
     bool EnableUserAttributesInTopicQuery = false;
     bool StreamingTopicsReadByDefault = true;
-    bool UseYtflowEngine = false;
+    bool AllowYtflowEngine = false;
     bool EnableTopicsPredicatePushdown = false;
     bool EnablePqConstraintsTransformer = false;
     bool ForbidYqlSysColumnsAndSystemMetadata = false;
@@ -81,7 +84,7 @@ public:
 TDataProviderInitializer GetPqDataProviderInitializer(IPqGateway::TPtr gateway, bool supportRtmrMode = false,
     std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr, const NPq::NProto::StreamingDisposition& disposition = {},
     const std::vector<std::pair<TString, TString>>& taskSensorLabels = {}, const std::vector<ui64>& nodeIds = {},
-    bool useActorSystemThreadsInTopicClient = true, bool useYtflowEngine = false, bool addTransparentPrefixToTransparentSystemColumns = true);
+    bool useActorSystemThreadsInTopicClient = true, bool allowYtflowEngine = false, bool addTransparentPrefixToTransparentSystemColumns = true);
 
 TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway);
 TIntrusivePtr<IDataProvider> CreatePqDataSink(TPqState::TPtr state, IPqGateway::TPtr gateway);

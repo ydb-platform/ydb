@@ -878,6 +878,126 @@ Y_UNIT_TEST_SUITE(Viewer) {
         return statusCode;
     }
 
+    class TDatabaseAliasTicketParser : public TActor<TDatabaseAliasTicketParser> {
+    public:
+        TDatabaseAliasTicketParser() : TActor(&TDatabaseAliasTicketParser::StateFunc) {}
+
+        void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+            const TCgiParameters paths("database=alias&path=/alias/a,/alias/b&topic=relative");
+            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths).Get("path"), "/Root/a,/alias/b");
+            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, true).Get("path"), "/Root/a,/Root/b");
+            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths).Get("topic"), "relative");
+            NJson::TJsonValue jsonPaths;
+            UNIT_ASSERT(NJson::ReadJsonTree(R"({"database":"alias","path":["/alias/a","/alias/b"],"message":"/alias"})", &jsonPaths));
+            NormalizePathParameters(jsonPaths);
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["database"].GetString(), "/Root");
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"][0].GetString(), "/Root/a");
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"][1].GetString(), "/Root/b");
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["message"].GetString(), "/alias");
+            jsonPaths["path"] = "/alias/a,/alias/b";
+            NormalizePathParameters(jsonPaths, true);
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"].GetString(), "/Root/a,/Root/b");
+
+            const auto& request = *ev->Get();
+            const TString allowedDatabase = request.Ticket == VALID_TOKEN ? "/Root" : "/Other";
+            if (request.Ticket != ROOT_TOKEN && (request.Database != allowedDatabase
+                || (request.Ticket != VALID_TOKEN && request.Ticket != "Bearer other-db"))) {
+                TEvTicketParser::TError error;
+                error.Message = "Token is not valid for this database";
+                error.Retryable = false;
+                Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(request.Ticket, error));
+                return;
+            }
+            NACLib::TUserToken::TUserTokenInitFields fields;
+            fields.UserSID = request.Ticket == ROOT_TOKEN ? ROOT_TOKEN : "username";
+            auto token = MakeIntrusive<NACLib::TUserToken>(fields);
+            token->SaveSerializationInfo();
+            Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(request.Ticket, token));
+        }
+
+        STFUNC(StateFunc) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
+            }
+        }
+    };
+
+    Y_UNIT_TEST(DatabaseAlias) {
+        TPortManager ports;
+        const ui16 monPort = ports.GetPort(8765);
+        auto settings = TServerSettings(ports.GetPort(2134));
+        settings.InitKikimrRunConfig()
+            .SetNodeCount(1)
+            .SetUseRealThreads(true)
+            .SetDomainName("Root")
+            .SetUseSectorMap(true)
+            .SetMonitoringPortOffset(monPort, true);
+        auto* rule = settings.AppConfig->MutableResourcePathPrefixMapping()->AddRules();
+        rule->SetSrc("/alias");
+        rule->SetDst("/Root");
+        settings.FeatureFlags.SetEnableExtraSidsControlForHttpViewer(true);
+        auto* security = settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
+        security->SetEnforceUserTokenCheckRequirement(true);
+        security->AddAdministrationAllowedSIDs(ROOT_TOKEN);
+        security->AddMonitoringAllowedSIDs(ROOT_TOKEN);
+        security->AddViewerAllowedSIDs(ROOT_TOKEN);
+        security->AddDatabaseAllowedSIDs("username");
+        settings.CreateTicketParser = [](const TTicketParserSettings&) -> IActor* { return new TDatabaseAliasTicketParser; };
+        TServer server(settings);
+        server.EnableGRpc(ports.GetPort(2135));
+        TClient client(settings);
+        client.SetSecurityToken(ROOT_TOKEN);
+        client.InitRootScheme();
+        GrantRead(client);
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Authorization"] = VALID_TOKEN;
+        TStringStream response;
+        const auto status = httpClient.DoGet("/viewer/tenantinfo?database=/alias&direct=true", &response, headers);
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
+        const auto json = NJson::ReadJsonTree(&response, true);
+        UNIT_ASSERT_VALUES_EQUAL(json["TenantInfo"][0]["Name"].GetString(), "/alias");
+
+        NJson::TJsonReaderConfig describeJsonConfig;
+        describeJsonConfig.DontValidateUtf8 = true; // Describe includes binary ACL fields.
+        for (const auto* cache : {"never", "only"}) {
+            TStringStream describeResponse;
+            const auto describeStatus = httpClient.DoGet(TStringBuilder() << "/viewer/describe?database=/alias&path=/alias&direct=true&ask_scheme_cache=" << cache, &describeResponse, headers);
+            UNIT_ASSERT_VALUES_EQUAL(describeStatus, HTTP_OK);
+            const auto describeJson = NJson::ReadJsonTree(&describeResponse, &describeJsonConfig, true);
+            UNIT_ASSERT_VALUES_EQUAL(describeJson["Path"].GetString(), "/alias");
+        }
+
+        TStringStream relativeResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/describe?database=alias&path=/alias&direct=true", &relativeResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&relativeResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
+
+        headers["Content-Type"] = "application/json";
+        TStringStream postResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", R"({"database":"/alias","path":"/alias"})", &postResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&postResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
+
+        headers["Content-Type"] = "application/x-www-form-urlencoded";
+        TStringStream formResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", "database=alias&path=/alias", &formResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&formResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
+
+        TStringStream directoryResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/scheme/directory?database=/alias&path=/alias&direct=true", &directoryResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&directoryResponse, true)["self"]["name"].GetString(), "alias");
+        headers["Authorization"] = ROOT_TOKEN;
+        for (const auto* parameter : {"tenant", "path"}) {
+            TStringStream tenantResponse;
+            UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet(TStringBuilder() << "/viewer/tenantinfo?" << parameter << "=/alias&direct=true", &tenantResponse, headers), HTTP_OK);
+            UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&tenantResponse, true)["TenantInfo"][0]["Name"].GetString(), "/alias");
+        }
+        headers["Authorization"] = "Bearer other-db";
+        TStringStream deniedResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/whoami?database=/alias", &deniedResponse, headers), HTTP_FORBIDDEN);
+    }
+
     NJson::TJsonValue SendQuery(const TString& query, const TString& schema, const bool base64) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -2708,6 +2828,155 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST(NodesPageHasWhiteboardDataOffloaded) {
         TestNodesWhiteboardData(true);
+    }
+
+    void TestNodesAliveFilter(bool offloadMerge) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        THashMap<TActorId, TNodeId> whiteboardNodes;
+        // TServer registers viewers by node index; offload requests address them by node ID.
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(nodeIndex), nodeIndex);
+            const TNodeId nodeId = runtime.GetNodeId(nodeIndex);
+            runtime.RegisterService(MakeViewerID(nodeId), viewerId, nodeIndex);
+            const TActorId whiteboardId = runtime.GetLocalServiceId(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), nodeIndex);
+            whiteboardNodes.emplace(whiteboardId, nodeId);
+        }
+        const TNodeId disconnectedNodeId = runtime.GetNodeId(1);
+        bool disconnected = true;
+        bool disconnectAll = false;
+        EFlag otherConnectedNodeState = EFlag::Red;
+        size_t offloadedResponses = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvWhiteboard::EvSystemStateResponse) {
+                const auto itNode = whiteboardNodes.find(ev->Sender);
+                if (itNode == whiteboardNodes.end() || ev->Cookie != itNode->second) {
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+                if (disconnectAll || (disconnected && ev->Cookie == disconnectedNodeId)) {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                auto* response = ev->Get<TEvWhiteboard::TEvSystemStateResponse>();
+                for (auto& info : *response->Record.MutableSystemStateInfo()) {
+                    info.SetSystemState(ev->Cookie == runtime.GetNodeId(0) ? EFlag::Yellow : otherConnectedNodeState);
+                }
+            } else if (ev->GetTypeRewrite() == TEvViewer::EvViewerResponse) {
+                ++offloadedResponses;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto requestPage = [&](const TString& path) {
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET " << path << " HTTP/1.1\r\n\r\n", endpoint, {});
+            TActorId sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
+            return json;
+        };
+        auto makeRequest = [&](const TString& query, const TString& fields = "NodeId") {
+            return requestPage(TStringBuilder() << "/viewer/json/nodes?type=static&fields_required=" << fields
+                << "&offload_merge=" << (offloadMerge ? "true" : "false") << "&offload_merge_attempts=1&timeout=1000&enums=true" << query);
+        };
+        auto assertCounts = [](const NJson::TJsonValue& json, size_t total, size_t found) {
+            UNIT_ASSERT_VALUES_EQUAL_C(json["TotalNodes"].GetString(), ToString(total), NJson::WriteJson(json, false));
+            UNIT_ASSERT_VALUES_EQUAL_C(json["FoundNodes"].GetString(), ToString(found), NJson::WriteJson(json, false));
+            UNIT_ASSERT_C(!json["NeedFilter"].GetBoolean(), NJson::WriteJson(json, false));
+        };
+
+        const auto capabilities = requestPage("/viewer/capabilities");
+        UNIT_ASSERT_VALUES_EQUAL(capabilities["Capabilities"]["/viewer/nodes/alive"].GetInteger(), 1);
+
+        for (const TString& query : {TString(""), TString("&alive=false")}) {
+            const auto json = makeRequest(query + "&sort=NodeId", "NodeId,SystemState");
+            assertCounts(json, 3, 3);
+            UNIT_ASSERT_VALUES_EQUAL(json["Nodes"].GetArray().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(json["Nodes"][1]["NodeId"].GetUInteger(), disconnectedNodeId);
+            UNIT_ASSERT(json["Nodes"][1]["Disconnected"].GetBoolean());
+        }
+
+        const auto minimal = makeRequest("&alive=true&sort=NodeId");
+        assertCounts(minimal, 3, 2);
+        UNIT_ASSERT_VALUES_EQUAL(minimal["Nodes"].GetArray().size(), 2);
+        for (const auto& node : minimal["Nodes"].GetArray()) {
+            UNIT_ASSERT(!node.Has("SystemState"));
+        }
+
+        const auto defaults = makeRequest("&alive=true", "");
+        assertCounts(defaults, 3, 2);
+        for (const auto& node : defaults["Nodes"].GetArray()) {
+            UNIT_ASSERT(node.Has("SystemState"));
+        }
+
+        const auto alive = makeRequest("&alive=true&sort=NodeId", "NodeId,SystemState");
+        assertCounts(alive, 3, 2);
+        UNIT_ASSERT_VALUES_EQUAL(alive["Nodes"].GetArray().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(alive["Nodes"][0]["NodeId"].GetUInteger(), runtime.GetNodeId(0));
+        UNIT_ASSERT_VALUES_EQUAL(alive["Nodes"][1]["NodeId"].GetUInteger(), runtime.GetNodeId(2));
+        UNIT_ASSERT_VALUES_EQUAL(alive["Nodes"][0]["SystemState"]["SystemState"].GetString(), "Yellow");
+        UNIT_ASSERT_VALUES_EQUAL(alive["Nodes"][1]["SystemState"]["SystemState"].GetString(), "Red");
+
+        const auto page = makeRequest("&alive=true&sort=NodeId&offset=1&limit=1");
+        assertCounts(page, 3, 2);
+        UNIT_ASSERT_VALUES_EQUAL(page["Nodes"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(page["Nodes"][0]["NodeId"].GetUInteger(), runtime.GetNodeId(2));
+
+        const auto emptyPage = makeRequest("&alive=true&sort=NodeId&offset=2&limit=1");
+        assertCounts(emptyPage, 3, 2);
+        UNIT_ASSERT(emptyPage["Nodes"].GetArray().empty());
+
+        const auto grouped = makeRequest("&alive=true&group=SystemState");
+        assertCounts(grouped, 3, 2);
+        UNIT_ASSERT_VALUES_EQUAL(grouped["NodeGroups"].GetArray().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(grouped["NodeGroups"][0]["GroupName"].GetString(), "Red");
+        UNIT_ASSERT_VALUES_EQUAL(grouped["NodeGroups"][1]["GroupName"].GetString(), "Yellow");
+        for (const auto& group : grouped["NodeGroups"].GetArray()) {
+            UNIT_ASSERT_VALUES_EQUAL(group["NodeCount"].GetString(), "1");
+        }
+
+        otherConnectedNodeState = EFlag::Green;
+        const auto problems = makeRequest("&alive=true&problems_only=true");
+        assertCounts(problems, 3, 1);
+        UNIT_ASSERT_VALUES_EQUAL(problems["Nodes"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(problems["Nodes"][0]["NodeId"].GetUInteger(), runtime.GetNodeId(0));
+        otherConnectedNodeState = EFlag::Red;
+
+        const auto selected = makeRequest(TStringBuilder() << "&alive=true&node_id=" << disconnectedNodeId);
+        assertCounts(selected, 1, 0);
+        UNIT_ASSERT(selected["Nodes"].GetArray().empty());
+
+        disconnected = false;
+        const auto recovered = makeRequest("&alive=true&sort=NodeId");
+        assertCounts(recovered, 3, 3);
+        UNIT_ASSERT_VALUES_EQUAL(recovered["Nodes"].GetArray().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(recovered["Nodes"][1]["NodeId"].GetUInteger(), disconnectedNodeId);
+        UNIT_ASSERT(!recovered["Nodes"][1]["Disconnected"].GetBoolean());
+
+        disconnectAll = true;
+        const auto empty = makeRequest("&alive=true&group=SystemState");
+        assertCounts(empty, 3, 0);
+        UNIT_ASSERT(empty["NodeGroups"].GetArray().empty());
+        UNIT_ASSERT_VALUES_EQUAL(offloadedResponses > 0, offloadMerge);
+    }
+
+    Y_UNIT_TEST(NodesPageAliveFilterDirect) {
+        TestNodesAliveFilter(false);
+    }
+
+    Y_UNIT_TEST(NodesPageAliveFilterOffloaded) {
+        TestNodesAliveFilter(true);
     }
 
     Y_UNIT_TEST(NodesPageKeepsPDisksForDisconnectedNode)

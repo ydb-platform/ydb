@@ -136,6 +136,9 @@ namespace NDiscovery {
                 case NKikimrBridge::TClusterState::SUSPENDED:
                     pileInfo->set_state(Ydb::Bridge::PileState::SUSPENDED);
                     break;
+                case NKikimrBridge::TClusterState::INACTIVE:
+                    pileInfo->set_state(Ydb::Bridge::PileState::INACTIVE);
+                    break;
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
                     Y_ABORT("Unknown pile state");
@@ -227,6 +230,9 @@ namespace NDiscovery {
 
         if (bridgeInfo) {
             for (const auto& pile : bridgeInfo->Piles) {
+                if (pile.State == NKikimrBridge::TClusterState::INACTIVE) {
+                    continue; // the pile is not part of the cluster, it has no endpoints for clients
+                }
                 AddPileState(cachedMessage, pile);
                 AddPileState(cachedMessageSsl, pile);
             }

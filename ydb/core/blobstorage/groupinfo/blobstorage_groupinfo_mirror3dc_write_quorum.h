@@ -113,6 +113,10 @@ public:
         return WriteLayout;
     }
 
+    EMirror3dcLayout GetEnsuredLayout() const {
+        return EnsuredLayout;
+    }
+
     static std::optional<TMirror3dcWriteQuorumChecker> TryCreate(
             const std::array<EMirror3dcFailRealmState, 3>& realms,
             EMirror3dcLayout writeLayout, EMirror3dcLayout ensuredLayout) {

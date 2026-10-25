@@ -81,7 +81,6 @@ struct TEvStateStorage {
         enum ESigWaitMode {
             SigNone,
             SigAsync,
-            SigSyncRingGroups,
             SigSync,
         };
 
@@ -95,7 +94,6 @@ struct TEvStateStorage {
             switch (SigWaitMode) {
             case SigNone: return "SigNone";
             case SigAsync: return "SigAsync";
-            case SigSyncRingGroups: return "SigSyncRingGroups";
             case SigSync: return "SigSync";
             default: return "Unknown";
             }

@@ -35,7 +35,7 @@ class TestBridgeBasic(BridgeKiKiMRTest):
             try:
                 pool.retry_operation_sync(
                     lambda session: session.execute_scheme(
-                        "CREATE TABLE `/Root/after_primary_restart` (id Uint64, PRIMARY KEY(id));",
+                        "CREATE TABLE IF NOT EXISTS `/Root/after_primary_restart` (id Uint64, PRIMARY KEY(id));",
                         settings=ydb.BaseRequestSettings().with_timeout(10),
                     ),
                     retry_settings=ydb.RetrySettings(max_retries=0, get_session_client_timeout=5),

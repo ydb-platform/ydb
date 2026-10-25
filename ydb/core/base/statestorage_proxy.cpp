@@ -144,8 +144,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void ReplyAndSig(NKikimrProto::EReplyStatus status) {
         Reply(status);
-        if ((ProxyOptions.SigWaitMode == ProxyOptions.SigAsync
-                || ProxyOptions.SigWaitMode == ProxyOptions.SigSyncRingGroups) && RepliesMerged != Replicas)
+        if (ProxyOptions.SigWaitMode == ProxyOptions.SigAsync && RepliesMerged != Replicas)
             Become(&TThis::StateUpdateSig);
         else
             PassAway();
@@ -454,8 +453,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void CheckLookupReply() {
         const bool allowReply = ProxyOptions.SigWaitMode == ProxyOptions.SigNone
-            || ((ProxyOptions.SigWaitMode == ProxyOptions.SigAsync
-                    || ProxyOptions.SigWaitMode == ProxyOptions.SigSyncRingGroups) && SignaturesMerged >= Majority())
+            || (ProxyOptions.SigWaitMode == ProxyOptions.SigAsync && SignaturesMerged >= Majority())
             || RepliesMerged == Replicas;
 
         if (allowReply) {
@@ -788,7 +786,6 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     TMap<TActorId, TEvStateStorage::TEvInfo::TFollowerInfo> Followers;
 
     bool Replied = false;
-    bool InitialRepliesComplete = false;
 
     TEvStateStorage::TSignature Signature;
 
@@ -799,7 +796,6 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     };
 
     ERequestKind RequestKind = ERequestKind::None;
-    bool WaitForAllRingGroups = false;
     NKikimrProto::EReplyStatus AggregatedStatus = NKikimrProto::OK;
     NKikimrProto::EReplyStatus StateStatus = NKikimrProto::UNKNOWN;
     ui32 StateRingGroupIdx = Max<ui32>();
@@ -857,8 +853,6 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         TabletID = msg->TabletID;
         Cookie = msg->Cookie;
         RequestKind = ERequestKind::Lookup;
-        WaitForAllRingGroups = msg->ProxyOptions.SigWaitMode == TEvStateStorage::TProxyOptions::SigSync
-            || msg->ProxyOptions.SigWaitMode == TEvStateStorage::TProxyOptions::SigSyncRingGroups;
         YDB_LOG_DEBUG("RingGroupProxyRequest::HandleInit",
             {"ev", msg->ToString()});
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
@@ -956,24 +950,12 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         Replied = true;
     }
 
-    void MaybeReply(NKikimrProto::EReplyStatus status, bool isInitialReply) {
+    void MaybeReply(NKikimrProto::EReplyStatus status) {
         Y_UNUSED(status);
-        if (RequestKind == ERequestKind::Lookup && HasState && !WaitForAllRingGroups && !Replied) {
-            Reply(StateStatus);
-        }
         if (!ShouldReply()) {
             return;
         }
-        const bool justCompletedInitialReplies = !InitialRepliesComplete;
-        InitialRepliesComplete = true;
         if (Replied) {
-            // The last initial TEvInfo completes the signature that would have
-            // been returned by the initial reply before early lookup replies.
-            // Do not expose that transition as an intermediate async update;
-            // subsequent per-group signature updates are still forwarded.
-            if (isInitialReply && justCompletedInitialReplies) {
-                return;
-            }
             auto* msg = new TEvStateStorage::TEvUpdateSignature(TabletID, Signature);
             YDB_LOG_DEBUG("RingGroupProxyRequest::Reply TEvUpdateSignature",
                 {"ev", msg->ToString()});
@@ -989,13 +971,13 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         ProcessEvInfo(RingGroupActors[ev->Sender], msg);
         YDB_LOG_DEBUG("RingGroupProxyRequest::HandleTEvInfo",
             {"ev", msg->ToString()});
-        MaybeReply(msg->Status, true);
+        MaybeReply(msg->Status);
     }
 
     void HandleResult(TEvStateStorage::TEvUpdateSignature::TPtr &ev) {
         TEvStateStorage::TEvUpdateSignature *msg = ev->Get();
         Signature.Merge(msg->Signature);
-        MaybeReply(NKikimrProto::OK, false);
+        MaybeReply(NKikimrProto::OK);
     }
 
     void HandleConfigVersion(TEvStateStorage::TEvConfigVersionInfo::TPtr &ev) {

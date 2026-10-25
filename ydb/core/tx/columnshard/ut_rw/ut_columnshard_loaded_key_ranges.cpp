@@ -116,11 +116,11 @@ Y_UNIT_TEST_SUITE(TColumnShardLoadedKeyRanges) {
         AddRowsRange(reader, { 100, 200 });
         reader.StartScanner();
         UNIT_ASSERT(!reader.WaitScannerAnswer(NoAnswerWait));
-        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, sender, "ScansWaitingLoadedPortions"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, sender, "ColumnShard/ScansWaitingLoadedPortions"), 1);
 
         SetLoadedKeyRanges(runtime, sender, csControllerGuard, NOlap::TLoadedKeyRanges::BuildEverything());
         UNIT_ASSERT(reader.WaitScannerAnswer());
-        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, sender, "ScansWaitingLoadedPortions"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, sender, "ColumnShard/ScansWaitingLoadedPortions"), 0);
     }
 
     Y_UNIT_TEST(ScanWaitingForSnapshotIsCounted) {
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(TColumnShardLoadedKeyRanges) {
         AddRowsRange(reader, { 100, 200 });
         reader.StartScanner();
         UNIT_ASSERT(!reader.WaitScannerAnswer(NoAnswerWait));
-        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, sender, "ScansWaitingSnapshot"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, sender, "ColumnShard/ScansWaitingSnapshot"), 1);
     }
 
     // an insert reads the rows it writes through an internal scan

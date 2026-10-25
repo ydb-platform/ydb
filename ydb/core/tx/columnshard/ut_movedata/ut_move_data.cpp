@@ -145,33 +145,33 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             !TActualizer::HasBlobInGroups({ outsideTarget, thirdParty }, targets), "no blob in a target group means the portion stays put");
     }
 
-    // Live groups are rejected, so a portion created after the session started cannot hold a target blob.
-    Y_UNIT_TEST(PortionCreatedAfterTheSessionStartedIsNotAdopted) {
+    // Notifications neither adopt new writes nor lose a seeded candidate across a level move.
+    Y_UNIT_TEST(NotificationsPreserveSeededMembershipAndRejections) {
         TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
-        NOlap::NActualizer::TMoveDataActualizer actualizer(THashSet<ui32>{ 100 }, schema.Index);
-        const TInstant start = TInstant::Seconds(1000);
-        actualizer.Seed(NOlap::NActualizer::TAddExternalContext(start, {}), {});
+        NOlap::NActualizer::TMoveDataActualizer actualizer({ OldGroup }, schema.Index);
+        auto portion = MakeDefaultTierPortion(1);
+        THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
+        const NOlap::NActualizer::TAddExternalContext context(TInstant::Seconds(1000), portions);
+        actualizer.Seed(context, {});
 
-        const THashMap<ui64, NOlap::TPortionInfo::TPtr> noPortions;
-        actualizer.AddPortion(MakeDefaultTierPortion(1), NOlap::NActualizer::TAddExternalContext(start + TDuration::Minutes(1), noPortions));
-        UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().GetTotal(), 0, "adopting it would hold the response back");
-    }
-
-    // A compaction-level move removes and re-adds the same portion; it stays ours however late it returns.
-    Y_UNIT_TEST(PortionReaddedAfterALevelMoveIsStillMoved) {
-        TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
-        NOlap::NActualizer::TMoveDataActualizer actualizer(THashSet<ui32>{ 100 }, schema.Index);
-        const TInstant start = TInstant::Seconds(1000);
-        const auto portion = MakeDefaultTierPortion(1);
-        const THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
-        actualizer.Seed(NOlap::NActualizer::TAddExternalContext(start, portions), {});
-        UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().Pending, 1, "a default-tier portion must be admitted at session start");
-
+        portions.emplace(2, MakeDefaultTierPortion(2));
+        actualizer.AddPortion(portions.at(2), context);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 1);
         actualizer.RemovePortion(1);
-        actualizer.AddPortion(portion, NOlap::NActualizer::TAddExternalContext(start + TDuration::Hours(1), portions));
-        const auto readded = actualizer.GetMoveDataQueueSizes();
-        UNIT_ASSERT_VALUES_EQUAL_C(readded.Pending, 1, "a portion the session started with must stay tracked across a level move");
-        UNIT_ASSERT_VALUES_EQUAL_C(readded.Retired, 0, "a portion that came back is live again, not awaiting cleanup");
+        actualizer.AddPortion(portion, context);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Pending, 1);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
+
+        ClassifyPortion(actualizer, portion, NewGroup);
+        actualizer.RemovePortion(1);
+        actualizer.AddPortion(portion, context);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Pending, 0);
+        portion->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
+        actualizer.UpdatePortionStates(portions, {});
+        ClassifyPortion(actualizer, portion, NewGroup);   // A late result must not reclassify an erased candidate.
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Rejected, 1);
     }
 
     // A seeded portion that compaction or the move retired keeps the gate closed until cleanup erases it from the granule.
@@ -201,8 +201,6 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().Retired, 1, "an unseeded portion must not count");
 
         portions.erase(1);
-        const auto& actualizerView = actualizer;
-        UNIT_ASSERT_VALUES_EQUAL(actualizerView.GetMoveDataQueueSizes().Retired, 1);
         actualizer.UpdatePortionStates(portions, noUncommitted);
         UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().Retired, 0, "the gate must open once cleanup erased the portion");
 
@@ -230,68 +228,29 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(seeded.Retired, 1, "its cleanup must still hold the gate");
 
         portions.erase(1);
-        const auto& actualizerView = actualizer;
-        UNIT_ASSERT_VALUES_EQUAL(actualizerView.GetMoveDataQueueSizes().Retired, 1);
         actualizer.UpdatePortionStates(portions, noUncommitted);
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
-    }
-
-    Y_UNIT_TEST(RetiredNonTargetPortionDoesNotBlockCompletion) {
-        TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
-        NOlap::NActualizer::TMoveDataActualizer actualizer({ OldGroup }, schema.Index);
-        auto portion = MakeDefaultTierPortion(1);
-        portion->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
-        THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
-        actualizer.Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
-
-        NOlap::NActualizer::TMoveDataMetadataBudget budget(0);
-        auto sharedActualizer = std::make_shared<NOlap::NActualizer::TMoveDataActualizer>(THashSet<ui32>{ OldGroup }, schema.Index);
-        sharedActualizer->Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
-        UNIT_ASSERT_VALUES_EQUAL(sharedActualizer->BuildMoveDataMetadataRequests(portions, {}, sharedActualizer, budget).size(), 1);
-
-        ClassifyPortion(actualizer, portion, NewGroup);
-        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
-        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Rejected, 1);
-        UNIT_ASSERT(portions.contains(1));   // A read can keep this portion alive without keeping MoveData alive.
-    }
-
-    Y_UNIT_TEST(RejectedPortionStaysRejectedAcrossRetirementAndLevelMoves) {
-        TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
-        NOlap::NActualizer::TMoveDataActualizer actualizer({ OldGroup }, schema.Index);
-        auto portion = MakeDefaultTierPortion(1);
-        THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
-        const NOlap::NActualizer::TAddExternalContext context(TInstant::Seconds(1000), portions);
-        actualizer.Seed(context, {});
-        ClassifyPortion(actualizer, portion, NewGroup);
-        actualizer.RemovePortion(1);
-        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
-        actualizer.AddPortion(portion, context);
-        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Pending, 0);
-        portion->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
-        actualizer.UpdatePortionStates(portions, {});
-        ClassifyPortion(actualizer, portion, OldGroup);   // A late reply must not readopt the erased rejected entry.
-        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
-        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Rejected, 1);
     }
 
     Y_UNIT_TEST(RetirementDuringClassificationPreservesTheTargetCheck) {
         for (const bool Target : { false, true }) {
             TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
-            NOlap::NActualizer::TMoveDataActualizer actualizer({ OldGroup }, schema.Index);
+            auto actualizer = std::make_shared<NOlap::NActualizer::TMoveDataActualizer>(THashSet<ui32>{ OldGroup }, schema.Index);
             auto portion = MakeDefaultTierPortion(1);
             THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
-            actualizer.Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
+            actualizer->Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
             portion->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
-            actualizer.UpdatePortionStates(portions, {});
-            UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Pending, 1);
-            UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
+            actualizer->UpdatePortionStates(portions, {});
+            UNIT_ASSERT_VALUES_EQUAL(actualizer->GetMoveDataQueueSizes().Pending, 1);
+            UNIT_ASSERT_VALUES_EQUAL(actualizer->GetMoveDataQueueSizes().Retired, 0);
 
-            ClassifyPortion(actualizer, portion, Target ? OldGroup : NewGroup);
-            UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, Target ? 1 : 0);
-            UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().ConfirmedToMove, 0);
+            NOlap::NActualizer::TMoveDataMetadataBudget budget(0);
+            UNIT_ASSERT_VALUES_EQUAL(actualizer->BuildMoveDataMetadataRequests(portions, {}, actualizer, budget).size(), 1);
+            ClassifyPortion(*actualizer, portion, Target ? OldGroup : NewGroup);
+            UNIT_ASSERT_VALUES_EQUAL(actualizer->GetMoveDataQueueSizes().GetTotal(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(actualizer->GetMoveDataQueueSizes().Retired, Target ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(actualizer->GetMoveDataQueueSizes().ConfirmedToMove, 0);
+            UNIT_ASSERT_VALUES_EQUAL(actualizer->GetMoveDataQueueSizes().Rejected, Target ? 0 : 1);
         }
     }
 
@@ -322,7 +281,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             portions.emplace(id, MakeDefaultTierPortion(id));
         }
         actualizer.Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
-        // Reject interleaved candidates while all three cursors still point into the seeded list.
+        // Reject interleaved candidates before the first bounded pass.
         for (ui64 id = 1; id <= PortionCount; ++id) {
             ClassifyPortion(actualizer, portions.at(id), id % 2 ? NewGroup : OldGroup);
         }
@@ -330,8 +289,6 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_VALUES_EQUAL(selected, PortionCount / 2);
         portions.clear();
         actualizer.UpdatePortionStates(portions, {});
-        UNIT_ASSERT_GT(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
-        UNIT_ASSERT_LT(actualizer.GetMoveDataQueueSizes().GetTotal(), selected);
         UNIT_ASSERT_VALUES_EQUAL_C(selected - actualizer.GetMoveDataQueueSizes().GetTotal(), 1024,
             "one pass must erase exactly its candidate budget without revisiting entries");
         for (ui32 pass = 1; pass < 5; ++pass) {

@@ -92,9 +92,10 @@ void TMoveDataActualizer::DoExtractTasks(
         }
         const auto* portion = MapFindPtr(externalContext.GetPortions(), portionId);
         // A commit may still be completing, or another background task may have retired the portion since the last pass.
-        if (!portion || (*portion)->HasRemoveSnapshot() || !(*portion)->IsCommitted()) {
+        if (!portion || (*portion)->HasRemoveSnapshot()) {
             return true;
         }
+        AFL_VERIFY((*portion)->IsCommitted());
         switch (AddPortionToMove(tasksContext, *portion, VersionedIndex)) {
             case TTieringProcessContext::EAddPortionResult::TASK_LIMIT_EXCEEDED:
                 return false;
@@ -243,9 +244,6 @@ void TMoveDataActualizer::Seed(
     add(externalContext.GetPortions());
     // A persisted uncommitted portion can survive both restart and acknowledgement of its Keep flag.
     add(uncommitted);
-    StateScanPosition = Portions.begin();
-    RewriteScanPosition = Portions.begin();
-    MetadataScanPosition = Portions.begin();
 }
 
 }   // namespace NKikimr::NOlap::NActualizer

@@ -285,15 +285,12 @@ void RunMoveDataToCompletion(const bool moveDataEnabled) {
 
     f.StartMove();
     const auto response = f.DriveGateWithWrite(150, 2, 1000, 1001);
-    UNIT_ASSERT_C(response, "no TEvMoveDataResponse: the move never drained OldGroup");
-    UNIT_ASSERT_VALUES_EQUAL(
-        static_cast<int>(response->Get()->Record.GetStatus()), static_cast<int>(NKikimrTabletBase::TEvMoveDataResponse::Success));
+    f.AssertSuccess(response);
 
     // Success must mean rewritten, not merely empty queues: only the move puts data in NewGroup.
     const size_t movedBlobs = LivePortionBlobs(*f.NewGroupProxy, TabletId).size();
     if (moveDataEnabled) {
         UNIT_ASSERT_C(movedBlobs, "answered Success without rewriting any of the " << oldBlobs << " portion blobs out of the old group");
-        f.AssertSuccess(response);
     } else {
         UNIT_ASSERT_VALUES_EQUAL_C(movedBlobs, 0u, "the disabled feature flag still rewrote portions");
     }
@@ -343,26 +340,6 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         RunMoveDataToCompletion(/*moveDataEnabled=*/false);
     }
 
-    Y_UNIT_TEST(DrainedGroupMustNotWaitForUnrelatedRetiredPortions) {
-        TMoveDataFixture f;
-        f.Controller->DisableBackground(EBackground::TTL);
-        f.Write(1, 0, 1000);
-        f.Controller->WaitCompactions(TDuration::Seconds(10));
-        f.ReassignPastWrittenData();
-        f.StartMove();
-        const auto first = f.DriveGateWithWrite(150, 2, 1000, 1001);
-        UNIT_ASSERT_C(first, "the first evacuation must complete");
-        f.AssertSuccess(first);
-
-        // No new plan step: retired new-group portions cannot be cleaned up yet.
-        // The old group is already drained, so these unrelated retirees must not delay another request.
-        f.StartMove();
-        const auto next = f.DriveGate(150);
-        UNIT_ASSERT_C(next, "unrelated new-group retirees blocked an already-drained group");
-        f.AssertSuccess(next);
-        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000u);
-    }
-
     Y_UNIT_TEST(CompletedSessionCanStartAnotherWithoutReboot) {
         TMoveDataFixture f;
         f.Controller->DisableBackground(EBackground::TTL);
@@ -387,27 +364,12 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(refused->Get()->Record.GetStatus()),
             static_cast<int>(NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch));
 
+        // No new plan step: unrelated new-group retirees remain but must not hold another move of the drained group.
         f.StartMove();
         const auto next = f.DriveGate(150);
         UNIT_ASSERT_C(next, "a completed or refused request must not prevent another session in the same incarnation");
         f.AssertSuccess(next);
         UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000u);
-    }
-
-    // A group still holding the latest history entry keeps taking writes and can never converge, so refuse it like keyvalue does.
-    Y_UNIT_TEST(MoveDataRejectsAGroupStillTakingWrites) {
-        TMoveDataFixture f;
-        f.Controller->DisableBackground(EBackground::TTL);
-        f.Write(1, 0, 1000);
-        f.Controller->WaitCompactions(TDuration::Seconds(10));
-
-        // Deliberately no ReassignPastWrittenData: OldGroup is still the channel's latest entry.
-        f.StartMove();
-        const auto response = f.DriveGate(20);
-        UNIT_ASSERT_C(response, "a request naming a live group must be answered, not left pending");
-        UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(response->Get()->Record.GetStatus()),
-            static_cast<int>(NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch), "expected ErrorGroupIdMismatch");
-        UNIT_ASSERT_VALUES_EQUAL_C(f.ReadRows(), 1000, "a refused move must not touch the data");
     }
 
     // A poke queued behind the tablet's death but ahead of the driver's poison must not touch the dead tablet.

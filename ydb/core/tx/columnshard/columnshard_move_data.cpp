@@ -47,7 +47,7 @@ TMoveDataDriver::TMoveDataDriver(TColumnShard* self)
 }
 
 void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext& ctx) {
-    if (!HasAppData() || !AppData()->FeatureFlags.GetEnableColumnshardMoveData()) {
+    if (!AppDataVerified().FeatureFlags.GetEnableColumnshardMoveData()) {
         TTabletExecutedFlat::Handle(ev);
         return;
     }

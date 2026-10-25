@@ -6,7 +6,11 @@ TEST_SRCS(
     test_recompiles_requests.py
 )
 
-REQUIREMENTS(cpu:4)
+IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+    REQUIREMENTS(cpu:3)
+ELSE()
+    REQUIREMENTS(cpu:4)
+ENDIF()
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

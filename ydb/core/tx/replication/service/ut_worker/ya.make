@@ -3,7 +3,11 @@ UNITTEST_FOR(ydb/core/tx/replication/service)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+    REQUIREMENTS(cpu:1)
+ELSE()
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 PEERDIR(
     ydb/core/tx/replication/ut_helpers

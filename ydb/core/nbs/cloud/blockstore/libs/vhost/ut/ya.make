@@ -7,4 +7,8 @@ SRCS(
     vhost_test.cpp
 )
 
+IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+    REQUIREMENTS(cpu:1)
+ENDIF()
+
 END()

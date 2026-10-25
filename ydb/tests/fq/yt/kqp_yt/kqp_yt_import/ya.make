@@ -13,7 +13,11 @@ PY_SRCS(
 )
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+    REQUIREMENTS(cpu:1)
+ELSE()
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 DEPENDS(
     ydb/tests/tools/kqprun

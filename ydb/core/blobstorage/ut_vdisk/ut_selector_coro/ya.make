@@ -2,7 +2,11 @@ UNITTEST()
 
 FORK_SUBTESTS()
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:4 ram:4)
+IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+    REQUIREMENTS(cpu:1 ram:4)
+ELSE()
+    REQUIREMENTS(cpu:4 ram:4)
+ENDIF()
 
 SRCS(
     selector_equivalence_ut.cpp

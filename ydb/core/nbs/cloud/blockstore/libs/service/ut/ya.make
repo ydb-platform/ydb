@@ -16,4 +16,8 @@ PEERDIR(
     ydb/library/actors/wilson
 )
 
+IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+    REQUIREMENTS(cpu:1)
+ENDIF()
+
 END()

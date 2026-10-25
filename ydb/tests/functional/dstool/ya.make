@@ -3,7 +3,11 @@ PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 SIZE(MEDIUM)
 
-REQUIREMENTS(cpu:4)
+IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+    REQUIREMENTS(cpu:3)
+ELSE()
+    REQUIREMENTS(cpu:4)
+ENDIF()
 
 TEST_SRCS(
     conftest.py

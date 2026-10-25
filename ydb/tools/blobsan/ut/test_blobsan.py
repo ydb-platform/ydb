@@ -140,7 +140,7 @@ class TestBlobSan:
 
     def _testcase(self, name, data, description):
         results = [f'===== testcase =====\n{name}\n{description}\nSnapshot: {data!r}']
-        results.extend(self.run_blobsan(data, options) for options in [(), ('--write2x2-candidates',)])
+        results.extend(self.run_blobsan(data, options) for options in [(), ('--restore-canidates',)])
         return '\n\n'.join(results)
 
     def test_stdout_dump(self):
@@ -186,28 +186,28 @@ class TestBlobSan:
                            + self._trace(['block-4-2'], data))
         return self._canonical_file('output.txt', '\n\n'.join(results) + '\n')
 
-    def test_write2x2_candidates(self):
+    def test_restore_candidates(self):
         cases = [
             ('above barriers', {},
              'When a blob has no GC barrier and local copies exist in only one of the two captured DCs,\n'
-             'then default mode skips it; write2x2 mode reports a candidate with FULL because ingress claims a full layout.'),
+             'then default mode skips it; restore mode reports a candidate with FULL because ingress claims a full layout.'),
             ('keep above barriers', {'keep': 1},
              'When a blob has Keep but no GC barrier and local copies exist in only one captured DC,\n'
-             'then default mode skips it despite Keep; write2x2 mode reports a candidate with FULL.'),
+             'then default mode skips it despite Keep; restore mode reports a candidate with FULL.'),
             ('missing DC inferred from ingress', {'keep': 1, 'barrier': 'soft'},
              'When a kept blob is at a confirmed soft barrier and one DC is missing from the snapshot,\n'
-             'then default mode accepts the full layout inferred from ingress; write2x2 mode reports a candidate with FULL.'),
+             'then default mode accepts the full layout inferred from ingress; restore mode reports a candidate with FULL.'),
             ('all disks captured, local data incomplete',
              {'keep': 1, 'barrier': 'soft', 'indexes': range(9)},
              'When all nine VDisks are captured but a kept blob at the soft barrier has local copies in only one DC,\n'
-             'then both modes report a candidate; only write2x2 mode appends FULL to indicate full ingress.'),
+             'then both modes report a candidate; only restore mode appends FULL to indicate full ingress.'),
             ('local data full in two DCs', {'keep': 1, 'barrier': 'soft', 'local_realms': (0, 1)},
              'When a kept blob at the soft barrier has three local replicas in each of two captured DCs,\n'
-             'then both modes consider the local layout full and report no candidate.'),
+             'then both modes report no candidate because each fully captured DC has three local replicas.'),
             ('local data full, ingress incomplete',
              {'keep': 1, 'barrier': 'soft', 'local_realms': (0, 1), 'known_full': False},
              'When local replicas form a full layout in two DCs but ingress knows only one main part,\n'
-             'then default mode reports the kept blob because ingress is incomplete; write2x2 mode reports no candidate.'),
+             'then default mode reports the kept blob because ingress is incomplete; restore mode reports no candidate because both fully captured DCs have three replicas.'),
             ('DoNotKeep above barriers', {'keep': 2},
              'When a blob has DoNotKeep and no GC barrier,\n'
              'then both modes exclude it from recovery candidates.'),
@@ -222,7 +222,7 @@ class TestBlobSan:
              'then the hard barrier takes precedence over Keep and both modes exclude the blob.'),
             ('hard barrier without quorum', {'keep': 1, 'barrier': 'hard', 'quorum': False},
              'When a kept blob is covered by a hard barrier whose ingress lacks quorum,\n'
-             'then default mode ignores the barrier and skips the blob above any accepted barrier; write2x2 mode excludes it as hard-collected.'),
+             'then default mode ignores the barrier and skips the blob above any accepted barrier; restore mode excludes it as hard-collected.'),
             ('empty snapshot', {'indexes': ()},
              'When the input contains no VDisk snapshots,\n'
              'then both modes exit successfully without candidates or trash diagnostics.'),
@@ -233,7 +233,7 @@ class TestBlobSan:
                 'then both modes exclude the blob through the phantom filter because no local part is available.'),
             ('no local parts with missing DC', {'keep': 1, 'barrier': 'soft', 'local_realms': ()},
              'When captured VDisks have no local data for a kept blob but ingress claims parts in an uncaptured DC,\n'
-             'then both modes report a candidate using the inferred parts for the phantom check; write2x2 mode also appends FULL.'),
+             'then both modes report a candidate using the inferred parts for the phantom check; restore mode also appends FULL.'),
             ('incomplete ingress and local data', {'keep': 1, 'barrier': 'soft', 'known_full': False},
              'When a kept blob at the soft barrier has incomplete local data and ingress knows only one main part,\n'
              'then both modes report a candidate and neither appends FULL.'),
@@ -250,23 +250,23 @@ class TestBlobSan:
                 'local_realms': (), 'local_parts': {7: (0,), 1: (1,), 4: (2,)},
             },
                 'When exactly one local replica is present in each of the three DCs,\n'
-                'then the mirror-3-dc layout is full and both modes report no candidate.'),
+                'then default mode reports no candidate; restore mode reports only an invariant II candidate.'),
             ('two replicas in each of two DCs', {
                 'keep': 1, 'barrier': 'soft', 'local_realms': (), 'local_parts': {7: (0,), 8: (0,), 1: (1,), 2: (1,)},
             },
                 'When exactly two local replicas are present in each of two captured DCs,\n'
-                'then the two-by-two layout is full and both modes report no candidate.'),
+                'then both modes report no candidate because each fully captured DC has two replicas; the missing DC is ignored.'),
             ('one replica missing from two-by-two layout', {
                 'keep': 1, 'barrier': 'soft', 'local_realms': (), 'local_parts': {7: (0,), 8: (0,), 1: (1,)},
             },
                 'When two local replicas exist in one captured DC and only one exists in the other,\n'
-                'then default mode accepts the layout after inferring the missing DC; write2x2 mode reports a candidate with FULL.'),
+                'then default mode accepts the layout after inferring the missing DC; restore mode reports only an invariant II candidate with FULL.'),
             ('misplaced local part', {'keep': 1, 'barrier': 'soft', 'local_parts': {7: (1,)}},
              'When one local part belongs to the wrong DC and the remaining local copies are incomplete,\n'
-             'then both modes report TrashSize# 100 for the misplaced part; only write2x2 mode also reports a candidate with FULL.'),
+             'then both modes report TrashSize# 100 for the misplaced part; only restore mode also reports a candidate with FULL.'),
             ('Keep on one disk, other local parts discarded', {'barrier': 'soft', 'keep_flags': {7: 1}},
              'When only one VDisk has Keep for a blob covered by a confirmed soft barrier,\n'
-             'then local parts on other captured VDisks are discarded and both modes report a candidate using the remaining Keep.'),
+             'then default mode reports a candidate using only the remaining Keep; restore mode counts raw local replicas before per-VDisk GC discards and reports both invariant candidates.'),
             ('DoNotKeep on one disk overrides Keep elsewhere', {'keep': 1, 'keep_flags': {7: 2}},
              'When one VDisk has DoNotKeep while the other captured VDisks have Keep,\n'
              'then the merged DoNotKeep overrides Keep and both modes exclude the blob.'),
@@ -278,10 +278,10 @@ class TestBlobSan:
              'then DoNotKeep wins during record merging and both modes exclude the blob.'),
             ('blob absent from a captured disk', {'keep': 1, 'barrier': 'soft', 'blob_indexes': TWO_REALMS[1:]},
              'When a captured VDisk has no record for a blob that is present on the other captured VDisks,\n'
-             'then default mode accepts the inferred full layout; write2x2 mode excludes the phantom-like blob and reports estimated TrashSize# 500.'),
+             'then default mode accepts the inferred full layout; restore mode excludes the phantom-like blob and reports estimated TrashSize# 500.'),
             ('two DCs missing', {'keep': 1, 'barrier': 'soft', 'indexes': (7, 8, 6)},
              'When only the three VDisks of one DC are captured for a kept blob at the soft barrier,\n'
-             'then default mode accepts inferred completeness; write2x2 mode rejects coverage outside the failure model and reports estimated TrashSize# 900.'),
+             'then default mode accepts inferred completeness; restore mode reports no candidate because the single fully captured DC has three replicas.'),
             ('snapshot has no blob records', {'blob_indexes': ()},
              'When VDisk streams are present but contain no blob or barrier records,\n'
              'then both modes exit successfully without candidates or trash diagnostics.'),
@@ -297,22 +297,22 @@ class TestBlobSan:
                 },
             },
                 'When local data forms a full layout but no VDisk ingress reflects its own part,\n'
-                'then default mode reports the missing reflection information; write2x2 mode reports no candidate because local data is full.'),
+                'then default mode reports the missing reflection information; restore mode reports both invariant candidates because the fully captured third DC has no replica.'),
             ('blob above soft barrier step', {'barriers': [{'collect': (1, 0)}]},
              'When the blob generation matches the soft barrier but its step is greater than the collect step,\n'
-             'then default mode skips the blob above the barrier; write2x2 mode checks it and reports a candidate with FULL.'),
+             'then default mode skips the blob above the barrier; restore mode checks it and reports a candidate with FULL.'),
             ('blob above soft barrier generation', {'barriers': [{'collect': (0, 100)}]},
              'When the blob generation is greater than the soft barrier collect generation,\n'
-             'then default mode skips the blob above the barrier; write2x2 mode checks it and reports a candidate with FULL.'),
+             'then default mode skips the blob above the barrier; restore mode checks it and reports a candidate with FULL.'),
             ('blob below soft barrier generation', {'barriers': [{'collect': (2, 0)}]},
              'When a blob without Keep has a generation below the soft barrier collect generation,\n'
              'then both modes treat it as soft-collected and report no candidate.'),
             ('barrier for another tablet', {'barriers': [{'tablet': 2}]},
              'When the only GC barrier belongs to a different tablet,\n'
-             'then both modes ignore that barrier; default mode skips the blob and write2x2 mode reports a candidate with FULL.'),
+             'then both modes ignore that barrier; default mode skips the blob and restore mode reports a candidate with FULL.'),
             ('barrier for another channel', {'barriers': [{'channel': 1}]},
              'When the only GC barrier belongs to a different channel of the same tablet,\n'
-             'then both modes ignore that barrier; default mode skips the blob and write2x2 mode reports a candidate with FULL.'),
+             'then both modes ignore that barrier; default mode skips the blob and restore mode reports a candidate with FULL.'),
             ('hard barrier on one disk', {'keep': 1, 'barrier': 'hard', 'barrier_indexes': (7,)},
              'When only one captured VDisk has a confirmed hard barrier covering the kept blob,\n'
              'then that hard barrier excludes the blob from recovery candidates in both modes.'),
@@ -320,7 +320,7 @@ class TestBlobSan:
                 {'kind': 'soft'}, {'kind': 'hard', 'record': (3, 1), 'collect': (1, 0)},
             ]},
                 'When a kept blob is covered by the soft barrier but lies above the hard barrier collect step,\n'
-                'then the hard barrier does not collect it; default mode accepts inferred completeness and write2x2 mode reports a candidate with FULL.'),
+                'then the hard barrier does not collect it; default mode accepts inferred completeness and restore mode reports a candidate with FULL.'),
         ]
         results = [self._testcase(name, snapshot(**parameters), description)
                    for name, parameters, description in cases]
@@ -330,10 +330,10 @@ class TestBlobSan:
         cases = [
             ('soft barrier without quorum', {'keep': 1, 'barrier': 'soft', 'quorum': False},
              'When a kept blob has incomplete local data and a soft barrier without quorum,\n'
-             'then default mode ignores the barrier and skips the blob; write2x2 mode accepts it and reports a candidate under the barrier with FULL.'),
+             'then default mode ignores the barrier and skips the blob; restore mode accepts it and reports a candidate under the barrier with FULL.'),
             ('soft barrier without quorum and without Keep', {'barrier': 'soft', 'quorum': False},
              'When a blob without Keep is covered by a soft barrier whose ingress lacks quorum,\n'
-             'then default mode skips it above any accepted barrier; write2x2 mode accepts the barrier and excludes the soft-collected blob.'),
+             'then default mode skips it above any accepted barrier; restore mode accepts the barrier and excludes the soft-collected blob.'),
             ('barrier ingress fragments form quorum', {'keep': 1, 'indexes': tuple(range(9)), 'barriers': [
                 {'ingress': 0x007}, {'ingress': 0x038},
             ]},
@@ -343,12 +343,12 @@ class TestBlobSan:
                 {'ingress': 0x007}, {'ingress': 0x007},
             ]},
                 'When two records for the same barrier both carry ingress 0x007,\n'
-                'then merging leaves 0x007 without quorum; default mode skips the blob and write2x2 mode reports the kept candidate.'),
+                'then merging leaves 0x007 without quorum; default mode skips the blob and restore mode reports the kept candidate.'),
             ('newer barrier lacks quorum', {'keep': 1, 'indexes': tuple(range(9)), 'barriers': [
                 {}, {'record': (3, 1), 'collect': (1, 2), 'ingress': 0},
             ]},
                 'When confirmed barrier record (2, 1) is followed by unconfirmed record (3, 1),\n'
-                'then default mode selects (2, 1) collecting through (1, 1); write2x2 mode selects (3, 1) collecting through (1, 2); both report a candidate.'),
+                'then default mode selects (2, 1) collecting through (1, 1); restore mode selects (3, 1) collecting through (1, 2); both report a candidate.'),
             ('older barrier arrives after newer barrier', {'keep': 1, 'indexes': tuple(range(9)), 'barriers': [
                 {'record': (3, 1), 'collect': (1, 2)}, {},
             ]},
@@ -363,7 +363,7 @@ class TestBlobSan:
                 {}, {'kind': 'hard', 'record': (3, 1), 'ingress': 0},
             ]},
                 'When a confirmed soft barrier and an unconfirmed hard barrier both cover a kept blob,\n'
-                'then default mode ignores the hard barrier and reports a soft-barrier candidate; write2x2 mode accepts the hard barrier and excludes the blob.'),
+                'then default mode ignores the hard barrier and reports a soft-barrier candidate; restore mode accepts the hard barrier and excludes the blob.'),
         ]
         results = [self._testcase(name, snapshot(**parameters), description)
                    for name, parameters, description in cases]
@@ -371,13 +371,15 @@ class TestBlobSan:
 
 
 class TestScanReport(unittest.TestCase):
-    def analyze(self, data, completed=None, check=True):
+    def analyze(self, data, completed=None, check=True, restore=True):
         completed = data.parameters['indexes'] if completed is None else completed
         binary = yatest.common.binary_path('ydb/tools/blobsan/blobsan')
         with tempfile.TemporaryDirectory() as directory:
             manifest, report = Path(directory) / 'manifest.json', Path(directory) / 'report.json'
             manifest.write_text(json.dumps(dict(group_id=1, completed_vdisks=list(completed))))
-            command = [binary, '--write2x2-candidates', '--scan-manifest', str(manifest), '--scan-report', str(report)]
+            command = [binary, '--scan-manifest', str(manifest), '--scan-report', str(report)]
+            if restore:
+                command.append('--restore-canidates')
             command.append('mirror-3-dc')
             result = subprocess.run(command, input=bytes(data), stdout=subprocess.DEVNULL,
                                     stderr=subprocess.PIPE, check=check)
@@ -385,19 +387,90 @@ class TestScanReport(unittest.TestCase):
 
     def test_full_layouts_are_counted_in_group_realm_order(self):
         # Subgroup realms 0, 1, 2 map to group realms 2, 0, 1.
-        cases = [({7: (0,), 1: (1,), 4: (2,)}, '1+1+1', 300),
-                 ({7: (0,), 8: (0,), 1: (1,), 2: (1,)}, '2+0+2', 400)]
-        for parts, local, replica_bytes in cases:
+        cases = [({7: (0,), 1: (1,), 4: (2,)}, '1+1+1', 300, False),
+                 ({7: (0,), 8: (0,), 1: (1,), 2: (1,)}, '2+0+2', 400, True)]
+        for parts, local, replica_bytes, inv1_candidate in cases:
             with self.subTest(local=local):
                 report, result = self.analyze(snapshot(indexes=range(9), local_realms=(), local_parts=parts,
                                                        known_nodes=(0, 1, 2)))
-                self.assertNotIn(b'GroupId#', result.stderr)
+                self.assertIn(b'GroupId#', result.stderr)
                 expected = dict(
                     local=local, ingress='1+1+1', gc='no_covering_barrier', blobs=1,
                     logical_bytes=100, observed_replica_bytes=replica_bytes, missing_metadata_blobs=0,
-                    phantom_like=False, write2x2_candidate=False)
+                    phantom_like=False, inv1_candidate=inv1_candidate, inv2_candidate=True)
                 self.assertEqual(report['buckets'], [expected])
                 self.assertEqual(report['totals']['blobs'], 1)
+
+    def test_invariant_candidates_use_local_replica_thresholds(self):
+        cases = [((1, 1, 1), False, True), ((2, 2, 0), True, True),
+                 ((2, 2, 1), False, True), ((2, 2, 2), False, False),
+                 ((3, 3, 3), False, False)]
+        for counts, inv1_candidate, inv2_candidate in cases:
+            parts = {SUBGROUP_ORDER[copy * 3 + realm]: (realm,)
+                     for realm, copies in enumerate(counts) for copy in range(copies)}
+            with self.subTest(counts=counts):
+                report, result = self.analyze(snapshot(indexes=range(9), local_realms=(), local_parts=parts))
+                bucket, = report['buckets']
+                self.assertEqual((bucket['inv1_candidate'], bucket['inv2_candidate']), (inv1_candidate, inv2_candidate))
+                self.assertEqual(b' inv1_candidate' in result.stderr, inv1_candidate)
+                self.assertEqual(b' inv2_candidate' in result.stderr, inv2_candidate)
+
+    def test_unknown_realms_are_ignored_by_both_candidate_thresholds(self):
+        # Capture group realms 0 and 1 (subgroup parts 1 and 2); realm 2 is unknown.
+        completed = tuple(index for node, index in enumerate(SUBGROUP_ORDER) if node % 3 != 0)
+        cases = [((2, 2), '2+2+?', False, False),
+                 ((1, 1), '1+1+?', False, True),
+                 ((0, 2), '0+2+?', True, True)]
+        for counts, local, inv1_candidate, inv2_candidate in cases:
+            parts = {SUBGROUP_ORDER[copy * 3 + part]: (part,)
+                     for part, copies in zip((1, 2), counts) for copy in range(copies)}
+            data = snapshot(indexes=completed, local_realms=(), local_parts=parts)
+            with self.subTest(local=local):
+                report, result = self.analyze(data)
+                bucket, = report['buckets']
+                self.assertEqual(bucket['local'], local)
+                self.assertEqual((bucket['inv1_candidate'], bucket['inv2_candidate']), (inv1_candidate, inv2_candidate))
+                self.assertEqual(b' inv1_candidate' in result.stderr, inv1_candidate)
+                self.assertEqual(b' inv2_candidate' in result.stderr, inv2_candidate)
+                # The mode without a manifest uses the same captured-VDisk coverage.
+                command = [yatest.common.binary_path('ydb/tools/blobsan/blobsan'),
+                           '--restore-canidates', 'mirror-3-dc']
+                plain = subprocess.run(command, input=bytes(data), stdout=subprocess.DEVNULL,
+                                       stderr=subprocess.PIPE, check=True)
+                self.assertEqual(b' inv1_candidate' in plain.stderr, inv1_candidate)
+                self.assertEqual(b' inv2_candidate' in plain.stderr, inv2_candidate)
+        # Every realm has one uncaptured VDisk, so there is no numeric LocalPerDc minimum.
+        completed = tuple(SUBGROUP_ORDER[:6])
+        report, result = self.analyze(snapshot(indexes=completed, local_realms=(0, 1, 2)))
+        bucket, = report['buckets']
+        self.assertEqual(bucket['local'], '?+?+?')
+        self.assertEqual((bucket['inv1_candidate'], bucket['inv2_candidate']), (False, False))
+        self.assertNotIn(b'GroupId#', result.stderr)
+
+    def test_candidate_thresholds_use_raw_local_counts_before_gc_discards(self):
+        report, result = self.analyze(snapshot(indexes=range(9), local_realms=(0, 1, 2),
+                                               barrier='soft', keep_flags={7: 1}))
+        bucket, = report['buckets']
+        self.assertEqual(bucket['local'], '3+3+3')
+        self.assertEqual(bucket['gc'], 'soft_with_keep')
+        self.assertEqual((bucket['inv1_candidate'], bucket['inv2_candidate']), (False, False))
+        self.assertNotIn(b'GroupId#', result.stderr)
+
+    def test_restore_annotations_are_null_in_default_mode(self):
+        report, _ = self.analyze(snapshot(indexes=range(9), keep=1, barrier='soft'), restore=False)
+        bucket, = report['buckets']
+        self.assertIsNone(bucket['inv1_candidate'])
+        self.assertIsNone(bucket['inv2_candidate'])
+        self.assertNotIn('write2x2_candidate', bucket)
+
+    def test_misplaced_parts_do_not_satisfy_invariant(self):
+        # Wrong-DC parts would add a second replica to each part count if they were accepted.
+        parts = {7: (0, 1), 1: (1, 2), 4: (2, 0)}
+        report, result = self.analyze(snapshot(indexes=range(9), local_realms=(), local_parts=parts))
+        bucket, = report['buckets']
+        self.assertEqual((bucket['inv1_candidate'], bucket['inv2_candidate']), (False, True))
+        self.assertEqual(bucket['observed_replica_bytes'], 300)
+        self.assertIn(b' inv2_candidate', result.stderr)
 
     def test_missing_disk_makes_the_whole_realm_unknown(self):
         for completed, expected in [(tuple(i for i in range(9) if i != 6), '1+1+?'),
@@ -472,7 +545,9 @@ class TestScanReport(unittest.TestCase):
                 data = snapshot(**parameters)
                 report, result = self.analyze(data)
                 bucket, = report['buckets']
-                self.assertEqual(bucket['write2x2_candidate'], b'GroupId#' in result.stderr)
+                self.assertEqual(bucket['inv1_candidate'], b' inv1_candidate' in result.stderr)
+                self.assertEqual(bucket['inv2_candidate'], b' inv2_candidate' in result.stderr)
+                self.assertEqual(bucket['inv1_candidate'] or bucket['inv2_candidate'], b'GroupId#' in result.stderr)
                 self.assertEqual(bucket['phantom_like'], bool(bucket['missing_metadata_blobs']))
 
     def test_same_layout_splits_phantom_and_candidate_annotations(self):
@@ -488,8 +563,8 @@ class TestScanReport(unittest.TestCase):
         self.assertEqual(len(report['buckets']), 2)
         self.assertEqual({(b['local'], b['ingress'], b['gc']) for b in report['buckets']},
                          {('1+0+1', '1+1+1', 'no_covering_barrier')})
-        self.assertEqual({(b['phantom_like'], b['write2x2_candidate']) for b in report['buckets']},
-                         {(False, True), (True, False)})
+        self.assertEqual({(b['phantom_like'], b['inv1_candidate'], b['inv2_candidate']) for b in report['buckets']},
+                         {(False, True, True), (True, False, False)})
         self.assertEqual(result.stderr.count(b'GroupId#'), 1)
 
     def test_manifest_rejects_duplicate_and_unlisted_vdisks(self):
@@ -507,7 +582,7 @@ class TestScanReport(unittest.TestCase):
         from ydb.apps.dstool.lib import blobsan_service as svc
 
         binary = yatest.common.binary_path('ydb/tools/blobsan/blobsan')
-        args = SimpleNamespace(viewer='http://viewer', request_timeout=5, scan_timeout=30, scan_only=True,
+        args = SimpleNamespace(viewer='http://viewer', request_timeout=5, scan_timeout=30,
                                blobsan=binary, interval=3600, retry=60, refresh=300, lease=120)
         layout = dict(id=1, generation=7, fingerprint='v7', pool='pool1', pool_key='1:1',
                       slots=[dict(index=i, node=i + 1, pdisk=1, slot=100 + i) for i in range(9)])
@@ -537,9 +612,12 @@ class TestScanReport(unittest.TestCase):
                 scratch.mkdir()
                 with patch.object(svc, 'ydb_http', side_effect=fetch):
                     candidates, coverage = svc.scan(args, job, scratch, threading.Event())
-                self.assertEqual(candidates, {'[1:1:1:0:0:100:0]'})
+                self.assertEqual(candidates, {'inv1_candidate': set(),
+                                              'inv2_candidate': {'[1:1:1:0:0:100:0]'}})
                 reply = master.rpc('/result', dict(
-                    worker='test', group=1, token=job['token'], result=dict(findings={}, findings_complete=False, **coverage)))
+                    worker='test', group=1, token=job['token'], result=dict(
+                        candidates={key: sorted(blobs) for key, blobs in candidates.items()},
+                        candidates_complete=True, **coverage)))
                 self.assertTrue(reply['accepted'])
                 pool, = json.loads(master.console('pools pool1'))
                 self.assertEqual(pool['partial_groups'], 1)

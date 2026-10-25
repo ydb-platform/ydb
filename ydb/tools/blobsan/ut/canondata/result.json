@@ -8,10 +8,10 @@
     "test_blobsan.TestBlobSan.test_block42": {
         "uri": "file://test_blobsan.TestBlobSan.test_block42/output.txt"
     },
+    "test_blobsan.TestBlobSan.test_restore_candidates": {
+        "uri": "file://test_blobsan.TestBlobSan.test_restore_candidates/output.txt"
+    },
     "test_blobsan.TestBlobSan.test_stdout_dump": {
         "uri": "file://test_blobsan.TestBlobSan.test_stdout_dump/output.txt"
-    },
-    "test_blobsan.TestBlobSan.test_write2x2_candidates": {
-        "uri": "file://test_blobsan.TestBlobSan.test_write2x2_candidates/output.txt"
     }
 }

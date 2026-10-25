@@ -5,7 +5,7 @@ import re
 
 GC_STATES = {'hard_barrier', 'do_not_keep', 'soft_without_keep', 'soft_with_keep', 'no_covering_barrier'}
 METRICS = ('blobs', 'logical_bytes', 'observed_replica_bytes', 'missing_metadata_blobs')
-ANNOTATIONS = ('phantom_like', 'write2x2_candidate')
+ANNOTATIONS = ('phantom_like', 'inv1_candidate', 'inv2_candidate')
 
 
 def local3(local):
@@ -58,10 +58,12 @@ def validate(report, gid, completed):
         if bucket.get('phantom_like') is not None and bucket['missing_metadata_blobs'] != (
                 bucket['blobs'] if bucket['phantom_like'] else 0):
             raise ValueError('Phantom annotation contradicts missing metadata')
-        if bucket.get('write2x2_candidate') and (
+        if any(bucket.get(key) is True for key in ('inv1_candidate', 'inv2_candidate')) and (
                 bucket.get('phantom_like') is not False or
                 bucket['gc'] not in ('soft_with_keep', 'no_covering_barrier')):
-            raise ValueError('Invalid write2x2 candidate annotation')
+            raise ValueError('Invalid restore candidate annotation')
+        if bucket.get('inv1_candidate') is True and bucket.get('inv2_candidate') is not True:
+            raise ValueError('inv1_candidate must be a subset of inv2_candidate')
         key = bucket_key(bucket)
         if key in seen:
             raise ValueError('Duplicate scan bucket')

@@ -33,7 +33,7 @@ ui32 TotalPartCount = 0;
 ui32 BlobSubgroupSize = 0;
 
 bool OutputCout = true;
-bool Write2x2Candidates = false;
+bool RestoreCandidates = false;
 TString ScanManifestPath;
 TString ScanReportPath;
 
@@ -268,7 +268,7 @@ void ParseBlock(TBuffer& buffer, TVDiskState& vs, const TBlobStorageGroupInfo& i
             }
 
             auto ingress = TBarrierIngress::CreateFromRaw(r.Ingress);
-            if (Write2x2Candidates || ingress.IsQuorum(ingressCache.Get())) {
+            if (RestoreCandidates || ingress.IsQuorum(ingressCache.Get())) {
                 auto& key = r.Hard ? barrier.HardKey : barrier.SoftKey;
                 auto& value = r.Hard ? barrier.Hard : barrier.Soft;
                 if (!value || key < it->first) { // newer barrier with quorum wins
@@ -427,8 +427,8 @@ int main(int argc, char **argv) {
     opts.SetTitle("Analyze BlobStorage VDisk index snapshots for incomplete blob layouts.");
     opts.SetFreeArgsNum(1);
     opts.SetFreeArgTitle(0, "erasure", "Erasure species of all input groups, e.g. mirror-3-dc or block-4-2");
-    opts.AddLongOption("write2x2-candidates", "Find mirror-3-dc write2x2 recovery candidates using local parts from the snapshot")
-        .StoreTrue(&Write2x2Candidates);
+    opts.AddLongOption("restore-canidates", "Find mirror-3-dc invariant I and II restore candidates using local parts from the snapshot")
+        .StoreTrue(&RestoreCandidates);
     opts.AddLongOption("scan-manifest", "JSON file with group_id and completed_vdisks, including successfully captured empty VDisks")
         .RequiredArgument("PATH").StoreResult(&ScanManifestPath);
     opts.AddLongOption("scan-report", "Write a JSON histogram of all observed mirror-3-dc blobs before candidate filtering")
@@ -442,8 +442,9 @@ int main(int argc, char **argv) {
         "By default, check Keep blobs below quorum-confirmed GC barriers for"
         " incomplete local data or ingress layouts. Parts on missing VDisks may"
         " be inferred from ingress metadata."
-        " --write2x2-candidates requires mirror-3-dc. Judge"
-        " completeness using only local parts from captured VDisks, include blobs"
+        " --restore-canidates requires mirror-3-dc. Find blobs with fewer than one"
+        " or two replicas in any fully captured DC using raw local parts from the snapshot."
+        " Ignore DCs with incomplete coverage; include blobs"
         " above barriers and accept barriers without quorum. Skip hard-collected"
         " and DoNotKeep blobs; blobs below soft barriers still require Keep."
         " Both modes filter out blobs with missing records on captured VDisks,"
@@ -454,17 +455,19 @@ int main(int argc, char **argv) {
         "stderr: GroupId#/BlobId# reports with part layouts, Keep flags, VDisk"
         " coverage masks and GC barriers. An optional TrashSize# line"
         " estimates the size of misplaced and phantom-like parts."
-        " In write2x2 mode this estimate may include blobs still being written"
+        " In restore mode this estimate may include blobs still being written"
         " above GC barriers; it does not establish that these parts can be deleted."
-        " FULL marks a write2x2 candidate whose merged ingress layout is full"
-        " while its local-part layout from captured VDisks is incomplete.");
+        " Candidate lines contain inv1_candidate and/or inv2_candidate, identifying blobs with"
+        " fewer than one or two raw local replicas in a fully captured DC, respectively."
+        " MinRedundancyPerDc is the minimum over fully captured DCs; unknown DCs are ignored."
+        " FULL marks a candidate whose merged ingress layout is full.");
     opts.AddSection("Exit status",
         "0: analysis completed, including when findings are reported."
         " Nonzero: argument or input error.");
     opts.AddSection("Examples",
         "ydb-dstool -e HOST:2135 group take-snapshot --group-ids 42 --output snapshot.bin"
         " blobsan mirror-3-dc < snapshot.bin > dump.txt 2> report.txt"
-        " blobsan --write2x2-candidates mirror-3-dc < snapshot.bin > /dev/null 2> candidates.txt");
+        " blobsan --restore-canidates mirror-3-dc < snapshot.bin > /dev/null 2> candidates.txt");
     NLastGetopt::TOptsParseResult args(&opts, argc, argv);
     const TString erasure = args.GetFreeArgs().front();
 
@@ -479,8 +482,8 @@ int main(int argc, char **argv) {
         Cerr << "invalid erasure species name: " << erasure << Endl;
         return 1;
     }
-    if (Write2x2Candidates && species != TBlobStorageGroupType::ErasureMirror3dc) {
-        Cerr << "--write2x2-candidates requires mirror-3-dc" << Endl;
+    if (RestoreCandidates && species != TBlobStorageGroupType::ErasureMirror3dc) {
+        Cerr << "--restore-canidates requires mirror-3-dc" << Endl;
         return 1;
     }
     const bool scanReport = !ScanReportPath.empty();
@@ -544,7 +547,7 @@ int main(int argc, char **argv) {
     }
 
     TBufferedOutput err(&Cerr, 1_MB);
-    std::map<std::tuple<TString, TString, TString, bool, bool>, TScanCounters> scanBuckets;
+    std::map<std::tuple<TString, TString, TString, bool, bool, bool>, TScanCounters> scanBuckets;
     TScanCounters scanTotals;
 
     for (auto& [groupId, group] : Groups) {
@@ -690,8 +693,28 @@ int main(int argc, char **argv) {
                 && numLocalParts >= type.MinimalRestorablePartCount()
                 && checker.CheckFailModelForSubgroup(~TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(
                     &info.GetTopology(), blob.Info.Nodes));
-            const bool fullLocalLayout = isFull(originalLocalLayout);
-            const bool write2x2Candidate = gcEligible && !fullLocalLayout && restorable;
+            ui32 MinRedundancyPerDc = 3;
+            if (RestoreCandidates || scanReport) {
+                ui32 counts[3] = {};
+                bool known[3] = {true, true, true};
+                for (ui32 node = 0; node < nums.size(); ++node) {
+                    const ui32 realm = info.GetTopology().GetVDiskId(nums[node]).FailRealm;
+                    if (!(scanReport ? completed.contains(nums[node]) : group.States.contains(nums[node]))) {
+                        known[realm] = false;
+                    }
+                    // Compute MinRedundancyPerDc from the raw LocalPerDc histogram, excluding misplaced and inferred replicas.
+                    if (blob.ObservedLocalLayout.GetDisksWithPart(node % 3) >> node & 1) {
+                        ++counts[realm];
+                    }
+                }
+                for (ui32 realm = 0; realm < 3; ++realm) {
+                    if (known[realm]) {
+                        MinRedundancyPerDc = std::min(MinRedundancyPerDc, counts[realm]);
+                    }
+                }
+            }
+            const bool inv1_candidate = gcEligible && MinRedundancyPerDc < 1 && restorable;
+            const bool inv2_candidate = gcEligible && MinRedundancyPerDc < 2 && restorable;
 
             if (scanReport) {
                 const TString gc = blob.Hard ? "hard_barrier"
@@ -707,17 +730,17 @@ int main(int argc, char **argv) {
                     counters.ObservedReplicaBytes += ui64(replicas) * blobId.BlobSize();
                     counters.MissingMetadataBlobs += phantomLike;
                 };
-                add(scanBuckets[{local, ingress, gc, phantomLike, write2x2Candidate}]);
+                add(scanBuckets[{local, ingress, gc, phantomLike, inv1_candidate, inv2_candidate}]);
                 add(scanTotals);
             }
             if (!gcEligible) {
                 continue;
             }
-            if (!Write2x2Candidates && (!blob.UnderBarrierMask || blob.Info.KeepMode != KEEP)) {
+            if (!RestoreCandidates && (!blob.UnderBarrierMask || blob.Info.KeepMode != KEEP)) {
                 continue;
             }
 
-            if (Write2x2Candidates ? fullLocalLayout :
+            if (RestoreCandidates ? MinRedundancyPerDc >= 2 :
                     (isFull(blob.Info.Layout) && isFull(blob.Info.ReflectionLayout) && isFull(blob.Info.LocalLayout))) {
                 // looks like correct blob -- either it is not under barrier (and may be being written right now), or
                 // it is with keep flags and fully written with correct ingress bits on every disk
@@ -741,7 +764,9 @@ int main(int argc, char **argv) {
                 case DO_NOT_KEEP: keepMode = "doNotKeep"; break;
             }
 
-            err << "GroupId# " << groupId << " BlobId# " << blobId << (Write2x2Candidates && isFull(blob.Info.Layout) ? " FULL" : "")
+            err << "GroupId# " << groupId << " BlobId# " << blobId << (RestoreCandidates && isFull(blob.Info.Layout) ? " FULL" : "")
+                << (RestoreCandidates && inv1_candidate ? " inv1_candidate" : "")
+                << (RestoreCandidates && inv2_candidate ? " inv2_candidate" : "")
                 << "\n\tOrderNums#          " << FormatList(nums)
                 << "\n\tKeepMode#           " << keepMode
                 << "\n\tLayout#             " << FormatLayout(blob.Info.Layout, type)
@@ -794,13 +819,15 @@ int main(int argc, char **argv) {
         report["buckets"] = NJson::TJsonValue(NJson::JSON_ARRAY);
         for (const auto& [key, counters] : scanBuckets) {
             auto bucket = counters.ToJson();
-            const auto& [local, ingress, gc, phantomLike, write2x2Candidate] = key;
+            const auto& [local, ingress, gc, phantomLike, inv1_candidate, inv2_candidate] = key;
             bucket["local"] = local;
             bucket["ingress"] = ingress;
             bucket["gc"] = gc;
             bucket["phantom_like"] = phantomLike;
-            bucket["write2x2_candidate"] = Write2x2Candidates
-                ? NJson::TJsonValue(write2x2Candidate) : NJson::TJsonValue(NJson::JSON_NULL);
+            bucket["inv1_candidate"] = RestoreCandidates
+                ? NJson::TJsonValue(inv1_candidate) : NJson::TJsonValue(NJson::JSON_NULL);
+            bucket["inv2_candidate"] = RestoreCandidates
+                ? NJson::TJsonValue(inv2_candidate) : NJson::TJsonValue(NJson::JSON_NULL);
             report["buckets"].AppendValue(std::move(bucket));
         }
         TFileOutput output(ScanReportPath);

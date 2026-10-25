@@ -112,7 +112,7 @@ The master uses its own Viewer URL and credentials to send one
 `inflight` and `timeout`. Only one HTTP batch runs at a time.
 `--restore-inflight` limits concurrent target VDisk requests within the batch
 (default 16). `--restore-timeout` sets the server deadline in seconds
-(default 60, maximum 300). The HTTP deadline is at least ten seconds longer
+(positive integer, default 60). The HTTP deadline is at least ten seconds longer
 than the server deadline and at least `--request-timeout`.
 
 Before sending, the master commits the exact request and selected candidates

@@ -130,7 +130,6 @@ message TReplicationConfig {
     optional TReplicationLocationConfig Location = 10;
     optional bool InitialScan = 11 [default = true];
 
-
     // targets to be replicated
     // Currently, only OLTP tables are supported.
     oneof Target {

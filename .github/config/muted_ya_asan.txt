@@ -25,6 +25,7 @@ ydb/core/kqp/ut/rbo KqpRboYql.Decorrelation+ColumnStore+EqualNullsJoinKeys
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_9
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_YQL_CBO4_ColumnLineageMapping
 ydb/core/kqp/ut/rbo KqpRboYql.WholePartitionWindowAsAggregateJoin+WindowFunctionsV2
+ydb/core/kqp/ut/rbo KqpRboYql.WholePartitionWindowAsAggregateJoin-WindowFunctionsV2
 ydb/core/kqp/ut/rbo KqpRboYql.WindowAggregates-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.WindowSortWithoutBlocksUnderWindowFunctionsV2-WindowFunctionsV2
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
@@ -95,6 +96,7 @@ ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_P
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKInt64
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKUInt32
 ydb/core/tx/columnshard/ut_rw unittest.[*/*] chunk
+ydb/core/tx/datashard/ut_truncate unittest.[*/*] chunk
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ReplacementRejectsOldResultsAndAcceptsNew+ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ReplacementRejectsOldResultsAndAcceptsNew-ResourceId
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropAsyncIndexWithRowConsistency

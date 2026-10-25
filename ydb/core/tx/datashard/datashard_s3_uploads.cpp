@@ -82,10 +82,18 @@ const TS3Upload* TS3UploadsManager::Find(ui64 txId) const {
 const TS3Upload& TS3UploadsManager::Add(NIceDb::TNiceDb& db, ui64 txId, const TString& uploadId) {
     using Schema = TDataShard::Schema;
 
-    Y_ENSURE(!Uploads.contains(txId));
+    auto it = Uploads.find(txId);
+    Y_ENSURE(it == Uploads.end() || (it->second.Status == TS3Upload::EStatus::Abort && !it->second.Error),
+        "Cannot replace an active s3 upload: txId# " << txId);
+    if (it != Uploads.end()) {
+        Uploads.erase(it);
+    }
     auto res = Uploads.emplace(txId, TS3Upload(uploadId));
 
-    db.Table<Schema::S3Uploads>().Key(txId).Update<Schema::S3Uploads::UploadId>(uploadId);
+    db.Table<Schema::S3Uploads>().Key(txId).Update(
+        NIceDb::TUpdate<Schema::S3Uploads::UploadId>(uploadId),
+        NIceDb::TUpdate<Schema::S3Uploads::Status>(TS3Upload::EStatus::UploadParts),
+        NIceDb::TNull<Schema::S3Uploads::Error>());
 
     return res.first->second;
 }
@@ -99,6 +107,9 @@ const TS3Upload& TS3UploadsManager::ChangeStatus(NIceDb::TNiceDb& db, ui64 txId,
     Y_ENSURE(it != Uploads.end());
 
     auto& upload = it->second;
+    for (ui32 partIndex = parts.size(); partIndex < upload.Parts.size(); ++partIndex) {
+        db.Table<Schema::S3UploadedParts>().Key(txId, partIndex + 1).Delete();
+    }
     upload.Status = status;
     upload.Error = std::move(error);
     upload.Parts = std::move(parts);
@@ -107,6 +118,8 @@ const TS3Upload& TS3UploadsManager::ChangeStatus(NIceDb::TNiceDb& db, ui64 txId,
 
     if (upload.Error) {
         db.Table<Schema::S3Uploads>().Key(txId).Update<Schema::S3Uploads::Error>(*upload.Error);
+    } else {
+        db.Table<Schema::S3Uploads>().Key(txId).UpdateToNull<Schema::S3Uploads::Error>();
     }
 
     for (ui32 partIndex = 0; partIndex < upload.Parts.size(); ++partIndex) {

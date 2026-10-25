@@ -352,6 +352,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
             CheckCase({state, state, R::R}, {2, 2, 0}, true);
             // W = 1+1+1 OR 2+2: N/R cannot provide 2+2 instead of N/N; 1+1+1 is also missing.
             CheckCase({state, state, R::R}, {2, 0, 2}, false);
+            CheckBlobStateCase({state, state, R::R}, {2, 0, 2}, {}, G::EBS_RECOVERABLE_FRAGMENTARY);
             // W = 1+1+1 OR 2+2: no copy in R for 1+1+1, and only one in the second N for 2+2.
             CheckCase({state, state, R::R}, {2, 1, 0}, false);
         }

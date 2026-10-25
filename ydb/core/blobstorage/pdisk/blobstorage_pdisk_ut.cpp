@@ -890,6 +890,16 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT(opened.substr(payload.size()) == TString(opened.size() - payload.size(), '\0'));
     }
 
+    // No TEvChunkWriteResult arrives within a second. With nothing at all to deliver the test runtime throws instead
+    // of timing out, which means the same.
+    bool NoMoreWriteAnswers(TActorTestContext& testCtx) {
+        try {
+            return !testCtx.GetRuntime()->GrabEdgeEvent<NPDisk::TEvChunkWriteResult>(TDuration::Seconds(1));
+        } catch (const NActors::TEmptyEventQueueException&) {
+            return true;
+        }
+    }
+
     // Long writes go to the device in pieces; a PDiskStop that drops the pieces still queued must leave every write
     // answered exactly once (with an error if it was cut short), never waiting forever.
     void TestWritesInPiecesAnsweredOnStop(bool preformatted) {
@@ -941,8 +951,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             UNIT_ASSERT_C(answered.insert(cookie).second, "write# " << cookie << " answered twice");
         }
         testCtx.Recv<NPDisk::TEvYardControlResult>();
-        UNIT_ASSERT_C(!testCtx.GetRuntime()->GrabEdgeEvent<NPDisk::TEvChunkWriteResult>(TDuration::Seconds(1)),
-            "an extra write answer");
+        UNIT_ASSERT_C(NoMoreWriteAnswers(testCtx), "an extra write answer");
     }
 
     // The accounting of a write's pieces, driven by hand: a write whose first piece was done and the others dropped
@@ -1024,8 +1033,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<ui64>(res->Cookie), cookie);
             UNIT_ASSERT_VALUES_EQUAL_C(res->Status, status, cookie);
         }
-        UNIT_ASSERT_C(!testCtx.GetRuntime()->GrabEdgeEvent<NPDisk::TEvChunkWriteResult>(TDuration::Seconds(1)),
-            "an extra write answer");
+        UNIT_ASSERT_C(NoMoreWriteAnswers(testCtx), "an extra write answer");
     }
 
     Y_UNIT_TEST(WritesInPiecesAnsweredOnStopPreformatted) {

@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet)
 
 FORK_SUBTESTS()
 
-IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+IF (NOT SANITIZER_TYPE)
     REQUIREMENTS(ram:32 cpu:1)
 ELSE()
     REQUIREMENTS(ram:32 cpu:2)

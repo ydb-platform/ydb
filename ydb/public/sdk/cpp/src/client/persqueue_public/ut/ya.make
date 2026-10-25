@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/persqueue_public)
 
-IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+IF (NOT SANITIZER_TYPE)
     REQUIREMENTS(cpu:1)
 ELSE()
     REQUIREMENTS(cpu:2)

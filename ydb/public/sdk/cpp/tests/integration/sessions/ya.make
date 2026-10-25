@@ -5,7 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 FORK_SUBTESTS()
 
-IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+IF (NOT SANITIZER_TYPE)
     REQUIREMENTS(cpu:1)
 ELSE()
     REQUIREMENTS(cpu:2)

@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
-IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+IF (NOT SANITIZER_TYPE)
     REQUIREMENTS(ram:32 cpu:2)
 ELSE()
     REQUIREMENTS(ram:32 cpu:4)

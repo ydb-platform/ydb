@@ -5,7 +5,7 @@ TEST_SRCS(
     test_init.py
 )
 
-IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+IF (NOT SANITIZER_TYPE)
     REQUIREMENTS(ram:16 cpu:2)
 ELSE()
     REQUIREMENTS(ram:16 cpu:4)

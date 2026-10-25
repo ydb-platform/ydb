@@ -3,7 +3,7 @@ GTEST(topic_direct_read_it)
 INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/tests/integration/tests_common.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
-IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+IF (NOT SANITIZER_TYPE)
     REQUIREMENTS(ram:32 cpu:1)
 ELSE()
     REQUIREMENTS(ram:32 cpu:2)

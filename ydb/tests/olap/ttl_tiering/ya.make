@@ -16,7 +16,7 @@ TEST_SRCS(
     unstable_connection.py
 )
 
-IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+IF (NOT SANITIZER_TYPE)
     REQUIREMENTS(cpu:2)
 ELSE()
     REQUIREMENTS(cpu:4)

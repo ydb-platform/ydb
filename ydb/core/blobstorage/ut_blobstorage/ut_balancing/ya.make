@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
     SIZE(MEDIUM)
-    IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+    IF (NOT SANITIZER_TYPE)
         REQUIREMENTS(cpu:1)
     ELSE()
         REQUIREMENTS(cpu:2)

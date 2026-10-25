@@ -6,7 +6,7 @@ TEST_SRCS(
     test_recompiles_requests.py
 )
 
-IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+IF (NOT SANITIZER_TYPE)
     REQUIREMENTS(cpu:3)
 ELSE()
     REQUIREMENTS(cpu:4)

@@ -6,7 +6,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/sqs/migration/suites/common.inc)
 TEST_SRCS(
     ydb/tests/functional/sqs/common/test_garbage_collection.py
 )
-IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+IF (NOT SANITIZER_TYPE)
     REQUIREMENTS(cpu:1)
 ENDIF()
 

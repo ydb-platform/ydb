@@ -6,7 +6,7 @@ TEST_SRCS(
     test_workload.py
 )
 
-IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+IF (NOT SANITIZER_TYPE)
     REQUIREMENTS(ram:32 cpu:1)
 ELSE()
     REQUIREMENTS(ram:32 cpu:4)

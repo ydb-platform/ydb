@@ -9,7 +9,7 @@ TEST_SRCS(
     test_quota_exhaustion.py
 )
 
-IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+IF (NOT SANITIZER_TYPE)
     REQUIREMENTS(cpu:2)
 ELSE()
     REQUIREMENTS(cpu:4)

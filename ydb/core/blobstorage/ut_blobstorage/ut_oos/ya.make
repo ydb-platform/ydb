@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
     FORK_SUBTESTS()
 
     SIZE(MEDIUM)
-    IF (NOT SANITIZER_TYPE AND BUILD_TYPE != "DEBUG")
+    IF (NOT SANITIZER_TYPE)
         REQUIREMENTS(cpu:1 ram:16)
     ELSE()
         REQUIREMENTS(cpu:2 ram:16)

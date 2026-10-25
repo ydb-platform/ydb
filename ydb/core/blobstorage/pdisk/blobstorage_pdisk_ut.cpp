@@ -941,6 +941,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             UNIT_ASSERT_C(answered.insert(cookie).second, "write# " << cookie << " answered twice");
         }
         testCtx.Recv<NPDisk::TEvYardControlResult>();
+        UNIT_ASSERT_C(!testCtx.GetRuntime()->GrabEdgeEvent<NPDisk::TEvChunkWriteResult>(TDuration::Seconds(1)),
+            "an extra write answer");
     }
 
     // The accounting of a write's pieces, driven by hand: a write whose first piece was done and the others dropped
@@ -1022,6 +1024,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<ui64>(res->Cookie), cookie);
             UNIT_ASSERT_VALUES_EQUAL_C(res->Status, status, cookie);
         }
+        UNIT_ASSERT_C(!testCtx.GetRuntime()->GrabEdgeEvent<NPDisk::TEvChunkWriteResult>(TDuration::Seconds(1)),
+            "an extra write answer");
     }
 
     Y_UNIT_TEST(WritesInPiecesAnsweredOnStopPreformatted) {

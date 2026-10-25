@@ -82,6 +82,11 @@ class TEnv {
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(Endpoint)
             .SetDatabase(Database);
+        if (!GetRuntime().IsRealThreads()) {
+            // Synchronous discovery blocks the simulated runtime's dispatcher,
+            // preventing it from handling the discovery request.
+            driverConfig.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
+        }
         Driver = MakeHolder<NYdb::TDriver>(driverConfig);
 
         YdbProxy = Server.GetRuntime()->Register(CreateYdbProxy(

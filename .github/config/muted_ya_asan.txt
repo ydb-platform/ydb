@@ -22,6 +22,7 @@ ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
 ydb/core/kqp/ut/rbo KqpRboYql.AggregationShuffleEliminationSettingDoesNotEnableTransactionLayout
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.Decorrelation+ColumnStore+EqualNullsJoinKeys
+ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_14
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_9
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_YQL_CBO4_ColumnLineageMapping
 ydb/core/kqp/ut/rbo KqpRboYql.WholePartitionWindowAsAggregateJoin+WindowFunctionsV2
@@ -97,17 +98,31 @@ ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_P
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKUInt32
 ydb/core/tx/columnshard/ut_rw unittest.[*/*] chunk
 ydb/core/tx/datashard/ut_truncate unittest.[*/*] chunk
+ydb/core/tx/replication/controller/ut_schema_change AttachmentLifecycle.PublicDoneRetriesResourceExhaustionAcrossRestart
+ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ChangedCredentialsBeforeDeferredReset-ResourceId
+ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.DropAfterDoneResolvesFreshSecret
+ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.DropDuringDeferredDoneResolvesFreshSecret
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ReplacementRejectsOldResultsAndAcceptsNew+ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ReplacementRejectsOldResultsAndAcceptsNew-ResourceId
+ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.SameCredentialsDuringDeferredDone+ResourceId
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropAsyncIndexWithRowConsistency
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithSchemaChangesEnabledAfterCreationReportsError
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithoutSchemaChangesReportsError
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropSyncIndexWithGlobalConsistency
 ydb/core/tx/replication/controller/ut_schema_change StatsDescription.CredentialsDuringStatsRequest+ReplyPending
+ydb/core/tx/replication/controller/ut_schema_change StatsDescription.CredentialsDuringStatsRequest-ReplyPending
 ydb/core/tx/replication/controller/ut_schema_change StatsDescription.UnresponsiveProxyReturnsPartialStats
+ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentFailureAfterReplacement+DescribeOnly
+ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentSuccessAfterReplacement+DescribeOnly
 ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentSuccessAfterReplacement-DescribeOnly
+ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedBootstrapUnchangedCredentialRetryAfterConsumerFailure
+ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedConfigPreservesDestinationError
+ydb/core/tx/replication/controller/ut_schema_change StreamRetry.ResetSurvivesRestartBeforeSourceCompletion+Deferred
+ydb/core/tx/replication/controller/ut_schema_change StreamRetry.ResetSurvivesRestartBeforeSourceCompletion-Deferred
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.EmptyDiscoveryIsConsumed
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.ReplacedDiscovery+NewFirst
+ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.ReplacedDiscovery-NewFirst
+ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.TerminalStateIgnoresDiscovery+Drop
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.TerminalStateIgnoresDiscovery-Drop
 ydb/core/tx/replication/service/ut_worker Worker.WriterRestartAfterAppliedReplaysRelease
 ydb/core/tx/schemeshard/ut_login TSchemeShardLoginTest.CheckThatLockedOutParametersIsRestoredFromLocalDb
@@ -118,6 +133,7 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRe
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeDataAndShuffle
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut LocalPartition.WithoutPartitionWithRestart
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
+ydb/public/sdk/cpp/tests/integration/bulk_upsert BulkUpsert.RetryOverheadOnHappyPath
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/0
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/1
 ydb/services/keyvalue/ut unittest.sole chunk

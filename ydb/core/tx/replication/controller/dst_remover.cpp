@@ -2,6 +2,7 @@
 #include "logging.h"
 #include "private_events.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -50,9 +51,8 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         auto& tx = *ev->Record.AddTransaction();
         tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
         tx.SetInternal(true);
-        if (ReplicationPathId) {
+        if (ReplicationPathId && AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()) {
             ReplicationPathId.ToProto(tx.MutableExpectedReplicationOwner());
-            tx.SetAllowUnownedReplicationCleanup(!RequireTargetOwnership);
         }
         PendingDstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
         tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(
@@ -66,7 +66,7 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         auto& tx = *ev->Record.AddTransaction();
         tx.SetInternal(true);
-        if (ReplicationPathId) {
+        if (ReplicationPathId && AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()) {
             ReplicationPathId.ToProto(tx.MutableExpectedReplicationOwner());
         }
         tx.MutableDrop()->SetId(DstPathId.LocalPathId);
@@ -228,8 +228,7 @@ public:
             TReplication::ETargetKind kind,
             const TPathId& dstPathId,
             const TPathId& pendingDstPathId,
-            const TPathId& replicationPathId,
-            bool requireTargetOwnership)
+            const TPathId& replicationPathId)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -239,7 +238,6 @@ public:
         , DstPathId(dstPathId)
         , ReplicationPathId(replicationPathId)
         , PendingDstPathId(pendingDstPathId)
-        , RequireTargetOwnership(requireTargetOwnership)
         , LogPrefix(CreateActorLogPrefix("DstRemover", ReplicationId, TargetId))
     {
     }
@@ -284,7 +282,6 @@ private:
     const TPathId DstPathId;
     const TPathId ReplicationPathId;
     const TPathId PendingDstPathId;
-    const bool RequireTargetOwnership;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     ui64 TxId = 0;
@@ -298,14 +295,14 @@ IActor* CreateDstRemover(TReplication* replication, ui64 targetId, const TActorC
     Y_ABORT_UNLESS(target);
     return CreateDstRemover(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(),
-        target->GetPendingDstPathId(), replication->GetPathId(), replication->GetConfig().GetRequireTargetOwnership());
+        target->GetPendingDstPathId(), replication->GetPathId());
 }
 
 IActor* CreateDstRemover(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId,
-        const TPathId& pendingDstPathId, const TPathId& replicationPathId, bool requireTargetOwnership)
+        const TPathId& pendingDstPathId, const TPathId& replicationPathId)
 {
-    return new TDstRemover(parent, schemeShardId, proxy, rid, tid, kind, dstPathId, pendingDstPathId, replicationPathId, requireTargetOwnership);
+    return new TDstRemover(parent, schemeShardId, proxy, rid, tid, kind, dstPathId, pendingDstPathId, replicationPathId);
 }
 
 }

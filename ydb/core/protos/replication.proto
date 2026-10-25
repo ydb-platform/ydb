@@ -146,8 +146,6 @@ message TReplicationConfig {
     optional bool InitialScan = 11 [default = true];
     optional TAvailabilityPeriod AvailabilityPeriod = 12;
 
-    // Controller-internal: persisted at creation, absent on pre-ownership replications.
-    optional bool RequireTargetOwnership = 12 [default = false];
 
     // targets to be replicated
     // Currently, only OLTP tables are supported.

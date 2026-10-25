@@ -2,6 +2,7 @@
 #include "logging.h"
 #include "private_events.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -47,9 +48,8 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         auto& tx = *ev->Record.AddTransaction();
         tx.SetInternal(true);
-        if (ReplicationPathId) {
+        if (ReplicationPathId && AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership()) {
             ReplicationPathId.ToProto(tx.MutableExpectedReplicationOwner());
-            tx.SetAllowUnownedReplicationCleanup(!RequireTargetOwnership);
         }
 
         switch (Kind) {
@@ -214,8 +214,7 @@ public:
             TReplication::ETargetKind kind,
             const TPathId& dstPathId,
             const TReplication::EState desiredState,
-            const TPathId& replicationPathId,
-            bool requireTargetOwnership)
+            const TPathId& replicationPathId)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , ReplicationId(rid)
@@ -224,7 +223,6 @@ public:
         , DstPathId(dstPathId)
         , ReplicationPathId(replicationPathId)
         , DesiredState(desiredState)
-        , RequireTargetOwnership(requireTargetOwnership)
         , LogPrefix(CreateActorLogPrefix("DstAlterer", ReplicationId, TargetId))
     {
     }
@@ -271,7 +269,6 @@ private:
     const TPathId DstPathId;
     const TPathId ReplicationPathId;
     const TReplication::EState DesiredState;
-    const bool RequireTargetOwnership;
     NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     ui64 TxId = 0;
@@ -291,15 +288,14 @@ IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorC
         ? target->GetDstPathId()
         : target->GetPendingDstPathId();
     return CreateDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
-        replication->GetId(), target->GetId(), target->GetKind(), dstPathId, replication->GetDesiredState(), replication->GetPathId(),
-        replication->GetConfig().GetRequireTargetOwnership());
+        replication->GetId(), target->GetId(), target->GetKind(), dstPathId, replication->GetDesiredState(), replication->GetPathId());
 }
 
 IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId, TReplication::EState desiredState,
-        const TPathId& replicationPathId, bool requireTargetOwnership)
+        const TPathId& replicationPathId)
 {
-    return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredState, replicationPathId, requireTargetOwnership);
+    return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredState, replicationPathId);
 }
 
 }

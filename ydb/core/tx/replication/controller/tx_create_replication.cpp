@@ -49,7 +49,6 @@ public:
         const auto initialState = record.GetConfig().GetInitialScan()
             ? TReplication::EState::Ready : TReplication::EState::Paused;
 
-        record.MutableConfig()->SetRequireTargetOwnership(true);
         db.Table<Schema::Replications>().Key(rid).Update(
             NIceDb::TUpdate<Schema::Replications::PathOwnerId>(pathId.OwnerId),
             NIceDb::TUpdate<Schema::Replications::PathLocalId>(pathId.LocalPathId),

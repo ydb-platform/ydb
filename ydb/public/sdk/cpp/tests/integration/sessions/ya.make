@@ -5,7 +5,12 @@ INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 FORK_SUBTESTS()
 
-REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ELSE()
+    REQUIREMENTS(ram:4 cpu:1)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread")
     SPLIT_FACTOR(60)
     SIZE(LARGE)

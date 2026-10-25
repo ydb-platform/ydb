@@ -3,14 +3,14 @@ GTEST(topic_direct_read_it)
 INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/tests/integration/tests_common.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
-REQUIREMENTS(ram:32 cpu:2)
-
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32 cpu:2)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
+    REQUIREMENTS(ram:32 cpu:1)
     SIZE(MEDIUM)
 ENDIF()
 

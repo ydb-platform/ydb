@@ -48,6 +48,7 @@ SRCS(
     dsproxy_strategy_base.h
     dsproxy_strategy_get_bold.h
     dsproxy_strategy_get_m3dc_basic.h
+    dsproxy_strategy_get_mirror3dc.h
     dsproxy_strategy_get_m3dc_restore.h
     dsproxy_strategy_get_m3of4.h
     dsproxy_strategy_get_min_iops_block.h

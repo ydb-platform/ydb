@@ -1451,6 +1451,7 @@ message TEvVRestorePartResult {
     enum EResponseOrigin {
         VRESTORE_PART_ACTOR = 0;
         SKELETON_FRONT = 1;
+        MON_RESTORE_PART_REQUEST_ACTOR = 2;
     }
     optional NKikimrProto.EReplyStatus Status = 1;
     optional string ErrorReason = 2;

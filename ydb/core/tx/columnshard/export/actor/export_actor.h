@@ -29,6 +29,8 @@ private:
 
     using TBase = NBackground::TSessionActor;
     std::optional<TActorId> ScanActorId;
+    bool AllowScanPings = false;
+    std::optional<TString> PendingAbortReason;
 
     EStage Stage = EStage::Initialization;
     std::shared_ptr<NExport::TSession> ExportSession;

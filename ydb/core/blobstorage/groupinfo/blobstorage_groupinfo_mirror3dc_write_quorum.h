@@ -113,6 +113,10 @@ public:
         return WriteLayout;
     }
 
+    EMirror3dcLayout GetEnsuredLayout() const {
+        return EnsuredLayout;
+    }
+
     static std::optional<TMirror3dcWriteQuorumChecker> TryCreate(
             const std::array<EMirror3dcFailRealmState, 3>& realms,
             EMirror3dcLayout writeLayout, EMirror3dcLayout ensuredLayout) {
@@ -160,7 +164,7 @@ public:
     }
 
     // parts contains known copies; failedDisks includes errors and NOT_YET replies.
-    // A missing copy in R never proves absence; copies in F are ignored.
+    // R contributes only known copies; failures in R and copies in F are ignored.
     // For E > 0, uncertainty that can hide E takes precedence over known copies.
     TBlobStorageGroupInfo::EBlobState GetBlobState(const TSubgroupPartLayout& parts,
             const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const {
@@ -177,7 +181,7 @@ public:
             if (Realms[realm] != R::F) {
                 // A mirror part can recover the blob even when stored in the wrong position.
                 hasCopy |= bool(present & (1u << disk));
-                uncertain[realm] += Realms[realm] == R::R || failedDisks[disk];
+                uncertain[realm] += Realms[realm] != R::R && failedDisks[disk];
             }
         }
 

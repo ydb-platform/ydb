@@ -22,7 +22,7 @@ inputs:
     description: "Test threads count"
   link_threads:
     required: false
-    default: "12"
+    default: "6"
     description: "link threads count"
   additional_ya_make_args:
     type: string

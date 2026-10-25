@@ -131,9 +131,9 @@ runs:
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}
         run_tests: ${{ inputs.run_tests }}
-        # Temporary comparison PR: rerun all PR-check tests with a fixed link limit.
+        # Temporary comparison PR: rerun all PR-check tests without build-cache reuse.
         increment: false
-        link_threads: 1
+        link_threads: ${{ inputs.link_threads }}
         additional_ya_make_args: ${{ inputs.additional_ya_make_args }} --no-bazel-remote-store
         test_threads: ${{ inputs.test_threads }}
         bazel_remote_uri: ''

@@ -1,6 +1,12 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
-REQUIREMENTS(ram:32 cpu:2)
+REQUIREMENTS(ram:32)
+
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ELSE()
+    REQUIREMENTS(cpu:1)
+ENDIF()
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

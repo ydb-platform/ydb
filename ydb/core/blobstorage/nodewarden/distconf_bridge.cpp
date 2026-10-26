@@ -233,8 +233,11 @@ namespace NKikimr::NStorage {
                     return true;
                 };
 
-                if (!state->GetUnsyncedBSC() && checkIfStaticGroupsSynced()) {
-                    // fully synced, can switch to SYNCHRONIZED
+                if (!state->GetUnsyncedBSC() && config->GetClusterState().GetPerPileState(bridgePileId.GetPileIndex())
+                        == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2 && checkIfStaticGroupsSynced()) {
+                    // fully synced, can switch to SYNCHRONIZED; only the pile going through its sync
+                    // (NOT_SYNCHRONIZED_2) finishes it, the one waiting to start (NOT_SYNCHRONIZED_1) may have parts
+                    // reported synced by BSC for their previous sync, which are going to be reset
                     pileSyncState->DeleteSubrange(stateIndex--, 1);
                     config->MutableClusterState()->SetPerPileState(bridgePileId.GetPileIndex(),
                         NKikimrBridge::TClusterState::SYNCHRONIZED);

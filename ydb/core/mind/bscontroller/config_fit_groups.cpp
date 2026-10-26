@@ -408,6 +408,10 @@ namespace NKikimr {
                     }
                 }
 
+                if (!replacedSlots.empty()) {
+                    CheckBridgedPartReassignment(*groupInfo, replacedSlots);
+                }
+
                 if (sanitizingRequest) {
                     if (checker.OneStepFromDegradedOrWorse(failed)) {
                         throw TExFitGroupError() << "Sanitizing requst was blocked, group is one step from DEGRADED or worse";
@@ -503,6 +507,10 @@ namespace NKikimr {
                                 }
                             }
                         }
+                    }
+
+                    if (!replacedSlots.empty()) {
+                        CheckBridgedPartReassignment(*groupInfo, replacedSlots);
                     }
 
                     // make list of donors and dispose unused slots
@@ -611,6 +619,17 @@ namespace NKikimr {
             }
 
         private:
+            void CheckBridgedPartReassignment(const TGroupInfo& groupInfo,
+                    const TMap<TVDiskIdShort, TVSlotId>& replacedSlots) const {
+                TBlobStorageGroupInfo::TGroupVDisks dataless(groupInfo.Topology.get());
+                for (const TVSlotInfo *slot : groupInfo.VDisksInGroup) {
+                    if (replacedSlots.contains(slot->GetShortVDiskId()) || !slot->IsReady) {
+                        dataless |= {groupInfo.Topology.get(), slot->GetShortVDiskId()};
+                    }
+                }
+                State.CheckBridgedPartDataRestorable(groupInfo, dataless);
+            }
+
             template<typename T>
             using TAllocateOrSanitizeGroupResult = std::invoke_result_t<T,
                 TGroupGeometryInfo&,
